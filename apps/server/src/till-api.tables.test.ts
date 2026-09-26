@@ -390,6 +390,41 @@ describe("table + tab routes", () => {
     expect(state.find((t) => t.id === id)).toMatchObject({ state: "open-tab", tabLineCount: 1 });
   });
 
+  it("DELETE .../lines/:lineNo?quantity= voids that part of the line, and refuses a quantity it cannot void", async () => {
+    const { id } = (await (
+      await request("/api/tables", {
+        method: "POST",
+        body: JSON.stringify({ label: "11", zoneId: tablesZoneId }),
+      })
+    ).json()) as { id: string };
+    const { tabId } = (await (
+      await request(`/api/tables/${id}/tab`, { method: "POST", body: JSON.stringify({}) })
+    ).json()) as { tabId: string };
+    await request(`/api/working-orders/${tabId}/round`, {
+      method: "POST",
+      body: JSON.stringify({ lines: [{ menuItemId, quantity: "3" }] }),
+    });
+
+    for (const quantity of ["0", "4", "abc"]) {
+      const refused = await request(`/api/working-orders/${tabId}/lines/1?quantity=${quantity}`, {
+        method: "DELETE",
+      });
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "quantity" } },
+      });
+    }
+
+    const voided = await request(`/api/working-orders/${tabId}/lines/1?quantity=1`, {
+      method: "DELETE",
+    });
+    expect(voided.status).toBe(200);
+    const lines = (await (await request(`/api/working-orders/${tabId}/lines`)).json()) as {
+      quantity: string;
+    }[];
+    expect(lines.map((line) => line.quantity)).toEqual(["2.000"]);
+  });
+
   it("GET /api/working-orders/:id/lines reads an open tab's lines with locked price + served state", async () => {
     const { id } = (await (
       await request("/api/tables", {

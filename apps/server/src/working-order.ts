@@ -22,6 +22,7 @@ import {
   locationId as brandLocationId,
   MONEY_SCALE,
   multiplyDecimal,
+  perDishOptionQuantity,
   rawCentsToDecimal,
   type SaleId,
   type StationThresholds,
@@ -463,6 +464,12 @@ async function priceOrderLines(
   }));
   return { lineRows, priced, identities, lineContexts };
 }
+
+/**
+ * What the kitchen was asked to make: the ticket item's fired quantity. A ticket item fired before
+ * `ticket_items.quantity` existed carries none, and reads its line's current quantity instead.
+ */
+const firedQuantity = sql<number>`coalesce(${ticketItems.quantity}, ${workingOrderLines.quantity})`;
 
 const storedLineColumns = {
   id: workingOrderLines.id,
@@ -1290,8 +1297,13 @@ export async function sendLines(
 /**
  * Recall selected lines of an open tab only while their items remain queued.
  * Refuse the whole call if a line is missing or any item has started. Previously
- * fired lines enqueue correction slips in the same transaction; held lines do not.
- * Leave queued_at untouched until a later send refreshes it.
+ * fired lines record a RECALLED kitchen notice and enqueue correction slips in the same
+ * transaction; held lines do neither. Leave queued_at untouched until a later send refreshes it.
+ *
+ * With changes to sent items switched off (`readEditSentLines`), a line that was ever sent to a
+ * station — stamped sent and holding a ticket item — is refused `ticket.already_fired`: a
+ * paper-only kitchen reports nothing, so a recall slip cannot be trusted, and a void is the only
+ * correction.
  */
 export async function recallLines(
   tx: Transaction,
@@ -1324,9 +1336,15 @@ export async function recallLines(
       state: ticketItems.state,
       firedAt: ticketItems.firedAt,
       stationId: ticketItems.stationId,
+      quantity: firedQuantity,
+      sentAt: workingOrderLines.sentAt,
     })
     .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .where(inArray(ticketItems.workingOrderLineId, lineIds));
+  if (items.some((r) => r.sentAt !== null) && !(await VENUE_SERVICE.readEditSentLines(tx))) {
+    throw new AppError("ticket.already_fired", { workingOrderId: tabId });
+  }
   const started = items.find((r) => r.state === "preparing" || r.state === "ready");
   if (started !== undefined) {
     throw new AppError("ticket.already_started", { ticketItemId: started.ticketItemId });
@@ -1334,7 +1352,12 @@ export async function recallLines(
   // A held line never printed, so it gets no slip.
   const recalled = items
     .filter((r) => r.firedAt !== null && r.state === "queued")
-    .map((r) => ({ workingOrderLineId: r.workingOrderLineId, stationId: r.stationId! }));
+    .map((r) => ({
+      workingOrderLineId: r.workingOrderLineId,
+      stationId: r.stationId!,
+      quantity: r.quantity,
+      wasStarted: false,
+    }));
   await tx
     .update(ticketItems)
     .set({ firedAt: null })
@@ -1452,24 +1475,35 @@ export async function addTabRound(
 }
 
 /**
- * Void ONE not-yet-paid line from an OPEN tab: pre-fiscal, a plain delete. A line that had already
- * fired gets a VOID correction slip.
+ * Void a not-yet-paid line, or `quantity` of it, from an OPEN tab: pre-fiscal, a plain delete or a
+ * reduction. `quantity` absent, or equal to the line's own, voids the whole line; a smaller one
+ * voids that part only, reducing the line, its extras children (which follow their dish) and its
+ * ticket item's fired quantity. A line that had already fired records a VOID kitchen notice for what
+ * was removed — marked started when the cook had started it — and gets a VOID correction slip where
+ * its station has a printer.
+ *
+ * Voiding stays open with changes to sent items switched off: it is then the only correction.
  */
 export async function voidTabLine(
   tx: Transaction,
   cfg: TillConfig,
   tabId: string,
   lineNo: number,
+  quantity?: string,
 ): Promise<void> {
   await assertAnchoredTabOpen(tx, cfg, tabId);
-  // The delete below takes the line's child modifier lines in the same statement: the parent
-  // alone would be refused by the self-referencing foreign key. Read first, because the delete's
-  // cascade removes the ticket item too.
+  // Read first, because the delete's cascade removes the ticket item too.
   const [target] = await tx
     .select({
       id: workingOrderLines.id,
+      parentLineId: workingOrderLines.parentLineId,
+      quantity: workingOrderLines.quantity,
+      unitPriceGross: workingOrderLines.unitPriceGross,
+      ticketItemId: ticketItems.id,
       firedAt: ticketItems.firedAt,
       stationId: ticketItems.stationId,
+      state: ticketItems.state,
+      firedQuantity,
     })
     .from(workingOrderLines)
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
@@ -1477,20 +1511,96 @@ export async function voidTabLine(
   if (target === undefined) {
     throw new AppError("tab.line_not_found", { tabId, lineNo });
   }
+  const removed = quantity === undefined ? null : voidQuantity(quantity, target);
+  const wasStarted = target.state === "preparing" || target.state === "ready";
   const voided =
     target.firedAt !== null
-      ? [{ workingOrderLineId: target.id, stationId: target.stationId! }]
+      ? [
+          {
+            workingOrderLineId: target.id,
+            stationId: target.stationId!,
+            // A whole void takes away everything the station was asked for.
+            quantity: removed ?? target.firedQuantity,
+            wasStarted,
+          },
+        ]
       : [];
-  // Before the delete: the slip re-reads the line, which the delete removes.
+  // Before the delete or the reduction: the notice and the slip re-read the line.
   await enqueueCorrectionSlips(tx, cfg, tabId, voided, "VOID");
+  if (removed === null) {
+    // Takes the line's child modifier lines in the same statement: the parent alone would be
+    // refused by the self-referencing foreign key.
+    await tx
+      .delete(workingOrderLines)
+      .where(
+        and(
+          eq(workingOrderLines.workingOrderId, tabId),
+          or(eq(workingOrderLines.id, target.id), eq(workingOrderLines.parentLineId, target.id)),
+        ),
+      );
+    return;
+  }
+  const lineQuantity = thousandthsToDecimal(target.quantity);
+  const remaining = subtractDecimal(lineQuantity, thousandthsToDecimal(removed));
   await tx
-    .delete(workingOrderLines)
-    .where(
-      and(
-        eq(workingOrderLines.workingOrderId, tabId),
-        or(eq(workingOrderLines.id, target.id), eq(workingOrderLines.parentLineId, target.id)),
-      ),
-    );
+    .update(workingOrderLines)
+    .set({
+      quantity: decimalToThousandths(remaining),
+      lineTotal: decimalToCents(grossLineTotal(centsToDecimal(target.unitPriceGross), remaining)),
+    })
+    .where(eq(workingOrderLines.id, target.id));
+  const children = await tx
+    .select({
+      id: workingOrderLines.id,
+      quantity: workingOrderLines.quantity,
+      unitPriceGross: workingOrderLines.unitPriceGross,
+    })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.parentLineId, target.id));
+  for (const child of children) {
+    const perDish = perDishOptionQuantity(thousandthsToDecimal(child.quantity), lineQuantity);
+    const childQuantity = multiplyDecimal(remaining, decimal(String(perDish)));
+    await tx
+      .update(workingOrderLines)
+      .set({
+        quantity: decimalToThousandths(childQuantity),
+        lineTotal: decimalToCents(
+          grossLineTotal(centsToDecimal(child.unitPriceGross), childQuantity),
+        ),
+      })
+      .where(eq(workingOrderLines.id, child.id));
+  }
+  if (target.ticketItemId !== null) {
+    await tx
+      .update(ticketItems)
+      .set({ quantity: target.firedQuantity - removed })
+      .where(eq(ticketItems.id, target.ticketItemId));
+  }
+}
+
+/**
+ * The part of a line a void removes, as thousandths, or `null` for the whole line. Refused
+ * `management.request_invalid` unless it is a positive decimal no larger than the line, and for an
+ * extras child, whose quantity follows its dish.
+ */
+function voidQuantity(
+  quantity: string,
+  line: { quantity: number; parentLineId: string | null },
+): number | null {
+  let asked: number;
+  try {
+    asked = stringToThousandths(quantity);
+  } catch {
+    throw new AppError("management.request_invalid", { field: "quantity" });
+  }
+  if (asked <= 0 || asked > line.quantity) {
+    throw new AppError("management.request_invalid", { field: "quantity" });
+  }
+  if (asked === line.quantity) return null;
+  if (line.parentLineId !== null) {
+    throw new AppError("management.request_invalid", { field: "quantity" });
+  }
+  return asked;
 }
 
 /**
@@ -3259,12 +3369,6 @@ async function readQueueSubItems(
   }
   return { modifiersByParent, asServedByParent };
 }
-
-/**
- * What the kitchen was asked to make: the ticket item's fired quantity. A ticket item fired before
- * `ticket_items.quantity` existed carries none, and reads its line's current quantity instead.
- */
-const firedQuantity = sql<number>`coalesce(${ticketItems.quantity}, ${workingOrderLines.quantity})`;
 
 /**
  * The venue's ticket items at one station, grouped by order, oldest first. An abandoned or collected

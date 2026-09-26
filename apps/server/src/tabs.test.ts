@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   locations,
   nowIso,
+  printJobs,
   ticketItems,
   tills,
   withTransaction,
@@ -13,7 +14,12 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { departments, preparationRoutes } from "@waitron/venue-service";
+import {
+  departments,
+  listStationNotices,
+  preparationRoutes,
+  writeEditSentLines,
+} from "@waitron/venue-service";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToLocation,
@@ -37,6 +43,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { createTable, createZone, updateTable } from "./tables.js";
 import {
   addTabRound,
+  advanceTicketItem,
   createOpenOrder,
   fireCourse,
   fireLines,
@@ -1170,5 +1177,233 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
       sql`update ticket_items set quantity = null where working_order_id = ${tabId}`,
     );
     expect(await queued()).toEqual({ station: "3.000", expo: "3.000" });
+  });
+});
+
+/** The one ticket item of a tab's line, and the station it went to. */
+async function ticketOfLine(
+  tabId: string,
+  lineNo: number,
+): Promise<{ id: string; stationId: string; quantity: number | null }> {
+  const [row] = await db
+    .select({
+      id: ticketItems.id,
+      stationId: ticketItems.stationId,
+      quantity: ticketItems.quantity,
+    })
+    .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, lineNo)));
+  return { id: row!.id, stationId: row!.stationId!, quantity: row!.quantity };
+}
+
+/** A station's notices, as the fields a cook reads. */
+async function noticesAt(cfg: TillConfig, stationId: string) {
+  return (await asApp(cfg, (tx) => listStationNotices(tx, cfg, stationId))).map((notice) => ({
+    kind: notice.kind,
+    lineName: notice.lineName,
+    quantity: notice.quantity,
+    wasStarted: notice.wasStarted,
+  }));
+}
+
+async function linesOf(tabId: string) {
+  return db
+    .select({
+      lineNo: workingOrderLines.lineNo,
+      parentLineId: workingOrderLines.parentLineId,
+      quantity: workingOrderLines.quantity,
+      lineTotal: workingOrderLines.lineTotal,
+    })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, tabId))
+    .orderBy(workingOrderLines.lineNo);
+}
+
+describe("corrections to sent work reach the kitchen as notices, printer or not", () => {
+  it("voiding a started item records a VOID notice marked started, then removes the line, with no printer", async () => {
+    const { cfg, tableId, cafeId, cafeOffer } = await setupVenue();
+    // The three names differ, so the notice is seen to carry the one a cook reads.
+    await db.execute(sql`
+      update products
+      set kitchen_name = 'Café de cocina', customer_name = ${JSON.stringify({ es: "Café del cliente" })}
+      where id = ${cafeId}`);
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
+    );
+    const ticket = await ticketOfLine(tabId, 1);
+    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, ticket.id, "preparing"));
+
+    await asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 1));
+
+    expect(await linesOf(tabId)).toEqual([]);
+    // The notice keeps the line's name after the line is gone.
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
+      { kind: "void", lineName: "Café de cocina", quantity: "1.000", wasStarted: true },
+    ]);
+    // This venue's station has no printer: the notice is the only correction.
+    expect(await db.select({ id: printJobs.id }).from(printJobs)).toEqual([]);
+  });
+
+  it("voiding a held line records no notice: the kitchen was never asked for it", async () => {
+    const { cfg, tableId, cafeOffer } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1", hold: true }]),
+    );
+    const ticket = await ticketOfLine(tabId, 1);
+
+    await asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 1));
+
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+  });
+
+  it("a partial void removes that quantity only, from the line, its extras and its ticket, and says so", async () => {
+    const { cfg, tableId, cafeId, aguaId, cafeOffer } = await setupVenue();
+    const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        {
+          menuItemId: cafeOffer,
+          quantity: "3",
+          extras: [{ listId, picks: [{ productId: aguaId, quantity: 2 }] }],
+        },
+      ]),
+    );
+    const ticket = await ticketOfLine(tabId, 1);
+    expect(ticket.quantity).toBe(3000);
+
+    await asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 1, "1"));
+
+    // The café at 1.50 for two dishes, and its extra at 0.50, two per dish, for four: each column
+    // in its own scale, quantities in thousandths and money in cents.
+    expect(await linesOf(tabId)).toEqual([
+      expect.objectContaining({ lineNo: 1, quantity: 2000, lineTotal: 300 }),
+      expect.objectContaining({ lineNo: 2, quantity: 4000, lineTotal: 200 }),
+    ]);
+    expect((await ticketOfLine(tabId, 1)).quantity).toBe(2000);
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
+      { kind: "void", lineName: "Café", quantity: "1.000", wasStarted: false },
+    ]);
+  });
+
+  it("voids the whole line when the quantity given is the line's own", async () => {
+    const { cfg, tableId, cafeOffer } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "2" }]),
+    );
+    const ticket = await ticketOfLine(tabId, 1);
+
+    await asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 1, "2"));
+
+    expect(await linesOf(tabId)).toEqual([]);
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
+      { kind: "void", lineName: "Café", quantity: "2.000", wasStarted: false },
+    ]);
+  });
+
+  it.each(["0", "-1", "3", "abc", ""])(
+    "refuses to void a quantity of %j from a line of two, changing nothing",
+    async (quantity) => {
+      const { cfg, tableId, cafeOffer } = await setupVenue();
+      const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+      await asApp(cfg, (tx) =>
+        addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "2" }]),
+      );
+      const ticket = await ticketOfLine(tabId, 1);
+
+      await expect(
+        asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 1, quantity)),
+      ).rejects.toMatchObject({
+        code: "management.request_invalid",
+        params: { field: "quantity" },
+      });
+      expect(await linesOf(tabId)).toEqual([expect.objectContaining({ quantity: 2000 })]);
+      expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+    },
+  );
+
+  it("a recall records a RECALLED notice for the fired line only", async () => {
+    const { cfg, tableId, cafeOffer, aguaOffer } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { menuItemId: cafeOffer, quantity: "2" },
+        { menuItemId: aguaOffer, quantity: "1", hold: true },
+      ]),
+    );
+    const ticket = await ticketOfLine(tabId, 1);
+
+    await asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1, 2]));
+
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
+      { kind: "recalled", lineName: "Café", quantity: "2.000", wasStarted: false },
+    ]);
+  });
+});
+
+describe("with changes to sent items switched off", () => {
+  it("refuses to recall a line that was sent to a station, and changes nothing", async () => {
+    const { cfg, tableId, cafeOffer } = await setupVenue();
+    await asApp(cfg, (tx) => writeEditSentLines(tx, false));
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
+    );
+    const ticket = await ticketOfLine(tabId, 1);
+
+    await expect(asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]))).rejects.toMatchObject({
+      code: "ticket.already_fired",
+      params: { workingOrderId: tabId },
+    });
+    const [state] = await sentState(tabId);
+    expect(state!.ticket!.firedAt).not.toBeNull();
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+  });
+
+  it("still recalls a held line that was never sent", async () => {
+    const { cfg, tableId, cafeOffer } = await setupVenue();
+    await asApp(cfg, (tx) => writeEditSentLines(tx, false));
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1", hold: true }]),
+    );
+
+    await expect(asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]))).resolves.toBeUndefined();
+  });
+
+  it("still voids a sent line: the notice is recorded and the line leaves the bill", async () => {
+    const { cfg, tableId, cafeOffer } = await setupVenue();
+    await asApp(cfg, (tx) => writeEditSentLines(tx, false));
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
+    );
+    const ticket = await ticketOfLine(tabId, 1);
+
+    await asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 1));
+
+    expect(await linesOf(tabId)).toEqual([]);
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
+      { kind: "void", lineName: "Café", quantity: "1.000", wasStarted: false },
+    ]);
+  });
+
+  it("recalls a sent line once the setting is back on", async () => {
+    const { cfg, tableId, cafeOffer } = await setupVenue();
+    await asApp(cfg, (tx) => writeEditSentLines(tx, false));
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
+    );
+    await asApp(cfg, (tx) => writeEditSentLines(tx, true));
+
+    await asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]));
+
+    const [state] = await sentState(tabId);
+    expect(state!.ticket!.firedAt).toBeNull();
   });
 });

@@ -12,6 +12,8 @@ describe("VENUE_SERVICE", () => {
       "listLineContexts",
       "listServiceZones",
       "listZoneOffers",
+      "readEditSentLines",
+      "recordKitchenNotices",
       "recordLineContexts",
       "recordOrderContext",
       "resolveNewOrderZone",

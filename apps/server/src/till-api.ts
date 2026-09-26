@@ -1215,8 +1215,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("tab.not_open", { tabId: id });
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
+      // Absent voids the whole line; `voidTabLine` validates a given one.
+      const quantity = c.req.query("quantity");
       await withTransaction(deps.db, async (tx) => {
-        await voidTabLine(tx, deps.cfg, id, lineNo);
+        await voidTabLine(tx, deps.cfg, id, lineNo, quantity);
       });
       return c.body(null, 200);
     }),

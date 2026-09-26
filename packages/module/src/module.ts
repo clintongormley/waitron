@@ -1,7 +1,7 @@
 import semver from "semver";
 import type { Hono } from "hono";
 import { AppError } from "@waitron/shared";
-import type { LocationId } from "@waitron/shared";
+import type { Decimal, LocationId } from "@waitron/shared";
 import type { ChangeSource } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import type { Logger } from "@waitron/server-kit";
@@ -254,6 +254,22 @@ export interface VenueServiceContribution {
     fromWorkingOrderLineId: string,
     toWorkingOrderLineId: string,
   ): Promise<void>;
+  /** Records one kitchen notice per item, copying each line's kitchen name and note as they stand
+   *  now, so a caller removing a line records its notices first. */
+  recordKitchenNotices(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    workingOrderId: string,
+    items: readonly {
+      workingOrderLineId: string;
+      stationId: string;
+      quantity: Decimal;
+      wasStarted: boolean;
+    }[],
+    kind: "recalled" | "void" | "changed",
+  ): Promise<void>;
+  /** Whether staff may change an item already sent to the kitchen. */
+  readEditSentLines(tx: Transaction): Promise<boolean>;
 }
 
 /** A reference to non-DB state a module owns, resolved to a path by the composition root. */

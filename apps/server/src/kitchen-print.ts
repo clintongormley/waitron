@@ -20,6 +20,7 @@ import { kitchenPresentationName, optionSnapshotLabels } from "@waitron/catalogu
 import { columnsFor, enqueuePrintJob } from "@waitron/printing";
 import type { CharacterSet, PaperWidth, PrintConfig } from "@waitron/printing";
 import { formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
+import { VENUE_SERVICE } from "./modules.js";
 import type { KitchenLayout, KitchenTicketItem, KitchenTicketStation } from "./kitchen-ticket.js";
 import type { TillConfig } from "./till-config.js";
 
@@ -344,23 +345,49 @@ export async function enqueueKitchenTickets(
   }
 }
 
+/** One correction to work a station was sent: the quantity it corrects, and whether the cook had
+ *  started it. */
+export interface CorrectionItem {
+  workingOrderLineId: string;
+  stationId: string;
+  /** As thousandths: what the station was asked for on a recall or a whole void, and the part
+   *  removed on a partial void. */
+  quantity: number;
+  wasStarted: boolean;
+}
+
 /**
- * Enqueue a kitchen correction slip per item for a RECALL ({@link recallLines}) or VOID
- * ({@link voidTabLine}) of a line that had already fired; callers pass only fired lines. Each slip goes
- * to every active printer on the line's station, whatever its scope, and prints the item exactly as the
- * original ticket did. The header's never-block argument applies unchanged.
+ * Record a kitchen notice per item for a RECALL ({@link recallLines}) or VOID ({@link voidTabLine})
+ * of a line that had already fired, then enqueue a correction slip per item where its station has
+ * an active printer; callers pass only fired lines. The notice is recorded whether or not a printer
+ * exists, so a station screen sees every correction. Each slip goes to every active printer on the
+ * line's station, whatever its scope, and prints the item as the original ticket did, at the item's
+ * quantity. The header's never-block argument applies unchanged.
  *
- * A void must call this before deleting the line: the delete cascades its ticket item away, and this
- * re-reads the line from `working_order_lines`.
+ * A void must call this before deleting the line: the delete cascades its ticket item away, and both
+ * the notice and the slip re-read the line from `working_order_lines`.
  */
 export async function enqueueCorrectionSlips(
   tx: Transaction,
   cfg: TillConfig,
   orderId: string,
-  items: FiredItem[],
+  items: CorrectionItem[],
   kind: "VOID" | "RECALLED",
 ): Promise<void> {
   if (items.length === 0) return;
+
+  await VENUE_SERVICE.recordKitchenNotices(
+    tx,
+    cfg,
+    orderId,
+    items.map((item) => ({
+      workingOrderLineId: item.workingOrderLineId,
+      stationId: item.stationId,
+      quantity: thousandthsToDecimal(item.quantity),
+      wasStarted: item.wasStarted,
+    })),
+    kind === "VOID" ? "void" : "recalled",
+  );
 
   const stationIds = [...new Set(items.map((i) => i.stationId))];
   const mappingRows = await activePrinterMappings(tx, stationIds);
@@ -399,7 +426,7 @@ export async function enqueueCorrectionSlips(
           tableLabel: header.tableLabel,
           orderNumber: header.orderNumber,
           at,
-          item: entry.item,
+          item: atFiredQuantity(entry.item, target),
         },
         layoutOf(group[0]!),
       );
