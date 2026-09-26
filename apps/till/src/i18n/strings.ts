@@ -306,6 +306,8 @@ export const en = {
   // Says what to DO, because reopening the line and choosing again is the only way out.
   "held.options_changed": "An item's choices have changed — open the line and choose again",
   "held.stale": "That order is no longer available",
+  "held.changed_elsewhere":
+    "This order was changed on another device. It has been reloaded: check it and make your change again",
   "place.error": "Could not place the order, try again",
   // Placing takes no tender, so unlike `sale.refused` this says nothing about charges or refunds.
   "place.refused":
@@ -324,6 +326,8 @@ export const en = {
   "locale.save_failed": "Could not save your language, try again",
   "station.collect_error": "Could not mark the order collected, try again",
   "table.error": "Could not update the table, try again",
+  "table.payment_in_flight":
+    "A card payment for this order is in progress. Wait for it to finish before changing the order",
   "boot.error": "Could not load the till, reload to try again",
   // Menu and service-zone names are server data, not keys here.
   "menu.switcher": "Menu",
@@ -613,6 +617,8 @@ export const es: Record<StringKey, string> = {
   "held.options_changed":
     "Han cambiado las opciones de un producto: abre la línea y vuelve a elegir",
   "held.stale": "Ese pedido ya no está disponible",
+  "held.changed_elsewhere":
+    "Este pedido se ha cambiado en otro dispositivo. Se ha vuelto a cargar: revísalo y repite tu cambio",
   "place.error": "No se pudo enviar el pedido, inténtalo de nuevo",
   "place.refused":
     "Este pedido no se puede registrar en Hacienda. Reintentar no servirá de nada: hay que corregir los datos de facturación del local, así que avisa a quien configuró esta caja.",
@@ -630,6 +636,8 @@ export const es: Record<StringKey, string> = {
   "locale.save_failed": "No se pudo guardar tu idioma, inténtalo de nuevo",
   "station.collect_error": "No se pudo marcar el pedido como entregado, inténtalo de nuevo",
   "table.error": "No se pudo actualizar la mesa, inténtalo de nuevo",
+  "table.payment_in_flight":
+    "Se está cobrando este pedido con tarjeta. Espera a que termine antes de cambiarlo",
   "boot.error": "No se pudo cargar la caja, recarga para reintentar",
   "menu.switcher": "Menú",
   "service_zone.label": "Zona de servicio",

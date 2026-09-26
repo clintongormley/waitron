@@ -1394,6 +1394,7 @@ describe("getHeldOrder", () => {
             kitchenName: "Leche kitchen",
             price: "0.75",
             quantity: 2,
+            listId: extra.listId,
           },
         ],
       }),

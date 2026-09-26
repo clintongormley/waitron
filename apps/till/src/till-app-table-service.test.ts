@@ -210,7 +210,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listZones: vi.fn().mockResolvedValue([floorZone]),
     listStatuses: vi.fn().mockResolvedValue([]),
     openTab: vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 }),
-    getTabLines: vi.fn().mockResolvedValue([tabLine]),
+    getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
     addTabRound: vi.fn().mockResolvedValue(undefined),
     fireCourse: vi.fn().mockResolvedValue(undefined),
     markLineServed: vi.fn().mockResolvedValue(undefined),
@@ -451,6 +451,29 @@ describe("till-app table ordering: a handheld's Order tab with no table opened",
 
 describe("till-app table ordering: refused and failed table actions", () => {
   it.each([
+    ["send-round", { lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }] }, "addTabRound"],
+    ["recall-lines", { lineNos: [1] }, "recallLines"],
+    ["void-line", { lineNo: 1 }, "voidLine"],
+    ["serve-line", { lineNo: 1 }, "markLineServed"],
+    ["send-lines", { lineNos: [] }, "sendLines"],
+    ["transfer-lines", { toTabId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferLines"],
+  ] as const)(
+    "a %s refused because a card payment of the order is running says so",
+    async (type, detail, method) => {
+      const { el } = await mountApp({
+        [method]: vi.fn().mockRejectedValue({ code: "order.payment_in_flight" }),
+      });
+      const screen = await toTableOrder(el);
+
+      emit(screen, type, detail);
+      await flush(el);
+
+      expect(banner(el)!.textContent).toContain(t("table.payment_in_flight"));
+      expect(banner(el)!.textContent).not.toContain("order.payment_in_flight");
+    },
+  );
+
+  it.each([
     ["join-table", { tableId: "t9" }, "joinTable"],
     ["merge-tabs", { fromTabId: "wo-9", freeSourceTable: true }, "mergeTabs"],
     ["transfer-lines", { toTabId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferLines"],
@@ -512,7 +535,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
   it("shows an empty tab rather than stale lines when the re-read after a round fails", async () => {
     const getTabLines = vi
       .fn()
-      .mockResolvedValueOnce([tabLine])
+      .mockResolvedValueOnce({ lines: [tabLine], revision: 0 })
       .mockRejectedValueOnce(new TypeError("Failed to fetch"));
     const { el } = await mountApp({ getTabLines });
     const screen = await toTableOrder(el);

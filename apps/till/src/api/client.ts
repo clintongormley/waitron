@@ -521,8 +521,7 @@ export interface HeldOrderSummary {
 
 /**
  * One CHILD line of a retrieved held order's dish: the picked product, its three frozen names, the
- * price it was sold at, and how many of it this dish takes. See {@link HeldOrder}'s `extras` for why
- * this is values rather than a selection.
+ * price it was sold at, how many of it this dish takes, and the list it was picked from.
  */
 export interface HeldExtra {
   productId: string | null;
@@ -531,6 +530,8 @@ export interface HeldExtra {
   kitchenName: string | null;
   price: string;
   quantity: number;
+  /** Null only on a child stored before lists were recorded on child lines. */
+  listId: string | null;
 }
 
 /**
@@ -542,12 +543,13 @@ export interface HeldOrder {
   id: string;
   orderNumber: number;
   label: string | null;
+  /** What a save of this copy sends back, so a save from a copy since changed is refused. */
+  revision: number;
   lines: (Omit<SaleLine, "extras" | "options"> & {
     productId?: string;
     /**
-     * What each CHILD line of this dish froze, with `quantity` per dish. These are VALUES, not a
-     * re-sendable selection — a child holds no list id, so an edit re-derives one from the dish's live
-     * offer (`deriveExtraSelections`, `../state/held-extras.ts`).
+     * What each CHILD line of this dish froze, with `quantity` per dish. An edit turns them back into
+     * a selection against the dish's live offer (`deriveExtraSelections`, `../state/held-extras.ts`).
      */
     extras?: HeldExtra[];
     product?: TillProduct;
@@ -672,6 +674,32 @@ export interface StationQueueCourse {
  * One order's lines at a station. `queuedAt` is that of the order's OLDEST line at this station — the
  * group's ordering key and the age-colouring anchor.
  */
+/** What a kitchen notice tells a station: a line recalled, voided or changed after it was sent. */
+export type KitchenNoticeKind = "recalled" | "void" | "changed";
+
+/**
+ * A correction to work a station was sent, until a cook acknowledges it. `lineName` is the kitchen
+ * name, and `orderLabel` and `note` are copied from the order as they stood when it was recorded.
+ */
+export interface KitchenNotice {
+  id: string;
+  stationId: string;
+  workingOrderId: string;
+  orderLabel: string;
+  kind: KitchenNoticeKind;
+  lineName: string;
+  quantity: string;
+  note: string | null;
+  wasStarted: boolean;
+  createdAt: string;
+}
+
+/** `GET /api/stations/:id/queue` — the station's work, oldest first, and its unacknowledged notices. */
+export interface StationQueue {
+  items: StationQueueGroup[];
+  notices: KitchenNotice[];
+}
+
 export interface StationQueueGroup {
   orderId: string;
   orderNumber: number;
@@ -728,7 +756,7 @@ export interface DeviceIdentity {
  * device cookie names the station, so there is no id to pass.
  */
 export interface DeviceStation {
-  station: { id: string; queue: StationQueueGroup[] };
+  station: { id: string; queue: StationQueueGroup[]; notices: KitchenNotice[] };
 }
 
 /**
@@ -959,6 +987,12 @@ export interface TabResult {
  * `unitPriceGross` is the gross unit price LOCKED at add-time. `servedAt` is the pre-fiscal served
  * marker (`null` ⇒ still to serve).
  */
+/** `GET /api/working-orders/:id/lines` — an open tab's lines and the revision they were read at. */
+export interface TabLines {
+  lines: TabLine[];
+  revision: number;
+}
+
 export interface TabLine {
   /** The line's frozen STAFF label — the variant's name on a variant line, else the product's. Absent
    * only on a fixture that omits it, which falls back to the live catalogue name. */
@@ -1193,10 +1227,37 @@ export class TillApi {
   /**
    * Edit a parked order → `PUT /api/working-orders/:id`. A full REPLACEMENT: the sent `lines` and
    * `label` become the order's new state (`label` absent clears it). Only an `open` order may change
-   * (else `working_order.not_open`).
+   * (else `working_order.not_open`), and only from the copy at its current `revision` (else
+   * `working_order.out_of_date`).
    */
-  async updateWorkingOrder(id: string, req: { lines: SaleLine[]; label?: string }): Promise<void> {
+  async updateWorkingOrder(
+    id: string,
+    req: { lines: SaleLine[]; label?: string; revision: number },
+  ): Promise<void> {
     await this.#request<void>(`/api/working-orders/${id}`, "PUT", req);
+  }
+
+  /**
+   * Edit ONE dish line of an open order → `PUT /api/working-orders/:orderId/lines/:lineNo`, from the
+   * copy read at `revision`. An absent field keeps the line's own. Rejects `working_order.out_of_date`,
+   * `order.payment_in_flight`, `ticket.already_started`, `ticket.already_fired` or
+   * `tab.line_not_found`.
+   */
+  async updateOrderLine(
+    orderId: string,
+    lineNo: number,
+    patch: {
+      quantity?: string;
+      note?: string | null;
+      options?: OptionSelection[];
+      extras?: ExtraSelection[];
+    },
+    revision: number,
+  ): Promise<void> {
+    await this.#request<void>(`/api/working-orders/${orderId}/lines/${lineNo}`, "PUT", {
+      ...patch,
+      revision,
+    });
   }
 
   /**
@@ -1234,13 +1295,20 @@ export class TillApi {
    * One station's kitchen queue → `GET /api/stations/:id/queue`, grouped by order, oldest first. A
    * malformed or unknown station id rejects with `station.not_found`.
    */
-  async getStationQueue(stationId: string): Promise<StationQueueGroup[]> {
-    // The response also carries the station's kitchen notices, which this does not pass on yet.
-    const queue = await this.#request<{ items: StationQueueGroup[] }>(
-      `/api/stations/${stationId}/queue`,
-      "GET",
-    );
-    return queue.items;
+  getStationQueue(stationId: string): Promise<StationQueue> {
+    return this.#request<StationQueue>(`/api/stations/${stationId}/queue`, "GET");
+  }
+
+  /** Acknowledge one kitchen notice → `POST /api/kitchen-notices/:id/acknowledge`. An unknown id
+   * rejects with `kitchen_notice.not_found`. */
+  async acknowledgeKitchenNotice(id: string): Promise<void> {
+    await this.#request<void>(`/api/kitchen-notices/${id}/acknowledge`, "POST");
+  }
+
+  /** The station display's twin of {@link acknowledgeKitchenNotice}, by its device cookie; a notice
+   * at another station rejects as an unknown one does. */
+  async deviceAcknowledgeKitchenNotice(id: string): Promise<void> {
+    await this.#request<void>(`/api/device/kitchen-notices/${id}/acknowledge`, "POST");
   }
 
   /**
@@ -1447,15 +1515,10 @@ export class TillApi {
 
   /**
    * Read one open tab's lines → `GET /api/working-orders/:orderId/lines`. A non-open or absent tab
-   * rejects with `tab.not_open`. The response also carries the tab's `revision`, which this does
-   * not pass on yet.
+   * rejects with `tab.not_open`. `revision` is what an edit of this copy sends back.
    */
-  async getTabLines(orderId: string): Promise<TabLine[]> {
-    const tab = await this.#request<{ lines: TabLine[]; revision: number }>(
-      `/api/working-orders/${orderId}/lines`,
-      "GET",
-    );
-    return tab.lines;
+  getTabLines(orderId: string): Promise<TabLines> {
+    return this.#request<TabLines>(`/api/working-orders/${orderId}/lines`, "GET");
   }
 
   /**
@@ -1492,10 +1555,12 @@ export class TillApi {
   /**
    * Cancel (VOID) ONE line of an open tab → `DELETE /api/working-orders/:orderId/lines/:lineNo`: the
    * cancel path for a line the kitchen has already STARTED, which can no longer be recalled. NON-FISCAL;
-   * the server prints a correction slip. Rejects `tab.not_open` or `tab.line_not_found`.
+   * the server prints a correction slip. `quantity`, a decimal string, voids that part of the line
+   * only; absent voids all of it. Rejects `tab.not_open` or `tab.line_not_found`.
    */
-  async voidLine(orderId: string, lineNo: number): Promise<void> {
-    await this.#request<void>(`/api/working-orders/${orderId}/lines/${lineNo}`, "DELETE");
+  async voidLine(orderId: string, lineNo: number, quantity?: string): Promise<void> {
+    const part = quantity === undefined ? "" : `?quantity=${encodeURIComponent(quantity)}`;
+    await this.#request<void>(`/api/working-orders/${orderId}/lines/${lineNo}${part}`, "DELETE");
   }
 
   /**

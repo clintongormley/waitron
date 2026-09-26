@@ -2051,6 +2051,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       body: JSON.stringify({
         lines: [{ menuItemId: aguaOfferId, quantity: "5" }],
         label: "Mesa 7 bis",
+        revision: 0,
       }),
     });
     expect(put.status).toBe(200);
@@ -2114,7 +2115,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     const put = await app.request(`/api/working-orders/${id}`, {
       method: "PUT",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ lines: [{ menuItemId: aguaOfferId, quantity: "2" }] }),
+      body: JSON.stringify({ lines: [{ menuItemId: aguaOfferId, quantity: "2" }], revision: 0 }),
     });
     expect(put.status).toBe(409);
     expect(await put.json()).toMatchObject({ error: { code: "working_order.not_open" } });
@@ -2143,7 +2144,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     const res = await app.request("/api/working-orders/not-a-uuid", {
       method: "PUT",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ lines: [{ menuItemId: aguaOfferId, quantity: "1" }] }),
+      body: JSON.stringify({ lines: [{ menuItemId: aguaOfferId, quantity: "1" }], revision: 0 }),
     });
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({
@@ -3351,7 +3352,8 @@ async function modifierOfferFixture() {
       labelKitchenName: "Frío kitchen",
     },
   ];
-  /** The child line as the held-order read hands it back: the OFFER's price, and per-dish picks. */
+  /** The child line as the held-order read hands it back: the OFFER's price, per-dish picks, and
+   * the list the pick was taken from. */
   const parkedExtras = [
     {
       productId: data.cheese.id,
@@ -3360,6 +3362,7 @@ async function modifierOfferFixture() {
       kitchenName: "Queso kitchen",
       price: "0.35",
       quantity: 2,
+      listId: data.extrasList.id,
     },
   ];
   const app = new Hono();
@@ -3416,7 +3419,7 @@ describe("canonical modifier HTTP serialization", () => {
     expect(parked.status, await parked.clone().text()).toBe(200);
     const got = await f.app.request(`/api/working-orders/${id}`, { headers: f.headers });
     expect(got.status).toBe(200);
-    const body = (await got.json()) as { lines: HeldLine[] };
+    const body = (await got.json()) as { lines: HeldLine[]; revision: number };
     expect(body.lines[0]!.optionSnapshots).toEqual(f.optionSnapshots);
     expect(body.lines[0]!.extras).toEqual(f.parkedExtras);
     // 1.75 × 2 dishes = 3.50, plus the published 0.35 × (2 dishes × 2 picks) = 1.40.
@@ -3436,6 +3439,7 @@ describe("canonical modifier HTTP serialization", () => {
             ...f.answers,
           },
         ],
+        revision: body.revision,
       }),
     });
     expect(edited.status, await edited.clone().text()).toBe(200);
@@ -3586,7 +3590,7 @@ describe("canonical modifier HTTP serialization", () => {
     expect(round.status, await round.clone().text()).toBe(200);
     const got = await f.app.request(`/api/working-orders/${tabId}`, { headers: f.headers });
     expect(got.status).toBe(200);
-    const body = (await got.json()) as { lines: HeldLine[] };
+    const body = (await got.json()) as { lines: HeldLine[]; revision: number };
     expect(body.lines.map((line) => line.optionSnapshots)).toEqual([
       f.optionSnapshots,
       f.optionSnapshots,

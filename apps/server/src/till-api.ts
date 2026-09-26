@@ -829,10 +829,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           options?: OptionSelection[];
         } & LineExtras)[];
         label?: string;
-        revision?: number;
+        revision?: unknown;
       }>(c);
-      // Optional until every till sends the revision of the copy it edited.
-      const revision = body.revision === undefined ? undefined : requireRevision(body.revision);
+      const revision = requireRevision(body.revision);
       await updateHeldOrder({ db: deps.db }, deps.cfg, id, {
         lines: body.lines,
         label: body.label,

@@ -114,6 +114,14 @@ const PERMANENT_SALE_REFUSALS = new Set([
   "fiscal.foreign_recipient_unsupported",
 ]);
 
+/** A table write refused because a card payment of the order is running says so; any other says
+ * the generic `table.error`. */
+function tableWriteError(error: unknown): StringKey {
+  return (error as { code?: string } | undefined)?.code === "order.payment_in_flight"
+    ? "table.payment_in_flight"
+    : "table.error";
+}
+
 function isPermanentSaleRefusal(error: unknown): boolean {
   const code = (error as { code?: string }).code;
   return code !== undefined && PERMANENT_SALE_REFUSALS.has(code);
@@ -724,7 +732,7 @@ export class TillApp extends LitElement {
     if (this.stations.length === 0) this.stations = await this.api.listStations();
     const defaultStation = this.stations.find((station) => station.isDefault);
     const queue =
-      defaultStation === undefined ? [] : await this.api.getStationQueue(defaultStation.id);
+      defaultStation === undefined ? [] : (await this.api.getStationQueue(defaultStation.id)).items;
     return () => (this.stationQueue = queue);
   }
 
@@ -934,7 +942,7 @@ export class TillApp extends LitElement {
     try {
       // The server pays a retrieved order from its stored lines and ignores `lines`, so an edit made
       // after retrieving must be saved first or it is silently dropped from the charge and the record.
-      await this.#syncIfDirty(id, lines, label);
+      if (!(await this.#syncIfDirty(id, lines, label))) return;
       reachedFiscal = true;
       this.result = await this.api.recordSale(lines, tender, id);
       this.#showTicket(id);
@@ -970,7 +978,7 @@ export class TillApp extends LitElement {
     this.cardOutcome = undefined;
     let reachedFiscal = false;
     try {
-      await this.#syncIfDirty(id, lines, label);
+      if (!(await this.#syncIfDirty(id, lines, label))) return;
       reachedFiscal = true;
       const out: PayOutcome = await this.api.pay({
         id,
@@ -1026,13 +1034,20 @@ export class TillApp extends LitElement {
    * ticket; `placeOrder` is not idempotent and still refuses. An idempotent `placeOrder` is a recorded
    * backlog follow-up (docs/backlog.md).
    */
-  async #syncIfDirty(id: string, lines: SaleLine[], label: string | undefined): Promise<void> {
-    if (!(this.#store.persisted && this.#store.dirty)) return;
+  async #syncIfDirty(id: string, lines: SaleLine[], label: string | undefined): Promise<boolean> {
+    if (!(this.#store.persisted && this.#store.dirty)) return true;
     try {
-      await this.api.updateWorkingOrder(id, { lines, label });
+      await this.api.updateWorkingOrder(id, { lines, label, revision: this.#store.revision });
+      this.#store.markSaved();
     } catch (error) {
-      if ((error as { code?: string }).code !== "working_order.not_open") throw error;
+      const code = (error as { code?: string }).code;
+      if (code === "working_order.out_of_date") {
+        await this.#reloadChangedOrder(id);
+        return false;
+      }
+      if (code !== "working_order.not_open") throw error;
     }
+    return true;
   }
 
   /**
@@ -1051,7 +1066,7 @@ export class TillApp extends LitElement {
     let reachedFiscal = false;
     try {
       if (this.#store.persisted) {
-        await this.#syncIfDirty(id, lines, label);
+        if (!(await this.#syncIfDirty(id, lines, label))) return;
       } else {
         await this.api.parkOrder({ id, lines, label });
         this.#store.markPersisted();
@@ -1174,7 +1189,7 @@ export class TillApp extends LitElement {
       if (this.#store.persisted) {
         // The Hold field opens blank, so fall back to the stored label rather than wipe it. A typed
         // label is saved only when a line was also edited (docs/backlog.md).
-        await this.#syncIfDirty(id, lines, label ?? this.#store.label);
+        if (!(await this.#syncIfDirty(id, lines, label ?? this.#store.label))) return;
       } else {
         await this.api.parkOrder({ id, lines, label });
       }
@@ -1198,78 +1213,95 @@ export class TillApp extends LitElement {
     const { id } = (event as CustomEvent<{ id: string }>).detail;
     this.errorKey = undefined;
     try {
-      const order = await this.api.retrieveWorkingOrder(id);
-      const lines: OrderLine[] = [];
-      let droppedAProduct = false;
-      let extraNotOffered = false;
-      let mustChooseAgain = false;
-      // Indexed once rather than scanned per line; the first entry wins under either key.
-      const liveByProduct = new Map<string, TillProduct>();
-      const liveByMenuItem = new Map<string, TillProduct>();
-      for (const candidate of this.products) {
-        if (!liveByProduct.has(candidate.id)) liveByProduct.set(candidate.id, candidate);
-        if (candidate.menuItemId !== undefined && !liveByMenuItem.has(candidate.menuItemId))
-          liveByMenuItem.set(candidate.menuItemId, candidate);
-      }
-      for (const line of order.lines) {
-        // The snapshot keeps the order's names and price; the offered lists come from today's live
-        // offer, which is what an edit has to answer against.
-        const live =
-          line.menuItemId === undefined
-            ? line.productId === undefined
-              ? undefined
-              : liveByProduct.get(line.productId)
-            : liveByMenuItem.get(line.menuItemId);
-        const stored = line.product;
-        const product =
-          stored === undefined
-            ? live
-            : {
-                ...stored,
-                ...(live === undefined ? {} : { offeredModifiers: live.offeredModifiers }),
-              };
-        if (product === undefined) {
-          // A legacy product-only line no longer resolves; contextual lines carry their own snapshot.
-          droppedAProduct = true;
-          continue;
-        }
-        // A child line names no list, so the list a pick belongs to is re-derived from the offer.
-        const picks = deriveExtraSelections(product.offeredModifiers ?? [], line.extras);
-        if (picks.notOffered.length > 0) extraNotOffered = true;
-        // A still-offered list that nothing matched must be answered again: the server refuses the
-        // edit until it is, and falling back to the list's default would change what the diner asked for.
-        const answers = deriveOptionSelections(
-          product.offeredModifiers ?? [],
-          line.optionSnapshots,
-        );
-        if (answers.unanswered.length > 0) mustChooseAgain = true;
-        lines.push({
-          product,
-          quantity: displayQuantity(product, line.quantity),
-          ...(line.workingOrderLineId === undefined
-            ? {}
-            : { workingOrderLineId: line.workingOrderLineId }),
-          ...(live === undefined ? { notOffered: true as const } : {}),
-          ...(picks.extras.length === 0 ? {} : { extras: picks.extras }),
-          ...(picks.notOffered.length === 0 ? {} : { notOfferedExtras: picks.notOffered }),
-          ...(answers.options.length === 0 ? {} : { options: answers.options }),
-          ...(line.optionSnapshots === undefined ? {} : { optionSnapshots: line.optionSnapshots }),
-          ...(line.note === undefined ? {} : { note: line.note }),
-        });
-      }
-      // One banner, so a DROPPED product is reported first: it has already changed what the basket
-      // will bill, where the other two change nothing until the operator edits the order.
-      if (droppedAProduct) this.errorKey = "held.product_gone";
-      else if (extraNotOffered) this.errorKey = "held.extra_not_offered";
-      else if (mustChooseAgain) this.errorKey = "held.options_changed";
-      this.#store.loadFrom(order.id, lines, order.label ?? undefined);
-      this.cardOutcome = undefined;
+      await this.#loadHeldOrder(id);
     } catch {
       // Paid or discarded on another till; the basket is untouched.
       this.errorKey = "held.stale";
     }
     // Runs on both paths: on success the list is re-read; on the stale race the vanished row drops off.
     await this.#refreshHeldOrders();
+  }
+
+  /**
+   * A save refused `working_order.out_of_date` was made from a copy another till has since changed
+   * (spec §10.7 example 2): the order is loaded again as it now stands, and staff are told, so they
+   * make their change again on it. An order closed meanwhile reads as a stale retrieve.
+   */
+  async #reloadChangedOrder(id: string): Promise<void> {
+    try {
+      await this.#loadHeldOrder(id);
+      this.errorKey = "held.changed_elsewhere";
+    } catch {
+      this.errorKey = "held.stale";
+    }
+    await this.#refreshHeldOrders();
+  }
+
+  /** Replaces the basket with the open order `id` as stored; a failed read rejects, basket untouched. */
+  async #loadHeldOrder(id: string): Promise<void> {
+    const order = await this.api.retrieveWorkingOrder(id);
+    const lines: OrderLine[] = [];
+    let droppedAProduct = false;
+    let extraNotOffered = false;
+    let mustChooseAgain = false;
+    // Indexed once rather than scanned per line; the first entry wins under either key.
+    const liveByProduct = new Map<string, TillProduct>();
+    const liveByMenuItem = new Map<string, TillProduct>();
+    for (const candidate of this.products) {
+      if (!liveByProduct.has(candidate.id)) liveByProduct.set(candidate.id, candidate);
+      if (candidate.menuItemId !== undefined && !liveByMenuItem.has(candidate.menuItemId))
+        liveByMenuItem.set(candidate.menuItemId, candidate);
+    }
+    for (const line of order.lines) {
+      // The snapshot keeps the order's names and price; the offered lists come from today's live
+      // offer, which is what an edit has to answer against.
+      const live =
+        line.menuItemId === undefined
+          ? line.productId === undefined
+            ? undefined
+            : liveByProduct.get(line.productId)
+          : liveByMenuItem.get(line.menuItemId);
+      const stored = line.product;
+      const product =
+        stored === undefined
+          ? live
+          : {
+              ...stored,
+              ...(live === undefined ? {} : { offeredModifiers: live.offeredModifiers }),
+            };
+      if (product === undefined) {
+        // A legacy product-only line no longer resolves; contextual lines carry their own snapshot.
+        droppedAProduct = true;
+        continue;
+      }
+      // Each pick goes back to the list it was taken from, if the live offer still has it there.
+      const picks = deriveExtraSelections(product.offeredModifiers ?? [], line.extras);
+      if (picks.notOffered.length > 0) extraNotOffered = true;
+      // A still-offered list that nothing matched must be answered again: the server refuses the
+      // edit until it is, and falling back to the list's default would change what the diner asked for.
+      const answers = deriveOptionSelections(product.offeredModifiers ?? [], line.optionSnapshots);
+      if (answers.unanswered.length > 0) mustChooseAgain = true;
+      lines.push({
+        product,
+        quantity: displayQuantity(product, line.quantity),
+        ...(line.workingOrderLineId === undefined
+          ? {}
+          : { workingOrderLineId: line.workingOrderLineId }),
+        ...(live === undefined ? { notOffered: true as const } : {}),
+        ...(picks.extras.length === 0 ? {} : { extras: picks.extras }),
+        ...(picks.notOffered.length === 0 ? {} : { notOfferedExtras: picks.notOffered }),
+        ...(answers.options.length === 0 ? {} : { options: answers.options }),
+        ...(line.optionSnapshots === undefined ? {} : { optionSnapshots: line.optionSnapshots }),
+        ...(line.note === undefined ? {} : { note: line.note }),
+      });
+    }
+    // One banner, so a DROPPED product is reported first: it has already changed what the basket
+    // will bill, where the other two change nothing until the operator edits the order.
+    if (droppedAProduct) this.errorKey = "held.product_gone";
+    else if (extraNotOffered) this.errorKey = "held.extra_not_offered";
+    else if (mustChooseAgain) this.errorKey = "held.options_changed";
+    this.#store.loadFrom(order.id, lines, order.label ?? undefined, order.revision);
+    this.cardOutcome = undefined;
   }
 
   /** A discard already made on another till is a non-fatal `held.stale`; the list refreshes on both paths. */
@@ -1532,7 +1564,7 @@ export class TillApp extends LitElement {
       return;
     }
     try {
-      this.tabLines = await this.api.getTabLines(this.activeTabId);
+      this.tabLines = (await this.api.getTabLines(this.activeTabId)).lines;
     } catch {
       this.tabLines = [];
     }
@@ -1544,8 +1576,8 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       await this.api.addTabRound(this.activeTabId, lines);
-    } catch {
-      this.errorKey = "table.error";
+    } catch (error) {
+      this.errorKey = tableWriteError(error);
       return;
     }
     await this.#loadTabLines();
@@ -1557,8 +1589,8 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       await this.api.fireCourse(this.activeTabId, courseId);
-    } catch {
-      this.errorKey = "table.error";
+    } catch (error) {
+      this.errorKey = tableWriteError(error);
       return;
     }
     await this.#loadTabLines();
@@ -1570,8 +1602,8 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       await this.api.markLineServed(this.activeTabId, lineNo);
-    } catch {
-      this.errorKey = "table.error";
+    } catch (error) {
+      this.errorKey = tableWriteError(error);
       return;
     }
     await this.#loadTabLines();
@@ -1586,8 +1618,8 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       await this.api.setLineCourse(this.activeTabId, lineNo, courseId);
-    } catch {
-      this.errorKey = "table.error";
+    } catch (error) {
+      this.errorKey = tableWriteError(error);
     }
     await this.#loadTabLines();
   }
@@ -1599,8 +1631,8 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       await this.api.sendLines(this.activeTabId, lineNos);
-    } catch {
-      this.errorKey = "table.error";
+    } catch (error) {
+      this.errorKey = tableWriteError(error);
     }
     await this.#loadTabLines();
   }
@@ -1615,8 +1647,8 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       await this.api.recallLines(this.activeTabId, lineNos);
-    } catch {
-      this.errorKey = "table.error";
+    } catch (error) {
+      this.errorKey = tableWriteError(error);
     }
     await this.#loadTabLines();
   }
@@ -1628,8 +1660,8 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       await this.api.voidLine(this.activeTabId, lineNo);
-    } catch {
-      this.errorKey = "table.error";
+    } catch (error) {
+      this.errorKey = tableWriteError(error);
     }
     await this.#loadTabLines();
   }
@@ -1641,8 +1673,8 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       await this.api.setTableStatus(this.activeTableId, statusId);
-    } catch {
-      this.errorKey = "table.error";
+    } catch (error) {
+      this.errorKey = tableWriteError(error);
     }
   }
 
@@ -1663,8 +1695,8 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       await this.api.moveTab(this.activeTabId, toTableId);
-    } catch {
-      this.errorKey = "table.error";
+    } catch (error) {
+      this.errorKey = tableWriteError(error);
       return;
     }
     this.activeTableId = toTableId;
@@ -1677,8 +1709,8 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       await this.api.joinTable(this.activeTabId, tableId);
-    } catch {
-      this.errorKey = "table.error";
+    } catch (error) {
+      this.errorKey = tableWriteError(error);
       return;
     }
     await this.#reloadTables();
@@ -1692,8 +1724,8 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       await this.api.mergeTabs(this.activeTabId, fromTabId, freeSourceTable);
-    } catch {
-      this.errorKey = "table.error";
+    } catch (error) {
+      this.errorKey = tableWriteError(error);
       return;
     }
     // Each read swallows its own error.
@@ -1708,8 +1740,8 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       await this.api.transferLines(this.activeTabId, toTabId, transfers);
-    } catch {
-      this.errorKey = "table.error";
+    } catch (error) {
+      this.errorKey = tableWriteError(error);
       return;
     }
     // Each read swallows its own error.
@@ -1729,7 +1761,7 @@ export class TillApp extends LitElement {
       this.errorKey =
         (error as { code?: string }).code === "tab.transfer_modifier_line"
           ? "table.split_modifier_error"
-          : "table.error";
+          : tableWriteError(error);
       return;
     }
     await Promise.all([this.#loadTabLines(), this.#reloadTables()]);

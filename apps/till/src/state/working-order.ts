@@ -128,6 +128,8 @@ export class WorkingOrderStore {
    * never reaches the filed sale.
    */
   #dirty = false;
+  /** The server revision the persisted order's copy is at; meaningless until {@link persisted}. */
+  #revision = 0;
 
   /** Changes only on {@link clear} and {@link loadFrom}. */
   get id(): string {
@@ -160,10 +162,19 @@ export class WorkingOrderStore {
     return this.#dirty;
   }
 
+  get revision(): number {
+    return this.#revision;
+  }
+
   /** No `"changed"` notification: not a rendering concern. */
   markPersisted(): void {
     this.#persisted = true;
     this.#dirty = false;
+  }
+
+  /** After a save of this copy landed: the save counted one write on the order. */
+  markSaved(): void {
+    this.#revision += 1;
   }
 
   get #pricedOrder(): Priced {
@@ -289,13 +300,15 @@ export class WorkingOrderStore {
     this.#invalidatePricing();
     this.#persisted = false;
     this.#dirty = false;
+    this.#revision = 0;
     this.emit("changed");
   }
 
   /** Adopts a RETRIEVED order's `id` verbatim, so paying it keys the same idempotency slot the server
-   * stored it under. */
-  loadFrom(id: string, lines: OrderLine[], label?: string): void {
+   * stored it under, and the `revision` its copy was read at. */
+  loadFrom(id: string, lines: OrderLine[], label?: string, revision = 0): void {
     this.#id = id;
+    this.#revision = revision;
     this.#lines.length = 0;
     this.#lines.push(...lines);
     this.#label = label;

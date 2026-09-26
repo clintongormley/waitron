@@ -2560,8 +2560,7 @@ export interface HeldOrder {
     /** The variant the line was sold as, absent when it names none. */
     variantId?: string;
     quantity: string;
-    /** One entry per CHILD line: frozen VALUES, not a re-sendable selection (a child holds no list
-     * id). */
+    /** One entry per CHILD line: the frozen values, and the list the pick was taken from. */
     extras?: {
       productId: string | null;
       name: string;
@@ -2569,6 +2568,8 @@ export interface HeldOrder {
       kitchenName: string | null;
       price: string;
       quantity: number;
+      /** Null only on a child stored before lists were recorded on child lines. */
+      listId: string | null;
     }[];
     note?: string;
     product?: {
@@ -2671,6 +2672,7 @@ export async function getHeldOrder(
         unitPriceGross: workingOrderLines.unitPriceGross,
         courseId: workingOrderLines.courseId,
         parentLineId: workingOrderLines.parentLineId,
+        extraListId: workingOrderLines.extraListId,
         note: workingOrderLines.note,
         // A line sold as a variant names the variant as its product; the dish the till rebuilds is
         // its parent, with the variant chosen on it, as the till built it at add time.
@@ -2730,6 +2732,7 @@ export async function getHeldOrder(
           kitchenName: child.kitchenName,
           price: child.unitPriceGross,
           quantity: Number(child.quantity) / Number(line.quantity),
+          listId: child.extraListId,
         }));
         return {
           workingOrderLineId: line.id,

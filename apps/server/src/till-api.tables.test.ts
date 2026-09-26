@@ -622,7 +622,7 @@ describe("table + tab routes", () => {
     },
   );
 
-  it("PUT /api/working-orders/:id answers 409 working_order.out_of_date for a copy another save changed", async () => {
+  it("PUT /api/working-orders/:id answers 409 working_order.out_of_date for a copy another save changed, and requires the revision", async () => {
     const { tabId, revision } = await firedTab();
     await request(`/api/working-orders/${tabId}/lines/1`, {
       method: "PUT",
@@ -636,14 +636,16 @@ describe("table + tab routes", () => {
 
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: { code: "working_order.out_of_date" } });
-    const malformed = await request(`/api/working-orders/${tabId}`, {
-      method: "PUT",
-      body: JSON.stringify({ revision: "2", lines: [{ menuItemId, quantity: "1" }] }),
-    });
-    expect(malformed.status).toBe(400);
-    expect(await malformed.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "revision" } },
-    });
+    for (const revision of [{ revision: "2" }, {}]) {
+      const malformed = await request(`/api/working-orders/${tabId}`, {
+        method: "PUT",
+        body: JSON.stringify({ ...revision, lines: [{ menuItemId, quantity: "1" }] }),
+      });
+      expect(malformed.status).toBe(400);
+      expect(await malformed.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "revision" } },
+      });
+    }
   });
 
   it("answers 409 order.payment_in_flight to a round, a line edit and a void while a card payment is in flight", async () => {

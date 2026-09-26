@@ -24,6 +24,7 @@ import type {
   HeldOrderSummary,
   PayOutcome,
   ProductCatalogue,
+  StationQueue,
   TabLine,
   TableServiceStatus,
   TableState,
@@ -340,6 +341,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       id: "wo-1",
       orderNumber: 5,
       label: "Mesa 4",
+      revision: 3,
       lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
     }),
     abandonWorkingOrder: vi.fn().mockResolvedValue(undefined),
@@ -354,7 +356,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       .fn()
       .mockResolvedValue([{ personId: "sup-1", displayName: "Responsable" }]),
     listStations: vi.fn().mockResolvedValue([defaultStation]),
-    getStationQueue: vi.fn().mockResolvedValue([]),
+    getStationQueue: vi.fn().mockResolvedValue({ items: [], notices: [] }),
     advanceTicketItem: vi.fn().mockResolvedValue(undefined),
     markCollected: vi.fn().mockResolvedValue(undefined),
     advanceTicket: vi.fn().mockResolvedValue(undefined),
@@ -364,7 +366,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     getTablesState: vi.fn().mockResolvedValue([]),
     listZones: vi.fn().mockResolvedValue([]),
     openTab: vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 }),
-    getTabLines: vi.fn().mockResolvedValue([]),
+    getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
     addTabRound: vi.fn().mockResolvedValue(undefined),
     fireCourse: vi.fn().mockResolvedValue(undefined),
     markLineServed: vi.fn().mockResolvedValue(undefined),
@@ -985,7 +987,7 @@ describe("till-app", () => {
           .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
         getTablesState: vi.fn().mockResolvedValue([openTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
-        getTabLines: vi.fn().mockResolvedValue([]),
+        getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
       });
       await flush(el);
       emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
@@ -1558,7 +1560,7 @@ describe("till-app", () => {
         .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
       getTablesState: vi.fn().mockResolvedValue([openTable]),
       listZones: vi.fn().mockResolvedValue([floorZone]),
-      getTabLines: vi.fn().mockResolvedValue([]),
+      getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
       recordSale,
       openDrawer,
     });
@@ -1886,13 +1888,15 @@ describe("till-app", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
 
-    // The edited composition was re-locked: café×2 (retrieved) + café×1 (the edit), under the order's id.
+    // The edited composition was re-locked: café×2 (retrieved) + café×1 (the edit), under the order's
+    // id, from the copy at the revision it was retrieved at.
     expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
       lines: [
         { menuItemId: "menu-item-cafe-0", quantity: "2" },
         { menuItemId: "menu-item-cafe-0", quantity: "1" },
       ],
       label: "Mesa 4",
+      revision: 3,
     });
     // recordSale files the SAME edited composition under the same id, and the sync ran FIRST — the
     // server needs the lock updated before it files from it.
@@ -1907,6 +1911,119 @@ describe("till-app", () => {
     expect(updateWorkingOrder.mock.invocationCallOrder[0]!).toBeLessThan(
       recordSale.mock.invocationCallOrder[0]!,
     );
+  });
+
+  it("a save that lands moves the copy on a revision, so a pay retried after a decline saves again from it", async () => {
+    const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+    const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+    const { el } = await mountApp({ updateWorkingOrder, pay });
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    c.store.addProduct(cafe, "1");
+    await el.updateComplete;
+
+    emit(c, "collect-card", {});
+    await flush(el);
+    emit(c, "collect-card", {});
+    await flush(el);
+
+    expect(updateWorkingOrder.mock.calls.map(([, req]) => req.revision)).toEqual([3, 4]);
+  });
+
+  it("a held order parked from this till is saved from revision 0", async () => {
+    const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+    const placeOrder = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "station.no_default" })
+      .mockResolvedValue(placedResult);
+    const { el } = await mountApp({ updateWorkingOrder, placeOrder });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1");
+    await el.updateComplete;
+    emit(c, "place-order", {});
+    await flush(el);
+    c.store.addProduct(cafe, "1");
+    await el.updateComplete;
+
+    emit(c, "place-order", {});
+    await flush(el);
+
+    expect(updateWorkingOrder).toHaveBeenCalledWith(
+      c.store.id,
+      expect.objectContaining({ revision: 0 }),
+    );
+  });
+
+  it("a save refused as out of date reloads the order and says it changed on another till, paying nothing", async () => {
+    // Spec §10.7 example 2: the second save is refused, and that till reloads the order.
+    const retrieveWorkingOrder = vi
+      .fn()
+      .mockResolvedValueOnce({
+        id: "wo-1",
+        orderNumber: 5,
+        label: "Mesa 4",
+        revision: 3,
+        lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
+      })
+      .mockResolvedValueOnce({
+        id: "wo-1",
+        orderNumber: 5,
+        label: "Mesa 4",
+        revision: 4,
+        lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "5.000" }],
+      });
+    const updateWorkingOrder = vi
+      .fn()
+      .mockRejectedValue({ code: "working_order.out_of_date", params: { revision: 4 } });
+    const recordSale = vi.fn().mockResolvedValue(saleResult);
+    const { el } = await mountApp({ retrieveWorkingOrder, updateWorkingOrder, recordSale });
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    c.store.addProduct(cafe, "1");
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    expect(recordSale).not.toHaveBeenCalled();
+    expect(retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+    // The basket is the order as the other till left it, at its new revision.
+    expect(c.store.lines.map((line) => line.quantity)).toEqual(["5"]);
+    expect(c.store.revision).toBe(4);
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("held.changed_elsewhere"));
+    expect(el.shadowRoot!.textContent).not.toContain("working_order.out_of_date");
+  });
+
+  it("an out-of-date save whose order has since closed says so, as a stale retrieve does", async () => {
+    const retrieveWorkingOrder = vi
+      .fn()
+      .mockResolvedValueOnce({
+        id: "wo-1",
+        orderNumber: 5,
+        label: null,
+        revision: 3,
+        lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
+      })
+      .mockRejectedValueOnce({ code: "working_order.not_found" });
+    const { el } = await mountApp({
+      retrieveWorkingOrder,
+      updateWorkingOrder: vi.fn().mockRejectedValue({ code: "working_order.out_of_date" }),
+    });
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    c.store.addProduct(cafe, "1");
+    await el.updateComplete;
+
+    emit(c, "park-order", {});
+    await flush(el);
+
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("held.stale"));
+    expect(currentApi.parkOrder).not.toHaveBeenCalled();
   });
 
   it("sends a retrieved line's stable server id on a quantity edit", async () => {
@@ -1944,6 +2061,7 @@ describe("till-app", () => {
         },
       ],
       label: undefined,
+      revision: 0,
     });
   });
 
@@ -1974,7 +2092,7 @@ describe("till-app", () => {
     ],
   };
 
-  /** The dish's child line as the server hands it back: values, and no list id. */
+  /** The dish's child line as the server hands it back: values, and the list it was picked from. */
   const heldMilk = {
     productId: "p-milk",
     name: "Leche extra",
@@ -1982,6 +2100,7 @@ describe("till-app", () => {
     kitchenName: "Leche extra KDS",
     price: "0.75",
     quantity: 2,
+    listId: "list-milk",
   };
 
   it("rebuilds a retrieved line's picks under the list its dish still offers", async () => {
@@ -2036,6 +2155,7 @@ describe("till-app", () => {
     await flush(el);
     expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith("wo-customised", {
       label: "Takeaway",
+      revision: 0,
       lines: [
         {
           workingOrderLineId: "line-customised",
@@ -2137,6 +2257,7 @@ describe("till-app", () => {
     await flush(el);
     expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith("wo-customised", {
       label: "Takeaway",
+      revision: 0,
       lines: [plainLine("3")],
     });
     expect(currentApi.parkOrder).not.toHaveBeenCalled();
@@ -2314,6 +2435,7 @@ describe("till-app", () => {
     await flush(el);
     expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith("wo-answered", {
       label: "Mesa 2",
+      revision: 0,
       lines: [
         {
           workingOrderLineId: "line-answered",
@@ -2630,6 +2752,7 @@ describe("till-app", () => {
         { menuItemId: "menu-item-cafe-0", quantity: "1" },
       ],
       label: "Mesa 4",
+      revision: 3,
     });
     expect(parkOrder).not.toHaveBeenCalled();
     // Success path: the basket empties and stays on the counter (a hold is not a completed sale).
@@ -2691,6 +2814,7 @@ describe("till-app", () => {
         { menuItemId: "menu-item-cafe-0", quantity: "1" },
       ],
       label: "Mesa 4",
+      revision: 3,
     });
     expect(parkOrder).not.toHaveBeenCalled();
   });
@@ -3454,7 +3578,7 @@ describe("till-app", () => {
         state: "queued",
       };
       it("loads the tab's lines and threads them (with the catalogue) to the screen", async () => {
-        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -3537,7 +3661,7 @@ describe("till-app", () => {
             { ...floorZone, id: "zone-b" },
           ]),
           listZoneOffers: vi.fn((zoneId: "zone-a" | "zone-b") => pending[zoneId]),
-          getTabLines: vi.fn().mockResolvedValue([]),
+          getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
         });
         await toCounter(el);
         selectTab(el, "floor");
@@ -3559,7 +3683,7 @@ describe("till-app", () => {
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
-          getTabLines: vi.fn().mockResolvedValue([tabLine]),
+          getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
         });
         const screen = await toTableOrder(el, openTable);
         // The pay section is available. The screen threads no `cardProvider`, so the embedded pay widget
@@ -3596,7 +3720,7 @@ describe("till-app", () => {
             .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
-          getTabLines: vi.fn().mockResolvedValue([tabLine]),
+          getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
         });
         await flush(el);
         // A handheld waits on the lock screen, then lands on the floor after PIN login.
@@ -3633,7 +3757,7 @@ describe("till-app", () => {
 
       it("send-round appends the round to the tab then reloads its lines", async () => {
         const addTabRound = vi.fn().mockResolvedValue(undefined);
-        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -3659,7 +3783,7 @@ describe("till-app", () => {
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           addTabRound,
-          getTabLines: vi.fn().mockResolvedValue([tabLine]),
+          getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
         });
         const screen = await toTableOrder(el, openTable);
         emit(screen, "send-round", {
@@ -3677,7 +3801,7 @@ describe("till-app", () => {
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           addTabRound,
-          getTabLines: vi.fn().mockResolvedValue([tabLine]),
+          getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
         });
         const screen = await toTableOrder(el, openTable);
         emit(screen, "send-round", {
@@ -3703,7 +3827,7 @@ describe("till-app", () => {
 
       it("fire-course fires the held course on the tab then reloads its lines", async () => {
         const fireCourse = vi.fn().mockResolvedValue(undefined);
-        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -3726,7 +3850,7 @@ describe("till-app", () => {
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
-          getTabLines: vi.fn().mockResolvedValue([tabLine]),
+          getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
           fireCourse: vi.fn().mockRejectedValue({ code: "course.not_found" }),
         });
         const screen = await toTableOrder(el, openTable);
@@ -3738,7 +3862,7 @@ describe("till-app", () => {
 
       it("serve-line marks the line served then reloads its lines", async () => {
         const markLineServed = vi.fn().mockResolvedValue(undefined);
-        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -3756,7 +3880,7 @@ describe("till-app", () => {
 
       it("set-line-course moves a held line's course then reloads its lines", async () => {
         const setLineCourse = vi.fn().mockResolvedValue(undefined);
-        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -3779,7 +3903,7 @@ describe("till-app", () => {
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           setLineCourse,
-          getTabLines: vi.fn().mockResolvedValue([tabLine]),
+          getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
         });
         const screen = await toTableOrder(el, openTable);
 
@@ -3792,7 +3916,7 @@ describe("till-app", () => {
       it("a rejected set-line-course surfaces the banner AND still reloads to reconcile to server truth", async () => {
         // A raced move of a line the kitchen has just fired rejects `ticket.already_fired`; the handler
         // must still re-read the tab so the stale picker reconciles to server truth (like its siblings).
-        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -3815,7 +3939,7 @@ describe("till-app", () => {
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
-          getTabLines: vi.fn().mockResolvedValue([tabLine]),
+          getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
           addTabRound: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
           markLineServed: vi.fn().mockRejectedValue({ code: "tab.line_not_found" }),
           setLineCourse: vi.fn().mockRejectedValue({ code: "course.not_found" }),
@@ -3855,7 +3979,7 @@ describe("till-app", () => {
       // ── Coursing corrections: send / recall / cancel line actions ─────────────────────────────
       it("send-lines fires the held lines on the tab then reloads its lines", async () => {
         const sendLines = vi.fn().mockResolvedValue(undefined);
-        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -3890,7 +4014,7 @@ describe("till-app", () => {
 
       it("recall-lines un-sends the not-yet-started lines then reloads its lines", async () => {
         const recallLines = vi.fn().mockResolvedValue(undefined);
-        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -3908,7 +4032,7 @@ describe("till-app", () => {
 
       it("void-line cancels the started line then reloads its lines", async () => {
         const voidLine = vi.fn().mockResolvedValue(undefined);
-        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -3927,7 +4051,7 @@ describe("till-app", () => {
       it("a rejected recall-lines surfaces the banner AND still reloads to reconcile to server truth", async () => {
         // A raced recall of a line the kitchen has just started rejects `ticket.already_started`; the
         // handler must still re-read the tab so the line flips from Recall to Cancel (server truth).
-        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -3948,7 +4072,7 @@ describe("till-app", () => {
       });
 
       it("a rejected send-lines / void-line also surfaces the banner and reloads", async () => {
-        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -4014,7 +4138,7 @@ describe("till-app", () => {
 
       it("merge-tabs absorbs another tab then reloads this tab's lines AND the floor", async () => {
         const mergeTabs = vi.fn().mockResolvedValue(undefined);
-        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
         const { el } = await mountApp({
           getTablesState,
@@ -4037,7 +4161,7 @@ describe("till-app", () => {
 
       it("transfer-lines moves selected lines out then reloads this tab's lines AND the floor", async () => {
         const transferLines = vi.fn().mockResolvedValue(undefined);
-        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
         const { el } = await mountApp({
           getTablesState,
@@ -4058,7 +4182,7 @@ describe("till-app", () => {
 
       it("split-lines switches pay and later receipt actions to the detached check", async () => {
         const splitTab = vi.fn().mockResolvedValue({ checkId: "wo-check" });
-        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
         const recordSale = vi.fn().mockResolvedValue(saleResult);
         const reprint = vi.fn().mockResolvedValue(undefined);
@@ -4094,7 +4218,7 @@ describe("till-app", () => {
 
       it("a modifier-dish partial split refusal keeps the origin open and explains the full-line rule", async () => {
         const splitTab = vi.fn().mockRejectedValue({ code: "tab.transfer_modifier_line" });
-        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -4118,7 +4242,7 @@ describe("till-app", () => {
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
-          getTabLines: vi.fn().mockResolvedValue([tabLine]),
+          getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
           moveTab: vi.fn().mockRejectedValue({ code: "table.occupied" }),
         });
         const screen = await toTableOrder(el, openTable);
@@ -4143,7 +4267,7 @@ describe("till-app", () => {
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
-          getTabLines: vi.fn().mockResolvedValue([tabLine]),
+          getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
           recordSale,
           updateWorkingOrder,
         });
@@ -4164,7 +4288,7 @@ describe("till-app", () => {
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
-          getTabLines: vi.fn().mockResolvedValue([tabLine]),
+          getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
           recordSale: vi.fn().mockRejectedValue({ code: "sale.rejected" }),
         });
         const screen = await toTableOrder(el, openTable);
@@ -4183,7 +4307,7 @@ describe("till-app", () => {
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
-          getTabLines: vi.fn().mockResolvedValue([tabLine]),
+          getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
           recordSale: vi.fn().mockRejectedValue({ code: "fiscal.record_invalid" }),
         });
         const screen = await toTableOrder(el, openTable);
@@ -4735,6 +4859,7 @@ describe("till-app", () => {
           { menuItemId: "menu-item-cafe-0", quantity: "1" },
         ],
         label: "Mesa 4",
+        revision: 3,
       });
       expect(pay).toHaveBeenCalledWith({
         id: "wo-1",
@@ -4841,7 +4966,7 @@ describe("till-app", () => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
         // A non-empty queue so the has-items-gated prep-queue card renders (an empty queue hides it).
-        getStationQueue: vi.fn().mockResolvedValue([stationGroup]),
+        getStationQueue: vi.fn().mockResolvedValue({ items: [stationGroup], notices: [] }),
       });
       await toCounter(el);
       expect(tenderPay(el).mode).toBe("invoice_first");
@@ -4856,7 +4981,7 @@ describe("till-app", () => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
         // A non-empty queue so the has-items-gated prep-queue card renders (an empty queue hides it).
-        getStationQueue: vi.fn().mockResolvedValue([stationGroup]),
+        getStationQueue: vi.fn().mockResolvedValue({ items: [stationGroup], notices: [] }),
       });
       await toCounter(el);
       expect(tenderPay(el).mode).toBe("ticket_then_pay");
@@ -4866,7 +4991,7 @@ describe("till-app", () => {
     it("renders the station queue from fetched data, not just an empty placeholder", async () => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
-        getStationQueue: vi.fn().mockResolvedValue([stationGroup]),
+        getStationQueue: vi.fn().mockResolvedValue({ items: [stationGroup], notices: [] }),
       });
       await toCounter(el);
       expect(stationQueueWidget(el)!.groups).toEqual([stationGroup]);
@@ -4966,6 +5091,7 @@ describe("till-app", () => {
           { menuItemId: "menu-item-cafe-0", quantity: "1" }, // the edit
         ],
         label: "Mesa 4",
+        revision: 3,
       });
       expect(placeOrder).toHaveBeenCalledWith("wo-1");
       expect(updateWorkingOrder.mock.invocationCallOrder[0]!).toBeLessThan(
@@ -5253,7 +5379,10 @@ describe("till-app", () => {
     it("advance-ticket-item: advances the line, then refreshes the default station's queue", async () => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
-        getStationQueue: vi.fn().mockResolvedValueOnce([stationGroup]).mockResolvedValue([]),
+        getStationQueue: vi
+          .fn()
+          .mockResolvedValueOnce({ items: [stationGroup], notices: [] })
+          .mockResolvedValue({ items: [], notices: [] }),
       });
       const c = await toCounter(el);
       expect(stationQueueWidget(el)!.groups).toEqual([stationGroup]);
@@ -5292,7 +5421,10 @@ describe("till-app", () => {
     it("mark-collected: hands over the order via markCollected, then refreshes the default station's queue", async () => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
-        getStationQueue: vi.fn().mockResolvedValueOnce([stationGroup]).mockResolvedValue([]),
+        getStationQueue: vi
+          .fn()
+          .mockResolvedValueOnce({ items: [stationGroup], notices: [] })
+          .mockResolvedValue({ items: [], notices: [] }),
       });
       const c = await toCounter(el);
       expect(stationQueueWidget(el)!.groups).toEqual([stationGroup]);
@@ -7576,7 +7708,7 @@ describe("a failed list refresh after a successful write", () => {
   });
 
   it("place: the collect stage stands and the queue refresh failure never shows sale.unconfirmed", async () => {
-    const getStationQueue = failingAfterLogin<unknown[]>([]);
+    const getStationQueue = failingAfterLogin<StationQueue>({ items: [], notices: [] });
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
       getStationQueue,
@@ -7594,7 +7726,7 @@ describe("a failed list refresh after a successful write", () => {
     expect(alertText(el)).not.toContain(t("place.error"));
     expect(message(el, "station")).toBe(t("refresh.station_after_place"));
 
-    getStationQueue.mockResolvedValue([stationGroup]);
+    getStationQueue.mockResolvedValue({ items: [stationGroup], notices: [] });
     await tick(el, 5000);
 
     expect(el.shadowRoot!.querySelector("[data-refresh-retry]")).toBeNull();
@@ -7636,10 +7768,10 @@ describe("a failed list refresh after a successful write", () => {
   }
 
   it("a kitchen-queue refresh that answers after a switch to a prepay zone does not put its queue back", async () => {
-    let resolve: (groups: unknown[]) => void = () => undefined;
+    let resolve: (queue: { items: unknown[]; notices: unknown[] }) => void = () => undefined;
     const getStationQueue = vi
       .fn()
-      .mockResolvedValueOnce([stationGroup])
+      .mockResolvedValueOnce({ items: [stationGroup], notices: [] })
       .mockImplementationOnce(() => new Promise((yes) => (resolve = yes)));
     const { el } = await mountWithPrepayZone(getStationQueue);
     const c = await toCounterFake(el);
@@ -7653,14 +7785,14 @@ describe("a failed list refresh after a successful write", () => {
     expect(c.orderFlow).toBe("prepay");
     expect(c.stationQueue).toEqual([]);
 
-    resolve([stationGroup]);
+    resolve({ items: [stationGroup], notices: [] });
     await settle(el);
 
     expect(c.stationQueue).toEqual([]);
   });
 
   it("a switch to a prepay zone ends a kitchen-queue retry, and that retry's late failure does not bring the notice back", async () => {
-    const getStationQueue = failingAfterLogin<unknown[]>([]);
+    const getStationQueue = failingAfterLogin<StationQueue>({ items: [], notices: [] });
     const { el } = await mountWithPrepayZone(getStationQueue);
     const c = await toCounterFake(el);
     c.store.addProduct(cafe, "2");

@@ -9,6 +9,7 @@ import {
   type MyShift,
   type MySwap,
   type ProductCatalogue,
+  type KitchenNotice,
   type TabLine,
   type TableServiceStatus,
   type TableState,
@@ -562,6 +563,7 @@ describe("TillApi", () => {
       api.updateWorkingOrder("wo1", {
         lines: [{ menuItemId: "mi-cafe", quantity: "3" }],
         label: "Mesa 5",
+        revision: 4,
       }),
     ).resolves.toBeUndefined();
 
@@ -574,6 +576,7 @@ describe("TillApi", () => {
         body: JSON.stringify({
           lines: [{ menuItemId: "mi-cafe", quantity: "3" }],
           label: "Mesa 5",
+          revision: 4,
         }),
       }),
     );
@@ -713,7 +716,21 @@ describe("TillApi", () => {
         ],
       },
     ];
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ items: groups, notices: [] }));
+    const notices: KitchenNotice[] = [
+      {
+        id: "kn-1",
+        stationId: "st-1",
+        workingOrderId: "wo-1",
+        orderLabel: "Mesa 4",
+        kind: "void",
+        lineName: "Paella kitchen",
+        quantity: "1",
+        note: "sin gambas",
+        wasStarted: true,
+        createdAt: "2026-08-17T10:05:00.000Z",
+      },
+    ];
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ items: groups, notices }));
 
     const r = await new TillApi("", fetchStub).getStationQueue("st-1");
 
@@ -721,7 +738,22 @@ describe("TillApi", () => {
       "/api/stations/st-1/queue",
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
-    expect(r).toEqual(groups);
+    expect(r).toEqual({ items: groups, notices });
+  });
+
+  it("acknowledgeKitchenNotice POSTs to the notice's acknowledge route, and a display to its device twin", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    const api = new TillApi("", fetchStub);
+
+    await expect(api.acknowledgeKitchenNotice("kn-1")).resolves.toBeUndefined();
+    await expect(api.deviceAcknowledgeKitchenNotice("kn-2")).resolves.toBeUndefined();
+
+    expect(
+      fetchStub.mock.calls.map(([path, init]) => [path, (init as RequestInit).method]),
+    ).toEqual([
+      ["/api/kitchen-notices/kn-1/acknowledge", "POST"],
+      ["/api/device/kitchen-notices/kn-2/acknowledge", "POST"],
+    ]);
   });
 
   it("advanceTicketItem POSTs { to } to the ticket item's advance route (empty 200 body)", async () => {
@@ -1405,13 +1437,14 @@ describe("TillApi", () => {
     ];
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ lines, revision: 3 }));
 
-    const r = await new TillApi("", fetchStub).getTabLines("ord-1");
+    const tab = await new TillApi("", fetchStub).getTabLines("ord-1");
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/working-orders/ord-1/lines",
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
-    expect(r).toEqual(lines);
+    expect(tab).toEqual({ lines, revision: 3 });
+    const r = tab.lines;
     // The served-state signal survives the round-trip decoded per line.
     expect(r[0]!.servedAt).not.toBeNull();
     expect(r[1]!.servedAt).toBeNull();
@@ -1552,6 +1585,38 @@ describe("TillApi", () => {
     const init = fetchStub.mock.calls[0]![1] as RequestInit;
     expect(init.body).toBeUndefined();
     expect(init.headers).toBeUndefined();
+  });
+
+  it("voidLine with a quantity voids that part only, as a query parameter", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await new TillApi("", fetchStub).voidLine("ord-1", 2, "1.5");
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/ord-1/lines/2?quantity=1.5",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("updateOrderLine PUTs the changed fields of one line with the revision it was read at", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(
+      new TillApi("", fetchStub).updateOrderLine(
+        "ord-1",
+        3,
+        { quantity: "2", note: null, extras: [] },
+        7,
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/ord-1/lines/3",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ quantity: "2", note: null, extras: [], revision: 7 }),
+      }),
+    );
   });
 
   it("voidLine surfaces { code } when the tab line is not found", async () => {
