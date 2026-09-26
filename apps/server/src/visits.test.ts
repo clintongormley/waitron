@@ -51,6 +51,7 @@ import {
   mergeTabs,
   moveTab,
   openTab,
+  parkOrder,
   splitOffCheck,
   transferLines,
   unjoinTable,
@@ -1124,6 +1125,97 @@ describe("a paid party (paying changes no table of the party)", () => {
       ),
     ).toMatchObject({ code: "tab.not_open" });
   });
+});
+
+/**
+ * Mesa 5 points at the party's paid check without belonging to the party: it reaches the check
+ * through a parked counter order, which a visitless merge or join leaves it on.
+ */
+describe("a paid check reached by a table outside its party", () => {
+  async function paidCheckAtMesa5(mesa5Party: "has left the party" | "belongs to another party") {
+    const venue = await setupVenue();
+    const mesa4 = await venue.table("Mesa 4");
+    const mesa5 = await venue.table("Mesa 5");
+    const { visitId, tabId } = await seat(venue.cfg, mesa4);
+    await order(venue, tabId, "Burger", "Vino");
+    const checkId = await split(venue.cfg, visitId, tabId, [2]);
+
+    const parkedId = randomUUID();
+    await parkOrder({ db: suite.db }, venue.cfg, {
+      id: parkedId,
+      lines: [{ menuItemId: venue.item("Agua"), quantity: "1" }],
+      zoneId: venue.tables.zoneId,
+    });
+    let otherVisitId: string | null = null;
+    if (mesa5Party === "has left the party") {
+      await join(venue.cfg, visitId, tabId, mesa5);
+      const command = await cmd(visitId);
+      await inTx((tx) => unjoinTable(tx, venue.cfg, tabId, mesa5, undefined, command));
+      await inTx((tx) => joinTable(tx, venue.cfg, parkedId, mesa5));
+    } else {
+      const other = await seat(venue.cfg, mesa5);
+      otherVisitId = other.visitId;
+      const expectedSourceVisitRevision = await revisionOf(other.visitId);
+      await inTx((tx) =>
+        mergeTabs(tx, venue.cfg, parkedId, other.tabId, {
+          freeSourceTable: false,
+          expectedSourceVisitRevision,
+          operatorId: OPERATOR,
+        }),
+      );
+    }
+    const command = await cmd(visitId);
+    await inTx((tx) =>
+      mergeTabs(tx, venue.cfg, checkId, parkedId, { freeSourceTable: false, ...command }),
+    );
+    await pay(venue.cfg, checkId, "32.00");
+
+    expect(await statusOf(checkId)).toBe("settled");
+    expect((await tableRow(mesa4)).tabId).toBe(tabId);
+    expect((await tableRow(mesa5)).tabId).toBe(checkId);
+    const mesa5Visit = await inTx((tx) => visitForTable(tx, mesa5));
+    expect(mesa5Visit?.visitId ?? null).toBe(otherVisitId);
+    return { venue, mesa5, visitId, checkId };
+  }
+
+  for (const mesa5Party of ["has left the party", "belongs to another party"] as const) {
+    describe(`when Mesa 5 ${mesa5Party}`, () => {
+      it("refuses a round sent to the check, and opens no next tab", async () => {
+        const { venue, mesa5, visitId, checkId } = await paidCheckAtMesa5(mesa5Party);
+        const bills = await inTx((tx) => readVisitBills(tx, visitId));
+
+        expect(
+          await captureError(() =>
+            inTx((tx) =>
+              addTabRound(tx, venue.cfg, checkId, [
+                { menuItemId: venue.item("Flan"), quantity: "1" },
+              ]),
+            ),
+          ),
+        ).toMatchObject({ code: "tab.not_open", params: { tabId: checkId } });
+        expect(await inTx((tx) => readVisitBills(tx, visitId))).toEqual(bills);
+        expect((await tableRow(mesa5)).tabId).toBe(checkId);
+      });
+
+      it("refuses moving the check to a free table, or joining one to it", async () => {
+        const { venue, mesa5, visitId, checkId } = await paidCheckAtMesa5(mesa5Party);
+        const mesa7 = await venue.table("Mesa 7");
+        const command = await cmd(visitId);
+
+        for (const run of [
+          (tx: Transaction) => moveTab(tx, venue.cfg, checkId, mesa7, command),
+          (tx: Transaction) => joinTable(tx, venue.cfg, checkId, mesa7, command),
+        ]) {
+          expect(await captureError(() => inTx(run))).toMatchObject({
+            code: "tab.not_open",
+            params: { tabId: checkId },
+          });
+        }
+        expect((await tableRow(mesa5)).tabId).toBe(checkId);
+        expect((await tableRow(mesa7)).tabId).toBeNull();
+      });
+    });
+  }
 });
 
 describe("a split check moved to another table", () => {
