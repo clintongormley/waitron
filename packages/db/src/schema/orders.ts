@@ -43,6 +43,10 @@ export const workingOrderStatus = enumType([
  * advance to any next state; a `placed` order may only be settled or abandoned;
  * `settled` and `abandoned` are terminal, save the handover stamp on a settled
  * order.
+ *
+ * That trigger names every column of this table except `status` and
+ * `collected_at`, so a column added here goes into its list too, by a migration
+ * that re-creates it (the latest: `drizzle/0015_settled_order_freeze_new_columns.sql`).
  */
 export const workingOrders = table(
   "working_orders",

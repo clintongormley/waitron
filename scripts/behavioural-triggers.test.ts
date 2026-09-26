@@ -38,6 +38,8 @@ import {
  *
  * It also holds `packages/db/drizzle/0004_variant_one_level.sql`'s three triggers on `products`: a
  * variant is one level deep, keeps the parent it was created with, and no product's id changes.
+ * `working_orders_enforce_transition` is re-created, with the same name, by
+ * `packages/db/drizzle/0015_settled_order_freeze_new_columns.sql`.
  *
  * **It migrates through `applyMigrations`**: a guard that installs the thing under test cannot see
  * the product failing to install it.
@@ -214,6 +216,8 @@ function seed(connection) {
     workingOrder("wo-placed", "placed"),
     workingOrder("wo-settled", "settled"),
     workingOrder("wo-settled-extra", "settled"),
+    workingOrder("wo-settled-revision", "settled"),
+    workingOrder("wo-settled-payment", "settled"),
     workingOrder("wo-settled-reopen", "settled"),
     workingOrder("wo-flip", "open"),
     workingOrder("wo-lines-update", "open"),
@@ -434,6 +438,26 @@ describe("working_orders_enforce_transition", () => {
         connection,
         `update working_orders set collected_at = '${STAMP}', label = 'renamed' ` +
           `where id = 'wo-settled-extra'`,
+      ),
+    ).toBe(TRANSITION_REFUSAL);
+  });
+
+  it("refuses the handover stamp when the order's revision changes with it", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set collected_at = '${STAMP}', revision = revision + 1 ` +
+          `where id = 'wo-settled-revision'`,
+      ),
+    ).toBe(TRANSITION_REFUSAL);
+  });
+
+  it("refuses the handover stamp when a card payment attempt is marked with it", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set collected_at = '${STAMP}', payment_attempt_at = '${STAMP}' ` +
+          `where id = 'wo-settled-payment'`,
       ),
     ).toBe(TRANSITION_REFUSAL);
   });
