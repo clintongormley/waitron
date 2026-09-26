@@ -1094,7 +1094,7 @@ export async function fireLines(
         note: line.note,
         firedAt: fired ? firedAt : null,
         state: "queued" as const,
-        // What the kitchen is asked to make. A split does not change it; a partial void reduces it.
+        // What the kitchen is asked to make. A split or a partial void reduces it.
         quantity: quantityByLine.get(line.id)!,
       };
     })
@@ -2294,7 +2294,6 @@ async function carveOffLines(
       note: workingOrderLines.note,
       extraListId: workingOrderLines.extraListId,
       ticketItemId: ticketItems.id,
-      ticketState: ticketItems.state,
     })
     .from(workingOrderLines)
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
@@ -2367,11 +2366,6 @@ async function carveOffLines(
       if (childLineNos.length > 0) {
         throw new AppError("tab.transfer_modifier_line", { tabId: fromTabId, lineNo: t.lineNo });
       }
-      // The split row gets no ticket item of its own, so nothing would guard it while the cook
-      // works on the source's.
-      if (line.ticketState === "preparing" || line.ticketState === "ready") {
-        throw new AppError("ticket.already_started", { ticketItemId: line.ticketItemId! });
-      }
       partials.push({ line, quantity: t.quantity });
     }
   }
@@ -2425,8 +2419,6 @@ async function carveOffLines(
         variantDescriptions: line.variantDescriptions,
         variantKitchenName: line.variantKitchenName,
         kitchenName: line.kitchenName,
-        // The ticket item stays with the source line at the quantity fired, so the kitchen still
-        // makes the whole; the split row carries the facts that decide what it may be.
         sentAt: line.sentAt,
         servedAt: line.servedAt,
         courseId: line.courseId,
@@ -2434,8 +2426,40 @@ async function carveOffLines(
         extraListId: line.extraListId,
       });
       await VENUE_SERVICE.copyLineContext(tx, cfg, line.id, splitLineId);
+      if (line.ticketItemId !== null) {
+        await splitTicketItem(tx, line.ticketItemId, line.quantity, toTabId, splitLineId, quantity);
+      }
     }
   }
+}
+
+/**
+ * Give a split row its own copy of the source line's ticket item, asking for the part moved, and take
+ * that part off the source's. Each row is then voided, recalled and fired on its own; the kitchen is
+ * told nothing, since the total it makes is unchanged.
+ */
+async function splitTicketItem(
+  tx: Transaction,
+  ticketItemId: string,
+  lineQuantity: string,
+  toOrderId: string,
+  splitLineId: string,
+  moved: string,
+): Promise<void> {
+  const [ticket] = await tx.select().from(ticketItems).where(eq(ticketItems.id, ticketItemId));
+  const movedThousandths = stringToThousandths(moved);
+  const asked = ticket!.quantity ?? decimalToThousandths(decimal(lineQuantity));
+  await tx
+    .update(ticketItems)
+    .set({ quantity: asked - movedThousandths })
+    .where(eq(ticketItems.id, ticketItemId));
+  await tx.insert(ticketItems).values({
+    ...ticket!,
+    id: randomUUID(),
+    workingOrderId: toOrderId,
+    workingOrderLineId: splitLineId,
+    quantity: movedThousandths,
+  });
 }
 
 /**

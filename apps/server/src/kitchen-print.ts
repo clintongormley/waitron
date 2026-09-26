@@ -207,9 +207,11 @@ async function readStationNames(
 }
 
 /**
- * The order number and dining-table label (null for a walk-up). The outer `working_orders` columns are
- * written as literal qualified names: drizzle renders a `.from()` base table's column inside `sql` as a
- * bare `"id"`, which inside this subquery would bind to `dining_tables.id`.
+ * The order number and dining-table label, else the order's own label: a check split off a tab has no
+ * table and carries the tab's table label as its own (`splitOffCheck`). Null for an unlabelled
+ * walk-up. The outer `working_orders` columns are written as literal qualified names: drizzle renders
+ * a `.from()` base table's column inside `sql` as a bare `"id"`, which inside this subquery would bind
+ * to `dining_tables.id`.
  */
 async function readOrderHeader(
   tx: Transaction,
@@ -219,12 +221,12 @@ async function readOrderHeader(
   const rows = await tx
     .select({
       orderNumber: workingOrders.orderNumber,
-      tableLabel: sql<string | null>`(
+      tableLabel: sql<string | null>`coalesce((
         select dt.label from dining_tables dt
         where dt.location_id = ${cfg.locationId}
           and (dt.tab_id = working_orders.id or working_orders.delivery_table_id = dt.id)
         order by (dt.tab_id = working_orders.id) desc nulls last, dt.id
-        limit 1)`,
+        limit 1), working_orders.label)`,
     })
     .from(workingOrders)
     .where(eq(workingOrders.id, orderId));

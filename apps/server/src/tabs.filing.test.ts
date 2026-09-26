@@ -487,8 +487,9 @@ describe("H2 (column): the huella is independent of delivery_table_id", () => {
 
 /**
  * Review Focus 6 of the menus plan (spec sections 11.3 and 11.7 examples 4 and 5, and 10.7 example
- * 5): a line that was sent stays payable however its product's availability changes, through a
- * split and with no preparation route; one that was never sent does not.
+ * 5), as the owner restated it on 2026-09-26: a line that was sent stays payable however its
+ * product's availability changes, through a split and with no preparation route; one that was never
+ * sent does not; and the split's two Burgers are one on each check.
  */
 describe("a sent line is payable whatever its availability; an unsent one is not", () => {
   it("pays two checks' fired Burgers and a served bottle after both sell out, and blocks the held Burger until it is removed", async () => {
@@ -566,7 +567,7 @@ describe("a sent line is payable whatever its availability; an unsent one is not
     ).rejects.toMatchObject({ code: "product.unavailable", params: { productId: burgerId } });
     expect(await saleCount(tabId)).toBe(0);
 
-    // The kitchen still shows the ticket it was sent, two Burgers, beside the held one.
+    // The kitchen still makes the two Burgers it was sent, one on each check, beside the held one.
     const [ticket] = await suite.db
       .select({ stationId: ticketItems.stationId })
       .from(ticketItems)
@@ -574,13 +575,19 @@ describe("a sent line is payable whatever its availability; an unsent one is not
       .where(eq(workingOrderLines.workingOrderId, tabId));
     const queue = await withTransaction(suite.db, (tx) => listStationQueue(tx, ticket!.stationId!));
     expect(
-      queue.flatMap((group) =>
-        group.items.map((item) => [item.name, item.quantity, item.firedAt !== null]),
+      Object.fromEntries(
+        queue.map((group) => [
+          group.orderId,
+          group.items.map((item) => [item.name, item.quantity, item.firedAt !== null]),
+        ]),
       ),
-    ).toEqual([
-      ["Burger kitchen", "2.000", true],
-      ["Burger kitchen", "1.000", false],
-    ]);
+    ).toEqual({
+      [tabId]: [
+        ["Burger kitchen", "1.000", true],
+        ["Burger kitchen", "1.000", false],
+      ],
+      [checkId]: [["Burger kitchen", "1.000", true]],
+    });
 
     // Removing the held Burger lets the tab pay its fired Burger and the bottle.
     await withTransaction(suite.db, (tx) => voidTabLine(tx, cfg, tabId, 3));
