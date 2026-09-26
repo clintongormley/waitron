@@ -2573,6 +2573,20 @@ phone, so the narrow-viewport banner and drawer are unverified on hardware; that
 the display walkthrough in [ui-review.md](ui-review.md). The rest of the dashboard's screens are the
 ongoing overhaul listed at the top of Track A.
 
+- **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
+  `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
+  too fine-grained: one permission such as `node.manage` might cover what `mirror.create` and
+  `node.promote` split today (adding a machine, promoting a standby and, since #708, removing a
+  standby that never finished joining all use one or the other). Machine permissions are to be named
+  `node.*`, not `mirror.*` — the owner's preference. The review should propose the whole list: which
+  permissions to merge, the names, and which role holds each, and then rename the call sites in one
+  change. **Renaming is allowed now:** the file's header says permission ids are "never renamed once
+  shipped", but a search (2026-09-26, reading, not running) found them stored nowhere — the database
+  stores a person's ROLE (`packages/identity/src/schema/persons.ts`), and the names appear only in
+  code the box itself serves — and the pre-production rule (CLAUDE.md §3, no
+  backwards-compatibility code until a venue is live) covers the rest. The review should confirm that
+  by running it, then drop or narrow that header sentence. Ties in with the next item: editable roles
+  are built from this list.
 - **Roles are something an admin can add and edit; the four built-ins are only defaults** (owner
   decision 2026-09-12, design not written). Detail under *Detail → Roles*: the ladder question decides
   the schema.
