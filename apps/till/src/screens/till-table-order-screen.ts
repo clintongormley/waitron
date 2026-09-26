@@ -428,10 +428,29 @@ export class TillTableOrderScreen extends LitElement {
 
       .round-bar {
         display: flex;
+        flex-wrap: wrap;
         align-items: flex-end;
         gap: var(--wt-space-3);
         padding-top: var(--wt-space-3);
         border-top: 1px solid var(--wt-color-border);
+      }
+
+      /* A round being sent takes no edit until the answer comes back; the status line says why. */
+      .round-control[inert] {
+        opacity: var(--wt-opacity-disabled);
+      }
+
+      .round-sending {
+        margin: 0;
+        padding-top: var(--wt-space-3);
+        color: var(--wt-color-text-muted);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      /* A round line's name may wrap inside a word, so on a narrow screen the line's controls and its
+         remove button stay on screen. */
+      .round-bar till-basket::part(name) {
+        overflow-wrap: anywhere;
       }
 
       .round-bar till-basket {
@@ -1178,25 +1197,36 @@ export class TillTableOrderScreen extends LitElement {
                 : nothing
             }
             <till-product-grid
+              class="round-control"
+              ?inert=${this.#roundStore.sending}
               .products=${this.#gridProducts()}
               .store=${this.#roundStore}
             ></till-product-grid>
           </div>
           ${this.drawerOpen ? this.#drawer(pending) : nothing}
         </div>
-        ${this.#roundCoursesSection()}
-        <div class="round-bar">
-          <till-basket .store=${this.#roundStore}></till-basket>
-          <wt-button
-            class="send-round"
-            data-send-round
-            variant="primary"
-            size="lg"
-            ?disabled=${this.#roundStore.lineCount === 0}
-            @click=${() => this.#sendRound()}
-          >
-            ${t("table.send_round")}
-          </wt-button>
+        ${
+          this.#roundStore.sending
+            ? html`<p class="round-sending" role="status" data-round-sending>
+                ${t("table.round_sending")}
+              </p>`
+            : nothing
+        }
+        <div class="round-control" data-round-controls ?inert=${this.#roundStore.sending}>
+          ${this.#roundCoursesSection()}
+          <div class="round-bar">
+            <till-basket .store=${this.#roundStore}></till-basket>
+            <wt-button
+              class="send-round"
+              data-send-round
+              variant="primary"
+              size="lg"
+              ?disabled=${this.#roundStore.lineCount === 0 || this.#roundStore.sending}
+              @click=${() => this.#sendRound()}
+            >
+              ${t("table.send_round")}
+            </wt-button>
+          </div>
         </div>
         ${this.#cancelDialog()} ${this.#changeEditor()}
       </section>

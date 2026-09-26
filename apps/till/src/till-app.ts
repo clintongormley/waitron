@@ -615,8 +615,9 @@ export class TillApp extends LitElement {
    * actions' counters, so a reload never discards a zone switch's or a table open's answer. */
   #counterRefreshRequest = 0;
   #tableRefreshRequest = 0;
-  /** A round being added to the tab, so a second Send waits for its answer rather than doubling it. */
-  #sendingRound = false;
+  /** Rounds whose lines carry a mark from a refused send, marked again whenever their table's offers
+   * change, so a dish that can be sold again is not left marked. */
+  #markedRounds = new Set<WorkingOrderStore>();
   readonly #menuPoll = new MenuStatePoll({
     read: (zoneId, signal) => this.api.menuState(zoneId, { signal }),
     // A table's zone only while its order is on screen: each read takes a turn of the write lock.
@@ -1253,6 +1254,16 @@ export class TillApp extends LitElement {
     this.#tableOffers.load(catalogue);
     this.tableMenus = catalogue.menus;
     this.tableProducts = this.#tableOffers.products();
+    this.#markRounds();
+  }
+
+  /** Marks each marked round's lines again against the table's offers; a round left with no mark is
+   * forgotten. */
+  #markRounds(): void {
+    for (const round of this.#markedRounds) {
+      round.setBlocked(this.#tableOffers.blocks(round.lines));
+      if (round.lines.every((line) => line.blocked === undefined)) this.#markedRounds.delete(round);
+    }
   }
 
   /** Marks each unsaved basket line that cannot be sold as it stands against the counter's offers,
@@ -1281,8 +1292,10 @@ export class TillApp extends LitElement {
         void this.#refreshBasket();
     }
     if (zoneId === this.#tableZoneId) {
-      if (this.#tableOffers.setUnavailable(state.unavailable))
+      if (this.#tableOffers.setUnavailable(state.unavailable)) {
         this.tableProducts = this.#tableOffers.products();
+        this.#markRounds();
+      }
       if (versionsMoved(this.tableMenus, state.menus)) void this.#reloadTableOffers(zoneId);
     }
   }
@@ -1356,8 +1369,7 @@ export class TillApp extends LitElement {
     if (refresh === undefined) return;
     if (refresh.adopted.size > 0) refresh.store.adoptLines(refresh.adopted);
     // The counter's basket is marked again on every change; a round is marked here.
-    if (refresh.store !== this.#store)
-      refresh.store.setBlocked(this.#tableOffers.blocks(refresh.store.lines));
+    if (refresh.store !== this.#store) this.#markRounds();
   }
 
   /**
@@ -1369,7 +1381,8 @@ export class TillApp extends LitElement {
     const zoneId = this.#tableZoneId;
     if (zoneId === undefined || !(await this.#reloadTableOffers(zoneId))) return "failed";
     const outcome = this.#reconcileBasket(round, this.#tableOffers);
-    round.setBlocked(this.#tableOffers.blocks(round.lines));
+    this.#markedRounds.add(round);
+    this.#markRounds();
     return outcome;
   }
 
@@ -2202,12 +2215,14 @@ export class TillApp extends LitElement {
       event as CustomEvent<Pick<SendRoundDetail, "lines"> & Partial<SendRoundDetail>>
     ).detail;
     const tabId = this.activeTabId;
-    if (tabId === undefined || this.#sendingRound) return;
-    this.#sendingRound = true;
+    if (tabId === undefined || round?.sending === true) return;
+    // The round is shut to edits until the answer, so a retry sends what the screen shows and success
+    // takes out exactly what was sent.
+    if (round !== undefined) round.sending = true;
     try {
       await this.#sendRound(tabId, lines, round, sent ?? [], false);
     } finally {
-      this.#sendingRound = false;
+      if (round !== undefined) round.sending = false;
     }
   }
 
@@ -2239,7 +2254,7 @@ export class TillApp extends LitElement {
         if (outcome !== "confirming") this.errorKey = { code: "menu.version_changed" };
         return;
       }
-      this.errorKey = tableWriteError(error);
+      this.errorKey = lineWriteError(error);
       if (isNetworkFailure(error)) round?.removeLines(sent);
       return;
     }
@@ -2650,6 +2665,7 @@ export class TillApp extends LitElement {
   #endOperatorSession(): void {
     this.#menuPoll.stop();
     this.#tableZoneId = undefined;
+    this.#markedRounds.clear();
     // The basket stays as it was, as a cancel leaves it; the next sign-in's offers load checks it.
     this.basketRefresh = undefined;
     this.#operatorSession++;

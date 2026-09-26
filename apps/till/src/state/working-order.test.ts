@@ -475,6 +475,24 @@ describe("WorkingOrderStore", () => {
       expect(notified).toBe(1);
     });
 
+    it("refuses every staff edit while it is being sent, and takes them again once it is not", () => {
+      const s = new WorkingOrderStore();
+      s.addProduct(cafe, "1", { note: "sin azúcar" });
+      let notified = 0;
+      s.subscribe(() => notified++);
+      s.sending = true;
+      expect(notified).toBe(1);
+      s.addProduct(jamon, "0.500");
+      s.setLineQuantity(0, "2");
+      s.setLineExtras(0, { note: "con hielo" });
+      s.setLineModifiers(0, { options: [{ listId: "l", labelId: "x" }] });
+      s.removeLine(0);
+      expect(s.lines).toEqual([{ product: cafe, quantity: "1", note: "sin azúcar" }]);
+      s.sending = false;
+      s.setLineQuantity(0, "2");
+      expect(s.lines[0]!.quantity).toBe("2");
+    });
+
     it("setBlocked marks and clears lines, notifying only when a mark changed, never marking dirty", () => {
       const s = new WorkingOrderStore();
       s.addProduct(cafe, "1");

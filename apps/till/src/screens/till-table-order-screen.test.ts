@@ -168,6 +168,27 @@ describe("till-table-order-screen", () => {
     expect(grid(el).store.lineCount).toBe(1);
   });
 
+  it("says a round is being sent, and shuts its controls, until the app has the answer", async () => {
+    const { el } = await mount();
+    grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
+    await el.updateComplete;
+    grid(el).store.sending = true;
+    await el.updateComplete;
+
+    const status = el.shadowRoot!.querySelector<HTMLElement>("[data-round-sending]");
+    expect(status?.getAttribute("role")).toBe("status");
+    expect(status!.textContent).toContain(t("table.round_sending"));
+    expect(el.shadowRoot!.querySelector("[data-round-controls]")!.hasAttribute("inert")).toBe(true);
+    expect(el.shadowRoot!.querySelector("[data-send-round]")!.hasAttribute("disabled")).toBe(true);
+
+    grid(el).store.sending = false;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-round-sending]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-round-controls]")!.hasAttribute("inert")).toBe(
+      false,
+    );
+  });
+
   it("sends a zone offer by menu-item identity", async () => {
     const offer = { ...cafe, menuItemId: "offer-cafe", productId: cafe.id };
     const { el } = await mount({ products: [offer] });

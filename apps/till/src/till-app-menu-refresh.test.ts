@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
 import { setLocale } from "./i18n/t.js";
@@ -1057,5 +1058,145 @@ describe("a sign-in whose offers fail to load", () => {
 
     expect(counter(el).store.lines[0]!.blocked).toBeUndefined();
     expect(payButton(el).disabled).toBe(true);
+  });
+});
+
+// ── Fix round 2 ──────────────────────────────────────────────────────────────────────────────────
+
+type RoundStore = {
+  lines: { quantity: string; blocked?: string }[];
+  lineCount: number;
+  setLineQuantity(index: number, quantity: string): void;
+  removeLine(index: number): void;
+};
+const roundStore = (el: TillApp) => roundGrid(el).store as unknown as RoundStore;
+
+describe("a table round while it is being sent", () => {
+  it("takes no quantity change until the answer, so the kitchen gets what the screen shows", async () => {
+    let answer!: () => void;
+    const { el } = await mountApp(
+      tableStubs(DINING, {
+        addTabRound: vi.fn(() => new Promise<void>((resolve) => (answer = resolve))),
+      }),
+    );
+    await toTable(el);
+    await sendLemonadeRound(el);
+
+    roundStore(el).setLineQuantity(0, "2");
+    await flush(el);
+    expect(roundStore(el).lines[0]!.quantity).toBe("1");
+    expect(tableScreen(el).shadowRoot!.querySelector("[data-round-sending]")).not.toBeNull();
+
+    answer();
+    await flush(el);
+    expect(api.addTabRound.mock.calls[0]![1]).toEqual([
+      { menuItemId: "offer-lemonade", menuVersionId: "v1", quantity: "1" },
+    ]);
+    expect(roundStore(el).lineCount).toBe(0);
+    expect(tableScreen(el).shadowRoot!.querySelector("[data-round-sending]")).toBeNull();
+  });
+
+  it("takes no removal while a refusal's reload is out, so the re-send is what the screen shows", async () => {
+    let answerReload!: (value: ZoneOfferCatalogue) => void;
+    const { el } = await mountApp(
+      tableStubs(DINING, {
+        addTabRound: vi.fn().mockRejectedValueOnce(versionRefusal).mockResolvedValueOnce(undefined),
+      }),
+    );
+    await toTable(el);
+    api.listZoneOffers.mockImplementation((zoneId: string) =>
+      zoneId === "zone-dining"
+        ? new Promise<ZoneOfferCatalogue>((resolve) => (answerReload = resolve))
+        : Promise.resolve(V1),
+    );
+    await sendLemonadeRound(el);
+
+    roundStore(el).removeLine(0);
+    await flush(el);
+    expect(roundStore(el).lineCount).toBe(1);
+
+    answerReload(catalogue("v2", V1.offers));
+    await flush(el);
+    expect(api.addTabRound).toHaveBeenCalledTimes(2);
+    expect(roundStore(el).lineCount).toBe(0);
+  });
+});
+
+describe("a table round refused for another reason", () => {
+  it("says a sold-out dish in its own words, and keeps the round", async () => {
+    const { el } = await mountApp(
+      tableStubs(DINING, {
+        addTabRound: vi
+          .fn()
+          .mockRejectedValue({ code: "product.unavailable", status: 409, productId: "Lemonade" }),
+      }),
+    );
+    await toTable(el);
+    await sendLemonadeRound(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("product.unavailable"));
+    expect(roundStore(el).lineCount).toBe(1);
+  });
+});
+
+describe("a round line's mark", () => {
+  it("clears when the table's zone shows the dish can be sold again", async () => {
+    const soldOut = catalogue("v2", [
+      offer("offer-lemonade", "Lemonade", "3.00", { available: false }),
+      burgerOffer(),
+    ]);
+    const { el } = await mountApp(
+      tableStubs(soldOut, { addTabRound: vi.fn().mockRejectedValue(versionRefusal) }),
+    );
+    await toTable(el);
+    await sendLemonadeRound(el);
+    expect(dialogText(el)).toContain("Lemonade is not available");
+    dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!.click();
+    await flush(el);
+    expect(roundStore(el).lines[0]!.blocked).toBe("unavailable");
+
+    api.menuState.mockImplementation(async (zoneId: string) =>
+      menuState(zoneId === "zone-dining" ? "v2" : "v1"),
+    );
+    await poll(el);
+    expect(roundStore(el).lines[0]!.blocked).toBeUndefined();
+  });
+});
+
+describe("a round at phone width", () => {
+  it("keeps each round line's remove control on screen", async () => {
+    await page.viewport(390, 844);
+    try {
+      const phone: CanvasDef = {
+        formFactor: "phone-portrait",
+        tabs: [tableCanvas.tabs[1]!, tableCanvas.tabs[2]!],
+      };
+      api = stubApi({
+        ...tableStubs(),
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phone }),
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          deviceId: "h1",
+          name: "H",
+          formFactor: "phone-portrait",
+          stationId: null,
+        }),
+      });
+      const { el } = await mountWidget<TillApp>("till-app", { api: api as unknown as TillApi });
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      await flush(el);
+      emit(shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
+        tableId: "t2",
+        hasOpenTab: true,
+      });
+      await flush(el);
+      roundGrid(el).shadowRoot!.querySelector<HTMLElement>("wt-button")!.click();
+      await flush(el);
+      const basket = tableScreen(el).shadowRoot!.querySelector(".round-bar till-basket")!;
+      const remove = basket.shadowRoot!.querySelector<HTMLElement>("wt-button.remove")!;
+      expect(remove.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
+    } finally {
+      await page.viewport(1280, 720);
+    }
   });
 });

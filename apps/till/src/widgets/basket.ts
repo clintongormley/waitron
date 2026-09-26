@@ -137,6 +137,7 @@ export class TillBasket extends LitElement {
 
       .not-offered {
         display: inline-block;
+        overflow-wrap: normal;
         padding: 0 var(--wt-space-2);
         border-radius: var(--wt-radius-sm);
         background: var(--wt-color-warning);
@@ -320,7 +321,7 @@ export class TillBasket extends LitElement {
       ${lines.map(
         (line, index) => html`
           <div class="line">
-            <span class="name"
+            <span class="name" part="name"
               >${this.#lineName(line)}${line.notOffered ? notOfferedMarker() : nothing}${
                 line.blocked === undefined ? nothing : blockedMarker(line.blocked)
               }</span

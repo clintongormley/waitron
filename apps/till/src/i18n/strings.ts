@@ -391,6 +391,7 @@ export const en = {
   "service_zone.load_error": "Could not load menus for this service area",
   "service_zone.basket_active": "Clear the basket before changing service area",
   // A basket refreshed against a newly published menu (the words after `{name}` follow a name).
+  "table.round_sending": "Sending the round…",
   "basket_refresh.title": "The menu has changed",
   "basket_refresh.changed": "New prices",
   "basket_refresh.blocked": "Remove or replace before paying",
@@ -764,6 +765,7 @@ export const es: Record<StringKey, string> = {
   "service_zone.refresh": "Actualizar menús",
   "service_zone.load_error": "No se pudieron cargar los menús de esta zona",
   "service_zone.basket_active": "Vacía la cesta antes de cambiar de zona de servicio",
+  "table.round_sending": "Enviando la ronda…",
   "basket_refresh.title": "La carta ha cambiado",
   "basket_refresh.changed": "Precios nuevos",
   "basket_refresh.blocked": "Quita o sustituye antes de cobrar",
