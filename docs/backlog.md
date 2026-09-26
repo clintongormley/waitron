@@ -332,7 +332,23 @@ provisioning or the demo seed publish a menu BEFORE the import runs, the import'
 Also seen once while landing it: `apps/dashboard/src/widgets/variant-form.test.ts` (a file #677 did not
 touch) failed in one local dashboard coverage run and passed three times alone — an intermittent
 failure that needs its cause found and fixed, not a re-run.
-Next in the lane: menus Task 7a (VAT is resolved when the invoice record is issued). The owner lifted the wait: the dependency upgrades are
+**Menus Task 7a (VAT is resolved when the invoice record is issued), landed as #683 (2026-09-26):**
+every filing path for a stored order — a held order, tab or split check paid at the till, a card
+payment's pricing before the reader, card recovery, invoice-first placing and ticket-then-pay
+collect — now files each line at the rate of its product's CURRENT VAT class (a variant with no
+class of its own reads its parent's; an extras line reads its own product's), read in the same query
+as the lines; the customer pays the same gross. Walk-up sales were already current. Reprints and
+replays price the stored lines and never read the catalogue. The resolved rate and net unit price
+are written back onto `working_order_lines` only while the order is OPEN: a placed order (a
+ticket-then-pay collect, or a card payment of a placed order) keeps its stored rate on the line,
+because `working_order_lines_require_open_parent_update` refuses an update of a line whose order
+is not open. Nothing prints or files that stored rate — receipt lines are gross only and a reprint's
+VAT breakdown comes from the filed record — so this is an owner FYI, not a defect: allowing the
+write would mean loosening that trigger in a core migration. No migration; golden fingerprint and
+`inmutabilidad` unedited. Still open: asesor Q26 (the adviser confirming the rule); the new test
+file `apps/server/src/vat-at-issuance.test.ts` copies about 150 lines of setup from
+`issuance-pass.test.ts`, which a shared helper could absorb.
+Next in the lane: menus Task 7b (editing a saved order — the server rules). The owner lifted the wait: the dependency upgrades are
 finished, and the work does not wait for SQLite slice 2. The menus plan's decisions D1–D23 settle
 the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the ones flagged for the
 owner. Menus Task 3 wipes existing venues (it rebuilds `menu_items`); every other migrating task
@@ -5121,9 +5137,9 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
    `apps/server/src/working-order.ts` and were read on 2026-09-16 rather than inferred:
    `markCollected` takes a `TillConfig` and discards it (`void cfg;`), then selects and updates on
    `eq(workingOrders.id, id)`; `cancelPlacedOrder` selects and updates the same way and uses `cfg`
-   only to stamp the amendment's till and node; `readLockedLines` takes no `cfg` at all, and neither
-   does its caller `priceStoredOrderForIssuance`, which the filing sites in `till-sale.ts` and
-   `working-order.ts` call and `priceStoredOrder` wraps to rebuild a filed ticket. Named by function rather than by line, because the line numbers
+   only to stamp the amendment's till and node; `readLockedLines` takes no `cfg` at all, nor does
+   `priceStoredOrder`, which calls it to rebuild a filed ticket, nor `priceStoredOrderForIssuance`,
+   which the filing sites in `till-sale.ts` and `working-order.ts` call. Named by function rather than by line, because the line numbers
    this item used to carry went stale when the file moved.
 2. **A concurrent-corrective race in `settleSale` is untranslated** — a raw `P0001` from the coverage
    trigger with no `sale.*` code. Give the trigger a SQLSTATE and translate it when reachable.
