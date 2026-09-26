@@ -3082,7 +3082,7 @@ image constraints under *Detail → Box image*.
     body then got `setup.already_provisioning`. Not measured: whether a server restart clears it.
     Provision's own refusals before the venue is committed are thrown, so the record is deleted and
     a corrected body succeeds; a provision failure after `advance("venue_committed")` keeps the
-    record by design, so the same request can resume. **Done (2026-09-26, lane A's A43):** run
+    record by design, so the same request can resume. **Done (2026-09-26, lane A's A43, #675):** run
     first on the unfixed code, through the real route and a real operation store
     (`apps/server/src/setup-api.test.ts`): after an adopt refused 502 `mirror.bundle_fetch_failed`
     (a wrong password), 400 `setup.request_invalid` (no credential) or 400
