@@ -1,6 +1,7 @@
 /**
- * Paths for wt-icon's 16x16 viewBox. `kebab` (wt-row-actions), `chevron-down` (wt-combobox) and
- * `close` (wt-toast) are drawn by shared primitives, which need their consuming app to register them.
+ * Paths for wt-icon's 16x16 viewBox. `kebab` (wt-row-actions), `chevron-down` (wt-combobox),
+ * `close` (wt-toast) and `minus` and `plus` (wt-number-stepper) are drawn by shared primitives, which
+ * need their consuming app to register them.
  *
  * Attribution: some of these are adapted from Google's Material Symbols icon set, Copyright
  * Google, licensed under the Apache License, Version 2.0
@@ -15,6 +16,8 @@ export const DASHBOARD_ICONS: Record<string, string> = {
   person:
     "M8,8c1.47,0 2.67,-1.19 2.67,-2.67s-1.19,-2.67 -2.67,-2.67-2.67,1.19 -2.67,2.67 1.19,2.67 2.67,2.67zm0,1.33c-1.78,0 -5.33,0.89 -5.33,2.67v1.33h10.67v-1.33c0,-1.77 -3.55,-2.67 -5.33,-2.67z",
   plus: "M7.25 2.5H8.75V7.25H13.5V8.75H8.75V13.5H7.25V8.75H2.5V7.25H7.25Z",
+  minus: "M2.5 7.25H13.5V8.75H2.5Z",
+  bin: "M6 1.75H10V3.25H13.5V4.75H2.5V3.25H6ZM3.75 4.75H12.25V13a1 1 0 0 1-1 1H4.75a1 1 0 0 1-1-1ZM5 4.75V12.75H11V4.75ZM6.5 6.5H7.5V11H6.5ZM8.5 6.5H9.5V11H8.5Z",
   grip: "M6 3.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M12.2 3.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M6 8a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M12.2 8a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M6 12.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M12.2 12.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0",
   bell: "M8 14.5a1.5 1.5 0 0 0 1.5-1.5h-3A1.5 1.5 0 0 0 8 14.5ZM12.5 10.5V7.25c0-2.2-1.2-4-3.25-4.5V2.25a1.25 1.25 0 0 0-2.5 0v.5C4.7 3.25 3.5 5.05 3.5 7.25v3.25L2 12v.5h12V12Z",
   close:
