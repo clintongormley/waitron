@@ -1,6 +1,7 @@
 // A bare side-effect import: it makes TypeScript augment "@waitron/shared" rather than declare a
 // fresh ambient module.
 import "@waitron/shared";
+import type { VerifyFailure } from "@waitron/membership";
 import type { ProbeFailure } from "@waitron/stream";
 
 /**
@@ -767,6 +768,10 @@ declare module "@waitron/shared" {
      * failed with no code of its own. The first start fails rather than sign a term the pointer may
      * be above. Logged, never shown. */
     "restore.pointer_unreadable": Record<string, never>;
+    /** A restored box's first start found a held membership document that fails its check against
+     * the restored copy's own node keys, so it signs nothing over it and the start is refused.
+     * `reason` is the check's own failure. */
+    "restore.membership_invalid": { reason: VerifyFailure };
     /**
      * The restore gate (`restore-gate.ts`) refused: the backup's environment differs from the
      * restoring binary's. One database per environment (CLAUDE.md §5): a cross-environment restore

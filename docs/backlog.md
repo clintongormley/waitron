@@ -5884,14 +5884,35 @@ endorsement stored when that round reads, not the first round's"
   start runs whenever that box next starts trading unfenced and not as a mirror. Whether a rejoin
   should clear it is the owner's call.
 - A sell-only local secondary that is not fenced runs the first start and signs the next term.
-- **Open, left by A38 (#669): a restored membership row is signed
-  over unchecked.** A restore (archive or bucket) puts the copy's `node_membership` row back as it
-  was, and whatever this node next mints over it signs the next term over that row's node list
-  without verifying it — the start that finishes the restore (`completeRebuild`), or before it a
-  mirror promoted without a restart (the item below). A probe wrote a row with a broken signature
-  and an extra node, then ran `completeRebuild`: it returned true and stored a new, validly signed
-  document still listing the extra node. Whether a restore should verify the row is the owner's
-  call.
+- A restored membership row is now checked before the start that finishes the restore signs over
+  it (branch `fix/verify-restored-membership`, closing what A38, #669, left open).
+  `completeRebuild` first runs `assertRestoredMembershipValid`
+  (`apps/server/src/rebuild-first-start.ts`): a held document that fails `verifyMembershipDocument`
+  against the `nodes` keys of the same database throws `restore.membership_invalid { reason }`
+  before the leaf is re-issued, the bucket is asked or anything is signed, and `runFirstStart`
+  throws it on instead of selling, so the start fails and the recovery page shows fixed English and
+  Spanish text for it. A database holding no document still passes and signs term 0. Cases in
+  `apps/server/src/rebuild-first-start.test.ts` (a node added after signing, for each marker
+  source, and a document signed by a key the copy does not hold: refused, stored row and leaf
+  byte-for-byte unchanged, marker kept) and `apps/server/src/boot.test.ts` ("refuses to start after
+  a … restore whose membership document no longer matches its signature", for `archive` and
+  `stream`; it writes the marker directly, because both restores write the same file through
+  `writeValidated`, `apps/server/src/restore.ts`). Each failed on the old code, and again with the
+  check's call deleted. Left open:
+  - The check trusts the keys the restored copy holds. A copy whose `nodes.public_key` for this
+    node was rewritten, with its document re-signed by the matching key, passes, and the next term
+    is signed over the added node: the case "passes a document re-signed with a key the copy's own
+    node row was changed to name" pins that.
+  - A start that defers the first start (a mirror, or a fenced node) does not run the check, and
+    neither promotion (`apps/server/src/promote.ts`) nor `retireSelf` (`apps/server/src/retire.ts`)
+    checks the row before signing over it. Gating promotion on the same check was measured and not
+    done, because it would refuse a genuine document: on 2026-09-26 a scratch case built the way
+    `promote.test.ts` builds a mirror found, after `setDeploymentMode(…, "mirror")` alone (what
+    `adoptFromPrimary` leaves), no document and an empty trust set; after
+    `establishReservedStandbyIdentity`, a trust set naming the standby alone; and a document the
+    primary signed with its real key, written there, verified as `untrusted_signer`. Nothing writes
+    a document on a mirror today, so its held document is null (from reading the writers, not a
+    run). Which key a mirror should check a restored document against is the owner's call.
 - A mirror that deferred its first start and is then promoted without a restart
   (`promoteMirrorToPrimary`, `apps/server/src/promote.ts`) keeps the bucket copy held, reading off
   with the reason `first_start_pending` and raising no alert, until the box next starts; that start

@@ -18,6 +18,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
 import {
+  buildNextMembershipDocument,
   endorseKey,
   generateNodeKeyPair,
   verifyMembershipDocument,
@@ -123,6 +124,29 @@ function deps(stateDir: string, overrides: Partial<RebuildDeps> = {}): RebuildDe
 
 async function leafOf(stateDir: string): Promise<X509Certificate> {
   return new X509Certificate(await readFile(join(stateDir, "tls", "server.crt"), "utf8"));
+}
+
+const INTRUDER: MembershipNode = {
+  nodeId: "c0000000-0000-4000-8000-00000000000f",
+  contactUrl: "https://intruder.example",
+  standing: "serving-secondary",
+};
+
+/** The held document with a node added after it was signed, so its signature no longer matches. */
+async function tamperHeldRow(): Promise<void> {
+  const held = (await readNodeMembership(suite.db))!;
+  await writeNodeMembership(suite.db, {
+    ...held,
+    body: { ...held.body, nodes: [...held.body.nodes, INTRUDER] },
+  });
+}
+
+/** The raw row, so "unchanged" means the stored bytes and not a parsed equivalent. */
+async function storedRow(): Promise<unknown> {
+  const result = await suite.db.execute(
+    sql`select term, document, updated_at from node_membership where id = 1`,
+  );
+  return result.rows;
 }
 
 describe("completeRebuild", () => {
@@ -319,6 +343,81 @@ describe("completeRebuild", () => {
     } finally {
       await suite.db.update(nodes).set({ endorsement: null }).where(eq(nodes.id, NODE));
     }
+  });
+
+  it.each(["archive", "stream"] as const)(
+    "after a %s restore, refuses a held document whose signature does not match, changing nothing",
+    async (source) => {
+      const stateDir = await rebuiltStateDir(source);
+      await tamperHeldRow();
+      const before = await storedRow();
+      const leafBefore = await readFile(join(stateDir, "tls", "server.crt"));
+      const pointerTerm = vi.fn(async () => null);
+      await expect(completeRebuild(deps(stateDir, { pointerTerm }))).rejects.toMatchObject({
+        code: "restore.membership_invalid",
+        params: { reason: "bad_signature" },
+      });
+      expect(await storedRow()).toEqual(before);
+      expect(await readFile(join(stateDir, "tls", "server.crt"))).toEqual(leafBefore);
+      expect(pointerTerm).not.toHaveBeenCalled();
+      await stat(join(stateDir, REBUILD_MARKER));
+    },
+  );
+
+  it("refuses a held document signed by a key the restored copy does not trust", async () => {
+    const stateDir = await rebuiltStateDir("archive");
+    const stranger = generateNodeKeyPair();
+    await writeNodeMembership(
+      suite.db,
+      buildNextMembershipDocument({
+        heldDocument: null,
+        nodes: [
+          { nodeId: NODE, contactUrl: "https://old-box.example", standing: "serving-primary" },
+          INTRUDER,
+        ],
+        signerNodeId: INTRUDER.nodeId,
+        signerPrivateKey: stranger.privateKey,
+      }),
+    );
+    const before = await storedRow();
+    await expect(completeRebuild(deps(stateDir))).rejects.toMatchObject({
+      code: "restore.membership_invalid",
+      params: { reason: "untrusted_signer" },
+    });
+    expect(await storedRow()).toEqual(before);
+    await stat(join(stateDir, REBUILD_MARKER));
+  });
+
+  // The limit of the check: the keys it trusts come from the same restored copy.
+  it("passes a document re-signed with a key the copy's own node row was changed to name", async () => {
+    const stateDir = await rebuiltStateDir("archive");
+    const ownKey = (await readMembershipTrustSet(suite.db))[NODE]!;
+    const forger = generateNodeKeyPair();
+    await suite.db.update(nodes).set({ publicKey: forger.publicKey }).where(eq(nodes.id, NODE));
+    try {
+      await writeNodeMembership(
+        suite.db,
+        buildNextMembershipDocument({
+          heldDocument: null,
+          nodes: [
+            { nodeId: NODE, contactUrl: "https://old-box.example", standing: "serving-primary" },
+            INTRUDER,
+          ],
+          signerNodeId: NODE,
+          signerPrivateKey: forger.privateKey,
+        }),
+      );
+      expect(await completeRebuild(deps(stateDir))).toBe(true);
+      expect((await readNodeMembership(suite.db))!.body.nodes).toContainEqual(INTRUDER);
+    } finally {
+      await suite.db.update(nodes).set({ publicKey: ownKey }).where(eq(nodes.id, NODE));
+    }
+  });
+
+  it("does not check the held document on an ordinary start", async () => {
+    const stateDir = await rebuiltStateDir(false);
+    await tamperHeldRow();
+    expect(await completeRebuild(deps(stateDir))).toBe(false);
   });
 
   it("signs term 0 naming this node alone when the restored database holds no document", async () => {
@@ -547,6 +646,17 @@ describe("runFirstStart (slice-2 spec §5.3)", () => {
     } finally {
       await withTransaction(suite.db, (tx) => deleteCredential(tx, { purpose: STREAM_PURPOSE }));
     }
+  });
+
+  it("stops the start, rather than selling, when the restored membership document fails its check", async () => {
+    const stateDir = await rebuiltStateDir("stream");
+    await tamperHeldRow();
+    const log = vi.fn();
+    await expect(runFirstStart(deps(stateDir, { log }))).rejects.toMatchObject({
+      code: "restore.membership_invalid",
+    });
+    expect(log).not.toHaveBeenCalledWith("error", "restore.first_start_failed", expect.anything());
+    await stat(join(stateDir, REBUILD_MARKER));
   });
 
   it("streams on an ordinary start", async () => {

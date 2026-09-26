@@ -413,11 +413,29 @@ describe("curated operator text", () => {
       "server.boot_incomplete",
       "provisioning.database_holder_stalled",
     ];
-    const fromBootByHand = ["deployment.environment_mismatch"];
+    const fromBootByHand = ["deployment.environment_mismatch", "restore.membership_invalid"];
     const missing = [...classified, ...persistedByRunEntry, ...fromBootByHand].filter(
       (code) => code !== "unknown" && !(code in OPERATOR_TEXT),
     );
     expect(missing).toEqual([]);
+  });
+
+  // Fixed strings, not the table: a page rendering another row would pass a comparison with it.
+  it("names a restored copy whose list of machines fails its signature check, in both languages", async () => {
+    const english = await pageFor("restore.membership_invalid");
+    expect(english).toContain(
+      "The list of machines in the restored copy does not carry a valid signature, so it may have been changed after it was saved.",
+    );
+    expect(english).toContain(
+      "The box will not start from this copy. Ask whoever installed this box to look at it before anything else.",
+    );
+    const spanish = await pageFor("restore.membership_invalid", undefined, SPANISH);
+    expect(spanish).toContain(
+      "La lista de equipos de la copia restaurada no tiene una firma válida, así que puede haberse cambiado después de guardarse.",
+    );
+    expect(spanish).toContain(
+      "El equipo no arrancará con esta copia. Antes de nada, pide a quien instaló este equipo que lo revise.",
+    );
   });
 
   // A retry or restart can fix a volume that did not come up; nothing else at the box can.

@@ -296,6 +296,21 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
         "Antes de nada, pide a quien instaló este equipo que lo revise. La base de datos está en una carpeta dentro de la carpeta del local, cuyo nombre aparece en la salida del propio servidor. Hay que devolverla a su sitio, o volver a hacer la restauración, antes de que el equipo pueda arrancar.",
     },
   },
+  "restore.membership_invalid": {
+    // No retry: the refusal leaves the copy unchanged, so the next start reads it again.
+    "en-GB": {
+      title:
+        "The list of machines in the restored copy does not carry a valid signature, so it may have been changed after it was saved.",
+      action:
+        "The box will not start from this copy. Ask whoever installed this box to look at it before anything else.",
+    },
+    "es-ES": {
+      title:
+        "La lista de equipos de la copia restaurada no tiene una firma válida, así que puede haberse cambiado después de guardarse.",
+      action:
+        "El equipo no arrancará con esta copia. Antes de nada, pide a quien instaló este equipo que lo revise.",
+    },
+  },
   "migrations.set_missing": {
     "en-GB": {
       title: "The installed software is incomplete.",

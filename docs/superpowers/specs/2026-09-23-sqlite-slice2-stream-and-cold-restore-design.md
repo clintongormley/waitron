@@ -428,6 +428,11 @@ stream, raises an alert, and retries the step at the next start.
 > fenced node defers it: nothing is re-issued or signed, the marker stays and the copy is held. See
 > `docs/backlog.md`'s Task 9a entry.
 
+> 2026-09-26: one failure now does keep the box shut. When the restored membership document fails
+> its signature check against the copy's own node keys, the start fails with
+> `restore.membership_invalid` and the recovery page shows it; nothing is re-issued or signed. See
+> `docs/backlog.md`'s Task 9a entry.
+
 ---
 
 ## 6. The restart reset

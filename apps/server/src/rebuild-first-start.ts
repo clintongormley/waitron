@@ -2,7 +2,13 @@ import { access, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type { KeyRing } from "@waitron/credentials";
-import { persistNodeMembershipIfNewer, readNodeMembership, type Database } from "@waitron/db";
+import {
+  persistNodeMembershipIfNewer,
+  readMembershipTrustSet,
+  readNodeMembership,
+  type Database,
+} from "@waitron/db";
+import { verifyMembershipDocument } from "@waitron/membership";
 import { codeOf } from "@waitron/server-kit";
 import { AppError, isAppError } from "@waitron/shared";
 import {
@@ -15,6 +21,7 @@ import { reissueBoxLeaf } from "./box-secrets.js";
 import type { Logger } from "./logger.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
 import { readStreamSettings } from "./stream-host.js";
+import "./errors.js";
 
 /** Left in the state folder by `writeValidated` (restore.ts) whenever a restore takes on the
  * archive's identity; holds `{ version: 1, source }`. */
@@ -41,9 +48,21 @@ export interface RebuildDeps {
 }
 
 /**
- * A restored box's first trading start: a certificate naming this machine's addresses, then the
- * membership document one term higher naming this machine's contact address. Does nothing, and
- * returns false, when no restore left its marker.
+ * Throws `restore.membership_invalid` when the held membership document fails its check against the
+ * node keys in the same database; a database holding no document passes. The keys come from the
+ * restored copy itself, so a copy whose `nodes` keys were rewritten along with its document passes.
+ */
+export async function assertRestoredMembershipValid(db: Database): Promise<void> {
+  const held = await readNodeMembership(db);
+  if (held === null) return;
+  const verdict = verifyMembershipDocument(held, await readMembershipTrustSet(db));
+  if (!verdict.valid) throw new AppError("restore.membership_invalid", { reason: verdict.reason });
+}
+
+/**
+ * A restored box's first trading start: a check of the restored membership document, a certificate
+ * naming this machine's addresses, then the membership document one term higher naming this
+ * machine's contact address. Does nothing, and returns false, when no restore left its marker.
  *
  * The marker is removed last, so a failure or a crash part-way re-runs every step at the next
  * start. Each re-run issues another leaf and, once the term has been stored, moves the term up
@@ -58,6 +77,7 @@ export async function completeRebuild(deps: RebuildDeps): Promise<boolean> {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
     throw error;
   }
+  await assertRestoredMembershipValid(deps.db);
   await reissueBoxLeaf({
     stateDir: deps.stateDir,
     hostnames: deps.hostnames,
@@ -107,15 +127,18 @@ export interface FirstStart {
 }
 
 /**
- * {@link completeRebuild}, for boot. A failure never keeps the box shut: it sells, does not stream
+ * {@link completeRebuild}, for boot. A failure does not keep the box shut: it sells, does not stream
  * (its term may not have moved), and the marker stays so the next start tries again (slice-2
- * spec §5.3). The log carries the error's code only.
+ * spec §5.3). The log carries the error's code only. The exception is
+ * `restore.membership_invalid`, which is thrown on, so the start fails and the recovery page shows
+ * it.
  */
 export async function runFirstStart(deps: RebuildDeps): Promise<FirstStart> {
   try {
     await completeRebuild(deps);
     return { mayStream: true, failedSince: null };
   } catch (error) {
+    if (isAppError(error) && error.code === "restore.membership_invalid") throw error;
     deps.log("error", "restore.first_start_failed", { errorCode: codeOf(error) });
     return { mayStream: false, failedSince: deps.now().toISOString() };
   }

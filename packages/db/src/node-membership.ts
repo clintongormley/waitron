@@ -11,10 +11,13 @@ import { nodeMembership } from "./schema/node-membership.js";
  * Not verified here. A peer's document is stored only after `acceptMembershipDocument`
  * (@waitron/membership) passes it; every other write is one this node minted and signed itself
  * (`mintNextMembershipDocument`), so readers trust the row as boot trusts its deployment axes.
- * A row that arrived any other way is not checked: a restore (archive or bucket) puts back the
- * copy's row as it was, and whatever this node next mints over it (`completeRebuild`, at the start
- * that finishes the restore, is one) signs the next term over that row's node list without
- * verifying it; a raw SQL write or a database file edited outside the program is read as is.
+ * A restore (archive or bucket) puts back the copy's row as it was; the start that finishes the
+ * restore checks it against the copy's own node keys before signing over it, and refuses the start
+ * when it fails (`assertRestoredMembershipValid`, `apps/server/src/rebuild-first-start.ts`). That
+ * check trusts the keys the same copy holds, and a start that defers finishing the restore (a
+ * mirror, or a fenced node) does not run it; neither promotion nor `retireSelf` checks the row
+ * before signing over it (`apps/server/src/promote.ts`, `apps/server/src/retire.ts`). A raw SQL
+ * write or a database file edited outside the program is read as is.
  *
  * The table's existence is read off `sqlite_master` rather than discovered by running the select and
  * catching the refusal; the reason is on `deploymentTableExists` in `./deployment.js`.
