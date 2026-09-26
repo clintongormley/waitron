@@ -2288,7 +2288,7 @@ describe("till-app", () => {
     expect(currentApi.parkOrder).not.toHaveBeenCalled();
   });
 
-  it("says a retrieved extra is no longer offered but still charged, not that it was dropped", async () => {
+  it("says a retrieved extra is no longer offered, not that it was dropped", async () => {
     const { el } = await mountApp({
       retrieveWorkingOrder: vi.fn().mockResolvedValue(milkOrder()),
     });
@@ -2300,6 +2300,31 @@ describe("till-app", () => {
     const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
     expect(banner.textContent).toContain(t("held.extra_not_offered"));
     expect(banner.textContent).not.toContain(t("held.product_gone"));
+  });
+
+  // The till cannot tell a list that withdrew a still-sellable extra from an extra that can no
+  // longer be sold (both are simply absent from the live offer), nor whether the line has gone to
+  // the kitchen, so the banner may not promise that the extra is charged: paying refuses an unsent
+  // one that can no longer be sold (`priceStoredOrderForIssuance`, apps/server/src/working-order.ts).
+  it("warns that paying is refused if a no-longer-offered extra cannot be sold, in both languages", async () => {
+    const { el } = await mountApp({
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(milkOrder()),
+    });
+    const counter = await toCounter(el);
+    const banner = () => el.shadowRoot!.querySelector('[role="alert"]')!.textContent!;
+
+    emit(counter, "retrieve-order", { id: "wo-customised" });
+    await flush(el);
+    expect(banner()).toContain("Sigue en el pedido tal como se guardó");
+    expect(banner()).toContain("no se podrá cobrar hasta que se quite");
+    expect(banner()).not.toContain("Se sigue cobrando");
+
+    setLocale("en-GB");
+    emit(counter, "retrieve-order", { id: "wo-customised" });
+    await flush(el);
+    expect(banner()).toContain("It stays on the order as saved");
+    expect(banner()).toContain("paying is refused until it is removed");
+    expect(banner()).not.toContain("still charged");
   });
 
   it("reports a dropped line before a not-offered extra, and a not-offered extra before a stale answer", async () => {

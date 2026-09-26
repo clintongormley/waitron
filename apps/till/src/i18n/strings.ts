@@ -303,7 +303,7 @@ export const en = {
   "held.park_error": "Could not hold the order, try again",
   "held.product_gone": "A product is no longer available and was dropped from the order",
   "held.extra_not_offered":
-    "An extra on this order is no longer offered. It is still charged; changing the order removes it.",
+    "An extra on this order is no longer offered. It stays on the order as saved, and changing the order removes it. If it can no longer be sold and has not gone to the kitchen, paying is refused until it is removed.",
   // Says what to DO, because reopening the line and choosing again is the only way out.
   "held.options_changed": "An item's choices have changed — open the line and choose again",
   "held.stale": "That order is no longer available",
@@ -614,7 +614,7 @@ export const es: Record<StringKey, string> = {
   "held.park_error": "No se pudo aparcar el pedido, inténtalo de nuevo",
   "held.product_gone": "Un producto ya no está disponible y se quitó del pedido",
   "held.extra_not_offered":
-    "Un extra de este pedido ya no se ofrece. Se sigue cobrando; si cambias el pedido, se quita.",
+    "Un extra de este pedido ya no se ofrece. Sigue en el pedido tal como se guardó, y si cambias el pedido, se quita. Si ya no se puede vender y no se ha enviado a cocina, no se podrá cobrar hasta que se quite.",
   "held.options_changed":
     "Han cambiado las opciones de un producto: abre la línea y vuelve a elegir",
   "held.stale": "Ese pedido ya no está disponible",

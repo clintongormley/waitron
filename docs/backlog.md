@@ -1065,6 +1065,9 @@ the plain product path; see "A sale needs a zone" below.) What Task 9 leaves ope
   carries the same mark. The first edit takes the extra off the basket, because the till cannot
   send it and the server re-prices an edited order without it — pinned by "bills a parked extra
   that gained an Active variant until an edit omits it" (`apps/server/src/till-sale.test.ts`).
+  (2026-09-26, branch `feat/menus-order-edits`: paying now refuses an unsent extra that can no
+  longer be sold, so the banner no longer says the extra is charged; it says paying is refused in
+  that case.)
 - **Retrieving a held order reads the counter's CURRENT zone offer, not the zone the order was
   parked in.** `#onRetrieveOrder` (`apps/till/src/till-app.ts`) matches each line against the
   till's `products`, which hold the offers of the zone the counter is showing (loaded by
