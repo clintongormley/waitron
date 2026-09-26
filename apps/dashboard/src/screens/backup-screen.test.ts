@@ -907,6 +907,63 @@ describe("the status watcher's key requests and read alerts", () => {
     expect(alertText(el)?.trim()).toBe(codeMessage("backup.recovery_key_exists"));
   });
 
+  async function mountThenFailARead(api: DashboardApi): Promise<BackupScreen> {
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    vi.mocked(api.getBackupStatus).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() => expect(alertText(el)?.trim()).toBe(codeMessage("connection.failed")));
+    return el;
+  }
+
+  async function startApply(el: BackupScreen): Promise<void> {
+    setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
+    tickCheckbox(el, "[data-test=saved-it]");
+    await el.updateComplete;
+    q(el, "[data-test=apply]")!.click();
+    await el.updateComplete;
+  }
+
+  it("clears the failed-read alert when Apply starts", async () => {
+    const api = stubApi({ applyBackup: vi.fn().mockReturnValue(new Promise(() => {})) });
+    const el = await mountThenFailARead(api);
+
+    await startApply(el);
+    expect(api.applyBackup).toHaveBeenCalledOnce();
+    expect(alertText(el)).toBeUndefined();
+  });
+
+  it("clears the failed-read alert when Rotate starts", async () => {
+    const api = stubApi(
+      { rotateBackupKey: vi.fn().mockReturnValue(new Promise(() => {})) },
+      ENABLED,
+    );
+    const el = await mountThenFailARead(api);
+
+    q(el, "[data-test=show-old-key]")!.click();
+    await flush(el);
+    tickCheckbox(el, "[data-test=saved-it]");
+    await el.updateComplete;
+    expect(alertText(el)?.trim()).toBe(codeMessage("connection.failed"));
+    q(el, "[data-test=rotate-confirm]")!.click();
+    await el.updateComplete;
+    expect(api.rotateBackupKey).toHaveBeenCalledOnce();
+    expect(alertText(el)).toBeUndefined();
+  });
+
+  it("raises the failed-read alert again when a read after Apply fails", async () => {
+    const api = stubApi();
+    const el = await mountThenFailARead(api);
+    const readsBeforeApply = vi.mocked(api.getBackupStatus).mock.calls.length;
+
+    await startApply(el);
+    await flush(el);
+    expect(api.applyBackup).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(api.getBackupStatus).toHaveBeenCalledTimes(readsBeforeApply + 1));
+    await flush(el);
+    expect(alertText(el)?.trim()).toBe(codeMessage("connection.failed"));
+  });
+
   it("makes no key when the late status says the box is not the primary", async () => {
     const api = stubApi({
       getBackupStatus: vi

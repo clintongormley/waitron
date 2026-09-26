@@ -127,9 +127,9 @@ for a key only while the screen has made none, and at most once — a failed min
 every refresh, because the mint is a POST and a POST is never passive — so a first status read that
 failed, or a held key a later read finds too short, still gets a key. A key request already in
 flight is shared, so Apply, Rotate and the watcher never race to set the shown key. A failed
-status read's alert clears when a later status read succeeds; an alert from anything else — an
-action, showing the old key, or a failed mint — stays until the screen is reopened or a key or
-settings action clears it. See
+status read's alert clears when a later status read succeeds or when Apply or Rotate starts; an
+alert from anything else — an action, showing the old key, or a failed mint — stays until the
+screen is reopened or a key or settings action clears it. See
 `docs/developers/dashboard-live-updates.md` and the passive-session and backup-screen regressions
 (`apps/dashboard/src/screens/backup-screen.test.ts`, "the status watcher's key requests and read
 alerts").

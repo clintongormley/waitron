@@ -5678,16 +5678,15 @@ environment, no usable held key). So a first status read that fails and a later 
 now gets a key, and a refresh never replaces a key the screen made. The watcher shares a pending key
 request with Apply and Rotate, and a failed status read's alert clears when a later one succeeds;
 the owner ruled that CLAUDE.md §3's observer rule protects the shown key, and it now says so.
-Starting Apply or Rotate no longer clears a failed status read's alert, so after an Apply that
-reuses the held key (which asks for no fresh status) it stays until the next timed status read —
-`getBackupStatus` refreshes every 10 seconds (`apps/dashboard/src/api/live-queries.ts`). Left
-open: the panel picks its message from `managedByEnvironment` alone, so with a key hand-edited too
-short in `backup.env` it can name a button that does not help: with archives on it names a button
-that is not shown (the status reads the running settings' still-long key, and the form shows only
-with archives off); with archives off, until the next status read reports the key too short, the
-button sends no new key (it reuses the held one) — after that read the screen makes one. The watcher
-does not retry its own failed mint (the mint is a POST, which is never passive session activity), so
-the screen then offers no key until it is reopened, as it did before.
+Starting Apply or Rotate clears that alert too, and a later failed status read raises it again
+(lane A's A54, 2026-09-26, the owner's choice); Save settings, Show old key, Edit and Cancel edit
+still leave it. Left open: the panel picks its message from `managedByEnvironment` alone, so with
+a key hand-edited too short in `backup.env` it can name a button that does not help: with archives
+on it names a button that is not shown (the status reads the running settings' still-long key, and
+the form shows only with archives off); with archives off, until the next status read reports the
+key too short, the button sends no new key (it reuses the held one) — after that read the screen
+makes one. The watcher does not retry its own failed mint (the mint is a POST, which is never
+passive session activity), so the screen then offers no key until it is reopened, as it did before.
 The edit-settings form can also meet
 `backup.recovery_key_exists`, when a rotate (from another tab or admin) lands after it fetched the
 key. Left open: the
