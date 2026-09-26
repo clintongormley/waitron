@@ -1217,10 +1217,6 @@ What Task 12 deliberately did NOT do, so Task 13 is not surprised by it:
   transfer pickers (`apps/till/src/screens/till-table-order-screen.ts`), so nothing offers it an
   action it cannot take; whether the drawer should also INDENT it is a display question nobody has
   decided. Deliberately left as it is.
-- **Resolved by menus Task 7: the order path no longer runs a `products` read of its own for an
-  extra's facts.** `resolveBasketModifiers` is gone; the order path takes an extra's names, price,
-  VAT class and availability from the served offer (`offerModifiers`,
-  `apps/server/src/working-order.ts`).
 - **A published-but-DETACHED extras list is offered by nothing and demanded by the validator, and
   nothing cleans the publication up.** The two sides read different sets on ONE of the three reads
   that build those maps — the MENU-OFFER extras read, which is the read this scenario uses. The
