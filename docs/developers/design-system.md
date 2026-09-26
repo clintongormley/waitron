@@ -710,7 +710,9 @@ Two notes on the primitives this pattern uses, both in the table above:
   field's button is the only way to the unit. The extras list form's price cells set `fixed-unit`:
   a row shows its product's unit, which is chosen on the product, so a unit button there would be a
   control that does nothing. Where that form is 30rem wide or less, the unit moves under the amount
-  as text, so a long unit does not widen the table.
+  as text that breaks inside a word where it must, so a long unit does not widen the table:
+  `extra-list-form.test.ts` checks that with "kilogramos", "Unidadesdeembalaje" and a multi-word
+  unit name against the one-letter "g".
 
 ### Dashboard banner
 

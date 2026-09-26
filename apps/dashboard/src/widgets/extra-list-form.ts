@@ -76,10 +76,11 @@ export class ExtraListForm extends LitElement {
         td wt-switch::part(label) {
           display: none;
         }
-        /* The unit moves under the amount as text, so a long one cannot widen the table. */
+        /* The unit moves under the amount as text, breaking inside a word where it must. */
         td wt-price-input::part(unit) {
           flex-basis: 100%;
           min-width: 0;
+          overflow-wrap: anywhere;
           min-height: 0;
           padding: var(--wt-space-1) 0 0;
           border: 0;

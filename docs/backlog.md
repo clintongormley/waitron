@@ -660,10 +660,12 @@ its part done here when it lands.
   stepper's button names are now functions (the A64 open point), the price field can hide its label
   and show its unit as text, and a switch now takes its label's text as its line. On a phone the
   Preselected text beside each switch is hidden (the column heading names them) and each unit moves
-  under its price, which keeps the table's sideways scroll below what it was whatever the unit:
-  measured at 390px with two 9999.99 prices, 163px of scroll in English (234px before) and 206px in
-  Spanish (271px before), the same for "ración", "kilogramos" and a unit named "Large half portion"
-  or "Media ración grande" with no abbreviation. Still to come: A67, the Options editor.
+  under its price, breaking inside a word where it must. Measured in Chromium 153.0.8010.12,
+  2026-09-27, at a 390px viewport (the page's own width read back as 390) with two 9999.99 prices:
+  163px of sideways scroll in English and 206px in Spanish, and a 104px price column, for each of
+  "g", "ración", "kilogramos", "Unidadesdeembalaje" and a unit with no abbreviation named "Large
+  half portion" / "Media ración grande". An earlier measurement, not repeated, read 234px (English)
+  and 271px (Spanish) before the A66 rework. Still to come: A67, the Options editor.
 
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its

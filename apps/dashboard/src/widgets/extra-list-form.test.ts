@@ -1032,6 +1032,12 @@ const LONG_ABBREVIATION = {
   precision: 3,
   abbreviation: { en: "kilogramos", es: "kilogramos" },
 };
+const ONE_LONG_WORD = {
+  id: "unit-pack",
+  name: { en: "Packing unit", es: "Unidad de embalaje" },
+  precision: 0,
+  abbreviation: { en: "Unidadesdeembalaje", es: "Unidadesdeembalaje" },
+};
 const LONG_NAME = {
   id: "unit-half",
   name: { en: "Large half portion", es: "Media ración grande" },
@@ -1069,7 +1075,7 @@ it("keeps a long unit from widening the table on a phone, in English and Spanish
       setLocale(locale);
       const short = await phoneOverflow(GRAM);
       expect(short.overflow, locale).toBeGreaterThan(0);
-      for (const unit of [LONG_ABBREVIATION, LONG_NAME]) {
+      for (const unit of [LONG_ABBREVIATION, ONE_LONG_WORD, LONG_NAME]) {
         const long = await phoneOverflow(unit);
         expect(long.clipped, `${locale} ${unit.id}`).toBe(false);
         expect(long.overflow, `${locale} ${unit.id}`).toBeLessThanOrEqual(short.overflow);
