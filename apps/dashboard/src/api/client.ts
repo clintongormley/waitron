@@ -43,7 +43,10 @@ export type { LibrarySection, MemberRef, SectionInput, SectionMember, SectionUsa
 import type { MenuPriceRow, MenuVariant } from "@waitron/catalogue/src/menu-types.js";
 export type { MenuPriceRow, MenuVariant };
 import type {
+  DocumentMember,
+  FrozenOffer,
   MenuChange,
+  MenuDocument,
   MenuPreview,
   MenuStatus,
   ProductChangeField,
@@ -51,7 +54,10 @@ import type {
   SectionChangeField,
 } from "@waitron/catalogue/src/menu-document-types.js";
 export type {
+  DocumentMember,
+  FrozenOffer,
   MenuChange,
+  MenuDocument,
   MenuPreview,
   MenuStatus,
   ProductChangeField,

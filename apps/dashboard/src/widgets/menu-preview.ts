@@ -3,9 +3,13 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { formatMoney } from "@waitron/shared";
+import "./menu-structure-tree.js";
 import type {
+  DocumentMember,
   MenuChange,
+  MenuDocument,
   MenuPreview,
+  MenuStructureNode,
   MenuStatus,
   ProductChangeField,
   SectionChangeField,
@@ -78,6 +82,44 @@ function list(items: readonly string[]): string {
     listFormats.set(locale, format);
   }
   return format.format(items);
+}
+
+/**
+ * A published-menu document in the structure tree's shape, with the names the tree shows: a product
+ * by its offer's staff name, a section by its internal name. A list holds a product or a section at
+ * most once (`section_members_product_uq`, `section_members_child_uq`), so what a member names keys
+ * it within its list.
+ */
+export function documentTree(document: MenuDocument): {
+  nodes: MenuStructureNode[];
+  products: { id: string; name: string }[];
+  sections: { id: string; internalName: string }[];
+} {
+  const products = new Map<string, string>();
+  const sections = new Map<string, string>();
+  const nodes = (members: DocumentMember[]): MenuStructureNode[] =>
+    members.map((member) => {
+      if (member.kind === "product") {
+        const offer = document.offers[member.menuItemId];
+        if (offer !== undefined) products.set(member.productId, offer.name);
+        return {
+          memberId: `p:${member.productId}`,
+          ref: { kind: "product", productId: member.productId },
+        };
+      }
+      sections.set(member.sectionId, member.internalName);
+      return {
+        memberId: `s:${member.sectionId}`,
+        ref: { kind: "section", sectionId: member.sectionId },
+        children: nodes(member.members),
+      };
+    });
+  const root = nodes(document.root.members);
+  return {
+    nodes: root,
+    products: [...products].map(([id, name]) => ({ id, name })),
+    sections: [...sections].map(([id, internalName]) => ({ id, internalName })),
+  };
 }
 
 /** Says a publish did not happen, what is still live, and that the working edits are kept. */
@@ -388,6 +430,29 @@ export class MenuPreviewPanel extends LitElement {
     </section>`;
   }
 
+  /** The whole menu, as the publish would make it live, or as it is live when there is nothing to
+   * publish. */
+  #renderDocument() {
+    const preview = this.preview;
+    if (this.failed || preview === null) return nothing;
+    const heading = t(
+      this.#upToDate(preview) === null
+        ? "menu_preview.document_heading"
+        : "menu_preview.document_heading_live",
+    );
+    const tree = documentTree(preview.document);
+    return html`<section data-test="document" aria-labelledby="document-heading">
+      <h2 id="document-heading">${heading}</h2>
+      <dashboard-menu-structure-tree
+        readonly
+        label=${heading}
+        .nodes=${tree.nodes}
+        .products=${tree.products}
+        .sections=${tree.sections}
+      ></dashboard-menu-structure-tree>
+    </section>`;
+  }
+
   #renderPublish() {
     if (this.failed || this.preview === null || this.#upToDate(this.preview) !== null)
       return nothing;
@@ -409,7 +474,7 @@ export class MenuPreviewPanel extends LitElement {
 
   override render() {
     return html`${this.#renderLive()} ${this.#renderResult()} ${this.#renderChanges()}
-    ${this.#renderWarnings()} ${this.#renderPublish()}`;
+    ${this.#renderWarnings()} ${this.#renderPublish()} ${this.#renderDocument()}`;
   }
 }
 

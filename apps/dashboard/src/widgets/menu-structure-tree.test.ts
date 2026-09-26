@@ -178,3 +178,36 @@ it("names the whole structure by its label, and leaves a nested list unnamed", a
   const lists = [...el.shadowRoot!.querySelectorAll("ul")];
   expect(lists.map((list) => list.getAttribute("aria-label"))).toEqual(["Lunch Menu", null]);
 });
+
+it("in read-only mode shows a section's name as text that asks for no edit, and still opens it", async () => {
+  const el = await mount({ readonly: true });
+  const heard: Event[] = [];
+  el.addEventListener("wt-structure-edit", (event) => heard.push(event));
+  expect(q(el, '[data-test="edit-m-drinks"]')).toBeNull();
+  expect(q(el, 'li[data-path="m-drinks"] > .row [data-test="name"]')!.closest("button")).toBeNull();
+  expect(nameOf(el, "m-drinks")).toBe("Drinks");
+  q(el, 'li[data-path="m-drinks"] > .row [data-test="name"]')!.click();
+  expect(heard).toEqual([]);
+  await toggle(el, "m-drinks");
+  expect(shown(el)).toEqual([
+    "m-burger",
+    "m-drinks",
+    "m-drinks/m-lager",
+    "m-drinks/m-beer",
+    "m-drinks/m-lemonade",
+    "m-fav",
+  ]);
+});
+
+it("edits by default: the same click on a section's name asks to edit it", async () => {
+  const el = await mount();
+  const heard: { path: string[] }[] = [];
+  el.addEventListener("wt-structure-edit", (event) =>
+    heard.push((event as CustomEvent<{ path: string[] }>).detail),
+  );
+  expect(
+    q(el, 'li[data-path="m-drinks"] > .row [data-test="name"]')!.closest("button"),
+  ).not.toBeNull();
+  q(el, 'li[data-path="m-drinks"] > .row [data-test="name"]')!.click();
+  expect(heard).toEqual([{ path: ["m-drinks"] }]);
+});
