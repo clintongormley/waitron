@@ -81,6 +81,9 @@ declare module "@waitron/shared" {
     "media.too_large": { size: number; limit: number };
     /** A location-menu write, or a read or write of a menu's structure, names no menu. */
     "catalogue.not_found": { catalogueId: string };
+    /** The menu's working state no longer hashes to what its preview showed, so nothing was
+     * published. */
+    "menu.changed_since_preview": { menuId: string };
     /** A menu offer operation names no item the menu's structure reaches; menuId is present when
      * the route supplies it. */
     "menu_item.not_found": { menuId?: string; menuItemId: string };

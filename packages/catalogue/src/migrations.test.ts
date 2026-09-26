@@ -62,6 +62,9 @@ const TABLES = [
   "product_modifiers",
   "sections",
   "section_members",
+  "menu_versions",
+  "menu_publications",
+  "menu_version_images",
 ];
 
 /**
@@ -168,6 +171,9 @@ describe("the catalogue migration set carries no tenant column", () => {
       product_modifiers: "id",
       sections: "id",
       section_members: "id",
+      menu_versions: "id",
+      menu_publications: "menu_id",
+      menu_version_images: "version_id, filename",
     });
 
     expect(foreignKeys).toEqual({
@@ -201,6 +207,10 @@ describe("the catalogue migration set carries no tenant column", () => {
       "section_members(product_id)": "products(id) on delete cascade",
       "section_members(section_id)": "sections(id) on delete cascade",
       "sections(owner_menu_id)": "catalogues(id) on delete no action",
+      "menu_versions(menu_id)": "catalogues(id) on delete no action",
+      "menu_publications(menu_id)": "catalogues(id) on delete no action",
+      "menu_publications(version_id, menu_id)": "menu_versions(id, menu_id) on delete no action",
+      "menu_version_images(version_id)": "menu_versions(id) on delete no action",
     });
 
     expect(checks).toEqual({
@@ -224,6 +234,7 @@ describe("the catalogue migration set carries no tenant column", () => {
       sections_role_ck: `"sections"."role" in ('library', 'menu_root', 'home_layout')`,
       sections_owner_ck: `("sections"."role" = 'library') = ("sections"."owner_menu_id" is null)`,
       section_members_one_ref_ck: `("section_members"."product_id" is null) <> ("section_members"."child_section_id" is null)`,
+      menu_versions_number_ck: `"menu_versions"."number" >= 1`,
     });
   });
 
@@ -278,6 +289,9 @@ describe("the catalogue migration set carries no tenant column", () => {
       section_members_order_idx: { unique: false, columns: "section_id, position" },
       section_members_child_idx: { unique: false, columns: "child_section_id" },
       section_members_product_idx: { unique: false, columns: "product_id" },
+      menu_versions_menu_number_uq: { unique: true, columns: "menu_id, number" },
+      menu_versions_id_menu_key: { unique: true, columns: "id, menu_id" },
+      menu_version_images_filename_idx: { unique: false, columns: "filename" },
     });
   });
 });

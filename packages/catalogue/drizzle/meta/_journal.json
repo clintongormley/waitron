@@ -71,6 +71,13 @@
       "when": 1790365571708,
       "tag": "0009_drop_menu_sections",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1790394956138,
+      "tag": "0010_menu_publication",
+      "breakpoints": true
     }
   ]
 }

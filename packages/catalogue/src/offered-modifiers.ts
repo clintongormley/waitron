@@ -63,6 +63,7 @@ export async function resolveAttachedModifiers(
 async function walkAttachedModifiers(
   tx: Transaction,
   dishes: readonly ModifierHolder[],
+  everyItem = false,
 ): Promise<WalkedAttachments> {
   const productIds = [...new Set(dishes.map((dish) => dish.productId))];
   const menuItemIds = [
@@ -76,7 +77,9 @@ async function walkAttachedModifiers(
 
   const extrasByHolder = new Map<string, ResolvedExtraList[]>();
   if (menuItemIds.length > 0) {
-    for (const [holder, lists] of await readMenuExtras(tx, menuItemIds)) {
+    for (const [holder, lists] of await readMenuExtras(tx, menuItemIds, {
+      includeWithdrawn: everyItem,
+    })) {
       extrasByHolder.set(holder, lists);
     }
   }
@@ -114,10 +117,12 @@ type OfferedExtraItemFacts = Omit<OfferedExtraItem, "price" | "maxQuantity" | "p
 
 const activeVariant = alias(products, "active_variant");
 
-/** One query for every product any offered list names, and none at all when no list names one. */
+/** One query for every product any offered list names, and none at all when no list names one.
+ * With `everyItem`, an Inactive or Unavailable product is read too. */
 async function readExtraProducts(
   tx: Transaction,
   productIds: string[],
+  everyItem: boolean,
 ): Promise<Map<string, OfferedExtraItemFacts>> {
   if (productIds.length === 0) return new Map();
   const rows = await tx
@@ -135,8 +140,8 @@ async function readExtraProducts(
     .where(
       and(
         inArray(products.id, productIds),
-        eq(products.active, true),
-        eq(products.available, true),
+        everyItem ? undefined : eq(products.active, true),
+        everyItem ? undefined : eq(products.available, true),
         notExists(
           tx
             .select({ one: sql`1` })
@@ -179,12 +184,22 @@ type WalkedList =
  * `validateExtraSelections` and `validateOptionSelections` will accept an answer from. An extras
  * item is left out when its product row is missing, Inactive or Unavailable (spec §15.6), or has an
  * Active variant (spec §15.1). The order path refuses a pick of the last three on its own read.
+ *
+ * With `everyItem`, what a published document holds: every label, and every extras item whether or
+ * not its product is Active and Available and whether or not the offer withdraws it. A default label
+ * is then kept while it names any label of its list.
  */
 export async function readOfferedModifiers(
   tx: Transaction,
   dishes: readonly ModifierHolder[],
+  options: { everyItem?: boolean } = {},
 ): Promise<Map<string, OfferedModifier[]>> {
-  const { attachments, extrasByHolder, optionsByProduct } = await walkAttachedModifiers(tx, dishes);
+  const everyItem = options.everyItem === true;
+  const { attachments, extrasByHolder, optionsByProduct } = await walkAttachedModifiers(
+    tx,
+    dishes,
+    everyItem,
+  );
 
   const walked = new Map<string, WalkedList[]>();
   for (const dish of dishes) {
@@ -206,15 +221,19 @@ export async function readOfferedModifiers(
     );
   }
 
-  const facts = await readExtraProducts(tx, [
-    ...new Set(
-      [...walked.values()].flatMap((entries) =>
-        entries.flatMap((entry) =>
-          entry.kind === "extras" ? entry.list.items.map((item) => item.productId) : [],
+  const facts = await readExtraProducts(
+    tx,
+    [
+      ...new Set(
+        [...walked.values()].flatMap((entries) =>
+          entries.flatMap((entry) =>
+            entry.kind === "extras" ? entry.list.items.map((item) => item.productId) : [],
+          ),
         ),
       ),
-    ),
-  ]);
+    ],
+    everyItem,
+  );
 
   const offered = new Map<string, OfferedModifier[]>();
   for (const [holder, entries] of walked) {
@@ -222,7 +241,9 @@ export async function readOfferedModifiers(
       holder,
       entries.map((entry): OfferedModifier => {
         if (entry.kind === "options") {
-          const labels = entry.list.labels.filter((label) => label.available);
+          const labels = everyItem
+            ? entry.list.labels
+            : entry.list.labels.filter((label) => label.available);
           return {
             kind: "options",
             id: entry.list.id,
