@@ -5,6 +5,7 @@ import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import type { BackupStatusView, DashboardApi, StreamSettingsView } from "../api/client.js";
 import { BackupScreen } from "./backup-screen.js";
+import type { StreamSettingsPanel } from "./stream-settings-panel.js";
 
 afterEach(cleanupWidgets);
 
@@ -181,8 +182,31 @@ describe("backup-screen", () => {
     const apply = q(el, "[data-test=apply]")!;
     expect(apply.textContent!.trim()).toBe(t("backup.apply"));
     expect(t("stream.error.recovery_key_too_short")).toContain(t("backup.apply"));
-    const panel = q(el, "dashboard-stream-settings")!;
+    const panel = q(el, "dashboard-stream-settings") as StreamSettingsPanel;
     expect(apply.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(panel.managedByEnvironment).toBe(false);
+  });
+
+  it("tells the bucket-copy panel the environment owns a too-short key, where there is no button to replace it", async () => {
+    const api = stubApi({}, { ...MANAGED, recoveryKeySet: true, recoveryKeyTooShort: true });
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    expect(q(el, "[data-test=apply]")).toBeNull();
+    const panel = q(el, "dashboard-stream-settings") as StreamSettingsPanel;
+    expect(panel.managedByEnvironment).toBe(true);
+  });
+
+  it("tells the bucket-copy panel it does not know who owns the backup settings when the status read fails", async () => {
+    const api = stubApi({
+      getBackupStatus: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    expect(q(el, "[role=alert]")?.textContent?.trim()).toBe(codeMessage("connection.failed"));
+    expect(q(el, "[data-test=apply]")).toBeNull();
+    const panel = q(el, "dashboard-stream-settings") as StreamSettingsPanel;
+    expect(panel).not.toBeNull();
+    expect(panel.managedByEnvironment).toBeUndefined();
   });
 
   it("explains a refused second recovery key in words", async () => {

@@ -509,7 +509,10 @@ export class BackupScreen extends LitElement {
           : nothing
       }
       <div class="card">
-        <dashboard-stream-settings .api=${this.api}></dashboard-stream-settings>
+        <dashboard-stream-settings
+          .api=${this.api}
+          .managedByEnvironment=${s?.managedByEnvironment}
+        ></dashboard-stream-settings>
       </div>
     `;
   }
