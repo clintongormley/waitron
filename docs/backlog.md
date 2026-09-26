@@ -5789,7 +5789,7 @@ line with what slice 2 built. Left open:
   `1 skipped`; the reason shows under `--reporter=verbose`
   ([testing-guide.md](developers/testing-guide.md), "The stream loop test skips locally without its
   two binaries, and a skip reads as a pass").
-- **DONE (2026-09-26, lane A's A34, branch `fix/installer-scripts-select-server`): a change to
+- **DONE (2026-09-26, lane A's A34, #665): a change to
   `scripts/setup-litestream.mjs` or `scripts/setup-s3-test-server.mjs` alone now selects
   `@waitron/server` and so its `test-server` shards.** Both are in `ROOT_SCOPE_CONSUMERS` against
   `apps/server`, and `scripts/root-scope-consumers.test.mjs` accepts a script run in the ci.yml job
