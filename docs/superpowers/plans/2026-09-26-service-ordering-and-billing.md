@@ -847,6 +847,11 @@ Spec terms, §1 (seating, related bills, joined tables), §8 (Finish table, Need
   // TableState gains visit: { id, revision, guestCount, state, outstanding: string, billCount: number, tableIds: string[] } | null
   ```
 
+  _Note, 2026-09-26: as built (`apps/server/src/visits.ts`), `visitForTable` is a helper inside
+  `visits.test.ts`, not an export; `checkAndBumpVisit` takes a fourth argument, `requiredState`
+  (`"open"` or `"needs_clearing"`); `finishTable` and `markCleared` take no `cfg`; and `seatTable`
+  also returns `orderNumber`._
+
 - [ ] **Step 0: Re-map** (Global Constraints) `splitOffCheck`, `transferLines`, `moveTab`,
   `joinTable`, `unjoinTable` and `mergeTabs` after M7b, and the transition trigger's current column
   list. List every path that creates a tab or changes which tables a tab covers; each must keep

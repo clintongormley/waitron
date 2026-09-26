@@ -3543,11 +3543,11 @@ describe("till-app", () => {
     });
 
     it("open-table on a FREE table opens a fresh tab and moves to the table-ordering screen", async () => {
-      const openTab = vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 });
+      const seatTable = vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 });
       const { el } = await mountApp({
         getTablesState: vi.fn().mockResolvedValue([freeTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
-        seatTable: openTab,
+        seatTable,
       });
       await toCounter(el);
       selectTab(el, "floor");
@@ -3557,7 +3557,7 @@ describe("till-app", () => {
       await flush(el);
 
       // A free table opens a NEW tab (a pre-fiscal working order) before transitioning.
-      expect(openTab).toHaveBeenCalledWith("t1", null);
+      expect(seatTable).toHaveBeenCalledWith("t1", null);
       // On a TILL the table-order screen opens as a DRILL over the floor tab, which stays
       // mounted (inert) underneath — the drill is what the operator sees.
       expect(floor(el)).not.toBeNull();
@@ -3567,11 +3567,11 @@ describe("till-app", () => {
     });
 
     it("open-table on an OCCUPIED table resumes its tab WITHOUT opening a new one", async () => {
-      const openTab = vi.fn();
+      const seatTable = vi.fn();
       const { el } = await mountApp({
         getTablesState: vi.fn().mockResolvedValue([openTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
-        seatTable: openTab,
+        seatTable,
       });
       await toCounter(el);
       selectTab(el, "floor");
@@ -3580,21 +3580,21 @@ describe("till-app", () => {
       emit(floor(el)!, "open-table", { tableId: "t2", seated: true });
       await flush(el);
 
-      // An occupied table already has a tab — no fresh openTab, just the transition. The screen points
-      // at the RESUMED tab id (resolved from the read-model's tabId), not a new one.
-      expect(openTab).not.toHaveBeenCalled();
+      // An occupied table already has a tab — no seatTable call, just the transition. The screen
+      // points at the RESUMED tab id (resolved from the read-model's tabId), not a new one.
+      expect(seatTable).not.toHaveBeenCalled();
       // The table-order drill overlays the still-mounted floor tab.
       expect(floor(el)).not.toBeNull();
       expect(tableOrder(el)!.orderId).toBe("wo-7");
     });
 
     it("open-table on an occupied table missing from the read-model transitions with no order id", async () => {
-      const openTab = vi.fn();
+      const seatTable = vi.fn();
       const { el } = await mountApp({
         // The read-model is empty, so the tapped table can't be resolved to a tab id.
         getTablesState: vi.fn().mockResolvedValue([]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
-        seatTable: openTab,
+        seatTable,
       });
       await toCounter(el);
       selectTab(el, "floor");
@@ -3604,7 +3604,7 @@ describe("till-app", () => {
       await flush(el);
 
       // A resume never opens a fresh tab; with no tab id resolved the screen carries none.
-      expect(openTab).not.toHaveBeenCalled();
+      expect(seatTable).not.toHaveBeenCalled();
       expect(tableOrder(el)).not.toBeNull();
       expect(tableOrder(el)!.orderId).toBeUndefined();
     });

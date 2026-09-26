@@ -514,9 +514,7 @@ describe("unjoinTable", () => {
       openTabWith(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "1" }] }),
     );
     await asApp(cfg, (tx) => joinTable(tx, cfg, tabId, tableId2));
-    // Abandon the shared order WITHOUT clearing the tables' tab_id — a STALE pointer, exactly the state
-    // openTab documents (a settled/abandoned tab leaves its tables pointing at it). tableId2.tab_id still
-    // equals tabId, so it passes the table.not_joined guard and reaches the shared-tab open check.
+    // Abandon the shared order WITHOUT clearing the tables' tab_id, so tableId2 still points at it.
     await db.execute(sql`update working_orders set status = 'abandoned' where id = ${tabId}`);
     await expect(asApp(cfg, (tx) => unjoinTable(tx, cfg, tabId, tableId2))).rejects.toMatchObject({
       code: "tab.not_open",

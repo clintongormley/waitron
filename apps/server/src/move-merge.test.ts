@@ -459,12 +459,13 @@ describe("moveTab", () => {
     });
   });
 
-  it("treats a target with a STALE tab_id (settled order) as free and moves onto it", async () => {
+  it("treats a target with a STALE tab_id (settled order) on a table no party holds as free and moves onto it", async () => {
     const { cfg, cafeId } = await setupVenue();
     const src = await seedTable(cfg, "St-src");
     const dst = await seedTable(cfg, "St-dst");
     const oldTab = await openTabOn(cfg, dst, [{ productId: cafeId, quantity: "1" }]);
-    // Settle dst's tab (owner write) — tab_id STILL points at it, but it is now stale/free.
+    // Settle dst's tab (owner write) — tab_id STILL points at it, and no party holds dst, so it is
+    // free.
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${oldTab}`,
     );
@@ -543,12 +544,13 @@ describe("joinTable", () => {
     });
   });
 
-  it("treats a target with a STALE tab_id (settled order) as free and joins onto it", async () => {
+  it("treats a target with a STALE tab_id (settled order) on a table no party holds as free and joins onto it", async () => {
     const { cfg, cafeId } = await setupVenue();
     const t1 = await seedTable(cfg, "JS1");
     const t2 = await seedTable(cfg, "JS2");
     const oldTab = await openTabOn(cfg, t2, [{ productId: cafeId, quantity: "1" }]);
-    // Settle t2's tab (owner write) — tab_id STILL points at it, but it is now stale/free.
+    // Settle t2's tab (owner write) — tab_id STILL points at it, and no party holds t2, so it is
+    // free.
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${oldTab}`,
     );

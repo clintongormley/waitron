@@ -30,8 +30,9 @@ export const floorTableShape = enumType(["round", "square", "rect"]);
  * node-scoped, but a table must not fragment when a venue runs a second node).
  *
  * `tab_id` is the BACK-POINTER to the tab covering this table; a single nullable FK gives one tab
- * per table. On a table a party still holds, a `tab_id` naming a settled order names the party's
- * current, paid tab. Several tables pointing at the SAME tab is a join. `working_orders`
+ * per table. A table can keep pointing at a settled or abandoned tab; only when the table's own
+ * party is recorded on that tab is it the party's current tab (`closedPartyTab`). Several tables
+ * pointing at the SAME tab is a join. `working_orders`
  * carries the reverse key (`working_orders.delivery_table_id` → `dining_tables`), so the two
  * tables name each other; the `AnySQLiteColumn` annotation on the thunk below is what stops
  * TypeScript inferring each table's type from the other's.

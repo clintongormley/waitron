@@ -1736,7 +1736,11 @@ export class TillApi {
     });
   }
 
-  /** Carve selected items from a table tab into a detached check, ready for the existing pay path. */
+  /**
+   * Carve selected items from a table tab into a detached check, ready for the existing pay path.
+   * On a party's tab rejects `visit.not_open`, `visit.out_of_date`, or `management.request_invalid`
+   * for a missing revision.
+   */
   splitTab(
     orderId: string,
     transfers: readonly TabTransfer[],

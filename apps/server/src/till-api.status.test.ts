@@ -23,8 +23,8 @@ import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
 // The HTTP wiring of `POST /api/tables/:id/status`: session guard, isUuid screen and STATUS mapping.
-// The `setTableStatus` verb is pinned in `set-table-status.test.ts`; the status clearing in
-// `scripts/behavioural-triggers.test.ts`.
+// The `setTableStatus` verb is pinned in `set-table-status.test.ts`; the clearing of the status
+// when a party's visit ends in `scripts/behavioural-triggers.test.ts`.
 let cfg: TillConfig;
 let ana: { id: string };
 // The inactive status is seeded inactive (rather than deactivated at runtime) so no test mutates a

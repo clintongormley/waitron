@@ -904,10 +904,10 @@ What B4 leaves open:
   seed and configuration transfer make, needs a separate grep for `catalogue_id`/`catalogueId`.
   **Next action:** owner to decide whether to retire `location_catalogues` and those routes with
   `GET /api/products`, or keep them.
-- **A table in no zone still opens a tab, and nothing can be added to it.** The till opens a tab
-  with no lines (`#onOpenTable`, `apps/till/src/till-app.ts`), and a booking seated at a table does
-  the same through `core.seatTable`, which also opens a visit (`seatBooking`,
-  `packages/bookings/src/bookings.ts`); on a table
+- **A table in no zone still opens a tab, and nothing can be added to it.** The till seats a
+  party through `seatTable` (`#onOpenTable`, `apps/till/src/till-app.ts`), which opens a visit and
+  a tab with no lines, and a booking seated at a table does the same through `core.seatTable`
+  (`seatBooking`, `packages/bookings/src/bookings.ts`); on a table
   in no zone that tab opens, and every round on it is refused `order.service_context_missing`. The
   till shows no products there: `#onOpenTable` loads offers only for a table with a zone and leaves
   the grid empty otherwise. Pinned by "openTab with no lines on a table in no zone opens an empty
@@ -1850,6 +1850,13 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   shows `44.00 €` while the table screen shows `44,00 €` in Spanish. The floor's format predates
   the visits work; Task 2 now also uses it for what a party still owes. Make the floor follow the
   locale, as the table screen does.
+- **A party's table can be pointed at a counter order, or at another party's bill (plan Task 2
+  review, 2026-09-26).** `joinTable` and `mergeTabs` (`apps/server/src/working-order.ts`) accept a
+  parked counter order, which belongs to no party, as a tab when its service mode matches. So a
+  table can stay in its party while pointing at that counter order, or be held by one party while
+  pointing at another party's bill. "a paid check reached by a table outside its party"
+  (`apps/server/src/visits.test.ts`) reaches both. The till does not send that sequence (read, not
+  tested). **Next action:** decide whether to refuse it.
 - **Later: optional seat/guest item assignment (owner, 2026-09-20).** Include shared items when
   this is designed. For now, orders remain at table/tab level and staff select items manually
   when splitting bills; seat assignment is not a prerequisite for the service workflow.
