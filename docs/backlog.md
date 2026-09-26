@@ -284,7 +284,7 @@ older copy is refused; and a second device cannot change an order while a card p
 (D22). Owner decisions applied:
 a partial split takes its own copy of the kitchen ticket and a started line may be split (D10 and
 Review Focus 6 overturned); moving sent work to another table prints a MOVED slip and records a
-`moved` notice; held kitchen work cannot be split onto a check (`tab.split_held_line`). The core
+`moved` notice; held kitchen work cannot be split onto a check (`tab.split_held_line`) — decided by the owner 2026-09-26 as the safe behaviour until the service plan's Tasks 14 and 15 (lane B's B14/B15) let a guest pay for one held item against the table's bill. The core
 migrations add five columns and replace the `working_orders_enforce_transition` trigger, and
 venue-service adds `kitchen_notices` and `service_settings`; the upgrade succeeds, but
 rows written before it misbehave (a dish sent before the upgrade counts as unsent, an extra saved
@@ -343,8 +343,13 @@ for an open order no table points at, and a check is exactly that; `voidTabLine`
 kitchen has started can now be split onto a check, so the kitchen's made-but-cancelled part cannot
 be voided there. A check can be merged back into its tab (`mergeTabs`, "tells the kitchen nothing
 when a check merges back into the tab it was split from" in `apps/server/src/split-bill.test.ts`).
-**Next action:** an owner decision — does a check get Void, with its kitchen notice, or do staff
-merge the check back into its tab first?
+**Decided (owner, 2026-09-26):** a check gets no Void. The till pays a check straight after
+"Create bill", so a dish being cancelled is voided on the TAB first; a change of mind in between is
+covered by merging the check back. Since menus M7b3 the originating till does that merge itself when
+the waiter leaves the check unpaid (Back to floor, another screen tab, or another table); after a
+reload or on another device the check stays in the counter's Held orders, where it can be paid.
+The durable link between a check and its table is lane B's visits (service plan,
+`docs/superpowers/plans/2026-09-26-service-ordering-and-billing.md`), not a new column.
 
 **Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
 shared look, and the rules for it live in [design-system.md](developers/design-system.md). That
