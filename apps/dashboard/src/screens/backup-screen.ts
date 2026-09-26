@@ -393,6 +393,7 @@ export class BackupScreen extends LitElement {
   async #saveSettings(): Promise<void> {
     if (this.#saveSettingsDisabled || this.#reuseKey === null) return;
     this.errorKey = null;
+    this.refreshErrorKey = null;
     this.submitting = true;
     const body: BackupApplyBody = {
       destinationDir: this.destinationDir.trim(),
