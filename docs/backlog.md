@@ -587,6 +587,24 @@ ordered attachment list per product. Landed across #412, #436, #445, #449, #452,
   (`packages/catalogue/src/offered-modifiers.test.ts`). **Next action:** decide whether a new menu
   item should inherit its product's extras lists by default, or whether publication stays explicit
   and a route is built for it.
+- **Are per-menu extras worth keeping at all? (owner, 2026-09-26: "I'm not sure it is worth the
+  effort.")** A menu can carry its own version of a product's extras lists, with its own prices and
+  availability (`menu_item_extra_lists`, `menu_item_extra_items`); the menus plan keeps them (its
+  D5), and the Modifiers screen's "Used by" popup shows them as menu rows. Options lists have no such
+  per-menu version. Dropping per-menu extras would remove two tables, `setMenuItemExtraLists`, the
+  menu rows in `extraListDependants`, and whatever the menus publish copies from them (not traced);
+  it would also settle the item above. **Next action:** the owner decides keep or drop; if drop, it is a menus-plan
+  change, coordinated with lane C.
+
+**Extras and Options editors — owner review fixes (2026-09-26), queued as campaign lane A items
+A64–A67.** The owner's review of the Modifiers screen: Active/Inactive in place of "In use", a Used
+by column, an options popup that lists products only, collapsed name sections, steppers for choices
+and quantities, baseline-aligned rows, a bin icon, the product's unit beside each price, a wider
+standard modal everywhere, visible drag feedback, option rows as text with their own editor, and an
+options list that always has a default. Spec:
+[modifier editors polish](superpowers/specs/2026-09-26-modifier-editors-polish-design.md); plan:
+[modifier editors polish](superpowers/plans/2026-09-26-modifier-editors-polish.md). Each item marks
+its part done here when it lands.
 
 **Branch 2, variants as products — LANDED** (spec
 `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §4, §15). A variant is now a `products` row
