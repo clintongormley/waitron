@@ -1434,11 +1434,13 @@ export const en = {
   "payments.stuck.check": "Check with the card provider",
   "payments.stuck.confirm_heading": "Check this payment with {provider}?",
   "payments.stuck.confirm_body":
-    "Waitron will ask {provider} what happened to this {amount} payment ({order}). If it went through, the sale is recorded. If it did not, it is cancelled at {provider} and the order is unlocked so it can be paid again.",
+    "Waitron will ask {provider} what happened to this {amount} payment ({order}). If it went through, the sale is recorded. If it did not, Waitron cancels it at {provider} where it can still be cancelled, and unlocks the order so it can be paid again, unless another card payment on the order is still unresolved.",
   "payments.stuck.confirm": "Check now",
   "payments.stuck.filed": "Payment went through — the sale has been recorded.",
-  "payments.stuck.released":
-    "Payment did not go through — it was cancelled and the order is unlocked.",
+  "payments.stuck.not_charged_unlocked":
+    "Payment did not go through — nothing was charged, and the order is unlocked.",
+  "payments.stuck.not_charged_locked":
+    "Payment did not go through — nothing was charged. The order stays locked while another card payment on it is still in progress or unresolved.",
   "payments.stuck.unknown_unreachable":
     "Could not reach the card provider; the order stays locked. Try again in a minute.",
   "payments.stuck.unknown_ambiguous":
@@ -3140,11 +3142,13 @@ export const es: Record<StringKey, string> = {
   "payments.stuck.check": "Consultar con el proveedor de pagos",
   "payments.stuck.confirm_heading": "¿Consultar este cobro con {provider}?",
   "payments.stuck.confirm_body":
-    "Waitron preguntará a {provider} qué pasó con este cobro de {amount} ({order}). Si se completó, se registra la venta. Si no, se cancela en {provider} y el pedido se desbloquea para poder cobrarlo de nuevo.",
+    "Waitron preguntará a {provider} qué pasó con este cobro de {amount} ({order}). Si se completó, se registra la venta. Si no, Waitron lo cancela en {provider} si todavía se puede cancelar, y desbloquea el pedido para poder cobrarlo de nuevo, salvo que otro pago con tarjeta del pedido siga sin resolver.",
   "payments.stuck.confirm": "Consultar ahora",
   "payments.stuck.filed": "El pago se completó: la venta ha quedado registrada.",
-  "payments.stuck.released":
-    "El pago no se completó: se ha cancelado y el pedido está desbloqueado.",
+  "payments.stuck.not_charged_unlocked":
+    "El pago no se completó: no se ha cobrado nada y el pedido está desbloqueado.",
+  "payments.stuck.not_charged_locked":
+    "El pago no se completó: no se ha cobrado nada. El pedido sigue bloqueado mientras otro cobro con tarjeta del mismo pedido siga en curso o sin resolver.",
   "payments.stuck.unknown_unreachable":
     "No se pudo contactar con el proveedor de pagos; el pedido sigue bloqueado. Vuelve a intentarlo en un minuto.",
   "payments.stuck.unknown_ambiguous":

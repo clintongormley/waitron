@@ -328,11 +328,14 @@ describe("DashboardApi routes", () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(stuck))
-      .mockResolvedValueOnce(jsonResponse({ outcome: "released" }));
+      .mockResolvedValueOnce(jsonResponse({ outcome: "not_charged", orderUnlocked: true }));
     const api = new DashboardApi("", fetchImpl);
 
     await expect(api.listStuckPayments()).resolves.toEqual(stuck);
-    await expect(api.resolveStuckPayment("pay-1")).resolves.toEqual({ outcome: "released" });
+    await expect(api.resolveStuckPayment("pay-1")).resolves.toEqual({
+      outcome: "not_charged",
+      orderUnlocked: true,
+    });
 
     expect(callsOf(fetchImpl)).toEqual([
       ["/management-api/payments/stuck", "GET", undefined],

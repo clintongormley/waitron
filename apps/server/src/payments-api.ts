@@ -19,8 +19,10 @@ import {
   cardReaders,
   deviceCardReaders,
   payments,
+  type AbandonedAttemptOutcome,
   type CardProviderContribution,
   type CardProviderRuntimeDeps,
+  type PaymentProvider,
 } from "@waitron/payments";
 import {
   deleteCredential,
@@ -45,9 +47,7 @@ import {
 } from "./till-sale.js";
 
 /**
- * `pool` is only `evict`ed here, so a credential change takes effect without a restart. The routes
- * reach a seat only through `cardProviderById`, never by importing a provider package. `fetch` is
- * injected by tests; the live host omits it and the seats fall back to the global.
+ * The routes never import a provider package. `fetch` is injected by tests; the live host omits it and the seats fall back to the global.
  */
 export interface PaymentsApiDeps {
   db: Database;
@@ -87,6 +87,21 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 const run = createErrorBoundary(STATUS, "payments.failed");
+
+/** `provider` with a `collect` that refuses, so a pay through it can file a payment already
+ * captured but can never charge a card. */
+function withoutCollect(provider: PaymentProvider): PaymentProvider {
+  return new Proxy(provider, {
+    get: (target, prop) => {
+      if (prop === "collect") {
+        return () =>
+          Promise.reject(new Error("a stuck payment's resolve must never collect a new payment"));
+      }
+      const value: unknown = Reflect.get(target, prop, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
 
 function screenStringMap(body: Record<string, unknown>): Record<string, string> {
   const out: Record<string, string> = {};
@@ -537,11 +552,12 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   );
 
   // Asks the provider what became of a stuck payment. A capture is filed through the till's own
-  // recovery path, so the card is never charged again.
-  app.post("/management-api/payments/stuck/:paymentId/resolve", (c) =>
+  // recovery path, over a provider whose `collect` refuses (`withoutCollect`), so the card is never
+  // charged again.
+  app.post("/management-api/payments/stuck/:id/resolve", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const paymentId = requireUuidParam(c.req.param("paymentId"), "PaymentId");
+      const paymentId = requireUuidParam(c.req.param("id"), "PaymentId");
       const stuck = await gated(sessionId, async (tx, personId) => {
         const [row] = await tx
           .select({
@@ -570,18 +586,21 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
 
       const provider = await deps.pool.get(stuck.provider);
       if (provider.resolveAbandonedAttempt === undefined) {
-        throw new AppError("payment.resolve_unsupported", { provider: stuck.provider });
+        throw new AppError("payment.resolve_unsupported", { providerId: stuck.provider });
       }
       const now = deps.clock.now().instant;
-      const resolved = await provider
-        .resolveAbandonedAttempt(stuck.paymentRef, now, { personId: stuck.personId })
-        .catch((error: unknown) => {
-          // A concurrent resolve settled the row after the check above.
-          if (isAppError(error) && error.code === "payment.not_found") {
-            throw new AppError("payment.not_stuck", { paymentId });
-          }
-          throw error;
+      let resolved: AbandonedAttemptOutcome;
+      try {
+        resolved = await provider.resolveAbandonedAttempt(stuck.paymentRef, now, {
+          personId: stuck.personId,
         });
+      } catch (error) {
+        // A concurrent resolve settled the row after the check above.
+        if (isAppError(error) && error.code === "payment.not_found") {
+          throw new AppError("payment.not_stuck", { paymentId });
+        }
+        throw error;
+      }
       if (resolved.outcome === "unknown") {
         throw new AppError("payment.outcome_unknown", {
           paymentId,
@@ -593,25 +612,41 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       }
 
       if (resolved.outcome === "failed") {
+        // Apart from the provider's write on purpose: a crash between the two leaves a mark that the
+        // work loop's next `releaseStalePaymentAttempts` pass clears.
         // Only the mark read above: an attempt started since has written its own.
-        await withTransaction(deps.db, (tx) =>
-          clearPaymentAttemptMark(tx, stuck.workingOrderId, stuck.attemptAt),
-        );
-        return c.json({ outcome: "released" });
+        // Read back rather than trusting the update: the work loop may have cleared the mark first.
+        const orderUnlocked = await gated(sessionId, async (tx) => {
+          await clearPaymentAttemptMark(tx, stuck.workingOrderId, stuck.attemptAt);
+          const [order] = await tx
+            .select({ mark: workingOrders.paymentAttemptAt })
+            .from(workingOrders)
+            .where(eq(workingOrders.id, stuck.workingOrderId));
+          return order?.mark === null;
+        });
+        return c.json({ outcome: "not_charged", orderUnlocked });
       }
 
       // The payment is captured with no sale, so the pay takes its recovery branch and files it.
       const paid = await payWorkingOrderIntegrated(
-        { db: deps.db, backend: deps.backend, clock: deps.clock, provider, log },
+        {
+          db: deps.db,
+          backend: deps.backend,
+          clock: deps.clock,
+          provider: withoutCollect(provider),
+          log,
+        },
         { ...deps.cfg, tillId: brandTillId(stuck.tillId) },
         { id: stuck.workingOrderId, lines: [] },
         stuck.personId,
       );
-      return c.json(
-        paid.outcome === "captured"
-          ? { outcome: "filed", invoiceNumber: paid.ticket.invoiceNumber }
-          : { outcome: paid.outcome },
-      );
+      /* v8 ignore start -- unreachable: every path that returns another outcome goes through
+         `collect`, which `withoutCollect` makes throw. */
+      if (paid.outcome !== "captured") {
+        throw new Error(`a stuck payment's resolve returned ${paid.outcome}`);
+      }
+      /* v8 ignore stop */
+      return c.json({ outcome: "filed", invoiceNumber: paid.ticket.invoiceNumber });
     }),
   );
 }

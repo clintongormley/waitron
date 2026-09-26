@@ -188,6 +188,23 @@ describe("StripeTerminalProvider.collect", () => {
     expect(row?.state).toBe("failed");
   });
 
+  it("a reader cancel that throws before returning a promise is best-effort: the payment fails cleanly", async () => {
+    const client: StripeClient = {
+      createPaymentIntent: () => Promise.reject(new Error("network down")),
+      processPaymentIntent: () => Promise.resolve(),
+      readerOutcome: () => Promise.resolve({ status: "succeeded" }),
+      cancelReaderAction: () => {
+        throw new Error("stripe client broke synchronously");
+      },
+      refund: () => Promise.resolve({ id: "re_x", status: "succeeded" }),
+      ...NO_INTENT_READS,
+    };
+    const p = await collectParams();
+    const result = await providerFor(client).collect(p);
+    expect(result.state).toBe("failed");
+    expect((await rowFor(result.paymentRef))?.state).toBe("failed");
+  });
+
   it("polls the reader with the default real-timer sleep between attempts", async () => {
     // No `sleep` override, so the production default (`setTimeout`) runs; `intervalMs: 0` keeps it
     // instant.
@@ -690,6 +707,40 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
       reason: "unreachable",
     });
     expect((await rowFor(paymentRef))?.state).toBe("attempting");
+  });
+
+  it("a read that throws before returning a promise: unknown/unreachable, the row untouched", async () => {
+    const client: StripeClient = {
+      ...scripted([], () => Promise.resolve({ status: "canceled" })),
+      retrievePaymentIntent: () => {
+        throw new Error("stripe client broke synchronously");
+      },
+    };
+    const { paymentRef } = await abandonedRow("pi_sync_read");
+    expect(await providerFor(client).resolveAbandonedAttempt(paymentRef, NOW, AUDIT)).toEqual({
+      outcome: "unknown",
+      reason: "unreachable",
+    });
+    expect((await rowFor(paymentRef))?.state).toBe("attempting");
+  });
+
+  it("a cancel that throws before returning a promise is best-effort: the re-read decides", async () => {
+    const client = scripted(
+      [
+        () => Promise.resolve({ status: "processing" }),
+        () => Promise.resolve({ status: "canceled" }),
+      ],
+      () => {
+        throw new Error("stripe client broke synchronously");
+      },
+    );
+    const { paymentRef } = await abandonedRow("pi_sync_cancel");
+    expect(await providerFor(client).resolveAbandonedAttempt(paymentRef, NOW, AUDIT)).toEqual({
+      outcome: "failed",
+      cancelledAtProvider: true,
+    });
+    expect(client.cancels).toBe(1);
+    expect((await rowFor(paymentRef))?.state).toBe("failed");
   });
 
   it("a status this code does not know: unknown/ambiguous with that status, nothing cancelled", async () => {

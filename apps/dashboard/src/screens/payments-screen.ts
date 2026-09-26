@@ -45,7 +45,13 @@ function stuckRefusalText(error: unknown): string {
 
 function stuckOutcomeText(resolution: StuckPaymentResolution): string | null {
   if (resolution.outcome === "filed") return t("payments.stuck.filed");
-  if (resolution.outcome === "released") return t("payments.stuck.released");
+  if (resolution.outcome === "not_charged") {
+    return t(
+      resolution.orderUnlocked
+        ? "payments.stuck.not_charged_unlocked"
+        : "payments.stuck.not_charged_locked",
+    );
+  }
   return null;
 }
 
@@ -173,7 +179,7 @@ export class PaymentsScreen extends LitElement {
         flex: 1 1 calc(var(--wt-tap-min) * 6);
       }
       .stuck-order {
-        font-weight: 600;
+        font-weight: var(--wt-font-weight-bold);
         margin: 0 0 var(--wt-space-2);
       }
       .stuck-details {

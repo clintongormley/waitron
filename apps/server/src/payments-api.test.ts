@@ -175,7 +175,7 @@ const pool: CardProviderPool = {
   },
 };
 
-// These routes file no sale; the stuck-payment routes that do are in payments-stuck-api.test.ts.
+// These routes file no sale; the stuck-payment routes that do are in payments-api.stuck.test.ts.
 function saleDeps() {
   return { backend: new FakeFiscalBackend(suite.db), clock: systemClock() };
 }

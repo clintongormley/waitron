@@ -89,16 +89,5 @@ declare module "@waitron/shared" {
     "payment.provider_credential_rejected": { providerId: string };
     "payment.provider_duplicate": { providerId: string };
     "payment.provider_unknown": { providerId: string };
-    /** Refuses a manager's resolve: the payment is not `attempting`, its order is not open and
-     * marked in flight, or an attempt in this process is still driving the order. */
-    "payment.not_stuck": { paymentId: string };
-    "payment.resolve_unsupported": { provider: string };
-    /** The processor could not say what became of the payment; the row and the order's mark are
-     * left as they were. */
-    "payment.outcome_unknown": {
-      paymentId: string;
-      reason: "unreachable" | "ambiguous";
-      providerStatus?: string;
-    };
   }
 }

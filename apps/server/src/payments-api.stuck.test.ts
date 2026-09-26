@@ -40,6 +40,7 @@ import {
   type MakeStripe,
 } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
+import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mountPaymentsApi } from "./payments-api.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
@@ -81,7 +82,7 @@ beforeAll(() => {
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
     resolveClient: () =>
-      Promise.reject(new Error("payments-stuck-api.test: resolveClient must never be called")),
+      Promise.reject(new Error("payments-api.stuck.test: resolveClient must never be called")),
   });
 });
 
@@ -92,7 +93,7 @@ function nextNif(): string {
 }
 
 const stripeSeat: CardProviderContribution = createStripeCardProvider((() => {
-  throw new Error("payments-stuck-api.test: the seat's own Stripe SDK is never built");
+  throw new Error("payments-api.stuck.test: the seat's own Stripe SDK is never built");
 }) as unknown as MakeStripe);
 
 interface Venue {
@@ -109,7 +110,12 @@ interface Venue {
 
 /** A fresh venue selling one 1.50 Café, a connected Stripe seat, and a manager and a staff session. */
 async function setup(
-  opts: { client?: FakeStripe; providerFor?: (p: StripeTerminalProvider) => PaymentProvider } = {},
+  opts: {
+    client?: FakeStripe;
+    providerFor?: (p: StripeTerminalProvider) => PaymentProvider;
+    /** A second provider, served under its own id and connected through the Stripe credential. */
+    extra?: PaymentProvider;
+  } = {},
 ): Promise<Venue> {
   const venue = await applyVenue(
     planVenue(
@@ -205,8 +211,9 @@ async function setup(
   const served = opts.providerFor?.(provider) ?? provider;
   const pool: CardProviderPool = {
     get: async (providerId) => {
-      if (providerId !== "stripe") throw new Error(`unexpected provider ${providerId}`);
-      return served;
+      if (providerId === "stripe") return served;
+      if (providerId === opts.extra?.provider) return opts.extra;
+      throw new Error(`unexpected provider ${providerId}`);
     },
     evict: () => {},
   };
@@ -221,7 +228,10 @@ async function setup(
       ring: RING,
       environment: "preproduction",
       pool,
-      providers: [stripeSeat],
+      providers: [
+        stripeSeat,
+        ...(opts.extra === undefined ? [] : [{ ...stripeSeat, providerId: opts.extra.provider }]),
+      ],
     },
     noopLog,
   );
@@ -287,6 +297,28 @@ async function strandPayment(
     .from(payments)
     .where(eq(payments.paymentRef, paymentRef));
   return { paymentId: row!.id, piId };
+}
+
+/** An `attempting` payment of `provider` on a marked order, with no PaymentIntent. */
+async function strandBarePayment(orderId: string, provider: string): Promise<string> {
+  const paymentRef = randomUUID();
+  await withTransaction(suite.db, (tx) =>
+    insertAttempting(tx, {
+      workingOrderId: brandWorkingOrderId(orderId),
+      provider,
+      paymentRef,
+      amount: decimal("1.50"),
+    }),
+  );
+  await suite.db
+    .update(workingOrders)
+    .set({ paymentAttemptAt: MARK })
+    .where(eq(workingOrders.id, orderId));
+  const [row] = await suite.db
+    .select({ id: payments.id })
+    .from(payments)
+    .where(eq(payments.paymentRef, paymentRef));
+  return row!.id;
 }
 
 async function send(
@@ -386,7 +418,7 @@ describe("GET /management-api/payments/stuck", () => {
 
 // --- resolving ------------------------------------------------------------------------------
 
-describe("POST /management-api/payments/stuck/:paymentId/resolve", () => {
+describe("POST /management-api/payments/stuck/:id/resolve", () => {
   it("(a) files ONE sale for a payment Stripe captured, settles the order, and refuses a second resolve", async () => {
     const v = await setup();
     const orderId = await openOrder(v);
@@ -438,7 +470,7 @@ describe("POST /management-api/payments/stuck/:paymentId/resolve", () => {
     const res = await send(v, "POST", resolvePath(paymentId));
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ outcome: "released" });
+    expect(await res.json()).toEqual({ outcome: "not_charged", orderUnlocked: true });
     expect(v.client.cancelledIntents).toEqual([piId]);
     expect((await paymentRow(paymentId)).state).toBe("failed");
     expect(await orderOf(orderId)).toEqual({ status: "open", mark: null });
@@ -465,6 +497,122 @@ describe("POST /management-api/payments/stuck/:paymentId/resolve", () => {
       .where(eq(payments.state, "captured"));
     expect(captured).toHaveLength(1);
     expect(captured[0]!.externalRef).not.toBe(piId);
+  });
+
+  it("reports the order still locked, and keeps its mark, while another card payment on it is unresolved", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const first = await strandPayment(v, orderId, { status: "requires_payment_method" });
+    const second = await strandPayment(v, orderId, { status: "requires_payment_method" });
+
+    const res = await send(v, "POST", resolvePath(first.paymentId));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ outcome: "not_charged", orderUnlocked: false });
+    expect((await paymentRow(first.paymentId)).state).toBe("failed");
+    expect((await paymentRow(second.paymentId)).state).toBe("attempting");
+    expect(await orderOf(orderId)).toEqual({ status: "open", mark: MARK });
+
+    const list = (await (await send(v, "GET", "/management-api/payments/stuck")).json()) as {
+      paymentId: string;
+    }[];
+    expect(list.map((row) => row.paymentId)).toEqual([second.paymentId]);
+  });
+
+  it("reports the order unlocked when the work loop cleared its mark before the resolve's own clear", async () => {
+    let orderId = "";
+    const v = await setup({
+      providerFor: (p) =>
+        new Proxy(p, {
+          get: (target, prop) =>
+            prop === "resolveAbandonedAttempt"
+              ? async (paymentRef: string, now: Date, audit: { personId: string }) => {
+                  const resolved = await target.resolveAbandonedAttempt(paymentRef, now, audit);
+                  // What `releaseStalePaymentAttempts` does between the two transactions.
+                  await suite.db
+                    .update(workingOrders)
+                    .set({ paymentAttemptAt: null })
+                    .where(eq(workingOrders.id, orderId));
+                  return resolved;
+                }
+              : Reflect.get(target, prop),
+        }),
+    });
+    orderId = await openOrder(v);
+    const { paymentId } = await strandPayment(v, orderId, { status: "requires_payment_method" });
+
+    const res = await send(v, "POST", resolvePath(paymentId));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ outcome: "not_charged", orderUnlocked: true });
+    expect(await orderOf(orderId)).toEqual({ status: "open", mark: null });
+  });
+
+  it("releases no mark when the manager loses the permission during the provider call", async () => {
+    let managerId = "";
+    const v = await setup({
+      providerFor: (p) =>
+        new Proxy(p, {
+          get: (target, prop) =>
+            prop === "resolveAbandonedAttempt"
+              ? async (paymentRef: string, now: Date, audit: { personId: string }) => {
+                  const resolved = await target.resolveAbandonedAttempt(paymentRef, now, audit);
+                  await suite.db
+                    .update(persons)
+                    .set({ status: "suspended" })
+                    .where(eq(persons.id, managerId));
+                  return resolved;
+                }
+              : Reflect.get(target, prop),
+        }),
+    });
+    managerId = v.managerId;
+    const orderId = await openOrder(v);
+    const { paymentId } = await strandPayment(v, orderId, { status: "requires_payment_method" });
+
+    const res = await send(v, "POST", resolvePath(paymentId));
+
+    expect(res.status).toBe(403);
+    expect((await errorOf(res)).code).toBe("person.suspended");
+    expect((await paymentRow(paymentId)).state).toBe("failed");
+    expect(await orderOf(orderId)).toEqual({ status: "open", mark: MARK });
+  });
+
+  it("never asks the provider to collect: a capture it reports but did not record files nothing", async () => {
+    const fake = new FakePaymentProvider(suite.db);
+    // The row ends failed, so nothing stops a pay at its in-flight check, while the answer says
+    // captured.
+    fake.scriptAbandonedAttempt({ outcome: "failed", cancelledAtProvider: false });
+    let collects = 0;
+    const misreporting = new Proxy(fake, {
+      get: (target, prop) => {
+        if (prop === "resolveAbandonedAttempt") {
+          return async (paymentRef: string, now: Date, audit: { personId: string }) => {
+            await target.resolveAbandonedAttempt(paymentRef, now, audit);
+            return { outcome: "captured" };
+          };
+        }
+        if (prop === "collect") {
+          return (params: Parameters<PaymentProvider["collect"]>[0]) => {
+            collects += 1;
+            return target.collect(params);
+          };
+        }
+        const value: unknown = Reflect.get(target, prop, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const v = await setup({ extra: misreporting });
+    const orderId = await openOrder(v);
+    const paymentId = await strandBarePayment(orderId, fake.provider);
+
+    const res = await send(v, "POST", resolvePath(paymentId));
+
+    expect(res.status).toBe(500);
+    expect((await errorOf(res)).code).toBe("server.internal");
+    expect(collects).toBe(0);
+    expect(saleIdsFor(orderId)).toEqual([]);
+    expect((await orderOf(orderId)).status).toBe("open");
   });
 
   it("(c) refuses outcome_unknown when Stripe cannot be reached, leaving the row attempting and the order locked", async () => {
@@ -666,7 +814,7 @@ describe("POST /management-api/payments/stuck/:paymentId/resolve", () => {
 
     const again = await send(v, "POST", resolvePath(paymentId));
     expect(again.status).toBe(200);
-    expect(await again.json()).toEqual({ outcome: "released" });
+    expect(await again.json()).toEqual({ outcome: "not_charged", orderUnlocked: true });
     expect(await resolutionsFor(paymentId)).toEqual([
       {
         personId: v.managerId,
@@ -693,7 +841,7 @@ describe("POST /management-api/payments/stuck/:paymentId/resolve", () => {
     expect(res.status).toBe(422);
     expect(await errorOf(res)).toEqual({
       code: "payment.resolve_unsupported",
-      params: { provider: "stripe" },
+      params: { providerId: "stripe" },
     });
     expect((await paymentRow(paymentId)).state).toBe("attempting");
     expect(await orderOf(orderId)).toEqual({ status: "open", mark: MARK });

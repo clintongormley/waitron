@@ -1121,9 +1121,7 @@ export interface StuckPaymentRow {
 }
 
 export type StuckPaymentResolution =
-  | { outcome: "filed"; invoiceNumber: string }
-  | { outcome: "released" }
-  | { outcome: "declined" | "timeout" | "network_unavailable" };
+  { outcome: "filed"; invoiceNumber: string } | { outcome: "not_charged"; orderUnlocked: boolean };
 
 export interface AddReaderInput {
   providerId: string;

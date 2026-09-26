@@ -28,7 +28,8 @@ export const paymentResolutions = table(
     paymentId: id("payment_id").notNull(),
     workingOrderId: id("working_order_id").notNull(),
     // No foreign key: `persons` is in @waitron/identity's migration set, which this set does not
-    // require.
+    // require. The resolve route takes the id from `authorizeManager`, which read it through a
+    // join to `persons` in an earlier transaction.
     personId: id("person_id").notNull(),
     outcome: paymentResolutionOutcome("outcome").notNull(),
     /** The provider's payment is cancelled, so the working order's next card payment needs a

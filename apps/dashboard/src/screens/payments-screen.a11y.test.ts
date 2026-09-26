@@ -83,7 +83,7 @@ const STUCK: StuckPaymentRow[] = [
 function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): DashboardApi {
   return {
     listStuckPayments: vi.fn().mockResolvedValue([]),
-    resolveStuckPayment: vi.fn().mockResolvedValue({ outcome: "released" }),
+    resolveStuckPayment: vi.fn().mockResolvedValue({ outcome: "not_charged", orderUnlocked: true }),
     listPaymentProviders: vi.fn().mockResolvedValue(PROVIDERS),
     listReaders: vi.fn().mockResolvedValue(READERS),
     readerStatus: vi.fn().mockResolvedValue({ online: true }),

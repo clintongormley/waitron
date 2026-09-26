@@ -9,6 +9,7 @@ import type {
   PaymentProviderRow,
   ReaderRow,
   ReaderStatusView,
+  StuckPaymentResolution,
   StuckPaymentRow,
 } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -72,7 +73,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     availableReaders: vi.fn().mockResolvedValue([]),
     adoptReader: vi.fn().mockResolvedValue({ id: "r-2", status: "paired" }),
     listStuckPayments: vi.fn().mockResolvedValue([]),
-    resolveStuckPayment: vi.fn().mockResolvedValue({ outcome: "released" }),
+    resolveStuckPayment: vi.fn().mockResolvedValue({ outcome: "not_charged", orderUnlocked: true }),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -952,7 +953,9 @@ describe("card payments stuck after a restart", () => {
     expect(api.resolveStuckPayment).not.toHaveBeenCalled();
     const dialog = q(el, "[data-test=resolve-dialog]")!;
     expect(dialog.textContent).toContain("If it went through, the sale is recorded");
-    expect(dialog.textContent).toContain("cancelled at Acme Pay and the order is unlocked");
+    expect(dialog.textContent).toContain(
+      "If it did not, Waitron cancels it at Acme Pay where it can still be cancelled, and unlocks the order so it can be paid again, unless another card payment on the order is still unresolved.",
+    );
 
     q(el, "[data-test=cancel-resolve]")!.click();
     await flush(el);
@@ -980,8 +983,12 @@ describe("card payments stuck after a restart", () => {
       "Payment went through — the sale has been recorded.",
     ],
     [
-      { outcome: "released" },
-      "Payment did not go through — it was cancelled and the order is unlocked.",
+      { outcome: "not_charged", orderUnlocked: true },
+      "Payment did not go through — nothing was charged, and the order is unlocked.",
+    ],
+    [
+      { outcome: "not_charged", orderUnlocked: false },
+      "Payment did not go through — nothing was charged. The order stays locked while another card payment on it is still in progress or unresolved.",
     ],
   ])("reports %o and refreshes the list", async (answer, text) => {
     const listStuckPayments = vi
@@ -1034,7 +1041,7 @@ describe("card payments stuck after a restart", () => {
       "This payment is no longer stuck — the list has been refreshed.",
     ],
     [
-      { code: "payment.resolve_unsupported", params: { provider: "acme" } },
+      { code: "payment.resolve_unsupported", params: { providerId: "acme" } },
       "Waitron cannot ask this card provider about a stuck payment, so the order stays locked. Check the payment in the provider's dashboard.",
     ],
     [
@@ -1119,8 +1126,8 @@ describe("card payments stuck after a restart", () => {
   });
 
   it("asks the provider once, and disables every check, while a check is running", async () => {
-    let release!: (value: { outcome: "released" }) => void;
-    const pending = new Promise<{ outcome: "released" }>((resolve) => {
+    let release!: (value: StuckPaymentResolution) => void;
+    const pending = new Promise<StuckPaymentResolution>((resolve) => {
       release = resolve;
     });
     const { el, api } = await mount(
@@ -1142,7 +1149,7 @@ describe("card payments stuck after a restart", () => {
     await flush(el);
     expect(q(el, "[data-test=resolve-dialog]")).toBeNull();
 
-    release({ outcome: "released" });
+    release({ outcome: "not_charged", orderUnlocked: true });
     await flush(el);
     expect(api.resolveStuckPayment).toHaveBeenCalledTimes(1);
     expect(q(el, "[data-test=resolve-pay-2]")!.hasAttribute("disabled")).toBe(false);

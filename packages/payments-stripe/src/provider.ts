@@ -216,9 +216,12 @@ export class StripeTerminalProvider implements PaymentProvider {
     }
   }
 
-  /** Best-effort: a reader that refuses the cancel changes nothing about the payment's outcome. */
-  private cancelReaderAction(readerId: string): Promise<void> {
-    return this.opts.client.cancelReaderAction(readerId).catch(() => {});
+  private async cancelReaderAction(readerId: string): Promise<void> {
+    try {
+      await this.opts.client.cancelReaderAction(readerId);
+    } catch {
+      // Best-effort: a reader that refuses the cancel changes nothing about the payment's outcome.
+    }
   }
 
   /** Called only for an attempt nothing in this process is still driving. Reads the row, asks
@@ -242,16 +245,24 @@ export class StripeTerminalProvider implements PaymentProvider {
     if (first === undefined) return { outcome: "unknown", reason: "unreachable" };
     if (!CANCELLABLE.has(first.status)) return this.settleFrom(settle, row.amount, first);
 
-    await this.opts.client.cancelPaymentIntent(piId).catch(() => {});
+    try {
+      await this.opts.client.cancelPaymentIntent(piId);
+    } catch {
+      // The re-read below decides, whether or not the cancel went through.
+    }
     const after = await this.readIntent(piId);
     if (after === undefined) return { outcome: "unknown", reason: "unreachable" };
     return this.settleFrom(settle, row.amount, after);
   }
 
-  private readIntent(
+  private async readIntent(
     piId: string,
   ): Promise<{ id: string; status: string; amountReceived: number } | undefined> {
-    return this.opts.client.retrievePaymentIntent(piId).catch(() => undefined);
+    try {
+      return await this.opts.client.retrievePaymentIntent(piId);
+    } catch {
+      return undefined;
+    }
   }
 
   /** A `canceled` PaymentIntent counts as cancelled at the provider whoever cancelled it: either way

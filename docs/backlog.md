@@ -2427,7 +2427,8 @@ and a standby that has fallen behind.
   - Stripe Terminal's automatic `resolvePending` sweep is still a no-op, on purpose. During a LIVE
     collect the row is `attempting` and its PaymentIntent waits for a card, so a sweep that cancels
     would cancel a payment a customer is about to tap. Only the manager action, which first checks
-    that no attempt is running in this process, asks Stripe and cancels.
+    that no attempt is running in this process, asks Stripe, and cancels the PaymentIntent if Stripe
+    still allows it.
   - SumUp has no permanent lock: its sweep resolves every `attempting` row against SumUp, and fails
     one SumUp has never heard of after 15 minutes, with an incident. It leaves a row only while SumUp
     keeps answering PENDING. The manager action refuses a SumUp payment
