@@ -618,6 +618,19 @@ options list that always has a default. Spec:
 [modifier editors polish](superpowers/plans/2026-09-26-modifier-editors-polish.md). Each item marks
 its part done here when it lands.
 
+- **A64 (shared pieces) — built on `feat/modifier-editors-shared-pieces`, not yet merged (no pull
+  request number yet).** The `wt-number-stepper` control, the dashboard's `minus` and `bin` icons,
+  a standard modal widened from 768px to 1024px (dialogs and help tooltips keep 768px), and a lifted
+  look for a row being dragged, with its own colour token, `--wt-color-surface-lifted`. Left for
+  A66: at the stepper's 64px width (`--wt-stepper-field-width`) the box has 48px for text, and
+  "No limit" needs 52px and "Sin límite" 62px at the body font size, so a "No limit" placeholder is
+  cut off unless that stepper is given more width. Seen while looking at every modal at 1024px, not
+  changed: the printers screen's list of discovered printers keeps its details column capped
+  (`min(28vw, 24dvh)`), so the details wrap while half the row stands empty; and the till's option
+  picker, 1024px wide on a 1280px screen, puts each price at the far end of a 1024px row, well
+  away from its name (which adds to the "prices are not a column" item in the till layout pass,
+  under A4).
+
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
 nine pull requests: Task 1 #511, Task 2 #517, Task 3 #528, Task 4 #532, Task 5 #537, Task 6 #539,
@@ -1872,7 +1885,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   ([testing-guide.md](developers/testing-guide.md)).
   - **Within one extras list, prices are not a column and names are not a column**
     (`apps/till/src/widgets/modifier-picker.ts`) — a checkbox row and a stepper row misalign both the
-    price edges and the name edges, at 1024 and at 390.
+    price edges and the name edges, at 1024 and at 390. Since A64 widened the standard modal, on a
+    screen wider than 1072px the picker is 1024px wide and each price sits at the far end of the
+    row from its name: take 1280 into the pass too.
   - **The picker's fieldset legend wraps at phone width and its second line crosses the fieldset's own
     top border**, so the required marker (appended as a plain space) can break onto a line of its own
     sitting on the border rule.

@@ -51,8 +51,9 @@ Each was put to the owner on 2026-09-26; the answer is recorded with it.
   a complaint about a shared component is fixed in the shared component. `--wt-modal-max-width`
   goes from `48rem` to `64rem`. `--wt-dialog-max-width` is written in terms of the modal token
   (`packages/ui-core/src/tokens/structure.css`), so it would widen every `wt-dialog` and
-  `wt-help-tooltip` too; those are confirmations and hints, not forms, so the dialog token is given
-  its own `48rem` and keeps today's width.
+  `wt-help-tooltip` too; the dialog token is therefore given its own `48rem` and keeps today's
+  width. (Not every `wt-dialog` is a confirmation: some add and edit forms, the ingredient form
+  among them, are built in one and stay at 768px.)
 - **D6. Row alignment means the text baselines line up**, not that cells are centred — "some cells
   are much taller than others". Checked by screenshot, not by reading CSS.
 - **D7. The price column names each row's own unit.** Products in one list can be sold in different
@@ -76,7 +77,8 @@ Each was put to the owner on 2026-09-26; the answer is recorded with it.
   a + button, with `min`, optional `max`, `value`, `label`, `name`, `error`, `disabled` and an
   `allow-blank` mode (blank is a value in its own right: "no limit"). − and + are real buttons with
   accessible names ("Decrease {label}", "Increase {label}") and are disabled at the bounds; typing
-  still works. Pressing + on a blank value gives `min` (or 1 if `min` is 0); − never goes below
+  still works. Pressing + on a blank value gives `min` (or 1 if `min` is 0; as built, never above
+  `max`, and a step that changes nothing emits nothing — review of 2026-09-26); − never goes below
   `min`, so clearing the box is the only way back to blank. Emits `wt-change` with
   `detail: { value: string }`, following the custom-event rule (`bubbles`, `composed`, the inner
   event stopped). It needs the two tests CLAUDE.md §3 requires of a new primitive: a token-painting

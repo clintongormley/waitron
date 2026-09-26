@@ -3029,7 +3029,7 @@ it.each(["agent", "printer"])(
     q(el, `[data-test=open-add-${kind}]`)!.click();
     await flush(el);
     const dialog = q(el, `[data-test=new-${kind}-modal]`)!.shadowRoot!.querySelector("dialog")!;
-    expect(dialog.getBoundingClientRect().width).toBeCloseTo(768, 0);
+    expect(dialog.getBoundingClientRect().width).toBeCloseTo(1024, 0);
   },
 );
 

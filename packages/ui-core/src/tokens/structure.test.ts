@@ -44,6 +44,7 @@ test("defines the structural contract", () => {
     "--wt-modal-inline-margin",
     "--wt-modal-inline-padding",
     "--wt-cell-name-max-width",
+    "--wt-stepper-field-width",
   ]) {
     expect(token(el, name), `${name} should be defined`).not.toBe("");
   }
@@ -54,12 +55,27 @@ test("dialog max width is 48rem, capped at 90% of the viewport", () => {
   expect(token(el, "--wt-dialog-max-width")).toBe("min(90vw, 48rem)");
 });
 
+test("the standard modal is 64rem wide, and a dialog keeps its own 48rem", () => {
+  const el = mount();
+  expect(token(el, "--wt-modal-max-width")).toBe("64rem");
+  el.style.setProperty("--wt-modal-max-width", "10rem");
+  expect(token(el, "--wt-dialog-max-width")).toBe("min(90vw, 48rem)");
+});
+
 test("a name cell may grow wider than the controls that sit beside it", () => {
   // The cap exists to make a long name WRAP, not to squeeze the row: a value at or below the tap
   // minimum would make the name column narrower than the switch or menu button next to it, which is
   // the opposite of what it is for.
   const el = mount();
   expect(parseInt(token(el, "--wt-cell-name-max-width"), 10)).toBeGreaterThan(
+    parseInt(token(el, "--wt-tap-min"), 10),
+  );
+});
+
+test("a stepper's number box is never narrower than the tap target", () => {
+  // The box is what a wt-number-stepper hands focus to, so it is held to the tap minimum.
+  const el = mount();
+  expect(parseInt(token(el, "--wt-stepper-field-width"), 10)).toBeGreaterThanOrEqual(
     parseInt(token(el, "--wt-tap-min"), 10),
   );
 });

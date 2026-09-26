@@ -104,14 +104,21 @@ This works whether or not `#app` also carries `data-theme` — see "Themes" abov
 
 ### Colour
 
-`--wt-color-bg`, `--wt-color-surface`, `--wt-color-surface-raised`, `--wt-color-text`,
-`--wt-color-text-muted`, `--wt-color-primary`, `--wt-color-on-primary`, `--wt-color-danger`,
+`--wt-color-bg`, `--wt-color-surface`, `--wt-color-surface-raised`, `--wt-color-surface-lifted`,
+`--wt-color-text`, `--wt-color-text-muted`, `--wt-color-primary`, `--wt-color-on-primary`, `--wt-color-danger`,
 `--wt-color-on-danger`, `--wt-color-success`, `--wt-color-warning`, `--wt-color-on-warning`,
 `--wt-color-border`, `--wt-color-focus`, `--wt-color-scrim`
 
 Colours are semantic, not literal. There is no `--wt-color-blue`. `--wt-color-scrim` was added
 after the rest of the palette to back `wt-dialog`'s `::backdrop` — if you need a similar
 overlay/veil colour elsewhere, reuse it rather than inventing a new one.
+
+`--wt-color-surface-lifted` is the background of something picked up and moving — a table row
+while a pointer drags it (`apps/dashboard/src/widgets/reorder-table.ts`). A dragged row can sit
+inside a `wt-modal`, which is painted `--wt-color-surface-raised`, so the lifted surface differs
+from `--wt-color-bg`, `--wt-color-surface` and `--wt-color-surface-raised` in both themes, and
+keeps `--wt-color-text` and `--wt-color-text-muted` at 4.5:1 or more; the "lifted surface" test
+in `packages/ui-core/src/tokens/colors.test.ts` holds both.
 
 `--wt-color-warning` is the amber for a warning that is not yet an error, such as the alerts count
 badge when no open alert is an error. Text on it uses `--wt-color-on-warning`.
@@ -133,7 +140,7 @@ the filled-background idiom only for a colour that is itself the data, never as 
 `--wt-font-size-sm|md|lg|xl`, `--wt-font-weight-normal|bold`, `--wt-shadow-1|2`,
 `--wt-focus-ring`, `--wt-focus-offset`, `--wt-dialog-max-width`, `--wt-modal-max-width`,
 `--wt-modal-inline-margin`, `--wt-modal-inline-padding`, `--wt-cell-name-max-width`,
-`--wt-opacity-disabled`, `--wt-opacity-hover`
+`--wt-stepper-field-width`, `--wt-opacity-disabled`, `--wt-opacity-hover`
 
 `--wt-opacity-hover` is `wt-button`'s hover feedback (`button:hover:not(:disabled)`) — a plain
 opacity dip, the same treatment for every variant. A variant-specific background or border-colour
@@ -153,10 +160,10 @@ buttons" under "Page composition" below for the pattern this exists for.
 `--wt-dialog-max-width` (`min(90vw, 48rem)`) exists so `wt-dialog` never spells out a literal
 `rem` value inline — the no-hardcoded-chrome guard (see below) checks `rem`/`em` sizing, not just
 `px`, so any component-level size, including one wrapped in `min()`/`max()`/`clamp()`, must resolve
-through a token. It is written `min(90vw, var(--wt-modal-max-width))`, so overriding
-`--wt-modal-max-width` on the theme root also resizes every `wt-dialog` and `wt-help-tooltip`
-that does not set `--wt-dialog-max-width` itself (the till's device chooser does); overriding it on
-an element below the root does not, because the dialog token is resolved where it is declared.
+through a token. `wt-modal` is at most `64rem` (1024px) wide; `wt-dialog` and `wt-help-tooltip`
+read their own token and are at most `48rem` (768px). Some add and edit forms are built in
+`wt-dialog` rather than `wt-modal` (the ingredient form is one), so they are held to 768px too. Overriding `--wt-modal-max-width` therefore resizes `wt-modal` alone; to resize a
+dialog, set `--wt-dialog-max-width` (the till's device chooser does).
 
 `--wt-cell-name-max-width` is one sizing value for the NAME column of a table a form owns, and it
 is used in **three different directions**, which its name does not say. Grep for the token before
@@ -210,10 +217,11 @@ settled convention; it is recorded in `docs/backlog.md` under what Task 11 left 
 
 Minimum interactive target, 44px, **on both axes**. POS screens are touched under time pressure by
 staff who are not looking carefully — a numpad key ("1", "+", "−") fails just as badly if it's
-44px tall but only 32px wide as if it were too short. `wt-button`, `wt-input`, `wt-switch` and
-`wt-combobox` apply `min-width` and `min-height` to the element that actually forms the hit target
-(the inner `button` for `wt-button`; the inner `input` for `wt-input`; both `:host` and `.control`
-for `wt-switch`; the `.trigger` button for `wt-combobox`) — never to an element that can overflow
+44px tall but only 32px wide as if it were too short. `wt-button`, `wt-input`, `wt-price-input`,
+`wt-number-stepper`, `wt-switch` and `wt-combobox` apply `min-width` and `min-height` to the element
+that actually forms the hit target (the inner `button` for `wt-button`; the inner `input` for
+`wt-input`; the inner `input` and the unit button for `wt-price-input`; the inner `input` and both buttons for `wt-number-stepper`; both
+`:host` and `.control` for `wt-switch`; the `.trigger` button for `wt-combobox`) — never to an element that can overflow
 its own container (see "Hit targets must not overflow their container" below).
 
 `min-width` is a floor, not a request: `wt-input`'s inner `<input>` sets both `width: 100%` (to
@@ -240,6 +248,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-toast` | `open`, `tone` (`info`\|`error`, reflected; info is announced politely through `role="status"`, error assertively through `role="alert"`), `message`, `close-label` (required: the close button's accessible name, and an empty one leaves that button nameless), `duration` (milliseconds, default `8000`; `0` keeps it open); `show()` opens it and restarts the full countdown (unless the pointer or keyboard focus is on it, when the countdown waits), which is how to re-announce an identical message. While the pointer or keyboard focus is on it the countdown never runs, even when the message changes; once both have left, the full duration restarts. Positioning belongs to the consumer, which must also register the `close` icon | `wt-activate` — `detail: {}` (the message was pressed; the toast then closes); `wt-close` — `detail: {}` (closed by the timer, the close button, or after activation) |
 | `wt-input` | `value`, `label`, `name`, `type`, `autocomplete`, `placeholder`, `hint` (an always-shown line of help under the field, which describes the native input), `required`, `disabled`, `invalid`, `error`; `help` and `end` slots | `wt-change` — `detail: { value: string }` |
 | `wt-price-input` | `value`, `label`, `name`, `unit`, `placeholder`, `required` (reflected), `disabled` (reflected), `error`. `placeholder` shows on the amount only while it is empty, painted `--wt-color-text-muted`. A money field joined to a trailing `<button>` whose visible text is `unit` (which is also that button's accessible name, so supply one). `disabled` locks the amount AND the unit button, so a form that suspends itself while saving cannot be edited through the price. `error` marks the field `aria-invalid` and links the message | `wt-change` — `detail: { value: string }` (on input); `wt-unit-click` — `detail: {}` (the unit button was pressed) |
+| `wt-number-stepper` | `value` (text), `label`, `name`, `min` (default `0`), `max` (default none), `placeholder`, `hint`, `required` (reflected), `disabled` (reflected, and locks the box and both buttons), `invalid` (reflected), `error`, `hide-label` (names the box with `label` for assistive technology but draws no label), `decreaseLabel` and `increaseLabel` (the buttons' accessible names, default `Decrease {label}` and `Increase {label}`; set translated ones). A whole-number box between a − and a + button, each disabled at its bound. + on a blank or non-number value gives the larger of `min` and 1, never above `max`; − never goes below `min`, so only clearing the box reaches blank. Typing emits exactly what was typed, never a clamped number, so the form's own validation sees a typed 0, a blank or a non-number. Its baseline is the number's, so a row aligned by baseline lines the text up. The box is `--wt-stepper-field-width` wide; focusing the element focuses the box. The consuming app registers the `minus` and `plus` icons | `wt-change` — `detail: { value: string }` (on typing, and on each step that changes the value) |
 | `wt-switch` | `checked`, `disabled`, `label`, `name`, `hide-label` (names the switch for assistive technology with `label` but draws no text beside it — for a switch in a table column whose heading already says what it is) | `wt-change` — `detail: { checked: boolean }` |
 | `wt-dialog` | `open`, `heading`, `aria-label` (fallback name when there is no `heading`), `dismissible` (default true; set the property `.dismissible=${false}` so Escape cannot close it); default slot (body), `footer` slot | `wt-close` |
 | `wt-modal` | `open`, `heading`, `aria-label`, `dismissible`; default slot (scrolling body), `footer` slot (fixed actions) | `wt-close` |
@@ -354,7 +363,7 @@ In tree mode the table keeps a match's ancestor rows and tells each cell, via it
 `ancestorOnly`, whether the row is present only to hold a descendant's place — mute those with a
 `part` on the cell.
 
-Use `wt-modal` for an add or edit form. Its width is `--wt-modal-max-width` (`48rem`) bounded by the
+Use `wt-modal` for an add or edit form. Its width is `--wt-modal-max-width` (`64rem`) bounded by the
 viewport minus its side margins, and it fills the viewport height with 24px top and bottom margins.
 Its side margins (`--wt-modal-inline-margin`) and the inline padding of its body and footer
 (`--wt-modal-inline-padding`) are 24px from 800px wide and shrink on a phone to 4px and 12px, so the
@@ -435,7 +444,7 @@ An unregistered `name` renders nothing — there is no broken-icon fallback mark
 `packages/ui` primitive itself uses `<wt-icon name="...">` internally (`wt-row-actions`' kebab
 trigger, for one), that name becomes part of the primitive's contract: every consuming app must
 register it itself, or that primitive's icon silently disappears there. The dashboard's own set —
-`hamburger`, `kebab`, `chevron-down`, `gear`, `person`, `plus`, `grip`, `bell`, `close`, each a
+`hamburger`, `kebab`, `chevron-down`, `gear`, `person`, `plus`, `minus`, `bin`, `grip`, `bell`, `close`, each a
 plain geometric shape at the same 16x16 viewBox — lives in `apps/dashboard/src/icons.ts` (its header carries the
 Material Symbols attribution) and is registered once in `main.ts`. `hamburger` and `kebab` look similar in the abstract ("reveal more") but mean
 different things at different scales: hamburger opens the whole app's navigation (used once);
@@ -530,9 +539,12 @@ receives focus, so keyboard interaction and `:focus-visible` styling never engag
 "focus the quantity field" constantly (e.g. after adding a line item); `delegatesFocus: true` makes
 `wtInput.focus()` actually focus the inner `<input>`.
 
-A primitive isn't a candidate for this when it wraps several native focusable controls of its own
-(there is no single one for a host `.focus()` to mean), or none (a pure container slotting other
-primitives, which already carry their own delegation). `grep -n delegatesFocusShadowRootOptions
+A primitive isn't a candidate for this when it wraps no native focusable control of its own (a pure
+container slotting other primitives, which already carry their own delegation). One that wraps
+several can still set it — `wt-price-input` and `wt-combobox` do — and a host `.focus()` then lands
+on the first focusable control inside. `wt-number-stepper`'s first control is the − button, so it
+also overrides `focus()` to focus the number box.
+`grep -n delegatesFocusShadowRootOptions
 packages/ui/src/components/*.ts` shows which primitives set it today.
 
 ### Forms
@@ -596,7 +608,7 @@ Give its question-mark button a localized `aria-label`. It opens on click, stays
 interact with it, and closes when you press Escape or click anywhere outside it. Place it in a
 `wt-input`'s `help` slot to align it beside that field's label.
 
-A line of help that should always show goes in `wt-input`'s `hint`: it renders muted under the
+A line of help that should always show goes in `wt-input`'s or `wt-number-stepper`'s `hint`: it renders muted under the
 field, and the native input is described by it. A paragraph placed beside the `wt-input` cannot do
 that: in Chromium an `aria-describedby` naming an id outside the input's shadow root gave the input
 no description (measured 2026-09-26 with Playwright 1.63.0's Chromium, reading its accessibility

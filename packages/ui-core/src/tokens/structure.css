@@ -28,8 +28,8 @@
   --wt-opacity-disabled: 0.5;
   --wt-opacity-hover: 0.85;
 
-  --wt-modal-max-width: 48rem;
-  --wt-dialog-max-width: min(90vw, var(--wt-modal-max-width));
+  --wt-modal-max-width: 64rem;
+  --wt-dialog-max-width: min(90vw, 48rem);
 
   /* A modal's side margin and inline padding shrink on a phone so the width goes to its content.
      Fluid rather than a breakpoint: a media query cannot read a token, and the no-hardcoded-chrome
@@ -57,6 +57,10 @@
      its own is an open question (docs/backlog.md, under what Task 11 left open). Grep before
      quoting a list of consumers here: it has gone stale once already. */
   --wt-cell-name-max-width: 140px;
+
+  /* Wide enough for four digits, and never below --wt-tap-min: the number box is what a
+     wt-number-stepper hands focus to. */
+  --wt-stepper-field-width: 64px;
 
   --wt-shadow-1: 0 1px 2px rgb(0 0 0 / 0.08);
   --wt-shadow-2: 0 8px 24px rgb(0 0 0 / 0.16);

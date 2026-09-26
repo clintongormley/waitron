@@ -11,6 +11,7 @@ import "../src/components/wt-data-table.js";
 import "../src/components/wt-icon.js";
 import "../src/components/wt-input.js";
 import "../src/components/wt-price-input.js";
+import "../src/components/wt-number-stepper.js";
 import "../src/components/wt-spinner.js";
 import "../src/components/wt-switch.js";
 import "../src/components/wt-tabs.js";
@@ -23,6 +24,7 @@ registerIcons({
   check: "M2 8 L6 12 L14 4",
   cart: "M1 2 h3 l2 8 h7 l2 -6 H5",
   plus: "M7.25 2.5H8.75V7.25H13.5V8.75H8.75V13.5H7.25V8.75H2.5V7.25H7.25Z",
+  minus: "M2.5 7.25H13.5V8.75H2.5Z",
   // An unregistered icon renders nothing, leaving wt-row-actions' trigger a blank button.
   kebab:
     "M6.7 3a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 8a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 13a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0",
@@ -106,6 +108,35 @@ const panel = (theme: "light" | "dark") => `
         error="Introduce un precio."
       >
       </wt-price-input>
+    </div>
+    <div class="row" style="margin-top:16px">
+      <wt-number-stepper
+        label="Mínimo"
+        name="minimo"
+        value="0"
+        hint="0 hace la lista opcional"
+        decreaselabel="Reducir {label}"
+        increaselabel="Aumentar {label}"
+      >
+      </wt-number-stepper>
+      <wt-number-stepper
+        label="Máximo"
+        name="maximo"
+        placeholder="∞"
+        decreaselabel="Reducir {label}"
+        increaselabel="Aumentar {label}"
+      >
+      </wt-number-stepper>
+      <wt-number-stepper
+        label="Cantidad"
+        name="cantidad"
+        value="1"
+        min="1"
+        max="1"
+        decreaselabel="Reducir {label}"
+        increaselabel="Aumentar {label}"
+      >
+      </wt-number-stepper>
     </div>
     <wt-tabs label="Venue settings">
       <section slot="status"><p>Choose Team to manage your staff in a table.</p></section>

@@ -112,3 +112,32 @@ test("a nested theme root does not inherit the outer root's scheme", async () =>
   expect(getComputedStyle(inner).colorScheme).toBe("light");
   expect(token(inner, "--wt-color-bg")).toBe("#f7f7f8");
 });
+
+test("the lifted surface stands apart from every other surface and keeps text readable, in both themes", () => {
+  const luminance = (hex: string) => {
+    expect(hex).toMatch(/^#[0-9a-f]{6}$/);
+    const [r, g, b] = [1, 3, 5]
+      .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+  };
+  const ratio = (a: string, b: string) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (hi! + 0.05) / (lo! + 0.05);
+  };
+  for (const theme of ["light", "dark"] as const) {
+    const el = mount(theme);
+    const lifted = token(el, "--wt-color-surface-lifted");
+    for (const surface of ["--wt-color-bg", "--wt-color-surface", "--wt-color-surface-raised"]) {
+      expect(ratio(lifted, token(el, surface)), `${theme}: lifted vs ${surface}`).toBeGreaterThan(
+        1.1,
+      );
+    }
+    for (const text of ["--wt-color-text", "--wt-color-text-muted"]) {
+      expect(ratio(lifted, token(el, text)), `${theme}: ${text} on lifted`).toBeGreaterThanOrEqual(
+        4.5,
+      );
+    }
+    el.remove();
+  }
+});
