@@ -239,7 +239,18 @@ export function formatReceipt({
 
   // Allowed operational extras — the tender block. Card identity belongs on the payment slip.
   const t = result.tender;
-  if (t.method === "cash") {
+  if (result.payments !== undefined && result.payments.length > 0) {
+    for (const payment of result.payments) {
+      if (payment.method === "cash") {
+        row(LABEL.cash, formatMoney(payment.tendered, locale));
+        if (payment.change !== "0.00") row(LABEL.change, formatMoney(payment.change, locale));
+      } else {
+        row("Tarjeta", formatMoney(payment.amount, locale));
+        if (payment.reference !== null) text(`Ref. ${payment.reference}`);
+      }
+      if (payment.tip !== "0.00") row(LABEL.tip, formatMoney(payment.tip, locale));
+    }
+  } else if (t.method === "cash") {
     row(LABEL.cash, formatMoney(addDecimal(decimal(result.total), decimal(t.change)), locale));
     row(LABEL.change, formatMoney(t.change, locale));
   } else if (t.method === "card") {

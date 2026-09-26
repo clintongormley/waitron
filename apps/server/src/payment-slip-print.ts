@@ -1,5 +1,5 @@
 import "./errors.js";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, isNull, ne, or } from "drizzle-orm";
 import { readTenant, sales, tenders, withTransaction, type Database } from "@waitron/db";
 import { payments, type CardDetails } from "@waitron/payments";
 import { AppError, centsToDecimal, subtractDecimal } from "@waitron/shared";
@@ -32,7 +32,18 @@ export async function printSalePaymentSlip(
         authCode: payments.cardAuthCode,
       })
       .from(payments)
-      .innerJoin(tenders, and(eq(tenders.saleId, payments.saleId), eq(tenders.method, "card")))
+      .innerJoin(
+        tenders,
+        and(
+          eq(tenders.saleId, payments.saleId),
+          eq(tenders.method, "card"),
+          // A bill paid by several cards: each payment's own tender carries its own tip.
+          or(
+            eq(tenders.billPaymentId, payments.billPaymentId),
+            and(isNull(tenders.billPaymentId), isNull(payments.billPaymentId)),
+          ),
+        ),
+      )
       .where(
         and(
           eq(payments.saleId, sale.id),

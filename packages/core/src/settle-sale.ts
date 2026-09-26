@@ -23,9 +23,13 @@ import {
 import type { SaleId } from "@waitron/shared";
 import type { RecordSaleTender } from "./record-sale.js";
 
+/** A tender as settlement writes it: `billPaymentId` names the bill payment it was taken as, when
+ * the bill was paid in parts before its invoice. */
+export type SettleSaleTender = RecordSaleTender & { billPaymentId?: string | null };
+
 export interface SettleSaleInput {
   saleId: SaleId;
-  tenders: RecordSaleTender[];
+  tenders: SettleSaleTender[];
 }
 
 /**
@@ -117,6 +121,7 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
             tender.cashTendered == null ? tender.cashTendered : stringToCents(tender.cashTendered),
           tipAmount: stringToCents(tender.tipAmount),
           settledAt: tender.settledAt!.toISOString(),
+          billPaymentId: tender.billPaymentId ?? null,
         })),
       );
     } catch (error) {

@@ -95,3 +95,28 @@ it("localises the refusals of changing or cancelling a sent line in both languag
     "The kitchen has already started this item, so it can no longer be changed. You can cancel it",
   );
 });
+
+it("explains each refusal a bill paid in parts can give, in both languages, naming no identifier", () => {
+  const generic = {
+    en: codeMessage("server.internal", "en"),
+    es: codeMessage("server.internal", "es"),
+  };
+  for (const code of [
+    "bill.payments_received",
+    "bill.line_paid",
+    "bill.received_exceeds_total",
+    "bill.nothing_outstanding",
+    "bill.tip_not_allowed",
+    "bill.allocation_changed",
+  ]) {
+    expect(codeMessage(code, "en")).not.toBe(generic.en);
+    expect(codeMessage(code, "es")).not.toBe(generic.es);
+    expect(codeMessage(code, "en")).not.toContain(code);
+  }
+  expect(codeMessage("bill.payments_received", "en")).toBe(
+    "Money has already been taken on this bill. Take the rest from the bill's payments",
+  );
+  expect(codeMessage("bill.payments_received", "es")).toBe(
+    "Ya se ha cobrado dinero en esta cuenta. Cobra el resto desde los pagos de la cuenta",
+  );
+});

@@ -11,10 +11,18 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { AppError, centsToDecimal, rawCentsToDecimal } from "@waitron/shared";
+import {
+  AppError,
+  centsToDecimal,
+  MONEY_SCALE,
+  rawCentsToDecimal,
+  subtractDecimal,
+  toScale,
+} from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { openTab } from "./working-order.js";
+import { readReceivedByBill, refuseBillHoldingMoney } from "./bill-payments.js";
 import "./errors.js";
 
 /** One bill of a visit's party, as the table screen lists it. */
@@ -25,7 +33,10 @@ export interface VisitBill {
   label: string | null;
   status: "open" | "placed" | "settled" | "abandoned";
   total: string;
-  /** What is still to pay: the total of an open or placed bill, nothing on a settled or abandoned one. */
+  /**
+   * What is still to pay: the total of an open or placed bill less the money received against it
+   * before its invoice, and nothing on a settled or abandoned one.
+   */
   outstanding: string;
   /** A sale has been filed for the bill, so its receipt can be printed again. */
   receiptAvailable: boolean;
@@ -276,16 +287,25 @@ export async function readBillsOfVisits(
     .where(inArray(workingOrders.visitId, members))
     .groupBy(workingOrders.id)
     .orderBy(workingOrders.openedAt, workingOrders.orderNumber, workingOrders.id);
+  const received = await readReceivedByBill(
+    tx,
+    rows.filter((row) => row.status === "open").map((row) => row.workingOrderId),
+  );
   const bills = rows.map((row): Omit<VisitBill, "receiptAvailable"> => {
     const total = rawCentsToDecimal(row.total);
     const owing = row.status === "open" || row.status === "placed";
+    const paid = received.get(row.workingOrderId);
     return {
       workingOrderId: row.workingOrderId,
       visitId: row.visitId!,
       label: row.label,
       status: row.status,
       total,
-      outstanding: owing ? total : centsToDecimal(0),
+      outstanding: !owing
+        ? centsToDecimal(0)
+        : paid === undefined
+          ? total
+          : toScale(subtractDecimal(total, paid), MONEY_SCALE),
     };
   });
   return new Map(
@@ -342,6 +362,8 @@ export async function finishTable(
     throw new AppError("visit.bill_outstanding", { visitId });
   }
   const empty = bills.filter((bill) => bill.status === "open").map((bill) => bill.id);
+  // An emptied bill can still hold a tip its refunded payment kept (design §2.3, §4.5).
+  await refuseBillHoldingMoney(tx, empty);
   if (empty.length > 0) {
     await tx
       .update(workingOrders)
@@ -393,7 +415,11 @@ function canonicalJson(value: unknown): string {
   return JSON.stringify(value) ?? "null";
 }
 
-function fingerprint(args: Record<string, unknown>): string {
+/**
+ * SHA-256 of `args` as canonical JSON, leaving out the keys a retry may change without being
+ * another request (the submission id itself, and re-read revisions).
+ */
+export function fingerprint(args: Record<string, unknown>): string {
   const kept = Object.fromEntries(
     Object.entries(args).filter(([key]) => !NOT_FINGERPRINTED.has(key)),
   );

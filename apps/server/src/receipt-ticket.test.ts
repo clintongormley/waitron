@@ -1058,3 +1058,51 @@ describe("formatReceipt — printer layout", () => {
     },
   );
 });
+
+describe("a bill paid in parts before its invoice", () => {
+  // €20.90 paid as €10.00 cash from a €50.00 note, then €10.90 by hand-keyed card with a €1.00
+  // tip: each payment prints on its own, with the change it gave when it was taken.
+  const PAID_IN_PARTS: TillSaleResult = {
+    ...FILED_SALE,
+    tender: { method: "cash", change: "40.00" },
+    payments: [
+      { method: "cash", amount: "10.00", tip: "0.00", tendered: "50.00", change: "40.00" },
+      { method: "card", amount: "11.90", tip: "1.00", reference: "OP-9" },
+    ],
+  };
+
+  function lines(): string[] {
+    return printedLines(
+      formatReceipt({
+        result: PAID_IN_PARTS,
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
+    ).map((line) => line.trim().replace(/\s+/g, " "));
+  }
+
+  it("prints each payment with what was handed over, the change it gave and its tip", () => {
+    const printed = lines();
+    const start = printed.findIndex((line) => line.startsWith("TOTAL"));
+
+    expect(
+      printed
+        .slice(start + 1)
+        .filter((line) => line !== "")
+        .slice(0, 6),
+    ).toEqual([
+      "Efectivo 50,00 €",
+      "Cambio 40,00 €",
+      "Tarjeta 11,90 €",
+      "Ref. OP-9",
+      "Propina 1,00 €",
+      "VERI*FACTU",
+    ]);
+  });
+
+  it("never derives cash from the total and the change, as a single payment's ticket does", () => {
+    expect(lines().some((line) => line === "Efectivo 60,90 €")).toBe(false);
+  });
+});

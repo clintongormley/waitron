@@ -164,6 +164,26 @@ export async function enqueueOriginalReceipt(
   await enqueuePrintJob(tx, printConfig(cfg), resolved.printer.id, resolved.receiptBytes);
 }
 
+/** Cash taken against a bill before its invoice opens the drawer naming the bill payment. */
+export async function enqueueBillPaymentDrawer(
+  tx: Transaction,
+  cfg: TillConfig,
+  billPaymentId: string,
+  operatorId: string,
+): Promise<void> {
+  if (cfg.allowCashDrawer === false) return;
+  const printer = await resolveReceiptPrinter(tx, cfg);
+  if (printer === undefined || !printer.hasCashDrawer) return;
+  await tx.insert(drawerOpens).values({
+    tillId: cfg.tillId,
+    printerId: printer.id,
+    personId: operatorId,
+    reason: "bill_payment",
+    billPaymentId,
+  });
+  await enqueuePrintJob(tx, printConfig(cfg), printer.id, DRAWER_KICK, "drawer");
+}
+
 /** Cash collected at a till opens its attached drawer independently of document printing. */
 export async function enqueueCashSaleDrawer(
   tx: Transaction,

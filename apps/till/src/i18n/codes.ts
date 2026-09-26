@@ -35,6 +35,30 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This request could not be matched to what was sent before. Reload and try again",
     es: "Esta petición no coincide con la que se envió antes. Vuelve a cargar e inténtalo de nuevo",
   },
+  "bill.payments_received": {
+    en: "Money has already been taken on this bill. Take the rest from the bill's payments",
+    es: "Ya se ha cobrado dinero en esta cuenta. Cobra el resto desde los pagos de la cuenta",
+  },
+  "bill.line_paid": {
+    en: "This item has already been paid for, so it cannot be changed, moved or charged again. Refund its payment first",
+    es: "Este artículo ya está pagado, así que no se puede cambiar, mover ni cobrar otra vez. Devuelve antes su pago",
+  },
+  "bill.received_exceeds_total": {
+    en: "The bill would owe less than has already been paid on it. Move fewer items, or refund the difference first",
+    es: "La cuenta quedaría por debajo de lo que ya se ha pagado. Mueve menos artículos o devuelve antes la diferencia",
+  },
+  "bill.nothing_outstanding": {
+    en: "Nothing is left to pay on this bill",
+    es: "No queda nada por pagar en esta cuenta",
+  },
+  "bill.tip_not_allowed": {
+    en: "This venue does not take tips. Charge only what the bill owes",
+    es: "Este local no acepta propinas. Cobra solo lo que se debe de la cuenta",
+  },
+  "bill.allocation_changed": {
+    en: "The bill changed while you were paying. Check the new amounts and confirm again",
+    es: "La cuenta ha cambiado mientras cobrabas. Revisa los nuevos importes y vuelve a confirmar",
+  },
   "order.payment_in_flight": {
     en: "A card payment for this order is in progress. Wait for it to finish before changing the order",
     es: "Se está cobrando este pedido con tarjeta. Espera a que termine antes de cambiarlo",

@@ -363,6 +363,21 @@ declare module "@waitron/shared" {
      * server's current answer, for the till to show again.
      */
     "bill.allocation_changed": { workingOrderId: string; preview: AllocationPreview };
+    /**
+     * A write would charge again, move, void, reduce or edit a quantity of a line that a pending
+     * or received item payment has paid for. The line's unpaid quantity stays free.
+     */
+    "bill.line_paid": { workingOrderId: string; lineNo: number };
+    /**
+     * A write would leave the bill's total below the money it has received or reserved. `excess`
+     * is by how much; refunding that first lets the write through.
+     */
+    "bill.received_exceeds_total": { workingOrderId: string; excess: string };
+    /**
+     * The bill holds money taken before its invoice, so it cannot be abandoned, merged into
+     * another, placed, or paid in one go by the single-payment routes.
+     */
+    "bill.payments_received": { workingOrderId: string };
     // The four `booking.*` codes are declared in @waitron/bookings/src/errors.ts.
     /**
      * A tab verb found the order it was asked to modify is not an OPEN tab — not `open`, not pointed

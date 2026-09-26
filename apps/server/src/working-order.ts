@@ -141,6 +141,14 @@ import { readReceiptOrder } from "./receipt-order.js";
 import { ticketLinesFrom } from "./receipt-lines.js";
 import { enqueueOriginalReceipt } from "./receipt-print.js";
 import type { TillSaleResult } from "./till-sale.js";
+import {
+  assertBillInvariant,
+  issueBillsFullyPaid,
+  readPaidQuantities,
+  refuseBillHoldingMoney,
+  refuseLinesPaid,
+  refusePaidLines,
+} from "./bill-payments.js";
 
 export interface WorkingOrderDeps {
   db: Database;
@@ -1789,6 +1797,9 @@ export async function voidTabLine(
     throw new AppError("tab.line_not_found", { tabId, lineNo });
   }
   const removed = quantity === undefined ? null : voidQuantity(tabId, lineNo, quantity, target);
+  await refusePaidLines(tx, tabId, [
+    { id: target.id, lineNo, keeps: removed === null ? 0 : target.quantity - removed },
+  ]);
   const wasStarted = isStarted(target.state);
   const voided =
     target.firedAt !== null
@@ -1816,6 +1827,7 @@ export async function voidTabLine(
           or(eq(workingOrderLines.id, target.id), eq(workingOrderLines.parentLineId, target.id)),
         ),
       );
+    await assertBillInvariant(tx, [tabId]);
     return;
   }
   const children = await tx
@@ -1836,6 +1848,7 @@ export async function voidTabLine(
       perDish: perDishOptionQuantity(thousandthsToDecimal(child.quantity), dishQuantity),
     })),
   );
+  await assertBillInvariant(tx, [tabId]);
 }
 
 /** A dish's extras child, and how many of it go with one of the dish. */
@@ -2042,6 +2055,7 @@ export async function moveTabLines(
   const before = await readSentWork(tx, cfg, fromTabId);
   await moveOrderLines(tx, cfg, fromTabId, toTabId, lineNos, { modesChecked: false });
   await bumpRevision(tx, [fromTabId, toTabId]);
+  await assertBillInvariant(tx, [fromTabId]);
   await enqueueMovedSlips(tx, cfg, before, toTabId);
 }
 
@@ -2094,6 +2108,12 @@ async function moveOrderLines(
     .from(workingOrderLines)
     .where(sourceWhere)
     .orderBy(workingOrderLines.lineNo);
+  // A moved row takes its id with it, and a paid quantity stays on the bill it was paid on.
+  await refusePaidLines(
+    tx,
+    fromTabId,
+    source.map((line) => ({ id: line.id, lineNo: line.lineNo, keeps: 0 })),
+  );
 
   const [agg] = await tx
     .select({ next: sql<number>`cast(coalesce(max(${workingOrderLines.lineNo}), 0) as int)` })
@@ -2447,6 +2467,8 @@ export async function mergeTabs(
     throw new AppError("tab.not_open", { tabId: fromTabId });
   }
   await guardVisits(tx, into.visitId, from.visitId, options);
+  // The source is abandoned below; money it holds never moves to another bill implicitly.
+  await refuseBillHoldingMoney(tx, [fromTabId]);
   const before = await readSentWork(tx, cfg, fromTabId);
   await moveOrderLines(tx, cfg, fromTabId, intoTabId, undefined, { modesChecked: false });
   await bumpRevision(tx, [fromTabId, intoTabId]);
@@ -2573,6 +2595,7 @@ async function carveBetweenTabs(
     refuseHeld: false,
   });
   await bumpRevision(tx, [fromTabId, toTabId]);
+  await assertBillInvariant(tx, [fromTabId]);
   return splitFrom;
 }
 
@@ -2696,6 +2719,16 @@ async function carveOffLines(
       partials.push({ line, quantity: t.quantity });
     }
   }
+  // A split keeps the source row, so its paid quantity may stay there while unpaid units move.
+  await refusePaidLines(
+    tx,
+    fromTabId,
+    partials.map(({ line, quantity }) => ({
+      id: line.id,
+      lineNo: line.lineNo,
+      keeps: decimalToThousandths(line.quantity) - stringToThousandths(quantity),
+    })),
+  );
 
   if (wholeLineNos.length > 0) {
     await moveOrderLines(tx, cfg, fromTabId, toTabId, wholeLineNos, { modesChecked: true });
@@ -2835,6 +2868,7 @@ export async function splitOffCheck(
   // A check is paid, never sent, so held work moved onto it would never fire.
   await carveOffLines(tx, cfg, fromTabId, checkId, transfers, { refuseHeld: true });
   await bumpRevision(tx, [fromTabId, checkId]);
+  await assertBillInvariant(tx, [fromTabId]);
 
   return { checkId };
 }
@@ -3541,6 +3575,7 @@ async function applyLineEdits(
   )[] = plan.fresh.map(() => ({ kind: "line", kitchen: order.newWork }));
   const raised: RequestedLine[] = [];
   const resent: string[] = [];
+  const paid = await readPaidQuantities(tx, orderId);
 
   for (const { parent, intent } of plan.edits) {
     assertQuantityPrecision(intent.quantity, parent.unitPrecision ?? MAX_UNIT_PRECISION, {
@@ -3580,6 +3615,8 @@ async function applyLineEdits(
       extras.removed.length > 0;
     const rise = compareDecimal(requested, parent.quantity);
     if (!changed && rise === 0) continue;
+    // Changed in place or replaced, a paid line would no longer be what was paid for.
+    refuseLinesPaid(orderId, paid, paidLineParts(parent));
     const fired = await kitchenHas(parent);
     const action: Action = !fired ? "free" : changed ? "change" : rise > 0 ? "raise" : "drop";
 
@@ -3649,6 +3686,7 @@ async function applyLineEdits(
     pricedAs.push({ kind: "check" });
   }
 
+  refuseLinesPaid(orderId, paid, plan.removed.flatMap(paidLineParts));
   const voided: CorrectionItem[] = [];
   for (const parent of plan.removed) {
     if (await kitchenHas(parent)) {
@@ -3819,7 +3857,17 @@ async function applyLineEdits(
         ),
       );
   }
+  await assertBillInvariant(tx, [orderId]);
   return { changed: changes.length > 0 || plan.removed.length > 0 || plan.fresh.length > 0 };
+}
+
+/** A dish line and its extras, none of which an edit may leave holding a paid quantity. */
+function paidLineParts(parent: EditableParent): { id: string; lineNo: number; keeps: number }[] {
+  return [parent, ...parent.children].map((line) => ({
+    id: line.id,
+    lineNo: parent.lineNo,
+    keeps: 0,
+  }));
 }
 
 /**
@@ -3855,6 +3903,7 @@ export async function updateHeldOrder(
   cfg: TillConfig,
   id: string,
   req: UpdateHeldOrderRequest,
+  issue?: { fiscal: TillSaleDeps; operatorId: string },
 ): Promise<number> {
   return withTransaction(deps.db, async (tx) => {
     const { label } = await requireEditableOrder(tx, id, req.revision);
@@ -3908,7 +3957,12 @@ export async function updateHeldOrder(
         .set({ label: req.label ?? null })
         .where(eq(workingOrders.id, id));
     }
-    return countEdit(tx, id, req.revision, changed || relabelled);
+    const revision = await countEdit(tx, id, req.revision, changed || relabelled);
+    // An edit that lowers the total to what the bill has received issues its invoice (design §7).
+    if (issue !== undefined) {
+      await issueBillsFullyPaid(tx, issue.fiscal, cfg, [id], issue.operatorId);
+    }
+    return revision;
   });
 }
 
@@ -3963,6 +4017,7 @@ export async function abandonHeldOrder(
   void cfg;
   return withTransaction(deps.db, async (tx) => {
     await refusePaymentInFlight(tx, [id]);
+    await refuseBillHoldingMoney(tx, [id]);
     const updated = await tx
       .update(workingOrders)
       .set({ status: "abandoned" })
@@ -4010,6 +4065,7 @@ export async function placeOrder(
       throw new AppError("working_order.not_open", { workingOrderId: id });
     }
     await refusePaymentInFlight(tx, [id]);
+    await refuseBillHoldingMoney(tx, [id]);
     const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
     const orderFlow = serviceContext?.serviceMode ?? cfg.orderFlow;
 
