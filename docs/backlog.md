@@ -3079,7 +3079,7 @@ image constraints under *Detail → Box image*.
     is open under Task 9a. Two notes #653's prune deleted and nothing else recorded: nobody knows
     why the 5-second busy timeout did not absorb a `database is locked` in the pending-payment
     sweep; and nothing proves `startServer` itself survives a backup duty that cannot start — only
-    `backup-supervisor.test.ts` covers that, at the supervisor. **Done (2026-09-26, lane A's A39):**
+    `backup-supervisor.test.ts` covers that, at the supervisor. **Done (2026-09-26, lane A's A39, #671):**
     a start that failed after boot's long-lived open left the venue store open, holding the folder
     for this process — reproduced for an unreadable pending-adoption file, an empty fiscal slot, and
     an unreadable certificate on an adoption-pending start and on a trading start (read after the
@@ -3096,7 +3096,9 @@ image constraints under *Detail → Box image*.
     adoption-pending and throwing-undo cases close a listener that has not bound yet (its close
     reports `ERR_SERVER_NOT_RUNNING`, which the unwind drops), so only the trading and tunnel cases
     close a bound one. Receipt: `docs/developers/conventions-data.md`, "A failed start undoes what
-    it started".
+    it started". Left open by #671: each stop is written twice, once in the unwind list and once
+    in the mode's `stopWork`; sharing one list was declined because it would change the normal
+    shutdown order, which no test pins either.
     Test titles #653 could not touch in `boot.test.ts` carry the history tags
     "(SP-1a)", "(SP-1b)", "(SP-1b spec §3)", "(SP-1c)", "(slice 3)" and "SP-C dev override".
   - Found by #625 (`apps/server` part e1), outside its files or not fixable in a comments-only
