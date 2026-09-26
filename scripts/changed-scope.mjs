@@ -30,14 +30,18 @@ const INERT_ROOT_FILES = [".gitignore", ".editorconfig"];
 const ROOT_SCOPE_PREFIXES = ["scripts/", ".husky/", ".github/"];
 
 /**
- * Root-scope files that workspace members read, each mapped to the member DIRECTORIES that read it,
- * so a change to one selects those members as well as the root project. Without an entry, root
- * scope emits `code=false` and ci.yml runs neither `bundle-smoke` nor any member's build or tests.
+ * Root-scope files a workspace member depends on, each mapped to the member DIRECTORIES that depend
+ * on it: a member file reads it, or the ci.yml job that tests the member runs it first (the
+ * `test-server` job's two binary installers). A change to one selects those members as well as the
+ * root project. Without an entry, root scope emits `code=false` and ci.yml runs neither
+ * `bundle-smoke` nor any member's build or tests.
  *
- * Hand-written. `scripts/root-scope-consumers.test.mjs` fails when a member file names a root
- * `scripts/` file by relative path and is not listed here, or when an entry here is not read —
- * weaker than its name: it reads text, so a path built from parts is invisible to it, a comment
- * spelling the path counts as a reference, and only root `scripts/` is scanned.
+ * Hand-written. `scripts/root-scope-consumers.test.mjs` fails when a root `scripts/` file is named
+ * by a member file through a relative path, or run by a line starting `node scripts/` in a ci.yml
+ * job that tests a member through one quoted `pnpm --filter`, and is not listed here for that
+ * member — or when an entry here is neither. Weaker than its name in the ways its header states —
+ * it reads member files and ci.yml as text, so among other gaps a path built from parts, or a
+ * script fed from a pipe in ci.yml, is invisible to it.
  */
 export const ROOT_SCOPE_CONSUMERS = new Map([
   [
@@ -45,11 +49,13 @@ export const ROOT_SCOPE_CONSUMERS = new Map([
     ["apps/print-agent", "apps/server", "packages/credentials", "packages/provisioning"],
   ],
   ["scripts/dev-server-proxy.ts", ["apps/dashboard", "apps/setup", "apps/till"]],
+  ["scripts/setup-litestream.mjs", ["apps/server"]],
+  ["scripts/setup-s3-test-server.mjs", ["apps/server"]],
 ]);
 
 /**
  * True for a path under ROOT_SCOPE_PREFIXES. For the files ROOT_SCOPE_CONSUMERS lists,
- * scopeForPaths also selects the members that read them.
+ * scopeForPaths also selects the members listed against them.
  *
  * The other root config — the lockfile, the root manifests, `tsconfig*.json`, the lint and format
  * config, `vitest.config.ts` — is deliberately not here: each can change what every package builds,

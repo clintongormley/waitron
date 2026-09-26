@@ -106,7 +106,7 @@ function owningPackage(path, packages) {
  *
  *   "documentation"  every changed path is inert (see `isInertPath`).
  *   "root"           every changed CODE path is the repository's own machinery (`isRootScopePath`)
- *                    and none is a file members read (`ROOT_SCOPE_CONSUMERS`). The repo-level Vitest
+ *                    and none is a file `ROOT_SCOPE_CONSUMERS` lists. The repo-level Vitest
  *                    project is the only suite that runs; no package is typechecked or tested.
  *   "global"         run everything: a path outside every package that is not root scope, an
  *                    unreadable workspace, or a push whose contents could not be determined at all.
@@ -189,7 +189,7 @@ export function scopeForPaths(changedPaths, loadPackages) {
           packages: [],
           root,
           deploy,
-          reason: `${path} is read by ${dir}, which is not a workspace member — running everything`,
+          reason: `${path} is listed against ${dir}, which is not a workspace member — running everything`,
         };
       }
       attributed.add(consumer.name);

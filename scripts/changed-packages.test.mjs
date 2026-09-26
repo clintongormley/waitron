@@ -194,7 +194,7 @@ describe("scopeForPaths", () => {
     });
   });
 
-  describe("a root file that workspace members read", () => {
+  describe("a root file a workspace member depends on", () => {
     const consumers = workspacePackages(
       ls(
         member("@waitron/server", "apps/server"),
@@ -229,6 +229,17 @@ describe("scopeForPaths", () => {
         root: true,
       });
     });
+
+    it.each(["scripts/setup-litestream.mjs", "scripts/setup-s3-test-server.mjs"])(
+      "selects the server, whose CI test job runs %s",
+      (path) => {
+        expect(scopeForPaths([path], workspace(consumers))).toMatchObject({
+          kind: "packages",
+          packages: ["@waitron/server"],
+          root: true,
+        });
+      },
+    );
 
     it("still gives any other scripts/ file root scope alone", () => {
       const load = loader(consumers);
@@ -685,6 +696,15 @@ describe("the CLI", () => {
         "@waitron/provisioning @waitron/server\nroot=true\ndeploy=false\n",
     );
   });
+
+  it.each(["scripts/setup-litestream.mjs", "scripts/setup-s3-test-server.mjs"])(
+    "selects the server, whose CI test job runs %s",
+    (path) => {
+      expect(run(`${path}\n`).stdout).toBe(
+        "code=true\nscope=packages\npackages=@waitron/server\nroot=true\ndeploy=false\n",
+      );
+    },
+  );
 
   it("selects the real front-ends that import scripts/dev-server-proxy.ts", () => {
     expect(run("scripts/dev-server-proxy.ts\n").stdout).toBe(
