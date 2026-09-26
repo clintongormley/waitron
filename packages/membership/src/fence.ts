@@ -8,18 +8,32 @@ export function standingOf(
   document: SignedMembershipDocument,
   nodeId: string,
 ): NodeStanding | undefined {
+  if (document.body.revoked?.includes(nodeId) === true) return "evicted";
   return document.body.nodes.find((n) => n.nodeId === nodeId)?.standing;
 }
 
 /**
- * A node ABSENT from the chart is NOT fenced: `nextStandings` demotes rather than drops, so a node
- * that was ever in the chart stays in it, and fencing an unnamed node on an incomplete chart would
- * be the wrong direction.
+ * A node ABSENT from the chart — from both `nodes` and `revoked` — is NOT fenced: `nextStandings`
+ * demotes rather than drops, clearing a node moves its id into `revoked`, and fencing an unnamed
+ * node on an incomplete chart would be the wrong direction.
  */
 export function isFencedStanding(
   standing: NodeStanding | undefined,
 ): standing is "sell-only" | "evicted" {
   return standing === "sell-only" || standing === "evicted";
+}
+
+/**
+ * The ids a receiver shuts out when it verifies a peer's chart: every node its OWN held chart lists
+ * `evicted`, and every revoked id. Read from the held chart, never an incoming one, because a
+ * retirement chart is signed by the node it evicts.
+ */
+export function fencedOutNodeIds(held: SignedMembershipDocument | null): ReadonlySet<string> {
+  if (held === null) return new Set();
+  return new Set([
+    ...held.body.nodes.filter((n) => n.standing === "evicted").map((n) => n.nodeId),
+    ...(held.body.revoked ?? []),
+  ]);
 }
 
 /** At most one node holds `serving-primary`, so the first match is it. */
