@@ -1212,8 +1212,9 @@ the wrong list's price; `matchExtraChildren` now refuses to pair a stored extras
 picked product is offered by more than one of the dish's active lists.
 
 - **Superseded by menus plan Task 7b (branch `feat/menus-order-edits`):** a stored extras child now
-  records its list (`working_order_lines.extra_list_id`) and `matchExtraChildren` pairs on list,
-  product and quantity, so the refusal and the escape it left are gone. The till's
+  records its list (`working_order_lines.extra_list_id`) and a stored child pairs with a pick on list,
+  product and quantity (`editLineExtras`, which replaced `matchExtraChildren`), so the refusal and the
+  escape it left are gone. The till's
   `apps/till/src/state/held-extras.ts` still guesses a stored child's list; reading `listId` there is
   Task 7b's till part.
 
