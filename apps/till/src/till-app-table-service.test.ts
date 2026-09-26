@@ -1002,6 +1002,138 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       expect(banner(el)!.textContent).toContain(startedRefusal);
     });
 
+    /** Sends a held change on table 2 from a device on `canvas`; the test settles its answer. */
+    async function changeOnCanvas(canvas: CanvasDef, overrides: Record<string, unknown> = {}) {
+      let settle!: { reject: (reason: unknown) => void };
+      let releaseOffers: () => void = () => undefined;
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "h1", formFactor: canvas.formFactor, stationId: null }),
+        getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
+        getTabLines: vi.fn((orderId: string) =>
+          Promise.resolve({
+            lines: [orderId === "wo-8" ? otherLine : burgerLine],
+            revision: orderId === "wo-8" ? 2 : 7,
+            editSentLines: true,
+          }),
+        ),
+        updateOrderLine: vi.fn(() => new Promise((_resolve, reject) => (settle = { reject }))),
+        listZoneOffers: vi
+          .fn()
+          .mockResolvedValueOnce(burgerOffers)
+          .mockImplementation(
+            () => new Promise((resolve) => (releaseOffers = () => resolve(burgerOffers))),
+          ),
+        ...overrides,
+      });
+      await logIn(el);
+      emit(shell(el), "tab-select", { key: "floor" });
+      await flush(el);
+      await openFromFloor(el, openTable);
+      await flush(el);
+      emit(tableOrder(el)!, "change-line", change);
+      await flush(el);
+      return {
+        el,
+        settle: () => settle,
+        release: () => releaseOffers(),
+        reads: () => vi.mocked(api.getTabLines).mock.calls.length,
+      };
+    }
+
+    it("names the refusal that lands while a handheld shows its Floor tab, and keeps it when another table opens", async () => {
+      const { el, settle, release, reads } = await changeOnCanvas(phoneCanvas);
+      emit(shell(el), "tab-select", { key: "floor" });
+      await flush(el);
+      const readsOnLeaving = reads();
+
+      settle().reject({ code: "ticket.already_started" });
+      await flush(el);
+      expect(banner(el)!.textContent).toContain(startedRefusal);
+      expect(reads()).toBe(readsOnLeaving);
+      await openFromFloor(el, otherTable);
+      release();
+      await flush(el);
+      await flush(el);
+
+      expect(tableOrder(el)!.orderId).toBe("wo-8");
+      expect(banner(el)!.textContent).toContain(startedRefusal);
+      expect(dialogOf(tableOrder(el)!).open).toBe(false);
+    });
+
+    it("names the refusal that lands after a till closes the table's view by selecting another tab", async () => {
+      const { el, settle, reads } = await changeOnCanvas(tillCanvas);
+      emit(shell(el), "tab-select", { key: "counter" });
+      await flush(el);
+      expect(tableOrder(el)).toBeNull();
+      const readsOnLeaving = reads();
+
+      settle().reject({ code: "ticket.already_started" });
+      await flush(el);
+
+      expect(banner(el)!.textContent).toContain(startedRefusal);
+      expect(reads()).toBe(readsOnLeaving);
+    });
+
+    it("treats a handheld's tap on the Order tab it is already on as staying on the order", async () => {
+      const { el, settle } = await changeOnCanvas(phoneCanvas);
+      emit(shell(el), "tab-select", { key: "order" });
+      await flush(el);
+
+      settle().reject({ code: "ticket.already_started" });
+      await flush(el);
+
+      expect(banner(el)!.textContent).not.toContain("Tu cambio");
+      expect(dialogOf(tableOrder(el)!).open).toBe(true);
+    });
+
+    it("names the refusal that lands while a tablet opens another table from the same tab", async () => {
+      const tabletCanvas: CanvasDef = {
+        formFactor: "tablet-landscape",
+        tabs: [
+          {
+            key: "floor",
+            title: "Floor",
+            columns: 24,
+            cards: [
+              { type: "floor-plan", colSpan: 12, rowSpan: 12, config: {} },
+              { type: "table-order", colSpan: 12, rowSpan: 12, config: {} },
+            ],
+          },
+        ],
+      };
+      const { el, settle, release } = await changeOnCanvas(tabletCanvas);
+      await openFromFloor(el, otherTable);
+
+      settle().reject({ code: "ticket.already_started" });
+      await flush(el);
+      release();
+      await flush(el);
+      await flush(el);
+
+      expect(tableOrder(el)!.orderId).toBe("wo-8");
+      expect(dialogOf(tableOrder(el)!).open).toBe(false);
+      expect(banner(el)!.textContent).toContain(startedRefusal);
+    });
+
+    it("keeps the named refusal when the next table's menus then fail to load", async () => {
+      const { el, settle } = await changeThenLeave({
+        listZoneOffers: vi
+          .fn()
+          .mockResolvedValueOnce(burgerOffers)
+          .mockRejectedValue(new Error("offers down")),
+      });
+      settle().reject({ code: "ticket.already_started" });
+      await flush(el);
+
+      await openFromFloor(el, otherTable);
+      await flush(el);
+
+      expect(banner(el)!.textContent).toContain(startedRefusal);
+    });
+
     it("leaves the table out of the message when the floor no longer lists the changed order's table", async () => {
       const { el, settle } = await changeThenLeave({
         getTablesState: vi
