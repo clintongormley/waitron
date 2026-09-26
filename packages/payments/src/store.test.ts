@@ -2,9 +2,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
+  UNIQUE_VIOLATION,
+  billPayments,
   captureError,
   engineErrorMessage,
   nodes,
+  refusalOn,
   tills,
   workingOrders,
 } from "@waitron/db";
@@ -22,6 +25,7 @@ import {
   expireInitiated,
   failAttempting,
   findCapturedPaymentForWorkingOrder,
+  findPaymentByBillPayment,
   findPaymentByRef,
   getPaymentByRef,
   insertAcceptedOffline,
@@ -1261,5 +1265,140 @@ describe("listAttempting / stampAttemptingRef", () => {
       return [first, second, none];
     });
     expect([stamped, late, missing]).toEqual([true, false, false]);
+  });
+});
+
+describe("the link from a provider payment to its bill payment", () => {
+  /** A bill payment on the seeded order, which a `payments` row may name. */
+  async function billPayment(seeded: Seeded): Promise<string> {
+    const [row] = await pg.db
+      .insert(billPayments)
+      .values({
+        workingOrderId: seeded.workingOrderId,
+        submissionId: `submission-${Math.random()}`,
+        fingerprint: "fingerprint",
+        kind: "contribution",
+        method: "card",
+        applied: 1000,
+        state: "pending",
+        requestedBy: "11111111-1111-1111-1111-111111111111",
+        tillId: seeded.tillId,
+      })
+      .returning({ id: billPayments.id });
+    return row!.id;
+  }
+
+  async function storedLink(paymentRef: string): Promise<string | null> {
+    const rows = await pg.db.execute<{ bill_payment_id: string | null }>(
+      sql`select bill_payment_id from payments where payment_ref = ${paymentRef}`,
+    );
+    return rows.rows[0]!.bill_payment_id;
+  }
+
+  it.each([
+    ["insertAttempting", insertAttempting],
+    ["insertCapturedPayment", insertCapturedPayment],
+    ["insertAcceptedOffline", insertAcceptedOffline],
+    ["insertFailedPayment", insertFailedPayment],
+  ] as const)("%s writes the bill payment it was given", async (name, insert) => {
+    const seeded = await seedTenant();
+    const billPaymentId = await billPayment(seeded);
+    await pg.db.transaction((tx) =>
+      insert(tx, {
+        workingOrderId: seeded.workingOrderId,
+        provider: "fake",
+        paymentRef: name,
+        amount: decimal("10.00"),
+        settledAt: SETTLED,
+        billPaymentId,
+      }),
+    );
+    expect(await storedLink(name)).toBe(billPaymentId);
+  });
+
+  it("leaves the link null for a payment of a whole order", async () => {
+    const seeded = await seedTenant();
+    await capture(seeded, "whole-order");
+    expect(await storedLink("whole-order")).toBeNull();
+  });
+
+  it("findPaymentByBillPayment returns the provider's row for that bill payment, and nothing for another", async () => {
+    const seeded = await seedTenant();
+    const billPaymentId = await billPayment(seeded);
+    const other = await billPayment(seeded);
+    await capture(seeded, "unlinked");
+    await pg.db.transaction((tx) =>
+      insertAttempting(tx, {
+        workingOrderId: seeded.workingOrderId,
+        provider: "fake",
+        paymentRef: "linked",
+        amount: decimal("12.50"),
+        billPaymentId,
+      }),
+    );
+    const found = await pg.db.transaction((tx) => findPaymentByBillPayment(tx, billPaymentId));
+    expect(found).toMatchObject({
+      provider: "fake",
+      paymentRef: "linked",
+      state: "attempting",
+      amount: "12.50",
+      saleId: null,
+    });
+    expect(await pg.db.transaction((tx) => findPaymentByBillPayment(tx, other))).toBeUndefined();
+  });
+
+  it("refuses a second provider payment for the same bill payment", async () => {
+    const seeded = await seedTenant();
+    const billPaymentId = await billPayment(seeded);
+    const attempt = (paymentRef: string) =>
+      pg.db.transaction((tx) =>
+        insertAttempting(tx, {
+          workingOrderId: seeded.workingOrderId,
+          provider: "fake",
+          paymentRef,
+          amount: decimal("10.00"),
+          billPaymentId,
+        }),
+      );
+    await attempt("first");
+    const error = await captureError(() => attempt("second"));
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, { table: "payments", columns: ["bill_payment_id"] }),
+    ).toBe(true);
+  });
+
+  it("names an existing bill payment", async () => {
+    const seeded = await seedTenant();
+    const error = await captureError(() =>
+      pg.db.transaction((tx) =>
+        insertAttempting(tx, {
+          workingOrderId: seeded.workingOrderId,
+          provider: "fake",
+          paymentRef: "dangling",
+          amount: decimal("10.00"),
+          billPaymentId: "dddddddd-0000-4000-8000-0000000000ff",
+        }),
+      ),
+    );
+    expect(engineErrorMessage(error)).toBe("FOREIGN KEY constraint failed");
+  });
+});
+
+describe("recordRefund: the provider's refund id", () => {
+  it("is written when given, and null when not", async () => {
+    const seeded = await seedTenant();
+    const withRef = await capture(seeded, "ref-with", "20.00");
+    await pg.db.transaction((tx) =>
+      recordRefund(tx, { ...withRef, amount: decimal("5.00"), providerRefundRef: "re_123" }),
+    );
+    const withoutRef = await capture(seeded, "ref-without", "20.00");
+    await pg.db.transaction((tx) => recordRefund(tx, { ...withoutRef, amount: decimal("5.00") }));
+    const rows = await pg.db.execute<{ payment_ref: string; provider_refund_ref: string | null }>(
+      sql`select payment_ref, provider_refund_ref from payment_refunds order by payment_ref`,
+    );
+    expect(rows.rows).toEqual([
+      { payment_ref: "ref-with", provider_refund_ref: "re_123" },
+      { payment_ref: "ref-without", provider_refund_ref: null },
+    ]);
   });
 });

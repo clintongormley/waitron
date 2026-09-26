@@ -396,6 +396,7 @@ const DRAWER_OPENS_TYPES = {
   opened_at: "text",
   reason: "text",
   sale_id: "text",
+  bill_payment_id: "text",
   authorized_by: "text",
   via_override: "integer",
 } as const;
@@ -427,10 +428,10 @@ describe("the generated migration and the converted table agree", () => {
     );
     expect(constraint).toBeDefined(); // positive control, as above
     expect(render(constraint.value)).toBe(
-      "\"drawer_opens\".\"reason\" in ('cash_sale', 'manual', 'calibration')",
+      "\"drawer_opens\".\"reason\" in ('cash_sale', 'manual', 'calibration', 'bill_payment', 'bill_refund')",
     );
     expect(body).toContain(
-      `CONSTRAINT "drawer_opens_reason_ck" CHECK("drawer_opens"."reason" in ('cash_sale', 'manual', 'calibration'))`,
+      `CONSTRAINT "drawer_opens_reason_ck" CHECK("drawer_opens"."reason" in ('cash_sale', 'manual', 'calibration', 'bill_payment', 'bill_refund'))`,
     );
   });
 });

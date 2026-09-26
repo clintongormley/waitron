@@ -1,6 +1,7 @@
 import { check } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 import { enumCheck, enumText, flag, id, newId, now, table, ts } from "./columns.js";
+import { billPayments } from "./bill-payments.js";
 import { sales } from "./sales.js";
 import { tills } from "./tenants.js";
 import { printers } from "./printers.js";
@@ -28,9 +29,19 @@ export const drawerOpens = table(
     /* v8 ignore stop */
     personId: id("person_id").notNull(),
     openedAt: ts("opened_at").notNull().$defaultFn(now),
-    reason: enumText("reason", ["cash_sale", "manual", "calibration"] as const).notNull(),
+    reason: enumText("reason", [
+      "cash_sale",
+      "manual",
+      "calibration",
+      "bill_payment",
+      "bill_refund",
+    ] as const).notNull(),
     /* v8 ignore start */
     saleId: id("sale_id").references(() => sales.id),
+    /* v8 ignore stop */
+    // A cash payment or cash refund taken before the bill's invoice exists has no sale to name.
+    /* v8 ignore start */
+    billPaymentId: id("bill_payment_id").references(() => billPayments.id),
     /* v8 ignore stop */
     // Who authorized the open under the location's `drawer_open_policy`; NULL for a `cash_sale` open.
     authorizedBy: id("authorized_by"),
@@ -41,7 +52,7 @@ export const drawerOpens = table(
     check("drawer_opens_reason_ck", enumCheck(t.reason)),
     check(
       "drawer_opens_target_ck",
-      sql`(${t.reason} = 'calibration' and ${t.printerId} is not null and ${t.tillId} is null and ${t.saleId} is null) or (${t.reason} != 'calibration' and ${t.tillId} is not null)`,
+      sql`(${t.reason} = 'calibration' and ${t.printerId} is not null and ${t.tillId} is null and ${t.saleId} is null and ${t.billPaymentId} is null) or (${t.reason} in ('bill_payment', 'bill_refund') and ${t.tillId} is not null and ${t.billPaymentId} is not null and ${t.saleId} is null) or (${t.reason} in ('cash_sale', 'manual') and ${t.tillId} is not null and ${t.billPaymentId} is null)`,
     ),
   ],
 );

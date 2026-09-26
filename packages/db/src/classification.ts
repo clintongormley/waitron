@@ -40,6 +40,21 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "ledger",
     "who cleared which removed machine from the membership chart, and at which term; an audit row is never corrected",
   ),
+  classify(
+    "bill_payments",
+    "ledger",
+    "money taken against a bill before its invoice; only its outcome moves, under a trigger",
+  ),
+  appendOnly(
+    "bill_payment_lines",
+    "ledger",
+    "which lines an item payment paid for; never corrected, refunded by a refund row instead",
+  ),
+  classify(
+    "bill_payment_refunds",
+    "ledger",
+    "money given back from a bill payment before the invoice; only its outcome moves, under a trigger",
+  ),
 
   // state — manager configuration and live service; copied to a standby, never drained back.
   classify(

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS } from "@waitron/db";
+import { CORE_MIGRATIONS, billPayments } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
@@ -97,5 +97,38 @@ describe("recordManualRefund", () => {
 
   it("exposes the sentinel provider id as MANUAL_PROVIDER", () => {
     expect(MANUAL_PROVIDER).toBe("manual");
+  });
+});
+
+describe("recordManualCardPayment for a bill payment", () => {
+  it("links the captured row to the bill payment it was given", async () => {
+    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const [bill] = await pg.db
+      .insert(billPayments)
+      .values({
+        workingOrderId: seeded.workingOrderId,
+        submissionId: "submission",
+        fingerprint: "fingerprint",
+        kind: "contribution",
+        method: "card",
+        applied: 1210,
+        state: "received",
+        receivedAt: SETTLED.toISOString(),
+        requestedBy: "11111111-1111-1111-1111-111111111111",
+        tillId: seeded.tillId,
+      })
+      .returning({ id: billPayments.id });
+    const result = await pg.db.transaction((tx) =>
+      recordManualCardPayment(tx, {
+        workingOrderId: seeded.workingOrderId,
+        amount: decimal("12.10"),
+        settledAt: SETTLED,
+        billPaymentId: bill!.id,
+      }),
+    );
+    const rows = await pg.db.execute<{ bill_payment_id: string | null }>(
+      sql`select bill_payment_id from payments where payment_ref = ${result.paymentRef}`,
+    );
+    expect(rows.rows[0]!.bill_payment_id).toBe(bill!.id);
   });
 });

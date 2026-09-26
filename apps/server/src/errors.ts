@@ -3,6 +3,7 @@
 import "@waitron/shared";
 import type { VerifyFailure } from "@waitron/membership";
 import type { ProbeFailure } from "@waitron/stream";
+import type { AllocationPreview } from "./bill-allocation.js";
 
 /**
  * This host's contribution to the shared error registry, by declaration merging. A code names the
@@ -349,6 +350,19 @@ declare module "@waitron/shared" {
      * arguments. The id is the device's own, made fresh for each person's action.
      */
     "submission.id_reused": { submissionId: string };
+    /** A payment was asked of a bill with nothing left to pay and no card pending on it. */
+    "bill.nothing_outstanding": { workingOrderId: string };
+    /**
+     * The venue has tips off and the payment would record a tip. `chargeable` is what can be taken
+     * without one.
+     */
+    "bill.tip_not_allowed": { workingOrderId: string; chargeable: string };
+    /**
+     * The allocation the operator was shown is no longer the server's, or a choice between paying
+     * the full price with a tip and using the earlier contributions is needed. `preview` is the
+     * server's current answer, for the till to show again.
+     */
+    "bill.allocation_changed": { workingOrderId: string; preview: AllocationPreview };
     // The four `booking.*` codes are declared in @waitron/bookings/src/errors.ts.
     /**
      * A tab verb found the order it was asked to modify is not an OPEN tab — not `open`, not pointed

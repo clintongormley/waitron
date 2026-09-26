@@ -41,6 +41,8 @@ interface NewPayment {
   amount: Decimal;
   externalRef?: string;
   card?: CardDetails;
+  /** The bill payment this attempt charges for; absent for a payment of a whole order. */
+  billPaymentId?: string;
 }
 
 /** The storage boundary: a money column counts whole cents, and nothing above this sees a count. */
@@ -79,6 +81,7 @@ async function insertPayment(
     cardLast4: params.card?.last4 ?? null,
     cardEntryMode: params.card?.entryMode ?? null,
     cardAuthCode: params.card?.authCode ?? null,
+    billPaymentId: params.billPaymentId ?? null,
     state,
     settledAt,
   });
@@ -176,7 +179,7 @@ export async function recordVoid(tx: Transaction, params: Key): Promise<PaymentR
  * `payment.refund_exceeds_capture` if the running total of refunds would exceed the capture. */
 export async function recordRefund(
   tx: Transaction,
-  params: Key & { amount: Decimal; authorizedBy?: string },
+  params: Key & { amount: Decimal; authorizedBy?: string; providerRefundRef?: string },
 ): Promise<PaymentRow> {
   const row = await requireRow(tx, params);
   if (row.state !== "captured" && row.state !== "partially_refunded") {
@@ -207,6 +210,7 @@ export async function recordRefund(
     amount: decimalToCents(params.amount),
     state: "succeeded",
     authorizedBy: params.authorizedBy ?? null,
+    providerRefundRef: params.providerRefundRef ?? null,
   });
   const state: PaymentState =
     compareDecimal(afterThis, captured) === 0 ? "refunded" : "partially_refunded";
@@ -334,6 +338,19 @@ export async function findCapturedPaymentForWorkingOrderAnyProvider(
   key: { workingOrderId: string },
 ): Promise<CapturedPaymentForOrder | null> {
   return (await selectCapturedForWorkingOrder(tx, key)) ?? null;
+}
+
+/** The provider's row for one bill payment, in whatever state it is; at most one exists
+ * (`payments_bill_payment_key`). */
+export async function findPaymentByBillPayment(
+  tx: Transaction,
+  billPaymentId: string,
+): Promise<(PaymentRow & Key) | undefined> {
+  const [row] = await tx
+    .select(CAPTURED_FOR_ORDER_COLUMNS)
+    .from(payments)
+    .where(eq(payments.billPaymentId, billPaymentId));
+  return row === undefined ? undefined : withDecimalAmount(row);
 }
 
 export async function findPaymentByRef(

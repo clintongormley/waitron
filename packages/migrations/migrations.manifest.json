@@ -13,6 +13,7 @@
       "daily_closes",
       "membership_removals",
       "membership_clearances",
+      "bill_payment_lines",
       "order_amendments"
     ]
   },

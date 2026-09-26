@@ -27,6 +27,7 @@ export {
   failAttempting,
   findCapturedPaymentForWorkingOrder,
   findCapturedPaymentForWorkingOrderAnyProvider,
+  findPaymentByBillPayment,
   findPaymentByRef,
   getPaymentByRef,
   hasPaymentWithExternalRef,

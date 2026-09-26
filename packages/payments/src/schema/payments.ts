@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
 import {
+  billPayments,
   enumCheck,
   enumType,
   id,
@@ -73,6 +74,9 @@ export const payments = table(
     reconcileRemediatedAt: tsString("reconcile_remediated_at"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     updatedAt: tsString("updated_at").notNull().$defaultFn(nowIso),
+    /** The bill payment this attempt charges for (bill payments design §2.4); null for a payment
+     * of a whole order. Unique where set. */
+    billPaymentId: id("bill_payment_id"),
   },
   (t) => [
     unique("payments_provider_ref_key").on(t.provider, t.paymentRef),
@@ -101,6 +105,16 @@ export const payments = table(
       foreignColumns: [cardReaders.id],
       name: "payments_reader_fk",
     }).onDelete("restrict"),
+    // No delete rule: drizzle adds this column with a plain `ALTER TABLE ADD`, which writes none
+    // (`drizzle/0002_bill_payment_link.sql`), and a declared `restrict` would not match the table.
+    foreignKey({
+      columns: [t.billPaymentId],
+      foreignColumns: [billPayments.id],
+      name: "payments_bill_payment_fk",
+    }),
+    uniqueIndex("payments_bill_payment_key")
+      .on(t.billPaymentId)
+      .where(sql`${t.billPaymentId} is not null`),
     index("payments_working_order_idx").on(t.workingOrderId),
     index("payments_sale_idx").on(t.saleId),
     // The reconcile sweep's filter: one provider's rows over a settled_at window.
