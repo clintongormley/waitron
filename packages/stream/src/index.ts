@@ -32,7 +32,12 @@ export {
 } from "./litestream.js";
 export { readBucketConfig } from "./bucket-config.js";
 export type { ChildHandle, SpawnFn } from "./litestream-process.js";
-export { DEFAULT_WAL_LIMIT_BYTES, L0_RETENTION_MS, StreamSupervisor } from "./supervisor.js";
+export {
+  DEFAULT_WAL_LIMIT_BYTES,
+  L0_RETENTION_MS,
+  StreamSupervisor,
+  TICK_MS,
+} from "./supervisor.js";
 export type {
   StreamLog,
   StreamNotStarted,
