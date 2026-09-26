@@ -125,7 +125,7 @@ const ADOPT_ERROR_MESSAGES: Record<string, string> = {
 const OPERATION_CONFLICT_MESSAGE =
   "This server has saved setup work for a different request. Resume the original setup or contact support.";
 const ALREADY_STAMPED_MESSAGE =
-  "A previous setup attempt left this server partly set up, for a different environment. It cannot be set up again from here. Contact support to reset this server, then start setup again.";
+  "A previous setup attempt left this server partly set up, for a different environment. Contact support to reset this server, then start setup again.";
 const ADOPT_INCOMPLETE_MESSAGE =
   "A previous attempt to join this server to a restaurant stopped partway and left it partly set up. It cannot be finished from here. Contact support to reset this server, then start setup again.";
 const KIT_DAMAGED =

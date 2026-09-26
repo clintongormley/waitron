@@ -521,8 +521,8 @@ declare module "@waitron/shared" {
     "setup.operation_conflict": Record<string, never>;
     /**
      * The same adopt request was sent again after an earlier attempt failed past its first write to
-     * this node. Nothing can safely resume a half-finished adopt, and running it again would mint a
-     * second standby identity, so the request is refused and the saved operation left as it is.
+     * this node. Adopt has no resume path, and running it again mints a second standby identity, so
+     * the request is refused and the saved operation left as it is.
      */
     "setup.adopt_incomplete": Record<string, never>;
     /**

@@ -1047,9 +1047,10 @@ dependency of this shape surfaces only when the trigger first fires.
 own; a route handler opens exactly one `withTransaction` per request (`recordSale`'s header says why —
 `packages/core/src/record-sale.ts`). A convention, not a compiler guarantee: `Database` is assignable
 to `Transaction`, and an ESLint backstop was declined (2026-09-03). **Splitting one logical change
-across transactions is a commented decision, never a default** — the two that do it
-(`provisionVenue`'s latch, `adoptFromPrimary`'s idempotent steps) say so in their headers because a
-non-DB step sits between the writes.
+across transactions is a commented decision, never a default.** `provisionVenue` stamps the database
+before its venue transaction opens, and its header says so. `adoptFromPrimary` opens no transaction
+around its writes and has file writes between them, and its header does not say so (tracked in
+`docs/backlog.md`, from #625's review).
 
 Queries sharing one transaction are awaited one at a time, never started together with
 `Promise.all`. The MECHANISM changed with the engine; the rule did not. On this one there is nothing

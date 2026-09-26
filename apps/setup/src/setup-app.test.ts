@@ -1002,7 +1002,7 @@ describe("setup-app", () => {
     expect(host.shadowRoot!.querySelector("[data-test=reload]")).not.toBeNull();
   });
 
-  it("maps the fiscal 409 setup.already_provisioned to 'already set up' with a reload and NO retry (re-POST is unrecoverable)", async () => {
+  it("maps the fiscal 409 setup.already_provisioned to 'already set up' with a reload and NO retry", async () => {
     const provision = vi.fn().mockRejectedValue({ code: "setup.already_provisioned", params: {} });
     const el = await mountSetupApp(stubApi({ provision }));
     provisionRequest(el);

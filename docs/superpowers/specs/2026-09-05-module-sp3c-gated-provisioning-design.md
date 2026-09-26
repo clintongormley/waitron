@@ -339,6 +339,13 @@ activate. `adopt.ts` reads the enabled set from the bundle's `moduleOverrides` i
 Idempotency is unchanged: the membership-key latch at the top of `establishReservedStandbyIdentity`
 still returns before any module runs on a re-adopt.
 
+> **2026-09-26:** every adopt run generates a new standby identity and has the primary reserve
+> it (a place in the primary's membership list, plus whatever its modules reserve, such as an
+> installation number), so adopt has no idempotent re-run. Since A50 the setup route refuses a
+> resend of the same request once an attempt has reached its first write
+> (`setup.adopt_incomplete`); a retry after a refusal that came before the first write still runs
+> adopt again.
+
 ## 7. The fiscal package's contributions
 
 `packages/fiscal-verifactu/src/provisioning.ts` (new) exports:
