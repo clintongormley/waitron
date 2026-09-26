@@ -1,3 +1,4 @@
+/* Temporary: selects @waitron/server so PR #682 CI runs the server jobs; reverted before landing. */
 /**
  * `pnpm setup:litestream` — downloads the pinned Litestream for this machine into `.bin/litestream`
  * at the repository root (gitignored). Start a server that streams with
