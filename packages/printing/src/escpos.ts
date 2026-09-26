@@ -87,6 +87,13 @@ export class EscBuilder {
     return this;
   }
 
+  /** `GS L nL nH` followed by `GS W nL nH`, in dots. */
+  printArea(widthDots: number): this {
+    this.parts.push(GS, 0x4c, 0x00, 0x00);
+    this.parts.push(GS, 0x57, widthDots & 0xff, (widthDots >> 8) & 0xff);
+    return this;
+  }
+
   /** `ESC d n`. */
   feed(n = 1): this {
     this.parts.push(ESC, 0x64, n & 0xff);

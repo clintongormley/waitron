@@ -2147,6 +2147,7 @@ rather than the size closest to 35mm. The receipt body, QR and its VERI*FACTU le
 the owner confirmed the centred body and QR on paper, then requested the centred legend.
 The Printers screen also gained a remembered status filter, one-click disable, links to each print
 agent's setup page, and shows the agent that last saw each printer without implying it is bound to it.
+The print-agent list gained its own remembered Active/Revoked/All filter in the 2026-09-26 follow-up.
 [Current design and physical evidence](superpowers/specs/2026-09-26-printer-calibration-wizard.md).
 
 **Calibration and status follow-up (2026-09-26, implemented on the `printers` branch):** four calibration steps separate
@@ -2176,8 +2177,12 @@ Bluetooth delivery connection is still unimplemented in `liveBtDevicePath`.
 - **On-paper verification is still owed on the TM-T88III** (spec "Verification on paper" steps 1-6):
   whether the printer's built-in QR command prints anything at all, and whether the mandated 30-40mm
   QR size is meant to count the code's blank border or only its dark squares.
-- **58mm layout is checkable only through the preview** until a 58mm printer is available to print on
-  for real.
+- **Repeat the 58mm physical receipt after the print-area fix.** The owner's wider printer clipped
+  the right edge of a 58mm receipt whose payload centred without an explicit print area; whether the
+  printer's own width setting also contributed was not tested. The formatter now sets a zero left
+  margin and a 360-dot print area before centring. Byte-level tests pin those commands; the preview
+  test establishes only that its parser continues past them, not that the selected width fits the
+  paper. The corrected paper output has not yet been printed.
 - **Follow-up (ruling C): the preview no longer shows the QR link as text** for a raster receipt —
   only the earlier, now-unused native-QR path did that. A possible fix is to carry the link alongside
   the print job so the preview can still show it as text.

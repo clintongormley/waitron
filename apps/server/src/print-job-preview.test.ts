@@ -42,6 +42,14 @@ describe("print job preview", () => {
     });
   });
 
+  it("skips print-area commands without stopping the receipt preview", () => {
+    expect(previewPrintJob(esc().printArea(360).line("Receipt").bytes())).toMatchObject({
+      text: "Receipt\n",
+      unsupported: false,
+      truncated: false,
+    });
+  });
+
   it("extracts QR content when the stored symbol is printed", () => {
     const data = "https://example.test/receipt?id=1&total=12.50";
     expect(
@@ -84,6 +92,7 @@ describe("print job preview", () => {
     [0x1b],
     [0x1b, 0x61],
     [0x1b, 0x70, 0],
+    [0x1d, 0x4c, 0],
     [0x1d, 0x28, 0x6b, 255, 255, 0x31, 0x50, 0x30, 65],
     [0x1d, 0x76, 0x30, 0, 255, 255, 255, 255, 65],
   ])("stops at incomplete commands and reports a partial preview: %j", (...bytes) => {

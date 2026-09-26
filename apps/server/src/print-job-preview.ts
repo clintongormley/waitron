@@ -223,6 +223,11 @@ export function previewPrintJob(
       offset += length;
       continue;
     }
+    if (byte === 0x1d && (command === 0x4c || command === 0x57)) {
+      if (!available(4)) break;
+      offset += 4;
+      continue;
+    }
     if (byte === 0x1d && command === 0x56) {
       if (!available(3)) break;
       if (payload[offset + 2] !== 0) {
