@@ -1152,7 +1152,7 @@ describe("till-table-order-screen", () => {
       expect(seen.event!.detail.revision).toBe(7);
     });
 
-    it("prefills the line's note, answer and extras, and sends them back as the line now stands", async () => {
+    it("prefills the line's note, answer and extras; saving unchanged sends the extras back and leaves the answer out", async () => {
       const dish: TillProduct = { ...burger, offeredModifiers: [cookedList, extrasList] };
       const line: TabLine = {
         ...burgerLine,
@@ -1195,9 +1195,67 @@ describe("till-table-order-screen", () => {
         revision: 3,
         patch: {
           note: "sin sal",
-          options: [{ listId: "list-cooked", labelId: "label-rare" }],
           extras: [{ listId: "list-extras", picks: [{ productId: "p-cheese", quantity: 2 }] }],
         },
+      });
+    });
+
+    describe("a line holding an answer to a list the dish no longer offers", () => {
+      const snapshot = (list: string, label: string) => ({
+        listName: { es: list },
+        listCustomerName: { es: `${list} carta` },
+        listKitchenName: `${list} KDS`,
+        labelName: { es: label },
+        labelCustomerName: { es: `${label} carta` },
+        labelKitchenName: `${label} KDS`,
+      });
+      const line: TabLine = {
+        ...burgerLine,
+        optionSnapshots: [snapshot("Punto", "Poco hecha"), snapshot("Pan", "Sin gluten")],
+      };
+      const mountWithdrawn = () =>
+        mount({ products: [{ ...burger, offeredModifiers: [cookedList] }], lines: [line] });
+      const pickLabel = async (picker: TillModifierPicker, labelId: string) => {
+        picker
+          .shadowRoot!.querySelector<HTMLInputElement>(`#label-list-cooked-${labelId}`)!
+          .click();
+        await picker.updateComplete;
+      };
+
+      it("a note-only change leaves the line's answers out, so the server keeps both", async () => {
+        const { el } = await mountWithdrawn();
+        await openDrawer(el);
+        const picker = await openChange(el, 5);
+        await typeNote(picker, "sin sal");
+        const seen = captureChange(el);
+        picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+        expect(seen.event!.detail.patch).toEqual({ note: "sin sal" });
+      });
+
+      it("an answer changed and changed back is compared by value and left out", async () => {
+        const { el } = await mountWithdrawn();
+        await openDrawer(el);
+        const picker = await openChange(el, 5);
+        await pickLabel(picker, "label-medium");
+        await pickLabel(picker, "label-rare");
+        const seen = captureChange(el);
+        picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+        expect(seen.event!.detail.patch).toEqual({ note: null });
+      });
+
+      /** The server refuses an answer naming a list the dish no longer offers (`options.invalid`), so
+       * a deliberate change of answers replaces the set with the offered lists' answers alone. */
+      it("a changed answer sends the offered lists' answers, which replace the set", async () => {
+        const { el } = await mountWithdrawn();
+        await openDrawer(el);
+        const picker = await openChange(el, 5);
+        await pickLabel(picker, "label-medium");
+        const seen = captureChange(el);
+        picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+        expect(seen.event!.detail.patch).toEqual({
+          note: null,
+          options: [{ listId: "list-cooked", labelId: "label-medium" }],
+        });
       });
     });
 

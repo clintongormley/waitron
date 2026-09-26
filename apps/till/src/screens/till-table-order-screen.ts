@@ -29,7 +29,7 @@ import {
   type SelectedExtra,
 } from "../state/working-order.js";
 import { deriveExtraSelections } from "../state/held-extras.js";
-import { deriveOptionSelections } from "../state/held-options.js";
+import { deriveOptionSelections, sameOptionSelections } from "../state/held-options.js";
 import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "../state/order-line.js";
 import { StoreChangeController } from "../state/store-controller.js";
 import "../widgets/product-grid.js";
@@ -928,13 +928,18 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** `options` and `extras` go only when the dish offers a list of that kind: either, sent, replaces the
-   * line's whole set, so an absent one keeps what the line holds. */
+   * line's whole set, so an absent one keeps what the line holds. `options` goes only when the answers
+   * differ from those the editor opened with: the editor holds no answer to a list the dish no longer
+   * offers, so sending an unchanged set would drop that answer. */
   #confirmChange(detail: ModifierConfirmDetail): void {
     const line = this.changeLine!;
     const offered = this.#changeProduct!.offeredModifiers ?? [];
+    const opened = this.#changeSelection!.options ?? [];
     this.#closeChange();
     const patch: OrderLinePatch = { note: detail.note ?? null };
-    if (offered.some((entry) => entry.kind === "options")) patch.options = detail.options ?? [];
+    const options = detail.options ?? [];
+    if (offered.some((entry) => entry.kind === "options") && !sameOptionSelections(options, opened))
+      patch.options = options;
     if (offered.some((entry) => entry.kind === "extras"))
       patch.extras = toWireModifiers({ extras: detail.extras }).extras ?? [];
     const change: ChangeLineDetail = {
