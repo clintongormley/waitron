@@ -415,7 +415,7 @@ the invoice is issued is a *descuento* (Q15, closed). **Details, Owner, 2026-09-
 - **A weighed item (sold by weight) can take a discount (Owner, 2026-09-26)** by lowering its
   per-kilo price to the whole-cent price whose line total comes nearest the discounted amount. Up
   to 1 kg that is exact; on a heavier item the amount actually taken off can differ from the amount
-  asked by up to half the weight in cents: up to 2 cents at 3.2–5 kg, 5 cents at 10 kg, 12 cents at
+  asked by a few cents: up to 1 cent up to 3 kg, 2 cents up to 5 kg, 5 cents at 10 kg, 12 cents at
   25 kg (one cent of per-kilo price moves a 2.5 kg line by 2.5 cents). Staff
   see the exact amount before confirming, and the adjustment records the amount actually taken off.
   A whole-bill discount shares out over every line, weighed ones included, and any cent a weighed

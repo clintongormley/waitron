@@ -683,8 +683,8 @@ that:
   drops by its lines' share;
 - a comp (an item given free) appears as its own line at €0.00, beside its original price;
 - an item sold by weight takes a discount by lowering its per-kilo price to a whole cent, so on a
-  heavy item the discount actually applied can differ from the one agreed: by up to half the weight
-  in cents (up to 2 cents at 3.2–5 kg, 5 cents at 10 kg). The invoice shows what was actually
+  heavy item the discount actually applied can differ from the one agreed by a few cents (up to
+  1 cent up to 3 kg, 2 cents up to 5 kg, 5 cents at 10 kg). The invoice shows what was actually
   charged, and staff see it before confirming.
 
 > **(a)** En una factura simplificada, ¿es correcto reflejar un descuento concedido antes de la

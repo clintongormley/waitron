@@ -177,13 +177,15 @@ names it so the owner can overturn it at review.
     - a line in a FIRED group moves with `group_id` cleared, and M7b's MOVED slip tells the kitchen.
   - **This reverses two landed rules, by the owner's acceptance of "a group belongs to the visit"
     (spec §3), and Task 3 names both as retired in its PR:** on `main`, `splitOffCheck` refuses a
-    held line (`refuseHeld: true`, `tab.split_held_line`, "a check cannot be sent") and
+    held line (`refuseHeld: true`, `tab.split_held_line`; its comment: "A check is paid, never
+    sent, so held work moved onto it would never fire") and
     `transferLines` allows one (`refuseHeld: false`), with held detected as "a ticket item whose
     `fired_at` is null" (`carveOffLines`, `apps/server/src/working-order.ts`). Under groups a held
     line has NO ticket, so that detection cannot see it. Task 3 replaces it with
     `order_groups.state = 'held'`: a split onto a check of the same visit is allowed (the group,
     not the check, is what fires), and a transfer out of the visit is refused. `tab.split_held_line`
-    stays registered (codes are never renamed) and is no longer thrown; its test is retired.
+    stays registered (codes are never renamed) and is no longer thrown; its server test, the till's
+    handling of it (`apps/till/src/till-app.ts`) and the till's test for that are retired.
   - **No unique index on `position`.** A reorder rewrites several rows one at a time, and a unique
     index there breaks midway although the final state satisfies it (CLAUDE.md §3). Lists order by
     `position`, then `created_at`. Say so at the column.
@@ -224,8 +226,9 @@ names it so the owner can overturn it at review.
     into the target visit T:
     - S's tables: with `freeSourceTable` their memberships close; without it they move to T
       (closed under S, opened under T);
-    - S's other OPEN bills (split checks) move to T (`visit_id` = T); S's SETTLED bills stay on S,
-      because a settled order's `visit_id` is frozen (Global Constraints);
+    - S's other OPEN bills (split checks) move to T (`visit_id` = T); every bill of S that is not
+      open (placed, settled or abandoned) stays on S, because the transition trigger lets only an
+      open order change (Global Constraints);
     - S's groups (Task 3 onwards) move to T, appended after T's last position in their own order,
       held and fired alike: a merge is two parties becoming one, not held work leaving its party;
     - S's open drafts (Task 7 onwards) move to T, and where one person has an open draft on both,
@@ -268,10 +271,12 @@ names it so the owner can overturn it at review.
       whole-cent price `p` whose `round(p × quantity)` comes nearest the target total; on a tie, the
       higher total (the smaller discount). Several prices can give the same total at a small
       weight, so among them the HIGHEST price is used (the smallest cut to the per-kilo price).
-      The miss grows with the weight: up to half the quantity in cents, so up to 2 cents at 3.2–5 kg,
-      5 cents at 10 kg and 12 cents at 25 kg (measured by the plan review over whole-cent prices). For a quantity up to 1 every whole-cent total is
-      reachable, so it is exact; above 1 the achieved total can miss by up to half the quantity in
-      cents. The adjustment records the reduction ACTUALLY achieved; the till shows it before
+      Up to 1 kg every whole-cent total is reachable, so it is exact. Above that the achieved total
+      can miss the target by up to ⌊⌈weight in kg⌉ ÷ 2⌋ cents: 1 cent above 1 kg up to 3 kg, 2 cents
+      above 3 kg up to 5 kg, 5 cents at 10 kg, 12 cents at 25 kg (brute-forced over whole-cent prices
+      by the plan's third review and re-run by the planning session, 2026-09-26; "half the weight",
+      the second revision's wording, is wrong at weights that are not whole kilos, e.g. 1.2 kg
+      misses by 1 cent). The adjustment records the reduction ACTUALLY achieved; the till shows it before
       confirming; policy limits (D6) are checked against it.
     - A comp (price zero) is always exact.
     - A discount larger than the line or bill it applies to is refused with
@@ -283,7 +288,7 @@ names it so the owner can overturn it at review.
   moves the credit for everything in the draft. Submission writes the owner onto each new line as
   `working_order_lines.credited_to` (nullable, a person id). Work added outside a draft is credited
   to the person who made it: the till's Change action (a line it creates), and a counter order's
-  lines, credited to the operator who places or pays it. A split or transfer keeps `credited_to`.
+  lines, credited to the operator who creates the order. A split or transfer keeps `credited_to`.
   Draft lines carry no author of their own; the history records each takeover (`order_drafts`
   events, Task 7). The counter basket stays device-owned.
 - **D6. Adjustment limits are cumulative.**
@@ -397,12 +402,14 @@ names it so the owner can overturn it at review.
   served, and today `working_order_lines_require_open_parent_update`
   (`packages/db/drizzle/0001_behavioural_triggers.sql`) refuses ANY update of a line whose order is
   not open; it has no exemption at all. Task 9 creates the first: an update of a line on a
-  non-open order is allowed when only `served_quantity` and `served_at` change and every other
-  column is unchanged, listed column by column the way `0015_settled_order_freeze_new_columns.sql`
+  non-open order is allowed when `served_quantity` or `served_at` CHANGES and every other column is
+  unchanged (an update changing no served column stays refused, as the `0015` exception requires
+  `collected_at` to go from empty to set), listed column by column the way `0015_settled_order_freeze_new_columns.sql`
   lists `working_orders`'s. Serving is an operational fact, not billing, and the trigger's comment
   says so. **From Task 9 on, every new `working_order_lines` column joins that list** (Global
-  Constraints): Task 11's `list_unit_price_gross` must, and Task 9 itself lists `group_id` and
-  `credited_to` from Task 3.
+  Constraints): Task 9 lists every column that exists when it lands (`group_id` and `credited_to`
+  from Task 3 among them, and Task 11's `list_unit_price_gross` if Task 11 landed first); a column
+  added after Task 9 joins the list in its own task.
 - **D19. Revisions: one for the visit, one per bill.** Plan Revision 1 asked every write to bump
   `working_orders.revision`, but a group belongs to a VISIT and can hold lines on several bills, so
   one bill's revision cannot version it.
@@ -415,14 +422,20 @@ names it so the owner can overturn it at review.
     - Finish and Mark cleared (Task 2);
     - **every route that moves lines or tables between bills or visits**: the tab routes `move`,
       `join`, `merge`, `transfer`, `split` and `unjoin`, which on `main` take no revision at all
-      (`till-api.ts`, the tab routes; they only bump each bill's). Task 2 adds the parameter to
-      them and to the till's calls, with a stale-case test each.
+      (`till-api.ts`, the tab routes). Of their functions, `moveTab`, `joinTable` and an unjoin
+      without items bump nothing today; the others bump each bill's. Task 2 adds the parameter to
+      all six routes and the till's calls, bumps the visit in each, and adds a stale-case test
+      each. A transfer or merge between two visits takes both visits' expected revisions
+      (`expectedVisitRevision` for the destination, `expectedSourceVisitRevision` for the source)
+      and bumps both.
   - Paths that remove or replace a line INSIDE a group bump the visit too, and apply "an emptied
     held group becomes `removed`": M7b's `voidTabLine` and `applyLineEdits` (reached from
-    `updateHeldOrder` and `updateOrderLine`), and Task 11's cancel and split rows. They keep
-    M7b's bill revision check and do not take a visit revision of their own: a bill edit is a
-    bill-local action, and it bumps the visit so any visit-wide command prepared before it is
-    refused.
+    `updateHeldOrder` and `updateOrderLine`), and Task 11's cancel and split rows. They do not take
+    a visit revision of their own: a bill edit is a bill-local action, and it bumps the visit so
+    any visit-wide command prepared before it is refused. Their bill revision: `updateHeldOrder`
+    and `updateOrderLine` check M7b's (`requireEditableOrder`); `voidTabLine` checks none on `main`
+    (neither does its route), and Task 11's cancel, which replaces it for staff, brings the bill
+    revision check.
   - `working_orders.revision` (M7b) keeps versioning a bill's own commercial content. An adjustment
     takes `expectedRevision` for its bill, and a line edit keeps M7b's check.
   - A draft keeps its own `revision` for saves and takeovers. Submitting checks the draft's AND the
@@ -442,8 +455,10 @@ names it so the owner can overturn it at review.
   - `working_order_lines.list_unit_price_gross` is set on EVERY line the first time any adjustment
     touches it (comp, discount or a split row carved by one), to the unit price it had then, and
     never changed afterwards; a line's pre-adjustment value is `list_unit_price_gross × quantity`
-    when it is set, else its current `unit_price_gross × quantity`;
-  - a cancel deletes the line, so each adjustment row snapshots the line's `credited_to`,
+    when it is set, else its current `unit_price_gross × quantity`, rounded exactly as the pricing
+    code rounds a line total (`toScale`, half away from zero: 2.5 kg at €12.99 is €32.48, not
+    €32.475);
+  - a whole-line cancel deletes the line (a partial cancel reduces its quantity), so each adjustment row snapshots the line's `credited_to`,
     quantity and pre-adjustment unit price (Task 11), and a cancelled line counts through that
     snapshot's `nominal_value`;
   - cancelled and comped lines stay in the denominator.
@@ -914,15 +929,22 @@ tests drive the routes.
     `createOpenOrder`, `addTabRound`, `carveOffLines` and `applyLineEdits`):
     - `submitGroups` (which replaces `addTabRound` for tabs): the group it creates, and
       `credited_to` = its operator (Task 7 passes the draft's owner, who is the submitter);
-    - `createOpenOrder` (counter orders): no group, `credited_to` = the operator who creates the
-      order (the session that parks or rings it up);
-    - `carveOffLines` (splits and transfers): copies both from the source line, except that a
-      transfer to another visit clears `group_id` (D1);
+    - `createOpenOrder`: used by counter orders AND by `openTab` when a tab is opened with lines
+      (`POST /api/tables/:id/tab` with `lines`). Under visits, `seatTable` opens a tab with NO lines,
+      and the tab-with-lines route is retired in favour of seat-then-`submitGroups`, so every tab
+      line gets a group; a counter order's lines get no group and `credited_to` = the operator who
+      creates the order (D5 says the same);
+    - `carveOffLines` (splits and transfers): a split row copies both from the source line; a
+      WHOLE line moves in place through `moveOrderLines` and keeps both; either way a transfer to
+      another visit clears `group_id` on the line that lands there (D1);
     - `applyLineEdits` (reached from `updateHeldOrder` and `updateOrderLine`, including M7c's Change
-      action): a REPLACEMENT line inherits both from the line it replaces; a NEW line an edit adds
-      is credited to the editing operator, and joins the edited line's group when that group is
-      held, or becomes a new fired group (Fire now, the spec's default for later additions) when it
-      is fired;
+      action) changes an edited line IN PLACE under the same id, so it keeps its group and credit.
+      The rows it inserts are of three kinds: an added extras CHILD line, which inherits its
+      parent dish's group and credit; the new line for extra quantity when a FIRED line is raised,
+      credited to the editing operator and placed in a new fired group (Fire now, the spec's
+      default for later additions); and a brand-new dish added by an edit, credited to the editing
+      operator and placed in a new fired group — or, on an order with no groups (a counter
+      order), in none;
     - Task 11's split rows inherit both (Task 11).
 
   One generated core migration. The plan review measured that adding the keyed column generates a
@@ -1059,8 +1081,9 @@ tests drive the routes.
   - **A counter order** places and fires as today, with no groups.
   - **Edits inside groups (D19):** voiding the only line of a held group marks it `removed` and
     bumps the visit; a Change-action edit that raises a FIRED line's quantity creates a new fired
-    group for the extra, credited to the editor, while the same edit on a HELD line stays in its
-    group; a replacement line keeps the old line's group and credit.
+    group for the extra, credited to the editor; the same edit on a HELD line changes it in place,
+    in its group; adding an extra (Bacon) to Alex's held Burger while Mia edits creates a child
+    line in the Burger's group credited to Alex, not Mia.
   - **Retired behaviour:** `till-api.courses.test.ts` and the course-firing cases; the
     `tab.split_held_line` refusal of a split onto a check and its test; and the transfer of a held
     line to another table, which `main` allows. Name each in the PR.
@@ -1516,8 +1539,9 @@ versus the charge. **It changes what an invoice charges; it lands on the automat
   order functions.
 - Modify:
   - `packages/db/src/schema/orders.ts` (`working_order_lines.list_unit_price_gross`, D4 and D21; a
-    plain `ADD COLUMN`), set on every line the first time any adjustment touches it; plus the
-    custom migration adding it to Task 9's unchanged-column list (D18);
+    plain `ADD COLUMN`), set on every line the first time any adjustment touches it; if Task 9 has
+    landed, a custom migration adds it to Task 9's unchanged-column list (D18); if not, Task 9 lists
+    it with every other column;
   - `apps/server/src/working-order.ts`:
     - a void takes a reason and records an adjustment;
     - a comp sets the price to zero and keeps the list price;
@@ -1598,7 +1622,8 @@ versus the charge. **It changes what an invoice charges; it lands on the automat
     - A second run gives the same shares.
   - **Approval (D6):**
     - a staff member's comp under "Complaint" (`apply_role supervisor`) with no approver is
-      `adjustment.approval_required` naming `supervisor`, and nothing changes;
+      `adjustment.approval_required` naming `manager` (the reason's `approver_role`), and nothing
+      changes;
     - with a manager's id and PIN it applies, the adjustment records `requested_by` = the waiter
       and `approved_by` = the manager, and the waiter's session is still valid;
     - a staff member as approver is `adjustment.approval_required`;
@@ -1666,10 +1691,12 @@ Spec §7 "Make adjustments reviewable".
     credit to the invoice operator would give Jo €67.00 and Alex nothing, and dropping comped lines
     from the denominator would give Alex €25.00 and a rate of 48.0%. The test asserts the expected
     figures, so either wrong reading fails.
-  - **Credit versus actor (D21):** Mia cancels Alex's fired Steak (€25.00). Alex's sales still
+  - **Credit versus actor (D21)**, extending the "Whose sales" fixture above (Mia credited with the
+    €30.00 Wine), with Alex's Burger comp left out: Mia cancels Alex's fired Steak (€25.00). Alex's sales still
     include the Steak at €25.00, read from the adjustment's snapshot after the line is gone; the
-    €25.00 reduction counts against Mia, the actor. A report that used `requested_by` as the credit
-    would move the Steak out of Alex's sales and fail.
+    €25.00 reduction counts against Mia, the actor. Mia's own credited sales that day are her
+    €30.00 of Wine, so her rate is €25.00 ÷ €30.00 = 83.3%. A report that used `requested_by` as the
+    credit would move the Steak out of Alex's sales and fail.
   - **The fixture day** (the values are chosen so that a report mixing up nominal value and
     reduction gives a different number):
     - Alex, credited sales €800.00 (before adjustments):
@@ -1851,9 +1878,6 @@ code and by the database (read in both places on `main` at `72e7e65fb`).
   - **Retries (D8):** a handover resent with its `submissionId` after a lost reply returns the
     first result (bill scope, since a counter order has no visit), not
     `working_order.already_collected`; a NEW handover request on a collected order is.
-  - **No revision bump:** the handover changes only `collected_at`. It must not call M7b's
-    `bumpRevision`, because the trigger's exception lists `revision` as unchanged; a test proves the
-    revision is the same before and after.
   - **Refusals:** a second handover is `working_order.already_collected`; handing over an OPEN order
     is refused with `working_order.not_settled` or the code Step 0 finds for it; a placed order
     with no fired work is `ticket.not_fired`.
@@ -1921,8 +1945,8 @@ the task's own PR wherever the task makes it stale. **The last task to land** al
     task's direct route tests, and Review Focus 1 and 2), 14 (every screen task). Item 12 is
     inventory, which is out of scope.
 - **Interfaces used across tasks:**
-  - `checkAndBumpVisit`, `runServiceCommand` and `service_commands` come from Task 2; Tasks 3, 7 and 9
-    write through them.
+  - `checkAndBumpVisit`, `runServiceCommand` and `service_commands` come from Task 2; Tasks 3, 5, 7,
+    9, 11 and 16 write through them.
   - `OrderGroup` (with `remindAt`), `GroupRelease`, `SubmitGroupsInput` and `VisitCommandArgs`
     come from Task 3; Tasks 4, 5, 7 and 9 use them. Group functions take a `visitId` and line ids,
     and every quantity is a string.
