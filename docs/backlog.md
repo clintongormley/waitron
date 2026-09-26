@@ -618,8 +618,7 @@ options list that always has a default. Spec:
 [modifier editors polish](superpowers/plans/2026-09-26-modifier-editors-polish.md). Each item marks
 its part done here when it lands.
 
-- **A64 (shared pieces) — built on `feat/modifier-editors-shared-pieces`, not yet merged (no pull
-  request number yet).** The `wt-number-stepper` control, the dashboard's `minus` and `bin` icons,
+- **A64 (shared pieces) — LANDED, #714.** The `wt-number-stepper` control, the dashboard's `minus` and `bin` icons,
   a standard modal widened from 768px to 1024px (dialogs and help tooltips keep 768px), and a lifted
   look for a row being dragged, with its own colour token, `--wt-color-surface-lifted`. Left for
   A66: at the stepper's 64px width (`--wt-stepper-field-width`) the box has 48px for text, and
@@ -629,7 +628,9 @@ its part done here when it lands.
   (`min(28vw, 24dvh)`), so the details wrap while half the row stands empty; and the till's option
   picker, 1024px wide on a 1280px screen, puts each price at the far end of a 1024px row, well
   away from its name (which adds to the "prices are not a column" item in the till layout pass,
-  under A4).
+  under A4). Open for A66, the stepper's first user: its button names are text with a
+  `{label}` slot (as the plan chose) where other shared controls take a function; switch them there
+  unless the owner prefers the text form.
 
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
