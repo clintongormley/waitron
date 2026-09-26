@@ -67,10 +67,6 @@ export class ExtraListForm extends LitElement {
       .picks-row wt-number-stepper {
         --wt-stepper-field-width: var(--wt-stepper-field-width-wide);
       }
-      /* Every price box the same width, rather than each stretched by the unit beside it. */
-      td wt-price-input {
-        width: fit-content;
-      }
       /* The same narrow case, and the same width, as the variants table's (design-system.md): a
          container query cannot read a token. There the column heading alone names the switches. */
       @container (max-width: 30rem) {
@@ -80,9 +76,28 @@ export class ExtraListForm extends LitElement {
         td wt-switch::part(label) {
           display: none;
         }
+        /* The unit moves under the amount as text, so a long one cannot widen the table. */
+        td wt-price-input::part(unit) {
+          flex-basis: 100%;
+          min-width: 0;
+          min-height: 0;
+          padding: var(--wt-space-1) 0 0;
+          border: 0;
+          background: none;
+        }
+        td wt-price-input::part(amount) {
+          border-start-end-radius: var(--wt-radius-md);
+          border-end-end-radius: var(--wt-radius-md);
+        }
       }
+      .required,
       .error {
         color: var(--wt-color-danger);
+      }
+      .required {
+        margin-inline-start: var(--wt-space-1);
+      }
+      .error {
         margin: var(--wt-space-1) 0 0;
         font-size: var(--wt-font-size-sm);
       }
@@ -195,10 +210,13 @@ export class ExtraListForm extends LitElement {
     return this.#productById.get(productId)?.unitPrice ?? "";
   }
 
-  /** The rule product-editor.ts's unit label uses: the abbreviation, else the name. */
+  /** The rule product-editor.ts's `unitShortLabel` uses: the abbreviation, else the name, and Each
+   * for a product with no unit. A product this form was given no row for claims no unit. */
   #unitLabel(productId: string): string {
-    const unit = this.#productById.get(productId)?.unit;
-    if (!unit) return "";
+    const product = this.#productById.get(productId);
+    if (!product) return "";
+    const unit = product.unit;
+    if (!unit) return t("editor.unit_each");
     const language = this.#primaryLanguage();
     return (
       resolveContentText(unit.abbreviation, language, language) ||
@@ -521,7 +539,11 @@ export class ExtraListForm extends LitElement {
             <tr>
               <th scope="col"><span class="visually-hidden">${t("extras.reorder")}</span></th>
               <th scope="col">${t("extras.product")}</th>
-              <th scope="col">${t("extras.max_quantity")}</th>
+              <th scope="col">
+                ${t("extras.max_quantity")}<span class="required" data-required aria-hidden="true"
+                  >*</span
+                >
+              </th>
               <th scope="col">${t("extras.preselected")}</th>
               <th scope="col" colspan="2">${t("extras.price")}</th>
             </tr>

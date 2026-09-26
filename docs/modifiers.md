@@ -18,8 +18,8 @@ offer: **Maximum quantity**, how many of it one dish may take (at least one, so 
 none"); **Preselected**, whether it starts chosen; and **Price**, what the diner is charged for it.
 That price REPLACES the product's own rather than adding to it, so 1.50 against a 3.00 product bills
 1.50. Leave it blank and the product's own price is what gets charged — the field shows you that
-price, greyed, while it is blank. The product's unit is shown after the price, so you can see what
-one of it is. The list itself sets **Minimum choices** — 0 makes the list optional, 1 or more makes
+price, greyed, while it is blank. The product's unit is shown after the price (under it on a phone), so
+you can see what one of it is; a product with no unit reads Each. The list itself sets **Minimum choices** — 0 makes the list optional, 1 or more makes
 it required — and **Maximum choices**, left blank for no limit. Each of these numbers has − and +
 buttons, and you can also type it.
 

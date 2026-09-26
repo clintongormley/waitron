@@ -1,5 +1,6 @@
 import { expect, test, afterEach } from "vitest";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
+import { applyTokens } from "../tokens/index.js";
 import "./wt-price-input.js";
 
 afterEach(cleanup);
@@ -314,4 +315,52 @@ test("the amount box still fills a wider field", async () => {
   const input = el.shadowRoot!.querySelector("input")!.getBoundingClientRect();
   const unit = el.shadowRoot!.querySelector(".unit")!.getBoundingClientRect();
   expect(input.width + unit.width).toBe(400);
+});
+
+test("a fixed unit joins the field with the field's own end border, and square corners at the seam", async () => {
+  const el = await mount('<wt-price-input unit="kg" fixed-unit></wt-price-input>');
+  host.style.setProperty("--wt-radius-md", "7px");
+  const input = getComputedStyle(el.shadowRoot!.querySelector("input")!);
+  const unit = getComputedStyle(el.shadowRoot!.querySelector(".unit")!);
+  expect([
+    input.borderInlineEndWidth,
+    input.borderStartEndRadius,
+    input.borderEndEndRadius,
+  ]).toEqual(["1px", "0px", "0px"]);
+  expect([unit.borderInlineStartWidth, unit.borderStartEndRadius]).toEqual(["0px", "7px"]);
+});
+
+test("exposes the amount and a fixed unit as parts, so a host can move the unit under the amount", async () => {
+  const beside = await mount(
+    '<wt-price-input unit="kilogramos" fixed-unit style="display: inline-block"></wt-price-input>',
+  );
+  const besideBox = beside.shadowRoot!.querySelector("input")!.getBoundingClientRect();
+  const besideUnit = beside.shadowRoot!.querySelector(".unit")!.getBoundingClientRect();
+  expect([besideUnit.top, besideUnit.left]).toEqual([besideBox.top, besideBox.right]);
+
+  // Styled from a shadow root of its own, as a consuming screen restyles it.
+  const outer = document.createElement("div");
+  document.body.append(outer);
+  applyTokens(outer);
+  try {
+    const shadow = outer.attachShadow({ mode: "open" });
+    shadow.innerHTML = `<style>
+        wt-price-input::part(unit) { flex-basis: 100%; }
+        wt-price-input::part(amount) { border-start-end-radius: 3px; }
+      </style>
+      <wt-price-input unit="kilogramos" fixed-unit style="display: inline-block"></wt-price-input>`;
+    const el = shadow.querySelector("wt-price-input")! as HTMLElement & {
+      updateComplete: Promise<unknown>;
+    };
+    await el.updateComplete;
+    const input = el.shadowRoot!.querySelector("input")!;
+    const box = input.getBoundingClientRect();
+    const unit = el.shadowRoot!.querySelector(".unit")!.getBoundingClientRect();
+    expect(unit.top).toBeGreaterThanOrEqual(box.bottom);
+    expect(unit.left).toBe(box.left);
+    expect(box.width).toBe(besideBox.width);
+    expect(getComputedStyle(input).borderStartEndRadius).toBe("3px");
+  } finally {
+    outer.remove();
+  }
 });

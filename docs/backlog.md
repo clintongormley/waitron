@@ -654,15 +654,16 @@ its part done here when it lands.
   or less), with short labels and the old parenthetical explanations moved to a line underneath;
   the maximum's box uses a new, wider width token so "No limit" and "Sin límite" fit. In each
   product row, the maximum quantity is a stepper, the price box is a fixed width (a new token) with
-  the product's unit shown after it as plain text, and Remove is a bin icon with the same spoken
-  name; the Price heading runs over the bin column. A row lines up its text: the product name, the
+  the product's unit shown after it as plain text (Each when the product has no unit), and Remove
+  is a bin icon with the same spoken name; the Maximum quantity heading carries the required mark; the Price heading runs over the bin column. A row lines up its text: the product name, the
   quantity, the Preselected label and the price all sit on one line. Shared changes it needed: the
   stepper's button names are now functions (the A64 open point), the price field can hide its label
   and show its unit as text, and a switch now takes its label's text as its line. On a phone the
-  Preselected text beside each switch is hidden (the column heading names them), which keeps the
-  table's sideways scroll below what it was: measured at 390px with a 9999.99 price and a "ración"
-  unit, 223px of scroll in English (234px before) and 266px in Spanish (271px before). Still to
-  come: A67, the Options editor.
+  Preselected text beside each switch is hidden (the column heading names them) and each unit moves
+  under its price, which keeps the table's sideways scroll below what it was whatever the unit:
+  measured at 390px with two 9999.99 prices, 163px of scroll in English (234px before) and 206px in
+  Spanish (271px before), the same for "ración", "kilogramos" and a unit named "Large half portion"
+  or "Media ración grande" with no abbreviation. Still to come: A67, the Options editor.
 
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its

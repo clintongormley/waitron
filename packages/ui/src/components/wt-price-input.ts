@@ -5,7 +5,8 @@ import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../
 
 /**
  * The unit button's visible text is its accessible name, so an empty `unit` leaves it nameless.
- * `fixed-unit` shows the unit as text instead, for a field whose unit is not chosen here.
+ * `fixed-unit` shows the unit as text instead, for a field whose unit is not chosen here. The
+ * amount box is the `amount` part and a fixed unit the `unit` part.
  */
 @customElement("wt-price-input")
 export class WtPriceInput extends LitElement {
@@ -65,6 +66,17 @@ export class WtPriceInput extends LitElement {
         border-end-end-radius: var(--wt-radius-md);
       }
 
+      /* The amount box draws the seam itself, so a host that moves the unit under it (flex-basis
+         100% on the unit part) leaves the box's trailing border in place. */
+      .fixed {
+        flex-wrap: wrap;
+      }
+
+      .fixed input {
+        flex: none;
+        border-inline-end: 1px solid var(--wt-color-border);
+      }
+
       input[aria-invalid="true"] {
         border-color: var(--wt-color-danger);
       }
@@ -87,6 +99,7 @@ export class WtPriceInput extends LitElement {
         display: inline-flex;
         align-items: center;
         padding-inline: var(--wt-space-2);
+        border-inline-start: 0;
         cursor: default;
       }
 
@@ -149,7 +162,9 @@ export class WtPriceInput extends LitElement {
       >
         ${this.unit}
       </button>`;
-    return this.unit ? html`<span id=${this.unitId} class="unit">${this.unit}</span>` : nothing;
+    return this.unit
+      ? html`<span id=${this.unitId} class="unit" part="unit">${this.unit}</span>`
+      : nothing;
   }
 
   override render() {
@@ -173,9 +188,10 @@ export class WtPriceInput extends LitElement {
             </div>`
           : nothing
       }
-      <div class="control">
+      <div class=${this.fixedUnit && this.unit ? "control fixed" : "control"}>
         <input
           id=${inputId}
+          part="amount"
           name=${this.name || nothing}
           .value=${this.value}
           inputmode="decimal"

@@ -1,5 +1,7 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, expect, it } from "vitest";
+import { registerIcons } from "@waitron/ui";
+import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 // Value import (not `import type`): pulls the module in for its `@customElement` side effect, so
 // `mountWidget` can create `dashboard-extra-list-form`.
@@ -7,6 +9,7 @@ import { ExtraListForm } from "./extra-list-form.js";
 import type { ExtraList, ExtraListInput, Product } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
 
+registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -884,7 +887,8 @@ function textBaseline(parent: Element): number {
 }
 
 /** An `<input>` takes no children, so the mark joins the input's own baseline group in the flex or
- * grid box around it instead. The input is set to baseline alignment for the reading, and the
+ * grid box around it instead, placed straight after the input so it shares the input's line when a
+ * unit has wrapped under it. The input is set to baseline alignment for the reading, and the
  * reading is refused if that moved it. */
 function inputBaseline(control: Element): number {
   const input = control.shadowRoot!.querySelector("input")!;
@@ -897,7 +901,7 @@ function inputBaseline(control: Element): number {
     : "auto";
   const alignSelf = input.style.alignSelf;
   input.style.alignSelf = "baseline";
-  input.parentElement!.append(mark);
+  input.after(mark);
   const top = mark.getBoundingClientRect().top;
   const after = input.getBoundingClientRect();
   mark.remove();
@@ -970,4 +974,163 @@ it("draws every row's price box the same width, whatever its unit", async () => 
   const box = (name: string) =>
     field(el, name).shadowRoot!.querySelector("input")!.getBoundingClientRect().width;
   expect(box("item-0-price")).toBe(box("item-1-price"));
+});
+
+it("reads a product with no unit as sold by the each, as the product editor does", async () => {
+  const unknown = "cccccccc-3333-4333-8333-cccccccccccc";
+  const { el } = await mount({
+    value: {
+      ...addons,
+      items: [
+        ...addons.items,
+        {
+          id: "55555555-5555-4555-8555-555555555555",
+          productId: unknown,
+          maxQuantity: 1,
+          preselected: false,
+          price: "1.00",
+        },
+      ],
+    },
+    products: [
+      product({ unitId: undefined, unit: undefined }),
+      product({ id: EGG, name: "Fried egg", unitPrice: "0.80", unitId: KG.id, unit: KG }),
+    ],
+  });
+  const unit = (name: string) => field<HTMLElementTagNameMap["wt-price-input"]>(el, name).unit;
+
+  expect(unit("item-0-price")).toBe(t("editor.unit_each"));
+  expect(unit("item-1-price")).toBe("kg");
+  // A product this form was given no row for has no known unit, so it claims none.
+  expect(unit("item-2-price")).toBe("");
+});
+
+it("marks the Maximum quantity heading as required, the way a drawn label is marked", async () => {
+  const { el, host } = await mount({ value: addons });
+  host.style.setProperty("--wt-color-danger", "rgb(1, 2, 3)");
+  const heading = [...el.shadowRoot!.querySelectorAll("thead th")][2]!;
+  const marker = heading.querySelector<HTMLElement>("[data-required]");
+
+  expect(marker?.textContent).toBe("*");
+  expect(marker?.getAttribute("aria-hidden")).toBe("true");
+  expect(getComputedStyle(marker!).color).toBe("rgb(1, 2, 3)");
+  expect(heading.textContent!.replace("*", "").trim()).toBe(t("extras.max_quantity"));
+  expect(
+    field<HTMLElementTagNameMap["wt-number-stepper"]>(el, "item-0-max-quantity").required,
+  ).toBe(true);
+});
+
+const GRAM = {
+  id: "unit-g",
+  name: { en: "Gram", es: "Gramo" },
+  precision: 0,
+  abbreviation: { en: "g", es: "g" },
+};
+const LONG_ABBREVIATION = {
+  id: "unit-kilos",
+  name: { en: "Kilogram", es: "Kilogramo" },
+  precision: 3,
+  abbreviation: { en: "kilogramos", es: "kilogramos" },
+};
+const LONG_NAME = {
+  id: "unit-half",
+  name: { en: "Large half portion", es: "Media ración grande" },
+  precision: 0,
+  abbreviation: {},
+};
+
+/** How far the items table scrolls sideways with two four-digit prices in `unit`, and whether any
+ * price's digits are cut off. */
+async function phoneOverflow(unit: Product["unit"]) {
+  const { el } = await mount({
+    value: {
+      ...addons,
+      items: addons.items.map((item) => ({ ...item, price: "9999.99" })),
+    },
+    products: products.map((each) => ({ ...each, unitId: unit!.id, unit })),
+  });
+  const wrap = el.shadowRoot!.querySelector<HTMLElement>(".table-wrap")!;
+  const clipped = ["item-0-price", "item-1-price"].some((name) => {
+    const input = field(el, name).shadowRoot!.querySelector("input")!;
+    return input.scrollWidth > input.clientWidth;
+  });
+  const overflow = wrap.querySelector("table")!.scrollWidth - wrap.clientWidth;
+  cleanupWidgets();
+  return { overflow, clipped };
+}
+
+it("keeps a long unit from widening the table on a phone, in English and Spanish", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(390, 844);
+  try {
+    expect(window.innerWidth).toBe(390);
+    for (const locale of ["en", "es"] as const) {
+      setLocale(locale);
+      const short = await phoneOverflow(GRAM);
+      expect(short.overflow, locale).toBeGreaterThan(0);
+      for (const unit of [LONG_ABBREVIATION, LONG_NAME]) {
+        const long = await phoneOverflow(unit);
+        expect(long.clipped, `${locale} ${unit.id}`).toBe(false);
+        expect(long.overflow, `${locale} ${unit.id}`).toBeLessThanOrEqual(short.overflow);
+      }
+    }
+  } finally {
+    setLocale("en");
+    await page.viewport(width, height);
+  }
+});
+
+it("puts the unit under the amount on a phone and beside it on a wide screen", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  try {
+    for (const [frame, under] of [
+      [1280, false],
+      [390, true],
+    ] as const) {
+      await page.viewport(frame, 844);
+      expect(window.innerWidth).toBe(frame);
+      const { el } = await mount({
+        value: addons,
+        products: [product({ unitId: KG.id, unit: KG }), products[1]!],
+      });
+      const price = field(el, "item-0-price").shadowRoot!;
+      const input = price.querySelector("input")!.getBoundingClientRect();
+      const unit = price.querySelector(".unit")!.getBoundingClientRect();
+      expect(
+        under
+          ? unit.top >= input.bottom && unit.left === input.left
+          : unit.top === input.top && unit.left === input.right,
+        `at ${frame}px: ${JSON.stringify({ input, unit })}`,
+      ).toBe(true);
+      cleanupWidgets();
+    }
+  } finally {
+    await page.viewport(width, height);
+  }
+});
+
+it("keeps a price's baseline on its amount when the unit sits under it on a phone", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(390, 844);
+  try {
+    const { el } = await mount({
+      value: addons,
+      products: [product({ unitId: LONG_NAME.id, unit: LONG_NAME }), products[1]!],
+    });
+    const row = el.shadowRoot!.querySelector(`tr[data-item="${BACON_ITEM}"]`)!;
+    const name = textBaseline(row.querySelector('[data-test="item-0-product"]')!);
+    const price = row.querySelector("wt-price-input")!;
+    const input = price.shadowRoot!.querySelector("input")!.getBoundingClientRect();
+
+    expect(window.innerWidth).toBe(390);
+    expect(
+      price.shadowRoot!.querySelector(".unit")!.getBoundingClientRect().top,
+    ).toBeGreaterThanOrEqual(input.bottom);
+    expect(Math.abs(inputBaseline(price) - name)).toBeLessThanOrEqual(1);
+  } finally {
+    await page.viewport(width, height);
+  }
 });
