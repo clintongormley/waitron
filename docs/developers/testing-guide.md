@@ -555,10 +555,57 @@ before taking the loop as tested.
 **The frozen-server stage.** Ten sales are timed with the S3 server up, then it is frozen with
 `SIGSTOP` (every call hangs rather than being refused) and ten more are timed. The slowest frozen sale
 must stay under the larger of one second and five times the slowest sale before the freeze. It never
-drives the side file to the 256 MiB limit, so it says nothing about the pause. Its sales are recorded
-with `recordOneSale` (`apps/server/scripts/record-one-sale.ts`), which opens a second store with
-`exclusive: false` and so its own write queue, not the server's route and write queue; no sale in
-this stage waits behind the server's `checkpointTruncate`.
+drives the side file to its limit. Its sales are recorded with `recordOneSale`
+(`apps/server/scripts/record-one-sale.ts`), which opens a second store with `exclusive: false` and so
+its own write queue, not the server's route and write queue. The next test reaches the limit.
+
+**The stream pause test.** `apps/server/src/stream-pause.e2e.test.ts` needs the same two binaries
+and skips or fails without them the same way. It boots one streaming server with `startServer`'s
+third argument, a test seam, setting the side-file limit to 16 MiB; a 1 MiB limit paused the stream
+while its generation was still opening, from boot's own writes (measured 2026-09-26). One till
+session has three sellers posting sales at once to `/api/sales` over the box's TLS. At least ten
+sales with the bucket up set the bound, as in the frozen-server stage. The bucket is frozen with
+`SIGSTOP`, and a listing sent to it is checked to be still unanswered at the bound. The sellers post
+until the side file passes the limit, stop, start again three seconds before the supervisor's next
+once-a-minute measurement, and post until one of them sees the file folded back; at least ten more
+sales follow during the pause. While filling, the sellers post nothing from the bound plus three
+seconds before a measurement until three seconds after it: with the test held past a measurement
+between the fill and the restart, the stream read `paused` before the sellers started again
+(measured 2026-09-26). Every frozen sale must beat the bound, the stream must read `paused`,
+and each seller must have exactly one sale whose side-file readings straddle the fold-back: the size
+measured before it was posted at or over the limit, the size after its answer under it. Nothing else
+in the server's own code shrinks that file: the stream host is `checkpointTruncate`'s only caller,
+and no `journal_size_limit` is set. Then the bucket is let run: the stream must read `streaming` on
+the same generation, a sale from the pause must be in a restore of that generation, and the server's
+log must hold exactly one `stream.paused`, at this limit, followed by `stream.resumed`.
+
+What it does not show: whether a straddling sale's own write waited in the write queue behind the
+fold-back rather than landing before it — in each of two runs on 2026-09-26, one of the three
+straddling sales was answered with the side file at 0 bytes, so its write had landed first — and how
+long the fold-back of a 256 MiB file takes. The straddling-sale check does not guard the write queue
+either: with `writes.exclusive(...)` in `checkpointTruncate` (`packages/store/src/index.ts`)
+replaced by `Promise.resolve().then(...)`, the case still passed (70,258 ms, measured 2026-09-26).
+Measured 2026-09-26 on the owner's Mac, with Vitest 4.1.11: 70,586 ms in all, most of it waiting for
+the supervisor's measurement; the slowest sale 123 ms with the bucket up, 129 ms frozen before the
+pause, 53 to 56 ms for the three straddling sales and 78 ms during the pause, against a bound of
+1,000 ms; streaming again 253 ms after the bucket was let run. The fill's deadline was 30 seconds
+until CI run 36210908359 (2026-09-26) found the side file at 15,697,232 bytes when it expired; it
+is now 180 seconds, and the case's timeout, the sum of its waits and budgets, 526 seconds. Locally
+the fill from 5,879,272 bytes took 3,819 ms plain, and under coverage 5,087 ms beside 18 busy loops
+and 14,907 ms beside 72, on the owner's Mac, which reports 18 CPUs (2026-09-26). With `...seams.stream` deleted from
+`apps/server/src/boot.ts`, so the default 256 MiB limit applied, the same run failed with `timed out
+waiting for the fold-back: the stream reads {"state":"streaming",…}, the side file 27558712 bytes`.
+
+**A bucket question the pause is waiting on.** While paused, the supervisor asks the bucket for a
+listing and resumes once one is answered (`#bucketAnswers`, `packages/stream/src/supervisor.ts`).
+A server frozen with `SIGSTOP` answers the pending listing once it gets `SIGCONT`, as the pause test
+shows. A server that takes the connection and never replies is different: the S3 client sets no
+request timeout of its own. Measured 2026-09-26 with `@smithy/node-http-handler` 4.12.1: a listing
+sent to a TCP server that accepts and never writes was still pending after 20,000 ms, and the
+control, a server that closes each connection at once, was refused in 259 ms. So each question now
+gives up after `READ_DEADLINE_MS` (five minutes) and the pause asks again on its next tick; the
+supervisor case "asks the bucket again when a question during the pause goes unanswered, and resumes
+once one is answered" fails with the deadline removed.
 
 **Why versitygw 1.8.0.** Five candidates were weighed on 2026-09-23. Four were run with the same
 probe: a write "only if absent" over an existing key, a write "only if unchanged" with a stale ETag,

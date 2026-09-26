@@ -195,7 +195,7 @@ import { readVenueLocale } from "./venue-locale.js";
 import { readVenueTimeZone } from "./venue-time-zone.js";
 import { makeFiscalBackend, systemClock } from "./till-backend.js";
 import { buildServeOptions, watchTlsFiles } from "./tls.js";
-import { StreamHost } from "./stream-host.js";
+import { StreamHost, type StreamHostDeps } from "./stream-host.js";
 import { mountStreamApi } from "./stream-api.js";
 import { createTurns } from "./backup-turns.js";
 import { writeRecoveryKey } from "./backup-env-writer.js";
@@ -570,6 +570,11 @@ function makeStartedServer(
   };
 }
 
+/** Test seams; production leaves them unset. */
+export interface StartServerSeams {
+  stream?: Pick<StreamHostDeps, "walLimitBytes">;
+}
+
 /**
  * The one place the real implementations meet.
  *
@@ -580,6 +585,7 @@ function makeStartedServer(
 export async function startServer(
   env: Record<string, string | undefined>,
   base: NodeJS.ProcessEnv = {},
+  seams: StartServerSeams = {},
 ): Promise<StartedServer> {
   const now = () => new Date();
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
@@ -1549,6 +1555,7 @@ export async function startServer(
     now,
     isPrimary: () => holders.singletonRole.current === "primary",
     mayStream: () => firstStart.mayStream,
+    ...seams.stream,
   });
   await streamHost.start();
   health.readStream = () => streamHost.status();

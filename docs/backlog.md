@@ -5765,9 +5765,12 @@ open:
   none. The command line and the setup restores wrap it for every object-store call they make
   (`boundObjectStore`, which abandons a call but never cancels it),
   the first start's pointer read has its own 15-second race (`readBucketPointerTerm`,
-  `apps/server/src/rebuild-first-start.ts`, reported as `restore.pointer_unreadable`), and every
-  other caller's calls have no bound at all: the replication supervisor's, and the bucket check the
-  backup settings screen's Test and Save buttons run (`probeBucket`, opened in
+  `apps/server/src/rebuild-first-start.ts`, reported as `restore.pointer_unreadable`), the
+  replication supervisor's freshness read and the pause's bucket question are each abandoned after
+  `READ_DEADLINE_MS` (`packages/stream/src/supervisor.ts`) but never cancelled, and every other
+  caller's calls have no bound at all: the supervisor's other calls (the open item "the stream's
+  other bucket calls have no time bound either", below), and the bucket check the backup settings
+  screen's Test and Save buttons run (`probeBucket`, opened in
   `apps/server/src/boot.ts`, called from `apps/server/src/stream-api.ts`). A per-call abort signal or request timeout
   inside `createS3ObjectStore` would bound and cancel every caller's calls.
 - Open question: the first start's pointer read and the bucket rebuild's calls (the command line's
@@ -5843,17 +5846,35 @@ line with what slice 2 built. Left open:
 - Linux is covered by one CI run only: #652's first (2026-09-25, run 36173603563), where each
   `test-server` shard's install step took about two seconds by GitHub's whole-second step
   timestamps, and the loop test passed in 15,989 ms with no test skipped in the merged report.
-- The frozen-server stage never reaches the 256 MiB side-file limit, so the supervisor's pause runs
-  only against a fake Litestream in the test suites (`packages/stream/src/supervisor.test.ts`
-  among them); the real binary at that limit was measured by the bench rig (results note, 1b), not
-  through the supervisor.
-- Read in #652's review, not reproduced: while the side file is at its limit, the supervisor's pause
-  loop asks the bucket whether it answers (`#bucketAnswers` in `packages/stream/src/supervisor.ts`)
-  through a store call nothing in that loop bounds by time, so a bucket that accepts the connection
-  and never replies may hold the pause open; a stop still ends it (`#unlessStopped`). Whether the S3
-  client's own settings bound that call was not checked.
-- The frozen-server stage records its sales with `recordOneSale`, which opens a second store with its
-  own write queue, so none of them waits behind the server's `checkpointTruncate`.
+- **DONE (2026-09-26, lane A's A37): the pause runs end to end.**
+  `apps/server/src/stream-pause.e2e.test.ts` freezes the bucket and has three concurrent sellers on one till
+  session sell through the server's own sale route while the side file passes a 16 MiB limit
+  (`startServer`'s third argument, a test seam), the real supervisor stops the real Litestream, the server folds the file back in its
+  own write queue and the pause holds; every sale beats the bound, and once the bucket is let run the
+  stream resumes into the same generation, which a restore shows holds a sale made during the pause
+  ([testing-guide.md](developers/testing-guide.md), "The stream pause test"). Left open: whether a
+  sale's write waited behind the fold-back, rather than landing before it, is not observed, and the
+  fold-back of a 256 MiB file is still timed only by the bench rig (results note, 1b), not through
+  the supervisor.
+- **DONE (2026-09-26, A37): the pause's bucket question is bounded.** Reproduced first: the S3 client
+  sets no request timeout, and a listing sent to a server that accepts and never replies was still
+  pending after 20,000 ms (`@smithy/node-http-handler` 4.12.1); a supervisor case whose first
+  question during the pause never settles failed with nothing left asleep. Each question
+  (`#bucketAnswers`, `packages/stream/src/supervisor.ts`) now gives up after `READ_DEADLINE_MS` and
+  the pause asks again. A server frozen with `SIGSTOP` answers after `SIGCONT` anyway: the pause test
+  read `streaming` 253 ms after it.
+- **Open, found by A37: the stream's other bucket calls have no time bound either.** Measured: the S3
+  client sets no request timeout (above; the earlier entry "The bucket client sets no time limit of its
+  own" lists the calls that are bounded). Read in `packages/stream/src/supervisor.ts`, not run: while
+  opening, the probe, the pointer read, the generation claim and the pointer write are awaited with
+  no deadline, so a bucket that takes the connection and never replies would leave the stream
+  `opening` after the bucket is back, until a stop or a reload; a prune that never settles leaves
+  `#pruning` set, so no later prune starts. Also read, not run: the pause's deadline and the
+  freshness read's stop waiting but cannot cancel the request, since `ObjectStore` calls take no
+  abort signal, and the handler's default agent allows 50 sockets (`maxSockets` in
+  `@smithy/node-http-handler` 4.12.1's `resolveDefaultConfig`), so enough requests abandoned on
+  connections that never close might leave later calls waiting for a socket. A request timeout on
+  the S3 client would bound all of them at once.
 
 **Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The
 owner's rule (2026-09-24) is that a change adding third-party code to the image carries its licence

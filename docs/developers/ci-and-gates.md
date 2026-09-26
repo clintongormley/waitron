@@ -681,16 +681,18 @@ file of its own, another bundler, or esbuild reached by path — is not flagged.
 so the other bundles the server's `build` makes, and `waitron-provision` (`dist/bin.js` in
 `packages/provisioning`), are not read by it.
 
-### `test-server`'s shards download two binaries for the stream loop test
+### `test-server`'s shards download two binaries for the stream loop and pause tests
 
 Each of the three `test-server` shards runs `node scripts/setup-litestream.mjs` and
 `node scripts/setup-s3-test-server.mjs` before its tests, because file sharding decides which shard
-gets `apps/server/src/stream-loop.e2e.test.ts`, and that test fails rather than skips in CI without
-them ([testing-guide.md](testing-guide.md), "The stream loop test skips locally without its two
-binaries, and a skip reads as a pass"). That is about 13.5 MB of
+gets `apps/server/src/stream-loop.e2e.test.ts` and `apps/server/src/stream-pause.e2e.test.ts`, and
+each fails rather than skips in CI without them ([testing-guide.md](testing-guide.md), "The stream
+loop test skips locally without its two binaries, and a skip reads as a pass"). That is about 13.5 MB of
 Litestream and 27.5 MB of versitygw per shard for linux/amd64 (the release APIs' `size` fields,
 read 2026-09-25), from GitHub's release downloads, each checked against a pinned SHA-256. The time
-it adds to a shard has not been measured.
+it adds to a shard has not been measured. The pause test took about 70 seconds on the owner's Mac
+(2026-09-26), most of it waiting for the stream's once-a-minute side-file measurement; its time on a
+CI shard has not been measured either.
 
 They are not cached. On 2026-09-25 `gh api repos/:owner/:repo/actions/cache/usage` reported
 11,174,362,480 bytes across 1,066 entries, and the plan's grouping of the entries on 2026-09-23 put

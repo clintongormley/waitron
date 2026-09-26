@@ -760,11 +760,12 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # The stream loop test (apps/server/src/stream-loop.e2e.test.ts) runs the pinned Litestream
-      # against versitygw as a child process, and fails rather than skips without them in CI. Every
-      # shard installs both because file sharding decides which shard runs it. Downloaded, not
-      # cached: the Actions cache is at its budget (docs/developers/ci-and-gates.md).
-      - name: Install the stream loop test's pinned binaries
+      # The stream loop and pause tests (apps/server/src/stream-loop.e2e.test.ts,
+      # apps/server/src/stream-pause.e2e.test.ts) run the pinned Litestream against versitygw as a
+      # child process, and fail rather than skip without them in CI. Every shard installs both
+      # because file sharding decides which shard runs each. Downloaded, not cached: the Actions
+      # cache is at its budget (docs/developers/ci-and-gates.md).
+      - name: Install the stream loop and pause tests' pinned binaries
         run: |
           set -euo pipefail
           node scripts/setup-litestream.mjs

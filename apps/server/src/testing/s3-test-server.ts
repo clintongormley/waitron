@@ -7,11 +7,11 @@ import { promisify } from "node:util";
 import { LITESTREAM_VERSION } from "@waitron/stream";
 import { isUnset } from "../env-value.js";
 
-// versitygw run as a plain child process: the S3-compatible server the stream loop test streams to,
-// plus the lookup of the litestream binary that test also needs. No package suite may start a
-// container (CLAUDE.md §4). Why versitygw, and the measurements behind the flags below, are in
-// docs/developers/testing-guide.md → "The stream loop test skips locally without its two binaries,
-// and a skip reads as a pass".
+// versitygw run as a plain child process: the S3-compatible server the stream loop and pause tests
+// stream to, plus the lookup of the litestream binary those tests also need. No package suite may
+// start a container (CLAUDE.md §4). Why versitygw, and the measurements behind the flags below, are
+// in docs/developers/testing-guide.md → "The stream loop test skips locally without its two
+// binaries, and a skip reads as a pass".
 
 /** Must equal `VERSITYGW_VERSION` in `scripts/setup-s3-test-server.mjs`; that script's suite reads this line. */
 export const VERSITYGW_VERSION = "1.8.0";
