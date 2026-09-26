@@ -2245,9 +2245,22 @@ address that answers is then asked for its paper sizes on port 631.
   approved by the owner and merged as #693 (§14 lists every change from Revision 1);
   [plan](superpowers/plans/2026-09-26-service-ordering-and-billing.md), Revision 2, eighteen tasks,
   reviewed three times before the merge. What stays open:
-  - **Task 0's [bill payments design](superpowers/specs/2026-09-26-bill-payments-design.md) awaits
-    the owner's approval**, with nine open points in its §11 (copied to lane B's questions file).
-    Task 14, several payments against one bill, does not start until it is approved.
+  - **Task 0's [bill payments design](superpowers/specs/2026-09-26-bill-payments-design.md) is
+    approved** (owner, 2026-09-26, PR #698), with the owner's answers to its open points (its §11):
+    the cash-up counts money on the day it moves, in Task 14 (§9a), and a card refund is a durable
+    attempt that survives an interrupted call (§6b). Task 14 waits only for its dependencies (Task 2
+    and lane C's M7b2), and its Step 0 checks the providers' documentation and the SumUp endpoint
+    before any implementation.
+  - **The card refund path records only after the provider call, with a fresh key each time**
+    (found by the owner reviewing Task 0, 2026-09-26). `reverseViaStripe`
+    (`packages/payments-stripe/src/reverse.ts`) sends a fresh `randomUUID()` idempotency key on
+    every call and writes `payment_refunds` only after the call returns, so a crash between the two
+    leaves no record, and a repeat would send a new key. SumUp's refund sends no key at all. No
+    product route refunds a card today; the only product caller is the reconciler's reversal of an
+    abandoned order's capture (`packages/payments-stripe/src/reconciler.ts`). Task 14 uses a
+    separate, durable path for refunds before the invoice (design §6b). **Next action:** give the
+    reconciler's reversal, and any post-invoice refund route when one is built, the same
+    durable-attempt rule.
   - **Task 1** (adjustment reasons and policies, a new module) is the one build task that can start
     now.
   - **Every other task waits for lane C's menus tasks that change the same order and till code**

@@ -1805,9 +1805,36 @@ Spec §6; D3, D16; the approved Task 0 design. **Payments and fiscal issuance: f
 and the owner reviews before landing.** This task's Files and Interfaces come from the approved
 design. The tests below are the minimum it must contain whatever the design decides.
 
+**Scope added by the owner's answers of 2026-09-26** (design §11), beyond the payment routes
+themselves:
+- **the cash-up** (design §9a): `packages/reporting/src/cash-up.ts` counts `bill_payments` on the day
+  and till they are received and completed `bill_payment_refunds` on the day and till they are
+  given back, and stops counting tenders that carry a `bill_payment_id`, so issuing the invoice
+  counts nothing twice; the frozen daily close (`record-daily-close.ts`) reconciles against it.
+  Its guard suites and the daily-close tests are in this task;
+- **durable card refunds** (design §6b): the refund row is written `pending` before the provider
+  call; the call carries a key derived from the row; recovery by retry, by the loop and by M7b2's
+  manager action; a pending refund locks the whole bill and holds back the invoice. **The
+  cross-package contract change** (design §6b): each card provider gains a refund call that does
+  NOT record (the existing `refund`, `partialRefund` and `reverseViaStripe` record in their own
+  transactions), taking a caller-given idempotency key and metadata; and `lookupRefund`, returning
+  the matched refund's id and OUTCOME (Stripe's refund `status`; SumUp's `REFUND` transaction event
+  and its `status`). The bill path stamps `sent_at` before the call, records an outcome only on the
+  evidence table of design §6b, and writes `payment_refunds` only in its own completion
+  transaction.
+  - **The cash-up's node scope and the refund-only till** (design §9a): bill payments and refunds
+    are scoped through their bill's node, and the close forces a count for every till that moved
+    any cash that day, whatever its net.
+
 - [ ] **Step 0: Read the approved design** (`docs/superpowers/specs/2026-09-26-bill-payments-design.md`)
-  and re-map the payment path after M7b2. Write this task's Files and Interfaces into the ledger
-  before any test.
+  and re-map the payment path after M7b2. Read Stripe's current documentation for how long it keeps
+  an idempotency key, and call SumUp's transaction endpoint with the venue's credentials to confirm
+  the `REFUND` events and statuses its documentation describes, and which permission it needs;
+  and, for each card provider, which error responses its own documentation says mean a refund was
+  NOT created (the documented-refusal list of design §6b; Stripe's own error page says rate
+  limiting, a missing key and most 400s run before its idempotency layer); record all three, with
+  the source's own words, in the ledger (design §6b depends on them). Write this task's Files
+  and Interfaces into the ledger before any test.
 - [ ] **Step 1: Write the failing tests:**
   - **Change versus tip (§12 item 7):**
     - selected items €40.00, cash €50.00: €40.00 applied, €10.00 change, tip €0.00;
@@ -1846,6 +1873,13 @@ design. The tests below are the minimum it must contain whatever the design deci
   - **An id reused for a different request (D8):** a payment `submission_id` resent with a changed
     amount, with other lines named, or on a refund instead of a payment is `submission.id_reused`,
     and nothing is written.
+  - **Every acceptance test in design §8**, including 17–23 (an interrupted card refund completed
+    by lookup without a second request, each provider outcome through each resolver, the call's own
+    answer settling only its own send, never-sent versus sent-but-not-found, no Stripe resend after
+    24 hours, the manager's confirmed outcome, and the invoice
+    waiting for a pending refund) and 24–27 (the cash-up counting money on the day and till it
+    moved, a refund on another day and till, today's paths unchanged, and a zero-net cash till
+    still counted).
 
   Run them: they FAIL.
 - [ ] **Step 2: Implement.** Step 3: run `apps/server`, `packages/core`, `packages/payments*` and
