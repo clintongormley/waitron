@@ -425,6 +425,9 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
       own ticket row, copied from the original, and the original's quantity drops by the part
       moved; a started line may be split, while edits of it stay refused; the split tells the
       kitchen nothing.
+      _2026-09-26, the owner's answer to item 4: a split onto a check still tells the kitchen
+      nothing, but sent work moved to another table records a MOVED notice and prints a MOVED
+      slip — spec §11.5's dated note._
     - **With the venue setting off** (owner, 2026-09-25: the setting is for a paper-only kitchen,
       which never reports "started", so a recall slip cannot be trusted either), a line that was
       ever sent to a station (`sent_at` set AND a ticket row exists) is refused `ticket.already_fired`
@@ -1687,6 +1690,9 @@ call, and its tests drive them directly.
     from the original, at the quantity moved, and the source's ticket drops by that quantity; a
     partial split of a `preparing` or `ready` line succeeds, edits of either row stay refused
     `ticket.already_started`, and the split writes no notice and no print job.
+    **Changed 2026-09-26 (the owner's answer to item 4):** a split onto a check still writes
+    neither; a transfer or unjoin that takes sent work to another table writes a MOVED notice and
+    slip (below).
   - **Kitchen, sent and not started:**
     - a fired tab line (`state = 'queued'`) changed to "no onions" through
       `PUT /api/working-orders/:id/lines/:lineNo` gets a RECALLED notice AND slip for the old ticket
@@ -1713,6 +1719,12 @@ call, and its tests drive them directly.
     recall, a void and a change each leave a notice `listStationNotices` returns, and
     `enqueuePrintJob` is never called. With a printer: notice AND slip. Acknowledging removes it;
     an unknown id is `kitchen_notice.not_found`.
+  - **Moved** (added 2026-09-26, the owner's answer to item 4, spec §11.5's dated note): sent work
+    that `transferLines` (whole or part), `unjoinTable`, `moveTab`, `mergeTabs` or `moveTabLines`
+    takes to another table records a `moved` notice, with `movedTo` the table it now belongs to,
+    at the quantity its ticket asks for, and prints a MOVED slip naming both tables, and both order
+    numbers where they differ; held work and a move that keeps the table (a split onto a check, a
+    check merged back into its tab) record nothing.
   - **Revision:** two edits made from the same revision — the first lands and the second is refused
     as out of date, with nothing changed. The till reloads the order and shows a message (spec §10.7
     example 2).
@@ -1770,7 +1782,8 @@ Browser tests in real Chromium. It depends on Task 7b's routes and needs no publ
     void route with `quantity=1`.
   - **Kitchen screen notices:** a stubbed queue answer with two notices renders them above the
     items in order, the void of a started item reads "started", text and an icon distinguish the
-    three kinds (never colour alone), Acknowledge calls the route and removes the row, and the
+    three kinds (never colour alone; 2026-09-26: four, with `moved`, which names its `movedTo`
+    table — Task 7b's Moved step), Acknowledge calls the route and removes the row, and the
     screen re-fetches on the 15-second timer (fake timers, advanced past an awaited frame per
     CLAUDE.md §4).
   - **The a11y tests** cover the Change editor, the partial-cancel dialog, and the notices strip

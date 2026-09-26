@@ -370,14 +370,10 @@ finds, none of them puts a photo on a menu's own list: in `packages/catalogue/sr
 inserts create library sections and the update refuses any other, and none of the writes outside
 that file sets an image. So when Task 3 lets a menu's list carry a photo, link it to the menu editor or
 narrow the link to library sections.
-**A paper kitchen hears of no table change.** Sent work reaches another table in several ways: a
-line transfer, whole or part, and unjoining a table move the line, or the part moved, with its
-ticket onto another tab; merging tabs moves the source tab's lines and tickets onto the other tab;
-moving a tab moves the table's pointer, and the ticket stays on its order. None of them prints a
-slip or records a notice, so a printed slip keeps naming the old table. Of the kitchen screens only
-the pass board shows a table, read afresh at each load (`listExpoQueue`); the station screen's queue
-carries the order's number and its own label, which a tab is opened without. Build a printed MOVED
-slip for every such path (owner question, 2026-09-26, recorded in lane C's questions).
+**A joined tab's kitchen slips can name a table its ticket did not print.** Correction and MOVED
+slips name a joined tab's lowest-id table (`readOrderHeader`, `apps/server/src/kitchen-print.ts`),
+so after a join a MOVED slip's "from" can name the other table; recording each ticket's printed
+table would fix it.
 
 **Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
 shared look, and the rules for it live in [design-system.md](developers/design-system.md). That
