@@ -5620,13 +5620,16 @@ instead that a longer key has to be set there (`stream.error.recovery_key_too_sh
 until the Backups screen's first status read succeeds it names neither
 (`stream.error.recovery_key_too_short_unknown`); in English and Spanish (2026-09-26, lane A's A35,
 #666). The refusal code is unchanged and the message does
-not link or scroll to the button. Since lane A's A49 (2026-09-26) the screen asks for a key from its
+not link or scroll to the button. Since lane A's A49 (2026-09-26, #684) the screen asks for a key from its
 status watcher on any status read rather than only the first: at most once, and only while the
 screen has made none and the first load's own conditions hold (primary, settings not owned by the
 environment, no usable held key). So a first status read that fails and a later one that succeeds
 now gets a key, and a refresh never replaces a key the screen made. The watcher shares a pending key
 request with Apply and Rotate, and a failed status read's alert clears when a later one succeeds;
-the owner ruled that CLAUDE.md §3's observer rule protects the shown key, and it now says so. Left
+the owner ruled that CLAUDE.md §3's observer rule protects the shown key, and it now says so.
+Starting Apply or Rotate no longer clears a failed status read's alert, so after an Apply that
+reuses the held key (which asks for no fresh status) it stays until the next timed status read —
+`getBackupStatus` refreshes every 10 seconds (`apps/dashboard/src/api/live-queries.ts`). Left
 open: the panel picks its message from `managedByEnvironment` alone, so with a key hand-edited too
 short in `backup.env` it can name a button that does not help: with archives on it names a button
 that is not shown (the status reads the running settings' still-long key, and the form shows only
