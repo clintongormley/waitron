@@ -166,9 +166,9 @@ should ignore capitals (today "Alcoholic" and "alcoholic" can both exist — a s
 label routes and `?descendants=1` on a category's products have no dashboard caller yet.
 **Classification Task 2 landed as #648 (2026-09-25):**
 every till filing path records each sale line's product, a variant's parent, its menu, its gross
-and its reporting chain and labels when the record is issued. `sale_lines.menu_version_id` stays
-null on every line until the menus plan's Task 7 (sell from the published version) fills it; that
-task wires it, because it lands second.
+and its reporting chain and labels when the record is issued. Since menus Task 7,
+`sale_lines.menu_version_id` is the menu version the line was added from
+(`working_line_contexts.menu_version_id`); a line added before Task 7 recorded none and files null.
 Two follow-ups it leaves: the till shows "try again" when `sale_classification.invalid` refuses a sale (it happens only on corrupt category data, and retrying cannot succeed), so the code wants its own till message on the permanent-refusal list; and a card recovery refused that way leaves a captured payment unlinked until the catalogue is fixed, as recovery's existing below-locked-total refusal already does. The demo seed (`apps/server/scripts/demo-seed/seed-sales.ts`), the other scripts that call `recordSale` directly (`record-one-sale.ts`, `settle-invoice-first.ts`, `daily-close-demo.ts`, `daily-close-z-demo.ts`, `modelo-303-demo.ts`) and `apps/server/src/fiscal-readiness-runner.ts` file sales without the issuance pass, so seeded demo lines carry no product id, classification or gross, and the spec's category reports would show every one as Not recorded — classification Task 3 cannot measure its reports on seeded sales until the seed records them.
 **Menus Task 1 (sections), landed as #651 (2026-09-25):**
 reusable, ordered, nestable sections (`sections`, `section_members`), with section and member
@@ -248,8 +248,8 @@ window is resized while it is open.
 **Menus Task 6 (publishing), landed as #677 (2026-09-26):** a menu can be published: publishing
 freezes the menu's working state as a numbered version in `menu_versions`, which can never be
 changed or deleted, and points `menu_publications` at it; the Menus list shows each menu's status and
-a Preview tab words each change and publishes the one menu. **Tills still
-sell from the working state until menus Task 7.** **M6c** (#705, 2026-09-26): an extras item's photo
+a Preview tab words each change and publishes the one menu. Tills sell from the published version
+since menus Task 7. **M6c** (#705, 2026-09-26): an extras item's photo
 is in the frozen copy, so changing it flags every menu offering it; deleting a product flags its
 menus; and the Preview tab shows the whole proposed menu below the changes. A version published before M6c has no photo on its extras items, so each
 menu with extras shows unpublished changes until it is published again. Left, none blocking: after a
@@ -321,6 +321,23 @@ before building, as the PR records. No migration. Left open: if the waiter leave
 itself answers, the bill arrives after they have gone and is not merged back (it stays in Held
 orders); and the counter's Held orders list shows every open order, a table's own tab included
 (seen in the same run, not investigated).
+**Menus Task 7 (tills sell from the published version), on `feat/menus-sell-published`:** a till
+is offered, and every new line is charged, what each menu's published version says: the dish, its
+variant, its extras and its options. Only availability is read from the current rows: a sold-out
+dish is served in its place marked unavailable, and a line for it is refused `product.unavailable`;
+an extras item sold out or switched off on the offer is refused as a pick the list does not offer.
+Each unsaved line a till sends may name the version it was priced against (`menuVersionId`); a
+request naming one that is no longer live is refused `menu.version_changed` (409), listing each
+affected menu's live version, before anything is priced or written. A held or tab line records the
+version it was added from, and its filed sale line carries that version. `GET /api/menu-state?zoneId=`
+answers each live version and what is sold out now. **Upgrading:** a box or dev venue seeded before
+this branch, and a venue imported from a configuration file, sells nothing until each of its menus
+is published; the dashboard's readiness list says so (`zone.menu_unpublished`). Left open:
+`/api/menu-state` runs inside `withTransaction`, the venue's write lock, because there is no
+read-only transaction (`packages/db/src/tenancy.ts` offers only `withTransaction`), so every poll
+takes a turn of it; and a till learns of a change only by polling, because the dashboard's
+live-update route accepts the management cookie only — a till-session branch on that route would let
+the server tell tills instead (plan D11), a later refinement.
 **M7b2 landed (#702, 2026-09-26): a manager can clear a card payment a crash left running.** The
 Payments screen lists open orders locked by a card payment nothing is finishing any more, and "Check
 with the card provider" files the sale once if the card was charged, marks the payment failed and
