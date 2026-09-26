@@ -2028,8 +2028,16 @@ async function carveOffLines(
       variantDescriptions: workingOrderLines.variantDescriptions,
       variantKitchenName: workingOrderLines.variantKitchenName,
       kitchenName: workingOrderLines.kitchenName,
+      sentAt: workingOrderLines.sentAt,
+      servedAt: workingOrderLines.servedAt,
+      courseId: workingOrderLines.courseId,
+      note: workingOrderLines.note,
+      extraListId: workingOrderLines.extraListId,
+      ticketItemId: ticketItems.id,
+      ticketState: ticketItems.state,
     })
     .from(workingOrderLines)
+    .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(eq(workingOrderLines.workingOrderId, fromTabId))
     .orderBy(workingOrderLines.lineNo);
   const sourceLines = sourceRows.map((l) => ({
@@ -2097,6 +2105,11 @@ async function carveOffLines(
       if (childLineNos.length > 0) {
         throw new AppError("tab.transfer_modifier_line", { tabId: fromTabId, lineNo: t.lineNo });
       }
+      // The split row gets no ticket item of its own, so nothing would guard it while the cook
+      // works on the source's.
+      if (line.ticketState === "preparing" || line.ticketState === "ready") {
+        throw new AppError("ticket.already_started", { ticketItemId: line.ticketItemId! });
+      }
       partials.push({ line, quantity: t.quantity });
     }
   }
@@ -2150,6 +2163,13 @@ async function carveOffLines(
         variantDescriptions: line.variantDescriptions,
         variantKitchenName: line.variantKitchenName,
         kitchenName: line.kitchenName,
+        // The ticket item stays with the source line at the quantity fired, so the kitchen still
+        // makes the whole; the split row carries the facts that decide what it may be.
+        sentAt: line.sentAt,
+        servedAt: line.servedAt,
+        courseId: line.courseId,
+        note: line.note,
+        extraListId: line.extraListId,
       });
       await VENUE_SERVICE.copyLineContext(tx, cfg, line.id, splitLineId);
     }

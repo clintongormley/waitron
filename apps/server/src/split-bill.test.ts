@@ -6,6 +6,7 @@ import {
   diningTables,
   locations,
   tableServiceStatuses,
+  ticketItems,
   tills,
   withTransaction,
   workingOrderLines,
@@ -14,7 +15,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -26,18 +27,24 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
+  thousandthsToDecimal,
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createTable, setTableStatus } from "./tables.js";
 import {
+  addTabRound,
+  advanceTicketItem,
   createOpenOrder,
   joinTable,
+  listStationQueue,
+  markLineServed,
   openTab,
   splitOffCheck,
   priceStoredOrder,
   unjoinTable,
 } from "./working-order.js";
+import { createCourse } from "./kitchen.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
@@ -554,5 +561,111 @@ it("retains the frozen options answers and the frozen names when a dish quantity
     expect(check.lines[0]!.quantity).toBe("1.000");
     expect(source.total).toBe("3.00");
     expect(check.total).toBe("1.50");
+  });
+});
+
+/** A default kitchen station, with each product's route re-pointed at it, so a round fires there. */
+async function withKitchen(cfg: TillConfig): Promise<string> {
+  const stationId = await seedKitchenStation(db, { locationId: cfg.locationId });
+  const offers = await asApp(cfg, (tx) => offerProducts(tx, cfg, { zone: "tables" }));
+  offersByCfg.set(cfg, offers);
+  return stationId;
+}
+
+/** Each line of an order in `line_no` order, with its ticket item, if any. */
+async function linesWithTickets(orderId: string) {
+  return db
+    .select({
+      id: workingOrderLines.id,
+      quantity: workingOrderLines.quantity,
+      sentAt: workingOrderLines.sentAt,
+      servedAt: workingOrderLines.servedAt,
+      courseId: workingOrderLines.courseId,
+      note: workingOrderLines.note,
+      extraListId: workingOrderLines.extraListId,
+      ticketId: ticketItems.id,
+      ticketOrderId: ticketItems.workingOrderId,
+      ticketQuantity: ticketItems.quantity,
+      ticketState: ticketItems.state,
+    })
+    .from(workingOrderLines)
+    .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .where(eq(workingOrderLines.workingOrderId, orderId))
+    .orderBy(workingOrderLines.lineNo);
+}
+
+describe("splitting a line the kitchen has", () => {
+  it("copies the sent and served marks, course and note to the split row, and leaves the ticket at the quantity fired", async () => {
+    const { cfg, aguaId, tableId } = await setupVenue();
+    const stationId = await withKitchen(cfg);
+    const course = await asApp(cfg, (tx) =>
+      createCourse(tx, cfg, { name: "Principales", displayOrder: 1 }),
+    );
+    const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        {
+          menuItemId: offersByCfg.get(cfg)!.offerFor(aguaId),
+          quantity: "3",
+          courseId: course.id,
+          note: "sin hielo",
+        },
+      ]),
+    );
+    await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1));
+
+    const { checkId } = await asApp(cfg, (tx) =>
+      splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+    );
+
+    const [source] = await linesWithTickets(tabId);
+    const [split] = await linesWithTickets(checkId);
+    expect(source!.sentAt).not.toBeNull();
+    expect(source!.servedAt).not.toBeNull();
+    expect(split).toMatchObject({
+      quantity: 1000,
+      sentAt: source!.sentAt,
+      servedAt: source!.servedAt,
+      courseId: course.id,
+      note: "sin hielo",
+      extraListId: null,
+      ticketId: null,
+    });
+    // The ticket stays with the source line, at the three the kitchen was asked for.
+    expect(source).toMatchObject({ quantity: 2000, ticketOrderId: tabId, ticketQuantity: 3000 });
+    const [group] = await asApp(cfg, (tx) => listStationQueue(tx, stationId));
+    expect(group!.items.map((item) => item.quantity)).toEqual([thousandthsToDecimal(3000)]);
+  });
+
+  it("refuses a partial split of a line the kitchen has started, and moves the whole line with its ticket", async () => {
+    const { cfg, aguaId, tableId } = await setupVenue();
+    await withKitchen(cfg);
+    const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { menuItemId: offersByCfg.get(cfg)!.offerFor(aguaId), quantity: "2" },
+      ]),
+    );
+    const [line] = await linesWithTickets(tabId);
+    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, line!.ticketId!, "preparing"));
+
+    await expect(
+      asApp(cfg, (tx) => splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }])),
+    ).rejects.toMatchObject({
+      code: "ticket.already_started",
+      params: { ticketItemId: line!.ticketId },
+    });
+    expect((await linesWithTickets(tabId))[0]).toMatchObject({ quantity: 2000 });
+
+    const { checkId } = await asApp(cfg, (tx) => splitOffCheck(tx, cfg, tabId, [{ lineNo: 1 }]));
+
+    expect(await linesWithTickets(tabId)).toEqual([]);
+    expect((await linesWithTickets(checkId))[0]).toMatchObject({
+      id: line!.id,
+      quantity: 2000,
+      ticketId: line!.ticketId,
+      ticketOrderId: checkId,
+      ticketState: "preparing",
+    });
   });
 });
