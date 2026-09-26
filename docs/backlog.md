@@ -5846,7 +5846,7 @@ line with what slice 2 built. Left open:
 - Linux is covered by one CI run only: #652's first (2026-09-25, run 36173603563), where each
   `test-server` shard's install step took about two seconds by GitHub's whole-second step
   timestamps, and the loop test passed in 15,989 ms with no test skipped in the merged report.
-- **DONE (2026-09-26, lane A's A37): the pause runs end to end.**
+- **DONE (2026-09-26, lane A's A37, #668): the pause runs end to end.**
   `apps/server/src/stream-pause.e2e.test.ts` freezes the bucket and has three concurrent sellers on one till
   session sell through the server's own sale route while the side file passes a 16 MiB limit
   (`startServer`'s third argument, a test seam), the real supervisor stops the real Litestream, the server folds the file back in its
@@ -5856,7 +5856,7 @@ line with what slice 2 built. Left open:
   sale's write waited behind the fold-back, rather than landing before it, is not observed, and the
   fold-back of a 256 MiB file is still timed only by the bench rig (results note, 1b), not through
   the supervisor.
-- **DONE (2026-09-26, A37): the pause's bucket question is bounded.** Reproduced first: the S3 client
+- **DONE (2026-09-26, A37, #668): the pause's bucket question is bounded.** Reproduced first: the S3 client
   sets no request timeout, and a listing sent to a server that accepts and never replies was still
   pending after 20,000 ms (`@smithy/node-http-handler` 4.12.1); a supervisor case whose first
   question during the pause never settles failed with nothing left asleep. Each question
@@ -5875,6 +5875,14 @@ line with what slice 2 built. Left open:
   `@smithy/node-http-handler` 4.12.1's `resolveDefaultConfig`), so enough requests abandoned on
   connections that never close might leave later calls waiting for a socket. A request timeout on
   the S3 client would bound all of them at once.
+- **Open, left by #668 (A37): two things about the pause test and its deadline.** (1) The test's
+  fill of the side file to 16 MiB took 82 s and 895 sales on CI (run for head `464d9eca7`) against
+  its 180 s allowance, about 13 KB a sale, where a local run wrote about 79 KB a sale; why the growth
+  per sale differs so much was not tested (Litestream's own checkpoints reusing the file is the
+  guess), so if the test turns unreliable on CI that margin is where to look. It also took 133.8 s of
+  the `test-server (3)` shard. (2) When the pause's bucket question gives up at its deadline, nothing
+  is logged, while the supervisor's other two deadlines log; the old code logged nothing on a refusal
+  either, so adding a log event is left to the owner.
 
 **Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The
 owner's rule (2026-09-24) is that a change adding third-party code to the image carries its licence
