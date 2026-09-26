@@ -6558,8 +6558,8 @@ line with what slice 2 built. Left open:
   the bucket's error name when it is on the fixed list in `packages/stream/src/bucket-error-names.ts`
   (the S3 API Reference's list of error codes, one name from the PutObject page, and the names
   `s3-store.ts` gives an answer it refused) and `other` when it is not, so a 200 line now names a
-  listed error found inside the answer. Not covered by A60, and **DONE by lane B's A62 (#707, 2026-09-26)
-  (2026-09-26):** the error itself now carries the vetted name —
+  listed error found inside the answer. Not covered by A60, and **DONE by lane B's A62
+  (#707, 2026-09-26):** the error itself now carries the vetted name —
   `requestFailed` in `packages/stream/src/s3-store.ts` stores what `loggableErrorName` answers, so
   `backup.stream_request_failed`'s `name` from the S3 store is a listed name or `other`. Shown by
   `s3-store.test.ts` (an unlisted, a secret-looking and a markup-bearing name, on a refused
