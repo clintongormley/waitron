@@ -15,6 +15,7 @@ import { seedNode } from "@waitron/db/testing/seed.js";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { startManagementSession } from "@waitron/identity";
 import {
+  MAX_REVOKED,
   routableServers,
   verifyMembershipDocument,
   type MembershipNode,
@@ -106,6 +107,12 @@ async function remove(p: Primary, nodeId: string, cookie?: string): Promise<Resp
   return p.app.request(`/management-api/servers/${nodeId}/remove`, { method: "POST", headers });
 }
 
+async function clear(p: Primary, nodeId: string, cookie?: string): Promise<Response> {
+  const headers: Record<string, string> = {};
+  if (cookie !== undefined) headers["cookie"] = cookie;
+  return p.app.request(`/management-api/servers/${nodeId}/clear`, { method: "POST", headers });
+}
+
 async function list(p: Primary, cookie?: string): Promise<Response> {
   const headers: Record<string, string> = {};
   if (cookie !== undefined) headers["cookie"] = cookie;
@@ -121,6 +128,31 @@ async function removals(db: Database): Promise<Record<string, unknown>[]> {
     sql`select removed_node_id, contact_url, person_id, term from membership_removals`,
   );
   return rows;
+}
+
+async function clearances(db: Database): Promise<Record<string, unknown>[]> {
+  const { rows } = await db.execute<Record<string, unknown>>(
+    sql`select cleared_node_id, person_id, term from membership_clearances`,
+  );
+  return rows;
+}
+
+function evicted(nodeId: string = randomUUID(), contactUrl = CLOUD_URL): MembershipNode {
+  return { nodeId, contactUrl, standing: "evicted" };
+}
+
+/** Holds the next chart with `revoked` as its revoked list, minted and signed by this node. */
+async function holdChartRevoking(
+  p: Primary,
+  nodes: readonly MembershipNode[],
+  revoked: readonly string[],
+): Promise<void> {
+  const held = await readNodeMembership(p.db);
+  const document = await mintNextMembershipDocument(
+    { db: p.db, ring: RING },
+    { heldDocument: held, nodes, signerNodeId: p.nodeId, revoked },
+  );
+  await writeNodeMembership(p.db, document);
 }
 
 async function heldTerm(db: Database): Promise<number | undefined> {
@@ -406,6 +438,288 @@ describe("POST /management-api/servers/:nodeId/remove", () => {
       });
       expect(await heldTerm(p.db)).toBe(seedTerm);
       expect(await removals(p.db)).toEqual([]);
+    });
+  });
+});
+
+describe("POST /management-api/servers/:nodeId/remove on a cleared machine", () => {
+  it("answers removed:false for an id the chart has cleared, without re-signing or a record", async () => {
+    const p = await primary();
+    const gone = evicted();
+    await holdChartRevoking(p, [self(p)], [gone.nodeId]);
+    const held = await readNodeMembership(p.db);
+
+    const res = await remove(p, gone.nodeId, p.adminCookie);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ removed: false, term: held!.body.term });
+    expect(await readNodeMembership(p.db)).toEqual(held);
+    expect(await removals(p.db)).toEqual([]);
+  });
+});
+
+describe("POST /management-api/servers/:nodeId/clear", () => {
+  it("moves a removed machine from the chart's machines to its revoked list in a new chart this node signs, and records who did it", async () => {
+    const p = await primary();
+    const gone = evicted();
+    const live = standby(randomUUID(), "https://live.deli.test");
+    await holdChartRevoking(p, [self(p), gone, live], []);
+    const before = (await readNodeMembership(p.db))!;
+
+    const res = await clear(p, gone.nodeId, p.adminCookie);
+
+    expect(res.status).toBe(200);
+    const term = before.body.term + 1;
+    expect(await res.json()).toEqual({ cleared: true, term });
+    const after = (await readNodeMembership(p.db))!;
+    expect(after.body).toEqual({ term, nodes: [self(p), live], revoked: [gone.nodeId] });
+    expect(after.signerNodeId).toBe(p.nodeId);
+    const verdict = verifyMembershipDocument(after, { [p.nodeId]: p.publicKey });
+    expect(verdict.valid ? "valid" : verdict.reason).toBe("valid");
+    expect(await clearances(p.db)).toEqual([
+      { cleared_node_id: gone.nodeId, person_id: p.adminPersonId, term },
+    ]);
+    expect(await removals(p.db)).toEqual([]);
+    expect(p.lines).toEqual([
+      {
+        level: "info",
+        event: "membership.node_cleared",
+        fields: { nodeId: gone.nodeId, term, personId: p.adminPersonId },
+      },
+    ]);
+  });
+
+  it("keeps the ids an earlier clearing revoked", async () => {
+    const p = await primary();
+    const earlier = randomUUID();
+    const gone = evicted();
+    await holdChartRevoking(p, [self(p), gone], [earlier]);
+
+    expect((await clear(p, gone.nodeId, p.adminCookie)).status).toBe(200);
+
+    expect((await readNodeMembership(p.db))!.body.revoked).toEqual([earlier, gone.nodeId]);
+  });
+
+  it("answers an already-cleared machine cleared:false, without re-signing the chart or a second record", async () => {
+    const p = await primary();
+    const gone = evicted();
+    await holdChartRevoking(p, [self(p), gone], []);
+    expect((await clear(p, gone.nodeId, p.adminCookie)).status).toBe(200);
+    const held = await readNodeMembership(p.db);
+
+    const again = await clear(p, gone.nodeId, p.adminCookie);
+
+    expect(again.status).toBe(200);
+    expect(await again.json()).toEqual({ cleared: false, term: held!.body.term });
+    expect(await readNodeMembership(p.db)).toEqual(held);
+    expect(await clearances(p.db)).toHaveLength(1);
+  });
+
+  describe("refusals leave the chart and the record untouched", () => {
+    async function expectRefused(
+      p: Primary,
+      nodeId: string,
+      status: number,
+      code: string,
+    ): Promise<{ code: string; params: unknown }> {
+      const before = await readNodeMembership(p.db);
+      const res = await clear(p, nodeId, p.adminCookie);
+      expect(res.status).toBe(status);
+      const error = await errorOf(res);
+      expect(error.code).toBe(code);
+      expect(await readNodeMembership(p.db)).toEqual(before);
+      expect(await clearances(p.db)).toEqual([]);
+      return error;
+    }
+
+    it("refuses a live standby as membership.node_not_removed (409)", async () => {
+      const p = await primary();
+      const live = standby();
+      await holdChart(p, [self(p), live]);
+      await expectRefused(p, live.nodeId, 409, "membership.node_not_removed");
+    });
+
+    it("refuses a former primary (sell-only) as membership.node_not_removed (409)", async () => {
+      const p = await primary();
+      const former: MembershipNode = {
+        nodeId: randomUUID(),
+        contactUrl: "https://old.deli.test",
+        standing: "sell-only",
+      };
+      await holdChart(p, [self(p), former]);
+      await expectRefused(p, former.nodeId, 409, "membership.node_not_removed");
+    });
+
+    it("refuses this node, the serving primary, as membership.node_is_primary (409)", async () => {
+      const p = await primary();
+      await holdChart(p, [self(p), evicted()]);
+      await expectRefused(p, p.nodeId, 409, "membership.node_is_primary");
+    });
+
+    it("refuses an id the chart does not list as membership.node_not_found (404)", async () => {
+      const p = await primary();
+      await holdChart(p, [self(p), evicted()]);
+      await expectRefused(p, randomUUID(), 404, "membership.node_not_found");
+    });
+
+    it("refuses any id as membership.node_not_found (404) when no chart is held", async () => {
+      const p = await primary();
+      expect(await readNodeMembership(p.db)).toBeNull();
+      await expectRefused(p, randomUUID(), 404, "membership.node_not_found");
+    });
+
+    it("refuses on a node that is not the chart's serving primary as membership.not_primary (409), even for a removed machine", async () => {
+      const p = await primary();
+      const gone = evicted();
+      await holdChart(p, [
+        {
+          nodeId: randomUUID(),
+          contactUrl: "https://elsewhere.deli.test",
+          standing: "serving-primary",
+        },
+        { ...self(p), standing: "serving-secondary" },
+        gone,
+      ]);
+      await expectRefused(p, gone.nodeId, 409, "membership.not_primary");
+    });
+
+    it("refuses when the revoked list is full as membership.chart_too_large (409)", async () => {
+      const p = await primary();
+      const gone = evicted();
+      const full = Array.from({ length: MAX_REVOKED }, () => randomUUID());
+      await holdChartRevoking(p, [self(p), gone], full);
+
+      const error = await expectRefused(p, gone.nodeId, 409, "membership.chart_too_large");
+
+      expect(error.params).toEqual({ list: "revoked", count: MAX_REVOKED + 1, limit: MAX_REVOKED });
+    });
+  });
+
+  describe("who may clear", () => {
+    it("refuses a request with no dashboard session as management_session.required (401)", async () => {
+      const p = await primary();
+      const gone = evicted();
+      await holdChart(p, [self(p), gone]);
+      const before = await readNodeMembership(p.db);
+
+      const res = await clear(p, gone.nodeId);
+
+      expect(res.status).toBe(401);
+      expect((await errorOf(res)).code).toBe("management_session.required");
+      expect(await readNodeMembership(p.db)).toEqual(before);
+    });
+
+    it("refuses a manager (no mirror.create) as authorization.not_permitted (403), for a real id and an unknown one alike", async () => {
+      const p = await primary();
+      const gone = evicted();
+      await holdChart(p, [self(p), gone]);
+      const before = await readNodeMembership(p.db);
+
+      for (const nodeId of [gone.nodeId, randomUUID()]) {
+        const res = await clear(p, nodeId, p.managerCookie);
+        expect(res.status).toBe(403);
+        expect((await errorOf(res)).code).toBe("authorization.not_permitted");
+      }
+      expect(await readNodeMembership(p.db)).toEqual(before);
+      expect(await clearances(p.db)).toEqual([]);
+    });
+  });
+
+  describe("the term-guarded chart write", () => {
+    it("re-reads and re-signs when a newer chart lands between its read and its write, keeping the machine that chart added", async () => {
+      const p = await primary();
+      const gone = evicted();
+      await holdChart(p, [self(p), gone]);
+      const seedTerm = (await heldTerm(p.db))!;
+      const added = standby(randomUUID(), "https://added.deli.test");
+      await p.db.execute(sql.raw("create table test_newer_landed (done integer)"));
+      await p.db.execute(
+        sql.raw(
+          `create trigger test_membership_newer_lands before update on node_membership
+           when not exists (select 1 from test_newer_landed)
+           begin
+             insert into test_newer_landed values (1);
+             update node_membership set term = term + 1,
+               document = json_insert(
+                 json_set(document, '$.body.term', term + 1),
+                 '$.body.nodes[#]',
+                 json('${JSON.stringify(added)}')
+               ) where id = 1;
+             select raise(ignore);
+           end`,
+        ),
+      );
+      let res: Response;
+      try {
+        res = await clear(p, gone.nodeId, p.adminCookie);
+      } finally {
+        await p.db.execute(sql.raw("drop trigger test_membership_newer_lands"));
+        await p.db.execute(sql.raw("drop table test_newer_landed"));
+      }
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ cleared: true, term: seedTerm + 2 });
+      const after = (await readNodeMembership(p.db))!;
+      expect(after.body).toEqual({
+        term: seedTerm + 2,
+        nodes: [self(p), added],
+        revoked: [gone.nodeId],
+      });
+      const verdict = verifyMembershipDocument(after, { [p.nodeId]: p.publicKey });
+      expect(verdict.valid ? "valid" : verdict.reason).toBe("valid");
+      expect(await clearances(p.db)).toEqual([
+        expect.objectContaining({ cleared_node_id: gone.nodeId, term: seedTerm + 2 }),
+      ]);
+    });
+
+    it("commits the chart and its clearance record together: a refused record leaves the chart unmoved", async () => {
+      const p = await primary();
+      const gone = evicted();
+      await holdChart(p, [self(p), gone]);
+      const before = await readNodeMembership(p.db);
+      await p.db.execute(
+        sql.raw(
+          `create trigger test_clearance_refused before insert on membership_clearances
+           begin select raise(abort, 'test: clearance record refused'); end`,
+        ),
+      );
+      let res: Response;
+      try {
+        res = await clear(p, gone.nodeId, p.adminCookie);
+      } finally {
+        await p.db.execute(sql.raw("drop trigger test_clearance_refused"));
+      }
+
+      expect(res.status).toBe(500);
+      expect(await res.json()).toEqual({ error: { code: "server.internal" } });
+      expect(await readNodeMembership(p.db)).toEqual(before);
+      expect(await clearances(p.db)).toEqual([]);
+      expect(p.lines.map((l) => l.event)).not.toContain("membership.node_cleared");
+    });
+
+    it("gives up with 503 membership.write_contended when every round loses, recording nothing", async () => {
+      const p = await primary();
+      const gone = evicted();
+      await holdChart(p, [self(p), gone]);
+      const seedTerm = await heldTerm(p.db);
+      await p.db.execute(
+        sql.raw(
+          "create trigger test_membership_contended before update on node_membership begin select raise(ignore); end",
+        ),
+      );
+      let res: Response;
+      try {
+        res = await clear(p, gone.nodeId, p.adminCookie);
+      } finally {
+        await p.db.execute(sql.raw("drop trigger test_membership_contended"));
+      }
+
+      expect(res.status).toBe(503);
+      expect(await res.json()).toEqual({
+        error: { code: "membership.write_contended", params: { attempts: 8 } },
+      });
+      expect(await heldTerm(p.db)).toBe(seedTerm);
+      expect(await clearances(p.db)).toEqual([]);
     });
   });
 });

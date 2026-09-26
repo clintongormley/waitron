@@ -96,7 +96,7 @@ export function refuseFullChart(
 }
 
 // Throws `mirror.not_provisioned` when the database carries no deployment stamp,
-// `mirror.standby_removed` when the held chart lists the standby as `evicted`, and
+// `mirror.standby_removed` when the held chart lists the standby as `evicted` or has cleared it, and
 // `mirror.membership_full` when it has no place left for the standby.
 export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBundle> {
   const { tenant, primaryNode } = await withTransaction(deps.appDb, async (tx) => {

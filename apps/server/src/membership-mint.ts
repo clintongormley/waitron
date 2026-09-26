@@ -22,6 +22,7 @@ export async function mintNextMembershipDocument(
     nodes: readonly MembershipNode[];
     signerNodeId: string;
     minTerm?: number;
+    revoked?: readonly string[];
   },
 ): Promise<SignedMembershipDocument> {
   const signerPrivateKey = await readNodeIdentityKey(deps.db, deps.ring);
@@ -33,5 +34,6 @@ export async function mintNextMembershipDocument(
     signerPrivateKey,
     endorsements: endorsement === null ? [] : [endorsement],
     minTerm: args.minTerm,
+    revoked: args.revoked,
   });
 }

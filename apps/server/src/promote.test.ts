@@ -477,6 +477,39 @@ describe("promoteMirrorToPrimary", () => {
     expect(persisted).toEqual([]);
   });
 
+  // Covers only a machine whose OWN held chart contains the clearing. A standby that never finished
+  // joining never receives the primary's later charts, so on such a machine this check does not see
+  // the clearing; the primary's join refusal (`mirror.standby_removed`) is what refuses it.
+  it("refuses a machine its own held chart has cleared (revoked) with promotion.node_fenced, leaving it a mirror", async () => {
+    const { db, deps, nodeId } = await mirror();
+    await writeNodeMembership(db, {
+      body: {
+        term: 3,
+        nodes: [
+          { nodeId: "carrier-node", contactUrl: "https://carrier", standing: "serving-primary" },
+        ],
+        revoked: [nodeId],
+      },
+      signerNodeId: "carrier-node",
+      signature: "held-placeholder-sig",
+      endorsements: [],
+    });
+    const persisted: string[] = [];
+    const err = await captureError(() =>
+      promoteMirrorToPrimary(
+        deps(noopLog, async (seriesId) => {
+          persisted.push(seriesId);
+        }),
+        { oldNodeNeutralised: true },
+      ),
+    );
+    expect(isAppError(err) && err.code).toBe("promotion.node_fenced");
+    expect(isAppError(err) && err.params).toEqual({ standing: "evicted" });
+    expect(await readDeploymentMode(db, nodeId)).toBe("mirror");
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+    expect(persisted).toEqual([]);
+  });
+
   it("aborts the whole PONR with promotion.membership_superseded when a newer term raced in", async () => {
     // Stands in for a gossip adoption landing a newer term between the mint and the commit: a stale
     // document against a held term 5.

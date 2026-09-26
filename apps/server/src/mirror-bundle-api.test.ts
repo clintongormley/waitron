@@ -33,7 +33,7 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
-import { removeUnjoinedStandby } from "./membership-removal.js";
+import { clearRemovedMachine, removeUnjoinedStandby } from "./membership-removal.js";
 
 // Pause points for the cases that land a removal part-way through a request. Each runs once and
 // clears itself; unset, the wrapped function behaves as the real one.
@@ -812,6 +812,48 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       });
       expect(await installationCounter()).toEqual(counterBefore);
       expect(await readNodeMembership(db)).toEqual(chartBefore);
+    });
+
+    it("takes the new standby once an admin clears the removed machine, and still refuses the cleared id", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated, "https://relay.example:9000/");
+      const { ids } = await holdFullChart(designated);
+      const removed = ids[0]!;
+      const newcomer = validStandby();
+      const refused = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...newcomer,
+      });
+      expect(refused.status).toBe(409);
+
+      const clearance = await clearRemovedMachine(
+        { db, ring: RING, nodeId: designated.nodeId, log: () => {} },
+        { targetNodeId: removed, personId: adminPersonId },
+      );
+      expect(clearance.cleared).toBe(true);
+
+      const joined = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...newcomer,
+      });
+      expect(joined.status).toBe(200);
+      const after = (await readNodeMembership(db))!;
+      expect(after.body.nodes).toHaveLength(MAX_NODES);
+      expect(after.body.nodes.map((n) => n.nodeId)).toContain(newcomer.standbyNodeId);
+      expect(after.body.revoked).toEqual([removed]);
+
+      const returning = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+        standbyNodeId: removed,
+      });
+      expect(returning.status).toBe(409);
+      expect(await returning.json()).toEqual({
+        error: { code: "mirror.standby_removed", params: {} },
+      });
     });
 
     it("still serves a standby the full chart already lists, which adds no machine", async () => {

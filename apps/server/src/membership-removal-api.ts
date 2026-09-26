@@ -5,7 +5,7 @@ import { withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { KeyRing } from "@waitron/credentials";
 import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
-import { listServers, removeUnjoinedStandby } from "./membership-removal.js";
+import { clearRemovedMachine, listServers, removeUnjoinedStandby } from "./membership-removal.js";
 import type { Logger } from "./logger.js";
 
 export interface MembershipRemovalApiDeps {
@@ -24,6 +24,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "membership.node_is_primary": 409,
   "membership.node_has_served": 409,
   "membership.standby_joined": 409,
+  "membership.node_not_removed": 409,
+  "membership.chart_too_large": 409,
   "membership.write_contended": 503,
 };
 
@@ -60,6 +62,17 @@ export function mountMembershipRemovalApi(
       const result = await removeUnjoinedStandby(
         { db: deps.db, ring: deps.ring, nodeId: deps.nodeId, log },
         { targetNodeId, personId },
+      );
+      return c.json(result);
+    }),
+  );
+
+  app.post("/management-api/servers/:nodeId/clear", (c) =>
+    run(c, log, async () => {
+      const personId = await authorize(requireManagementSession(c));
+      const result = await clearRemovedMachine(
+        { db: deps.db, ring: deps.ring, nodeId: deps.nodeId, log },
+        { targetNodeId: c.req.param("nodeId"), personId },
       );
       return c.json(result);
     }),

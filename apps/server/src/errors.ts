@@ -660,26 +660,31 @@ declare module "@waitron/shared" {
      * The membership document could not be written because every read-mint-write round lost its
      * term race. The mirror-bundle adopt handshake refuses rather than force a write that would drop
      * the winner's node from the chart; transient, so the caller retries. `attempts` is the round
-     * bound, a constant of this process. A machine's removal (`removeUnjoinedStandby`) raises it
-     * the same way.
+     * bound, a constant of this process. A machine's removal (`removeUnjoinedStandby`) and
+     * clearance (`clearRemovedMachine`) raise it the same way.
      */
     "membership.write_contended": { attempts: number };
     /**
-     * An admin asked to remove a machine this node's held membership chart does not list, or no
-     * chart is held.
+     * An admin asked to remove or clear a machine this node's held membership chart lists neither
+     * among its machines nor as cleared, or no chart is held.
      */
     "membership.node_not_found": Record<string, never>;
-    /** Only the chart's serving primary removes a machine from it, and this node is not that. */
+    /** Only the chart's serving primary removes or clears a machine, and this node is not that. */
     "membership.not_primary": Record<string, never>;
-    /** The machine asked to be removed is the serving primary, this node. */
+    /** The machine asked to be removed or cleared is the serving primary, this node. */
     "membership.node_is_primary": Record<string, never>;
     /** The machine asked to be removed is a former primary (`sell-only`), so it has served. */
     "membership.node_has_served": Record<string, never>;
     /** The standby asked to be removed has a `nodes` row in this database, so it finished joining. */
     "membership.standby_joined": Record<string, never>;
     /**
-     * A mirror-bundle request named a standby node id this node's held chart lists as `evicted`. A
-     * fresh join mints a fresh id.
+     * The machine asked to be cleared is not removed (`evicted`): only a removed machine's place in
+     * the chart can be freed.
+     */
+    "membership.node_not_removed": Record<string, never>;
+    /**
+     * A mirror-bundle request named a standby node id this node's held chart lists as `evicted` or
+     * has cleared. A fresh join mints a fresh id.
      */
     "mirror.standby_removed": Record<string, never>;
     /**
