@@ -954,35 +954,52 @@ measured 2026-09-06); with approved host execution, a direct Codex driver can ru
 Receipt: on 2026-09-12, `pnpm --filter @waitron/dashboard test src/screens/payments-screen.test.ts`
 passed in Chromium. Check host execution before deferring browser testing to another agent.
 
-## Migration-upgrade test coverage gap
+## Migration-upgrade test coverage
 
-### No test applies a shipped migration to a database already at an earlier point
+### A migration can fail on a database that already carries earlier migrations and what boot installed after them
 
-So a green gate is no evidence that any set can upgrade a box. Drizzle applies a set's
-PENDING migrations in one transaction, so a statement that is legal on a virgin database — where
-the same batch creates everything it then names — can be refused on a database that already
-carries the earlier migrations.
+Drizzle applies a set's pending migrations in one transaction, so a statement that is legal on a
+fresh database — where the same batch creates everything it then names — can be refused on one that
+already carries earlier migrations and whatever boot installed after them.
 
-Cost: a bricked box, an hour of guesswork, and a wipe that destroyed the evidence.
+**2026-09-26.** The box took an image whose core `0013` drops `devices.has_cash_drawer` and failed
+three starts with `error in trigger waitron_change_devices_update after drop column: no such column:
+new.has_cash_drawer`. The change feed's update trigger names every column the table had when boot
+installed it, and SQLite refuses to drop a column a trigger names. Every suite migrated a fresh
+database before installing the feed, so none met it. The failed migration rolled back whole (the
+box still had `has_cash_drawer` and lacked `print_agents.setup_port`, which the same migration
+adds); deleting the feed's triggers and retrying started the box, and boot recreated all 285.
+`applyMigrations` now removes the feed before migrating (`removeChangeFeed`,
+`packages/db/src/change-feed.ts`).
 
-The upgrade regression that migrated real databases from each release point covered `core` alone.
-It was deleted with the PostgreSQL test harness on 2026-09-22 — its subject was PostgreSQL's own
-enum-safety rule inside drizzle's single migrate transaction, and there is no `ALTER TYPE` left —
-so **no test applies a shipped migration to a database already at an earlier point today.** One
-test does apply a migration step to a database that is already migrated — the older-artifact case in
-`apps/server/src/restore-fiscal-e2e.test.ts` — and the step it replays is one it makes up, not a
-shipped one.
+`scripts/migration-upgrade.test.ts` walks one database through every shipped migration in date
+order, installing the change feed between steps as boot does. Measured 2026-09-26: with
+`removeChangeFeed(store.venue)` deleted from `packages/migrations/src/apply.ts`,
+`pnpm exec vitest run scripts/migration-upgrade.test.ts` failed dropping
+`working_order_lines.variant_id` (core `0006_drop_line_variant_id`) with
+`no such column: new.variant_id`. Inferred from that, not run against a real box: a box that booted
+before that migration would have failed the same way. The guard also meets the shape
+[conventions-data.md](conventions-data.md#a-migration-set-depends-on-another-through-a-foreign-key-a-trigger-on-its-table-or-a-trigger-body-naming-its-table)
+already records: core `0003_variant_inherited_nullable` rebuilds `products` while a trigger from
+media's `0001_image_references` reads it in its body, and SQLite refuses the rename that ends the
+rebuild (`error in trigger products_media_image_fk_parent_delete: no such table: main.products`).
+The guard applies everything up to `0003` together for that reason; a future rebuild of a table
+another set's trigger BODY reads fails it. It seeds no rows, so a migration that fails only on data
+passes it.
 
-**2026-09-21, the SQLite storage switch.** The one instance of that shape this repository ever met
-was PostgreSQL's rule that a label added by `ALTER TYPE … ADD VALUE` may not be named in the
-transaction that added it, and a root guard read every set's SQL for it —
+The earlier upgrade regression, which migrated real PostgreSQL databases from each release point
+for `core` alone, was deleted with the PostgreSQL test harness on 2026-09-22.
+
+**2026-09-21, the SQLite storage switch.** The PostgreSQL instance of that shape was PostgreSQL's
+rule that a label added by `ALTER TYPE … ADD VALUE` may not be named in the transaction that added
+it, and a root guard read every set's SQL for it —
 `enum-add-value-safety.test.ts`, written here without its `scripts/` directory on purpose, because
 a backticked path to a file that no longer exists fails `scripts/claude-md-pointers.test.ts`.
 SQLite has no enum types and no `ALTER TYPE`, and the regenerated baselines carry a text column
 with a named `CHECK` instead, so no file in the tree can hold the statement that guard searched
 for. It was deleted rather than left green over a spelling that can no longer appear, which is a
-state it could only reach by having its anti-vacuity floor lowered. The general gap above is
-unaffected: it is about shipped migrations never being upgrade-tested, not about enums.
+state it could only reach by having its anti-vacuity floor lowered. The upgrade coverage above is
+unaffected: it is not about enums.
 
 ## Check every command's exit status
 

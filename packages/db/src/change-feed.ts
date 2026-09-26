@@ -126,3 +126,21 @@ export async function installChangeFeed(
     }
   }
 }
+
+/**
+ * Drops every trigger whose name begins `waitron_change_`, the prefix {@link installChangeFeed}
+ * gives its triggers.
+ *
+ * The update trigger names each column the table had when it was installed, and SQLite refuses to
+ * drop a column a trigger names, so a migration dropping such a column fails once the feed is
+ * installed. Migrating runs without the feed; `installChangeFeed` in `apps/server/src/boot.ts`
+ * installs it again.
+ */
+export function removeChangeFeed(db: Database | Transaction): void {
+  const names = db
+    .execute<{ name: string }>(
+      sql`select name from sqlite_master where type = 'trigger' and name glob 'waitron_change_*'`,
+    )
+    .rows.map((row) => plainName("trigger", row.name));
+  for (const name of names) db.execute(sql.raw(`drop trigger "${name}"`));
+}

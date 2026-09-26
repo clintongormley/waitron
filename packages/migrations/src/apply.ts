@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { openVenueDatabase, runMigrations, type Database } from "@waitron/db";
+import { openVenueDatabase, removeChangeFeed, runMigrations, type Database } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { installAppendOnlyTriggers } from "@waitron/store";
 import type { VenueMigrationOptions } from "./manifest.js";
@@ -37,6 +37,10 @@ const LOCK_WAIT_MS = 120_000;
  * It also installs the append-only triggers, set by set, from each set's `appendOnlyTables`, so no
  * caller that migrates through here can forget them. A caller that hands over no
  * `appendOnlyTables` gets a migrated database with no triggers on it.
+ *
+ * It removes the change feed first and does not put it back, because a migration cannot drop a
+ * column the feed's update trigger names; `installChangeFeed` in
+ * `apps/server/src/boot.ts` installs it again.
  */
 export async function applyMigrations(
   directory: string,
@@ -63,6 +67,7 @@ async function migrateEverySet(
 ): Promise<void> {
   const store = await openVenueDatabase(directory);
   try {
+    removeChangeFeed(store.venue);
     // Sets apply in the order the caller passes. Boot derives it from each module's declared
     // `requires` (`orderedMigrationSets`, which refuses a missing dependency or a cycle). Core must
     // come before media, whose triggers are on core's `products`.

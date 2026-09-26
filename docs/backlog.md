@@ -2721,6 +2721,24 @@ image constraints under *Detail → Box image*.
 
 ### B4. Upgrades and migrations
 
+- **Upgrade testing — blocking before go-live (owner, 2026-09-26).** On 2026-09-26 the box could not
+  start after an upgrade: core `0013` dropped a column the change feed's trigger named, which no test
+  could see because every suite migrated a fresh database. `scripts/migration-upgrade.test.ts` now
+  walks one database through every shipped migration in date order, with the change feed installed
+  between steps. What it still does not cover, each needed before a real venue is live:
+  - **Rows.** Its tables are empty, so a migration that fails only on data passes — a new
+    `not null` column, a rebuild whose `DROP TABLE` cascades (CLAUDE.md §3), a unique index the
+    existing rows break. Seed a realistic venue (the demo seed at least) at each step.
+  - **A rebuild of a table another set's trigger BODY reads is still refused** on a box that has
+    the trigger — core `0003` on `products`, recorded in
+    [conventions-data.md](developers/conventions-data.md) → *A migration set depends on another
+    through a foreign key, a trigger on its table, or a trigger body naming its table*, and in Track
+    A, the paragraph opening **Task 1 LANDED as #511**. The guard steps over it by applying
+    everything up to `0003` in one go, so the next such rebuild fails the guard. Decide the fix.
+  - **A real old database.** Every step here is built by this image's own migrator from today's
+    change-feed and append-only lists; a snapshot of a box at an earlier release, upgraded by the
+    new image, is the test that matches what a box does.
+
 - **Core release points 1 to 6 could not upgrade — CLOSED 2026-09-23.** The storage switch (#489)
   regenerated every migration set, so the journal that had that shape no longer exists
   ([conventions-data.md](developers/conventions-data.md) → the core journal's contradictory shape),

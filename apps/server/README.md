@@ -88,7 +88,9 @@ open it without the lock ([conventions-data.md](../../docs/developers/convention
 
 `applyMigrations` also installs each set's **append-only triggers** as it goes, from the table names
 that set declares. Those are SQLite `RAISE(ABORT)` triggers (`packages/store/src/append-only.ts`),
-and they are what makes a ledger row unrewritable now that there is no `REVOKE` to lean on.
+and they are what makes a ledger row unrewritable now that there is no `REVOKE` to lean on. It
+removes the live-update triggers (`removeChangeFeed`) before migrating, and `installChangeFeed` in
+`apps/server/src/boot.ts` installs them again.
 
 ### The deployment-environment check
 
