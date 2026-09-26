@@ -6244,10 +6244,13 @@ line with what slice 2 built. Left open:
   78.1 s (one run each). (2) DONE by A44 for the deadline: a question given up at it logs
   `stream.pause_check_failed` with `errorCode: "timeout"`, as the freshness read's deadline logs
   `stream.freshness_unreadable`; the pause case fails with the line removed, and a case stopped
-  during the wait fails once the line no longer checks for a stop. Still open: a refused question
-  logs nothing, and since A44 a bucket that never replies ends each question as a refusal after
-  about 90 seconds, before the deadline; a temporary supervisor case showed the pause stay paused
-  and log nothing of its own. Whether to log a refusal is left to the owner.
+  during the wait fails once the line no longer checks for a stop. Since A44 a bucket that never
+  replies ends each question as a refusal after about 90 seconds, before the deadline. **DONE by
+  lane A's A51 (2026-09-26):** a refused question is logged once per pause, `stream.pause_check_failed`
+  with the refusal's code, and a refusal arriving after the deadline or a stop is not; the line
+  carries the code only, so a refusal the bucket answered (403) and one that got no answer both read
+  `backup.stream_request_failed` in it ([testing-guide.md](developers/testing-guide.md), "A bucket
+  question the pause is waiting on").
 
 **Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The
 owner's rule (2026-09-24) is that a change adding third-party code to the image carries its licence

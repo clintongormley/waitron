@@ -611,8 +611,18 @@ taken out of the race (re-run by A44). Since A44 the store also gives a request 
 has had no reply 30 seconds after it started (`BUCKET_IDLE_MS`,
 `packages/stream/src/s3-store.ts`), though not an answer whose body stalls after headers that
 arrived within its first three seconds; with that default, a listing to such a server failed after
-90,116 ms, three attempts. A refused question is not logged, so against a server that never replies
-the pause now ends each question as a refusal, before the deadline, and logs nothing.
+90,116 ms, three attempts. Against a server that never replies the pause therefore ends each
+question as a refusal, before the deadline. Since A51 a refused question is logged once per pause,
+`stream.pause_check_failed` with the refusal's code — for that server `backup.stream_request_failed`,
+the code the store's "a bucket that stops answering" cases in `packages/stream/src/s3-store.test.ts`
+assert for a listing — and a refusal that arrives after the deadline or a stop is not logged. The
+supervisor case "logs a question during the pause the bucket refuses once per pause, with its code"
+fails with the log line, the once-per-pause check, or the record shared across the pause taken out;
+"logs nothing more for a question during the pause that is refused after its deadline" fails with
+the deadline check taken out; "logs nothing for a question during the pause that is refused while
+the run is stopping" fails with the stop check taken out; and "logs nothing for a question during
+the pause that is refused after the run was stopped" is held by both checks, failing only with both
+taken out.
 
 **Why versitygw 1.8.0.** Five candidates were weighed on 2026-09-23. Four were run with the same
 probe: a write "only if absent" over an existing key, a write "only if unchanged" with a stale ETag,
