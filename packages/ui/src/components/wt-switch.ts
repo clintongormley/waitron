@@ -26,6 +26,12 @@ export class WtSwitch extends LitElement {
         min-height: var(--wt-tap-min);
       }
 
+      /* A zero-width line of text, centred like the label, so the control's baseline, and so the
+         element's, is where the label's text sits: the track alone has no text to give one. */
+      .control::before {
+        content: "\\200b" / "";
+      }
+
       /* The native input covers the control so it stays the hit target and keeps keyboard and
          assistive-technology behaviour. It fills .control exactly (inset: 0) rather than
          carrying its own min-height/min-width — the minimum tap target comes from .control
@@ -118,7 +124,7 @@ export class WtSwitch extends LitElement {
         <span class="track"></span>
         <span class="thumb"></span>
       </span>
-      ${this.label && !this.hideLabel ? html`<label for=${this.inputId}>${this.label}</label>` : nothing}
+      ${this.label && !this.hideLabel ? html`<label part="label" for=${this.inputId}>${this.label}</label>` : nothing}
     `;
   }
 }

@@ -86,6 +86,7 @@ export class WtPriceInput extends LitElement {
       span.unit {
         display: inline-flex;
         align-items: center;
+        padding-inline: var(--wt-space-2);
         cursor: default;
       }
 

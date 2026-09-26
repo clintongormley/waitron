@@ -283,6 +283,14 @@ test("a fixed unit paints its border and text from tokens, and stands as tall as
   expect(unit.getBoundingClientRect().height).toBe(input.getBoundingClientRect().height);
 });
 
+test("a fixed unit is a tighter box than the unit button, padded by --wt-space-2", async () => {
+  const el = await mount('<wt-price-input unit="kg" fixed-unit></wt-price-input>');
+  host.style.setProperty("--wt-space-2", "5px");
+  host.style.setProperty("--wt-space-3", "11px");
+  const unit = getComputedStyle(el.shadowRoot!.querySelector(".unit")!);
+  expect([unit.paddingInlineStart, unit.paddingInlineEnd]).toEqual(["5px", "5px"]);
+});
+
 test("a fixed unit that is empty draws no unit box, and the field keeps its own trailing edge", async () => {
   const el = await mount("<wt-price-input fixed-unit></wt-price-input>");
   host.style.setProperty("--wt-radius-md", "7px");
