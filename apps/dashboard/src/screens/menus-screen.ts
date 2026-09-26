@@ -1323,8 +1323,8 @@ export class MenusScreen extends LitElement {
     });
   }
 
-  /** The probe is observed rather than the list: its size follows the list's container alone, so
-   * the redraw a switch causes cannot resize what is observed within the same observation. */
+  /** The probe is observed rather than the list: the probe's width follows the list's container,
+   * not the table's contents. */
   #observeProbe = (probe: Element | undefined): void => {
     this.#listSize?.disconnect();
     this.#listSize = null;
