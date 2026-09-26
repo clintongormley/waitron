@@ -249,6 +249,12 @@ declare module "@waitron/shared" {
      */
     "working_order.not_open": { workingOrderId: string };
     /**
+     * An edit was made from a copy of an OPEN order that another write has since changed: the
+     * `revision` the edit carried is not the order's. `revision` is the order's current one; the
+     * caller reloads the order and edits again.
+     */
+    "working_order.out_of_date": { workingOrderId: string; revision: number };
+    /**
      * A working order this caller tried to CANCEL or AMEND is not `placed` (still open, settled,
      * abandoned, or absent — one code for all).
      */

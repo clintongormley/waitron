@@ -72,16 +72,18 @@ sides are built in the order the dish OFFERS its answers, which reads as a fixed
 one: it is a stored position, and three columns hold parts of it, each re-numbered from the body of
 whatever save writes it. `docs/developers/modifiers.md` lists all three with what writes each. So a
 line parked before one of those saves keeps the OLD order while the rebuilt side comes back in the
-new one — and a comparison pairing the two up position by position reads that as a changed answer
-and re-prices a quantity-only edit. That is why the pairing is order-independent
-(`sameOptionSelections`, `matchExtraChildren`). Measured on 2026-09-20 for BOTH comparators, through
-the column a product save writes: the options half and the extras half each re-issued every line
-under a new id and re-priced the dish.
+new one — and a comparison pairing the two up position by position reads that as a changed answer.
+That is why the pairing is order-independent (`sameOptionSelections`, and for extras
+`editLineExtras`, which replaced `matchExtraChildren` with menus plan D10). Measured on 2026-09-20
+for BOTH comparators, through the column a product save writes: the options half and the extras
+half each re-issued every line under a new id and re-priced the dish. Since plan D10 a changed
+answer no longer re-prices anything (an answer carries no price), but an order-dependent pairing
+would still remove a kept extra and price it again as a new pick.
 
 **A stored extras child records the list it came off (`working_order_lines.extra_list_id`), and a
 pick pairs with it only on the same list, product and quantity.** A pick moved between two lists
-offering the same product, or two picks exchanging counts between them, pairs with nothing and takes
-the replacement path; a quantity-only edit keeps each child at its own list's stored price.
+offering the same product, or two picks exchanging counts between them, pairs with nothing and is a
+new pick, priced now; an unchanged pick keeps its child at its own list's stored price.
 `docs/developers/modifiers.md` has the detail.
 
 What covers it, in `apps/server/src/working-order.test.ts`: "keeps extras rows and customisation on

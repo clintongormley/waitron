@@ -71,6 +71,7 @@ import {
   sendToPrep,
   setLineCourse,
   updateHeldOrder,
+  updateOrderLine,
   voidTabLine,
 } from "./working-order.js";
 import type { TicketState } from "./working-order.js";
@@ -1942,7 +1943,8 @@ describe("updateHeldOrder", () => {
     const [beforeSummary] = await listHeldOrders({ db }, cfg);
 
     // A fresh basket in a deliberately different order (agua first) — proving the per-line product_id
-    // zip is re-applied, the line_no is re-numbered from 1, and the total is re-priced authoritatively.
+    // zip is re-applied, the new lines are numbered after the parked line's (plan D10: a number is
+    // never reused within an order), and the total is re-priced authoritatively.
     const newLines = [
       { productId: aguaId, quantity: "1" },
       { productId: cafeId, quantity: "1" },
@@ -1961,15 +1963,15 @@ describe("updateHeldOrder", () => {
       settledAt: null,
     });
 
-    // The old café line is gone; the two new lines carry the new products, re-numbered from 1.
+    // The old café line is gone; the two new lines carry the new products, numbered after it.
     const lines = await db
       .select()
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
     expect(lines).toHaveLength(2);
-    expect(lines[0]).toMatchObject({ lineNo: 1, productId: aguaId });
-    expect(lines[1]).toMatchObject({ lineNo: 2, productId: cafeId });
+    expect(lines[0]).toMatchObject({ lineNo: 2, productId: aguaId });
+    expect(lines[1]).toMatchObject({ lineNo: 3, productId: cafeId });
 
     // Re-priced: the new total differs from the parked one AND equals the GROSS basket total for the
     // replaced lines (`priceBasket(newLines).total`, computed independently of the persisted column) —
@@ -2487,7 +2489,7 @@ describe("basket-wide modifier resolution (perf)", () => {
     ]);
   });
 
-  it("does not resolve the catalogue twice for an edit that cannot be preserved", async () => {
+  it("resolves the catalogue once for a note edit of a stored line", async () => {
     const { cfg, cafeId, catalogueId } = await setupVenue();
     const seeded = await withTransaction(db, async (tx) => {
       await addExtraList(tx, catalogueId, cafeId, "Bacon");
@@ -2504,10 +2506,8 @@ describe("basket-wide modifier resolution (perf)", () => {
     const contentLanguages = vi.spyOn(catalogue, "readContentLanguages");
     const resolve = vi.spyOn(catalogue, "resolveAttachedModifiers");
 
-    // A changed note is not a quantity-only edit, so this takes the replacement path and is
-    // re-priced from the current offer. The preserve check that runs first decides that from the
-    // stored `note` alone, which costs nothing — so the catalogue is resolved once, by
-    // `priceOrderLines`, and not a second time by a preserve check that was never going to hold.
+    // A changed note is an edit of the stored line, which prices nothing: the catalogue is resolved
+    // once, for the answers the edit is checked against.
     await updateProducts(cfg, id, {
       lines: [
         {
@@ -4336,6 +4336,38 @@ describe("correction slips on recall & void (A6)", () => {
     });
   });
 
+  it("(e) changing a FIRED, not-started line prints a RECALLED slip and a ticket for the changed line", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      const { printerId } = await attachedPrinter(
+        tx,
+        cfg,
+        { name: "Cocina", isDefault: true },
+        "P-Cocina",
+      );
+      const starter = await namedProduct(tx, cfg, catalogueId, "Croquetas");
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+      await addRound(tx, cfg, tabId, [line(starter)]);
+      const [{ revision }] = await tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, tabId));
+      const before = await jobRows(tx);
+
+      await updateOrderLine(tx, cfg, tabId, 1, { note: "Sin cebolla" }, revision!);
+
+      const fresh = (await jobRows(tx)).filter((j) => !before.some((b) => b.id === j.id));
+      expect(fresh.map((job) => job.printerId)).toEqual([printerId, printerId]);
+      const [slip, ticket] = fresh.map((job) => decodeTicket(job.payload));
+      expect(slip).toContain("RECALLED");
+      expect(slip).toContain("Croquetas");
+      expect(ticket).not.toContain("RECALLED");
+      expect(ticket).toContain("Croquetas");
+      expect(ticket).toContain("Sin cebolla");
+    });
+  });
+
   it("(d) voiding a HELD line enqueues NO slip (it never printed)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
@@ -6112,7 +6144,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
     ]);
   });
 
-  it("replaces the line when the answer itself changed, re-pricing it from today's offer", async () => {
+  it("keeps the line and its price when the answer itself changed: an answer carries no price", async () => {
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
     const punto = await withTransaction(db, async (tx) => {
       return addOptionList(tx, cafeId, "Punto", ["Solo", "Cortado"]);
@@ -6154,9 +6186,9 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
-    expect(after[0]!.id).not.toEqual(before[0]!.id);
-    // Re-priced from today's offer: 9900 whole cents is that 99.00, off the column.
-    expect(after[0]!.unitPriceGross).toEqual(9900);
+    expect(after[0]!.id).toEqual(before[0]!.id);
+    // The 3.25 it was sold at, not today's 99.00 (plan D10), in whole cents off the column.
+    expect(after[0]!.unitPriceGross).toEqual(325);
     expect(after[0]!.optionSnapshots[0]).toMatchObject({
       labelName: { [CONTENT_LANGUAGE]: "Cortado staff" },
     });
@@ -6213,11 +6245,11 @@ describe("what a held-order edit preserves and what it replaces", () => {
   });
 
   /**
-   * The settled behaviour, not an oversight: `docs/developers/modifiers.md` carries the reason a
-   * names-only snapshot cannot tell a rename from a different answer, and why giving the comparison
-   * an id to use would mean putting one on the line.
+   * A names-only snapshot cannot tell a rename from a different answer
+   * (`docs/developers/modifiers.md`), so the renamed answer is frozen as a changed one; an answer
+   * carries no price, so the line keeps its own (plan D10).
    */
-  it("re-prices a held line when the options list it answered was renamed between the two sends", async () => {
+  it("keeps the price of a held line whose options list was renamed between the two sends, freezing the new name", async () => {
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
     const punto = await withTransaction(db, async (tx) => {
       return addOptionList(tx, cafeId, "Punto", ["Solo"]);
@@ -6258,9 +6290,9 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
     expect(after).toHaveLength(1);
-    expect(after[0]!.id).not.toEqual(before[0]!.id);
-    // Re-priced from today's offer: 9900 whole cents is that 99.00, off the column.
-    expect(after[0]!.unitPriceGross).toEqual(9900);
+    expect(after[0]!.id).toEqual(before[0]!.id);
+    // The 3.25 it was sold at, not today's 99.00, in whole cents off the column.
+    expect(after[0]!.unitPriceGross).toEqual(325);
     expect(after[0]!.optionSnapshots[0]).toMatchObject({
       listName: { [CONTENT_LANGUAGE]: "Renamed staff" },
     });
@@ -6340,6 +6372,244 @@ describe("what a held-order edit preserves and what it replaces", () => {
     expect(after).toHaveLength(1);
     // Two units, as a count of thousandths off the column.
     expect(after[0]).toMatchObject({ id: before[0]!.id, quantity: 2000 });
+  });
+});
+
+/** Every stored row of an order, in line order, with the columns an edit must leave alone. */
+async function storedRows(id: string) {
+  return db
+    .select({
+      id: workingOrderLines.id,
+      lineNo: workingOrderLines.lineNo,
+      parentLineId: workingOrderLines.parentLineId,
+      productId: workingOrderLines.productId,
+      name: workingOrderLines.name,
+      descriptions: workingOrderLines.descriptions,
+      kitchenName: workingOrderLines.kitchenName,
+      category: workingOrderLines.category,
+      quantity: workingOrderLines.quantity,
+      unitPriceGross: workingOrderLines.unitPriceGross,
+      lineTotal: workingOrderLines.lineTotal,
+      vatRate: workingOrderLines.vatRate,
+      note: workingOrderLines.note,
+      extraListId: workingOrderLines.extraListId,
+      sentAt: workingOrderLines.sentAt,
+      servedAt: workingOrderLines.servedAt,
+    })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, id))
+    .orderBy(workingOrderLines.lineNo);
+}
+
+/**
+ * Plan D10 and spec §10.3 and §11.2: a saved order keeps its facts. An edit prices only what it
+ * adds — a new line, an extra added to a line, a line whose menu item or variant changed — and a
+ * note or an options answer carries no price.
+ */
+describe("editing a saved order prices only what the edit adds", () => {
+  async function menuVenue() {
+    const venue = await setupVenue();
+    const { cfg, catalogueId } = venue;
+    const seeded = await withTransaction(db, async (tx) => {
+      const mains = await createCategory(tx, { name: { en: "Mains" } });
+      const product = (name: string, unitPrice: string, categoryId: string | null = null) =>
+        createProduct(tx, {
+          catalogueId,
+          categoryId,
+          name: `${name} staff`,
+          customerName: { [LOCALE]: `${name} customer` },
+          kitchenName: `${name} kitchen`,
+          pricingUnit: "each",
+          unitPrice,
+          vatClass: "general",
+        });
+      const lemonade = await product("Lemonade", "3.00");
+      const water = await product("Water", "2.00");
+      const burger = await product("Burger", "12.00", mains.id);
+      const coffee = await product("Coffee", "1.40");
+      const cheese = await addExtraList(tx, catalogueId, burger.id, "Cheese", { price: "1.00" });
+      const bacon = await addExtraList(tx, catalogueId, burger.id, "Bacon", { price: "1.20" });
+      return {
+        lemonade: lemonade.id,
+        water: water.id,
+        burger: burger.id,
+        coffee: coffee.id,
+        cheese,
+        bacon,
+      };
+    });
+    return { ...venue, cfg, ...seeded };
+  }
+
+  it("keeps every stored line's price and facts, and prices the added extra and the new line now", async () => {
+    const { cfg, lemonade, water, burger, coffee, cheese, bacon } = await menuVenue();
+    const cheesePick = {
+      listId: cheese.listId,
+      picks: [{ productId: cheese.productId, quantity: 1 }],
+    };
+    const baconPick = {
+      listId: bacon.listId,
+      picks: [{ productId: bacon.productId, quantity: 1 }],
+    };
+    const id = randomUUID();
+    await parkProducts(cfg, {
+      id,
+      lines: [
+        { productId: lemonade, quantity: "1" },
+        { productId: water, quantity: "1" },
+        { productId: burger, quantity: "1", extras: [cheesePick] },
+      ],
+    });
+    const before = await storedRows(id);
+    expect(before.map((row) => [row.lineNo, row.unitPriceGross])).toEqual([
+      [1, 300],
+      [2, 200],
+      [3, 1200],
+      [4, 100],
+    ]);
+
+    // Every price moves underneath the order, and two products are renamed.
+    await db.execute(sql`update products set unit_price = 250 where id = ${lemonade}`);
+    await db.execute(
+      sql`update products set unit_price = 180, name = 'Renamed' where id = ${water}`,
+    );
+    await db.execute(
+      sql`update products set unit_price = 1300, name = 'Renamed' where id = ${burger}`,
+    );
+    await db.execute(sql`update extra_list_items set price = 120 where list_id = ${cheese.listId}`);
+    await db.execute(sql`update extra_list_items set price = 150 where list_id = ${bacon.listId}`);
+
+    await updateProducts(cfg, id, {
+      lines: [
+        { workingOrderLineId: before[0]!.id, productId: lemonade, quantity: "1" },
+        { workingOrderLineId: before[1]!.id, productId: water, quantity: "1", note: "No ice" },
+        {
+          workingOrderLineId: before[2]!.id,
+          productId: burger,
+          quantity: "1",
+          extras: [cheesePick, baconPick],
+        },
+        { productId: coffee, quantity: "1" },
+      ],
+    });
+
+    const after = await storedRows(id);
+    const byId = new Map(after.map((row) => [row.id, row]));
+    // The lemonade is untouched, and the water gains its note alone.
+    expect(byId.get(before[0]!.id)).toEqual(before[0]);
+    expect(byId.get(before[1]!.id)).toEqual({ ...before[1]!, note: "No ice" });
+    // The burger and its cheese keep their rows, names and prices. They move together after the
+    // highest line number, so the new bacon stays with its dish.
+    expect(byId.get(before[2]!.id)).toEqual({ ...before[2]!, lineNo: 5 });
+    expect(byId.get(before[3]!.id)).toEqual({ ...before[3]!, lineNo: 6 });
+    const added = after.filter((row) => !before.some((old) => old.id === row.id));
+    expect(
+      added.map((row) => [row.lineNo, row.productId, row.parentLineId, row.unitPriceGross]),
+    ).toEqual([
+      [7, bacon.productId, before[2]!.id, 150],
+      [8, coffee, null, 140],
+    ]);
+  });
+
+  it("changes a note on its own row, keeping the line's id and price", async () => {
+    const { cfg, water } = await menuVenue();
+    const id = randomUUID();
+    await parkProducts(cfg, { id, lines: [{ productId: water, quantity: "2" }] });
+    const [before] = await storedRows(id);
+    await db.execute(sql`update products set unit_price = 900 where id = ${water}`);
+
+    await updateProducts(cfg, id, {
+      lines: [{ workingOrderLineId: before!.id, productId: water, quantity: "2", note: "Warm" }],
+    });
+
+    expect(await storedRows(id)).toEqual([{ ...before!, note: "Warm" }]);
+  });
+
+  it("numbers a line that replaces another after the order's highest line number", async () => {
+    const { cfg, lemonade, water } = await menuVenue();
+    const id = randomUUID();
+    await parkProducts(cfg, {
+      id,
+      lines: [
+        { productId: lemonade, quantity: "1" },
+        { productId: water, quantity: "1" },
+      ],
+    });
+    const before = await storedRows(id);
+
+    // The first line is dropped from the basket and the second is kept.
+    await updateProducts(cfg, id, {
+      lines: [
+        { workingOrderLineId: before[1]!.id, productId: water, quantity: "1" },
+        { productId: lemonade, quantity: "2" },
+      ],
+    });
+
+    const after = await storedRows(id);
+    expect(after.map((row) => [row.id === before[1]!.id, row.lineNo, row.productId])).toEqual([
+      [true, 2, water],
+      [false, 3, lemonade],
+    ]);
+  });
+
+  it("keeps an extra from the list it was taken from, whatever that list later charges or offers", async () => {
+    // Spec §11.7 example 7: Extra cheese on "Toppings" at 1.00 and on "Premium toppings" at 1.50,
+    // and the line took it from Premium toppings.
+    const { cfg, cafeId, catalogueId } = await setupVenue();
+    const seeded = await withTransaction(db, async (tx) => {
+      const toppings = await addExtraList(tx, catalogueId, cafeId, "Queso", { price: "1.00" });
+      const premium = await catalogue.createExtraList(
+        tx,
+        {
+          name: "Premium toppings list staff",
+          customerName: { [CONTENT_LANGUAGE]: "Premium toppings list customer" },
+          kitchenName: "Premium toppings list kitchen",
+          minPicks: 0,
+          maxPicks: null,
+          active: true,
+          items: [
+            { productId: toppings.productId, maxQuantity: 1, preselected: false, price: "1.50" },
+          ],
+        },
+        LOCALE,
+      );
+      await attachModifierList(tx, cafeId, { kind: "extras", id: premium.id });
+      return { cheeseId: toppings.productId, toppingsId: toppings.listId, premiumId: premium.id };
+    });
+    const fromList = (listId: string) => [
+      { listId, picks: [{ productId: seeded.cheeseId, quantity: 1 }] },
+    ];
+    const id = randomUUID();
+    await parkProducts(cfg, {
+      id,
+      lines: [{ productId: cafeId, quantity: "1", extras: fromList(seeded.premiumId) }],
+    });
+    const [dish] = await storedRows(id);
+    const editNote = (note: string, extras = fromList(seeded.premiumId)) =>
+      updateProducts(cfg, id, {
+        lines: [{ workingOrderLineId: dish!.id, productId: cafeId, quantity: "1", note, extras }],
+      });
+    const cheese = async () =>
+      (await storedRows(id))
+        .filter((row) => row.parentLineId !== null)
+        .map((row) => [row.extraListId, row.unitPriceGross]);
+
+    await editNote("One");
+    expect(await cheese()).toEqual([[seeded.premiumId, 150]]);
+
+    await db.execute(
+      sql`update extra_list_items set price = 180 where list_id = ${seeded.premiumId}`,
+    );
+    await editNote("Two");
+    expect(await cheese()).toEqual([[seeded.premiumId, 150]]);
+
+    await db.execute(sql`delete from extra_list_items where list_id = ${seeded.premiumId}`);
+    await editNote("Three");
+    expect(await cheese()).toEqual([[seeded.premiumId, 150]]);
+
+    // A pick from the other list is a new pick, priced from that list now.
+    await editNote("Four", fromList(seeded.toppingsId));
+    expect(await cheese()).toEqual([[seeded.toppingsId, 100]]);
   });
 });
 

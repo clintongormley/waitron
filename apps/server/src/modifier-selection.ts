@@ -136,32 +136,119 @@ export function sameOptionSelections(
   return pairOff(frozen, stored, isDeepStrictEqual) !== null;
 }
 
+/** One pick as a request names it, read leniently: a malformed one is left to the validator. */
+function namedPicks(requested: unknown): { listId: string; productId: string; quantity: number }[] {
+  if (!Array.isArray(requested)) return [];
+  return requested.flatMap((entry: unknown) => {
+    const { listId, picks } = (entry ?? {}) as { listId?: unknown; picks?: unknown };
+    if (typeof listId !== "string" || !Array.isArray(picks)) return [];
+    return picks.flatMap((pick: unknown) => {
+      const { productId, quantity } = (pick ?? {}) as { productId?: unknown; quantity?: unknown };
+      return typeof productId === "string" && typeof quantity === "number"
+        ? [{ listId: listId.toLowerCase(), productId: productId.toLowerCase(), quantity }]
+        : [];
+    });
+  });
+}
+
 /**
- * Pair each rebuilt pick with the stored child line that froze it, or `null` when the edit is not
- * quantity-only. A pick and a child match on their list, product and quantity; neither side's ORDER
- * is part of the pairing. `dishQuantity` is the STORED dish count, since a child's stored quantity is
- * `dishQuantity × picksPerDish`. A child that records no list matches no pick.
+ * The extras answer to an edit of a SAVED line (plan D10). A pick that names a stored child's list,
+ * product and per-dish quantity keeps that child, and is accepted even where its list no longer
+ * offers it at that quantity, or at all (spec §11.7 example 7). Every other pick is NEW: it must be
+ * offered by an active list in `offered` now, and it is priced from that list. A stored child no pick
+ * keeps is removed. The lists' own rules apply to the kept and new picks together, except that the
+ * kept picks alone may exceed a cap the list has since lowered.
+ *
+ * `dishQuantity` is the STORED dish count; a child's stored quantity is it times the per-dish picks.
  */
-export function matchExtraChildren<
+export function editLineExtras<
   Child extends { productId: string | null; extraListId: string | null; quantity: string },
 >(
-  picks: readonly ExtraChild[],
-  children: readonly Child[],
-  dishQuantity: string,
-): { pick: ExtraChild; child: Child }[] | null {
-  const dish = decimal(dishQuantity);
-  const wanted = picks.map((pick) => ({
-    listId: pick.listId,
-    productId: pick.productId,
-    quantity: multiplyDecimal(dish, decimal(String(pick.quantity))),
-  }));
-  const matched = pairOff(
-    wanted,
-    children,
-    (want, child) =>
-      child.extraListId === want.listId &&
-      child.productId === want.productId &&
-      compareDecimal(want.quantity, decimal(child.quantity)) === 0,
-  );
-  return matched === null ? null : picks.map((pick, index) => ({ pick, child: matched[index]! }));
+  offered: readonly ResolvedExtraList[],
+  products: ReadonlyMap<string, ExtraProductFacts>,
+  requested: unknown,
+  stored: { children: readonly Child[]; dishQuantity: string },
+): { kept: { child: Child; perDish: number }[]; added: ExtraChild[]; removed: Child[] } {
+  const dish = decimal(stored.dishQuantity);
+  const remaining = [...stored.children];
+  const kept = new Map<string, { child: Child; perDish: number }>();
+  for (const pick of namedPicks(requested)) {
+    const index = remaining.findIndex(
+      (child) =>
+        child.extraListId === pick.listId &&
+        child.productId === pick.productId &&
+        compareDecimal(
+          multiplyDecimal(dish, decimal(String(pick.quantity))),
+          decimal(child.quantity),
+        ) === 0,
+    );
+    if (index < 0) continue;
+    kept.set(`${pick.listId}\u0000${pick.productId}`, {
+      child: remaining[index]!,
+      perDish: pick.quantity,
+    });
+    remaining.splice(index, 1);
+  }
+
+  // The lists the picks are checked against: the live ones, plus each kept pick where the live list
+  // no longer offers it as the line holds it.
+  const lists = offered.map((list) => ({ ...list, items: [...list.items] }));
+  for (const { child, perDish } of kept.values()) {
+    let list = lists.find((candidate) => candidate.active && candidate.id === child.extraListId);
+    if (list === undefined) {
+      list = {
+        id: child.extraListId!,
+        name: "",
+        customerName: null,
+        kitchenName: null,
+        minPicks: 0,
+        maxPicks: null,
+        active: true,
+        items: [],
+      };
+      lists.push(list);
+    }
+    const index = list.items.findIndex((item) => item.productId === child.productId);
+    if (index < 0) {
+      list.items.push({
+        id: "",
+        productId: child.productId!,
+        maxQuantity: perDish,
+        preselected: false,
+        price: "0.00",
+      });
+    } else {
+      const item = list.items[index]!;
+      list.items[index] = { ...item, maxQuantity: Math.max(item.maxQuantity, perDish) };
+    }
+    const keptOnList = [...kept.values()]
+      .filter((entry) => entry.child.extraListId === list.id)
+      .reduce((total, entry) => total + entry.perDish, 0);
+    if (list.maxPicks !== null && keptOnList > list.maxPicks) list.maxPicks = keptOnList;
+  }
+
+  const added: ExtraChild[] = [];
+  for (const selection of validateExtraSelections(lists, requested ?? [])) {
+    for (const pick of selection.picks) {
+      if (kept.has(`${selection.listId}\u0000${pick.productId}`)) continue;
+      // A list or item added above holds only kept picks, so a new pick names a live one.
+      const list = offered.find(
+        (candidate) => candidate.active && candidate.id === selection.listId,
+      )!;
+      const item = list.items.find((candidate) => candidate.productId === pick.productId)!;
+      // `products` holds every product a live list offers.
+      const product = products.get(pick.productId)!;
+      added.push({
+        productId: product.id,
+        name: product.name,
+        descriptions: product.descriptions,
+        kitchenName: product.kitchenName,
+        price: item.price,
+        listId: list.id,
+        vatClass: product.vatClass,
+        quantity: pick.quantity,
+      });
+    }
+  }
+  return { kept: [...kept.values()], added, removed: remaining };
 }

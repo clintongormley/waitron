@@ -56,6 +56,8 @@ import {
   recallLines,
   sendLines,
   unmarkLineServed,
+  updateHeldOrder,
+  updateOrderLine,
   voidTabLine,
 } from "./working-order.js";
 import "./errors.js";
@@ -1566,5 +1568,358 @@ describe("a line with no fired ticket whose product sold out cannot be sent", ()
     await asApp(cfg, (tx) => sendLines(tx, cfg, tabId, []));
 
     expect((await sentState(tabId))[0]!.ticket!.firedAt).not.toBeNull();
+  });
+});
+
+/** The order's revision as stored: what a till's copy of it carries back. */
+async function revisionOf(orderId: string): Promise<number> {
+  const [row] = await db
+    .select({ revision: workingOrders.revision })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  return row!.revision;
+}
+
+/** One line's ticket item, whole, or `null` when it has none. */
+async function ticketRow(tabId: string, lineNo: number) {
+  const [row] = await db
+    .select({
+      id: ticketItems.id,
+      firedAt: ticketItems.firedAt,
+      note: ticketItems.note,
+      quantity: ticketItems.quantity,
+      state: ticketItems.state,
+    })
+    .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, lineNo)));
+  return row ?? null;
+}
+
+/** A tab with one café line fired to the default station at `quantity`, and that station's id. */
+async function tabWithFiredCafe(quantity = "1") {
+  const venue = await setupVenue();
+  const { cfg, tableId, cafeOffer } = venue;
+  const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+  await asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity }]));
+  const ticket = await ticketOfLine(tabId, 1);
+  const [line] = await db
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, tabId));
+  return { ...venue, tabId, ticket, lineId: line!.id };
+}
+
+describe("editing a line the kitchen has and has not started (plan D10, spec §10.3)", () => {
+  it("a change to a sent, not-started line recalls the old item with a notice and fires the changed line as a new item, price unchanged", async () => {
+    const { cfg, tabId, ticket } = await tabWithFiredCafe();
+    const before = await linesOf(tabId);
+
+    await asApp(cfg, async (tx) =>
+      updateOrderLine(tx, cfg, tabId, 1, { note: "no onions" }, await revisionOf(tabId)),
+    );
+
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
+      { kind: "recalled", lineName: "Café", quantity: "1.000", wasStarted: false },
+    ]);
+    const fresh = await ticketRow(tabId, 1);
+    expect(fresh).toMatchObject({ note: "no onions", quantity: 1000, state: "queued" });
+    expect(fresh!.id).not.toBe(ticket.id);
+    expect(fresh!.firedAt).not.toBeNull();
+    expect(await linesOf(tabId)).toEqual(before);
+  });
+
+  it("the same change through the whole-order save is never a silent delete", async () => {
+    const { cfg, tabId, ticket, lineId, cafeOffer } = await tabWithFiredCafe();
+
+    await updateHeldOrder({ db }, cfg, tabId, {
+      lines: [
+        { workingOrderLineId: lineId, menuItemId: cafeOffer, quantity: "1", note: "no onions" },
+      ],
+    });
+
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
+      { kind: "recalled", lineName: "Café", quantity: "1.000", wasStarted: false },
+    ]);
+    const fresh = await ticketRow(tabId, 1);
+    expect(fresh).toMatchObject({ note: "no onions", quantity: 1000 });
+    expect(fresh!.id).not.toBe(ticket.id);
+  });
+
+  it("a quantity rise leaves the fired item as it was and sends the difference as a new line", async () => {
+    const { cfg, tabId, ticket, cafeId } = await tabWithFiredCafe();
+    await db.execute(sql`update products set unit_price = 175 where id = ${cafeId}`);
+
+    await asApp(cfg, async (tx) =>
+      updateOrderLine(tx, cfg, tabId, 1, { quantity: "2" }, await revisionOf(tabId)),
+    );
+
+    // The first café at the 1.50 it was sold at; the second at today's 1.75.
+    expect(await linesOf(tabId)).toEqual([
+      expect.objectContaining({ lineNo: 1, quantity: 1000, lineTotal: 150 }),
+      expect.objectContaining({ lineNo: 2, quantity: 1000, lineTotal: 175 }),
+    ]);
+    expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id, quantity: 1000 });
+    const added = await ticketRow(tabId, 2);
+    expect(added).toMatchObject({ quantity: 1000, state: "queued" });
+    expect(added!.firedAt).not.toBeNull();
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+  });
+
+  it("a quantity drop is a void of the difference: a VOID notice, and the ticket's quantity follows", async () => {
+    const { cfg, tabId, ticket } = await tabWithFiredCafe("2");
+
+    await asApp(cfg, async (tx) =>
+      updateOrderLine(tx, cfg, tabId, 1, { quantity: "1" }, await revisionOf(tabId)),
+    );
+
+    expect(await linesOf(tabId)).toEqual([
+      expect.objectContaining({ lineNo: 1, quantity: 1000, lineTotal: 150 }),
+    ]);
+    expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id, quantity: 1000 });
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
+      { kind: "void", lineName: "Café", quantity: "1.000", wasStarted: false },
+    ]);
+  });
+
+  it("removing a sent, not-started line from the whole-order save voids it with a notice", async () => {
+    const { cfg, tabId, ticket, aguaOffer } = await tabWithFiredCafe();
+
+    await updateHeldOrder({ db }, cfg, tabId, {
+      lines: [{ menuItemId: aguaOffer, quantity: "1" }],
+    });
+
+    expect((await linesOf(tabId)).map((line) => line.lineNo)).toEqual([2]);
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
+      { kind: "void", lineName: "Café", quantity: "1.000", wasStarted: false },
+    ]);
+    // The tab has work sent, so the new line goes to the kitchen as a round's would.
+    expect((await ticketRow(tabId, 2))!.firedAt).not.toBeNull();
+  });
+
+  it("refuses any edit of a started line, and its removal, changing nothing", async () => {
+    const { cfg, tabId, ticket, aguaOffer } = await tabWithFiredCafe();
+    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, ticket.id, "preparing"));
+    const before = await linesOf(tabId);
+
+    for (const patch of [{ note: "no onions" }, { quantity: "2" }]) {
+      await expect(
+        asApp(cfg, async (tx) =>
+          updateOrderLine(tx, cfg, tabId, 1, patch, await revisionOf(tabId)),
+        ),
+      ).rejects.toMatchObject({
+        code: "ticket.already_started",
+        params: { ticketItemId: ticket.id },
+      });
+    }
+    await expect(
+      updateHeldOrder({ db }, cfg, tabId, { lines: [{ menuItemId: aguaOffer, quantity: "1" }] }),
+    ).rejects.toMatchObject({ code: "ticket.already_started" });
+
+    expect(await linesOf(tabId)).toEqual(before);
+    expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id, state: "preparing" });
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+  });
+
+  it("with changes to sent items switched off, refuses an edit of a sent line, changing nothing", async () => {
+    const { cfg, tabId, ticket, lineId, cafeOffer } = await tabWithFiredCafe();
+    await asApp(cfg, (tx) => writeEditSentLines(tx, false));
+    const before = await linesOf(tabId);
+
+    await expect(
+      asApp(cfg, async (tx) =>
+        updateOrderLine(tx, cfg, tabId, 1, { note: "no onions" }, await revisionOf(tabId)),
+      ),
+    ).rejects.toMatchObject({ code: "ticket.already_fired", params: { workingOrderId: tabId } });
+    await expect(
+      updateHeldOrder({ db }, cfg, tabId, {
+        lines: [{ workingOrderLineId: lineId, menuItemId: cafeOffer, quantity: "2" }],
+      }),
+    ).rejects.toMatchObject({ code: "ticket.already_fired" });
+
+    expect(await linesOf(tabId)).toEqual(before);
+    expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id });
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+  });
+
+  it("edits a recalled line freely: no notice, and its held item carries the change when sent again", async () => {
+    const { cfg, tabId, ticket } = await tabWithFiredCafe();
+    await asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]));
+    const recallNotices = await noticesAt(cfg, ticket.stationId);
+
+    await asApp(cfg, async (tx) =>
+      updateOrderLine(
+        tx,
+        cfg,
+        tabId,
+        1,
+        { note: "no onions", quantity: "3" },
+        await revisionOf(tabId),
+      ),
+    );
+
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual(recallNotices);
+    expect(await linesOf(tabId)).toEqual([
+      expect.objectContaining({ lineNo: 1, quantity: 3000, lineTotal: 450 }),
+    ]);
+    expect(await ticketRow(tabId, 1)).toMatchObject({
+      id: ticket.id,
+      firedAt: null,
+      note: "no onions",
+      quantity: 3000,
+    });
+  });
+
+  it("edits a held-course line and a no-route line freely, with no notice", async () => {
+    const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
+    await routeToNoPreparation(aguaId);
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { menuItemId: cafeOffer, quantity: "1", hold: true },
+        { menuItemId: aguaOffer, quantity: "1" },
+      ]),
+    );
+    const held = await ticketOfLine(tabId, 1);
+
+    await asApp(cfg, async (tx) =>
+      updateOrderLine(tx, cfg, tabId, 1, { note: "later" }, await revisionOf(tabId)),
+    );
+    await asApp(cfg, async (tx) =>
+      updateOrderLine(tx, cfg, tabId, 2, { quantity: "2" }, await revisionOf(tabId)),
+    );
+
+    expect(await ticketRow(tabId, 1)).toMatchObject({ id: held.id, firedAt: null, note: "later" });
+    expect(await ticketRow(tabId, 2)).toBeNull();
+    expect((await linesOf(tabId)).map((line) => line.quantity)).toEqual([1000, 2000]);
+    expect(await noticesAt(cfg, held.stationId)).toEqual([]);
+  });
+
+  it("refuses an edit made from a copy another edit has since changed, changing nothing", async () => {
+    const { cfg, tabId } = await tabWithFiredCafe("3");
+    const copy = await revisionOf(tabId);
+
+    await asApp(cfg, (tx) =>
+      updateOrderLine(tx, cfg, tabId, 1, { quantity: "3", note: "a" }, copy),
+    );
+    const landed = await linesOf(tabId);
+
+    await expect(
+      asApp(cfg, (tx) => updateOrderLine(tx, cfg, tabId, 1, { quantity: "2" }, copy)),
+    ).rejects.toMatchObject({
+      code: "working_order.out_of_date",
+      params: { workingOrderId: tabId },
+    });
+    expect(await linesOf(tabId)).toEqual(landed);
+  });
+
+  it("refuses to send a changed line again once its dish sold out, changing nothing", async () => {
+    const { cfg, tabId, ticket, cafeId } = await tabWithFiredCafe();
+    await db.execute(sql`update products set available = 0 where id = ${cafeId}`);
+
+    await expect(
+      asApp(cfg, async (tx) =>
+        updateOrderLine(tx, cfg, tabId, 1, { note: "no onions" }, await revisionOf(tabId)),
+      ),
+    ).rejects.toMatchObject({ code: "product.unavailable", params: { productId: cafeId } });
+    expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id, note: null });
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+  });
+
+  it("refuses a quantity the line's unit cannot take, and one that is not positive", async () => {
+    const { cfg, tabId } = await tabWithFiredCafe();
+    const before = await linesOf(tabId);
+
+    for (const [quantity, reason] of [
+      ["1.5", "precision"],
+      ["0", "positive"],
+    ]) {
+      await expect(
+        asApp(cfg, async (tx) =>
+          updateOrderLine(tx, cfg, tabId, 1, { quantity }, await revisionOf(tabId)),
+        ),
+      ).rejects.toMatchObject({ code: "quantity.invalid", params: { reason } });
+    }
+    expect(await linesOf(tabId)).toEqual(before);
+  });
+
+  it("an extra added to a sent line is priced now, and the line moves after the highest number with its extras", async () => {
+    const { cfg, tableId, cafeId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
+    const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        {
+          menuItemId: cafeOffer,
+          quantity: "1",
+          extras: [{ listId, picks: [{ productId: aguaId, quantity: 1 }] }],
+        },
+        { menuItemId: aguaOffer, quantity: "1" },
+      ]),
+    );
+    const ticket = await ticketOfLine(tabId, 1);
+    await db.execute(sql`update extra_list_items set price = 80 where list_id = ${listId}`);
+
+    await asApp(cfg, async (tx) =>
+      updateOrderLine(
+        tx,
+        cfg,
+        tabId,
+        1,
+        { extras: [{ listId, picks: [{ productId: aguaId, quantity: 2 }] }] },
+        await revisionOf(tabId),
+      ),
+    );
+
+    // The water extra taken twice is a new pick: the one at 0.50 goes, two at 0.80 come.
+    expect(await linesOf(tabId)).toEqual([
+      expect.objectContaining({ lineNo: 3, parentLineId: null, quantity: 1000 }),
+      expect.objectContaining({ lineNo: 4, parentLineId: null, quantity: 1000, lineTotal: 150 }),
+      expect.objectContaining({ lineNo: 5, quantity: 2000, lineTotal: 160 }),
+    ]);
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
+      { kind: "recalled", lineName: "Café", quantity: "1.000", wasStarted: false },
+    ]);
+    expect((await ticketRow(tabId, 4))!.firedAt).not.toBeNull();
+  });
+
+  it("changing a sent line's dish voids it with a notice and sends the new dish", async () => {
+    const { cfg, tabId, ticket, lineId, aguaOffer } = await tabWithFiredCafe();
+
+    await updateHeldOrder({ db }, cfg, tabId, {
+      lines: [{ workingOrderLineId: lineId, menuItemId: aguaOffer, quantity: "1" }],
+    });
+
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
+      { kind: "void", lineName: "Café", quantity: "1.000", wasStarted: false },
+    ]);
+    expect(await linesOf(tabId)).toEqual([expect.objectContaining({ lineNo: 2, lineTotal: 200 })]);
+    expect((await ticketRow(tabId, 2))!.firedAt).not.toBeNull();
+  });
+
+  it("refuses an unknown line, and an extras line, which follows its dish", async () => {
+    const { cfg, tableId, cafeId, aguaId, cafeOffer } = await setupVenue();
+    const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        {
+          menuItemId: cafeOffer,
+          quantity: "1",
+          extras: [{ listId, picks: [{ productId: aguaId, quantity: 1 }] }],
+        },
+      ]),
+    );
+
+    await expect(
+      asApp(cfg, async (tx) =>
+        updateOrderLine(tx, cfg, tabId, 9, { note: "x" }, await revisionOf(tabId)),
+      ),
+    ).rejects.toMatchObject({ code: "tab.line_not_found", params: { tabId, lineNo: 9 } });
+    await expect(
+      asApp(cfg, async (tx) =>
+        updateOrderLine(tx, cfg, tabId, 2, { note: "x" }, await revisionOf(tabId)),
+      ),
+    ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "lineNo" } });
   });
 });
