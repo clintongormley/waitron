@@ -2599,7 +2599,7 @@ image constraints under *Detail → Box image*.
     "never finished joining" is read as `serving-secondary` with no `nodes` row in the primary's
     database, and a remote standby writes that row in its own database, so the check cannot see a
     remote standby that finished — none can today (`finish-adoption.ts`).
-    **Done (2026-09-26, lane A's A63) for A61's two other open notes** (a removed entry still took a
+    **Done (2026-09-26, lane A's A63, #712) for A61's two other open notes** (a removed entry still took a
     `MAX_NODES` place; a removed node still held the primary's endorsement of its key): an admin
     (`mirror.create`) on the serving primary can clear a removed machine from the Servers screen
     (`POST /management-api/servers/:nodeId/clear`, routed in
