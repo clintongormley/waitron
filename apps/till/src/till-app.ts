@@ -524,6 +524,8 @@ export class TillApp extends LitElement {
   #tableOpensPending = 0;
   /** Identifies the latest tab-lines read, so an earlier read answering later cannot win. */
   #tabLinesRead = 0;
+  /** The same for the party's bills. */
+  #visitBillsRead = 0;
   /** The check {@link #onSplitLines} made and the tab it came from, cleared when a tab is paid, the
    * check is left while it is the open order, or the operator's session ends. Held in memory only:
    * after a reload the check stays in Held orders. */
@@ -1760,6 +1762,7 @@ export class TillApp extends LitElement {
     if (guestCount === undefined) {
       this.activeTabId = table?.tabId;
       this.orderParty = table?.visit ?? null;
+      await this.#loadLinesAndBills();
     } else {
       try {
         const { tabId, visitId, revision } = await this.api.seatTable(tableId, guestCount);
@@ -1778,11 +1781,8 @@ export class TillApp extends LitElement {
         await this.#refreshFloor();
         return;
       }
-      await this.#reloadTables();
-      this.#rememberOrderParty();
+      await this.#reloadOrder();
     }
-    await this.#loadTabLines();
-    await this.#loadVisitBills();
     // A canvas that authors a `table-order` card (handheld, tablet) switches to that tab; a till drills
     // in over the floor tab. Off the shell, only the lock screen is reached here, by a logout that lands
     // while the tab is opening.
@@ -1828,8 +1828,11 @@ export class TillApp extends LitElement {
   async #reloadOrder(): Promise<void> {
     await this.#reloadTables();
     this.#rememberOrderParty();
-    await this.#loadTabLines();
-    await this.#loadVisitBills();
+    await this.#loadLinesAndBills();
+  }
+
+  async #loadLinesAndBills(): Promise<void> {
+    await Promise.all([this.#loadTabLines(), this.#loadVisitBills()]);
   }
 
   /** The party a tab's table belongs to, as the floor last read it. */
@@ -1839,14 +1842,18 @@ export class TillApp extends LitElement {
 
   /** A failed read leaves the list empty rather than showing another party's bills. */
   async #loadVisitBills(): Promise<void> {
+    const read = ++this.#visitBillsRead;
     const visit = this.orderParty;
     if (visit === null) {
       this.visitBills = [];
       return;
     }
     try {
-      this.visitBills = await this.api.getVisitBills(visit.id);
+      const bills = await this.api.getVisitBills(visit.id);
+      if (read !== this.#visitBillsRead) return;
+      this.visitBills = bills;
     } catch {
+      if (read !== this.#visitBillsRead) return;
       this.visitBills = [];
     }
   }
@@ -2269,10 +2276,18 @@ export class TillApp extends LitElement {
     return this.#checkReturn;
   }
 
+  /** Sends the revision of the party whose table holds the tab, as the floor last read it, because
+   * the operator may already be opening another party's table. */
   async #mergeCheckBack(split: { checkId: string; tabId: string }): Promise<void> {
     const session = this.#operatorSession;
+    const party = this.#visitOfTab(split.tabId);
     try {
-      await this.api.mergeTabs(split.tabId, split.checkId, false);
+      await this.api.mergeTabs(
+        split.tabId,
+        split.checkId,
+        false,
+        party === null ? {} : { expectedVisitRevision: party.revision },
+      );
     } catch (error) {
       if (session !== this.#operatorSession) return;
       // No answer means the merge may have happened.

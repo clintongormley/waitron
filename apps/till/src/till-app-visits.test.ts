@@ -512,6 +512,12 @@ describe("till-app: the party on a handheld", () => {
   );
 });
 
+/** The party's bills read left unanswered until the test settles it. */
+interface LateBills {
+  resolve: (bills: VisitBill[]) => void;
+  reject: (error: unknown) => void;
+}
+
 describe("till-app: reads and refusals around the party", () => {
   it("shows no bills rather than stale ones when the party's bills cannot be read", async () => {
     const { el } = await mountApp({
@@ -522,6 +528,44 @@ describe("till-app: reads and refusals around the party", () => {
 
     expect(order.bills).toEqual([]);
   });
+
+  it.each([
+    ["answers", (late: LateBills) => late.resolve([tabBill, checkBill])],
+    ["fails", (late: LateBills) => late.reject(new TypeError("Failed to fetch"))],
+  ] as const)(
+    "keeps the next table's bills when the last table's bills read %s after them",
+    async (_outcome, settle) => {
+      const bill7: VisitBill = { ...tabBill, workingOrderId: "wo-7", visitId: "v7" };
+      const late = {} as LateBills;
+      let v1Reads = 0;
+      const { el } = await mountApp({
+        getVisitBills: vi.fn((visitId: string) => {
+          if (visitId !== "v1") return Promise.resolve([bill7]);
+          v1Reads++;
+          if (v1Reads === 1) return Promise.resolve([tabBill, checkBill]);
+          return new Promise<VisitBill[]>((resolve, reject) =>
+            Object.assign(late, { resolve, reject }),
+          );
+        }),
+      });
+      const first = await openMesa(el);
+      // The join reads the party's bills again, and that read is still unanswered when the waiter
+      // goes to the next table.
+      emit(first, "join-table", { tableId: "t9" });
+      await flush(el);
+      expect(v1Reads).toBe(2);
+      emit(tableOrder(el)!, "back-to-floor");
+      await flush(el);
+      emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+      await flush(el);
+      expect(tableOrder(el)!.bills).toEqual([bill7]);
+
+      settle(late);
+      await flush(el);
+
+      expect(tableOrder(el)!.bills).toEqual([bill7]);
+    },
+  );
 
   it("offers no Finish command for a tab that belongs to no party", async () => {
     const { el } = await mountApp({
@@ -681,6 +725,100 @@ describe("till-app: every table move sends the party revision it last read", () 
     expect(tableOrder(el)!.orderId).toBe("wo-next");
     expect(api.getTabLines).toHaveBeenLastCalledWith("wo-next");
     expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
+  });
+});
+
+describe("till-app: a party's split-off bill left unpaid goes back with the party's revision", () => {
+  const tablet: CanvasDef = {
+    formFactor: "tablet-landscape",
+    tabs: [
+      {
+        key: "floor",
+        title: "Floor",
+        columns: 24,
+        cards: [
+          { type: "floor-plan", colSpan: 12, rowSpan: 12, config: {} },
+          { type: "table-order", colSpan: 12, rowSpan: 12, config: {} },
+        ],
+      },
+    ],
+  };
+  const orderCard = (el: TillApp) =>
+    tabGrid(el)?.shadowRoot?.querySelector<TillTableOrderScreen>("till-table-order-screen") ?? null;
+
+  /** The floor reads the party at revision 3 until the split, and at 4 once the split has moved it. */
+  function floorAcrossSplit() {
+    let split = false;
+    return {
+      getTablesState: vi.fn(async () => [
+        split ? seated({}, { revision: 4 }) : mesa4,
+        mesa7,
+        mesa9,
+      ]),
+      splitTab: vi.fn(async () => {
+        split = true;
+        return { checkId: "wo-check" };
+      }),
+    };
+  }
+
+  it("sends the revision the floor read after the split when a till goes Back", async () => {
+    const { el } = await mountApp(floorAcrossSplit());
+    const order = await openMesa(el);
+    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+
+    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-4", "wo-check", false, {
+      expectedVisitRevision: 4,
+    });
+    expect(banner(el)).toBeNull();
+  });
+
+  it("sends the returned party's revision, not the next table's, when a tablet opens another table", async () => {
+    const { el } = await mountApp({
+      ...floorAcrossSplit(),
+      getTill: vi.fn().mockResolvedValue({ ...till, canvas: tablet }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "tb1", formFactor: "tablet-landscape", stationId: null }),
+    });
+    const screen = await toFloor(el);
+    emit(screen, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    emit(orderCard(el)!, "split-lines", { transfers: [{ lineNo: 1 }] });
+    await flush(el);
+    expect(orderCard(el)!.orderId).toBe("wo-check");
+
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+
+    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-4", "wo-check", false, {
+      expectedVisitRevision: 4,
+    });
+    expect(orderCard(el)!.orderId).toBe("wo-7");
+  });
+
+  it("keeps the bill held, without sending it again, when the party changed elsewhere first", async () => {
+    const { el } = await mountApp({
+      ...floorAcrossSplit(),
+      mergeTabs: vi
+        .fn()
+        .mockRejectedValue({ code: "visit.out_of_date", visitId: "v1", revision: 6 }),
+    });
+    const order = await openMesa(el);
+    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    await flush(el);
+
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+
+    expect(api.mergeTabs).toHaveBeenCalledOnce();
+    expect(banner(el)!.textContent).toContain(t("table.check_kept_held"));
+    expect(floor(el)).not.toBeNull();
   });
 });
 

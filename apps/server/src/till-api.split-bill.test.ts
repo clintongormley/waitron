@@ -9,6 +9,8 @@ import {
   printJobs,
   ticketItems,
   tills,
+  visitTables,
+  visits,
   withTransaction,
   workingOrderLines,
 } from "@waitron/db";
@@ -522,6 +524,15 @@ describe("POST /api/tabs/:id/unjoin", () => {
   });
 });
 
+/** The suite shares one database, and an earlier case may already have seeded the default station. */
+async function kitchenStation(config: TillConfig): Promise<string> {
+  const [existing] = await suite.db
+    .select({ id: kitchenStations.id })
+    .from(kitchenStations)
+    .where(eq(kitchenStations.locationId, config.locationId));
+  return existing?.id ?? seedKitchenStation(suite.db, { locationId: config.locationId });
+}
+
 /** The merge the till sends when a waiter leaves an unpaid split-off check without paying it. */
 describe("POST /api/tabs/:id/merge of a check back into the tab it was split from", () => {
   /** A tab whose second line was sent to a kitchen with a printer, then split whole onto a check. */
@@ -563,15 +574,6 @@ describe("POST /api/tabs/:id/merge of a check back into the tab it was split fro
     });
     const { checkId } = (await split.json()) as { checkId: string };
     return { app, tabA, checkId, cookie, printerId, ticket: ticket! };
-  }
-
-  /** The suite shares one database, and an earlier case may already have seeded the default station. */
-  async function kitchenStation(config: TillConfig): Promise<string> {
-    const [existing] = await suite.db
-      .select({ id: kitchenStations.id })
-      .from(kitchenStations)
-      .where(eq(kitchenStations.locationId, config.locationId));
-    return existing?.id ?? seedKitchenStation(suite.db, { locationId: config.locationId });
   }
 
   /** Each ticket item on the order, with the line number of the line it belongs to. */
@@ -653,6 +655,111 @@ describe("POST /api/tabs/:id/merge of a check back into the tab it was split fro
     expect((await ticketsOn(checkId)).map((item) => item.id)).toEqual([ticket.id]);
     expect(await ticketsOn(tabA)).toEqual([]);
     expect(await heldOrderIds(app, cookie)).toContain(checkId);
+  });
+});
+
+/** The same merge on a seated party's tab, whose split-off check belongs to the party too. */
+describe("POST /api/tabs/:id/merge of a seated party's check back into its tab", () => {
+  /** A party seated through the till's seat route, a round of three cafés, and one of them split off
+   * onto a check; the revision is the party's as the floor reads it after the split. */
+  async function seatedSplit(): Promise<{
+    post: (path: string, body: unknown) => Promise<Response>;
+    tabId: string;
+    checkId: string;
+    visitId: string;
+    revision: number;
+  }> {
+    const app = new Hono();
+    const d = deps(suite.db);
+    mountTillApi(app, d, collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const post = async (path: string, body: unknown) =>
+      app.request(path, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify(body),
+      });
+    const table = await withTransaction(suite.db, (tx) =>
+      createTable(tx, d.cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId }),
+    );
+    const seated = await post(`/api/tables/${table.id}/seat`, { guestCount: 2 });
+    expect(seated.status).toBe(200);
+    const { tabId, visitId, revision } = (await seated.json()) as {
+      tabId: string;
+      visitId: string;
+      revision: number;
+    };
+    await kitchenStation(d.cfg);
+    const offers = await withTransaction(suite.db, (tx) =>
+      offerProducts(tx, d.cfg, { zone: "tables" }),
+    );
+    const round = await post(`/api/working-orders/${tabId}/round`, {
+      lines: [{ menuItemId: offers.offerFor(cafeId), quantity: "3" }],
+    });
+    expect(round.status).toBe(200);
+    const split = await post(`/api/tabs/${tabId}/split`, {
+      transfers: [{ lineNo: 1, quantity: "1" }],
+      expectedVisitRevision: revision,
+    });
+    expect(split.status).toBe(200);
+    const { checkId } = (await split.json()) as { checkId: string };
+    const floor = await app.request("/api/tables/state", { headers: { cookie } });
+    const row = ((await floor.json()) as { id: string; visit: { revision: number } | null }[]).find(
+      (candidate) => candidate.id === table.id,
+    );
+    return { post, tabId, checkId, visitId, revision: row!.visit!.revision };
+  }
+
+  async function quantitiesOn(orderId: string): Promise<string[]> {
+    const { rows } = await suite.db.execute<{ quantity: string }>(
+      sql`select cast(quantity as text) as quantity from working_order_lines
+          where working_order_id = ${orderId} order by line_no`,
+    );
+    return rows.map((row) => row.quantity);
+  }
+
+  async function partyOf(visitId: string) {
+    const [visit] = await suite.db
+      .select({ state: visits.state })
+      .from(visits)
+      .where(eq(visits.id, visitId));
+    const members = await suite.db
+      .select({ tableId: visitTables.tableId, leftAt: visitTables.leftAt })
+      .from(visitTables)
+      .where(eq(visitTables.visitId, visitId));
+    return { state: visit?.state, members };
+  }
+
+  it("puts the check's lines back on the tab when sent with the party's revision, keeping the party", async () => {
+    const { post, tabId, checkId, visitId, revision } = await seatedSplit();
+    const before = await partyOf(visitId);
+
+    const res = await post(`/api/tabs/${tabId}/merge`, {
+      fromTabId: checkId,
+      freeSourceTable: false,
+      expectedVisitRevision: revision,
+    });
+
+    expect(res.status).toBe(200);
+    expect(await quantitiesOn(checkId)).toEqual([]);
+    expect(await quantitiesOn(tabId)).toEqual(["2000", "1000"]);
+    expect(before).toMatchObject({ state: "open", members: [{ leftAt: null }] });
+    expect(await partyOf(visitId)).toEqual(before);
+  });
+
+  it("refuses the merge sent without a revision, leaving the check's line on it", async () => {
+    const { post, tabId, checkId } = await seatedSplit();
+
+    const res = await post(`/api/tabs/${tabId}/merge`, {
+      fromTabId: checkId,
+      freeSourceTable: false,
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "expectedVisitRevision" } },
+    });
+    expect(await quantitiesOn(checkId)).toEqual(["1000"]);
   });
 });
 

@@ -1721,7 +1721,7 @@ describe("till-app table ordering: a split-off bill left unpaid goes back to its
     emit(tableOrder(el)!, "back-to-floor");
     await flush(el);
 
-    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false);
+    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false, {});
     expect(lastCall(api.getTablesState)).toBeGreaterThan(lastCall(api.mergeTabs));
     expect(activeTabId(el)).toBe("wo-7");
     expect(floor(el)).not.toBeNull();
@@ -1734,7 +1734,7 @@ describe("till-app table ordering: a split-off bill left unpaid goes back to its
     emit(shell(el), "tab-select", { key: "floor" });
     await flush(el);
 
-    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false);
+    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false, {});
     expect(lastCall(api.getTablesState)).toBeGreaterThan(lastCall(api.mergeTabs));
 
     emit(shell(el), "tab-select", { key: "order" });
@@ -1761,7 +1761,7 @@ describe("till-app table ordering: a split-off bill left unpaid goes back to its
     await openFromFloor(el, otherTable);
     await flush(el);
 
-    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false);
+    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false, {});
     expect(lastCall(api.getTabLines)).toBeGreaterThan(lastCall(api.mergeTabs));
     expect(tableOrder(el)!.orderId).toBe("wo-8");
   });
@@ -1786,7 +1786,7 @@ describe("till-app table ordering: a split-off bill left unpaid goes back to its
     emit(shell(el), "tab-select", { key: "floor" });
     await flush(el);
 
-    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false);
+    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false, {});
     expect(banner(el)!.textContent).toContain(t("table.check_kept_held"));
     expect(floor(el)).not.toBeNull();
 
@@ -2052,7 +2052,7 @@ describe("till-app table ordering: a split-off bill left unpaid goes back to its
     emit(tableOrder(el)!, "split-lines", { transfers: [{ lineNo: 3 }] });
     await flush(el);
     await openFromFloor(el, otherTable);
-    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false);
+    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false, {});
     opened({ tabId: "wo-new", orderNumber: 12 });
     await flush(el);
     const reads = vi.mocked(api.getTabLines).mock.calls.length;
