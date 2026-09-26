@@ -324,6 +324,19 @@ describe("reordering", () => {
     await settle(el);
   });
 
+  it("reloads the list after a refused reorder, so a retry works from the current order", async () => {
+    const api = fakeApi({
+      reorderReasons: vi.fn().mockRejectedValue({
+        code: "management.request_invalid",
+        params: { field: "ids" },
+      }),
+    });
+    const el = await mount(api);
+    await press(el, "move-up-c");
+    expect(api.listReasons).toHaveBeenCalledTimes(2);
+    expect(alert(el)).toBe("The new order could not be saved.");
+  });
+
   it("says when the new order could not be saved", async () => {
     const el = await mount(
       fakeApi({ reorderReasons: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
@@ -512,14 +525,15 @@ describe("the editor", () => {
     });
     const el = await mount(api);
     await press(el, "edit-c");
+    field(el, "name").focus();
     await press(el, "save-editor");
     const save = find(el, '[data-test="save-editor"]') as HTMLElement & { disabled: boolean };
     expect(save.disabled).toBe(true);
     save.click();
     await settle(el);
-    const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
-    modal(el)!.dispatchEvent(escape);
-    expect(escape.defaultPrevented).toBe(true);
+    await userEvent.keyboard("{Escape}");
+    await settle(el);
+    expect(modal(el)).not.toBeNull();
     expect(api.updateReason).toHaveBeenCalledTimes(1);
     finish(complaint);
     await settle(el);
@@ -629,6 +643,22 @@ describe("the editor", () => {
     expect(api.updateReason).not.toHaveBeenCalled();
   });
 
+  it("fills the limits with the dashboard's decimal mark, and sends them back unchanged", async () => {
+    setLocale("es");
+    const api = fakeApi({
+      listReasons: vi.fn().mockResolvedValue([{ ...complaint, maxPercentBp: 1250 }]),
+    });
+    const el = await mount(api);
+    await press(el, "edit-c");
+    expect(field(el, "maxPercent").value).toBe("12,5");
+    expect(field(el, "maxAmount").value).toBe("30,00");
+    await press(el, "save-editor");
+    expect(api.updateReason.mock.calls[0]![1]).toMatchObject({
+      maxPercentBp: 1250,
+      maxAmount: "30.00",
+    });
+  });
+
   it("closes on Escape without saving", async () => {
     const api = fakeApi();
     const el = await mount(api);
@@ -654,6 +684,51 @@ describe("the editor", () => {
 });
 
 describe("deactivating", () => {
+  const menuFocused = (el: AdjustmentReasonsScreen) =>
+    table(el).shadowRoot!.activeElement?.getAttribute("label");
+
+  it("moves focus to the menu of the row that takes the deactivated one's place", async () => {
+    const api = fakeApi({
+      listReasons: vi
+        .fn()
+        .mockResolvedValueOnce(reasons)
+        .mockResolvedValue([entryError, employee, { ...complaint, active: false }, retired]),
+    });
+    const el = await mount(api);
+    await press(el, "deactivate-c");
+    await press(el, "confirm-deactivate");
+    expect(rowKeys(el)).toEqual(["e", "d"]);
+    expect(menuFocused(el)).toBe("Actions: Employee discount");
+  });
+
+  it("moves focus to the new last row when the last row is deactivated", async () => {
+    const api = fakeApi({
+      listReasons: vi
+        .fn()
+        .mockResolvedValueOnce(reasons)
+        .mockResolvedValue([entryError, complaint, { ...employee, active: false }, retired]),
+    });
+    const el = await mount(api);
+    await press(el, "deactivate-d");
+    await press(el, "confirm-deactivate");
+    expect(menuFocused(el)).toBe("Actions: Complaint");
+  });
+
+  it("moves focus to Add reason when no active reason remains", async () => {
+    const api = fakeApi({
+      listReasons: vi
+        .fn()
+        .mockResolvedValueOnce([complaint])
+        .mockResolvedValue([{ ...complaint, active: false }]),
+    });
+    const el = await mount(api);
+    await press(el, "deactivate-c");
+    await press(el, "confirm-deactivate");
+    expect(rowKeys(el)).toEqual([]);
+    const add = el.shadowRoot!.querySelector('[data-test="add-reason"]');
+    expect(el.shadowRoot!.activeElement).toBe(add);
+  });
+
   it("says what deactivating does before it acts, then deactivates and reloads", async () => {
     const api = fakeApi();
     const el = await mount(api);

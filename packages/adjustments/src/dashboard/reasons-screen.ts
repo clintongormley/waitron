@@ -89,6 +89,14 @@ function amount(text: string): string | null | undefined {
   return match[2] === undefined ? whole : `${whole}.${match[2]}`;
 }
 
+/** A decimal string written with the dashboard language's decimal mark, as the list shows it. */
+function localDecimal(value: string): string {
+  const mark = new Intl.NumberFormat(currentLocale())
+    .formatToParts(1.5)
+    .find((part) => part.type === "decimal")!.value;
+  return value.replace(".", mark);
+}
+
 function languageName(code: string): string {
   return new Intl.DisplayNames([currentLocale()], { type: "language", fallback: "code" }).of(code)!;
 }
@@ -250,11 +258,12 @@ export class AdjustmentReasonsScreen extends LitElement {
       await this.api.reorderReasons(ids);
     } catch {
       this.orderError = t("adjustments.reorder_error");
-      return;
     } finally {
       this.busy = false;
     }
+    // Also after a refusal: the route refuses a stale list whole, so a retry needs the current one.
     await this.#load();
+    if (this.orderError) return;
     await this.updateComplete;
     // Rows are drawn by position, so the pressed button now belongs to another reason.
     const table = this.renderRoot.querySelector("wt-data-table");
@@ -278,8 +287,9 @@ export class AdjustmentReasonsScreen extends LitElement {
         name: reason?.name ?? "",
         names: { ...reason?.names },
         actions: [...(reason?.actions ?? [])],
-        maxPercent: reason?.maxPercentBp == null ? "" : String(reason.maxPercentBp / 100),
-        maxAmount: reason?.maxAmount ?? "",
+        maxPercent:
+          reason?.maxPercentBp == null ? "" : localDecimal(String(reason.maxPercentBp / 100)),
+        maxAmount: reason?.maxAmount == null ? "" : localDecimal(reason.maxAmount),
         applyRole: reason?.applyRole ?? "manager",
         approverRole: reason?.approverRole ?? "manager",
         noteRequired: reason?.noteRequired ?? false,
@@ -354,7 +364,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   }
 
   /** A refresh that fails after a write succeeded is a load failure: the editor has already closed. */
-  async #write(action: () => Promise<unknown>): Promise<void> {
+  async #write(action: () => Promise<unknown>, after?: () => Promise<void>): Promise<void> {
     if (this.busy) return;
     this.busy = true;
     try {
@@ -367,6 +377,30 @@ export class AdjustmentReasonsScreen extends LitElement {
     }
     this.#close();
     await this.#load();
+    await after?.();
+  }
+
+  /** The Active filter drops the row, so focus goes to the row now in its place, or to Add reason. */
+  #deactivate(reason: AdjustmentReason): void {
+    const rows = () => [
+      ...(this.renderRoot
+        .querySelector("wt-data-table")
+        ?.shadowRoot?.querySelectorAll<HTMLElement>("tbody tr[data-row-key]") ?? []),
+    ];
+    const index = rows().findIndex((row) => row.dataset.rowKey === reason.id);
+    void this.#write(
+      () => this.api.deactivateReason(reason.id),
+      async () => {
+        await this.updateComplete;
+        await this.renderRoot.querySelector("wt-data-table")?.updateComplete;
+        const remaining = rows();
+        const row = remaining[Math.min(index, remaining.length - 1)];
+        (
+          row?.querySelector<HTMLElement>("wt-row-actions") ??
+          this.renderRoot.querySelector<HTMLElement>('[data-test="add-reason"]')
+        )?.focus();
+      },
+    );
   }
 
   #save(): void {
@@ -645,13 +679,9 @@ export class AdjustmentReasonsScreen extends LitElement {
         @wt-close=${() => {
           if (this.editor === editor) this.#close();
         }}
-        @keydown=${(event: KeyboardEvent) => {
-          if (event.key === "Escape" && this.busy) {
-            event.preventDefault();
-            event.stopPropagation();
-          }
-          submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-editor"]'));
-        }}
+        .dismissible=${!this.busy}
+        @keydown=${(event: KeyboardEvent) =>
+          submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-editor"]'))}
       >
         <wt-form-error-summary
           heading=${t("adjustments.form_error_heading")}
@@ -681,7 +711,7 @@ export class AdjustmentReasonsScreen extends LitElement {
                   variant="danger"
                   data-test="confirm-deactivate"
                   ?disabled=${this.busy}
-                  @click=${() => void this.#write(() => this.api.deactivateReason(editor.reason.id))}
+                  @click=${() => this.#deactivate(editor.reason)}
                   >${t("adjustments.deactivate")}</wt-button
                 >`
               : html`<wt-button
