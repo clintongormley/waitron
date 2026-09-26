@@ -2,6 +2,7 @@ import { optionAnswers } from "../widgets/option-snapshot.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { keyed } from "lit/directives/keyed.js";
 import { baseStyles } from "@waitron/ui";
 import {
   addDecimal,
@@ -32,7 +33,6 @@ import {
 import { deriveExtraSelections } from "../state/held-extras.js";
 import { deriveOptionSelections, sameOptionSelections } from "../state/held-options.js";
 import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "../state/order-line.js";
-import { StoreChangeController } from "../state/store-controller.js";
 import "../widgets/product-grid.js";
 import "../widgets/basket.js";
 import "../widgets/tender-pay.js";
@@ -528,7 +528,42 @@ export class TillTableOrderScreen extends LitElement {
   @state() private splitQuantities = new Map<number, string>();
   @state() private splitAttempted = false;
 
-  readonly #roundStore = new WorkingOrderStore();
+  /**
+   * One round per order, so a round kept after a refused send stays with its table: another table
+   * opened on this screen starts its own, and the first comes back when the waiter returns to it.
+   */
+  readonly #rounds = new Map<string, WorkingOrderStore>();
+
+  get #roundStore(): WorkingOrderStore {
+    const key = this.orderId ?? "";
+    let round = this.#rounds.get(key);
+    if (round === undefined) {
+      round = new WorkingOrderStore();
+      this.#rounds.set(key, round);
+    }
+    return round;
+  }
+
+  /** The round this screen re-renders on; it follows {@link orderId}. */
+  #watchedRound?: { round: WorkingOrderStore; stop: () => void };
+
+  #watchRound(): void {
+    const round = this.#roundStore;
+    if (this.#watchedRound?.round === round) return;
+    this.#watchedRound?.stop();
+    this.#watchedRound = { round, stop: round.subscribe(() => this.requestUpdate()) };
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#watchRound();
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#watchedRound?.stop();
+    this.#watchedRound = undefined;
+  }
   /**
    * Keyed by the round line's object identity: a store line is kept by reference until the round
    * clears, so a `WeakMap` survives re-renders and drops its entries once the round is sent. A line
@@ -548,10 +583,10 @@ export class TillTableOrderScreen extends LitElement {
   constructor() {
     super();
     new ContentLanguageController(this);
-    new StoreChangeController(this, () => this.#roundStore);
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
+    this.#watchRound();
     // The gross map is filled BEFORE `#tabTotal` sums it below.
     if (changed.has("lines") || this.#payStore === undefined) {
       this.#lineGrossByLineNo = new Map(
@@ -1196,12 +1231,19 @@ export class TillTableOrderScreen extends LitElement {
                   ></till-diet-filter>`
                 : nothing
             }
-            <till-product-grid
-              class="round-control"
-              ?inert=${this.#roundStore.sending}
-              .products=${this.#gridProducts()}
-              .store=${this.#roundStore}
-            ></till-product-grid>
+            ${
+              // Keyed on the order: a widget subscribes to its store once, when it connects, so a
+              // round of another order needs a fresh one.
+              keyed(
+                this.orderId,
+                html`<till-product-grid
+                  class="round-control"
+                  ?inert=${this.#roundStore.sending}
+                  .products=${this.#gridProducts()}
+                  .store=${this.#roundStore}
+                ></till-product-grid>`,
+              )
+            }
           </div>
           ${this.drawerOpen ? this.#drawer(pending) : nothing}
         </div>
@@ -1215,7 +1257,7 @@ export class TillTableOrderScreen extends LitElement {
         <div class="round-control" data-round-controls ?inert=${this.#roundStore.sending}>
           ${this.#roundCoursesSection()}
           <div class="round-bar">
-            <till-basket .store=${this.#roundStore}></till-basket>
+            ${keyed(this.orderId, html`<till-basket .store=${this.#roundStore}></till-basket>`)}
             <wt-button
               class="send-round"
               data-send-round

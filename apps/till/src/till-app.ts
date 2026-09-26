@@ -116,6 +116,14 @@ interface RefreshRetry {
 
 const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
 
+/**
+ * How long a round's send may stay out before it is cancelled and treated as unanswered. Above the
+ * server watchdog's two minutes (`WATCHDOG_KILL_MS`, `packages/store/src/venue-liveness.ts`), after
+ * which a server whose main thread stopped is killed, so the till does not give up on a server the
+ * watchdog is still letting run.
+ */
+const ROUND_SEND_LIMIT_MS = 150_000;
+
 /** A whole-count unit's three-place server quantity reads "2", not "2.000". */
 function displayQuantity(product: TillProduct, quantity: string): string {
   if (productUnit(product).precision !== 0 || !quantity.includes(".")) return quantity;
@@ -1257,6 +1265,16 @@ export class TillApp extends LitElement {
     this.#markRounds();
   }
 
+  /** A round refused because a dish in it sold out: the table's offers are read again, so the line
+   * shows its mark, and the mark follows the offers from then on. */
+  async #markSoldOut(round: WorkingOrderStore): Promise<void> {
+    const zoneId = this.#tableZoneId;
+    if (zoneId === undefined) return;
+    await this.#reloadTableOffers(zoneId);
+    this.#markedRounds.add(round);
+    this.#markRounds();
+  }
+
   /** Marks each marked round's lines again against the table's offers; a round left with no mark is
    * forgotten. */
   #markRounds(): void {
@@ -2239,8 +2257,10 @@ export class TillApp extends LitElement {
   ): Promise<void> {
     this.errorKey = undefined;
     let landedOn: string;
+    const send = new AbortController();
+    const limit = setTimeout(() => send.abort(), ROUND_SEND_LIMIT_MS);
     try {
-      landedOn = (await this.api.addTabRound(tabId, lines)).tabId;
+      landedOn = (await this.api.addTabRound(tabId, lines, { signal: send.signal })).tabId;
     } catch (error) {
       if (isVersionRefusal(error) && round !== undefined) {
         const outcome = await this.#refreshRound(round);
@@ -2254,9 +2274,18 @@ export class TillApp extends LitElement {
         if (outcome !== "confirming") this.errorKey = { code: "menu.version_changed" };
         return;
       }
+      if (isNetworkFailure(error)) {
+        this.errorKey = "table.round_unconfirmed";
+        round?.removeLines(sent);
+        await this.#loadTabLines();
+        return;
+      }
       this.errorKey = lineWriteError(error);
-      if (isNetworkFailure(error)) round?.removeLines(sent);
+      if ((error as { code?: string }).code === "product.unavailable" && round !== undefined)
+        await this.#markSoldOut(round);
       return;
+    } finally {
+      clearTimeout(limit);
     }
     round?.removeLines(sent);
     if (landedOn !== tabId && this.activeTabId === tabId) {

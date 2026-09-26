@@ -168,6 +168,25 @@ describe("till-table-order-screen", () => {
     expect(grid(el).store.lineCount).toBe(1);
   });
 
+  it("keeps one round per order: another order starts empty, and the first comes back with its lines", async () => {
+    const { el } = await mount({ orderId: "wo-A" });
+    grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
+    await el.updateComplete;
+    expect(grid(el).store.lineCount).toBe(1);
+
+    el.orderId = "wo-B";
+    await el.updateComplete;
+    expect(grid(el).store.lineCount).toBe(0);
+    const basket = el.shadowRoot!.querySelector(".round-bar till-basket")!;
+    expect(basket.shadowRoot!.textContent).toContain(t("basket.empty"));
+    expect(el.shadowRoot!.querySelector("[data-send-round]")!.hasAttribute("disabled")).toBe(true);
+
+    el.orderId = "wo-A";
+    await el.updateComplete;
+    expect(grid(el).store.lineCount).toBe(1);
+    expect(el.shadowRoot!.querySelector("[data-send-round]")!.hasAttribute("disabled")).toBe(false);
+  });
+
   it("says a round is being sent, and shuts its controls, until the app has the answer", async () => {
     const { el } = await mount();
     grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();

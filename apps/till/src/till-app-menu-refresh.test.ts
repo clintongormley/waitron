@@ -1200,3 +1200,126 @@ describe("a round at phone width", () => {
     }
   });
 });
+
+// ── Fix round 3 ──────────────────────────────────────────────────────────────────────────────────
+
+const tableB = { ...table, id: "t3", label: "3", tabId: "wo-8" };
+
+describe("a kept round and another table", () => {
+  it("does not carry a refused round to the next table opened on the same screen", async () => {
+    // Floor and order share one tab, as a tablet canvas can, so the table screen stays mounted.
+    const sideBySide: CanvasDef = {
+      formFactor: "till",
+      tabs: [
+        canvas.tabs[0]!,
+        {
+          key: "service",
+          title: "Service",
+          columns: 24,
+          cards: [
+            { type: "floor-plan", colSpan: 12, rowSpan: 12, config: {} },
+            { type: "table-order", colSpan: 12, rowSpan: 12, config: {} },
+          ],
+        },
+      ],
+    };
+    const { el } = await mountApp(
+      tableStubs(DINING, {
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: sideBySide }),
+        getTablesState: vi.fn().mockResolvedValue([table, tableB]),
+        addTabRound: vi
+          .fn()
+          .mockRejectedValue({ code: "product.unavailable", status: 409, productId: "Lemonade" }),
+      }),
+    );
+    await toCounter(el);
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "service" });
+    await flush(el);
+    const floorScreen = () => shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!;
+    emit(floorScreen(), "open-table", { tableId: "t2", hasOpenTab: true });
+    await flush(el);
+    const screenForA = tableScreen(el);
+    await sendLemonadeRound(el);
+    expect(roundStore(el).lineCount).toBe(1);
+
+    emit(floorScreen(), "open-table", { tableId: "t3", hasOpenTab: true });
+    await flush(el);
+    expect(tableScreen(el)).toBe(screenForA);
+    expect(roundStore(el).lineCount).toBe(0);
+    expect(
+      tableScreen(el).shadowRoot!.querySelector("[data-send-round]")!.hasAttribute("disabled"),
+    ).toBe(true);
+
+    emit(floorScreen(), "open-table", { tableId: "t2", hasOpenTab: true });
+    await flush(el);
+    expect(roundStore(el).lineCount).toBe(1);
+  });
+});
+
+describe("a round send that gets no answer", () => {
+  it("gives up after 150 seconds, takes the round out, re-reads the tab and says to check it", async () => {
+    let signal: AbortSignal | undefined;
+    const { el } = await mountApp(
+      tableStubs(DINING, {
+        addTabRound: vi.fn(
+          (_tabId: string, _lines: unknown, options?: { signal?: AbortSignal }) =>
+            new Promise<void>((_resolve, reject) => {
+              signal = options?.signal;
+              signal?.addEventListener("abort", () =>
+                reject(new DOMException("The operation was aborted.", "AbortError")),
+              );
+            }),
+        ),
+      }),
+    );
+    await toTable(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    const settle = async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+    };
+    const tileButton = [
+      ...roundGrid(el).shadowRoot!.querySelectorAll<HTMLElement>("wt-button"),
+    ].find((button) => button.querySelector(".name")!.textContent === "Lemonade")!;
+    tileButton.click();
+    await settle();
+    tableScreen(el).shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    await settle();
+    const tabReads = api.getTabLines.mock.calls.length;
+
+    await vi.advanceTimersByTimeAsync(149_999);
+    await el.updateComplete;
+    expect(signal?.aborted).toBe(false);
+    expect(roundStore(el).lineCount).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await settle();
+    await settle();
+    expect(signal?.aborted).toBe(true);
+    expect(roundStore(el).lineCount).toBe(0);
+    expect(api.getTabLines.mock.calls.length).toBe(tabReads + 1);
+    expect(banner(el)!.textContent).toContain(
+      "The server did not answer, so the round may have been added. Check the tab before sending it again.",
+    );
+    expect(api.addTabRound).toHaveBeenCalledOnce();
+  });
+});
+
+describe("a round refused because a dish in it sold out", () => {
+  it("marks the sold-out line", async () => {
+    const soldOut = {
+      ...DINING,
+      offers: [offer("offer-lemonade", "Lemonade", "3.00", { available: false }), burgerOffer()],
+    };
+    const { el } = await mountApp(
+      tableStubs(soldOut, {
+        addTabRound: vi
+          .fn()
+          .mockRejectedValue({ code: "product.unavailable", status: 409, productId: "Lemonade" }),
+      }),
+    );
+    await toTable(el);
+    await sendLemonadeRound(el);
+    expect(roundStore(el).lines[0]!.blocked).toBe("unavailable");
+  });
+});

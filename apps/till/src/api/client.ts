@@ -1659,10 +1659,17 @@ export class TillApi {
    * round landed on.
    * `tab.not_open` and `sale.empty_basket` surface as a rejected `{ code }`.
    */
-  addTabRound(orderId: string, lines: RoundLine[]): Promise<{ tabId: string }> {
-    return this.#request<{ tabId: string }>(`/api/working-orders/${orderId}/round`, "POST", {
-      lines,
-    });
+  addTabRound(
+    orderId: string,
+    lines: RoundLine[],
+    options: ReadOptions = {},
+  ): Promise<{ tabId: string }> {
+    return this.#request<{ tabId: string }>(
+      `/api/working-orders/${orderId}/round`,
+      "POST",
+      { lines },
+      options.signal,
+    );
   }
 
   /**
