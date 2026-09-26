@@ -4,6 +4,7 @@ import { productUnit } from "./widgets/product-name.js";
 import { TillApp } from "./till-app.js";
 import { ServerRouter } from "./api/server-router.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { codeMessage } from "./i18n/codes.js";
 import { formatMoney } from "@waitron/shared";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
@@ -2185,5 +2186,104 @@ describe("till-app table ordering: a split-off bill left unpaid goes back to its
 
     expect(api.mergeTabs).not.toHaveBeenCalled();
     expect(floor(el)).not.toBeNull();
+  });
+});
+
+describe("till-app table ordering: a menu published while a table is open", () => {
+  it("reloads the table's offers and says why when a round is refused for an old menu version", async () => {
+    const { el } = await mountApp({
+      addTabRound: vi.fn().mockRejectedValue({
+        code: "menu.version_changed",
+        status: 409,
+        menus: [{ menuId: "menu-lunch", liveVersionId: "v2" }],
+      }),
+    });
+    const screen = await toTableOrder(el);
+    expect(api.listZoneOffers).toHaveBeenCalledTimes(1);
+
+    emit(screen, "send-round", { lines: [{ menuItemId: "menu-item-sopa-0", quantity: "1" }] });
+    await flush(el);
+    await flush(el);
+
+    expect(api.listZoneOffers).toHaveBeenCalledTimes(2);
+    expect(api.listZoneOffers).toHaveBeenLastCalledWith(floorZone.id);
+    expect(banner(el)!.textContent).toContain(codeMessage("menu.version_changed"));
+  });
+
+  it("greys a table's sold-out dish at the next poll of the table's zone, without reloading", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const menuState = vi.fn(async (zoneId: string) => ({
+        menus: (zoneId === floorZone.id ? diningOffers : counterOffers).menus.map((menu) => ({
+          menuId: menu.id,
+          versionId: menu.versionId,
+        })),
+        unavailable: {
+          products: ["cordero"],
+          optionLabels: [],
+          extraItems: [],
+        },
+      }));
+      const { el } = await mountApp({
+        menuState,
+        listDefaultZoneOffers: vi.fn().mockResolvedValue({
+          ...counterOffers,
+          context: { ...counterOffers.context, zoneId: "zone-counter" },
+        }),
+      });
+      await toTableOrder(el);
+      vi.advanceTimersByTime(15_000);
+      await flush(el);
+      await flush(el);
+
+      expect(menuState.mock.calls.map((call) => call[0])).toEqual(["zone-counter", floorZone.id]);
+      const cordero = tableOrder(el)!.products.find((product) => product.id === "cordero")!;
+      expect(cordero.available).toBe(false);
+      expect(api.listZoneOffers).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("reloads a table's offers when the poll names a new version of a menu in the table's zone", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const republished = {
+        ...diningOffers,
+        menus: [{ id: "menu-dinner", name: "Dinner", isDefault: true, versionId: "v2" }],
+        offers: diningOffers.offers.filter((offer) => offer.menuId === "menu-dinner"),
+      };
+      const listZoneOffers = vi
+        .fn()
+        .mockResolvedValueOnce(diningOffers)
+        .mockResolvedValue(republished);
+      const menuState = vi.fn(async (zoneId: string) => ({
+        menus:
+          zoneId === floorZone.id
+            ? [{ menuId: "menu-dinner", versionId: "v2" }]
+            : counterOffers.menus.map((menu) => ({ menuId: menu.id, versionId: menu.versionId })),
+        unavailable: { products: [], optionLabels: [], extraItems: [] },
+      }));
+      const { el } = await mountApp({
+        menuState,
+        listZoneOffers,
+        listDefaultZoneOffers: vi.fn().mockResolvedValue({
+          ...counterOffers,
+          context: { ...counterOffers.context, zoneId: "zone-counter" },
+        }),
+      });
+      const screen = await toTableOrder(el);
+      emit(screen, "menu-selected", { id: "menu-lunch" });
+      await flush(el);
+      vi.advanceTimersByTime(15_000);
+      await flush(el);
+      await flush(el);
+
+      expect(listZoneOffers).toHaveBeenLastCalledWith(floorZone.id);
+      expect(tableOrder(el)!.products.map((product) => product.id)).toEqual(["cordero"]);
+      // Lunch is no longer in the zone, so the table falls back to its default menu.
+      expect(tableOrder(el)!.selectedMenuId).toBe("menu-dinner");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

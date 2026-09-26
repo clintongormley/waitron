@@ -269,6 +269,14 @@ describe("lineBlock", () => {
       name: "rare",
     });
   });
+  it("names an answer by its id when the line was never offered its label", () => {
+    const line: OrderLine = {
+      product: { ...menuOfferToTillProduct(burger, "v1"), offeredModifiers: [] },
+      quantity: "1",
+      options: [{ listId: "list-cooked", labelId: "blue" }],
+    };
+    expect(lineBlock(line, burger)).toEqual({ reason: "extra_removed", name: "blue" });
+  });
 });
 
 describe("refreshBasket", () => {
@@ -341,6 +349,24 @@ describe("refreshBasket", () => {
     ]);
     expect(outcome.adopted.has(0)).toBe(false);
     expect(outcome.adopted.get(1)!.product.menuVersionId).toBe("v2");
+  });
+
+  it("keeps a pick the live version no longer offers as it was, so the line stays blocked for it", () => {
+    const bacon = {
+      listId: "list-extras",
+      productId: "bacon",
+      name: "bacon",
+      price: "1.50",
+      quantity: 1,
+    };
+    const line = lineOf(burger, "v1", { extras: [bacon] });
+    const withoutBacon = {
+      ...burger,
+      offeredModifiers: [extrasList("list-extras", [extraItem("cheese", "1.00")])],
+    };
+    const outcome = refreshBasket([line], [withoutBacon], live);
+    expect(outcome.blocked).toEqual([{ lineNo: 1, name: "bacon", reason: "extra_removed" }]);
+    expect(outcome.adopted.get(0)!.extras).toEqual([bacon]);
   });
 
   it("leaves saved lines, and lines already on the live version, alone", () => {
