@@ -1,5 +1,12 @@
 import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
-import { kitchenStations, locations, nowIso, workingOrderLines, workingOrders } from "@waitron/db";
+import {
+  kitchenStations,
+  locations,
+  nowIso,
+  tills,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { kitchenPresentationName } from "@waitron/catalogue";
 import { businessDayStart } from "@waitron/reporting";
@@ -43,11 +50,14 @@ const INSERTION_ORDER = sql`"kitchen_notices"."rowid"`;
 
 /**
  * Records one notice per item, copying the order's label and each line's kitchen name and note as
- * they stand now. A caller voiding a line calls this before deleting it.
+ * they stand now, so a void calls it BEFORE deleting the line. The order and every station must be
+ * at the caller's location (`working_order.not_found`, `station.not_found`) and every quantity
+ * positive (`quantity.invalid`). An item whose line is not on the order is the caller's fault and
+ * throws a plain `Error`.
  */
 export async function recordKitchenNotices(
   tx: Transaction,
-  _cfg: VenueScope,
+  cfg: VenueScope,
   orderId: string,
   items: readonly KitchenNoticeItem[],
   kind: KitchenNoticeKind,
@@ -56,7 +66,27 @@ export async function recordKitchenNotices(
   const [order] = await tx
     .select({ orderNumber: workingOrders.orderNumber, label: workingOrders.label })
     .from(workingOrders)
-    .where(eq(workingOrders.id, orderId));
+    .innerJoin(tills, eq(tills.id, workingOrders.tillId))
+    .where(and(eq(workingOrders.id, orderId), eq(tills.locationId, cfg.locationId)));
+  if (order === undefined) {
+    throw new AppError("working_order.not_found", { workingOrderId: orderId });
+  }
+  const stationIds = [...new Set(items.map((item) => item.stationId))];
+  const stations = await tx
+    .select({ id: kitchenStations.id })
+    .from(kitchenStations)
+    .where(
+      and(inArray(kitchenStations.id, stationIds), eq(kitchenStations.locationId, cfg.locationId)),
+    );
+  const knownStations = new Set(stations.map((station) => station.id));
+  const unknownStation = stationIds.find((id) => !knownStations.has(id));
+  if (unknownStation !== undefined) {
+    throw new AppError("station.not_found", { stationId: unknownStation });
+  }
+  const quantities = items.map((item) => decimalToThousandths(item.quantity));
+  if (quantities.some((count) => count <= 0)) {
+    throw new AppError("quantity.invalid", { reason: "positive" });
+  }
   const lines = await tx
     .select({
       id: workingOrderLines.id,
@@ -79,18 +109,23 @@ export async function recordKitchenNotices(
   const lineById = new Map(lines.map((line) => [line.id, line]));
   // The label the station screen shows for an order: its number, then its label when it has one.
   const orderLabel =
-    order!.label === null ? `#${order!.orderNumber}` : `#${order!.orderNumber} · ${order!.label}`;
+    order.label === null ? `#${order.orderNumber}` : `#${order.orderNumber} · ${order.label}`;
   const createdAt = nowIso();
   await tx.insert(kitchenNotices).values(
-    items.map((item) => {
-      const line = lineById.get(item.workingOrderLineId)!;
+    items.map((item, index) => {
+      const line = lineById.get(item.workingOrderLineId);
+      if (line === undefined) {
+        throw new Error(
+          `recordKitchenNotices: line ${item.workingOrderLineId} is not on order ${orderId}`,
+        );
+      }
       return {
         stationId: item.stationId,
         workingOrderId: orderId,
         orderLabel,
         kind,
         lineName: kitchenPresentationName(line),
-        quantity: decimalToThousandths(item.quantity),
+        quantity: quantities[index]!,
         note: line.note,
         wasStarted: item.wasStarted,
         createdAt,
@@ -114,7 +149,6 @@ export async function listStationNotices(
     .where(eq(locations.id, cfg.locationId));
   const since = businessDayStart(new Date(), {
     timeZone: clock!.timeZone,
-    // Stored as `HH:MM:SS`; the business-day helpers take `HH:MM`.
     dayCutover: clock!.dayCutover.slice(0, 5),
   });
   const rows = await tx

@@ -20,5 +20,8 @@ declare module "@waitron/shared" {
     "route.station_inactive": { stationId: string };
     "order.service_context_missing": { workingOrderId: string };
     "kitchen_notice.not_found": { noticeId: string };
+    // Declared by the server too, with the same params; recordKitchenNotices throws them.
+    "working_order.not_found": { workingOrderId: string };
+    "station.not_found": { stationId: string };
   }
 }

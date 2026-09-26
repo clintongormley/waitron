@@ -13,7 +13,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, thousandthsToDecimal } from "@waitron/shared";
+import { AppError, locationId as brandLocationId, thousandthsToDecimal } from "@waitron/shared";
 import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { kitchenNotices } from "./schema/kitchen-notices.js";
@@ -24,6 +24,7 @@ import {
   readEditSentLines,
   recordKitchenNotices,
   writeEditSentLines,
+  type KitchenNoticeItem,
 } from "./kitchen-notices.js";
 
 const suite = useVenueDb({
@@ -41,7 +42,7 @@ const inTx = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransac
 const ONE = thousandthsToDecimal(1000);
 const TWO = thousandthsToDecimal(2000);
 
-/** The venue's clock as `HH:MM:SS` in UTC, `minutes` from now: the column's own spelling. */
+/** A cutover `minutes` from now on a UTC venue, written `HH:MM:SS`. */
 function cutoverFromNow(minutes: number): string {
   return `${new Date(Date.now() + minutes * 60_000).toISOString().slice(11, 16)}:00`;
 }
@@ -70,13 +71,15 @@ async function seedStation(locationId: LocationId, name: string): Promise<string
 /**
  * An order with a burger whose three names differ, so a reader of the wrong one fails: staff name
  * "Burger", kitchen name "BRGR", customer-facing text "Classic beef burger". A second line, a
- * lemonade, has no kitchen name, and falls back to its staff name.
+ * lemonade, has no kitchen name, and falls back to its staff name. A third, a pizza sold as its
+ * large variant, has three different variant names too: staff "Large pizza", kitchen "LRG PZ",
+ * customer-facing "Large sourdough pizza".
  */
 async function seedOrder(
   locationId: LocationId,
   orderNumber: number,
   label: string | null,
-): Promise<{ orderId: string; burgerLineId: string; lemonadeLineId: string }> {
+): Promise<{ orderId: string; burgerLineId: string; lemonadeLineId: string; pizzaLineId: string }> {
   const [till] = await db
     .insert(tills)
     .values({ locationId, name: `Till ${orderNumber}` })
@@ -108,7 +111,25 @@ async function seedOrder(
     .insert(workingOrderLines)
     .values({ ...line, lineNo: 2, name: "Lemonade", descriptions: { en: "Fresh lemonade" } })
     .returning({ id: workingOrderLines.id });
-  return { orderId: order!.id, burgerLineId: burger!.id, lemonadeLineId: lemonade!.id };
+  const [pizza] = await db
+    .insert(workingOrderLines)
+    .values({
+      ...line,
+      lineNo: 3,
+      name: "Pizza",
+      kitchenName: "PZ",
+      descriptions: { en: "Sourdough pizza" },
+      variantName: "Large pizza",
+      variantKitchenName: "LRG PZ",
+      variantDescriptions: { en: "Large sourdough pizza" },
+    })
+    .returning({ id: workingOrderLines.id });
+  return {
+    orderId: order!.id,
+    burgerLineId: burger!.id,
+    lemonadeLineId: lemonade!.id,
+    pizzaLineId: pizza!.id,
+  };
 }
 
 async function venue() {
@@ -192,6 +213,121 @@ describe("recordKitchenNotices", () => {
         wasStarted: false,
       }),
     ]);
+  });
+
+  it("names a variant line by the variant's kitchen name", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 8, null);
+    await inTx((tx) =>
+      recordKitchenNotices(
+        tx,
+        v.cfg,
+        order.orderId,
+        [
+          {
+            workingOrderLineId: order.pizzaLineId,
+            stationId: v.grill,
+            quantity: ONE,
+            wasStarted: false,
+          },
+        ],
+        "void",
+      ),
+    );
+    expect(
+      (await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).map((n) => n.lineName),
+    ).toEqual(["LRG PZ"]);
+  });
+
+  describe("refuses", () => {
+    const item = (
+      workingOrderLineId: string,
+      stationId: string,
+      quantity = ONE,
+    ): KitchenNoticeItem => ({ workingOrderLineId, stationId, quantity, wasStarted: false });
+
+    it("an unknown order, and an order at another location, as not found", async () => {
+      const v = await venue();
+      const order = await seedOrder(v.locationId, 1, null);
+      const elsewhere = await seedOrder(await seedLocation("Other venue"), 2, null);
+      const unknown = "00000000-0000-4000-8000-00000000dead";
+      await expect(
+        inTx((tx) =>
+          recordKitchenNotices(tx, v.cfg, unknown, [item(order.burgerLineId, v.grill)], "void"),
+        ),
+      ).rejects.toMatchObject({
+        code: "working_order.not_found",
+        params: { workingOrderId: unknown },
+      });
+      await expect(
+        inTx((tx) =>
+          recordKitchenNotices(
+            tx,
+            v.cfg,
+            elsewhere.orderId,
+            [item(elsewhere.burgerLineId, v.grill)],
+            "void",
+          ),
+        ),
+      ).rejects.toMatchObject({
+        code: "working_order.not_found",
+        params: { workingOrderId: elsewhere.orderId },
+      });
+      expect(await db.select().from(kitchenNotices)).toEqual([]);
+    });
+
+    it("an unknown station, and a station at another location, as not found", async () => {
+      const v = await venue();
+      const order = await seedOrder(v.locationId, 1, null);
+      const elsewhere = await seedStation(await seedLocation("Other venue"), "Grill");
+      const unknown = "00000000-0000-4000-8000-00000000beef";
+      for (const stationId of [unknown, elsewhere]) {
+        await expect(
+          inTx((tx) =>
+            recordKitchenNotices(
+              tx,
+              v.cfg,
+              order.orderId,
+              [item(order.burgerLineId, v.grill), item(order.lemonadeLineId, stationId)],
+              "void",
+            ),
+          ),
+        ).rejects.toMatchObject({ code: "station.not_found", params: { stationId } });
+      }
+      expect(await db.select().from(kitchenNotices)).toEqual([]);
+    });
+
+    it.each([
+      ["zero", thousandthsToDecimal(0)],
+      ["a negative", thousandthsToDecimal(-1000)],
+    ])("%s quantity as not positive", async (_, quantity) => {
+      const v = await venue();
+      const order = await seedOrder(v.locationId, 1, null);
+      await expect(
+        inTx((tx) =>
+          recordKitchenNotices(
+            tx,
+            v.cfg,
+            order.orderId,
+            [item(order.burgerLineId, v.grill, quantity)],
+            "void",
+          ),
+        ),
+      ).rejects.toMatchObject({ code: "quantity.invalid", params: { reason: "positive" } });
+    });
+
+    it("a line that is not on the order as a caller fault, with no domain code", async () => {
+      const v = await venue();
+      const order = await seedOrder(v.locationId, 1, null);
+      const other = await seedOrder(v.locationId, 2, null);
+      const refusal = inTx((tx) =>
+        recordKitchenNotices(tx, v.cfg, order.orderId, [item(other.burgerLineId, v.grill)], "void"),
+      );
+      await expect(refusal).rejects.toThrow(
+        `recordKitchenNotices: line ${other.burgerLineId} is not on order ${order.orderId}`,
+      );
+      await expect(refusal).rejects.not.toBeInstanceOf(AppError);
+    });
   });
 
   it("labels an order with no label by its number alone, and records the kind it is given", async () => {

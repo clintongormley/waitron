@@ -7,6 +7,7 @@ import {
   businessDayOf,
   businessDayRangeWindow,
   businessDayStart,
+  businessDayWindow,
   currentBusinessDay,
   validateBusinessDay,
   validateCutover,
@@ -98,6 +99,47 @@ describe("businessDayStart", () => {
     expect(
       businessDayStart(new Date(instant), { timeZone: "Europe/Madrid", dayCutover: "06:00" }),
     ).toBe(expected);
+  });
+
+  // Madrid's clocks jump 02:00 → 03:00 at 2026-03-29T01:00Z and fall 03:00 → 02:00 at
+  // 2026-10-25T01:00Z. A 02:30 cutover does not exist on the first day and happens twice on the
+  // second; a 06:00 cutover is clear of both changes and is the control.
+  describe("on the two clock-change days", () => {
+    const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+
+    it.each([
+      // 03:10 summer time, after the jump: the day that starts at the missing 02:30 has not begun.
+      ["02:30", "2026-03-29T01:10:00.000Z", "2026-03-28T01:30:00.000Z"],
+      // 03:40 summer time: the day that began at 01:30Z, half an hour after the jump.
+      ["02:30", "2026-03-29T01:40:00.000Z", "2026-03-29T01:30:00.000Z"],
+      // 02:45 summer time, before the fall back: 02:30 is still to come a second time.
+      ["02:30", "2026-10-25T00:45:00.000Z", "2026-10-24T00:30:00.000Z"],
+      // 02:40 winter time, after the second 02:30.
+      ["02:30", "2026-10-25T01:40:00.000Z", "2026-10-25T01:30:00.000Z"],
+      ["06:00", "2026-03-29T01:10:00.000Z", "2026-03-28T05:00:00.000Z"],
+      ["06:00", "2026-03-29T05:00:00.000Z", "2026-03-29T04:00:00.000Z"],
+      ["06:00", "2026-10-25T00:45:00.000Z", "2026-10-24T04:00:00.000Z"],
+      ["06:00", "2026-10-25T05:00:00.000Z", "2026-10-25T05:00:00.000Z"],
+    ])(
+      "with a %s cutover, %s is in the day the daily close starts at %s",
+      async (dayCutover, instant, expected) => {
+        const clock = { timeZone: "Europe/Madrid", dayCutover };
+        const start = businessDayStart(new Date(instant), clock);
+        expect(start).toBe(expected);
+        expect(start <= instant).toBe(true);
+        // The daily close's window for the day that start opens holds the instant and the start,
+        // and not the millisecond before the start.
+        const window = businessDayWindow({
+          businessDay: expected.slice(0, 10),
+          ...clock,
+        } as DailyCloseInput);
+        const before = new Date(new Date(start).getTime() - 1).toISOString();
+        const { rows } = await suite.db.execute<{ instant: 0 | 1; start: 0 | 1; before: 0 | 1 }>(
+          sql`select ${window(sql`${instant}`)} as instant, ${window(sql`${start}`)} as start, ${window(sql`${before}`)} as before`,
+        );
+        expect(rows[0]).toEqual({ instant: 1, start: 1, before: 0 });
+      },
+    );
   });
 
   it("validates the clock before computing (caller precondition, plain Error)", () => {
