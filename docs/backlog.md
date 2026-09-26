@@ -647,12 +647,12 @@ its part done here when it lands.
   sideways inside their own box, further than before by the new column: Extras 511px of content in
   388px (439px before) in English, 610px (463px) in Spanish; Options 457px (402px) and 479px
   (405px). The page itself does not scroll sideways.
-- **A66 (the Extras editor) — LANDED.** The customer-facing and kitchen names fold into a
+- **A66 (the Extras editor) — built, no pull request number yet.** The customer-facing and kitchen names fold into a
   "Customer and kitchen names" section, closed until opened, whose heading counts the names filled
   in ("1 of 3 filled in") and which opens by itself when the server refuses one of them. Minimum and
   maximum choices are − / + steppers side by side (one above the other where the form is 30rem wide
   or less), with short labels and the old parenthetical explanations moved to a line underneath;
-  the maximum's box uses a new, wider width token so "No limit" and "Sin límite" fit. In each
+  both boxes use a new, wider width token, so the two match and "No limit" and "Sin límite" fit. In each
   product row, the maximum quantity is a stepper, the price box is a fixed width (a new token) with
   the product's unit shown after it as plain text (Each when the product has no unit), and Remove
   is a bin icon with the same spoken name; the Maximum quantity heading carries the required mark; the Price heading runs over the bin column. A row lines up its text: the product name, the
