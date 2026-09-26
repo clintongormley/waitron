@@ -162,7 +162,9 @@ brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at
 
 4. **The displays and the printers walked at the real box** (A4, A3) — till, handheld and KDS through
    [ui-review.md](ui-review.md), and the first physical print since #327: slips, duplicates, the
-   drawer pulse, the feed-before-cut.
+   drawer pulse, the feed-before-cut. #689 printed calibration samples and a sample receipt on the
+   owner's NT-806 and fired its drawer from the calibration test; a real sale's slip, the duplicates,
+   the cash-settlement drawer job and the feed-before-cut are still unwalked.
 
 5. **The bootable USB installer** (B3) — the last piece of "install without a terminal".
 
@@ -2089,8 +2091,8 @@ encoding and the `ESC t` table number independent printer settings, the editor p
 simulated sample receipt with unsaved settings, sample characters follow the site's language, and the
 Add-printer layout was tidied.
 
-The later calibration chooser starts with tables 0–15 and offers further ranges. **26 September
-follow-up, implemented on the printer branch:** a three-step wizard replaces the combined calibration editor, using
+The later calibration chooser starts with tables 0–15 and offers further ranges. **Calibration
+wizard, drawer auditing and receipt layout — LANDED #689 (2026-09-26):** a three-step wizard replaces the combined calibration editor, using
 `W-nn`/`8-nn` labels and remembering printed ranges. Drawer attachment belongs to the printer and
 has a separate audited test. The owner's network printer reproduced the finder failure: removing
 table-zero resets and slowing the bytes did not fix it. Initializing before each candidate line
@@ -2100,7 +2102,16 @@ from the supplied manual remains unknown; do not use them as defaults for other 
 Receipt QRs now use the largest whole-dot size up to 40mm that fits the paper with its blank border,
 rather than the size closest to 35mm. The receipt body, QR and its VERI*FACTU legend are centred;
 the owner confirmed the centred body and QR on paper, then requested the centred legend.
+The Printers screen also gained a remembered status filter, one-click disable, links to each print
+agent's setup page, and shows the agent that last saw each printer without implying it is bound to it.
 [Current design and physical evidence](superpowers/specs/2026-09-26-printer-calibration-wizard.md).
+
+- **The setup-page link is unproven on the box.** The print agent now builds it from
+  `WAITRON_SETUP_URL` (set on the box as `WAITRON_PRINT_AGENT_SETUP_URL`, which `deploy/compose.yml`
+  passes through), or from the first of `WAITRON_BOX_ADDRESSES` (`apps/print-agent/src/config.ts`); unit tests cover the parsing, but no review seat ran the deployed
+  compose and nobody has yet followed the link from a dashboard on the real box.
+- **A calibration drawer opening records who asked and when, not that the drawer opened.** There is
+  no drawer sensor; the audit row is the request.
 
 - **Every printer saved before this change must be recalibrated** through the printer editor's test
   flow. Rows still carrying the old `pc858` setting were deliberately not converted: this repository
