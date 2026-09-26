@@ -430,7 +430,7 @@ describe("transferLines — guards", () => {
     const { cfg, tableAId, tableBId, cafeOffer, aguaOffer } = await setupVenue();
     const tabA = await openTabWith(cfg, tableAId, [{ menuItemId: cafeOffer, quantity: "3" }]);
     const tabB = await openTabWith(cfg, tableBId, [{ menuItemId: aguaOffer, quantity: "1" }]);
-    for (const bad of ["0", "-1", "4", "0.000", "abc"]) {
+    for (const bad of ["0", "-1", "4", "0.000", "abc", "1.0004"]) {
       await expect(
         asApp(cfg, (tx) => transferLines(tx, cfg, tabA, tabB, [{ lineNo: 1, quantity: bad }])),
       ).rejects.toMatchObject({

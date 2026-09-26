@@ -58,6 +58,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
+  MAX_UNIT_PRECISION,
   assertQuantityPrecision,
   expandDietaryDeclarations,
   priceBasket,
@@ -1708,23 +1709,15 @@ function voidQuantity(
   const invalid = () => new AppError("tab.void_quantity_invalid", { tabId, lineNo, quantity });
   let asked: number;
   try {
+    assertQuantityPrecision(quantity, line.unitPrecision ?? MAX_UNIT_PRECISION, { positive: true });
     asked = stringToThousandths(quantity);
   } catch {
     throw invalid();
   }
-  if (asked <= 0 || asked > line.quantity || !fitsUnitPrecision(asked, line.unitPrecision)) {
-    throw invalid();
-  }
+  if (asked > line.quantity) throw invalid();
   if (asked === line.quantity) return null;
   if (line.parentLineId !== null) throw invalid();
   return asked;
-}
-
-/** Whether a count of thousandths has no more decimal places than the line's unit takes. A line
- * that records no precision (an extras child) is bounded only by the thousandths scale. */
-function fitsUnitPrecision(thousandths: number, unitPrecision: number | null): boolean {
-  if (unitPrecision === null || unitPrecision >= 3) return true;
-  return thousandths % 10 ** (3 - unitPrecision) === 0;
 }
 
 /**
@@ -2363,11 +2356,10 @@ async function carveOffLines(
     // A malformed literal is reported as the same domain code as an out-of-range one.
     let inRange: boolean;
     try {
-      const q = decimal(t.quantity);
-      inRange =
-        compareDecimal(q, decimal("0")) > 0 &&
-        compareDecimal(q, decimal(line.quantity)) <= 0 &&
-        fitsUnitPrecision(stringToThousandths(t.quantity), line.unitPrecision);
+      assertQuantityPrecision(t.quantity, line.unitPrecision ?? MAX_UNIT_PRECISION, {
+        positive: true,
+      });
+      inRange = compareDecimal(decimal(t.quantity), decimal(line.quantity)) <= 0;
     } catch {
       inRange = false;
     }

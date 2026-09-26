@@ -1389,7 +1389,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
     ]);
   });
 
-  it.each(["0", "-1", "3", "abc", ""])(
+  it.each(["0", "-1", "3", "abc", "", "1.0004"])(
     "refuses to void a quantity of %j from a line of two, changing nothing",
     async (quantity) => {
       const { cfg, tableId, cafeOffer } = await setupVenue();
