@@ -13,5 +13,5 @@ CREATE TABLE `payment_resolutions` (
 	CONSTRAINT "payment_resolutions_cancelled_ck" CHECK("payment_resolutions"."cancelled_at_provider" = 0 or "payment_resolutions"."outcome" = 'failed')
 );
 --> statement-breakpoint
-CREATE INDEX `payment_resolutions_payment_idx` ON `payment_resolutions` (`payment_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `payment_resolutions_payment_key` ON `payment_resolutions` (`payment_id`);--> statement-breakpoint
 CREATE INDEX `payment_resolutions_working_order_idx` ON `payment_resolutions` (`working_order_id`);

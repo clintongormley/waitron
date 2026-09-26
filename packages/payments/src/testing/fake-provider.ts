@@ -6,6 +6,7 @@ import { saleId as brandSaleId, tillId as brandTillId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import { workingOrders } from "@waitron/db";
 import type {
+  AbandonedAttemptAudit,
   AbandonedAttemptOutcome,
   CollectParams,
   ForwardResult,
@@ -14,6 +15,7 @@ import type {
   ProviderCapabilities,
 } from "../provider.js";
 import type { PaymentRow } from "../store.js";
+import { recordAttemptResolution } from "../resolutions.js";
 import {
   captureAttempting,
   claimAcceptedOffline,
@@ -148,22 +150,34 @@ export class FakePaymentProvider implements PaymentProvider {
     return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
   }
 
-  async resolveAbandonedAttempt(paymentRef: string, now: Date): Promise<AbandonedAttemptOutcome> {
+  async resolveAbandonedAttempt(
+    paymentRef: string,
+    now: Date,
+    audit: AbandonedAttemptAudit,
+  ): Promise<AbandonedAttemptOutcome> {
     this.abandonedAttemptCalls.push({ paymentRef, now });
     const answer = this.abandonedAnswer;
     const key = { provider: this.provider, paymentRef };
     await this.db.transaction(async (tx) => {
       const row = await getPaymentByRef(tx, key);
       if (row?.state !== "attempting") throw new AppError("payment.not_found", key);
+      if (answer.outcome === "unknown") return;
       if (answer.outcome === "captured") {
         await captureAttempting(tx, {
           ...key,
           settledAt: now,
           externalRef: `fake-ext-${paymentRef}`,
         });
-      } else if (answer.outcome === "failed") {
+      } else {
         await failAttempting(tx, key);
       }
+      await recordAttemptResolution(tx, key, {
+        personId: audit.personId,
+        outcome: answer.outcome,
+        cancelledAtProvider: answer.outcome === "failed" && answer.cancelledAtProvider,
+        providerStatus: null,
+        resolvedAt: now,
+      });
     });
     return answer;
   }

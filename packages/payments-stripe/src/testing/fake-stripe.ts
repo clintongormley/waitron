@@ -74,9 +74,14 @@ export class FakeStripe implements StripeClient {
     return Promise.resolve({ id });
   }
   processPaymentIntent(readerId: string, paymentIntentId: string): Promise<void> {
+    const intent = this.intents.get(paymentIntentId);
+    if (intent?.status === "canceled") {
+      return Promise.reject(
+        new Error("This PaymentIntent cannot be processed because it has a status of canceled."),
+      );
+    }
     this.processedReaders.push(readerId);
     this.readerAction.set(readerId, this.outcome);
-    const intent = this.intents.get(paymentIntentId);
     if (intent !== undefined && this.outcome === "succeeded") {
       intent.status = "succeeded";
       intent.amountReceived = intent.amount;

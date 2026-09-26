@@ -1,4 +1,5 @@
 export type {
+  AbandonedAttemptAudit,
   AbandonedAttemptOutcome,
   AsyncPaymentProvider,
   CardDetails,
@@ -54,7 +55,11 @@ export type {
   ReconcilableRow,
   SettledInitiated,
 } from "./store.js";
-export { countProviderCancelledResolutions, recordResolution } from "./resolutions.js";
+export {
+  countProviderCancelledResolutions,
+  recordAttemptResolution,
+  recordResolution,
+} from "./resolutions.js";
 export type { NewPaymentResolution } from "./resolutions.js";
 export { MANUAL_PROVIDER, recordManualCardPayment, recordManualRefund } from "./manual.js";
 export { SimulatorPaymentProvider } from "./simulator.js";

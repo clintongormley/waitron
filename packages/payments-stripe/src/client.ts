@@ -44,7 +44,8 @@ export function fromMinorUnits(minor: number): Decimal {
  * re-drives the SAME PaymentIntent and the card is charged once: one PaymentIntent per working
  * order, possibly many `payments` rows. `cancelled` is how many of the order's PaymentIntents a
  * resolution left cancelled at Stripe (`countProviderCancelledResolutions`): the key moves on past
- * each, because Stripe answers a repeated key with the cancelled PaymentIntent. */
+ * each, because until Stripe forgets a key it replays that key's first response, which names the
+ * PaymentIntent now cancelled. */
 export function workingOrderIdempotencyKey(workingOrderId: string, cancelled = 0): string {
   return cancelled === 0 ? `wo_${workingOrderId}` : `wo_${workingOrderId}_r${cancelled}`;
 }

@@ -463,31 +463,30 @@ describe("StripeTerminalProvider.collect stamps the PaymentIntent before the rea
     expect((await rowFor(result.paymentRef))?.state).toBe("failed");
   });
 
-  it("a stamp that fails for any other reason propagates, and the reader never processes the PaymentIntent", async () => {
+  it("a stamp refused for any reason but a held PaymentIntent: collect rejects, the row stays attempting unstamped, and the reader never processes it", async () => {
     const fake = new FakeStripe();
     const p = await collectParams();
-    const client: StripeClient = {
-      createPaymentIntent: async (params) => {
-        // Renaming the table makes the stamp's UPDATE fail with a plain SQL error.
-        await pg.db.execute(sql`alter table payments rename to payments_away`);
-        return fake.createPaymentIntent(params);
-      },
-      processPaymentIntent: (readerId, piId) => fake.processPaymentIntent(readerId, piId),
-      readerOutcome: (r) => fake.readerOutcome(r),
-      cancelReaderAction: (r) => fake.cancelReaderAction(r),
-      refund: (params) => fake.refund(params),
-      ...NO_INTENT_READS,
-    };
+    await pg.db.execute(
+      sql`create trigger refuse_stamp before update of external_ref on payments
+          when new.external_ref is not null
+          begin select raise(abort, 'probe: stamp refused'); end`,
+    );
     try {
-      await expect(providerFor(client).collect(p)).rejects.toThrow(/no such table/);
+      await expect(providerFor(fake).collect(p)).rejects.toThrow(/probe: stamp refused/);
     } finally {
-      await pg.db.execute(sql`alter table payments_away rename to payments`);
+      await pg.db.execute(sql`drop trigger refuse_stamp`);
     }
+    const { paymentRef } = await attemptingRowOf(p.workingOrderId);
+    const row = await rowFor(paymentRef);
+    expect(row?.state).toBe("attempting");
+    expect(row?.externalRef).toBeNull();
     expect(fake.processedReaders).toEqual([]);
   });
 });
 
 const NOW = new Date("2026-09-26T12:00:00Z");
+const MANAGER = "22222222-2222-4222-8222-222222222222";
+const AUDIT = { personId: MANAGER };
 
 /** An `attempting` stripe row as a crash leaves it, optionally stamped with a PaymentIntent. */
 async function abandonedRow(
@@ -510,7 +509,7 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
     const fake = new FakeStripe();
     const retrieve = vi.spyOn(fake, "retrievePaymentIntent");
     const { paymentRef } = await abandonedRow(null);
-    expect(await providerFor(fake).resolveAbandonedAttempt(paymentRef, NOW)).toEqual({
+    expect(await providerFor(fake).resolveAbandonedAttempt(paymentRef, NOW, AUDIT)).toEqual({
       outcome: "failed",
       cancelledAtProvider: false,
     });
@@ -523,7 +522,7 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
     fake.setIntent("pi_unreach", { status: "requires_payment_method", amount: 1210 });
     fake.unreachableNext();
     const { paymentRef } = await abandonedRow("pi_unreach");
-    expect(await providerFor(fake).resolveAbandonedAttempt(paymentRef, NOW)).toEqual({
+    expect(await providerFor(fake).resolveAbandonedAttempt(paymentRef, NOW, AUDIT)).toEqual({
       outcome: "unknown",
       reason: "unreachable",
     });
@@ -535,7 +534,7 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
     const fake = new FakeStripe();
     fake.setIntent("pi_paid", { status: "succeeded", amount: 1210, amountReceived: 1210 });
     const { paymentRef } = await abandonedRow("pi_paid");
-    expect(await providerFor(fake).resolveAbandonedAttempt(paymentRef, NOW)).toEqual({
+    expect(await providerFor(fake).resolveAbandonedAttempt(paymentRef, NOW, AUDIT)).toEqual({
       outcome: "captured",
     });
     const row = await rowFor(paymentRef);
@@ -548,7 +547,7 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
     const fake = new FakeStripe();
     fake.setIntent("pi_short", { status: "succeeded", amount: 1210, amountReceived: 1000 });
     const { paymentRef } = await abandonedRow("pi_short");
-    expect(await providerFor(fake).resolveAbandonedAttempt(paymentRef, NOW)).toEqual({
+    expect(await providerFor(fake).resolveAbandonedAttempt(paymentRef, NOW, AUDIT)).toEqual({
       outcome: "unknown",
       reason: "ambiguous",
       providerStatus: "succeeded",
@@ -560,7 +559,7 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
     const fake = new FakeStripe();
     fake.setIntent("pi_gone", { status: "canceled", amount: 1210 });
     const { paymentRef } = await abandonedRow("pi_gone");
-    expect(await providerFor(fake).resolveAbandonedAttempt(paymentRef, NOW)).toEqual({
+    expect(await providerFor(fake).resolveAbandonedAttempt(paymentRef, NOW, AUDIT)).toEqual({
       outcome: "failed",
       cancelledAtProvider: true,
     });
@@ -579,7 +578,7 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
     const id = `pi_${status}`;
     fake.setIntent(id, { status, amount: 1210 });
     const { paymentRef } = await abandonedRow(id);
-    expect(await providerFor(fake).resolveAbandonedAttempt(paymentRef, NOW)).toEqual({
+    expect(await providerFor(fake).resolveAbandonedAttempt(paymentRef, NOW, AUDIT)).toEqual({
       outcome: "failed",
       cancelledAtProvider: true,
     });
@@ -592,7 +591,7 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
     fake.setIntent("pi_race", { status: "requires_payment_method", amount: 1210 });
     fake.cancelRacesNext();
     const { paymentRef } = await abandonedRow("pi_race");
-    expect(await providerFor(fake).resolveAbandonedAttempt(paymentRef, NOW)).toEqual({
+    expect(await providerFor(fake).resolveAbandonedAttempt(paymentRef, NOW, AUDIT)).toEqual({
       outcome: "captured",
     });
     expect((await rowFor(paymentRef))?.state).toBe("captured");
@@ -635,7 +634,7 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
       () => Promise.reject(new Error("network blip")),
     );
     const { paymentRef } = await abandonedRow("pi_blip");
-    expect(await providerFor(client).resolveAbandonedAttempt(paymentRef, NOW)).toEqual({
+    expect(await providerFor(client).resolveAbandonedAttempt(paymentRef, NOW, AUDIT)).toEqual({
       outcome: "failed",
       cancelledAtProvider: true,
     });
@@ -652,7 +651,7 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
       () => Promise.reject(new Error("cannot cancel")),
     );
     const { paymentRef } = await abandonedRow("pi_part");
-    expect(await providerFor(client).resolveAbandonedAttempt(paymentRef, NOW)).toEqual({
+    expect(await providerFor(client).resolveAbandonedAttempt(paymentRef, NOW, AUDIT)).toEqual({
       outcome: "unknown",
       reason: "ambiguous",
       providerStatus: "succeeded",
@@ -669,7 +668,7 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
       () => Promise.reject(new Error("cannot cancel")),
     );
     const { paymentRef } = await abandonedRow("pi_stuck");
-    expect(await providerFor(client).resolveAbandonedAttempt(paymentRef, NOW)).toEqual({
+    expect(await providerFor(client).resolveAbandonedAttempt(paymentRef, NOW, AUDIT)).toEqual({
       outcome: "unknown",
       reason: "ambiguous",
       providerStatus: "processing",
@@ -686,7 +685,7 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
       () => Promise.resolve({ status: "canceled" }),
     );
     const { paymentRef } = await abandonedRow("pi_lost");
-    expect(await providerFor(client).resolveAbandonedAttempt(paymentRef, NOW)).toEqual({
+    expect(await providerFor(client).resolveAbandonedAttempt(paymentRef, NOW, AUDIT)).toEqual({
       outcome: "unknown",
       reason: "unreachable",
     });
@@ -697,7 +696,7 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
     const fake = new FakeStripe();
     fake.setIntent("pi_odd", { status: "requires_source", amount: 1210 });
     const { paymentRef } = await abandonedRow("pi_odd");
-    expect(await providerFor(fake).resolveAbandonedAttempt(paymentRef, NOW)).toEqual({
+    expect(await providerFor(fake).resolveAbandonedAttempt(paymentRef, NOW, AUDIT)).toEqual({
       outcome: "unknown",
       reason: "ambiguous",
       providerStatus: "requires_source",
@@ -706,16 +705,102 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
     expect((await rowFor(paymentRef))?.state).toBe("attempting");
   });
 
+  function resolutionsOf(paymentId: string) {
+    return pg.db.execute<Record<string, unknown>>(
+      sql`select working_order_id, person_id, outcome, cancelled_at_provider, provider_status,
+                 resolved_at
+            from payment_resolutions where payment_id = ${paymentId}`,
+    );
+  }
+
+  it.each([
+    {
+      name: "a row with no PaymentIntent",
+      ref: null,
+      intent: undefined,
+      state: "failed",
+      recorded: { outcome: "failed", cancelled_at_provider: 0, provider_status: null },
+    },
+    {
+      name: "a PaymentIntent Stripe captured",
+      ref: "pi_audit_paid",
+      intent: { status: "succeeded", amount: 1210, amountReceived: 1210 },
+      state: "captured",
+      recorded: { outcome: "captured", cancelled_at_provider: 0, provider_status: "succeeded" },
+    },
+    {
+      name: "a PaymentIntent cancelled at Stripe",
+      ref: "pi_audit_gone",
+      intent: { status: "requires_payment_method", amount: 1210 },
+      state: "failed",
+      recorded: { outcome: "failed", cancelled_at_provider: 1, provider_status: "canceled" },
+    },
+  ])(
+    "$name: records who resolved it and what Stripe said",
+    async ({ ref, intent, state, recorded }) => {
+      const fake = new FakeStripe();
+      if (ref !== null && intent !== undefined) fake.setIntent(ref, intent);
+      const row = await abandonedRow(ref);
+      await providerFor(fake).resolveAbandonedAttempt(row.paymentRef, NOW, AUDIT);
+      expect((await rowFor(row.paymentRef))?.state).toBe(state);
+      expect((await resolutionsOf(row.paymentId)).rows).toEqual([
+        {
+          working_order_id: row.workingOrderId,
+          person_id: MANAGER,
+          resolved_at: NOW.toISOString(),
+          ...recorded,
+        },
+      ]);
+    },
+  );
+
+  it.each([
+    { name: "a row with no PaymentIntent", ref: null, intent: undefined },
+    {
+      name: "a PaymentIntent Stripe captured",
+      ref: "pi_probe_paid",
+      intent: { status: "succeeded", amount: 1210, amountReceived: 1210 },
+    },
+    {
+      name: "a PaymentIntent cancelled at Stripe",
+      ref: "pi_probe_gone",
+      intent: { status: "requires_payment_method", amount: 1210 },
+    },
+  ])(
+    "$name: when the resolution cannot be recorded, the row stays attempting",
+    async ({ ref, intent }) => {
+      const fake = new FakeStripe();
+      if (ref !== null && intent !== undefined) fake.setIntent(ref, intent);
+      const row = await abandonedRow(ref);
+      await pg.db.execute(
+        sql`create trigger refuse_resolutions before insert on payment_resolutions
+          begin select raise(abort, 'probe: resolution refused'); end`,
+      );
+      try {
+        await expect(
+          providerFor(fake).resolveAbandonedAttempt(row.paymentRef, NOW, AUDIT),
+        ).rejects.toThrow(/probe: resolution refused/);
+      } finally {
+        await pg.db.execute(sql`drop trigger refuse_resolutions`);
+      }
+      const after = await rowFor(row.paymentRef);
+      expect(after?.state).toBe("attempting");
+      expect(after?.externalRef).toBe(ref);
+    },
+  );
+
   it("refuses payment.not_found for a row that is missing or no longer attempting", async () => {
     const fake = new FakeStripe();
     const provider = providerFor(fake);
     const missing = await provider
-      .resolveAbandonedAttempt("no-such-ref", NOW)
+      .resolveAbandonedAttempt("no-such-ref", NOW, AUDIT)
       .catch((e: unknown) => e);
     expect((missing as AppError).code).toBe("payment.not_found");
     const { paymentRef } = await abandonedRow(null);
-    await provider.resolveAbandonedAttempt(paymentRef, NOW);
-    const again = await provider.resolveAbandonedAttempt(paymentRef, NOW).catch((e: unknown) => e);
+    await provider.resolveAbandonedAttempt(paymentRef, NOW, AUDIT);
+    const again = await provider
+      .resolveAbandonedAttempt(paymentRef, NOW, AUDIT)
+      .catch((e: unknown) => e);
     expect(again).toBeInstanceOf(AppError);
     expect((again as AppError).code).toBe("payment.not_found");
   });
@@ -745,9 +830,8 @@ describe("the Stripe idempotency key after a PaymentIntent was cancelled at Stri
     const provider = providerFor(fake);
     fake.setIntent("pi_first", { status: "requires_payment_method", amount: 1210 });
     const stuck = await abandonedRow("pi_first", p.workingOrderId);
-    const outcome = await provider.resolveAbandonedAttempt(stuck.paymentRef, NOW);
+    const outcome = await provider.resolveAbandonedAttempt(stuck.paymentRef, NOW, AUDIT);
     expect(outcome).toEqual({ outcome: "failed", cancelledAtProvider: true });
-    await resolved(stuck, true);
 
     const next = await provider.collect(p);
     expect(fake.lastCreateIntent?.idempotencyKey).toBe(`wo_${p.workingOrderId}_r1`);

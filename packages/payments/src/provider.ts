@@ -105,6 +105,11 @@ export type AbandonedAttemptOutcome =
       providerStatus?: string;
     };
 
+/** Who asked for `resolveAbandonedAttempt`. */
+export interface AbandonedAttemptAudit {
+  personId: string;
+}
+
 /**
  * No method takes a transaction handle: every method makes a network call, and a database
  * transaction is never held across one. Each does its own short-transaction bookkeeping and returns
@@ -135,10 +140,16 @@ export interface PaymentProvider {
   resolvePending(now: Date): Promise<ForwardResult>;
 
   /** Settle one `attempting` row that nothing in this process is still driving — the caller
-   * guarantees that — by asking the processor what became of it. Throws `payment.not_found` when
-   * the row is missing or no longer `attempting`. Absent on an adapter that never leaves such a row
-   * for a person to resolve. */
-  resolveAbandonedAttempt?(paymentRef: string, now: Date): Promise<AbandonedAttemptOutcome>;
+   * guarantees that — by asking the processor what became of it. A `captured` or `failed` outcome
+   * records `audit`'s person in `payment_resolutions` in the same transaction that changes the row:
+   * the order's next card payment reads that record to know the processor's payment is cancelled.
+   * Throws `payment.not_found` when the row is missing or no longer `attempting`. Absent on an
+   * adapter that never leaves such a row for a person to resolve. */
+  resolveAbandonedAttempt?(
+    paymentRef: string,
+    now: Date,
+    audit: AbandonedAttemptAudit,
+  ): Promise<AbandonedAttemptOutcome>;
 
   /** Reverse a captured payment in full — a same-day void, distinct from a refund. Throws
    * `payment.not_voidable` if the payment is not `captured`. */

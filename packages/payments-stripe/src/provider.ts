@@ -4,6 +4,7 @@ import type { Decimal } from "@waitron/shared";
 import { UNIQUE_VIOLATION, refusalOn, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type {
+  AbandonedAttemptAudit,
   AbandonedAttemptOutcome,
   CollectParams,
   ForwardResult,
@@ -17,6 +18,7 @@ import {
   failAttempting,
   getPaymentByRef,
   insertAttempting,
+  recordAttemptResolution,
   stampAttemptingRef,
 } from "@waitron/payments";
 import { fromMinorUnits, workingOrderIdempotencyKey } from "./client.js";
@@ -42,6 +44,12 @@ const DEFAULT_POLL = {
   intervalMs: 1000,
   sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, ms)),
 };
+
+interface Settle {
+  key: { provider: string; paymentRef: string };
+  now: Date;
+  audit: AbandonedAttemptAudit;
+}
 
 export interface StripeTerminalProviderOptions {
   client: StripeClient;
@@ -216,24 +224,28 @@ export class StripeTerminalProvider implements PaymentProvider {
   /** Called only for an attempt nothing in this process is still driving. Reads the row, asks
    * Stripe with no transaction open, then writes: a PaymentIntent still awaiting its card is
    * cancelled first and read again, because the cancel can lose a race to the card. */
-  async resolveAbandonedAttempt(paymentRef: string, now: Date): Promise<AbandonedAttemptOutcome> {
+  async resolveAbandonedAttempt(
+    paymentRef: string,
+    now: Date,
+    audit: AbandonedAttemptAudit,
+  ): Promise<AbandonedAttemptOutcome> {
     const key = { provider: PROVIDER, paymentRef };
     const row = await this.inTransaction((tx) => getPaymentByRef(tx, key));
     if (row?.state !== "attempting") throw new AppError("payment.not_found", key);
 
+    const settle = { key, now, audit };
     if (row.externalRef === null) {
-      await this.inTransaction((tx) => failAttempting(tx, key));
-      return { outcome: "failed", cancelledAtProvider: false };
+      return this.resolveRow(settle, { outcome: "failed", cancelledAtProvider: false }, null);
     }
     const piId = row.externalRef;
     const first = await this.readIntent(piId);
     if (first === undefined) return { outcome: "unknown", reason: "unreachable" };
-    if (!CANCELLABLE.has(first.status)) return this.settleFrom(key, row.amount, first, now);
+    if (!CANCELLABLE.has(first.status)) return this.settleFrom(settle, row.amount, first);
 
     await this.opts.client.cancelPaymentIntent(piId).catch(() => {});
     const after = await this.readIntent(piId);
     if (after === undefined) return { outcome: "unknown", reason: "unreachable" };
-    return this.settleFrom(key, row.amount, after, now);
+    return this.settleFrom(settle, row.amount, after);
   }
 
   private readIntent(
@@ -245,26 +257,65 @@ export class StripeTerminalProvider implements PaymentProvider {
   /** A `canceled` PaymentIntent counts as cancelled at the provider whoever cancelled it: either way
    * the order's key must move on (`workingOrderIdempotencyKey`). Any status still awaiting the card
    * here is one a cancel did not move, so it is left for a person. */
-  private async settleFrom(
-    key: { provider: string; paymentRef: string },
+  private settleFrom(
+    settle: Settle,
     amount: string,
     intent: { id: string; status: string; amountReceived: number },
-    now: Date,
   ): Promise<AbandonedAttemptOutcome> {
     if (intent.status === "succeeded") {
       if (compareDecimal(fromMinorUnits(intent.amountReceived), decimal(amount)) !== 0) {
-        return { outcome: "unknown", reason: "ambiguous", providerStatus: intent.status };
+        return Promise.resolve({
+          outcome: "unknown",
+          reason: "ambiguous",
+          providerStatus: intent.status,
+        });
       }
-      await this.inTransaction((tx) =>
-        captureAttempting(tx, { ...key, settledAt: now, externalRef: intent.id }),
+      return this.resolveRow(
+        settle,
+        { outcome: "captured", externalRef: intent.id },
+        intent.status,
       );
-      return { outcome: "captured" };
     }
     if (intent.status === "canceled") {
-      await this.inTransaction((tx) => failAttempting(tx, key));
-      return { outcome: "failed", cancelledAtProvider: true };
+      return this.resolveRow(
+        settle,
+        { outcome: "failed", cancelledAtProvider: true },
+        intent.status,
+      );
     }
-    return { outcome: "unknown", reason: "ambiguous", providerStatus: intent.status };
+    return Promise.resolve({
+      outcome: "unknown",
+      reason: "ambiguous",
+      providerStatus: intent.status,
+    });
+  }
+
+  /** The row's new state and its `payment_resolutions` record commit together: the record is what
+   * moves the order's idempotency key past a PaymentIntent the resolution left cancelled. */
+  private async resolveRow(
+    { key, now, audit }: Settle,
+    resolved:
+      | { outcome: "captured"; externalRef: string }
+      | { outcome: "failed"; cancelledAtProvider: boolean },
+    providerStatus: string | null,
+  ): Promise<AbandonedAttemptOutcome> {
+    await this.inTransaction(async (tx) => {
+      if (resolved.outcome === "captured") {
+        await captureAttempting(tx, { ...key, settledAt: now, externalRef: resolved.externalRef });
+      } else {
+        await failAttempting(tx, key);
+      }
+      await recordAttemptResolution(tx, key, {
+        personId: audit.personId,
+        outcome: resolved.outcome,
+        cancelledAtProvider: resolved.outcome === "failed" && resolved.cancelledAtProvider,
+        providerStatus,
+        resolvedAt: now,
+      });
+    });
+    return resolved.outcome === "captured"
+      ? { outcome: "captured" }
+      : { outcome: "failed", cancelledAtProvider: resolved.cancelledAtProvider };
   }
 
   private reverse(kind: "void" | "refund", ref: string, amount?: Decimal): Promise<PaymentResult> {

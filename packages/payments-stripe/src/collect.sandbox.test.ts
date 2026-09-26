@@ -21,6 +21,7 @@ import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 // through a simulated Terminal reader.
 const KEY = process.env.STRIPE_SECRET_KEY;
 const d = KEY ? describe : describe.skip;
+const MANAGER = "22222222-2222-4222-8222-222222222222";
 
 d("Stripe test-mode sandbox: collect against a simulated reader", () => {
   const pg = useVenueDb({
@@ -149,7 +150,9 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
       await stampAttemptingRef(tx, key, intent.id);
     });
 
-    expect(await provider.resolveAbandonedAttempt(key.paymentRef, new Date())).toEqual({
+    expect(
+      await provider.resolveAbandonedAttempt(key.paymentRef, new Date(), { personId: MANAGER }),
+    ).toEqual({
       outcome: "failed",
       cancelledAtProvider: true,
     });

@@ -42,7 +42,7 @@ function collectParams(s: { tillId: string; workingOrderId: string }, allowOffli
 }
 
 describe("StripeOnDeviceProvider.collect after a Terminal PaymentIntent of the order was cancelled", () => {
-  it("uses the order's next key, because Stripe would answer the old key with the cancelled PaymentIntent", async () => {
+  it("uses the order's next key, because Stripe's replayed response to the old key names the cancelled PaymentIntent", async () => {
     const s = await seedWorkingOrder(pg.db, freshNif());
     await withTransaction(pg.db, async (tx) => {
       const key = { provider: "stripe", paymentRef: "terminal-stuck" };

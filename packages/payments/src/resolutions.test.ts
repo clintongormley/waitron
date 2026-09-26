@@ -4,16 +4,22 @@ import {
   CHECK_VIOLATION,
   CORE_MIGRATIONS,
   FOREIGN_KEY_VIOLATION,
+  UNIQUE_VIOLATION,
   captureError,
   checkFailed,
   isRefusal,
+  refusalOn,
   triggerRaised,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { decimal } from "@waitron/shared";
+import { AppError, decimal } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
-import { countProviderCancelledResolutions, recordResolution } from "./resolutions.js";
+import {
+  countProviderCancelledResolutions,
+  recordAttemptResolution,
+  recordResolution,
+} from "./resolutions.js";
 import { getPaymentByRef, insertAttempting } from "./store.js";
 import { freshNif, seedWorkingOrder } from "../test/seed.js";
 
@@ -28,7 +34,7 @@ let refCounter = 0;
 async function stuckPayment(
   provider = "stripe",
   workingOrderId?: string,
-): Promise<{ paymentId: string; workingOrderId: string }> {
+): Promise<{ paymentId: string; workingOrderId: string; paymentRef: string }> {
   const woId = workingOrderId ?? (await seedWorkingOrder(pg.db, freshNif())).workingOrderId;
   const paymentRef = `stuck-${++refCounter}`;
   return withTransaction(pg.db, async (tx) => {
@@ -39,7 +45,7 @@ async function stuckPayment(
       amount: decimal("12.10"),
     });
     const row = await getPaymentByRef(tx, { provider, paymentRef });
-    return { paymentId: row!.id, workingOrderId: woId };
+    return { paymentId: row!.id, workingOrderId: woId, paymentRef };
   });
 }
 
@@ -113,6 +119,18 @@ describe("recordResolution", () => {
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
+  it("refuses a second resolution of the same payment", async () => {
+    const p = await stuckPayment();
+    await record(p);
+    const error = await captureError(() =>
+      record(p, { outcome: "captured", cancelledAtProvider: false }),
+    );
+    // SQLite names the columns that collided, not the index.
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, { table: "payment_resolutions", columns: ["payment_id"] }),
+    ).toBe(true);
+  });
+
   it("refuses an outcome that changed nothing: only captured and failed are recorded", async () => {
     const p = await stuckPayment();
     const error = await captureError(() =>
@@ -141,6 +159,51 @@ describe("recordResolution", () => {
       pg.db.execute(sql`delete from payment_resolutions where id = ${id}`),
     );
     expect(triggerRaised(remove, "payment_resolutions is append-only")).toBe(true);
+  });
+});
+
+describe("recordAttemptResolution", () => {
+  it("records the resolution against the payment the key names and that payment's order", async () => {
+    const p = await stuckPayment("stripe");
+    const { id } = await withTransaction(pg.db, (tx) =>
+      recordAttemptResolution(
+        tx,
+        { provider: "stripe", paymentRef: p.paymentRef },
+        {
+          personId: MANAGER,
+          outcome: "captured",
+          cancelledAtProvider: false,
+          providerStatus: "succeeded",
+          resolvedAt: RESOLVED_AT,
+        },
+      ),
+    );
+    const { rows } = await pg.db.execute<Record<string, unknown>>(
+      sql`select payment_id, working_order_id from payment_resolutions where id = ${id}`,
+    );
+    expect(rows).toEqual([{ payment_id: p.paymentId, working_order_id: p.workingOrderId }]);
+  });
+
+  it("refuses payment.not_found for a key that names no payment", async () => {
+    const p = await stuckPayment("stripe");
+    const error = await captureError(() =>
+      withTransaction(pg.db, (tx) =>
+        recordAttemptResolution(
+          tx,
+          { provider: "sumup", paymentRef: p.paymentRef },
+          {
+            personId: MANAGER,
+            outcome: "failed",
+            cancelledAtProvider: false,
+            providerStatus: null,
+            resolvedAt: RESOLVED_AT,
+          },
+        ),
+      ),
+    );
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe("payment.not_found");
+    expect((error as AppError).params).toEqual({ provider: "sumup", paymentRef: p.paymentRef });
   });
 });
 

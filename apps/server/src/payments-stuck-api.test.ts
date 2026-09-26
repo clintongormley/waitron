@@ -597,12 +597,12 @@ describe("POST /management-api/payments/stuck/:paymentId/resolve", () => {
         new Proxy(p, {
           get: (target, prop) =>
             prop === "resolveAbandonedAttempt"
-              ? async (paymentRef: string, now: Date) => {
+              ? async (paymentRef: string, now: Date, audit: { personId: string }) => {
                   // The other resolve won: the row is no longer attempting.
                   await withTransaction(suite.db, (tx) =>
                     failAttempting(tx, { provider: "stripe", paymentRef }),
                   );
-                  return target.resolveAbandonedAttempt(paymentRef, now);
+                  return target.resolveAbandonedAttempt(paymentRef, now, audit);
                 }
               : Reflect.get(target, prop),
         }),
@@ -638,6 +638,43 @@ describe("POST /management-api/payments/stuck/:paymentId/resolve", () => {
     expect((await paymentRow(paymentId)).state).toBe("attempting");
     expect(await orderOf(orderId)).toEqual({ status: "open", mark: MARK });
     expect(await resolutionsFor(paymentId)).toEqual([]);
+  });
+
+  it("leaves the payment attempting and the order locked when the resolution cannot be recorded, and a later resolve still releases it", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const { paymentId, piId } = await strandPayment(v, orderId, {
+      status: "requires_payment_method",
+    });
+    await suite.db.execute(
+      sql`create trigger refuse_resolutions before insert on payment_resolutions
+          begin select raise(abort, 'probe: resolution refused'); end`,
+    );
+    let res: Response;
+    try {
+      res = await send(v, "POST", resolvePath(paymentId));
+    } finally {
+      await suite.db.execute(sql`drop trigger refuse_resolutions`);
+    }
+
+    expect(res.status).toBe(500);
+    expect((await errorOf(res)).code).toBe("server.internal");
+    expect(v.client.cancelledIntents).toEqual([piId]);
+    expect((await paymentRow(paymentId)).state).toBe("attempting");
+    expect(await orderOf(orderId)).toEqual({ status: "open", mark: MARK });
+    expect(await resolutionsFor(paymentId)).toEqual([]);
+
+    const again = await send(v, "POST", resolvePath(paymentId));
+    expect(again.status).toBe(200);
+    expect(await again.json()).toEqual({ outcome: "released" });
+    expect(await resolutionsFor(paymentId)).toEqual([
+      {
+        personId: v.managerId,
+        workingOrderId: orderId,
+        outcome: "failed",
+        cancelledAtProvider: true,
+      },
+    ]);
   });
 
   it("refuses resolve_unsupported when the payment's provider cannot resolve an abandoned attempt", async () => {

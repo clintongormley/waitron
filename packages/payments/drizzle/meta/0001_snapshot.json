@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "803920b9-a43d-4af7-943a-ec4d6b9d9a44",
+  "id": "5c51b8dd-b991-4bea-a9f6-188219af552c",
   "prevId": "7a151f34-c17b-4603-be27-ebad425a39b2",
   "tables": {
     "card_readers": {
@@ -348,12 +348,12 @@
         }
       },
       "indexes": {
-        "payment_resolutions_payment_idx": {
-          "name": "payment_resolutions_payment_idx",
+        "payment_resolutions_payment_key": {
+          "name": "payment_resolutions_payment_key",
           "columns": [
             "payment_id"
           ],
-          "isUnique": false
+          "isUnique": true
         },
         "payment_resolutions_working_order_idx": {
           "name": "payment_resolutions_working_order_idx",

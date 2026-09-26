@@ -1,5 +1,7 @@
 import { and, count, eq } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
+import { AppError } from "@waitron/shared";
+import "./errors.js";
 import { paymentResolutions } from "./schema/payment-resolutions.js";
 import { payments } from "./schema/payments.js";
 
@@ -31,6 +33,25 @@ export async function recordResolution(
     })
     .returning({ id: paymentResolutions.id });
   return row!;
+}
+
+/** `recordResolution` for the payment `key` names, on the working order it belongs to. Throws
+ * `payment.not_found` when no payment has that key. */
+export async function recordAttemptResolution(
+  tx: Transaction,
+  key: { provider: string; paymentRef: string },
+  r: Omit<NewPaymentResolution, "paymentId" | "workingOrderId">,
+): Promise<{ id: string }> {
+  const [payment] = await tx
+    .select({ id: payments.id, workingOrderId: payments.workingOrderId })
+    .from(payments)
+    .where(and(eq(payments.provider, key.provider), eq(payments.paymentRef, key.paymentRef)));
+  if (payment === undefined) throw new AppError("payment.not_found", key);
+  return recordResolution(tx, {
+    ...r,
+    paymentId: payment.id,
+    workingOrderId: payment.workingOrderId,
+  });
 }
 
 /** How many of this working order's payments a resolution left cancelled at the provider — with

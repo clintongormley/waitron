@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import {
   enumCheck,
   enumType,
@@ -28,7 +28,7 @@ export const paymentResolutions = table(
     paymentId: id("payment_id").notNull(),
     workingOrderId: id("working_order_id").notNull(),
     // No foreign key: `persons` is in @waitron/identity's migration set, which this set does not
-    // require. The server action that writes the row is what authenticates the manager.
+    // require.
     personId: id("person_id").notNull(),
     outcome: paymentResolutionOutcome("outcome").notNull(),
     /** The provider's payment is cancelled, so the working order's next card payment needs a
@@ -49,7 +49,7 @@ export const paymentResolutions = table(
       foreignColumns: [workingOrders.id],
       name: "payment_resolutions_working_order_fk",
     }).onDelete("restrict"),
-    index("payment_resolutions_payment_idx").on(t.paymentId),
+    uniqueIndex("payment_resolutions_payment_key").on(t.paymentId),
     index("payment_resolutions_working_order_idx").on(t.workingOrderId),
     check("payment_resolutions_outcome_ck", enumCheck(t.outcome)),
     check(

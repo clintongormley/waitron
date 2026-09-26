@@ -164,6 +164,19 @@ describe("FakeStripe", () => {
     expect(fake.cancelledIntents).toEqual([]);
   });
 
+  it("processPaymentIntent refuses a canceled intent: the reader is not engaged and it stays canceled", async () => {
+    const fake = new FakeStripe();
+    fake.setIntent("pi_cx", { status: "canceled", amount: 400 });
+    await expect(fake.processPaymentIntent("reader_1", "pi_cx")).rejects.toThrow(
+      /status of canceled/,
+    );
+    expect(fake.processedReaders).toEqual([]);
+    expect(await fake.retrievePaymentIntent("pi_cx")).toMatchObject({
+      status: "canceled",
+      amountReceived: 0,
+    });
+  });
+
   it("cancelRacesNext: the next cancel is refused because the card was charged first", async () => {
     const fake = new FakeStripe();
     fake.setIntent("pi_r", { status: "requires_payment_method", amount: 700 });

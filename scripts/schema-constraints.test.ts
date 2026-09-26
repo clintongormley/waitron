@@ -239,6 +239,7 @@ const EXPECTED_UNIQUE_INDEXES = [
   "menu_versions_id_menu_key",
   "menu_versions_menu_number_uq",
   "order_amendments_chain_position_key",
+  "payment_resolutions_payment_key",
   "payments_provider_external_ref_key",
   "payments_provider_ref_key",
   "persons_tenant_email_uq",

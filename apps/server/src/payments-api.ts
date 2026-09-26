@@ -19,7 +19,6 @@ import {
   cardReaders,
   deviceCardReaders,
   payments,
-  recordResolution,
   type CardProviderContribution,
   type CardProviderRuntimeDeps,
 } from "@waitron/payments";
@@ -575,7 +574,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       }
       const now = deps.clock.now().instant;
       const resolved = await provider
-        .resolveAbandonedAttempt(stuck.paymentRef, now)
+        .resolveAbandonedAttempt(stuck.paymentRef, now, { personId: stuck.personId })
         .catch((error: unknown) => {
           // A concurrent resolve settled the row after the check above.
           if (isAppError(error) && error.code === "payment.not_found") {
@@ -593,25 +592,14 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         });
       }
 
-      const resolution = {
-        paymentId,
-        workingOrderId: stuck.workingOrderId,
-        personId: stuck.personId,
-        outcome: resolved.outcome,
-        cancelledAtProvider: resolved.outcome === "failed" && resolved.cancelledAtProvider,
-        providerStatus: null,
-        resolvedAt: now,
-      };
       if (resolved.outcome === "failed") {
-        await withTransaction(deps.db, async (tx) => {
-          await recordResolution(tx, resolution);
-          // Only the mark read above: an attempt started since has written its own.
-          await clearPaymentAttemptMark(tx, stuck.workingOrderId, stuck.attemptAt);
-        });
+        // Only the mark read above: an attempt started since has written its own.
+        await withTransaction(deps.db, (tx) =>
+          clearPaymentAttemptMark(tx, stuck.workingOrderId, stuck.attemptAt),
+        );
         return c.json({ outcome: "released" });
       }
 
-      await withTransaction(deps.db, (tx) => recordResolution(tx, resolution));
       // The payment is captured with no sale, so the pay takes its recovery branch and files it.
       const paid = await payWorkingOrderIntegrated(
         { db: deps.db, backend: deps.backend, clock: deps.clock, provider, log },
