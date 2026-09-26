@@ -127,7 +127,6 @@ export class TillStationScreen extends LitElement {
   @state() private acknowledgeFailed = false;
   #initialConsumed = false;
   #refreshTimer?: ReturnType<typeof setInterval>;
-  #refreshing = false;
   /**
    * Notices this screen has acknowledged, filtered out of every answer until one arrives without them:
    * a read that set out before the acknowledgement landed still lists the notice.
@@ -182,15 +181,13 @@ export class TillStationScreen extends LitElement {
     clearInterval(this.#refreshTimer);
   }
 
-  /** Skips a tick while the previous refresh is still out, so requests never stack up. */
+  /**
+   * Every tick reads afresh, even when the previous tick's read has not answered: the client sets no
+   * timeout, so waiting for it would let one read that never answers freeze the display. That read's
+   * late answer is dropped by the request counter.
+   */
   async #refresh(): Promise<void> {
-    if (this.#refreshing) return;
-    this.#refreshing = true;
-    try {
-      await (this.deviceMode ? this.#loadDevice() : this.#reload());
-    } finally {
-      this.#refreshing = false;
-    }
+    await (this.deviceMode ? this.#loadDevice() : this.#reload());
   }
 
   #adoptNotices(notices: KitchenNotice[]): void {

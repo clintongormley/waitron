@@ -17,7 +17,6 @@ import type {
   TicketState,
 } from "../api/client.js";
 
-/** Plain geometric shapes on wt-icon's 16x16 grid: a U-turn back, a cross, a pencil and an arrow. */
 const NOTICE_ICONS: Record<`notice-${KitchenNoticeKind}`, string> = {
   "notice-recalled": "M6 2 1.5 6 6 10V7h4a2.5 2.5 0 0 1 0 5H6v2h4a4.5 4.5 0 0 0 0-9H6Z",
   "notice-void":

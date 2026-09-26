@@ -1216,21 +1216,89 @@ describe("till-station-screen 15-second refresh", () => {
     expect(api.getStationQueue).toHaveBeenCalledTimes(3);
   });
 
-  it("skips a tick while the previous read is still out, never stacking requests", async () => {
+  it("a read that never answers does not stop the next tick's read, and its late answer is dropped", async () => {
+    // A stalled socket after a Wi-Fi drop: the refresh is the display's only way to hear of new work,
+    // so one hung read must not freeze it.
+    let answerHung!: (queue: StationQueue) => void;
     const api = stubApi({
       getStationQueue: vi
         .fn()
         .mockResolvedValueOnce({ items: cocinaQueue, notices: [] })
-        .mockImplementation(() => new Promise(() => {})),
+        .mockImplementationOnce(() => new Promise((resolve) => (answerHung = resolve)))
+        .mockResolvedValue(later),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
     await flush(el);
+    vi.advanceTimersByTime(15_000); // this read hangs
+    await flush(el);
+    expect(api.getStationQueue).toHaveBeenCalledTimes(2);
     vi.advanceTimersByTime(15_000);
     await flush(el);
-    expect(api.getStationQueue).toHaveBeenCalledTimes(2);
-    vi.advanceTimersByTime(30_000);
+    expect(api.getStationQueue).toHaveBeenCalledTimes(3);
+    expect(queueWidget(el)!.groups).toEqual(barraQueue);
+    expect(queueWidget(el)!.notices).toEqual(later.notices);
+    answerHung({ items: cocinaQueue, notices: [] }); // older than what is on screen
     await flush(el);
-    expect(api.getStationQueue).toHaveBeenCalledTimes(2);
+    expect(queueWidget(el)!.groups).toEqual(barraQueue);
+    expect(queueWidget(el)!.notices).toEqual(later.notices);
+  });
+
+  it("device mode: a read that never answers does not stop the next tick's read", async () => {
+    const api = {
+      getDeviceStation: vi
+        .fn()
+        .mockResolvedValueOnce({ station: { id: "st-dev", queue: cocinaQueue, notices: [] } })
+        .mockImplementationOnce(() => new Promise(() => {}))
+        .mockResolvedValue({
+          station: { id: "st-dev", queue: barraQueue, notices: later.notices },
+        }),
+    } as unknown as TillApi;
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api,
+      deviceMode: true,
+    });
+    await flush(el);
+    vi.advanceTimersByTime(15_000); // this read hangs
+    await flush(el);
+    vi.advanceTimersByTime(15_000);
+    await flush(el);
+    expect(api.getDeviceStation).toHaveBeenCalledTimes(3);
+    expect(queueWidget(el)!.notices).toEqual(later.notices);
+  });
+
+  it("taken off the page and put back, it refreshes on the timer again, even after a hung read", async () => {
+    const api = stubApi({
+      getStationQueue: vi
+        .fn()
+        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] })
+        .mockImplementationOnce(() => new Promise(() => {}))
+        .mockResolvedValue(later),
+    });
+    const { el, host } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    vi.advanceTimersByTime(15_000); // this read hangs
+    await flush(el);
+    el.remove();
+    host.appendChild(el); // re-attaching reads once on its own
+    await flush(el);
+    const afterReattach = vi.mocked(api.getStationQueue).mock.calls.length;
+    vi.advanceTimersByTime(15_000);
+    await flush(el);
+    expect(api.getStationQueue).toHaveBeenCalledTimes(afterReattach + 1);
+    expect(queueWidget(el)!.notices).toEqual(later.notices);
+  });
+
+  it("taken off the page and put back, it runs one timer, not two", async () => {
+    const api = stubApi();
+    const { el, host } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    el.remove();
+    host.appendChild(el);
+    await flush(el);
+    const afterReattach = vi.mocked(api.getStationQueue).mock.calls.length;
+    vi.advanceTimersByTime(15_000);
+    await flush(el);
+    expect(api.getStationQueue).toHaveBeenCalledTimes(afterReattach + 1);
   });
 
   it("a failed refresh keeps the last good queue and notices on screen", async () => {
