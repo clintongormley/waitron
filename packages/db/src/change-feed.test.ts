@@ -7,7 +7,7 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import type { ResourceChange } from "@waitron/shared";
-import { installChangeFeed } from "./change-feed.js";
+import { installChangeFeed, removeChangeFeed } from "./change-feed.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import type { Database } from "./client.js";
 import { useVenueDb } from "./testing/venue-db.js";
@@ -151,5 +151,38 @@ describe("database change feed", () => {
       .rows.map((row) => row.id);
     expect(ids).toHaveLength(2);
     expect(new Set(ids).size).toBe(2);
+  });
+});
+
+describe("removing the change feed", () => {
+  const suite = useVenueDb({
+    migrations: [CORE_MIGRATIONS],
+    setup: async (db: Database) => {
+      db.run(sql.raw(`create table live_probe (id text primary key)`));
+      db.run(sql.raw(`create table other_probe (id text primary key)`));
+      // A trigger the feed did not install, which removing the feed must leave alone.
+      db.run(
+        sql.raw(
+          `create trigger other_probe_copy after insert on live_probe for each row ` +
+            `begin insert into other_probe values (new.id); end`,
+        ),
+      );
+      await installChangeFeed(db, [{ table: "live_probe", type: "probe" }]);
+    },
+  });
+
+  // The feed goes back at the end because the suite's reset replays the triggers it found after
+  // setup, and a drop of one that is gone fails it.
+  it("stops recording changes and leaves every other trigger in place", async () => {
+    try {
+      removeChangeFeed(suite.db);
+      suite.db.run(sql.raw(`insert into live_probe values ('p1')`));
+      expect(suite.db.execute(sql`select * from change_log`).rows).toEqual([]);
+      expect(
+        suite.db.execute<{ id: string }>(sql`select id from other_probe`).rows.map((r) => r.id),
+      ).toEqual(["p1"]);
+    } finally {
+      await installChangeFeed(suite.db, [{ table: "live_probe", type: "probe" }]);
+    }
   });
 });

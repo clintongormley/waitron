@@ -209,7 +209,7 @@ export { refusalError, type Refusal, type RefusalError } from "./testing/refusal
 // `import.meta.dirname` at MODULE LOAD TIME, and `drizzle-kit generate` loads this barrel
 // transitively through its own CJS-transformed loader, where `import.meta.dirname` is `undefined`
 // and the top-level `join` throws.
-export { installChangeFeed } from "./change-feed.js";
+export { installChangeFeed, removeChangeFeed } from "./change-feed.js";
 export { CORE_CHANGE_SOURCES } from "./classification.js";
 // The in-process change feed. Only the subscribe half is public: draining the log and handing the
 // rows over are `withTransaction`'s own two steps, and a caller doing either itself would take the

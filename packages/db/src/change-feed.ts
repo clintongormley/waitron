@@ -95,6 +95,22 @@ function recordSql(row: "new" | "old", source: ChangeSource, hasId: boolean): st
  * related columns change gets the new definition on the next boot rather than keeping the old one
  * for the life of the file.
  */
+/**
+ * Drops every trigger {@link installChangeFeed} installed, on every table.
+ *
+ * The update trigger names each column the table had when it was installed, and SQLite refuses to
+ * drop a column a trigger names, so a migration dropping one fails on any database that has booted
+ * before. Migrating runs without the feed; boot installs it again afterwards.
+ */
+export function removeChangeFeed(db: Database | Transaction): void {
+  const names = db
+    .execute<{ name: string }>(
+      sql`select name from sqlite_master where type = 'trigger' and name glob 'waitron_change_*'`,
+    )
+    .rows.map((row) => plainName("trigger", row.name));
+  for (const name of names) db.execute(sql.raw(`drop trigger "${name}"`));
+}
+
 export async function installChangeFeed(
   db: Database | Transaction,
   sources: readonly ChangeSource[],
