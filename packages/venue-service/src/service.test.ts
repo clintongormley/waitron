@@ -14,6 +14,7 @@ describe("VENUE_SERVICE", () => {
       "listServiceZones",
       "listStationNotices",
       "listZoneOffers",
+      "menuState",
       "readClearingWorkflow",
       "readEditSentLines",
       "recordKitchenNotices",
@@ -23,7 +24,6 @@ describe("VENUE_SERVICE", () => {
       "resolvePreparationRoutes",
       "resolveZoneContext",
       "retargetOrderContext",
-      "unavailableSet",
     ]);
   });
 

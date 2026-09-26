@@ -127,7 +127,51 @@ export interface ZoneMenuOffer {
   readonly courseId: string | null;
   /** The product is Active and Available now. An unavailable offer is served in its place, marked. */
   readonly available: boolean;
+  /** The extras and options lists the published version offers with this dish, in order. */
+  readonly offeredModifiers: readonly ZoneOfferedModifier[];
 }
+
+/**
+ * One list a published offer carries. Every extras item and option label the version holds is
+ * present, each marked with whether it can be picked now.
+ */
+export type ZoneOfferedModifier =
+  | {
+      readonly kind: "extras";
+      readonly id: string;
+      readonly name: string;
+      readonly customerName: Readonly<Record<string, string>> | null;
+      readonly kitchenName: string | null;
+      readonly minPicks: number;
+      readonly maxPicks: number | null;
+      readonly items: readonly {
+        readonly productId: string;
+        readonly name: string;
+        readonly customerName: Readonly<Record<string, string>> | null;
+        readonly kitchenName: string | null;
+        /** GROSS, as published. */
+        readonly price: string;
+        readonly vatClass: string;
+        readonly maxQuantity: number;
+        readonly preselected: boolean;
+        readonly available: boolean;
+      }[];
+    }
+  | {
+      readonly kind: "options";
+      readonly id: string;
+      readonly name: string;
+      readonly customerName: Readonly<Record<string, string>> | null;
+      readonly kitchenName: string | null;
+      readonly defaultLabelId: string | null;
+      readonly labels: readonly {
+        readonly id: string;
+        readonly name: string;
+        readonly customerName: Readonly<Record<string, string>> | null;
+        readonly kitchenName: string | null;
+        readonly available: boolean;
+      }[];
+    };
 
 /** A menu a zone sells from: its live version, and whether it is the zone's default. */
 export interface ZoneMenu {
@@ -149,8 +193,18 @@ export interface ZoneUnavailable {
   /** Every product or variant that is Inactive or Unavailable, extras items' products included. */
   readonly products: readonly string[];
   readonly optionLabels: readonly string[];
-  /** Every extras item an offer has switched off. */
-  readonly extraItems: readonly { readonly menuItemId: string; readonly productId: string }[];
+  /** Every extras item an offer has switched off, in the list it is switched off in. */
+  readonly extraItems: readonly {
+    readonly menuItemId: string;
+    readonly productId: string;
+    readonly extraListId: string;
+  }[];
+}
+
+/** A zone's live menu versions, and what they hold that cannot be sold now. */
+export interface ZoneMenuState {
+  readonly menus: readonly { readonly menuId: string; readonly versionId: string }[];
+  readonly unavailable: ZoneUnavailable;
 }
 
 export interface ZoneMenuOfferVariant {
@@ -199,12 +253,16 @@ export interface VenueServiceContribution {
     zoneId: string,
     productIds: readonly string[],
   ): Promise<ReadonlyMap<string, PreparationRoute>>;
+  /** Refused `menu.version_changed` unless every `asserted` version is the live version of one of
+   *  the zone's menus. */
   listZoneOffers(
     tx: Transaction,
     cfg: { locationId: LocationId },
     zoneId: string,
+    asserted?: readonly { menuId: string; versionId: string }[],
   ): Promise<ZoneOffers>;
-  unavailableSet(tx: Transaction, zoneId: string): Promise<ZoneUnavailable>;
+  /** Does not check the zone: an unknown one holds nothing. */
+  menuState(tx: Transaction, zoneId: string): Promise<ZoneMenuState>;
   resolveNewOrderZone(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -241,6 +299,7 @@ export interface VenueServiceContribution {
       workingOrderLineId: string;
       menuItemId: string;
       menuId: string;
+      menuVersionId: string | null;
       menuName: string;
       categoryName: string;
       unitId: string;

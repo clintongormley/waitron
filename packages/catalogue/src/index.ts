@@ -38,6 +38,7 @@ export type * from "./menu-document-types.js";
 export {
   assertLiveVersions,
   menuStatus,
+  menusOfVersions,
   previewMenu,
   publishMenu,
   readLiveDocuments,

@@ -125,6 +125,21 @@ export async function assertLiveVersions(
   return live;
 }
 
+/** The menu each version belongs to, by version id; an id that names no version is left out. */
+export async function menusOfVersions(
+  tx: Transaction,
+  versionIds: readonly string[],
+): Promise<Map<string, string>> {
+  const menus = new Map<string, string>();
+  for (const batch of batches(versionIds))
+    for (const row of await tx
+      .select({ versionId: menuVersions.id, menuId: menuVersions.menuId })
+      .from(menuVersions)
+      .where(inArray(menuVersions.id, batch)))
+      menus.set(row.versionId, row.menuId);
+  return menus;
+}
+
 /** Every section id the document's structure holds. */
 function sectionsOf(document: MenuDocument): Set<string> {
   const held = new Set<string>();

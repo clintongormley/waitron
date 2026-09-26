@@ -15,6 +15,8 @@ export type {
   ZoneMenu,
   ZoneMenuOffer,
   ZoneMenuOfferVariant,
+  ZoneMenuState,
+  ZoneOfferedModifier,
   ZoneOffers,
   ZoneUnavailable,
   PreparationRoute,

@@ -23,6 +23,7 @@ import { menuDocumentHash } from "./menu-document.js";
 import {
   assertLiveVersions,
   menuStatus,
+  menusOfVersions,
   previewMenu,
   publishMenu,
   readLiveDocuments,
@@ -297,6 +298,28 @@ describe("assertLiveVersions", () => {
       code: "menu.version_changed",
       params: { menus: [{ menuId: f.dinner, liveVersionId: null }] },
     });
+  });
+});
+
+describe("menusOfVersions", () => {
+  it("names the menu of every version, live or not, and leaves out an id that is no version", async () => {
+    const f = await menusFixture(fx.db);
+    const first = await publish(f.lunch);
+    await app((tx) => updateProduct(tx, f.soup, { name: "Broth" }));
+    const second = await publish(f.lunch);
+    const dinner = await publish(f.dinner);
+    const unknown = "00000000-0000-4000-8000-000000000000";
+    const menus = await app((tx) =>
+      menusOfVersions(tx, [first.versionId, second.versionId, dinner.versionId, unknown]),
+    );
+    expect(menus).toEqual(
+      new Map([
+        [first.versionId, f.lunch],
+        [second.versionId, f.lunch],
+        [dinner.versionId, f.dinner],
+      ]),
+    );
+    await expect(app((tx) => menusOfVersions(tx, []))).resolves.toEqual(new Map());
   });
 });
 

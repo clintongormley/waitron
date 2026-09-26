@@ -12,18 +12,18 @@ import {
 import type { Transaction } from "@waitron/db";
 import {
   applyLiveFields,
+  assertLiveVersions,
   effectiveProductColumns,
   menuItemExtraItems,
   optionLabels,
   parentJoin,
   parentProducts,
   productWithId,
-  readLiveDocuments,
   type LiveOffer,
   type MenuDocument,
   type MenuOffer,
 } from "@waitron/catalogue";
-import type { PreparationRoute, ServiceMode, ZoneOffers, ZoneUnavailable } from "@waitron/module";
+import type { PreparationRoute, ServiceMode, ZoneMenuState, ZoneOffers } from "@waitron/module";
 import { AppError, type LocationId, normaliseUuid } from "@waitron/shared";
 import {
   departments,
@@ -477,13 +477,17 @@ async function zoneMenuIds(tx: Transaction, zoneId: string): Promise<string[]> {
   return rows.map((row) => row.id);
 }
 
-/** The zone's published menus, in the zone's order, each with its live version and document. */
+/**
+ * The zone's published menus, in the zone's order, each with its live version and document, once
+ * every `asserted` version is the live version of one of the zone's menus (`menu.version_changed`).
+ */
 async function zoneLiveDocuments(
   tx: Transaction,
   zoneId: string,
+  asserted: readonly { menuId: string; versionId: string }[] = [],
 ): Promise<{ menuId: string; versionId: string; document: MenuDocument }[]> {
   const menuIds = await zoneMenuIds(tx, zoneId);
-  const live = await readLiveDocuments(tx, menuIds);
+  const live = await assertLiveVersions(tx, menuIds, asserted);
   return menuIds.flatMap((menuId) => {
     const version = live.get(menuId);
     return version === undefined ? [] : [{ menuId, ...version }];
@@ -493,19 +497,22 @@ async function zoneLiveDocuments(
 /**
  * What the zone sells: each published menu's live version, with the current availability put back
  * (an unavailable offer is served marked, in its place). A menu with no live version is left out,
- * and an unpublished default gives way to the zone's first published menu.
+ * and an unpublished default gives way to the zone's first published menu. Refused
+ * `menu.version_changed` unless every `asserted` version is the live version of one of the zone's
+ * menus.
  */
 export async function listZoneOffers(
   tx: Transaction,
   cfg: VenueScope,
   zoneId: string,
+  asserted: readonly { menuId: string; versionId: string }[] = [],
 ): Promise<{
   defaultMenuId: string | null;
   menus: { id: string; name: string; isDefault: boolean; versionId: string }[];
   offers: LiveOffer[];
 }> {
   const context = await resolveZoneContext(tx, cfg, zoneId);
-  const published = await zoneLiveDocuments(tx, zoneId);
+  const published = await zoneLiveDocuments(tx, zoneId, asserted);
   const served = await applyLiveFields(
     tx,
     published.map((menu) => menu.document),
@@ -528,15 +535,21 @@ export async function listZoneOffers(
 }
 
 /**
- * The products and variants (extras items' included), option labels and per-offer extras items the
- * zone's live menus hold that cannot be sold now: one read of each table.
+ * Each of the zone's live menus with its version, and the products and variants (extras items'
+ * included), option labels and per-offer extras items those versions hold that cannot be sold now:
+ * one read of each table. Does not check the zone: an unknown one holds nothing.
  */
-export async function unavailableSet(tx: Transaction, zoneId: string): Promise<ZoneUnavailable> {
+export async function menuState(tx: Transaction, zoneId: string): Promise<ZoneMenuState> {
   const productIds = new Set<string>();
   const labelIds = new Set<string>();
-  const extraItems = new Map<string, { menuItemId: string; productId: string }>();
-  const itemKey = (menuItemId: string, productId: string) => `${menuItemId}\u0000${productId}`;
-  for (const { document } of await zoneLiveDocuments(tx, zoneId))
+  const extraItems = new Map<
+    string,
+    { menuItemId: string; productId: string; extraListId: string }
+  >();
+  const itemKey = (menuItemId: string, listId: string, productId: string) =>
+    `${menuItemId}\u0000${listId}\u0000${productId}`;
+  const published = await zoneLiveDocuments(tx, zoneId);
+  for (const { document } of published)
     for (const offer of Object.values(document.offers)) {
       productIds.add(offer.productId);
       for (const variant of offer.variants) productIds.add(variant.id);
@@ -545,9 +558,10 @@ export async function unavailableSet(tx: Transaction, zoneId: string): Promise<Z
         else
           for (const item of entry.items) {
             productIds.add(item.productId);
-            extraItems.set(itemKey(offer.id, item.productId), {
+            extraItems.set(itemKey(offer.id, entry.id, item.productId), {
               menuItemId: offer.id,
               productId: item.productId,
+              extraListId: entry.id,
             });
           }
     }
@@ -571,12 +585,16 @@ export async function unavailableSet(tx: Transaction, zoneId: string): Promise<Z
       .from(optionLabels)
       .where(and(inArray(optionLabels.id, [...labelIds]), eq(optionLabels.available, false))))
       labels.push(row.id);
-  const withdrawn = new Map<string, { menuItemId: string; productId: string }>();
+  const withdrawn = new Map<
+    string,
+    { menuItemId: string; productId: string; extraListId: string }
+  >();
   const menuItemIds = [...new Set([...extraItems.values()].map((item) => item.menuItemId))];
   if (menuItemIds.length > 0)
     for (const row of await tx
       .select({
         menuItemId: menuItemExtraItems.menuItemId,
+        listId: menuItemExtraItems.listId,
         productId: menuItemExtraItems.productId,
       })
       .from(menuItemExtraItems)
@@ -586,14 +604,17 @@ export async function unavailableSet(tx: Transaction, zoneId: string): Promise<Z
           eq(menuItemExtraItems.available, false),
         ),
       )) {
-      const key = itemKey(row.menuItemId, row.productId);
+      const key = itemKey(row.menuItemId, row.listId, row.productId);
       const item = extraItems.get(key);
       if (item !== undefined) withdrawn.set(key, item);
     }
   return {
-    products: unavailableProducts,
-    optionLabels: labels,
-    extraItems: [...withdrawn.values()],
+    menus: published.map(({ menuId, versionId }) => ({ menuId, versionId })),
+    unavailable: {
+      products: unavailableProducts,
+      optionLabels: labels,
+      extraItems: [...withdrawn.values()],
+    },
   };
 }
 
@@ -753,6 +774,8 @@ export async function listWorkingLineContexts(
     workingOrderLineId: string;
     menuItemId: string;
     menuId: string;
+    /** Null for a line added before lines recorded their menu version. */
+    menuVersionId: string | null;
     menuName: string;
     categoryName: string;
     unitId: string;
@@ -772,6 +795,7 @@ export async function listWorkingLineContexts(
       workingOrderLineId: workingLineContexts.workingOrderLineId,
       menuItemId: workingLineContexts.menuItemId,
       menuId: workingLineContexts.menuId,
+      menuVersionId: workingLineContexts.menuVersionId,
       menuName: workingLineContexts.menuName,
       categoryName: workingLineContexts.categoryName,
       unitId: workingLineContexts.unitId,
@@ -815,6 +839,12 @@ export async function recordWorkingLineContexts(
   }
   const byMenuItem = new Map(offers.offers.map((offer) => [offer.id, offer]));
   const versions = new Map(offers.menus.map((menu) => [menu.id, menu.versionId]));
+  const versionOf = (menuId: string): string => {
+    const versionId = versions.get(menuId);
+    if (versionId === undefined)
+      throw new Error(`the offers name no live version of menu ${menuId}`);
+    return versionId;
+  };
   await tx.insert(workingLineContexts).values(
     lines.map((line) => {
       const offer = byMenuItem.get(line.menuItemId);
@@ -828,7 +858,7 @@ export async function recordWorkingLineContexts(
         workingOrderLineId: line.workingOrderLineId,
         menuItemId: offer.id,
         menuId: offer.menuId,
-        menuVersionId: versions.get(offer.menuId) ?? null,
+        menuVersionId: versionOf(offer.menuId),
         menuName: offer.menuName,
         departmentId: context.departmentId,
         departmentName: department.name,

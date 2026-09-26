@@ -66,7 +66,7 @@ import {
   resolveZoneContext,
   retargetOrderServiceContext,
   setDeviceDefaultZone,
-  unavailableSet,
+  menuState,
   updatePreparationRoute,
 } from "./operations.js";
 
@@ -1803,6 +1803,16 @@ describe("zone offers from the published menus", () => {
         code: "service_zone.offer_not_allowed",
         params: { zoneId: venue.diningZone, menuItemId: UNKNOWN_ID },
       });
+
+      await expect(
+        recordWorkingLineContexts(
+          tx,
+          cfg,
+          orderId,
+          [{ workingOrderLineId: stranger!, menuItemId: venue.menuItemId }],
+          { ...offers, menus: [] },
+        ),
+      ).rejects.toThrow(/no live version/);
     });
   });
 
@@ -1922,12 +1932,14 @@ describe("zone offers from the published menus", () => {
 
   it("lists what the zone's live menus hold that cannot be sold now, one query per table", async () => {
     const venue = await seedTwoMenuVenue();
-    const { cfg } = venue;
     await scoped(async (tx) => {
-      await expect(unavailableSet(tx, venue.diningZone)).resolves.toEqual({
-        products: [],
-        optionLabels: [],
-        extraItems: [],
+      const menus = [
+        { menuId: venue.menuId, versionId: venue.versionId },
+        { menuId: venue.dinner, versionId: venue.dinnerVersionId },
+      ];
+      await expect(menuState(tx, venue.diningZone)).resolves.toEqual({
+        menus,
+        unavailable: { products: [], optionLabels: [], extraItems: [] },
       });
 
       await updateProduct(tx, venue.burger, { available: false });
@@ -1982,20 +1994,62 @@ describe("zone offers from the published menus", () => {
       ]);
 
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
-      const unavailable = await unavailableSet(tx, venue.diningZone);
+      const { menus: served, unavailable } = await menuState(tx, venue.diningZone);
       // The zone's menus, their live versions, then products, option labels and extras items.
       expect(prepared).toHaveBeenCalledTimes(5);
+      expect(served).toEqual(menus);
       expect({ ...unavailable, products: [...unavailable.products].sort() }).toEqual({
         products: [venue.productId, venue.burger, venue.large, venue.extraMint].sort(),
         optionLabels: [WITH_ICE],
-        extraItems: [{ menuItemId: venue.lemonadeOffer, productId: venue.extraLemon }],
+        extraItems: [
+          {
+            menuItemId: venue.lemonadeOffer,
+            productId: venue.extraLemon,
+            extraListId: venue.extrasList,
+          },
+        ],
       });
-      await expect(unavailableSet(tx, UNKNOWN_ID)).resolves.toEqual({
-        products: [],
-        optionLabels: [],
-        extraItems: [],
+      await expect(menuState(tx, UNKNOWN_ID)).resolves.toEqual({
+        menus: [],
+        unavailable: { products: [], optionLabels: [], extraItems: [] },
       });
-      void cfg;
+    });
+  });
+
+  it("names the list of a withdrawn extras item, so the same product in another list stays offered", async () => {
+    const venue = await seedTwoMenuVenue();
+    await scoped(async (tx) => {
+      const garnish = (
+        await createExtraList(
+          tx,
+          { name: "Garnish", minPicks: 0, maxPicks: 1, items: [{ productId: venue.extraLemon }] },
+          "en",
+        )
+      ).id;
+      await writeProductModifiers(tx, venue.lemonade, [
+        { kind: "extras", id: venue.extrasList },
+        { kind: "extras", id: garnish },
+        { kind: "options", id: venue.iceList },
+      ]);
+      await setMenuItemExtraLists(tx, venue.lemonadeOffer, [
+        { listId: venue.extrasList, items: [] },
+        { listId: garnish, items: [] },
+      ]);
+      await publish(tx, venue.dinner);
+      await setMenuItemExtraLists(tx, venue.lemonadeOffer, [
+        {
+          listId: venue.extrasList,
+          items: [{ productId: venue.extraLemon, price: null, available: false }],
+        },
+        { listId: garnish, items: [] },
+      ]);
+      expect((await menuState(tx, venue.diningZone)).unavailable.extraItems).toEqual([
+        {
+          menuItemId: venue.lemonadeOffer,
+          productId: venue.extraLemon,
+          extraListId: venue.extrasList,
+        },
+      ]);
     });
   });
 });
