@@ -1,14 +1,18 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { registerIcons } from "@waitron/ui";
+import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { OptionListForm } from "./option-list-form.js";
 import type { OptionList } from "../api/client.js";
 
+registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
 
 /**
  * The form only exposes anything to the accessibility tree once it is OPEN, so every state below is
  * mounted with `open = true`. The three names read differently on purpose (CLAUDE.md §3). The `many`
- * state holds a withdrawn label so the disabled preselect radio is scanned too.
+ * state holds a withdrawn option so the Unavailable lozenge and the disabled default radio are
+ * scanned too.
  */
 const label = (id: string, name: string, customer: string, kitchen: string, available = true) => ({
   id,
@@ -40,7 +44,17 @@ const many: OptionList = {
   ],
 };
 
-const states = ["create", "edit", "invalid", "busy", "server-error", "many-labels"] as const;
+const states = [
+  "create",
+  "edit",
+  "invalid",
+  "busy",
+  "server-error",
+  "many-labels",
+  "names-open",
+  "names-error",
+  "option-editor",
+] as const;
 
 describe.each(["light", "dark"] as const)("option list form (%s)", (theme) => {
   it.each(states)("renders %s accessibly", async (state) => {
@@ -50,7 +64,7 @@ describe.each(["light", "dark"] as const)("option list form (%s)", (theme) => {
         open: true,
         languages: { defaultLanguage: "en", languages: ["en", "es"] },
         value:
-          state === "many-labels"
+          state === "many-labels" || state === "option-editor"
             ? many
             : state === "create" || state === "invalid"
               ? null
@@ -58,8 +72,10 @@ describe.each(["light", "dark"] as const)("option list form (%s)", (theme) => {
         busy: state === "busy",
         fieldErrors:
           state === "server-error"
-            ? { name: "That name is already used.", "labels.0.name": "Give this label a name." }
-            : {},
+            ? { name: "That name is already used.", "labels.0.name": "Give this option a name." }
+            : state === "names-error"
+              ? { kitchenName: "Too long for the kitchen." }
+              : {},
       },
       theme,
     );
@@ -67,6 +83,20 @@ describe.each(["light", "dark"] as const)("option list form (%s)", (theme) => {
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
       await el.updateComplete;
     }
+    if (state === "option-editor") {
+      el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-label-3"]')!.click();
+      await el.updateComplete;
+    }
+    const names = el.shadowRoot!.querySelector<
+      HTMLElement & { open: boolean; updateComplete: Promise<unknown> }
+    >('[data-test="names-section"]')!;
+    if (state === "names-open") names.open = true;
+    await names.updateComplete;
+    const editor = el.shadowRoot!.querySelector("dashboard-option-label-form")!;
+    await editor.updateComplete;
+    // Each named state is scanned in the shape it names.
+    expect(names.open).toBe(state === "names-open" || state === "names-error");
+    expect(editor.open).toBe(state === "option-editor");
     await expectNoA11yViolations(host);
   });
 });

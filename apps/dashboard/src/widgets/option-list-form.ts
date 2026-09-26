@@ -4,7 +4,10 @@ import { repeat } from "lit/directives/repeat.js";
 import { baseStyles, submitOnEnter } from "@waitron/ui";
 import type { ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
+import "@waitron/ui/src/components/wt-disclosure.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-lozenge.js";
+import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -12,23 +15,16 @@ import "@waitron/ui/src/components/wt-form-error-summary.js";
 import { optionalTextFields, translations, type FieldContext } from "./form-fields.js";
 import { reorder } from "./reorder.js";
 import { ReorderController, type ReorderModel } from "./reorder-table.js";
+import "./option-label-form.js";
+import type { DraftLabel } from "./option-label-form.js";
 import type { OptionList, OptionListInput } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
-interface DraftLabel {
-  id: string;
-  name: string;
-  customerName: Record<string, string>;
-  kitchenName: string;
-  available: boolean;
-}
-
 /**
- * Two things the server's validator decides, mirrored here so the operator learns them without a
- * round trip (both read from `parseOptionListInput`, packages/catalogue/src/option-contract.ts):
- * an ACTIVE list with no available label is refused, and a preselection naming a label that is not
- * available is dropped to null rather than refused — so this form never offers that combination and
- * never reports it as a fault.
+ * Two rules of `parseOptionListInput` (packages/catalogue/src/option-contract.ts), mirrored so the
+ * operator sees them before saving: an ACTIVE list with no available option is refused, and a list
+ * with an available option always has one as its default — the first available one when none is
+ * chosen, so the form shows the default the server will store.
  */
 @customElement("dashboard-option-list-form")
 export class OptionListForm extends LitElement {
@@ -51,19 +47,24 @@ export class OptionListForm extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
-      td.pick-cell {
-        vertical-align: middle;
+      td p.error {
+        margin: var(--wt-space-1) 0 0;
+        font-size: var(--wt-font-size-sm);
       }
-      .cell-stack {
-        display: grid;
+      .option-name {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
         gap: var(--wt-space-2);
-        min-width: var(--wt-cell-name-max-width);
       }
-      /* A lone input in a cell has no width of its own, so the automatic table layout shrinks it to
-         wt-input's own tap-target floor and cuts the value off mid-word. The same token the stacked
-         translated names use gives it room; the table's own scroller absorbs the extra width. */
-      .cell-field {
-        min-width: var(--wt-cell-name-max-width);
+      /* The grip and the kebab are each a tap-target-wide button that already centres its icon. */
+      th:first-child,
+      td:first-child,
+      td:last-child {
+        padding-inline: 0;
+      }
+      td:last-child {
+        text-align: end;
       }
       /* The preselect control is a native radio, which is far smaller than a finger. The tap target
          is the LABEL that contains it, never the radio stretched past its own box
@@ -105,6 +106,8 @@ export class OptionListForm extends LitElement {
   @state() private active = true;
   @state() private labels: DraftLabel[] = [];
   @state() private defaultLabelId: string | null = null;
+  /** The option open in the option editor: "new" while adding one, null while it is closed. */
+  @state() private editingLabel: DraftLabel | "new" | null = null;
   @state() private validation: Record<string, string> = {};
   /** `fieldErrors` with each path turned into one of this form's own keys. A label's message is
    * held against the label's ID rather than the position the server named, so moving a label
@@ -129,6 +132,7 @@ export class OptionListForm extends LitElement {
     ) {
       this.#reseed();
     }
+    if (changes.has("open") && !this.open) this.editingLabel = null;
     // After the reseed, so a label path resolves against the labels now on screen.
     if (changes.has("fieldErrors")) this.serverErrors = this.#mapFieldErrors();
   }
@@ -146,12 +150,15 @@ export class OptionListForm extends LitElement {
       kitchenName: label.kitchenName ?? "",
       available: label.available,
     }));
-    this.defaultLabelId = this.#pickable(value?.defaultLabelId ?? null);
+    this.defaultLabelId = value?.defaultLabelId ?? null;
+    this.#keepDefault();
+    this.editingLabel = null;
     this.validation = {};
   }
 
-  #pickable(id: string | null): string | null {
-    return this.labels.some((label) => label.id === id && label.available) ? id : null;
+  #keepDefault(): void {
+    const chosen = this.labels.some((label) => label.id === this.defaultLabelId && label.available);
+    if (!chosen) this.defaultLabelId = this.labels.find((label) => label.available)?.id ?? null;
   }
 
   /** The language a refusal naming a whole translated map is shown against: the first input on
@@ -167,8 +174,9 @@ export class OptionListForm extends LitElement {
     return mapped;
   }
 
-  /** A path naming the list as a whole, a label's id or a label's availability has no input of its
-   * own, so it is shown under the labels table with the rest of the list-level refusals. */
+  /** A path naming the list as a whole, an option's id or an option's availability (`wt-switch`
+   * draws no error text) is shown under the options table with the rest of the list-level
+   * refusals. */
   #formKey(field: string): string {
     const label = /^labels\.(\d+)(?:\.(.+))?$/.exec(field);
     if (label) {
@@ -206,34 +214,46 @@ export class OptionListForm extends LitElement {
     this.validation = {};
   }
 
-  #editLabel(id: string, patch: Partial<DraftLabel>): void {
+  /** Puts the option editor's draft in place of the option it was opened on, or after the others
+   * when it was opened to add one. */
+  #saveLabel(event: CustomEvent<{ value: DraftLabel }>): void {
+    event.stopPropagation();
+    const saved = event.detail.value;
+    const known = this.labels.some((label) => label.id === saved.id);
     this.#edit(() => {
-      this.labels = this.labels.map((label) => (label.id === id ? { ...label, ...patch } : label));
-      this.defaultLabelId = this.#pickable(this.defaultLabelId);
+      this.labels = known
+        ? this.labels.map((label) => (label.id === saved.id ? saved : label))
+        : [...this.labels, saved];
+      this.#keepDefault();
     });
+    this.#closeEditor();
   }
 
-  #addLabel(): void {
-    this.#edit(() => {
-      // A label is given its id HERE, not by the server: `parseOptionListInput` refuses a
-      // `defaultLabelId` naming no label in the submitted array, so a label the operator adds and
-      // preselects in the same save has to travel with an id of its own. `writeLabels` inserts a
-      // supplied id rather than replacing it (packages/catalogue/src/options.ts).
-      const label: DraftLabel = {
-        id: crypto.randomUUID(),
-        name: "",
-        customerName: {},
-        kitchenName: "",
-        available: true,
-      };
-      this.labels = [...this.labels, label];
-    });
+  /** Closes the option editor and puts focus back on the control that opened it, once the dialog
+   * has closed and put focus back where IT recorded. */
+  #closeEditor(): void {
+    const opener = this.editingLabel;
+    if (opener === null) return;
+    this.editingLabel = null;
+    void this.#returnFocus(opener === "new" ? null : opener.id);
+  }
+
+  async #returnFocus(id: string | null): Promise<void> {
+    await this.updateComplete;
+    const form = this.shadowRoot!.querySelector("dashboard-option-label-form");
+    await form?.updateComplete;
+    await form?.shadowRoot!.querySelector("wt-modal")?.updateComplete;
+    const target =
+      id === null
+        ? this.shadowRoot!.querySelector<HTMLElement>('[data-test="add-option"]')
+        : this.shadowRoot!.querySelector<HTMLElement>(`tr[data-label="${id}"] wt-row-actions`);
+    target?.focus();
   }
 
   #removeLabel(id: string): void {
     this.#edit(() => {
       this.labels = this.labels.filter((label) => label.id !== id);
-      this.defaultLabelId = this.#pickable(this.defaultLabelId);
+      this.#keepDefault();
     });
   }
 
@@ -260,8 +280,6 @@ export class OptionListForm extends LitElement {
     if (this.busy) return;
     const validation: Record<string, string> = {};
     if (!this.name.trim()) validation.name = t("options.name_required");
-    for (const [index, label] of this.labels.entries())
-      if (!label.name.trim()) validation[`label-${index}-name`] = t("options.label_name_required");
     if (this.active && !this.labels.some((label) => label.available))
       validation.labels = t("options.labels_required");
     this.validation = validation;
@@ -300,66 +318,74 @@ export class OptionListForm extends LitElement {
     };
   }
 
+  /** A row's messages, keyed as the option editor names its inputs (`label-3-name` → `label-name`). */
+  #rowErrors(index: number, errors: Record<string, string>): Record<string, string> {
+    const prefix = `label-${index}-`;
+    return Object.fromEntries(
+      Object.entries(errors)
+        .filter(([key]) => key.startsWith(prefix))
+        .map(([key, message]) => [`label-${key.slice(prefix.length)}`, message]),
+    );
+  }
+
+  #namesSection(errors: Record<string, string>) {
+    const locales = this.languages.languages;
+    const filled =
+      locales.filter((locale) => (this.customerName[locale] ?? "").trim()).length +
+      (this.kitchenName.trim() ? 1 : 0);
+    const hasError =
+      !!errors["kitchen-name"] || locales.some((locale) => !!errors[`customer-name-${locale}`]);
+    return html`<wt-disclosure
+      data-test="names-section"
+      heading=${t("options.names_section")}
+      summary=${t("options.names_summary")
+        .replace("{filled}", String(filled))
+        .replace("{total}", String(locales.length + 1))}
+      .hasError=${hasError}
+    >
+      <div class="names">
+        ${optionalTextFields(
+          this.#fields(errors),
+          "customer-name",
+          t("options.customer_name"),
+          this.customerName,
+          (customerName) => this.#edit(() => (this.customerName = customerName)),
+          this.name,
+        )}
+        <wt-input
+          name="kitchen-name"
+          label=${t("options.kitchen_name")}
+          placeholder=${this.name}
+          .disabled=${this.busy}
+          .value=${this.kitchenName}
+          .error=${errors["kitchen-name"] ?? ""}
+          .invalid=${!!errors["kitchen-name"]}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            this.#edit(() => (this.kitchenName = event.detail.value));
+          }}
+        ></wt-input>
+      </div>
+    </wt-disclosure>`;
+  }
+
   #labelRow(label: DraftLabel, index: number, errors: Record<string, string>) {
     const named = label.name || t("options.label");
     return html`<tr data-label=${label.id}>
       <td class="handle-cell">${this.#reorder.handle(label.id)}</td>
       <td>
-        <wt-input
-          class="cell-field"
-          name=${`label-${index}-name`}
-          label=${t("options.name")}
-          required
-          .disabled=${this.busy}
-          .value=${label.name}
-          .error=${errors[`label-${index}-name`] ?? ""}
-          .invalid=${!!errors[`label-${index}-name`]}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            this.#editLabel(label.id, { name: event.detail.value });
-          }}
-        ></wt-input>
-      </td>
-      <td>
-        <div class="cell-stack">
-          ${optionalTextFields(
-            this.#fields(errors),
-            `label-${index}-customer-name`,
-            t("options.customer_name"),
-            label.customerName,
-            (customerName) => this.#editLabel(label.id, { customerName }),
-            label.name,
-          )}
+        <div class="option-name">
+          <span data-test=${`label-${index}-name`}>${label.name}</span>${
+            label.available
+              ? nothing
+              : html`<wt-lozenge data-test=${`label-${index}-unavailable`}
+                  >${t("options.unavailable")}</wt-lozenge
+                >`
+          }
         </div>
-      </td>
-      <td>
-        <wt-input
-          class="cell-field"
-          name=${`label-${index}-kitchen-name`}
-          label=${t("options.kitchen_name")}
-          placeholder=${label.name}
-          .disabled=${this.busy}
-          .value=${label.kitchenName}
-          .error=${errors[`label-${index}-kitchen-name`] ?? ""}
-          .invalid=${!!errors[`label-${index}-kitchen-name`]}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            this.#editLabel(label.id, { kitchenName: event.detail.value });
-          }}
-        ></wt-input>
-      </td>
-      <td>
-        <wt-switch
-          name=${`label-${index}-available`}
-          data-test=${`label-${index}-available`}
-          label=${t("options.available")}
-          .checked=${label.available}
-          .disabled=${this.busy}
-          @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-            event.stopPropagation();
-            this.#editLabel(label.id, { available: event.detail.checked });
-          }}
-        ></wt-switch>
+        ${Object.values(this.#rowErrors(index, errors)).map(
+          (message) => html`<p class="error" data-test=${`label-${index}-error`}>${message}</p>`,
+        )}
       </td>
       <td class="pick-cell">
         <label class="pick" data-test=${`label-${index}-pick`}
@@ -374,16 +400,26 @@ export class OptionListForm extends LitElement {
         /></label>
       </td>
       <td>
-        <wt-button
-          variant="danger"
-          data-test=${`remove-label-${index}`}
-          aria-label=${`${t("options.remove_label")}: ${named}`}
-          .disabled=${this.busy}
-          @click=${(event: Event) => {
-            event.stopPropagation();
-            this.#removeLabel(label.id);
-          }}
-          >${t("action.remove")}</wt-button
+        <wt-row-actions align="end" label=${`${t("options.option_actions")}: ${named}`}
+          ><wt-button
+            variant="secondary"
+            data-test=${`edit-label-${index}`}
+            .disabled=${this.busy}
+            @click=${(event: Event) => {
+              event.stopPropagation();
+              if (!this.busy) this.editingLabel = label;
+            }}
+            >${t("action.edit")}</wt-button
+          ><wt-button
+            variant="danger"
+            data-test=${`remove-label-${index}`}
+            .disabled=${this.busy}
+            @click=${(event: Event) => {
+              event.stopPropagation();
+              if (!this.busy) this.#removeLabel(label.id);
+            }}
+            >${t("action.delete")}</wt-button
+          ></wt-row-actions
         >
       </td>
     </tr>`;
@@ -391,17 +427,16 @@ export class OptionListForm extends LitElement {
 
   #labelsSection(errors: Record<string, string>) {
     return html`${this.#reorder.liveRegion()}
-      <div class="table-wrap" tabindex="0" role="region" aria-label=${t("options.labels")}>
+      <div class="table-wrap" tabindex="0" role="region" aria-label=${t("options.list_options")}>
         <table>
           <thead>
             <tr>
               <th scope="col"><span class="visually-hidden">${t("options.reorder")}</span></th>
               <th scope="col">${t("options.name")}</th>
-              <th scope="col">${t("options.customer_name")}</th>
-              <th scope="col">${t("options.kitchen_name")}</th>
-              <th scope="col">${t("options.available")}</th>
               <th scope="col">${t("options.default")}</th>
-              <th scope="col"><span class="visually-hidden">${t("action.remove")}</span></th>
+              <th scope="col">
+                <span class="visually-hidden">${t("options.option_actions")}</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -421,117 +456,105 @@ export class OptionListForm extends LitElement {
       <div class="label-actions">
         <wt-button
           variant="secondary"
-          data-test="add-label"
+          data-test="add-option"
           .disabled=${this.busy}
           @click=${(event: Event) => {
             event.stopPropagation();
-            this.#addLabel();
+            if (!this.busy) this.editingLabel = "new";
           }}
-          >${t("options.add_label")}</wt-button
-        >${
-          this.defaultLabelId === null
-            ? nothing
-            : html`<wt-button
-                variant="ghost"
-                data-test="clear-default"
-                .disabled=${this.busy}
-                @click=${(event: Event) => {
-                  event.stopPropagation();
-                  this.#edit(() => (this.defaultLabelId = null));
-                }}
-                >${t("options.clear_default")}</wt-button
-              >`
-        }
+          >${t("options.add_option")}</wt-button
+        >
       </div>`;
+  }
+
+  #labelEditor(errors: Record<string, string>) {
+    const editing = this.editingLabel;
+    const index =
+      editing === null || editing === "new"
+        ? -1
+        : this.labels.findIndex((label) => label.id === editing.id);
+    return html`<dashboard-option-label-form
+      .open=${editing !== null}
+      .busy=${this.busy}
+      .languages=${this.languages}
+      .value=${editing === "new" ? null : editing}
+      .errors=${index < 0 ? {} : this.#rowErrors(index, errors)}
+      @wt-submit=${(event: CustomEvent<{ value: DraftLabel }>) => this.#saveLabel(event)}
+      @wt-cancel=${(event: Event) => {
+        event.stopPropagation();
+        this.#closeEditor();
+      }}
+    ></dashboard-option-label-form>`;
   }
 
   override render() {
     const errors = this.#errors();
     return html`<wt-modal
-      .open=${this.open}
-      heading=${t(this.value ? "options.edit" : "options.create")}
-      @keydown=${(event: KeyboardEvent) => {
-        if (this.busy && event.key === "Escape") event.preventDefault();
-      }}
-      @wt-close=${(event: Event) => this.#cancel(event)}
-    >
-      <div
-        ?inert=${this.busy}
-        class="fields"
-        @keydown=${(event: KeyboardEvent) =>
-          submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]'))}
+        .open=${this.open}
+        heading=${t(this.value ? "options.edit" : "options.create")}
+        @keydown=${(event: KeyboardEvent) => {
+          if (this.busy && event.key === "Escape") event.preventDefault();
+        }}
+        @wt-close=${(event: Event) => this.#cancel(event)}
       >
-        <wt-form-error-summary
-          heading=${t("form.error_heading")}
-          .errors=${Object.values(errors)}
-        ></wt-form-error-summary>
-        <div class="names">
-          <wt-input
-            name="name"
-            label=${t("options.name")}
-            required
-            .disabled=${this.busy}
-            .value=${this.name}
-            .error=${errors.name ?? ""}
-            .invalid=${!!errors.name}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              this.#edit(() => (this.name = event.detail.value));
-            }}
-          ></wt-input>
-          ${optionalTextFields(
-            this.#fields(errors),
-            "customer-name",
-            t("options.customer_name"),
-            this.customerName,
-            (customerName) => this.#edit(() => (this.customerName = customerName)),
-            this.name,
-          )}
-          <wt-input
-            name="kitchen-name"
-            label=${t("options.kitchen_name")}
-            placeholder=${this.name}
-            .disabled=${this.busy}
-            .value=${this.kitchenName}
-            .error=${errors["kitchen-name"] ?? ""}
-            .invalid=${!!errors["kitchen-name"]}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              this.#edit(() => (this.kitchenName = event.detail.value));
-            }}
-          ></wt-input>
-          <wt-switch
-            name="active"
-            data-test="active"
-            label=${t("options.active")}
-            .checked=${this.active}
-            .disabled=${this.busy}
-            @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-              event.stopPropagation();
-              this.#edit(() => (this.active = event.detail.checked));
-            }}
-          ></wt-switch>
-        </div>
-        ${this.#labelsSection(errors)}
-      </div>
-      <wt-form-actions slot="footer"
-        ><wt-button
-          slot="cancel"
-          data-test="cancel"
-          variant="secondary"
-          .disabled=${this.busy}
-          @click=${(event: Event) => this.#cancel(event)}
-          >${t("action.cancel")}</wt-button
+        <div
+          ?inert=${this.busy}
+          class="fields"
+          @keydown=${(event: KeyboardEvent) =>
+            submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]'))}
         >
-        <wt-button
-          data-test="save"
-          variant="primary"
-          .disabled=${this.busy}
-          @click=${(event: Event) => this.#submit(event)}
-          >${t("action.save")}</wt-button
-        ></wt-form-actions
-      >
-    </wt-modal>`;
+          <wt-form-error-summary
+            heading=${t("form.error_heading")}
+            .errors=${Object.values(errors)}
+          ></wt-form-error-summary>
+          <div class="names">
+            <wt-input
+              name="name"
+              label=${t("options.name")}
+              required
+              .disabled=${this.busy}
+              .value=${this.name}
+              .error=${errors.name ?? ""}
+              .invalid=${!!errors.name}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                this.#edit(() => (this.name = event.detail.value));
+              }}
+            ></wt-input>
+            ${this.#namesSection(errors)}
+            <wt-switch
+              name="active"
+              data-test="active"
+              label=${t("options.active")}
+              .checked=${this.active}
+              .disabled=${this.busy}
+              @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+                event.stopPropagation();
+                this.#edit(() => (this.active = event.detail.checked));
+              }}
+            ></wt-switch>
+          </div>
+          ${this.#labelsSection(errors)}
+        </div>
+        <wt-form-actions slot="footer"
+          ><wt-button
+            slot="cancel"
+            data-test="cancel"
+            variant="secondary"
+            .disabled=${this.busy}
+            @click=${(event: Event) => this.#cancel(event)}
+            >${t("action.cancel")}</wt-button
+          >
+          <wt-button
+            data-test="save"
+            variant="primary"
+            .disabled=${this.busy}
+            @click=${(event: Event) => this.#submit(event)}
+            >${t("action.save")}</wt-button
+          ></wt-form-actions
+        >
+      </wt-modal>
+      ${this.#labelEditor(errors)}`;
   }
 }
 declare global {
