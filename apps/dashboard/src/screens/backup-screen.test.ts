@@ -964,6 +964,52 @@ describe("the status watcher's key requests and read alerts", () => {
     expect(alertText(el)?.trim()).toBe(codeMessage("connection.failed"));
   });
 
+  async function enterEditAfterAFailedRead(api: DashboardApi): Promise<BackupScreen> {
+    const el = await mountThenFailARead(api);
+    q(el, "[data-test=edit-settings]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=save-settings]")).not.toBeNull());
+    expect(alertText(el)?.trim()).toBe(codeMessage("connection.failed"));
+    return el;
+  }
+
+  it("clears the failed-read alert when Save settings starts", async () => {
+    const api = stubApi({ applyBackup: vi.fn().mockReturnValue(new Promise(() => {})) }, ENABLED);
+    const el = await enterEditAfterAFailedRead(api);
+
+    q(el, "[data-test=save-settings]")!.click();
+    await el.updateComplete;
+    expect(api.applyBackup).toHaveBeenCalledOnce();
+    expect(alertText(el)).toBeUndefined();
+  });
+
+  it("raises the failed-read alert again when a read after Save settings fails", async () => {
+    const api = stubApi({}, ENABLED);
+    const el = await enterEditAfterAFailedRead(api);
+    const readsBeforeSave = vi.mocked(api.getBackupStatus).mock.calls.length;
+
+    q(el, "[data-test=save-settings]")!.click();
+    await flush(el);
+    expect(api.applyBackup).toHaveBeenCalledOnce();
+    expect(alertText(el)).toBeUndefined();
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() => expect(api.getBackupStatus).toHaveBeenCalledTimes(readsBeforeSave + 1));
+    await flush(el);
+    expect(alertText(el)?.trim()).toBe(codeMessage("connection.failed"));
+  });
+
+  it("keeps the failed-read alert through Show old key, Edit and Cancel edit", async () => {
+    const api = stubApi({}, ENABLED);
+    const el = await enterEditAfterAFailedRead(api);
+
+    q(el, "[data-test=cancel-edit]")!.click();
+    await el.updateComplete;
+    expect(alertText(el)?.trim()).toBe(codeMessage("connection.failed"));
+    q(el, "[data-test=show-old-key]")!.click();
+    await flush(el);
+    expect(api.getBackupRecoveryKey).toHaveBeenCalledTimes(2);
+    expect(alertText(el)?.trim()).toBe(codeMessage("connection.failed"));
+  });
+
   it("makes no key when the late status says the box is not the primary", async () => {
     const api = stubApi({
       getBackupStatus: vi

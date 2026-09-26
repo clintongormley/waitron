@@ -5845,10 +5845,10 @@ environment, no usable held key). So a first status read that fails and a later 
 now gets a key, and a refresh never replaces a key the screen made. The watcher shares a pending key
 request with Apply and Rotate, and a failed status read's alert clears when a later one succeeds;
 the owner ruled that CLAUDE.md §3's observer rule protects the shown key, and it now says so.
-Starting Apply or Rotate clears that alert too, and a later failed status read raises it again
-(lane A's A54, 2026-09-26, #690, the owner's choice); Save settings, Show old key, Edit and Cancel
-edit still leave it — open, for the owner to choose: Save settings asks for no fresh status either,
-so after a successful save a stale alert stays until the next timed status read. Left open: the panel picks its message from `managedByEnvironment` alone, so with
+Starting Apply, Rotate or Save settings clears that alert too, and a later failed status read
+raises it again (lane A's A54, #690, and A59, 2026-09-26, the owner's choices); Show old key, Edit
+and Cancel edit are not saves and leave it, as A54's report proposed and the owner's answer kept.
+Left open: the panel picks its message from `managedByEnvironment` alone, so with
 a key hand-edited too short in `backup.env` it can name a button that does not help: with archives
 on it names a button that is not shown (the status reads the running settings' still-long key, and
 the form shows only with archives off); with archives off, until the next status read reports the
