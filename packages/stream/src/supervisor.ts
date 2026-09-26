@@ -151,7 +151,7 @@ const PROBE_EVERY_MS = 24 * 60 * 60_000;
  */
 const CLASSIFY_EVERY_MS = 10 * 60_000;
 /** A read of the bucket unanswered this long is given up on, and the next tick starts another. */
-const READ_DEADLINE_MS = 5 * 60_000;
+export const READ_DEADLINE_MS = 5 * 60_000;
 /** Beside the configuration: the PID of the Litestream this supervisor started. */
 const PID_FILE = "litestream.pid";
 const CONFIG_FILE = "litestream.yml";
@@ -761,7 +761,7 @@ export class StreamSupervisor {
       }
       if (
         bytes < limitBytes &&
-        (await this.#unlessStopped(signal, this.#bucketAnswers(generation)))
+        (await this.#unlessStopped(signal, this.#bucketAnswers(generation, signal)))
       ) {
         return;
       }
@@ -856,14 +856,25 @@ export class StreamSupervisor {
     }
   }
 
-  async #bucketAnswers(generation: string): Promise<boolean> {
+  /**
+   * False when the listing is refused, or unanswered after {@link READ_DEADLINE_MS}: the S3 client
+   * has no request timeout of its own, so a bucket that takes the connection and never replies
+   * would otherwise hold the pause open after the bucket is back.
+   */
+  async #bucketAnswers(generation: string, signal: AbortSignal): Promise<boolean> {
+    const deadline = new AbortController();
     try {
-      await this.#store.list(
-        `${generationPrefix(this.#deps.venueId, generation)}${levelFolder(0)}`,
-      );
-      return true;
-    } catch {
-      return false;
+      return await Promise.race([
+        this.#store
+          .list(`${generationPrefix(this.#deps.venueId, generation)}${levelFolder(0)}`)
+          .then(
+            () => true,
+            () => false,
+          ),
+        this.#sleep(READ_DEADLINE_MS, AbortSignal.any([signal, deadline.signal])).then(() => false),
+      ]);
+    } finally {
+      deadline.abort();
     }
   }
 

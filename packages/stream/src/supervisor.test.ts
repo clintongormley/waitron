@@ -23,6 +23,7 @@ import { SwitchableStore } from "./testing/switchable-store.js";
 import {
   OPEN_RETRY_MS,
   PRUNE_EVERY_MS,
+  READ_DEADLINE_MS,
   RESTART_BACKOFF_MS,
   StreamSupervisor,
   abortableSleep,
@@ -1198,6 +1199,30 @@ describe("while streaming", () => {
     expect(h.supervisor.status().generation).toBe(h.generation);
     expect(h.litestream.running()).toBeDefined();
     expect(h.logs.some((line) => line.event === "stream.resumed")).toBe(true);
+  });
+
+  // The S3 client sets no request timeout, so a bucket that takes the connection and then says
+  // nothing leaves a listing pending for good.
+  it("asks the bucket again when a question during the pause goes unanswered, and resumes once one is answered", async () => {
+    const h = await streaming();
+    const list = h.store.list.bind(h.store);
+    let questions = 0;
+    h.store.list = async (prefix) => {
+      if (prefix.endsWith("/0000/") && h.supervisor.status().state === "paused") {
+        questions += 1;
+        if (questions === 1) await new Promise<never>(() => {});
+      }
+      return list(prefix);
+    };
+    h.setWal(LIMIT);
+    await h.clock.until(() => questions === 1);
+    expect(h.supervisor.status().state).toBe("paused");
+
+    await h.clock.until(() => h.supervisor.status().state === "streaming");
+    expect(questions).toBe(2);
+    expect(h.clock.slept).toContain(READ_DEADLINE_MS);
+    expect(h.supervisor.status().generation).toBe(h.generation);
+    expect(h.litestream.running()).toBeDefined();
   });
 
   // A restore reads the pointer's generation, so a pause must leave that generation whole and still
