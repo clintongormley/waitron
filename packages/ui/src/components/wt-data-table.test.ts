@@ -1132,6 +1132,49 @@ test("search and filter combine with AND", async () => {
   expect(el.shadowRoot!.querySelector(".message")).not.toBeNull();
 });
 
+test("a filter whose value is a list keeps a row when the list holds the chosen option", async () => {
+  type Tagged = { id: string; name: string; tags: string[] };
+  const el = (await mount(
+    '<wt-data-table aria-label="Tagged"></wt-data-table>',
+  )) as WtDataTable<Tagged>;
+  Object.assign(el, {
+    rows: [
+      { id: "1", name: "Both", tags: ["a", "b"] },
+      { id: "2", name: "Only b", tags: ["b"] },
+      { id: "3", name: "None", tags: [] },
+    ],
+    rowKey: (r: Tagged) => r.id,
+    columns: [
+      {
+        key: "tags",
+        label: "Tags",
+        cell: (r: Tagged) => r.name,
+        filter: {
+          label: "Tag",
+          allLabel: "Any tag",
+          value: (r: Tagged) => r.tags,
+          options: [
+            { value: "a", label: "A" },
+            { value: "b", label: "B" },
+          ],
+        },
+      },
+    ],
+  });
+  await el.updateComplete;
+  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[data-filter="tags"]')!;
+  const keys = () =>
+    [...el.shadowRoot!.querySelectorAll("tbody tr")].map((r) => r.getAttribute("data-row-key"));
+  select.value = "a";
+  select.dispatchEvent(new Event("change"));
+  await el.updateComplete;
+  expect(keys()).toEqual(["1"]);
+  select.value = "b";
+  select.dispatchEvent(new Event("change"));
+  await el.updateComplete;
+  expect(keys()).toEqual(["1", "2"]);
+});
+
 test("a column with no filter contributes no dropdown", async () => {
   const el = await tableS({ searchable: true, columns: withStatus });
   expect(el.shadowRoot!.querySelectorAll("select[data-filter]").length).toBe(1);

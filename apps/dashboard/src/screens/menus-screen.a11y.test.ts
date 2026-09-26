@@ -15,6 +15,7 @@ const lager = {
   kitchenName: "LAG",
   categoryId: null,
   active: true,
+  variants: [],
 } as unknown as Product;
 
 const sections: LibrarySection[] = [
@@ -83,6 +84,20 @@ function api(state: State): DashboardApi {
     }),
     createSection: vi.fn(),
     duplicateSection: vi.fn(),
+    getMenuPrices: vi.fn().mockResolvedValue([
+      {
+        menuItemId: "mi-lager",
+        productId: "p-lager",
+        name: "Lager",
+        categoryId: null,
+        placements: [["s-drinks"]],
+        productPrice: "2.00",
+        override: "1.80",
+        effectivePrice: "1.80",
+        active: true,
+        variants: [],
+      },
+    ]),
   } as unknown as DashboardApi;
 }
 
@@ -180,6 +195,17 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
       await expectNoA11yViolations(host);
     },
   );
+
+  it("accessible Prices tab", async () => {
+    const { el, host } = await mount(
+      "populated",
+      theme,
+      "/manage/menus/menu/menu-lunch/view/prices",
+    );
+    const prices = q(el, "dashboard-menu-prices-table") as HTMLElement & { rows: unknown[] };
+    await vi.waitFor(() => expect(prices.rows).toHaveLength(1));
+    await expectNoA11yViolations(host);
+  });
 
   it("accessible add-products picker", async () => {
     const { el, host } = await mount("populated", theme, LUNCH);

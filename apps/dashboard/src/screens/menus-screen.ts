@@ -23,6 +23,8 @@ import {
 } from "../widgets/member-list-editor.js";
 import "../widgets/menu-structure-tree.js";
 import "../widgets/section-add-products.js";
+import "../widgets/menu-prices-table.js";
+import type { OfferSave } from "../widgets/menu-prices-table.js";
 import { textField } from "../widgets/form-fields.js";
 import { fieldOf, ListWriteQueue } from "../widgets/section-writes.js";
 import type {
@@ -31,6 +33,7 @@ import type {
   DashboardApi,
   LibrarySection,
   MemberRef,
+  MenuPriceRow,
   MenuStructure,
   MenuStructureNode,
   Product,
@@ -42,7 +45,10 @@ import { dashboardPath } from "../navigation.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 
-const TABS = ["structure"] as const;
+const TABS = ["structure", "prices"] as const;
+type Tab = (typeof TABS)[number];
+
+const isTab = (value: string | null): value is Tab => TABS.includes(value as Tab);
 
 /** A list being edited, by section id, with the name it was shown under and the menu and path
  * it was reached by. */
@@ -148,7 +154,8 @@ function withOrder(
 /**
  * The menus, and one menu's editor. Its Structure tab edits one list at a time, the menu's own top
  * level or a section reached from it, and each change to that list is its own request, sent in
- * order through one queue, because a move leaves the list's focus on the row.
+ * order through one queue, because a move leaves the list's focus on the row. Its Prices tab lists
+ * each product the menu reaches and edits what the menu charges for it.
  */
 @customElement("dashboard-menus-screen")
 export class MenusScreen extends LitElement {
@@ -224,6 +231,11 @@ export class MenusScreen extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
+      .prices {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--wt-space-3);
+      }
       .list-actions {
         display: flex;
         flex-wrap: wrap;
@@ -255,6 +267,14 @@ export class MenusScreen extends LitElement {
   @state() private usagesError = false;
   @state() private busy = false;
   @state() private memberError: string | null = null;
+  @state() private view: Tab = TABS[0];
+
+  /** Null until the open menu's prices are first read. */
+  @state() private prices: MenuPriceRow[] | null = null;
+  @state() private pricesError = false;
+  @state() private editingOffer: string | null = null;
+  @state() private savingOffer = false;
+  @state() private offerRefusal: { field: string; message: string } | null = null;
 
   /** Null while closed; `id` is null while creating. */
   @state() private menuForm: { id: string | null; name: string } | null = null;
@@ -295,6 +315,15 @@ export class MenusScreen extends LitElement {
       this.structureError = true;
     },
   );
+  readonly #priceQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    () => {
+      this.pricesError = true;
+    },
+  );
+  /** The menu whose prices are being watched, so switching tabs does not read them again. */
+  #pricesFor: string | null = null;
   readonly #usageQueries = new DashboardQueries(
     this,
     () => this.api,
@@ -488,6 +517,28 @@ export class MenusScreen extends LitElement {
     }
   }
 
+  /** The query slot holds one watch: watching another menu, or `#select`'s release, stops the
+   * earlier one, so its answers never land on another menu. */
+  async #watchPrices(menuId: string): Promise<void> {
+    this.#pricesFor = menuId;
+    this.pricesError = false;
+    try {
+      await this.#priceQueries.watch("getMenuPrices", [menuId], (value) => {
+        this.prices = value;
+        this.pricesError = false;
+      });
+    } catch {
+      this.pricesError = true;
+    }
+  }
+
+  /** The prices are read only once the Prices tab is shown for the menu. */
+  #showView(view: Tab): void {
+    this.view = view;
+    if (view === "prices" && this.menuId !== null && this.#pricesFor !== this.menuId)
+      void this.#watchPrices(this.menuId);
+  }
+
   /** A write that succeeded is never reported as a failed one: a failure here is a load failure. */
   async #refresh(): Promise<void> {
     await Promise.all([this.#watchStructure(), this.#watchSections().catch(() => undefined)]);
@@ -496,6 +547,8 @@ export class MenusScreen extends LitElement {
   #restore(): void {
     if (this.#url.read("dashboard") !== "menus") return;
     this.#select(this.#url.read("menu"));
+    const view = this.#url.read("view");
+    this.#showView(isTab(view) ? view : TABS[0]);
     this.#checkAddress();
   }
 
@@ -506,6 +559,12 @@ export class MenusScreen extends LitElement {
     this.structure = null;
     this.structureError = false;
     this.memberError = null;
+    this.prices = null;
+    this.pricesError = false;
+    this.editingOffer = null;
+    this.offerRefusal = null;
+    this.#pricesFor = null;
+    this.#priceQueries.release("getMenuPrices");
     if (menuId === null) this.#structureQueries.release("getMenuStructure");
     else void this.#watchStructure();
   }
@@ -522,12 +581,12 @@ export class MenusScreen extends LitElement {
       this.#url.write({ menu: null, view: null }, true);
       return;
     }
-    const view = this.#url.read("view");
-    if (!TABS.includes(view as (typeof TABS)[number])) this.#url.write({ view: TABS[0] }, true);
+    if (!isTab(this.#url.read("view"))) this.#url.write({ view: TABS[0] }, true);
   }
 
   #open(menuId: string): void {
     this.#select(menuId);
+    this.#showView(TABS[0]);
     this.#url.write({ dashboard: "menus", menu: menuId, view: TABS[0] });
   }
 
@@ -786,6 +845,40 @@ export class MenusScreen extends LitElement {
       this.#reportSavedToLost(target);
       this.busy = false;
     });
+  }
+
+  // ── Prices ───────────────────────────────────────────────────────────────────────────────────
+
+  /** One PATCH for the menu item, then one PUT of its variants when it has any. The window closes
+   * once both are saved; a refusal keeps it open, unless the person has gone to another menu, when
+   * it is named beside that menu instead. */
+  async #saveOffer(save: OfferSave): Promise<void> {
+    const menuId = this.menuId;
+    if (menuId === null || this.savingOffer) return;
+    this.savingOffer = true;
+    this.offerRefusal = null;
+    try {
+      await this.api.updateMenuItem(menuId, save.menuItemId, {
+        grossPrice: save.grossPrice,
+        active: save.active,
+      });
+      if (save.variants !== null)
+        await this.api.setMenuVariants(menuId, save.menuItemId, save.variants);
+    } catch (error) {
+      this.savingOffer = false;
+      const message = codeMessage(codeOf(error));
+      if (this.menuId === menuId && this.editingOffer === save.menuItemId)
+        this.offerRefusal = { field: fieldOf(error), message };
+      else
+        this.memberError = t("menus.change_not_saved")
+          .replace("{name}", save.name)
+          .replace("{reason}", message);
+      return;
+    }
+    this.savingOffer = false;
+    if (this.menuId !== menuId) return;
+    this.editingOffer = null;
+    await this.#watchPrices(menuId);
   }
 
   // ── Rendering ────────────────────────────────────────────────────────────────────────────────
@@ -1149,6 +1242,46 @@ export class MenusScreen extends LitElement {
       </div>`;
   }
 
+  #renderPrices() {
+    return html`<dashboard-menu-prices-table
+        .rows=${this.prices ?? []}
+        .loading=${this.prices === null && !this.pricesError}
+        .failed=${this.pricesError}
+        .sections=${this.sections}
+        .categories=${this.categories}
+        .products=${this.products}
+        menuName=${this.#menuName()}
+        .editing=${this.editingOffer}
+        .busy=${this.savingOffer}
+        .refusal=${this.offerRefusal}
+        @wt-offer-edit=${(event: CustomEvent<{ menuItemId: string }>) => {
+          event.stopPropagation();
+          this.offerRefusal = null;
+          this.editingOffer = event.detail.menuItemId;
+        }}
+        @wt-offer-save=${(event: CustomEvent<OfferSave>) => {
+          event.stopPropagation();
+          void this.#saveOffer(event.detail);
+        }}
+        @wt-offer-cancel=${(event: Event) => {
+          event.stopPropagation();
+          this.editingOffer = null;
+        }}
+      ></dashboard-menu-prices-table>
+      ${
+        this.pricesError
+          ? html`<div>
+              <wt-button
+                data-test="prices-retry"
+                variant="secondary"
+                @click=${() => void this.#watchPrices(this.menuId!)}
+                >${t("menus.retry")}</wt-button
+              >
+            </div>`
+          : nothing
+      }`;
+  }
+
   #renderDuplicate() {
     const duplicating = this.duplicating;
     const errors = this.duplicateErrors;
@@ -1273,14 +1406,19 @@ export class MenusScreen extends LitElement {
       <wt-tabs
         data-test="menu-tabs"
         label=${name || t("menus.title")}
-        .value=${TABS[0]}
-        .items=${[{ key: "structure", label: t("menus.tab_structure") }]}
+        .value=${this.view}
+        .items=${[
+          { key: "structure", label: t("menus.tab_structure") },
+          { key: "prices", label: t("menus.tab_prices") },
+        ]}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           if (event.target !== event.currentTarget) return;
+          this.#showView(event.detail.value as Tab);
           this.#url.write({ view: event.detail.value });
         }}
       >
         <div slot="structure">${this.#renderStructure()}</div>
+        <div slot="prices" class="prices">${this.#renderPrices()}</div>
       </wt-tabs>
       ${this.#renderDuplicate()} ${this.#renderNewSection()} ${this.#renderAddProducts()}`;
   }

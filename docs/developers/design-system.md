@@ -318,7 +318,9 @@ with the search box at least eight tap targets wide, the dropdowns wrap onto the
 search box takes its line alone (the table's tests measure a stacked toolbar at 360px and a single
 line at 1000px). The wrap is sized by the controls rather than a breakpoint because a media or
 container query cannot read a `--wt-*` token. A column exposes text to the search with
-`searchValue` (falling back to `sortValue`), and offers a dropdown with a `filter` descriptor. Pass
+`searchValue` (falling back to `sortValue`), and offers a dropdown with a `filter` descriptor. A
+filter's `value` may return a list, for a row that belongs under several options at once — a
+product placed in two sections — and the row then shows when the list holds the chosen option. Pass
 `sortKey`/`sortDirection` to choose the starting sort — the table then owns it and emits
 `wt-sort-change`.
 

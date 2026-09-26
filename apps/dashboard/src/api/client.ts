@@ -40,6 +40,8 @@ import type {
   SectionUsages,
 } from "@waitron/catalogue/src/section-types.js";
 export type { LibrarySection, MemberRef, SectionInput, SectionMember, SectionUsages };
+import type { MenuPriceRow, MenuVariant } from "@waitron/catalogue/src/menu-types.js";
+export type { MenuPriceRow, MenuVariant };
 
 /** One member of a menu's structure (`readMenuStructure`, packages/catalogue/src/menu-structure.ts);
  * `children` is present exactly when the member is a section. */
@@ -1370,6 +1372,35 @@ export class DashboardApi {
 
   getMenuStructure(id: string): Promise<MenuStructure> {
     return this.#request<MenuStructure>(`/management-api/catalogues/${id}/structure`, "GET");
+  }
+
+  getMenuPrices(id: string): Promise<MenuPriceRow[]> {
+    return this.#request<MenuPriceRow[]>(`/management-api/catalogues/${id}/prices`, "GET");
+  }
+
+  /** A null `grossPrice` clears the menu's price, so the product's own applies. */
+  updateMenuItem(
+    menuId: string,
+    menuItemId: string,
+    input: { grossPrice?: string | null; active?: boolean },
+  ): Promise<void> {
+    return this.#request<void>(
+      `/management-api/catalogues/${menuId}/items/${menuItemId}`,
+      "PATCH",
+      input,
+    );
+  }
+
+  setMenuVariants(
+    menuId: string,
+    menuItemId: string,
+    variants: MenuVariant[],
+  ): Promise<MenuVariant[]> {
+    return this.#request<MenuVariant[]>(
+      `/management-api/catalogues/${menuId}/items/${menuItemId}/variants`,
+      "PUT",
+      { variants },
+    );
   }
 
   // ── Location menus (which catalogues a location sells) ─────────────────────────────────────────

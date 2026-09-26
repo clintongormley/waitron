@@ -13,7 +13,8 @@ export interface DataTableColumn<Row> {
   filter?: {
     label: string;
     allLabel: string;
-    value: (row: Row) => string;
+    /** A list keeps the row when it holds the chosen option. */
+    value: (row: Row) => string | readonly string[];
     options: { value: string; label: string }[];
     /** The option the filter starts on, while no choice is made or restored and the column's
      * options include it. Choosing the all option is then remembered as a choice of its own, so on
@@ -498,7 +499,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
     });
     return this.rows.filter(
       (row) =>
-        active.every(({ value, selected }) => value(row) === selected) && this.#passesSearch(row),
+        active.every(({ value, selected }) => {
+          const held = value(row);
+          return typeof held === "string" ? held === selected : held.includes(selected);
+        }) && this.#passesSearch(row),
     );
   }
 
