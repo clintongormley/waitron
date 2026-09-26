@@ -158,12 +158,14 @@ export class BackupScreen extends LitElement {
     this,
     () => this.api,
     (error) => {
-      this.errorKey = codeOf(error);
+      this.refreshErrorKey = codeOf(error);
     },
   );
 
   @state() private status?: BackupStatusView;
   @state() private errorKey: string | null = null;
+  /** Kept apart from `errorKey` so a later good read clears its own failure and never an action's. */
+  @state() private refreshErrorKey: string | null = null;
 
   // The configure and rotate forms share this draft: only ONE of them renders at a time.
   @state() private destinationDir = "";
@@ -193,6 +195,12 @@ export class BackupScreen extends LitElement {
   /** Fetched on entering edit mode so a settings change re-applies under the SAME key. Held off the
    * reactive state so it is never rendered. */
   #reuseKey: string | null = null;
+  /** The status watcher asks for a key at most once, so a failing mint is not retried on every
+   * refresh: the mint is a POST, and a POST is never passive session activity. */
+  #watcherAsked = false;
+  /** Every key request goes through `#mint`, and a second asker waits for the one in flight, so two
+   * answers never race to set the shown key. */
+  #minting: Promise<void> | null = null;
 
   /** Stable per instance, so re-renders do not shift the downloaded key file's name. */
   readonly #stamp = new Date().toISOString();
@@ -213,20 +221,37 @@ export class BackupScreen extends LitElement {
   }
 
   async #load(): Promise<void> {
+    this.refreshErrorKey = null;
     this.errorKey = null;
     try {
-      await this.#queries.watch("getBackupStatus", [], (value) => {
+      await this.#queries.watch("getBackupStatus", [], async (value) => {
         this.status = value;
+        this.refreshErrorKey = null;
+        await this.#mintIfNone();
       });
-      if (this.status!.isPrimary && !this.status!.managedByEnvironment && !this.#reusesHeldKey) {
-        await this.#mint();
-      }
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.refreshErrorKey = codeOf(error);
     }
   }
 
-  async #mint(): Promise<void> {
+  /** A status read may give the screen its first key, but never replaces a key: the operator may be
+   * copying the shown one, and the box would then store a key nobody saved. */
+  async #mintIfNone(): Promise<void> {
+    const s = this.status!;
+    if (this.mintedKey !== null || this.#watcherAsked) return;
+    if (!s.isPrimary || s.managedByEnvironment || this.#reusesHeldKey) return;
+    this.#watcherAsked = true;
+    await this.#mint();
+  }
+
+  #mint(): Promise<void> {
+    this.#minting ??= this.#requestKey().finally(() => {
+      this.#minting = null;
+    });
+    return this.#minting;
+  }
+
+  async #requestKey(): Promise<void> {
     try {
       const { key } = await this.api.mintBackupKey();
       this.mintedKey = key;
@@ -500,14 +525,11 @@ export class BackupScreen extends LitElement {
 
   override render(): TemplateResult {
     const s = this.status;
+    const alertKey = this.errorKey ?? this.refreshErrorKey;
     return html`
       <h1 class="title">${t("backup.title")}</h1>
       ${this.#renderConfigurationExport()} ${s === undefined ? nothing : this.#renderBody(s)}
-      ${
-        this.errorKey
-          ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
-          : nothing
-      }
+      ${alertKey ? html`<p class="error" role="alert">${codeMessage(alertKey)}</p>` : nothing}
       <div class="card">
         <dashboard-stream-settings
           .api=${this.api}

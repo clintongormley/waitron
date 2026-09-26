@@ -5620,17 +5620,20 @@ instead that a longer key has to be set there (`stream.error.recovery_key_too_sh
 until the Backups screen's first status read succeeds it names neither
 (`stream.error.recovery_key_too_short_unknown`); in English and Spanish (2026-09-26, lane A's A35,
 #666). The refusal code is unchanged and the message does
-not link or scroll to the button. Left open, two cases. First, the panel picks its message from
-`managedByEnvironment` alone, so with a key hand-edited too short in `backup.env` it can name a
-button that does not help: with archives on it names a button that is not shown (the status reads
-the running settings' still-long key, and the form shows only with archives off); with archives
-off it names a button that sends no new key — the held key before the next status read, and none
-after it, because the screen makes a key only on its first load. Second, if the Backups screen's
-first status read fails and a later one succeeds, the panel then names "Turn on backups", but the
-screen never made a key (it does so only in its first load, since #628), so on a too-short-key box
-the form offers no key and Apply stays disabled until one is pasted. Making a key from the status
-watcher instead would break the dashboard rule that observer callbacks never mint recovery keys
-(CLAUDE.md §3), so this is the owner's call.
+not link or scroll to the button. Since lane A's A49 (2026-09-26) the screen asks for a key from its
+status watcher on any status read rather than only the first: at most once, and only while the
+screen has made none and the first load's own conditions hold (primary, settings not owned by the
+environment, no usable held key). So a first status read that fails and a later one that succeeds
+now gets a key, and a refresh never replaces a key the screen made. The watcher shares a pending key
+request with Apply and Rotate, and a failed status read's alert clears when a later one succeeds;
+the owner ruled that CLAUDE.md §3's observer rule protects the shown key, and it now says so. Left
+open: the panel picks its message from `managedByEnvironment` alone, so with a key hand-edited too
+short in `backup.env` it can name a button that does not help: with archives on it names a button
+that is not shown (the status reads the running settings' still-long key, and the form shows only
+with archives off); with archives off, until the next status read reports the key too short, the
+button sends no new key (it reuses the held one) — after that read the screen makes one. The watcher
+does not retry its own failed mint (the mint is a POST, which is never passive session activity), so
+the screen then offers no key until it is reopened, as it did before.
 The edit-settings form can also meet
 `backup.recovery_key_exists`, when a rotate (from another tab or admin) lands after it fetched the
 key. Left open: the

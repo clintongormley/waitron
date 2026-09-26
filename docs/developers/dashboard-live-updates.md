@@ -20,9 +20,12 @@ module's `changes` declaration identifies its tables and any related objects a w
 server installs those declarations at trading boot, including on mirrors.
 
 Keep form drafts separate from query snapshots. Update list rows and report values in the observer;
-do not call a whole-screen loader that resets a modal or performs a mutation. `DraftRows` helps with
-scalar row editors by replacing clean fields while retaining locally edited fields. Structured
-editors keep their draft until you save or reopen them.
+do not call a whole-screen loader that resets a modal or performs a mutation. An observer may take
+one narrow action a first load would have taken, when the screen still lacks its result: the Backups
+screen's status watcher asks for a recovery key at most once, only while the screen has made none,
+and shares a key request already in flight, so it never replaces a key the screen made. `DraftRows`
+helps with scalar row editors by replacing clean fields while retaining locally edited fields.
+Structured editors keep their draft until you save or reopen them.
 
 Use passive requests for automatic refreshes so leaving a dashboard open does not keep its session
 alive. `DashboardQueries` handles that distinction for core screens. A module using `request`
