@@ -40,8 +40,7 @@ type UsageDependant = Dependant & { type: "product" | "menu" };
 
 /**
  * No order count: options never touch an order, and an extras-list delete leaves an open order's
- * child lines alone because they name the product, not the list (spec
- * 2026-09-18-one-product-model-design.md §3.5).
+ * child lines alone: each records the list's id with no foreign key into it.
  */
 type ListDependants = { products: Dependant[]; menus: Dependant[] };
 

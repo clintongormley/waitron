@@ -530,7 +530,7 @@ export interface HeldExtra {
   kitchenName: string | null;
   price: string;
   quantity: number;
-  /** Null only on a child stored before lists were recorded on child lines. */
+  /** Null only on a child older than `0014_order_edit_columns.sql`. */
   listId: string | null;
 }
 
@@ -670,10 +670,6 @@ export interface StationQueueCourse {
   displayOrder: number;
 }
 
-/**
- * One order's lines at a station. `queuedAt` is that of the order's OLDEST line at this station — the
- * group's ordering key and the age-colouring anchor.
- */
 /** What a kitchen notice tells a station: a line recalled, voided, changed or moved to another
  *  table after it was sent. */
 export type KitchenNoticeKind = "recalled" | "void" | "changed" | "moved";
@@ -703,6 +699,10 @@ export interface StationQueue {
   notices: KitchenNotice[];
 }
 
+/**
+ * One order's lines at a station. `queuedAt` is that of the order's OLDEST line at this station — the
+ * group's ordering key and the age-colouring anchor.
+ */
 export interface StationQueueGroup {
   orderId: string;
   orderNumber: number;
@@ -985,17 +985,17 @@ export interface TabResult {
   orderNumber: number;
 }
 
-/**
- * One line of an open tab from `GET /api/working-orders/:id/lines`. A tab does NOT re-price:
- * `unitPriceGross` is the gross unit price LOCKED at add-time. `servedAt` is the pre-fiscal served
- * marker (`null` ⇒ still to serve).
- */
 /** `GET /api/working-orders/:id/lines` — an open tab's lines and the revision they were read at. */
 export interface TabLines {
   lines: TabLine[];
   revision: number;
 }
 
+/**
+ * One line of an open tab from `GET /api/working-orders/:id/lines`. A tab does NOT re-price:
+ * `unitPriceGross` is the gross unit price LOCKED at add-time. `servedAt` is the pre-fiscal served
+ * marker (`null` ⇒ still to serve).
+ */
 export interface TabLine {
   /** The line's frozen STAFF label — the variant's name on a variant line, else the product's. Absent
    * only on a fixture that omits it, which falls back to the live catalogue name. */
@@ -1561,8 +1561,8 @@ export class TillApi {
    * Cancel (VOID) ONE line of an open tab → `DELETE /api/working-orders/:orderId/lines/:lineNo`: the
    * cancel path for a line the kitchen has already STARTED, which can no longer be recalled. NON-FISCAL;
    * the server prints a correction slip. `quantity`, a decimal string, voids that part of the line
-   * only; absent voids all of it. Rejects `tab.not_open`, `tab.line_not_found` or
-   * `tab.void_quantity_invalid`.
+   * only; absent voids all of it. Rejects `tab.not_open`, `tab.line_not_found`,
+   * `tab.void_quantity_invalid` or `order.payment_in_flight`.
    */
   async voidLine(orderId: string, lineNo: number, quantity?: string): Promise<void> {
     const part = quantity === undefined ? "" : `?quantity=${encodeURIComponent(quantity)}`;

@@ -1041,8 +1041,8 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * Saves an edited retrieved order before a pay or place. A fresh basket has no server row, and
-   * re-saving an unedited one would re-price it against the live catalogue, losing its add-time prices.
+   * Saves an edited retrieved order before a pay or place. A fresh basket has no server row, and an
+   * unedited one has nothing to save.
    * `working_order.not_open` (already settled or placed) is swallowed so the pay routes replay the filed
    * ticket; `placeOrder` is not idempotent and still refuses. An idempotent `placeOrder` is a recorded
    * backlog follow-up (docs/backlog.md).
@@ -1789,8 +1789,8 @@ export class TillApp extends LitElement {
 
   /**
    * The tab is an open working order, so `recordSale` files its stored lines and ignores the basket: `[]`
-   * is sent and `#syncIfDirty` is deliberately skipped, because saving would re-price the tab's add-time
-   * lines. Shares `submitting` with {@link #onConfirmPayment}.
+   * is sent and `#syncIfDirty` is skipped, because it saves the counter basket, which is not the tab.
+   * Shares `submitting` with {@link #onConfirmPayment}.
    */
   async #onPayTab(event: Event): Promise<void> {
     if (this.submitting || this.activeTabId === undefined) return;

@@ -2505,9 +2505,8 @@ describe("basket-wide modifier resolution (perf)", () => {
   // that: a resolver moved inside the loop resolves three times instead of once. Behaviour alone
   // cannot tell the two apart (the same order comes out either way), so the resolver is spied on.
   // The MIDDLE case is not one of them and does not cover the line loop at all: its basket is a
-  // SINGLE line, so it reads 1 either way. What it pins is
-  // a different thing — that a preserve check which cannot hold does not resolve the catalogue a
-  // SECOND time on top of `priceOrderLines`.
+  // SINGLE line, so it reads 1 either way. What it pins is a different thing — that a note edit of a
+  // stored line resolves the catalogue once.
   //
   // What is spied on is `resolveAttachedModifiers` — the ORDER path's own way into the shared walk,
   // and the only caller of it in product code (`resolveBasketModifiers`, working-order.ts). It is
@@ -5593,7 +5592,7 @@ describe("frozen answers through a fractional quantity edit", () => {
     async (source) => {
       const { cfg, cafeId, cafeOfferId, zoneId, kgUnitId } = await setupVenue();
       // A WEIGHED dish: the quantity edit below moves a fraction, which is where the decimal
-      // arithmetic behind the preserve path is most likely to go wrong. The answer is an OPTIONS one
+      // arithmetic behind keeping a stored line is most likely to go wrong. The answer is an OPTIONS one
       // because it makes no child line — an extras pick on a dish sold by weight is refused, by the
       // test below this one.
       const taza = await withTransaction(db, async (tx) => {
@@ -5952,15 +5951,13 @@ describe("order path — extras and options", () => {
 });
 
 /**
- * Which edits `updateHeldOrder` preserves the stored lines for, and which it replaces them for.
+ * What `updateHeldOrder` keeps on a stored line it edits.
  *
- * The reorder cases are the ones that paid for the comparison being order-independent: the order a
- * dish's lists are offered in is a stored position a save re-numbers, so a line parked before a
- * reorder keeps the OLD one while the rebuilt side comes back in the new one, and a comparison
- * pairing the two up position by position reads that as a changed answer and re-prices a
- * quantity-only edit. These two cases reorder through `writeProductModifiers`
- * (`packages/catalogue/src/product-modifiers.ts`), which is one of the three columns that carry
- * that position — `docs/developers/modifiers.md` lists all three.
+ * The reorder cases exist because the order a dish's lists are offered in is a stored position a
+ * save re-numbers: a line parked before a reorder keeps the OLD one while the rebuilt side comes back
+ * in the new one, and an edit must not read that as a changed answer. These two cases reorder through
+ * `writeProductModifiers` (`packages/catalogue/src/product-modifiers.ts`), which is one of the three
+ * columns that carry that position — `docs/developers/modifiers.md` lists all three.
  */
 describe("what a held-order edit preserves and what it replaces", () => {
   it("keeps the line's id and locked price when two options lists change places", async () => {
@@ -5987,10 +5984,10 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .orderBy(workingOrderLines.lineNo);
     expect(before).toHaveLength(1);
 
-    // The manager swaps the two lists over, and the menu price moves, so a line that took the
-    // replacement path would be visibly re-priced rather than merely re-issued. Replacing the whole
-    // set is the point here, so this goes straight to `writeProductModifiers` rather than through
-    // `attachModifierList`, which exists to ADD one without disturbing the rest.
+    // The manager swaps the two lists over, and the menu price moves, so a re-priced line would
+    // show it. Replacing the whole set is the point here, so this goes straight to
+    // `writeProductModifiers` rather than through `attachModifierList`, which exists to ADD one
+    // without disturbing the rest.
     await withTransaction(db, async (tx) => {
       await catalogue.writeProductModifiers(tx, cafeId, [
         { kind: "options", id: seeded.taza.listId },
@@ -6362,9 +6359,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
 
-    // Two of an item capped at one. The preserve check cannot hold, and what the caller is told
-    // comes from the replacement path re-validating the answer — not from the preserve check, which
-    // only ever answers "not this edit".
+    // Two of an item capped at one: the list's own rules apply to the edited picks.
     await expect(
       updateProducts(cfg, id, {
         lines: [

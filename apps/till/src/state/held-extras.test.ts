@@ -103,7 +103,7 @@ describe("deriveExtraSelections", () => {
 
   it("keeps the list the pick came from when two offered lists carry the same product", () => {
     // Owner decision (plan D10): a held pick carries its list, so the second list is not guessed
-    // away; before, the first offered list won.
+    // away.
     const alsoBacon: OfferedModifier = {
       ...sauces,
       items: [item("p-bacon", "Bacon", "2.00")],

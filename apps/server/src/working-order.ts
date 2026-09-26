@@ -2646,7 +2646,7 @@ export interface HeldOrder {
       kitchenName: string | null;
       price: string;
       quantity: number;
-      /** Null only on a child stored before lists were recorded on child lines. */
+      /** Null only on a child older than `0014_order_edit_columns.sql`. */
       listId: string | null;
     }[];
     note?: string;
@@ -3254,8 +3254,8 @@ async function applyLineEdits(
     const fired = await kitchenHas(parent);
     const action: Action = !fired ? "free" : changed ? "change" : rise > 0 ? "raise" : "drop";
 
-    // The picks the line carries after the edit, as a request names them. A child stored before
-    // lists were recorded names none, and pricing it again refuses it as `extras.invalid`.
+    // The picks the line carries after the edit, as a request names them. A child older than
+    // `0014_order_edit_columns.sql` names none, and pricing it again refuses it as `extras.invalid`.
     const picks: ExtraSelection[] =
       intent.extras === null
         ? [...new Set(parent.children.map((child) => child.extraListId))].map((listId) => ({

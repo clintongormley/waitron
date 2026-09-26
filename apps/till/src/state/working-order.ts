@@ -210,8 +210,8 @@ export class WorkingOrderStore {
   }
 
   /**
-   * An edit sends each line without its not-offered picks, so the server re-prices the order without
-   * them; they leave the basket now to match. No prompt: the retrieve banner
+   * An edit sends each line without its not-offered picks, so the server takes them off the order;
+   * they leave the basket now to match. No prompt: the retrieve banner
    * (`held.extra_not_offered`) already said that changing the order removes them.
    */
   #markDirty(): void {

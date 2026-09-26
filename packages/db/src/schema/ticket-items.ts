@@ -61,8 +61,8 @@ export const ticketItems = table(
     firedAt: tsString("fired_at"),
     awayAt: tsString("away_at"),
     note: label("note"),
-    // The quantity fired. Null where an insert does not state it, as every row written before this
-    // column does.
+    // The quantity fired. Null where an insert does not state it, and on every row older than
+    // `0014_order_edit_columns.sql`.
     quantity: quantity("quantity"),
   },
   (t) => [

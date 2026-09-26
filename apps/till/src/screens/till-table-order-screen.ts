@@ -765,7 +765,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** `stopPropagation` keeps the inner `confirm-payment` from reaching the app's counter
-   * `#onConfirmPayment`, which would `#syncIfDirty` → re-price the tab's locked lines. */
+   * `#onConfirmPayment`, which would save and pay the counter basket instead of the tab. */
   #onTenderConfirm(event: Event): void {
     event.stopPropagation();
     const detail = (event as CustomEvent<ConfirmPaymentDetail>).detail;

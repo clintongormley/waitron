@@ -390,9 +390,12 @@ declare module "@waitron/shared" {
      */
     "ticket.invalid_transition": { ticketItemId: string };
     /**
-     * A line was fired that already has a ticket item — a re-fire. `fireLines` catches the per-line
-     * unique violation on `ticket_items`, so every fire path is covered. Its own code because the
-     * colliding item is never read, so there is no `ticketItemId` to report.
+     * The line has already gone to the kitchen, so this write is refused: a re-fire (`fireLines`
+     * catches the per-line unique violation on `ticket_items`, so every fire path is covered), a
+     * re-course of a fired line (`setLineCourse`), and, when the venue has switched off changes to
+     * sent items (`edit_sent_lines`), a recall (`recallLines`) or an edit (`applyLineEdits`) of a
+     * line that was sent to a station. It names the order, not a ticket item, because the re-fire
+     * never reads the colliding item.
      */
     "ticket.already_fired": { workingOrderId: string };
     /**

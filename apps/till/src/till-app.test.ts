@@ -1862,9 +1862,8 @@ describe("till-app", () => {
       { method: "cash", amount: "5" },
       "wo-1",
     );
-    // The order was retrieved but NOT edited, so it must NOT be re-synced —
-    // re-syncing re-prices with the live catalogue and would file at the pay-time price, defeating the
-    // add-time lock. An unedited retrieve→pay files from the stored lock (recordSale straight through).
+    // The order was retrieved but NOT edited, so it must NOT be re-synced: an unedited retrieve→pay
+    // files from the stored lines (recordSale straight through).
     expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
   });
 
@@ -2091,8 +2090,8 @@ describe("till-app", () => {
     });
   });
 
-  // A held line's extras come back as VALUES — the child line holds no list id — so the till finds
-  // the list from the dish's LIVE offer before the line can be re-sent. The three names of the list
+  // A held line's extras come back as VALUES and the id of the list each was picked from, so the till
+  // finds that list in the dish's LIVE offer before the line can be re-sent. The three names of the list
   // and of the picked product differ, so reading the wrong one fails (CLAUDE.md §3).
   const milkList = {
     kind: "extras" as const,
@@ -4324,8 +4323,8 @@ describe("till-app", () => {
         await flush(el);
 
         // The server files the tab's STORED locked lines and ignores the sent basket, so we send `[]`
-        // (the documented shape) tagged with the tab's order id — and crucially NEVER #syncIfDirty →
-        // updateWorkingOrder, which would re-price and destroy the tab's locks.
+        // (the documented shape) tagged with the tab's order id, and never #syncIfDirty →
+        // updateWorkingOrder, which saves the counter basket, not the tab.
         expect(recordSale).toHaveBeenCalledWith([], { method: "cash", amount: "10.00" }, "wo-7");
         expect(updateWorkingOrder).not.toHaveBeenCalled();
         expect(ticket(el)).not.toBeNull();
@@ -4922,7 +4921,7 @@ describe("till-app", () => {
 
     it("retrieve → collect-card (unedited): no re-sync, files the stored lock straight through", async () => {
       // The integrated route's mirror of the unedited retrieve→pay test: an UNEDITED retrieve must NOT
-      // re-sync — that would re-price against the live catalogue and defeat the add-time lock (design §3).
+      // re-sync.
       const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 4 });
       const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
       const { el } = await mountApp({ updateWorkingOrder, pay });
@@ -5085,10 +5084,9 @@ describe("till-app", () => {
 
     it("place-order on an UNEDITED retrieved order does NOT re-sync — placeOrder files the stored composition", async () => {
       // Symmetric with the unedited retrieve→pay path: retrieving adopts the order's id and marks it
-      // persisted+clean (loadFrom). An UNEDITED retrieved order must NOT re-sync before placing —
-      // `updateWorkingOrder` re-prices with the LIVE catalogue and would replace the add-time lock,
-      // filing at the place-time price (design §3: placing does not re-lock price). It must never re-park
-      // either (a re-park of the same id would idempotently REPLAY the existing open order server-side).
+      // persisted+clean (loadFrom). An UNEDITED retrieved order must NOT re-sync before placing, and
+      // must never re-park either (a re-park of the same id would idempotently REPLAY the existing open
+      // order server-side).
       // `placeOrder` files the STORED composition straight.
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
