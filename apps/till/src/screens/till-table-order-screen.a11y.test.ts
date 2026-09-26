@@ -2,7 +2,13 @@ import { afterEach, describe, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./till-table-order-screen.js";
 import type { TableServiceStatus, TillTableOrderScreen } from "./till-table-order-screen.js";
-import type { OfferedModifier, TabLine, TillProduct } from "../api/client.js";
+import type {
+  OfferedModifier,
+  TabLine,
+  TableVisit,
+  TillProduct,
+  VisitBill,
+} from "../api/client.js";
 import type { TillProductGrid } from "../widgets/product-grid.js";
 import type { TillModifierPicker } from "../widgets/modifier-picker.js";
 
@@ -70,6 +76,37 @@ const weightProduct: TillProduct = {
   customerName: { es: "Jamón para el cliente" },
   pricingUnit: "weight",
 };
+
+const party: TableVisit = {
+  id: "v1",
+  revision: 2,
+  guestCount: 3,
+  state: "open",
+  outstanding: "30.00",
+  billCount: 2,
+  tableIds: ["t4"],
+};
+
+const partyBills: VisitBill[] = [
+  {
+    workingOrderId: "wo-1",
+    visitId: "v1",
+    label: null,
+    status: "settled",
+    total: "14.00",
+    outstanding: "0.00",
+    receiptAvailable: true,
+  },
+  {
+    workingOrderId: "wo-2",
+    visitId: "v1",
+    label: null,
+    status: "open",
+    total: "30.00",
+    outstanding: "30.00",
+    receiptAvailable: false,
+  },
+];
 
 afterEach(cleanupWidgets);
 
@@ -223,6 +260,28 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       await expectNoA11yViolations(host);
     });
   });
+
+  it.each([false, true])(
+    "has no violations in the party's bills with Finish refused: %s",
+    async (finishRefused) => {
+      const { el, host } = await mountWidget<TillTableOrderScreen>(
+        "till-table-order-screen",
+        {
+          products,
+          lines: [],
+          statuses,
+          orderId: "wo-1",
+          visit: party,
+          bills: partyBills,
+          finishRefused,
+        },
+        theme,
+      );
+      el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+      await el.updateComplete;
+      await expectNoA11yViolations(host);
+    },
+  );
 
   it("has no violations in the split quantity picker", async () => {
     const splitLines: TabLine[] = [

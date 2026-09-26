@@ -60,7 +60,7 @@ async function fixture(
       },
       ...(maxUploadBytes === null ? {} : { maxUploadBytes }),
       core: {
-        openTab: async () => {
+        seatTable: async () => {
           throw new Error("unused");
         },
       },

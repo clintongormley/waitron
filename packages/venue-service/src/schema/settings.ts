@@ -10,6 +10,8 @@ export const serviceSettings = table(
     // "Allow changes to items already sent to the kitchen". Off is for a paper-only kitchen, which
     // never reports that it has started an item.
     editSentLines: flag("edit_sent_lines").notNull().default(true),
+    // Finish table leaves the party's tables "needs clearing" until someone marks them cleared.
+    clearingWorkflow: flag("clearing_workflow").notNull().default(false),
   },
   (t) => [check("service_settings_singleton_ck", sql`${t.id} = 1`)],
 );

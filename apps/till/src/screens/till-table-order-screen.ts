@@ -17,6 +17,7 @@ import {
   type Decimal,
 } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { selectStyles } from "../select-styles.js";
 import { type DietPredicate, hasDietData, visibleProducts } from "../menu-filter.js";
@@ -47,10 +48,12 @@ import type {
   TabLine,
   TableServiceStatus,
   TableState,
+  TableVisit,
   TabTransfer,
   TillCourse,
   TillMenu,
   TillProduct,
+  VisitBill,
 } from "../api/client.js";
 import type { ConfirmPaymentDetail } from "../widgets/tender-pay.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
@@ -287,6 +290,51 @@ export class TillTableOrderScreen extends LitElement {
         font-variant-numeric: tabular-nums;
       }
 
+      .bill {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        gap: var(--wt-space-1) var(--wt-space-3);
+        padding: var(--wt-space-2) 0;
+        border-bottom: 1px solid var(--wt-color-border);
+      }
+
+      .bill[aria-current="true"] .bill-name {
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .bill-total {
+        font-variant-numeric: tabular-nums;
+      }
+
+      .bill-state {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+
+      .bill-actions,
+      .finish {
+        grid-column: 1 / -1;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: var(--wt-space-2);
+      }
+
+      .finish-refusal {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        margin: var(--wt-space-2) 0 0;
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-danger);
+        border-radius: var(--wt-radius-md);
+      }
+
+      .finish-refusal wt-button {
+        align-self: flex-end;
+      }
+
       .status-options {
         display: flex;
         flex-wrap: wrap;
@@ -408,6 +456,12 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Boolean }) embedded = false;
   /** The target lists of the move/join/merge/transfer flow read this. */
   @property({ attribute: false }) tables: TableState[] = [];
+  /** The party seated at this table, or null for a tab that belongs to none. */
+  @property({ attribute: false }) visit: TableVisit | null = null;
+  /** Every bill of {@link visit}, merged parties' included. */
+  @property({ attribute: false }) bills: VisitBill[] = [];
+  /** Finish table was refused because a bill is unpaid. */
+  @property({ type: Boolean }) finishRefused = false;
 
   @state() private drawerOpen = false;
 
@@ -1184,7 +1238,7 @@ export class TillTableOrderScreen extends LitElement {
           >
         </div>
         ${
-          this.canSettle
+          this.canSettle && this.#chargeable()
             ? html`<section
                 class="pay"
                 @confirm-payment=${(event: Event) => this.#onTenderConfirm(event)}
@@ -1195,9 +1249,118 @@ export class TillTableOrderScreen extends LitElement {
               </section>`
             : nothing
         }
-        ${this.#statusSection()} ${this.#actionSection()}
+        ${this.#billsSection()} ${this.#statusSection()} ${this.#actionSection()}
       </aside>
     `;
+  }
+
+  /** The bill on screen can take a payment unless the party's bills say it is no longer open. */
+  #chargeable(): boolean {
+    const shown = this.bills.find((bill) => bill.workingOrderId === this.orderId);
+    return shown === undefined || shown.status === "open";
+  }
+
+  /** Abandoned bills are left out: nobody pays them. */
+  #shownBills(): VisitBill[] {
+    return this.bills.filter((bill) => bill.status !== "abandoned");
+  }
+
+  #money(amount: string): string {
+    return formatMoney(decimal(amount), currentLocale());
+  }
+
+  #billsSection(): TemplateResult | typeof nothing {
+    if (this.visit === null) return nothing;
+    const bills = this.#shownBills();
+    const unpaid = bills.filter((bill) => bill.status === "open");
+    // Another bill first: the one on screen is charged from the section above.
+    const firstUnpaid = unpaid.find((bill) => bill.workingOrderId !== this.orderId) ?? unpaid[0];
+    return html`<section class="bills" data-bills>
+      <h2>${t("table.bills_title")}</h2>
+      <ul>
+        ${bills.map((bill, index) => this.#billRow(bill, index))}
+      </ul>
+      <div class="total-row">
+        <span class="label">${t("table.still_to_pay")}</span>
+        <span class="amount" data-visit-outstanding>${this.#money(this.visit.outstanding)}</span>
+      </div>
+      ${
+        this.finishRefused
+          ? html`<div class="finish-refusal" role="alert" data-finish-refusal>
+              <span>${codeMessage("visit.bill_outstanding")}</span>
+              ${
+                firstUnpaid === undefined
+                  ? nothing
+                  : html`<wt-button
+                      size="sm"
+                      variant="primary"
+                      data-take-payment
+                      @click=${() => this.#takePayment(firstUnpaid)}
+                    >
+                      ${t("table.take_payment")}
+                    </wt-button>`
+              }
+            </div>`
+          : nothing
+      }
+      <div class="finish">
+        <wt-button
+          variant="secondary"
+          data-finish-table
+          @click=${() => this.#dispatch("finish-table", {})}
+        >
+          ${t("table.finish")}
+        </wt-button>
+      </div>
+    </section>`;
+  }
+
+  #billRow(bill: VisitBill, index: number): TemplateResult {
+    const shown = bill.workingOrderId === this.orderId;
+    const paid = bill.status === "settled";
+    return html`<li
+      class="bill"
+      data-bill=${bill.workingOrderId}
+      aria-current=${shown ? "true" : nothing}
+    >
+      <span class="bill-name"
+        >${bill.label ?? t("table.bill_n").replace("{n}", String(index + 1))}</span
+      >
+      <span class="bill-total" data-bill-total>${this.#money(bill.total)}</span>
+      <span class="bill-state" data-bill-state
+        >${paid ? t("table.bill_paid") : t("table.bill_to_pay").replace("{amount}", () => this.#money(bill.outstanding))}</span
+      >
+      <span class="bill-actions">
+        ${
+          paid && bill.receiptAvailable
+            ? html`<wt-button
+                size="sm"
+                variant="secondary"
+                data-bill-receipt
+                @click=${() => this.#dispatch("reprint-bill", { workingOrderId: bill.workingOrderId })}
+              >
+                ${t("table.bill_receipt")}
+              </wt-button>`
+            : nothing
+        }
+        ${
+          bill.status === "open" && !shown
+            ? html`<wt-button
+                size="sm"
+                variant="secondary"
+                data-take-payment
+                @click=${() => this.#takePayment(bill)}
+              >
+                ${t("table.take_payment")}
+              </wt-button>`
+            : nothing
+        }
+      </span>
+    </li>`;
+  }
+
+  #takePayment(bill: VisitBill): void {
+    this.#dispatch("take-payment", { workingOrderId: bill.workingOrderId });
   }
 
   #pendingSection(pending: TabLine[]): TemplateResult {

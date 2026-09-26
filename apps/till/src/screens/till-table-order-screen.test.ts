@@ -1538,6 +1538,7 @@ describe("till-table-order-screen", () => {
       posY: null,
       shape: null,
       rotation: null,
+      visit: null,
       ...over,
     });
 

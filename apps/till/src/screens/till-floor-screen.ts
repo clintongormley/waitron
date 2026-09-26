@@ -21,12 +21,28 @@ import type {
   PlacementClear,
   ZoneTab,
 } from "@waitron/ui";
+import { decimal, isZeroDecimal } from "@waitron/shared";
 import { t } from "../i18n/t.js";
-import type { FloorZone, TableState, TillApi } from "../api/client.js";
+import "../widgets/seat-dialog.js";
+import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
+import type { FloorZone, TableState, TableVisit, TillApi } from "../api/client.js";
+
+function needsClearing(table: TableState): table is TableState & { visit: TableVisit } {
+  return table.visit?.state === "needs_clearing";
+}
+
+/** Nothing of the party is left to pay, and no tab is open that could still take a round. */
+function partyPaid(table: TableState): boolean {
+  return (
+    table.visit !== null && !table.hasOpenTab && isZeroDecimal(decimal(table.visit.outstanding))
+  );
+}
 
 /**
- * The TILL live-floor screen. Tapping a table asks the app to open (or resume) its tab; the screen
- * itself owns NO fiscal path, because a tab is a PRE-FISCAL working order.
+ * The TILL live-floor screen. Tapping a free table asks for the party's guest count and then asks the
+ * app to seat it; tapping a seated table asks the app to resume it. A table whose party has finished
+ * but not been cleared offers Mark cleared instead. The screen itself owns NO fiscal path, because a
+ * tab is a PRE-FISCAL working order.
  *
  * Each zone tab has a MAP view (the shared `<wt-floor-canvas>`, with the zone's unplaced tables in a
  * tray beneath) and a LIST view; the map is the default when the zone has at least one placed table.
@@ -126,6 +142,11 @@ export class TillFloorScreen extends LitElement {
         border-left-color: var(--wt-color-danger);
       }
 
+      .card.clearing {
+        border-left-color: var(--wt-color-warning);
+        cursor: default;
+      }
+
       /* Order-timing accent (KDS order-timing alerts, design §7.3): a table whose worst unserved line
          has escalated gets a subtler steady amber (warm) through steady red (overdue) up to a
          FLASHING red (forgotten) — the SAME age- and flash class scheme till-station-queue's rail
@@ -201,11 +222,13 @@ export class TillFloorScreen extends LitElement {
         gap: var(--wt-space-1);
       }
 
-      .total {
+      .total,
+      .paid {
         font-weight: var(--wt-font-weight-bold);
       }
 
       .lines,
+      .party,
       .occupancy.free,
       .occupancy.delivery {
         color: var(--wt-color-text-muted);
@@ -308,6 +331,10 @@ export class TillFloorScreen extends LitElement {
   /** `undefined` DERIVES the view per active zone; a toggle tap pins it for the session, not persisted. */
   @state() private viewOverride: "map" | "list" | undefined = undefined;
   @state() private editing = false;
+  /** The free table whose guest count is being asked for. */
+  @state() private seating: TableState | null = null;
+  /** The table tapped on the map whose party needs clearing. */
+  @state() private clearing: (TableState & { visit: TableVisit }) | null = null;
 
   readonly #url = new UrlStateController(
     this,
@@ -318,14 +345,33 @@ export class TillFloorScreen extends LitElement {
     tillPath,
   );
 
+  /** A seated table resumes; a table needing clearing offers Mark cleared; a free one asks for guests. */
   #openTable(table: TableState): void {
-    this.dispatchEvent(
-      new CustomEvent("open-table", {
-        detail: { tableId: table.id, hasOpenTab: table.hasOpenTab },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    if (needsClearing(table)) {
+      this.clearing = table;
+      return;
+    }
+    if (table.visit === null && !table.hasOpenTab) {
+      this.seating = table;
+      return;
+    }
+    this.#emit("open-table", { tableId: table.id, seated: true });
+  }
+
+  #onSeatConfirm(event: Event, table: TableState): void {
+    event.stopPropagation();
+    this.seating = null;
+    const { guestCount } = (event as CustomEvent<SeatConfirmDetail>).detail;
+    this.#emit("open-table", { tableId: table.id, seated: false, guestCount });
+  }
+
+  #markCleared(visit: TableVisit): void {
+    this.clearing = null;
+    this.#emit("mark-cleared", { visitId: visit.id, expectedVisitRevision: visit.revision });
+  }
+
+  #emit(type: string, detail: unknown): void {
+    this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
   #back(): void {
@@ -348,9 +394,8 @@ export class TillFloorScreen extends LitElement {
   }
 
   /**
-   * The shared canvas has no read-model, so it emits `wt-open-table { tableId }` only. Re-emit it as
-   * `open-table` with `hasOpenTab` resolved here, so the app resumes an existing tab rather than minting
-   * a second one on an occupied table.
+   * The shared canvas has no read-model, so it emits `wt-open-table { tableId }` only. The table is
+   * looked up here, so a seated one resumes its party rather than being seated a second time.
    */
   #onCanvasOpen(event: Event): void {
     event.stopPropagation();
@@ -389,9 +434,32 @@ export class TillFloorScreen extends LitElement {
     this.dispatchEvent(new CustomEvent("floor-refresh", { bubbles: true, composed: true }));
   }
 
-  /** A `TableState` carries both the placement half and the occupancy half, so it is passed as both. */
+  /**
+   * A `TableState` carries both the placement half and the occupancy half, so it is passed as both. A
+   * seated party's token shows what it still owes; a party needing clearing shows that in the status
+   * chip, which it has free because the status is cleared when the party finishes.
+   */
   #toFloorTable(table: TableState): FloorTable {
-    return toFloorTable(table, { ...table, reservedTime: table.nextReservation?.time ?? null });
+    const tabTotal =
+      table.visit === null
+        ? table.tabTotal
+        : isZeroDecimal(decimal(table.visit.outstanding))
+          ? null
+          : table.visit.outstanding;
+    const status =
+      needsClearing(table) && table.status === null
+        ? {
+            id: "needs-clearing",
+            label: t("floor.needs_clearing"),
+            color: "var(--wt-color-warning)",
+          }
+        : table.status;
+    return toFloorTable(table, {
+      ...table,
+      tabTotal,
+      status,
+      reservedTime: table.nextReservation?.time ?? null,
+    });
   }
 
   /** Only the overridden keys are supplied; the canvas fills the rest from its English defaults. */
@@ -477,6 +545,7 @@ export class TillFloorScreen extends LitElement {
             ? this.#map(placed, unplaced)
             : html`<div class="grid">${visible.map((table) => this.#card(table))}</div>`
         }
+        ${this.#seatDialog()} ${this.#clearDialog()}
       </section>
     `;
   }
@@ -574,7 +643,74 @@ export class TillFloorScreen extends LitElement {
     return ` age-${band}${flash ? " flash" : ""}`;
   }
 
+  #seatDialog(): TemplateResult | typeof nothing {
+    const table = this.seating;
+    if (table === null) return nothing;
+    return html`<till-seat-dialog
+      .tableLabel=${table.label}
+      @seat-confirm=${(event: Event) => this.#onSeatConfirm(event, table)}
+      @seat-cancel=${(event: Event) => {
+        event.stopPropagation();
+        this.seating = null;
+      }}
+    ></till-seat-dialog>`;
+  }
+
+  #clearDialog(): TemplateResult | typeof nothing {
+    const table = this.clearing;
+    if (table === null) return nothing;
+    return html`<wt-dialog
+      data-clear-dialog
+      .open=${true}
+      .heading=${t("floor.clear_title").replace("{table}", () => table.label)}
+      @wt-close=${() => (this.clearing = null)}
+    >
+      <p>${t("floor.clear_body")}</p>
+      <wt-button
+        slot="footer"
+        data-clear-cancel
+        variant="secondary"
+        @click=${() => (this.clearing = null)}
+      >
+        ${t("action.cancel")}
+      </wt-button>
+      <wt-button
+        slot="footer"
+        data-mark-cleared
+        variant="primary"
+        @click=${() => this.#markCleared(table.visit)}
+      >
+        ${t("floor.mark_cleared")}
+      </wt-button>
+    </wt-dialog>`;
+  }
+
+  /** A card is one button, so a table needing clearing, whose card holds its own Mark cleared, is a
+   * plain box instead. */
+  #clearingCard(table: TableState & { visit: TableVisit }): TemplateResult {
+    return html`<div class="card state-${table.state} clearing" data-table=${table.id}>
+      <span class="card-head">
+        <span class="label">${table.label}</span>
+        ${
+          table.capacity !== null
+            ? html`<span class="capacity">${table.capacity} ${t("floor.capacity")}</span>`
+            : nothing
+        }
+      </span>
+      <span class="occupancy" data-needs-clearing>${t("floor.needs_clearing")}</span>
+      <wt-button
+        size="sm"
+        variant="secondary"
+        data-mark-cleared
+        @click=${() => this.#markCleared(table.visit)}
+      >
+        ${t("floor.mark_cleared")}
+      </wt-button>
+    </div>`;
+  }
+
   #card(table: TableState): TemplateResult {
+    if (needsClearing(table)) return this.#clearingCard(table);
     return html`<button
       class="card state-${table.state}${this.#timingAccentClass(table.timingBand)}"
       data-table=${table.id}
@@ -619,6 +755,15 @@ export class TillFloorScreen extends LitElement {
     </button>`;
   }
 
+  #party(visit: TableVisit | null): TemplateResult | typeof nothing {
+    if (visit === null) return nothing;
+    const parts = [
+      ...(visit.guestCount === null ? [] : [`${t("floor.guests")}: ${visit.guestCount}`]),
+      ...(visit.billCount > 1 ? [`${t("floor.bills")}: ${visit.billCount}`] : []),
+    ];
+    return parts.length === 0 ? nothing : html`<span class="party">${parts.join(" · ")}</span>`;
+  }
+
   /** Only the MOST ADVANCED of the three service signals renders: a dispatched line is still `ready`
    * and unserved, so all three counts can be positive at once. */
   #hint(table: TableState): TemplateResult | typeof nothing {
@@ -646,8 +791,17 @@ export class TillFloorScreen extends LitElement {
     switch (table.state) {
       case "open-tab":
         return html`<span class="occupancy tab-open">
-          <span class="total">${table.tabTotal} €</span>
-          <span class="lines">${table.tabLineCount} ${t("floor.line_count")}</span>
+          ${
+            partyPaid(table)
+              ? html`<span class="paid" data-paid>${t("floor.paid")}</span>`
+              : html`<span class="total">${table.visit?.outstanding ?? table.tabTotal} €</span>`
+          }
+          ${
+            table.hasOpenTab
+              ? html`<span class="lines">${table.tabLineCount} ${t("floor.line_count")}</span>`
+              : nothing
+          }
+          ${this.#party(table.visit)}
         </span>`;
       case "delivery-pending":
         return html`<span class="occupancy delivery"

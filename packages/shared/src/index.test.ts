@@ -17,9 +17,11 @@ import {
   isAppError,
   isSupportedLocale,
   isUuid,
+  isValidGuestCount,
   isValidTelephone,
   isZeroDecimal,
   locationId,
+  MAX_GUEST_COUNT,
   MAX_MONEY_INTEGER_DIGITS,
   MAX_QUANTITY_INTEGER_DIGITS,
   MAX_RATE_INTEGER_DIGITS,
@@ -92,6 +94,11 @@ describe("package public surface (./index.js)", () => {
     expect(MAX_QUANTITY_INTEGER_DIGITS).toBe(9);
     expect(RATE_SCALE).toBe(2);
     expect(MAX_RATE_INTEGER_DIGITS).toBe(3);
+  });
+
+  it("re-exports the seating bound and its check", () => {
+    expect(MAX_GUEST_COUNT).toBe(999);
+    expect(isValidGuestCount(MAX_GUEST_COUNT)).toBe(true);
   });
 
   it("re-exports the string-to-stored-count converters", () => {

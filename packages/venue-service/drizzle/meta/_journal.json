@@ -15,6 +15,13 @@
       "when": 1790426888883,
       "tag": "0001_service_settings_kitchen_notices",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790449466297,
+      "tag": "0002_clearing_workflow",
+      "breakpoints": true
     }
   ]
 }

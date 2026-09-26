@@ -469,13 +469,14 @@ async function seedTable(cfg: VenueCfg, label: string): Promise<string> {
   return insertDiningTable(cfg.locationId, label);
 }
 
-// `core.openTab` is `fakeCore` (`./testing/fake-core.ts`): the real verb lives in apps/server. It
+// `core.seatTable` is `fakeCore` (`./testing/fake-core.ts`): the real verb lives in apps/server. It
 // still writes a real working_orders row.
 describe("seatBooking", () => {
   async function setupTillVenue(): Promise<{
     cfg: VenueCfg;
     core: CoreServices;
     createdBy: string;
+    seatedBy: string;
   }> {
     await seedTenant(db);
     const locationId = await insertLocation("Barra");
@@ -489,11 +490,12 @@ describe("seatBooking", () => {
       cfg: { locationId: brandLocationId(locationId) },
       core: fakeCore({ tillId: till.rows[0]!.id, nodeId }),
       createdBy: randomUUID(),
+      seatedBy: randomUUID(),
     };
   }
 
   it("seats a booking: opens a tab on the assigned table and links it", async () => {
-    const { cfg, core, createdBy } = await setupTillVenue();
+    const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
     const tableId = await seedTable(cfg, "4");
     const { id } = await scoped(cfg, (tx) =>
       createBooking(tx, cfg, {
@@ -505,14 +507,38 @@ describe("seatBooking", () => {
         createdBy,
       }),
     );
-    const { tabId } = await scoped(cfg, (tx) => seatBooking(tx, cfg, id, {}, core));
+    const { tabId } = await scoped(cfg, (tx) => seatBooking(tx, cfg, id, { seatedBy }, core));
     expect(tabId).toEqual(expect.any(String));
     const b = await scoped(cfg, (tx) => getBooking(tx, cfg, id));
     expect(b).toMatchObject({ status: "seated", tabId, tableId });
   });
 
+  it("seats the party for the booking's size, as the person who seated it", async () => {
+    const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
+    const tableId = await seedTable(cfg, "8");
+    const { id } = await scoped(cfg, (tx) =>
+      createBooking(tx, cfg, {
+        bookingDate: "2026-08-20",
+        bookingTime: "20:00",
+        partySize: 5,
+        contactName: "Vidal",
+        tableId,
+        createdBy,
+      }),
+    );
+    const asked: unknown[] = [];
+    const recording: CoreServices = {
+      async seatTable(tx, req) {
+        asked.push(req);
+        return core.seatTable(tx, req);
+      },
+    };
+    await scoped(cfg, (tx) => seatBooking(tx, cfg, id, { seatedBy }, recording));
+    expect(asked).toEqual([{ tableId, guestCount: 5, operatorId: seatedBy }]);
+  });
+
   it("uses req.tableId when the booking has no table, and stores it", async () => {
-    const { cfg, core, createdBy } = await setupTillVenue();
+    const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
     const tableId = await seedTable(cfg, "7");
     const { id } = await scoped(cfg, (tx) =>
       createBooking(tx, cfg, {
@@ -523,13 +549,15 @@ describe("seatBooking", () => {
         createdBy,
       }),
     );
-    const { tabId } = await scoped(cfg, (tx) => seatBooking(tx, cfg, id, { tableId }, core));
+    const { tabId } = await scoped(cfg, (tx) =>
+      seatBooking(tx, cfg, id, { tableId, seatedBy }, core),
+    );
     const b = await scoped(cfg, (tx) => getBooking(tx, cfg, id));
     expect(b).toMatchObject({ status: "seated", tabId, tableId });
   });
 
   it("rejects a req.tableId in ANOTHER location of the same tenant with table.not_found", async () => {
-    const { cfg, core, createdBy } = await setupTillVenue();
+    const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
     const otherTableId = await makeTableInOtherLocation();
     const { id } = await scoped(cfg, (tx) =>
       createBooking(tx, cfg, {
@@ -541,12 +569,12 @@ describe("seatBooking", () => {
       }),
     );
     await expect(
-      scoped(cfg, (tx) => seatBooking(tx, cfg, id, { tableId: otherTableId }, core)),
+      scoped(cfg, (tx) => seatBooking(tx, cfg, id, { tableId: otherTableId, seatedBy }, core)),
     ).rejects.toMatchObject({ code: "table.not_found" });
   });
 
   it("requires a table: booking.table_required when neither the booking nor req has one", async () => {
-    const { cfg, core, createdBy } = await setupTillVenue();
+    const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
     const { id } = await scoped(cfg, (tx) =>
       createBooking(tx, cfg, {
         bookingDate: "2026-08-20",
@@ -556,13 +584,15 @@ describe("seatBooking", () => {
         createdBy,
       }),
     );
-    await expect(scoped(cfg, (tx) => seatBooking(tx, cfg, id, {}, core))).rejects.toMatchObject({
+    await expect(
+      scoped(cfg, (tx) => seatBooking(tx, cfg, id, { seatedBy }, core)),
+    ).rejects.toMatchObject({
       code: "booking.table_required",
     });
   });
 
   it("refuses a non-booked booking with booking.invalid_transition", async () => {
-    const { cfg, core, createdBy } = await setupTillVenue();
+    const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
     const tableId = await seedTable(cfg, "9");
     const { id } = await scoped(cfg, (tx) =>
       createBooking(tx, cfg, {
@@ -575,15 +605,17 @@ describe("seatBooking", () => {
       }),
     );
     await scoped(cfg, (tx) => cancelBooking(tx, cfg, id));
-    await expect(scoped(cfg, (tx) => seatBooking(tx, cfg, id, {}, core))).rejects.toMatchObject({
+    await expect(
+      scoped(cfg, (tx) => seatBooking(tx, cfg, id, { seatedBy }, core)),
+    ).rejects.toMatchObject({
       code: "booking.invalid_transition",
     });
   });
 
-  // Refused by the check before `openTab`. Deleting that check leaves this green: the
+  // Refused by the check before `seatTable`. Deleting that check leaves this green: the
   // compare-and-swap then refuses it and the rollback removes the tab.
   it("seating a no-longer-booked booking throws invalid_transition and opens no tab", async () => {
-    const { cfg, core, createdBy } = await setupTillVenue();
+    const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
     const tableId = await seedTable(cfg, "3");
     const { id } = await scoped(cfg, (tx) =>
       createBooking(tx, cfg, {
@@ -596,7 +628,9 @@ describe("seatBooking", () => {
       }),
     );
     await scoped(cfg, (tx) => cancelBooking(tx, cfg, id));
-    await expect(scoped(cfg, (tx) => seatBooking(tx, cfg, id, {}, core))).rejects.toMatchObject({
+    await expect(
+      scoped(cfg, (tx) => seatBooking(tx, cfg, id, { seatedBy }, core)),
+    ).rejects.toMatchObject({
       code: "booking.invalid_transition",
     });
     const b = await scoped(cfg, (tx) => getBooking(tx, cfg, id));
@@ -605,10 +639,10 @@ describe("seatBooking", () => {
     expect(tabs.rows[0]!.n).toBe(0);
   });
 
-  // Cancels INSIDE `openTab`, after the pre-`openTab` check has passed, so only the final write's
+  // Cancels INSIDE `seatTable`, after the pre-`seatTable` check has passed, so only the final write's
   // compare-and-swap can refuse it. The rollback must take the tab and the cancel with it.
-  it("CAS guard: a booking that leaves `booked` during openTab is refused and the tab rolled back", async () => {
-    const { cfg, core, createdBy } = await setupTillVenue();
+  it("CAS guard: a booking that leaves `booked` during seatTable is refused and the tab rolled back", async () => {
+    const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
     const tableId = await seedTable(cfg, "3b");
     const { id } = await scoped(cfg, (tx) =>
       createBooking(tx, cfg, {
@@ -622,13 +656,13 @@ describe("seatBooking", () => {
     );
     const cancellingCore: CoreServices = {
       ...core,
-      async openTab(tx, req) {
+      async seatTable(tx, req) {
         await cancelBooking(tx, cfg, id);
-        return core.openTab(tx, req);
+        return core.seatTable(tx, req);
       },
     };
     await expect(
-      scoped(cfg, (tx) => seatBooking(tx, cfg, id, {}, cancellingCore)),
+      scoped(cfg, (tx) => seatBooking(tx, cfg, id, { seatedBy }, cancellingCore)),
     ).rejects.toMatchObject({ code: "booking.invalid_transition" });
     const b = await scoped(cfg, (tx) => getBooking(tx, cfg, id));
     expect(b).toMatchObject({ status: "booked", tabId: null, tableId });
@@ -637,18 +671,20 @@ describe("seatBooking", () => {
   });
 
   it("refuses an absent booking with booking.not_found", async () => {
-    const { cfg, core } = await setupTillVenue();
+    const { cfg, core, seatedBy } = await setupTillVenue();
     await expect(
-      scoped(cfg, (tx) => seatBooking(tx, cfg, randomUUID(), {}, core)),
+      scoped(cfg, (tx) => seatBooking(tx, cfg, randomUUID(), { seatedBy }, core)),
     ).rejects.toMatchObject({
       code: "booking.not_found",
     });
   });
 
   it("bubbles tab.already_open when the target table already has an open tab", async () => {
-    const { cfg, core, createdBy } = await setupTillVenue();
+    const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
     const tableId = await seedTable(cfg, "5");
-    await scoped(cfg, (tx) => core.openTab(tx, { tableId }));
+    await scoped(cfg, (tx) =>
+      core.seatTable(tx, { tableId, guestCount: null, operatorId: seatedBy }),
+    );
     const { id } = await scoped(cfg, (tx) =>
       createBooking(tx, cfg, {
         bookingDate: "2026-08-20",
@@ -659,13 +695,15 @@ describe("seatBooking", () => {
         createdBy,
       }),
     );
-    await expect(scoped(cfg, (tx) => seatBooking(tx, cfg, id, {}, core))).rejects.toMatchObject({
+    await expect(
+      scoped(cfg, (tx) => seatBooking(tx, cfg, id, { seatedBy }, core)),
+    ).rejects.toMatchObject({
       code: "tab.already_open",
     });
   });
 
   it("seats then completes end-to-end (booked → seated → completed)", async () => {
-    const { cfg, core, createdBy } = await setupTillVenue();
+    const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
     const tableId = await seedTable(cfg, "6");
     const { id } = await scoped(cfg, (tx) =>
       createBooking(tx, cfg, {
@@ -677,7 +715,7 @@ describe("seatBooking", () => {
         createdBy,
       }),
     );
-    await scoped(cfg, (tx) => seatBooking(tx, cfg, id, {}, core));
+    await scoped(cfg, (tx) => seatBooking(tx, cfg, id, { seatedBy }, core));
     await scoped(cfg, (tx) => completeBooking(tx, cfg, id));
     expect((await scoped(cfg, (tx) => getBooking(tx, cfg, id)))!.status).toBe("completed");
   });

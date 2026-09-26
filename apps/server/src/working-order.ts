@@ -5,6 +5,16 @@ import { readReceiptIssuer } from "./receipt-issuer.js";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
 import "./errors.js";
+import {
+  guardVisits,
+  leaveTables,
+  memberTables,
+  openVisit,
+  readBillsOfVisits,
+  tableHeld,
+  visitOfOrder,
+} from "./visits.js";
+import type { VisitCommand } from "./visits.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, exists, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { GetColumnData, SQL } from "drizzle-orm";
@@ -30,6 +40,7 @@ import {
   stringToCents,
   stringToThousandths,
   subtractDecimal,
+  sumDecimals,
   thousandthsToDecimal,
   type TillId,
   type TimingBand,
@@ -50,6 +61,8 @@ import {
   products,
   sales,
   ticketItems,
+  visitTables,
+  visits,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -764,7 +777,7 @@ export async function createOpenOrder(
   } & LineExtras)[],
   label: string | null,
   // A tab's table link is `dining_tables.tab_id`, not `deliveryTableId`, so openTab passes none.
-  placement: { deliveryTableId?: string | null; zoneId?: string } = {},
+  placement: { deliveryTableId?: string | null; zoneId?: string; visitId?: string | null } = {},
 ): Promise<{
   orderNumber: number;
   priced: PricedBasket;
@@ -805,6 +818,7 @@ export async function createOpenOrder(
     status: "open",
     // Not a fiscal field.
     deliveryTableId,
+    visitId: placement.visitId ?? null,
   });
 
   // An empty tab has no lines, and `tx.insert(...).values([])` throws.
@@ -859,10 +873,11 @@ export async function parkOrder(
  * Open the running tab on a table. The link is the table's `tab_id` back-pointer; the order carries
  * no tab column.
  *
- * One open tab per table needs no lock and no unique index: the check-then-set below cannot
- * interleave with a second `openTab`, because `withTransaction` IS the venue file's write lock. A
- * STALE `tab_id`, pointing at a settled or abandoned order, reads as free and is overwritten, so the
- * pay path needs no settle-time write.
+ * Refused while the table's `tab_id` points at an open order, and while a party still holds the
+ * table (an active `visit_tables` row, `left_at` null) whatever its `tab_id` points at. The
+ * check-then-set below cannot interleave with a second `openTab`, because `withTransaction` IS the
+ * venue file's write lock. A `tab_id` pointing at a settled or abandoned order on a table no party
+ * holds is overwritten.
  */
 export async function openTab(
   tx: Transaction,
@@ -870,6 +885,7 @@ export async function openTab(
   req: {
     tableId: string;
     lines?: { menuItemId: string; quantity: string }[];
+    visitId?: string;
   },
 ): Promise<{ tabId: string; orderNumber: number }> {
   const [table] = await tx
@@ -903,10 +919,15 @@ export async function openTab(
       throw new AppError("tab.already_open", { tableId: req.tableId });
     }
   }
+  // A party still holds the table after its tabs settle, until Finish table (or Mark cleared).
+  if (await tableHeld(tx, req.tableId)) {
+    throw new AppError("tab.already_open", { tableId: req.tableId });
+  }
 
   const tabId = randomUUID();
   const { orderNumber } = await createOpenOrder(tx, cfg, tabId, req.lines ?? [], null, {
     zoneId: table.zoneId ?? undefined,
+    visitId: req.visitId,
   });
   // Also clears any stale manual status as the new tab opens.
   await tx
@@ -1530,7 +1551,7 @@ export async function markCourseAway(
 export async function addTabRound(
   tx: Transaction,
   cfg: TillConfig,
-  tabId: string,
+  sentTabId: string,
   lines: ({
     menuItemId: string;
     quantity: string;
@@ -1539,7 +1560,9 @@ export async function addTabRound(
     options?: OptionSelection[];
     hold?: boolean;
   } & LineExtras)[],
-): Promise<void> {
+): Promise<{ tabId: string }> {
+  const tabId =
+    lines.length > 0 ? ((await openNextPartyTab(tx, cfg, sentTabId)) ?? sentTabId) : sentTabId;
   await assertAnchoredTabOpen(tx, cfg, tabId);
   if (lines.length === 0) {
     throw new AppError("sale.empty_basket", {});
@@ -1569,6 +1592,81 @@ export async function addTabRound(
   }));
   await fireLines(tx, cfg, tabId, withHold);
   await bumpRevision(tx, [tabId]);
+  return { tabId };
+}
+
+/**
+ * A round sent to a seated party's tab after it has settled or been abandoned opens the party's next
+ * tab on the same visit and points every table of the party at it. Only the tab the party's tables
+ * still point at qualifies, so a round from a screen that has not seen the new tab is refused rather
+ * than opening a second one. Returns the new tab, or null when `tabId` is not such a tab.
+ */
+async function openNextPartyTab(
+  tx: Transaction,
+  cfg: TillConfig,
+  tabId: string,
+): Promise<string | null> {
+  const party = await closedPartyTab(tx, tabId);
+  if (party === null) {
+    return null;
+  }
+  const nextTabId = randomUUID();
+  await createOpenOrder(tx, cfg, nextTabId, [], null, { visitId: party.visitId });
+  await VENUE_SERVICE.copyOrderContext(tx, cfg, tabId, nextTabId);
+  await tx
+    .update(diningTables)
+    .set({ tabId: nextTabId })
+    .where(inArray(diningTables.id, party.tables));
+  await tx
+    .update(visits)
+    .set({ revision: sql`${visits.revision} + 1` })
+    .where(eq(visits.id, party.visitId));
+  return nextTabId;
+}
+
+/**
+ * A settled or abandoned tab that tables of its party still point at: its visit, and those tables.
+ * Null for any other order, so a screen that has not seen the party's next tab cannot act on this one.
+ */
+async function closedPartyTab(
+  tx: Transaction,
+  tabId: string,
+): Promise<{ visitId: string; tables: string[] } | null> {
+  const [order] = await tx
+    .select({ status: workingOrders.status, visitId: workingOrders.visitId })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, tabId));
+  if (order?.visitId == null || (order.status !== "settled" && order.status !== "abandoned")) {
+    return null;
+  }
+  const pointed = await tx
+    .select({ id: diningTables.id })
+    .from(diningTables)
+    .innerJoin(visitTables, eq(visitTables.tableId, diningTables.id))
+    .where(
+      and(
+        eq(diningTables.tabId, tabId),
+        eq(visitTables.visitId, order.visitId),
+        isNull(visitTables.leftAt),
+      ),
+    );
+  return pointed.length === 0
+    ? null
+    : { visitId: order.visitId, tables: pointed.map((table) => table.id) };
+}
+
+/**
+ * {@link assertTabOpen}, also letting through the settled or abandoned tab a seated party's tables
+ * point at, so a party that has paid can still be moved or joined to another table.
+ */
+async function assertTabOpenOrPartyCurrent(
+  tx: Transaction,
+  cfg: TillConfig,
+  tabId: string,
+): Promise<void> {
+  if ((await closedPartyTab(tx, tabId)) === null) {
+    await assertTabOpen(tx, cfg, tabId);
+  }
 }
 
 /**
@@ -2091,8 +2189,8 @@ export async function readOrderRevision(tx: Transaction, orderId: string): Promi
 }
 
 /**
- * Assert a move/join TARGET table exists, is `active`, and is FREE: its `tab_id` is null or a stale
- * pointer at a settled or abandoned order.
+ * Assert a move/join TARGET table exists, is `active`, and is FREE: its `tab_id` is null or points
+ * at a settled or abandoned order, and no party holds it (an active `visit_tables` row).
  */
 async function assertTableAvailable(
   tx: Transaction,
@@ -2116,6 +2214,10 @@ async function assertTableAvailable(
       throw new AppError("table.occupied", { tableId });
     }
   }
+  // Checked here so the partial unique index on active memberships never refuses with an engine error.
+  if (await tableHeld(tx, tableId)) {
+    throw new AppError("table.occupied", { tableId });
+  }
 }
 
 /** Free every table covered by `tabId`. A turnover: the manual status must not linger onto the next
@@ -2129,17 +2231,21 @@ async function freeTablesCoveredBy(tx: Transaction, cfg: TillConfig, tabId: stri
 }
 
 /**
- * Relocate a party to a free table: no line moves, no fiscal effect. Both tables are turned over, and
- * the clears are explicit because the settle trigger does not fire on a move (the tab stays open).
- * The kitchen is told of the tab's sent work ({@link enqueueMovedSlips}).
+ * Relocate a tab to a free table: no line moves, no fiscal effect. The tables the tab covered are
+ * turned over and leave its party, and the destination joins the party, so a split check moved away
+ * leaves the party's other tables where they are. The kitchen is told of the tab's sent work
+ * ({@link enqueueMovedSlips}).
  */
 export async function moveTab(
   tx: Transaction,
   cfg: TillConfig,
   tabId: string,
   toTableId: string,
+  command?: VisitCommand,
 ): Promise<void> {
-  await assertTabOpen(tx, cfg, tabId);
+  await assertTabOpenOrPartyCurrent(tx, cfg, tabId);
+  const visitId = await visitOfOrder(tx, tabId);
+  await guardVisits(tx, visitId, null, command);
 
   const involved = await tx
     .select({
@@ -2169,17 +2275,31 @@ export async function moveTab(
     .update(diningTables)
     .set({ tabId, statusId: null })
     .where(eq(diningTables.id, toTableId));
+  if (visitId !== null) {
+    await leaveTables(
+      tx,
+      involved.filter((table) => table.tabId === tabId).map((table) => table.id),
+    );
+    await tx.insert(visitTables).values({ visitId, tableId: toTableId });
+  }
   await enqueueMovedSlips(tx, cfg, before, tabId);
 }
 
-/** Join an active, free table to an open tab. The existing tab lines remain in place. */
+/**
+ * Join an active, free table to an open tab, or to the settled or abandoned tab a seated party's
+ * tables point at.
+ * The existing tab lines remain in place.
+ */
 export async function joinTable(
   tx: Transaction,
   cfg: TillConfig,
   tabId: string,
   tableId: string,
+  command?: VisitCommand,
 ): Promise<void> {
-  await assertTabOpen(tx, cfg, tabId);
+  await assertTabOpenOrPartyCurrent(tx, cfg, tabId);
+  const visitId = await visitOfOrder(tx, tabId);
+  await guardVisits(tx, visitId, null, command);
 
   const [table] = await tx
     .select({
@@ -2206,6 +2326,9 @@ export async function joinTable(
   }
 
   await tx.update(diningTables).set({ tabId }).where(eq(diningTables.id, tableId));
+  if (visitId !== null) {
+    await tx.insert(visitTables).values({ visitId, tableId });
+  }
 }
 
 /**
@@ -2215,17 +2338,15 @@ export async function joinTable(
  * `freeSourceTable = true` frees the source table (it turns over); `false` re-points it at `intoTab`,
  * and the joined table KEEPS its status.
  *
- * ORDER MATTERS: the re-point precedes the abandon. The `working_orders_clear_table_status` trigger
- * clears the status of tables pointing at an abandoned order, so abandoning first would clear it on a
- * table that stays joined. The kitchen is told of moved sent work only after the re-point, which
- * can change the table its slips name for `intoTab`.
+ * The kitchen is told of moved sent work only after the re-point, which can change the table its
+ * slips name for `intoTab`.
  */
 export async function mergeTabs(
   tx: Transaction,
   cfg: TillConfig,
   intoTabId: string,
   fromTabId: string,
-  options: { freeSourceTable: boolean },
+  options: { freeSourceTable: boolean } & Partial<VisitCommand>,
 ): Promise<void> {
   if (intoTabId === fromTabId) {
     throw new AppError("tab.merge_self", { tabId: intoTabId });
@@ -2233,7 +2354,7 @@ export async function mergeTabs(
 
   // Both orders in one read; each must be open.
   const tabs = await tx
-    .select({ id: workingOrders.id, status: workingOrders.status })
+    .select({ id: workingOrders.id, status: workingOrders.status, visitId: workingOrders.visitId })
     .from(workingOrders)
     .where(or(eq(workingOrders.id, intoTabId), eq(workingOrders.id, fromTabId)));
   const into = tabs.find((t) => t.id === intoTabId);
@@ -2244,24 +2365,58 @@ export async function mergeTabs(
   if (from === undefined || from.status !== "open") {
     throw new AppError("tab.not_open", { tabId: fromTabId });
   }
+  await guardVisits(tx, into.visitId, from.visitId, options);
   const before = await readSentWork(tx, cfg, fromTabId);
   await moveOrderLines(tx, cfg, fromTabId, intoTabId, undefined, { modesChecked: false });
   await bumpRevision(tx, [fromTabId, intoTabId]);
 
-  // Before the abandon (see the docstring).
-  if (options.freeSourceTable) {
-    await freeTablesCoveredBy(tx, cfg, fromTabId);
-  } else {
+  // Two parties becoming one (D2): the source visit is absorbed into the target's.
+  const absorbed =
+    into.visitId !== null && from.visitId !== null && from.visitId !== into.visitId
+      ? { from: from.visitId, into: into.visitId }
+      : null;
+  const sourceTables = absorbed === null ? [] : await memberTables(tx, absorbed.from);
+  if (absorbed !== null) {
+    await leaveTables(tx, sourceTables);
+    if (!options.freeSourceTable && sourceTables.length > 0) {
+      await tx
+        .insert(visitTables)
+        .values(sourceTables.map((tableId) => ({ visitId: absorbed.into, tableId })));
+    }
+    // Only an open bill may change visit; the rest stay on the source and count through its family.
     await tx
-      .update(diningTables)
-      .set({ tabId: intoTabId })
-      .where(eq(diningTables.tabId, fromTabId));
+      .update(workingOrders)
+      .set({ visitId: absorbed.into })
+      .where(
+        and(
+          eq(workingOrders.visitId, absorbed.from),
+          eq(workingOrders.status, "open"),
+          ne(workingOrders.id, fromTabId),
+        ),
+      );
   }
+
+  await tx
+    .update(diningTables)
+    .set(options.freeSourceTable ? { tabId: null, statusId: null } : { tabId: intoTabId })
+    .where(or(eq(diningTables.tabId, fromTabId), inArray(diningTables.id, sourceTables)));
 
   await tx
     .update(workingOrders)
     .set({ status: "abandoned" })
     .where(eq(workingOrders.id, fromTabId));
+  // After its memberships have ended: closing a visit clears the status of every table it still holds.
+  if (absorbed !== null) {
+    await tx
+      .update(visits)
+      .set({
+        state: "closed",
+        closedAt: nowIso(),
+        closedBy: options.operatorId ?? null,
+        mergedIntoVisitId: absorbed.into,
+      })
+      .where(eq(visits.id, absorbed.from));
+  }
   await enqueueMovedSlips(tx, cfg, before, intoTabId);
 }
 
@@ -2299,7 +2454,14 @@ export async function transferLines(
   fromTabId: string,
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
+  command?: VisitCommand,
 ): Promise<void> {
+  await guardVisits(
+    tx,
+    await visitOfOrder(tx, toTabId),
+    await visitOfOrder(tx, fromTabId),
+    command,
+  );
   const before = await readSentWork(tx, cfg, fromTabId);
   const splitFrom = await carveBetweenTabs(tx, cfg, fromTabId, toTabId, transfers);
   await enqueueMovedSlips(tx, cfg, before, toTabId, splitFrom);
@@ -2566,6 +2728,7 @@ export async function splitOffCheck(
   cfg: TillConfig,
   fromTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
+  command?: VisitCommand,
 ): Promise<{ checkId: string }> {
   // Without this an empty batch would succeed and leave an empty check behind.
   if (transfers.length === 0) {
@@ -2576,10 +2739,12 @@ export async function splitOffCheck(
 
   // The origin must be a TAB: a detached check minted by an earlier split is not a split origin.
   await assertAnchoredTabOpen(tx, cfg, fromTabId);
+  const visitId = await visitOfOrder(tx, fromTabId);
+  await guardVisits(tx, visitId, null, command);
 
   const { orderLabel } = await readReceiptOrder(tx, cfg, fromTabId);
   const checkId = randomUUID();
-  await createOpenOrder(tx, cfg, checkId, [], orderLabel);
+  await createOpenOrder(tx, cfg, checkId, [], orderLabel, { visitId });
   // The check takes the origin's service mode (or, like it, has none), so `carveOffLines` needs no
   // mode check on this path.
   await VENUE_SERVICE.copyOrderContext(tx, cfg, fromTabId, checkId);
@@ -2593,7 +2758,8 @@ export async function splitOffCheck(
 
 /**
  * Detach a table from a joined tab. WITH items, the table keeps its OWN bill: a new tab ANCHORED to
- * it, since it is still a seat, not a payment unit. WITHOUT items, the table is freed and turned over.
+ * it, since it is still a seat, not a payment unit. WITHOUT items, the table is freed and turned over,
+ * unless it is the party's only table.
  */
 export async function unjoinTable(
   tx: Transaction,
@@ -2601,6 +2767,7 @@ export async function unjoinTable(
   tabId: string,
   tableId: string,
   transfers?: { lineNo: number; quantity?: string }[],
+  command?: VisitCommand,
 ): Promise<{ tabId?: string }> {
   // Checked before the table, so a call wrong about both is refused `tab.not_open`.
   await assertTabOpen(tx, cfg, tabId);
@@ -2612,12 +2779,18 @@ export async function unjoinTable(
   if (table?.tabId !== tabId) {
     throw new AppError("table.not_joined", { tableId, tabId });
   }
+  const visitId = await visitOfOrder(tx, tabId);
+  await guardVisits(tx, visitId, null, command);
 
   if (transfers === undefined || transfers.length === 0) {
+    if (visitId !== null && (await memberTables(tx, visitId)).every((id) => id === tableId)) {
+      throw new AppError("table.not_shared", { tableId, tabId });
+    }
     await tx
       .update(diningTables)
       .set({ tabId: null, statusId: null })
       .where(eq(diningTables.id, tableId));
+    await leaveTables(tx, [tableId]);
     return {};
   }
 
@@ -2632,9 +2805,20 @@ export async function unjoinTable(
     throw new AppError("table.not_shared", { tableId, tabId });
   }
 
+  let newVisitId: string | null = null;
+  if (visitId !== null) {
+    // `guardVisits` has refused a party's tab sent without a command.
+    await leaveTables(tx, [tableId]);
+    const opened = await openVisit(tx, {
+      guestCount: null,
+      operatorId: command!.operatorId,
+      tableId,
+    });
+    newVisitId = opened.visitId;
+  }
   // Repointed before the move, so `newTabId` is a tab when `carveBetweenTabs` checks it.
   const newTabId = randomUUID();
-  await createOpenOrder(tx, cfg, newTabId, [], null);
+  await createOpenOrder(tx, cfg, newTabId, [], null, { visitId: newVisitId });
   await VENUE_SERVICE.copyOrderContext(tx, cfg, tabId, newTabId);
   if (table.zoneId !== null && (await VENUE_SERVICE.findOrderContext(tx, cfg, newTabId)) !== null) {
     await VENUE_SERVICE.retargetOrderContext(tx, cfg, newTabId, table.zoneId);
@@ -4488,14 +4672,30 @@ export async function listExpoQueue(
   return [...orders.values()];
 }
 
+/** The seated party a table belongs to, as the floor shows it. */
+export interface TableVisit {
+  id: string;
+  revision: number;
+  guestCount: number | null;
+  state: "open" | "needs_clearing" | "closed";
+  /** What the party's bills, and those of every party merged into it, still owe. */
+  outstanding: string;
+  /** The party's bills that are not abandoned, merged parties' included. */
+  billCount: number;
+  /** Every table the party sits at, in the order they joined it. */
+  tableIds: string[];
+}
+
 /** One row of the occupancy read-model. */
 export interface TableState {
   id: string;
   label: string;
   zoneId: string | null;
   capacity: number | null;
+  /** `open-tab` while a party holds the table, whether or not its tab is still open. */
   state: "free" | "open-tab" | "delivery-pending";
   hasOpenTab: boolean;
+  /** The open tab, or a seated party's settled tab, a round to which opens the party's next one. */
   tabId?: string;
   tabLineCount?: number;
   /** The open tab's GROSS draft total. */
@@ -4518,6 +4718,7 @@ export interface TableState {
   rotation: number | null;
   /** Merged from the enabled modules' floor annotators; `null` when none annotates the table. */
   nextReservation: { time: string } | null;
+  visit: TableVisit | null;
 }
 
 /**
@@ -4640,16 +4841,20 @@ export async function listTablesWithState(
     order by dt.label
   `);
 
+  const seated = await readSeatedParties(tx, loc);
+
   // Not the `now` parameter, which is the VENUE clock the annotators take and a caller may supply.
   const nowMs = Date.now();
   const states = result.rows.map((r) => {
     const hasOpenTab = r.tab_id !== null;
+    const party = seated.get(r.id);
     const pendingDeliveries = Number(r.pending_deliveries);
-    const state: TableState["state"] = hasOpenTab
-      ? "open-tab"
-      : pendingDeliveries > 0
-        ? "delivery-pending"
-        : "free";
+    const state: TableState["state"] =
+      hasOpenTab || party !== undefined
+        ? "open-tab"
+        : pendingDeliveries > 0
+          ? "delivery-pending"
+          : "free";
     const timingBand = worstBand(
       parseUnservedLines(r.tab_unserved_lines).map((line) =>
         classifyBand(nowMs - minutesSince(line.queuedAt, nowMs) * 60_000, nowMs, {
@@ -4680,13 +4885,16 @@ export async function listTablesWithState(
       shape: r.shape,
       rotation: r.rotation,
       nextReservation: null as { time: string } | null,
+      visit: party?.visit ?? null,
       ...(hasOpenTab
         ? {
             tabId: r.tab_id!,
             tabLineCount: Number(r.tab_line_count),
             tabTotal: rawCentsToDecimal(r.tab_total!),
           }
-        : {}),
+        : party?.tabId != null
+          ? { tabId: party.tabId }
+          : {}),
     };
   });
 
@@ -4702,4 +4910,51 @@ export async function listTablesWithState(
     }
   }
   return states;
+}
+
+/** Each table of the location a party holds, with the party and the tab its table points at. */
+async function readSeatedParties(
+  tx: Transaction,
+  locationId: string,
+): Promise<Map<string, { visit: TableVisit; tabId: string | null }>> {
+  const members = await tx
+    .select({
+      tableId: visitTables.tableId,
+      tabId: diningTables.tabId,
+      visitId: visits.id,
+      revision: visits.revision,
+      guestCount: visits.guestCount,
+      state: visits.state,
+    })
+    .from(visitTables)
+    .innerJoin(visits, eq(visits.id, visitTables.visitId))
+    .innerJoin(diningTables, eq(diningTables.id, visitTables.tableId))
+    .where(and(isNull(visitTables.leftAt), eq(diningTables.locationId, locationId)))
+    .orderBy(visitTables.joinedAt, visitTables.id);
+  const visitIds = [...new Set(members.map((member) => member.visitId))];
+  const bills = await readBillsOfVisits(tx, visitIds);
+  const partyOf = new Map<string, TableVisit>();
+  for (const member of members) {
+    const known = partyOf.get(member.visitId);
+    if (known !== undefined) {
+      known.tableIds.push(member.tableId);
+      continue;
+    }
+    const own = bills.get(member.visitId)!;
+    partyOf.set(member.visitId, {
+      id: member.visitId,
+      revision: member.revision,
+      guestCount: member.guestCount,
+      state: member.state,
+      outstanding: toScale(sumDecimals(own.map((bill) => decimal(bill.outstanding))), MONEY_SCALE),
+      billCount: own.filter((bill) => bill.status !== "abandoned").length,
+      tableIds: [member.tableId],
+    });
+  }
+  return new Map(
+    members.map((member) => [
+      member.tableId,
+      { visit: partyOf.get(member.visitId)!, tabId: member.tabId },
+    ]),
+  );
 }

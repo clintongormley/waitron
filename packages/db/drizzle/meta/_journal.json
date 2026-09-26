@@ -127,6 +127,27 @@
       "when": 1790448136388,
       "tag": "0017_membership_clearances",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1790456085264,
+      "tag": "0018_visits",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1790456089707,
+      "tag": "0019_settled_order_freeze_visit_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1790456090482,
+      "tag": "0020_visit_clears_table_status",
+      "breakpoints": true
     }
   ]
 }

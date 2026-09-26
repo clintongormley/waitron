@@ -265,7 +265,7 @@ async function tabWithSopaAndFilete(): Promise<string> {
   });
   expect(table.status).toBe(200);
   const { id: tableId } = (await table.json()) as { id: string };
-  const opened = await app.request(`/api/tables/${tableId}/tab`, {
+  const opened = await app.request(`/api/tables/${tableId}/seat`, {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
     body: JSON.stringify({}),

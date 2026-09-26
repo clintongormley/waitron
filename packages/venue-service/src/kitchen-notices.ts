@@ -228,3 +228,19 @@ export async function writeEditSentLines(tx: Transaction, value: boolean): Promi
     .values({ id: 1, editSentLines: value })
     .onConflictDoUpdate({ target: serviceSettings.id, set: { editSentLines: value } });
 }
+
+/** Whether Finish table leaves the tables needing clearing. A venue with no row reads OFF. */
+export async function readClearingWorkflow(tx: Transaction): Promise<boolean> {
+  const [row] = await tx
+    .select({ clearingWorkflow: serviceSettings.clearingWorkflow })
+    .from(serviceSettings)
+    .where(eq(serviceSettings.id, 1));
+  return row?.clearingWorkflow ?? false;
+}
+
+export async function writeClearingWorkflow(tx: Transaction, value: boolean): Promise<void> {
+  await tx
+    .insert(serviceSettings)
+    .values({ id: 1, clearingWorkflow: value })
+    .onConflictDoUpdate({ target: serviceSettings.id, set: { clearingWorkflow: value } });
+}

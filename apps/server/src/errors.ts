@@ -303,10 +303,10 @@ declare module "@waitron/shared" {
     /** A dining table exists but is deactivated, so no tab may be opened on it. */
     "table.inactive": { tableId: string };
     /**
-     * A move/join TARGET table already has an OPEN tab; `mergeTabs` combines two bills instead. A
-     * table whose `tab_id` points at a settled/abandoned order is free. No unique index backs the
-     * rule: two concurrent moves cannot overlap because one write transaction runs on the venue
-     * file at a time (`withTransaction`, `packages/db/src/tenancy.ts`).
+     * A move/join TARGET table already has an OPEN tab, or a party still holds it (an active
+     * `visit_tables` row) whatever its `tab_id` points at; `mergeTabs` combines two bills instead.
+     * The partial unique index `visit_tables_active_table_uq` allows one active membership per
+     * table; the check runs first so the index never refuses with an engine error.
      */
     "table.occupied": { tableId: string };
     /**
@@ -316,21 +316,46 @@ declare module "@waitron/shared" {
      */
     "table.not_joined": { tableId: string; tabId: string };
     /**
-     * An un-join named the SOLE table anchoring the tab, so there is no join to carve it out of.
-     * Refused because the un-join would otherwise leave the tab with no table.
+     * An un-join named the SOLE table anchoring the tab, so there is no join to carve it out of; or
+     * an un-join with no items named the party's only member table. Refused because the un-join
+     * would otherwise leave the tab, or the party, with no table.
      */
     "table.not_shared": { tableId: string; tabId: string };
     /**
-     * A table's `tab_id` already points at an OPEN working order, so a second tab may not be opened.
-     * No unique index backs the rule: two concurrent `openTab`s cannot overlap because one write
-     * transaction runs on the venue file at a time (`openTab` in `working-order.ts`). A stale
-     * `tab_id` (a settled/abandoned order) reads as free and is overwritten.
+     * A table's `tab_id` already points at an OPEN working order, or a party still holds the table
+     * (an active `visit_tables` row) whatever its `tab_id` points at, so a second tab may not be
+     * opened (`openTab` in `working-order.ts`).
      */
     "tab.already_open": { tableId: string };
+    /**
+     * A visit verb found the visit is not in the state it needs — Finish needs `open`, Mark cleared
+     * needs `needs_clearing`, a new service command needs `open`, a tab path acting on a party's bill
+     * needs that party's visit `open` (`guardVisits`) — or the id names no visit, or a visit id in
+     * a route is not a UUID. One code for all, as `tab.not_open` is.
+     */
+    "visit.not_open": { visitId: string };
+    /**
+     * A command carried a visit revision another write has since moved past, so it was prepared
+     * from a stale copy of the visit. `revision` is the visit's current one; the caller reloads and
+     * acts again. The sibling of `working_order.out_of_date`.
+     */
+    "visit.out_of_date": { visitId: string; revision: number };
+    /**
+     * Finish table found a bill of the party — its own, or one kept by a party merged into it — that
+     * is placed, or open with items on it: the table cannot be finished while a bill is unpaid.
+     */
+    "visit.bill_outstanding": { visitId: string };
+    /**
+     * A submission id already recorded in this scope arrived with another command kind or other
+     * arguments. The id is the device's own, made fresh for each person's action.
+     */
+    "submission.id_reused": { submissionId: string };
     // The four `booking.*` codes are declared in @waitron/bookings/src/errors.ts.
     /**
      * A tab verb found the order it was asked to modify is not an OPEN tab — not `open`, not pointed
-     * at by any `dining_tables.tab_id`, or absent. Every tab verb shares this code for that state.
+     * at by any `dining_tables.tab_id`, or absent. `moveTab` and `joinTable`, and `addTabRound` for
+     * a round with lines, also accept the settled or abandoned tab a seated party's tables still
+     * point at.
      */
     "tab.not_open": { tabId: string };
     /** A per-line void named no line on the open tab. Pre-fiscal: a void of an open tab files nothing. */

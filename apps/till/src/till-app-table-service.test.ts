@@ -56,6 +56,7 @@ const openTable: TableState = {
   posY: null,
   shape: null,
   rotation: null,
+  visit: null,
 };
 
 const tabLine: TabLine = {
@@ -217,9 +218,9 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     getTablesState: vi.fn().mockResolvedValue([openTable]),
     listZones: vi.fn().mockResolvedValue([floorZone]),
     listStatuses: vi.fn().mockResolvedValue([]),
-    openTab: vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 }),
+    seatTable: vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 }),
     getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0, editSentLines: true }),
-    addTabRound: vi.fn().mockResolvedValue(undefined),
+    addTabRound: vi.fn(async (orderId: string) => ({ tabId: orderId })),
     fireCourse: vi.fn().mockResolvedValue(undefined),
     markLineServed: vi.fn().mockResolvedValue(undefined),
     setLineCourse: vi.fn().mockResolvedValue(undefined),
@@ -274,7 +275,7 @@ async function logIn(el: TillApp): Promise<void> {
 }
 
 async function openFromFloor(el: TillApp, table: TableState): Promise<void> {
-  emit(floor(el)!, "open-table", { tableId: table.id, hasOpenTab: table.hasOpenTab });
+  emit(floor(el)!, "open-table", { tableId: table.id, seated: table.hasOpenTab });
   await flush(el);
 }
 
@@ -376,7 +377,7 @@ describe("till-app table ordering: the table's menus", () => {
     expect(tableOrder(el)).toBeNull();
     expect(floor(el)).not.toBeNull();
     expect(api.getTabLines).not.toHaveBeenCalled();
-    expect(api.openTab).not.toHaveBeenCalled();
+    expect(api.seatTable).not.toHaveBeenCalled();
   });
 
   it("says nothing about a failed offer load for a table the operator has already left", async () => {
@@ -396,8 +397,8 @@ describe("till-app table ordering: the table's menus", () => {
     emit(shell(el), "tab-select", { key: "floor" });
     await flush(el);
 
-    emit(floor(el)!, "open-table", { tableId: tableA.id, hasOpenTab: true });
-    emit(floor(el)!, "open-table", { tableId: tableB.id, hasOpenTab: true });
+    emit(floor(el)!, "open-table", { tableId: tableA.id, seated: true });
+    emit(floor(el)!, "open-table", { tableId: tableB.id, seated: true });
     await flush(el);
     rejectA({ code: "service_zone.not_found" });
     await flush(el);
@@ -548,7 +549,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
     emit(screen, "move-tab", { toTableId: "t9" });
     await flush(el);
 
-    expect(api.moveTab).toHaveBeenCalledWith("wo-7", "t9");
+    expect(api.moveTab).toHaveBeenCalledWith("wo-7", "t9", {});
     expect(tableOrder(el)!.tables).toEqual([]);
     expect(banner(el)).toBeNull();
   });
@@ -1626,7 +1627,7 @@ describe("till-app table ordering: logout while a request is waiting for the ser
   it("stays on the lock screen when a new tab's answer arrives after the operator logged out", async () => {
     let answerOpenTab!: (tab: { tabId: string; orderNumber: number }) => void;
     const { el } = await mountApp({
-      openTab: vi.fn(
+      seatTable: vi.fn(
         () =>
           new Promise<{ tabId: string; orderNumber: number }>(
             (resolve) => (answerOpenTab = resolve),
@@ -1637,7 +1638,7 @@ describe("till-app table ordering: logout while a request is waiting for the ser
     emit(shell(el), "tab-select", { key: "floor" });
     await flush(el);
     await openFromFloor(el, { ...openTable, hasOpenTab: false });
-    expect(api.openTab).toHaveBeenCalledWith(openTable.id);
+    expect(api.seatTable).toHaveBeenCalledWith(openTable.id, null);
 
     emit(shell(el), "logout");
     await flush(el);
@@ -1720,7 +1721,7 @@ describe("till-app table ordering: a split-off bill left unpaid goes back to its
     emit(tableOrder(el)!, "back-to-floor");
     await flush(el);
 
-    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false);
+    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false, {});
     expect(lastCall(api.getTablesState)).toBeGreaterThan(lastCall(api.mergeTabs));
     expect(activeTabId(el)).toBe("wo-7");
     expect(floor(el)).not.toBeNull();
@@ -1733,7 +1734,7 @@ describe("till-app table ordering: a split-off bill left unpaid goes back to its
     emit(shell(el), "tab-select", { key: "floor" });
     await flush(el);
 
-    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false);
+    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false, {});
     expect(lastCall(api.getTablesState)).toBeGreaterThan(lastCall(api.mergeTabs));
 
     emit(shell(el), "tab-select", { key: "order" });
@@ -1760,7 +1761,7 @@ describe("till-app table ordering: a split-off bill left unpaid goes back to its
     await openFromFloor(el, otherTable);
     await flush(el);
 
-    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false);
+    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false, {});
     expect(lastCall(api.getTabLines)).toBeGreaterThan(lastCall(api.mergeTabs));
     expect(tableOrder(el)!.orderId).toBe("wo-8");
   });
@@ -1785,7 +1786,7 @@ describe("till-app table ordering: a split-off bill left unpaid goes back to its
     emit(shell(el), "tab-select", { key: "floor" });
     await flush(el);
 
-    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false);
+    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false, {});
     expect(banner(el)!.textContent).toContain(t("table.check_kept_held"));
     expect(floor(el)).not.toBeNull();
 
@@ -2042,7 +2043,7 @@ describe("till-app table ordering: a split-off bill left unpaid goes back to its
         .mockResolvedValue({ deviceId: "tb1", formFactor: "tablet-landscape", stationId: null }),
       getTablesState: vi.fn().mockResolvedValue([openTable, otherTable, freeTable]),
       getTabLines: linesOf(),
-      openTab: vi.fn(() => new Promise((resolve) => (opened = resolve))),
+      seatTable: vi.fn(() => new Promise((resolve) => (opened = resolve))),
       mergeTabs: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
     });
     await logIn(el);
@@ -2051,7 +2052,7 @@ describe("till-app table ordering: a split-off bill left unpaid goes back to its
     emit(tableOrder(el)!, "split-lines", { transfers: [{ lineNo: 3 }] });
     await flush(el);
     await openFromFloor(el, otherTable);
-    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false);
+    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false, {});
     opened({ tabId: "wo-new", orderNumber: 12 });
     await flush(el);
     const reads = vi.mocked(api.getTabLines).mock.calls.length;

@@ -183,6 +183,22 @@ async function request(path: string, init: RequestInit = {}): Promise<Response> 
   });
 }
 
+/** Seats table `id` and rings one line on its tab; returns the tab id. */
+async function seatWithOneLine(id: string): Promise<string> {
+  const seated = await request(`/api/tables/${id}/seat`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  expect(seated.status).toBe(200);
+  const { tabId } = (await seated.json()) as { tabId: string };
+  const round = await request(`/api/working-orders/${tabId}/round`, {
+    method: "POST",
+    body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
+  });
+  expect(round.status).toBe(200);
+  return tabId;
+}
+
 describe("table + tab routes", () => {
   it("POST /api/tables creates and GET /api/tables lists it", async () => {
     const create = await request("/api/tables", {
@@ -327,22 +343,27 @@ describe("table + tab routes", () => {
     expect(await res.json()).toMatchObject({ error: { code: "table.not_found" } });
   });
 
-  it("POST /api/tables/:id/tab opens a tab; a second → 409 tab.already_open", async () => {
+  it("POST /api/tables/:id/seat opens a tab; a second → 409 tab.already_open", async () => {
     const { id } = (await (
       await request("/api/tables", {
         method: "POST",
         body: JSON.stringify({ label: "3", zoneId: tablesZoneId }),
       })
     ).json()) as { id: string };
-    const open = await request(`/api/tables/${id}/tab`, {
+    const open = await request(`/api/tables/${id}/seat`, {
       method: "POST",
-      body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
+      body: JSON.stringify({}),
     });
     expect(open.status).toBe(200);
     const { tabId } = (await open.json()) as { tabId: string };
     expect(tabId).toBeDefined();
+    const round = await request(`/api/working-orders/${tabId}/round`, {
+      method: "POST",
+      body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
+    });
+    expect(round.status).toBe(200);
 
-    const again = await request(`/api/tables/${id}/tab`, {
+    const again = await request(`/api/tables/${id}/seat`, {
       method: "POST",
       body: JSON.stringify({}),
     });
@@ -350,8 +371,8 @@ describe("table + tab routes", () => {
     expect(await again.json()).toMatchObject({ error: { code: "tab.already_open" } });
   });
 
-  it("POST /api/tables/:id/tab with a malformed id → 404 table.not_found (isUuid guard, not a 500)", async () => {
-    const res = await request("/api/tables/not-a-uuid/tab", {
+  it("POST /api/tables/:id/seat with a malformed id → 404 table.not_found (isUuid guard, not a 500)", async () => {
+    const res = await request("/api/tables/not-a-uuid/seat", {
       method: "POST",
       body: JSON.stringify({}),
     });
@@ -366,19 +387,15 @@ describe("table + tab routes", () => {
         body: JSON.stringify({ label: "5", zoneId: tablesZoneId }),
       })
     ).json()) as { id: string };
-    const { tabId } = (await (
-      await request(`/api/tables/${id}/tab`, {
-        method: "POST",
-        body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
-      })
-    ).json()) as { tabId: string };
+    const tabId = await seatWithOneLine(id);
 
     const round = await request(`/api/working-orders/${tabId}/round`, {
       method: "POST",
       body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
     });
     expect(round.status).toBe(200);
-    expect(await round.text()).toBe("");
+    // The tab the round landed on: a seated party's settled tab gets a new one (visits.test.ts).
+    expect(await round.json()).toEqual({ tabId });
 
     const voided = await request(`/api/working-orders/${tabId}/lines/1`, { method: "DELETE" });
     expect(voided.status).toBe(200);
@@ -400,7 +417,7 @@ describe("table + tab routes", () => {
       })
     ).json()) as { id: string };
     const { tabId } = (await (
-      await request(`/api/tables/${id}/tab`, { method: "POST", body: JSON.stringify({}) })
+      await request(`/api/tables/${id}/seat`, { method: "POST", body: JSON.stringify({}) })
     ).json()) as { tabId: string };
     await request(`/api/working-orders/${tabId}/round`, {
       method: "POST",
@@ -435,7 +452,7 @@ describe("table + tab routes", () => {
       })
     ).json()) as { id: string };
     const { tabId } = (await (
-      await request(`/api/tables/${id}/tab`, { method: "POST", body: JSON.stringify({}) })
+      await request(`/api/tables/${id}/seat`, { method: "POST", body: JSON.stringify({}) })
     ).json()) as { tabId: string };
     await request(`/api/working-orders/${tabId}/round`, {
       method: "POST",
@@ -469,15 +486,17 @@ describe("table + tab routes", () => {
       })
     ).json()) as { id: string };
     const { tabId } = (await (
-      await request(`/api/tables/${id}/tab`, {
-        method: "POST",
-        body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
-      })
+      await request(`/api/tables/${id}/seat`, { method: "POST", body: JSON.stringify({}) })
     ).json()) as { tabId: string };
-    // A second round so there are two lines, then serve line 1 (the two floor states the screen renders).
+    // One round of two lines, then serve line 1 (the two floor states the screen renders).
     await request(`/api/working-orders/${tabId}/round`, {
       method: "POST",
-      body: JSON.stringify({ lines: [{ menuItemId, quantity: "2" }] }),
+      body: JSON.stringify({
+        lines: [
+          { menuItemId, quantity: "1" },
+          { menuItemId, quantity: "2" },
+        ],
+      }),
     });
     await request(`/api/working-orders/${tabId}/lines/1/served`, { method: "POST" });
 
@@ -515,12 +534,7 @@ describe("table + tab routes", () => {
         body: JSON.stringify({ label: `C-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
       })
     ).json()) as { id: string };
-    const { tabId } = (await (
-      await request(`/api/tables/${id}/tab`, {
-        method: "POST",
-        body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
-      })
-    ).json()) as { tabId: string };
+    const tabId = await seatWithOneLine(id);
     const read = async () =>
       (await (await request(`/api/working-orders/${tabId}/lines`)).json()) as {
         editSentLines: boolean;
@@ -577,12 +591,7 @@ describe("table + tab routes", () => {
         body: JSON.stringify({ label: "88", zoneId: tablesZoneId }),
       })
     ).json()) as { id: string };
-    const { tabId } = (await (
-      await request(`/api/tables/${id}/tab`, {
-        method: "POST",
-        body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
-      })
-    ).json()) as { tabId: string };
+    const tabId = await seatWithOneLine(id);
 
     const res = await request(`/api/working-orders/${tabId}/lines/9999999999`, {
       method: "DELETE",
@@ -600,7 +609,7 @@ describe("table + tab routes", () => {
       })
     ).json()) as { id: string };
     const { tabId } = (await (
-      await request(`/api/tables/${id}/tab`, { method: "POST", body: JSON.stringify({}) })
+      await request(`/api/tables/${id}/seat`, { method: "POST", body: JSON.stringify({}) })
     ).json()) as { tabId: string };
     await request(`/api/working-orders/${tabId}/round`, {
       method: "POST",
@@ -761,7 +770,7 @@ describe("table + tab routes", () => {
         body: JSON.stringify({ label: "z" }),
       }),
       noAuth.request(`/api/tables/${id}`, { method: "DELETE" }),
-      noAuth.request(`/api/tables/${id}/tab`, {
+      noAuth.request(`/api/tables/${id}/seat`, {
         method: "POST",
         headers: json,
         body: JSON.stringify({}),

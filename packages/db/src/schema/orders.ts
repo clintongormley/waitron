@@ -22,6 +22,7 @@ import { diningTables } from "./dining-tables.js";
 import { kitchenCourses } from "./kitchen-courses.js";
 import { nodes } from "./nodes.js";
 import { tills } from "./tenants.js";
+import { visits } from "./visits.js";
 
 export const workingOrderStatus = enumType([
   "open",
@@ -46,7 +47,7 @@ export const workingOrderStatus = enumType([
  *
  * That trigger names every column of this table except `status` and
  * `collected_at`, so a column added here goes into its list too, by a migration
- * that re-creates it (the latest: `drizzle/0015_settled_order_freeze_new_columns.sql`).
+ * that re-creates it (the latest: `drizzle/0019_settled_order_freeze_visit_id.sql`).
  */
 export const workingOrders = table(
   "working_orders",
@@ -79,6 +80,8 @@ export const workingOrders = table(
     collectedAt: tsString("collected_at"),
     revision: count("revision").notNull().default(0),
     paymentAttemptAt: tsString("payment_attempt_at"),
+    // The seated party this bill belongs to; a counter order has none.
+    visitId: id("visit_id"),
   },
   (t) => [
     index("working_orders_tenant_status_idx").on(t.status),
@@ -87,6 +90,12 @@ export const workingOrders = table(
       foreignColumns: [nodes.id],
       name: "working_orders_node_fk",
     }),
+    foreignKey({
+      columns: [t.visitId],
+      foreignColumns: [visits.id],
+      name: "working_orders_visit_fk",
+    }),
+    index("working_orders_visit_idx").on(t.visitId),
     check("working_orders_status_ck", enumCheck(t.status)),
     // Biconditional, not two one-way checks: a settled order always carries a
     // timestamp and a non-settled one never does.

@@ -18,14 +18,15 @@ import "./errors.js";
  * Boot implements it with the venue's config bound in, so a verb never takes the config.
  */
 export interface CoreServices {
-  openTab(
+  /** Seats a party at a free table: its visit, its first table and its tab. */
+  seatTable(
     tx: Transaction,
-    req: { tableId: string },
-  ): Promise<{ tabId: string; orderNumber: number }>;
+    req: { tableId: string; guestCount: number | null; operatorId: string },
+  ): Promise<{ tabId: string; visitId: string }>;
 }
 
 /**
- * `nodeId`/`tillId` are read only inside `core.openTab`, which boot binds, so they never enter
+ * `nodeId`/`tillId` are read only inside `core.seatTable`, which boot binds, so they never enter
  * `cfg`.
  */
 export interface ModuleRouteContext {
@@ -298,6 +299,8 @@ export interface VenueServiceContribution {
   ): Promise<void>;
   /** Whether staff may change an item already sent to the kitchen. */
   readEditSentLines(tx: Transaction): Promise<boolean>;
+  /** Whether Finish table leaves the party's tables needing clearing. */
+  readClearingWorkflow(tx: Transaction): Promise<boolean>;
 }
 
 /** A reference to non-DB state a module owns, resolved to a path by the composition root. */

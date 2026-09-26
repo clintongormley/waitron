@@ -98,6 +98,7 @@ const freeTable: TableState = {
   posY: null,
   shape: null,
   rotation: null,
+  visit: null,
 };
 
 const openTable: TableState = {
@@ -121,6 +122,7 @@ const openTable: TableState = {
   posY: null,
   shape: null,
   rotation: null,
+  visit: null,
 };
 
 const saleResult: TillSaleResult = {
@@ -366,9 +368,9 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     markCourseAway: vi.fn().mockResolvedValue(undefined),
     getTablesState: vi.fn().mockResolvedValue([]),
     listZones: vi.fn().mockResolvedValue([]),
-    openTab: vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 }),
+    seatTable: vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 }),
     getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
-    addTabRound: vi.fn().mockResolvedValue(undefined),
+    addTabRound: vi.fn(async (orderId: string) => ({ tabId: orderId })),
     fireCourse: vi.fn().mockResolvedValue(undefined),
     markLineServed: vi.fn().mockResolvedValue(undefined),
     setLineCourse: vi.fn().mockResolvedValue(undefined),
@@ -511,7 +513,7 @@ async function toTableOrder(el: TillApp, table: TableState): Promise<TillTableOr
   await toCounter(el);
   selectTab(el, "floor");
   await flush(el);
-  emit(floor(el)!, "open-table", { tableId: table.id, hasOpenTab: table.hasOpenTab });
+  emit(floor(el)!, "open-table", { tableId: table.id, seated: table.hasOpenTab });
   await flush(el);
   return tableOrder(el)!;
 }
@@ -1017,7 +1019,7 @@ describe("till-app", () => {
 
     it("does NOT leave the face-set when back-to-counter bubbles from the table-order screen", async () => {
       const el = await toHandheldFloor();
-      emit(floor(el)!, "open-table", { tableId: openTable.id, hasOpenTab: openTable.hasOpenTab });
+      emit(floor(el)!, "open-table", { tableId: openTable.id, seated: openTable.hasOpenTab });
       await flush(el);
       expect(tableOrder(el)).not.toBeNull();
       // A stray back-to-counter bubbling up from the table-order subtree must not reach the counter POS.
@@ -1580,7 +1582,7 @@ describe("till-app", () => {
       canConfigureTill: false,
     });
     await flush(el);
-    emit(floor(el)!, "open-table", { tableId: openTable.id, hasOpenTab: true });
+    emit(floor(el)!, "open-table", { tableId: openTable.id, seated: true });
     await flush(el);
 
     emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "20.00" });
@@ -3541,21 +3543,21 @@ describe("till-app", () => {
     });
 
     it("open-table on a FREE table opens a fresh tab and moves to the table-ordering screen", async () => {
-      const openTab = vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 });
+      const seatTable = vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 });
       const { el } = await mountApp({
         getTablesState: vi.fn().mockResolvedValue([freeTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
-        openTab,
+        seatTable,
       });
       await toCounter(el);
       selectTab(el, "floor");
       await flush(el);
 
-      emit(floor(el)!, "open-table", { tableId: "t1", hasOpenTab: false });
+      emit(floor(el)!, "open-table", { tableId: "t1", seated: false });
       await flush(el);
 
       // A free table opens a NEW tab (a pre-fiscal working order) before transitioning.
-      expect(openTab).toHaveBeenCalledWith("t1");
+      expect(seatTable).toHaveBeenCalledWith("t1", null);
       // On a TILL the table-order screen opens as a DRILL over the floor tab, which stays
       // mounted (inert) underneath — the drill is what the operator sees.
       expect(floor(el)).not.toBeNull();
@@ -3565,44 +3567,44 @@ describe("till-app", () => {
     });
 
     it("open-table on an OCCUPIED table resumes its tab WITHOUT opening a new one", async () => {
-      const openTab = vi.fn();
+      const seatTable = vi.fn();
       const { el } = await mountApp({
         getTablesState: vi.fn().mockResolvedValue([openTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
-        openTab,
+        seatTable,
       });
       await toCounter(el);
       selectTab(el, "floor");
       await flush(el);
 
-      emit(floor(el)!, "open-table", { tableId: "t2", hasOpenTab: true });
+      emit(floor(el)!, "open-table", { tableId: "t2", seated: true });
       await flush(el);
 
-      // An occupied table already has a tab — no fresh openTab, just the transition. The screen points
-      // at the RESUMED tab id (resolved from the read-model's tabId), not a new one.
-      expect(openTab).not.toHaveBeenCalled();
+      // An occupied table already has a tab — no seatTable call, just the transition. The screen
+      // points at the RESUMED tab id (resolved from the read-model's tabId), not a new one.
+      expect(seatTable).not.toHaveBeenCalled();
       // The table-order drill overlays the still-mounted floor tab.
       expect(floor(el)).not.toBeNull();
       expect(tableOrder(el)!.orderId).toBe("wo-7");
     });
 
     it("open-table on an occupied table missing from the read-model transitions with no order id", async () => {
-      const openTab = vi.fn();
+      const seatTable = vi.fn();
       const { el } = await mountApp({
         // The read-model is empty, so the tapped table can't be resolved to a tab id.
         getTablesState: vi.fn().mockResolvedValue([]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
-        openTab,
+        seatTable,
       });
       await toCounter(el);
       selectTab(el, "floor");
       await flush(el);
 
-      emit(floor(el)!, "open-table", { tableId: "t2", hasOpenTab: true });
+      emit(floor(el)!, "open-table", { tableId: "t2", seated: true });
       await flush(el);
 
       // A resume never opens a fresh tab; with no tab id resolved the screen carries none.
-      expect(openTab).not.toHaveBeenCalled();
+      expect(seatTable).not.toHaveBeenCalled();
       expect(tableOrder(el)).not.toBeNull();
       expect(tableOrder(el)!.orderId).toBeUndefined();
     });
@@ -3732,8 +3734,8 @@ describe("till-app", () => {
         selectTab(el, "floor");
         await flush(el);
 
-        emit(floor(el)!, "open-table", { tableId: tableA.id, hasOpenTab: true });
-        emit(floor(el)!, "open-table", { tableId: tableB.id, hasOpenTab: true });
+        emit(floor(el)!, "open-table", { tableId: tableA.id, seated: true });
+        emit(floor(el)!, "open-table", { tableId: tableB.id, seated: true });
         resolveB(offersB);
         await flush(el);
         expect(tableOrder(el)!.products[0]!.id).toBe("product-b");
@@ -3795,7 +3797,7 @@ describe("till-app", () => {
           canConfigureTill: false,
         });
         await flush(el);
-        emit(floor(el)!, "open-table", { tableId: openTable.id, hasOpenTab: openTable.hasOpenTab });
+        emit(floor(el)!, "open-table", { tableId: openTable.id, seated: openTable.hasOpenTab });
         await flush(el);
         const screen = tableOrder(el)!;
         expect(screen).not.toBeNull();
@@ -3821,7 +3823,7 @@ describe("till-app", () => {
       });
 
       it("send-round appends the round to the tab then reloads its lines", async () => {
-        const addTabRound = vi.fn().mockResolvedValue(undefined);
+        const addTabRound = vi.fn(async (orderId: string) => ({ tabId: orderId }));
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
@@ -3843,7 +3845,7 @@ describe("till-app", () => {
       });
 
       it("send-round forwards a per-line course OVERRIDE verbatim to addTabRound (KDS-2 §5b)", async () => {
-        const addTabRound = vi.fn().mockResolvedValue(undefined);
+        const addTabRound = vi.fn(async (orderId: string) => ({ tabId: orderId }));
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -3861,7 +3863,7 @@ describe("till-app", () => {
       });
 
       it("send-round forwards a per-line hold flag verbatim to addTabRound (coursing A3)", async () => {
-        const addTabRound = vi.fn().mockResolvedValue(undefined);
+        const addTabRound = vi.fn(async (orderId: string) => ({ tabId: orderId }));
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -4199,7 +4201,7 @@ describe("till-app", () => {
         emit(screen, "move-tab", { toTableId: "t9" });
         await flush(el);
 
-        expect(moveTab).toHaveBeenCalledWith("wo-7", "t9");
+        expect(moveTab).toHaveBeenCalledWith("wo-7", "t9", {});
         // Re-reads the floor so the freed/occupied tables reconcile, and stays on the table-order screen.
         expect(getTablesState).toHaveBeenCalledTimes(2);
         expect(tableOrder(el)).not.toBeNull();
@@ -4219,7 +4221,7 @@ describe("till-app", () => {
         emit(screen, "join-table", { tableId: "t9" });
         await flush(el);
 
-        expect(joinTable).toHaveBeenCalledWith("wo-7", "t9");
+        expect(joinTable).toHaveBeenCalledWith("wo-7", "t9", {});
         expect(getTablesState).toHaveBeenCalledTimes(2);
         expect(tableOrder(el)).not.toBeNull();
       });
@@ -4241,7 +4243,7 @@ describe("till-app", () => {
         emit(screen, "merge-tabs", { fromTabId: "wo-9", freeSourceTable: true });
         await flush(el);
 
-        expect(mergeTabs).toHaveBeenCalledWith("wo-7", "wo-9", true);
+        expect(mergeTabs).toHaveBeenCalledWith("wo-7", "wo-9", true, {});
         // The current tab absorbed the other's lines (reload) and the floor changed (reload).
         expect(getTabLines).toHaveBeenCalledTimes(2);
         expect(getTablesState).toHaveBeenCalledTimes(2);
@@ -4263,7 +4265,7 @@ describe("till-app", () => {
         emit(screen, "transfer-lines", { toTabId: "wo-9", transfers: [{ lineNo: 1 }] });
         await flush(el);
 
-        expect(transferLines).toHaveBeenCalledWith("wo-7", "wo-9", [{ lineNo: 1 }]);
+        expect(transferLines).toHaveBeenCalledWith("wo-7", "wo-9", [{ lineNo: 1 }], {});
         expect(getTabLines).toHaveBeenCalledTimes(2);
         expect(getTablesState).toHaveBeenCalledTimes(2);
       });
@@ -4287,7 +4289,7 @@ describe("till-app", () => {
         emit(screen, "split-lines", { transfers: [{ lineNo: 1 }] });
         await flush(el);
 
-        expect(splitTab).toHaveBeenCalledWith("wo-7", [{ lineNo: 1 }]);
+        expect(splitTab).toHaveBeenCalledWith("wo-7", [{ lineNo: 1 }], {});
         expect(getTabLines).toHaveBeenLastCalledWith("wo-check");
         expect(tableOrder(el)!.orderId).toBe("wo-check");
         expect(getTablesState).toHaveBeenCalledTimes(2);
@@ -4318,7 +4320,7 @@ describe("till-app", () => {
         emit(screen, "split-lines", { transfers: [{ lineNo: 1, quantity: "1" }] });
         await flush(el);
 
-        expect(splitTab).toHaveBeenCalledWith("wo-7", [{ lineNo: 1, quantity: "1" }]);
+        expect(splitTab).toHaveBeenCalledWith("wo-7", [{ lineNo: 1, quantity: "1" }], {});
         expect(tableOrder(el)!.orderId).toBe("wo-7");
         expect(getTabLines).toHaveBeenCalledTimes(1);
         expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
@@ -4358,7 +4360,9 @@ describe("till-app", () => {
         emit(screen, "move-tab", { toTableId: "t9" });
         await flush(el);
         expect(tableOrder(el)).not.toBeNull();
-        expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(t("table.error"));
+        expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(
+          codeMessage("table.occupied"),
+        );
       });
 
       it("threads the occupancy read-model to the table-order screen for its action targets", async () => {
@@ -6094,7 +6098,7 @@ describe("till-app", () => {
     it("switches a handheld to the Order tab (card mount) when a table is opened, not a drill-in", async () => {
       const el = await toHandheldFloor();
       expect(shell(el)!.activeTabKey).toBe("floor");
-      emit(shell(el)!, "open-table", { tableId: freeTable.id, hasOpenTab: false });
+      emit(shell(el)!, "open-table", { tableId: freeTable.id, seated: false });
       await flush(el);
       const s = shell(el)!;
       // Switched to the Order tab — the card mount, not a drill.
@@ -6139,7 +6143,7 @@ describe("till-app", () => {
       await flush(el);
       emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
       await flush(el);
-      emit(shell(el)!, "open-table", { tableId: freeTable.id, hasOpenTab: false }); // → Order tab card
+      emit(shell(el)!, "open-table", { tableId: freeTable.id, seated: false }); // → Order tab card
       await flush(el);
       expect(shell(el)!.activeTabKey).toBe("order");
       const before = getTablesState.mock.calls.length;
@@ -6152,7 +6156,7 @@ describe("till-app", () => {
       expect(getTablesState.mock.calls.length).toBeGreaterThan(before);
       expect(pushHistory).toHaveBeenCalledTimes(1);
       // The Floor tab re-read occupancy (tables-only refresh): t1 now renders the SECOND fetch (occupied),
-      // not the stale free one — so a re-tap resumes the open tab instead of re-firing `openTab`.
+      // not the stale free one — so a re-tap resumes the open tab instead of seating the table again.
       const grid = el.shadowRoot!.querySelector("till-card-grid")!;
       const floorScreen = grid.shadowRoot!.querySelector<TillFloorScreen>("till-floor-screen");
       expect(floorScreen).not.toBeNull();
@@ -6186,7 +6190,7 @@ describe("till-app", () => {
       await flush(el);
       emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
       await flush(el);
-      emit(shell(el)!, "open-table", { tableId: freeTable.id, hasOpenTab: false }); // → Order tab card
+      emit(shell(el)!, "open-table", { tableId: freeTable.id, seated: false }); // → Order tab card
       await flush(el);
       expect(shell(el)!.activeTabKey).toBe("order");
       const before = getTablesState.mock.calls.length;
@@ -6258,7 +6262,7 @@ describe("till-app", () => {
 
     it("pushes the table-order drill-in over the shell when a table is opened from the floor tab", async () => {
       const el = await toShellFloor();
-      emit(shell(el)!, "open-table", { tableId: freeTable.id, hasOpenTab: false });
+      emit(shell(el)!, "open-table", { tableId: freeTable.id, seated: false });
       await flush(el);
       // The table-order screen mounts into the shell's `drill` slot, OVER the (now inert) floor tab.
       expect(drill(el)).not.toBeNull();
@@ -6268,7 +6272,7 @@ describe("till-app", () => {
 
     it("pops the table-order drill-in back to the floor tab on back-to-floor", async () => {
       const el = await toShellFloor();
-      emit(shell(el)!, "open-table", { tableId: freeTable.id, hasOpenTab: false });
+      emit(shell(el)!, "open-table", { tableId: freeTable.id, seated: false });
       await flush(el);
       emit(tableOrder(el)!, "back-to-floor");
       await el.updateComplete;
@@ -6280,11 +6284,9 @@ describe("till-app", () => {
     });
 
     it("refreshes floor occupancy when the drill pops back to the floor tab (SP-B2.1 review — no stale floor)", async () => {
-      // Opening a table (`openTab`) and table-service actions do NOT update `this.tables`, so after a
-      // waiter opens table N from the floor tab, adds a round, and taps Back, the floor tab must RE-READ
-      // occupancy or it re-renders from the STALE read-model — table N still shows FREE. Tapping it again
-      // calls `openTab(N)` → server throws `tab.already_open` → the waiter cannot resume the tab they just
-      // opened. So this asserts FRESHNESS — the floor reflects a SECOND fetch.
+      // A round and other table-service actions do NOT update `this.tables`, so after a waiter adds a
+      // round and taps Back, the floor tab must RE-READ occupancy or it re-renders a stale read-model.
+      // So this asserts FRESHNESS — the floor reflects the read taken after Back.
       const occupiedT1: TableState = {
         ...freeTable,
         state: "open-tab",
@@ -6293,29 +6295,30 @@ describe("till-app", () => {
         tabLineCount: 1,
         tabTotal: "3.00",
       };
+      const afterRound: TableState = { ...occupiedT1, tabLineCount: 2, tabTotal: "6.00" };
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
-        // FIRST floor load (tab-select): table free. SECOND load (the back-to-floor refresh): now occupied.
+        // FIRST floor load (tab-select): table free. SECOND load (seating re-reads the floor): now
+        // occupied. THIRD load (the back-to-floor refresh): the round sent meanwhile shows.
         getTablesState: vi
           .fn()
           .mockResolvedValueOnce([freeTable])
-          .mockResolvedValueOnce([occupiedT1]),
+          .mockResolvedValueOnce([occupiedT1])
+          .mockResolvedValueOnce([afterRound]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
       });
       await toCounter(el);
       emit(shell(el)!, "tab-select", { key: "floor" }); // first floor load → freeTable
       await flush(el);
-      emit(shell(el)!, "open-table", { tableId: freeTable.id, hasOpenTab: false }); // drill in
+      emit(shell(el)!, "open-table", { tableId: freeTable.id, seated: false }); // drill in
       await flush(el);
       expect(tableOrder(el)).not.toBeNull();
-      emit(tableOrder(el)!, "back-to-floor"); // pop the drill + tables-only refresh → occupiedT1
+      emit(tableOrder(el)!, "back-to-floor"); // pop the drill + tables-only refresh → afterRound
       await flush(el);
       const g = grid(el)!;
       const floorScreen = g.shadowRoot!.querySelector<TillFloorScreen>("till-floor-screen");
       expect(floorScreen).not.toBeNull();
-      // The floor RE-READ occupancy: table t1 now renders the SECOND fetch (occupied), not the stale free
-      // one — so tapping it resumes the open tab instead of re-firing `openTab` → `tab.already_open`.
-      expect(floorScreen!.tables).toEqual([occupiedT1]);
+      expect(floorScreen!.tables).toEqual([afterRound]);
     });
 
     it("pushes the schedule drill-in from the shell's Schedule affordance", async () => {
@@ -7072,7 +7075,7 @@ describe("remembered dietary filters", () => {
     await flush(el);
     selectTab(el, "floor");
     await flush(el);
-    emit(floor(el)!, "open-table", { tableId: freeTable.id, hasOpenTab: false });
+    emit(floor(el)!, "open-table", { tableId: freeTable.id, seated: false });
     await flush(el);
     expect(pressed(tableOrder(el)!, "vegetarian")).toBe("true");
     pick(tableOrder(el)!, "vegetarian");

@@ -918,9 +918,10 @@ What B4 leaves open:
   seed and configuration transfer make, needs a separate grep for `catalogue_id`/`catalogueId`.
   **Next action:** owner to decide whether to retire `location_catalogues` and those routes with
   `GET /api/products`, or keep them.
-- **A table in no zone still opens a tab, and nothing can be added to it.** The till opens a tab
-  with no lines (`#onOpenTable`, `apps/till/src/till-app.ts`), and a booking seated at a table does
-  the same through `core.openTab` (`seatBooking`, `packages/bookings/src/bookings.ts`); on a table
+- **A table in no zone still opens a tab, and nothing can be added to it.** The till seats a
+  party through `seatTable` (`#onOpenTable`, `apps/till/src/till-app.ts`), which opens a visit and
+  a tab with no lines, and a booking seated at a table does the same through `core.seatTable`
+  (`seatBooking`, `packages/bookings/src/bookings.ts`); on a table
   in no zone that tab opens, and every round on it is refused `order.service_context_missing`. The
   till shows no products there: `#onOpenTable` loads offers only for a table with a zone and leaves
   the grid empty otherwise. Pinned by "openTab with no lines on a table in no zone opens an empty
@@ -1848,6 +1849,29 @@ approved print agents to try it, so a printer the two discovery passes cannot se
 
   Out of scope for this plan: guest access, inventory, seat and staff assignment, changing the floor
   layout during service, screen plugins and Bizum.
+- **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
+  2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
+  joined to it, but merging another table's bill into its paid bill, or moving items to or from
+  that paid bill, is refused with `tab.not_open` until a new round opens the party's next bill.
+  Decide whether a paid party should be mergeable before the till offers it.
+- **An invoiced but unpaid bill on a party cannot be charged from the table screen (plan Task 2,
+  2026-09-26).** In a venue that issues the invoice first, a party merged into another can bring a
+  bill whose invoice is issued but not yet paid. The table screen lists it with what it owes, but
+  offers Take payment only on bills that are still open, so there is no button to charge it. Finish
+  table is then refused because that bill is unpaid; once no open bill is left, the refusal tells
+  the person to take payment but offers no button that does it. Charging it belongs to plan Task 14 (bill payments).
+- **The floor and the table screen write amounts differently (plan Task 2, 2026-09-26).** The floor
+  shows `44.00 €` while the table screen shows `44,00 €` in Spanish. The floor's format predates
+  the visits work; Task 2 now also uses it for what a party still owes. Make the floor follow the
+  locale, as the table screen does.
+- **A party's table can be pointed at a counter order, or at another party's bill (plan Task 2
+  review, 2026-09-26).** `joinTable` and `mergeTabs` (`apps/server/src/working-order.ts`) accept a
+  parked counter order, which belongs to no party, as a tab: `joinTable` accepts any open order
+  whose zone is the table's (or when either has none), and `mergeTabs` one whose service mode
+  matches. So a table can stay in its party while pointing at that counter order, or be held by
+  one party while pointing at another party's bill. "a paid check reached by a table outside its party"
+  (`apps/server/src/visits.test.ts`) reaches both. The till does not send that sequence (read, not
+  tested). **Next action:** decide whether to refuse it.
 - **Later: optional seat/guest item assignment (owner, 2026-09-20).** Include shared items when
   this is designed. For now, orders remain at table/tab level and staff select items manually
   when splitting bills; seat assignment is not a prerequisite for the service workflow.

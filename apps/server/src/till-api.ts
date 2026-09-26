@@ -2,7 +2,7 @@ import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq } from "drizzle-orm";
-import { AppError, isAppError, SUPPORTED_LOCALES } from "@waitron/shared";
+import { AppError, isAppError, isValidGuestCount, SUPPORTED_LOCALES } from "@waitron/shared";
 import type { FloorAnnotator } from "@waitron/module";
 import { locations, readNodeMembership, readTenant, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -78,7 +78,6 @@ import {
   markLineServed,
   mergeTabs,
   moveTab,
-  openTab,
   parkOrder,
   placeOrder,
   readTabLines,
@@ -97,6 +96,8 @@ import {
 } from "./working-order.js";
 import type { LineExtras, OrderLinePatch, TicketState } from "./working-order.js";
 import { listCourses, listStations } from "./kitchen.js";
+import { finishTable, markCleared, readVisitBills, seatTable } from "./visits.js";
+import type { VisitCommand } from "./visits.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
 import {
@@ -296,6 +297,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "table.not_shared": 409,
   "tab.transfer_modifier_line": 400,
   "tab.split_held_line": 400,
+  "visit.not_open": 409,
+  "visit.out_of_date": 409,
+  "visit.bill_outstanding": 409,
+  "submission.id_reused": 409,
   "status.not_found": 404,
   "status.inactive": 409,
   "drawer.no_printer": 400,
@@ -356,12 +361,60 @@ function requireTabParam(id: string): string {
   return id;
 }
 
-/** An order's revision as a body carries it: a whole number from 0, else `management.request_invalid`. */
-function requireRevision(value: unknown): number {
+/**
+ * A revision as a body carries it, an order's or a visit's: a whole number from 0, else
+ * `management.request_invalid` naming `field`.
+ */
+function requireRevision(
+  value: unknown,
+  field: "revision" | "expectedVisitRevision" | "expectedSourceVisitRevision" = "revision",
+): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
-    throw new AppError("management.request_invalid", { field: "revision" });
+    throw new AppError("management.request_invalid", { field });
   }
   return value;
+}
+
+/** A non-UUID names no visit, so it gets the absent visit's `visit.not_open`. */
+function requireVisitParam(id: string): string {
+  if (!isUuid(id)) {
+    throw new AppError("visit.not_open", { visitId: id });
+  }
+  return id;
+}
+
+/** An optional guest count: absent or null records none, otherwise a whole number from 1. */
+function requireGuestCount(value: unknown): number | null {
+  if (value === undefined || value === null) return null;
+  if (!isValidGuestCount(value)) {
+    throw new AppError("management.request_invalid", { field: "guestCount" });
+  }
+  return value;
+}
+
+/**
+ * A tab route's visit revisions and the acting person. A revision may be absent here: the verb
+ * refuses its absence only where the tab belongs to a party.
+ */
+function visitCommand(
+  personId: string,
+  body: { expectedVisitRevision?: unknown; expectedSourceVisitRevision?: unknown },
+  crossesVisits = false,
+): VisitCommand {
+  const command: VisitCommand = { operatorId: personId };
+  if (body.expectedVisitRevision !== undefined) {
+    command.expectedVisitRevision = requireRevision(
+      body.expectedVisitRevision,
+      "expectedVisitRevision",
+    );
+  }
+  if (crossesVisits && body.expectedSourceVisitRevision !== undefined) {
+    command.expectedSourceVisitRevision = requireRevision(
+      body.expectedSourceVisitRevision,
+      "expectedSourceVisitRevision",
+    );
+  }
+  return command;
 }
 
 /** A value that cannot be a line number gets the absent line's `tab.line_not_found`. */
@@ -1211,18 +1264,60 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  app.post("/api/tables/:id/tab", (c) =>
+  app.post("/api/tables/:id/seat", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const { personId } = await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      const body = await readJsonBody<{
-        lines?: { menuItemId: string; quantity: string }[];
-      }>(c);
+      const body = await readJsonBody<{ guestCount?: unknown }>(c);
+      const guestCount = requireGuestCount(body.guestCount);
       const result = await withTransaction(deps.db, async (tx) => {
-        return openTab(tx, deps.cfg, { tableId: id, lines: body.lines });
+        return seatTable(tx, deps.cfg, { tableId: id, guestCount, operatorId: personId });
       });
       return c.json(result);
+    }),
+  );
+
+  app.post("/api/visits/:id/finish", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const visitId = requireVisitParam(c.req.param("id"));
+      const body = await readJsonBody<{ expectedVisitRevision?: unknown }>(c);
+      const expectedVisitRevision = requireRevision(
+        body.expectedVisitRevision,
+        "expectedVisitRevision",
+      );
+      const result = await withTransaction(deps.db, async (tx) => {
+        return finishTable(tx, { visitId, expectedVisitRevision, operatorId: personId });
+      });
+      return c.json(result);
+    }),
+  );
+
+  app.post("/api/visits/:id/cleared", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const visitId = requireVisitParam(c.req.param("id"));
+      const body = await readJsonBody<{ expectedVisitRevision?: unknown }>(c);
+      const expectedVisitRevision = requireRevision(
+        body.expectedVisitRevision,
+        "expectedVisitRevision",
+      );
+      await withTransaction(deps.db, async (tx) => {
+        await markCleared(tx, { visitId, expectedVisitRevision });
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  app.get("/api/visits/:id/bills", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const visitId = requireVisitParam(c.req.param("id"));
+      const bills = await withTransaction(deps.db, async (tx) => {
+        return readVisitBills(tx, visitId);
+      });
+      return c.json(bills);
     }),
   );
 
@@ -1241,10 +1336,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           hold?: boolean;
         } & LineExtras)[];
       }>(c);
-      await withTransaction(deps.db, async (tx) => {
-        await addTabRound(tx, deps.cfg, id, body.lines);
+      const result = await withTransaction(deps.db, async (tx) => {
+        return addTabRound(tx, deps.cfg, id, body.lines);
       });
-      return c.body(null, 200);
+      return c.json(result);
     }),
   );
 
@@ -1431,13 +1526,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/tabs/:id/move", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const { personId } = await requireSession(deps, c);
       const tabId = requireTabParam(c.req.param("id"));
-      const body = await readJsonBody<{ toTableId: string }>(c);
+      const body = await readJsonBody<{ toTableId: string; expectedVisitRevision?: unknown }>(c);
       if (!isUuid(body.toTableId))
         throw new AppError("table.not_found", { tableId: body.toTableId });
+      const command = visitCommand(personId, body);
       await withTransaction(deps.db, async (tx) => {
-        await moveTab(tx, deps.cfg, tabId, body.toTableId);
+        await moveTab(tx, deps.cfg, tabId, body.toTableId, command);
       });
       return c.body(null, 200);
     }),
@@ -1445,12 +1541,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/tabs/:id/join", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const { personId } = await requireSession(deps, c);
       const tabId = requireTabParam(c.req.param("id"));
-      const body = await readJsonBody<{ tableId: string }>(c);
+      const body = await readJsonBody<{ tableId: string; expectedVisitRevision?: unknown }>(c);
       if (!isUuid(body.tableId)) throw new AppError("table.not_found", { tableId: body.tableId });
+      const command = visitCommand(personId, body);
       await withTransaction(deps.db, async (tx) => {
-        await joinTable(tx, deps.cfg, tabId, body.tableId);
+        await joinTable(tx, deps.cfg, tabId, body.tableId, command);
       });
       return c.body(null, 200);
     }),
@@ -1458,13 +1555,20 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/tabs/:id/merge", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const { personId } = await requireSession(deps, c);
       const intoTabId = requireTabParam(c.req.param("id"));
-      const body = await readJsonBody<{ fromTabId: string; freeSourceTable: boolean }>(c);
+      const body = await readJsonBody<{
+        fromTabId: string;
+        freeSourceTable: boolean;
+        expectedVisitRevision?: unknown;
+        expectedSourceVisitRevision?: unknown;
+      }>(c);
       if (!isUuid(body.fromTabId)) throw new AppError("tab.not_open", { tabId: body.fromTabId });
+      const command = visitCommand(personId, body, true);
       await withTransaction(deps.db, async (tx) => {
         await mergeTabs(tx, deps.cfg, intoTabId, body.fromTabId, {
           freeSourceTable: body.freeSourceTable,
+          ...command,
         });
       });
       return c.body(null, 200);
@@ -1473,15 +1577,18 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/tabs/:id/transfer", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const { personId } = await requireSession(deps, c);
       const fromTabId = requireTabParam(c.req.param("id"));
       const body = await readJsonBody<{
         toTabId: string;
         transfers: { lineNo: number; quantity?: string }[];
+        expectedVisitRevision?: unknown;
+        expectedSourceVisitRevision?: unknown;
       }>(c);
       if (!isUuid(body.toTabId)) throw new AppError("tab.not_open", { tabId: body.toTabId });
+      const command = visitCommand(personId, body, true);
       await withTransaction(deps.db, async (tx) => {
-        await transferLines(tx, deps.cfg, fromTabId, body.toTabId, body.transfers);
+        await transferLines(tx, deps.cfg, fromTabId, body.toTabId, body.transfers, command);
       });
       return c.body(null, 200);
     }),
@@ -1490,11 +1597,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // Spins selected items off into a new table-less check; nothing files until it is paid.
   app.post("/api/tabs/:id/split", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const { personId } = await requireSession(deps, c);
       const fromTabId = requireTabParam(c.req.param("id"));
       // `readRawJsonBody`, not `readJsonBody`: a null, empty or malformed body must be refused as
       // field "body", not coalesced to `{}`.
-      const body = await readRawJsonBody<{ transfers: { lineNo: number; quantity?: string }[] }>(c);
+      const body = await readRawJsonBody<{
+        transfers: { lineNo: number; quantity?: string }[];
+        expectedVisitRevision?: unknown;
+      }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
@@ -1502,8 +1612,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (!Array.isArray(body.transfers)) {
         throw new AppError("management.request_invalid", { field: "transfers" });
       }
+      const command = visitCommand(personId, body);
       const result = await withTransaction(deps.db, async (tx) => {
-        return splitOffCheck(tx, deps.cfg, fromTabId, body.transfers);
+        return splitOffCheck(tx, deps.cfg, fromTabId, body.transfers, command);
       });
       return c.json(result);
     }),
@@ -1511,12 +1622,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/tabs/:id/unjoin", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const { personId } = await requireSession(deps, c);
       const tabId = requireTabParam(c.req.param("id"));
       // Raw parse, as in `/split`.
       const body = await readRawJsonBody<{
         tableId: string;
         transfers?: { lineNo: number; quantity?: string }[];
+        expectedVisitRevision?: unknown;
       }>(c);
       // Body shape first: a missing body is a request-shape fault, not `table.not_joined`.
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
@@ -1528,8 +1640,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.transfers !== undefined && !Array.isArray(body.transfers)) {
         throw new AppError("management.request_invalid", { field: "transfers" });
       }
+      const command = visitCommand(personId, body);
       const result = await withTransaction(deps.db, async (tx) => {
-        return unjoinTable(tx, deps.cfg, tabId, body.tableId, body.transfers);
+        return unjoinTable(tx, deps.cfg, tabId, body.tableId, body.transfers, command);
       });
       return c.json(result);
     }),

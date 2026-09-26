@@ -77,7 +77,10 @@ with hand-written PostgreSQL triggers, restored as SQLite triggers; `0004_varian
 which keeps a variant one level deep, its parent fixed, and a product's id unchanged; and
 `0015_settled_order_freeze_new_columns.sql`, which re-creates `0001`'s
 `working_orders_enforce_transition` with the two `working_orders` columns `0014` added (`revision`
-and `payment_attempt_at`) in its list. No migration
+and `payment_attempt_at`) in its list; `0019_settled_order_freeze_visit_id.sql`, which re-creates it
+again with `visit_id`; and `0020_visit_clears_table_status.sql`, which drops `0001`'s
+`working_orders_clear_table_status` and clears a table's service status when the party's visit
+leaves `open` instead of when a tab settles. No migration
 contains a `GRANT`, a role or an `ENABLE ALWAYS`: there is no database role to grant anything to,
 and file permissions on the venue directory are the access control.
 

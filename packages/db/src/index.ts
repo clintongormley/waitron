@@ -72,6 +72,13 @@ export type {
   VerifiableAmendment,
 } from "./order-amendment-hash.js";
 export { diningTables, floorTableShape } from "./schema/dining-tables.js";
+export {
+  serviceCommands,
+  serviceCommandScope,
+  visitState,
+  visitTables,
+  visits,
+} from "./schema/visits.js";
 export { floorZones } from "./schema/floor-zones.js";
 export { kitchenStations } from "./schema/kitchen-stations.js";
 export { kitchenCourses } from "./schema/kitchen-courses.js";

@@ -61,7 +61,7 @@ describe("the media module descriptor", () => {
         db: suite.db,
         cfg: { locationId: locationId("00000000-0000-4000-8000-000000000001") },
         core: {
-          openTab: async () => {
+          seatTable: async () => {
             throw new Error("unused");
           },
         },
