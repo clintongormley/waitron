@@ -214,15 +214,14 @@ Every refusal is a structured code and its params on stderr — never a raw driv
 | `provisioning.invalid_locales`       | `--locale` was given no times, or more than twice                                                               | Give one or two.                                                                                                                                                                                                                     |
 | `provisioning.duplicate_series_code` | `--series-code` and `--rectificative-code` are the same                                                         | Give them different codes; they are two separate series.                                                                                                                                                                             |
 
-Waitron is not in production (CLAUDE.md §3, "no backwards-compatibility or data-migration code until
-Waitron is in production"), which is the carve-out under which a code has twice been DELETED rather
-than deprecated: SP-3c dropped `provisioning.id_sistema_invalid` when the software-id bound moved
+Before a venue is live a code may be deleted freely (CLAUDE.md §3), and this package has deleted
+several: SP-3c dropped `provisioning.id_sistema_invalid` when the software-id bound moved
 into the fiscal module as `sif.id_sistema_invalid`, and the instance-path deletion dropped
 `provisioning.role_over_privileged`, `role_unusable`, `role_creation_failed`,
 `membership_grant_failed` and `grant_ineffective` along with the only code that threw them. The
 venue command's own repointing dropped two more the same way — `provisioning.admin_uri_missing` and
 `admin_uri_not_a_url`, which described a connection string this tool no longer takes, replaced by
-`provisioning.venue_dir_missing`. Taking over the stamping dropped a fourth,
+`provisioning.venue_dir_missing`. Taking over the stamping dropped another,
 `provisioning.database_unstamped`: an unstamped directory is what this command now STAMPS, so
 nothing was left to refuse under that name, and the case it really caught — a directory nothing had
 migrated — is `provisioning.database_unmigrated`, which says so.

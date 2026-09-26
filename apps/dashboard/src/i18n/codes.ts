@@ -508,7 +508,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That allergen isn't valid",
     es: "Ese alérgeno no es válido",
   },
-  // No route answers with this any more; a shipped code is never removed.
+  // No route answers with this any more.
   "options.group_invalid": {
     en: "Check the group's min/max selection settings",
     es: "Revisa los ajustes de selección mínima/máxima del grupo",

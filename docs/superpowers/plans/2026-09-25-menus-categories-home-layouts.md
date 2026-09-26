@@ -693,11 +693,11 @@ Every task's requirements implicitly include this section.
   - `apps/server/src/live-resources.ts`
   - `apps/server/scripts/demo-seed/`
   - `docs/developers/product-categories.md`
-- **Error codes name the domain concept and are never renamed** (CLAUDE.md §3). (2026-09-26: before
-  a venue is live a code may be renamed or deleted freely, CLAUDE.md §3.) New ones in this plan: `menu_section.member_cycle`,
-  `menu_section.member_duplicate`, `menu_section.not_library`, `menu_section.invalid` (with
-  `params.field`), `menu_section.membership_invalid`, `menu.changed_since_preview`,
-  `menu.version_changed`, `menu.shortcut_unreachable`, `menu.default_layout_required`,
+- **Error codes name the domain concept and are never renamed** (CLAUDE.md §3). _(2026-09-26: before
+  a venue is live a code may be renamed or deleted freely, CLAUDE.md §3.)_ New ones in this plan:
+  `menu_section.member_cycle`, `menu_section.member_duplicate`, `menu_section.not_library`,
+  `menu_section.invalid` (with `params.field`), `menu_section.membership_invalid`,
+  `menu.changed_since_preview`, `menu.version_changed`, `menu.shortcut_unreachable`, `menu.default_layout_required`,
   `menu.layout_not_found`, `order.payment_in_flight`,
   `kitchen_notice.not_found`, and the readiness code `zone.menu_unpublished`. (Revision 2's
   `menu.version_expired` was never shipped and is not minted.)
@@ -870,7 +870,8 @@ that plan left them. There are no menu changes yet; menus still use the old per-
 - the new tables are `sections` and `section_members`;
 - error codes use the existing `menu_section.*` prefix (the concept is still a menu section, now
   reusable; `menu_section.not_found` is already registered — CLAUDE.md §3: extend with siblings,
-  never rename);
+  never rename; _(2026-09-26: before a venue is live a code may be renamed or deleted freely,
+  CLAUDE.md §3.)_);
 - the dashboard says "Sections".
 - The old per-menu table `menu_sections` is dropped in Task 3, in its own generation.
 

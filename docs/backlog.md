@@ -1276,6 +1276,7 @@ What extras lists left open, and what #449 found on the way:
   straight out of `menu_item_extra_lists` rather than reaching them through the products, and the
   products out of `product_modifiers`. Its options twin has only the one table to read.
 - **`extras.in_use` is registered and nothing throws it**, the same posture as `options.in_use`.
+  **Next action:** delete it, under *Delete the error codes nothing raises any more* below.
 
 - **A save reaches the database once per submitted label.** The read that finds which list each
   submitted label belongs to, and the delete that drops the labels a body omits, are each one
@@ -4600,20 +4601,25 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   that before a venue is live a code may be renamed or deleted freely (CLAUDE.md §3), so the deletion
   stands. Nothing to do.
 - **Delete the error codes nothing raises any more** (owner, 2026-09-26: before a venue is live a
-  code may be deleted freely). Several are still registered only because the old rule said a shipped
-  code is never removed, each with a comment saying so: the "Not thrown. Kept because a shipped code
-  is never removed" entries in `packages/catalogue/src/errors.ts`, the deprecated entry in
-  `packages/provisioning/src/errors.ts`, `sale.unknown_product` (below, *`sale.unknown_product` is no
-  longer raised*), `options.in_use` (above) and the retired entry in
-  `apps/dashboard/src/i18n/codes.ts`. Delete each with its
-  wording, status-map entry and tests in one change, after checking that nothing raises it and that
-  no prefix matcher or stored copy needs it (docs/developers/conventions-data.md lists both).
+  code may be deleted freely). Several are still registered, each with a note saying nothing raises
+  it, and they survived because the old rule said a shipped code is never removed: the "Not thrown."
+  entries in `packages/catalogue/src/errors.ts`, the deprecated entry in
+  `packages/provisioning/src/errors.ts`, `sale.unknown_product` (above, *`sale.unknown_product` is
+  no longer raised*), `options.in_use` and `extras.in_use` (above) and the retired entry in
+  `apps/dashboard/src/i18n/codes.ts`. Two more registered codes are raised by nothing but were not
+  kept under that rule and are not in this list: `sale.number_reused` (`packages/core/src/errors.ts`:
+  no path translates the unique-index violation into it) and `provisioning.database_not_owned`
+  (`packages/provisioning/src/errors.ts`); check each before deleting it. **Next action:** delete
+  each with its wording, status-map entry and tests in one change, after checking that nothing
+  raises it and that no prefix matcher or stored copy needs it (docs/developers/conventions-data.md
+  lists both).
 - **`server.credential_unusable` names an unusable credential, although `server.*` is reserved for
   facts about the process itself.** It is thrown for AEAT's certificate
   (`packages/fiscal-verifactu/src/aeat-transport.ts`) and for Stripe's secret key and webhook secret
   (`apps/server/src/stripe-account.ts`, `apps/server/src/webhook.ts`), and both
-  `packages/fiscal-verifactu/src/errors.ts` and `apps/server/src/errors.ts` declare it. Since
-  2026-09-26 a rename is a migration (CLAUDE.md §3). **Next action:** choose a prefix
+  `packages/fiscal-verifactu/src/errors.ts` and `apps/server/src/errors.ts` declare it. Before a
+  venue is live a code may be renamed freely; once one is live a rename is a migration (CLAUDE.md
+  §3). **Next action:** choose a prefix
   (`credentials.missing` is the nearest sibling) and rename it in one change, checking the prefix
   matchers `docs/developers/conventions-data.md` lists.
 - **The Stripe webhook endpoint still has to be repointed by hand, at Stripe.** #378 shortened the

@@ -59,9 +59,9 @@ wide margin. This section stays in full deliberately: it applies to every change
 - **The correction is a new claim, and deserves MORE scrutiny than the text it replaces.** This is the
   single most productive source of false claims in the repository's history.
 - **Before asserting a convention, grep the siblings** — identifiers AND prose. Cost: an error code
-  prefixed `payments.` landed beside twelve `payment.` siblings (renaming a shipped code is a
-  migration), and a spec used `orphan` to mean what `packages/payments/src/reconcile.ts` calls
-  `unmatched`.
+  prefixed `payments.` landed beside twelve `payment.` siblings (once a venue is live, renaming a
+  code is a migration), and a spec used `orphan` to mean what `packages/payments/src/reconcile.ts`
+  calls `unmatched`.
 - **A behaviour change retires every receipt about the old behaviour — editing a file is not auditing
   it.** Read the runbooks and the README paraphrases across the whole base-to-tip range, not the three
   lines of context a diff shows; per-task review cannot see this class. Cost:
