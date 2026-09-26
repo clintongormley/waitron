@@ -5,6 +5,7 @@ import type { ObjectStore, PutCondition } from "./object-store.js";
 import { PROBE_PREFIX, probeBucket } from "./probe.js";
 import { createS3ObjectStore } from "./s3-store.js";
 import { createMemoryObjectStore } from "./testing/memory-store.js";
+import { silentBucket } from "./testing/silent-bucket.js";
 
 const NONCE = "nonce-1";
 const KEY = `${PROBE_PREFIX}${NONCE}.json`;
@@ -425,5 +426,20 @@ describe("probeBucket", () => {
     const key = store.calls[0]!.key;
     expect(key.startsWith(PROBE_PREFIX)).toBe(true);
     expect(key).not.toBe(KEY);
+  });
+});
+
+describe("a bucket that takes the connection and never answers", () => {
+  it("is thrown as unreachable once the client gives up, not reported as a refusal", async () => {
+    const bucket = await silentBucket();
+    try {
+      const store = createS3ObjectStore(bucket.config, { idleMs: 100 });
+      await expect(probeBucket(store, NONCE)).rejects.toMatchObject({
+        code: "backup.stream_request_failed",
+        params: { operation: "put", key: KEY, status: null, name: "TimeoutError" },
+      });
+    } finally {
+      await bucket.close();
+    }
   });
 });

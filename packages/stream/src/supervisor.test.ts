@@ -6,8 +6,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
+import type { BucketOperation } from "./errors.js";
 import { claimGeneration, generationPrefix, markerKey } from "./generations.js";
-import { generationName } from "./names.js";
+import { generationName, venuePrefix } from "./names.js";
+import type { ObjectStore } from "./object-store.js";
 import {
   pointerKey,
   readPointer,
@@ -17,8 +19,9 @@ import {
 } from "./pointer.js";
 import { CommitLog } from "./freshness.js";
 import { PROBE_PREFIX } from "./probe.js";
-import type { BucketConfig } from "./s3-store.js";
+import { createS3ObjectStore, type BucketConfig } from "./s3-store.js";
 import { FakeLitestream } from "./testing/fake-litestream.js";
+import { silentBucket } from "./testing/silent-bucket.js";
 import { SwitchableStore } from "./testing/switchable-store.js";
 import {
   OPEN_RETRY_MS,
@@ -171,6 +174,8 @@ interface HarnessOptions {
   bucketAheadMs?: number;
   /** False gives `successor()` a record of the pointers sent of its own, not the first one's. */
   shareSentPointers?: boolean;
+  /** What the supervisor reaches the bucket through, given the harness's own store. */
+  wrapStore?: (store: ObjectStore) => ObjectStore;
 }
 
 async function harness(options: HarnessOptions = {}) {
@@ -246,7 +251,7 @@ async function harness(options: HarnessOptions = {}) {
       }
       return litestream.spawn(bin, args, env);
     },
-    store,
+    store: options.wrapStore?.(store) ?? store,
     sleep: clock.sleep,
     onCommit: (next) => {
       listener = next;
@@ -318,6 +323,32 @@ async function streaming(options: HarnessOptions = {}) {
   await h.clock.until(() => h.supervisor.status().state === "streaming");
   return { ...h, generation };
 }
+
+/**
+ * Sends each call `pick` chooses, until `answering` is set, through the real S3 store to a bucket
+ * that takes the connection and never answers; the store gives such a call up after `idleMs`.
+ */
+async function silentFor(pick: (operation: BucketOperation, key: string) => boolean) {
+  const silent = await silentBucket();
+  cleanups.push(() => silent.close());
+  const unanswered = createS3ObjectStore(silent.config, { idleMs: 100 });
+  const state = { answering: false, sent: 0 };
+  const via = (inner: ObjectStore, operation: BucketOperation, key: string) => {
+    if (state.answering || !pick(operation, key)) return inner;
+    state.sent += 1;
+    return unanswered;
+  };
+  const wrap = (inner: ObjectStore): ObjectStore => ({
+    get: (key) => via(inner, "get", key).get(key),
+    put: (key, body, condition) => via(inner, "put", key).put(key, body, condition),
+    list: (prefix) => via(inner, "list", prefix).list(prefix),
+    delete: (key) => via(inner, "delete", key).delete(key),
+    deleteMany: (keys) => via(inner, "delete", keys[0] ?? "").deleteMany(keys),
+  });
+  return { wrap, state, connections: () => silent.connections() };
+}
+
+const REQUEST_FAILED = { errorCode: "backup.stream_request_failed" };
 
 const pointerFrom = (nodeId: string, term: number, generation: string): SignedPointer => ({
   body: { venueId: VENUE, term, nodeId, generation, writtenAt: new Date(START).toISOString() },
@@ -749,6 +780,65 @@ describe("opening a generation", () => {
     await vi.waitFor(() => expect(h.supervisor.status().reason).toBe("litestream_unavailable"));
     expect(h.litestream.children[0]!.killed).toBe(true);
   });
+
+  it.each<[string, (operation: BucketOperation, key: string) => boolean]>([
+    ["the bucket check", (operation, key) => operation === "put" && key.startsWith(PROBE_PREFIX)],
+    ["the pointer read", (operation, key) => operation === "get" && key === pointerKey(VENUE)],
+    ["the claim", (operation, key) => operation === "put" && key.endsWith("/opened.json")],
+  ])(
+    "gives %s up when the bucket takes the connection and never answers, and opens once it answers",
+    async (_step, pick) => {
+      const silent = await silentFor(pick);
+      const h = await harness({ wrapStore: silent.wrap });
+      await h.supervisor.start();
+      await vi.waitFor(
+        () =>
+          expect(h.logs).toContainEqual({
+            level: "warn",
+            event: "stream.open_failed",
+            fields: REQUEST_FAILED,
+          }),
+        { timeout: 3_000 },
+      );
+      expect(silent.connections()).toBe(3);
+      expect(h.supervisor.status().state).toBe("opening");
+      expect(h.litestream.running()).toBeUndefined();
+
+      silent.state.answering = true;
+      await h.clock.until(() => h.litestream.running() !== undefined);
+      expect(h.clock.slept).toContain(OPEN_RETRY_MS);
+      h.store.upload(fullCopyOf(h.supervisor.status().generation!));
+      await h.clock.until(() => h.supervisor.status().state === "streaming");
+    },
+    10_000,
+  );
+
+  it("gives the pointer write up when the bucket takes the connection and never answers, and writes it again", async () => {
+    const silent = await silentFor(
+      (operation, key) => operation === "put" && key === pointerKey(VENUE),
+    );
+    const h = await harness({ wrapStore: silent.wrap });
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    const generation = h.supervisor.status().generation!;
+    h.store.upload(fullCopyOf(generation));
+    await h.clock.until(() => silent.state.sent > 0);
+    await vi.waitFor(
+      () =>
+        expect(h.logs).toContainEqual({
+          level: "warn",
+          event: "stream.pointer_write_failed",
+          fields: REQUEST_FAILED,
+        }),
+      { timeout: 3_000 },
+    );
+    expect(h.supervisor.status()).toMatchObject({ state: "opening", generation });
+
+    silent.state.answering = true;
+    await h.clock.until(() => h.supervisor.status().state === "streaming");
+    expect(h.supervisor.status().generation).toBe(generation);
+    expect((await readPointer(h.store, VENUE))?.pointer.body.generation).toBe(generation);
+  }, 10_000);
 
   it("retries opening after a bucket error, under a new generation", async () => {
     const h = await harness();
@@ -1201,9 +1291,7 @@ describe("while streaming", () => {
     expect(h.logs.some((line) => line.event === "stream.resumed")).toBe(true);
   });
 
-  // The S3 client sets no request timeout: a listing sent to a server that accepts the connection
-  // and never replies was still pending after 20,000 ms (`@smithy/node-http-handler` 4.12.1).
-  it("asks the bucket again when a question during the pause goes unanswered, and resumes once one is answered", async () => {
+  it("asks the bucket again when a question during the pause goes unanswered, logs it, and resumes once one is answered", async () => {
     const h = await streaming();
     const list = h.store.list.bind(h.store);
     let questions = 0;
@@ -1221,8 +1309,29 @@ describe("while streaming", () => {
     await h.clock.until(() => h.supervisor.status().state === "streaming");
     expect(questions).toBe(2);
     expect(h.clock.slept).toContain(READ_DEADLINE_MS);
+    expect(h.logs.filter((line) => line.event === "stream.pause_check_failed")).toEqual([
+      { level: "warn", event: "stream.pause_check_failed", fields: { errorCode: "timeout" } },
+    ]);
     expect(h.supervisor.status().generation).toBe(h.generation);
     expect(h.litestream.running()).toBeDefined();
+  });
+
+  it("logs nothing about a question during the pause that is still waiting when stopped", async () => {
+    const h = await streaming();
+    const list = h.store.list.bind(h.store);
+    let asked = false;
+    h.store.list = async (prefix) => {
+      if (prefix.endsWith("/0000/") && h.supervisor.status().state === "paused") {
+        asked = true;
+        await new Promise<never>(() => {});
+      }
+      return list(prefix);
+    };
+    h.setWal(LIMIT);
+    await h.clock.until(() => asked);
+    await h.clock.asleep();
+    await h.supervisor.stop();
+    expect(h.logs.some((line) => line.event === "stream.pause_check_failed")).toBe(false);
   });
 
   it("stays paused when a question during the pause throws before it is sent, and resumes once one is answered", async () => {
@@ -1485,6 +1594,39 @@ describe("generation housekeeping", () => {
     );
     expect(h.supervisor.status().state).toBe("streaming");
   });
+
+  it.each<[string, (operation: BucketOperation, key: string) => boolean]>([
+    ["listing", (operation, key) => operation === "list" && key === venuePrefix(VENUE)],
+    ["delete", (operation, key) => operation === "delete" && !key.startsWith(PROBE_PREFIX)],
+  ])(
+    "gives a prune's %s up when the bucket takes the connection and never answers, and prunes the next day",
+    async (_call, pick) => {
+      const silent = await silentFor(pick);
+      const h = await streaming({ wrapStore: silent.wrap });
+      const old = generationName(1, "node-old", new Date(Date.parse(START) - 9 * DAY));
+      oldGeneration(h, old, Date.parse(START) - 8 * DAY);
+      h.clock.advance(8 * DAY);
+      await h.clock.next(); // the streaming tick
+      await vi.waitFor(
+        () =>
+          expect(h.logs).toContainEqual({
+            level: "warn",
+            event: "stream.prune_failed",
+            fields: REQUEST_FAILED,
+          }),
+        { timeout: 3_000 },
+      );
+      expect(silent.connections()).toBe(3);
+      expect(h.store.has(fullCopyOf(old))).toBe(true);
+
+      silent.state.answering = true;
+      h.clock.advance(PRUNE_EVERY_MS);
+      await h.clock.next();
+      await vi.waitFor(() => expect(h.store.has(fullCopyOf(old))).toBe(false));
+      expect(h.supervisor.status().state).toBe("streaming");
+    },
+    10_000,
+  );
 
   // A bucket that never answers must not hold the tick: the side-file limit is checked there.
   it("does not wait for the prune: a bucket that never answers still lets the tick pause at the limit", async () => {

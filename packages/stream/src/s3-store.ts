@@ -32,11 +32,26 @@ export interface BucketConfig {
 }
 
 export interface S3ObjectStoreOptions {
-  /** Replaces the network. Tests only. */
+  /** Replaces the network, and with it {@link BUCKET_IDLE_MS}. Tests only. */
   requestHandler?: S3ClientConfig["requestHandler"];
   /** Replaces the wait between conflict retries. Tests only. */
   sleep?: (ms: number) => Promise<void>;
+  /** Replaces {@link BUCKET_IDLE_MS}. Tests only. */
+  idleMs?: number;
 }
+
+/**
+ * The handler's `socketTimeout`. A request that gets no reply is given up, and the client makes
+ * three attempts in all (its default). An answer whose headers arrive within the first three
+ * seconds and whose body then stalls is not given up: at this size the handler sets the limit three
+ * seconds into the request, so headers that arrive before then cancel it before it is set; once
+ * set, it stays for the rest of the request. `requestTimeout` is not used because it stops counting
+ * at the headers and only warns unless `throwOnRequestTimeout` is set.
+ * Thirty seconds keeps the three attempts inside the stream's five-minute read deadline
+ * (`READ_DEADLINE_MS`, `./supervisor.ts`). Receipts: docs/backlog.md, "the stream's other bucket
+ * calls are bounded".
+ */
+const BUCKET_IDLE_MS = 30_000;
 
 /** S3's own limit: "The request can contain a list of up to 1,000 keys" (API_DeleteObjects). */
 const DELETE_BATCH_KEYS = 1000;
@@ -113,7 +128,7 @@ export function createS3ObjectStore(
     // if endpoint is set".
     forcePathStyle: config.endpoint !== undefined,
     credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
-    ...(options.requestHandler === undefined ? {} : { requestHandler: options.requestHandler }),
+    requestHandler: options.requestHandler ?? { socketTimeout: options.idleMs ?? BUCKET_IDLE_MS },
   });
   const wait = options.sleep ?? sleep;
   const bucket = config.bucket;

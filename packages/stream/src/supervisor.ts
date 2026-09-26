@@ -857,9 +857,9 @@ export class StreamSupervisor {
   }
 
   /**
-   * False when the listing is refused, or unanswered after {@link READ_DEADLINE_MS}: the S3 client
-   * sets no request timeout: a listing sent to a server that accepts the connection and never
-   * replies was still pending after 20,000 ms (`@smithy/node-http-handler` 4.12.1).
+   * False when the listing is refused, or unanswered after {@link READ_DEADLINE_MS}, which is logged.
+   * The deadline is still needed because the S3 store's own limit (`BUCKET_IDLE_MS`) does not bound
+   * an answer that keeps arriving, or one whose body stalls after early headers.
    */
   async #bucketAnswers(generation: string, signal: AbortSignal): Promise<boolean> {
     const deadline = new AbortController();
@@ -874,10 +874,18 @@ export class StreamSupervisor {
       }
     };
     try {
-      return await Promise.race([
+      const answer = await Promise.race([
         listed(),
-        this.#sleep(READ_DEADLINE_MS, AbortSignal.any([signal, deadline.signal])).then(() => false),
+        this.#sleep(READ_DEADLINE_MS, AbortSignal.any([signal, deadline.signal])).then(
+          () => "timeout" as const,
+        ),
       ]);
+      if (answer !== "timeout") return answer;
+      // The sleep also ends when the run is stopped, which is no deadline.
+      if (!signal.aborted) {
+        this.#deps.log("warn", "stream.pause_check_failed", { errorCode: "timeout" });
+      }
+      return false;
     } finally {
       deadline.abort();
     }

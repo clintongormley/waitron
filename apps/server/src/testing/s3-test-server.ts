@@ -45,7 +45,7 @@ export interface S3TestServer {
   log(): string;
   /** SIGTERM, then SIGKILL after a grace period; resolves once the process is gone either way. */
   stop(): Promise<void>;
-  /** Freezes the process (SIGSTOP): every call to it then hangs, answering nothing. */
+  /** Freezes the process (SIGSTOP): every call to it then goes unanswered. */
   pause(): void;
   /** Lets a paused process run again (SIGCONT). */
   resume(): void;
