@@ -4,7 +4,7 @@ import { formatMoney } from "@waitron/shared";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillProductGrid } from "./product-grid.js";
-import { TillModifierPicker } from "./modifier-picker.js";
+import { TillModifierPicker, type ModifierConfirmDetail } from "./modifier-picker.js";
 import { sellingValuesOf, type OfferedModifier, type TillProduct } from "../api/client.js";
 import { currentLocale } from "../i18n/t.js";
 
@@ -898,6 +898,35 @@ describe("till-modifier-picker", () => {
       addButton(picker).click();
       await el.updateComplete;
       expect(store.lines[0]!.note).toBe("well seasoned, no butter");
+    });
+
+    it("keeps the note out of a reopen unless asked to edit it", async () => {
+      const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+        product: burger,
+        initialSelections: { extras: [], options: [], note: "sin sal" },
+      });
+      expect(noteBox(el)).toBeNull();
+    });
+
+    it("shows and seeds the line's note on a reopen that edits it, and carries the edited note", async () => {
+      const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+        product: burger,
+        initialSelections: {
+          extras: [],
+          options: [{ listId: "list-cooked", labelId: "label-rare" }],
+          note: "sin sal",
+        },
+        withNote: true,
+      });
+      expect(noteBox(el)!.value).toBe("sin sal");
+      let detail: ModifierConfirmDetail | undefined;
+      el.addEventListener("wt-modifier-confirm", (e) => (detail = (e as CustomEvent).detail));
+      const note = noteBox(el)!;
+      note.value = "sin sal, bien hecha";
+      note.dispatchEvent(new Event("input"));
+      await el.updateComplete;
+      addButton(el).click();
+      expect(detail!.note).toBe("sin sal, bien hecha");
     });
 
     it("folds a whitespace-only note to nothing (not chosen)", async () => {

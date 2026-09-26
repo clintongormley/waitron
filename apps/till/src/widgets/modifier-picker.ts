@@ -159,6 +159,10 @@ export class TillModifierPicker extends LitElement {
    * a fresh open seeds the offer's defaults, a reopen never does. */
   @property({ attribute: false }) initialSelections?: LineSelection;
 
+  /** Shows the note field on a reopen too, seeded from `initialSelections.note`. A fresh open always
+   * shows it; a basket reopen leaves the note to the basket's own editor. */
+  @property({ type: Boolean }) withNote = false;
+
   /** How many of each offered product is taken, keyed by {@link pickKey}. */
   @state() private picks: Record<string, number> = {};
 
@@ -176,6 +180,7 @@ export class TillModifierPicker extends LitElement {
     if (this.#seeded || !this.product) return;
     this.#seeded = true;
     if (this.initialSelections !== undefined) {
+      if (this.withNote) this.note = this.initialSelections.note ?? "";
       for (const extra of this.initialSelections.extras ?? [])
         this.picks[pickKey(extra.listId, extra.productId)] = extra.quantity;
       for (const answer of this.initialSelections.options ?? [])
@@ -464,7 +469,7 @@ export class TillModifierPicker extends LitElement {
           </p>`,
       )}
       ${
-        this.initialSelections !== undefined
+        this.initialSelections !== undefined && !this.withNote
           ? nothing
           : renderLineExtrasEditor({
               note: this.note,
