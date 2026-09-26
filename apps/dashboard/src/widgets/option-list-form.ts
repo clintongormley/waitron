@@ -66,6 +66,11 @@ export class OptionListForm extends LitElement {
       td:last-child {
         text-align: end;
       }
+      /* A row holds one line of text beside two tap-target-high controls, so all three are centred
+         on it; the shared table styles put a cell's content at its top. */
+      tbody td {
+        vertical-align: middle;
+      }
       /* The preselect control is a native radio, which is far smaller than a finger. The tap target
          is the LABEL that contains it, never the radio stretched past its own box
          (design-system.md → "Hit targets must not overflow their container"). */
@@ -82,6 +87,8 @@ export class OptionListForm extends LitElement {
          color-scheme (packages/ui-core/src/tokens/colors.test.ts). */
       input[type="radio"] {
         accent-color: var(--wt-color-primary);
+        /* The user agent's own margin is lopsided (none below), which sets the dot off-centre. */
+        margin: 0;
       }
       .label-actions {
         display: flex;

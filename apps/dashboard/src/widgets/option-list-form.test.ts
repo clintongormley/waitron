@@ -1,4 +1,4 @@
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
@@ -878,3 +878,31 @@ it("closes the option editor when the list is closed or reopened", async () => {
   await el.updateComplete;
   expect(editor(el).open).toBe(false);
 });
+
+it.each([1280, 390])(
+  "centres an option's name, radio and menu on one line at %ipx",
+  async (frame) => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(frame, 844);
+    try {
+      const { el } = await mount({ value: cooked });
+      const row = el.shadowRoot!.querySelector(`tr[data-label="${RARE}"]`)!;
+      const middle = (node: Element) => {
+        const box = node.getBoundingClientRect();
+        return box.top + box.height / 2;
+      };
+      const name = middle(row.querySelector('[data-test="label-0-name"]')!);
+      const pick = middle(row.querySelector('[data-test="label-0-default"]')!);
+      const menu = middle(
+        row.querySelector("wt-row-actions")!.shadowRoot!.querySelector("button")!,
+      );
+
+      expect(window.innerWidth).toBe(frame);
+      expect(Math.abs(pick - name), "radio").toBeLessThanOrEqual(1);
+      expect(Math.abs(menu - name), "menu").toBeLessThanOrEqual(1);
+    } finally {
+      await page.viewport(width, height);
+    }
+  },
+);
