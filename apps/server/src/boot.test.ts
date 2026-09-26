@@ -3622,6 +3622,43 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     }
   }, 60_000);
 
+  it("stages the reset of an adopt that stopped partway and requests a restart", async () => {
+    const venue = await freshVenue();
+    const personId = "33333333-3333-4333-8333-333333333333";
+    const operationId = "44444444-4444-4444-8444-444444444444";
+    try {
+      await withSetupBoot(venue.directory, {}, async ({ post, kills, stateDir }) => {
+        await writeFile(
+          join(stateDir, "setup-operation.json"),
+          JSON.stringify({
+            version: 1,
+            id: operationId,
+            kind: "adopt",
+            requestHash: "a-request",
+            phase: "venue_committed",
+            data: { resetProof: { personId, passwordHash: hashPassword("the-password") } },
+            updatedAt: "2026-09-26T00:00:00.000Z",
+          }),
+        );
+        const response = await post("/setup-api/reset-incomplete-adopt", {
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ personId, password: "the-password" }),
+        });
+        expect(response.status).toBe(202);
+        expect(await response.json()).toEqual({ resetStaged: true, restarting: true });
+        expect(JSON.parse(await readFile(join(stateDir, "reset-request.json"), "utf8"))).toEqual({
+          version: 1,
+          operationId,
+        });
+        await poll(() => (kills.length > 0 ? kills.length : undefined));
+        expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
+      });
+    } finally {
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("refuses an adopt into a database stamped for another environment without locking setup", async () => {
     const venue = await freshVenue();
     const bundle = {

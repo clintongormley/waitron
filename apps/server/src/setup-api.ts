@@ -10,7 +10,12 @@ import {
   resolveFiscalJurisdiction,
 } from "@waitron/country";
 import { getVenueSetupCountryPack, resolveInstalledCountryLocale } from "@waitron/country-packs";
-import { hashPassword, hashPin, normalizeAndValidateEmail } from "@waitron/identity";
+import {
+  hashPassword,
+  hashPin,
+  normalizeAndValidateEmail,
+  verifyPassword,
+} from "@waitron/identity";
 import { AppError, FALLBACK_LOCALE, SUPPORTED_LOCALE_CODES, isAppError } from "@waitron/shared";
 import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
@@ -21,6 +26,7 @@ import type { TradingConfig } from "./trading-config.js";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
 import { resolveLoginLocale } from "./login-locale.js";
+import { createPasswordThrottle } from "./password-throttle.js";
 import { assertSafePrimaryUrl } from "./primary-url.js";
 import { mountSpa } from "./spa-api.js";
 import type { Logger } from "./logger.js";
@@ -94,6 +100,8 @@ export interface SetupDeps {
   /** Checks the owner's bucket and stages a rebuild from it for the entrypoint to write after
    * restart. Rejects with the refusal, having staged nothing. */
   stageBucketRestore?: (input: BucketRestoreInput) => Promise<void>;
+  /** Stages the reset of the adopt `operationId` for the entrypoint to carry out after restart. */
+  stageReset?: (operationId: string) => Promise<void>;
   /** Fresh replacement's private Cloud snapshot recovery client. */
   cloudRecovery?: Omit<
     ReturnType<typeof createCloudRecoveryClient>,
@@ -201,6 +209,31 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 const runAdopt = createErrorBoundary(ADOPT_STATUS, "setup.adopt_failed");
+
+const RESET_STATUS: Record<string, ContentfulStatusCode> = {
+  "setup.request_invalid": 400,
+  "password.invalid": 401,
+  "setup.reset_unavailable": 409,
+  "password.throttled": 429,
+};
+
+const runReset = createErrorBoundary(RESET_STATUS, "setup.reset_failed");
+
+/**
+ * Whether `personId` and `password` are the admin login the primary accepted for the adopt that
+ * stopped partway. It does NOT establish that the admin is still active on the primary, and the
+ * one-time code is not checked again.
+ */
+function matchesResetProof(proof: unknown, personId: string, password: string): boolean {
+  const saved =
+    typeof proof === "object" && proof !== null ? (proof as Record<string, unknown>) : {};
+  const passwordMatches = verifyPassword(
+    password,
+    typeof saved.passwordHash === "string" ? saved.passwordHash : "",
+  );
+  return passwordMatches && saved.personId === personId;
+}
+
 /**
  * The refusals every restore route (archive, Cloud and bucket) meets from the same validation, so
  * each code answers one status on all three: a copy or key that cannot be opened is 422; an
@@ -735,9 +768,15 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         {
           // For adopt this phase means "adopt is past its own checks and may have written to this
           // node": the store keeps a record past "started", so a different request cannot run over
-          // a half-adopted node.
+          // a half-adopted node. Adopt reaches this only after the primary accepted the login, which
+          // is what makes it the proof the reset route asks for.
           beforeFirstWrite: async () => {
-            await operation?.advance("venue_committed");
+            await operation?.advance("venue_committed", {
+              resetProof: {
+                personId: credential.personId,
+                passwordHash: hashPassword(credential.password),
+              },
+            });
           },
         },
       );
@@ -770,6 +809,61 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
                 return response;
               });
         succeeded = response.ok;
+        return response;
+      } finally {
+        if (!succeeded) provisioning = false;
+      }
+    });
+  });
+
+  // These routes are unauthenticated on the LAN, so without the proof anyone on the network could
+  // wipe a half-adopted box. The wipe itself happens at the next start, under the venue lock.
+  const resetThrottle = createPasswordThrottle();
+  app.post("/setup-api/reset-incomplete-adopt", async (c) => {
+    const stageReset = deps.stageReset;
+    const requestRestart = deps.requestRestart;
+    const operations = deps.operations;
+    if (stageReset === undefined || requestRestart === undefined || operations === undefined) {
+      return directError(c, log, "setup.not_ready", 503);
+    }
+    if (provisioning || fiscalTesting || configurationStaging) {
+      return directError(c, log, "setup.already_provisioning", 409);
+    }
+    provisioning = true;
+
+    return runReset(c, log, async () => {
+      let succeeded = false;
+      try {
+        const body = await readJsonBody<{ personId?: unknown; password?: unknown }>(c);
+        const personId = asString(body.personId, "personId");
+        const password = asString(body.password, "password");
+        const record = await operations.read().catch((error: unknown) => {
+          if (isAppError(error) && error.code === "setup.operation_conflict") return null;
+          throw error;
+        });
+        if (
+          record === null ||
+          record.kind !== "adopt" ||
+          record.phase === "started" ||
+          record.phase === "complete"
+        ) {
+          throw new AppError("setup.reset_unavailable", {});
+        }
+        const finish = resetThrottle.begin(personId);
+        let outcome: "success" | "invalid" | "error" = "error";
+        try {
+          outcome = matchesResetProof(record.data.resetProof, personId, password)
+            ? "success"
+            : "invalid";
+        } finally {
+          finish(outcome);
+        }
+        if (outcome === "invalid") throw new AppError("password.invalid", {});
+
+        await stageReset(record.id);
+        const response = c.json({ resetStaged: true, restarting: true }, 202);
+        setTimeout(() => requestRestart(), 0);
+        succeeded = true;
         return response;
       } finally {
         if (!succeeded) provisioning = false;

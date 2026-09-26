@@ -53,6 +53,7 @@ import { buildServeOptions, type TlsFiles } from "./tls.js";
 import { mintedBoxLeaf } from "./box-secrets.js";
 import { mountDiscovery } from "./discovery-api.js";
 import { runStagedRestore, type StagedRestoreDeps } from "./restore-request.js";
+import { runStagedReset, type StagedResetDeps } from "./reset-request.js";
 import { clearReplacedDatabases } from "./restore.js";
 import { loadCloudOrigin } from "./cloud-client.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
@@ -177,6 +178,7 @@ export interface EntryDeps {
    *  precisely when its configuration is what is broken. */
   venueDir: string;
   runStagedRestore?: (deps: StagedRestoreDeps) => Promise<boolean>;
+  runStagedReset?: (deps: StagedResetDeps) => Promise<boolean>;
   /** Defaults to the real `assertNotAhead` below, never a no-op: it is a guard, and a no-op default
    *  is lost silently by any caller that forgets the dependency. */
   assertNotAhead?: (venueDir: string, migrationsRoot: string) => Promise<void>;
@@ -352,9 +354,10 @@ export async function assertNotAhead(venueDir: string, migrationsRoot: string): 
  * 3. It clears only from the stayed-up callback — `startServer` resolved and the process then
  *    survived `STAYED_UP_MS`. Clearing on "started" alone would let a module throwing seconds in
  *    reset the counter on every attempt.
- * 4. The ahead check runs after `runStagedRestore`, which replaces the venue files, and before
- *    `startServer`, which migrates and then queries the schema. It judges a database nothing has
- *    migrated yet, which the one-directional comparison in `assertNotAhead` makes safe.
+ * 4. The ahead check runs after `runStagedRestore` and `runStagedReset`, which replace or remove
+ *    the venue files, and before `startServer`, which migrates and then queries the schema. It
+ *    judges a database nothing has migrated yet, which the one-directional comparison in
+ *    `assertNotAhead` makes safe.
  * 5. After the staged restore, the start holds the venue folder from clearing set-aside folders
  *    until `startServer` settles or an earlier step throws, so another process's placement cannot
  *    run in between: one that failed with the old database set aside would leave no `venue.db`,
@@ -438,6 +441,11 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
             environment: "preproduction",
           }).markRestored(binding);
       },
+    });
+    await (deps.runStagedReset ?? runStagedReset)({
+      stateDir: deps.stateDir,
+      venueDir: deps.venueDir,
+      log: deps.log,
     });
 
     // Ordering 5 in the doc comment above.

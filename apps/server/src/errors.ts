@@ -526,6 +526,11 @@ declare module "@waitron/shared" {
      */
     "setup.adopt_incomplete": Record<string, never>;
     /**
+     * A reset from the setup wizard was asked for, but no adopt stopped partway on this box: there
+     * is no saved operation, it is not an adopt, or that adopt never wrote here or finished.
+     */
+    "setup.reset_unavailable": Record<string, never>;
+    /**
      * A first-boot setup POST arrived before the box wired the dependencies that action needs; the
      * box is up but cannot serve it yet.
      */

@@ -3160,3 +3160,353 @@ describe("the setup latch after a request refused before its work starts", () =>
     },
   );
 });
+
+describe("POST /setup-api/reset-incomplete-adopt", () => {
+  const OPERATION_ID = "00000000-0000-4000-8000-0000000000aa";
+  const recordPath = (dir: string): string => join(dir, "setup-operation.json");
+  const unavailable = { error: { code: "setup.reset_unavailable", params: {} } };
+  const invalid = { error: { code: "password.invalid", params: {} } };
+
+  async function postReset(app: Hono, body: unknown): Promise<Response> {
+    return app.request("/setup-api/reset-incomplete-adopt", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: typeof body === "string" ? body : JSON.stringify(body),
+    });
+  }
+
+  const resetBody = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+    personId: ADOPT_CREDENTIAL.personId,
+    password: ADOPT_CREDENTIAL.password,
+    ...over,
+  });
+
+  function writeRecord(dir: string, kind: string, phase: string, data = {}): void {
+    writeFileSync(
+      recordPath(dir),
+      JSON.stringify({
+        version: 1,
+        id: OPERATION_ID,
+        kind,
+        requestHash: "a-request",
+        phase,
+        data,
+        updatedAt: "2026-09-26T00:00:00.000Z",
+      }),
+    );
+  }
+
+  /** A box whose adopt failed after its first write, as the adopt route leaves it. */
+  async function halfAdopted(
+    dir: string,
+    overrides: Partial<SetupDeps> = {},
+  ): Promise<{
+    app: Hono;
+    stageReset: ReturnType<typeof vi.fn>;
+    requestRestart: ReturnType<typeof vi.fn>;
+  }> {
+    const adopt = vi.fn(async (_req: AdoptRequest, hooks: AdoptHooks) => {
+      await hooks.beforeFirstWrite();
+      throw new AppError("mirror.bundle_fetch_failed", {});
+    });
+    const stageReset = vi.fn(async () => {});
+    const app = new Hono();
+    const { deps, requestRestart } = makeAdoptDeps({
+      adopt,
+      operations: createSetupOperationStore(dir),
+      stageReset,
+      ...overrides,
+    });
+    mountSetup(app, deps, noopLog);
+    expect((await postAdopt(app, adoptBody())).status).toBe(502);
+    return { app, stageReset, requestRestart };
+  }
+
+  it("stages the reset of the adopt that stopped partway, given the login the primary accepted, and restarts", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-"));
+    try {
+      const { app, stageReset, requestRestart } = await halfAdopted(dir);
+      const record = await createSetupOperationStore(dir).read();
+      expect(record?.phase).toBe("venue_committed");
+
+      const response = await postReset(app, resetBody());
+      expect(response.status).toBe(202);
+      expect(await response.json()).toEqual({ resetStaged: true, restarting: true });
+      expect(stageReset).toHaveBeenCalledOnce();
+      expect(stageReset).toHaveBeenCalledWith(record?.id);
+      expect(requestRestart).not.toHaveBeenCalled();
+      await tick();
+      expect(requestRestart).toHaveBeenCalledOnce();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("saves the proof as the person id and a password hash, never the password", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-proof-"));
+    try {
+      await halfAdopted(dir);
+      const text = readFileSync(recordPath(dir), "utf8");
+      expect(text).not.toContain(ADOPT_CREDENTIAL.password);
+      const proof = (await createSetupOperationStore(dir).read())?.data.resetProof as {
+        personId: string;
+        passwordHash: string;
+      };
+      expect(proof.personId).toBe(ADOPT_CREDENTIAL.personId);
+      expect(verifyPassword(ADOPT_CREDENTIAL.password, proof.passwordHash)).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ["a wrong password", resetBody({ password: "not-the-password" })],
+    ["a different person id", resetBody({ personId: "99999999-9999-9999-9999-999999999999" })],
+  ])(
+    "refuses %s with password.invalid, staging nothing and leaving the record",
+    async (_label, body) => {
+      const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-wrong-"));
+      try {
+        const { app, stageReset, requestRestart } = await halfAdopted(dir);
+        const before = readFileSync(recordPath(dir), "utf8");
+
+        const response = await postReset(app, body);
+        expect(response.status).toBe(401);
+        expect(await response.json()).toEqual(invalid);
+        expect(stageReset).not.toHaveBeenCalled();
+        expect(readFileSync(recordPath(dir), "utf8")).toBe(before);
+        await tick();
+        expect(requestRestart).not.toHaveBeenCalled();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("refuses a record saved without a proof with password.invalid", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-no-proof-"));
+    try {
+      writeRecord(dir, "adopt", "venue_committed");
+      const stageReset = vi.fn(async () => {});
+      const app = new Hono();
+      mountSetup(
+        app,
+        makeAdoptDeps({ operations: createSetupOperationStore(dir), stageReset }).deps,
+        noopLog,
+      );
+      const response = await postReset(app, resetBody());
+      expect(response.status).toBe(401);
+      expect(await response.json()).toEqual(invalid);
+      expect(stageReset).not.toHaveBeenCalled();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ["no record", () => {}],
+    ["an adopt still at its own checks", (dir: string) => writeRecord(dir, "adopt", "started")],
+    ["a completed adopt", (dir: string) => writeRecord(dir, "adopt", "complete")],
+    ["a provision in progress", (dir: string) => writeRecord(dir, "provision", "venue_committed")],
+    ["a record that cannot be read", (dir: string) => writeFileSync(recordPath(dir), "{")],
+  ])("refuses with setup.reset_unavailable given %s", async (_label, arrange) => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-unavailable-"));
+    try {
+      arrange(dir);
+      const stageReset = vi.fn(async () => {});
+      const app = new Hono();
+      const { deps, requestRestart } = makeAdoptDeps({
+        operations: createSetupOperationStore(dir),
+        stageReset,
+      });
+      mountSetup(app, deps, noopLog);
+      const response = await postReset(app, resetBody());
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual(unavailable);
+      expect(stageReset).not.toHaveBeenCalled();
+      await tick();
+      expect(requestRestart).not.toHaveBeenCalled();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses after an adopt that completed", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-completed-"));
+    try {
+      const stageReset = vi.fn(async () => {});
+      const app = new Hono();
+      mountSetup(
+        app,
+        makeAdoptDeps({ operations: createSetupOperationStore(dir), stageReset }).deps,
+        noopLog,
+      );
+      expect((await postAdopt(app, adoptBody())).status).toBe(200);
+      await tick();
+
+      // A second mount, as the box after its restart; the first mount's latch stays held.
+      const restarted = new Hono();
+      mountSetup(
+        restarted,
+        makeAdoptDeps({ operations: createSetupOperationStore(dir), stageReset }).deps,
+        noopLog,
+      );
+      const response = await postReset(restarted, resetBody());
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual(unavailable);
+      expect(stageReset).not.toHaveBeenCalled();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("throttles repeated wrong passwords with password.throttled", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-throttle-"));
+    try {
+      const { app, stageReset } = await halfAdopted(dir);
+      const wrong = resetBody({ password: "not-the-password" });
+      // The PIN policy's free attempts, then the first failure that opens a wait window.
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        expect((await postReset(app, wrong)).status).toBe(401);
+      }
+      const throttled = await postReset(app, resetBody());
+      expect(throttled.status).toBe(429);
+      expect(await throttled.json()).toMatchObject({
+        error: { code: "password.throttled", params: { retryAfterSeconds: expect.any(Number) } },
+      });
+      expect(stageReset).not.toHaveBeenCalled();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ["personId", { password: "x" }],
+    ["password", { personId: ADOPT_CREDENTIAL.personId, password: "" }],
+  ])(
+    "refuses a missing or empty %s with setup.request_invalid, never echoing it",
+    async (field, body) => {
+      const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-shape-"));
+      try {
+        const { app, stageReset } = await halfAdopted(dir);
+        const response = await postReset(app, body);
+        expect(response.status).toBe(400);
+        expect(await response.json()).toEqual({
+          error: { code: "setup.request_invalid", params: { field } },
+        });
+        expect(stageReset).not.toHaveBeenCalled();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.each([
+    ["stageReset", { stageReset: undefined }],
+    ["requestRestart", { requestRestart: undefined }],
+    ["operations", { operations: undefined }],
+  ] as const)("answers 503 setup.not_ready when %s is unwired", async (_dep, unwired) => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-unwired-"));
+    try {
+      writeRecord(dir, "adopt", "venue_committed");
+      const app = new Hono();
+      mountSetup(
+        app,
+        makeAdoptDeps({
+          operations: createSetupOperationStore(dir),
+          stageReset: vi.fn(async () => {}),
+          ...unwired,
+        }).deps,
+        noopLog,
+      );
+      const response = await postReset(app, resetBody());
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("shares the setup latch: refused while an adopt is in flight, and a refused reset releases it", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-latch-"));
+    try {
+      let release!: (v: { breakGlassSecret: string }) => void;
+      const pending = new Promise<{ breakGlassSecret: string }>((resolve) => {
+        release = resolve;
+      });
+      const adopt = vi.fn(() => pending);
+      const stageReset = vi.fn(async () => {});
+      const app = new Hono();
+      mountSetup(
+        app,
+        makeAdoptDeps({ adopt, stageReset, operations: createSetupOperationStore(dir) }).deps,
+        noopLog,
+      );
+      const inFlight = postAdopt(app, adoptBody());
+      await tick();
+      const blocked = await postReset(app, resetBody());
+      expect(blocked.status).toBe(409);
+      expect(await blocked.json()).toEqual({
+        error: { code: "setup.already_provisioning", params: {} },
+      });
+      release({ breakGlassSecret: BREAK_GLASS_SECRET });
+      expect((await inFlight).status).toBe(200);
+      await tick();
+      expect(stageReset).not.toHaveBeenCalled();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+
+    const next = mkdtempSync(join(tmpdir(), "waitron-setup-reset-latch-release-"));
+    try {
+      const app = new Hono();
+      const { deps } = makeAdoptDeps({
+        operations: createSetupOperationStore(next),
+        stageReset: vi.fn(async () => {}),
+      });
+      mountSetup(app, deps, noopLog);
+      expect((await postReset(app, resetBody())).status).toBe(409);
+      expect((await postAdopt(app, adoptBody())).status).toBe(200);
+      await tick();
+    } finally {
+      rmSync(next, { recursive: true, force: true });
+    }
+  });
+
+  it("answers a record it fails to read as a server fault, and releases the latch", async () => {
+    const read = vi.fn(async () => {
+      throw new Error("EACCES");
+    });
+    const app = new Hono();
+    mountSetup(
+      app,
+      makeAdoptDeps({
+        operations: { read, run: vi.fn() },
+        stageReset: vi.fn(async () => {}),
+      }).deps,
+      noopLog,
+    );
+    const response = await postReset(app, resetBody());
+    expect(response.status).toBe(500);
+    expect((await response.json()).error.code).toBe("server.internal");
+    expect((await postReset(app, resetBody())).status).toBe(500);
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it("never returns the saved proof from the status route", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-status-"));
+    try {
+      const { app } = await halfAdopted(dir);
+      const proof = (await createSetupOperationStore(dir).read())?.data.resetProof as {
+        passwordHash: string;
+      };
+      const text = await (await app.request("/setup-api/status")).text();
+      expect(text).toContain("venue_committed");
+      expect(text).not.toContain(proof.passwordHash);
+      expect(text).not.toContain("passwordHash");
+      expect(text).not.toContain(ADOPT_CREDENTIAL.password);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

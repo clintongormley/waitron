@@ -187,6 +187,15 @@ established. The only way past the refusal on a genuinely production box is deli
 `--force-production`, and, when run at a terminal, also type the word `production` when asked.
 Full design: `docs/superpowers/specs/2026-09-11-waitron-sh-box-command-design.md` §4.
 
+A box whose join to another server stopped partway can also be reset from the setup wizard, without
+a terminal, given the admin login the join used; the server refuses it in any other state. The box
+restarts and, before the server opens the database, removes the venue's databases (`venue.db`,
+`node.db` and their side files, and Litestream's folder beside them), `modules.json`,
+`pending-adoption.json` and the record of the stopped join; it keeps the certificate (`tls/`),
+`secrets.env` and `backup.env`. It does nothing if the box has meanwhile got a `trading.env` or
+holds a venue. It does not remove this box from the other server's list of machines, nor release
+the installation number reserved for it there.
+
 ## The operator CLIs — two different invocation forms
 
 The image has an `ENTRYPOINT` (`node /app/node-entry.js`) and no `CMD`, and the two ways of running a
