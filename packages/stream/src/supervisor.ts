@@ -858,19 +858,24 @@ export class StreamSupervisor {
 
   /**
    * False when the listing is refused, or unanswered after {@link READ_DEADLINE_MS}: the S3 client
-   * has no request timeout of its own, so a bucket that takes the connection and never replies
-   * would otherwise hold the pause open after the bucket is back.
+   * sets no request timeout: a listing sent to a server that accepts the connection and never
+   * replies was still pending after 20,000 ms (`@smithy/node-http-handler` 4.12.1).
    */
   async #bucketAnswers(generation: string, signal: AbortSignal): Promise<boolean> {
     const deadline = new AbortController();
+    const listed = async () => {
+      try {
+        await this.#store.list(
+          `${generationPrefix(this.#deps.venueId, generation)}${levelFolder(0)}`,
+        );
+        return true;
+      } catch {
+        return false;
+      }
+    };
     try {
       return await Promise.race([
-        this.#store
-          .list(`${generationPrefix(this.#deps.venueId, generation)}${levelFolder(0)}`)
-          .then(
-            () => true,
-            () => false,
-          ),
+        listed(),
         this.#sleep(READ_DEADLINE_MS, AbortSignal.any([signal, deadline.signal])).then(() => false),
       ]);
     } finally {

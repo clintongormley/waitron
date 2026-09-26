@@ -1201,8 +1201,8 @@ describe("while streaming", () => {
     expect(h.logs.some((line) => line.event === "stream.resumed")).toBe(true);
   });
 
-  // The S3 client sets no request timeout, so a bucket that takes the connection and then says
-  // nothing leaves a listing pending for good.
+  // The S3 client sets no request timeout: a listing sent to a server that accepts the connection
+  // and never replies was still pending after 20,000 ms (`@smithy/node-http-handler` 4.12.1).
   it("asks the bucket again when a question during the pause goes unanswered, and resumes once one is answered", async () => {
     const h = await streaming();
     const list = h.store.list.bind(h.store);
@@ -1221,6 +1221,27 @@ describe("while streaming", () => {
     await h.clock.until(() => h.supervisor.status().state === "streaming");
     expect(questions).toBe(2);
     expect(h.clock.slept).toContain(READ_DEADLINE_MS);
+    expect(h.supervisor.status().generation).toBe(h.generation);
+    expect(h.litestream.running()).toBeDefined();
+  });
+
+  it("stays paused when a question during the pause throws before it is sent, and resumes once one is answered", async () => {
+    const h = await streaming();
+    const list = h.store.list.bind(h.store);
+    let questions = 0;
+    h.store.list = (prefix) => {
+      if (prefix.endsWith("/0000/") && h.supervisor.status().state === "paused") {
+        questions += 1;
+        if (questions === 1) throw new Error("thrown before any request");
+      }
+      return list(prefix);
+    };
+    h.setWal(LIMIT);
+    await h.clock.until(() => questions === 1);
+    expect(h.supervisor.status().state).toBe("paused");
+
+    await h.clock.until(() => h.supervisor.status().state === "streaming");
+    expect(questions).toBe(2);
     expect(h.supervisor.status().generation).toBe(h.generation);
     expect(h.litestream.running()).toBeDefined();
   });
