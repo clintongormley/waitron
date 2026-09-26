@@ -5846,7 +5846,7 @@ now gets a key, and a refresh never replaces a key the screen made. The watcher 
 request with Apply and Rotate, and a failed status read's alert clears when a later one succeeds;
 the owner ruled that CLAUDE.md §3's observer rule protects the shown key, and it now says so.
 Starting Apply, Rotate or Save settings clears that alert too, and a later failed status read
-raises it again (lane A's A54, #690, and A59, 2026-09-26, the owner's choices); Show old key, Edit
+raises it again (lane A's A54, #690, and A59, #701, 2026-09-26, the owner's choices); Show old key, Edit
 and Cancel edit are not saves and leave it, as A54's report proposed and the owner's answer kept.
 Left open: the panel picks its message from `managedByEnvironment` alone, so with
 a key hand-edited too short in `backup.env` it can name a button that does not help: with archives
