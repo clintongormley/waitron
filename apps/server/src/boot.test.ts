@@ -79,6 +79,8 @@ import { loadTillConfig } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEV_DEVICE_HEADER } from "./device-session.js";
+import type { Turns } from "./backup-turns.js";
+import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
 
 /**
  * The one test below that provisions a usable `fiscal.aeat` credential needs the AEAT transport to
@@ -124,6 +126,33 @@ vi.mock("./bounded-store.js", async (importOriginal) => {
     ...actual,
     boundObjectStore: (store: Parameters<typeof actual.boundObjectStore>[0], timeoutMs?: number) =>
       actual.boundObjectStore(store, bucketBound.timeoutMs ?? timeoutMs),
+  };
+});
+
+/**
+ * Passes through to the real queue that `boot.ts` builds, counting the bodies routes hand it and the
+ * bodies it starts, and holding every started body on `gate` while a test sets one.
+ */
+const backupQueue = vi.hoisted(() => ({
+  gate: undefined as Promise<void> | undefined,
+  handed: 0,
+  started: 0,
+}));
+vi.mock("./backup-turns.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./backup-turns.js")>();
+  return {
+    ...actual,
+    createTurns: (): Turns => {
+      const turns = actual.createTurns();
+      return (body) => {
+        backupQueue.handed += 1;
+        return turns(async () => {
+          backupQueue.started += 1;
+          await backupQueue.gate;
+          return body();
+        });
+      };
+    },
   };
 });
 
@@ -2805,6 +2834,50 @@ describe("startServer — what a trading boot wires behind its management routes
     expect(response.status).toBe(200);
     const body = (await response.json()) as { alerts: { code: string }[] };
     expect(body.alerts.map((alert) => alert.code)).toContain("backup.disabled");
+  }, 60_000);
+
+  it("gives the archive routes and the bucket-copy routes one queue: a bucket-copy read waits behind a held rotation", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const handed = backupQueue.handed;
+    const started = backupQueue.started;
+    backupQueue.gate = gate;
+    try {
+      const rotation = fetch(`http://127.0.0.1:${port}/api/backup/rotate`, {
+        method: "POST",
+        headers: { cookie, origin: ORIGIN, "content-type": "application/json" },
+        body: JSON.stringify({ recoveryKey: "k".repeat(MIN_PASSPHRASE_LENGTH) }),
+      });
+      await vi.waitFor(() => expect(backupQueue.started).toBe(started + 1), {
+        timeout: POLL_TRIES * POLL_INTERVAL_MS,
+      });
+
+      const kit = fetch(`http://127.0.0.1:${port}/api/backup/stream/kit`, { headers: { cookie } });
+      await vi.waitFor(() => expect(backupQueue.handed).toBe(handed + 2), {
+        timeout: POLL_TRIES * POLL_INTERVAL_MS,
+      });
+      await delay(POLL_INTERVAL_MS);
+      expect(backupQueue.started).toBe(started + 1);
+
+      backupQueue.gate = undefined;
+      release();
+      const rotationResponse = await rotation;
+      expect(rotationResponse.status).toBe(400);
+      expect(await rotationResponse.json()).toEqual({
+        error: { code: "backup.request_invalid", params: { field: "config" } },
+      });
+      const kitResponse = await kit;
+      expect(backupQueue.started).toBe(started + 2);
+      expect(kitResponse.status).toBe(409);
+      expect(await kitResponse.json()).toEqual({
+        error: { code: "backup.stream_not_configured", params: {} },
+      });
+    } finally {
+      release();
+      backupQueue.gate = undefined;
+    }
   }, 60_000);
 });
 
