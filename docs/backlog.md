@@ -6246,11 +6246,15 @@ line with what slice 2 built. Left open:
   `stream.freshness_unreadable`; the pause case fails with the line removed, and a case stopped
   during the wait fails once the line no longer checks for a stop. Since A44 a bucket that never
   replies ends each question as a refusal after about 90 seconds, before the deadline. **DONE by
-  lane A's A51 (2026-09-26):** a refused question is logged once per pause, `stream.pause_check_failed`
+  lane A's A51 (#686, 2026-09-26):** a refused question is logged once per pause, `stream.pause_check_failed`
   with the refusal's code, and a refusal arriving after the deadline or a stop is not; the line
   carries the code only, so a refusal the bucket answered (403) and one that got no answer both read
   `backup.stream_request_failed` in it ([testing-guide.md](developers/testing-guide.md), "A bucket
-  question the pause is waiting on").
+  question the pause is waiting on"). Left by #686: that a real bucket's 403 to this LISTING reads
+  that code was shown by reading `packages/stream/src/s3-store.ts` and by the test stand-in, not
+  against a real bucket; and the case "refused while the run is stopping" catches a removed stop
+  check only through the order two pending steps finish in, so re-run that removal if
+  `#bucketAnswers` is restructured.
 
 **Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The
 owner's rule (2026-09-24) is that a change adding third-party code to the image carries its licence
