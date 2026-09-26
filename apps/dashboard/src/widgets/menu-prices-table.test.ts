@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   CategorySummary,
   LibrarySection,
@@ -11,7 +11,10 @@ import { MenuPricesTable, type OfferSave } from "./menu-prices-table.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 
 afterEach(cleanupWidgets);
-beforeEach(() => sessionStorage.clear());
+beforeEach(() => {
+  sessionStorage.clear();
+  localStorage.clear();
+});
 
 /** Each section's customer names differ from its internal name, so a placement drawn from the
  * wrong one fails. */
@@ -129,22 +132,36 @@ function row(el: MenuPricesTable, menuItemId: string): HTMLElement | null {
   return table(el).shadowRoot.querySelector<HTMLElement>(`tr[data-row-key="${menuItemId}"]`);
 }
 
-const COLUMNS = [
-  "name",
-  "placements",
-  "category",
-  "product-price",
-  "menu-price",
-  "effective-price",
-  "active",
-];
+/** Each shown column's key, in order. */
+function headers(el: MenuPricesTable): string[] {
+  return [...table(el).shadowRoot.querySelectorAll("thead th")].map(
+    (th) => th.querySelector("[data-sort]")?.getAttribute("data-sort") ?? "",
+  );
+}
+
+/** A cell's text as it is seen: without the tree's toggle glyph or the text only a screen reader
+ * reads. */
+function visibleText(node: Element | undefined): string {
+  if (node === undefined) return "";
+  const clone = node.cloneNode(true) as Element;
+  for (const hidden of clone.querySelectorAll('.tree-toggle, [part~="visually-hidden"]'))
+    hidden.remove();
+  return text(clone);
+}
+
+/** One column's cell in one shown row. */
+function cell(el: MenuPricesTable, key: string, rowKey: string): HTMLElement {
+  const index = headers(el).indexOf(key);
+  expect(index, key).toBeGreaterThanOrEqual(0);
+  return row(el, rowKey)!.children[index] as HTMLElement;
+}
 
 /** The text of one column's cell in each shown row, in order. */
 function column(el: MenuPricesTable, key: string): string[] {
-  const index = COLUMNS.indexOf(key);
-  expect(table(el).shadowRoot.querySelectorAll("thead th")).toHaveLength(COLUMNS.length);
+  const index = headers(el).indexOf(key);
+  expect(index, key).toBeGreaterThanOrEqual(0);
   return [...table(el).shadowRoot.querySelectorAll("tbody tr")].map((tr) =>
-    text(tr.children[index]),
+    visibleText(tr.children[index]),
   );
 }
 
@@ -231,7 +248,13 @@ it("lists each product once with its prices, and where it appears by the section
   const placements = [...row(el, "mi-lemonade")!.querySelectorAll("[part~=placement]")].map(text);
   expect(placements).toEqual(["Favourites", "Drinks"]);
   expect(column(el, "category")).toEqual(["Principales", "Bebidas", "Bebidas / Cerveza"]);
-  expect(column(el, "product-price")).toEqual(["12.00", "3.00", "2.00"]);
+  // Lemonade is sold only as its variants, so its product price is theirs: 3.00 for the small,
+  // which has none of its own, and the large's 3.40.
+  expect(column(el, "product-price")).toEqual([
+    "12.00",
+    t("menu_prices.range").replace("{low}", "3.00").replace("{high}", "3.40"),
+    "2.00",
+  ]);
   expect(column(el, "menu-price")).toEqual([
     t("menu_prices.no_override"),
     "2.50",
@@ -741,4 +764,584 @@ it("saves on Enter in the menu price", async () => {
   );
   await el.updateComplete;
   expect(heard).toHaveBeenCalledOnce();
+});
+
+describe("variants", () => {
+  // Every product price, variant's own price, product's menu price and variant's menu price below
+  // is a different amount, so a cell reading the wrong one fails.
+  const products = [
+    {
+      id: "p-wine",
+      name: "Wine",
+      variants: [
+        variant("v-glass", "Glass", "6.00"),
+        // No price of its own: on this menu it takes the product's menu price.
+        variant("v-bottle", "Bottle", null),
+        variant("v-carafe", "Carafe", "14.00"),
+      ],
+    },
+    {
+      id: "p-juice",
+      name: "Juice",
+      variants: [
+        variant("v-juice-small", "Small juice", "3.00"),
+        variant("v-juice-large", "Large juice", "5.00"),
+      ],
+    },
+    { id: "p-tea", name: "Tea", variants: [variant("v-pot", "Pot", "2.20")] },
+    {
+      id: "p-cider",
+      name: "Cider",
+      variants: [variant("v-pint", "Pint", "4.50"), variant("v-half", "Half", null)],
+    },
+  ] as unknown as Product[];
+
+  /** Sets its own menu price and a menu price on two of its variants; the carafe is not offered. */
+  const wine: MenuPriceRow = {
+    menuItemId: "mi-wine",
+    productId: "p-wine",
+    name: "Wine",
+    categoryId: "c-drinks",
+    placements: [["s-drinks"]],
+    productPrice: "10.00",
+    override: "13.00",
+    effectivePrice: "13.00",
+    active: true,
+    variants: [
+      { variantId: "v-glass", price: "7.00", offered: true },
+      { variantId: "v-bottle", price: null, offered: true },
+      { variantId: "v-carafe", price: "15.00", offered: false },
+    ],
+  };
+  /** Its only menu price is a variant's. */
+  const juice: MenuPriceRow = {
+    menuItemId: "mi-juice",
+    productId: "p-juice",
+    name: "Juice",
+    categoryId: "c-drinks",
+    placements: [["s-fav"]],
+    productPrice: "4.00",
+    override: null,
+    effectivePrice: "4.00",
+    active: true,
+    variants: [
+      { variantId: "v-juice-small", price: "3.50", offered: true },
+      { variantId: "v-juice-large", price: null, offered: true },
+    ],
+  };
+  /** No variant is offered. */
+  const tea: MenuPriceRow = {
+    menuItemId: "mi-tea",
+    productId: "p-tea",
+    name: "Tea",
+    categoryId: "c-mains",
+    placements: [[]],
+    productPrice: "2.00",
+    override: null,
+    effectivePrice: "2.00",
+    active: true,
+    variants: [{ variantId: "v-pot", price: "2.40", offered: false }],
+  };
+  /** No menu price anywhere. */
+  const cider: MenuPriceRow = {
+    menuItemId: "mi-cider",
+    productId: "p-cider",
+    name: "Cider",
+    categoryId: "c-beer",
+    placements: [["s-drinks", "s-beer"]],
+    productPrice: "4.00",
+    override: null,
+    effectivePrice: "4.00",
+    active: true,
+    variants: [
+      { variantId: "v-pint", price: null, offered: true },
+      { variantId: "v-half", price: null, offered: true },
+    ],
+  };
+  const steak: MenuPriceRow = {
+    ...burger,
+    menuItemId: "mi-steak",
+    productId: "p-steak",
+    name: "Steak",
+    productPrice: "20.00",
+    override: "18.00",
+    effectivePrice: "18.00",
+  };
+  const soup: MenuPriceRow = {
+    ...burger,
+    menuItemId: "mi-soup",
+    productId: "p-soup",
+    name: "Soup",
+    productPrice: "5.00",
+    override: "5.00",
+    effectivePrice: "5.00",
+  };
+
+  function mountVariants(props: Partial<MenuPricesTable> = {}) {
+    return mount({ rows: [wine, juice, tea, burger], products, ...props });
+  }
+
+  function toggle(el: MenuPricesTable, key: string): HTMLButtonElement | null {
+    return row(el, key)?.querySelector<HTMLButtonElement>("button.tree-toggle") ?? null;
+  }
+
+  async function expand(el: MenuPricesTable, ...keys: string[]): Promise<void> {
+    for (const key of keys) {
+      toggle(el, key)!.click();
+      await table(el).updateComplete;
+    }
+  }
+
+  async function sortBy(el: MenuPricesTable, key: string): Promise<void> {
+    table(el).shadowRoot.querySelector<HTMLElement>(`button[data-sort="${key}"]`)!.click();
+    await table(el).updateComplete;
+  }
+
+  async function search(el: MenuPricesTable, term: string): Promise<void> {
+    const box = table(el).shadowRoot.querySelector<HTMLInputElement>('input[name="search"]')!;
+    box.value = term;
+    box.dispatchEvent(new Event("input"));
+    await table(el).updateComplete;
+  }
+
+  const range = (low: string, high: string) =>
+    t("menu_prices.range").replace("{low}", low).replace("{high}", high);
+
+  function mutedColour(el: MenuPricesTable): string {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--wt-color-text-muted)";
+    el.parentElement!.appendChild(probe);
+    return getComputedStyle(probe).color;
+  }
+
+  // Hidden text a screen reader reads must still be clipped out of sight, not merely marked.
+  function expectClipped(hidden: Element) {
+    const style = getComputedStyle(hidden);
+    expect([style.position, style.width, style.height, style.overflow, style.clip]).toEqual([
+      "absolute",
+      "1px",
+      "1px",
+      "hidden",
+      "rect(0px, 0px, 0px, 0px)",
+    ]);
+  }
+
+  async function showCombined(el: MenuPricesTable): Promise<void> {
+    const box = table(el).shadowRoot.querySelector<HTMLInputElement>(
+      'input[data-column="price-on-menu"]',
+    )!;
+    box.click();
+    await table(el).updateComplete;
+  }
+
+  it("puts each variant under its product, collapsed until the product is opened", async () => {
+    const el = await mountVariants();
+    expect(shown(el)).toEqual(["mi-wine", "mi-juice", "mi-tea", "mi-burger"]);
+    expect(toggle(el, "mi-burger")).toBeNull();
+    expect(toggle(el, "mi-wine")!.getAttribute("aria-label")).toBe(
+      t("menu_prices.show_variants").replace("{name}", "Wine"),
+    );
+    await expand(el, "mi-wine");
+    expect(shown(el)).toEqual([
+      "mi-wine",
+      "mi-wine:v-glass",
+      "mi-wine:v-bottle",
+      "mi-wine:v-carafe",
+      "mi-juice",
+      "mi-tea",
+      "mi-burger",
+    ]);
+    expect(toggle(el, "mi-wine")!.getAttribute("aria-label")).toBe(
+      t("menu_prices.hide_variants").replace("{name}", "Wine"),
+    );
+    expect(row(el, "mi-wine:v-glass")!.getAttribute("aria-level")).toBe("2");
+    await expand(el, "mi-wine");
+    expect(shown(el)).toEqual(["mi-wine", "mi-juice", "mi-tea", "mi-burger"]);
+  });
+
+  it("shows each variant's name, its own price, this menu's price for it, what it is charged and whether it is offered", async () => {
+    const el = await mountVariants();
+    await expand(el, "mi-wine");
+    const variants = ["mi-wine:v-glass", "mi-wine:v-bottle", "mi-wine:v-carafe"];
+    const cells = (key: string) => variants.map((rowKey) => visibleText(cell(el, key, rowKey)));
+    expect(cells("name")).toEqual(["Glass", "Bottle", "Carafe"]);
+    // A variant with no price of its own shows the product's.
+    expect(cells("product-price")).toEqual(["6.00", "10.00", "14.00"]);
+    expect(cells("menu-price")).toEqual(["7.00", t("menu_prices.no_override"), "15.00"]);
+    // The bottle has neither a menu price nor its own, so it is charged the product's menu price.
+    expect(cells("effective-price")).toEqual(["7.00", "13.00", "15.00"]);
+    expect(cells("active")).toEqual([
+      t("menu_prices.offered"),
+      t("menu_prices.offered"),
+      t("menu_prices.not_offered"),
+    ]);
+    expect(cells("placements")).toEqual(["", "", ""]);
+    expect(cells("category")).toEqual(["", "", ""]);
+    const muted = mutedColour(el);
+    for (const [key, rowKey] of [
+      ["menu-price", "mi-wine:v-bottle"],
+      ["active", "mi-wine:v-carafe"],
+    ] as const)
+      expect(getComputedStyle(cell(el, key, rowKey).querySelector("[part~=muted]")!).color).toBe(
+        muted,
+      );
+    // The name is plain text; only the product's name opens the settings.
+    expect(cell(el, "name", "mi-wine:v-glass").querySelector("wt-button")).toBeNull();
+    expect(cell(el, "name", "mi-wine").querySelector('[data-test="edit-mi-wine"]')).not.toBeNull();
+    expect(visibleText(cell(el, "name", "mi-wine"))).toBe(`Wine ${t("menu_prices.has_variants")}`);
+  });
+
+  it("indents a variant's name past its product's, so it reads as nested", async () => {
+    const el = await mountVariants();
+    await expand(el, "mi-wine");
+    // Where each name's words start, not its box.
+    const start = (node: Node) => {
+      const words = document.createRange();
+      words.selectNodeContents(node);
+      return words.getBoundingClientRect().left;
+    };
+    const product = start(cell(el, "name", "mi-wine").querySelector("wt-button")!);
+    const variant = start(
+      cell(el, "name", "mi-wine:v-glass").querySelector("[part~=variant-name]")!,
+    );
+    expect(variant - product).toBeGreaterThanOrEqual(8);
+  });
+
+  it("names a variant the product list does not hold as missing, and charges it the product's price on this menu", async () => {
+    const el = await mountVariants({ rows: [wine], products: [] });
+    await expand(el, "mi-wine");
+    expect(visibleText(cell(el, "name", "mi-wine:v-glass"))).toBe(t("members.missing"));
+    expect(visibleText(cell(el, "product-price", "mi-wine:v-glass"))).toBe("10.00");
+    expect(visibleText(cell(el, "effective-price", "mi-wine:v-glass"))).toBe("7.00");
+    expect(visibleText(cell(el, "effective-price", "mi-wine:v-carafe"))).toBe("15.00");
+  });
+
+  it("shows a product sold as its variants at the range of its variants' prices", async () => {
+    const el = await mountVariants();
+    // All the variants for the product price, the offered ones for what is charged.
+    expect(column(el, "product-price")).toEqual([
+      range("6.00", "14.00"),
+      range("3.00", "5.00"),
+      "2.20",
+      "12.00",
+    ]);
+    expect(column(el, "effective-price")).toEqual([
+      range("7.00", "13.00"),
+      range("3.50", "5.00"),
+      t("menu_prices.no_variant_offered"),
+      "12.00",
+    ]);
+    expect(
+      getComputedStyle(cell(el, "effective-price", "mi-tea").querySelector("[part~=muted]")!).color,
+    ).toBe(mutedColour(el));
+  });
+
+  it("shows one price, not a range, when the variants' prices are the same amount", async () => {
+    const el = await mountVariants({
+      rows: [
+        {
+          ...juice,
+          variants: [
+            { variantId: "v-juice-small", price: "5.0", offered: true },
+            { variantId: "v-juice-large", price: null, offered: true },
+          ],
+        },
+      ],
+    });
+    expect(column(el, "effective-price")).toEqual(["5.0"]);
+  });
+
+  it("sorts a range column by the low end of each range, as an amount", async () => {
+    const el = await mountVariants();
+    await sortBy(el, "product-price");
+    // By the high end it would be tea, juice, burger (12.00), wine (14.00).
+    expect(shown(el)).toEqual(["mi-tea", "mi-juice", "mi-wine", "mi-burger"]);
+    await sortBy(el, "effective-price");
+    await sortBy(el, "effective-price");
+    // Descending; a product with no variant offered has no price and sorts last either way.
+    expect(shown(el)).toEqual(["mi-burger", "mi-wine", "mi-juice", "mi-tea"]);
+  });
+
+  it("sorts the variants under their product by their own prices", async () => {
+    const el = await mountVariants({ rows: [wine] });
+    await expand(el, "mi-wine");
+    await sortBy(el, "effective-price");
+    expect(shown(el)).toEqual([
+      "mi-wine",
+      "mi-wine:v-glass",
+      "mi-wine:v-bottle",
+      "mi-wine:v-carafe",
+    ]);
+    await sortBy(el, "effective-price");
+    expect(shown(el)).toEqual([
+      "mi-wine",
+      "mi-wine:v-carafe",
+      "mi-wine:v-bottle",
+      "mi-wine:v-glass",
+    ]);
+    await sortBy(el, "name");
+    expect(shown(el)).toEqual([
+      "mi-wine",
+      "mi-wine:v-bottle",
+      "mi-wine:v-carafe",
+      "mi-wine:v-glass",
+    ]);
+  });
+
+  it("says a product's menu prices are on its variants when only they have one", async () => {
+    const el = await mountVariants();
+    expect(column(el, "menu-price")).toEqual([
+      "13.00",
+      t("menu_prices.variant_overrides"),
+      t("menu_prices.variant_overrides"),
+      t("menu_prices.no_override"),
+    ]);
+  });
+
+  it("keeps exactly the products it marks with a menu price under the Overridden only filter", async () => {
+    const el = await mountVariants({ rows: [wine, juice, tea, cider, burger, steak] });
+    const unmarked = column(el, "menu-price")
+      .map((price, at) => [shown(el)[at], price] as const)
+      .filter(([, price]) => price === t("menu_prices.no_override"))
+      .map(([key]) => key);
+    expect(unmarked).toEqual(["mi-cider", "mi-burger"]);
+    await choose(el, "menu-price", "overridden");
+    expect(shown(el)).toEqual(["mi-wine", "mi-juice", "mi-tea", "mi-steak"]);
+  });
+
+  it("judges each variant by its own menu price under the Overridden only filter", async () => {
+    const el = await mountVariants();
+    await choose(el, "menu-price", "overridden");
+    await expand(el, "mi-wine", "mi-juice");
+    expect(shown(el)).toEqual([
+      "mi-wine",
+      "mi-wine:v-glass",
+      "mi-wine:v-carafe",
+      "mi-juice",
+      "mi-juice:v-juice-small",
+      "mi-tea",
+    ]);
+  });
+
+  it("keeps a product's variants under the section and category filters that keep the product", async () => {
+    const el = await mountVariants();
+    await choose(el, "placements", "s-drinks");
+    await expand(el, "mi-wine");
+    expect(shown(el)).toEqual([
+      "mi-wine",
+      "mi-wine:v-glass",
+      "mi-wine:v-bottle",
+      "mi-wine:v-carafe",
+    ]);
+    await choose(el, "placements", "");
+    await choose(el, "category", "c-drinks");
+    await expand(el, "mi-juice");
+    expect(shown(el)).toEqual([
+      "mi-wine",
+      "mi-wine:v-glass",
+      "mi-wine:v-bottle",
+      "mi-wine:v-carafe",
+      "mi-juice",
+      "mi-juice:v-juice-small",
+      "mi-juice:v-juice-large",
+    ]);
+  });
+
+  it("finds a variant by its name, under its product", async () => {
+    const el = await mountVariants();
+    await search(el, "carafe");
+    expect(shown(el)).toEqual(["mi-wine", "mi-wine:v-carafe"]);
+  });
+
+  it("finds a price as it is written, not as the amount it sorts by", async () => {
+    const el = await mountVariants();
+    await search(el, "15.00");
+    expect(shown(el)).toEqual(["mi-wine", "mi-wine:v-carafe"]);
+    await search(el, "1500");
+    expect(shown(el)).toEqual([]);
+  });
+
+  it("keeps a product's variants when the product is found by its name", async () => {
+    const el = await mountVariants();
+    await search(el, "wine");
+    expect(shown(el)).toEqual(["mi-wine"]);
+    await expand(el, "mi-wine");
+    expect(shown(el)).toEqual([
+      "mi-wine",
+      "mi-wine:v-glass",
+      "mi-wine:v-bottle",
+      "mi-wine:v-carafe",
+    ]);
+  });
+
+  it("offers every column but the product's in the column chooser, with the combined price hidden until chosen, and remembers the choice", async () => {
+    const el = await mountVariants();
+    const trigger = table(el).shadowRoot.querySelector(".columns-trigger")!;
+    expect(text(trigger)).toBe(t("menu_prices.columns"));
+    const choices = [
+      ...table(el).shadowRoot.querySelectorAll<HTMLInputElement>("input[data-column]"),
+    ].map((box) => [box.dataset.column, box.checked]);
+    expect(choices).toEqual([
+      ["placements", true],
+      ["category", true],
+      ["product-price", true],
+      ["menu-price", true],
+      ["effective-price", true],
+      ["price-on-menu", false],
+      ["active", true],
+    ]);
+    expect(headers(el)).toEqual([
+      "name",
+      "placements",
+      "category",
+      "product-price",
+      "menu-price",
+      "effective-price",
+      "active",
+    ]);
+    await showCombined(el);
+    expect(headers(el)).toContain("price-on-menu");
+    const th = [...table(el).shadowRoot.querySelectorAll("thead th")][
+      headers(el).indexOf("price-on-menu")
+    ]!;
+    expect(text(th)).toContain(t("menu_prices.price_on_menu"));
+    expect(JSON.parse(localStorage.getItem("waitron.menus.prices:columns")!)).toMatchObject({
+      "price-on-menu": true,
+    });
+  });
+
+  describe("the combined price on this menu", () => {
+    async function mountCombined() {
+      const el = await mountVariants({ rows: [burger, steak, soup, wine, juice, tea, cider] });
+      await showCombined(el);
+      return el;
+    }
+    const combined = (el: MenuPricesTable, key: string) => cell(el, "price-on-menu", key);
+
+    it("greys out the charged price when no menu price applies, and says so to a screen reader", async () => {
+      const el = await mountCombined();
+      for (const [key, price] of [
+        ["mi-burger", "12.00"],
+        ["mi-cider", range("4.00", "4.50")],
+      ] as const) {
+        const muted = combined(el, key).querySelector("[part~=muted]")!;
+        expect(visibleText(muted), key).toBe(price);
+        expect(getComputedStyle(muted).color).toBe(mutedColour(el));
+        const hidden = muted.querySelector('[part~="visually-hidden"]')!;
+        expect(hidden.textContent!.trim()).toBe(t("menu_prices.price_inherited"));
+        expectClipped(hidden);
+        expect(combined(el, key).querySelector("s")).toBeNull();
+      }
+    });
+
+    it("strikes out the product's price beside a different menu price, telling a screen reader it was the price", async () => {
+      const el = await mountCombined();
+      for (const [key, was, now] of [
+        ["mi-steak", "20.00", "18.00"],
+        // The juice's only menu price is its small size's.
+        ["mi-juice", range("3.00", "5.00"), range("3.50", "5.00")],
+        ["mi-wine", range("6.00", "14.00"), range("7.00", "13.00")],
+      ] as const) {
+        const struck = combined(el, key).querySelector("s")!;
+        expect(struck.textContent!.trim(), key).toBe(was);
+        expect(getComputedStyle(struck).textDecorationLine).toBe("line-through");
+        expect(visibleText(combined(el, key))).toBe(`${was} ${now}`);
+        const hidden = combined(el, key).querySelector('[part~="visually-hidden"]')!;
+        expect(hidden.textContent!.trim()).toBe(t("menu_prices.price_was"));
+        expectClipped(hidden);
+        expect(combined(el, key).querySelector("[part~=muted]")).toBeNull();
+      }
+    });
+
+    it("shows a menu price equal to the product's price plainly", async () => {
+      const el = await mountCombined();
+      expect(visibleText(combined(el, "mi-soup"))).toBe("5.00");
+      expect(
+        combined(el, "mi-soup").querySelector("s, [part~=muted], [part~=visually-hidden]"),
+      ).toBeNull();
+    });
+
+    it("shows a range plainly when the menu prices that apply leave it the same", async () => {
+      const el = await mountVariants({
+        rows: [
+          {
+            ...cider,
+            variants: [
+              { variantId: "v-pint", price: "4.50", offered: true },
+              { variantId: "v-half", price: null, offered: true },
+            ],
+          },
+        ],
+      });
+      await showCombined(el);
+      expect(visibleText(combined(el, "mi-cider"))).toBe(range("4.00", "4.50"));
+      expect(combined(el, "mi-cider").querySelector("s, [part~=muted]")).toBeNull();
+    });
+
+    it("counts the product's menu price as applying to an offered variant with no price of its own", async () => {
+      const el = await mountVariants({
+        rows: [{ ...wine, variants: [{ variantId: "v-bottle", price: null, offered: true }] }],
+      });
+      await showCombined(el);
+      expect(combined(el, "mi-wine").querySelector("s")!.textContent!.trim()).toBe("10.00");
+      expect(visibleText(combined(el, "mi-wine"))).toBe("10.00 13.00");
+    });
+
+    it("ignores a menu price on a variant that is not offered", async () => {
+      const el = await mountVariants({
+        rows: [
+          {
+            ...juice,
+            variants: [
+              { variantId: "v-juice-small", price: "3.50", offered: false },
+              { variantId: "v-juice-large", price: null, offered: true },
+            ],
+          },
+        ],
+      });
+      await showCombined(el);
+      const muted = combined(el, "mi-juice").querySelector("[part~=muted]")!;
+      expect(visibleText(muted)).toBe("5.00");
+      expect(combined(el, "mi-juice").querySelector("s")).toBeNull();
+    });
+
+    it("says no variant is offered for a product sold as variants none of which is offered", async () => {
+      const el = await mountCombined();
+      const muted = combined(el, "mi-tea").querySelector("[part~=muted]")!;
+      expect(visibleText(muted)).toBe(t("menu_prices.no_variant_offered"));
+      expect(combined(el, "mi-tea").querySelector("s, [part~=visually-hidden]")).toBeNull();
+    });
+
+    it("shows each variant's own price against what this menu charges for it", async () => {
+      const el = await mountCombined();
+      await expand(el, "mi-wine", "mi-juice");
+      // The bottle has no price of its own, so the product's menu price applies to it.
+      for (const [key, was, now] of [
+        ["mi-wine:v-glass", "6.00", "7.00"],
+        ["mi-wine:v-bottle", "10.00", "13.00"],
+        ["mi-wine:v-carafe", "14.00", "15.00"],
+        ["mi-juice:v-juice-small", "3.00", "3.50"],
+      ] as const) {
+        expect(combined(el, key).querySelector("s")!.textContent!.trim(), key).toBe(was);
+        expect(visibleText(combined(el, key)), key).toBe(`${was} ${now}`);
+      }
+      const large = combined(el, "mi-juice:v-juice-large");
+      expect(visibleText(large.querySelector("[part~=muted]")!)).toBe("5.00");
+      expect(large.querySelector("s")).toBeNull();
+    });
+
+    it("sorts by the price charged", async () => {
+      const el = await mountCombined();
+      await sortBy(el, "price-on-menu");
+      expect(shown(el)).toEqual([
+        "mi-juice",
+        "mi-cider",
+        "mi-soup",
+        "mi-wine",
+        "mi-burger",
+        "mi-steak",
+        "mi-tea",
+      ]);
+    });
+  });
 });

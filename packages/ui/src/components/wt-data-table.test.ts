@@ -614,6 +614,23 @@ test("labels the tree toggle Collapse when the branch is open and Expand when it
   expect(toggle().getAttribute("aria-label")).toBe("Expand");
 });
 
+test("names each tree toggle after its own row when a toggle label is given", async () => {
+  const el = await treeTable({
+    rowToggleLabel: (row: TreeRow, expanded: boolean) =>
+      `${expanded ? "Hide" : "Show"} inside ${row.name}`,
+  });
+  const toggle = (key: string) =>
+    el.shadowRoot!.querySelector<HTMLButtonElement>(
+      `tbody tr[data-row-key="${key}"] button.tree-toggle`,
+    )!;
+  expect(toggle("food").getAttribute("aria-label")).toBe("Hide inside Food");
+  expect(toggle("break").getAttribute("aria-label")).toBe("Hide inside Breakfast");
+  toggle("break").click();
+  await el.updateComplete;
+  expect(toggle("break").getAttribute("aria-label")).toBe("Show inside Breakfast");
+  expect(toggle("food").getAttribute("aria-label")).toBe("Hide inside Food");
+});
+
 test("seeds branches collapsed when the rows arrive after the flag", async () => {
   const el = await treeTable({ rows: [], initiallyCollapsed: true });
   el.rows = treeRows;

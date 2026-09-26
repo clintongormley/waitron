@@ -297,6 +297,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property() errorMessage = "";
   @property() collapseLabel = "Collapse";
   @property() expandLabel = "Expand";
+  /** Names each row's tree toggle, in place of `collapseLabel` and `expandLabel`, so a toggle can
+   * say which branch it opens. */
+  @property({ attribute: false }) rowToggleLabel?: (row: Row, expanded: boolean) => string;
   /** In tree mode, seed each branch as collapsed the first time that branch appears. A person can
    * still expand it normally, and later row refreshes do not collapse it again. */
   @property({ type: Boolean }) initiallyCollapsed = false;
@@ -1011,7 +1014,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
                                 hasChildren && !cellContext.ancestorOnly
                                   ? html`<button
                                       class="tree-toggle"
-                                      aria-label=${expanded ? this.collapseLabel : this.expandLabel}
+                                      aria-label=${
+                                        this.rowToggleLabel
+                                          ? this.rowToggleLabel(row, expanded)
+                                          : expanded
+                                            ? this.collapseLabel
+                                            : this.expandLabel
+                                      }
                                       @click=${() => this.#toggle(key)}
                                     >
                                       ${expanded ? "▾" : "▸"}
