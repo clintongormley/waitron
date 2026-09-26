@@ -1223,9 +1223,9 @@ production. Two different events are affected:
   New Year's Eve table is still open after midnight. Under the new rule, everything paid after
   midnight is filed at the new rate, including drinks served before it.
 
-_2026-09-26: the rule is built on branch `feat/menus-vat-at-issuance`
-(`priceStoredOrderForIssuance`, `apps/server/src/working-order.ts`); once that branch is merged,
-the "Today" sentence above describes the code before it. The question to the adviser stands._
+_2026-09-26: menus plan Task 7a built this rule (`priceStoredOrderForIssuance`,
+`apps/server/src/working-order.ts`), so the "Today" sentence above describes the code before it.
+The question to the adviser stands._
 
 A wrong rate on a filed invoice can only be corrected by a further record, so we want the rule
 confirmed before production, not after.
