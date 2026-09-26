@@ -130,8 +130,8 @@ export interface FirstStart {
  * {@link completeRebuild}, for boot. A failure does not keep the box shut: it sells, does not stream
  * (its term may not have moved), and the marker stays so the next start tries again (slice-2
  * spec §5.3). The log carries the error's code only. The exception is
- * `restore.membership_invalid`, which is thrown on, so the start fails and the recovery page shows
- * it.
+ * `restore.membership_invalid`, which is thrown on, so the start fails, and once starts have failed
+ * repeatedly the recovery page shows it.
  */
 export async function runFirstStart(deps: RebuildDeps): Promise<FirstStart> {
   try {

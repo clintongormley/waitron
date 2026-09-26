@@ -3218,10 +3218,12 @@ image constraints under *Detail → Box image*.
     `verifyMembershipDocument` / `acceptMembershipDocument` on what it reads, and none did; it now
     says a peer's document is stored only after `acceptMembershipDocument` passes it, every other
     one is minted and signed by this node, and readers trust the row. The restore question it raised
-    is open under Task 9a. Two notes #653's prune deleted and nothing else recorded: nobody knows
-    why the 5-second busy timeout did not absorb a `database is locked` in the pending-payment
-    sweep; and nothing proves `startServer` itself survives a backup duty that cannot start — only
-    `backup-supervisor.test.ts` covers that, at the supervisor. **Done (2026-09-26, lane A's A39, #671):**
+    is open under Task 9a (the archive and bucket first start now checks the row, branch
+    `fix/verify-restored-membership`; the rest stays open there). Two notes #653's prune deleted and
+    nothing else recorded: nobody knows why the 5-second busy timeout did not absorb a
+    `database is locked` in the pending-payment sweep; and nothing proves `startServer` itself
+    survives a backup duty that cannot start — only `backup-supervisor.test.ts` covers that, at the
+    supervisor. **Done (2026-09-26, lane A's A39, #671):**
     a start that failed after boot's long-lived open left the venue store open, holding the folder
     for this process — reproduced for an unreadable pending-adoption file, an empty fiscal slot, and
     an unreadable certificate on an adoption-pending start and on a trading start (read after the
@@ -5885,27 +5887,29 @@ endorsement stored when that round reads, not the first round's"
   should clear it is the owner's call.
 - A sell-only local secondary that is not fenced runs the first start and signs the next term.
 - A restored membership row is now checked before the start that finishes the restore signs over
-  it (branch `fix/verify-restored-membership`, closing what A38, #669, left open).
+  it (branch `fix/verify-restored-membership`, closing part of what A38, #669, left open).
   `completeRebuild` first runs `assertRestoredMembershipValid`
   (`apps/server/src/rebuild-first-start.ts`): a held document that fails `verifyMembershipDocument`
   against the `nodes` keys of the same database throws `restore.membership_invalid { reason }`
   before the leaf is re-issued, the bucket is asked or anything is signed, and `runFirstStart`
-  throws it on instead of selling, so the start fails and the recovery page shows fixed English and
-  Spanish text for it. A database holding no document still passes and signs term 0. Cases in
-  `apps/server/src/rebuild-first-start.test.ts` (a node added after signing, for each marker
-  source, and a document signed by a key the copy does not hold: refused, stored row and leaf
-  byte-for-byte unchanged, marker kept) and `apps/server/src/boot.test.ts` ("refuses to start after
-  a … restore whose membership document no longer matches its signature", for `archive` and
-  `stream`; it writes the marker directly, because both restores write the same file through
-  `writeValidated`, `apps/server/src/restore.ts`). Each failed on the old code, and again with the
-  check's call deleted. Left open:
+  throws it on instead of selling, so the start fails, and once starts have failed repeatedly the
+  recovery page shows fixed English and Spanish text for it. A database holding no document still
+  passes and signs term 0. Cases in `apps/server/src/rebuild-first-start.test.ts` (a node added
+  after signing, for each marker source, and a document signed by a key the copy does not hold:
+  refused, stored row and leaf byte-for-byte unchanged, marker kept) and
+  `apps/server/src/boot.test.ts` ("refuses to start after a … restore whose membership document no
+  longer matches its signature", for `archive` and `stream`; it writes the marker directly, because
+  both restores write the same file through `writeValidated`, `apps/server/src/restore.ts`). Each
+  failed on the old code, and again with the check's call deleted. Left open:
   - The check trusts the keys the restored copy holds. A copy whose `nodes.public_key` for this
     node was rewritten, with its document re-signed by the matching key, passes, and the next term
     is signed over the added node: the case "passes a document re-signed with a key the copy's own
     node row was changed to name" pins that.
-  - A start that defers the first start (a mirror, or a fenced node) does not run the check, and
-    neither promotion (`apps/server/src/promote.ts`) nor `retireSelf` (`apps/server/src/retire.ts`)
-    checks the row before signing over it. Gating promotion on the same check was measured and not
+  - Only the start that finishes a restore checks the row. A start that puts that off (a mirror, a
+    fenced node, or one still finishing an adoption) does not, and no other code that signs over the
+    held row checks it first (promotion, `retireSelf` and the standby chart append among them:
+    `apps/server/src/promote.ts`, `apps/server/src/retire.ts`,
+    `apps/server/src/mirror-bundle-api.ts`). Gating promotion on the same check was measured and not
     done, because it would refuse a genuine document: on 2026-09-26 a scratch case built the way
     `promote.test.ts` builds a mirror found, after `setDeploymentMode(…, "mirror")` alone (what
     `adoptFromPrimary` leaves), no document and an empty trust set; after
@@ -5913,6 +5917,17 @@ endorsement stored when that round reads, not the first round's"
     primary signed with its real key, written there, verified as `untrusted_signer`. Nothing writes
     a document on a mirror today, so its held document is null (from reading the writers, not a
     run). Which key a mirror should check a restored document against is the owner's call.
+  - A held document whose `body.nodes` is not a list, or whose stored JSON cannot be read, fails
+    before the check. Boot reads the held row at the peer reconciliation (when a peer is
+    configured) and just after it, where it asks `isFenced` about it (`readNodeMembership` and
+    `isFenced` in `apps/server/src/boot.ts`; the lines just after the reconciliation predate this
+    branch, `git blame` e82588f349 and ce7d1aafa8), on every trading start that is not finishing an
+    adoption, not only after a restore, and such a document throws there. The start still
+    fails and nothing is signed, but once starts have failed repeatedly the recovery page shows the
+    generic text (code `unknown`), not `restore.membership_invalid`. Measured by the Codex review
+    seat, by changing the `apps/server/src/boot.test.ts` fixtures to those two values: the cases
+    failed with `Cannot read properties of null (reading 'find')` and a `SyntaxError`, each
+    classified `unknown`. Whether to give it a curated code is open.
 - A mirror that deferred its first start and is then promoted without a restart
   (`promoteMirrorToPrimary`, `apps/server/src/promote.ts`) keeps the bucket copy held, reading off
   with the reason `first_start_pending` and raising no alert, until the box next starts; that start

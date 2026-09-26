@@ -430,8 +430,8 @@ stream, raises an alert, and retries the step at the next start.
 
 > 2026-09-26: one failure now does keep the box shut. When the restored membership document fails
 > its signature check against the copy's own node keys, the start fails with
-> `restore.membership_invalid` and the recovery page shows it; nothing is re-issued or signed. See
-> `docs/backlog.md`'s Task 9a entry.
+> `restore.membership_invalid`, and once starts have failed repeatedly the recovery page shows it;
+> nothing is re-issued or signed. See `docs/backlog.md`'s Task 9a entry.
 
 ---
 

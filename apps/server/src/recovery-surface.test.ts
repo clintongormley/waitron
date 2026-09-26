@@ -397,7 +397,8 @@ describe("curated operator text", () => {
 
   // A hand-kept list, and NOT every code that can reach the page: a code with no entry falls to the
   // generic line. `deployment.environment_mismatch` is listed because the generic line fails it
-  // worst (CLAUDE.md §5).
+  // worst (CLAUDE.md §5); `restore.membership_invalid` because the page's Retry reads the same copy
+  // again, which the generic line does not say.
   it("has an entry for every code classifyBootFailure produces and each persisted code listed here", () => {
     const classified = [
       "provisioning.database_unreachable",

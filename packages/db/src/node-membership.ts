@@ -14,10 +14,12 @@ import { nodeMembership } from "./schema/node-membership.js";
  * A restore (archive or bucket) puts back the copy's row as it was; the start that finishes the
  * restore checks it against the copy's own node keys before signing over it, and refuses the start
  * when it fails (`assertRestoredMembershipValid`, `apps/server/src/rebuild-first-start.ts`). That
- * check trusts the keys the same copy holds, and a start that defers finishing the restore (a
- * mirror, or a fenced node) does not run it; neither promotion nor `retireSelf` checks the row
- * before signing over it (`apps/server/src/promote.ts`, `apps/server/src/retire.ts`). A raw SQL
- * write or a database file edited outside the program is read as is.
+ * check trusts the keys the same copy holds. Only the start that finishes a restore checks the row;
+ * a start that puts that off (a mirror, a fenced node, or one still finishing an adoption) does
+ * not, and no other code that signs over the held row checks it first (promotion, `retireSelf` and
+ * the standby chart append among them: `apps/server/src/promote.ts`, `apps/server/src/retire.ts`,
+ * `apps/server/src/mirror-bundle-api.ts`). A raw SQL write or a database file edited outside the
+ * program is read as is.
  *
  * The table's existence is read off `sqlite_master` rather than discovered by running the select and
  * catching the refusal; the reason is on `deploymentTableExists` in `./deployment.js`.
