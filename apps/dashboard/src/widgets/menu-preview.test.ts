@@ -161,9 +161,9 @@ it("words every kind of change, each with where it came from", async () => {
     "Burger price changed from €12.00 to €13.00 — shared product, also on Dinner Menu",
     "Lemonade: allergens — shared product, also on Dinner Menu",
     "Drinks renamed — shared section",
-    "Lager removed from Drinks › Beer — shared section, also on Dinner Menu, Terrace Menu",
+    "Lager removed from Drinks › Beer — shared section, also on Dinner Menu and Terrace Menu",
     "Chips added at the top level — this menu",
-    "Soup moved from Starters to Top level and Mains › Hot — this menu",
+    "Soup moved from Starters to the top level and Mains › Hot — this menu",
     "Cola: names, description, photo, unit, diet, variants, extras, options — shared product",
     "Section Desserts added at the top level — this menu",
     "Bread removed from the top level — this menu",
@@ -198,14 +198,14 @@ it("words a change in Spanish, with the price in the Spanish money format", asyn
         from: "12.00",
         to: "13.00",
         source: "shared_product",
-        alsoOn: ["Dinner Menu"],
+        alsoOn: ["Dinner Menu", "Terrace Menu"],
       },
     ]),
   });
   expect(items(el, "changes").map((line) => line.replace(/\s/g, " "))).toEqual([
-    "Se ha movido Soup de Starters a Nivel principal y Mains › Hot — este menú",
+    "Se ha movido Soup: antes en Starters; ahora en el nivel principal y Mains › Hot — este menú",
     "Ha cambiado el orden en el nivel principal — este menú",
-    "Ha cambiado el precio de Burger de 12,00 € a 13,00 € — producto compartido, también en Dinner Menu",
+    "Ha cambiado el precio de Burger de 12,00 € a 13,00 € — producto compartido, también en Dinner Menu y Terrace Menu",
   ]);
 });
 

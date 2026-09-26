@@ -75,9 +75,11 @@ interface MenuRow extends CatalogueSummary {
 const STATUS_ORDER = ["unpublished", "changed", "current", "loading", "failed"];
 
 /** The state in one line, for the editor's heading. */
-function statusLine(status: MenuStatus): string {
+function statusLine(status: MenuStatus) {
   const { label, live } = statusWords(status);
-  return live === null ? label : `${label} · ${live.version} · ${live.time}`;
+  return live === null
+    ? label
+    : html`${label} · ${live.version} · <span class="time">${live.time}</span>`;
 }
 
 function refusal(error: unknown): Record<string, string> {
@@ -275,6 +277,9 @@ export class MenusScreen extends LitElement {
       .status-line {
         margin: calc(var(--wt-space-3) * -1) 0 var(--wt-space-4);
       }
+      .status-line .time {
+        white-space: nowrap;
+      }
       .list {
         container-type: inline-size;
       }
@@ -296,12 +301,11 @@ export class MenusScreen extends LitElement {
         display: block;
         padding-inline: var(--wt-space-4);
       }
-      wt-data-table.narrow::part(name) {
-        max-width: var(--wt-cell-name-max-width);
-      }
+      /* The name and its status take the list's width less room for the row menu's column, and
+         wrap inside it: the table itself never narrows a column below its content. */
+      wt-data-table.narrow::part(name),
       wt-data-table.narrow::part(stacked) {
-        box-sizing: content-box;
-        max-width: var(--wt-cell-name-max-width);
+        max-width: calc(100cqi - 3 * var(--wt-tap-min));
       }
     `,
   ];
@@ -345,7 +349,8 @@ export class MenusScreen extends LitElement {
   @state() private previewError = false;
   /** The menus whose publish is out. Replaced, never mutated, so a change re-renders. */
   @state() private publishing: ReadonlySet<string> = new Set();
-  /** The list is narrower than its columns need, so each status sits under its menu's name. */
+  /** The list is 30rem wide or less (the probe's container query), so each status sits under its
+   * menu's name. */
   @state() private narrow = false;
   @state() private publishResult: PublishResult | null = null;
 
@@ -453,6 +458,18 @@ export class MenusScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
+  }
+
+  /** A narrow list has no status column to sort by, so a status sort gives way, visibly, to the
+   * name order. */
+  protected override updated(changed: PropertyValues): void {
+    if (!changed.has("narrow") || !this.narrow) return;
+    const table = this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+      'wt-data-table[data-test="menus"]',
+    );
+    if (table?.sortKey !== "status") return;
+    table.sortKey = "name";
+    table.sortDirection = "ascending";
   }
 
   protected override willUpdate(changed: PropertyValues): void {
@@ -1306,17 +1323,16 @@ export class MenusScreen extends LitElement {
     });
   }
 
-  /** The width at which the list turns narrow is the probe's container query, so it lives in CSS
-   * with the rest of the layout. */
-  #observeList = (list: Element | undefined): void => {
+  /** The probe is observed rather than the list: its size follows the list's container alone, so
+   * the redraw a switch causes cannot resize what is observed within the same observation. */
+  #observeProbe = (probe: Element | undefined): void => {
     this.#listSize?.disconnect();
     this.#listSize = null;
-    if (list === undefined) return;
-    const probe = list.querySelector(".narrow-probe")!;
+    if (probe === undefined) return;
     this.#listSize = new ResizeObserver(() => {
       this.narrow = getComputedStyle(probe).display !== "none";
     });
-    this.#listSize.observe(list);
+    this.#listSize.observe(probe);
   };
 
   #renderList() {
@@ -1332,8 +1348,8 @@ export class MenusScreen extends LitElement {
                   >${t("menus.add")}</wt-button
                 >
               </div>
-              <div class="list" ${ref(this.#observeList)}>
-                <span class="narrow-probe" aria-hidden="true"></span>
+              <div class="list">
+                <span class="narrow-probe" aria-hidden="true" ${ref(this.#observeProbe)}></span>
                 <wt-data-table
                   data-test="menus"
                   class=${this.narrow ? "narrow" : ""}

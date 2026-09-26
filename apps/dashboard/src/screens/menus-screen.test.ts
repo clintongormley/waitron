@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -2876,6 +2876,10 @@ describe("publishing", () => {
   });
 
   it("shows each menu's state under its name on a phone-width list, with no status column", async () => {
+    const reported: string[] = [];
+    const report = (event: ErrorEvent) => reported.push(event.message);
+    window.addEventListener("error", report);
+    onTestFinished(() => window.removeEventListener("error", report));
     const el = await mount();
     await page.viewport(390, 844);
     await vi.waitFor(async () => {
@@ -2899,6 +2903,37 @@ describe("publishing", () => {
         [...table(el).shadowRoot.querySelectorAll("thead th")].map((th) => text(th)),
       ).toContain("Status");
     });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(reported).toEqual([]);
+  });
+
+  it("sorts by name, and shows it, when a list sorted by status turns phone-width", async () => {
+    const client = api({
+      listCatalogues: vi
+        .fn()
+        .mockResolvedValue([
+          ...menus,
+          { id: "menu-brunch", name: "Brunch Menu", active: true, version: 1 },
+        ]),
+      getMenuStatuses: vi
+        .fn()
+        .mockResolvedValue({ ...statuses(), "menu-brunch": { state: "unpublished" } }),
+    });
+    const el = await mount(client);
+    await vi.waitFor(() => expect(statusCell(el, "menu-brunch")).toBe("Unpublished"));
+    table(el).shadowRoot.querySelector<HTMLElement>('button[data-sort="status"]')!.click();
+    await table(el).updateComplete;
+    const order = () =>
+      [...table(el).shadowRoot.querySelectorAll("tbody tr")].map((row) =>
+        row.getAttribute("data-row-key"),
+      );
+    expect(order()).toEqual(["menu-brunch", "menu-lunch", "menu-dinner"]);
+    await page.viewport(390, 844);
+    await vi.waitFor(() => expect(order()).toEqual(["menu-brunch", "menu-dinner", "menu-lunch"]));
+    const sorted = [...table(el).shadowRoot.querySelectorAll("thead th")].filter(
+      (th) => th.getAttribute("aria-sort") === "ascending",
+    );
+    expect(sorted.map((th) => text(th))).toEqual(["Name▲"]);
   });
 
   it("follows every menu's state on the list alone, and one menu's in its editor", async () => {

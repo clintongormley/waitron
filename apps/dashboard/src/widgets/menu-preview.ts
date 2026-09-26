@@ -68,6 +68,10 @@ export function statusWords(status: MenuStatus): {
       };
 }
 
+function list(items: readonly string[]): string {
+  return new Intl.ListFormat(currentLocale(), { type: "conjunction" }).format(items);
+}
+
 /** Says a publish did not happen, what is still live, and that the working edits are kept. */
 export function publishFailure(menu: string, status: MenuStatus | null, reason: string): string {
   return status !== null && status.state !== "unpublished"
@@ -159,15 +163,13 @@ export class MenuPreviewPanel extends LitElement {
   @property({ type: Boolean }) publishing = false;
   @property({ attribute: false }) result: PublishResult | null = null;
 
-  /** One place, named as the Prices tab names it. */
+  /** One place inside a sentence. */
   #place(path: readonly string[]): string {
-    return path.length === 0 ? t("menu_prices.top_level") : path.join(" › ");
+    return path.length === 0 ? t("menu_preview.top_level") : path.join(" › ");
   }
 
   #places(paths: readonly (readonly string[])[]): string {
-    return new Intl.ListFormat(currentLocale(), { type: "conjunction" }).format(
-      paths.map((path) => this.#place(path)),
-    );
+    return list(paths.map((path) => this.#place(path)));
   }
 
   /** A change at one place: its own wording at the top level, else `key` with the place filled. */
@@ -250,7 +252,7 @@ export class MenuPreviewPanel extends LitElement {
   #source(change: MenuChange): string {
     const source = t(SOURCES[change.source]);
     return change.alsoOn?.length
-      ? fill("menu_preview.also_on", { source, menus: change.alsoOn.join(", ") })
+      ? fill("menu_preview.also_on", { source, menus: list(change.alsoOn) })
       : source;
   }
 
