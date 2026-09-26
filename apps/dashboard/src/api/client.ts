@@ -46,9 +46,18 @@ import type {
   MenuChange,
   MenuPreview,
   MenuStatus,
+  ProductChangeField,
   PublishedMenuVersion,
+  SectionChangeField,
 } from "@waitron/catalogue/src/menu-document-types.js";
-export type { MenuChange, MenuPreview, MenuStatus, PublishedMenuVersion };
+export type {
+  MenuChange,
+  MenuPreview,
+  MenuStatus,
+  ProductChangeField,
+  PublishedMenuVersion,
+  SectionChangeField,
+};
 
 /** One member of a menu's structure (`readMenuStructure`, packages/catalogue/src/menu-structure.ts);
  * `children` is present exactly when the member is a section. */
