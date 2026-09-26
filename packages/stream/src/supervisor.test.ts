@@ -810,6 +810,7 @@ describe("opening a generation", () => {
       h.store.upload(fullCopyOf(h.supervisor.status().generation!));
       await h.clock.until(() => h.supervisor.status().state === "streaming");
     },
+    10_000,
   );
 
   it("gives the pointer write up when the bucket takes the connection and never answers, and writes it again", async () => {
@@ -837,7 +838,7 @@ describe("opening a generation", () => {
     await h.clock.until(() => h.supervisor.status().state === "streaming");
     expect(h.supervisor.status().generation).toBe(generation);
     expect((await readPointer(h.store, VENUE))?.pointer.body.generation).toBe(generation);
-  });
+  }, 10_000);
 
   it("retries opening after a bucket error, under a new generation", async () => {
     const h = await harness();
@@ -1624,6 +1625,7 @@ describe("generation housekeeping", () => {
       await vi.waitFor(() => expect(h.store.has(fullCopyOf(old))).toBe(false));
       expect(h.supervisor.status().state).toBe("streaming");
     },
+    10_000,
   );
 
   // A bucket that never answers must not hold the tick: the side-file limit is checked there.

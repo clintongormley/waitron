@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import type { BucketConfig } from "../s3-store.js";
 
 export interface SilentBucket {
-  /** Settings that address this bucket, by path, as any endpoint other than Amazon's is. */
+  /** Settings that address this bucket by path, as the store does for any endpoint it is given. */
   config: BucketConfig;
   /** How many connections it has taken. */
   connections(): number;

@@ -858,8 +858,8 @@ export class StreamSupervisor {
 
   /**
    * False when the listing is refused, or unanswered after {@link READ_DEADLINE_MS}, which is logged.
-   * The S3 store's own limit counts idle time only (`BUCKET_IDLE_MS`), so an answer that keeps
-   * arriving can outlast the deadline.
+   * The deadline is still needed because the S3 store's own limit (`BUCKET_IDLE_MS`) does not bound
+   * an answer that keeps arriving, or one whose body stalls after early headers.
    */
   async #bucketAnswers(generation: string, signal: AbortSignal): Promise<boolean> {
     const deadline = new AbortController();

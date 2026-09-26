@@ -5709,10 +5709,10 @@ bucket, unable to use its settings, or stopped by itself, and for a failed refre
 state row; the `backup.disabled` alert now fires only when there is neither a scheduled backup nor a
 bucket copy that is on and current. Left open:
 - A bucket read given up after five minutes is not cancelled, because the bucket client's list
-  takes no way to stop it. Since A44 the store ends a request itself once its connection has been
-  idle for 30 seconds, so what the deadline can still leave running is a listing whose answer keeps
-  arriving, or one whose answer stalls after its headers (the entry "the stream's other bucket
-  calls are bounded", below).
+  takes no way to stop it. Since A44 the store gives a request up when it has had no reply 30
+  seconds after it started, so what the deadline can still leave running is a listing whose answer
+  keeps arriving, or one whose answer stalls after headers that arrived within the first three
+  seconds (the entry "the stream's other bucket calls are bounded", below).
 - A commit that changes no row but writes to the side file, such as a schema change or a pragma
   such as `user_version`, is not reported, so the lag can read low.
 - An update that writes the same value, straight after a schema-only commit, is still reported,
@@ -5929,9 +5929,9 @@ open:
     `restore.database_set_aside`. Only the container's entry clears them: a server started any other
     way (the dev stack) does not.
 - The bucket client's own time limit is on idle time only (A44, 2026-09-26): `createS3ObjectStore`
-  (`packages/stream`) gives a request up once its connection has sent and received nothing for 30
-  seconds (`BUCKET_IDLE_MS`), three attempts in all, and bounds no call's total time; it does not
-  reach the rest of an answer whose headers arrived within three seconds (measured; the entry "the
+  (`packages/stream`) gives a request up when it has had no reply 30 seconds after it started
+  (`BUCKET_IDLE_MS`), three attempts in all, and bounds no call's total time; it does not reach the
+  rest of an answer whose headers arrived within three seconds (measured; the entry "the
   stream's other bucket calls are bounded", below). The command line and the setup restores also
   wrap it for every object-store call they make (`boundObjectStore`, which abandons a call but never
   cancels it), the first start's pointer read has its own 15-second race (`readBucketPointerTerm`,
@@ -6029,11 +6029,12 @@ line with what slice 2 built. Left open:
   the supervisor.
 - **DONE (2026-09-26, A37, #668): the pause's bucket question is bounded.** Reproduced first: the S3 client
   sets no request timeout, and a listing sent to a server that accepts and never replies was still
-  pending after 20,000 ms (`@smithy/node-http-handler` 4.12.1); a supervisor case whose first
-  question during the pause never settles failed with nothing left asleep. Each question
-  (`#bucketAnswers`, `packages/stream/src/supervisor.ts`) now gives up after `READ_DEADLINE_MS` and
-  the pause asks again. A server frozen with `SIGSTOP` answers after `SIGCONT` anyway: the pause test
-  read `streaming` 253 ms after it.
+  pending after 20,000 ms (`@smithy/node-http-handler` 4.12.1; true then, since A44 the store gives
+  such a call up: the entry "the stream's other bucket calls are bounded", below); a supervisor
+  case whose first question during the pause never settles failed with nothing left asleep. Each
+  question (`#bucketAnswers`, `packages/stream/src/supervisor.ts`) now gives up after
+  `READ_DEADLINE_MS` and the pause asks again. A server frozen with `SIGSTOP` answers after
+  `SIGCONT` anyway: the pause test read `streaming` 253 ms after it.
 - **DONE (2026-09-26, lane A's A44): the stream's other bucket calls are bounded for a bucket that
   takes the connection and never replies.** `createS3ObjectStore` now sets the handler's
   `socketTimeout` to `BUCKET_IDLE_MS`, 30 seconds (`packages/stream/src/s3-store.ts`). What the

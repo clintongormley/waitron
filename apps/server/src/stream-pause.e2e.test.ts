@@ -1,6 +1,6 @@
 // The stream's pause at the side-file limit, end to end, with the real pinned Litestream, a real
 // S3-compatible server and sales posted to the running server's own sale route:
-//   - the bucket is frozen, so every call to it hangs;
+//   - the bucket is frozen, so every call to it goes unanswered;
 //   - sales grow the side file past the limit, and the supervisor stops Litestream and folds the
 //     file back in the server's own write queue while three sales at a time post on one till
 //     session;
@@ -537,8 +537,8 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
         "the side file reached the limit before the bucket was frozen",
       ).toBeLessThan(WAL_LIMIT_BYTES);
 
-      // 6. The bucket freezes (SIGSTOP), so every call to it hangs rather than being refused. The
-      //    control: a call that does wait on the bucket is still unanswered at the bound.
+      // 6. The bucket freezes (SIGSTOP), so every call to it goes unanswered while it is frozen.
+      //    The control: a call that does wait on the bucket is still unanswered at the bound.
       s3.pause();
       expect(
         await Promise.race([

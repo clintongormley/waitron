@@ -41,18 +41,15 @@ export interface S3ObjectStoreOptions {
 }
 
 /**
- * A request is given up once its connection has sent and received nothing for this long, and the
- * client makes three attempts in all (its default): a listing sent to a server that takes the
- * connection and never answers failed after 90,116 ms. It counts idle time, not the whole request,
- * so an answer that keeps arriving is not cut off. Thirty seconds keeps the three attempts inside
- * the stream's five-minute read deadline (`READ_DEADLINE_MS`, `./supervisor.ts`).
- *
- * It is the handler's `socketTimeout`, whose reach depends on its size. Measured 2026-09-26 with
- * `@smithy/node-http-handler` 4.12.1: from 6,000 ms up the handler sets it three seconds into the
- * request, so it bounds a connection still being made then, but not the rest of an answer whose
- * headers arrived sooner; below 6,000 ms it is set at once and bounds the whole answer, but not the
- * connection. The handler's `requestTimeout` stops at the headers, and only warns unless
- * `throwOnRequestTimeout` is set.
+ * The handler's `socketTimeout`. A request that gets no reply is given up, and the client makes
+ * three attempts in all (its default). An answer whose headers arrive within the first three
+ * seconds and whose body then stalls is not given up: at this size the handler sets the limit three
+ * seconds into the request, so headers that arrive before then cancel it before it is set; once
+ * set, it stays for the rest of the request. `requestTimeout` is not used because it stops counting
+ * at the headers and only warns unless `throwOnRequestTimeout` is set.
+ * Thirty seconds keeps the three attempts inside the stream's five-minute read deadline
+ * (`READ_DEADLINE_MS`, `./supervisor.ts`). Receipts: docs/backlog.md, "the stream's other bucket
+ * calls are bounded".
  */
 const BUCKET_IDLE_MS = 30_000;
 
