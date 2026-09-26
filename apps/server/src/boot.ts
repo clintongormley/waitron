@@ -1112,8 +1112,10 @@ async function bootServer(
         peerUrl: `${peer.relayUrl.replace(/\/+$/, "")}/management-api/membership`,
         fetchPeerMembership: fetchPeerMembershipDocument,
         // Persist-if-accepted, so a newer verified chart is held even when it does not fence this node.
+        // Judged against the chart held BEFORE it, never the incoming one: a retirement chart is
+        // signed by the node it evicts.
         acceptDocument: async (incoming, currentTerm) => {
-          const result = acceptMembershipDocument(incoming, currentTerm, trustSet);
+          const result = acceptMembershipDocument(incoming, currentTerm, trustSet, held);
           if (result.accepted) await persistNodeMembershipIfNewer(db, incoming);
           return result;
         },

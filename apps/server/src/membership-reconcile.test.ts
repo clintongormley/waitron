@@ -140,6 +140,61 @@ describe("reconcileMembershipOnBoot", () => {
     expect(persisted).toEqual([]);
   });
 
+  // Boot's peer fetch sends no credential and the peer's route refuses one without it, so in
+  // production this path accepts nothing today; this pins what it does with a chart once it can.
+  it("refuses, and logs at warn with its reason, a newer chart signed by a node the held chart lists evicted", async () => {
+    const persisted: SignedMembershipDocument[] = [];
+    const lines: { level: string; event: string; fields: unknown }[] = [];
+    const heldEvictingPeer = signedMembershipDoc(HELD_TERM, {
+      signerNodeId: THIS_NODE,
+      nodes: [
+        { nodeId: THIS_NODE, contactUrl: "https://box", standing: "serving-primary" },
+        { nodeId: PEER_NODE, contactUrl: "https://cloud", standing: "evicted" },
+      ],
+    });
+    const fencing = peerChart(HELD_TERM + 1, "sell-only");
+
+    const result = await reconcileMembershipOnBoot({
+      held: heldEvictingPeer,
+      nodeId: THIS_NODE,
+      peerUrl: "https://cloud",
+      fetchPeerMembership: () => Promise.resolve(fencing),
+      acceptDocument: async (incoming, currentTerm) => {
+        const r = acceptMembershipDocument(incoming, currentTerm, TRUST, heldEvictingPeer);
+        if (r.accepted) persisted.push(incoming);
+        return r;
+      },
+      log: (level, event, fields) => {
+        lines.push({ level, event, fields });
+      },
+    });
+
+    expect(result).toEqual({ superseded: false });
+    expect(persisted).toEqual([]);
+    expect(lines).toEqual([
+      {
+        level: "warn",
+        event: "node.membership_refused_on_boot",
+        fields: { failure: "signer_removed" },
+      },
+    ]);
+  });
+
+  it("logs nothing for a chart that is not newer", async () => {
+    const lines: LogLine[] = [];
+
+    await reconcileMembershipOnBoot({
+      held,
+      nodeId: THIS_NODE,
+      peerUrl: "https://cloud",
+      fetchPeerMembership: () => Promise.resolve(peerChart(HELD_TERM, "sell-only")),
+      acceptDocument: acceptRecorder([]),
+      log: capturingLog(lines),
+    });
+
+    expect(lines).toEqual([]);
+  });
+
   it("treats a null held document as currentTerm null (a node that never adopted a chart)", async () => {
     const seenTerms: (number | null)[] = [];
     const fencing = peerChart(1, "sell-only");
