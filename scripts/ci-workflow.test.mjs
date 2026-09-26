@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -43,6 +43,13 @@ const lines = readFileSync(join(repoRoot, ".github", "workflows", "ci.yml"), "ut
 //     wins over a bare Vitest timeout.
 const PNPM_LS_SPAWN_TIMEOUT_MS = 30_000;
 const PNPM_LS_TEST_TIMEOUT_MS = 60_000;
+
+const STREAM_JOB = "test-server-stream";
+const STREAM_TEST_FILES = ["src/stream-loop.e2e.test.ts", "src/stream-pause.e2e.test.ts"];
+const STREAM_BINARY_INSTALLERS = [
+  "node scripts/setup-litestream.mjs",
+  "node scripts/setup-s3-test-server.mjs",
+];
 
 /**
  * ci.yml's jobs as `{id, body}`, in file order.
@@ -239,9 +246,10 @@ function artifactDownloadBase(body) {
   return line === undefined ? undefined : /pattern: (\S+?)-\*/.exec(line)?.[1];
 }
 
-const shardedJobs = jobs
+const testShardJobs = jobs
   .map(({ id, body }) => ({ id, body, pkg: packageRunning(body, "test:shard") }))
   .filter(({ pkg }) => pkg !== undefined);
+const shardedJobs = testShardJobs.filter(({ body }) => matrixShards(body) !== undefined);
 const mergeJobs = jobs
   .map(({ id, body }) => ({ id, body, pkg: packageRunning(body, "test:merge") }))
   .filter(({ pkg }) => pkg !== undefined);
@@ -534,21 +542,6 @@ describe("the test shards", () => {
     }
   });
 
-  it("installs the stream loop and pause tests' two pinned binaries in every apps/server shard, before they run", () => {
-    // The loop and pause tests (apps/server/src/stream-loop.e2e.test.ts,
-    // apps/server/src/stream-pause.e2e.test.ts) FAIL in CI when a binary is missing, so this is the
-    // cheaper place to learn the install step went. It reads ci.yml as text.
-    const body = job("test-server").body.join("\n");
-    const litestream = body.indexOf("node scripts/setup-litestream.mjs");
-    const versitygw = body.indexOf("node scripts/setup-s3-test-server.mjs");
-    const run = body.indexOf('pnpm --filter "@waitron/server" test:shard');
-    expect(run).toBeGreaterThan(-1);
-    expect(litestream).toBeGreaterThan(-1);
-    expect(versitygw).toBeGreaterThan(-1);
-    expect(litestream).toBeLessThan(run);
-    expect(versitygw).toBeLessThan(run);
-  });
-
   it("were found, each with at least one filter", () => {
     expect(shards.length).toBeGreaterThan(1);
     for (const shard of shards) expect(shard.filters.length).toBeGreaterThan(0);
@@ -725,6 +718,15 @@ describe("the sharded jobs", () => {
     expect(mergeJobs.length).toBe(shardedJobs.length);
   });
 
+  // Without this, deleting a sharded job's matrix would drop it from every case below unseen.
+  it("are every job running test:shard, apart from the stream job", () => {
+    expect(
+      testShardJobs
+        .filter(({ id }) => !shardedJobs.some((shard) => shard.id === id))
+        .map(({ id }) => id),
+    ).toEqual([STREAM_JOB]);
+  });
+
   // If the matrix legs and the `--shard=i/N` denominator disagree, a bucket of files runs twice or
   // never — and because the merge job gates on whatever the blobs contain, a missing bucket is a
   // coverage HOLE that still reports green.
@@ -780,6 +782,70 @@ describe("the sharded jobs", () => {
 
   it("gate every merge job on `code` plus exactly one scope gate", () => {
     for (const merge of mergeJobs) expectGatedOnCodePlusOneScope(gatesRead(merge.body));
+  });
+});
+
+/**
+ * The stream loop and pause tests run in a job of their own, beside the apps/server shards: they
+ * need two downloaded binaries. Their blob joins the server's coverage merge. Read from ci.yml as
+ * TEXT, so a step an `if:` switches off still passes.
+ */
+describe("the stream loop and pause tests' own job", () => {
+  const stream = () => job(STREAM_JOB);
+  const streamText = () => stream().body.join("\n");
+
+  it("names test files that exist", () => {
+    for (const file of STREAM_TEST_FILES) {
+      expect(existsSync(join(repoRoot, "apps", "server", file)), file).toBe(true);
+    }
+  });
+
+  it("runs exactly those files, unsharded, after installing both binaries", () => {
+    expect(streamText()).toContain('pnpm --filter "@waitron/server" test:shard');
+    const body = stream().body;
+    const start = body.findIndex(
+      (line) => !line.trim().startsWith("#") && line.includes("test:shard"),
+    );
+    expect(start).toBeGreaterThan(-1);
+    const step = body.slice(start);
+    const args = step
+      .slice(0, step.findIndex((line) => !line.trimEnd().endsWith("\\")) + 1)
+      .join(" ");
+    for (const file of STREAM_TEST_FILES) expect(args).toContain(` ${file}`);
+    expect(args.match(/\bsrc\/\S+\.test\.ts\b/g)).toHaveLength(STREAM_TEST_FILES.length);
+    expect(args).not.toContain("--shard=");
+    for (const installer of STREAM_BINARY_INSTALLERS) {
+      const at = body.findIndex((line) => line.includes(installer));
+      expect(at, installer).toBeGreaterThan(-1);
+      expect(at, installer).toBeLessThan(start);
+    }
+  });
+
+  it("is the only job that installs the binaries", () => {
+    for (const { id, body } of jobs.filter(({ id }) => id !== STREAM_JOB)) {
+      const code = body.filter((line) => !line.trim().startsWith("#")).join("\n");
+      for (const installer of STREAM_BINARY_INSTALLERS) expect(code, id).not.toContain(installer);
+    }
+  });
+
+  it("takes both files out of every apps/server shard", () => {
+    const step = shardStep(job("test-server").body)?.join("\n") ?? "";
+    for (const file of STREAM_TEST_FILES) expect(step).toContain(`--exclude ${file}`);
+  });
+
+  it("feeds its blob to the server's coverage merge", () => {
+    const merge = job("test-server-merge");
+    expect(allNeedsOf(merge.body)).toContain(STREAM_JOB);
+    const download = artifactDownloadBase(merge.body);
+    expect(download).toBe("server-blob");
+    expect(streamText()).toMatch(new RegExp(`^ {10}name: ${download}-stream\\s*$`, "m"));
+    expect(streamText()).toContain("path: apps/server/.vitest-reports/blob-stream.json");
+    expect(streamText()).toContain("--outputFile=.vitest-reports/blob-stream.json");
+    expect(streamText()).toContain("if-no-files-found: error");
+  });
+
+  it("is gated exactly as the apps/server shards are", () => {
+    expect(gatesRead(stream().body).sort()).toEqual(gatesRead(job("test-server").body).sort());
   });
 });
 

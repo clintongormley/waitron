@@ -419,7 +419,8 @@ Before calling a package green, verify its CI coverage result on the current hea
 `pnpm --filter <pkg> test:coverage` locally when investigating a failure. There is no single `test`
 job: `.github/workflows/ci.yml` runs `test-heavy` (`packages/db`) and `test-server`
 (`apps/server`) as three-way file shards each with a `-merge` job that enforces the thresholds on
-the merged blob (#216), plus `test-fiscal-verifactu`, dedicated mixed database/browser jobs (`test-bookings`, `test-media`, `test-venue-service`,
+the merged blob (#216) — `apps/server`'s two stream tests run in `test-server-stream` instead, whose
+blob joins the same merge — plus `test-fiscal-verifactu`, dedicated mixed database/browser jobs (`test-bookings`, `test-media`, `test-venue-service`,
 `test-payments-stripe`, `test-payments-sumup`),
 the browser shards (`test-ui`, `test-till`, `test-dashboard`, `test-setup`) and
 `test-light-a` / `test-light-b` for everything else (bins in `scripts/changed-scope.mjs`). Vitest
@@ -485,8 +486,8 @@ documentation, or root config no `code`-gated job reads (`.codex/`, `.vscode/`, 
 `scripts/`, `.husky/`, `.github/`), and on a pull request narrows the shards and mutation jobs to
 the changed packages and their dependents. A root file a member depends on is the exception —
 `scripts/bundle-node.mjs` and `scripts/dev-server-proxy.ts`, which member files read, and
-`scripts/setup-litestream.mjs` and `scripts/setup-s3-test-server.mjs`, which the `test-server` job
-runs before testing `apps/server`: `ROOT_SCOPE_CONSUMERS` in `scripts/changed-scope.mjs` selects
+`scripts/setup-litestream.mjs` and `scripts/setup-s3-test-server.mjs`, which the `test-server-stream`
+job runs before testing `apps/server`: `ROOT_SCOPE_CONSUMERS` in `scripts/changed-scope.mjs` selects
 those members, so its change is `code=true`. `scripts/root-scope-consumers.test.mjs` fails when a
 member file starts reading an unlisted one, when a ci.yml job starts running an unlisted one before
 a member's tests, or when a listed entry is neither. That guard is weaker than its name: it reads
@@ -681,24 +682,49 @@ file of its own, another bundler, or esbuild reached by path — is not flagged.
 so the other bundles the server's `build` makes, and `waitron-provision` (`dist/bin.js` in
 `packages/provisioning`), are not read by it.
 
-### `test-server`'s shards download two binaries for the stream loop and pause tests
+### The stream loop and pause tests run in a job of their own, which downloads two binaries
 
-Each of the three `test-server` shards runs `node scripts/setup-litestream.mjs` and
-`node scripts/setup-s3-test-server.mjs` before its tests, because file sharding decides which shard
-gets `apps/server/src/stream-loop.e2e.test.ts` and `apps/server/src/stream-pause.e2e.test.ts`, and
-each fails rather than skips in CI without them ([testing-guide.md](testing-guide.md), "The stream
-loop test skips locally without its two binaries, and a skip reads as a pass"). That is about 13.5 MB of
-Litestream and 27.5 MB of versitygw per shard for linux/amd64 (the release APIs' `size` fields,
-read 2026-09-25), from GitHub's release downloads, each checked against a pinned SHA-256. The time
-it adds to a shard has not been measured. The pause test took about 70 seconds on the owner's Mac
-(2026-09-26), most of it waiting for the stream's once-a-minute side-file measurement; its time on a
-CI shard has not been measured either.
+`apps/server/src/stream-loop.e2e.test.ts` and `apps/server/src/stream-pause.e2e.test.ts` run in
+`test-server-stream`, beside the three `test-server` shards rather than inside one of them: each
+shard's `test:shard` call passes `--exclude` for both files, which Vitest 4.1.11 adds to the
+config's own `exclude` list rather than replacing it (`vitest list --filesOnly` in `apps/server`
+listed 289 files without the two flags and 287 with them, and the config-excluded
+`src/**/*.preprod.test.ts` file in neither, 2026-09-26). `test-server-stream` runs
+the same `test:shard` script over the two files alone and uploads its blob as `server-blob-stream`,
+which `test-server-merge`'s `server-blob-*` download picks up with the shards' three, so the
+coverage gate counts what those tests reach. It alone runs `node scripts/setup-litestream.mjs` and
+`node scripts/setup-s3-test-server.mjs`, because both tests fail rather than skip in CI without
+them ([testing-guide.md](testing-guide.md), "The stream loop test skips locally without its two
+binaries, and a skip reads as a pass"). That is about 13.5 MB of Litestream and 27.5 MB of versitygw
+for linux/amd64 (the release APIs' `size` fields, read 2026-09-25), from GitHub's release downloads,
+each checked against a pinned SHA-256. Run locally with `CI=true` on the owner's Mac (2026-09-26),
+that job's command took 72 seconds: the loop test 13 and the pause test 70, the two files running
+side by side (`apps/server/vitest.config.ts` sets `maxWorkers: 4`). Guard:
+`scripts/ci-workflow.test.mjs`, which reads `ci.yml` as TEXT.
+
+Measured on CI, one run each side (2026-09-26). After: run 36231025265, PR #682 at `81b07b698`.
+Before: run 36229776393, `main` at `1821da0e0`, the last run before the change to execute the
+server jobs. Times are each job's start to finish as GitHub reports them.
+
+- `test-server-stream` took 103 s: 3 s for the two downloads, 78 s for the test step (Vitest's
+  own `Duration` 77.15 s; the loop test 13.2 s, the pause test 72.1 s). The pause test filled the
+  side file with 283 sales, from 5,586,752 to 17,353,472 bytes, in 16.9 s. On the shard before
+  the change the same fill took 745 sales and 78.1 s, and A37's run for `464d9eca7` 895 sales and
+  82 s.
+- The three `test-server` shards took 123, 124 and 170 s, against 106, 130 and 242 s before; the
+  pause test had been in the third. From the shards' start to the end of `test-server-merge` the
+  server's jobs took 198 s, against 278 s before.
+- Their `Test Files` counts were 96, 96 and 95, and with the stream job's 2 that makes 289, the
+  total `test-server-merge` reported. Before, the shards held 97, 96 and 96.
+- `test-server-merge` reported 289 files and 4,449 tests passed, none skipped, with both stream
+  files among them, and the same coverage totals as before: 98.69% statements, 96.71% branches,
+  98.7% functions, 99.02% lines.
 
 They are not cached. On 2026-09-25 `gh api repos/:owner/:repo/actions/cache/usage` reported
 11,174,362,480 bytes across 1,066 entries, and the plan's grouping of the entries on 2026-09-23 put
 about nine tenths of that day's total in Docker layers; a new entry would compete under least-recently-used eviction
 with the pnpm store and Playwright entries the test jobs restore (see "The GHA cache is a shared
-per-repository budget" above). An error answer from a release download fails the shard with a message
+per-repository budget" above). An error answer from a release download fails the job with a message
 naming the URL.
 
 **A change to either installer alone selects `apps/server`**, because both are in
@@ -707,12 +733,14 @@ naming the URL.
 same for `scripts/setup-s3-test-server.mjs`, each printed `code=true`, `scope=packages`,
 `packages=@waitron/server`; and `pnpm --filter "...@waitron/server" ls --depth -1 --json | node
 scripts/changed-scope.mjs`, the `changes` job's gate step for that scope, printed `server=true` with
-every other gate false. `test-server`'s `if:` asks for `code` and `server` both true. On `main` the
-`changes` job forces `scope=global`, whose gate step prints every gate true. That a real pull
-request then runs the shards has not been checked on CI. The cost, read from the jobs' `if:` lines
+every other gate false. `test-server`'s and `test-server-stream`'s `if:` ask for `code` and
+`server` both true. On `main` the `changes` job forces `scope=global`, whose gate step prints every gate true. On a real pull
+request, PR #682: its run for `1081bbb7c`, which changed `ci.yml`, docs and root scripts but neither
+installer, skipped the shards and `test-server-stream`; its next run, 36231025265, for a commit
+that added one line to `scripts/setup-litestream.mjs`, ran both and `test-server-merge`. The cost, read from the jobs' `if:` lines
 in `.github/workflows/ci.yml`: on a pull request an installer change runs the three server shards,
-`test-server-merge`, and `typecheck` and `bundle-smoke`, which ask for `code` alone; on its merge to
-`main` those two run again, the forced global scope runs every test job and `mutation-shared`, and
+`test-server-stream`, `test-server-merge`, and `typecheck` and `bundle-smoke`, which ask for
+`code` alone; on its merge to `main` those two run again, the forced global scope runs every test job and `mutation-shared`, and
 the push runs `image` and, once `ci` passes, `publish`, which moves `:main` unless
 `scripts/main-tag-guard.sh` holds it for a newer commit.
 

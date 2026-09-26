@@ -687,9 +687,9 @@ browser test** — most of these rules exist because a test passed while proving
   `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`; with `CI=true` or
   `WAITRON_REQUIRE_STREAM_BINARIES=1` a missing one fails the case. **Vitest's default reporter
   prints a skipped run as `1 skipped` and nothing else** — the reason shows only under
-  `--reporter=verbose` — so a local green run of `apps/server` may not have run them. That CI installs
-  them is guarded by `scripts/ci-workflow.test.mjs`, which reads `ci.yml` as TEXT, so the commands
-  left only in a YAML comment, or in a step an `if:` switches off, pass it. See
+  `--reporter=verbose` — so a local green run of `apps/server` may not have run them. CI runs both in
+  `test-server-stream`. Guard: `scripts/ci-workflow.test.mjs`, which reads `ci.yml` as TEXT, so the
+  install commands left only in a YAML comment, or in a step an `if:` switches off, pass it. See
   [testing-guide.md](docs/developers/testing-guide.md).
 - **A container port-binding timeout needs Docker state as well as the container's own logs.** Save
   `docker inspect`'s `HostConfig.PortBindings` and `NetworkSettings.Ports` before removing the

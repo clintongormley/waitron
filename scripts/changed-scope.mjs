@@ -32,7 +32,7 @@ const ROOT_SCOPE_PREFIXES = ["scripts/", ".husky/", ".github/"];
 /**
  * Root-scope files a workspace member depends on, each mapped to the member DIRECTORIES that depend
  * on it: a member file reads it, or the ci.yml job that tests the member runs it first (the
- * `test-server` job's two binary installers). A change to one selects those members as well as the
+ * `test-server-stream` job's two binary installers). A change to one selects those members as well as the
  * root project. Without an entry, root scope emits `code=false` and ci.yml runs neither
  * `bundle-smoke` nor any member's build or tests.
  *

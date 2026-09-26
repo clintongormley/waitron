@@ -540,8 +540,9 @@ minutes, for the reason the "per-test timeout" section above gives.
 both under `.bin/` at the repository root; `WAITRON_LITESTREAM_BIN` and `WAITRON_VERSITYGW_BIN` point
 the test elsewhere. A missing binary, or one reporting another version, SKIPS the case locally, and
 FAILS it when `CI=true` (GitHub Actions sets it on every job) or `WAITRON_REQUIRE_STREAM_BINARIES=1`.
-CI's `test-server` shards install both first (`.github/workflows/ci.yml`; see
-[ci-and-gates.md](ci-and-gates.md), "`test-server`'s shards download two binaries").
+CI runs both tests in `test-server-stream`, the one job that installs both binaries
+(`.github/workflows/ci.yml`; see [ci-and-gates.md](ci-and-gates.md), "The stream loop and pause
+tests run in a job of their own").
 
 **A skipped run looks like a quiet pass.** Measured 2026-09-25 with Vitest 4.1.11 and
 `WAITRON_LITESTREAM_BIN=/nonexistent`: `pnpm --filter @waitron/server exec vitest run

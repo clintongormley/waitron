@@ -22930,6 +22930,9 @@ In `.github/workflows/ci.yml`'s `test-server` job, insert between `- run: pnpm i
           node scripts/setup-s3-test-server.mjs
 ```
 
+(2026-09-26, A48: superseded — the stream tests now run in `test-server-stream`, the only job that
+installs the two binaries; the shards `--exclude` both files.)
+
 Run: `pnpm vitest run scripts/ci-workflow.test.mjs`
 Expected: PASS.
 
@@ -24394,7 +24397,8 @@ GitHub evicts the least recently used entry, so a new ~41 MB entry would compete
 and Playwright entries that every test job restores. Downloading instead costs each `test-server`
 shard 13,540,484 bytes of Litestream (the release API's `size` field) plus 27,542,985 bytes of
 versitygw, three shards per run. The time this adds has not been measured. A GitHub release outage
-fails those shards, and the failure message names the URL.
+fails those shards, and the failure message names the URL. (2026-09-26, A48: superseded — only
+`test-server-stream` downloads the two binaries now, once per run.)
 
 **Where the test lives: `apps/server`.** The test needs the whole boot. The stream restore runs at
 the next start, the rebuilt box re-issues its certificate and signs a membership document one term
@@ -24402,7 +24406,9 @@ higher (Task 9), and boot starts the supervisor (Task 6). It cannot live in `pac
 because `apps/server` depends on `@waitron/stream`. Importing the server from the stream package's
 tests would close a workspace dependency loop, which `scripts/workspace-cycles.test.ts` refuses
 (CLAUDE.md §3). `apps/server` is sharded three ways by test file, and I found no way to fix which
-shard receives a file. So every `test-server` shard installs both binaries.
+shard receives a file. So every `test-server` shard installs both binaries. (2026-09-26, A48:
+superseded — the stream tests now run in `test-server-stream`, the only job that installs the two
+binaries; the shards `--exclude` both files.)
 
 ---
 
