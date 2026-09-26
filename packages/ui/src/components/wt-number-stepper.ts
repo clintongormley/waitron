@@ -124,9 +124,11 @@ export class WtNumberStepper extends LitElement {
   @property({ type: Boolean, reflect: true }) invalid = false;
   @property({ type: Boolean, reflect: true }) disabled = false;
   @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
-  /** `{label}` is replaced with `label`, naming the button after its field. */
-  @property() decreaseLabel = "Decrease {label}";
-  @property() increaseLabel = "Increase {label}";
+  /** Each is given `label`, naming the button after its field. */
+  @property({ attribute: false }) decreaseLabel: (label: string) => string = (label) =>
+    `Decrease ${label}`;
+  @property({ attribute: false }) increaseLabel: (label: string) => string = (label) =>
+    `Increase ${label}`;
 
   private readonly generatedInputId = uniqueId("wt-number-stepper");
   private readonly errorId = uniqueId("wt-number-stepper-error");
@@ -190,7 +192,7 @@ export class WtNumberStepper extends LitElement {
         <button
           type="button"
           data-step="-1"
-          aria-label=${this.decreaseLabel.replace("{label}", this.label)}
+          aria-label=${this.decreaseLabel(this.label)}
           ?disabled=${this.disabled || atMin}
           @click=${(event: Event) => this.step(-1, event)}
         >
@@ -212,7 +214,7 @@ export class WtNumberStepper extends LitElement {
         <button
           type="button"
           data-step="1"
-          aria-label=${this.increaseLabel.replace("{label}", this.label)}
+          aria-label=${this.increaseLabel(this.label)}
           ?disabled=${this.disabled || atMax}
           @click=${(event: Event) => this.step(1, event)}
         >

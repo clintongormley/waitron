@@ -45,10 +45,10 @@
      it wrap and keeps the controls after it (a switch, a row menu) on screen at phone width
      instead of pushing the row into a sideways scroll.
 
-     As a FLOOR (`min-width`): the single-input cells of the options list form and of the extras
-     list form's price column, which have no width of their own and would otherwise shrink to the
-     tap-target minimum and cut the value off mid-word. Those tables accept a sideways scroll —
-     each has its own focusable horizontal scroller so the dialog does not scroll instead.
+     As a FLOOR (`min-width`): the single-input cells of the options list form, which have no
+     width of their own and would otherwise shrink to the tap-target minimum and cut the value off
+     mid-word. That table accepts a sideways scroll — it has its own focusable horizontal scroller
+     so the dialog does not scroll instead.
 
      As a FLEX BASIS: the extras list form's product picker, which is a combobox rather than a
      table cell and sizes its open panel to its trigger.
@@ -61,6 +61,13 @@
   /* Wide enough for four digits, and never below --wt-tap-min: the number box is what a
      wt-number-stepper hands focus to. */
   --wt-stepper-field-width: 64px;
+  /* A stepper box whose blank value reads as a word ("No limit", "Sin límite" at
+     --wt-font-size-md), with its 8px padding on each side. */
+  --wt-stepper-field-width-wide: 96px;
+
+  /* A price field's amount box where nothing stretches it: "9999.99" at --wt-font-size-md, with
+     its 12px padding on each side. */
+  --wt-price-field-width: 96px;
 
   --wt-shadow-1: 0 1px 2px rgb(0 0 0 / 0.08);
   --wt-shadow-2: 0 8px 24px rgb(0 0 0 / 0.16);

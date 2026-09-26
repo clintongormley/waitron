@@ -184,18 +184,26 @@ test("the buttons are named after the field", async () => {
   expect(parts(el).plus.getAttribute("aria-label")).toBe("Increase Maximum quantity");
 });
 
-test("the button names can be translated", async () => {
+test("the button names can be translated, each built from the field's label", async () => {
   const el = await mount('<wt-number-stepper label="Máximo"></wt-number-stepper>');
   const stepper = el as HTMLElement & {
-    decreaseLabel: string;
-    increaseLabel: string;
+    decreaseLabel: (label: string) => string;
+    increaseLabel: (label: string) => string;
     updateComplete: Promise<unknown>;
   };
-  stepper.decreaseLabel = "Reducir {label}";
-  stepper.increaseLabel = "Aumentar {label}";
+  stepper.decreaseLabel = (label) => `Reducir ${label}`;
+  stepper.increaseLabel = (label) => `${label}: aumentar`;
   await stepper.updateComplete;
   expect(parts(el).minus.getAttribute("aria-label")).toBe("Reducir Máximo");
-  expect(parts(el).plus.getAttribute("aria-label")).toBe("Aumentar Máximo");
+  expect(parts(el).plus.getAttribute("aria-label")).toBe("Máximo: aumentar");
+});
+
+test("the button names are properties only, never read from an attribute", async () => {
+  const el = await mount(
+    '<wt-number-stepper label="Q" decreaselabel="Reducir {label}" increaselabel="Aumentar {label}"></wt-number-stepper>',
+  );
+  expect(parts(el).minus.getAttribute("aria-label")).toBe("Decrease Q");
+  expect(parts(el).plus.getAttribute("aria-label")).toBe("Increase Q");
 });
 
 test("the buttons are plain buttons, not submit buttons", async () => {

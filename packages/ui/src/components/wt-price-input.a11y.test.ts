@@ -58,6 +58,22 @@ describe.each(["light", "dark"] as const)("wt-price-input a11y (%s theme)", (the
     expect(contrastRatio(placeholder, field)).toBeGreaterThanOrEqual(4.5);
   });
 
+  test("hidden label, fixed unit", async () => {
+    await mountThemed(
+      '<wt-price-input label="Price" name="price" unit="kg" fixed-unit hide-label value="9.90"></wt-price-input>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  test("fixed unit with an error", async () => {
+    await mountThemed(
+      '<wt-price-input label="Price" name="price" unit="kg" fixed-unit error="Enter a price"></wt-price-input>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   test("disabled", async () => {
     await mountThemed(
       '<wt-price-input label="Price" name="price" unit="ea" value="9.90" disabled></wt-price-input>',

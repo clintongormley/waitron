@@ -160,3 +160,39 @@ test("a hidden label still names the switch but draws no text beside it", async 
   const tap = parseFloat(getComputedStyle(el).minWidth);
   expect(el.getBoundingClientRect().width).toBeLessThanOrEqual(tap);
 });
+
+function baselineOf(parent: Element): number {
+  const mark = document.createElement("span");
+  mark.style.cssText = "display: inline-block; width: 0; height: 0";
+  parent.append(mark);
+  const top = mark.getBoundingClientRect().top;
+  mark.remove();
+  return top;
+}
+
+test("its baseline is its label's text, so a row aligned by baseline lines the label up", async () => {
+  await mount(
+    '<div style="display: flex; align-items: baseline"><span>Bacon</span><wt-switch label="Preselected"></wt-switch></div>',
+  );
+  const row = host.firstElementChild!;
+  const label = row.querySelector("wt-switch")!.shadowRoot!.querySelector("label")!;
+  expect(baselineOf(label)).toBe(baselineOf(row.querySelector("span")!));
+});
+
+test("exposes its drawn label as the label part, so a host can hide the text and keep the name", async () => {
+  const outer = document.createElement("div");
+  document.body.append(outer);
+  try {
+    const shadow = outer.attachShadow({ mode: "open" });
+    shadow.innerHTML =
+      '<style>wt-switch::part(label) { display: none; }</style><wt-switch label="Preselected"></wt-switch>';
+    const el = shadow.querySelector("wt-switch")! as HTMLElement & {
+      updateComplete: Promise<unknown>;
+    };
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("label")!.getClientRects()).toHaveLength(0);
+    expect(el.shadowRoot!.querySelector("input")!.getAttribute("aria-label")).toBe("Preselected");
+  } finally {
+    outer.remove();
+  }
+});

@@ -140,7 +140,8 @@ the filled-background idiom only for a colour that is itself the data, never as 
 `--wt-font-size-sm|md|lg|xl`, `--wt-font-weight-normal|bold`, `--wt-shadow-1|2`,
 `--wt-focus-ring`, `--wt-focus-offset`, `--wt-dialog-max-width`, `--wt-modal-max-width`,
 `--wt-modal-inline-margin`, `--wt-modal-inline-padding`, `--wt-cell-name-max-width`,
-`--wt-stepper-field-width`, `--wt-opacity-disabled`, `--wt-opacity-hover`
+`--wt-stepper-field-width`, `--wt-stepper-field-width-wide`, `--wt-price-field-width`,
+`--wt-opacity-disabled`, `--wt-opacity-hover`
 
 `--wt-opacity-hover` is `wt-button`'s hover feedback (`button:hover:not(:disabled)`) — a plain
 opacity dip, the same treatment for every variant. A variant-specific background or border-colour
@@ -204,8 +205,7 @@ field's unit button is a tap target on both axes.
 As a **flex basis** it sizes the extras list form's product picker, which is a combobox rather
 than a table cell and sizes its open panel to its trigger.
 
-As a **floor** (`min-width`) it is in the options list form's two single-input cells and in the
-extras list form's price cell. An input
+As a **floor** (`min-width`) it is in the options list form's two single-input cells. An input
 alone in a cell has no width of its own, so the automatic table layout shrinks it to `wt-input`'s
 tap-target minimum and cuts the value off mid-word; the same value gives it room. That table then
 does scroll sideways, which is exactly what the cap exists to avoid — it carries its own focusable
@@ -247,9 +247,9 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-count-badge` | `count` (renders nothing at zero; shows `99+` above 99), `tone` (`neutral`\|`warning`\|`error`, reflected). It has no accessible name: the control it decorates must say the count | — |
 | `wt-toast` | `open`, `tone` (`info`\|`error`, reflected; info is announced politely through `role="status"`, error assertively through `role="alert"`), `message`, `close-label` (required: the close button's accessible name, and an empty one leaves that button nameless), `duration` (milliseconds, default `8000`; `0` keeps it open); `show()` opens it and restarts the full countdown (unless the pointer or keyboard focus is on it, when the countdown waits), which is how to re-announce an identical message. While the pointer or keyboard focus is on it the countdown never runs, even when the message changes; once both have left, the full duration restarts. Positioning belongs to the consumer, which must also register the `close` icon | `wt-activate` — `detail: {}` (the message was pressed; the toast then closes); `wt-close` — `detail: {}` (closed by the timer, the close button, or after activation) |
 | `wt-input` | `value`, `label`, `name`, `type`, `autocomplete`, `placeholder`, `hint` (an always-shown line of help under the field, which describes the native input), `required`, `disabled`, `invalid`, `error`; `help` and `end` slots | `wt-change` — `detail: { value: string }` |
-| `wt-price-input` | `value`, `label`, `name`, `unit`, `placeholder`, `required` (reflected), `disabled` (reflected), `error`. `placeholder` shows on the amount only while it is empty, painted `--wt-color-text-muted`. A money field joined to a trailing `<button>` whose visible text is `unit` (which is also that button's accessible name, so supply one). `disabled` locks the amount AND the unit button, so a form that suspends itself while saving cannot be edited through the price. `error` marks the field `aria-invalid` and links the message | `wt-change` — `detail: { value: string }` (on input); `wt-unit-click` — `detail: {}` (the unit button was pressed) |
-| `wt-number-stepper` | `value` (text), `label`, `name`, `min` (default `0`), `max` (default none), `placeholder`, `hint`, `required` (reflected), `disabled` (reflected, and locks the box and both buttons), `invalid` (reflected), `error`, `hide-label` (names the box with `label` for assistive technology but draws no label), `decreaseLabel` and `increaseLabel` (the buttons' accessible names, default `Decrease {label}` and `Increase {label}`; set translated ones). A whole-number box between a − and a + button, each disabled at its bound. + on a blank or non-number value gives the larger of `min` and 1, never above `max`; − never goes below `min`, so only clearing the box reaches blank. Typing emits exactly what was typed, never a clamped number, so the form's own validation sees a typed 0, a blank or a non-number. Its baseline is the number's, so a row aligned by baseline lines the text up. The box is `--wt-stepper-field-width` wide; focusing the element focuses the box. The consuming app registers the `minus` and `plus` icons | `wt-change` — `detail: { value: string }` (on typing, and on each step that changes the value) |
-| `wt-switch` | `checked`, `disabled`, `label`, `name`, `hide-label` (names the switch for assistive technology with `label` but draws no text beside it — for a switch in a table column whose heading already says what it is) | `wt-change` — `detail: { checked: boolean }` |
+| `wt-price-input` | `value`, `label`, `name`, `unit`, `placeholder`, `required` (reflected), `disabled` (reflected), `error`. `placeholder` shows on the amount only while it is empty, painted `--wt-color-text-muted`. A money field joined to a trailing `<button>` whose visible text is `unit` (which is also that button's accessible name, so supply one). `disabled` locks the amount AND the unit button, so a form that suspends itself while saving cannot be edited through the price. `error` marks the field `aria-invalid` and links the message. `hide-label` names the field with `label` for assistive technology but draws no label. `fixed-unit` shows `unit` as plain text rather than a button, for a field whose unit is not chosen here; the field's description then reads the unit after any error, and an empty `unit` draws no unit box at all. The amount box is the `amount` part and a fixed unit the `unit` part: the amount box draws the seam between them, so a host can move the unit under it with `flex-basis: 100%` on the unit part and round the amount's trailing corners. The amount box is `--wt-price-field-width` wide where nothing stretches it, and fills a wider field unless it carries a fixed unit | `wt-change` — `detail: { value: string }` (on input); `wt-unit-click` — `detail: {}` (the unit button was pressed) |
+| `wt-number-stepper` | `value` (text), `label`, `name`, `min` (default `0`), `max` (default none), `placeholder`, `hint`, `required` (reflected), `disabled` (reflected, and locks the box and both buttons), `invalid` (reflected), `error`, `hide-label` (names the box with `label` for assistive technology but draws no label), `decreaseLabel` and `increaseLabel` (functions given `label` that return the buttons' accessible names, property only, default "Decrease …" and "Increase …"; set translated ones). A whole-number box between a − and a + button, each disabled at its bound. + on a blank or non-number value gives the larger of `min` and 1, never above `max`; − never goes below `min`, so only clearing the box reaches blank. Typing emits exactly what was typed, never a clamped number, so the form's own validation sees a typed 0, a blank or a non-number. Its baseline is the number's, so a row aligned by baseline lines the text up. The box is `--wt-stepper-field-width` wide (a stepper whose blank value shows a word placeholder such as "No limit" sets it to `--wt-stepper-field-width-wide`, and so does a stepper set beside one, so the two boxes match); focusing the element focuses the box. The consuming app registers the `minus` and `plus` icons | `wt-change` — `detail: { value: string }` (on typing, and on each step that changes the value) |
+| `wt-switch` | `checked`, `disabled`, `label`, `name`, `hide-label` (names the switch for assistive technology with `label` but draws no text beside it — for a switch in a table column whose heading already says what it is). The drawn label is the `label` part, so a host can hide the text in one case only (the extras list form does on a phone) while the switch keeps its name. Its baseline is its label's text, so a row aligned by baseline lines the label up | `wt-change` — `detail: { checked: boolean }` |
 | `wt-dialog` | `open`, `heading`, `aria-label` (fallback name when there is no `heading`), `dismissible` (default true; set the property `.dismissible=${false}` so Escape cannot close it); default slot (body), `footer` slot | `wt-close` |
 | `wt-modal` | `open`, `heading`, `aria-label`, `dismissible`; default slot (scrolling body), `footer` slot (fixed actions) | `wt-close` |
 | `wt-form-error-summary` | `heading`, `errors` | — |
@@ -672,7 +672,10 @@ Three rules make the fold safe rather than merely tidy.
 **Every collapsed section carries a one-line summary of what is inside it**, passed as `summary`, so
 nothing a person has filled in becomes invisible. Build it from the values themselves, skipping the
 empty ones, joined with a middot: the Kitchen section reads `Café c/leche · Bar · Drinks`. An empty
-summary means an empty section, which is a useful signal in itself.
+summary means an empty section, which is a useful signal in itself. One exception: the extras list
+form's names section (`apps/dashboard/src/widgets/extra-list-form.ts`) summarises with a count of
+the names filled in ("2 of 3 filled in"), as
+[its spec](../superpowers/specs/2026-09-26-modifier-editors-polish-design.md) §3.3 chose.
 
 **A section holding a validation error opens itself and cannot be closed again while the error
 stands.** That is `has-error`: setting it forces `open` true and makes the header inert, so the
@@ -697,13 +700,19 @@ Two notes on the primitives this pattern uses, both in the table above:
 - `wt-disclosure` emits `wt-toggle` with `{ open }`, and reflects `open` and `has-error` as
   attributes, so a host can style or query the state from outside.
 - `wt-price-input` is the money field a priced form wants: an amount joined to a trailing unit
-  button. The button's visible text is its accessible name, so `unit` must never be empty. It emits
+  button. The button's visible text is its accessible name, so a unit button's `unit` must never be
+  empty. It emits
   `wt-change` on input and `wt-unit-click` when the button is pressed. The product editor draws its
   price field with that button whether or not the product has variants, and opens the unit dropdown
   under the field on `wt-unit-click`. A product with variants also has a unit select (`pricing-unit`)
   in the variants table's price heading. Both change the same product unit, on purpose. A table
   30rem wide or less hides its price column and that select with it, so on a phone the price
-  field's button is the only way to the unit.
+  field's button is the only way to the unit. The extras list form's price cells set `fixed-unit`:
+  a row shows its product's unit, which is chosen on the product, so a unit button there would be a
+  control that does nothing. Where that form is 30rem wide or less, the unit moves under the amount
+  as text that breaks inside a word where it must, so a long unit does not widen the table:
+  `extra-list-form.test.ts` checks that with "kilogramos", "Unidadesdeembalaje" and a multi-word
+  unit name against the one-letter "g".
 
 ### Dashboard banner
 
