@@ -2,7 +2,15 @@ import { afterEach, describe, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./catalogue-screen.js";
 import type { CatalogueScreen } from "./catalogue-screen.js";
-import type { CatalogueSummary, CategorySummary, DashboardApi, Product } from "../api/client.js";
+import type {
+  CatalogueSummary,
+  CategorySummary,
+  DashboardApi,
+  LibrarySection,
+  MenuStructure,
+  Product,
+  ProductEditorInput,
+} from "../api/client.js";
 
 /**
  * Scanned with catalogues loaded and with NONE. The stub must resolve EVERY method `#load` calls, or a
@@ -51,6 +59,26 @@ const stations = [{ id: "s1", name: "Cocina", displayOrder: 0, isDefault: true, 
 
 const courses = [{ id: "k1", name: "Entrantes", displayOrder: 0, active: true }];
 
+const drinks = {
+  memberId: "m-drinks",
+  ref: { kind: "section" as const, sectionId: "s-drinks" },
+  children: [],
+};
+const structures: Record<string, MenuStructure> = {
+  "cat-a": { rootSectionId: "root-a", nodes: [drinks] },
+  "cat-b": { rootSectionId: "root-b", nodes: [drinks] },
+};
+const sections: LibrarySection[] = [
+  {
+    id: "s-drinks",
+    internalName: "Drinks list",
+    names: { es: "Bebidas frías" },
+    image: null,
+    color: null,
+    members: [],
+  },
+];
+
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   const api = {
     listCatalogues: vi.fn().mockResolvedValue(catalogues),
@@ -66,6 +94,9 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
       ]),
     listExtraLists: vi.fn().mockResolvedValue([]),
     listOptionLists: vi.fn().mockResolvedValue([]),
+    createProductEditor: vi.fn().mockResolvedValue({ id: "new", name: "Croquetas de jamón" }),
+    getMenuStructure: vi.fn().mockImplementation((id: string) => Promise.resolve(structures[id])),
+    listSections: vi.fn().mockResolvedValue(sections),
     ...overrides,
   } as unknown as DashboardApi;
   Object.defineProperty(api, "background", { get: () => api });
@@ -116,6 +147,29 @@ describe.each(["light", "dark"] as const)("catalogue-screen a11y (%s theme)", (t
       }),
     );
     await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the Add to menus step that follows a create accessibly", async () => {
+    const { el, host } = await mountWidget<CatalogueScreen>(
+      "dashboard-catalogue-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-product]")!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector("dashboard-product-editor")!.dispatchEvent(
+      new CustomEvent("wt-submit", {
+        detail: { value: { name: "Croquetas de jamón" } as ProductEditorInput },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    await flush(el);
+    const stepRoot = el.shadowRoot!.querySelector("dashboard-add-to-menus")!.shadowRoot!;
+    if (!stepRoot.querySelector('input[value="s-drinks"]')) throw new Error("the step is not open");
     await expectNoA11yViolations(host);
   });
 });

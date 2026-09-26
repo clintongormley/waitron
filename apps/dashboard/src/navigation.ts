@@ -6,6 +6,7 @@ export const dashboardPath: UrlPathConfig = {
   children: {
     "*": { view: "view" },
     catalogue: { view: "view", product: "product" },
+    menus: { menu: "menu", view: "view" },
     floor: { "floor-view": "view", "floor-zone": "zone" },
     "canvas-editor": { canvas: "canvas", "canvas-tab": "tab" },
   },

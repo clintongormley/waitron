@@ -14,6 +14,8 @@ import type {
   ExtraList,
   ExtraListInput,
   LabelSummary,
+  LibrarySection,
+  MenuStructure,
   OptionList,
   OptionListInput,
   Product,
@@ -33,6 +35,11 @@ import {
   productEditorTranslationField,
   type ProductEditor,
 } from "../widgets/product-editor.js";
+import {
+  placementMenus,
+  type PlacementFailure,
+  type PlacementMenu,
+} from "../widgets/add-to-menus.js";
 import "../widgets/category-form.js";
 import "../widgets/content-languages.js";
 import "../widgets/extra-list-form.js";
@@ -115,6 +122,12 @@ export class CatalogueScreen extends LitElement {
   /** The rejected save's problem, keyed by the editor field that holds it. Empty when the server
    * named no field this screen can point at. */
   @state() private editorFieldErrors: Record<string, string> = {};
+  /** The product just created, while the Add to menus step that follows its create is open. */
+  @state() private placing: { id: string; name: string } | null = null;
+  @state() private placementMenus: PlacementMenu[] | null = null;
+  @state() private placementLoadError: string | null = null;
+  @state() private placementFailures: PlacementFailure[] = [];
+  @state() private placementBusy = false;
   #editorGeneration = 0;
   #linkedProduct: string | null = null;
 
@@ -124,6 +137,12 @@ export class CatalogueScreen extends LitElement {
     (error) => {
       this.errorKey = codeOf(error);
     },
+  );
+  // A re-read that fails after the step's first load keeps the menus it already shows.
+  readonly #placementQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    () => undefined,
   );
   readonly #url = new UrlStateController(
     this,
@@ -349,10 +368,12 @@ export class CatalogueScreen extends LitElement {
     this.errorKey = null;
     this.editorFieldErrors = {};
     try {
+      let created: ProductEditorValue | null = null;
       if (this.editorValue === null)
-        await this.api.createProductEditor(this.selectedCatalogueId, event.detail.value);
+        created = await this.api.createProductEditor(this.selectedCatalogueId, event.detail.value);
       else await this.api.updateProductEditor(this.editorValue.id, event.detail.value);
       this.#closeEditor();
+      if (created) void this.#openPlacement(created);
       await this.#reloadProducts();
     } catch (error) {
       const fieldErrors = this.#rejectedField(error, event.detail.value);
@@ -366,6 +387,69 @@ export class CatalogueScreen extends LitElement {
     } finally {
       this.busy = false;
     }
+  }
+
+  async #openPlacement(product: { id: string; name: string }): Promise<void> {
+    const placing = { id: product.id, name: product.name };
+    this.placing = placing;
+    this.placementMenus = null;
+    this.placementLoadError = null;
+    this.placementFailures = [];
+    const menus = [...this.catalogues];
+    let structures: MenuStructure[] | null = null;
+    let sections: LibrarySection[] | null = null;
+    const compose = () => {
+      if (structures && sections) this.placementMenus = placementMenus(menus, structures, sections);
+    };
+    try {
+      await Promise.all([
+        this.#placementQueries.watchGroup(
+          "getMenuStructure",
+          menus.map(({ id }) => [id]),
+          (value) => {
+            structures = value;
+            compose();
+          },
+        ),
+        this.#placementQueries.watch("listSections", [], (value) => {
+          sections = value;
+          compose();
+        }),
+      ]);
+    } catch (error) {
+      if (this.placing === placing) this.placementLoadError = codeMessage(codeOf(error));
+    }
+  }
+
+  /** One request per section, so a section that refuses leaves the others' additions in place. */
+  async #place(event: CustomEvent<{ sectionIds: string[] }>): Promise<void> {
+    event.stopPropagation();
+    const placing = this.placing;
+    if (placing === null || this.placementBusy) return;
+    this.placementBusy = true;
+    this.placementFailures = [];
+    const { sectionIds } = event.detail;
+    const settled = await Promise.allSettled(
+      sectionIds.map((sectionId) => this.api.addSectionProducts(sectionId, [placing.id])),
+    );
+    const failures = settled.flatMap((result, index): PlacementFailure[] =>
+      result.status === "rejected"
+        ? [{ sectionId: sectionIds[index]!, reason: codeMessage(codeOf(result.reason)) }]
+        : [],
+    );
+    this.placementBusy = false;
+    if (this.placing !== placing) return;
+    if (failures.length) this.placementFailures = failures;
+    else this.#closePlacement();
+  }
+
+  #closePlacement(): void {
+    this.placing = null;
+    this.placementMenus = null;
+    this.placementLoadError = null;
+    this.placementFailures = [];
+    this.#placementQueries.release("getMenuStructure");
+    this.#placementQueries.release("listSections");
   }
 
   /**
@@ -560,6 +644,19 @@ export class CatalogueScreen extends LitElement {
           void this.#openProduct(event.detail.productId);
         }}
       ></dashboard-product-editor>
+      <dashboard-add-to-menus
+        .open=${this.placing !== null}
+        .busy=${this.placementBusy}
+        productName=${this.placing?.name ?? ""}
+        .menus=${this.placementMenus}
+        .loadError=${this.placementLoadError}
+        .failures=${this.placementFailures}
+        @wt-submit=${(event: CustomEvent<{ sectionIds: string[] }>) => void this.#place(event)}
+        @wt-cancel=${(event: Event) => {
+          event.stopPropagation();
+          if (!this.placementBusy) this.#closePlacement();
+        }}
+      ></dashboard-add-to-menus>
       <wt-modal
         data-test="delete-dialog"
         .open=${this.deletingProduct !== null}

@@ -1410,6 +1410,7 @@ export const en = {
   "members.actions": "Actions",
   "members.open": "Open section",
   "members.remove": "Remove from this list",
+  "members.remove_from": "Remove from {list}",
   "members.empty": "Nothing is in this list yet.",
   "members.add_label": "Add to this list",
   "members.add_placeholder": "Choose a product or section",
@@ -1476,6 +1477,63 @@ export const en = {
   "sections.delete_sections": "Sections",
   "sections.delete_usages_error":
     "Where this section is used could not be checked, so it cannot be deleted yet. Close this and try again.",
+  "nav.menus": "Menus",
+  "menus.title": "Menus",
+  "menus.loading": "Loading menus…",
+  "menus.load_error": "The menus could not be loaded.",
+  "menus.retry": "Try again",
+  "menus.empty": "There are no menus yet.",
+  "menus.add": "Add menu",
+  "menus.name": "Name",
+  "menus.name_required": "Enter a name for the menu.",
+  "menus.create": "New menu",
+  "menus.rename": "Rename",
+  "menus.rename_heading": "Rename {name}",
+  "menus.open": "Open",
+  "menus.actions": "Actions",
+  "menus.back": "All menus",
+  "menus.tab_structure": "Structure",
+  "menus.tree_heading": "What is on this menu",
+  "menus.structure_empty": "Nothing is on this menu yet.",
+  "menus.structure_loading": "Loading the menu…",
+  "menus.structure_error": "This menu could not be loaded.",
+  "menus.breadcrumb": "Where you are",
+  "menus.expand": "Show what is in {name}",
+  "menus.collapse": "Hide what is in {name}",
+  "menus.shared": "Shared: also in {list}",
+  "menus.shared_note": "A change to this section changes it everywhere it is used.",
+  "menus.not_shared": "Not used anywhere else.",
+  "menus.duplicate_here": "Duplicate and use the copy here",
+  "menus.duplicate_heading": "Use a copy of {name} here",
+  "menus.duplicate_note":
+    "The copy takes the place of {name} in {list}. Everywhere else keeps using {name}.",
+  "menus.duplicate_save": "Use the copy here",
+  "menus.new_section": "New section here",
+  "menus.new_section_heading": "New section in {list}",
+  "menus.section_not_added":
+    "{name} was created, but it could not be added to this list. Choose it below to add it.",
+  "menus.section_not_added_to": "{name} was created, but it could not be added to {list}.",
+  "menus.list_gone":
+    "Another change took {name} away from where you were editing it, so its window was closed.",
+  "menus.list_gone_saved":
+    "Your change to {name} was saved, but meanwhile another change took it away from where you were editing it.",
+  "menus.change_not_saved": "Your change to {name} was not saved. {reason}",
+  "add_to_menus.heading": "Add {name} to menus",
+  "add_to_menus.intro":
+    "{name} is saved. Choose where it goes on your menus, or skip this and add it later from Menus.",
+  "add_to_menus.top_level": "Top level",
+  "add_to_menus.place_top_level": "Top level of {menu}",
+  "add_to_menus.shared": "Shared: also on {menus}",
+  "add_to_menus.shared_note":
+    "A shared section is the same list on every menu that uses it, so adding the product to it adds it to all of them.",
+  "add_to_menus.loading": "Loading your menus…",
+  "add_to_menus.load_error":
+    "{name} is saved, but your menus could not be loaded, so it has not been added to any. You can add it from Menus.",
+  "add_to_menus.failed":
+    "{name} is saved, but it could not be added to these places. They are still chosen below, so you can try again:",
+  "add_to_menus.none_chosen": "Choose at least one place, or skip this step.",
+  "add_to_menus.confirm": "Add to menus",
+  "add_to_menus.skip": "Skip",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -2900,6 +2958,7 @@ export const es: Record<StringKey, string> = {
   "members.actions": "Acciones",
   "members.open": "Abrir sección",
   "members.remove": "Quitar de esta lista",
+  "members.remove_from": "Quitar de {list}",
   "members.empty": "Esta lista aún está vacía.",
   "members.add_label": "Añadir a esta lista",
   "members.add_placeholder": "Elige un producto o una sección",
@@ -2968,6 +3027,63 @@ export const es: Record<StringKey, string> = {
   "sections.delete_sections": "Secciones",
   "sections.delete_usages_error":
     "No se pudo comprobar dónde se usa esta sección, así que aún no se puede eliminar. Cierra esto y vuelve a intentarlo.",
+  "nav.menus": "Menús",
+  "menus.title": "Menús",
+  "menus.loading": "Cargando menús…",
+  "menus.load_error": "No se pudieron cargar los menús.",
+  "menus.retry": "Reintentar",
+  "menus.empty": "Todavía no hay menús.",
+  "menus.add": "Añadir menú",
+  "menus.name": "Nombre",
+  "menus.name_required": "Introduce un nombre para el menú.",
+  "menus.create": "Nuevo menú",
+  "menus.rename": "Cambiar nombre",
+  "menus.rename_heading": "Cambiar el nombre de {name}",
+  "menus.open": "Abrir",
+  "menus.actions": "Acciones",
+  "menus.back": "Todos los menús",
+  "menus.tab_structure": "Estructura",
+  "menus.tree_heading": "Qué hay en este menú",
+  "menus.structure_empty": "Todavía no hay nada en este menú.",
+  "menus.structure_loading": "Cargando el menú…",
+  "menus.structure_error": "No se pudo cargar este menú.",
+  "menus.breadcrumb": "Dónde estás",
+  "menus.expand": "Mostrar lo que hay en {name}",
+  "menus.collapse": "Ocultar lo que hay en {name}",
+  "menus.shared": "Compartida: también en {list}",
+  "menus.shared_note": "Un cambio en esta sección la cambia en todos los sitios donde se usa.",
+  "menus.not_shared": "No se usa en ningún otro sitio.",
+  "menus.duplicate_here": "Duplicar y usar la copia aquí",
+  "menus.duplicate_heading": "Usar una copia de {name} aquí",
+  "menus.duplicate_note":
+    "La copia ocupa el lugar de {name} en {list}. En los demás sitios se sigue usando {name}.",
+  "menus.duplicate_save": "Usar la copia aquí",
+  "menus.new_section": "Nueva sección aquí",
+  "menus.new_section_heading": "Nueva sección en {list}",
+  "menus.section_not_added":
+    "Se creó {name}, pero no se pudo añadir a esta lista. Elígela abajo para añadirla.",
+  "menus.section_not_added_to": "Se creó {name}, pero no se pudo añadir a {list}.",
+  "menus.list_gone":
+    "Otro cambio ha quitado {name} de donde la estabas editando, así que se ha cerrado su ventana.",
+  "menus.list_gone_saved":
+    "Se ha guardado tu cambio en {name}, pero entretanto otro cambio la ha quitado de donde la estabas editando.",
+  "menus.change_not_saved": "No se ha guardado tu cambio en {name}. {reason}",
+  "add_to_menus.heading": "Añadir {name} a los menús",
+  "add_to_menus.intro":
+    "{name} está guardado. Elige dónde va en tus menús, u omite este paso y añádelo más tarde desde Menús.",
+  "add_to_menus.top_level": "Nivel principal",
+  "add_to_menus.place_top_level": "Nivel principal de {menu}",
+  "add_to_menus.shared": "Compartida: también en {menus}",
+  "add_to_menus.shared_note":
+    "Una sección compartida es la misma lista en todos los menús que la usan, así que añadir el producto a ella lo añade a todos.",
+  "add_to_menus.loading": "Cargando tus menús…",
+  "add_to_menus.load_error":
+    "{name} está guardado, pero no se pudieron cargar tus menús, así que no se ha añadido a ninguno. Puedes añadirlo desde Menús.",
+  "add_to_menus.failed":
+    "{name} está guardado, pero no se pudo añadir a estos lugares. Siguen elegidos abajo, así que puedes volver a intentarlo:",
+  "add_to_menus.none_chosen": "Elige al menos un lugar, u omite este paso.",
+  "add_to_menus.confirm": "Añadir a los menús",
+  "add_to_menus.skip": "Omitir",
 };
 
 export const catalogues: Record<string, Partial<Record<StringKey, string>>> = {

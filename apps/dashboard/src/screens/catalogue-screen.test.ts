@@ -5,6 +5,8 @@ import type {
   DashboardApi,
   ExtraList,
   ExtraListInput,
+  LibrarySection,
+  MenuStructure,
   OptionList,
   OptionListInput,
   Product,
@@ -12,6 +14,7 @@ import type {
   ProductEditorValue,
   Unit,
 } from "../api/client.js";
+import type { AddToMenus } from "../widgets/add-to-menus.js";
 import type { ProductEditor } from "../widgets/product-editor.js";
 import type { ProductList } from "../widgets/product-list.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
@@ -128,6 +131,38 @@ const value: ProductEditorValue = {
 
 const labels = [{ id: "l1", name: "Happy hour drinks", productCount: 1 }];
 
+// Drinks is on both menus. A section's customer-facing name differs from its internal one, so the
+// Add to menus step reading the wrong one shows text the assertions refuse.
+const drinksNode = {
+  memberId: "m-drinks",
+  ref: { kind: "section" as const, sectionId: "s-drinks" },
+  children: [
+    { memberId: "m-beer", ref: { kind: "section" as const, sectionId: "s-beer" }, children: [] },
+  ],
+};
+const structures: Record<string, MenuStructure> = {
+  "cat-a": { rootSectionId: "root-a", nodes: [drinksNode] },
+  "cat-b": { rootSectionId: "root-b", nodes: [drinksNode] },
+};
+const sections: LibrarySection[] = [
+  {
+    id: "s-drinks",
+    internalName: "Drinks list",
+    names: { es: "Bebidas frías" },
+    image: null,
+    color: null,
+    members: [],
+  },
+  {
+    id: "s-beer",
+    internalName: "Beer list",
+    names: { es: "Cervezas de barril" },
+    image: null,
+    color: null,
+    members: [],
+  },
+];
+
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   const api = {
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
@@ -151,6 +186,9 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     getProductEditor: vi.fn().mockResolvedValue(value),
     createProductEditor: vi.fn().mockResolvedValue({ ...value, id: "new" }),
     updateProductEditor: vi.fn().mockResolvedValue(value),
+    getMenuStructure: vi.fn().mockImplementation((id: string) => Promise.resolve(structures[id])),
+    listSections: vi.fn().mockResolvedValue(sections),
+    addSectionProducts: vi.fn().mockResolvedValue({ added: 1 }),
     createUnit: vi.fn().mockResolvedValue({
       id: "u2",
       name: { es: "ración" },
@@ -175,6 +213,8 @@ async function flush(el: CatalogueScreen): Promise<void> {
 }
 const editor = (el: CatalogueScreen): ProductEditor =>
   el.shadowRoot!.querySelector("dashboard-product-editor")!;
+const step = (el: CatalogueScreen): AddToMenus =>
+  el.shadowRoot!.querySelector("dashboard-add-to-menus")!;
 const list = (el: CatalogueScreen): ProductList =>
   el.shadowRoot!.querySelector("dashboard-product-list")!;
 function emit(source: Element, type: string, detail: unknown): void {
@@ -1062,6 +1102,192 @@ describe("catalogue-screen", () => {
       expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
         codeMessage("server.internal"),
       );
+    });
+  });
+
+  describe("the Add to menus step after a create", () => {
+    async function create(api: DashboardApi): Promise<CatalogueScreen> {
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-product]")!.click();
+      await el.updateComplete;
+      emit(editor(el), "wt-submit", { value: value as ProductEditorInput });
+      await flush(el);
+      await flush(el);
+      return el;
+    }
+    const place = (el: CatalogueScreen, menuId: string, sectionId: string) =>
+      step(el).shadowRoot!.querySelector<HTMLInputElement>(
+        `fieldset[data-menu="${menuId}"] input[value="${sectionId}"]`,
+      )!;
+    async function choose(el: CatalogueScreen, ...places: [string, string][]): Promise<void> {
+      for (const [menuId, sectionId] of places) {
+        place(el, menuId, sectionId).click();
+        await step(el).updateComplete;
+      }
+    }
+    const control = (el: CatalogueScreen, test: string) =>
+      step(el).shadowRoot!.querySelector<HTMLElement>(`[data-test="${test}"]`)!;
+
+    it("follows a saved create with the step, naming the product and each section by staff and internal names", async () => {
+      const api = stubApi();
+      const el = await create(api);
+      expect(editor(el).open).toBe(false);
+      expect(step(el).open).toBe(true);
+      expect(api.getMenuStructure).toHaveBeenCalledWith("cat-a");
+      expect(api.getMenuStructure).toHaveBeenCalledWith("cat-b");
+      const text = step(el).shadowRoot!.textContent!;
+      expect(step(el).productName).toBe("Croquetas");
+      expect(step(el).shadowRoot!.querySelector("wt-modal")!.getAttribute("heading")).not.toMatch(
+        /caseras|CROQUETAS/,
+      );
+      expect(text).toContain("Comida");
+      expect(text).toContain("Bebidas");
+      expect(text).toContain("Drinks list");
+      expect(text).toContain("Beer list");
+      expect(text).not.toContain("Bebidas frías");
+      expect(text).not.toContain("Cervezas de barril");
+      expect(place(el, "cat-a", "root-a")).not.toBeNull();
+    });
+
+    it("adds the product once to each chosen section, only after the product is saved", async () => {
+      const calls: string[] = [];
+      const api = stubApi({
+        createProductEditor: vi.fn().mockImplementation(() => {
+          calls.push("create");
+          return Promise.resolve({ ...value, id: "new" });
+        }),
+        addSectionProducts: vi.fn().mockImplementation((id: string) => {
+          calls.push(`add:${id}`);
+          return Promise.resolve({ added: 1 });
+        }),
+      });
+      const el = await create(api);
+      expect(api.addSectionProducts).not.toHaveBeenCalled();
+      // Drinks is chosen on BOTH menus: it is one list, so it is asked for once.
+      await choose(el, ["cat-b", "s-drinks"], ["cat-b", "root-b"], ["cat-a", "s-beer"]);
+      control(el, "add-to-menus").click();
+      await flush(el);
+      await flush(el);
+      expect(calls).toEqual(["create", "add:s-drinks", "add:s-beer", "add:root-b"]);
+      expect(api.addSectionProducts).toHaveBeenCalledWith("s-drinks", ["new"]);
+      expect(api.addSectionProducts).toHaveBeenCalledWith("s-beer", ["new"]);
+      expect(api.addSectionProducts).toHaveBeenCalledWith("root-b", ["new"]);
+      expect(step(el).open).toBe(false);
+    });
+
+    it("keeps the saved product when one section refuses it, says so apart from a save failure, and still tries the rest", async () => {
+      const api = stubApi({
+        addSectionProducts: vi
+          .fn()
+          .mockImplementation((id: string) =>
+            id === "s-drinks"
+              ? Promise.reject({ code: "server.internal" })
+              : Promise.resolve({ added: 1 }),
+          ),
+      });
+      const el = await create(api);
+      await choose(el, ["cat-a", "root-a"], ["cat-a", "s-drinks"], ["cat-a", "s-beer"]);
+      control(el, "add-to-menus").click();
+      await flush(el);
+      await flush(el);
+      expect(vi.mocked(api.addSectionProducts).mock.calls.map(([id]) => id)).toEqual([
+        "root-a",
+        "s-drinks",
+        "s-beer",
+      ]);
+      expect(api.createProductEditor).toHaveBeenCalledOnce();
+      expect(api.updateProductEditor).not.toHaveBeenCalled();
+      expect(step(el).open).toBe(true);
+      const alert = control(el, "placement-error");
+      expect(alert.textContent).toContain(t("add_to_menus.failed").replace("{name}", "Croquetas"));
+      expect(alert.textContent).toContain("Drinks list");
+      expect(alert.textContent).not.toContain("Beer list");
+      expect(alert.textContent).toContain(codeMessage("server.internal"));
+      expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+      expect(editor(el).open).toBe(false);
+      expect(editor(el).fieldErrors).toEqual({});
+    });
+
+    it("sends every chosen section's addition at once, and lists refusals in the order the places are shown", async () => {
+      let refuseFirst!: (error: unknown) => void;
+      const api = stubApi({
+        addSectionProducts: vi.fn().mockImplementation((id: string) => {
+          if (id === "root-a") return new Promise((_, reject) => (refuseFirst = reject));
+          if (id === "s-drinks") return Promise.reject({ code: "server.internal" });
+          return Promise.resolve({ added: 1 });
+        }),
+      });
+      const el = await create(api);
+      await choose(el, ["cat-a", "root-a"], ["cat-a", "s-drinks"], ["cat-a", "s-beer"]);
+      control(el, "add-to-menus").click();
+      await flush(el);
+      expect(vi.mocked(api.addSectionProducts).mock.calls.map(([id]) => id)).toEqual([
+        "root-a",
+        "s-drinks",
+        "s-beer",
+      ]);
+      expect(step(el).busy).toBe(true);
+      refuseFirst({ code: "menu_section.membership_invalid" });
+      await flush(el);
+      expect(step(el).busy).toBe(false);
+      expect(step(el).failures).toEqual([
+        { sectionId: "root-a", reason: codeMessage("menu_section.membership_invalid") },
+        { sectionId: "s-drinks", reason: codeMessage("server.internal") },
+      ]);
+    });
+
+    it("asks for every menu's structure at once", async () => {
+      const api = stubApi({
+        getMenuStructure: vi
+          .fn()
+          .mockImplementation((id: string) =>
+            id === "cat-a" ? new Promise(() => {}) : Promise.resolve(structures[id]),
+          ),
+      });
+      await create(api);
+      expect(vi.mocked(api.getMenuStructure).mock.calls.map(([id]) => id)).toEqual([
+        "cat-a",
+        "cat-b",
+      ]);
+    });
+
+    it("sends nothing and changes nothing when the step is skipped", async () => {
+      const api = stubApi();
+      const el = await create(api);
+      await choose(el, ["cat-a", "s-drinks"]);
+      control(el, "skip").click();
+      await flush(el);
+      expect(step(el).open).toBe(false);
+      expect(api.addSectionProducts).not.toHaveBeenCalled();
+      expect(api.createProductEditor).toHaveBeenCalledOnce();
+      expect(api.updateProductEditor).not.toHaveBeenCalled();
+      expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    });
+
+    it("reports menus that fail to load as a load failure, with the product still saved", async () => {
+      const api = stubApi({
+        getMenuStructure: vi.fn().mockRejectedValue({ code: "server.internal" }),
+      });
+      const el = await create(api);
+      expect(editor(el).open).toBe(false);
+      expect(step(el).open).toBe(true);
+      expect(control(el, "load-error").textContent).toContain(codeMessage("server.internal"));
+      expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    });
+
+    it("does not follow a save of an existing product with the step", async () => {
+      const api = stubApi();
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      emit(list(el), "edit-product", { productId: "p1" });
+      await flush(el);
+      emit(editor(el), "wt-submit", { value });
+      await flush(el);
+      expect(api.updateProductEditor).toHaveBeenCalledOnce();
+      expect(editor(el).open).toBe(false);
+      expect(step(el)?.open ?? false).toBe(false);
+      expect(api.getMenuStructure).not.toHaveBeenCalled();
     });
   });
 });

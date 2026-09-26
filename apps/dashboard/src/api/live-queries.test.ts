@@ -67,6 +67,8 @@ it.each([
   // also name each menu from `catalogues`.
   ["listSections", [], ["sections", "section_members"]],
   ["listSectionUsages", [], ["sections", "section_members", "catalogues"]],
+  // `readMenuStructure` reads the root from `menu_details`, then the whole section graph.
+  ["getMenuStructure", ["menu-1"], ["menu_details", "sections", "section_members"]],
   // "Below it too" walks `category_details`' parent links (`listCategoryProducts`, categories.ts).
   [
     "listCategoryProducts",

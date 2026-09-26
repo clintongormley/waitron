@@ -60,6 +60,8 @@ export const QUERY_DEPENDENCIES = {
   listCanvases: ["canvases"],
   getCanvas: ["canvases"],
   listCatalogues: ["catalogues"],
+  // `readMenuStructure` reads the root from `menu_details`, then the whole section graph.
+  getMenuStructure: ["menu_details", "sections", "section_members"],
   listCategories: ["categories", "category_details"],
   getCategory: ["categories", "category_details"],
   listCategoryProducts: ["categories", "category_details", "products", "product_labels"],
