@@ -684,8 +684,10 @@ that:
 - a comp (an item given free) appears as its own line at €0.00, beside its original price;
 - an item sold by weight takes a discount by lowering its per-kilo price to a whole cent, so on a
   heavy item the discount actually applied can differ from the one agreed by a few cents (up to
-  1 cent up to 3 kg, 2 cents up to 5 kg, 5 cents at 10 kg). The invoice shows what was actually
-  charged, and staff see it before confirming.
+  1 cent up to 3 kg, 2 cents up to 5 kg, 5 cents at 10 kg). A whole-bill discount can miss in the
+  same way when the bill's other items cannot absorb the difference (for example, when the only
+  other item is one given free). The invoice shows what was actually charged, and staff see it
+  before confirming.
 
 > **(a)** En una factura simplificada, ¿es correcto reflejar un descuento concedido antes de la
 > expedición reduciendo directamente el precio unitario de la línea afectada, sin una línea de
@@ -702,8 +704,10 @@ that:
 >
 > **(d)** En productos vendidos al peso, si el descuento acordado se aplica redondeando el precio por
 > kilo al céntimo, de modo que el importe descontado puede diferir en algunos céntimos del acordado
-> (hasta 2 céntimos en una pieza de 3 a 5 kg, 5 céntimos en una de 10 kg), ¿basta con que la factura
-> refleje el importe efectivamente cobrado, que el personal confirma antes de aplicarlo?
+> (hasta 2 céntimos en una pieza de 3 a 5 kg, 5 céntimos en una de 10 kg) — también en un descuento
+> sobre el total de la cuenta, cuando las demás líneas no pueden absorber esa diferencia —, ¿basta
+> con que la factura refleje el importe efectivamente cobrado, que el personal confirma antes de
+> aplicarlo?
 
 ---
 

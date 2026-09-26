@@ -77,7 +77,15 @@ Tap an empty table to seat guests: this opens a visit, records the guest count (
 a tab. Joining a table to a seated party adds it to that party's visit; moving the party moves the
 visit; unjoining a table that takes some items with it starts a separate visit there. A table
 belongs to at most one open visit at a time, whether it was the first table seated or one joined
-later. All bills split from the visit remain attached to it. You can see each bill's paid and
+later.
+
+**Merged parties. Owner, 2026-09-26:** merging one party's tab into another's makes one visit. Its
+open bills move to the surviving visit. A bill that can no longer move — already paid, or already
+invoiced and awaiting payment — stays recorded on the absorbed visit, but everywhere a visit's bills
+matter it counts as the surviving visit's related bill: it is listed with the others, it counts in
+the outstanding balance until paid, its receipts stay reachable, and it blocks Finish table while
+outstanding. The same holds through any chain of merges (a party merged into one that later merges
+into a third). All bills split from the visit remain attached to it. You can see each bill's paid and
 outstanding amounts, the table's total outstanding balance, and settled bills when you need their
 receipts. **Paying does not free the table** (§8).
 
@@ -418,9 +426,13 @@ the invoice is issued is a *descuento* (Q15, closed). **Details, Owner, 2026-09-
   asked by a few cents: up to 1 cent up to 3 kg, 2 cents up to 5 kg, 5 cents at 10 kg, 12 cents at
   25 kg (one cent of per-kilo price moves a 2.5 kg line by 2.5 cents). Staff
   see the exact amount before confirming, and the adjustment records the amount actually taken off.
-  A whole-bill discount shares out over every line, weighed ones included, and any cent a weighed
-  line could not take goes to the other lines, so the bill drops by exactly what was asked
-  wherever the bill has a line that is not weighed. A comp (100% off) is always exact. How this
+  A whole-bill discount shares out over every line, weighed ones included. Any cent a weighed line
+  could not take moves to lines not sold by weight, as far as they have room: a line can take
+  extra only up to its own price, and can give back only from a share above zero. When they have
+  room, the bill drops by exactly what was asked. When they do not — for example when the only
+  other line is already comped at €0.00 — the bill drops by the nearest amount the weighed items
+  allow, which can be a cent or more above or below what was asked; staff see that amount before
+  confirming, and it is what is recorded. A comp (100% off) is always exact. How this
   appears on the invoice is put to the advisor as
   [Q29](../../compliance/asesor-questions.md#q29-how-a-discount-or-comp-appears-on-a-simplified-invoice-added-2026-09-26).
 - A discount larger than what it applies to (the line, or the bill) is refused, never silently
@@ -596,12 +608,18 @@ These are future acceptance requirements, not tests run while writing this docum
 9. A table with one bill paid and another outstanding never reads as paid, and Finish table is
    refused. Tables 4 and 5 joined are one visit: neither can be seated again, paying leaves both
    occupied, dessert opens a new bill on the same visit, Finish frees both, and unjoining Table 5
-   with items starts exactly one separate visit. After Finish, the next party sees none of the previous visit's bills. Needs clearing is
+   with items starts exactly one separate visit. After Finish, the next party sees none of the
+   previous visit's bills. A party with a paid €20 bill and an invoiced but unpaid €15 bill merged
+   into another party lists both bills there, counts the €15 in the outstanding balance, shows the
+   €20 bill's receipt, and refuses Finish until the €15 is paid; the same holds when that visit is
+   itself merged into a third party's. Needs clearing is
    optional and off by default. Unpaid departure preserves debt and attribution (after Q28).
 10. A manager approves with their PIN without replacing the waiter session. A comp of a served dish
     sends nothing to the kitchen. A discount on Croquetas ×3 leaves whole cents per unit; a discount on a 2.5 kg weighed item
     shows and records the amount actually taken off; a discount larger than its line or bill is
-    refused. A rate counts a waiter's credited items at their original prices, whoever took the
+    refused. A €5.00 bill discount on 2.5 kg of fish (€32.48) and €10.00 of other items takes off
+    exactly €5.00; €3.24 off the fish beside a comped €0.00 water takes off €3.23, and €3.27 takes off
+    €3.28, each shown before confirming. A rate counts a waiter's credited items at their original prices, whoever took the
     payment. Reports
     distinguish requester, approver, guest actions, nominal value and actual financial reductions
     without double-counting them.
@@ -678,6 +696,11 @@ settled", §3 and §4's correction wording, and §10's held-work availability no
 **Added after a second review, 2026-09-26:** a party at joined tables is one visit across all of
 them (terms, §1, §8), because joining tables already exists and a visit keyed to one table would
 not stop the other tables being seated twice.
+
+**Added before merging Revision 2 (owner, 2026-09-26):** bills left on a party merged into another
+count as the surviving visit's related bills, through any chain of merges (§1); and a whole-bill
+discount is exact only when the lines not sold by weight have room to absorb the weighed items'
+rounding, otherwise the nearest achievable amount is shown and recorded (§7).
 
 **What the review of the code found, which shaped the above:** much of §3–§4 already exists
 (courses with hold and fire, per-line send and recall, kitchen screen states, void and recall slips,

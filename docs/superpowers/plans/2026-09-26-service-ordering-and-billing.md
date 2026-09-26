@@ -237,6 +237,15 @@ names it so the owner can overturn it at review.
     - S closes, with `merged_into_visit_id` = T (a column on `visits`); its `service_commands`
       stay scoped to S, so a replay still returns its recorded result, and a new command on S is
       `visit.not_open`;
+    - **the bills S keeps still belong to T's party (owner, 2026-09-26; spec §1 "Merged parties").**
+      A visit's FAMILY is the visit plus every visit whose `merged_into_visit_id` chain reaches it
+      (a recursive query; chains are acyclic, because only an open visit can absorb another and the
+      absorbed one closes). Everything that reads "the visit's bills" reads the family's: the bill
+      list and its receipts (`readVisitBills`), the outstanding balance and "paid" state on the
+      floor (`listTablesWithState`), Finish's outstanding check, Task 10's bill-requested signal,
+      and Tasks 14 and 17. A placed bill on S (invoiced, awaiting payment) is outstanding until paid,
+      and paying it works as for any placed bill: the payment path reads the bill, not its visit's
+      state;
     - the merge takes both visits' expected revisions (`expectedVisitRevision` for T and
       `expectedSourceVisitRevision` for S) and bumps both;
   - **unjoin with items** (`unjoinTable`): closes that table's membership, and creates exactly one
@@ -384,8 +393,9 @@ names it so the owner can overturn it at review.
     - a weighed line that took MORE than its share leaves cents to TAKE BACK from discrete lines'
       shares, only from shares above zero, so no line's price ever rises.
     - What cannot be placed that way is left unplaced, and the bill records the total actually
-      achieved, which the till shows before confirming (always the case on a bill of only weighed
-      lines).
+      achieved, which the till shows before confirming. So a bill discount is exact only when the
+      discrete lines have room (spec §7); it can miss when there are none (a bill of only weighed
+      lines) or when they cannot move (a comped €0.00 line cannot take a cent or give one back).
   - A line never goes below zero, and a discount larger than the bill is `adjustment.exceeds_amount`.
 - **D16. Equal shares (spec §6).** For an outstanding amount of `C` cents across `n` people, each
   share is `floor(C ÷ n)`, and the first `C mod n` shares get one cent more. So €100.01 across 3 is
@@ -622,7 +632,8 @@ test by default. Each has its test in the named task.
    seated again, and Finish frees both (Task 2).
 5. **Rounding cents.** A €5.00 bill discount over lines of €3.33, €3.33 and €3.34 at two VAT
    rates, and €100.01 split three ways, each sum exactly, and a rerun gives the same allocation
-   (Tasks 11, 14).
+   (Tasks 11, 14). A bill discount the weighed lines cannot meet and the other lines cannot absorb
+   records and shows the amount actually taken off, never the amount asked (Task 11).
 6. **A paper-only station and a failed printer.** A station with no kitchen screen never shows
    Ready; "fired 20 minutes ago" is all it claims. A failed print job shows a printing problem on
    the table and the station, never refuses the next order, and never marks the order missing
@@ -822,8 +833,9 @@ Spec terms, §1 (seating, related bills, joined tables), §8 (Finish table, Need
   export async function seatTable(tx, cfg, args: { tableId: string; guestCount: number | null; operatorId: string }): Promise<{ visitId: string; tabId: string; revision: number }>; // the reused occupied-table code
   export async function finishTable(tx, cfg, args: { visitId: string; expectedVisitRevision: number; operatorId: string }): Promise<{ state: "closed" | "needs_clearing" }>; // visit.bill_outstanding, visit.not_open, visit.out_of_date
   export async function markCleared(tx, cfg, args: { visitId: string; expectedVisitRevision: number }): Promise<void>; // visit.not_open when not needs_clearing, visit.out_of_date
-  export interface VisitBill { workingOrderId: string; label: string | null; status: "open" | "placed" | "settled" | "abandoned"; total: string; outstanding: string }
-  export async function readVisitBills(tx, visitId: string): Promise<VisitBill[]>;
+  export async function visitFamily(tx, visitId: string): Promise<string[]>; // the visit and every visit merged into it, directly or through a chain (D2)
+  export interface VisitBill { workingOrderId: string; visitId: string; label: string | null; status: "open" | "placed" | "settled" | "abandoned"; total: string; outstanding: string; receiptAvailable: boolean }
+  export async function readVisitBills(tx, visitId: string): Promise<VisitBill[]>; // the whole family's bills; outstanding = open and placed bills' unpaid amounts
   export async function visitForTable(tx, tableId: string): Promise<{ visitId: string; revision: number } | null>; // the active membership's visit
   export async function checkAndBumpVisit(tx, visitId: string, expectedVisitRevision: number): Promise<number>; // D19; visit.out_of_date; returns the new revision
   export type CommandScope = { kind: "visit"; visitId: string } | { kind: "bill"; workingOrderId: string };
@@ -883,6 +895,21 @@ Spec terms, §1 (seating, related bills, joined tables), §8 (Finish table, Need
     is `needs_clearing` or joined to another visit is `table.occupied`.
   - **Unjoin without items:** unjoining Mesa 5 with no items closes its membership and frees it,
     and seating it then opens a fresh visit.
+  - **Merged parties keep their bills (D2, spec §12 item 9):** Mesa 6 (visit S) has a settled €20.00
+    bill and, in an invoice-first venue, a placed (invoiced, unpaid) €15.00 bill. S merges into Mesa
+    4 (visit T, with an open €30.00 tab):
+    - `readVisitBills(T)` lists all three, the €20.00 one with its receipt reachable, and
+      `visitId` = S on the two S kept;
+    - T's outstanding is €45.00 (€30.00 + €15.00), and the floor never shows Mesa 4 as paid while
+      the €15.00 is unpaid;
+    - after the €30.00 tab is paid, Finish on T is `visit.bill_outstanding` because of S's €15.00;
+      collecting the €15.00 from T's screen succeeds, and Finish then closes T;
+    - **a chain:** before Finish, T merges into Mesa 8 (visit U). `readVisitBills(U)` lists U's own
+      bills, T's kept bills and S's two; U's outstanding includes the €15.00; Finish on U is refused
+      until it is paid; after Finish, a new party at Mesa 4, Mesa 6 or Mesa 8 sees none of these
+      bills;
+    - control: with the family query replaced by the visit alone, the listing, the outstanding and
+      the Finish refusal each fail.
   - **Merge (D2):** Mesa 4 (visit T) and Mesa 6 (visit S, with a settled bill and an open split
     check) are merged, S into T:
     - with `freeSourceTable`, Mesa 6 is free and T keeps Mesa 4; without it, both tables resolve to
@@ -1460,8 +1487,8 @@ Spec §1 (the floor and counter landing views; signals that coexist; the station
 
 **Files:**
 - Modify:
-  - `visits.bill_requested_at` (a "Bill requested" action; cleared when the visit's bills are all
-    paid), one migration;
+  - `visits.bill_requested_at` (a "Bill requested" action; cleared when every bill of the visit's
+    FAMILY is paid, D2), one migration;
   - `listTablesWithState` returns a list of signals per table, not one status;
   - `apps/till/src/screens/till-floor-screen.ts` (the signals as coexisting chips);
   - `widgets/held-orders.ts` (the counter's tab list, showing the same signals, and tabs without a
@@ -1611,6 +1638,18 @@ versus the charge. **It changes what an invoice charges; it lands on the automat
     - on a bill of only weighed lines, the till shows and the adjustment records the total
       actually achieved;
     - a discrete line whose share is €0.00 never takes a cent back (its price never rises).
+  - **When the other lines have room, and when they do not (spec §7, §12 item 10):**
+    - 2.5 kg of fish at €12.99/kg (€32.48) and bread €2.50, €3.27 off: the shares are €3.04 and
+      €0.23; the fish's target €29.44 is reached by no price (€11.77/kg gives €29.43, €11.78/kg
+      gives €29.45), the tie takes the higher total, €29.45, so the fish takes €3.03, one cent
+      short; the bread has room and takes €0.24; the bill drops by exactly €3.27;
+    - the same fish beside a comped water (€0.00), €3.24 off: all €3.24 falls on the fish, whose
+      target €29.24 ties and takes €29.25, so it takes €3.23; the water has no room to take the
+      missing cent, and the adjustment records €3.23, which the till showed before confirming;
+    - the same bill, €3.27 off: the fish's target €29.21 is nearest €29.20, so it takes €3.28; the
+      water's share is €0.00, so it cannot give the cent back, and the adjustment records €3.28;
+    - control: a spreading that forced exactness would push the water to −€0.01 or +€0.01, which
+      both the no-negative rule and the "price never rises" rule refuse.
   - **Bill discount (Review Focus 5):** €5.00 across line 1 €3.33 (10% VAT), line 2 €3.33 (10%)
     and line 3 €3.34 (21%), each quantity 1.
     - D15 gives €1.66, €1.66 and €1.67 rounded down (€4.99).
