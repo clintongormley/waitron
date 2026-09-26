@@ -9,13 +9,13 @@ import ts from "typescript";
 // comma Prettier adds or drops, except after a spread, where the comma Prettier writes is refused
 // (see `isRest`). Anything else fails, except a file whose path ends in lowercase `.md`, which is
 // listed as not compared and never read. Every other file is checked, and every refused file is
-// named, each with its first difference. A comment counts as code only when it is the shebang or
-// matches TOOL_COMMENT, a hand-written list, so a comment read by a tool the list does not name is
-// dropped unseen; and a tool comment is placed by the tokens around it, not by its line, so one
-// moved to another line without crossing a token passes, `eslint-disable-line` and
-// `eslint-disable-next-line` included. ESLint then reports any problem it no longer suppresses, and
-// the stranded directive only as a warning. A line break counts only where it changes the tree, or
-// before `=>` or `using`.
+// named with its reason, which for a compared file is its first difference. A comment counts as
+// code only when it is the shebang or matches TOOL_COMMENT, a hand-written list, so a comment read
+// by a tool the list does not name is dropped unseen; and a tool comment is placed by the tokens
+// around it, not by its line, so one moved to another line without crossing a token passes,
+// `eslint-disable-line` and `eslint-disable-next-line` included. ESLint then reports any problem it
+// no longer suppresses, and the stranded directive only as a warning. A line break counts only
+// where it changes the tree, or before `=>` or `using`.
 //
 // It needs the root's version 6 compiler API; a package's TypeScript 7 has no `createSourceFile`.
 //

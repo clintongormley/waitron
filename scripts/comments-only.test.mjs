@@ -391,7 +391,7 @@ describe("checkCommentsOnly against a git repository", () => {
     });
   });
 
-  it("keeps checking after a refused file and reports every refusal", () => {
+  it("keeps checking after a refused file and names every refused file", () => {
     write("package.json", "changed\n");
     write("src/a.ts", "export const a = 1;\n");
     write("src/b.mjs", "// b\nexport const b = 3;\n");
