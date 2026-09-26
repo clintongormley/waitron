@@ -2233,29 +2233,40 @@ address that answers is then asked for its paper sizes on port 631.
 ### A4. Till, displays and devices
 
 - **Service, ordering and billing: planned and queued on lane B (2026-09-26).**
-  [Design](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) (Revision 2, awaiting
-  the owner's review, with lane B paused until it is approved; §14 records the
-  owner's decisions of 2026-09-26, what a review against the code found missing, and what the menus
-  work superseded); [plan](superpowers/plans/2026-09-26-service-ordering-and-billing.md), eighteen
-  tasks. Two start now: the payment and billing design (Task 0), and adjustment reasons and policies
-  as a new module (Task 1). **Task 0 is written (2026-09-26) and awaits the owner's approval:**
-  [bill payments design](superpowers/specs/2026-09-26-bill-payments-design.md), with nine open
-  points in its §11; Task 14 does not start until it is approved. Every other task waits for lane C's menus tasks that change the same order
-  and till code (M7c, M7v, M9, M7b2), because building beside them would collide on
-  `apps/server/src/working-order.ts`, the till and the core migrations, and would build on order rules
-  still being decided there. Owner decisions (2026-09-26):
+  [Design](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md), Revision 2,
+  approved by the owner and merged as #693 (§14 lists every change from Revision 1);
+  [plan](superpowers/plans/2026-09-26-service-ordering-and-billing.md), Revision 2, eighteen tasks,
+  reviewed three times before the merge. What stays open:
+  - **Task 0's [bill payments design](superpowers/specs/2026-09-26-bill-payments-design.md) awaits
+    the owner's approval**, with nine open points in its §11 (copied to lane B's questions file).
+    Task 14, several payments against one bill, does not start until it is approved.
+  - **Task 1** (adjustment reasons and policies, a new module) is the one build task that can start
+    now.
+  - **Every other task waits for lane C's menus tasks that change the same order and till code**
+    (M7c, M7v, M9, M7b2; M7b landed as #696). Building beside them would collide on
+    `apps/server/src/working-order.ts`, the till and the core migrations.
+  - **Task 17** (unpaid departure) also waits for asesor Q28.
+  - **Asesor questions to send:**
+    [Q27](compliance/asesor-questions.md#q27-money-taken-against-a-bill-before-its-invoice-exists-then-a-split-added-2026-09-26)
+    (money before the invoice, then a split; printing the invoice first),
+    [Q28](compliance/asesor-questions.md#q28-a-table-leaves-without-paying--is-the-invoice-still-owed-added-2026-09-26)
+    (unpaid departure) and
+    [Q29](compliance/asesor-questions.md#q29-how-a-discount-or-comp-appears-on-a-simplified-invoice-added-2026-09-26)
+    (how a discount or comp appears on the invoice). Q19 stays open.
+
+  Owner decisions (2026-09-26), each in the spec where it applies:
   - groups replace named courses, and who may release a held group stays a venue setting;
-  - a visit record ties a party's orders and bills and keeps the table occupied until Finish table;
+  - a visit record ties a party's orders and bills (joined tables and merged parties included) and
+    keeps the table occupied until Finish table;
   - a bill's invoice is issued when it is fully paid, several payments may come before it, and lines
     can still be split off after a contribution;
-  - discounts reduce the line, and comps show at €0.00 with the original price.
+  - discounts reduce the line, comps show at €0.00 with the original price, and weighed items take
+    discounts to the nearest cent;
+  - an item is credited to whoever owns the draft when it is submitted, and adjustment rates are
+    measured against those credits.
 
-  New asesor questions:
-  [Q27](compliance/asesor-questions.md#q27-money-taken-against-a-bill-before-its-invoice-exists-then-a-split-added-2026-09-26)
-  (money before the invoice, then a split; printing the invoice first) and
-  [Q28](compliance/asesor-questions.md#q28-a-table-leaves-without-paying--is-the-invoice-still-owed-added-2026-09-26)
-  (unpaid departure). Q19 stays open. Out of scope for this plan: guest access, inventory, seat and
-  staff assignment, changing the floor layout during service, screen plugins and Bizum.
+  Out of scope for this plan: guest access, inventory, seat and staff assignment, changing the floor
+  layout during service, screen plugins and Bizum.
 - **Later: optional seat/guest item assignment (owner, 2026-09-20).** Include shared items when
   this is designed. For now, orders remain at table/tab level and staff select items manually
   when splitting bills; seat assignment is not a prerequisite for the service workflow.
