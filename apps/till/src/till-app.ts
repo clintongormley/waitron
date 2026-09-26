@@ -123,8 +123,8 @@ function tableWriteError(error: unknown): CounterError {
   return code === "order.payment_in_flight" ? { code } : "table.error";
 }
 
-/** Refusals of changing or cancelling one tab line, shown in their code's own words: each says what
- * the operator can still do. */
+/** Refusals of changing, recalling or cancelling tab lines, shown in their code's own words: each says
+ * what the operator can still do. */
 const LINE_REFUSALS = new Set([
   "product.unavailable",
   "ticket.already_started",
@@ -1769,7 +1769,7 @@ export class TillApp extends LitElement {
     try {
       await this.api.recallLines(this.activeTabId, lineNos);
     } catch (error) {
-      this.errorKey = tableWriteError(error);
+      this.errorKey = lineWriteError(error);
     }
     await this.#loadTabLines();
   }
