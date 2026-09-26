@@ -59,6 +59,70 @@ headless Chromium) for the dashboard and `packages/ui`, Vitest with `useVenueDb`
 5. **A pointer drag cancelled by the operating system** (`pointercancel`) — the dragged row's
    highlight must clear exactly as on release. Test in Task 1.
 
+
+## Plan review corrections (2026-09-26, fresh-context review before A64)
+
+A fresh-context reviewer read this plan against the spec and the code before Task 1 was built.
+Its findings are folded in here; where a step below says otherwise, THIS section wins.
+
+**Task 1 (A64).**
+- The stepper test "+ and - step the value and emit it" expects `["3", "2"]` (the element keeps
+  its own value, as `wt-price-input` does) — corrected in Step 1.
+- `packages/ui/src/tap-target-and-focus.test.ts` pins the set of primitives that reflect `disabled`
+  and requires each to hand focus to an inner control of at least the tap size. Add the file to
+  Task 1, add `wt-number-stepper` to its list, give the stepper `delegatesFocus` like
+  `wt-price-input`, and size `--wt-stepper-field-width` at or above the tap minimum.
+- The D5 width change breaks `apps/dashboard/src/screens/printers-screen.test.ts`'s case pinning
+  the Add agent/printer `wt-modal` at 768px on a 1280px page. That case is DELIBERATELY changed to
+  1024px (64rem) — write that change first and watch it fail, so the new width is pinned.
+- The drag rules go in `ReorderController.styles`, not `tableStyles`: `variant-table.ts` includes
+  only `styles`, and the spec names the variants table.
+- A `--wt-color-surface-raised` row background shows nothing inside a `wt-modal`, which is already
+  painted that colour (`wt-dialog.ts`), and the extras, options and product editors all sit in one.
+  Use an existing token that differs from the modal's surface in both themes, checked by
+  screenshot; if none exists, add one to the ui-core tokens for both themes rather than a literal.
+- The spec's `grabbing` cursor is on the PAGE: set it on `document.body` while a pointer drag is in
+  progress and restore it on release and on `pointercancel`, with a test for each.
+- The stepper also takes `hint` and `required`, drawn as `wt-input` draws them (Task 3 puts the
+  "0 makes the list optional" / "Blank means no limit" text in hints, and today's max-quantity
+  field is required).
+- `allow-blank` is dropped: the sketch gave it no behaviour, so both blank-value tests pass without
+  it. A blank value is simply a value; Task 3 marks "no limit" with the placeholder alone.
+- The stepper's grid uses `align-items: baseline`, so the host's baseline is the input text's
+  baseline (a probe without it measured the − button's baseline, 1.5px off). Pin that with a test
+  in Task 1 that fails without it.
+- Assert error rendering, `placeholder`, `hide-label`, `disabled` (both buttons and the input) and
+  the label-to-input association directly — axe alone does not meet the 90 mutation floor.
+- The `hostUpdated` re-mark is not needed: every host renders its rows with keyed `repeat`, so a
+  moved row keeps its attribute. Keep the "keeps the mark after it moves" test as a guard, and say
+  in the test that it passes without a re-mark for that reason.
+- The `action.decrease`/`action.increase` strings move to Task 3, where they are first used. Update
+  the header comment in `apps/dashboard/src/icons.ts` that names which primitives need icons
+  registered, adding the stepper's `minus` and `plus`.
+
+**Task 2 (A65).** Also deliberately changed: `apps/server/src/catalogue-api.test.ts`'s options
+dependants `toEqual({ products: [], menus: [] })`; `apps/dashboard/src/api/live-queries.test.ts`'s
+pinned dependency lists for `listOptionLists` and `listExtraLists`; and in
+`packages/catalogue/src/options.test.ts` the `toEqual` with `menus: []` and the whole
+"the menus a list's delete preview names" block. The Spanish singular is "{count} menú". The menu
+count is a count of menu ENTRIES carrying the list, so label it for what it counts (one menu
+carrying the list on two dishes must not read "2 menus").
+
+**Task 3 (A66).** `wt-price-input` has no `hide-label`; adding one is a `packages/ui` change with
+its own tests, so add it to the file list. Its unit is a focusable button emitting
+`wt-unit-click`, which nothing handles in an extras row — show the unit without a dead control. The
+price box needs a named width token; there is none to reuse (the variants table's container query
+is a literal `30rem`). `extra-list-form.test.ts`'s "shows a whole price, not a truncated one, at
+phone width" case must still pass unedited. Add the Task 1 strings here.
+
+**Task 4 (A67).** Also deliberately changed: `option-contract.test.ts`'s `labels[0]` `toEqual`,
+which gains an `id`. Tighten `writeLabels`'s types so the `label.id ?? randomUUID()` and
+`label.id === undefined` branches (`packages/catalogue/src/options.ts`) do not become unreachable
+code. Run every `createOptionList` caller's suite (e.g. `apps/server/src/catalogue-api.test.ts`,
+`configuration-transfer.test.ts`), not only catalogue and the demo seed. Pick one naming scheme for
+the option editor's fields and error keys. Say whether opening a list whose stored default is null
+applies the keep-a-default rule.
+
 ---
 
 ## Task 1 (lane A item A64): shared pieces
@@ -117,7 +181,7 @@ test("+ and - step the value and emit it", async () => {
   const seen = changes(el);
   parts(el).plus.click();
   parts(el).minus.click();
-  expect(seen).toEqual(["3", "1"]);
+  expect(seen).toEqual(["3", "2"]);
 });
 
 test("- is disabled at min and + at max", async () => {
