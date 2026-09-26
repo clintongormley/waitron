@@ -69,6 +69,9 @@ lets it travel safely even over the semi-trusted cloud relay.
 - **`endorsements`** (present only when a node's identity key is not yet in the receiver's trust set) — each
   a new member's public key signed by the serving-primary that admitted it; the chain back to setup (§4).
 
+> **Dated pointer, 2026-09-26 (A63):** the body may also carry a signed `revoked` list; see
+> `packages/membership/src/types.ts`.
+
 **Storage:** a new whole-DB singleton `node_membership` (`id = 1`; columns `term bigint`, `document` (the
 signed blob), `updated_at`) — mirroring the `mirror_config` singleton pattern
 ([`packages/db/src/schema/mirror-config.ts`](../../../packages/db/src/schema/mirror-config.ts)): **no

@@ -2593,15 +2593,18 @@ image constraints under *Detail → Box image*.
     chart lists removed or cleared (`signer_removed`, `verifyMembershipDocument`).
     **Still open after A63:** (i) a removed trust anchor (a machine whose key sits in the receiver's
     own `nodes` table) can still make up a key for a machine in good standing that is not an anchor,
-    vouch for it, and sign as that machine (stated at `resolveSignerKey`); (ii) boot
+    vouch for it, and sign as that machine — unless that machine signed the receiver's held chart and
+    the chart carries the endorsement its signature verifies under, so a standby is not covered, nor
+    a primary the receiver holds no chart signed by (after the former primary's own retirement
+    chart, for one) (stated at `resolveSignerKey`); (ii) boot
     reconciliation's peer fetch sends no credential (`boot.ts` gives `fetchPeerMembershipDocument`
     only the URL) and `GET /management-api/membership` refuses a request without one, so in
     production that path accepts no chart today and the receiver checks above never run there (read,
     not run); (iii) a cleared machine is refused its own promotion only if its own held chart
-    contains the clearing, and a standby that never finished joining never receives it; (iv) so the
-    primary's join refusal (`mirror.standby_removed` for a removed or cleared id,
-    `mirror.membership_full` for a full chart) is the only one of these guards working in production
-    today; (v) a receiver whose held chart predates a removal accepts the removed machine's charts
+    contains the clearing, and a standby that never finished joining never receives it; (iv) so, of
+    these guards, only the primary's own work in production today: its join refusals
+    (`mirror.standby_removed` for a removed or cleared id, `mirror.membership_full` for a full chart)
+    and the mint's `membership.chart_too_large`; (v) a receiver whose held chart predates a removal accepts the removed machine's charts
     until it learns of the removal; (vi) a joining standby sees `mirror.bundle_fetch_failed` rather
     than the primary's reason, because `apps/server/src/mirror-bundle-fetch.ts` turns every non-2xx
     answer into that code — this predates A63, and `mirror.standby_removed` has the same gap; (vii)
@@ -4561,7 +4564,7 @@ fixture (#275) are still in the tree. What remains, largest first:
   browser receipt still owed from till-reroute Task 10 (needs interactive Chrome + mkcert +
   `/etc/hosts`).
 - **Richer daily close** — one close run by the primary across all tills.
-- The residuals under *Detail → Replication*: re-admission, the unbounded membership chart, chart
+- The residuals under *Detail → Replication*: re-admission, the membership chart filling up, chart
   hygiene, the resume-at-restore marker, power-loss durability and the selling gate, restore-onto-cloud
   re-encrypt, mirror fidelity, split-brain on the promoted side, the till UX for a timed-out card.
 
@@ -5643,7 +5646,7 @@ that slice 3 has to restore:
 
 - **Re-admission `sell-only → serving-secondary`** — the primary-minted un-fence that makes a rejoined
   box sell again. Must retire the node's previous chart entry and delete its live `fiscal.aeat` row.
-- **The membership chart fills up with machines nobody can clear.** It APPENDS, every
+- **The membership chart fills up, and not every entry can be cleared.** It APPENDS, every
   wipe-and-re-adopt mints a fresh nodeId, and `MAX_NODES = 8` (`packages/membership/src/verify.ts`)
   caps it. Since A63 (2026-09-26) a full chart no longer produces a document no node accepts: the
   mint refuses it (`membership.chart_too_large`) and the primary refuses the join

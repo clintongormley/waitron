@@ -5,8 +5,9 @@ import { bigCount, id, newId, now, table, ts } from "./columns.js";
  * same transaction as the chart that moves it from `nodes` to `revoked`
  * (`apps/server/src/membership-removal.ts`).
  *
- * `cleared_node_id` and `person_id` are plain ids with no FK; `persons` is in @waitron/identity's
- * migration set, not the core one.
+ * `cleared_node_id` names an id from the chart, which need not have a `nodes` row here
+ * (`judgeClearance` reads only the chart), and `person_id` is in @waitron/identity's migration set,
+ * so neither has an FK.
  */
 export const membershipClearances = table("membership_clearances", {
   id: id("id").primaryKey().$defaultFn(newId),
