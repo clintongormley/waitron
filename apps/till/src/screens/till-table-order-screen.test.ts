@@ -1062,10 +1062,12 @@ describe("till-table-order-screen", () => {
 
     it("offers no Change on a line whose product the till does not have", async () => {
       const gone: TabLine = { ...burgerLine, productId: "gone", menuItemId: "menu-item-gone" };
-      const { el } = await mountLines([gone]);
+      const unnamed: TabLine = { ...burgerLine, lineNo: 6, productId: null, menuItemId: null };
+      const { el } = await mountLines([gone, unnamed]);
       await openDrawer(el);
       expect(lineAction(el, "change", 5)).toBeNull();
       expect(lineAction(el, "recall", 5)).not.toBeNull();
+      expect(lineAction(el, "change", 6)).toBeNull();
     });
 
     it("with changes to sent items switched off, a sent line offers Cancel and neither Change nor Recall", async () => {
@@ -1193,6 +1195,49 @@ describe("till-table-order-screen", () => {
         note: null,
         options: [{ listId: "list-cooked", labelId: "label-medium" }],
       });
+    });
+
+    it("sends an empty extras set when every pick is taken off, so the server removes them", async () => {
+      const dish: TillProduct = { ...burger, offeredModifiers: [extrasList] };
+      const { el } = await mount({ products: [dish], lines: [burgerLine, cheeseChild] });
+      await openDrawer(el);
+      const picker = await openChange(el, 5);
+      picker
+        .shadowRoot!.querySelector<HTMLElement>('[data-test="pick-list-extras-p-cheese-dec"]')!
+        .click();
+      await picker.updateComplete;
+      const seen = captureChange(el);
+      picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+      expect(seen.event!.detail.patch).toEqual({ note: null, extras: [] });
+    });
+
+    it("treats a pick recorded with no list as no longer offered", async () => {
+      const dish: TillProduct = { ...burger, offeredModifiers: [extrasList] };
+      const { el } = await mount({
+        products: [dish],
+        lines: [burgerLine, { ...cheeseChild, listId: null }],
+      });
+      await openDrawer(el);
+      const picker = await openChange(el, 5);
+      expect(
+        picker.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(".confirm")!.disabled,
+      ).toBe(true);
+    });
+
+    it("opens a line with no recorded offer on the first product of that id, as its name reads", async () => {
+      const lunch: TillProduct = {
+        ...burger,
+        menuItemId: "menu-item-burger-lunch",
+        offeredModifiers: [cookedList],
+      };
+      const dinner: TillProduct = { ...burger, menuItemId: "menu-item-burger-dinner" };
+      const { el } = await mount({
+        products: [lunch, dinner],
+        lines: [{ ...burgerLine, menuItemId: null }],
+      });
+      await openDrawer(el);
+      const picker = await openChange(el, 5);
+      expect(picker.shadowRoot!.querySelector("#label-list-cooked-label-rare")).not.toBeNull();
     });
 
     it("sends a cleared note as null, which removes it", async () => {
@@ -1335,6 +1380,17 @@ describe("till-table-order-screen", () => {
         await openDrawer(el);
         const dialog = await openCancel(el, 5);
         expect(dialog.querySelector("[data-cancel-one]")).toBeNull();
+      });
+
+      it("opens nothing when the line the app offers Cancel for is no longer on the tab", async () => {
+        const { el } = await mountLines([preparingBurger]);
+        await openDrawer(el);
+        el.cancelOffer = 42;
+        await el.updateComplete;
+        const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+          "wt-dialog.cancel-confirm",
+        )!;
+        expect(dialog.open).toBe(false);
       });
 
       it("opens Cancel on the line the app offers it for after a refused change", async () => {
