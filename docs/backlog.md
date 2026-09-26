@@ -2577,14 +2577,39 @@ image constraints under *Detail → Box image*.
     never-promoted standby simply burns it — gaps are permitted").
     **Done for (1) (2026-09-26, lane A's A61, #708):** the dashboard's Servers screen lets an admin
     (`mirror.create`) on the serving primary remove a standby that never finished joining
-    (`POST /management-api/servers/:nodeId/remove`), marking it `evicted`. Still open: an
-    `evicted` entry keeps its place under `MAX_NODES` (see "The membership chart grows without
-    bound" under *Replication, membership & failover — residuals*); "never finished joining" is read as `serving-secondary` with no
-    `nodes` row in the primary's database, and a remote standby writes that row in its own
-    database, so the check cannot see a remote standby that finished — none can today
-    (`finish-adoption.ts`); and, read not run, a removed node still holds the primary's endorsement
-    of its key, and `verifyMembershipDocument` (`packages/membership/src/verify.ts`) does not check
-    the signer's standing in any held chart. (2) An adopt saved before this
+    (`POST /management-api/servers/:nodeId/remove`), marking it `evicted`. Still open:
+    "never finished joining" is read as `serving-secondary` with no `nodes` row in the primary's
+    database, and a remote standby writes that row in its own database, so the check cannot see a
+    remote standby that finished — none can today (`finish-adoption.ts`).
+    **Done (2026-09-26, lane A's A63) for A61's two other open notes** (a removed entry still took a
+    `MAX_NODES` place; a removed node still held the primary's endorsement of its key): an admin
+    (`mirror.create`) on the serving primary can clear a removed machine from the Servers screen
+    (`POST /management-api/servers/:nodeId/clear`, `apps/server/src/membership-removal.ts`), which
+    moves its id into the chart's new signed `revoked` list (outside `MAX_NODES`, capped by
+    `MAX_REVOKED`) and writes an append-only `membership_clearances` row. The primary refuses a join
+    to a full chart (`mirror.membership_full`), minting refuses a chart over either cap
+    (`membership.chart_too_large`), and a receiver refuses a chart signed by a machine its own held
+    chart lists removed or cleared (`signer_removed`, `verifyMembershipDocument`).
+    **Still open after A63:** (i) a removed trust anchor (a machine whose key sits in the receiver's
+    own `nodes` table) can still make up a key for a machine in good standing that is not an anchor,
+    vouch for it, and sign as that machine (stated at `resolveSignerKey`); (ii) boot
+    reconciliation's peer fetch sends no credential (`boot.ts` gives `fetchPeerMembershipDocument`
+    only the URL) and `GET /management-api/membership` refuses a request without one, so in
+    production that path accepts no chart today and the receiver checks above never run there (read,
+    not run); (iii) a cleared machine is refused its own promotion only if its own held chart
+    contains the clearing, and a standby that never finished joining never receives it; (iv) so the
+    primary's join refusal (`mirror.standby_removed` for a removed or cleared id,
+    `mirror.membership_full` for a full chart) is the only one of these guards working in production
+    today; (v) a receiver whose held chart predates a removal accepts the removed machine's charts
+    until it learns of the removal; (vi) a joining standby sees `mirror.bundle_fetch_failed` rather
+    than the primary's reason, because `apps/server/src/mirror-bundle-fetch.ts` turns every non-2xx
+    answer into that code — this predates A63, and `mirror.standby_removed` has the same gap; (vii)
+    if A61's removal ever mis-classifies a live standby that an operator later promotes, the old
+    primary refuses the new primary's charts (`signer_removed`) and keeps selling; the refusal is
+    logged at warn and raises no alert. No adopt can finish today (`finish-adoption.ts`), so no such
+    standby exists yet.
+    A56's open items, continued:
+    (2) An adopt saved before this
     change carries no proof, so the reset refuses it (`password.invalid`). (3) The proof shows the
     login the primary accepted at join time, not that the admin is still active there, and the
     one-time code is not asked again. (4) A join that failed after writing `trading.env` boots the
@@ -2653,9 +2678,10 @@ image constraints under *Detail → Box image*.
     on the mirror's own database); `adoptFromPrimary` (`adopt.ts`) spreads one adoption across
     several transactions with file writes between and no commented decision (CLAUDE.md §3), so a
     failure partway could leave a stamped mirror with no break-glass verifier; the membership list's
-    eight-node cap (`MAX_NODES`, `packages/membership/src/verify.ts`) is enforced only by the
-    verifier — #625's review measured a nine-node list minted without complaint — so whether the
-    mint should refuse is an open question; the restore guard's repeated-destination check compares
+    eight-node cap (`MAX_NODES`, `packages/membership/src/verify.ts`) was enforced only by the
+    verifier — #625's review measured a nine-node list minted without complaint (since A63, 2026-09-26,
+    the mint refuses it with `membership.chart_too_large` and a join to a full chart is refused
+    `mirror.membership_full`); the restore guard's repeated-destination check compares
     resolved path text, so two names reaching one file through a symlink may pass;
     `mirror-session.ts`'s keepalive keeps an `isNull(lastSeenAt)` arm on a `not null` column (dead,
     kept on purpose); `MirrorBundle.wireguardPublicKey` is set by no production caller and read by
@@ -5610,9 +5636,16 @@ that slice 3 has to restore:
 
 - **Re-admission `sell-only → serving-secondary`** — the primary-minted un-fence that makes a rejoined
   box sell again. Must retire the node's previous chart entry and delete its live `fiscal.aeat` row.
-- **The membership chart grows without bound.** It APPENDS while `MAX_NODES = 8` (`packages/membership/src/verify.ts`) makes every verifier
-  refuse a longer document, and every wipe-and-re-adopt mints a fresh nodeId — roughly eight
-  disaster-recovery re-adopts leave a document no node accepts. Re-admission must retire, not add.
+- **The membership chart fills up with machines nobody can clear.** It APPENDS, every
+  wipe-and-re-adopt mints a fresh nodeId, and `MAX_NODES = 8` (`packages/membership/src/verify.ts`)
+  caps it. Since A63 (2026-09-26) a full chart no longer produces a document no node accepts: the
+  mint refuses it (`membership.chart_too_large`) and the primary refuses the join
+  (`mirror.membership_full`). An admin can clear a REMOVED (`evicted`) machine to free its place,
+  from the Servers screen. What stays open: only an `evicted` entry can be cleared, and A61's
+  Remove takes only a standby that never finished joining. So the old entry of a standby that
+  finished joining (a wiped-and-re-adopted box's previous id, for one) keeps its place and nothing
+  frees it, and a `sell-only` former primary keeps its place until that box retires itself
+  (`apps/server/src/retire.ts` marks it `evicted`). Re-admission must retire, not add.
 - **Chart hygiene:** a post-setup change to `WAITRON_ADVERTISED_ORIGIN` is never re-published, and a
   node that promotes while absent from the chart appends itself address-less, which `routableServers`
   drops.
