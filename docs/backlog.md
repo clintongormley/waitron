@@ -368,7 +368,8 @@ the kitchen screen (menus Task 7c); the `changed` notice kind is declared but no
 Payments screen lists open orders locked by a card payment nothing is finishing any more, and a
 "Check with the card provider" button asks the provider for the payment's own record. If the card
 was charged, the sale is filed once through the existing recovery path. If it was not, the payment
-is cancelled at Stripe and marked failed, and the order is unlocked. If the provider is unreachable
+is marked failed (cancelled at Stripe first, when Stripe holds a PaymentIntent for it), and the
+order is unlocked unless another of its card payments is still unresolved. If the provider is unreachable
 or unclear, the action refuses and the order stays locked. Stripe Terminal now records its
 PaymentIntent id before the reader is asked to charge, and the Stripe key gains a suffix after a
 cancellation so the order can be paid by card again. Each resolution is recorded, with the
