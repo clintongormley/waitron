@@ -2152,10 +2152,10 @@ rather than the size closest to 35mm. The receipt body, QR and its VERI*FACTU le
 the owner confirmed the centred body and QR on paper, then requested the centred legend.
 The Printers screen also gained a remembered status filter, one-click disable, links to each print
 agent's setup page, and shows the agent that last saw each printer without implying it is bound to it.
-The print-agent list gained its own remembered Active/Revoked/All filter in the 2026-09-26 follow-up.
+The print-agent list gained its own remembered Active/Revoked/All filter in #704 (2026-09-26).
 [Current design and physical evidence](superpowers/specs/2026-09-26-printer-calibration-wizard.md).
 
-**Calibration and status follow-up (2026-09-26, implemented on the `printers` branch):** four calibration steps separate
+**Calibration and status follow-up — LANDED #699 (2026-09-26):** four calibration steps separate
 the cash-drawer question from the receipt test. Finder codes use `nn-W`/`nn-8` and are available
 before printing; the paper-width lines are restored. Clicking a printer opens its status and
 connection details, with drawer attachment distinct from till assignment. Completed print jobs
