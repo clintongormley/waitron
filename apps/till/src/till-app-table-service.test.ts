@@ -1651,3 +1651,195 @@ describe("till-app table ordering: logout while a request is waiting for the ser
     expect((el as unknown as { operatorName: string }).operatorName).toBe("");
   });
 });
+
+describe("till-app table ordering: a split-off bill left unpaid goes back to its table", () => {
+  const checkLine: TabLine = { ...tabLine, lineNo: 3 };
+  const otherTable: TableState = { ...openTable, id: "t3", label: "3", tabId: "wo-8" };
+  const handheld = {
+    getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
+    getDeviceIdentity: vi
+      .fn()
+      .mockResolvedValue({ deviceId: "h1", formFactor: "phone-portrait", stationId: null }),
+  };
+  const tabletCanvas: CanvasDef = {
+    formFactor: "tablet-landscape",
+    tabs: [
+      {
+        key: "floor",
+        title: "Floor",
+        columns: 24,
+        cards: [
+          { type: "floor-plan", colSpan: 12, rowSpan: 12, config: {} },
+          { type: "table-order", colSpan: 12, rowSpan: 12, config: {} },
+        ],
+      },
+    ],
+  };
+
+  /** Lines by order, so a test can tell which order the screen was last read for. */
+  const linesOf = () =>
+    vi.fn((orderId: string) =>
+      Promise.resolve({
+        lines: [orderId === "wo-check" ? checkLine : tabLine],
+        revision: 0,
+        editSentLines: true,
+      }),
+    );
+
+  async function splitOnTill(overrides: Record<string, unknown> = {}) {
+    const { el } = await mountApp({ getTabLines: linesOf(), ...overrides });
+    const screen = await toTableOrder(el);
+    emit(screen, "split-lines", { transfers: [{ lineNo: 3 }] });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+    return el;
+  }
+
+  async function splitOnHandheld(overrides: Record<string, unknown> = {}) {
+    const { el } = await mountApp({ ...handheld, getTabLines: linesOf(), ...overrides });
+    await logIn(el);
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+    await openFromFloor(el, openTable);
+    emit(tableOrder(el)!, "split-lines", { transfers: [{ lineNo: 3 }] });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+    return el;
+  }
+
+  const activeTabId = (el: TillApp) => (el as unknown as { activeTabId?: string }).activeTabId;
+  const lastCall = (fn: unknown) => {
+    const order = vi.mocked(fn as () => unknown).mock.invocationCallOrder;
+    return order[order.length - 1]!;
+  };
+
+  it("merges the check back into the tab when a till goes Back, before the floor is read again", async () => {
+    const el = await splitOnTill();
+
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+
+    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false);
+    expect(lastCall(api.getTablesState)).toBeGreaterThan(lastCall(api.mergeTabs));
+    expect(activeTabId(el)).toBe("wo-7");
+    expect(floor(el)).not.toBeNull();
+    expect(banner(el)).toBeNull();
+  });
+
+  it("merges the check back when a handheld leaves its Order tab, and shows the tab's own lines on return", async () => {
+    const el = await splitOnHandheld();
+
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+
+    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false);
+    expect(lastCall(api.getTablesState)).toBeGreaterThan(lastCall(api.mergeTabs));
+
+    emit(shell(el), "tab-select", { key: "order" });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+    expect(tableOrder(el)!.lines).toEqual([tabLine]);
+  });
+
+  it("merges the check back before a tablet opens another table beside it", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, canvas: tabletCanvas }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "tb1", formFactor: "tablet-landscape", stationId: null }),
+      getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
+      getTabLines: linesOf(),
+    });
+    await logIn(el);
+    await openFromFloor(el, openTable);
+    emit(tableOrder(el)!, "split-lines", { transfers: [{ lineNo: 3 }] });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+
+    await openFromFloor(el, otherTable);
+    await flush(el);
+
+    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false);
+    expect(lastCall(api.getTabLines)).toBeGreaterThan(lastCall(api.mergeTabs));
+    expect(tableOrder(el)!.orderId).toBe("wo-8");
+  });
+
+  it("leaves a paid check alone when the waiter then leaves", async () => {
+    const el = await splitOnHandheld();
+    emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "3.00" });
+    await flush(el);
+    expect(api.recordSale).toHaveBeenCalledWith([], { method: "cash", amount: "3.00" }, "wo-check");
+
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+
+    expect(api.mergeTabs).not.toHaveBeenCalled();
+  });
+
+  it("says the bill is in Held orders when the server refuses to merge it back, and still reaches the floor", async () => {
+    const el = await splitOnHandheld({
+      mergeTabs: vi.fn().mockRejectedValue({ code: "order.payment_in_flight" }),
+    });
+
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+
+    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
+      t("table.check_kept_held"),
+    );
+    expect(floor(el)).not.toBeNull();
+
+    emit(shell(el), "tab-select", { key: "order" });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+    expect(api.mergeTabs).toHaveBeenCalledOnce();
+  });
+
+  it("does not merge a check whose payment is still running when the waiter goes Back", async () => {
+    let settle!: (result: TillSaleResult) => void;
+    const el = await splitOnTill({
+      recordSale: vi.fn(() => new Promise<TillSaleResult>((resolve) => (settle = resolve))),
+    });
+    emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "3.00" });
+    await flush(el);
+
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+
+    expect(api.mergeTabs).not.toHaveBeenCalled();
+    expect(banner(el)!.textContent).toContain(t("table.check_kept_held"));
+
+    settle(saleResult);
+    await flush(el);
+    expect(ticket(el)).not.toBeNull();
+    expect(banner(el)).toBeNull();
+  });
+
+  it("leaves the check in Held orders when the operator logs out, and does not merge it after the next login", async () => {
+    const el = await splitOnHandheld();
+
+    emit(shell(el), "logout");
+    await flush(el);
+    await logIn(el);
+    emit(shell(el), "tab-select", { key: "order" });
+    await flush(el);
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+
+    expect(api.mergeTabs).not.toHaveBeenCalled();
+  });
+
+  it("never merges when a till goes Back from an ordinary tab", async () => {
+    const { el } = await mountApp();
+    const screen = await toTableOrder(el);
+
+    emit(screen, "back-to-floor");
+    await flush(el);
+
+    expect(api.mergeTabs).not.toHaveBeenCalled();
+    expect(floor(el)).not.toBeNull();
+  });
+});

@@ -311,6 +311,8 @@ export const en = {
   "table.split_options_together": "Dishes with options must be moved in full",
   "table.split_modifier_error": "Dishes with options must be moved in full",
   "table.split_held_error": "Send held items to the kitchen before moving them to another bill",
+  "table.check_kept_held":
+    "The separate bill could not go back to the table. It is in Held orders on the counter.",
   // Errors
   "pin.invalid": "Wrong PIN, try again",
   "person.suspended": "This account is disabled — ask a manager",
@@ -646,6 +648,8 @@ export const es: Record<StringKey, string> = {
   "table.split_modifier_error": "Los platos con opciones deben moverse completos",
   "table.split_held_error":
     "Envía a cocina los artículos retenidos antes de pasarlos a otra cuenta",
+  "table.check_kept_held":
+    "La cuenta separada no pudo volver a la mesa. Está en Pedidos aparcados, en el mostrador.",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "person.suspended": "Esta cuenta está desactivada. Avisa a un responsable",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",

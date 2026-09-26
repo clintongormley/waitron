@@ -446,6 +446,9 @@ export class TillApp extends LitElement {
   #tableOpensPending = 0;
   /** Identifies the latest tab-lines read, so an earlier read answering later cannot win. */
   #tabLinesRead = 0;
+  /** The check {@link #onSplitLines} made and the tab it came from, while the check is on screen and
+   * unpaid. Held in memory only: after a reload the check stays in Held orders. */
+  #splitCheck?: { checkId: string; tabId: string };
   @state() private counterServiceZones: ServiceZoneSummary[] = [];
   @state() private counterServiceZoneId = "";
   #counterOfferRequest = 0;
@@ -1589,11 +1592,13 @@ export class TillApp extends LitElement {
     this.#setActiveTab(key, fromHistory, fromHistory);
     if (fromHistory) this.#restoreDestination();
     else if (this.drill !== undefined) this.#popDrill();
-    if (wasShowingOrder && !this.#tableCatalogueActive()) this.#orderVisit++;
+    const leftOrder = wasShowingOrder && !this.#tableCatalogueActive();
+    if (leftOrder) this.#orderVisit++;
     if (!wasShowingOrder && this.#tableCatalogueActive()) this.#shownOnVisit = this.#orderVisit;
+    const returned = leftOrder ? this.#returnSplitCheck() : Promise.resolve();
     if (this.#tabNeedsFloorData(tab)) {
-      if (this.#floorLoaded) void this.#refreshFloor();
-      else void this.#loadFloorData();
+      const read = this.#floorLoaded ? () => this.#refreshFloor() : () => this.#loadFloorData();
+      void returned.then(read);
     }
   }
 
@@ -1616,6 +1621,7 @@ export class TillApp extends LitElement {
     this.cancelOffer = null;
     this.#tableOpensPending++;
     try {
+      await this.#returnSplitCheck();
       await this.#openTable(tableId, hasOpenTab, offerRequest);
     } finally {
       this.#tableOpensPending--;
@@ -1945,11 +1951,13 @@ export class TillApp extends LitElement {
    * that check. The origin table id stays captured so its label continues to identify this split bill. */
   async #onSplitLines(event: Event): Promise<void> {
     const { transfers } = (event as CustomEvent<{ transfers: TabTransfer[] }>).detail;
-    if (this.activeTabId === undefined) return;
+    const tabId = this.activeTabId;
+    if (tabId === undefined) return;
     this.errorKey = undefined;
     try {
-      const { checkId } = await this.api.splitTab(this.activeTabId, transfers);
+      const { checkId } = await this.api.splitTab(tabId, transfers);
       this.activeTabId = checkId;
+      this.#splitCheck = { checkId, tabId };
     } catch (error) {
       const code = (error as { code?: string }).code;
       this.errorKey =
@@ -1961,6 +1969,27 @@ export class TillApp extends LitElement {
       return;
     }
     await Promise.all([this.#loadTabLines(), this.#reloadTables()]);
+  }
+
+  /** Leaving a split-off check unpaid puts its lines back on the tab it came from, with their kitchen
+   * tickets. A check being paid here, or one the server will not merge, stays in Held orders. */
+  async #returnSplitCheck(): Promise<void> {
+    const split = this.#splitCheck;
+    if (split === undefined || this.activeTabId !== split.checkId) return;
+    this.#splitCheck = undefined;
+    if (this.submitting) {
+      this.errorKey = "table.check_kept_held";
+      return;
+    }
+    try {
+      await this.api.mergeTabs(split.tabId, split.checkId, false);
+    } catch {
+      this.errorKey = "table.check_kept_held";
+      return;
+    }
+    if (this.activeTabId !== split.checkId) return;
+    this.activeTabId = split.tabId;
+    await this.#loadTabLines();
   }
 
   /**
@@ -1976,6 +2005,8 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       this.result = await this.api.recordSale([], tender, id);
+      this.#splitCheck = undefined;
+      if (this.errorKey === "table.check_kept_held") this.errorKey = undefined;
       this.#showTicket(id);
     } catch (error) {
       // No preliminary save, so any network failure may have filed.
@@ -2065,7 +2096,7 @@ export class TillApp extends LitElement {
     if (this.#inShell()) {
       this.#clearErrorKeepingLateChange();
       this.#popDrill();
-      void this.#refreshFloor();
+      void this.#returnSplitCheck().then(() => this.#refreshFloor());
     } else {
       void this.#onShowFloor();
     }
@@ -2078,6 +2109,7 @@ export class TillApp extends LitElement {
     this.operatorName = "";
     this.canEdit = false;
     this.#orderVisit++;
+    this.#splitCheck = undefined;
     // `screen = "lock"` resets neither the drill nor the tab.
     this.drill = undefined;
     this.#setActiveTab(this.canvas?.tabs[0]?.key, true);
