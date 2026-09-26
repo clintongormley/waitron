@@ -124,7 +124,7 @@ export class OptionListForm extends LitElement {
   readonly #reorder = new ReorderController(this, {
     order: () => this.labels.map((label) => label.id),
     move: (id, to) => this.#move(id, to),
-    label: (id) => this.labels.find((label) => label.id === id)?.name || t("options.label"),
+    label: (id) => this.labels.find((label) => label.id === id)!.name,
     busy: () => this.busy,
     get reorderLabel(): string {
       return t("options.reorder");
@@ -236,20 +236,26 @@ export class OptionListForm extends LitElement {
     this.#closeEditor();
   }
 
+  /** The row whose menu opened the option editor, or null for Add option. */
+  #openedFrom: string | null = null;
+
+  #openEditor(label: DraftLabel | "new"): void {
+    this.editingLabel = label;
+    this.#openedFrom = label === "new" ? null : label.id;
+  }
+
   /** Closes the option editor and puts focus back on the control that opened it, once the dialog
    * has closed and put focus back where IT recorded. */
   #closeEditor(): void {
-    const opener = this.editingLabel;
-    if (opener === null) return;
     this.editingLabel = null;
-    void this.#returnFocus(opener === "new" ? null : opener.id);
+    void this.#returnFocus(this.#openedFrom);
   }
 
   async #returnFocus(id: string | null): Promise<void> {
     await this.updateComplete;
-    const form = this.shadowRoot!.querySelector("dashboard-option-label-form");
-    await form?.updateComplete;
-    await form?.shadowRoot!.querySelector("wt-modal")?.updateComplete;
+    const form = this.shadowRoot!.querySelector("dashboard-option-label-form")!;
+    await form.updateComplete;
+    await form.shadowRoot!.querySelector("wt-modal")!.updateComplete;
     const target =
       id === null
         ? this.shadowRoot!.querySelector<HTMLElement>('[data-test="add-option"]')
@@ -377,7 +383,6 @@ export class OptionListForm extends LitElement {
   }
 
   #labelRow(label: DraftLabel, index: number, errors: Record<string, string>) {
-    const named = label.name || t("options.label");
     return html`<tr data-label=${label.id}>
       <td class="handle-cell">${this.#reorder.handle(label.id)}</td>
       <td>
@@ -400,21 +405,21 @@ export class OptionListForm extends LitElement {
             type="radio"
             name="default-label"
             data-test=${`label-${index}-default`}
-            aria-label=${`${t("options.default")}: ${named}`}
+            aria-label=${`${t("options.default")}: ${label.name}`}
             .checked=${this.defaultLabelId === label.id}
             ?disabled=${!label.available || this.busy}
             @change=${() => this.#edit(() => (this.defaultLabelId = label.id))}
         /></label>
       </td>
       <td>
-        <wt-row-actions align="end" label=${`${t("options.option_actions")}: ${named}`}
+        <wt-row-actions align="end" label=${`${t("options.option_actions")}: ${label.name}`}
           ><wt-button
             variant="secondary"
             data-test=${`edit-label-${index}`}
             .disabled=${this.busy}
             @click=${(event: Event) => {
               event.stopPropagation();
-              if (!this.busy) this.editingLabel = label;
+              this.#openEditor(label);
             }}
             >${t("action.edit")}</wt-button
           ><wt-button
@@ -423,7 +428,7 @@ export class OptionListForm extends LitElement {
             .disabled=${this.busy}
             @click=${(event: Event) => {
               event.stopPropagation();
-              if (!this.busy) this.#removeLabel(label.id);
+              this.#removeLabel(label.id);
             }}
             >${t("action.delete")}</wt-button
           ></wt-row-actions
@@ -467,7 +472,7 @@ export class OptionListForm extends LitElement {
           .disabled=${this.busy}
           @click=${(event: Event) => {
             event.stopPropagation();
-            if (!this.busy) this.editingLabel = "new";
+            this.#openEditor("new");
           }}
           >${t("options.add_option")}</wt-button
         >
