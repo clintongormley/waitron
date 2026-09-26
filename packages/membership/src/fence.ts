@@ -1,8 +1,8 @@
 import type { NodeStanding, SignedMembershipDocument } from "./types.js";
 
 /**
- * No verification here; which held documents were checked, and which were not, is on
- * `readNodeMembership` in @waitron/db.
+ * No verification here; why, and which held rows nothing checked, is on `readNodeMembership` in
+ * @waitron/db.
  */
 export function standingOf(
   document: SignedMembershipDocument,

@@ -5696,14 +5696,15 @@ endorsement stored when that round reads, not the first round's"
   only `trading.env` from the state folder (`apps/server/src/rejoin-command.ts`), so the first
   start runs whenever that box next starts trading unfenced and not as a mirror. Whether a rejoin
   should clear it is the owner's call.
-- **Open, left by A38 (branch `chore/membership-reader-header`): a restored membership row is
-  signed over unchecked.** A restore (archive or bucket) puts the copy's `node_membership` row back
-  as it was, and the start that finishes the restore (`completeRebuild`) signs the next term over
-  that row's node list without verifying it, unless boot's reconcile with a peer replaced the row
-  first. A probe wrote a row with a broken signature and an extra node, then ran `completeRebuild`:
-  it returned true and stored a new, validly signed document still listing the extra node. Whether
-  a restore should verify the row is the owner's call.
 - A sell-only local secondary that is not fenced runs the first start and signs the next term.
+- **Open, left by A38 (branch `chore/membership-reader-header`): a restored membership row is signed
+  over unchecked.** A restore (archive or bucket) puts the copy's `node_membership` row back as it
+  was, and whatever this node next mints over it signs the next term over that row's node list
+  without verifying it — the start that finishes the restore (`completeRebuild`), or before it a
+  mirror promoted without a restart (the item below). A probe wrote a row with a broken signature
+  and an extra node, then ran `completeRebuild`: it returned true and stored a new, validly signed
+  document still listing the extra node. Whether a restore should verify the row is the owner's
+  call.
 - A mirror that deferred its first start and is then promoted without a restart
   (`promoteMirrorToPrimary`, `apps/server/src/promote.ts`) keeps the bucket copy held, reading off
   with the reason `first_start_pending` and raising no alert, until the box next starts; that start
