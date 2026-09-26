@@ -8,6 +8,7 @@ import {
   sales,
   withTransaction,
   workingOrderLines,
+  workingOrders,
   type Transaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -1578,6 +1579,7 @@ describe("ordering extras and options — parent + child lines", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, edited));
     await updateHeldOrder({ db: suite.db }, v.cfg, edited, {
+      revision: await revisionOf(edited),
       lines: [{ workingOrderLineId: dish!.id, menuItemId: v.offerFor(v.burgerId), quantity: "2" }],
     });
     const stored = await suite.db
@@ -1618,6 +1620,7 @@ describe("ordering extras and options — parent + child lines", () => {
     const lineOf = (productId: string) => parked.find((line) => line.productId === productId)!.id;
     // The burger is re-sent unchanged but without the Bacon, which the till cannot name.
     await updateHeldOrder({ db: suite.db }, v.cfg, id, {
+      revision: await revisionOf(id),
       lines: [
         {
           workingOrderLineId: lineOf(v.burgerId),
@@ -1975,3 +1978,12 @@ describe("ordering extras and options — parent + child lines", () => {
     });
   });
 });
+
+/** The order's current revision, for an edit whose test is not about the out-of-date check. */
+async function revisionOf(orderId: string): Promise<number> {
+  const [row] = await suite.db
+    .select({ revision: workingOrders.revision })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  return row!.revision;
+}

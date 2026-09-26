@@ -263,16 +263,23 @@ describe("connectedCardProviderSweep", () => {
 });
 
 describe("withStalePaymentRelease", () => {
-  it("releases stale in-flight marks at the pass's time, logs how many, and returns the inner report", async () => {
+  it("releases in-flight marks after the inner pass, logs how many, and returns the inner report", async () => {
     const now = new Date("2026-09-26T12:00:00.000Z");
-    const inner = vi.fn(async () => REPORT);
-    const release = vi.fn(async () => 2);
+    const order: string[] = [];
+    const inner = vi.fn(async () => {
+      order.push("pass");
+      return REPORT;
+    });
+    const release = vi.fn(async () => {
+      order.push("release");
+      return 2;
+    });
     const log = vi.fn();
 
     expect(await withStalePaymentRelease(inner, release, log)(now)).toBe(REPORT);
 
     expect(inner).toHaveBeenCalledWith(now);
-    expect(release).toHaveBeenCalledWith(now);
+    expect(order).toEqual(["pass", "release"]);
     expect(log).toHaveBeenCalledWith("info", "payment_attempt.released", { released: 2 });
   });
 

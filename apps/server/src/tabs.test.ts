@@ -1651,6 +1651,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     const { cfg, tabId, ticket, lineId, cafeOffer } = await tabWithFiredCafe();
 
     await updateHeldOrder({ db }, cfg, tabId, {
+      revision: await revisionOf(tabId),
       lines: [
         { workingOrderLineId: lineId, menuItemId: cafeOffer, quantity: "1", note: "no onions" },
       ],
@@ -1704,6 +1705,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     const { cfg, tabId, ticket, aguaOffer } = await tabWithFiredCafe();
 
     await updateHeldOrder({ db }, cfg, tabId, {
+      revision: await revisionOf(tabId),
       lines: [{ menuItemId: aguaOffer, quantity: "1" }],
     });
 
@@ -1731,7 +1733,10 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
       });
     }
     await expect(
-      updateHeldOrder({ db }, cfg, tabId, { lines: [{ menuItemId: aguaOffer, quantity: "1" }] }),
+      updateHeldOrder({ db }, cfg, tabId, {
+        revision: await revisionOf(tabId),
+        lines: [{ menuItemId: aguaOffer, quantity: "1" }],
+      }),
     ).rejects.toMatchObject({ code: "ticket.already_started" });
 
     expect(await linesOf(tabId)).toEqual(before);
@@ -1751,6 +1756,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     ).rejects.toMatchObject({ code: "ticket.already_fired", params: { workingOrderId: tabId } });
     await expect(
       updateHeldOrder({ db }, cfg, tabId, {
+        revision: await revisionOf(tabId),
         lines: [{ workingOrderLineId: lineId, menuItemId: cafeOffer, quantity: "2" }],
       }),
     ).rejects.toMatchObject({ code: "ticket.already_fired" });
@@ -1905,6 +1911,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     const { cfg, tabId, ticket, lineId, aguaOffer } = await tabWithFiredCafe();
 
     await updateHeldOrder({ db }, cfg, tabId, {
+      revision: await revisionOf(tabId),
       lines: [{ workingOrderLineId: lineId, menuItemId: aguaOffer, quantity: "1" }],
     });
 

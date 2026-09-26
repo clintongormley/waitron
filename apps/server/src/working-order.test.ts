@@ -305,7 +305,21 @@ async function updateProducts(
   },
 ): Promise<void> {
   const offers = await counterOffers(cfg);
-  return updateHeldOrder({ db }, cfg, id, { ...req, lines: offers.toOfferLines(req.lines) });
+  return updateHeldOrder({ db }, cfg, id, {
+    ...req,
+    revision: req.revision ?? (await revisionOf(id)),
+    lines: offers.toOfferLines(req.lines),
+  });
+}
+
+/** The order's current revision, for an edit whose test is not about the out-of-date check; 0 for
+ * an order that does not exist. */
+async function revisionOf(orderId: string): Promise<number> {
+  const [row] = await db
+    .select({ revision: workingOrders.revision })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  return row?.revision ?? 0;
 }
 
 /**
@@ -1605,6 +1619,7 @@ describe("updateHeldOrder", () => {
     await db.execute(sql`
       update menu_item_extra_items set price = 400 where menu_item_id = ${premiumCafeOfferId}`);
     await updateHeldOrder({ db }, cfg, id, {
+      revision: await revisionOf(id),
       lines: [
         {
           workingOrderLineId: before.rows[0]!.id,
@@ -1701,8 +1716,9 @@ describe("updateHeldOrder", () => {
     await withTransaction(db, (tx) =>
       catalogue.updateProduct(tx, extra.productId, { available: false }),
     );
-    const edit = (quantity: string) =>
+    const edit = async (quantity: string) =>
       updateHeldOrder({ db }, cfg, id, {
+        revision: await revisionOf(id),
         lines: [
           { workingOrderLineId: before[0]!.id, menuItemId: premiumCafeOfferId, quantity, extras },
         ],
@@ -1735,6 +1751,7 @@ describe("updateHeldOrder", () => {
 
     await expect(
       updateHeldOrder({ db }, cfg, id, {
+        revision: await revisionOf(id),
         lines: [
           {
             workingOrderLineId: before[0]!.id,
@@ -1756,8 +1773,9 @@ describe("updateHeldOrder", () => {
     async (_state, patch) => {
       const { cfg, cafeId, premiumCafeOfferId, extras, id, before } = await parkWithExtra("1");
       await withTransaction(db, (tx) => catalogue.updateProduct(tx, cafeId, patch));
-      const edit = (quantity: string) =>
+      const edit = async (quantity: string) =>
         updateHeldOrder({ db }, cfg, id, {
+          revision: await revisionOf(id),
           lines: [
             { workingOrderLineId: before[0]!.id, menuItemId: premiumCafeOfferId, quantity, extras },
           ],
@@ -1804,6 +1822,7 @@ describe("updateHeldOrder", () => {
       update menu_items set gross_price = 900 where id = ${premiumCafeOfferId}`);
 
     await updateHeldOrder({ db }, cfg, id, {
+      revision: await revisionOf(id),
       lines: [
         {
           workingOrderLineId: before[0]!.id,
@@ -1850,6 +1869,7 @@ describe("updateHeldOrder", () => {
       .where(eq(workingOrderLines.workingOrderId, id));
     await expect(
       updateHeldOrder({ db }, cfg, id, {
+        revision: await revisionOf(id),
         lines: [
           {
             ...wireLine({ menuItemId: cafeOfferId, productId: cafeId, quantity: "2" }),
@@ -1879,6 +1899,7 @@ describe("updateHeldOrder", () => {
     await db.execute(sql`
       update menu_items set gross_price = 900 where id = ${premiumCafeOfferId}`);
     await updateHeldOrder({ db }, cfg, id, {
+      revision: await revisionOf(id),
       lines: [
         {
           workingOrderLineId: lineId,
@@ -1919,6 +1940,7 @@ describe("updateHeldOrder", () => {
     });
 
     await updateHeldOrder({ db }, cfg, id, {
+      revision: await revisionOf(id),
       lines: [{ menuItemId: premiumCafeOfferId, quantity: "2" }],
     });
 
@@ -2019,11 +2041,16 @@ describe("updateHeldOrder", () => {
     const before = await readOrder(id);
     const UUID_NOT_IN_CAT = "00000000-0000-0000-0000-000000000000";
 
-    await expect(updateHeldOrder({ db }, cfg, id, { lines: [] })).rejects.toMatchObject({
+    await expect(
+      updateHeldOrder({ db }, cfg, id, { revision: await revisionOf(id), lines: [] }),
+    ).rejects.toMatchObject({
       code: "sale.empty_basket",
     });
     await expect(
-      updateHeldOrder({ db }, cfg, id, { lines: [{ menuItemId: UUID_NOT_IN_CAT, quantity: "1" }] }),
+      updateHeldOrder({ db }, cfg, id, {
+        revision: await revisionOf(id),
+        lines: [{ menuItemId: UUID_NOT_IN_CAT, quantity: "1" }],
+      }),
     ).rejects.toMatchObject({
       code: "service_zone.offer_not_allowed",
       params: { zoneId, menuItemId: UUID_NOT_IN_CAT },
@@ -5605,6 +5632,7 @@ describe("frozen answers through a fractional quantity edit", () => {
       await db.execute(sql`update menu_items set gross_price = 9900 where id = ${cafeOfferId}`);
 
       await updateHeldOrder({ db }, cfg, result.id, {
+        revision: await revisionOf(result.id),
         lines: [
           {
             workingOrderLineId: held.lines[0]!.workingOrderLineId,
@@ -5970,6 +5998,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       update menu_items set gross_price = 9900 where id = ${premiumCafeOfferId}`);
 
     await updateHeldOrder({ db }, cfg, id, {
+      revision: await revisionOf(id),
       lines: [
         {
           workingOrderLineId: before[0]!.id,
@@ -6284,6 +6313,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
 
     // Same dish, same quantity, a DIFFERENT label off the same list.
     await updateHeldOrder({ db }, cfg, id, {
+      revision: await revisionOf(id),
       lines: [
         {
           workingOrderLineId: before[0]!.id,
@@ -6387,6 +6417,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       update menu_items set gross_price = 9900 where id = ${premiumCafeOfferId}`);
 
     await updateHeldOrder({ db }, cfg, id, {
+      revision: await revisionOf(id),
       lines: [
         {
           workingOrderLineId: before[0]!.id,
@@ -6445,6 +6476,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
 
     await expect(
       updateHeldOrder({ db }, cfg, id, {
+        revision: await revisionOf(id),
         lines: [
           {
             workingOrderLineId: before[0]!.id,
@@ -6474,6 +6506,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .orderBy(workingOrderLines.lineNo);
 
     await updateHeldOrder({ db }, cfg, id, {
+      revision: await revisionOf(id),
       lines: [{ workingOrderLineId: before[0]!.id, menuItemId: premiumCafeOfferId, quantity: "2" }],
     });
 
@@ -7380,6 +7413,7 @@ describe("a variant is sold as the product it is", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
     await updateHeldOrder({ db }, cfg, id, {
+      revision: await revisionOf(id),
       lines: [
         {
           workingOrderLineId: before!.id,
@@ -7426,6 +7460,7 @@ describe("a variant is sold as the product it is", () => {
       .where(eq(workingOrderLines.workingOrderId, id));
     await db.update(products).set({ unitPrice: 900 }).where(eq(products.id, wine.wine125));
     await updateHeldOrder({ db }, cfg, id, {
+      revision: await revisionOf(id),
       lines: [
         {
           workingOrderLineId: before!.id,
@@ -7748,8 +7783,9 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
     await withTransaction(db, (tx) =>
       setProductVariants(tx, cafeId, [{ ...doble!, active: true }], LOCALE),
     );
-    const edit = (quantity: string) =>
+    const edit = async (quantity: string) =>
       updateHeldOrder({ db }, cfg, id, {
+        revision: await revisionOf(id),
         lines: [{ workingOrderLineId: parked!.id, menuItemId: cafeOfferId, quantity }],
       });
 

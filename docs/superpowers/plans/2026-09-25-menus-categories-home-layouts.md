@@ -584,6 +584,12 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
   mark set: the recovery branch of `POST /api/pay` clears it when it files or fails, and boot's
   reconcile clears any mark older than the provider timeout. It never outlives the payment
   attempt, whose own timeout bounds it. Built in Task 7b.
+  - **2026-09-26, after review:** no mark is released by its age. An attempt still running in this
+    process keeps its mark however long the reader waits, and so does an order with a payment still
+    `attempting` or a capture no sale records; after each pass the server's loop clears any other
+    mark on an open order (`releaseStalePaymentAttempts`, `apps/server/src/till-sale.ts`). A card
+    Pay over a mark is refused `order.payment_in_flight` on the same two conditions, after the
+    recovery branch has had its turn.
 - **D23. "Duplicate and use the copy here" is one transaction** (spec §11.7 example 8). Two requests
   — remove Drinks, then add the copy — leave a moment in which Lunch reaches Lemonade through
   nothing, and D5's sync then resets its price and deletes its overrides. Task 1 adds

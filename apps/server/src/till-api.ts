@@ -729,7 +729,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // Practice mode: the local simulator, stamping no reader.
       if (deps.cardProvider?.provider === "simulator") {
         const outcome = await payWorkingOrderIntegrated(
-          { db: deps.db, backend: deps.backend, clock: deps.clock, provider: deps.cardProvider },
+          {
+            db: deps.db,
+            backend: deps.backend,
+            clock: deps.clock,
+            provider: deps.cardProvider,
+            log,
+          },
           saleCfg,
           { ...body, zoneId },
           personId,
@@ -755,6 +761,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           provider,
           readerRef: reader.providerRef,
           readerId: reader.id,
+          log,
         },
         saleCfg,
         { ...body, zoneId },

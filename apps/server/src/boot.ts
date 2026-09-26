@@ -368,19 +368,20 @@ export function withPendingSweep(
 }
 
 /**
- * Release, each pass, the in-flight marks (plan D22) no payment attempt is still behind
- * (`releaseStalePaymentAttempts`). Like {@link withPendingSweep} it is log-only: a failure never
- * changes the inner report. Exported for a direct test (`boot-pending-sweep.test.ts`).
+ * After each pass, release the in-flight marks (plan D22) no payment attempt is still behind
+ * (`releaseStalePaymentAttempts`). After the inner pass, so a card attempt its sweep resolved in
+ * this pass is judged on the resolved row. Like {@link withPendingSweep} it is log-only: a failure
+ * never changes the inner report. Exported for a direct test (`boot-pending-sweep.test.ts`).
  */
 export function withStalePaymentRelease(
   inner: (now: Date) => Promise<PassReport>,
-  release: (now: Date) => Promise<number>,
+  release: () => Promise<number>,
   log: Logger,
 ): (now: Date) => Promise<PassReport> {
   return async (now) => {
     const report = await inner(now);
     try {
-      const released = await release(now);
+      const released = await release();
       if (released > 0) log("info", "payment_attempt.released", { released });
     } catch (error) {
       log("warn", "payment_attempt.release_failed", { error: String(error) });
@@ -1824,8 +1825,6 @@ async function bootServer(
     mountSpa(app, { root: config.tillAppDir, basePath: "", navigationPath: "/tabs" }, log);
   }
 
-  // Before the listener, so every in-flight mark this process writes is at or after it.
-  const servingSince = now();
   // After every mount above, so the app is complete before it binds.
   const server = startTradingListener(config, app, now, log);
   undoOnFailure.push(() => closeListener(server));
@@ -1901,7 +1900,7 @@ async function bootServer(
         }),
         log,
       ),
-      (at) => releaseStalePaymentAttempts(db, at, servingSince),
+      () => releaseStalePaymentAttempts(db),
       log,
     ),
     now,

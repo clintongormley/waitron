@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
 import "./errors.js";
-import { and, eq, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import {
   addDecimal,
   AppError,
@@ -52,6 +52,7 @@ import { issuancePass } from "./issuance-pass.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { ticketLinesFrom } from "./receipt-lines.js";
+import type { Logger } from "./logger.js";
 import type { TillConfig } from "./till-config.js";
 import {
   enqueueCashSaleDrawer,
@@ -290,6 +291,8 @@ export type IntegratedPayDeps = TillSaleDeps & {
   /** The `card_readers.id` the pay routed to, stamped onto the payment when it is associated with
    * the sale; `undefined` leaves `payments.reader_id` NULL. */
   readerId?: string;
+  /** Where a failure to clear the in-flight mark after an attempt that filed nothing is logged. */
+  log?: Logger;
 };
 
 /**
@@ -654,10 +657,31 @@ export async function payWorkingOrderIntegrated(
   req: IntegratedPayRequest,
   operatorId?: string,
 ): Promise<IntegratedPayOutcome> {
+  const live = liveAttemptsOf(deps.db);
+  // The mark this call wrote, once P1 has written it; unregistered however the call ends.
+  let marked: string | null = null;
+  try {
+    return await payIntegrated(deps, cfg, req, operatorId, live, (attemptAt) => {
+      marked = attemptAt;
+      live.set(req.id, attemptAt);
+    });
+  } finally {
+    if (marked !== null && live.get(req.id) === marked) live.delete(req.id);
+  }
+}
+
+async function payIntegrated(
+  deps: IntegratedPayDeps,
+  cfg: TillConfig,
+  req: IntegratedPayRequest,
+  operatorId: string | undefined,
+  live: ReadonlyMap<string, string>,
+  onMarked: (attemptAt: string) => void,
+): Promise<IntegratedPayOutcome> {
   // ---- P1 (tx A) ----
   const prepared = await withTransaction(deps.db, async (tx) => {
     const [locked] = await tx
-      .select({ status: workingOrders.status })
+      .select({ status: workingOrders.status, attemptAt: workingOrders.paymentAttemptAt })
       .from(workingOrders)
       .where(eq(workingOrders.id, req.id));
 
@@ -697,6 +721,16 @@ export async function payWorkingOrderIntegrated(
       if (outstanding !== undefined) {
         return { kind: "settle" as const, outstanding };
       }
+
+      // After the recovery above, so a till pressing Pay again to file a captured payment is never
+      // refused. A mark no live attempt and no unfiled payment stands behind is overwritten below.
+      if (
+        locked.status === "open" &&
+        locked.attemptAt !== null &&
+        (live.has(req.id) || (await ordersWithUnfiledPayment(tx, [req.id])).has(req.id))
+      ) {
+        throw new AppError("order.payment_in_flight", { workingOrderId: req.id });
+      }
     }
 
     const order: PricedOrder =
@@ -716,6 +750,8 @@ export async function payWorkingOrderIntegrated(
         .update(workingOrders)
         .set({ paymentAttemptAt: attemptAt })
         .where(eq(workingOrders.id, req.id));
+      // Inside the transaction, so no release pass runs between the mark and its registration.
+      onMarked(attemptAt);
     }
     return { kind: "collect" as const, priced, wasPlaced, attemptAt };
   });
@@ -725,13 +761,7 @@ export async function payWorkingOrderIntegrated(
   }
   // P2 is skipped entirely: the card was already charged.
   if (prepared.kind === "recover") {
-    try {
-      return await finalizeRecovery(deps, cfg, req, prepared.captured, operatorId);
-    } catch (error) {
-      // A crash between P1 and P3 left the mark; a recovery that cannot file releases it too.
-      await releasePaymentAttempt(deps.db, req.id);
-      throw error;
-    }
+    return finalizeRecovery(deps, cfg, req, prepared.captured, operatorId);
   }
   if (prepared.kind === "recover-settle") {
     return finalizeSettleRecovery(deps, cfg, req, prepared.captured, prepared.outstanding);
@@ -756,11 +786,13 @@ export async function payWorkingOrderIntegrated(
       simulationOutcome: req.simulationOutcome,
     });
   } catch (error) {
-    await releasePaymentAttempt(deps.db, req.id, attemptAt);
+    await releasePaymentAttempt(deps, req.id, attemptAt);
     throw error;
   }
   if (result.state !== "captured" && result.state !== "accepted_offline") {
-    await releasePaymentAttempt(deps.db, req.id, attemptAt);
+    // A timed-out reader leaves its payment `attempting`, which keeps the mark: the provider's
+    // sweep may still capture it.
+    await releasePaymentAttempt(deps, req.id, attemptAt);
     return toPayOutcome(result, null);
   }
 
@@ -784,61 +816,102 @@ export async function payWorkingOrderIntegrated(
   return { outcome: "captured", ticket };
 }
 
-/**
- * Clear an OPEN order's in-flight mark (plan D22) after a payment attempt that filed nothing. Given
- * `attemptAt`, only the mark that attempt wrote: a later attempt on the same order keeps its own.
- * `null` is an attempt that wrote none.
- */
-async function releasePaymentAttempt(
-  db: Database,
-  workingOrderId: string,
-  attemptAt?: string | null,
-): Promise<void> {
-  if (attemptAt === null) return;
-  await withTransaction(db, async (tx) => {
-    await tx
-      .update(workingOrders)
-      .set({ paymentAttemptAt: null })
-      .where(
-        and(
-          eq(workingOrders.id, workingOrderId),
-          eq(workingOrders.status, "open"),
-          attemptAt === undefined ? undefined : eq(workingOrders.paymentAttemptAt, attemptAt),
-        ),
-      );
-  });
+/** The integrated card attempts each venue store has running in this process: order id to the
+ * mark its P1 wrote (plan D22). One process owns a venue at a time, so a mark missing here was left
+ * by an attempt that has ended, in this process or in one that died. */
+const LIVE_ATTEMPTS = new WeakMap<Database, Map<string, string>>();
+
+function liveAttemptsOf(db: Database): Map<string, string> {
+  let live = LIVE_ATTEMPTS.get(db);
+  if (live === undefined) {
+    live = new Map();
+    LIVE_ATTEMPTS.set(db, live);
+  }
+  return live;
 }
 
 /**
- * How old an in-flight mark must be before the server's loop takes it for one no attempt is still
- * behind. Longer than the longest reader wait in this repo, SumUp's 120 one-second polls
- * (`packages/payments-sumup/src/provider.ts`); a Stripe device collect has no bound of ours at all.
+ * Which of these orders has a payment that is, or could still become, a capture no sale records:
+ * an attempt its provider has not resolved, or a capture not yet filed. This decides whether a
+ * mark may be RELEASED and whether Pay may go ahead over one; the write guard
+ * (`refusePaymentInFlight`) reads only the mark.
  */
-export const PAYMENT_ATTEMPT_STALE_MS = 15 * 60_000;
+async function ordersWithUnfiledPayment(
+  tx: Transaction,
+  orderIds: readonly string[],
+): Promise<Set<string>> {
+  const rows = await tx
+    .selectDistinct({ id: payments.workingOrderId })
+    .from(payments)
+    .where(
+      and(
+        inArray(payments.workingOrderId, [...orderIds]),
+        or(
+          eq(payments.state, "attempting"),
+          and(inArray(payments.state, ["captured", "accepted_offline"]), isNull(payments.saleId)),
+        ),
+      ),
+    );
+  return new Set(rows.map((row) => row.id));
+}
 
 /**
- * Clear the in-flight mark (plan D22) on every OPEN order whose mark was written before
- * `startedAt` — by a process that has since died, since one process owns the venue at a time — or
- * more than {@link PAYMENT_ATTEMPT_STALE_MS} before `now`. Returns how many it cleared.
+ * Clear the in-flight mark `attemptAt` wrote on an OPEN order (plan D22), after an attempt that
+ * filed nothing, unless a payment of the order could still be captured or waits to be filed. `null`
+ * is an attempt that wrote none. A failure is logged and never replaces the attempt's own outcome;
+ * the loop's next release pass clears what this could not.
  */
-export async function releaseStalePaymentAttempts(
-  db: Database,
-  now: Date,
-  startedAt: Date,
-): Promise<number> {
-  const cutoff = new Date(Math.max(startedAt.getTime(), now.getTime() - PAYMENT_ATTEMPT_STALE_MS));
+async function releasePaymentAttempt(
+  deps: IntegratedPayDeps,
+  workingOrderId: string,
+  attemptAt: string | null,
+): Promise<void> {
+  if (attemptAt === null) return;
+  try {
+    await withTransaction(deps.db, async (tx) => {
+      if ((await ordersWithUnfiledPayment(tx, [workingOrderId])).has(workingOrderId)) return;
+      await tx
+        .update(workingOrders)
+        .set({ paymentAttemptAt: null })
+        .where(
+          and(
+            eq(workingOrders.id, workingOrderId),
+            eq(workingOrders.status, "open"),
+            eq(workingOrders.paymentAttemptAt, attemptAt),
+          ),
+        );
+    });
+  } catch (error) {
+    deps.log?.("warn", "payment_attempt.release_failed", {
+      workingOrderId,
+      error: String(error),
+    });
+  }
+}
+
+/**
+ * Clear the in-flight mark (plan D22) on every OPEN order whose attempt is not running in this
+ * process and which has no payment that is, or could still become, a capture not yet filed.
+ * Returns how many it cleared.
+ */
+export async function releaseStalePaymentAttempts(db: Database): Promise<number> {
   return withTransaction(db, async (tx) => {
-    const released = await tx
+    const marked = await tx
+      .select({ id: workingOrders.id })
+      .from(workingOrders)
+      .where(and(eq(workingOrders.status, "open"), isNotNull(workingOrders.paymentAttemptAt)));
+    // Read inside the transaction: a P1 registers its attempt in its own, which this one excludes.
+    const live = liveAttemptsOf(db);
+    const candidates = marked.map((row) => row.id).filter((id) => !live.has(id));
+    if (candidates.length === 0) return 0;
+    const held = await ordersWithUnfiledPayment(tx, candidates);
+    const releasable = candidates.filter((id) => !held.has(id));
+    if (releasable.length === 0) return 0;
+    await tx
       .update(workingOrders)
       .set({ paymentAttemptAt: null })
-      .where(
-        and(
-          eq(workingOrders.status, "open"),
-          lt(workingOrders.paymentAttemptAt, cutoff.toISOString()),
-        ),
-      )
-      .returning({ id: workingOrders.id });
-    return released.length;
+      .where(inArray(workingOrders.id, releasable));
+    return releasable.length;
   });
 }
 

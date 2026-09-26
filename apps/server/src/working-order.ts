@@ -2798,8 +2798,7 @@ export interface UpdateHeldOrderRequest {
     options?: OptionSelection[];
   } & LineExtras)[];
   label?: string;
-  /** The revision the edited copy was read at. Absent skips the out-of-date check. */
-  revision?: number;
+  revision: number;
 }
 
 /** What `PUT /api/working-orders/:id/lines/:lineNo` changes on one line; an absent field is kept. */
@@ -2869,13 +2868,13 @@ interface LineIntent {
 type RequestedLine = Parameters<typeof priceOrderLines>[3][number];
 
 /**
- * An OPEN order, else `working_order.not_open`, whose revision is `revision` when one is given, else
+ * An OPEN order, else `working_order.not_open`, whose revision is `revision`, else
  * `working_order.out_of_date`.
  */
 async function requireEditableOrder(
   tx: Transaction,
   orderId: string,
-  revision: number | undefined,
+  revision: number,
 ): Promise<{ label: string | null }> {
   const [order] = await tx
     .select({
@@ -2888,7 +2887,7 @@ async function requireEditableOrder(
   if (order === undefined || order.status !== "open") {
     throw new AppError("working_order.not_open", { workingOrderId: orderId });
   }
-  if (revision !== undefined && revision !== order.revision) {
+  if (revision !== order.revision) {
     throw new AppError("working_order.out_of_date", {
       workingOrderId: orderId,
       revision: order.revision,
@@ -2901,6 +2900,7 @@ async function requireEditableOrder(
  * Refuse `order.payment_in_flight` when an integrated card payment is between pricing and filing on
  * any of these OPEN orders (plan D22). It reads the order's own mark, never the payments store: the
  * simulator writes no `attempting` row, and Stripe and SumUp write theirs after pricing committed.
+ * Only deciding when the mark may be RELEASED reads that store (`till-sale.ts`).
  */
 export async function refusePaymentInFlight(
   tx: Transaction,

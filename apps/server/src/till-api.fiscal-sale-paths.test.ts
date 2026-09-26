@@ -1035,6 +1035,93 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     expect(after.wo).toEqual([{ status: "open" }]);
   });
 
+  describe("a decline whose in-flight mark cannot be cleared is still a decline, and is logged", () => {
+    /** Refuse, until dropped, any write that clears order `id`'s in-flight mark. */
+    function refuseRelease(id: string): () => void {
+      const name = `test_refuse_release_${id.replaceAll("-", "_")}`;
+      suite.db.run(
+        sql.raw(`create trigger ${name} before update of payment_attempt_at on working_orders
+          when old.id = '${id}' and new.payment_attempt_at is null
+          begin select raise(abort, 'release refused'); end`),
+      );
+      return () => suite.db.run(sql.raw(`drop trigger ${name}`));
+    }
+
+    async function declinedPay(
+      mount: (cfg: TillConfig, log: Logger) => Hono,
+      prepare: (deviceCookie: string) => Promise<void>,
+      body: Record<string, unknown>,
+    ) {
+      const { cfg, available, operatorId } = await setupVenue();
+      const each = available.find((p) => p.pricingUnit === "each")!;
+      const logged: string[] = [];
+      const app = mount(cfg, (_level, event) => void logged.push(event));
+      const cookie = await loginSession(app, cfg, operatorId);
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+      await prepare(deviceCookie);
+      const workingOrderId = randomUUID();
+      const drop = refuseRelease(workingOrderId);
+      try {
+        const payRes = await app.request("/api/pay", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+          body: JSON.stringify({
+            id: workingOrderId,
+            lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+            ...body,
+          }),
+        });
+        expect(payRes.status).toBe(200);
+        expect(await payRes.json()).toEqual({ outcome: "declined" });
+      } finally {
+        drop();
+      }
+      expect(logged).toContain("payment_attempt.release_failed");
+    }
+
+    it("through a reader", async () => {
+      const client = new FakeStripe();
+      client.declineNext();
+      await declinedPay(
+        (cfg, log) => {
+          const app = new Hono();
+          mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, client)), log);
+          return app;
+        },
+        async (deviceCookie) => {
+          await connectStripe();
+          const reader = await seedReader();
+          await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
+        },
+        {},
+      );
+    });
+
+    it("through the practice simulator", async () => {
+      await declinedPay(
+        (cfg, log) => {
+          const app = new Hono();
+          mountTillApi(
+            app,
+            {
+              db: suite.db,
+              backend,
+              clock,
+              cfg,
+              secureCookies: false,
+              venueLocale: cfg.locale,
+              cardProvider: new SimulatorPaymentProvider(suite.db),
+            },
+            log,
+          );
+          return app;
+        },
+        () => Promise.resolve(),
+        { simulationOutcome: "declined" },
+      );
+    });
+  });
+
   it("demo/prepare drives the local simulator and stamps NO reader", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
