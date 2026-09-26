@@ -180,7 +180,6 @@ export async function validateEntries(
   }
 
   // The path guard resolves existing roots; create protected directories before validating entries.
-  // Existing directory permissions belong to the operator and are not changed by mkdir.
   await mkdir(deps.stagingDir, { recursive: true, mode: 0o700 });
   await mkdir(deps.stateDir, { recursive: true, mode: 0o700 });
 

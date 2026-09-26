@@ -1,4 +1,4 @@
-import { mkdir, readFile, realpath } from "node:fs/promises";
+import { chmod, mkdir, readFile, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { AppError } from "@waitron/shared";
 import { type BundleFiles } from "./recovery-bundle.js";
@@ -67,16 +67,31 @@ export async function resolveSafeEntryPath(
   return target;
 }
 
-/** The inverse of `collectStateSecrets`: each file written atomically, 0600. */
+/**
+ * The inverse of `collectStateSecrets`: each file written atomically, 0600. The destination and every
+ * folder between it and an entry end 0700 whether or not they already existed (`mkdir`'s mode applies
+ * only to a folder it creates). No existing folder above the destination is changed (missing ones
+ * are created 0700), provided nothing else changes the folders during the unpack: a folder inside
+ * the destination replaced by a symlink mid-run is followed, wherever it points.
+ */
 export async function unpackBundleToDir(files: BundleFiles, destDir: string): Promise<void> {
-  // Created before the guard's `realpath`, which fails on a missing path. Only a directory created
-  // here is made 0700.
+  // Created before the guard's `realpath`, which fails on a missing path.
   await mkdir(destDir, { recursive: true, mode: 0o700 });
   const realDestRoot = await realpath(resolve(destDir));
+  await chmod(realDestRoot, 0o700);
   for (const [rel, contents] of Object.entries(files)) {
     const target = await resolveSafeEntryPath(rel, destDir, realDestRoot, () => {
       throw new AppError("recovery.bundle_invalid", { reason: "unsafe_path" });
     });
+    // Stops at the destination. Goes by path, like the write below: a folder swapped for a symlink
+    // after `realpath` is followed.
+    for (
+      let dir = await realpath(dirname(target));
+      dir.startsWith(realDestRoot + sep);
+      dir = dirname(dir)
+    ) {
+      await chmod(dir, 0o700);
+    }
     await writeFileAtomic(target, contents, 0o600);
   }
 }
