@@ -1,4 +1,4 @@
-import { afterEach, describe, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import { registerIcons } from "./wt-icon.js";
@@ -13,6 +13,23 @@ registerIcons({
   plus: "M7.25 2.5H8.75V7.25H13.5V8.75H8.75V13.5H7.25V8.75H2.5V7.25H7.25Z",
 });
 
+// axe does not score a placeholder's contrast, so a test of a placeholder-hinted field measures its
+// own ratio.
+// The parser reads rgb()/rgba() only, which is why each colour is checked for that form first.
+function contrastRatio(a: string, b: string): number {
+  const luminance = (rgb: string) => {
+    expect(rgb).toMatch(/^rgba?\(/);
+    const [r, g, bl] = rgb
+      .match(/\d+(\.\d+)?/g)!
+      .slice(0, 3)
+      .map((part) => Number(part) / 255)
+      .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r! + 0.7152 * g! + 0.0722 * bl!;
+  };
+  const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (light! + 0.05) / (dark! + 0.05);
+}
+
 describe.each(["light", "dark"] as const)("wt-number-stepper a11y (%s theme)", (theme) => {
   test("empty", async () => {
     await mountThemed(
@@ -20,6 +37,10 @@ describe.each(["light", "dark"] as const)("wt-number-stepper a11y (%s theme)", (
       theme,
     );
     await expectNoA11yViolations(host);
+    const input = host.querySelector("wt-number-stepper")!.shadowRoot!.querySelector("input")!;
+    const placeholder = getComputedStyle(input, "::placeholder").color;
+    const field = getComputedStyle(input).backgroundColor;
+    expect(contrastRatio(placeholder, field)).toBeGreaterThanOrEqual(4.5);
   });
 
   test("with a value", async () => {

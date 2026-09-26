@@ -102,11 +102,31 @@ test("+ on text that is not a whole number starts again from min", async () => {
   expect(seen).toEqual(["2"]);
 });
 
+test("+ on a blank or non-numeric value never goes above max", async () => {
+  for (const value of ["", "abc"]) {
+    const el = await mount(
+      `<wt-number-stepper label="Q" value="${value}" min="0" max="0"></wt-number-stepper>`,
+    );
+    const seen = changes(el);
+    parts(el).plus.click();
+    expect(seen).toEqual(["0"]);
+  }
+});
+
+test("a step that leaves the value where it is emits nothing", async () => {
+  const el = await mount('<wt-number-stepper label="Q" value="1" max="2"></wt-number-stepper>');
+  const seen = changes(el);
+  // Both clicks land before a render can disable + at max.
+  parts(el).plus.click();
+  parts(el).plus.click();
+  expect(seen).toEqual(["2"]);
+});
+
 test("- on a blank value does nothing, so only clearing the box reaches blank", async () => {
   const el = await mount('<wt-number-stepper label="Max"></wt-number-stepper>');
   const seen = changes(el);
   expect(parts(el).minus.disabled).toBe(true);
-  // A disabled button fires no click, so dispatch one straight at the handler's element.
+  // A disabled button fires no click, so re-enable it for the click to reach the handler.
   parts(el).minus.disabled = false;
   parts(el).minus.click();
   expect(seen).toEqual([]);
@@ -136,6 +156,17 @@ test("a step emits exactly one wt-change and lets no native click out", async ()
   const seen = changes(el);
   parts(el).plus.click();
   expect(seen).toEqual(["2"]);
+  expect(clicks).toBe(0);
+});
+
+test("a step that changes nothing lets no native click out either", async () => {
+  const el = await mount('<wt-number-stepper label="Q" value="2" max="2"></wt-number-stepper>');
+  let clicks = 0;
+  host.addEventListener("click", () => clicks++);
+  const seen = changes(el);
+  parts(el).plus.disabled = false;
+  parts(el).plus.click();
+  expect(seen).toEqual([]);
   expect(clicks).toBe(0);
 });
 

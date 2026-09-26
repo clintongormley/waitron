@@ -143,23 +143,19 @@ export class WtNumberStepper extends LitElement {
   }
 
   private step(delta: -1 | 1, event: Event): void {
+    // Stopped here as well as in dispatchWtChange: a press that changes nothing emits nothing, and
+    // its click must not reach a click handler outside either.
     event.stopPropagation();
     const current = this.current();
-    let next: number;
-    if (current === null) {
-      if (delta === -1) return;
-      next = Math.max(this.min, 1);
-    } else {
-      next = Math.min(Math.max(current + delta, this.min), this.max ?? Number.POSITIVE_INFINITY);
-    }
+    if (current === null && delta === -1) return;
+    const max = this.max ?? Number.POSITIVE_INFINITY;
+    const next =
+      current === null
+        ? Math.min(Math.max(this.min, 1), max)
+        : Math.min(Math.max(current + delta, this.min), max);
+    if (next === current) return;
     this.value = String(next);
-    this.dispatchEvent(
-      new CustomEvent("wt-change", {
-        detail: { value: this.value },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    dispatchWtChange(this, event, { value: this.value });
   }
 
   private onInput(event: Event): void {
