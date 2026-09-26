@@ -350,7 +350,22 @@ write would mean loosening that trigger in a core migration. No migration; golde
 `inmutabilidad` unedited. Still open: asesor Q26 (the adviser confirming the rule); the new test
 file `apps/server/src/vat-at-issuance.test.ts` copies about 150 lines of setup from
 `issuance-pass.test.ts`, which a shared helper could absorb.
-Next in the lane: menus Task 7b (editing a saved order — the server rules). The owner lifted the wait: the dependency upgrades are
+**Menus Task 7b landed (#696, 2026-09-26): editing a saved order — the server rules.** An edit keeps
+each line's locked price and prices only what it adds; every change to work the kitchen has is a
+recall or a void recorded as a kitchen notice (and printed where a printer is mapped); a line records
+when it was sent; an order carries a revision, so an edit made from an older copy is refused; and a
+second device cannot change an order while a card payment of it runs (D22). Owner decisions applied:
+a partial split takes its own copy of the kitchen ticket and a started line may be split (D10 and
+Review Focus 6 overturned); moving sent work to another table prints a MOVED slip and records a
+`moved` notice; held kitchen work cannot be split onto a check (`tab.split_held_line`). The core
+migrations add five columns and replace the `working_orders_enforce_transition` trigger, and
+venue-service adds `kitchen_notices` and `service_settings`; the upgrade succeeds, but
+rows written before it misbehave (a dish sent before the upgrade counts as unsent, an extra saved
+before it blocks a one-line edit) — the PR has the measured table; settle open orders or reset
+before upgrading. Golden fingerprint and `inmutabilidad` unedited. Still open: showing notices on
+the kitchen screen (menus Task 7c); a manager clearing a card payment a crash left running (M7b2,
+next in the lane); the `changed` notice kind is declared but nothing writes it.
+Next in the lane (was menus Task 7b): M7b2, then M6c, 7c, 7. The owner lifted the wait: the dependency upgrades are
 finished, and the work does not wait for SQLite slice 2. The menus plan's decisions D1–D23 settle
 the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the ones flagged for the
 owner. Menus Task 3 wipes existing venues (it rebuilds `menu_items`); every other migrating task
@@ -900,7 +915,7 @@ rows: **this task needs no venue reset of its own.** What it left open:
   class, category and allergens, so a retrieved line can now show values that differ from what was
   billed. **Next action (a follow-up, not one of the plan's tasks):** save or read the chosen
   variant's values for a retrieved line.
-- **DONE 2026-09-26 (menus plan Task 7b, branch `feat/menus-order-edits`):** `carveOffLines` now
+- **DONE 2026-09-26 (menus plan Task 7b, #696):** `carveOffLines` now
   refuses a quantity finer than the line's `unit_precision` with `tab.transfer_quantity_invalid`
   (`assertQuantityPrecision`). Pinned through a transfer, which shares `carveOffLines` with the
   split: "throws tab.transfer_quantity_invalid for a fraction of a line counted in whole units"
@@ -1065,7 +1080,7 @@ the plain product path; see "A sale needs a zone" below.) What Task 9 leaves ope
   carries the same mark. The first edit takes the extra off the basket, because the till cannot
   send it and the server re-prices an edited order without it — pinned by "bills a parked extra
   that gained an Active variant until an edit omits it" (`apps/server/src/till-sale.test.ts`).
-  (2026-09-26, branch `feat/menus-order-edits`: paying now refuses an unsent extra that can no
+  (2026-09-26, #696: paying now refuses an unsent extra that can no
   longer be sold, so the banner no longer says the extra is charged; it says paying is refused in
   that case.)
 - **Retrieving a held order reads the counter's CURRENT zone offer, not the zone the order was
@@ -1234,7 +1249,7 @@ re-priced every line. The review also found a dish offering one product on two l
 the wrong list's price; `matchExtraChildren` now refuses to pair a stored extras child whenever the
 picked product is offered by more than one of the dish's active lists.
 
-- **Superseded by menus plan Task 7b (branch `feat/menus-order-edits`):** a stored extras child now
+- **Superseded by menus plan Task 7b (#696):** a stored extras child now
   records its list (`working_order_lines.extra_list_id`) and a stored child pairs with a pick on list,
   product and quantity (`editLineExtras`, which replaced `matchExtraChildren`), so the refusal and the
   escape it left are gone. The till reads each held pick's `listId` too
@@ -1432,7 +1447,7 @@ What Task 12 deliberately did NOT do, so Task 13 is not surprised by it:
   the server re-prices. A staff-name rename or a withdrawn label matches nothing, and the till
   surfaces `held.options_changed` rather than substituting the list's default. Landed inside Task 12
   after the first cut of the picker refused every such edit with `options.label_required`.
-  **Superseded 2026-09-26 by menus plan Task 7b (branch `feat/menus-order-edits`):** the server no
+  **Superseded 2026-09-26 by menus plan Task 7b (#696):** the server no
   longer re-prices an edited line; a re-sent answer is frozen onto the same row at its stored price
   (plan D10).
 - **A child extras row still renders FLAT in the tab drawer**, as its own row beside the dishes, with
@@ -1548,7 +1563,7 @@ What the order path (the plan's Task 7) left behind:
   uses. A STAFF-name rename between the two sends therefore does not match: the till asks the
   operator to choose again, and the re-answered line takes the replacement path described here. A
   customer- or kitchen-name rename still re-sends and still lands on that path, at the server's own
-  by-value comparison. **Superseded by menus plan Task 7b (branch `feat/menus-order-edits`):** an
+  by-value comparison. **Superseded by menus plan Task 7b (#696):** an
   edit no longer re-prices or re-issues a line; a renamed answer is frozen onto the same row at its
   stored price, because an answer carries no price (plan D10). Pinned by "keeps the price of a held
   line whose options list was renamed between the two sends, freezing the new name".
@@ -3476,8 +3491,8 @@ image constraints under *Detail → Box image*.
     "(pre-merge review)", "(I1)" and "skipped a tenant" in `health.test.ts`, "the new guard" in
     `config.test.ts`.
   - Found by #623 (`apps/server` part b: working-order, tabs, tables), not fixable in a
-    comments-only change. (The first finding is fixed by menus plan Task 7b on
-    `feat/menus-order-edits`: an edit that changes or removes a sent line recalls or voids it with a
+    comments-only change. (The first finding is fixed by menus plan Task 7b,
+    #696: an edit that changes or removes a sent line recalls or voids it with a
     kitchen notice and slip, the changed line is sent again, and a line the edit adds reaches the
     kitchen as a round's would, held where its course or the whole tab is held; the "editing a line
     the kitchen has and has not started" and "new work an edit adds" cases in
