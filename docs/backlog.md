@@ -3088,14 +3088,14 @@ image constraints under *Detail → Box image*.
     symlinked destination's real folder became 0700 and received the files, and `/tmp` (root-owned,
     run as another user) stopped on a raw `EPERM` from `chmod` — both reproduced 2026-09-26 on
     `49f4af659`. And a start left an existing `tls/` folder's mode as it found it, while a restore
-    tightened it. **Done (2026-09-26, lane A's A47):** the command now refuses, before reading the
+    tightened it. **Done (2026-09-26, lane A's A47, #681):** the command now refuses, before reading the
     bundle or writing anything, a destination that is a symbolic link, that another user owns, or
     that is not a folder (a regular file used to stop it on a raw `EEXIST` after decrypting the
     bundle); each refusal exits 1 with a fixed message saying what to give instead, and a
     destination that does not exist yet is still created. The setup-mode start, before a venue is
     bound (`ensureBoxSecrets`, called only there from `boot.ts`), now makes a real `tls/` folder
-    0700 as a restore does; a `tls/` that is a symbolic link it leaves as it found it (a restore
-    refuses one pointing outside the destination). A trading start still leaves `tls/` as it finds
+    0700 as a restore does; a `tls/` that is a symbolic link it leaves as it found it, and still
+    writes the box's files through it (a restore refuses one pointing outside the destination). A trading start still leaves `tls/` as it finds
     it; whether to extend it is the owner's call. The restore itself (`restoreSecrets`) keeps no
     such check on the state folder it is given. A41's swap race above stays open, by the owner's
     choice.
