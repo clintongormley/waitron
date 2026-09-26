@@ -983,7 +983,7 @@ export class TillTableOrderScreen extends LitElement {
     return value === "" ? null : value;
   }
 
-  /** A FIRED line shows its course READ-ONLY: its course is corrected via recall, not moved here. A
+  /** A FIRED line shows its course READ-ONLY: the server refuses to move it (`ticket.already_fired`). A
    * CHILD extras row has no course of its own, and its null `firedAt` would otherwise paint an editable
    * picker on it. */
   #lineCourse(line: TabLine): TemplateResult | typeof nothing {

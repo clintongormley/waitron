@@ -1046,7 +1046,8 @@ export interface TabLine {
   firedAt: string | null;
   /** The line's kitchen ticket item state, or null when it has no LIVE ticket item. A child modifier
    * line never has one; a parent line can lack one too, so null is not impossible for a parent. A
-   * RECALLABLE line has `firedAt` set and `state === "queued"`; "preparing"/"ready" is cancel-only. */
+   * RECALLABLE line has `firedAt` set, `state === "queued"`, and the venue allows changes to sent items
+   * (`editSentLines`); "preparing"/"ready" is cancel-only. */
   state: TicketState | null;
   note: string | null;
   /** The extras list a CHILD row was picked from, which a prefilled pick goes back to; null on a
@@ -1562,7 +1563,7 @@ export class TillApi {
    * Move ONE not-yet-fired line into another course → `PATCH
    * /api/working-orders/:orderId/lines/:lineNo/course`. `null` CLEARS the line's course and is sent as an
    * explicit null, not an absent field. NON-FISCAL. Rejects `tab.not_open`, `course.not_found`,
-   * `tab.line_not_found`, or `ticket.already_fired` (correct a fired line via {@link recallLines}).
+   * `tab.line_not_found`, or `ticket.already_fired`.
    */
   async setLineCourse(orderId: string, lineNo: number, courseId: string | null): Promise<void> {
     await this.#request<void>(`/api/working-orders/${orderId}/lines/${lineNo}/course`, "PATCH", {
@@ -1582,8 +1583,10 @@ export class TillApi {
   /**
    * UN-send not-yet-started lines of an open tab → `POST /api/working-orders/:orderId/lines/recall`, the
    * inverse of {@link sendLines}. NON-FISCAL; a previously-fired line gets a RECALLED correction slip.
-   * Rejects `tab.not_open`, `tab.line_not_found`, or `ticket.already_started` (the kitchen has started
-   * it); an already-held line is a no-op.
+   * Rejects `tab.not_open`, `tab.line_not_found`, `ticket.already_started` (the kitchen has started
+   * it), or `ticket.already_fired` (the venue does not allow changes to sent items and a line with a
+   * ticket item has been sent — a recalled line still counts as sent); a held line never sent is a
+   * no-op.
    */
   async recallLines(orderId: string, lineNos: number[]): Promise<void> {
     await this.#request<void>(`/api/working-orders/${orderId}/lines/recall`, "POST", { lineNos });

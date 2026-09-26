@@ -1759,8 +1759,8 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * The reload runs on both paths: after a raced `ticket.already_started` the line has started, and
-   * re-reading turns its Recall into Cancel.
+   * The reload runs on both paths: after a raced `ticket.already_started` or `ticket.already_fired`,
+   * re-reading drops the line's Recall and Change.
    */
   async #onRecallLines(event: Event): Promise<void> {
     const { lineNos } = (event as CustomEvent<{ lineNos: number[] }>).detail;
