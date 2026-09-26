@@ -3308,7 +3308,6 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
     ["an adopt still at its own checks", (dir: string) => writeRecord(dir, "adopt", "started")],
     ["a completed adopt", (dir: string) => writeRecord(dir, "adopt", "complete")],
     ["a provision in progress", (dir: string) => writeRecord(dir, "provision", "venue_committed")],
-    ["a record that cannot be read", (dir: string) => writeFileSync(recordPath(dir), "{")],
   ])("refuses with setup.reset_unavailable given %s", async (_label, arrange) => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-unavailable-"));
     try {
@@ -3323,6 +3322,30 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
       const response = await postReset(app, resetBody());
       expect(response.status).toBe(409);
       expect(await response.json()).toEqual(unavailable);
+      expect(stageReset).not.toHaveBeenCalled();
+      await tick();
+      expect(requestRestart).not.toHaveBeenCalled();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("answers a record that holds something that is not a valid setup record with setup.operation_conflict", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-unreadable-"));
+    try {
+      writeFileSync(recordPath(dir), "{");
+      const stageReset = vi.fn(async () => {});
+      const app = new Hono();
+      const { deps, requestRestart } = makeAdoptDeps({
+        operations: createSetupOperationStore(dir),
+        stageReset,
+      });
+      mountSetup(app, deps, noopLog);
+      const response = await postReset(app, resetBody());
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({
+        error: { code: "setup.operation_conflict", params: {} },
+      });
       expect(stageReset).not.toHaveBeenCalled();
       await tick();
       expect(requestRestart).not.toHaveBeenCalled();
@@ -3376,6 +3399,54 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
       });
       expect(stageReset).not.toHaveBeenCalled();
     } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  const inventedPersonId = (n: number): string =>
+    `00000000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;
+
+  it("counts wrong passwords sent under different person ids against the one saved login", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-throttle-rotate-"));
+    try {
+      const { app, stageReset } = await halfAdopted(dir);
+      const statuses: number[] = [];
+      for (let n = 0; n < 5; n += 1) {
+        const body = resetBody({ personId: inventedPersonId(n), password: "not-the-password" });
+        statuses.push((await postReset(app, body)).status);
+      }
+      expect(statuses).toEqual([401, 401, 401, 401, 429]);
+      expect(stageReset).not.toHaveBeenCalled();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("accepts the correct login once the advertised wait has passed, after 1000 invented person ids", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-throttle-flood-"));
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const { app, stageReset } = await halfAdopted(dir);
+      for (let n = 0; n < 1000; n += 1) {
+        const body = resetBody({ personId: inventedPersonId(n), password: "not-the-password" });
+        expect([401, 429]).toContain((await postReset(app, body)).status);
+      }
+
+      const refused = await postReset(app, resetBody());
+      expect(refused.status).toBe(429);
+      const { retryAfterSeconds } = (
+        (await refused.json()) as {
+          error: { params: { retryAfterSeconds: number } };
+        }
+      ).error.params;
+      vi.setSystemTime(Date.now() + retryAfterSeconds * 1000);
+
+      const accepted = await postReset(app, resetBody());
+      expect(accepted.status).toBe(202);
+      expect(stageReset).toHaveBeenCalledOnce();
+      await tick();
+    } finally {
+      vi.useRealTimers();
       rmSync(dir, { recursive: true, force: true });
     }
   });

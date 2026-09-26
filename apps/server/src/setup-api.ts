@@ -214,6 +214,7 @@ const RESET_STATUS: Record<string, ContentfulStatusCode> = {
   "setup.request_invalid": 400,
   "password.invalid": 401,
   "setup.reset_unavailable": 409,
+  "setup.operation_conflict": 409,
   "password.throttled": 429,
 };
 
@@ -837,10 +838,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         const body = await readJsonBody<{ personId?: unknown; password?: unknown }>(c);
         const personId = asString(body.personId, "personId");
         const password = asString(body.password, "password");
-        const record = await operations.read().catch((error: unknown) => {
-          if (isAppError(error) && error.code === "setup.operation_conflict") return null;
-          throw error;
-        });
+        const record = await operations.read();
         if (
           record === null ||
           record.kind !== "adopt" ||
@@ -849,7 +847,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         ) {
           throw new AppError("setup.reset_unavailable", {});
         }
-        const finish = resetThrottle.begin(personId);
+        // Keyed by the saved operation, not the submitted person id: only its one saved login can
+        // authorise this, and a key per submitted id lets invented ids crowd the real one out.
+        const finish = resetThrottle.begin(record.id);
         let outcome: "success" | "invalid" | "error" = "error";
         try {
           outcome = matchesResetProof(record.data.resetProof, personId, password)

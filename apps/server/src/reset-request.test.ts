@@ -17,12 +17,17 @@ import {
 } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
+import { adoptFromPrimary, type AdoptHooks, type AdoptRequest } from "./adopt.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
-import { PENDING_ADOPTION_FILE } from "./finish-adoption.js";
+import { parseEnvFile } from "./env-file.js";
+import { PENDING_ADOPTION_FILE, type PendingAdoption } from "./finish-adoption.js";
 import type { Logger } from "./logger.js";
+import type { MirrorBundle } from "./mirror-bundle.js";
+import { writeModuleConfig } from "./module-config.js";
 import { runStagedReset, stageResetRequest } from "./reset-request.js";
 import { mountSetup } from "./setup-api.js";
 import { createSetupOperationStore } from "./setup-operation.js";
+import { writeTradingEnv } from "./trading-config.js";
 
 const NODE_ID = "11111111-1111-4111-8111-111111111111";
 const PRIMARY_NODE_ID = "22222222-2222-4222-8222-222222222222";
@@ -30,6 +35,35 @@ const ADOPT_BODY = JSON.stringify({
   primaryUrl: "https://primary.example",
   credential: { personId: "88888888-8888-8888-8888-888888888888", password: "a-password" },
 });
+
+const BUNDLE: MirrorBundle = {
+  designated: {
+    locationId: "33333333-3333-4333-8333-333333333333",
+    tillId: "44444444-4444-4444-8444-444444444444",
+    nodeId: PRIMARY_NODE_ID,
+    seriesId: "55555555-5555-4555-8555-555555555555",
+  },
+  tenant: { country: "ES", taxId: "80000001K" },
+  primaryNode: { name: "Caja 1", filingModule: "fiscal-verifactu", taxModule: null },
+  environment: "preproduction",
+  boxHostname: "waitron.local",
+  boxCaPem: "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n",
+  relayUrl: "https://relay.example/",
+  accountKey: Buffer.alloc(32, 9).toString("base64"),
+  reservedIdentity: {
+    modules: {
+      "fiscal-verifactu": { nif: "90000001K", idSistemaInformatico: "WS", numeroInstalacion: 7 },
+    },
+    series: [{ code: "SA-7", purpose: "standard" }],
+    endorsement: {
+      nodeId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      publicKey: "STANDBY_PUB",
+      endorsedBy: PRIMARY_NODE_ID,
+      signature: "SIG",
+    },
+  },
+  moduleOverrides: {},
+};
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -108,14 +142,19 @@ async function snapshot(stateDir: string): Promise<string[]> {
   );
 }
 
-async function postAdopt(stateDir: string): Promise<number> {
+type Adopt = (req: AdoptRequest, hooks: AdoptHooks) => Promise<{ breakGlassSecret: string }>;
+
+async function postAdopt(
+  stateDir: string,
+  adopt: Adopt = vi.fn(async () => ({ breakGlassSecret: "secret" })),
+): Promise<number> {
   const app = new Hono();
   mountSetup(
     app,
     {
       environment: "preproduction",
       operations: createSetupOperationStore(stateDir),
-      adopt: vi.fn(async () => ({ breakGlassSecret: "secret" })),
+      adopt,
       requestRestart: vi.fn(),
     },
     () => {},
@@ -189,14 +228,59 @@ describe("runStagedReset", () => {
     }
   });
 
-  it("lets the next adopt run where before the reset it was refused", async () => {
+  it("lets the real adopt run to completion where before the reset it was refused", async () => {
     const { stateDir, venueDir, operationId } = await halfAdoptedBox();
     expect(await postAdopt(stateDir)).toBe(409);
 
     await stageResetRequest(stateDir, operationId);
     expect(await runStagedReset({ stateDir, venueDir, log: () => {} })).toBe(true);
 
-    expect(await postAdopt(stateDir)).toBe(200);
+    // As the next start does before it serves setup.
+    await migrate(venueDir);
+    const store = await openVenueDatabase(venueDir);
+    try {
+      let standbyNodeId: string | undefined;
+      const adopt = vi.fn<Adopt>((req, hooks) =>
+        adoptFromPrimary(
+          {
+            ownerDb: store.venue,
+            fetchBundle: async (_url, _credential, standby) => {
+              standbyNodeId = standby.nodeId;
+              return BUNDLE;
+            },
+            advertisedOrigin: "https://standby.example",
+            environment: "preproduction",
+            persistTrading: async (cfg) => {
+              await writeTradingEnv(stateDir, cfg);
+            },
+            persistModuleConfig: async (config) => {
+              await writeModuleConfig(stateDir, config);
+            },
+            stateDir,
+            database: venueDir,
+          },
+          req,
+          hooks,
+        ),
+      );
+
+      expect(await postAdopt(stateDir, adopt)).toBe(200);
+      expect(await adopt.mock.results[0]?.value).toEqual({ breakGlassSecret: expect.any(String) });
+      expect((await createSetupOperationStore(stateDir).read())?.phase).toBe("complete");
+      const trading = parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8"));
+      expect(trading.WAITRON_TILL_NODE_ID).toBe(standbyNodeId);
+      expect(trading.WAITRON_TILL_LOCATION_ID).toBe(BUNDLE.designated.locationId);
+      const pending = JSON.parse(
+        await readFile(join(stateDir, PENDING_ADOPTION_FILE), "utf8"),
+      ) as PendingAdoption;
+      expect(pending.standby.nodeId).toBe(standbyNodeId);
+      expect(pending.originNodeId).toBe(PRIMARY_NODE_ID);
+      expect(await readMirrorConfig(store.venue, standbyNodeId!)).toMatchObject({
+        originNodeId: PRIMARY_NODE_ID,
+      });
+    } finally {
+      await store.close();
+    }
   });
 
   it.each([
