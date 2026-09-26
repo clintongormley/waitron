@@ -1130,7 +1130,8 @@ What B4 leaves open:
   refused `service_zone.offer_not_allowed` instead. The code stays registered, with its note in
   `apps/server/src/errors.ts` saying nothing raises it, and keeps its 400 in the till surface's
   status map (`apps/server/src/till-api.ts`), under the rule of the time that a shipped code was
-  never renamed or removed (replaced 2026-09-26: a rename is now a migration, CLAUDE.md §3).
+  never renamed (replaced 2026-09-26: a rename is now a migration, CLAUDE.md §3); whether a shipped
+  code may be removed is still open, under *Three shipped error codes were deleted…* below.
   **Next action:** none unless a retired code should also leave the status map; recorded so a
   reader who meets it knows it is retired.
 
@@ -1231,7 +1232,8 @@ What option lists left open, none of it taken in #436 or #445:
   file went with the old model in Task 13.
 - **`options.in_use` is registered and nothing throws it.** Deleting a list is designed to cascade
   its product attachments rather than be refused, so there may never be a thrower. It stays
-  registered because a shipped code is never removed.
+  registered; whether a shipped code may be removed is still open, under *Three shipped error codes
+  were deleted…* below.
 - **A trap that fooled three readers on #445, not yet written into `CLAUDE.md`.**
   `pnpm --filter <pkg> test <file> -t "name"` SILENTLY DROPS the `-t` and runs the whole file; only a
   bare `--` before it passes it through. Measured both ways: without `--` the echoed command is
@@ -1914,10 +1916,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   result, but nothing bounds the round trip from pressing the button to an answer; the agent only
   picks the request up on its next job pull.
 - **Two review suggestions were deliberately not taken** and would be relitigated otherwise:
-  renaming the new error code (declined under the never-renamed rule, replaced 2026-09-26: a rename
-  is now a migration, CLAUDE.md §3, so it can be reconsidered),
-  and deduplicating targets in the agent host (the issuing server already normalises and
-  deduplicates its bounded list of eight).
+  renaming the new error code `printer.probe_busy` (kept under the domain-naming rule, per #335's
+  commit message), and deduplicating targets in the agent host (the issuing server already
+  normalises and deduplicates its bounded list of eight).
 - **Nothing physical has been verified since #327:** discovery, paper output, whether a device knock
   reaches the box while the Add agent dialog is open, the five-line feed before the cut, Bluetooth
   discovery, and the receipt preview against printed paper. #324's slips, duplicates and drawer pulse
@@ -2292,8 +2293,9 @@ ongoing overhaul listed at the top of Track A.
   code the box itself serves — and the pre-production rule (CLAUDE.md §3, no
   backwards-compatibility code until a venue is live) covers the rest. The review should confirm that
   by running it, then drop or narrow that header sentence. **Do it before the editable-roles item
-  below** (owner, 2026-09-26): once an admin can make roles and give them permissions, every
-  permission name is stored with the roles, and a rename then has to rewrite those rows as well.
+  below** (owner, 2026-09-26): once an admin can make roles and give them permissions, the stored
+  roles would name their permissions (the roles design is not written yet), so a rename after that
+  has to rewrite those rows as well.
 - **Roles are something an admin can add and edit; the four built-ins are only defaults** (owner
   decision 2026-09-12, design not written). Detail under *Detail → Roles*: the ladder question decides
   the schema.
@@ -4603,7 +4605,15 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   removing one is the owner's call; and the nearest precedent, in a file #378 edited, keeps a retired
   code registered with a note saying codes are never deleted once shipped. The case for deleting them
   is that Waitron is pre-production with no deployed consumer reading them. **Next action:** the owner
-  decides. Re-registering all three as deprecated siblings is a small change either way round.
+  decides. Re-registering all three as deprecated entries is a small change either way round.
+- **`server.credential_unusable` names an unusable credential, although `server.*` is reserved for
+  facts about the process itself.** It is thrown for AEAT's certificate
+  (`packages/fiscal-verifactu/src/aeat-transport.ts`) and for Stripe's secret key and webhook secret
+  (`apps/server/src/stripe-account.ts`, `apps/server/src/webhook.ts`), and both
+  `packages/fiscal-verifactu/src/errors.ts` and `apps/server/src/errors.ts` declare it. Since
+  2026-09-26 a rename is a migration (CLAUDE.md §3). **Next action:** choose a prefix
+  (`credentials.missing` is the nearest sibling) and rename it in one change, checking the prefix
+  matchers `docs/developers/conventions-data.md` lists.
 - **The Stripe webhook endpoint still has to be repointed by hand, at Stripe.** #378 shortened the
   address from `/webhooks/stripe/<an id>` to `/webhooks/stripe`, because the id in that path was
   supplied by the caller and no longer labelled anything real. Nothing in this repository points at

@@ -225,8 +225,7 @@ venue command's own repointing dropped two more the same way — `provisioning.a
 `provisioning.venue_dir_missing`. Taking over the stamping dropped a fourth,
 `provisioning.database_unstamped`: an unstamped directory is what this command now STAMPS, so
 nothing was left to refuse under that name, and the case it really caught — a directory nothing had
-migrated — is `provisioning.database_unmigrated`, which says so. The never-rename rule stands for
-the day a venue is live.
+migrated — is `provisioning.database_unmigrated`, which says so.
 
 The underlying driver error is deliberately not attached, not even as `cause`: Node's default
 console formatting recurses into `.cause`, which would put a database's own words one level down

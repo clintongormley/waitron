@@ -2,9 +2,6 @@
 // a real module to augment rather than declaring a fresh ambient one.
 import "@waitron/shared";
 
-/**
- * packages/workforce-es's contribution to the shared error registry, by declaration merging.
- */
 declare module "@waitron/shared" {
   interface ErrorParams {
     /**

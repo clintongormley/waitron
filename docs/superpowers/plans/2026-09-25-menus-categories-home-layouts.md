@@ -693,11 +693,12 @@ Every task's requirements implicitly include this section.
   - `apps/server/src/live-resources.ts`
   - `apps/server/scripts/demo-seed/`
   - `docs/developers/product-categories.md`
-- **Error codes name the domain concept and are never renamed** (CLAUDE.md §3). New ones in this
-  plan: `menu_section.member_cycle`, `menu_section.member_duplicate`, `menu_section.not_library`,
-  `menu_section.invalid` (with `params.field`), `menu_section.membership_invalid`,
-  `menu.changed_since_preview`, `menu.version_changed`, `menu.shortcut_unreachable`,
-  `menu.default_layout_required`, `menu.layout_not_found`, `order.payment_in_flight`,
+- **Error codes name the domain concept and are never renamed** (CLAUDE.md §3). (2026-09-26: a
+  rename is now a migration, CLAUDE.md §3.) New ones in this plan: `menu_section.member_cycle`,
+  `menu_section.member_duplicate`, `menu_section.not_library`, `menu_section.invalid` (with
+  `params.field`), `menu_section.membership_invalid`, `menu.changed_since_preview`,
+  `menu.version_changed`, `menu.shortcut_unreachable`, `menu.default_layout_required`,
+  `menu.layout_not_found`, `order.payment_in_flight`,
   `kitchen_notice.not_found`, and the readiness code `zone.menu_unpublished`. (Revision 2's
   `menu.version_expired` was never shipped and is not minted.)
   - Reuse the shipped siblings instead of minting duplicates (the plan review grepped the

@@ -43,8 +43,8 @@ declare module "@waitron/shared" {
      * compared trimmed and upper-cased. `provisioning.foreign_tenant` is the refusal raised before
      * `applyVenue` by the callers that read the existing identities first. */
     "provisioning.tenant_identity_mismatch": Record<string, never>;
-    /** DEPRECATED: nothing raises it. Kept registered because codes are never deleted once shipped
-     * (CLAUDE.md §3). `missing` is the ROLE LABEL of the absent parent, never the uuid. */
+    /** DEPRECATED: nothing raises it. Kept registered because codes are never deleted once shipped.
+     * `missing` is the ROLE LABEL of the absent parent, never the uuid. */
     "provisioning.adopt_incomplete": {
       missing: "tenant" | "location" | "node" | "till" | "series";
     };

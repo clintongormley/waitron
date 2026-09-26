@@ -20,14 +20,20 @@ reading from that engine and not as something a box can still print.
 
 `series.not_found`, not `db.series_not_found` (design note atop `packages/shared/src/errors.ts`).
 **A rename is a migration, made in one change** (owner decision 2026-09-26, replacing "never renamed
-once shipped; deprecate and add a sibling"): the registry, the wording keyed by the code, the tests,
-stored copies such as `incidents.code` (`packages/db/src/schema/incidents.ts`) and `recovery.json`'s
-`lastErrorCode` — grep the code across the tree to find them — and anything outside this repository
-that reads it, which must accept both names until both sides are deployed. Old log lines keep the
-old name. Before a venue is live, stored copies are not rewritten (CLAUDE.md §3's no-data-migration
-rule). `server.*` is reserved for
-facts about the process itself (`apps/server/src/errors.ts`). Every file that throws a code imports
-its registry (`import "./errors.js"`); reachability is guarded once, in the root project (§4).
+once shipped; deprecate and add a sibling"). Grepping the code finds the registry, the wording keyed
+by it, the tests and the HTTP status maps. It does not find a consumer that matches a code by its
+prefix — the alert area claims (`claimFor`, `apps/server/src/alerts.ts`), the setup wizard's
+`provisioning.`/`fiscal.` routing (`apps/setup/src/setup-app.ts`),
+`apps/server/src/rejoin-command.ts`'s `rejoin.` handling and `apps/server/src/restore-command.ts`'s
+`restore.`/`recovery.`/`backup.` handling — so a rename that changes the prefix is checked against
+those too. It does not find the stored copies, because each store takes whatever code arrives: `incidents.code` (`packages/db/src/schema/incidents.ts`), `scheduled_runs.error_code`
+(`packages/scheduler/src/schema/scheduled-runs.ts`) and `recovery.json`'s `lastErrorCode`
+(`apps/server/src/recovery-state.ts`). Anything outside this repository that reads the code must
+accept both names until both sides are deployed. Old log lines keep the old name. Before a venue is
+live, stored copies are not rewritten (CLAUDE.md §3's no-data-migration rule). `server.*` is
+reserved for facts about the process itself (`apps/server/src/errors.ts`). Every file that throws a
+code imports its registry (`import "./errors.js"`); reachability is guarded once, in the root
+project (§4).
 
 ## A recorded incident code needs an area claim and English and Spanish alert wording
 
