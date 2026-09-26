@@ -414,14 +414,14 @@ describe("backup-screen", () => {
     expect(q(el, "[data-test=minted-key]")).toBeNull();
   });
 
-  it("is read-only when backups are managed by the environment", async () => {
-    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
-      api: stubApi({}, MANAGED),
-    });
+  it("is read-only when backups are managed by the environment, and makes no key", async () => {
+    const api = stubApi({}, MANAGED);
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
     await flush(el);
     expect(q(el, "[data-test=managed]")).not.toBeNull();
     expect(q(el, "[data-test=destination]")).toBeNull();
     expect(q(el, "[data-test=apply]")).toBeNull();
+    expect(api.mintBackupKey).not.toHaveBeenCalled();
   });
 
   it("apply sends the destination + key + policy and refreshes the status", async () => {
@@ -651,6 +651,135 @@ it("refreshes backup status without minting another recovery key", async () => {
     expect((el as unknown as { status: BackupStatusView }).status).toEqual(ENABLED),
   );
   expect(api.mintBackupKey).toHaveBeenCalledOnce();
+});
+
+describe("a status that arrives only after the first read failed", () => {
+  function failFirstRead(): DashboardApi {
+    return stubApi({
+      getBackupStatus: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue(OFF),
+    });
+  }
+
+  it("makes a recovery key once and shows it", async () => {
+    const api = failFirstRead();
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    expect(api.mintBackupKey).not.toHaveBeenCalled();
+
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=minted-key]")?.textContent).toBe("MINTED-KEY-abcdef012345"),
+    );
+    expect(api.mintBackupKey).toHaveBeenCalledOnce();
+  });
+
+  it("never replaces the shown key on a later refresh", async () => {
+    const api = failFirstRead();
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() => expect(q(el, "[data-test=minted-key]")).not.toBeNull());
+
+    vi.mocked(api.mintBackupKey).mockResolvedValue({ key: "SECOND-KEY-abcdef012345" });
+    vi.mocked(api.getBackupStatus).mockResolvedValue({ ...OFF, destinations: [] });
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() => expect(api.getBackupStatus).toHaveBeenCalledTimes(3));
+    await flush(el);
+
+    expect(api.mintBackupKey).toHaveBeenCalledOnce();
+    expect(q(el, "[data-test=minted-key]")?.textContent).toBe("MINTED-KEY-abcdef012345");
+  });
+
+  it("makes one key when a second status arrives while the first key is still being made", async () => {
+    let finishMint: (value: { key: string }) => void = () => {};
+    const api = failFirstRead();
+    vi.mocked(api.mintBackupKey).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishMint = resolve;
+        }),
+    );
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() => expect(api.mintBackupKey).toHaveBeenCalledOnce());
+
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() => expect(api.getBackupStatus).toHaveBeenCalledTimes(3));
+    await flush(el);
+    finishMint({ key: "MINTED-KEY-abcdef012345" });
+    await flush(el);
+
+    expect(api.mintBackupKey).toHaveBeenCalledOnce();
+    expect(q(el, "[data-test=minted-key]")?.textContent).toBe("MINTED-KEY-abcdef012345");
+  });
+
+  it("makes a key when a refresh finds the held key it was reusing is too short", async () => {
+    const held: BackupStatusView = { ...OFF, recoveryKeySet: true };
+    const api = stubApi({}, held);
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    expect(api.mintBackupKey).not.toHaveBeenCalled();
+
+    vi.mocked(api.getBackupStatus).mockResolvedValue({ ...held, recoveryKeyTooShort: true });
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=minted-key]")?.textContent).toBe("MINTED-KEY-abcdef012345"),
+    );
+    expect(api.mintBackupKey).toHaveBeenCalledOnce();
+  });
+
+  it("does not ask again on a later refresh when making the key failed", async () => {
+    const api = failFirstRead();
+    vi.mocked(api.mintBackupKey).mockRejectedValue({ code: "connection.failed" });
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() => expect(api.mintBackupKey).toHaveBeenCalledOnce());
+
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() => expect(api.getBackupStatus).toHaveBeenCalledTimes(3));
+    await flush(el);
+    expect(api.mintBackupKey).toHaveBeenCalledOnce();
+    expect(q(el, "[data-test=minted-key]")).toBeNull();
+  });
+
+  it("does not replace the key a held-key apply made when a refresh follows", async () => {
+    const api = stubApi({}, { ...OFF, recoveryKeySet: true });
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
+    await el.updateComplete;
+    q(el, "[data-test=apply]")!.click();
+    await vi.waitFor(() => expect(api.mintBackupKey).toHaveBeenCalledOnce());
+    await flush(el);
+
+    vi.mocked(api.mintBackupKey).mockResolvedValue({ key: "SECOND-KEY-abcdef012345" });
+    vi.mocked(api.getBackupStatus).mockResolvedValue(ENABLED);
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() => expect(api.getBackupStatus).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(api.mintBackupKey).toHaveBeenCalledOnce();
+    expect((el as unknown as { mintedKey: string }).mintedKey).toBe("MINTED-KEY-abcdef012345");
+  });
+
+  it("makes no key when the late status says the box is not the primary", async () => {
+    const api = stubApi({
+      getBackupStatus: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue({ ...OFF, isPrimary: false }),
+    });
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() => expect(api.getBackupStatus).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(api.mintBackupKey).not.toHaveBeenCalled();
+  });
 });
 
 describe("backup-screen failures and edit-mode prefill", () => {

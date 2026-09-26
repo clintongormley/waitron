@@ -121,8 +121,14 @@ fails”).
 Use the shared query controller or the request primitive's `passive` option for event refreshes and
 timers. A normal GET touches the management session, so polling it would keep an unattended
 dashboard signed in. Observer callbacks assign snapshots; they do not rerun loaders that reset
-drafts or mint recovery keys. See `docs/developers/dashboard-live-updates.md` and the
-passive-session and backup-screen regressions.
+drafts. A refresh never replaces a recovery key the screen already shows, because the operator may
+be copying it and the box would then store a key nobody saved. The Backups screen's status watcher
+asks for a key only while the screen holds none, and at most once — a failed mint is not retried on
+every refresh, because the mint is a POST and a POST is never passive — so a first status read that
+failed, or a held key a later read finds too short, still gets a key. See
+`docs/developers/dashboard-live-updates.md` and the passive-session and backup-screen regressions
+(`apps/dashboard/src/screens/backup-screen.test.ts`, "a status that arrives only after the first
+read failed").
 
 ## A background API client does not make POST requests passive
 

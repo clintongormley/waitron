@@ -193,6 +193,9 @@ export class BackupScreen extends LitElement {
   /** Fetched on entering edit mode so a settings change re-applies under the SAME key. Held off the
    * reactive state so it is never rendered. */
   #reuseKey: string | null = null;
+  /** The status watcher asks for a key at most once, so a failing mint is not retried on every
+   * refresh: the mint is a POST, and a POST is never passive session activity. */
+  #watcherMinted = false;
 
   /** Stable per instance, so re-renders do not shift the downloaded key file's name. */
   readonly #stamp = new Date().toISOString();
@@ -215,15 +218,23 @@ export class BackupScreen extends LitElement {
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
-      await this.#queries.watch("getBackupStatus", [], (value) => {
+      await this.#queries.watch("getBackupStatus", [], async (value) => {
         this.status = value;
+        await this.#mintIfNone();
       });
-      if (this.status!.isPrimary && !this.status!.managedByEnvironment && !this.#reusesHeldKey) {
-        await this.#mint();
-      }
     } catch (error) {
       this.errorKey = codeOf(error);
     }
+  }
+
+  /** A status read may give the screen its first key, but never replaces a key: the operator may be
+   * copying the shown one, and the box would then store a key nobody saved. */
+  async #mintIfNone(): Promise<void> {
+    const s = this.status!;
+    if (this.mintedKey !== null || this.#watcherMinted) return;
+    if (!s.isPrimary || s.managedByEnvironment || this.#reusesHeldKey) return;
+    this.#watcherMinted = true;
+    await this.#mint();
   }
 
   async #mint(): Promise<void> {

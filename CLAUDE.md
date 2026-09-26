@@ -286,7 +286,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   duplicate submission.
 - **Automatic dashboard reads are passive session activity.** Use the shared query controller or the
   request primitive's `passive` option, or polling keeps an unattended dashboard signed in. Observer
-  callbacks assign snapshots; they do not rerun loaders that reset drafts or mint recovery keys.
+  callbacks assign snapshots; they do not rerun loaders that reset drafts, and never replace a
+  recovery key already shown — the Backups screen asks for one at most once, and only while it
+  holds none.
 - **A background API client does not make POST requests passive.** Only GETs are marked passive;
   automatic pairing renewal uses its own authenticated route.
 - **Dashboard subscription names travel with their server sources.** A rejected subscription closes
