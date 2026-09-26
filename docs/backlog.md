@@ -269,7 +269,7 @@ change's message sits under the menu's heading, above the tabs, so it shows whil
 on a phone the tree sits between it and the list it names; if someone else exactly undoes a move
 while it is still saving, the move's answer is shown over their change until the menu is next read
 (stated in a comment at the site); and no accessibility test covers that message while it shows.
-**Menus Task 5 (menu prices, and the old Menus tab goes), on `feat/menus-menu-prices`:** a menu's
+**Menus Task 5 (menu prices, and the old Menus tab goes), landed as #670 (2026-09-26):** a menu's
 Prices tab (`/manage/menus/menu/<id>/view/prices`) lists each product the menu reaches once, with
 where it appears, its main category, its own price, this menu's price and the price that results,
 filtered by search, section, main category and "overridden only" (which also counts a variant's
@@ -736,7 +736,7 @@ needs `wa-wt reset demo <name>` (see above). What it left open:
   `assignProductUnit` and `deactivateProduct` are left without one: a variant's own page gives it
   its own unit through the first, and the second (which nothing outside the tests calls) makes a row
   Inactive, which a variant may be (V6).
-- **DONE (2026-09-26, menus Task 5, `feat/menus-menu-prices`): a menu price is checked by the
+- **DONE (2026-09-26, menus Task 5, #670): a menu price is checked by the
   server's rule.** The menu offer editor, whose pattern accepted a price such as `007.5` the server
   then refused, went with the old Menus tab; the Prices tab's settings window checks prices with
   `isProductPrice` (`packages/catalogue/src/modifier-limits.ts`).
