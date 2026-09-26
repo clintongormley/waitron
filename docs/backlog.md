@@ -2278,8 +2278,17 @@ address that answers is then asked for its paper sizes on port 631.
     separate, durable path for refunds before the invoice (design §6b). **Next action:** give the
     reconciler's reversal, and any post-invoice refund route when one is built, the same
     durable-attempt rule.
-  - **Task 1** (adjustment reasons and policies, a new module) is the one build task that can start
-    now.
+  - **Task 1 landed as #706** (2026-09-26): the new module `packages/adjustments` (tier
+    `mandatory`), whose own migration set adds one table, `adjustment_reasons`; the policy check
+    `evaluateAdjustment`; `roleAtLeast` in `packages/identity/src/permissions.ts`; a dashboard
+    screen for managers (permission `adjustment.manage`); and its own CI job, `test-adjustments`.
+    Nothing applies a reason to an order yet — Task 11 does. Two points Task 11 inherits:
+    `evaluateAdjustment` counts a cancel's reduction against the reason's euro limit, and it
+    throws a `RangeError` on a malformed request (a negative amount, or a percentage discount
+    without a percentage from 1 to 10000) rather than returning a verdict. Left from the review:
+    the reasons screen repeats the role list in `apps/dashboard/src/widgets/person-edit.ts` and the
+    placeholder-filling helper in `apps/dashboard/src/widgets/menu-preview.ts`; sharing them means moving both into `@waitron/dashboard-kit`. **Next
+    action:** do that move if a third module screen needs them.
   - **A keydown guard that cancels Escape while a save runs did not keep one dialog open.** Measured
     on Task 1's reasons screen (`packages/adjustments/src/dashboard/reasons-screen.ts`): a real
     Escape pressed with Vitest's `userEvent` during a save closed the editor, although the screen's
