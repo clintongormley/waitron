@@ -90,10 +90,12 @@ import {
   transferLines,
   unjoinTable,
   unmarkLineServed,
+  readOrderRevision,
   updateHeldOrder,
+  updateOrderLine,
   voidTabLine,
 } from "./working-order.js";
-import type { LineExtras, TicketState } from "./working-order.js";
+import type { LineExtras, OrderLinePatch, TicketState } from "./working-order.js";
 import { listCourses, listStations } from "./kitchen.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
@@ -249,6 +251,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "sale_classification.invalid": 409,
   "working_order.not_found": 404,
   "working_order.not_open": 409,
+  "working_order.out_of_date": 409,
   "working_order.not_placed": 409,
   "working_order.not_settled": 409,
   "working_order.already_collected": 409,
@@ -348,6 +351,14 @@ function requireTabParam(id: string): string {
     throw new AppError("tab.not_open", { tabId: id });
   }
   return id;
+}
+
+/** An order's revision as a body carries it: a whole number from 0, else `management.request_invalid`. */
+function requireRevision(value: unknown): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    throw new AppError("management.request_invalid", { field: "revision" });
+  }
+  return value;
 }
 
 /** A value that cannot be a line number gets the absent line's `tab.line_not_found`. */
@@ -817,10 +828,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           options?: OptionSelection[];
         } & LineExtras)[];
         label?: string;
+        revision?: number;
       }>(c);
+      // Optional until every till sends the revision of the copy it edited.
+      const revision = body.revision === undefined ? undefined : requireRevision(body.revision);
       await updateHeldOrder({ db: deps.db }, deps.cfg, id, {
         lines: body.lines,
         label: body.label,
+        revision,
       });
       return c.body(null, 200);
     }),
@@ -1226,15 +1241,32 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // A tab does not re-price: the stored locked gross rides back verbatim.
+  // A tab does not re-price: the stored locked gross rides back verbatim. The revision is read in
+  // the same transaction, so it is the one these lines are at.
   app.get("/api/working-orders/:id/lines", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
       const id = requireTabParam(c.req.param("id"));
-      const lines = await withTransaction(deps.db, async (tx) => {
-        return readTabLines(tx, deps.cfg, id);
+      const tab = await withTransaction(deps.db, async (tx) => ({
+        lines: await readTabLines(tx, deps.cfg, id),
+        revision: await readOrderRevision(tx, id),
+      }));
+      return c.json(tab);
+    }),
+  );
+
+  // One line of any open order, edited from the copy at `revision` (plan D10).
+  app.put("/api/working-orders/:id/lines/:lineNo", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = requireUuidId(c.req.param("id"), "working_order.not_open");
+      const lineNo = requireLineNo(id, c.req.param("lineNo"));
+      const { revision, ...patch } = await readJsonBody<OrderLinePatch & { revision?: unknown }>(c);
+      const copy = requireRevision(revision);
+      await withTransaction(deps.db, async (tx) => {
+        await updateOrderLine(tx, deps.cfg, id, lineNo, patch, copy);
       });
-      return c.json(lines);
+      return c.body(null, 200);
     }),
   );
 

@@ -51,10 +51,15 @@ import {
   listStationQueue,
   listTablesWithState,
   markLineServed,
+  mergeTabs,
+  moveTabLines,
   openTab,
   readTabLines,
   recallLines,
   sendLines,
+  setLineCourse,
+  splitOffCheck,
+  transferLines,
   unmarkLineServed,
   updateHeldOrder,
   updateOrderLine,
@@ -1921,5 +1926,90 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
         updateOrderLine(tx, cfg, tabId, 2, { note: "x" }, await revisionOf(tabId)),
       ),
     ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "lineNo" } });
+  });
+});
+
+describe("every write to an open order's lines counts on its revision (plan D10)", () => {
+  async function twoTabs() {
+    const venue = await setupVenue();
+    const { cfg, tableId, cafeOffer } = venue;
+    const course = await asApp(cfg, (tx) =>
+      createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
+    );
+    const otherTable = await asApp(cfg, async (tx) => {
+      const { zoneId } = await offerProducts(tx, cfg, { zone: "tables" });
+      return (await createTable(tx, cfg, { label: "T2", zoneId })).id;
+    });
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId: otherId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId: otherTable }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { menuItemId: cafeOffer, quantity: "3" },
+        { menuItemId: cafeOffer, quantity: "1", courseId: course.id, hold: true },
+      ]),
+    );
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, otherId, [{ menuItemId: cafeOffer, quantity: "1" }]),
+    );
+    return { ...venue, tabId, otherId, courseId: course.id };
+  }
+  type Tabs = Awaited<ReturnType<typeof twoTabs>>;
+
+  it.each<[string, (tx: Transaction, tabs: Tabs) => Promise<unknown>, ("tab" | "other")[]]>([
+    [
+      "a round",
+      (tx, t) => addTabRound(tx, t.cfg, t.tabId, [{ menuItemId: t.cafeOffer, quantity: "1" }]),
+      ["tab"],
+    ],
+    ["a void", (tx, t) => voidTabLine(tx, t.cfg, t.tabId, 1, "1"), ["tab"]],
+    ["a recall", (tx, t) => recallLines(tx, t.cfg, t.tabId, [1]), ["tab"]],
+    ["a send", (tx, t) => sendLines(tx, t.cfg, t.tabId, [2]), ["tab"]],
+    ["a course fired", (tx, t) => fireCourse(tx, t.cfg, t.tabId, t.courseId), ["tab"]],
+    ["a course change", (tx, t) => setLineCourse(tx, t.cfg, t.tabId, 2, null), ["tab"]],
+    ["a served mark", (tx, t) => markLineServed(tx, t.cfg, t.tabId, 1), ["tab"]],
+    ["a served mark cleared", (tx, t) => unmarkLineServed(tx, t.cfg, t.tabId, 1), ["tab"]],
+    [
+      "a transfer",
+      (tx, t) => transferLines(tx, t.cfg, t.tabId, t.otherId, [{ lineNo: 1, quantity: "1" }]),
+      ["tab", "other"],
+    ],
+    [
+      "a split",
+      (tx, t) => splitOffCheck(tx, t.cfg, t.tabId, [{ lineNo: 1, quantity: "1" }]),
+      ["tab"],
+    ],
+    ["a move of lines", (tx, t) => moveTabLines(tx, t.cfg, t.otherId, t.tabId), ["tab", "other"]],
+    [
+      "a merge",
+      (tx, t) => mergeTabs(tx, t.cfg, t.tabId, t.otherId, { freeSourceTable: true }),
+      ["tab"],
+    ],
+    [
+      "a line edit",
+      async (tx, t) =>
+        updateOrderLine(tx, t.cfg, t.tabId, 1, { note: "x" }, await revisionOf(t.tabId)),
+      ["tab"],
+    ],
+  ])("%s", async (_name, write, counted) => {
+    const tabs = await twoTabs();
+    const before = { tab: await revisionOf(tabs.tabId), other: await revisionOf(tabs.otherId) };
+
+    await asApp(tabs.cfg, (tx) => write(tx, tabs));
+
+    for (const which of counted) {
+      const id = which === "tab" ? tabs.tabId : tabs.otherId;
+      expect(await revisionOf(id)).toBe(before[which] + 1);
+    }
+  });
+
+  it("does not count a write refused as out of date, nor one that changes nothing", async () => {
+    const { cfg, tabId } = await twoTabs();
+    const copy = await revisionOf(tabId);
+    await asApp(cfg, (tx) => updateOrderLine(tx, cfg, tabId, 1, { note: "a" }, copy));
+
+    await expect(
+      asApp(cfg, (tx) => updateOrderLine(tx, cfg, tabId, 1, { note: "b" }, copy)),
+    ).rejects.toMatchObject({ code: "working_order.out_of_date", params: { revision: copy + 1 } });
+    expect(await revisionOf(tabId)).toBe(copy + 1);
   });
 });

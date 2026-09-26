@@ -298,7 +298,11 @@ async function parkProducts(
 async function updateProducts(
   cfg: TillConfig,
   id: string,
-  req: { label?: string; lines: (ProductLine & { workingOrderLineId?: string })[] },
+  req: {
+    label?: string;
+    revision?: number;
+    lines: (ProductLine & { workingOrderLineId?: string })[];
+  },
 ): Promise<void> {
   const offers = await counterOffers(cfg);
   return updateHeldOrder({ db }, cfg, id, { ...req, lines: offers.toOfferLines(req.lines) });
@@ -1505,6 +1509,7 @@ describe("getHeldOrder", () => {
       id,
       orderNumber: 1,
       label: "Mesa 7",
+      revision: 0,
       lines: [
         {
           productId: cafeId,
@@ -2059,6 +2064,44 @@ describe("updateHeldOrder", () => {
       code: "working_order.not_open",
       params: { workingOrderId: missing },
     });
+  });
+
+  it("refuses a save made from a copy another save has since changed, changing nothing", async () => {
+    // Spec §10.7 example 2: two tills open the same held order, and each changes it and saves.
+    const { cfg, cafeId } = await setupVenue();
+    const id = randomUUID();
+    await parkProducts(cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
+    const copy = await getHeldOrder({ db }, cfg, id);
+    const line = copy.lines[0]!.workingOrderLineId!;
+
+    await updateProducts(cfg, id, {
+      revision: copy.revision,
+      lines: [{ workingOrderLineId: line, productId: cafeId, quantity: "1", note: "first" }],
+    });
+    const landed = await readOrder(id);
+    const lines = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+
+    await expect(
+      updateProducts(cfg, id, {
+        revision: copy.revision,
+        label: "Mesa 9",
+        lines: [{ workingOrderLineId: line, productId: cafeId, quantity: "2", note: "second" }],
+      }),
+    ).rejects.toMatchObject({
+      code: "working_order.out_of_date",
+      params: { workingOrderId: id, revision: copy.revision + 1 },
+    });
+    expect(await readOrder(id)).toEqual(landed);
+    expect(
+      await db.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, id)),
+    ).toEqual(lines);
+    const [order] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
+    expect(order!.label).toBeNull();
+    // A fresh copy carries the revision the first save left.
+    expect((await getHeldOrder({ db }, cfg, id)).revision).toBe(copy.revision + 1);
   });
 
   it("edits an open order from ANOTHER node of the same tenant — reads are venue-wide (till-reroute §3.6)", async () => {
@@ -2892,8 +2935,19 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
     await parkProducts(cfg, { id, lines: [line(cafe), line(postre)] });
     await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR, cfg.tillId);
     await db.execute(sql`update products set available = 0 where id = ${postre}`);
+    const revision = async () =>
+      (
+        await db
+          .select({ revision: workingOrders.revision })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, id))
+      )[0]!.revision;
+    const placedAt = await revision();
 
     await withTransaction(db, (tx) => fireCourse(tx, cfg, id, desserts.id));
+
+    // Only an open order's revision counts writes: a placed order's lines cannot be edited.
+    expect(await revision()).toBe(placedAt);
 
     const items = await db
       .select({ firedAt: ticketItems.firedAt })

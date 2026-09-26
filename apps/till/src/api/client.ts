@@ -1442,10 +1442,15 @@ export class TillApi {
 
   /**
    * Read one open tab's lines → `GET /api/working-orders/:orderId/lines`. A non-open or absent tab
-   * rejects with `tab.not_open`.
+   * rejects with `tab.not_open`. The response also carries the tab's `revision`, which this does
+   * not pass on yet.
    */
-  getTabLines(orderId: string): Promise<TabLine[]> {
-    return this.#request<TabLine[]>(`/api/working-orders/${orderId}/lines`, "GET");
+  async getTabLines(orderId: string): Promise<TabLine[]> {
+    const tab = await this.#request<{ lines: TabLine[]; revision: number }>(
+      `/api/working-orders/${orderId}/lines`,
+      "GET",
+    );
+    return tab.lines;
   }
 
   /**

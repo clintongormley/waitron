@@ -1301,6 +1301,7 @@ export async function fireCourse(
   // The `fired_at IS NULL` predicate makes `RETURNING` exactly the items that fired now, so a re-fire
   // prints nothing.
   await enqueueKitchenTickets(tx, cfg, orderId, firedItems);
+  if (firedItems.length > 0 || noRoute.length > 0) await bumpRevision(tx, [orderId]);
 }
 
 /**
@@ -1382,6 +1383,7 @@ export async function sendLines(
       quantity,
     })),
   );
+  if (firedItems.length > 0 || noRoute.length > 0) await bumpRevision(tx, [tabId]);
 }
 
 /** Of `courseIds` (`null` standing for no course), the ones with no held item left on the order. */
@@ -1475,6 +1477,7 @@ export async function recallLines(
       ),
     );
   await enqueueCorrectionSlips(tx, cfg, tabId, recalled, "RECALLED");
+  await bumpRevision(tx, [tabId]);
 }
 
 /**
@@ -1578,6 +1581,7 @@ export async function addTabRound(
     hold: row.parentLineId === null ? (holdByParentId.get(row.id) ?? false) : false,
   }));
   await fireLines(tx, cfg, tabId, withHold);
+  await bumpRevision(tx, [tabId]);
 }
 
 /**
@@ -1634,6 +1638,7 @@ export async function voidTabLine(
       : [];
   // Before the delete or the reduction: the notice and the slip re-read the line.
   await enqueueCorrectionSlips(tx, cfg, tabId, voided, "VOID");
+  await bumpRevision(tx, [tabId]);
   if (removed === null) {
     // Takes the line's child modifier lines in the same statement: the parent alone would be
     // refused by the self-referencing foreign key.
@@ -1769,6 +1774,7 @@ export async function setLineCourse(
   await tx.update(workingOrderLines).set({ courseId }).where(eq(workingOrderLines.id, line.id));
   // The held ticket item's course snapshot too; no row when the line has no item yet.
   await tx.update(ticketItems).set({ courseId }).where(eq(ticketItems.workingOrderLineId, line.id));
+  await bumpRevision(tx, [tabId]);
 }
 
 /** Set or clear ONE line's `served_at` on an OPEN tab. Pre-fiscal: never read into a filed record. */
@@ -1788,6 +1794,7 @@ async function setLineServed(
   if (updated.length === 0) {
     throw new AppError("tab.line_not_found", { tabId, lineNo });
   }
+  await bumpRevision(tx, [tabId]);
 }
 
 /** Mark one line of an open tab as served. */
@@ -1848,6 +1855,7 @@ export async function moveTabLines(
   lineNos?: number[],
 ): Promise<void> {
   await moveOrderLines(tx, cfg, fromTabId, toTabId, lineNos, { modesChecked: false });
+  await bumpRevision(tx, [fromTabId, toTabId]);
 }
 
 /**
@@ -2017,6 +2025,15 @@ export async function readTabLines(
     firedAt: row.firedAt,
     state: row.state,
   }));
+}
+
+/** An order's revision: what a copy of it read now carries back to an edit. */
+export async function readOrderRevision(tx: Transaction, orderId: string): Promise<number> {
+  const [order] = await tx
+    .select({ revision: workingOrders.revision })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  return order!.revision;
 }
 
 /**
@@ -2235,6 +2252,7 @@ export async function transferLines(
   await assertServiceModesMatch(tx, cfg, fromTabId, toTabId);
 
   await carveOffLines(tx, cfg, fromTabId, toTabId, transfers);
+  await bumpRevision(tx, [fromTabId, toTabId]);
 }
 
 /**
@@ -2449,6 +2467,7 @@ export async function splitOffCheck(
   await VENUE_SERVICE.copyOrderContext(tx, cfg, fromTabId, checkId);
 
   await carveOffLines(tx, cfg, fromTabId, checkId, transfers);
+  await bumpRevision(tx, [fromTabId, checkId]);
 
   return { checkId };
 }
@@ -2524,6 +2543,8 @@ export interface HeldOrder {
   id: string;
   orderNumber: number;
   label: string | null;
+  /** What an edit of this copy sends back, so a save from a copy since changed is refused. */
+  revision: number;
   /**
    * PARENT rows only, each dish's child lines nested as `extras`. A row carries its stored offer and
    * display snapshot, so retrieval does not depend on the offer still being active; a row with no
@@ -2630,6 +2651,7 @@ export async function getHeldOrder(
         id: workingOrders.id,
         orderNumber: workingOrders.orderNumber,
         label: workingOrders.label,
+        revision: workingOrders.revision,
       })
       .from(workingOrders)
       .where(and(eq(workingOrders.id, id), eq(workingOrders.status, "open")));
@@ -2749,7 +2771,13 @@ export async function getHeldOrder(
         };
       });
 
-    return { id: order.id, orderNumber: order.orderNumber, label: order.label, lines };
+    return {
+      id: order.id,
+      orderNumber: order.orderNumber,
+      label: order.label,
+      revision: order.revision,
+      lines,
+    };
   });
 }
 

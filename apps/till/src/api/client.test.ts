@@ -1403,7 +1403,7 @@ describe("TillApi", () => {
         state: null,
       },
     ];
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(lines));
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ lines, revision: 3 }));
 
     const r = await new TillApi("", fetchStub).getTabLines("ord-1");
 
