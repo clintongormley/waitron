@@ -3491,13 +3491,9 @@ image constraints under *Detail → Box image*.
     (`mirror-bundle-fetch.test.ts`), "(swap S2)" (`mirror-bundle.test.ts`) and "as a file from before
     the field existed" (`recovery-state.test.ts`).
   - Found by #624 (`apps/server` part c1), outside its files or not fixable in a comments-only
-    change. `apps/server/src/node-entry.ts` (the comment after the boot-failure report is written)
-    says the scrubbed text "has already gone to stdout from runEntry's catch"; that is false for a
-    failure reading the recovery state or writing the boot counter, which run before the `try`
-    (receipt in #624's commit message, which moved it out of `boot-failure.ts`). Two other comments
-    in the same file, on the installer's stdout channel, call it "the one place the caught error's
-    own words may appear", which the recovery page's log tail contradicts (`recovery-surface.ts` and its "caught error's own words on the
-    page" test). `docs/developers/workflow-guide.md`'s dev migration hint section still describes the PostgreSQL
+    change. (Its two `node-entry.ts` comment findings — the outer catch's "has already gone to
+    stdout" and "the one place the caught error's own words may appear" — were fixed by
+    `fix/recovery-page-boot-failure-logs`.) `docs/developers/workflow-guide.md`'s dev migration hint section still describes the PostgreSQL
     version (PostgreSQL 18, `23P01` on the list, `classifyBootFailure` dropping `22P02`, "the two
     share no SQLSTATE table", remedies that are opposites); the two lists are now SQLite result
     codes, `boot-failure.ts`'s codes lead to "retry or restart", and `dev-migration-hint.ts` still
@@ -6235,7 +6231,7 @@ open:
     `runStagedRestore` (`apps/server/src/restore-request.ts`), which deletes the staged request on
     `restore.placement_failed` and fails that start; the start after it boots what the venue folder
     holds, so the box comes back in setup mode, and the code and which database was kept are only in
-    the server's own output (`failureDetail`, `apps/server/src/node-entry.ts`). That holds when
+    the server's own output and in `waitron.log` (`failureDetail`, `apps/server/src/node-entry.ts`). That holds when
     nothing was moved or everything was put back (a raw error, or `kept: "previous"`); when the old
     database was left in a set-aside folder (`kept: "set_aside"`) no `venue.db` remains, so since
     A31 every following start is refused with `restore.database_set_aside` and the box ends on the
