@@ -443,6 +443,20 @@ describe("transferLines — guards", () => {
     expect(await linesOf(tabB)).toHaveLength(1);
   });
 
+  it("throws tab.transfer_quantity_invalid for a fraction of a line counted in whole units", async () => {
+    const { cfg, tableAId, tableBId, cafeOffer, aguaOffer } = await setupVenue();
+    const tabA = await openTabWith(cfg, tableAId, [{ menuItemId: cafeOffer, quantity: "2" }]);
+    const tabB = await openTabWith(cfg, tableBId, [{ menuItemId: aguaOffer, quantity: "1" }]);
+    await expect(
+      asApp(cfg, (tx) => transferLines(tx, cfg, tabA, tabB, [{ lineNo: 1, quantity: "0.5" }])),
+    ).rejects.toMatchObject({
+      code: "tab.transfer_quantity_invalid",
+      params: { tabId: tabA, lineNo: 1, quantity: "0.5" },
+    });
+    expect((await linesOf(tabA))[0]).toMatchObject({ quantity: "2.000" });
+    expect(await linesOf(tabB)).toHaveLength(1);
+  });
+
   // Over-quantity at DECIMAL scale, not just whole numbers: the comparison must be value-wise.
   it("throws tab.transfer_quantity_invalid for a decimal-scale over-quantity on a WEIGHED line", async () => {
     const { cfg, tableAId, tableBId, aguaOffer, jamonOffer, jamonId } = await setupVenue();

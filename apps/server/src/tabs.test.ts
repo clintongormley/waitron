@@ -1103,6 +1103,56 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
     expect((await sentState(tabId)).map((line) => line.sentAt !== null)).toEqual([true, true]);
   });
 
+  it("sending everything held stamps a held no-route line even when nothing routed is held beside it", async () => {
+    const { cfg, tableId, aguaId, aguaOffer } = await setupVenue();
+    await routeToNoPreparation(aguaId);
+    const course = await asApp(cfg, (tx) =>
+      createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
+    );
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { menuItemId: aguaOffer, quantity: "1", courseId: course.id, hold: true },
+        { menuItemId: aguaOffer, quantity: "1", hold: true },
+      ]),
+    );
+    expect((await sentState(tabId)).map((line) => line.sentAt)).toEqual([null, null]);
+
+    await asApp(cfg, (tx) => sendLines(tx, cfg, tabId, []));
+
+    expect((await sentState(tabId)).map((line) => line.sentAt !== null)).toEqual([true, true]);
+  });
+
+  it("sending one held line of a course stamps the course's no-route line only once nothing routed in it is still held", async () => {
+    const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
+    await routeToNoPreparation(aguaId);
+    const course = await asApp(cfg, (tx) =>
+      createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
+    );
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { menuItemId: cafeOffer, quantity: "1", courseId: course.id, hold: true },
+        { menuItemId: cafeOffer, quantity: "1", courseId: course.id, hold: true },
+        { menuItemId: aguaOffer, quantity: "1", courseId: course.id, hold: true },
+      ]),
+    );
+
+    await asApp(cfg, (tx) => sendLines(tx, cfg, tabId, [1]));
+    expect((await sentState(tabId)).map((line) => line.sentAt !== null)).toEqual([
+      true,
+      false,
+      false,
+    ]);
+
+    await asApp(cfg, (tx) => sendLines(tx, cfg, tabId, [2]));
+    expect((await sentState(tabId)).map((line) => line.sentAt !== null)).toEqual([
+      true,
+      true,
+      true,
+    ]);
+  });
+
   it("stamps a no-route line with no course at the round even when the round holds another line", async () => {
     const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
     await routeToNoPreparation(aguaId);
@@ -1338,6 +1388,23 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
       expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
     },
   );
+
+  it("refuses to void a fraction of a line counted in whole units, changing nothing", async () => {
+    const { cfg, tableId, cafeOffer } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "2" }]),
+    );
+    const ticket = await ticketOfLine(tabId, 1);
+
+    await expect(asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 1, "0.5"))).rejects.toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "quantity" },
+    });
+    expect(await linesOf(tabId)).toEqual([expect.objectContaining({ quantity: 2000 })]);
+    expect((await ticketOfLine(tabId, 1)).quantity).toBe(2000);
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+  });
 
   it("refuses to void part of an extras line, whose quantity follows its dish", async () => {
     const { cfg, tableId, cafeId, aguaId, cafeOffer } = await setupVenue();

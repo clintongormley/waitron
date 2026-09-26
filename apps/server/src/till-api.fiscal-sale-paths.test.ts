@@ -2363,7 +2363,7 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
     expect(await sent.text()).toBe("");
     expect((await queue()).find((g) => g.orderId === workingOrderId)).toBeDefined();
   });
-  it("answers 409 product.unavailable and fires nothing when the paid product has since sold out", async () => {
+  it("fires a paid order whose product has since sold out: a settled order's lines cannot be removed", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     await suite.db.execute(
       sql`update locations set order_flow = 'ticket_then_pay' where id = ${cfg.locationId}`,
@@ -2396,13 +2396,10 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
       body: JSON.stringify({}),
     });
 
-    expect(sent.status).toBe(409);
-    expect(await sent.json()).toMatchObject({
-      error: { code: "product.unavailable", params: { productId: each.id } },
-    });
+    expect(sent.status).toBe(200);
     const fired = await suite.db.execute(
       sql`select 1 from ticket_items where working_order_id = ${workingOrderId}`,
     );
-    expect(fired.rows).toHaveLength(0);
+    expect(fired.rows).toHaveLength(1);
   });
 });

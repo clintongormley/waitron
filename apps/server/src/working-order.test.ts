@@ -2876,6 +2876,32 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
     expect(items.map((item) => item.firedAt !== null)).toEqual([true, false]);
   });
 
+  it("releases a placed order's held course whose product has since sold out: its lines can no longer be removed", async () => {
+    const { cfg, catalogueId } = await setupVenue("ticket_then_pay");
+    const { cafe, postre, desserts } = await withTransaction(db, async (tx) => {
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const starters = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 1 });
+      const desserts = await createCourse(tx, cfg, { name: "Postres", displayOrder: 3 });
+      const cafe = await makeProduct(tx, cfg, catalogueId, {});
+      const postre = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, cafe, starters.id);
+      await setProductCourse(tx, cfg, postre, desserts.id);
+      return { cafe, postre, desserts };
+    });
+    const id = randomUUID();
+    await parkProducts(cfg, { id, lines: [line(cafe), line(postre)] });
+    await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR, cfg.tillId);
+    await db.execute(sql`update products set available = 0 where id = ${postre}`);
+
+    await withTransaction(db, (tx) => fireCourse(tx, cfg, id, desserts.id));
+
+    const items = await db
+      .select({ firedAt: ticketItems.firedAt })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, id));
+    expect(items.map((item) => item.firedAt !== null)).toEqual([true, true]);
+  });
+
   it("placeOrder refuses a line whose product sold out after it was parked, placing nothing", async () => {
     const { cfg, catalogueId } = await setupVenue("ticket_then_pay");
     const cafe = await withTransaction(db, async (tx) => {

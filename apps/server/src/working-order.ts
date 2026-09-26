@@ -7,7 +7,7 @@ import { readReceiptIssuer } from "./receipt-issuer.js";
 import "./errors.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, exists, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
-import type { GetColumnData } from "drizzle-orm";
+import type { GetColumnData, SQL } from "drizzle-orm";
 import {
   AppError,
   basisPointsToDecimal,
@@ -1076,8 +1076,7 @@ export async function fireLines(
         note: line.note,
         firedAt: fired ? firedAt : null,
         state: "queued" as const,
-        // What the kitchen is asked to make. A later split or partial void of the line does not
-        // change what was asked; only a partial void reduces it.
+        // What the kitchen is asked to make. A split does not change it; a partial void reduces it.
         quantity: quantityByLine.get(line.id)!,
       };
     })
@@ -1160,22 +1159,26 @@ async function stampSent(
 /**
  * The dish lines of an order that have no ticket item and are not yet stamped sent, whose route is
  * `no_preparation`, and that sit in one of `courseIds` (`null` standing for no course) or are named
- * in `lineIds`: the no-route lines a course releases when it fires. Only a zoned order has
- * no-preparation routes.
+ * in `lineIds` — or every such line, with `"all"`: the no-route lines a send releases. Only a zoned
+ * order has no-preparation routes.
  */
 async function heldNoRouteLines(
   tx: Transaction,
   cfg: TillConfig,
   orderId: string,
-  scope: { courseIds: readonly (string | null)[]; lineIds: readonly string[] },
+  scope: { courseIds: readonly (string | null)[]; lineIds: readonly string[] } | "all",
 ): Promise<string[]> {
-  const namedCourses = scope.courseIds.filter((id): id is string => id !== null);
-  const inScope = [
-    ...(namedCourses.length > 0 ? [inArray(workingOrderLines.courseId, namedCourses)] : []),
-    ...(scope.courseIds.includes(null) ? [isNull(workingOrderLines.courseId)] : []),
-    ...(scope.lineIds.length > 0 ? [inArray(workingOrderLines.id, [...scope.lineIds])] : []),
-  ];
-  if (inScope.length === 0) return [];
+  let inScope: SQL | undefined;
+  if (scope !== "all") {
+    const namedCourses = scope.courseIds.filter((id): id is string => id !== null);
+    const any = [
+      ...(namedCourses.length > 0 ? [inArray(workingOrderLines.courseId, namedCourses)] : []),
+      ...(scope.courseIds.includes(null) ? [isNull(workingOrderLines.courseId)] : []),
+      ...(scope.lineIds.length > 0 ? [inArray(workingOrderLines.id, [...scope.lineIds])] : []),
+    ];
+    if (any.length === 0) return [];
+    inScope = or(...any);
+  }
   const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, orderId);
   if (serviceContext === null) return [];
   const candidates = await tx
@@ -1189,7 +1192,7 @@ async function heldNoRouteLines(
         isNotNull(workingOrderLines.productId),
         isNull(workingOrderLines.sentAt),
         isNull(ticketItems.id),
-        or(...inScope),
+        inScope,
       ),
     );
   const routes = await VENUE_SERVICE.resolvePreparationRoutes(tx, cfg, serviceContext.zoneId, [
@@ -1229,6 +1232,14 @@ async function assertSendable(tx: Transaction, lineIds: readonly string[]): Prom
   }
 }
 
+async function isOpenOrder(tx: Transaction, orderId: string): Promise<boolean> {
+  const [order] = await tx
+    .select({ status: workingOrders.status })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  return order?.status === "open";
+}
+
 /**
  * Release held items of a course by stamping fired_at. Require the course to exist
  * in this venue, including a deactivated course whose food still needs release.
@@ -1258,7 +1269,11 @@ export async function fireCourse(
       quantity: ticketItems.quantity,
     });
   const noRoute = await heldNoRouteLines(tx, cfg, orderId, { courseIds: [courseId], lineIds: [] });
-  await assertSendable(tx, [...firedItems.map((item) => item.workingOrderLineId), ...noRoute]);
+  // Only an open order's lines can be removed, so only there is a sold-out line refused; a placed
+  // order's held course is committed work.
+  if (await isOpenOrder(tx, orderId)) {
+    await assertSendable(tx, [...firedItems.map((item) => item.workingOrderLineId), ...noRoute]);
+  }
   await stampSent(
     tx,
     orderId,
@@ -1314,11 +1329,23 @@ export async function sendLines(
       courseId: ticketItems.courseId,
       quantity: ticketItems.quantity,
     });
-  // Sending a held line releases its course, so the course's no-route lines are sent with it.
-  const noRoute = await heldNoRouteLines(tx, cfg, tabId, {
-    courseIds: [...new Set(firedItems.map((item) => item.courseId))],
-    lineIds: namedLineIds,
-  });
+  // Sending everything held releases every held no-route line. Sending named lines releases the
+  // named ones, and a course's no-route lines once nothing routed in that course is still held.
+  const noRoute = await heldNoRouteLines(
+    tx,
+    cfg,
+    tabId,
+    lineNos.length === 0
+      ? "all"
+      : {
+          courseIds: await releasedCourses(
+            tx,
+            tabId,
+            firedItems.map((item) => item.courseId),
+          ),
+          lineIds: namedLineIds,
+        },
+  );
   await assertSendable(tx, [...firedItems.map((item) => item.workingOrderLineId), ...noRoute]);
   await stampSent(
     tx,
@@ -1337,6 +1364,22 @@ export async function sendLines(
       quantity,
     })),
   );
+}
+
+/** Of `courseIds` (`null` standing for no course), the ones with no held item left on the order. */
+async function releasedCourses(
+  tx: Transaction,
+  orderId: string,
+  courseIds: readonly (string | null)[],
+): Promise<(string | null)[]> {
+  const candidates = [...new Set(courseIds)];
+  if (candidates.length === 0) return [];
+  const stillHeld = await tx
+    .selectDistinct({ courseId: ticketItems.courseId })
+    .from(ticketItems)
+    .where(and(eq(ticketItems.workingOrderId, orderId), isNull(ticketItems.firedAt)));
+  const held = new Set(stillHeld.map((row) => row.courseId));
+  return candidates.filter((courseId) => !held.has(courseId));
 }
 
 /**
@@ -1543,6 +1586,7 @@ export async function voidTabLine(
       id: workingOrderLines.id,
       parentLineId: workingOrderLines.parentLineId,
       quantity: workingOrderLines.quantity,
+      unitPrecision: workingOrderLines.unitPrecision,
       unitPriceGross: workingOrderLines.unitPriceGross,
       ticketItemId: ticketItems.id,
       firedAt: ticketItems.firedAt,
@@ -1625,12 +1669,12 @@ export async function voidTabLine(
 
 /**
  * The part of a line a void removes, as thousandths, or `null` for the whole line. Refused
- * `management.request_invalid` unless it is a positive decimal no larger than the line, and for an
- * extras child, whose quantity follows its dish.
+ * `management.request_invalid` unless it is a positive decimal no larger than the line, in the
+ * line's unit's decimal places, and for a part of an extras child, whose quantity follows its dish.
  */
 function voidQuantity(
   quantity: string,
-  line: { quantity: number; parentLineId: string | null },
+  line: { quantity: number; parentLineId: string | null; unitPrecision: number | null },
 ): number | null {
   let asked: number;
   try {
@@ -1638,7 +1682,7 @@ function voidQuantity(
   } catch {
     throw new AppError("management.request_invalid", { field: "quantity" });
   }
-  if (asked <= 0 || asked > line.quantity) {
+  if (asked <= 0 || asked > line.quantity || !fitsUnitPrecision(asked, line.unitPrecision)) {
     throw new AppError("management.request_invalid", { field: "quantity" });
   }
   if (asked === line.quantity) return null;
@@ -1646,6 +1690,13 @@ function voidQuantity(
     throw new AppError("management.request_invalid", { field: "quantity" });
   }
   return asked;
+}
+
+/** Whether a count of thousandths has no more decimal places than the line's unit takes. A line
+ * that records no precision (an extras child) is bounded only by the thousandths scale. */
+function fitsUnitPrecision(thousandths: number, unitPrecision: number | null): boolean {
+  if (unitPrecision === null || unitPrecision >= 3) return true;
+  return thousandths % 10 ** (3 - unitPrecision) === 0;
 }
 
 /**
@@ -2241,7 +2292,9 @@ async function carveOffLines(
     try {
       const q = decimal(t.quantity);
       inRange =
-        compareDecimal(q, decimal("0")) > 0 && compareDecimal(q, decimal(line.quantity)) <= 0;
+        compareDecimal(q, decimal("0")) > 0 &&
+        compareDecimal(q, decimal(line.quantity)) <= 0 &&
+        fitsUnitPrecision(stringToThousandths(t.quantity), line.unitPrecision);
     } catch {
       inRange = false;
     }
@@ -3144,10 +3197,7 @@ export async function sendToPrep(
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
-    await assertSendable(
-      tx,
-      firedLines.filter((line) => line.parentLineId === null).map((line) => line.id),
-    );
+    // No sold-out check: a settled order's lines cannot be removed, so refusing would strand paid work.
     await fireLines(tx, cfg, id, firedLines);
   });
 }
