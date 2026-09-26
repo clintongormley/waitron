@@ -4118,7 +4118,7 @@ describe("till-app", () => {
       it.each(["ticket.already_started", "ticket.already_fired"])(
         "a recall-lines refused %s says so in its own words AND still reloads to reconcile to server truth",
         async (code) => {
-          // The re-read is what flips the line from Recall to Cancel (server truth).
+          // The order is re-read after a refusal, to reconcile with the server.
           const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
           const { el } = await mountApp({
             getTablesState: vi.fn().mockResolvedValue([openTable]),
@@ -4139,6 +4139,25 @@ describe("till-app", () => {
           expect(getTabLines).toHaveBeenCalledTimes(2);
         },
       );
+
+      it("a recall-lines refused tab.not_open shows the generic banner AND still reloads", async () => {
+        const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          getTabLines,
+          recallLines: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
+        });
+        const screen = await toTableOrder(el, openTable);
+        expect(getTabLines).toHaveBeenCalledTimes(1);
+
+        emit(screen, "recall-lines", { lineNos: [1] });
+        await flush(el);
+
+        expect(tableOrder(el)).not.toBeNull();
+        expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(t("table.error"));
+        expect(getTabLines).toHaveBeenCalledTimes(2);
+      });
 
       it("a rejected send-lines / void-line also surfaces the banner and reloads", async () => {
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
