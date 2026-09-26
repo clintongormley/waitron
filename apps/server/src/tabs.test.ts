@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   locations,
@@ -2027,32 +2027,34 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
   });
 });
 
-describe("every write to an open order's lines counts on its revision (plan D10)", () => {
-  async function twoTabs() {
-    const venue = await setupVenue();
-    const { cfg, tableId, cafeOffer } = venue;
-    const course = await asApp(cfg, (tx) =>
-      createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
-    );
-    const otherTable = await asApp(cfg, async (tx) => {
-      const { zoneId } = await offerProducts(tx, cfg, { zone: "tables" });
-      return (await createTable(tx, cfg, { label: "T2", zoneId })).id;
-    });
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
-    const { tabId: otherId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId: otherTable }));
-    await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, tabId, [
-        { menuItemId: cafeOffer, quantity: "3" },
-        { menuItemId: cafeOffer, quantity: "1", courseId: course.id, hold: true },
-      ]),
-    );
-    await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, otherId, [{ menuItemId: cafeOffer, quantity: "1" }]),
-    );
-    return { ...venue, tabId, otherId, courseId: course.id };
-  }
-  type Tabs = Awaited<ReturnType<typeof twoTabs>>;
+/** Two open tabs at their own tables: `tabId` with a café line of 3 and a held one in a course,
+ * `otherId` with one café line. */
+async function twoTabs() {
+  const venue = await setupVenue();
+  const { cfg, tableId, cafeOffer } = venue;
+  const course = await asApp(cfg, (tx) =>
+    createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
+  );
+  const otherTable = await asApp(cfg, async (tx) => {
+    const { zoneId } = await offerProducts(tx, cfg, { zone: "tables" });
+    return (await createTable(tx, cfg, { label: "T2", zoneId })).id;
+  });
+  const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+  const { tabId: otherId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId: otherTable }));
+  await asApp(cfg, (tx) =>
+    addTabRound(tx, cfg, tabId, [
+      { menuItemId: cafeOffer, quantity: "3" },
+      { menuItemId: cafeOffer, quantity: "1", courseId: course.id, hold: true },
+    ]),
+  );
+  await asApp(cfg, (tx) =>
+    addTabRound(tx, cfg, otherId, [{ menuItemId: cafeOffer, quantity: "1" }]),
+  );
+  return { ...venue, tabId, otherId, courseId: course.id };
+}
+type Tabs = Awaited<ReturnType<typeof twoTabs>>;
 
+describe("every write to an open order's lines counts on its revision (plan D10)", () => {
   it.each<[string, (tx: Transaction, tabs: Tabs) => Promise<unknown>, ("tab" | "other")[]]>([
     [
       "a round",
@@ -2109,5 +2111,113 @@ describe("every write to an open order's lines counts on its revision (plan D10)
       asApp(cfg, (tx) => updateOrderLine(tx, cfg, tabId, 1, { note: "b" }, copy)),
     ).rejects.toMatchObject({ code: "working_order.out_of_date", params: { revision: copy + 1 } });
     expect(await revisionOf(tabId)).toBe(copy + 1);
+  });
+});
+
+describe("a line write on an order whose card payment is in flight is refused (plan D22)", () => {
+  const MARK = "2026-09-26T10:00:00.000Z";
+
+  async function markPaying(orderId: string, at: string | null = MARK): Promise<void> {
+    await db
+      .update(workingOrders)
+      .set({ paymentAttemptAt: at })
+      .where(eq(workingOrders.id, orderId));
+  }
+
+  /** Everything a refused write could have changed on either tab. */
+  async function snapshot(t: Tabs) {
+    const lines = await db
+      .select({
+        orderId: workingOrderLines.workingOrderId,
+        lineNo: workingOrderLines.lineNo,
+        quantity: workingOrderLines.quantity,
+        note: workingOrderLines.note,
+        servedAt: workingOrderLines.servedAt,
+        courseId: workingOrderLines.courseId,
+        sentAt: workingOrderLines.sentAt,
+        firedAt: ticketItems.firedAt,
+      })
+      .from(workingOrderLines)
+      .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+      .where(inArray(workingOrderLines.workingOrderId, [t.tabId, t.otherId]))
+      .orderBy(workingOrderLines.workingOrderId, workingOrderLines.lineNo);
+    const orders = await db
+      .select({
+        id: workingOrders.id,
+        status: workingOrders.status,
+        revision: workingOrders.revision,
+      })
+      .from(workingOrders)
+      .where(inArray(workingOrders.id, [t.tabId, t.otherId]))
+      .orderBy(workingOrders.id);
+    return { lines, orders };
+  }
+
+  // Each write, and every order it writes lines on: a mark on any of them refuses it.
+  it.each<[string, (tx: Transaction, tabs: Tabs) => Promise<unknown>, ("tab" | "other")[]]>([
+    [
+      "a round",
+      (tx, t) => addTabRound(tx, t.cfg, t.tabId, [{ menuItemId: t.cafeOffer, quantity: "1" }]),
+      ["tab"],
+    ],
+    ["a void", (tx, t) => voidTabLine(tx, t.cfg, t.tabId, 1), ["tab"]],
+    ["a part void", (tx, t) => voidTabLine(tx, t.cfg, t.tabId, 1, "1"), ["tab"]],
+    ["a recall", (tx, t) => recallLines(tx, t.cfg, t.tabId, [1]), ["tab"]],
+    ["a send", (tx, t) => sendLines(tx, t.cfg, t.tabId, [2]), ["tab"]],
+    ["a course fired", (tx, t) => fireCourse(tx, t.cfg, t.tabId, t.courseId), ["tab"]],
+    ["a course change", (tx, t) => setLineCourse(tx, t.cfg, t.tabId, 2, null), ["tab"]],
+    ["a served mark", (tx, t) => markLineServed(tx, t.cfg, t.tabId, 1), ["tab"]],
+    [
+      "a transfer",
+      (tx, t) => transferLines(tx, t.cfg, t.tabId, t.otherId, [{ lineNo: 1, quantity: "1" }]),
+      ["tab", "other"],
+    ],
+    [
+      "a split",
+      (tx, t) => splitOffCheck(tx, t.cfg, t.tabId, [{ lineNo: 1, quantity: "1" }]),
+      ["tab"],
+    ],
+    ["a move of lines", (tx, t) => moveTabLines(tx, t.cfg, t.otherId, t.tabId), ["tab", "other"]],
+    [
+      "a merge",
+      (tx, t) => mergeTabs(tx, t.cfg, t.tabId, t.otherId, { freeSourceTable: true }),
+      ["tab", "other"],
+    ],
+    [
+      "a line edit",
+      async (tx, t) =>
+        updateOrderLine(tx, t.cfg, t.tabId, 1, { note: "x" }, await revisionOf(t.tabId)),
+      ["tab"],
+    ],
+  ])("%s", async (_name, write, touched) => {
+    const tabs = await twoTabs();
+    for (const which of touched) {
+      const paying = which === "tab" ? tabs.tabId : tabs.otherId;
+      await markPaying(paying, MARK);
+      const before = await snapshot(tabs);
+
+      await expect(asApp(tabs.cfg, (tx) => write(tx, tabs))).rejects.toMatchObject({
+        code: "order.payment_in_flight",
+        params: { workingOrderId: paying },
+      });
+      expect(await snapshot(tabs)).toEqual(before);
+      await markPaying(paying, null);
+    }
+  });
+
+  it("never blocks a different order", async () => {
+    const tabs = await twoTabs();
+    await markPaying(tabs.otherId);
+    const before = await revisionOf(tabs.tabId);
+
+    await asApp(tabs.cfg, (tx) =>
+      addTabRound(tx, tabs.cfg, tabs.tabId, [{ menuItemId: tabs.cafeOffer, quantity: "1" }]),
+    );
+    await asApp(tabs.cfg, (tx) => voidTabLine(tx, tabs.cfg, tabs.tabId, 1, "1"));
+    await asApp(tabs.cfg, async (tx) =>
+      updateOrderLine(tx, tabs.cfg, tabs.tabId, 1, { note: "x" }, await revisionOf(tabs.tabId)),
+    );
+
+    expect(await revisionOf(tabs.tabId)).toBe(before + 3);
   });
 });

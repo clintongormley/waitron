@@ -514,6 +514,12 @@ The ones worth grepping for:
 - **`resolve_pending.complete`** (`info`) — `{ captured, failed, incidentsRaised, nextDueAt }`. The
   per-tick summary of this node's card sweep: rows it captured, rows it resolved `failed`, and any
   `payment.pending_outcome_unactionable` incidents raised for a human.
+- **`payment_attempt.released`** (`info`) — `{ released }`. The pass cleared the "a card is paying
+  this order" mark on that many open orders, because it was written before this process started or
+  more than fifteen minutes ago (`withStalePaymentRelease`, `src/boot.ts`). Until then the till
+  refuses changes to those orders with `order.payment_in_flight`.
+- **`payment_attempt.release_failed`** (`warn`) — `{ error }`. That release threw; the next pass
+  tries again. It does not flip `/health`.
 - **`transport.close_failed`** (`warn`) — `{ errorCode, message }`. An mTLS
   `Agent` failed to close gracefully at the end of a pass (`aeatClientResolver`'s `closeAll`,
   `packages/fiscal-verifactu/src/aeat-transport.ts`). `message` is the raw `Error#message` — safe to log here, unlike

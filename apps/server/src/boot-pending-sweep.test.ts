@@ -4,7 +4,7 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { connectedCardProviderSweep, withPendingSweep } from "./boot.js";
+import { connectedCardProviderSweep, withPendingSweep, withStalePaymentRelease } from "./boot.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import type { PassReport } from "./pass.js";
 
@@ -259,5 +259,47 @@ describe("connectedCardProviderSweep", () => {
 
     expect(gets).toEqual([]);
     expect(providers).toEqual([simulator]);
+  });
+});
+
+describe("withStalePaymentRelease", () => {
+  it("releases stale in-flight marks at the pass's time, logs how many, and returns the inner report", async () => {
+    const now = new Date("2026-09-26T12:00:00.000Z");
+    const inner = vi.fn(async () => REPORT);
+    const release = vi.fn(async () => 2);
+    const log = vi.fn();
+
+    expect(await withStalePaymentRelease(inner, release, log)(now)).toBe(REPORT);
+
+    expect(inner).toHaveBeenCalledWith(now);
+    expect(release).toHaveBeenCalledWith(now);
+    expect(log).toHaveBeenCalledWith("info", "payment_attempt.released", { released: 2 });
+  });
+
+  it("logs nothing when there was nothing to release", async () => {
+    const log = vi.fn();
+
+    await withStalePaymentRelease(
+      async () => REPORT,
+      async () => 0,
+      log,
+    )(new Date());
+
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("a failed release is logged and never breaks the pass", async () => {
+    const log = vi.fn();
+
+    const report = await withStalePaymentRelease(
+      async () => REPORT,
+      () => Promise.reject(new Error("disk I/O error")),
+      log,
+    )(new Date());
+
+    expect(report).toBe(REPORT);
+    expect(log).toHaveBeenCalledWith("warn", "payment_attempt.release_failed", {
+      error: "Error: disk I/O error",
+    });
   });
 });

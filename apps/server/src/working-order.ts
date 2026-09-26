@@ -2881,8 +2881,39 @@ async function requireEditableOrder(
   }
 }
 
-/** Count one more write on each OPEN order named; a settled or placed order's revision stays. */
+/**
+ * Refuse `order.payment_in_flight` when an integrated card payment is between pricing and filing on
+ * any of these OPEN orders (plan D22). It reads the order's own mark, never the payments store: the
+ * simulator writes no `attempting` row, and Stripe and SumUp write theirs after pricing committed.
+ */
+export async function refusePaymentInFlight(
+  tx: Transaction,
+  orderIds: readonly string[],
+): Promise<void> {
+  const [paying] = await tx
+    .select({ id: workingOrders.id })
+    .from(workingOrders)
+    .where(
+      and(
+        inArray(workingOrders.id, [...orderIds]),
+        eq(workingOrders.status, "open"),
+        isNotNull(workingOrders.paymentAttemptAt),
+      ),
+    )
+    .orderBy(workingOrders.id)
+    .limit(1);
+  if (paying !== undefined) {
+    throw new AppError("order.payment_in_flight", { workingOrderId: paying.id });
+  }
+}
+
+/**
+ * Count one more write on each OPEN order named; a settled or placed order's revision stays. Every
+ * write to an open order's lines ends here, so this is also where a write to an order being paid is
+ * refused, rolling back what the write did before it.
+ */
 async function bumpRevision(tx: Transaction, orderIds: readonly string[]): Promise<void> {
+  await refusePaymentInFlight(tx, orderIds);
   await tx
     .update(workingOrders)
     .set({ revision: sql`${workingOrders.revision} + 1` })
@@ -3467,6 +3498,7 @@ export async function abandonHeldOrder(
 ): Promise<void> {
   void cfg;
   return withTransaction(deps.db, async (tx) => {
+    await refusePaymentInFlight(tx, [id]);
     const updated = await tx
       .update(workingOrders)
       .set({ status: "abandoned" })
@@ -3513,6 +3545,7 @@ export async function placeOrder(
     if (locked === undefined || locked.status !== "open") {
       throw new AppError("working_order.not_open", { workingOrderId: id });
     }
+    await refusePaymentInFlight(tx, [id]);
     const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
     const orderFlow = serviceContext?.serviceMode ?? cfg.orderFlow;
 

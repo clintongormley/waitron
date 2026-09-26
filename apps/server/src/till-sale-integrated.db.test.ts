@@ -19,7 +19,7 @@ import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { drawerOpens, printJobs, withTransaction } from "@waitron/db";
+import { drawerOpens, printJobs, withTransaction, workingOrders } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import {
   decimal,
@@ -37,9 +37,25 @@ import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js"
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { OrderFlow, TillConfig } from "./till-config.js";
-import { createOpenOrder, listStationQueue, parkOrder, placeOrder } from "./working-order.js";
-import { collectOrder, payWorkingOrder, payWorkingOrderIntegrated } from "./till-sale.js";
-import type { IntegratedPayDeps } from "./till-sale.js";
+import {
+  addTabRound,
+  createOpenOrder,
+  listStationQueue,
+  openTab,
+  parkOrder,
+  placeOrder,
+  updateOrderLine,
+  voidTabLine,
+} from "./working-order.js";
+import { createTable } from "./tables.js";
+import {
+  collectOrder,
+  PAYMENT_ATTEMPT_STALE_MS,
+  payWorkingOrder,
+  payWorkingOrderIntegrated,
+  releaseStalePaymentAttempts,
+} from "./till-sale.js";
+import type { IntegratedPayDeps, IntegratedPayOutcome } from "./till-sale.js";
 import { DRAWER_KICK } from "./receipt-print.js";
 import { bytesInclude } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -726,27 +742,30 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
 
-    // Mid-`collect` (after P1 committed, before P3) a concurrent cash pay settles this id. P3's
-    // `recordSale` is refused by `sales_working_order_id_key` and replays the winner's ticket.
+    // Mid-`collect` (after P1 committed, before P3) a second card pay of this id settles it. P3's
+    // `recordSale` is refused by `sales_working_order_id_key` and replays the winner's ticket. The
+    // winner is a card pay because a cash pay of an order a card is paying is refused (plan D22).
+    let winner: IntegratedPayOutcome | undefined;
     const provider = cannedProvider(async () => {
-      await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
-        id,
-        lines: [],
-        tender: { method: "cash", amount: "5.00" },
-      });
+      winner = await payWorkingOrderIntegrated(
+        { db: app, backend, clock, provider: new SimulatorPaymentProvider(app) },
+        cfg,
+        { id, lines: [], simulationOutcome: "captured" },
+      );
     }, "captured");
     const deps: IntegratedPayDeps = { db: app, backend, clock, provider };
 
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
     expect(out.outcome).toBe("captured");
-    if (out.outcome !== "captured") throw new Error("unreachable");
-    // A replay describes the same payment; it does not dispense the recorded change again.
+    if (out.outcome !== "captured" || winner?.outcome !== "captured") {
+      throw new Error("unreachable");
+    }
     expect(out.ticket.total).toBe("1.50");
-    expect(out.ticket.tender).toEqual({ method: "cash", change: "3.50" });
+    expect(out.ticket.invoiceNumber).toBe(winner.ticket.invoiceNumber);
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
-    expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "1.50", tipAmount: "0.00" }]);
+    expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
   });
 
   it("a capture whose payment cannot be associated rolls back the whole sale (P3 is atomic)", async () => {
@@ -1306,5 +1325,335 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       expect(await paymentCount(id)).toBe(1);
       expect((await paymentsFor(id))[0]!.linkedToSale).toBe(true);
     });
+  });
+});
+
+describe("an order being paid by card cannot be changed from another device (plan D22)", () => {
+  /** The simulator, held in P2 until `release`: it writes no payment row until it is released, which
+   * is what shows the guard reads the order's own mark and not the payments store. */
+  class PausedSimulator extends SimulatorPaymentProvider {
+    readonly entered: Promise<void>;
+    release!: () => void;
+    private signal!: () => void;
+    private readonly gate: Promise<void>;
+
+    constructor(db: Database) {
+      super(db);
+      this.entered = new Promise((resolve) => (this.signal = resolve));
+      this.gate = new Promise((resolve) => (this.release = resolve));
+    }
+
+    override async collect(params: Parameters<PaymentProvider["collect"]>[0]) {
+      this.signal();
+      await this.gate;
+      return super.collect(params);
+    }
+  }
+
+  /** Two open tabs in a tables zone, each with one café line. */
+  async function twoTabs() {
+    const venue = await setupVenue();
+    const { cfg, cafe } = venue;
+    const { tabId, otherId, menuItemId } = await withTransaction(suite.db, async (tx) => {
+      const offers = await offerProducts(tx, cfg, { zone: "tables" });
+      const offer = offers.offerFor(cafe.id);
+      const tab = async (label: string) => {
+        const table = await createTable(tx, cfg, { label, zoneId: offers.zoneId });
+        const { tabId: id } = await openTab(tx, cfg, { tableId: table.id });
+        await addTabRound(tx, cfg, id, [{ menuItemId: offer, quantity: "2" }]);
+        return id;
+      };
+      return { tabId: await tab("T1"), otherId: await tab("T2"), menuItemId: offer };
+    });
+    return { ...venue, tabId, otherId, menuItemId };
+  }
+  type Tabs = Awaited<ReturnType<typeof twoTabs>>;
+
+  async function markOf(id: string): Promise<string | null> {
+    const [row] = await suite.db
+      .select({ at: workingOrders.paymentAttemptAt })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, id));
+    return row!.at;
+  }
+
+  async function setMark(id: string, at: string): Promise<void> {
+    await suite.db
+      .update(workingOrders)
+      .set({ paymentAttemptAt: at })
+      .where(eq(workingOrders.id, id));
+  }
+
+  async function revisionOf(id: string): Promise<number> {
+    const [row] = await suite.db
+      .select({ revision: workingOrders.revision })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, id));
+    return row!.revision;
+  }
+
+  /** A new round, a line edit and a void, each in its own transaction, on `id`. */
+  function writes(t: Tabs, id: string): (() => Promise<unknown>)[] {
+    return [
+      () =>
+        withTransaction(suite.db, (tx) =>
+          addTabRound(tx, t.cfg, id, [{ menuItemId: t.menuItemId, quantity: "1" }]),
+        ),
+      async () => {
+        const revision = await revisionOf(id);
+        return withTransaction(suite.db, (tx) =>
+          updateOrderLine(tx, t.cfg, id, 1, { note: "sin azúcar" }, revision),
+        );
+      },
+      () => withTransaction(suite.db, (tx) => voidTabLine(tx, t.cfg, id, 1, "1")),
+    ];
+  }
+
+  it("refuses a round, a line edit and a void while the reader runs; the capture then files and clears the mark", async () => {
+    const t = await twoTabs();
+    const provider = new PausedSimulator(suite.db);
+    const paying = payWorkingOrderIntegrated({ db: suite.db, backend, clock, provider }, t.cfg, {
+      id: t.tabId,
+      lines: [],
+      simulationOutcome: "captured",
+    });
+    await provider.entered;
+
+    expect(await markOf(t.tabId)).not.toBeNull();
+    // The control: nothing is in the payments store while the reader runs.
+    expect(await paymentCount(t.tabId)).toBe(0);
+    const before = await revisionOf(t.tabId);
+    for (const write of writes(t, t.tabId)) {
+      await expect(write()).rejects.toMatchObject({
+        code: "order.payment_in_flight",
+        params: { workingOrderId: t.tabId },
+      });
+    }
+    expect(await revisionOf(t.tabId)).toBe(before);
+    // A different order is never blocked.
+    for (const write of writes(t, t.otherId)) await write();
+    expect(await markOf(t.otherId)).toBeNull();
+
+    provider.release();
+    const out = await paying;
+
+    expect(out.outcome).toBe("captured");
+    if (out.outcome !== "captured") throw new Error("unreachable");
+    // P3 files what P1 priced: the two cafés the order held when Pay was pressed.
+    expect(out.ticket.total).toBe("3.00");
+    expect(await orderState(t.tabId)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await markOf(t.tabId)).toBeNull();
+    // The settled order is closed to writes, and says so rather than that a payment is running.
+    await expect(writes(t, t.tabId)[0]!()).rejects.toMatchObject({ code: "tab.not_open" });
+  });
+
+  it("a declined card clears the mark, and the order takes a round, an edit and a void again", async () => {
+    const t = await twoTabs();
+    const provider = new PausedSimulator(suite.db);
+    const paying = payWorkingOrderIntegrated({ db: suite.db, backend, clock, provider }, t.cfg, {
+      id: t.tabId,
+      lines: [],
+      simulationOutcome: "declined",
+    });
+    await provider.entered;
+    expect(await markOf(t.tabId)).not.toBeNull();
+    provider.release();
+
+    expect(await paying).toEqual({ outcome: "declined" });
+    expect(await markOf(t.tabId)).toBeNull();
+    const before = await revisionOf(t.tabId);
+    for (const write of writes(t, t.tabId)) await write();
+    expect(await revisionOf(t.tabId)).toBe(before + 3);
+  });
+
+  it("a reader that throws clears the mark before the error reaches the till", async () => {
+    const t = await twoTabs();
+    const provider = new PausedSimulator(suite.db);
+    provider.collect = () => Promise.reject(new Error("reader unreachable"));
+
+    await expect(
+      payWorkingOrderIntegrated({ db: suite.db, backend, clock, provider }, t.cfg, {
+        id: t.tabId,
+        lines: [],
+      }),
+    ).rejects.toThrow("reader unreachable");
+    expect(await markOf(t.tabId)).toBeNull();
+    for (const write of writes(t, t.tabId)) await write();
+  });
+
+  it("a timed-out reader clears the mark", async () => {
+    const t = await twoTabs();
+    const provider = cannedProvider(() => Promise.resolve(), "attempting");
+
+    expect(
+      await payWorkingOrderIntegrated({ db: suite.db, backend, clock, provider }, t.cfg, {
+        id: t.tabId,
+        lines: [],
+      }),
+    ).toEqual({ outcome: "timeout" });
+    expect(await markOf(t.tabId)).toBeNull();
+  });
+
+  it("an attempt that fails leaves the mark of a later attempt on the same order", async () => {
+    const t = await twoTabs();
+    const first = new PausedSimulator(suite.db);
+    const second = new PausedSimulator(suite.db);
+    const pay = (provider: PausedSimulator, outcome: "captured" | "declined") =>
+      payWorkingOrderIntegrated({ db: suite.db, backend, clock, provider }, t.cfg, {
+        id: t.tabId,
+        lines: [],
+        simulationOutcome: outcome,
+      });
+    const firstPay = pay(first, "declined");
+    await first.entered;
+    // The marks are timestamps: the second must be written in a later millisecond.
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const secondPay = pay(second, "captured");
+    await second.entered;
+
+    first.release();
+    expect(await firstPay).toEqual({ outcome: "declined" });
+
+    await expect(writes(t, t.tabId)[0]!()).rejects.toMatchObject({
+      code: "order.payment_in_flight",
+    });
+    second.release();
+    expect((await secondPay).outcome).toBe("captured");
+    expect(await markOf(t.tabId)).toBeNull();
+  });
+
+  it("a pay pressed again over a mark a crash left is not refused by it, and clears it", async () => {
+    const t = await twoTabs();
+    await setMark(t.tabId, "2026-09-26T10:00:00.000Z");
+
+    const out = await payWorkingOrderIntegrated(
+      { db: suite.db, backend, clock, provider: new SimulatorPaymentProvider(suite.db) },
+      t.cfg,
+      { id: t.tabId, lines: [], simulationOutcome: "captured" },
+    );
+
+    expect(out.outcome).toBe("captured");
+    expect(await markOf(t.tabId)).toBeNull();
+  });
+
+  it("a cash payment of an order a card is paying is refused, filing nothing", async () => {
+    const t = await twoTabs();
+    await setMark(t.tabId, "2026-09-26T10:00:00.000Z");
+
+    await expect(
+      payWorkingOrder({ db: suite.db, backend, clock }, t.cfg, {
+        id: t.tabId,
+        lines: [],
+        tender: { method: "cash", amount: "10.00" },
+      }),
+    ).rejects.toMatchObject({
+      code: "order.payment_in_flight",
+      params: { workingOrderId: t.tabId },
+    });
+    expect(await saleCount(t.tabId)).toBe(0);
+    expect(await orderState(t.tabId)).toEqual({ status: "open", settledAtSet: false });
+  });
+
+  describe("a mark left by a crash after the card was captured", () => {
+    /** The crash: P1 marked the order and P2 captured, and P3 never ran. */
+    async function crashedAfterCapture(capturedAmount: string) {
+      const t = await twoTabs();
+      await setMark(t.tabId, "2026-09-26T10:00:00.000Z");
+      await withTransaction(suite.db, (tx) =>
+        insertCapturedPayment(tx, {
+          workingOrderId: t.tabId,
+          provider: "stripe",
+          paymentRef: `pi-ref-${randomUUID()}`,
+          amount: decimal(capturedAmount),
+          settledAt: new Date(),
+          externalRef: `pi_lost_${randomUUID()}`,
+        }),
+      );
+      return t;
+    }
+
+    it("is cleared by the recovery that files the sale", async () => {
+      const t = await crashedAfterCapture("3.00");
+      const { deps } = integratedDeps(t.cfg, suite.db);
+
+      const out = await payWorkingOrderIntegrated(deps, t.cfg, { id: t.tabId, lines: [] });
+
+      expect(out.outcome).toBe("captured");
+      expect(await orderState(t.tabId)).toEqual({ status: "settled", settledAtSet: true });
+      expect(await markOf(t.tabId)).toBeNull();
+    });
+
+    it("is cleared by a recovery that cannot file, and the order takes writes again", async () => {
+      const t = await crashedAfterCapture("1.00");
+      const { deps } = integratedDeps(t.cfg, suite.db);
+
+      await expect(
+        payWorkingOrderIntegrated(deps, t.cfg, { id: t.tabId, lines: [] }),
+      ).rejects.toThrow(/below the locked total/);
+
+      expect(await saleCount(t.tabId)).toBe(0);
+      expect(await markOf(t.tabId)).toBeNull();
+      await writes(t, t.tabId)[0]!();
+    });
+  });
+
+  it("the loop releases a mark written before this process started, or older than the attempt window, on open orders only", async () => {
+    const t = await twoTabs();
+    const now = new Date("2026-09-26T12:00:00.000Z");
+    const startedAt = new Date("2026-09-26T11:59:00.000Z");
+    const [beforeStart, abandoned] = [{ tabId: randomUUID() }, { tabId: randomUUID() }];
+    await withTransaction(suite.db, async (tx) => {
+      for (const { tabId } of [beforeStart, abandoned]) {
+        await createOpenOrder(
+          tx,
+          t.cfg,
+          tabId,
+          [{ menuItemId: t.cafe.menuItemId, quantity: "1" }],
+          null,
+          {
+            zoneId: t.cafe.zoneId,
+          },
+        );
+      }
+    });
+    // A crash's mark: written by the process before this one, seconds before it started.
+    await setMark(beforeStart.tabId, "2026-09-26T11:58:59.000Z");
+    // Written by this process, and older than any attempt runs.
+    await setMark(t.tabId, new Date(now.getTime() - PAYMENT_ATTEMPT_STALE_MS - 1).toISOString());
+    // Written by this process a minute ago: an attempt that may still be running.
+    await setMark(t.otherId, "2026-09-26T11:59:30.000Z");
+    // A mark on an order that left `open` cannot be cleared: the transition trigger refuses it.
+    await setMark(abandoned.tabId, "2026-09-26T10:00:00.000Z");
+    suite.db.run(sql`update working_orders set status = 'abandoned' where id = ${abandoned.tabId}`);
+
+    expect(await releaseStalePaymentAttempts(suite.db, now, startedAt)).toBe(2);
+
+    expect(await markOf(beforeStart.tabId)).toBeNull();
+    expect(await markOf(t.tabId)).toBeNull();
+    expect(await markOf(t.otherId)).toBe("2026-09-26T11:59:30.000Z");
+    expect(await markOf(abandoned.tabId)).toBe("2026-09-26T10:00:00.000Z");
+  });
+
+  it("never writes the mark on a placed order it collects", async () => {
+    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, cfg, {
+      id,
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
+    const provider = new PausedSimulator(suite.db);
+    const paying = payWorkingOrderIntegrated({ db: suite.db, backend, clock, provider }, cfg, {
+      id,
+      lines: [],
+      simulationOutcome: "captured",
+    });
+    await provider.entered;
+
+    expect(await markOf(id)).toBeNull();
+    provider.release();
+    expect((await paying).outcome).toBe("captured");
+    expect(await markOf(id)).toBeNull();
   });
 });

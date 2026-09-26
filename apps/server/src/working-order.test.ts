@@ -2861,6 +2861,65 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
   });
 });
 
+describe("an order whose card payment is in flight (plan D22)", () => {
+  async function payingHeldOrder(orderFlow?: TillConfig["orderFlow"]) {
+    const venue = await setupVenue(orderFlow);
+    // Placing fires the line, which needs a station to reach.
+    await withTransaction(db, (tx) =>
+      createStation(tx, venue.cfg, { name: "Cocina", isDefault: true }),
+    );
+    const id = randomUUID();
+    await parkProducts(venue.cfg, { id, lines: [{ productId: venue.cafeId, quantity: "1" }] });
+    await db
+      .update(workingOrders)
+      .set({ paymentAttemptAt: "2026-09-26T10:00:00.000Z" })
+      .where(eq(workingOrders.id, id));
+    const [before] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
+    const lines = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    return { ...venue, id, before: { order: before, lines } };
+  }
+
+  async function unchanged(id: string, before: { order: unknown; lines: unknown }) {
+    const [order] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
+    const lines = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    expect({ order, lines }).toEqual(before);
+  }
+
+  it("refuses a whole-order save, changing nothing", async () => {
+    const { cfg, cafeId, id, before } = await payingHeldOrder();
+
+    await expect(
+      updateProducts(cfg, id, { lines: [{ productId: cafeId, quantity: "2" }] }),
+    ).rejects.toMatchObject({ code: "order.payment_in_flight", params: { workingOrderId: id } });
+    await unchanged(id, before);
+  });
+
+  it("refuses abandoning it, which would leave the payment nothing to settle", async () => {
+    const { cfg, id, before } = await payingHeldOrder();
+
+    await expect(abandonHeldOrder({ db }, cfg, id)).rejects.toMatchObject({
+      code: "order.payment_in_flight",
+      params: { workingOrderId: id },
+    });
+    await unchanged(id, before);
+  });
+
+  it("refuses placing it", async () => {
+    const { cfg, id, before } = await payingHeldOrder("ticket_then_pay");
+
+    await expect(
+      placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR, cfg.tillId),
+    ).rejects.toMatchObject({ code: "order.payment_in_flight", params: { workingOrderId: id } });
+    await unchanged(id, before);
+  });
+});
+
 describe("placeOrder / sendToPrep fire ticket items", () => {
   it("placeOrder fires one ticket item per line to the resolved station (Mode T)", async () => {
     const { cfg, catalogueId } = await setupVenue("ticket_then_pay");

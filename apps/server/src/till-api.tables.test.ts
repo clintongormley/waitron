@@ -646,6 +646,31 @@ describe("table + tab routes", () => {
     });
   });
 
+  it("answers 409 order.payment_in_flight to a round, a line edit and a void while a card payment is in flight", async () => {
+    const { tabId, revision } = await firedTab();
+    suite.db.run(
+      sql`update working_orders set payment_attempt_at = '2026-09-26T10:00:00.000Z' where id = ${tabId}`,
+    );
+    const refusals = [
+      await request(`/api/working-orders/${tabId}/round`, {
+        method: "POST",
+        body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
+      }),
+      await request(`/api/working-orders/${tabId}/lines/1`, {
+        method: "PUT",
+        body: JSON.stringify({ note: "x", revision }),
+      }),
+      await request(`/api/working-orders/${tabId}/lines/1`, { method: "DELETE" }),
+    ];
+
+    for (const res of refusals) {
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({
+        error: { code: "order.payment_in_flight", params: { workingOrderId: tabId } },
+      });
+    }
+  });
+
   it("REJECTS every new table/tab route with 401 session.required when no cookie is present", async () => {
     // A fresh app driven WITHOUT the session cookie: every route below answers 401 with the one code.
     const noAuth = new Hono();

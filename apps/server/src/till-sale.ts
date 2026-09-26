@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
 import "./errors.js";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, lt, sql } from "drizzle-orm";
 import {
   addDecimal,
   AppError,
@@ -19,6 +19,7 @@ import {
 import {
   invoiceSeries,
   isUniqueViolation,
+  nowIso,
   sales,
   tenders,
   withTransaction,
@@ -43,6 +44,7 @@ import {
   priceStoredOrder,
   priceStoredOrderForIssuance,
   readInvoiceNumber,
+  refusePaymentInFlight,
   toVatBreakdown,
 } from "./working-order.js";
 import type { LineExtras, PricedOrder, TillSaleDeps } from "./working-order.js";
@@ -335,6 +337,8 @@ export async function payWorkingOrder(
       if (locked !== undefined && locked.status !== "open") {
         throw new AppError("working_order.not_open", { workingOrderId: req.id });
       }
+      // A card payment of this order would file its own sale after this one (plan D22).
+      if (locked !== undefined) await refusePaymentInFlight(tx, [req.id]);
 
       // The till is a network boundary. AFTER the replay check, so a retry of an already-settled
       // order is never refused for the shape of its retry body.
@@ -702,7 +706,18 @@ export async function payWorkingOrderIntegrated(
     // The record is issued from THIS pricing, in P3, whatever changes while the reader runs.
     const priced = await issuancePass(tx, cfg, req.id, order);
     // A `placed` order here is a counter collect, so `finalizeCapture` stamps `collected_at`.
-    return { kind: "collect" as const, priced, wasPlaced: locked?.status === "placed" };
+    const wasPlaced = locked?.status === "placed";
+    // An open order's lines could still change under the reader, so it is marked in flight (plan
+    // D22). A placed order's lines are already frozen, and `working_orders_enforce_transition`
+    // refuses any write that keeps an order placed.
+    const attemptAt = wasPlaced ? null : nowIso();
+    if (attemptAt !== null) {
+      await tx
+        .update(workingOrders)
+        .set({ paymentAttemptAt: attemptAt })
+        .where(eq(workingOrders.id, req.id));
+    }
+    return { kind: "collect" as const, priced, wasPlaced, attemptAt };
   });
 
   if (prepared.kind === "replay") {
@@ -710,7 +725,13 @@ export async function payWorkingOrderIntegrated(
   }
   // P2 is skipped entirely: the card was already charged.
   if (prepared.kind === "recover") {
-    return finalizeRecovery(deps, cfg, req, prepared.captured, operatorId);
+    try {
+      return await finalizeRecovery(deps, cfg, req, prepared.captured, operatorId);
+    } catch (error) {
+      // A crash between P1 and P3 left the mark; a recovery that cannot file releases it too.
+      await releasePaymentAttempt(deps.db, req.id);
+      throw error;
+    }
   }
   if (prepared.kind === "recover-settle") {
     return finalizeSettleRecovery(deps, cfg, req, prepared.captured, prepared.outstanding);
@@ -722,15 +743,24 @@ export async function payWorkingOrderIntegrated(
   const tip = cfg.tipsEnabled ? decimal(tipInput) : decimal("0.00");
   const baseAmount =
     prepared.kind === "settle" ? prepared.outstanding.amountDue : prepared.priced.total;
-  const result = await deps.provider.collect({
-    tillId: cfg.tillId,
-    workingOrderId: brandWorkingOrderId(req.id),
-    amount: addDecimal(baseAmount, tip),
-    ...(deps.readerRef === undefined ? {} : { readerRef: deps.readerRef }),
-    allowOffline: req.allowOffline,
-    simulationOutcome: req.simulationOutcome,
-  });
+  // Only a collect of an open order marked it; a settle is of a placed order.
+  const attemptAt = prepared.kind === "collect" ? prepared.attemptAt : null;
+  let result: PaymentResult;
+  try {
+    result = await deps.provider.collect({
+      tillId: cfg.tillId,
+      workingOrderId: brandWorkingOrderId(req.id),
+      amount: addDecimal(baseAmount, tip),
+      ...(deps.readerRef === undefined ? {} : { readerRef: deps.readerRef }),
+      allowOffline: req.allowOffline,
+      simulationOutcome: req.simulationOutcome,
+    });
+  } catch (error) {
+    await releasePaymentAttempt(deps.db, req.id, attemptAt);
+    throw error;
+  }
   if (result.state !== "captured" && result.state !== "accepted_offline") {
+    await releasePaymentAttempt(deps.db, req.id, attemptAt);
     return toPayOutcome(result, null);
   }
 
@@ -752,6 +782,64 @@ export async function payWorkingOrderIntegrated(
     prepared.wasPlaced,
   );
   return { outcome: "captured", ticket };
+}
+
+/**
+ * Clear an OPEN order's in-flight mark (plan D22) after a payment attempt that filed nothing. Given
+ * `attemptAt`, only the mark that attempt wrote: a later attempt on the same order keeps its own.
+ * `null` is an attempt that wrote none.
+ */
+async function releasePaymentAttempt(
+  db: Database,
+  workingOrderId: string,
+  attemptAt?: string | null,
+): Promise<void> {
+  if (attemptAt === null) return;
+  await withTransaction(db, async (tx) => {
+    await tx
+      .update(workingOrders)
+      .set({ paymentAttemptAt: null })
+      .where(
+        and(
+          eq(workingOrders.id, workingOrderId),
+          eq(workingOrders.status, "open"),
+          attemptAt === undefined ? undefined : eq(workingOrders.paymentAttemptAt, attemptAt),
+        ),
+      );
+  });
+}
+
+/**
+ * How old an in-flight mark must be before the server's loop takes it for one no attempt is still
+ * behind. Longer than the longest reader wait in this repo, SumUp's 120 one-second polls
+ * (`packages/payments-sumup/src/provider.ts`); a Stripe device collect has no bound of ours at all.
+ */
+export const PAYMENT_ATTEMPT_STALE_MS = 15 * 60_000;
+
+/**
+ * Clear the in-flight mark (plan D22) on every OPEN order whose mark was written before
+ * `startedAt` — by a process that has since died, since one process owns the venue at a time — or
+ * more than {@link PAYMENT_ATTEMPT_STALE_MS} before `now`. Returns how many it cleared.
+ */
+export async function releaseStalePaymentAttempts(
+  db: Database,
+  now: Date,
+  startedAt: Date,
+): Promise<number> {
+  const cutoff = new Date(Math.max(startedAt.getTime(), now.getTime() - PAYMENT_ATTEMPT_STALE_MS));
+  return withTransaction(db, async (tx) => {
+    const released = await tx
+      .update(workingOrders)
+      .set({ paymentAttemptAt: null })
+      .where(
+        and(
+          eq(workingOrders.status, "open"),
+          lt(workingOrders.paymentAttemptAt, cutoff.toISOString()),
+        ),
+      )
+      .returning({ id: workingOrders.id });
+    return released.length;
+  });
 }
 
 /**
@@ -827,7 +915,9 @@ async function finalizeCapture(
           label: (await readReceiptOrder(tx, cfg, req.id, { atIssuance: true })).orderLabel,
           status: "settled",
           settledAt: settledAt.toISOString(),
-          ...(markCollected ? { collectedAt: settledAt.toISOString() } : {}),
+          ...(markCollected
+            ? { collectedAt: settledAt.toISOString() }
+            : { paymentAttemptAt: null }),
         })
         .where(eq(workingOrders.id, req.id));
 
@@ -959,7 +1049,9 @@ async function finalizeRecovery(
         label: (await readReceiptOrder(tx, cfg, req.id, { atIssuance: true })).orderLabel,
         status: "settled",
         settledAt: settledAt.toISOString(),
-        ...(locked?.status === "placed" ? { collectedAt: settledAt.toISOString() } : {}),
+        ...(locked?.status === "placed"
+          ? { collectedAt: settledAt.toISOString() }
+          : { paymentAttemptAt: null }),
       })
       .where(eq(workingOrders.id, req.id));
 

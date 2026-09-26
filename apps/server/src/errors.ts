@@ -255,6 +255,12 @@ declare module "@waitron/shared" {
      */
     "working_order.out_of_date": { workingOrderId: string; revision: number };
     /**
+     * A write reached an OPEN order an integrated card payment is between pricing and filing
+     * (`working_orders.payment_attempt_at` is set, plan D22): the payment files what it priced, so the
+     * order is not changed under it. The caller waits for the payment to settle or fail.
+     */
+    "order.payment_in_flight": { workingOrderId: string };
+    /**
      * A working order this caller tried to CANCEL or AMEND is not `placed` (still open, settled,
      * abandoned, or absent — one code for all).
      */

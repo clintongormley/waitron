@@ -252,6 +252,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "working_order.not_found": 404,
   "working_order.not_open": 409,
   "working_order.out_of_date": 409,
+  "order.payment_in_flight": 409,
   "working_order.not_placed": 409,
   "working_order.not_settled": 409,
   "working_order.already_collected": 409,
