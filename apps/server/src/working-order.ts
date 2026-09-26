@@ -6,7 +6,7 @@ import { readReceiptIssuer } from "./receipt-issuer.js";
 // its codes.
 import "./errors.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, exists, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import {
   AppError,
   basisPointsToDecimal,
@@ -60,7 +60,9 @@ import {
   priceBasket,
   priceBasketWithOptions,
   priceLockedLines,
+  readEffectiveVatClasses,
   resolveAttachedModifiers,
+  resolveVatRate,
   toInvoiceLineDescriptions,
   readContentLanguages,
   readInvoiceLocales,
@@ -463,7 +465,8 @@ async function priceOrderLines(
 /**
  * Read a persisted order's STORED lines, snapshotted at add time, so every path that files a
  * persisted order files the same locked composition and a later catalogue price change never moves
- * the filed total.
+ * the filed total. Each line's rate is the stored one; issuance replaces it
+ * ({@link priceStoredOrderForIssuance}).
  *
  * Refuses a LINELESS order with `sale.empty_basket`: an empty tab is a reachable state, and this is
  * the last check before its pay or place reaches a fiscal write or a card charge.
@@ -533,22 +536,89 @@ export interface PricedOrder {
   identities: OrderLineIdentity[];
 }
 
-/** {@link priceStoredOrderForIssuance} without the line identities, to rebuild a filed ticket. */
+/** Price a persisted order exactly as its lines are stored, rates included, to rebuild a filed
+ * ticket. It never resolves a rate: after issuance the stored rate is the filed one. */
 export async function priceStoredOrder(
   tx: Transaction,
   workingOrderId: string,
 ): Promise<PricedLines> {
-  return (await priceStoredOrderForIssuance(tx, workingOrderId)).priced;
+  return priceLockedLines((await readLockedLines(tx, workingOrderId)).locked);
 }
 
-/** Price a persisted order from its add-time locked prices, with each priced line's working-order
- * identity for `issuancePass`; refuses a lineless order (see {@link readLockedLines}). */
+/**
+ * Issue a persisted order's price: each line's stored gross unit price, at the VAT rate of its
+ * product's CURRENT effective VAT class (spec §11.4), read for every line in one query. Returns each
+ * priced line's working-order identity for `issuancePass`, and refuses a lineless order (see
+ * {@link readLockedLines}).
+ *
+ * The resolved rate and its net unit price are written back, on the caller's transaction, onto each
+ * line whose rate changed while the order is still open, so {@link priceStoredOrder} rebuilds the
+ * filed rate. A placed order's lines are not written.
+ */
 export async function priceStoredOrderForIssuance(
   tx: Transaction,
   workingOrderId: string,
 ): Promise<PricedOrder> {
   const { locked, identities } = await readLockedLines(tx, workingOrderId);
-  return { priced: priceLockedLines(locked), identities };
+  const classes = await readEffectiveVatClasses(
+    tx,
+    identities.flatMap(({ productId }) => (productId === null ? [] : [productId])),
+  );
+  const resolved = locked.map((line, i) => {
+    const { productId } = identities[i]!;
+    // A line with no product names nothing to resolve from, so it keeps the rate it was added at.
+    if (productId === null) return line;
+    // `working_order_lines_product_fk` is `on delete restrict`, so the product row exists.
+    return { ...line, vatRate: resolveVatRate(classes.get(productId)!) };
+  });
+  const priced = priceLockedLines(resolved);
+  await writeBackIssuedRates(tx, identities, locked, priced);
+  return { priced, identities };
+}
+
+async function writeBackIssuedRates(
+  tx: Transaction,
+  identities: readonly OrderLineIdentity[],
+  locked: readonly LockedLine[],
+  priced: PricedLines,
+): Promise<void> {
+  const changed = identities.flatMap(({ id }, i) => {
+    const line = priced.lines[i]!;
+    const vatRate = stringToBasisPoints(line.vatRate);
+    return vatRate === stringToBasisPoints(locked[i]!.vatRate)
+      ? []
+      : [{ id, vatRate, unitPrice: stringToCents(line.unitPrice) }];
+  });
+  if (changed.length === 0) return;
+  const byLine = (value: (line: (typeof changed)[number]) => number) =>
+    sql`case ${workingOrderLines.id} ${sql.join(
+      changed.map((line) => sql`when ${line.id} then ${value(line)}`),
+      sql` `,
+    )} end`;
+  await tx
+    .update(workingOrderLines)
+    .set({ vatRate: byLine((line) => line.vatRate), unitPrice: byLine((line) => line.unitPrice) })
+    .where(
+      and(
+        inArray(
+          workingOrderLines.id,
+          changed.map((line) => line.id),
+        ),
+        // `working_order_lines_require_open_parent_update` refuses any line write on a placed
+        // order, so an order issued while placed keeps its add-time rate on the stored line.
+        exists(
+          tx
+            .select({ one: sql`1` })
+            .from(workingOrders)
+            .where(
+              and(
+                eq(workingOrders.id, workingOrderLines.workingOrderId),
+                eq(workingOrders.status, "open"),
+              ),
+            ),
+        ),
+      ),
+    );
 }
 
 /** Read a filed sale's invoice number ("A/1"); the fiscal record reference is regime-opaque and

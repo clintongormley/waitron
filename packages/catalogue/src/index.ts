@@ -66,6 +66,7 @@ export type {
   SellingValues,
 } from "./variants.js";
 export * from "./variant-fallback.js";
+export * from "./effective-vat.js";
 export * from "./dietary-declarations.js";
 export * from "./product-editor.js";
 export * from "./product-presentation.js";
