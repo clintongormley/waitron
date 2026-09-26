@@ -399,6 +399,10 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
       ticket row stays with the source line; **`ticket_items` gains `quantity`, the quantity fired**,
       so the kitchen screen keeps showing what it was asked to make after a split reduces the
       source line's quantity (`listStationQueue` reads the line's current quantity today).
+      **Overturned 2026-09-26 (the owner's answer):** a partial split gives the split row its own
+      ticket row, copied from the source's, at the quantity moved, and the source's `quantity`
+      drops by that much. A split onto a new check refuses a line whose ticket is still held
+      (`tab.split_held_line`), because a check cannot be sent.
     - **A no-route line under a HELD course** is not stamped when `fireLines` skips it, because its
       course has not fired. `fireCourse` and `sendLines` today act on `ticket_items` alone
       (`working-order.ts:942-1020`), so they gain a lookup of the course's no-route LINES and stamp
