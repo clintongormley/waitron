@@ -3229,7 +3229,7 @@ image constraints under *Detail → Box image*.
     stop a trading start: it logs `tls.tighten_failed` with the errno alone and the box serves
     (`chflags uchg` on the folder, then the chmod through the open folder, answers `EPERM`, measured 2026-09-26 on macOS,
     Node v26.7.0; the boot test injects that refusal). A setup-mode start still stops on such a
-    failure, as before. **Done (2026-09-26, lane A's A58):** a start that serves the recovery page
+    failure, as before. **Done (2026-09-26, lane A's A58, #700):** a start that serves the recovery page
     now runs the same `tightenTlsDir` in `serveRecovery` (`node-entry.ts`) before it reads the
     certificate and binds, with the trading start's rules: a linked `tls/` left as found, none
     created, and a failure logged `tls.tighten_failed` with the page still served. The restore itself (`restoreSecrets`) keeps none of the
