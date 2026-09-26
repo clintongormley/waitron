@@ -1795,10 +1795,11 @@ export class TillApp extends LitElement {
    * A saved change stores the new revision and reads the order again whenever that order is still the
    * open one, wherever the waiter is, so the next change is not refused as out of date. A refusal
    * reads the order again too, and one because the kitchen has started the line offers to cancel it.
-   * When {@link #orderVisit} says the waiter left the order and did not come back to it, a refusal
-   * changes nothing on screen but the message, which names the line, and its table while the floor
-   * lists it, because the waiter may believe a note (an allergy, say) was saved. Paying the tab and a
-   * server switch take the order off screen without that counter moving.
+   * When the order is no longer the open one, or {@link #orderVisit} says the waiter started leaving
+   * it and did not come back to it, a refusal changes nothing on screen but the message, which names
+   * the line, and its table while the floor lists it, because the waiter may believe a note (an
+   * allergy, say) was saved. Paying the tab and a server switch take the order off screen without
+   * that counter moving.
    */
   async #onChangeLine(event: Event): Promise<void> {
     const { lineNo, lineName, patch, revision } = (event as CustomEvent<ChangeLineDetail>).detail;
