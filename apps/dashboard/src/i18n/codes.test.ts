@@ -302,3 +302,25 @@ it("has a sentence in both languages for each refusal of a server's removal", ()
     expect(codeMessage(code, "es")).not.toBe(codeMessage(code, "en"));
   }
 });
+
+it("has a sentence in both languages for each refusal of clearing a server", () => {
+  const GENERIC_EN = codeMessage("test.unmapped_code", "en");
+  const GENERIC_ES = codeMessage("test.unmapped_code", "es");
+  for (const code of [
+    "membership.node_not_removed",
+    "membership.chart_too_large",
+    "membership.revoked_duplicate",
+    "membership.revoked_node_listed",
+  ]) {
+    expect(codeMessage(code, "en")).not.toBe(GENERIC_EN);
+    expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
+    expect(codeMessage(code, "es")).not.toBe(codeMessage(code, "en"));
+  }
+});
+
+it("words the refusals Remove and Clear share so they fit both actions", () => {
+  for (const code of ["membership.not_primary", "membership.node_is_primary"]) {
+    expect(codeMessage(code, "en")).toMatch(/remove.*clear|clear.*remove/i);
+    expect(codeMessage(code, "es")).toMatch(/retirar.*quitar|quitar.*retirar/i);
+  }
+});

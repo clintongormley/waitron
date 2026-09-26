@@ -992,6 +992,8 @@ export interface ServerRow {
   standing: "serving-primary" | "serving-secondary" | "sell-only" | "evicted";
   isSelf: boolean;
   removable: boolean;
+  /** Optional in this type only; the server sends it on every row. Absent reads as false. */
+  canClear?: boolean;
 }
 
 /** `term` is null, and `nodes` empty, when this server holds no chart. */
@@ -2546,6 +2548,11 @@ export class DashboardApi {
   /** `removed` is false when the machine was already removed and nothing was written. */
   removeServer(nodeId: string): Promise<{ removed: boolean; term: number }> {
     return this.#request(`/management-api/servers/${encodeURIComponent(nodeId)}/remove`, "POST");
+  }
+
+  /** `cleared` is false when the machine was already cleared and nothing was written. */
+  clearServer(nodeId: string): Promise<{ cleared: boolean; term: number }> {
+    return this.#request(`/management-api/servers/${encodeURIComponent(nodeId)}/clear`, "POST");
   }
 
   // ── Alerts ────────────────────────────────────────────────────────────────────────────────────

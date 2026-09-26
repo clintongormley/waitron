@@ -776,12 +776,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Ese servidor no está en la lista de servidores del local. Actualiza la lista.",
   },
   "membership.not_primary": {
-    en: "Only the primary server can remove a server. Open this page on the primary server.",
-    es: "Solo el servidor principal puede retirar un servidor. Abre esta página en el servidor principal.",
+    en: "Only the primary server can remove a server or clear it from the list. Open this page on the primary server.",
+    es: "Solo el servidor principal puede retirar un servidor o quitarlo de la lista. Abre esta página en el servidor principal.",
   },
   "membership.node_is_primary": {
-    en: "The primary server cannot be removed.",
-    es: "El servidor principal no se puede retirar.",
+    en: "The primary server cannot be removed or cleared from the list.",
+    es: "El servidor principal no se puede retirar ni quitar de la lista.",
   },
   "membership.node_has_served": {
     en: "This server has worked as the primary before, so it cannot be removed.",
@@ -790,6 +790,22 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "membership.standby_joined": {
     en: "This standby finished joining, so it cannot be removed.",
     es: "Este servidor en espera terminó de unirse, así que no se puede retirar.",
+  },
+  "membership.node_not_removed": {
+    en: "This server has not been removed, so it cannot be cleared from the list.",
+    es: "Este servidor no está retirado, así que no se puede quitar de la lista.",
+  },
+  "membership.chart_too_large": {
+    en: "The list of servers has reached its size limit, so this change cannot be made.",
+    es: "La lista de servidores ha llegado a su tamaño máximo, así que no se puede hacer este cambio.",
+  },
+  "membership.revoked_duplicate": {
+    en: "The list of servers this server holds is not valid, so it cannot be changed here.",
+    es: "La lista de servidores que tiene este servidor no es válida, así que no se puede cambiar aquí.",
+  },
+  "membership.revoked_node_listed": {
+    en: "The list of servers this server holds is not valid, so it cannot be changed here.",
+    es: "La lista de servidores que tiene este servidor no es válida, así que no se puede cambiar aquí.",
   },
   "membership.write_contended": {
     en: "The list of servers was being changed at the same moment. Try again.",

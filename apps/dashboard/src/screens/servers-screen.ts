@@ -19,7 +19,23 @@ const STANDING_KEY: Record<ServerRow["standing"], StringKey> = {
   evicted: "servers.standing.removed",
 };
 
-/** Which rows are `removable` is the server's judgement (`judgeRemoval`), never re-derived here. */
+type Action = "remove" | "clear";
+
+const ACTION_KEYS: Record<Action, { verb: StringKey; title: StringKey; explanation: StringKey }> = {
+  remove: {
+    verb: "servers.remove",
+    title: "servers.remove_title",
+    explanation: "servers.remove_explanation",
+  },
+  clear: {
+    verb: "servers.clear",
+    title: "servers.clear_title",
+    explanation: "servers.clear_explanation",
+  },
+};
+
+/** Which rows are `removable` or `canClear` is the server's judgement (`judgeRemoval`,
+ * `judgeClearance`), never re-derived here. */
 @customElement("dashboard-servers-screen")
 export class ServersScreen extends LitElement {
   static override styles = [
@@ -117,10 +133,10 @@ export class ServersScreen extends LitElement {
   @state() private servers: ServerRow[] = [];
   @state() private loading = true;
   @state() private loadErrorKey: string | null = null;
-  @state() private target: ServerRow | null = null;
-  @state() private removeErrorKey: string | null = null;
-  @state() private removing = false;
-  /** The Remove item's popover closes on the click, so the dialog has nothing visible to hand focus
+  @state() private target: { action: Action; row: ServerRow } | null = null;
+  @state() private actionErrorKey: string | null = null;
+  @state() private busy = false;
+  /** A menu item's popover closes on the click, so the dialog has nothing visible to hand focus
    * back to; the row menu's trigger takes it instead, or the heading once that menu is gone. */
   #focusTarget: HTMLElement | null = null;
 
@@ -142,37 +158,39 @@ export class ServersScreen extends LitElement {
     }
   }
 
-  #openRemove(row: ServerRow, event: Event): void {
+  #open(action: Action, row: ServerRow, event: Event): void {
     const menu = (event.currentTarget as HTMLElement).closest("wt-row-actions");
     this.#focusTarget = menu?.shadowRoot?.querySelector<HTMLButtonElement>("button") ?? null;
-    this.removeErrorKey = null;
-    this.target = row;
+    this.actionErrorKey = null;
+    this.target = { action, row };
   }
 
-  #closeRemove(): void {
-    if (this.removing) return;
+  #close(): void {
+    if (this.busy) return;
     this.target = null;
-    this.removeErrorKey = null;
+    this.actionErrorKey = null;
     requestAnimationFrame(() => {
       if (this.#focusTarget?.isConnected) this.#focusTarget.focus();
       else this.renderRoot.querySelector<HTMLElement>("h1")?.focus();
     });
   }
 
-  async #confirmRemove(): Promise<void> {
+  async #confirm(): Promise<void> {
     const target = this.target;
-    if (target === null || this.removing) return;
-    this.removing = true;
-    this.removeErrorKey = null;
+    if (target === null || this.busy) return;
+    this.busy = true;
+    this.actionErrorKey = null;
     try {
-      await this.api.removeServer(target.nodeId);
+      if (target.action === "remove") await this.api.removeServer(target.row.nodeId);
+      else await this.api.clearServer(target.row.nodeId);
     } catch (error) {
-      this.removeErrorKey = codeOf(error);
+      this.actionErrorKey = codeOf(error);
       return;
     } finally {
-      this.removing = false;
+      this.busy = false;
     }
-    // A removed row loses its menu, and the refresh below may land after the dialog has closed.
+    // A removed row loses its menu, a cleared one leaves the list, and the refresh below may land
+    // after the dialog has closed.
     this.#focusTarget = null;
     this.target = null;
     try {
@@ -233,60 +251,68 @@ export class ServersScreen extends LitElement {
       {
         key: "actions",
         label: t("servers.actions"),
-        cell: (row) =>
-          row.removable
-            ? html`<wt-row-actions label=${`${t("servers.actions")}: ${this.#rowName(row)}`}
-                ><wt-button
-                  align="start"
-                  variant="ghost"
-                  data-test=${`remove-${row.nodeId}`}
-                  @click=${(event: Event) => this.#openRemove(row, event)}
-                  >${t("servers.remove")}</wt-button
-                ></wt-row-actions
-              >`
-            : nothing,
+        cell: (row) => {
+          const actions = (["remove", "clear"] as const).filter((action) =>
+            action === "remove" ? row.removable : row.canClear === true,
+          );
+          return actions.length === 0
+            ? nothing
+            : html`<wt-row-actions label=${`${t("servers.actions")}: ${this.#rowName(row)}`}
+                >${actions.map(
+                  (action) =>
+                    html`<wt-button
+                      align="start"
+                      variant="ghost"
+                      data-test=${`${action}-${row.nodeId}`}
+                      @click=${(event: Event) => this.#open(action, row, event)}
+                      >${t(ACTION_KEYS[action].verb)}</wt-button
+                    >`,
+                )}</wt-row-actions
+              >`;
+        },
       },
     ];
   }
 
-  #renderDialog(): TemplateResult {
-    const target = this.target;
+  #renderDialog(action: Action): TemplateResult {
+    const target = this.target?.action === action ? this.target.row : null;
+    const keys = ACTION_KEYS[action];
     return html`<wt-dialog
-      data-test="remove-dialog"
-      heading=${t("servers.remove_title")}
+      data-test=${`${action}-dialog`}
+      heading=${t(keys.title)}
       .open=${target !== null}
-      .dismissible=${!this.removing}
-      @wt-close=${() => this.#closeRemove()}
+      .dismissible=${!this.busy}
+      @wt-close=${() => this.#close()}
     >
       ${
         target === null
           ? nothing
-          : html`<p class="target" data-test="remove-address">${this.#address(target)}</p>
-              <p class="machine" data-test="remove-machine">
+          : html`<p class="target" data-test=${`${action}-address`}>${this.#address(target)}</p>
+              <p class="machine" data-test=${`${action}-machine`}>
                 ${t("servers.machine")} <span class="machine-id">${this.#shortId(target)}</span>
               </p>
-              <p class="explanation">${t("servers.remove_explanation")}</p>`
-      }
-      ${
-        this.removeErrorKey === null
-          ? nothing
-          : html`<p class="error" role="alert">${codeMessage(this.removeErrorKey)}</p>`
+              <p class="explanation">${t(keys.explanation)}</p>
+              ${
+                this.actionErrorKey === null
+                  ? nothing
+                  : html`<p class="error" role="alert">${codeMessage(this.actionErrorKey)}</p>`
+              }`
       }
       <wt-form-actions slot="footer">
         <wt-button
           slot="cancel"
           variant="secondary"
-          data-test="cancel-remove"
-          ?disabled=${this.removing}
-          @click=${() => this.#closeRemove()}
+          data-test=${`cancel-${action}`}
+          ?disabled=${this.busy}
+          @click=${() => this.#close()}
           >${t("action.cancel")}</wt-button
         >
         <wt-button
           variant="danger"
-          data-test="confirm-remove"
-          .loading=${this.removing}
-          @click=${() => void this.#confirmRemove()}
-          >${t("servers.remove")}</wt-button
+          data-test=${`confirm-${action}`}
+          .loading=${this.busy && target !== null}
+          @click=${() => void this.#confirm()}
+          >${t(keys.verb)}</wt-button
         >
       </wt-form-actions>
     </wt-dialog>`;
@@ -312,7 +338,7 @@ export class ServersScreen extends LitElement {
         .emptyMessage=${t("servers.empty")}
         .errorMessage=${this.loadErrorKey === null ? "" : codeMessage(this.loadErrorKey)}
       ></wt-data-table>
-      ${this.#renderDialog()}
+      ${this.#renderDialog("remove")} ${this.#renderDialog("clear")}
     `;
   }
 }

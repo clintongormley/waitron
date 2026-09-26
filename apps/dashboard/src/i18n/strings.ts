@@ -835,7 +835,7 @@ export const en = {
   "diagnostics.empty": "No log lines yet",
   "servers.title": "Servers",
   "servers.intro":
-    "Every machine on this venue's list of servers. A standby that never finished joining can be removed, so tills stop trying to reach it. To use that machine again, it has to join from scratch.",
+    "Every machine on this venue's list of servers. A standby that never finished joining can be removed, so tills stop trying to reach it. To use that machine again, it has to join from scratch. A removed machine can be cleared from the list to free its place.",
   "servers.server": "Server",
   "servers.actions": "Actions",
   "servers.loading": "Loading servers…",
@@ -843,7 +843,7 @@ export const en = {
   "servers.no_address": "No address",
   "servers.machine": "Machine",
   "servers.not_primary":
-    "Only the primary server can remove machines. Open this screen on the primary.",
+    "Only the primary server can remove machines or clear them from the list. Open this screen on the primary.",
   "servers.this_server": "This server",
   "servers.standing.primary": "Primary",
   "servers.standing.standby": "Standby",
@@ -852,7 +852,11 @@ export const en = {
   "servers.remove": "Remove",
   "servers.remove_title": "Remove this standby?",
   "servers.remove_explanation":
-    "It will be taken off the list of servers, so tills stop trying to reach it. This cannot be undone: to use that machine again, it has to join from scratch.",
+    "It will be marked removed on the list of servers, so tills stop trying to reach it. This cannot be undone: to use that machine again, it has to join from scratch.",
+  "servers.clear": "Clear from list",
+  "servers.clear_title": "Clear this removed machine from the list?",
+  "servers.clear_explanation":
+    "Clearing frees the place it takes on the list of servers. It stays shut out for good: if it tries to come back under its old identity, the primary refuses it, so to use that machine again it has to join from scratch. This cannot be undone.",
   "backup.title": "Backups",
   "backup.configuration.title": "Move your preparation to production",
   "backup.configuration.explanation":
@@ -2566,7 +2570,7 @@ export const es: Record<StringKey, string> = {
   "diagnostics.empty": "Aún no hay líneas de registro",
   "servers.title": "Servidores",
   "servers.intro":
-    "Todas las máquinas de la lista de servidores del local. Un servidor en espera que no terminó de unirse se puede retirar, para que las cajas dejen de intentar conectar con él. Para volver a usar esa máquina, tiene que unirse de nuevo desde el principio.",
+    "Todas las máquinas de la lista de servidores del local. Un servidor en espera que no terminó de unirse se puede retirar, para que las cajas dejen de intentar conectar con él. Para volver a usar esa máquina, tiene que unirse de nuevo desde el principio. Una máquina retirada se puede quitar de la lista para liberar su sitio.",
   "servers.server": "Servidor",
   "servers.actions": "Acciones",
   "servers.loading": "Cargando servidores…",
@@ -2574,7 +2578,7 @@ export const es: Record<StringKey, string> = {
   "servers.no_address": "Sin dirección",
   "servers.machine": "Máquina",
   "servers.not_primary":
-    "Solo el servidor principal puede retirar máquinas. Abre esta pantalla en el principal.",
+    "Solo el servidor principal puede retirar máquinas o quitarlas de la lista. Abre esta pantalla en el principal.",
   "servers.this_server": "Este servidor",
   "servers.standing.primary": "Principal",
   "servers.standing.standby": "En espera",
@@ -2583,7 +2587,11 @@ export const es: Record<StringKey, string> = {
   "servers.remove": "Retirar",
   "servers.remove_title": "¿Retirar este servidor en espera?",
   "servers.remove_explanation":
-    "Se quitará de la lista de servidores, para que las cajas dejen de intentar conectar con él. No se puede deshacer: para volver a usar esa máquina, tiene que unirse de nuevo desde el principio.",
+    "Se marcará como retirado en la lista de servidores, para que las cajas dejen de intentar conectar con él. No se puede deshacer: para volver a usar esa máquina, tiene que unirse de nuevo desde el principio.",
+  "servers.clear": "Quitar de la lista",
+  "servers.clear_title": "¿Quitar esta máquina retirada de la lista?",
+  "servers.clear_explanation":
+    "Quitarla libera el sitio que ocupa en la lista de servidores. La máquina sigue excluida para siempre: si intenta volver con su identidad anterior, el servidor principal la rechaza, así que para volver a usarla tiene que unirse de nuevo desde el principio. No se puede deshacer.",
   "backup.title": "Copias de seguridad",
   "backup.configuration.title": "Lleva tu preparación a producción",
   "backup.configuration.explanation":

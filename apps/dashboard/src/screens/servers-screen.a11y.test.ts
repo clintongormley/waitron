@@ -66,6 +66,20 @@ async function openRemove(el: ServersScreen, nodeId = STANDBY): Promise<void> {
   await flush(el);
 }
 
+const REMOVED = "44444444-4444-4444-8444-444444444444";
+
+// The server marks `canClear` only on a removed row, and only while this server is the primary.
+const clearable: ServerListing = {
+  term: 4,
+  nodes: listing.nodes.map((n) => ({ ...n, canClear: n.nodeId === REMOVED })),
+};
+
+async function openClear(el: ServersScreen): Promise<void> {
+  rowMenu(el, REMOVED).shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+  rowMenu(el, REMOVED).querySelector<HTMLElement>(`[data-test="clear-${REMOVED}"]`)!.click();
+  await flush(el);
+}
+
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("servers-screen a11y (%s theme)", (theme) => {
@@ -138,6 +152,36 @@ describe.each(["light", "dark"] as const)("servers-screen a11y (%s theme)", (the
     );
     await flush(el);
     await openRemove(el, blank);
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the clear confirmation for a removed machine accessibly", async () => {
+    const { el, host } = await mountWidget<ServersScreen>(
+      "dashboard-servers-screen",
+      { api: stubApi({ listServers: vi.fn().mockResolvedValue(clearable) }) },
+      theme,
+    );
+    await flush(el);
+    await openClear(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders a refused clearing inside the confirmation accessibly", async () => {
+    const { el, host } = await mountWidget<ServersScreen>(
+      "dashboard-servers-screen",
+      {
+        api: stubApi({
+          listServers: vi.fn().mockResolvedValue(clearable),
+          clearServer: vi.fn().mockRejectedValue({ code: "membership.node_not_removed" }),
+        }),
+      },
+      theme,
+    );
+    await flush(el);
+    await openClear(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-clear]")!.click();
+    await flush(el);
+    await flush(el);
     await expectNoA11yViolations(host);
   });
 
