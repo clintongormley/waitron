@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   PERMISSIONS,
   type Permission,
+  type PersonRoleValue,
   permissionsForRole,
   registerModulePermissions,
+  roleAtLeast,
   roleHasPermission,
 } from "./permissions.js";
 
@@ -172,4 +174,33 @@ it("grants print.resend separately to manager and admin", () => {
   expect(roleHasPermission("admin", "print.resend")).toBe(true);
   expect(roleHasPermission("staff", "print.resend")).toBe(false);
   expect(roleHasPermission("supervisor", "print.resend")).toBe(false);
+});
+
+describe("roleAtLeast", () => {
+  it("holds for a role above its floor", () => {
+    expect(roleAtLeast("manager", "supervisor")).toBe(true);
+  });
+  it("fails for a role below its floor", () => {
+    expect(roleAtLeast("staff", "supervisor")).toBe(false);
+  });
+  it("holds for a role equal to its floor", () => {
+    expect(roleAtLeast("supervisor", "supervisor")).toBe(true);
+  });
+  it("orders every pair of roles by the ladder, staff lowest and admin highest", () => {
+    const ladder = ["staff", "supervisor", "manager", "admin"] as const;
+    for (const [i, role] of ladder.entries()) {
+      for (const [j, floor] of ladder.entries()) {
+        expect(roleAtLeast(role, floor), `${role} >= ${floor}`).toBe(i >= j);
+      }
+    }
+  });
+  it("fails for a role the ladder does not know, even against the lowest floor", () => {
+    expect(roleAtLeast("owner" as PersonRoleValue, "staff")).toBe(false);
+  });
+  it("fails against a floor the ladder does not know, even for the highest role", () => {
+    expect(roleAtLeast("admin", "owner" as PersonRoleValue)).toBe(false);
+  });
+  it("fails when neither the role nor the floor is on the ladder", () => {
+    expect(roleAtLeast("owner" as PersonRoleValue, "guest" as PersonRoleValue)).toBe(false);
+  });
 });

@@ -85,5 +85,11 @@
     "table": "__drizzle_migrations_bookings",
     "from": "../bookings/drizzle",
     "appendOnlyTables": []
+  },
+  {
+    "name": "adjustments",
+    "table": "__drizzle_migrations_adjustments",
+    "from": "../adjustments/drizzle",
+    "appendOnlyTables": []
   }
 ]

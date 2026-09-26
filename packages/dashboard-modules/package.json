@@ -12,6 +12,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@waitron/adjustments": "workspace:*",
     "@waitron/bookings": "workspace:*",
     "@waitron/dashboard-kit": "workspace:*",
     "@waitron/payments-stripe": "workspace:*",

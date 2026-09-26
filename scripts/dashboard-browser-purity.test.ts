@@ -21,6 +21,7 @@ const FORBIDDEN = ["@waitron/db", "hono", "pg", "drizzle-orm", "node:"];
 const SERVER_ENTRIES = ['from "../index.js"', 'from "../bookings.js"'];
 const SUBPATHS: Array<[string, string]> = [
   ["@waitron/bookings", "packages/bookings/src/dashboard"],
+  ["@waitron/adjustments", "packages/adjustments/src/dashboard"],
 ];
 
 function tsFiles(dir: string): string[] {

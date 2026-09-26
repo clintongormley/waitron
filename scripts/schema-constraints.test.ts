@@ -212,6 +212,7 @@ const EXPECTED_FOREIGN_KEYS = [
 
 /** Every unique index that is not a primary key, by the name its declaration gives it. */
 const EXPECTED_UNIQUE_INDEXES = [
+  "adjustment_reasons_active_name_key",
   "canvases_tenant_name_key",
   "card_readers_provider_ref_key",
   "convenio_config_location_uq",
@@ -292,6 +293,11 @@ const EXPECTED_UNIQUE_INDEXES = [
 const EXPECTED_CHECK_CONSTRAINTS = [
   "absences_range_ck",
   "acks_state_ck",
+  "adjustment_reasons_actions_ck",
+  "adjustment_reasons_max_amount_ck",
+  "adjustment_reasons_max_percent_ck",
+  "adjustment_reasons_name_ck",
+  "adjustment_reasons_position_ck",
   "availability_effective_ck",
   "availability_from_minute_ck",
   "availability_to_minute_ck",

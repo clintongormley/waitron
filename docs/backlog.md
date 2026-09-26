@@ -2280,6 +2280,34 @@ address that answers is then asked for its paper sizes on port 631.
     durable-attempt rule.
   - **Task 1** (adjustment reasons and policies, a new module) is the one build task that can start
     now.
+  - **A keydown guard that cancels Escape while a save runs did not keep one dialog open.** Measured
+    on Task 1's reasons screen (`packages/adjustments/src/dashboard/reasons-screen.ts`): a real
+    Escape pressed with Vitest's `userEvent` during a save closed the editor, although the screen's
+    keydown handler called `preventDefault()` and `stopPropagation()` on Escape while busy. The name
+    field was focused before the save and is disabled during it, so where focus was when the key
+    arrived was not recorded. That screen's `wt-close` handler closed the editor without checking
+    whether a save was running. It now sets `wt-modal`'s `dismissible` to false while busy instead.
+    The same keydown guard is on other dashboard forms. The tests of six of them press a real Escape
+    during a save and pass with the dialog still open: "keeps the editor open when Escape is pressed
+    during a save" (`apps/dashboard/src/widgets/category-form.test.ts`), "saves once and stays open
+    against Escape while a save is in flight" (`apps/dashboard/src/screens/labels-panel.test.ts`),
+    the three "keeps the … open against Escape" cases in
+    `apps/dashboard/src/screens/categories-screen.test.ts`, "holds the draft open and unchanged
+    while a save is in flight" (`apps/dashboard/src/widgets/content-languages.test.ts`), "ignores
+    Escape while a save is in flight and honours it once the save has settled"
+    (`packages/media/src/dashboard/image-library.test.ts`) and "stays open on Escape while a save is
+    still pending" (`packages/venue-service/src/dashboard/venue-operations-screen.test.ts`). The
+    first five forms' `wt-close` handlers also ignore a close while busy, so their tests do not show
+    the keydown guard holding on its own. The venue operations screen's `wt-close` handler has no
+    such check and the screen does not set `dismissible`; its test focuses the dialog's body, not a
+    field, before the key. The rest were tried only with a hand-built `KeyboardEvent` dispatched on
+    the dialog (`sections-screen`, `modifiers-screen`, `add-to-menus`, `extra-list-form`,
+    `option-list-form`, `variant-form` and `menu-prices-table`, under `apps/dashboard/src`) or not
+    at all (`#guardEscape` in `apps/dashboard/src/screens/menus-screen.ts`). Why the reasons screen
+    behaved differently has not been established. **Next action:** repeat the reasons-screen case
+    recording which element has focus just before the Escape; then press a real Escape during a save
+    on each form tried only with a hand-built event or not at all, and move the ones that close to
+    `dismissible`.
   - **Every other task waits for lane C's menus tasks that change the same order and till code**
     (M7c, M7v, M9; M7b landed as #696, M7b2 as #702). Building beside them would collide on
     `apps/server/src/working-order.ts`, the till and the core migrations.
@@ -5103,7 +5131,7 @@ measured and did not settle.
   so a file nobody measured is displayed exactly like a file whose every mutant survived — the worst
   reading in the table given to the case that carries no reading at all.
 
-**Left behind by raising the `packages/ui` mutation score (#466, 2026-09-20).** Three edges the
+**Left behind by raising the `packages/ui` mutation score (#466, 2026-09-20).** Two edges the
 branch found, checked, and consciously did not take.
 
 - **A vacuous test in `packages/ui/src/components/wt-combobox.test.ts`.** "disabling an open panel
@@ -5118,12 +5146,6 @@ branch found, checked, and consciously did not take.
   already lists under `mutate` as exclusions. Adding a fourth exclusion is the consistent move and
   also shrinks the denominator the new `break: 90` is measured against, which is why #466 left it in
   and said so rather than quietly dropping it. Owner's call.
-- **`packages/media` and `packages/venue-service` register `parkPointerCommands` and never call
-  `commands.parkPointer()`.** So the pointer reset that `apps/dashboard`, `apps/till` and
-  `packages/ui`'s a11y suites use is available in both and wired to nothing — the latent
-  hover-leaks-into-the-next-test failure `docs/developers/testing-guide.md` documents applies to them
-  untouched. Either add the `beforeEach` to each package's shared test helper or drop the
-  registration.
 
 **Left behind by the Stryker upgrade (#447, 2026-09-19).** One open follow-up remains.
 
@@ -5266,19 +5288,20 @@ Five things it leaves open:
   `browser-compat-data` for `NDEFReader`) is twenty-two majors BELOW the new chrome111. A device
   that can do the NFC tap path is not thereby a device this bundle runs on. What is missing is
   anywhere that states a browser floor, so the next bump moves it again silently.
-- **The four manifests declare `^8.0.0` while the lockfile installs 8.3.0**, which is the same
+- **The manifests that declare vite declare `^8.0.0` while the lockfile installs 8.3.0**, which is the same
   low-floor shape they carried at `^6.0.0`. Whether low floors are house style is the open question
   the dependency refresh left above (#432 raised five of them to the installed version); this bump
   deliberately did not answer it, because changing the shape is the owner's call and not a version
   bump's. Decide it once, for all of them.
-- **Only four packages declare vite; the other five browser-mode packages follow by deduplication,
-  not by a declaration.** `packages/bookings`, `packages/media`, `packages/payments-stripe`,
-  `packages/payments-sumup` and `packages/venue-service` run tests in a browser but never invoke the
-  `vite` binary, so they correctly declare no vite. They moved to 8.3.0 because vitest declares vite
-  as a REQUIRED peer spanning three majors (`^6.0.0 || ^7.0.0 || ^8.0.0`, and absent from
-  `peerDependenciesMeta`), the four bumped manifests are the only thing choosing a vite in the tree,
-  and pnpm deduped onto it. Nothing pins the five. If a future change ever puts a second vite in the
-  tree, they could land on a different one silently.
+- **The browser-mode packages that declare no vite follow the others' by deduplication, not by a
+  declaration.** `packages/adjustments`, `packages/bookings`, `packages/media`,
+  `packages/payments-stripe`, `packages/payments-sumup` and `packages/venue-service` run tests in a
+  browser but never invoke the `vite` binary, so they correctly declare no vite. They resolve 8.3.0
+  because vitest declares vite as a REQUIRED peer spanning three majors
+  (`^6.0.0 || ^7.0.0 || ^8.0.0`, and absent from `peerDependenciesMeta`), the manifests that do
+  declare vite are the only thing choosing one in the tree, and pnpm deduped onto it. Nothing pins
+  the packages without a declaration. If a future change ever puts a second vite in the tree, they
+  could land on a different one silently.
 - **A dependency-optimizer receipt taken on vite 6 was not re-measured.**
   `apps/dashboard/vitest.config.ts`, `apps/setup/vitest.config.ts`, `apps/till/vitest.config.ts` and
   `packages/ui/vitest.config.ts` each carry an `optimizeDeps.include` list. Only `apps/setup`'s

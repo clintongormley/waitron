@@ -1,3 +1,11 @@
+import {
+  ADJUSTMENTS_CHANGE_SOURCES,
+  ADJUSTMENTS_CLASSIFICATION,
+  ADJUSTMENTS_CONFIGURATION_TRANSFER,
+  ADJUSTMENTS_MIGRATIONS,
+  ADJUSTMENTS_PERMISSIONS,
+  ADJUSTMENTS_ROUTES,
+} from "@waitron/adjustments";
 import { BOOKINGS_MIGRATIONS } from "@waitron/bookings";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CREDENTIALS_MIGRATIONS } from "@waitron/credentials";
@@ -60,6 +68,7 @@ describe("the migration manifest", () => {
       scheduler: SCHEDULER_MIGRATIONS.migrationsTable,
       credentials: CREDENTIALS_MIGRATIONS.migrationsTable,
       bookings: BOOKINGS_MIGRATIONS.migrationsTable,
+      adjustments: ADJUSTMENTS_MIGRATIONS.migrationsTable,
     });
   });
 });
@@ -152,6 +161,16 @@ describe("ALL_MODULES provisioning and fiscal seats", () => {
     expect(venueService?.provisioning).toBe(VENUE_SERVICE_PROVISIONING);
     expect(venueService?.routes).toBe(VENUE_SERVICE_ROUTES);
     expect(venueService?.permissions).toBe(VENUE_SERVICE_PERMISSIONS);
+  });
+
+  it("adjustments is mandatory and declares its tables, route, permission and transfer seats", () => {
+    const adjustments = ALL_MODULES.find((module) => module.name === "adjustments");
+    expect(adjustments?.tier).toBe("mandatory");
+    expect(adjustments?.classification).toBe(ADJUSTMENTS_CLASSIFICATION);
+    expect(adjustments?.changes).toBe(ADJUSTMENTS_CHANGE_SOURCES);
+    expect(adjustments?.routes).toBe(ADJUSTMENTS_ROUTES);
+    expect(adjustments?.permissions).toBe(ADJUSTMENTS_PERMISSIONS);
+    expect(adjustments?.configurationTransfer).toBe(ADJUSTMENTS_CONFIGURATION_TRANSFER);
   });
 
   it("fiscal declares its provisioning contribution and fills the fiscal slot, by reference", () => {

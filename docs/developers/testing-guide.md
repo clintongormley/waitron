@@ -216,8 +216,8 @@ set and only then falls back to the outer config's (`dist/chunks/cli-api.CnMVyza
 separately on a scratch fixture of four test files: an outer limit of 4 together with a project limit
 of 1 gave peak concurrency 1 across four distinct worker processes, and the same fixture without the
 project limit peaked at 4. Configs here depend on the project value winning — `packages/bookings`,
-`packages/payments-stripe`, `packages/payments-sumup` and `packages/venue-service` each set
-`maxWorkers: 1` inside a project.
+`packages/payments-stripe`, `packages/payments-sumup`, `packages/venue-service` and
+`packages/adjustments` each set `maxWorkers: 1` inside a project.
 
 This section came from Vitest 3, where moving `maxForks: 4`
 inside fiscal-verifactu's project in #286 started 17 workers on the local host, observed during a
@@ -815,14 +815,13 @@ has one too, but only in `packages/ui/src/a11y-helpers.ts` — so the `*.a11y.te
 the behavioural suites, which import `packages/ui/src/test-helpers.ts` instead, do not. Two of
 `packages/ui-core/src/components/wt-button.test.ts`'s hover tests end with the cursor still on the button,
 and those suites drive the real cursor a lot, so the same latent failure lives there, unpaid for so
-far. `packages/media` and `packages/venue-service` register `parkPointerCommands` in their vitest
-configs and DO get the reset, through `packages/ui`: their a11y suites
-(`packages/media/src/dashboard/image-library.a11y.test.ts` and
+far. `packages/adjustments`, `packages/media` and `packages/venue-service` register
+`parkPointerCommands` in their vitest configs and DO get the reset, through `packages/ui`: their
+a11y suites (`packages/adjustments/src/dashboard/reasons-screen.a11y.test.ts`,
+`packages/media/src/dashboard/image-library.a11y.test.ts` and
 `packages/venue-service/src/dashboard/venue-operations-screen.a11y.test.ts`) import
 `packages/ui/src/a11y-helpers.ts`, whose line 22 is `beforeEach(() => commands.parkPointer())`.
-Both vitest configs say so in a comment beside the registration. An earlier version of this
-paragraph said neither ever called it — that was wrong when it was written, and has nothing to do
-with the storage switch.
+Each of those packages' vitest configs says so in a comment beside the registration.
 
 ## Dispatch events when testing a `composedPath()` guard.
 

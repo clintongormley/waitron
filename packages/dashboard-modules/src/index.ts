@@ -1,6 +1,7 @@
 import { MEDIA_DASHBOARD } from "@waitron/media/dashboard";
 import { BOOKINGS_DASHBOARD } from "@waitron/bookings/dashboard";
 import { VENUE_SERVICE_DASHBOARD } from "@waitron/venue-service/dashboard";
+import { ADJUSTMENTS_DASHBOARD } from "@waitron/adjustments/dashboard";
 import type { DashboardContribution } from "@waitron/dashboard-kit";
 
 // The dashboard's module registry: every module that contributes a dashboard screen names itself here,
@@ -11,6 +12,7 @@ export const DASHBOARD_MODULES: readonly DashboardContribution[] = [
   MEDIA_DASHBOARD,
   BOOKINGS_DASHBOARD,
   VENUE_SERVICE_DASHBOARD,
+  ADJUSTMENTS_DASHBOARD,
 ];
 
 export { CARD_PROVIDER_PANELS } from "./card-providers.js";

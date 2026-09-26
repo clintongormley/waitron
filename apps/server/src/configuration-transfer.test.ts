@@ -46,8 +46,13 @@ import { categoryDetails, labels, productLabels } from "@waitron/catalogue";
 import { availability, employments, shiftTemplates } from "@waitron/workforce";
 import { convenioConfig } from "@waitron/workforce-es";
 import { bookings } from "@waitron/bookings";
+import {
+  createAdjustmentReason,
+  deactivateAdjustmentReason,
+  listAdjustmentReasons,
+} from "@waitron/adjustments";
 import { payments } from "@waitron/payments";
-import { nodeId, seriesId, tillId } from "@waitron/shared";
+import { decimal, nodeId, seriesId, tillId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import { systemClock } from "./till-backend.js";
@@ -909,4 +914,48 @@ it("leaves publication behind, so an imported venue's menus arrive unpublished",
     // The working menu came across whole, so publishing it on the new venue has something to show.
     expect((await readMenuStructure(tx, menu!.id)).nodes).toHaveLength(1);
   });
+});
+
+it("transfers the adjustment reasons, inactive ones included, with their limits and order", async () => {
+  const source = await applyVenue(planVenue(venue("B55667788"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const prepared = await withTransaction(suite.db, async (tx) => {
+    const policy = {
+      names: { en: "Complaint", es: "Queja" },
+      actions: ["comp", "discount_percent"] as ("comp" | "discount_percent")[],
+      maxPercentBp: 5000,
+      maxAmount: decimal("30.00"),
+      applyRole: "supervisor" as const,
+      approverRole: "manager" as const,
+      noteRequired: true,
+    };
+    await createAdjustmentReason(tx, { ...policy, name: "Complaint" });
+    const retired = await createAdjustmentReason(tx, { ...policy, name: "Retired" });
+    await deactivateAdjustmentReason(tx, retired.id);
+    return listAdjustmentReasons(tx, { includeInactive: true });
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-09-26T12:00:00Z"),
+    versions,
+  );
+  expect(transferred.tables.adjustment_reasons).toHaveLength(2);
+  await applyVenue(planVenue(venue("B88776655"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const imported = await withTransaction(targetSuite.db, (tx) =>
+    listAdjustmentReasons(tx, { includeInactive: true }),
+  );
+  // The import gives each row a new id, so ids are left out of the comparison.
+  const withoutId = (reasons: typeof imported) =>
+    reasons.map((reason) => ({ ...reason, id: undefined }));
+  expect(withoutId(imported)).toEqual(withoutId(prepared));
 });

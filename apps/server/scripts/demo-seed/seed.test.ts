@@ -13,6 +13,7 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalogue";
+import { listAdjustmentReasons } from "@waitron/adjustments";
 import { seedDemoRestaurant } from "./seed.js";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
@@ -107,7 +108,7 @@ describe("seedDemoRestaurant", () => {
     expect(after).toEqual({ ...before, sales: 0 });
   });
 
-  it("runs every sub-seed: both menus, the floor, the staff, a sale, and content-addressed media", async () => {
+  it("runs every sub-seed: both menus, the floor, the staff, the adjustment reasons, a sale, and content-addressed media", async () => {
     const venue = await provisionVenue();
 
     await seedDemoRestaurant(suite.db, { venue, locale: LOCALE, salesDays: 7 });
@@ -334,6 +335,17 @@ describe("seedDemoRestaurant", () => {
     expect(read.tables).toBeGreaterThanOrEqual(16);
 
     expect(read.staff).toBeGreaterThanOrEqual(5);
+
+    const reasons = await withTransaction(suite.db, (tx) => listAdjustmentReasons(tx));
+    expect(reasons.map((reason) => reason.name)).toEqual([
+      "Entry error",
+      "Changed mind",
+      "Unavailable item",
+      "Complaint",
+      "Friends and family",
+      "Employee discount",
+      "Manager special",
+    ]);
 
     expect(read.sales).toBeGreaterThanOrEqual(1);
 

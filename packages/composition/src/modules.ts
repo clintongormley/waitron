@@ -1,4 +1,11 @@
 import { MEDIA_MODULE } from "@waitron/media";
+import {
+  ADJUSTMENTS_CHANGE_SOURCES,
+  ADJUSTMENTS_CLASSIFICATION,
+  ADJUSTMENTS_CONFIGURATION_TRANSFER,
+  ADJUSTMENTS_PERMISSIONS,
+  ADJUSTMENTS_ROUTES,
+} from "@waitron/adjustments";
 import { CREDENTIALS_CLASSIFICATION } from "@waitron/credentials";
 import {
   CATALOGUE_CLASSIFICATION,
@@ -255,5 +262,21 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     permissions: BOOKINGS_PERMISSIONS,
     floorAnnotations: BOOKINGS_FLOOR_ANNOTATIONS,
     configurationTransfer: { kind: "none" },
+  },
+  {
+    name: "adjustments",
+    version: "0.0.0",
+    tier: "mandatory",
+    requires: { core: "*" },
+    migrations: {
+      name: "adjustments",
+      table: "__drizzle_migrations_adjustments",
+      from: "../adjustments/drizzle",
+    },
+    classification: ADJUSTMENTS_CLASSIFICATION,
+    changes: ADJUSTMENTS_CHANGE_SOURCES,
+    routes: ADJUSTMENTS_ROUTES,
+    permissions: ADJUSTMENTS_PERMISSIONS,
+    configurationTransfer: ADJUSTMENTS_CONFIGURATION_TRANSFER,
   },
 ];

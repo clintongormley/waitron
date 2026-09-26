@@ -17,6 +17,11 @@ describe("DASHBOARD_MODULES honesty", () => {
   it("registers the bookings contribution (not vacuous)", () => {
     expect(DASHBOARD_MODULES.map((c) => c.module)).toContain("bookings");
   });
+
+  it("registers the adjustment reasons screen for managers of adjustments", () => {
+    const adjustments = DASHBOARD_MODULES.find((c) => c.module === "adjustments");
+    expect(adjustments?.screen.requiresPermission).toBe("adjustment.manage");
+  });
 });
 
 describe("CARD_PROVIDER_PANELS honesty", () => {
