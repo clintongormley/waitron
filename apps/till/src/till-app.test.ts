@@ -3624,8 +3624,13 @@ describe("till-app", () => {
         unitPriceGross: "1.50",
         servedAt: null,
         courseId: null,
+        sentAt: "2026-08-17T09:59:00.000Z",
         firedAt: "2026-08-17T09:59:00.000Z",
         state: "queued",
+        note: null,
+        listId: null,
+        menuItemId: null,
+        parentProductId: null,
       };
       it("loads the tab's lines and threads them (with the catalogue) to the screen", async () => {
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });

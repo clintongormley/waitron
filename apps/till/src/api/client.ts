@@ -989,6 +989,9 @@ export interface TabResult {
 export interface TabLines {
   lines: TabLine[];
   revision: number;
+  /** The venue's setting: when false the server refuses to change or recall a line already sent to
+   * a station (`ticket.already_fired`), and a void still works. */
+  editSentLines: boolean;
 }
 
 /**
@@ -1020,12 +1023,25 @@ export interface TabLine {
   servedAt: string | null;
   /** The line's RESOLVED kitchen course, or null when it has none. */
   courseId: string | null;
+  /** When the line was first sent to a station, or null if it never was. A recall clears `firedAt`
+   * and keeps this. */
+  sentAt: string | null;
   /** When the line's kitchen ticket item FIRED, or null while its course is still HELD. */
   firedAt: string | null;
   /** The line's kitchen ticket item state, or null when it has no LIVE ticket item. A child modifier
    * line never has one; a parent line can lack one too, so null is not impossible for a parent. A
    * RECALLABLE line has `firedAt` set and `state === "queued"`; "preparing"/"ready" is cancel-only. */
   state: TicketState | null;
+  note: string | null;
+  /** The extras list a CHILD row was picked from, which a prefilled pick goes back to; null on a
+   * dish. */
+  listId: string | null;
+  /** The offer the line was sold under (a child row's is its dish's), which finds the live product
+   * whose picker an edit opens; null on a line with no recorded service context. */
+  menuItemId: string | null;
+  /** On a dish sold as a variant, {@link productId} names the variant and this its parent product;
+   * otherwise null. */
+  parentProductId: string | null;
 }
 
 /**

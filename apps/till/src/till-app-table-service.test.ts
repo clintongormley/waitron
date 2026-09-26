@@ -62,8 +62,13 @@ const tabLine: TabLine = {
   unitPriceGross: "1.50",
   servedAt: null,
   courseId: null,
+  sentAt: "2026-08-17T09:59:00.000Z",
   firedAt: "2026-08-17T09:59:00.000Z",
   state: "queued",
+  note: null,
+  listId: null,
+  menuItemId: null,
+  parentProductId: null,
 };
 
 const saleResult: TillSaleResult = {

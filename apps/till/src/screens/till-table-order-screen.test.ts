@@ -48,8 +48,13 @@ const pendingLine: TabLine = {
   unitPriceGross: "1.50",
   servedAt: null,
   courseId: null,
+  sentAt: "2026-08-20T09:59:00.000Z",
   firedAt: "2026-08-20T09:59:00.000Z",
   state: "queued",
+  note: null,
+  listId: null,
+  menuItemId: null,
+  parentProductId: null,
 };
 const servedLine: TabLine = {
   lineNo: 2,
@@ -59,8 +64,13 @@ const servedLine: TabLine = {
   unitPriceGross: "1.50",
   servedAt: "2026-08-20T10:00:00.000Z",
   courseId: null,
+  sentAt: "2026-08-20T09:59:00.000Z",
   firedAt: "2026-08-20T09:59:00.000Z",
   state: "queued",
+  note: null,
+  listId: null,
+  menuItemId: null,
+  parentProductId: null,
 };
 
 const reserved: TableServiceStatus = { id: "s1", label: "Reservada", color: "#cc0000" };
@@ -576,8 +586,13 @@ describe("till-table-order-screen", () => {
     unitPriceGross: "1.50",
     servedAt: null,
     courseId: "postres",
+    sentAt: null,
     firedAt: null,
     state: "queued",
+    note: null,
+    listId: null,
+    menuItemId: null,
+    parentProductId: null,
   };
 
   it("shows a Fire <course> action per HELD course under fire_control='waiter' and emits fire-course", async () => {
@@ -703,8 +718,13 @@ describe("till-table-order-screen", () => {
       unitPriceGross: "0.50",
       servedAt: null,
       courseId: null,
+      sentAt: null,
       firedAt: null,
       state: null,
+      note: null,
+      listId: null,
+      menuItemId: null,
+      parentProductId: null,
     };
 
     it("renders NO per-line action and NO course picker on a child extras line", async () => {

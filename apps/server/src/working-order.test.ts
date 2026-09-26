@@ -560,6 +560,36 @@ describe("a sold line naming a variant is labelled by the variant's own name", (
       { [LOCALE]: "Large cup" },
     ]);
   });
+
+  it("names the variant's parent product and the offer on the tab line, as the retrieve screen maps them", async () => {
+    const { cfg, zoneId, catalogueId } = await setupVenue();
+    const orderId = randomUUID();
+    const { seeded, tabLines } = await withTransaction(db, async (tx) => {
+      const seeded = await seedVariantOffer(tx, catalogueId);
+      await createOpenOrder(
+        tx,
+        cfg,
+        orderId,
+        [{ menuItemId: seeded.offerId, variantId: seeded.variantId, quantity: "1" }],
+        null,
+        { zoneId },
+      );
+      return { seeded, tabLines: await readTabLines(tx, cfg, orderId) };
+    });
+    const held = await getHeldOrder({ db }, cfg, orderId);
+
+    expect(tabLines).toHaveLength(1);
+    expect(tabLines[0]).toMatchObject({
+      productId: seeded.variantId,
+      parentProductId: seeded.productId,
+      menuItemId: seeded.offerId,
+    });
+    expect(held.lines[0]).toMatchObject({
+      productId: tabLines[0]!.parentProductId,
+      variantId: tabLines[0]!.productId,
+      menuItemId: tabLines[0]!.menuItemId,
+    });
+  });
 });
 
 describe("parkOrder", () => {

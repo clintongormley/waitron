@@ -32,8 +32,13 @@ const lines: TabLine[] = [
     // still means the round-send already inserted its ticket item (fireLines does this for every parent
     // line, fired or held), so `state` is the fresh-insert "queued", not null.
     courseId: "c1",
+    sentAt: null,
     firedAt: null,
     state: "queued",
+    note: null,
+    listId: null,
+    menuItemId: null,
+    parentProductId: null,
   },
   {
     lineNo: 2,
@@ -43,8 +48,13 @@ const lines: TabLine[] = [
     unitPriceGross: "1.50",
     servedAt: "2026-08-20T10:00:00.000Z",
     courseId: "c1",
+    sentAt: null,
     firedAt: null,
     state: "queued",
+    note: null,
+    listId: null,
+    menuItemId: null,
+    parentProductId: null,
   },
 ];
 
@@ -99,8 +109,13 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       unitPriceGross: "0.50",
       servedAt: null,
       courseId: null,
+      sentAt: null,
       firedAt: null,
       state: null,
+      note: null,
+      listId: null,
+      menuItemId: null,
+      parentProductId: null,
     };
     const { el, host } = await mountWidget<TillTableOrderScreen>(
       "till-table-order-screen",

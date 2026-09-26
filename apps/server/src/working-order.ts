@@ -1981,11 +1981,22 @@ export interface TabLine {
   unitPriceGross: string;
   servedAt: string | null;
   courseId: string | null;
+  /** When the line was first sent to a station. A recall clears `firedAt` and keeps this. */
+  sentAt: string | null;
   /** Null when the line is HELD or has no ticket item at all, which a parent line can lack too:
    * `openTab` inserts its initial lines without firing them. */
   firedAt: string | null;
   /** Null when the line has no ticket item (always, on a child). */
   state: TicketState | null;
+  note: string | null;
+  /** The extras list a CHILD row was picked from; null on a dish. */
+  listId: string | null;
+  /** The offer the line was sold under (a child row's is its dish's); null on a line with no
+   * recorded service context. */
+  menuItemId: string | null;
+  /** On a dish sold as a variant, `productId` names the variant and this its parent product;
+   * otherwise null. */
+  parentProductId: string | null;
 }
 
 /** Read an open tab's lines in line-number order, at their stored prices: no re-price. */
@@ -2010,29 +2021,63 @@ export async function readTabLines(
       unitPriceGross: workingOrderLines.unitPriceGross,
       servedAt: workingOrderLines.servedAt,
       courseId: workingOrderLines.courseId,
+      sentAt: workingOrderLines.sentAt,
       firedAt: ticketItems.firedAt,
       state: ticketItems.state,
+      note: workingOrderLines.note,
+      listId: workingOrderLines.extraListId,
+      productParentId: products.parentId,
     })
     .from(workingOrderLines)
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .leftJoin(products, eq(products.id, workingOrderLines.productId))
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
+  const menuItemByLine = new Map(
+    (await VENUE_SERVICE.listLineContexts(tx, cfg, tabId)).map((context) => [
+      context.workingOrderLineId,
+      context.menuItemId,
+    ]),
+  );
   // The stored `line_no` is what this read returns, so, unlike `readLockedLines`, no renumbering.
   const lineNoById = new Map(rows.map((row) => [row.id, row.lineNo]));
-  return rows.map((row) => ({
-    lineNo: row.lineNo,
-    name: staffPresentationName({ name: row.name, variantName: row.variantName }),
-    optionSnapshots: row.optionSnapshots,
-    productId: row.productId,
-    parentLineNo: row.parentLineId === null ? null : (lineNoById.get(row.parentLineId) ?? null),
-    quantity: thousandthsToDecimal(row.quantity),
-    unitPrecision: row.unitPrecision,
-    unitPriceGross: centsToDecimal(row.unitPriceGross),
-    servedAt: row.servedAt,
-    courseId: row.courseId,
-    firedAt: row.firedAt,
-    state: row.state,
-  }));
+  return rows.map((row) => {
+    const sold = soldProduct(row);
+    return {
+      lineNo: row.lineNo,
+      name: staffPresentationName({ name: row.name, variantName: row.variantName }),
+      optionSnapshots: row.optionSnapshots,
+      productId: row.productId,
+      parentLineNo: row.parentLineId === null ? null : (lineNoById.get(row.parentLineId) ?? null),
+      quantity: thousandthsToDecimal(row.quantity),
+      unitPrecision: row.unitPrecision,
+      unitPriceGross: centsToDecimal(row.unitPriceGross),
+      servedAt: row.servedAt,
+      courseId: row.courseId,
+      sentAt: row.sentAt,
+      firedAt: row.firedAt,
+      state: row.state,
+      note: row.note,
+      listId: row.listId,
+      menuItemId: menuItemByLine.get(row.id) ?? null,
+      parentProductId: sold.variantId === null ? null : sold.productId,
+    };
+  });
+}
+
+/**
+ * A dish sold as a variant stores the variant as its product; the dish the till rebuilds is the
+ * variant's parent, with the variant chosen on it. A child row's product is the pick itself and is
+ * kept as it is, a variant or not.
+ */
+function soldProduct(line: {
+  parentLineId: string | null;
+  productId: string | null;
+  productParentId: string | null;
+}): { productId: string | null; variantId: string | null } {
+  const variantId =
+    line.parentLineId === null && line.productParentId !== null ? line.productId : null;
+  return { productId: variantId === null ? line.productId : line.productParentId, variantId };
 }
 
 /** An order's revision: what a copy of it read now carries back to an edit. */
@@ -2752,9 +2797,7 @@ export async function getHeldOrder(
         parentLineId: workingOrderLines.parentLineId,
         extraListId: workingOrderLines.extraListId,
         note: workingOrderLines.note,
-        // A line sold as a variant names the variant as its product; the dish the till rebuilds is
-        // its parent, with the variant chosen on it, as the till built it at add time.
-        parentProductId: products.parentId,
+        productParentId: products.parentId,
         variantName: workingOrderLines.variantName,
         variantKitchenName: workingOrderLines.variantKitchenName,
         kitchenName: workingOrderLines.kitchenName,
@@ -2764,13 +2807,11 @@ export async function getHeldOrder(
       .leftJoin(products, eq(products.id, workingOrderLines.productId))
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
-    const lineRows = storedLines.map(({ parentProductId, ...line }) => {
-      // A child line's product is the pick itself, a variant or not, and is kept as it is.
-      const variantId =
-        line.parentLineId === null && parentProductId !== null ? line.productId : null;
+    const lineRows = storedLines.map(({ productParentId, ...line }) => {
+      const { productId, variantId } = soldProduct({ ...line, productParentId });
       return {
         ...line,
-        productId: variantId === null ? line.productId : parentProductId,
+        productId,
         variantId,
         quantity: thousandthsToDecimal(line.quantity),
         unitPriceGross: centsToDecimal(line.unitPriceGross),
