@@ -71,7 +71,7 @@ function mount(db: Database): Hono {
       },
       maxUploadBytes: 1000,
       core: {
-        openTab: async () => {
+        seatTable: async () => {
           throw new Error("unused");
         },
       },
