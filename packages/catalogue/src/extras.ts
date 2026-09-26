@@ -91,7 +91,6 @@ export async function listExtraLists(tx: Transaction): Promise<ExtraListRow[]> {
     .from(extraLists)
     .orderBy(extraLists.sort, extraLists.id);
   const withAll = await withItems(tx, lists);
-  // Awaited in turn, never Promise.all: they share one transaction (CLAUDE.md §3).
   const productCounts = await tx
     .select({
       listId: productModifiers.extraListId,

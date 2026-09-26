@@ -303,10 +303,11 @@ describe("option list CRUD", () => {
         });
         if (name !== "chips")
           await writeProductModifiers(tx, product.id, [{ kind: "options", id: carried.id }]);
-        // The steak is on two menus, so a count that reached the menus would read 3, not 2.
-        if (name === "steak")
-          for (const menu of [lunch, dinner])
-            await addProductToMenu(tx, { menuId: menu.id, productId: product.id });
+        // The steak is on two menus and the burger on one, so `count(*)` over the carrying rows
+        // joined to the menu offers of their products reads 3, not 2.
+        const menus = { steak: [lunch, dinner], burger: [lunch], chips: [] }[name]!;
+        for (const menu of menus)
+          await addProductToMenu(tx, { menuId: menu.id, productId: product.id });
       }
     });
 
