@@ -3,8 +3,9 @@ import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillTableOrderScreen, type TableServiceStatus } from "./till-table-order-screen.js";
 import { currentLocale, t } from "../i18n/t.js";
-import type { TabLine, TableState, TillProduct } from "../api/client.js";
+import type { OfferedModifier, TabLine, TableState, TillProduct } from "../api/client.js";
 import type { TillProductGrid } from "../widgets/product-grid.js";
+import type { TillModifierPicker } from "../widgets/modifier-picker.js";
 import type { TillTenderPay } from "../widgets/tender-pay.js";
 
 const cafe: TillProduct = {
@@ -48,8 +49,13 @@ const pendingLine: TabLine = {
   unitPriceGross: "1.50",
   servedAt: null,
   courseId: null,
+  sentAt: "2026-08-20T09:59:00.000Z",
   firedAt: "2026-08-20T09:59:00.000Z",
   state: "queued",
+  note: null,
+  listId: null,
+  menuItemId: null,
+  parentProductId: null,
 };
 const servedLine: TabLine = {
   lineNo: 2,
@@ -59,8 +65,13 @@ const servedLine: TabLine = {
   unitPriceGross: "1.50",
   servedAt: "2026-08-20T10:00:00.000Z",
   courseId: null,
+  sentAt: "2026-08-20T09:59:00.000Z",
   firedAt: "2026-08-20T09:59:00.000Z",
   state: "queued",
+  note: null,
+  listId: null,
+  menuItemId: null,
+  parentProductId: null,
 };
 
 const reserved: TableServiceStatus = { id: "s1", label: "Reservada", color: "#cc0000" };
@@ -576,8 +587,13 @@ describe("till-table-order-screen", () => {
     unitPriceGross: "1.50",
     servedAt: null,
     courseId: "postres",
+    sentAt: null,
     firedAt: null,
     state: "queued",
+    note: null,
+    listId: null,
+    menuItemId: null,
+    parentProductId: null,
   };
 
   it("shows a Fire <course> action per HELD course under fire_control='waiter' and emits fire-course", async () => {
@@ -654,7 +670,7 @@ describe("till-table-order-screen", () => {
   });
 
   it("shows a FIRED tab line's course READ-ONLY, offering no editable picker", async () => {
-    // A fired line (firedAt set) is corrected via recall, not moved here.
+    // A fired line (firedAt set) is not moved here.
     const firedWithCourse: TabLine = { ...pendingLine, lineNo: 1, courseId: "postres" };
     const { el } = await mount({ lines: [firedWithCourse], courses });
     await openDrawer(el);
@@ -703,8 +719,13 @@ describe("till-table-order-screen", () => {
       unitPriceGross: "0.50",
       servedAt: null,
       courseId: null,
+      sentAt: null,
       firedAt: null,
       state: null,
+      note: null,
+      listId: null,
+      menuItemId: null,
+      parentProductId: null,
     };
 
     it("renders NO per-line action and NO course picker on a child extras line", async () => {
@@ -818,7 +839,8 @@ describe("till-table-order-screen", () => {
       const recall = el.shadowRoot!.querySelector<HTMLElement>('[data-recall-line="1"]');
       expect(recall).not.toBeNull();
       expect(el.shadowRoot!.querySelector('[data-send-line="1"]')).toBeNull();
-      expect(el.shadowRoot!.querySelector('[data-cancel-line="1"]')).toBeNull();
+      // Owner decision (menus plan Task 7c): a queued line is cancellable too, beside Recall.
+      expect(el.shadowRoot!.querySelector('[data-cancel-line="1"]')).not.toBeNull();
 
       let captured: CustomEvent | undefined;
       el.addEventListener("recall-lines", (e) => (captured = e as CustomEvent));
@@ -873,6 +895,627 @@ describe("till-table-order-screen", () => {
       // The confirm closed, so its buttons are gone from view.
       const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("wt-dialog");
       expect(dialog!.open).toBe(false);
+    });
+  });
+
+  describe("changing a sent line, and cancelling part of one (menus plan Task 7c)", () => {
+    const sent = "2026-08-20T09:59:00.000Z";
+    // Three different texts for the three names, so a surface reading the wrong one fails.
+    const burger: TillProduct = {
+      ...cafe,
+      id: "burger",
+      menuItemId: "menu-item-burger",
+      name: "Burger",
+      customerName: { es: "Hamburguesa de la casa" },
+      kitchenName: "BRG",
+      unitPrice: "9.50",
+      courseId: null,
+    };
+    const cookedList: OfferedModifier = {
+      kind: "options",
+      id: "list-cooked",
+      name: "Punto",
+      customerName: { es: "Punto carta" },
+      kitchenName: "Punto KDS",
+      defaultLabelId: "label-medium",
+      labels: [
+        {
+          id: "label-rare",
+          name: "Poco hecha",
+          customerName: { es: "Poco hecha carta" },
+          kitchenName: "Poco hecha KDS",
+          available: true,
+        },
+        {
+          id: "label-medium",
+          name: "Al punto",
+          customerName: { es: "Al punto carta" },
+          kitchenName: "Al punto KDS",
+          available: true,
+        },
+      ],
+    };
+    const extraItem = (productId: string, name: string, preselected: boolean) => ({
+      productId,
+      name,
+      customerName: { es: `${name} carta` },
+      kitchenName: `${name} KDS`,
+      price: "1.00",
+      vatClass: "general" as const,
+      maxQuantity: 3,
+      preselected,
+      addAllergens: null,
+      suitableFor: [],
+    });
+    const extrasList: OfferedModifier = {
+      kind: "extras",
+      id: "list-extras",
+      name: "Extras",
+      customerName: { es: "Extras carta" },
+      kitchenName: "Extras KDS",
+      minPicks: 0,
+      maxPicks: null,
+      // Bacon is preselected by the offer: a Change reopens the line's own answers and must not add it.
+      items: [extraItem("p-cheese", "Queso", false), extraItem("p-bacon", "Bacon", true)],
+    };
+    const burgerLine: TabLine = {
+      lineNo: 5,
+      name: "Burger",
+      productId: "burger",
+      quantity: "1.000",
+      unitPrecision: 0,
+      unitPriceGross: "9.50",
+      servedAt: null,
+      courseId: null,
+      sentAt: sent,
+      firedAt: sent,
+      state: "queued",
+      note: null,
+      listId: null,
+      menuItemId: "menu-item-burger",
+      parentProductId: null,
+    };
+    const recalledLine: TabLine = { ...burgerLine, lineNo: 6, firedAt: null };
+    const noRouteLine: TabLine = { ...burgerLine, lineNo: 7, firedAt: null, state: null };
+    const unreleasedNoRouteLine: TabLine = { ...noRouteLine, lineNo: 8, sentAt: null };
+    const preparingBurger: TabLine = { ...burgerLine, lineNo: 9, state: "preparing" };
+    const readyBurger: TabLine = { ...burgerLine, lineNo: 10, state: "ready" };
+    const cheeseChild: TabLine = {
+      ...burgerLine,
+      lineNo: 11,
+      name: "Queso",
+      productId: "p-cheese",
+      parentLineNo: 5,
+      unitPrecision: null,
+      unitPriceGross: "1.00",
+      firedAt: null,
+      state: null,
+      listId: "list-extras",
+    };
+    const neverSentLine: TabLine = { ...burgerLine, lineNo: 12, sentAt: null, firedAt: null };
+
+    const mountLines = (lines: TabLine[], over: Partial<TillTableOrderScreen> = {}) =>
+      mount({ products: [...products, burger], lines, ...over });
+    const lineAction = (el: TillTableOrderScreen, kind: string, lineNo: number) =>
+      el.shadowRoot!.querySelector<HTMLElement>(`[data-${kind}-line="${lineNo}"]`);
+    const editor = (el: TillTableOrderScreen) =>
+      el.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker");
+    const noteBox = (picker: TillModifierPicker) =>
+      picker.shadowRoot!.querySelector<HTMLTextAreaElement>('[data-test="line-note"]')!;
+    async function typeNote(picker: TillModifierPicker, text: string): Promise<void> {
+      const box = noteBox(picker);
+      box.value = text;
+      box.dispatchEvent(new Event("input"));
+      await picker.updateComplete;
+    }
+    async function openChange(el: TillTableOrderScreen, lineNo: number) {
+      lineAction(el, "change", lineNo)!.click();
+      await el.updateComplete;
+      const picker = editor(el)!;
+      await picker.updateComplete;
+      return picker;
+    }
+    function captureChange(el: TillTableOrderScreen): { event?: CustomEvent } {
+      const seen: { event?: CustomEvent } = {};
+      el.addEventListener("change-line", (e) => (seen.event = e as CustomEvent));
+      return seen;
+    }
+
+    it("offers Change beside Recall and Cancel on a queued line the kitchen has not started", async () => {
+      const { el } = await mountLines([burgerLine]);
+      await openDrawer(el);
+      expect(lineAction(el, "change", 5)).not.toBeNull();
+      expect(lineAction(el, "recall", 5)).not.toBeNull();
+      expect(lineAction(el, "cancel", 5)).not.toBeNull();
+      expect(lineAction(el, "change", 5)!.getAttribute("aria-label")).toBe(
+        `${t("table.change_line")} · Burger`,
+      );
+    });
+
+    it("offers Change on a recalled line and on a no-route line, whether or not it was released", async () => {
+      const { el } = await mountLines([recalledLine, noRouteLine, unreleasedNoRouteLine]);
+      await openDrawer(el);
+      expect(lineAction(el, "change", 6)).not.toBeNull();
+      // A recalled line is held again, so it can still be sent.
+      expect(lineAction(el, "send", 6)).not.toBeNull();
+      expect(lineAction(el, "change", 7)).not.toBeNull();
+      expect(lineAction(el, "change", 8)).not.toBeNull();
+    });
+
+    it("offers Cancel on a recalled line with the setting on, beside Send and Change", async () => {
+      const { el } = await mountLines([recalledLine]);
+      await openDrawer(el);
+      expect(lineAction(el, "cancel", 6)).not.toBeNull();
+      expect(lineAction(el, "send", 6)).not.toBeNull();
+      expect(lineAction(el, "change", 6)).not.toBeNull();
+    });
+
+    it("closes an open Change editor when the app points the screen at another order", async () => {
+      const { el } = await mountLines([burgerLine], { orderId: "wo-7" });
+      await openDrawer(el);
+      await openChange(el, 5);
+      el.orderId = "wo-9";
+      await el.updateComplete;
+      expect(editor(el)).toBeNull();
+    });
+
+    it("closes an open Cancel confirm when the app points the screen at another order", async () => {
+      const { el } = await mountLines([burgerLine], { orderId: "wo-7" });
+      await openDrawer(el);
+      lineAction(el, "cancel", 5)!.click();
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+        "wt-dialog.cancel-confirm",
+      )!;
+      expect(dialog.open).toBe(true);
+      el.orderId = "wo-9";
+      await el.updateComplete;
+      expect(dialog.open).toBe(false);
+    });
+
+    it("offers Cancel alone on a line the kitchen has started", async () => {
+      const { el } = await mountLines([preparingBurger, readyBurger]);
+      await openDrawer(el);
+      for (const lineNo of [9, 10]) {
+        expect(lineAction(el, "cancel", lineNo)).not.toBeNull();
+        expect(lineAction(el, "change", lineNo)).toBeNull();
+        expect(lineAction(el, "recall", lineNo)).toBeNull();
+      }
+    });
+
+    it("offers no Change on an extras row, nor on a held line that was never sent", async () => {
+      const { el } = await mountLines([burgerLine, cheeseChild, neverSentLine]);
+      await openDrawer(el);
+      expect(lineAction(el, "change", 11)).toBeNull();
+      expect(lineAction(el, "change", 12)).toBeNull();
+      expect(lineAction(el, "send", 12)).not.toBeNull();
+    });
+
+    it("offers no Change on a line whose product the till does not have", async () => {
+      const gone: TabLine = { ...burgerLine, productId: "gone", menuItemId: "menu-item-gone" };
+      const unnamed: TabLine = { ...burgerLine, lineNo: 6, productId: null, menuItemId: null };
+      const { el } = await mountLines([gone, unnamed]);
+      await openDrawer(el);
+      expect(lineAction(el, "change", 5)).toBeNull();
+      expect(lineAction(el, "recall", 5)).not.toBeNull();
+      expect(lineAction(el, "change", 6)).toBeNull();
+    });
+
+    it("with changes to sent items switched off, a sent line offers Cancel and neither Change nor Recall", async () => {
+      const { el } = await mountLines([burgerLine, recalledLine, noRouteLine, preparingBurger], {
+        editSentLines: false,
+      });
+      await openDrawer(el);
+      for (const lineNo of [5, 6, 9]) {
+        expect(lineAction(el, "change", lineNo)).toBeNull();
+        expect(lineAction(el, "recall", lineNo)).toBeNull();
+        expect(lineAction(el, "cancel", lineNo)).not.toBeNull();
+      }
+      // The server changes a no-route line whatever the setting, so it keeps Change.
+      expect(lineAction(el, "change", 7)).not.toBeNull();
+    });
+
+    it("opens the note editor on a dish with no choices; saving sends the note and the order's revision", async () => {
+      const { el } = await mountLines([burgerLine], { revision: 7 });
+      await openDrawer(el);
+      const picker = await openChange(el, 5);
+      expect(
+        picker.shadowRoot!.querySelector<HTMLElement & { heading: string }>("wt-modal")!.heading,
+      ).toBe("Burger");
+      expect(noteBox(picker).value).toBe("");
+      const seen = captureChange(el);
+
+      await typeNote(picker, "no onions");
+      picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+      await el.updateComplete;
+
+      expect(seen.event!.detail).toEqual({
+        lineNo: 5,
+        lineName: "Burger",
+        patch: { note: "no onions" },
+        revision: 7,
+      });
+      expect(seen.event!.bubbles).toBe(true);
+      expect(seen.event!.composed).toBe(true);
+      expect(editor(el)).toBeNull();
+    });
+
+    it("sends the revision the editor was opened at, not one read while it was open", async () => {
+      const { el } = await mountLines([burgerLine], { revision: 7 });
+      await openDrawer(el);
+      const picker = await openChange(el, 5);
+      el.revision = 8;
+      await el.updateComplete;
+      const seen = captureChange(el);
+      await typeNote(picker, "no onions");
+      picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+      expect(seen.event!.detail.revision).toBe(7);
+    });
+
+    it("prefills the line's note, answer and extras; saving unchanged sends the extras back and leaves the answer out", async () => {
+      const dish: TillProduct = { ...burger, offeredModifiers: [cookedList, extrasList] };
+      const line: TabLine = {
+        ...burgerLine,
+        quantity: "2.000",
+        note: "sin sal",
+        optionSnapshots: [
+          {
+            listName: { es: "Punto" },
+            listCustomerName: { es: "Punto carta" },
+            listKitchenName: "Punto KDS",
+            labelName: { es: "Poco hecha" },
+            labelCustomerName: { es: "Poco hecha carta" },
+            labelKitchenName: "Poco hecha KDS",
+          },
+        ],
+      };
+      // Two cheeses per burger on a line of two burgers.
+      const child: TabLine = { ...cheeseChild, quantity: "4.000" };
+      const { el } = await mount({ products: [dish], lines: [line, child], revision: 3 });
+      await openDrawer(el);
+      const picker = await openChange(el, 5);
+
+      expect(noteBox(picker).value).toBe("sin sal");
+      expect(
+        picker.shadowRoot!.querySelector<HTMLInputElement>("#label-list-cooked-label-rare")!
+          .checked,
+      ).toBe(true);
+      const count = (productId: string) =>
+        picker
+          .shadowRoot!.querySelector(`[data-test="pick-list-extras-${productId}-count"]`)!
+          .textContent!.trim();
+      expect(count("p-cheese")).toBe("2");
+      expect(count("p-bacon")).toBe("0");
+
+      const seen = captureChange(el);
+      picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+      expect(seen.event!.detail).toEqual({
+        lineNo: 5,
+        lineName: "Burger",
+        revision: 3,
+        patch: {
+          note: "sin sal",
+          extras: [{ listId: "list-extras", picks: [{ productId: "p-cheese", quantity: 2 }] }],
+        },
+      });
+    });
+
+    describe("a line holding an answer to a list the dish no longer offers", () => {
+      const snapshot = (list: string, label: string) => ({
+        listName: { es: list },
+        listCustomerName: { es: `${list} carta` },
+        listKitchenName: `${list} KDS`,
+        labelName: { es: label },
+        labelCustomerName: { es: `${label} carta` },
+        labelKitchenName: `${label} KDS`,
+      });
+      const line: TabLine = {
+        ...burgerLine,
+        optionSnapshots: [snapshot("Punto", "Poco hecha"), snapshot("Pan", "Sin gluten")],
+      };
+      const mountWithdrawn = () =>
+        mount({ products: [{ ...burger, offeredModifiers: [cookedList] }], lines: [line] });
+      const pickLabel = async (picker: TillModifierPicker, labelId: string) => {
+        picker
+          .shadowRoot!.querySelector<HTMLInputElement>(`#label-list-cooked-${labelId}`)!
+          .click();
+        await picker.updateComplete;
+      };
+
+      it("a note-only change leaves the line's answers out, so the server keeps both", async () => {
+        const { el } = await mountWithdrawn();
+        await openDrawer(el);
+        const picker = await openChange(el, 5);
+        await typeNote(picker, "sin sal");
+        const seen = captureChange(el);
+        picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+        expect(seen.event!.detail.patch).toEqual({ note: "sin sal" });
+      });
+
+      it("an answer changed and changed back is compared by value and left out", async () => {
+        const { el } = await mountWithdrawn();
+        await openDrawer(el);
+        const picker = await openChange(el, 5);
+        await pickLabel(picker, "label-medium");
+        await pickLabel(picker, "label-rare");
+        const seen = captureChange(el);
+        picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+        expect(seen.event!.detail.patch).toEqual({ note: null });
+      });
+
+      /** The server refuses an answer naming a list the dish no longer offers (`options.invalid`), so
+       * a deliberate change of answers replaces the set with the offered lists' answers alone. */
+      it("a changed answer sends the offered lists' answers, which replace the set", async () => {
+        const { el } = await mountWithdrawn();
+        await openDrawer(el);
+        const picker = await openChange(el, 5);
+        await pickLabel(picker, "label-medium");
+        const seen = captureChange(el);
+        picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+        expect(seen.event!.detail.patch).toEqual({
+          note: null,
+          options: [{ listId: "list-cooked", labelId: "label-medium" }],
+        });
+      });
+    });
+
+    it("keeps Save shut on a pick no offered list still carries, rather than dropping it", async () => {
+      const dish: TillProduct = { ...burger, offeredModifiers: [extrasList] };
+      const withdrawn: TabLine = { ...cheeseChild, listId: "list-withdrawn" };
+      const { el } = await mount({ products: [dish], lines: [burgerLine, withdrawn] });
+      await openDrawer(el);
+      const picker = await openChange(el, 5);
+      expect(picker.shadowRoot!.querySelector(".refusal")!.textContent).toContain("Queso");
+      expect(
+        picker.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(".confirm")!.disabled,
+      ).toBe(true);
+    });
+
+    it("leaves a line's extras alone when the dish offers no extras list", async () => {
+      const dish: TillProduct = { ...burger, offeredModifiers: [cookedList] };
+      const { el } = await mount({
+        products: [dish],
+        lines: [{ ...burgerLine, optionSnapshots: [] }, cheeseChild],
+        revision: 1,
+      });
+      await openDrawer(el);
+      const picker = await openChange(el, 5);
+      picker
+        .shadowRoot!.querySelector<HTMLInputElement>("#label-list-cooked-label-medium")!
+        .click();
+      await picker.updateComplete;
+      const seen = captureChange(el);
+      picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+      expect(seen.event!.detail.patch).toEqual({
+        note: null,
+        options: [{ listId: "list-cooked", labelId: "label-medium" }],
+      });
+    });
+
+    it("sends an empty extras set when every pick is taken off, so the server removes them", async () => {
+      const dish: TillProduct = { ...burger, offeredModifiers: [extrasList] };
+      const { el } = await mount({ products: [dish], lines: [burgerLine, cheeseChild] });
+      await openDrawer(el);
+      const picker = await openChange(el, 5);
+      picker
+        .shadowRoot!.querySelector<HTMLElement>('[data-test="pick-list-extras-p-cheese-dec"]')!
+        .click();
+      await picker.updateComplete;
+      const seen = captureChange(el);
+      picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+      expect(seen.event!.detail.patch).toEqual({ note: null, extras: [] });
+    });
+
+    it("treats a pick recorded with no list as no longer offered", async () => {
+      const dish: TillProduct = { ...burger, offeredModifiers: [extrasList] };
+      const { el } = await mount({
+        products: [dish],
+        lines: [burgerLine, { ...cheeseChild, listId: null }],
+      });
+      await openDrawer(el);
+      const picker = await openChange(el, 5);
+      expect(
+        picker.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(".confirm")!.disabled,
+      ).toBe(true);
+    });
+
+    it("opens a line with no recorded offer on the first product of that id, as its name reads", async () => {
+      const lunch: TillProduct = {
+        ...burger,
+        menuItemId: "menu-item-burger-lunch",
+        offeredModifiers: [cookedList],
+      };
+      const dinner: TillProduct = { ...burger, menuItemId: "menu-item-burger-dinner" };
+      const { el } = await mount({
+        products: [lunch, dinner],
+        lines: [{ ...burgerLine, menuItemId: null }],
+      });
+      await openDrawer(el);
+      const picker = await openChange(el, 5);
+      expect(picker.shadowRoot!.querySelector("#label-list-cooked-label-rare")).not.toBeNull();
+    });
+
+    it("sends a cleared note as null, which removes it", async () => {
+      const { el } = await mountLines([{ ...burgerLine, note: "sin sal" }], { revision: 2 });
+      await openDrawer(el);
+      const picker = await openChange(el, 5);
+      const seen = captureChange(el);
+      await typeNote(picker, "");
+      picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+      expect(seen.event!.detail.patch).toEqual({ note: null });
+    });
+
+    it("opens a variant line on its parent product, titled with the line's own name", async () => {
+      const withVariants: TillProduct = {
+        ...burger,
+        variants: [
+          {
+            id: "burger-large",
+            name: "Grande",
+            customerName: { es: "Grande carta" },
+            kitchenName: "GR",
+            vatClass: "general",
+            category: null,
+            allergens: null,
+            unitPrice: "11.00",
+            unitPriceDifference: "1.50",
+            available: true,
+          },
+        ],
+      };
+      const variantLine: TabLine = {
+        ...burgerLine,
+        name: "Grande",
+        productId: "burger-large",
+        parentProductId: "burger",
+        menuItemId: null,
+        unitPriceGross: "11.00",
+      };
+      const { el } = await mount({ products: [withVariants], lines: [variantLine], revision: 1 });
+      await openDrawer(el);
+      const picker = await openChange(el, 5);
+      expect(
+        picker.shadowRoot!.querySelector<HTMLElement & { heading: string }>("wt-modal")!.heading,
+      ).toBe("Grande");
+      // A change cannot move a line to another variant, so no variant has to be chosen to save.
+      expect(picker.shadowRoot!.querySelector('input[name="product-variant"]')).toBeNull();
+      const seen = captureChange(el);
+      await typeNote(picker, "sin pepinillo");
+      picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+      expect(seen.event!.detail.patch).toEqual({ note: "sin pepinillo" });
+      expect(seen.event!.detail.lineName).toBe("Grande");
+    });
+
+    it("closing the editor changes nothing", async () => {
+      const { el } = await mountLines([burgerLine]);
+      await openDrawer(el);
+      const picker = await openChange(el, 5);
+      const seen = captureChange(el);
+      picker.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
+      await el.updateComplete;
+      expect(seen.event).toBeUndefined();
+      expect(editor(el)).toBeNull();
+    });
+
+    it("shows a line's note on the tab line, beside its locked price", async () => {
+      const { el } = await mountLines([{ ...burgerLine, note: "no onions" }]);
+      await openDrawer(el);
+      const row = el.shadowRoot!.querySelector(".pending-line")!;
+      expect(row.querySelector(".line-note")!.textContent).toContain("no onions");
+      expect(row.querySelector(".line-total")!.textContent).toBe(
+        formatMoney("9.50", currentLocale()),
+      );
+    });
+
+    describe("Cancel on a line of more than one", () => {
+      const pair: TabLine = { ...burgerLine, quantity: "2.000" };
+      function captureVoid(el: TillTableOrderScreen): { event?: CustomEvent } {
+        const seen: { event?: CustomEvent } = {};
+        el.addEventListener("void-line", (e) => (seen.event = e as CustomEvent));
+        return seen;
+      }
+      async function openCancel(el: TillTableOrderScreen, lineNo: number): Promise<HTMLElement> {
+        lineAction(el, "cancel", lineNo)!.click();
+        await el.updateComplete;
+        return el.shadowRoot!.querySelector<HTMLElement>("wt-dialog.cancel-confirm")!;
+      }
+
+      it("asks how many, and Cancel 1 cancels one", async () => {
+        const { el } = await mountLines([pair]);
+        await openDrawer(el);
+        const dialog = await openCancel(el, 5);
+        expect(dialog.textContent).toContain(t("table.cancel_one_of").replace("{n}", "2"));
+        const seen = captureVoid(el);
+        dialog.querySelector<HTMLElement>("[data-cancel-one]")!.click();
+        expect(seen.event!.detail).toEqual({ lineNo: 5, quantity: "1" });
+        expect(seen.event!.bubbles).toBe(true);
+        expect(seen.event!.composed).toBe(true);
+      });
+
+      it("Cancel all cancels the whole line", async () => {
+        const { el } = await mountLines([pair]);
+        await openDrawer(el);
+        const dialog = await openCancel(el, 5);
+        const seen = captureVoid(el);
+        const all = dialog.querySelector<HTMLElement>("[data-cancel-confirm]")!;
+        expect(all.textContent!.trim()).toBe(t("table.cancel_all"));
+        all.click();
+        expect(seen.event!.detail).toEqual({ lineNo: 5 });
+      });
+
+      it("keeps the started wording when the kitchen has started the pair", async () => {
+        const { el } = await mountLines([{ ...pair, state: "preparing" }]);
+        await openDrawer(el);
+        const dialog = await openCancel(el, 5);
+        expect(dialog.textContent).toContain(t("table.cancel_started"));
+        expect(dialog.querySelector("[data-cancel-one]")).not.toBeNull();
+      });
+
+      it("does not ask how many on a line of one", async () => {
+        const { el } = await mountLines([burgerLine]);
+        await openDrawer(el);
+        const dialog = await openCancel(el, 5);
+        expect(dialog.querySelector("[data-cancel-one]")).toBeNull();
+        expect(dialog.textContent).not.toContain(t("table.cancel_one_of").replace("{n}", "1"));
+        const seen = captureVoid(el);
+        dialog.querySelector<HTMLElement>("[data-cancel-confirm]")!.click();
+        expect(seen.event!.detail).toEqual({ lineNo: 5 });
+      });
+
+      it("cancels a weighed line whole", async () => {
+        const weighed: TabLine = {
+          ...burgerLine,
+          productId: "jamon",
+          menuItemId: "menu-item-jamon",
+          name: "Jamón",
+          quantity: "2.000",
+          unitPrecision: 3,
+          state: "preparing",
+        };
+        const { el } = await mountLines([weighed]);
+        await openDrawer(el);
+        const dialog = await openCancel(el, 5);
+        expect(dialog.querySelector("[data-cancel-one]")).toBeNull();
+      });
+
+      it("tells the app it has taken a Cancel offer, so the offer is shown once", async () => {
+        const { el } = await mountLines([preparingBurger]);
+        let taken: Event | undefined;
+        el.addEventListener("cancel-offer-taken", (e) => (taken = e));
+        el.cancelOffer = 9;
+        await el.updateComplete;
+        expect(taken).toBeInstanceOf(CustomEvent);
+        expect(taken!.bubbles).toBe(true);
+        expect(taken!.composed).toBe(true);
+      });
+
+      it("opens nothing when the line the app offers Cancel for is no longer on the tab", async () => {
+        const { el } = await mountLines([preparingBurger]);
+        await openDrawer(el);
+        let taken: Event | undefined;
+        el.addEventListener("cancel-offer-taken", (e) => (taken = e));
+        el.cancelOffer = 42;
+        await el.updateComplete;
+        const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+          "wt-dialog.cancel-confirm",
+        )!;
+        expect(dialog.open).toBe(false);
+        // Taken all the same: a later mount must not open it on whatever line 42 then is.
+        expect(taken).toBeInstanceOf(CustomEvent);
+      });
+
+      it("opens Cancel on the line the app offers it for after a refused change", async () => {
+        const { el } = await mountLines([preparingBurger]);
+        await openDrawer(el);
+        el.cancelOffer = 9;
+        await el.updateComplete;
+        const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+          "wt-dialog.cancel-confirm",
+        )!;
+        expect(dialog.open).toBe(true);
+        expect(dialog.textContent).toContain(t("table.cancel_started"));
+        expect(dialog.textContent).toContain("Burger");
+      });
     });
   });
 

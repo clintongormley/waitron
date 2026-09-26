@@ -60,6 +60,12 @@ export function isNetworkFailure(err: unknown): boolean {
   return err instanceof TypeError || (err instanceof DOMException && err.name === "AbortError");
 }
 
+/** A read the caller can cancel: an aborted read rejects with `fetch`'s own abort error, which
+ * {@link isNetworkFailure} counts as no answer. */
+export interface ReadOptions {
+  signal?: AbortSignal;
+}
+
 /**
  * `GET /api/till` — the public boot info the app reads before login. `orderFlow` is needed before login
  * so the app can choose which pay control to render; `cardProvider`/`tipsEnabled` decide whether the
@@ -985,10 +991,23 @@ export interface TabResult {
   orderNumber: number;
 }
 
+/** One dish line's edit. An absent field keeps the line's own; a null `note` clears it; `options` and
+ * `extras`, when present, replace the line's whole set. */
+export interface OrderLinePatch {
+  quantity?: string;
+  note?: string | null;
+  options?: OptionSelection[];
+  extras?: ExtraSelection[];
+}
+
 /** `GET /api/working-orders/:id/lines` — an open tab's lines and the revision they were read at. */
 export interface TabLines {
   lines: TabLine[];
   revision: number;
+  /** The venue's setting. When false the server refuses to change or recall a dish line with
+   * `sentAt !== null && state !== null` (`ticket.already_fired`). Cancelling it through the void route
+   * ({@link TillApi.voidLine}) still works; removing it inside an edit is refused like a change. */
+  editSentLines: boolean;
 }
 
 /**
@@ -1020,12 +1039,26 @@ export interface TabLine {
   servedAt: string | null;
   /** The line's RESOLVED kitchen course, or null when it has none. */
   courseId: string | null;
+  /** When the line was first released: fired, or for a no-preparation line, when it would have
+   * fired; null if it never was. A recall clears `firedAt` and keeps this. */
+  sentAt: string | null;
   /** When the line's kitchen ticket item FIRED, or null while its course is still HELD. */
   firedAt: string | null;
   /** The line's kitchen ticket item state, or null when it has no LIVE ticket item. A child modifier
    * line never has one; a parent line can lack one too, so null is not impossible for a parent. A
-   * RECALLABLE line has `firedAt` set and `state === "queued"`; "preparing"/"ready" is cancel-only. */
+   * RECALLABLE line has `firedAt` set, `state === "queued"`, and the venue allows changes to sent items
+   * (`editSentLines`); "preparing"/"ready" is cancel-only. */
   state: TicketState | null;
+  note: string | null;
+  /** The extras list a CHILD row was picked from, which a prefilled pick goes back to; null on a
+   * dish. */
+  listId: string | null;
+  /** The offer the line was sold under (a child row's is its dish's), which finds the live product
+   * whose picker an edit opens; null on a line with no recorded service context. */
+  menuItemId: string | null;
+  /** On a dish sold as a variant, {@link productId} names the variant and this its parent product;
+   * otherwise null. */
+  parentProductId: string | null;
 }
 
 /**
@@ -1250,12 +1283,7 @@ export class TillApi {
   updateOrderLine(
     orderId: string,
     lineNo: number,
-    patch: {
-      quantity?: string;
-      note?: string | null;
-      options?: OptionSelection[];
-      extras?: ExtraSelection[];
-    },
+    patch: OrderLinePatch,
     revision: number,
   ): Promise<{ revision: number }> {
     return this.#request<{ revision: number }>(
@@ -1300,8 +1328,13 @@ export class TillApi {
    * One station's kitchen queue → `GET /api/stations/:id/queue`, grouped by order, oldest first. A
    * malformed or unknown station id rejects with `station.not_found`.
    */
-  getStationQueue(stationId: string): Promise<StationQueue> {
-    return this.#request<StationQueue>(`/api/stations/${stationId}/queue`, "GET");
+  getStationQueue(stationId: string, options: ReadOptions = {}): Promise<StationQueue> {
+    return this.#request<StationQueue>(
+      `/api/stations/${stationId}/queue`,
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
   /** Acknowledge one kitchen notice → `POST /api/kitchen-notices/:id/acknowledge`. An unknown id
@@ -1366,8 +1399,8 @@ export class TillApi {
    * The enrolled display's OWN bound station and queue → `GET /api/device/station`. A missing, rejected
    * or revoked cookie rejects `device.unauthorized` (401).
    */
-  getDeviceStation(): Promise<DeviceStation> {
-    return this.#request<DeviceStation>("/api/device/station", "GET");
+  getDeviceStation(options: ReadOptions = {}): Promise<DeviceStation> {
+    return this.#request<DeviceStation>("/api/device/station", "GET", undefined, options.signal);
   }
 
   /**
@@ -1530,7 +1563,7 @@ export class TillApi {
    * Move ONE not-yet-fired line into another course → `PATCH
    * /api/working-orders/:orderId/lines/:lineNo/course`. `null` CLEARS the line's course and is sent as an
    * explicit null, not an absent field. NON-FISCAL. Rejects `tab.not_open`, `course.not_found`,
-   * `tab.line_not_found`, or `ticket.already_fired` (correct a fired line via {@link recallLines}).
+   * `tab.line_not_found`, or `ticket.already_fired`.
    */
   async setLineCourse(orderId: string, lineNo: number, courseId: string | null): Promise<void> {
     await this.#request<void>(`/api/working-orders/${orderId}/lines/${lineNo}/course`, "PATCH", {
@@ -1550,8 +1583,10 @@ export class TillApi {
   /**
    * UN-send not-yet-started lines of an open tab → `POST /api/working-orders/:orderId/lines/recall`, the
    * inverse of {@link sendLines}. NON-FISCAL; a previously-fired line gets a RECALLED correction slip.
-   * Rejects `tab.not_open`, `tab.line_not_found`, or `ticket.already_started` (the kitchen has started
-   * it); an already-held line is a no-op.
+   * Rejects `tab.not_open`, `tab.line_not_found`, `ticket.already_started` (the kitchen has started
+   * it), or `ticket.already_fired` (the venue does not allow changes to sent items and a line with a
+   * ticket item has been sent — a recalled line still counts as sent); a held line never sent changes
+   * nothing but the order's revision.
    */
   async recallLines(orderId: string, lineNos: number[]): Promise<void> {
     await this.#request<void>(`/api/working-orders/${orderId}/lines/recall`, "POST", { lineNos });
@@ -1559,7 +1594,7 @@ export class TillApi {
 
   /**
    * Cancel (VOID) ONE line of an open tab → `DELETE /api/working-orders/:orderId/lines/:lineNo`: the
-   * cancel path for a line the kitchen has already STARTED, which can no longer be recalled. NON-FISCAL;
+   * cancel path for a sent line, whether or not the kitchen has started it. NON-FISCAL;
    * the server prints a correction slip. `quantity`, a decimal string, voids that part of the line
    * only; absent voids all of it. Rejects `tab.not_open`, `tab.line_not_found`,
    * `tab.void_quantity_invalid` or `order.payment_in_flight`.
@@ -1705,7 +1740,12 @@ export class TillApi {
    * A 2xx with an EMPTY body resolves to `undefined`, where `res.json()` would throw; a method
    * whose route answers one types `T` as `void`.
    */
-  async #request<T>(path: string, method: string, body?: unknown): Promise<T> {
+  async #request<T>(
+    path: string,
+    method: string,
+    body?: unknown,
+    signal?: AbortSignal,
+  ): Promise<T> {
     const fetchImpl = this.#fetchImpl;
     const init: RequestInit =
       body === undefined
@@ -1716,6 +1756,7 @@ export class TillApi {
             headers: { "content-type": "application/json" },
             body: JSON.stringify(body),
           };
+    if (signal !== undefined) init.signal = signal;
     const res = await fetchImpl(this.#baseUrl + path, init);
     if (!res.ok) {
       // The body is untrusted: it may not be JSON, and the literal `null` is valid JSON, so the parsed

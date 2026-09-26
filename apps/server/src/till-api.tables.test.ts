@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { floorZones, locations, tills, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { writeEditSentLines } from "@waitron/venue-service";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
@@ -505,6 +506,34 @@ describe("table + tab routes", () => {
     });
     expect(lines[0]!.servedAt).not.toBeNull();
     expect(lines[1]).toMatchObject({ lineNo: 2, quantity: "2.000", servedAt: null });
+  });
+
+  it("GET /api/working-orders/:id/lines carries the venue's setting for changing sent items", async () => {
+    const { id } = (await (
+      await request("/api/tables", {
+        method: "POST",
+        body: JSON.stringify({ label: `C-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
+      })
+    ).json()) as { id: string };
+    const { tabId } = (await (
+      await request(`/api/tables/${id}/tab`, {
+        method: "POST",
+        body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
+      })
+    ).json()) as { tabId: string };
+    const read = async () =>
+      (await (await request(`/api/working-orders/${tabId}/lines`)).json()) as {
+        editSentLines: boolean;
+      };
+
+    expect((await read()).editSentLines).toBe(true);
+    await withTransaction(suite.db, (tx) => writeEditSentLines(tx, false));
+    try {
+      expect((await read()).editSentLines).toBe(false);
+    } finally {
+      // The suite shares one venue across its cases.
+      await withTransaction(suite.db, (tx) => writeEditSentLines(tx, true));
+    }
   });
 
   it("a malformed :id on the lines read route → 409 tab.not_open (not a 500)", async () => {

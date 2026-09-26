@@ -11,6 +11,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "A card payment for this order is in progress. Wait for it to finish before changing the order",
     es: "Se está cobrando este pedido con tarjeta. Espera a que termine antes de cambiarlo",
   },
+  "ticket.already_started": {
+    en: "The kitchen has already started this item, so it can no longer be changed. You can cancel it",
+    es: "La cocina ya ha empezado este plato, así que ya no se puede cambiar. Puedes cancelarlo",
+  },
+  "ticket.already_fired": {
+    en: "This item has already gone to the kitchen, and this venue does not allow changing items once sent. You can cancel it",
+    es: "Este plato ya ha ido a cocina y en este local no se pueden cambiar los platos enviados. Puedes cancelarlo",
+  },
+  "tab.void_quantity_invalid": {
+    en: "That quantity cannot be cancelled from this line. Check how many are left on it",
+    es: "No se puede cancelar esa cantidad de esta línea. Comprueba cuántos quedan",
+  },
   "product.unavailable": {
     en: "An item on this order has sold out. Remove it and try again",
     es: "Un artículo de este pedido está agotado. Quítalo e inténtalo de nuevo",

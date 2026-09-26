@@ -343,7 +343,7 @@ describe("till-app boot interrupted by removal from the page", () => {
     await flush(el);
 
     host.removeChild(el);
-    resolveStation({ station: { id: "st-1", queue: [] } });
+    resolveStation({ station: { id: "st-1", queue: [], notices: [] } });
     await flush(el);
 
     expect(sa.configure).not.toHaveBeenCalled();

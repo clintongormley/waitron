@@ -87,3 +87,13 @@ export function deriveOptionSelections(
   });
   return { options, unanswered };
 }
+
+/** Whether two sets of answers name the same list-and-label pairs, in any order. */
+export function sameOptionSelections(
+  left: readonly OptionSelection[],
+  right: readonly OptionSelection[],
+): boolean {
+  const key = (answers: readonly OptionSelection[]) =>
+    JSON.stringify(answers.map(({ listId, labelId }) => JSON.stringify([listId, labelId])).sort());
+  return key(left) === key(right);
+}

@@ -103,6 +103,16 @@ export const en = {
   "station.state.queued": "New",
   "station.state.preparing": "Preparing",
   "station.state.ready": "Ready",
+  "station.notices": "Changes to sent orders",
+  "station.notice.recalled": "Recalled",
+  "station.notice.void": "Void",
+  "station.notice.changed": "Changed",
+  "station.notice.moved": "Moved",
+  "station.notice.started": "Started",
+  // `{table}` is substituted at the call site.
+  "station.notice.moved_to": "Moved to {table}",
+  "station.notice.acknowledge": "Got it",
+  "station.acknowledge_error": "Could not clear the notice, try again",
   // Device join. `{number}` is substituted at the call site. A refused knock's error code resolves
   // through `i18n/codes.ts`, not a key here.
   "device.join_name_title": "Set up this device",
@@ -265,6 +275,20 @@ export const en = {
   "table.cancel_started": "The kitchen has started this — cancel and bin it?",
   "table.cancel_confirm": "Cancel and bin it",
   "table.cancel_keep": "Keep it",
+  "table.change_line": "Change",
+  "table.cancel_sent": "It comes off the bill.",
+  "table.cancel_do": "Cancel it",
+  // `{n}` is substituted at the call site; `t()` does not interpolate.
+  "table.cancel_one_of": "Cancel 1 of {n}?",
+  "table.cancel_one": "Cancel 1",
+  "table.cancel_all": "Cancel all",
+  // `{line}`, `{table}` and `{reason}` are substituted at the call site; `t()` does not interpolate.
+  "table.change_not_saved": "Your change to {line} on table {table} was not saved. {reason}",
+  "table.change_unconfirmed":
+    "The server did not answer your change to {line} on table {table}. Open that table and check whether it was saved.",
+  "table.change_not_saved_no_table": "Your change to {line} was not saved. {reason}",
+  "table.change_unconfirmed_no_table":
+    "The server did not answer your change to {line}. Open its table and check whether it was saved.",
   // Table actions
   "table.actions_title": "Table actions",
   "table.action_move": "Move to table",
@@ -436,6 +460,15 @@ export const es: Record<StringKey, string> = {
   "station.state.queued": "Nuevo",
   "station.state.preparing": "Preparando",
   "station.state.ready": "Listo",
+  "station.notices": "Cambios en pedidos enviados",
+  "station.notice.recalled": "Retirado",
+  "station.notice.void": "Anulado",
+  "station.notice.changed": "Cambiado",
+  "station.notice.moved": "Movido",
+  "station.notice.started": "Empezado",
+  "station.notice.moved_to": "Movido a {table}",
+  "station.notice.acknowledge": "Entendido",
+  "station.acknowledge_error": "No se pudo quitar el aviso, inténtalo de nuevo",
   "device.join_name_title": "Configurar este dispositivo",
   "device.join_name_hint":
     "Pon un nombre a este dispositivo y pide a un responsable que lo apruebe en el panel",
@@ -579,6 +612,18 @@ export const es: Record<StringKey, string> = {
   "table.cancel_started": "La cocina ya lo ha empezado — ¿cancelar y tirarlo?",
   "table.cancel_confirm": "Cancelar y tirar",
   "table.cancel_keep": "Mantener",
+  "table.change_line": "Cambiar",
+  "table.cancel_sent": "Se quitará de la cuenta.",
+  "table.cancel_do": "Cancelarlo",
+  "table.cancel_one_of": "¿Cancelar 1 de {n}?",
+  "table.cancel_one": "Cancelar 1",
+  "table.cancel_all": "Cancelar todos",
+  "table.change_not_saved": "Tu cambio en {line} de la mesa {table} no se ha guardado. {reason}",
+  "table.change_unconfirmed":
+    "El servidor no ha respondido a tu cambio en {line} de la mesa {table}. Abre esa mesa y comprueba si se ha guardado.",
+  "table.change_not_saved_no_table": "Tu cambio en {line} no se ha guardado. {reason}",
+  "table.change_unconfirmed_no_table":
+    "El servidor no ha respondido a tu cambio en {line}. Abre su mesa y comprueba si se ha guardado.",
   "table.actions_title": "Acciones de mesa",
   "table.action_move": "Mover a mesa",
   "table.action_join": "Unir una mesa",

@@ -3,7 +3,7 @@ import type { StationThresholds } from "@waitron/shared";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./station-queue.js";
 import type { TillStationQueue } from "./station-queue.js";
-import type { StationQueueGroup } from "../api/client.js";
+import type { KitchenNotice, StationQueueGroup } from "../api/client.js";
 
 // The shipped DB defaults. No fixture injects `now`, so every ticket ages off the REAL wall clock
 // against its fixed `queuedAt` and renders `forgotten`, and the header's overdue-count badge appears
@@ -243,6 +243,28 @@ const dietGroups: StationQueueGroup[] = [
   },
 ];
 
+// One notice of each kind, with every optional part shown somewhere: a started void, a changed line
+// with its new note, a weighed quantity, and a move naming its new table.
+const baseNotice: KitchenNotice = {
+  id: "kn-void",
+  stationId: "st-1",
+  workingOrderId: "wo-1",
+  orderLabel: "#5 · Mesa 4",
+  kind: "void",
+  lineName: "Burger",
+  quantity: "1.000",
+  note: null,
+  wasStarted: true,
+  movedTo: null,
+  createdAt: "2026-08-17T10:10:00.000Z",
+};
+const notices: KitchenNotice[] = [
+  baseNotice,
+  { ...baseNotice, id: "kn-recalled", kind: "recalled", wasStarted: false, quantity: "0.250" },
+  { ...baseNotice, id: "kn-changed", kind: "changed", wasStarted: false, note: "no onions" },
+  { ...baseNotice, id: "kn-moved", kind: "moved", wasStarted: false, movedTo: "Terraza 2" },
+];
+
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", (theme) => {
@@ -331,6 +353,23 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
       { groups, stationId: "st-1", view: "rail", showReprint: true },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+  it("the notices strip, one of each kind, above the kanban board has no violations", async () => {
+    const { host } = await mountWidget<TillStationQueue>(
+      "till-station-queue",
+      { groups, notices, stationId: "st-1", view: "kanban" },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("the notices strip above an empty queue has no violations", async () => {
+    const { host } = await mountWidget<TillStationQueue>(
+      "till-station-queue",
+      { groups: [], notices, view: "rail" },
       theme,
     );
     await expectNoA11yViolations(host);

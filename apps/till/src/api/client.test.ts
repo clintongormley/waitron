@@ -743,6 +743,36 @@ describe("TillApi", () => {
     expect(r).toEqual({ items: groups, notices });
   });
 
+  it("getStationQueue and getDeviceStation hand a caller's abort signal to fetch", async () => {
+    const fetchStub = vi.fn<typeof fetch>(async () => jsonResponse({ items: [], notices: [] }));
+    const api = new TillApi("", fetchStub);
+    const signal = new AbortController().signal;
+
+    await api.getStationQueue("st-1", { signal });
+    await api.getDeviceStation({ signal });
+
+    expect(fetchStub.mock.calls.map(([, init]) => init?.signal)).toEqual([signal, signal]);
+  });
+
+  it("an aborted read rejects with fetch's own abort error, which reads as no answer", async () => {
+    const fetchStub = vi.fn(
+      (_path: string, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) =>
+          init!.signal!.addEventListener("abort", () => reject(init!.signal!.reason)),
+        ),
+    );
+    const controller = new AbortController();
+    const read = new TillApi("", fetchStub as unknown as typeof fetch).getStationQueue("st-1", {
+      signal: controller.signal,
+    });
+    controller.abort();
+    const error = await read.catch((caught: unknown) => caught);
+    // The client passes the abort through untouched rather than mapping it to a `{ code }`.
+    expect(error).toBe(controller.signal.reason);
+    expect((error as DOMException).name).toBe("AbortError");
+    expect(isNetworkFailure(error)).toBe(true);
+  });
+
   it("acknowledgeKitchenNotice POSTs to the notice's acknowledge route, and a display to its device twin", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
     const api = new TillApi("", fetchStub);
@@ -1412,32 +1442,45 @@ describe("TillApi", () => {
   });
 
   it("getTabLines GETs the open tab's lines, decoding the locked price + served state per line", async () => {
-    // Typed `TabLine[]` so `tsc` checks the client mirror declares every field. The second line is a
-    // CHILD extras row with no ticket item (`state: null`), naming its parent dish by `parentLineNo`.
+    // Typed `TabLine[]` so `tsc` checks the client mirror declares every field. The first line was
+    // sold as a variant, so it names its parent product; the second is a CHILD extras row with no
+    // ticket item (`state: null`), naming its parent dish by `parentLineNo` and its list by `listId`.
     const lines: TabLine[] = [
       {
         lineNo: 1,
-        productId: "cafe",
+        productId: "cafe-large",
+        parentProductId: "cafe",
+        menuItemId: "mi-cafe",
+        note: "sin azúcar",
+        listId: null,
         quantity: "1.000",
         unitPriceGross: "1.50",
         servedAt: "2026-08-06T10:00:00.000Z",
         courseId: null,
+        sentAt: "2026-08-06T09:59:00.000Z",
         firedAt: "2026-08-06T09:59:00.000Z",
         state: "queued",
       },
       {
         lineNo: 2,
         productId: "agua",
+        parentProductId: null,
+        menuItemId: null,
+        note: null,
         parentLineNo: 1,
+        listId: "list-extras",
         quantity: "2.000",
         unitPriceGross: "2.00",
         servedAt: null,
         courseId: "course-1",
+        sentAt: "2026-08-06T09:59:00.000Z",
         firedAt: null,
         state: null,
       },
     ];
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ lines, revision: 3 }));
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ lines, revision: 3, editSentLines: false }));
 
     const tab = await new TillApi("", fetchStub).getTabLines("ord-1");
 
@@ -1445,7 +1488,7 @@ describe("TillApi", () => {
       "/api/working-orders/ord-1/lines",
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
-    expect(tab).toEqual({ lines, revision: 3 });
+    expect(tab).toEqual({ lines, revision: 3, editSentLines: false });
     const r = tab.lines;
     // The served-state signal survives the round-trip decoded per line.
     expect(r[0]!.servedAt).not.toBeNull();

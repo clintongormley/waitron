@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveOptionSelections } from "./held-options.js";
+import { deriveOptionSelections, sameOptionSelections } from "./held-options.js";
 import type { OfferedModifier } from "../api/client.js";
 import type { OptionSnapshot } from "@waitron/shared";
 
@@ -173,5 +173,32 @@ describe("deriveOptionSelections", () => {
       options: [],
       unanswered: ["list-punto"],
     });
+  });
+});
+
+describe("sameOptionSelections", () => {
+  const cooked = { listId: "list-cooked", labelId: "label-rare" };
+  const bread = { listId: "list-bread", labelId: "label-gluten-free" };
+
+  it("compares the answers as a set, whatever order they come in", () => {
+    expect(sameOptionSelections([cooked, bread], [bread, cooked])).toBe(true);
+  });
+
+  it("tells a different label, a missing answer and an extra answer apart", () => {
+    expect(sameOptionSelections([cooked], [{ ...cooked, labelId: "label-medium" }])).toBe(false);
+    expect(sameOptionSelections([cooked, bread], [cooked])).toBe(false);
+    expect(sameOptionSelections([], [bread])).toBe(false);
+  });
+
+  it("does not take one list's label for another list's", () => {
+    expect(
+      sameOptionSelections(
+        [cooked, bread],
+        [
+          { listId: "list-cooked", labelId: "label-gluten-free" },
+          { listId: "list-bread", labelId: "label-rare" },
+        ],
+      ),
+    ).toBe(false);
   });
 });

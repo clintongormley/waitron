@@ -13,7 +13,8 @@ import type { NotOfferedExtra, SelectedExtra } from "./working-order.js";
  */
 export function deriveExtraSelections(
   offered: readonly OfferedModifier[],
-  heldExtras: readonly HeldExtra[] | undefined,
+  heldExtras:
+    readonly Pick<HeldExtra, "productId" | "listId" | "name" | "price" | "quantity">[] | undefined,
 ): { extras: SelectedExtra[]; notOffered: NotOfferedExtra[] } {
   const extras: SelectedExtra[] = [];
   const notOffered: NotOfferedExtra[] = [];

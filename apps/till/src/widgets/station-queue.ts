@@ -2,18 +2,31 @@ import { optionAnswers } from "./option-snapshot.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { TickingClock, baseStyles } from "@waitron/ui";
+import { TickingClock, baseStyles, registerIcons } from "@waitron/ui";
 import { BAND_RANK, type TimingBand, classifyBand } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
 import { snapshotDescriptionFor, trimQuantity } from "./dish-format.js";
 import type {
+  KitchenNotice,
+  KitchenNoticeKind,
   StationQueueCourse,
   StationQueueGroup,
   StationQueueItem,
   TicketState,
 } from "../api/client.js";
+
+const NOTICE_ICONS: Record<`notice-${KitchenNoticeKind}`, string> = {
+  "notice-recalled": "M6 2 1.5 6 6 10V7h4a2.5 2.5 0 0 1 0 5H6v2h4a4.5 4.5 0 0 0 0-9H6Z",
+  "notice-void":
+    "M3 4.4 4.4 3 8 6.6 11.6 3 13 4.4 9.4 8 13 11.6 11.6 13 8 9.4 4.4 13 3 11.6 6.6 8Z",
+  "notice-changed": "M11.3 1.9 14.1 4.7 5.8 13H3V10.2ZM2 14.5H14V15.5H2Z",
+  "notice-moved": "M2 7H10.6L7.3 3.7 8.7 2.3 14.4 8 8.7 13.7 7.3 12.3 10.6 9H2Z",
+};
+// Registered here rather than in main.ts: the icons are this widget's, and every surface that mounts it
+// needs them.
+registerIcons(NOTICE_ICONS);
 
 /** `ready` is terminal: a counter order's handover is an order-level collect, not a kitchen state. */
 const NEXT: Record<TicketState, Exclude<TicketState, "queued"> | undefined> = {
@@ -408,10 +421,93 @@ export class TillStationQueue extends LitElement {
       wt-button.reprint {
         display: block;
       }
+      /* The notices strip: corrections to work already sent, each until a cook acknowledges it. The
+         kind is always text plus an icon; the left border only repeats it. */
+      .notices {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        margin-bottom: var(--wt-space-4);
+      }
+
+      .notices-title {
+        margin: 0;
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+        color: var(--wt-color-text-muted);
+        text-transform: uppercase;
+      }
+
+      .notice-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .notice {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2) var(--wt-space-3);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-left: var(--wt-space-1) solid var(--wt-color-primary);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+      }
+
+      .notice.kind-void {
+        border-left-color: var(--wt-color-danger);
+      }
+
+      .notice-kind {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--wt-space-1);
+        font-weight: var(--wt-font-weight-bold);
+        text-transform: uppercase;
+      }
+
+      .notice-body {
+        display: flex;
+        flex: 1 1 auto;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: var(--wt-space-1) var(--wt-space-3);
+        min-width: 0;
+      }
+
+      .notice-line {
+        font-weight: var(--wt-font-weight-bold);
+        overflow-wrap: anywhere;
+      }
+
+      .notice-moved,
+      .notice-note {
+        overflow-wrap: anywhere;
+      }
+
+      /* Emphasis by weight and a border, so "started" never rests on colour. */
+      .notice-started {
+        padding: 0 var(--wt-space-2);
+        border: 1px solid var(--wt-color-danger);
+        border-radius: var(--wt-radius-sm);
+        font-weight: var(--wt-font-weight-bold);
+        text-transform: uppercase;
+      }
+
+      .notice wt-button {
+        margin-inline-start: auto;
+      }
     `,
   ];
 
   @property({ attribute: false }) groups: StationQueueGroup[] = [];
+  /** Unacknowledged corrections for this station, oldest first as the server sends them. */
+  @property({ attribute: false }) notices: KitchenNotice[] = [];
   @property() view: "kanban" | "rail" = "kanban";
   @property() bumpMode: BumpMode = "line";
   /** The station these items are AT — required for the whole-ticket bump's event (ticket mode). */
@@ -535,10 +631,72 @@ export class TillStationQueue extends LitElement {
   }
 
   override render() {
+    return html`${this.#notices()}${this.#queue()}`;
+  }
+
+  #queue(): TemplateResult {
     if (this.groups.length === 0) {
       return html`<p class="empty">${t("station.empty")}</p>`;
     }
     return html`${this.#header()}${this.view === "rail" ? this.#rail() : this.#kanban()}`;
+  }
+
+  #notices(): TemplateResult | typeof nothing {
+    if (this.notices.length === 0) return nothing;
+    return html`<section class="notices" aria-labelledby="notices-title">
+      <h2 class="notices-title" id="notices-title">${t("station.notices")}</h2>
+      <ul class="notice-list">
+        ${this.notices.map((notice) => this.#notice(notice))}
+      </ul>
+    </section>`;
+  }
+
+  #notice(notice: KitchenNotice): TemplateResult {
+    const kind = t(`station.notice.${notice.kind}` as const);
+    const line = `${trimQuantity(notice.quantity)}× ${notice.lineName}`;
+    const acknowledge = t("station.notice.acknowledge");
+    const { movedTo } = notice;
+    return html`<li class="notice kind-${notice.kind}" data-notice=${notice.id}>
+      <span class="notice-kind"><wt-icon name=${`notice-${notice.kind}`}></wt-icon>${kind}</span>
+      <span class="notice-body">
+        <span class="notice-line">${line}</span>
+        <span class="notice-order">${notice.orderLabel}</span>
+        ${
+          notice.wasStarted
+            ? html`<span class="notice-started">${t("station.notice.started")}</span>`
+            : nothing
+        }
+        ${notice.note ? html`<span class="notice-note">${notice.note}</span>` : nothing}
+        ${
+          movedTo === null
+            ? nothing
+            : html`<span class="notice-moved"
+                >${
+                  // A replacer function, so a `$` in the typed label is never read as a pattern.
+                  t("station.notice.moved_to").replace("{table}", () => movedTo)
+                }</span
+              >`
+        }
+      </span>
+      <wt-button
+        data-acknowledge
+        variant="secondary"
+        aria-label=${`${acknowledge}: ${kind} ${line}, ${notice.orderLabel}`}
+        @click=${() => this.#acknowledge(notice)}
+      >
+        ${acknowledge}
+      </wt-button>
+    </li>`;
+  }
+
+  #acknowledge(notice: KitchenNotice): void {
+    this.dispatchEvent(
+      new CustomEvent("acknowledge-notice", {
+        detail: { noticeId: notice.id },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   #rail(): TemplateResult {

@@ -289,15 +289,37 @@ migrations add five columns and replace the `working_orders_enforce_transition` 
 venue-service adds `kitchen_notices` and `service_settings`; the upgrade succeeds, but
 rows written before it misbehave (a dish sent before the upgrade counts as unsent, an extra saved
 before it blocks a one-line edit) — the PR has the measured table; settle open orders or reset
-before upgrading. Still open: showing notices on
-the kitchen screen (menus Task 7c); the `changed` notice kind is declared but nothing writes it.
+before upgrading. Still open: the `changed`
+notice kind is declared but nothing writes it (the kitchen screen renders it since Task 7c).
+**Menus Task 7c: changing a sent line from the till, and kitchen-screen notices.** The table
+screen offers Change on a sent line the kitchen has not started, a recalled line and a line with no
+kitchen route; it opens the existing option, extras and note editor prefilled from the line and saves
+through the one-line edit route with the order's revision. A started line keeps Cancel only; Cancel
+is now offered on a queued line too, and a line of several whole units asks "Cancel 1" or "Cancel
+all". With the venue's "allow changes to items already sent" setting off, Change and Recall are
+hidden on sent kitchen work. The tab-lines answer (`GET /api/working-orders/:id/lines`) now carries
+that setting, and each line when it was released, its note, its offer and its parent product. A
+change or recall the server refuses because the kitchen has started the item, or because the venue
+does not allow changes to sent items, says so in its own words (a change also names an unavailable
+product or an order changed elsewhere); most other refusals, such as a tab that is no longer open,
+show the generic error. A change answered after the waiter has moved to another table names the dish and the table instead of acting on the wrong order. The kitchen screen
+shows the station's notices above its queue (kind as a word and an icon, "started", the new note, the
+table a line moved to), each with an acknowledge button, and re-reads its queue every 15 seconds; a
+refresh read that has not answered after 25 seconds is cancelled. No migration. Left open: a notice carries no unit, so a
+weighed line's notice reads "0.5×" without "kg"; the counter's prep-queue card shows no notices and
+does not refresh; a failed kitchen refresh is silent, so a display that loses the server goes stale
+without a warning; the till's API client has no general request timeout (only the kitchen refresh
+reads are bounded); a refusal that lands after the tab is paid, or after a server switch, shows the
+ordinary unnamed message; the till's screen-to-app events use plain names, while
+[conventions-ui.md](developers/conventions-ui.md) says every custom event is `wt-*` — the rule or
+the till needs to change.
 **M7b2 landed (#702, 2026-09-26): a manager can clear a card payment a crash left running.** The
 Payments screen lists open orders locked by a card payment nothing is finishing any more, and "Check
 with the card provider" files the sale once if the card was charged, marks the payment failed and
 unlocks the order if it was not, and refuses if the provider is unreachable or unclear; each
 resolution is recorded in the append-only `payment_resolutions` table. What it leaves open is under
 "What M7b2 left open" in the payments section.
-Next in the lane (was M7b2): 7c, then 7 (M6c landed as #705). The owner lifted the wait: the dependency upgrades are
+Next in the lane: 7 (M6c landed as #705), then M7v. The owner lifted the wait: the dependency upgrades are
 finished, and the work does not wait for SQLite slice 2. The menus plan's decisions D1–D23 settle
 the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the ones flagged for the
 owner. Menus Task 3 wipes existing venues (it rebuilds `menu_items`); every other migrating task

@@ -922,7 +922,9 @@ describe("till-app", () => {
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "dev-1", formFactor: "kds", stationId: "st-dev" }),
-      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+      getDeviceStation: vi
+        .fn()
+        .mockResolvedValue({ station: { id: "st-dev", queue: [], notices: [] } }),
     });
     await flush(el);
     expect(currentApi.getDeviceStation).toHaveBeenCalled();
@@ -1194,7 +1196,9 @@ describe("till-app", () => {
           formFactor: "kds",
           stationId: "st-dev",
         }),
-      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+      getDeviceStation: vi
+        .fn()
+        .mockResolvedValue({ station: { id: "st-dev", queue: [], notices: [] } }),
     });
     await flush(el);
     expect(enrolScreen(el)).not.toBeNull();
@@ -1221,7 +1225,9 @@ describe("till-app", () => {
         .fn()
         .mockResolvedValueOnce({ deviceId: "dev-1", formFactor: "kds", stationId: "st-dev" })
         .mockRejectedValue({ code: "device.unauthorized" }),
-      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+      getDeviceStation: vi
+        .fn()
+        .mockResolvedValue({ station: { id: "st-dev", queue: [], notices: [] } }),
     });
     await flush(el);
     expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(true);
@@ -1247,7 +1253,9 @@ describe("till-app", () => {
         .fn()
         .mockResolvedValueOnce({ deviceId: "dev-1", formFactor: "kds", stationId: "st-dev" })
         .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
-      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+      getDeviceStation: vi
+        .fn()
+        .mockResolvedValue({ station: { id: "st-dev", queue: [], notices: [] } }),
     });
     await flush(el);
     expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(true);
@@ -3267,7 +3275,9 @@ describe("till-app", () => {
         stationId: "st-1",
         tillId: null,
       }),
-      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-1", queue: [] } }),
+      getDeviceStation: vi
+        .fn()
+        .mockResolvedValue({ station: { id: "st-1", queue: [], notices: [] } }),
     });
     const { el } = await mountWidget<TillApp>("till-app", { api, sessionActivity: sa as never });
     await flush(el);
@@ -3624,8 +3634,13 @@ describe("till-app", () => {
         unitPriceGross: "1.50",
         servedAt: null,
         courseId: null,
+        sentAt: "2026-08-17T09:59:00.000Z",
         firedAt: "2026-08-17T09:59:00.000Z",
         state: "queued",
+        note: null,
+        listId: null,
+        menuItemId: null,
+        parentProductId: null,
       };
       it("loads the tab's lines and threads them (with the catalogue) to the screen", async () => {
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
@@ -4098,15 +4113,40 @@ describe("till-app", () => {
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 
-      it("a rejected recall-lines surfaces the banner AND still reloads to reconcile to server truth", async () => {
-        // A raced recall of a line the kitchen has just started rejects `ticket.already_started`; the
-        // handler must still re-read the tab so the line flips from Recall to Cancel (server truth).
+      // A raced recall of a line the kitchen has just started, and a recall after the venue switched
+      // off changes to sent items, each name what the waiter can still do.
+      it.each(["ticket.already_started", "ticket.already_fired"])(
+        "a recall-lines refused %s says so in its own words AND still reloads to reconcile to server truth",
+        async (code) => {
+          // The order is re-read after a refusal, to reconcile with the server.
+          const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
+          const { el } = await mountApp({
+            getTablesState: vi.fn().mockResolvedValue([openTable]),
+            listZones: vi.fn().mockResolvedValue([floorZone]),
+            getTabLines,
+            recallLines: vi.fn().mockRejectedValue({ code }),
+          });
+          const screen = await toTableOrder(el, openTable);
+          expect(getTabLines).toHaveBeenCalledTimes(1);
+
+          emit(screen, "recall-lines", { lineNos: [1] });
+          await flush(el);
+
+          expect(tableOrder(el)).not.toBeNull();
+          const banner = el.shadowRoot!.querySelector(".error")!.textContent!;
+          expect(banner).toContain(codeMessage(code));
+          expect(banner).not.toContain(t("table.error"));
+          expect(getTabLines).toHaveBeenCalledTimes(2);
+        },
+      );
+
+      it("a recall-lines refused tab.not_open shows the generic banner AND still reloads", async () => {
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines,
-          recallLines: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
+          recallLines: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
         });
         const screen = await toTableOrder(el, openTable);
         expect(getTabLines).toHaveBeenCalledTimes(1);
@@ -4114,10 +4154,8 @@ describe("till-app", () => {
         emit(screen, "recall-lines", { lineNos: [1] });
         await flush(el);
 
-        // Non-fatal: the operator stays on the screen and sees the generic banner…
         expect(tableOrder(el)).not.toBeNull();
         expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(t("table.error"));
-        // …and the tab is re-read even on the reject, so the UI reconciles to server truth.
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 
@@ -5951,7 +5989,9 @@ describe("till-app", () => {
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "dev-1", formFactor: "kds", stationId: "st-dev" }),
-        getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+        getDeviceStation: vi
+          .fn()
+          .mockResolvedValue({ station: { id: "st-dev", queue: [], notices: [] } }),
       });
       await flush(el);
       const s = shell(el)!;
@@ -5978,7 +6018,9 @@ describe("till-app", () => {
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "dev-1", formFactor: "kds", stationId: "st-dev" }),
-        getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+        getDeviceStation: vi
+          .fn()
+          .mockResolvedValue({ station: { id: "st-dev", queue: [], notices: [] } }),
       });
       await flush(hidden.el);
       const hiddenGrid = hidden.el.shadowRoot!.querySelector("till-card-grid")!;
@@ -5994,7 +6036,9 @@ describe("till-app", () => {
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "dev-1", formFactor: "kds", stationId: "st-dev" }),
-        getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+        getDeviceStation: vi
+          .fn()
+          .mockResolvedValue({ station: { id: "st-dev", queue: [], notices: [] } }),
       });
       await flush(shown.el);
       const shownGrid = shown.el.shadowRoot!.querySelector("till-card-grid")!;
@@ -6656,7 +6700,9 @@ describe("till-app", () => {
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "dev-1", formFactor: "kds", stationId: "st-dev" }),
-      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+      getDeviceStation: vi
+        .fn()
+        .mockResolvedValue({ station: { id: "st-dev", queue: [], notices: [] } }),
       putLocale,
     });
     await flush(el);
@@ -7233,7 +7279,9 @@ describe("persistent till destinations", () => {
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "d1", formFactor: "kds", stationId: "st-dev" }),
-      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+      getDeviceStation: vi
+        .fn()
+        .mockResolvedValue({ station: { id: "st-dev", queue: [], notices: [] } }),
     });
     await flush(el);
     expect(station(el)!.deviceMode).toBe(true);

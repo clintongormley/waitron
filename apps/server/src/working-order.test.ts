@@ -560,6 +560,36 @@ describe("a sold line naming a variant is labelled by the variant's own name", (
       { [LOCALE]: "Large cup" },
     ]);
   });
+
+  it("names the variant's parent product and the offer on the tab line, as the retrieve screen maps them", async () => {
+    const { cfg, zoneId, catalogueId } = await setupVenue();
+    const orderId = randomUUID();
+    const { seeded, tabLines } = await withTransaction(db, async (tx) => {
+      const seeded = await seedVariantOffer(tx, catalogueId);
+      await createOpenOrder(
+        tx,
+        cfg,
+        orderId,
+        [{ menuItemId: seeded.offerId, variantId: seeded.variantId, quantity: "1" }],
+        null,
+        { zoneId },
+      );
+      return { seeded, tabLines: await readTabLines(tx, cfg, orderId) };
+    });
+    const held = await getHeldOrder({ db }, cfg, orderId);
+
+    expect(tabLines).toHaveLength(1);
+    expect(tabLines[0]).toMatchObject({
+      productId: seeded.variantId,
+      parentProductId: seeded.productId,
+      menuItemId: seeded.offerId,
+    });
+    expect(held.lines[0]).toMatchObject({
+      productId: tabLines[0]!.parentProductId,
+      variantId: tabLines[0]!.productId,
+      menuItemId: tabLines[0]!.menuItemId,
+    });
+  });
 });
 
 describe("parkOrder", () => {
@@ -3894,8 +3924,8 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
 
 // Coursing editing — `setLineCourse` moves a not-yet-fired tab line into another active course (or
 // clears it to null), updating BOTH the open-tab line's `course_id` and its held ticket item's snapshot.
-// It refuses a line whose ticket item has already FIRED (`ticket.already_fired`) — a fired line is
-// corrected via recall, not a silent move — validates a non-null target with the same `requireLiveCourse`
+// It refuses a line whose ticket item has already FIRED (`ticket.already_fired`) rather than moving it
+// silently, validates a non-null target with the same `requireLiveCourse`
 // the config/fire verbs use (`course.not_found` for an absent / foreign / retired course), and throws
 // `tab.line_not_found` for a `line_no` not on the tab. Non-fiscal: it touches only `working_order_lines`
 // (open tab) and `ticket_items` (kitchen), never a filed record. This suite proves the update + the
