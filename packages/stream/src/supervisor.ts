@@ -745,7 +745,8 @@ export class StreamSupervisor {
   /**
    * Stops Litestream and folds the side file back, retrying each tick while it is still over the
    * limit, then waits for the bucket. Restarting Litestream over a side file a reader still holds
-   * would only grow it again. Each kind of fold-back trouble is logged once per pause.
+   * would only grow it again. Each kind of fold-back trouble, and a refused bucket question, is
+   * logged once per pause.
    */
   async #pause(generation: string, walBytes: number, signal: AbortSignal): Promise<void> {
     const limitBytes = this.#deps.walLimitBytes;
@@ -761,7 +762,7 @@ export class StreamSupervisor {
       }
       if (
         bytes < limitBytes &&
-        (await this.#unlessStopped(signal, this.#bucketAnswers(generation, signal)))
+        (await this.#unlessStopped(signal, this.#bucketAnswers(generation, signal, noted)))
       ) {
         return;
       }
@@ -857,11 +858,16 @@ export class StreamSupervisor {
   }
 
   /**
-   * False when the listing is refused, or unanswered after {@link READ_DEADLINE_MS}, which is logged.
-   * The deadline is still needed because the S3 store's own limit (`BUCKET_IDLE_MS`) does not bound
-   * an answer that keeps arriving, or one whose body stalls after early headers.
+   * False when the listing is refused, logged the first time in a pause (`noted`), or unanswered
+   * after {@link READ_DEADLINE_MS}, logged every time. The deadline is still needed because the S3
+   * store's own limit (`BUCKET_IDLE_MS`) does not bound an answer that keeps arriving, or one whose
+   * body stalls after early headers.
    */
-  async #bucketAnswers(generation: string, signal: AbortSignal): Promise<boolean> {
+  async #bucketAnswers(
+    generation: string,
+    signal: AbortSignal,
+    noted: Set<string>,
+  ): Promise<boolean> {
     const deadline = new AbortController();
     const listed = async () => {
       try {
@@ -869,7 +875,16 @@ export class StreamSupervisor {
           `${generationPrefix(this.#deps.venueId, generation)}${levelFolder(0)}`,
         );
         return true;
-      } catch {
+      } catch (error) {
+        // A refusal after the deadline or a stop answers a question nobody is still asking.
+        if (
+          !signal.aborted &&
+          !deadline.signal.aborted &&
+          !noted.has("stream.pause_check_failed")
+        ) {
+          noted.add("stream.pause_check_failed");
+          this.#deps.log("warn", "stream.pause_check_failed", { errorCode: codeOf(error) });
+        }
         return false;
       }
     };

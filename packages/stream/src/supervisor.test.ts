@@ -1353,6 +1353,107 @@ describe("while streaming", () => {
     expect(questions).toBe(2);
     expect(h.supervisor.status().generation).toBe(h.generation);
     expect(h.litestream.running()).toBeDefined();
+    expect(h.logs.filter((line) => line.event === "stream.pause_check_failed")).toEqual([
+      { level: "warn", event: "stream.pause_check_failed", fields: { errorCode: "unknown" } },
+    ]);
+  });
+
+  it("logs a question during the pause the bucket refuses once per pause, with its code", async () => {
+    const h = await streaming();
+    const list = h.store.list.bind(h.store);
+    let refused = 0;
+    h.store.list = async (prefix) => {
+      if (prefix.endsWith("/0000/") && h.supervisor.status().state === "paused" && h.store.denied) {
+        refused += 1;
+      }
+      return list(prefix);
+    };
+    const failures = () => h.logs.filter((line) => line.event === "stream.pause_check_failed");
+    const refusal = {
+      level: "warn",
+      event: "stream.pause_check_failed",
+      fields: { errorCode: "backup.stream_request_failed" },
+    };
+
+    h.store.denied = true;
+    h.setWal(LIMIT);
+    await h.clock.until(() => refused === 3);
+    expect(h.supervisor.status().state).toBe("paused");
+    expect(failures()).toEqual([refusal]);
+
+    h.store.denied = false;
+    await h.clock.until(() => h.supervisor.status().state === "streaming");
+    expect(failures()).toEqual([refusal]);
+
+    // A later pause is a new one, and says so again.
+    h.store.denied = true;
+    h.setWal(LIMIT);
+    await h.clock.until(() => refused === 4);
+    expect(h.supervisor.status().state).toBe("paused");
+    expect(failures()).toEqual([refusal, refusal]);
+  });
+
+  it("logs nothing more for a question during the pause that is refused after its deadline", async () => {
+    const h = await streaming();
+    const list = h.store.list.bind(h.store);
+    let refuseLate!: () => void;
+    h.store.list = async (prefix) => {
+      if (prefix.endsWith("/0000/") && h.supervisor.status().state === "paused" && !refuseLate) {
+        await new Promise<never>((_, reject) => {
+          refuseLate = () => reject(new Error("refused late"));
+        });
+      }
+      return list(prefix);
+    };
+    h.setWal(LIMIT);
+    await h.clock.until(() => h.logs.some((line) => line.event === "stream.pause_check_failed"));
+    refuseLate();
+    await h.clock.until(() => h.supervisor.status().state === "streaming");
+    expect(h.logs.filter((line) => line.event === "stream.pause_check_failed")).toEqual([
+      { level: "warn", event: "stream.pause_check_failed", fields: { errorCode: "timeout" } },
+    ]);
+  });
+
+  it("logs nothing for a question during the pause that is refused after the run was stopped", async () => {
+    const h = await streaming();
+    const list = h.store.list.bind(h.store);
+    let refuseLate: (() => void) | undefined;
+    h.store.list = async (prefix) => {
+      if (prefix.endsWith("/0000/") && h.supervisor.status().state === "paused") {
+        await new Promise<never>((_, reject) => {
+          refuseLate = () => reject(new Error("refused after the stop"));
+        });
+      }
+      return list(prefix);
+    };
+    h.setWal(LIMIT);
+    await h.clock.until(() => refuseLate !== undefined);
+    await h.clock.asleep();
+    await h.supervisor.stop();
+    refuseLate!();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(h.logs.some((line) => line.event === "stream.pause_check_failed")).toBe(false);
+  });
+
+  it("logs nothing for a question during the pause that is refused while the run is stopping", async () => {
+    const h = await streaming();
+    const list = h.store.list.bind(h.store);
+    let refuseLate: (() => void) | undefined;
+    h.store.list = async (prefix) => {
+      if (prefix.endsWith("/0000/") && h.supervisor.status().state === "paused") {
+        await new Promise<never>((_, reject) => {
+          refuseLate = () => reject(new Error("refused during the stop"));
+        });
+      }
+      return list(prefix);
+    };
+    h.setWal(LIMIT);
+    await h.clock.until(() => refuseLate !== undefined);
+    await h.clock.asleep();
+    const stopping = h.supervisor.stop();
+    refuseLate!();
+    await stopping;
+    expect(h.logs.filter((line) => line.event === "stream.pause_check_failed")).toEqual([]);
   });
 
   // A restore reads the pointer's generation, so a pause must leave that generation whole and still
