@@ -969,7 +969,12 @@ of them sit on tables another set owns: `products`, created by core in
 `packages/db/drizzle/0000_baseline.sql` and rebuilt by core's
 `0003_variant_inherited_nullable.sql`, and `category_details`, created by catalogue.
 `drizzle/0002_section_image_references.sql` adds four more of the same shape for `sections.image`,
-two of them on catalogue's `sections`. Both edges are
+two of them on catalogue's `sections`. `drizzle/0003_published_image_references.sql` adds three for
+`menu_version_images.filename`: one on catalogue's `menu_version_images`, and two on `media_images`
+whose bodies read catalogue's `menu_version_images` and `menu_publications` — an edge
+`scripts/module-graph-honesty.test.ts` cannot see, because it never reads a trigger's body. A
+catalogue rebuild of either table is the trigger-body shape described below, which fails on an
+upgrade; a rebuild of `menu_version_images` also drops the trigger ON it, silently. Both edges are
 declared — media's descriptor reads `requires: { core: "*", modules: { catalogue: "*" } }`
 (`packages/media/src/module.ts`) — which is what the guard checks; the guard's job is the case where
 such an edge is NOT declared. Core's own triggers, in its migration files under

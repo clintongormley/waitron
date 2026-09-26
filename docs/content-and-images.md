@@ -100,3 +100,8 @@ products, including inactive products, to those categories, and to those section
 shown by its internal name. Remove the photograph from each of them before trying deletion again. A
 section's link opens its editor in **Products and recipes**, **Sections**, where **Remove image**
 clears it when you save the section.
+
+A published menu also holds every photograph its last publish included, even after you remove the
+photograph from a product or section. The library lists that menu by name, followed by
+**(Published menu)**, and its link opens the menu. Publish the menu again without the photograph
+to release it.

@@ -3,7 +3,8 @@ const formatters = new Map<string, Intl.NumberFormat>();
 /**
  * A money amount for paper, formatted in `locale`. `Intl.NumberFormat("es-ES", …)` separates the amount
  * and the € with a no-break space (U+00A0, or U+202F on some ICU builds); it becomes an ASCII space so
- * every character set prints the same gap. `Number(value)` is display-only: at money scale it is exact.
+ * every character set prints the same gap. `Number(value)` is display-only: it renders an amount to
+ * the cent up to fifteen significant digits, and not reliably beyond.
  */
 export function formatMoney(value: string, locale: string): string {
   let formatter = formatters.get(locale);

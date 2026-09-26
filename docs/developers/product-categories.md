@@ -130,6 +130,21 @@ is charged `effectivePrice`. `categoryId` is the product's reporting category, a
 `variants` is `{ variantId, price, offered }` as `GET …/items/:itemId/variants` gives it. An
 unknown menu is `catalogue.not_found` (404).
 
+`GET /management-api/catalogues/:id/status` → 200 gives a menu's publication state:
+`{ state: "unpublished" }`, or `{ state, version, publishedAt, hash }` for its live version, where
+`state` is `current` while the working menu hashes to that version's `hash` and `changed` once it
+does not. `GET /management-api/catalogues/status` gives every menu's, as one object keyed by menu
+id. `GET /management-api/catalogues/:id/preview` → 200, `{ hash, changes, warnings, status }`:
+`hash` is the working menu's, `changes` what publishing it would change, `warnings` the home-layout
+shortcuts publishing would leave out, and `status` the state above.
+`POST /management-api/catalogues/:id/publish` (`{ expectedHash }`) → 200, `{ versionId, number }`,
+makes the working menu the live version. It rebuilds the menu and refuses with
+`menu.changed_since_preview` (409) when that hashes to anything but `expectedHash`; a menu that
+already matches its live version answers that version and writes nothing. A missing or non-string
+`expectedHash` is `management.request_invalid` (400). On the three routes that name a menu, an
+unknown menu is `catalogue.not_found` (404) and a malformed id `shared.invalid_id` (400). Nothing
+sells from a live version yet: the till's offers are read from the working menu.
+
 ## Moving and deleting
 
 Moving a category to a new parent, or a product to a new main category, is always allowed. Sale
@@ -229,8 +244,9 @@ list silently ignored, so a caller still on the old contract finds out at once.
 `categories` (core) holds the translated name. `category_details` (catalogue) holds the parent, image
 and colour. `labels` holds each label, with the unique index `labels_name_uq` on its name, and
 `product_labels` joins products to labels; both cascade when a product or a label is deleted. All
-the catalogue tables are classified `state` and travel in the configuration transfer, `labels`
-before `product_labels`.
+the catalogue tables are classified `state`. All but the three that hold published menus
+(`menu_versions`, `menu_publications` and `menu_version_images`) travel in the configuration
+transfer, `labels` before `product_labels`, so an imported venue's menus arrive unpublished.
 
 The product-to-category membership table, `product_categories`, is gone. It was created by
 `packages/catalogue/drizzle/0000_baseline.sql` and is dropped by
