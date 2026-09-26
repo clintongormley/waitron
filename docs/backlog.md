@@ -632,19 +632,22 @@ its part done here when it lands.
   `{label}` slot (as the plan chose) where other shared controls take a function; switch them there
   unless the owner prefers the text form.
 - **A65 (the list tables and the Used by popup) — built, no pull request number yet.** Both tabs'
-  Status column reads Active / Inactive, and so does each editor's switch, which shares the words. A
-  new Used by column counts what carries each list ("2 products · 1 menu item", "Not used" at zero),
-  sorts by the total, and its count is the link that opens the popup, titled "Used by {name}"; the
-  name is plain text. The menu figure counts menu ENTRIES, so it says "menu items" ("elementos de
-  menú"), not "menus": one menu offering the list on two dishes counts 2. An extras list's popup and
-  delete preview name each menu row "{dish} — {menu}"; an options list's popup lists products only,
-  with no Type column, and its delete warning never mentions menu items. The list reads now refresh
-  when `product_modifiers` (both) or `menu_item_extra_lists` (extras) change, which also refreshes
-  the catalogue screen's copies of the two lists. Where the screen is 480px wide or less (a phone),
-  the two counts, and a popup row's menu, each take a line of their own. Measured at 390px, the tables still scroll
-  sideways inside their own box, further than before by the new column: Extras 511px of content in
-  388px (439px before) in English, 607px (463px) in Spanish; Options 457px (402px) and 479px
-  (405px). The page itself does not scroll sideways.
+  Status column and its filter read Active / Inactive; each editor's on/off switch shares the
+  "Active" string, so its label now reads "Active" where it read "In use". A new Used by column
+  counts what carries each list ("2 products · 1 menu item", "Not used" at zero), sorts by the
+  total, and its count is the link that opens the popup, titled "Used by {name}" ("Dónde se usa
+  {name}"); the name is plain text. Each count button's accessible name adds its list's name, so two
+  lists with the same counts do not sound alike. The menu figure counts menu ENTRIES, so it says
+  "menu items" ("elementos del menú"), not "menus": one menu offering the list on two dishes counts
+  twice. An extras list's popup and delete preview name each menu row "{dish} — {menu}"; an options
+  list's popup lists products only, with no Type column, and its delete warning never mentions menu
+  items. The list reads now refresh when `product_modifiers` (both) or `menu_item_extra_lists`
+  (extras) change, which also refreshes the catalogue screen's copies of the two lists. Where the
+  screen is 480px wide or less (a phone), the two counts, and a popup row's menu, each take a line
+  of their own. Measured at 390px, the tables still scroll sideways inside their own box, further
+  than before by the new column: Extras 511px of content in 388px (439px before) in English, 610px
+  (463px) in Spanish; Options 457px (402px) and 479px (405px). The page itself does not scroll
+  sideways.
 
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its

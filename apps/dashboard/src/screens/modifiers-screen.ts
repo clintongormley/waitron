@@ -371,6 +371,7 @@ export class ModifiersScreen extends LitElement {
       variant="ghost"
       align="start"
       data-test=${`used-by-${list.id}`}
+      aria-label=${`${this.#usedByHeading(list)}: ${counts.join(" · ")}`}
       exportparts="button: used-by"
       @click=${() => this.#openModal("view", kind, list)}
       ><span
@@ -540,8 +541,8 @@ export class ModifiersScreen extends LitElement {
       .emptyMessage=${extras ? t("modifiers.no_usage") : t("modifiers.no_product_usage")}
     ></wt-data-table>`;
   }
-  #usedByHeading(viewing: Target): string {
-    return t("modifiers.used_by_named").replace("{name}", viewing.name);
+  #usedByHeading(list: { name: string }): string {
+    return t("modifiers.used_by_named").replace("{name}", list.name);
   }
   #deleteWarning(dependants: ListDependants): string {
     const parts = [t("modifiers.delete_warning_intro")];

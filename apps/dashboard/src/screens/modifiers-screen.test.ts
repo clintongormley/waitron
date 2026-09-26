@@ -392,7 +392,7 @@ describe("in English", () => {
   beforeEach(() => setLocale("en"));
   afterEach(() => setLocale("es-ES"));
 
-  it("reads each list's switch as Active or Inactive, and filters by the same two words", async () => {
+  it("shows each list's status as Active or Inactive, and filters by the same two words", async () => {
     expect([t("extras.active"), t("extras.inactive")]).toEqual(["Active", "Inactive"]);
     expect([t("options.active"), t("options.inactive")]).toEqual(["Active", "Inactive"]);
     const el = await mount(
@@ -496,6 +496,36 @@ describe("in English", () => {
     await el.updateComplete;
     expect(detailModal(el).open).toBe(true);
     expect(detailModal(el).heading).toBe("Used by Breads");
+  });
+
+  // Two lists used by the same number of things would otherwise read the same to a screen reader.
+  it("names each count button after its own list, keeping the count as its visible text", async () => {
+    const el = await mount(
+      api({
+        listExtraLists: vi
+          .fn()
+          .mockResolvedValue([extraList, { ...extraList, id: "e2", name: "Sauces" }]),
+      }),
+    );
+    const extras = table(el, "extra-lists");
+    await vi.waitFor(() =>
+      expect(extras.shadowRoot.querySelector('[data-test="used-by-e2"]')).not.toBeNull(),
+    );
+    const named = (id: string) => {
+      const count = extras.shadowRoot.querySelector(`[data-test="used-by-${id}"]`)!;
+      return {
+        name: count.shadowRoot!.querySelector("button")!.getAttribute("aria-label"),
+        text: count.textContent!.trim(),
+      };
+    };
+    expect(named("e1")).toEqual({
+      name: "Used by Breads: 2 products · 1 menu item",
+      text: "2 products · 1 menu item",
+    });
+    expect(named("e2")).toEqual({
+      name: "Used by Sauces: 2 products · 1 menu item",
+      text: "2 products · 1 menu item",
+    });
   });
 
   // A class rule in the screen would reach nothing: the cell renders inside the table's shadow root.
@@ -611,9 +641,17 @@ it("counts in Spanish, with the singular forms", async () => {
     }),
   );
   await vi.waitFor(() => expect(table(el, "extra-lists").shadowRoot.textContent).toContain("Dips"));
-  expect(await usedByText(el, "extra-lists", "Breads")).toBe("2 productos · 1 elemento de menú");
-  expect(await usedByText(el, "extra-lists", "Sauces")).toBe("1 producto · 2 elementos de menú");
+  expect(await usedByText(el, "extra-lists", "Breads")).toBe("2 productos · 1 elemento del menú");
+  expect(await usedByText(el, "extra-lists", "Sauces")).toBe("1 producto · 2 elementos del menú");
   expect(await usedByText(el, "extra-lists", "Dips")).toBe("Sin usar");
+  // "Usado en Breads" would read as used inside the list; the popup asks where the list is used.
+  expect(t("modifiers.used_by")).toBe("Usado en");
+  await clickInTable(el, "extra-lists", "used-by-e1");
+  expect(detailModal(el).heading).toBe("Dónde se usa Breads");
+  const count = table(el, "extra-lists").shadowRoot.querySelector('[data-test="used-by-e1"]')!;
+  expect(count.shadowRoot!.querySelector("button")!.getAttribute("aria-label")).toBe(
+    "Dónde se usa Breads: 2 productos · 1 elemento del menú",
+  );
 });
 
 // ---------------------------------------------------------------------------
