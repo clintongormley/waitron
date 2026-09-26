@@ -763,11 +763,11 @@ describe("GET /management-api/servers", () => {
     expect(await res.json()).toEqual({
       term: await heldTerm(p.db),
       nodes: [
-        { ...self(p), isSelf: true, removable: false },
-        { ...neverJoined, isSelf: false, removable: true },
-        { ...joined, isSelf: false, removable: false },
-        { ...former, isSelf: false, removable: false },
-        { ...evicted, isSelf: false, removable: false },
+        { ...self(p), isSelf: true, removable: false, canClear: false },
+        { ...neverJoined, isSelf: false, removable: true, canClear: false },
+        { ...joined, isSelf: false, removable: false, canClear: false },
+        { ...former, isSelf: false, removable: false, canClear: false },
+        { ...evicted, isSelf: false, removable: false, canClear: true },
       ],
     });
   });
@@ -790,6 +790,50 @@ describe("GET /management-api/servers", () => {
       [other.nodeId, false],
       [p.nodeId, false],
       [neverJoined.nodeId, false],
+    ]);
+  });
+
+  it("marks canClear only on removed machines, and lists no cleared one", async () => {
+    const p = await primary();
+    const live = standby();
+    const former: MembershipNode = {
+      nodeId: randomUUID(),
+      contactUrl: "https://old.deli.test",
+      standing: "sell-only",
+    };
+    const gone = evicted();
+    const cleared = randomUUID();
+    await holdChartRevoking(p, [self(p), live, former, gone], [cleared]);
+
+    const res = await list(p, p.adminCookie);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { nodes: { nodeId: string; canClear: boolean }[] };
+    expect(body.nodes.map((n) => [n.nodeId, n.canClear])).toEqual([
+      [p.nodeId, false],
+      [live.nodeId, false],
+      [former.nodeId, false],
+      [gone.nodeId, true],
+    ]);
+  });
+
+  it("marks nothing clearable on a node that is not the serving primary", async () => {
+    const p = await primary();
+    const other: MembershipNode = {
+      nodeId: randomUUID(),
+      contactUrl: "https://elsewhere.deli.test",
+      standing: "serving-primary",
+    };
+    const gone = evicted();
+    await holdChart(p, [other, { ...self(p), standing: "serving-secondary" }, gone]);
+
+    const res = await list(p, p.adminCookie);
+
+    const body = (await res.json()) as { nodes: { nodeId: string; canClear: boolean }[] };
+    expect(body.nodes.map((n) => [n.nodeId, n.canClear])).toEqual([
+      [other.nodeId, false],
+      [p.nodeId, false],
+      [gone.nodeId, false],
     ]);
   });
 

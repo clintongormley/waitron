@@ -142,6 +142,7 @@ export interface ServerListing {
     readonly standing: NodeStanding;
     readonly isSelf: boolean;
     readonly removable: boolean;
+    readonly canClear: boolean;
   }[];
 }
 
@@ -161,6 +162,7 @@ export async function listServers(db: Database, selfNodeId: string): Promise<Ser
       isSelf: n.nodeId === selfNodeId,
       removable:
         judgeRemoval(held, selfNodeId, n.nodeId, withRows.has(n.nodeId)).kind === "removable",
+      canClear: judgeClearance(held, selfNodeId, n.nodeId).kind === "clearable",
     })),
   };
 }
