@@ -8,7 +8,7 @@ import {
   parseOptionListInput,
   type OptionLabel,
   type OptionList,
-  type OptionListInput,
+  type ParsedOptionList,
 } from "./option-contract.js";
 import type { OptionListDependants, OptionListRow } from "./modifier-list-types.js";
 import { findContentTranslationGap } from "./content-languages.js";
@@ -119,7 +119,7 @@ async function assertOptionList(tx: Transaction, optionListId: string): Promise<
  */
 async function validateNames(
   tx: Transaction,
-  input: OptionListInput,
+  input: ParsedOptionList,
   fallbackLanguage: string,
 ): Promise<void> {
   const named = [
@@ -142,9 +142,9 @@ async function validateNames(
     });
 }
 
-// Taken as "the rest" rather than field by field, so a column added to `OptionListInput` cannot be
+// Taken as "the rest" rather than field by field, so a column added to `ParsedOptionList` cannot be
 // left unwritten.
-function listValues(input: OptionListInput) {
+function listValues(input: ParsedOptionList) {
   const { labels, ...values } = input;
   void labels; // discarded on purpose; the lint rule does not exempt a rest sibling
   return values;
@@ -156,16 +156,16 @@ function listValues(input: OptionListInput) {
  * (see {@link optionListDependants}), and an order line copies the names as text rather than
  * pointing back by id.
  *
- * A body label carrying the id of a label this list already holds is updated in place; one with no
- * id, or with an id nothing holds, is inserted. An id that names a label of a DIFFERENT list is
+ * A body label carrying the id of a label this list already holds is updated in place; one whose id
+ * nothing holds is inserted. An id that names a label of a DIFFERENT list is
  * refused as `options.invalid` rather than moving that label.
  */
 async function writeLabels(
   tx: Transaction,
   optionListId: string,
-  input: OptionListInput,
+  input: ParsedOptionList,
 ): Promise<void> {
-  const bodyIds = input.labels.flatMap((label) => (label.id === undefined ? [] : [label.id]));
+  const bodyIds = input.labels.map((label) => label.id);
   const existing = bodyIds.length
     ? await tx
         .select({ id: optionLabels.id, listId: optionLabels.listId })
@@ -176,7 +176,7 @@ async function writeLabels(
     existing.filter((row) => row.listId !== optionListId).map((row) => row.id),
   );
   if (foreign.size) {
-    const at = input.labels.findIndex((label) => label.id !== undefined && foreign.has(label.id));
+    const at = input.labels.findIndex((label) => foreign.has(label.id));
     throw new AppError("options.invalid", { field: `labels.${at}.id` });
   }
   // What the body does not name is this list's to remove; `bodyIds` cannot name another list's label
@@ -197,7 +197,7 @@ async function writeLabels(
       available: label.available,
       sort,
     };
-    if (label.id !== undefined && heldIds.has(label.id)) {
+    if (heldIds.has(label.id)) {
       await tx
         .update(optionLabels)
         .set(values)
@@ -206,7 +206,7 @@ async function writeLabels(
     }
     const inserted = await tx
       .insert(optionLabels)
-      .values({ id: label.id ?? randomUUID(), listId: optionListId, ...values })
+      .values({ id: label.id, listId: optionListId, ...values })
       .onConflictDoNothing()
       .returning({ id: optionLabels.id });
     if (!inserted.length) throw new AppError("options.invalid", { field: `labels.${sort}.id` });

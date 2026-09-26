@@ -11,6 +11,7 @@ const wellDoneId = "33333333-3333-4333-8333-333333333333";
 const sauceId = "44444444-4444-4444-8444-444444444444";
 const aioliId = "55555555-5555-4555-8555-555555555555";
 const unknownId = "66666666-6666-4666-8666-666666666666";
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 // The three names carry three DIFFERENT texts everywhere, so a function reading the wrong one fails
 // rather than passing on a coincidence (CLAUDE.md §3).
@@ -160,8 +161,9 @@ describe("option list authoring contract", () => {
     });
     expect(parsed.customerName).toBeNull();
     expect(parsed.kitchenName).toBeNull();
-    expect(parsed.defaultLabelId).toBeNull();
+    expect(parsed.defaultLabelId).toBe(parsed.labels[0]!.id);
     expect(parsed.labels[0]).toEqual({
+      id: expect.stringMatching(UUID),
       name: "Medium rare",
       customerName: null,
       kitchenName: null,
@@ -251,13 +253,50 @@ describe("option list authoring contract", () => {
     );
   });
 
-  it("normalises a defaultLabelId naming an unavailable label to null", () => {
+  it("moves a default naming an unavailable label to the first available one", () => {
     const parsed = parseOptionListInput({
       ...cooked,
       labels: [{ ...mediumRare, available: false }, wellDone],
     });
-    expect(parsed.defaultLabelId).toBeNull();
+    expect(parsed.defaultLabelId).toBe(wellDoneId);
     expect(parsed.labels[0]!.available).toBe(false);
+  });
+
+  it("gives a label without an id one of its own", () => {
+    const parsed = parseOptionListInput({
+      ...cooked,
+      defaultLabelId: null,
+      labels: [{ ...mediumRare, id: undefined }],
+    });
+    expect(parsed.labels[0]!.id).toMatch(UUID);
+  });
+
+  it("makes the first available label the default when none is named", () => {
+    const parsed = parseOptionListInput({
+      ...cooked,
+      defaultLabelId: null,
+      labels: [{ ...mediumRare, available: false }, wellDone],
+    });
+    expect(parsed.defaultLabelId).toBe(wellDoneId);
+  });
+
+  it("keeps a default that names an available label", () => {
+    const parsed = parseOptionListInput({
+      ...cooked,
+      defaultLabelId: wellDoneId,
+      labels: [mediumRare, wellDone],
+    });
+    expect(parsed.defaultLabelId).toBe(wellDoneId);
+  });
+
+  it("has no default when no label is available (an inactive list)", () => {
+    const parsed = parseOptionListInput({
+      ...cooked,
+      active: false,
+      defaultLabelId: null,
+      labels: [{ ...mediumRare, available: false }],
+    });
+    expect(parsed.defaultLabelId).toBeNull();
   });
 
   it("refuses a duplicate label id", () => {

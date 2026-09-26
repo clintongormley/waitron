@@ -313,7 +313,7 @@ describe("what a product offers", () => {
 
   it("offers only the labels still available, and drops a default naming a withdrawn one", async () => {
     // `option_lists.default_label_id` carries no foreign key (schema/options.ts), and
-    // `parseOptionListInput` drops a default naming an unavailable label (option-contract.ts), so
+    // `parseOptionListInput` moves a default off an unavailable label (option-contract.ts), so
     // the authoring API cannot leave the two out of step. The column is written directly here to
     // reach the state anyway, because nothing in the database keeps it consistent.
     const seeded = await run(async (tx) => {
