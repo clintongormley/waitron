@@ -12,6 +12,28 @@ import { t } from "../i18n/t.js";
 
 type ReorderHost = ReactiveControllerHost & { readonly shadowRoot: ShadowRoot | null };
 
+/** Set on the body while any drag is in progress. The body's own `cursor` loses to any element
+ * with a cursor rule of its own, such as the handle; a custom property inherits into every shadow
+ * root, so a rule that reads it follows the drag. */
+const DRAG_CURSOR = "--reorder-drag-cursor";
+
+/** Shared by every controller on the page, so overlapping drags (two tables, two fingers) hand the
+ * page's own cursor back only when the last one ends. */
+const pageDrag = { count: 0, cursor: "" };
+
+function holdPageCursor(): void {
+  if (pageDrag.count++ > 0) return;
+  pageDrag.cursor = document.body.style.cursor;
+  document.body.style.cursor = "grabbing";
+  document.body.style.setProperty(DRAG_CURSOR, "grabbing");
+}
+
+function releasePageCursor(): void {
+  if (--pageDrag.count > 0) return;
+  document.body.style.cursor = pageDrag.cursor;
+  document.body.style.removeProperty(DRAG_CURSOR);
+}
+
 export interface ReorderModel {
   /** Row ids in current display order, top to bottom. The tbody renders one `<tr>` per id in this
    * order — the invariant the pointer geometry relies on. */
@@ -38,8 +60,6 @@ export class ReorderController implements ReactiveController {
   #rowBounds: { id: string; top: number; bottom: number }[] | null = null;
   #refocus: string | null = null;
   #announcement = "";
-  /** The page's own inline cursor, put back when a drag ends. */
-  #pageCursor = "";
   /** Relies on the host keying its rows (`repeat` by id), so this element moves with the row. */
   #draggedRow: Element | null = null;
 
@@ -55,7 +75,7 @@ export class ReorderController implements ReactiveController {
       border-radius: var(--wt-radius-md);
       background: transparent;
       color: var(--wt-color-text);
-      cursor: grab;
+      cursor: var(--reorder-drag-cursor, grab);
       /* A touch that starts on the handle drags the row; without this the browser claims the
          gesture and scrolls the host instead. Not a themed value, so no token. */
       touch-action: none;
@@ -69,9 +89,6 @@ export class ReorderController implements ReactiveController {
     tr[data-dragging] {
       background: var(--wt-color-surface-lifted);
       box-shadow: var(--wt-shadow-2);
-    }
-    tr[data-dragging] .handle {
-      cursor: grabbing;
     }
     /* Off screen but still announced: the live region below, and a header cell whose column holds
        only controls and so has no visible label of its own. */
@@ -194,8 +211,7 @@ export class ReorderController implements ReactiveController {
     this.#drag = { id, pointerId: event.pointerId };
     this.#draggedRow = (event.currentTarget as HTMLElement).closest("tr");
     this.#draggedRow?.setAttribute("data-dragging", "");
-    this.#pageCursor = document.body.style.cursor;
-    document.body.style.cursor = "grabbing";
+    holdPageCursor();
     document.addEventListener("pointermove", this.#onPointerMove);
     document.addEventListener("pointerup", this.#onPointerEnd);
     document.addEventListener("pointercancel", this.#onPointerEnd);
@@ -220,7 +236,7 @@ export class ReorderController implements ReactiveController {
   };
 
   #endDrag(): void {
-    if (this.#drag !== null) document.body.style.cursor = this.#pageCursor;
+    if (this.#drag !== null) releasePageCursor();
     this.#draggedRow?.removeAttribute("data-dragging");
     this.#draggedRow = null;
     this.#drag = null;

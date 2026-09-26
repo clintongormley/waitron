@@ -226,7 +226,7 @@ it("marks no row for a busy handle or a second pointer", async () => {
   pointer(document, "pointerup", 1);
 });
 
-it("shows a grabbing cursor across the page while dragging, and puts the page's back on release", async () => {
+it("sets a grabbing cursor on the page body while dragging, and puts the page's back on release", async () => {
   const el = await mount();
   document.body.style.cursor = "help";
   try {
@@ -274,9 +274,46 @@ it("paints the dragged row lifted, from tokens", async () => {
   expect(getComputedStyle(row(el, "a")).boxShadow).toBe("rgb(4, 5, 6) 0px 0px 0px 1px");
   expect(getComputedStyle(handle(el, "a")).cursor).toBe("grabbing");
   expect(getComputedStyle(row(el, "b")).backgroundColor).toBe("rgba(0, 0, 0, 0)");
-  expect(getComputedStyle(handle(el, "b")).cursor).toBe("grab");
   pointer(document, "pointerup", 1);
 });
+
+it("shows the grabbing hand on every row and handle, in every table, while one row is dragged", async () => {
+  const el = await mount();
+  const other = await mount();
+  expect(getComputedStyle(handle(el, "b")).cursor).toBe("grab");
+  pointer(handle(el, "a"), "pointerdown", 1);
+  for (const table of [el, other]) {
+    for (const id of ["a", "b", "c"]) {
+      expect(getComputedStyle(handle(table, id)).cursor).toBe("grabbing");
+      expect(getComputedStyle(row(table, id)).cursor).toBe("grabbing");
+    }
+  }
+  pointer(document, "pointerup", 1);
+  expect(getComputedStyle(handle(el, "b")).cursor).toBe("grab");
+  expect(getComputedStyle(handle(other, "a")).cursor).toBe("grab");
+});
+
+for (const [first, second] of [
+  [1, 2],
+  [2, 1],
+] as const) {
+  it(`puts the page's cursor back only when the last of two overlapping drags ends (pointer ${first} released first)`, async () => {
+    const tables = [await mount(), await mount()];
+    document.body.style.cursor = "help";
+    try {
+      pointer(handle(tables[0]!, "a"), "pointerdown", 1);
+      pointer(handle(tables[1]!, "a"), "pointerdown", 2);
+      pointer(document, "pointerup", first);
+      expect(document.body.style.cursor).toBe("grabbing");
+      expect(getComputedStyle(handle(tables[0]!, "b")).cursor).toBe("grabbing");
+      pointer(document, "pointerup", second);
+      expect(document.body.style.cursor).toBe("help");
+      expect(getComputedStyle(handle(tables[0]!, "b")).cursor).toBe("grab");
+    } finally {
+      document.body.style.cursor = "";
+    }
+  });
+}
 
 it("starts no drag from a busy handle", async () => {
   const el = await mount(three(), true);
