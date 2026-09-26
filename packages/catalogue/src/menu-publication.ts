@@ -169,26 +169,21 @@ export async function previewMenu(
   if (mine === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
   const live = await readLiveDocuments(tx, [...menus.keys()]);
   const entries = diffEntries(live.get(menuId)?.document ?? null, mine.document);
-  const others = [...live]
-    .filter(([other]) => other !== menuId && menus.has(other))
-    .map(([other, { document }]) => ({
-      menuId: other,
-      name: menus.get(other)!.document.menuName,
-      entries: diffEntries(document, menus.get(other)!.document),
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name));
 
-  const removed = [entries, ...others.map((other) => other.entries)].flatMap((list) =>
-    list.flatMap(({ change }) => (change.kind === "product_removed" ? [change.productId] : [])),
-  );
-  const deleted = new Set<string>();
-  for (const batch of batches([...new Set(removed)]))
-    for (const row of await tx
-      .select({ id: products.id })
-      .from(products)
-      .where(and(inArray(products.id, batch), eq(products.active, false))))
-      deleted.add(row.id);
-  const refine = (list: DiffEntry[], owner: string): void => {
+  const inactiveOf = async (lists: readonly DiffEntry[][]): Promise<Set<string>> => {
+    const removed = lists.flatMap((list) =>
+      list.flatMap(({ change }) => (change.kind === "product_removed" ? [change.productId] : [])),
+    );
+    const inactive = new Set<string>();
+    for (const batch of batches([...new Set(removed)]))
+      for (const row of await tx
+        .select({ id: products.id })
+        .from(products)
+        .where(and(inArray(products.id, batch), eq(products.active, false))))
+        inactive.add(row.id);
+    return inactive;
+  };
+  const refine = (list: DiffEntry[], owner: string, deleted: ReadonlySet<string>): void => {
     const reached = new Set(reachableProducts(graph, menus.get(owner)!.rootSectionId));
     for (const entry of list) {
       const { change } = entry;
@@ -209,15 +204,27 @@ export async function previewMenu(
       }
     }
   };
-  refine(entries, menuId);
-  for (const other of others) refine(other.entries, other.menuId);
+  refine(entries, menuId, await inactiveOf([entries]));
 
-  for (const entry of entries) {
-    if (entry.change.source === "this_menu") continue;
-    const alsoOn = others
-      .filter((other) => other.entries.some((candidate) => sameEdit(entry, candidate)))
-      .map((other) => other.name);
-    if (alsoOn.length > 0) entry.change.alsoOn = alsoOn;
+  // The other menus are compared only to fill in a shared change's `alsoOn`.
+  if (entries.some(({ change }) => change.source !== "this_menu")) {
+    const others = [...live]
+      .filter(([other]) => other !== menuId && menus.has(other))
+      .map(([other, { document }]) => ({
+        menuId: other,
+        name: menus.get(other)!.document.menuName,
+        entries: diffEntries(document, menus.get(other)!.document),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const deleted = await inactiveOf(others.map((other) => other.entries));
+    for (const other of others) refine(other.entries, other.menuId, deleted);
+    for (const entry of entries) {
+      if (entry.change.source === "this_menu") continue;
+      const alsoOn = others
+        .filter((other) => other.entries.some((candidate) => sameEdit(entry, candidate)))
+        .map((other) => other.name);
+      if (alsoOn.length > 0) entry.change.alsoOn = alsoOn;
+    }
   }
 
   return {

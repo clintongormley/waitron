@@ -562,7 +562,8 @@ function productFields(
   for (const variant of b.variants) {
     const was = before.get(variant.id);
     if (was === undefined) continue;
-    // A variant that inherits the fact changed with the dish, which the dish's own fields name.
+    // A variant whose value matched the dish's both before and after moved with the dish, and the
+    // dish's own field names that change.
     const read = (value: object, key: string) => (value as Record<string, unknown>)[key];
     const inherited = (keys: readonly string[]) =>
       keys.every(

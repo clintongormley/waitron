@@ -490,6 +490,18 @@ describe("previewMenu", () => {
     ]);
   });
 
+  it("compares no other menu when every change is this menu's own", async () => {
+    const f = await menusFixture(fx.db);
+    await publish(f.lunch);
+    await publish(f.dinner);
+    await app(async (tx) => moveMember(tx, f.lunchRoot, await memberOf(f.lunchRoot, f.soup), 0));
+    const diffs = vi.spyOn(menuDocument, "diffEntries");
+    expect((await app((tx) => previewMenu(tx, f.lunch))).changes).toEqual([
+      { kind: "order_changed", list: [], source: "this_menu" },
+    ]);
+    expect(diffs).toHaveBeenCalledOnce();
+  });
+
   it("names a reorder of Lunch's top level as this menu's change", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.lunch);
