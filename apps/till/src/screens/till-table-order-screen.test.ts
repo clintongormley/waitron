@@ -1042,6 +1042,36 @@ describe("till-table-order-screen", () => {
       expect(lineAction(el, "change", 8)).not.toBeNull();
     });
 
+    it("offers Cancel on a recalled line with the setting on, beside Send and Change", async () => {
+      const { el } = await mountLines([recalledLine]);
+      await openDrawer(el);
+      expect(lineAction(el, "cancel", 6)).not.toBeNull();
+      expect(lineAction(el, "send", 6)).not.toBeNull();
+      expect(lineAction(el, "change", 6)).not.toBeNull();
+    });
+
+    it("closes an open Change editor when the app points the screen at another order", async () => {
+      const { el } = await mountLines([burgerLine], { orderId: "wo-7" });
+      await openDrawer(el);
+      await openChange(el, 5);
+      el.orderId = "wo-9";
+      await el.updateComplete;
+      expect(editor(el)).toBeNull();
+    });
+
+    it("closes an open Cancel confirm when the app points the screen at another order", async () => {
+      const { el } = await mountLines([burgerLine], { orderId: "wo-7" });
+      await openDrawer(el);
+      lineAction(el, "cancel", 5)!.click();
+      await el.updateComplete;
+      el.orderId = "wo-9";
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+        "wt-dialog.cancel-confirm",
+      )!;
+      expect(dialog.open).toBe(false);
+    });
+
     it("offers Cancel alone on a line the kitchen has started", async () => {
       const { el } = await mountLines([preparingBurger, readyBurger]);
       await openDrawer(el);
@@ -1382,15 +1412,30 @@ describe("till-table-order-screen", () => {
         expect(dialog.querySelector("[data-cancel-one]")).toBeNull();
       });
 
+      it("tells the app it has taken a Cancel offer, so the offer is shown once", async () => {
+        const { el } = await mountLines([preparingBurger]);
+        let taken: Event | undefined;
+        el.addEventListener("cancel-offer-taken", (e) => (taken = e));
+        el.cancelOffer = 9;
+        await el.updateComplete;
+        expect(taken).toBeInstanceOf(CustomEvent);
+        expect(taken!.bubbles).toBe(true);
+        expect(taken!.composed).toBe(true);
+      });
+
       it("opens nothing when the line the app offers Cancel for is no longer on the tab", async () => {
         const { el } = await mountLines([preparingBurger]);
         await openDrawer(el);
+        let taken: Event | undefined;
+        el.addEventListener("cancel-offer-taken", (e) => (taken = e));
         el.cancelOffer = 42;
         await el.updateComplete;
         const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
           "wt-dialog.cancel-confirm",
         )!;
         expect(dialog.open).toBe(false);
+        // Taken all the same: a later mount must not open it on whatever line 42 then is.
+        expect(taken).toBeInstanceOf(CustomEvent);
       });
 
       it("opens Cancel on the line the app offers it for after a refused change", async () => {

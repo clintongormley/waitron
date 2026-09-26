@@ -628,7 +628,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       .fn()
       .mockResolvedValueOnce({ lines: [burgerLine], revision: 7, editSentLines: true })
       .mockResolvedValueOnce({
-        lines: [{ ...burgerLine, lineNo: 6, note: "no onions" }],
+        lines: [{ ...burgerLine, note: "no onions" }],
         revision: 8,
         editSentLines: true,
       });
@@ -749,6 +749,39 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     await flush(el);
 
     expect(dialogOf(tableOrder(el)!).open).toBe(true);
+  });
+
+  it("shows a dismissed Cancel offer only once, even when a handheld's Order tab mounts again", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "h1", formFactor: "phone-portrait", stationId: null }),
+      listZoneOffers: vi.fn().mockResolvedValue(burgerOffers),
+      getTabLines: vi.fn().mockResolvedValue({
+        lines: [{ ...burgerLine, state: "preparing" }],
+        revision: 7,
+        editSentLines: true,
+      }),
+      updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
+    });
+    await logIn(el);
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+    await openFromFloor(el, openTable);
+    await flush(el);
+    emit(tableOrder(el)!, "change-line", change);
+    await flush(el);
+    expect(dialogOf(tableOrder(el)!).open).toBe(true);
+    dialogOf(tableOrder(el)!).querySelector<HTMLElement>("[data-cancel-dismiss]")!.click();
+    await flush(el);
+
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+    emit(shell(el), "tab-select", { key: "order" });
+    await flush(el);
+
+    expect(dialogOf(tableOrder(el)!).open).toBe(false);
   });
 
   it("says changes to sent items are switched off, and reloads the line's actions", async () => {

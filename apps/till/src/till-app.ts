@@ -1713,9 +1713,9 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * The reload runs on every path: a changed line the kitchen had goes to it again under a new line
-   * number, and a refused one has stale actions. A change refused because the kitchen has started the
-   * line offers to cancel it once the reload shows it started.
+   * The reload runs on every path, so the line shows what the server stored and a refused change
+   * leaves no stale actions. A change refused because the kitchen has started the line offers to
+   * cancel it once the reload shows it started.
    */
   async #onChangeLine(event: Event): Promise<void> {
     const { lineNo, patch, revision } = (event as CustomEvent<ChangeLineDetail>).detail;
@@ -2202,6 +2202,7 @@ export class TillApp extends LitElement {
         @recall-lines=${(event: Event) => void this.#onRecallLines(event)}
         @void-line=${(event: Event) => void this.#onVoidLine(event)}
         @change-line=${(event: Event) => void this.#onChangeLine(event)}
+        @cancel-offer-taken=${() => (this.cancelOffer = null)}
         @set-status=${(event: Event) => void this.#onSetStatus(event)}
         @move-tab=${(event: Event) => void this.#onMoveTab(event)}
         @join-table=${(event: Event) => void this.#onJoinTable(event)}

@@ -476,6 +476,8 @@ export class TillTableOrderScreen extends LitElement {
     // A tab switch must not carry a half-open action flow across: its targets belong to the OLD tab.
     if (changed.has("orderId") && changed.get("orderId") !== undefined) {
       this.#closeActions();
+      this.#closeChange();
+      this.cancelLine = null;
     }
     if (changed.has("products") || this.#productsByOffer === undefined) {
       this.#productsByOffer = new Map();
@@ -491,8 +493,21 @@ export class TillTableOrderScreen extends LitElement {
         (line) => line.lineNo === this.cancelOffer && !this.#isChild(line),
       );
       if (offered !== undefined) this.cancelLine = offered;
+      this.#offerTaken = true;
     }
   }
+
+  /** The app clears its offer on this event, so a screen mounted later (a handheld's Order tab coming
+   * back) does not open it again. Taken even when the line is gone, for the same reason. */
+  override updated(): void {
+    if (!this.#offerTaken) return;
+    this.#offerTaken = false;
+    this.dispatchEvent(
+      new CustomEvent("cancel-offer-taken", { detail: {}, bubbles: true, composed: true }),
+    );
+  }
+
+  #offerTaken = false;
 
   #lineGross(line: TabLine): Decimal {
     return this.#lineGrossByLineNo.get(line.lineNo)!;
@@ -672,10 +687,12 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
+  /** Every sent line with a ticket item, and a fired one: whatever else a line offers, cancelling it
+   * always has a button. A held line never sent keeps Send alone. */
   #canCancel(line: TabLine): boolean {
     if (this.#isChild(line)) return false;
-    const firedQueued = line.firedAt !== null && line.state === "queued";
-    return this.#isStarted(line) || firedQueued || this.#lockedBySetting(line);
+    const queued = line.state === "queued" && (line.firedAt !== null || line.sentAt !== null);
+    return this.#isStarted(line) || queued;
   }
 
   /** A CHILD extras row is part of its dish and offers no action of its own. */
