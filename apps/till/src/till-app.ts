@@ -530,9 +530,9 @@ export class TillApp extends LitElement {
    * check is left while it is the open order, or the operator's session ends. Held in memory only:
    * after a reload the check stays in Held orders. */
   #splitCheck?: { checkId: string; tabId: string };
-  /** The last merge {@link #returnSplitCheck} started in this operator's session, so a later exit
-   * waits for it. */
-  #checkReturn: Promise<boolean> = Promise.resolve(false);
+  /** The merge {@link #returnSplitCheck} started in this operator's session, while it is still
+   * running, so a later exit waits for it. */
+  #checkReturn?: Promise<boolean>;
   /** Bumped when the operator's session ends by logout or a server switch, so a split answering
    * afterwards records no origin and a merge answering afterwards changes nothing on screen. */
   #operatorSession = 0;
@@ -1709,7 +1709,7 @@ export class TillApp extends LitElement {
   }
 
   /** A free table seats a party with the guest count given; a seated one resumes
-   * {@link TableState.tabId}, the party's paid tab included. */
+   * {@link TableState.tabId}, even when that tab is no longer open. */
   async #onOpenTable(event: Event): Promise<void> {
     const { tableId, seated, guestCount } = (
       event as CustomEvent<{ tableId: string; seated: boolean; guestCount?: number | null }>
@@ -1902,7 +1902,8 @@ export class TillApp extends LitElement {
     this.errorKey = tableWriteError(error);
   }
 
-  /** A round sent to a seated party's paid tab lands on the party's next tab, which the screen follows. */
+  /** A round sent to a seated party's settled or abandoned tab lands on the party's next tab, which
+   * the screen follows. */
   async #onSendRound(event: Event): Promise<void> {
     const { lines } = (event as CustomEvent<{ lines: RoundLine[] }>).detail;
     if (this.activeTabId === undefined) return;
@@ -2266,25 +2267,28 @@ export class TillApp extends LitElement {
 
   /** Leaving a split-off check unpaid puts its lines back on the tab it came from, with their kitchen
    * tickets. A check whose payment is running here is left to that payment, and a failed merge is not
-   * retried. Resolves once the latest merge started in this session has settled, so an exit's next
-   * read comes after it; true when this call's own merge has already re-read the floor. */
+   * retried. Resolves once a merge still running in this session has settled, so an exit's next
+   * read comes after it; true when that merge has re-read the floor. */
   #returnSplitCheck(): Promise<boolean> {
     const split = this.#splitCheck;
-    const earlier = this.#checkReturn.then(() => false);
-    if (split === undefined || this.activeTabId !== split.checkId) return earlier;
+    const running = this.#checkReturn ?? Promise.resolve(false);
+    if (split === undefined || this.activeTabId !== split.checkId) return running;
     this.#splitCheck = undefined;
     if (this.submitting) {
       this.#showCheckOutcome("table.check_kept_held");
-      return earlier;
+      return running;
     }
-    this.#checkReturn = this.#mergeCheckBack(split);
-    return this.#checkReturn;
+    const merge = this.#mergeCheckBack(split).finally(() => {
+      if (this.#checkReturn === merge) this.#checkReturn = undefined;
+    });
+    this.#checkReturn = merge;
+    return merge;
   }
 
   /** Sends the revision of the party whose table holds the tab, as the floor last read it, because
    * the operator may already be opening another party's table. A merge moves that party's revision
-   * on, so a successful one re-reads the floor before the till acts on the party again, and resolves
-   * to whether it did. */
+   * on, so a successful one re-reads the floor before resolving, so an exit or a table opened after
+   * it acts on the new revision; resolves to whether it did. */
   async #mergeCheckBack(split: { checkId: string; tabId: string }): Promise<boolean> {
     const session = this.#operatorSession;
     const party = this.#visitOfTab(split.tabId);
@@ -2317,7 +2321,7 @@ export class TillApp extends LitElement {
   #endOperatorSession(): void {
     this.#operatorSession++;
     this.#splitCheck = undefined;
-    this.#checkReturn = Promise.resolve(false);
+    this.#checkReturn = undefined;
   }
 
   #showCheckOutcome(key: "table.check_kept_held" | "table.check_return_unconfirmed"): void {

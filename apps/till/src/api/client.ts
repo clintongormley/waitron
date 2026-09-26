@@ -955,7 +955,8 @@ export interface VisitRevisions {
 /**
  * One row of the live-floor occupancy read-model from `GET /api/tables/state`. A table is
  * `"open-tab"` while a party holds it, paid or not. `tabLineCount`/`tabTotal` are present iff a tab
- * is open; `tabId` names the open tab, or the paid tab a seated party's table still points at.
+ * is open; `tabId` names the open tab, or the tab a seated party's table still points at once that
+ * tab is no longer open.
  * `tabTotal` is the tab's gross draft total as a two-place decimal string. `status` is the table's MANUAL service status,
  * independent of occupancy. `pendingToServe` counts the open tab's lines still to deliver,
  * `readyToServe` those the kitchen has bumped `ready` but the waiter has not served, and `enRoute`
@@ -1606,8 +1607,9 @@ export class TillApi {
 
   /**
    * Append a round to a table's tab → `POST /api/working-orders/:orderId/round`. The new lines are priced
-   * at add-time and the existing lines are NOT re-priced. Sent to the paid tab a seated party's table
-   * still points at, it opens the party's next tab: the answer names the tab the round landed on.
+   * at add-time and the existing lines are NOT re-priced. Sent to the settled or abandoned tab a
+   * seated party's table still points at, it opens the party's next tab: the answer names the tab the
+   * round landed on.
    * `tab.not_open` and `sale.empty_basket` surface as a rejected `{ code }`.
    */
   addTabRound(orderId: string, lines: RoundLine[]): Promise<{ tabId: string }> {

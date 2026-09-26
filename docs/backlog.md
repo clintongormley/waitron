@@ -1852,9 +1852,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   locale, as the table screen does.
 - **A party's table can be pointed at a counter order, or at another party's bill (plan Task 2
   review, 2026-09-26).** `joinTable` and `mergeTabs` (`apps/server/src/working-order.ts`) accept a
-  parked counter order, which belongs to no party, as a tab when its service mode matches. So a
-  table can stay in its party while pointing at that counter order, or be held by one party while
-  pointing at another party's bill. "a paid check reached by a table outside its party"
+  parked counter order, which belongs to no party, as a tab: `joinTable` accepts any open order
+  whose zone is the table's (or when either has none), and `mergeTabs` one whose service mode
+  matches. So a table can stay in its party while pointing at that counter order, or be held by
+  one party while pointing at another party's bill. "a paid check reached by a table outside its party"
   (`apps/server/src/visits.test.ts`) reaches both. The till does not send that sequence (read, not
   tested). **Next action:** decide whether to refuse it.
 - **Later: optional seat/guest item assignment (owner, 2026-09-20).** Include shared items when

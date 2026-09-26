@@ -2,13 +2,26 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { locations, tills, visits, withTransaction, workingOrders } from "@waitron/db";
+import {
+  locations,
+  tills,
+  visits,
+  withTransaction,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { writeClearingWorkflow } from "@waitron/venue-service";
+import {
+  assignCatalogueToLocation,
+  createCatalogue,
+  createCategory,
+  createProduct,
+} from "@waitron/catalogue";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -21,6 +34,8 @@ import type { TillApiDeps } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
+import { seedLegacySellingUnits } from "./testing/seed-units.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
 // The HTTP surface of seating and finishing a table: the session guard, the body and id screens and
@@ -169,11 +184,38 @@ describe("POST /api/tables/:id/seat", () => {
   );
 
   it("takes the guest count alone: lines sent with the seat are not rung", async () => {
-    const res = await post(`/api/tables/${await table()}/seat`, {
-      guestCount: 2,
-      lines: [{ menuItemId: randomUUID(), quantity: "1" }],
+    await seedLegacySellingUnits(suite.db);
+    const { menuItemId, tableId } = await withTransaction(suite.db, async (tx) => {
+      const catalogue = await createCatalogue(tx, { name: "Carta" });
+      const drinks = await createCategory(tx, { name: { en: "Bebidas" } });
+      const coffee = await createProduct(tx, {
+        catalogueId: catalogue.id,
+        categoryId: drinks.id,
+        name: "Café",
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+      });
+      await assignCatalogueToLocation(tx, cfg.locationId, catalogue.id);
+      const offers = await offerProducts(tx, cfg, { zone: "tables" });
+      const { id } = await createTable(tx, cfg, {
+        label: `Mesa ${randomUUID()}`,
+        zoneId: offers.zoneId,
+      });
+      return { menuItemId: offers.offerFor(coffee.id), tableId: id };
     });
+
+    const res = await post(`/api/tables/${tableId}/seat`, {
+      guestCount: 2,
+      lines: [{ menuItemId, quantity: "1" }],
+    });
+
     expect(res.status, await res.clone().text()).toBe(200);
+    const { tabId } = (await res.json()) as { tabId: string };
+    const lines = await withTransaction(suite.db, (tx) =>
+      tx.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, tabId)),
+    );
+    expect(lines).toEqual([]);
   });
 
   it("refuses a malformed table id as a missing table", async () => {

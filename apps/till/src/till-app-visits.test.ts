@@ -887,6 +887,57 @@ describe("till-app: a party's split-off bill left unpaid goes back with the part
     expect(api.finishTable).toHaveBeenCalledExactlyOnceWith("v1", 5);
   });
 
+  /** A handheld with the party's bill split off, on its Order tab. */
+  async function splitOnHandheld(mergeTabs: () => Promise<void>) {
+    const { el } = await mountApp({
+      ...floorAcrossSplit(),
+      getTill: vi.fn().mockResolvedValue({ ...till, canvas: phone }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+      mergeTabs: vi.fn(mergeTabs),
+    });
+    await toFloor(el);
+    emit(shell(el), "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    emit(orderCard(el)!, "split-lines", { transfers: [{ lineNo: 1 }] });
+    await flush(el);
+    return el;
+  }
+
+  it("reads the floor once when a handheld leaves its Order tab twice before the merge answers", async () => {
+    let answerMerge!: () => void;
+    const el = await splitOnHandheld(() => new Promise<void>((resolve) => (answerMerge = resolve)));
+    const reads = vi.mocked(api.getTablesState).mock.calls.length;
+
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+    emit(shell(el), "tab-select", { key: "order" });
+    await flush(el);
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+    answerMerge();
+    await flush(el);
+
+    expect(api.mergeTabs).toHaveBeenCalledOnce();
+    expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
+  });
+
+  it("reads the floor again when a handheld leaves its Order tab after the merge has answered", async () => {
+    const el = await splitOnHandheld(async () => undefined);
+
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+    emit(shell(el), "tab-select", { key: "order" });
+    await flush(el);
+    const reads = vi.mocked(api.getTablesState).mock.calls.length;
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+
+    expect(api.mergeTabs).toHaveBeenCalledOnce();
+    expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
+  });
+
   it("keeps the bill held, without sending it again, when the party changed elsewhere first", async () => {
     const { el } = await mountApp({
       ...floorAcrossSplit(),

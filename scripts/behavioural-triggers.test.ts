@@ -668,7 +668,6 @@ describe("visits_clear_table_status", () => {
     expect(statusOf("dt-bumped")).toBe("status-busy");
   });
 
-  // Settling a tab no longer clears the table's status.
   it("leaves a table's status alone when its tab settles", () => {
     connection.exec(
       `update working_orders set status = 'settled', settled_at = '${STAMP}' where id = 'wo-tab'`,

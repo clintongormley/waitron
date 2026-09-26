@@ -2286,7 +2286,8 @@ export async function moveTab(
 }
 
 /**
- * Join an active, free table to an open tab, or to the paid tab a seated party's tables point at.
+ * Join an active, free table to an open tab, or to the settled or abandoned tab a seated party's
+ * tables point at.
  * The existing tab lines remain in place.
  */
 export async function joinTable(
