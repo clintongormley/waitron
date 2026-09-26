@@ -247,7 +247,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-lozenge` | `color` (a hex string; empty or invalid renders the neutral chip); default slot (label) | — |
 | `wt-count-badge` | `count` (renders nothing at zero; shows `99+` above 99), `tone` (`neutral`\|`warning`\|`error`, reflected). It has no accessible name: the control it decorates must say the count | — |
 | `wt-toast` | `open`, `tone` (`info`\|`error`, reflected; info is announced politely through `role="status"`, error assertively through `role="alert"`), `message`, `close-label` (required: the close button's accessible name, and an empty one leaves that button nameless), `duration` (milliseconds, default `8000`; `0` keeps it open); `show()` opens it and restarts the full countdown (unless the pointer or keyboard focus is on it, when the countdown waits), which is how to re-announce an identical message. While the pointer or keyboard focus is on it the countdown never runs, even when the message changes; once both have left, the full duration restarts. Positioning belongs to the consumer, which must also register the `close` icon | `wt-activate` — `detail: {}` (the message was pressed; the toast then closes); `wt-close` — `detail: {}` (closed by the timer, the close button, or after activation) |
-| `wt-input` | `value`, `label`, `name`, `type`, `autocomplete`, `placeholder`, `required`, `disabled`, `invalid`, `error`; `help` and `end` slots | `wt-change` — `detail: { value: string }` |
+| `wt-input` | `value`, `label`, `name`, `type`, `autocomplete`, `placeholder`, `hint` (an always-shown line of help under the field, which describes the native input), `required`, `disabled`, `invalid`, `error`; `help` and `end` slots | `wt-change` — `detail: { value: string }` |
 | `wt-price-input` | `value`, `label`, `name`, `unit`, `placeholder`, `required` (reflected), `disabled` (reflected), `error`. `placeholder` shows on the amount only while it is empty, painted `--wt-color-text-muted`. A money field joined to a trailing `<button>` whose visible text is `unit` (which is also that button's accessible name, so supply one). `disabled` locks the amount AND the unit button, so a form that suspends itself while saving cannot be edited through the price. `error` marks the field `aria-invalid` and links the message | `wt-change` — `detail: { value: string }` (on input); `wt-unit-click` — `detail: {}` (the unit button was pressed) |
 | `wt-switch` | `checked`, `disabled`, `label`, `name`, `hide-label` (names the switch for assistive technology with `label` but draws no text beside it — for a switch in a table column whose heading already says what it is) | `wt-change` — `detail: { checked: boolean }` |
 | `wt-dialog` | `open`, `heading`, `aria-label` (fallback name when there is no `heading`), `dismissible` (default true; set the property `.dismissible=${false}` so Escape cannot close it); default slot (body), `footer` slot | `wt-close` |
@@ -600,18 +600,18 @@ tree; the same reference inside the shadow root did describe it).
 Some fields store a value only to override one they would otherwise take from somewhere else — a
 variant's VAT, unit, station or photo from its parent product, an extra's price from its product's
 (spec `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §9.1). Such a field is
-**empty while it falls back**, and shows the value it falls back to as a hint, so the operator sees
+**empty while it falls back**, and shows the value it falls back to as a placeholder hint, so the operator sees
 what will apply without a copy being stored. Leaving it empty keeps the fallback; typing or choosing
 a value overrides it; clearing it returns to the fallback and saves `null`. Never mark such a field
 required. A translated field inherited as ONE value across its languages (a variant's description)
-shows its hints only while every language is blank; once any language has text, the record's own
-value applies and its blank languages show no hint.
+shows its placeholder hints only while every language is blank; once any language has text, the
+record's own value applies and its blank languages show no placeholder hint.
 
 - **Text and price fields** (`wt-input`, `wt-price-input`, a `<textarea>`): the fallback value is the
   field's `placeholder`. Both primitives paint it `--wt-color-text-muted`; a bespoke `<textarea>`
   needs its own `::placeholder` rule with that token, because Chromium's default grey measured
   3.70:1 on `wt-input` against the dark theme's field (2026-09-24), under the 4.5:1 text needs. axe does not check placeholder
-  contrast, so an a11y test for a new hinted field measures the ratio itself
+  contrast, so an a11y test for a new placeholder-hinted field measures the ratio itself
   (`packages/ui-core/src/components/wt-input.a11y.test.ts`).
 - **A `<select>`**: the FIRST option has an empty value and reads "Same as &lt;fallback value&gt;"
   (`editor.same_as`, e.g. "Same as Reduced (10%)"); when there is nothing to name, "Same as the main
@@ -633,7 +633,7 @@ value applies and its blank languages show no hint.
   a dietary set) saves an emptied choice as `null` — "falls back" — never as an empty set, which
   would declare the record free of what the fallback contains.
 
-A name is never hinted this way: a variant's names are its own (§15.2), and a blank one falls back
+A name never shows a placeholder hint this way: a variant's names are its own (§15.2), and a blank one falls back
 to the record's own staff name, which the catalogue owns.
 
 ### Fold a long form into collapsible sections with summaries
@@ -1274,7 +1274,8 @@ Module management tabs use `/manage/<section>/view/<key>`; Venue operations uses
 `departments`, `zones` and `routing`, and Categories uses `categories` and `labels`. The dashboard preserves module-owned `view` segments
 while the module validates its keys. The Menus screen (`/manage/menus`) puts the menu's id before
 the tab:
-`/manage/menus/menu/<id>/view/structure` (`dashboardPath`, `apps/dashboard/src/navigation.ts`).
+`/manage/menus/menu/<id>/view/<key>`, with `structure` and `prices` (`dashboardPath`,
+`apps/dashboard/src/navigation.ts`).
 
 Use `/manage/<section>` for dashboard destinations and `/tabs/<key>` for till tabs. Nested views,
 zones and saved canvas tabs extend those paths, such as `/manage/floor/view/plano/zone/<id>`.

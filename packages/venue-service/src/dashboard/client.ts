@@ -77,11 +77,10 @@ export interface VenueServiceChoices {
   products: Product[];
 }
 /** The subset of `@waitron/catalogue`'s `Product` these screens read. `name` is the plain staff name
- * every dashboard surface shows; `customerName` is the language map only a diner ever sees. */
+ * every dashboard surface shows. */
 export interface Product {
   id: string;
   name: string;
-  customerName: Record<string, string> | null;
 }
 export type VenueServiceView = VenueServiceModel & VenueServiceChoices;
 

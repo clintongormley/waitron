@@ -78,7 +78,7 @@ const model: VenueServiceView = {
     { id: "z1", name: "Dining room" },
     { id: "z2", name: "Deli counter" },
   ],
-  products: [{ id: "p1", name: "Negroni", customerName: { en: "House Aperitivo" } }],
+  products: [{ id: "p1", name: "Negroni" }],
 };
 
 async function mount(api: VenueServiceApi): Promise<VenueOperationsScreen> {

@@ -59,9 +59,7 @@ describe("VenueServiceApi", () => {
       )
       .mockResolvedValueOnce(jsonResponse([{ id: "s1", name: "Bar", isDefault: false }]))
       .mockResolvedValueOnce(jsonResponse([{ id: "z1", name: "Upstairs" }]))
-      .mockResolvedValueOnce(
-        jsonResponse([{ id: "p1", name: "Negroni", customerName: { en: "House Aperitivo" } }]),
-      );
+      .mockResolvedValueOnce(jsonResponse([{ id: "p1", name: "Negroni" }]));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
 
     await expect(api.load()).resolves.toMatchObject({
@@ -69,7 +67,7 @@ describe("VenueServiceApi", () => {
       categories: [{ id: "c1", name: { en: "Cocktails" }, image: null, parentId: null }],
       stations: [{ id: "s1", name: "Bar" }],
       floorZones: [{ id: "z1", name: "Upstairs" }],
-      products: [{ id: "p1", name: "Negroni", customerName: { en: "House Aperitivo" } }],
+      products: [{ id: "p1", name: "Negroni" }],
     });
     expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual([
       "/management-api/venue-service",

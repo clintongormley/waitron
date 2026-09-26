@@ -100,8 +100,8 @@ export class WtInput extends LitElement {
   @property() autocomplete = "";
   @property() placeholder = "";
   @property() error = "";
-  /** A line of help under the field. It renders here, not beside the element, because the native
-   * input can only be described by an id in its own shadow root. */
+  /** A line of help under the field, rendered in this shadow root so the native input is described
+   * by it; why a paragraph beside the element is not: design-system.md → Forms. */
   @property() hint = "";
   @property({ type: Boolean, reflect: true }) required = false;
   @property({ type: Boolean, reflect: true }) disabled = false;

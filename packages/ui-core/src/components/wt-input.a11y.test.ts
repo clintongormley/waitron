@@ -5,7 +5,8 @@ import "./wt-input.js";
 
 afterEach(cleanup);
 
-// axe does not score a placeholder's contrast, so a test of a hinted field measures its own ratio.
+// axe does not score a placeholder's contrast, so a test of a placeholder-hinted field measures its
+// own ratio.
 // The parser reads rgb()/rgba() only, which is why each colour is checked for that form first.
 function contrastRatio(a: string, b: string): number {
   const luminance = (rgb: string) => {
@@ -43,7 +44,7 @@ describe.each(["light", "dark"] as const)("wt-input a11y (%s theme)", (theme) =>
     expect(contrastRatio(placeholder, field)).toBeGreaterThanOrEqual(4.5);
   });
 
-  test("hinted input", async () => {
+  test("input with a hint line", async () => {
     await mountThemed(
       '<wt-input label="Precio" hint="Déjalo vacío para usar el precio del producto."></wt-input>',
       theme,

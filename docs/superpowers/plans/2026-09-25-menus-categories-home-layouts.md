@@ -1325,7 +1325,8 @@ Spec §3's price rules, plus §9's "overrides stay" and D18.
     - the offer-settings modal edits the override (the product price is shown as the empty field's
       hint, per the design system's fallback-field rule), the per-menu switch and each variant's
       price and offered flag;
-    - saving sends one `PATCH` and one `PUT …/variants`.
+    - saving sends one `PATCH` and one `PUT …/variants`. (2026-09-26: a save now sends only the
+      request whose settings changed, and nothing when none did — finish-branch review.)
   - **Venue operations:** its tests no longer find a Menus tab, and its Zones tab still assigns
     menus.
   - Run them: they FAIL.
