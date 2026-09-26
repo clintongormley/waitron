@@ -10,12 +10,15 @@ export interface RotatingFileSinkOptions {
 }
 
 /**
- * Best-effort synchronous file sink. The box process is the single sequential writer, so rotation
- * needs no cross-process locking. On ANY IO failure it reports once (via `onError`) and becomes a
- * no-op: logging never throws into a request path.
+ * Best-effort synchronous file sink. Only the server's own sink rotates, so rotation needs no
+ * cross-process locking. Other writers append without rotating: the entrypoint's boot lines (this
+ * sink with an unbounded `maxBytes`, also from a second copy refused beside a running server) and
+ * the frozen-holder watchdog. The rotating sink's in-memory size misses their lines, so it rotates a
+ * little late. On ANY IO failure it reports once (via `onError`) and becomes a no-op: logging never
+ * throws into a request path.
  *
  * Every line goes through `redactSecrets` FIRST, because the unauthenticated recovery page serves this
- * file's tail (`recovery-surface.ts` → `tailLog`) and any module may log a caught error's own words.
+ * file's tail (`recovery-surface.ts` → `readLog`) and any module may log a caught error's own words.
  * The mask belongs to the FILE, not to the call sites, so a new module is covered without knowing the
  * page exists.
  */

@@ -103,20 +103,23 @@ after the app's own requested restart at the end of the setup wizard.
 
 ### When the app will not boot
 
-The box serves a recovery page instead of the app, and that page names a CODE and shows the tail of
-`waitron.log` — enough for the restaurant to act on, deliberately not enough to diagnose from. The
-real reason goes somewhere the restaurant never looks and only whoever prepared the box can read:
+The box serves a recovery page instead of the app. It names a CODE with fixed advice for the
+restaurant, then shows why the last start failed and the tail of `waitron.log`. The same failure
+report also goes to the container's output:
 
 ```bash
 cd /opt/waitron
 docker compose logs app | tail -50    # the failed boot's error, its cause chain, and its stack
 ```
 
-That output is the caught error's own words — a missing column, a database file that would not
-open, the counts behind `migrations.incomplete`, the migration hashes behind
-`provisioning.database_ahead` — with any credentials embedded in a URL masked before it is written. `docker compose logs` keeps it across the
-container's own restart loop, so read it before pulling a new image: `docker compose up -d` on a
-fresh image starts a new container and the previous boot's output goes with the old one.
+Both carry the caught error's own words — a missing column, a database file that would not open,
+the counts behind `migrations.incomplete`, the migration hashes behind
+`provisioning.database_ahead` — with any credentials embedded in a URL masked before it is written.
+The container's output also holds what happens before a start is counted, such as a start refused
+for being given arguments. `docker compose logs` keeps it across the container's own restart loop,
+but `docker compose up -d` on a fresh image starts a new container and the previous boot's output
+goes with the old one, so read it before pulling a new image. The failed start's report is also in
+`waitron.log` on the `logs` volume, which a new container keeps.
 
 ### Trying a branch before it merges
 

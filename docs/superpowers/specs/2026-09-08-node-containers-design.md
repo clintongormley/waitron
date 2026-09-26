@@ -484,6 +484,9 @@ restart.
 > entrypoint writes the scrubbed real error to `docker logs` for the installer; a database migrated
 > by a different image is detected explicitly as `provisioning.database_ahead`. Design:
 > [boot-failure-diagnosability](2026-09-10-boot-failure-diagnosability-design.md).
+>
+> **2026-09-26 — superseded in part.** The parenthesis above no longer holds: the page shows the
+> failed start's own error detail, redacted: [conventions-ui.md → the recovery page](../../developers/conventions-ui.md#the-unauthenticated-recovery-page-curated-title-and-action-and-the-failed-starts-own-lines).
 
 Deliberately NOT here — the recovery spec designs each, and each needs its own thinking: a
 degraded-but-trading mode (§9.1's module-contract change); restore from a backup over the web

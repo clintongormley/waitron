@@ -142,9 +142,7 @@ declare module "@waitron/shared" {
     "server.entry_arguments_refused": Record<string, never>;
     /**
      * The database could not be reached. Nothing constructs it; `classifyBootFailure`
-     * (`boot-failure.ts`) returns it and the recovery page has wording for it. `attempts` is the
-     * only param: this code's audience is the unauthenticated recovery page, so a driver's caught
-     * value is never carried.
+     * (`boot-failure.ts`) returns it and the recovery page has wording for it.
      */
     "provisioning.database_unreachable": { attempts: number };
     /**

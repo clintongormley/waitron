@@ -407,6 +407,7 @@ describe("curated operator text", () => {
     ];
     const persistedByRunEntry = [
       "server.config_missing",
+      "migrations.apply_failed",
       "provisioning.database_ahead",
       "restore.database_set_aside",
       "migrations.set_missing",
@@ -591,13 +592,13 @@ describe("a start refused by a holder that stopped", () => {
 });
 
 describe("a restore whose database could not be put in place, if it is the last failure", () => {
-  it("sends the operator to whoever installed the box, and not to the log on this page", async () => {
+  it("sends the operator to whoever installed the box, and to the failed start's details on this page", async () => {
     const text = OPERATOR_TEXT["restore.placement_failed"];
     expect(text).toBeDefined();
     expect(text!["en-GB"].action).toMatch(/ask whoever installed this box/i);
-    expect(text!["en-GB"].action).not.toMatch(/log below/i);
+    expect(text!["en-GB"].action).toContain("Why the last start failed");
     expect(text!["es-ES"].action).toMatch(/quien instaló este equipo/i);
-    expect(text!["es-ES"].action).not.toMatch(/registro de abajo/i);
+    expect(text!["es-ES"].action).toContain("Por qué falló el último arranque");
     const body = await pageFor("restore.placement_failed");
     expect(body).toContain(escapeHtml(text!["en-GB"].action));
     const spanish = await pageFor("restore.placement_failed", undefined, SPANISH);
@@ -611,11 +612,156 @@ describe("a start refused because the only copy of the database may be in a set-
     expect(text).toBeDefined();
     expect(text!["en-GB"].title).toMatch(/moved aside/i);
     expect(text!["en-GB"].action).toMatch(/ask whoever installed this box/i);
+    expect(text!["en-GB"].action).toContain("Why the last start failed");
     expect(text!["es-ES"].title).toMatch(/apartada/i);
     expect(text!["es-ES"].action).toMatch(/quien instaló este equipo/i);
+    expect(text!["es-ES"].action).toContain("Por qué falló el último arranque");
     const body = await pageFor("restore.database_set_aside");
     expect(body).toContain(escapeHtml(text!["en-GB"].title));
     const spanish = await pageFor("restore.database_set_aside", undefined, SPANISH);
     expect(spanish).toContain(escapeHtml(text!["es-ES"].title));
+  });
+});
+
+/** One line as the entrypoint writes it (`node-entry.ts`), through the real logger. */
+const line = (
+  event: string,
+  fields: Record<string, unknown> = {},
+  at = "2026-09-26T12:55:42.275Z",
+) => JSON.stringify({ ...fields, at, level: "info", event });
+
+async function logWith(lines: readonly string[]): Promise<string> {
+  const logDir = await mkdtemp(join(tmpdir(), "wt-log-"));
+  await writeFile(join(logDir, "waitron.log"), `${lines.join("\n")}\n`);
+  return logDir;
+}
+
+const bodyFor = async (logDir: string, acceptLanguage = "en-GB") =>
+  await (
+    await recoveryApp({ state, logDir, onRetry: vi.fn() }).request("/", {
+      headers: { "Accept-Language": acceptLanguage },
+    })
+  ).text();
+
+const DETAIL = [
+  "DrizzleError: Failed to run the query 'ALTER TABLE `devices` DROP COLUMN `has_cash_drawer`;'",
+  "    at runMigrations (file:///app/server.js:1:1)",
+  "caused by: Error: no such column: new.has_cash_drawer",
+].join("\n");
+
+describe("the last failed start's detail", () => {
+  it("is shown in full, line by line, under its own heading in the page's language", async () => {
+    const logDir = await logWith([
+      line("server.stopped", {}, "2026-09-26T12:54:09.000Z"),
+      line("server.boot_started"),
+      line("server.boot_failed", { errorCode: "unknown", detail: DETAIL }),
+    ]);
+    const english = await bodyFor(logDir);
+    expect(english).toContain("Why the last start failed (2026-09-26T12:55:42.275Z)");
+    expect(english).toContain(escapeHtml(DETAIL));
+    const spanish = await bodyFor(logDir, SPANISH);
+    expect(spanish).toContain("Por qué falló el último arranque (2026-09-26T12:55:42.275Z)");
+    expect(spanish).toContain(escapeHtml(DETAIL));
+  });
+
+  it("is shown however many lines follow it, though the tail no longer reaches it", async () => {
+    const after = Array.from({ length: 250 }, (_, index) => line("probe.later", { index }));
+    const logDir = await logWith([
+      line("server.boot_started"),
+      line("server.boot_failed", { errorCode: "unknown", detail: DETAIL }),
+      ...after,
+    ]);
+    const body = await bodyFor(logDir);
+    expect(body).toContain(escapeHtml(DETAIL));
+    // The control: the failure's own line is outside the tail.
+    expect(body).not.toContain("&quot;event&quot;:&quot;server.boot_failed&quot;");
+  });
+
+  // A start that hung or was killed records no failure; an older one would describe another start.
+  it("is not shown when a later start began and recorded no failure", async () => {
+    const logDir = await logWith([
+      line("server.boot_started"),
+      line("server.boot_failed", { errorCode: "unknown", detail: "an older failure" }),
+      line("server.boot_started"),
+    ]);
+    const body = await bodyFor(logDir);
+    expect(body).not.toContain("Why the last start failed");
+    // The control: the older failure is still in the tail.
+    expect(body).toContain("an older failure");
+  });
+
+  it("is escaped, not rendered as HTML", async () => {
+    const logDir = await logWith([
+      line("server.boot_failed", {
+        errorCode: "unknown",
+        detail: `<img src=x onerror="alert(1)">`,
+      }),
+    ]);
+    const body = await bodyFor(logDir);
+    expect(body).toContain("Why the last start failed");
+    expect(body).not.toContain('<img src=x onerror="alert(1)">');
+  });
+
+  it("skips a torn line and a failure line with no detail, without throwing", async () => {
+    const logDir = await logWith([
+      line("server.boot_failed", { errorCode: "unknown", detail: "the real one" }),
+      line("server.boot_failed", { errorCode: "unknown" }),
+      '{"event":"server.boot_failed","detail":"torn',
+    ]);
+    const body = await bodyFor(logDir);
+    expect(body).toContain("Why the last start failed");
+    expect(body).toMatch(/Why the last start failed[^<]*<\/h2>\s*<pre>the real one<\/pre>/);
+  });
+
+  // One JSON line with its line breaks escaped is unreadable in the tail.
+  it("is laid out line by line in the tail too, for every failed start in it", async () => {
+    const logDir = await logWith([
+      line("server.boot_started"),
+      line("server.boot_failed", { errorCode: "unknown", detail: "first attempt\ncaused by: A" }),
+      line("server.boot_started"),
+      line("server.boot_failed", { errorCode: "unknown", detail: DETAIL }),
+    ]);
+    const tail = (await bodyFor(logDir)).split("Log tail</h2>")[1]!;
+    expect(tail).toContain("first attempt\ncaused by: A");
+    expect(tail).toContain(escapeHtml(DETAIL));
+    expect(tail).toContain(
+      escapeHtml(
+        JSON.stringify({
+          errorCode: "unknown",
+          at: "2026-09-26T12:55:42.275Z",
+          level: "info",
+          event: "server.boot_failed",
+        }),
+      ),
+    );
+    expect(tail).not.toContain("\\n");
+  });
+
+  it("is absent with no log at all", async () => {
+    const body = await (
+      await recoveryApp({ state, logDir: "/nonexistent", onRetry: vi.fn() }).request("/")
+    ).text();
+    expect(body).not.toContain("Why the last start failed");
+  });
+});
+
+describe("a migration the engine refused", () => {
+  const text = OPERATOR_TEXT["migrations.apply_failed"];
+
+  it("says the database could not be updated, and sends the operator to whoever installed the box", () => {
+    expect(text).toBeDefined();
+    expect(text!["en-GB"].title).toBe(
+      "The box's database could not be updated for the installed version of Waitron.",
+    );
+    expect(text!["en-GB"].action).toMatch(/ask whoever installed this box/i);
+    expect(text!["es-ES"].action).toMatch(/quien instaló este equipo/i);
+  });
+
+  // A restore runs the same update, so it cannot be offered as the fix.
+  it("does not offer a restore as the fix", () => {
+    expect(text!["en-GB"].action).not.toMatch(/restore it from a backup, or reinstall/i);
+    expect(text!["es-ES"].action).not.toMatch(
+      /restáurala desde una copia de seguridad, o reinstala/i,
+    );
   });
 });

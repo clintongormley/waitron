@@ -21,5 +21,10 @@ declare module "@waitron/shared" {
      * Both counts are journal lengths — public facts about a build artefact, never data.
      */
     "migrations.incomplete": { set: string; applied: number; expected: number };
+    /**
+     * The engine refused a statement in one of a set's pending migrations. `set` is the journal
+     * table, as for `migrations.incomplete`; the engine's own failure is the error's `cause`.
+     */
+    "migrations.apply_failed": { set: string };
   }
 }

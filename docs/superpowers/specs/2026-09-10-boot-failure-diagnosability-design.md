@@ -22,6 +22,17 @@ afterwards confirmed and reproduced on `fix/core-migration-upgrade` — core `00
 `bluetooth` label to `print_transport` and `0014` names it in a `CHECK` inside the same pending
 batch; regression test `packages/db/src/migrate-upgrade.pg.test.ts`.
 
+**Pointer, 2026-09-26 (owner decision):** every passage below that keeps the caught error's own
+words off the page is superseded — decisions 2 and 4, §4.3's first invariant, §4.4, §5, §9's
+"none of it reaches the page", and in §7 the first item (the page now shows the full detail without
+a login) and the last (the entrypoint now writes its boot lines to the log file itself). The owner's box failed during a migration
+and the page showed `unknown` above a tail from the previous, successful run; the reason was only in
+`docker logs`. "We need all the relevant logs." Every start counted as an attempt now writes `server.boot_started` to
+`waitron.log`, a failed one writes `server.boot_failed` with its code and the redacted detail (name,
+message, stack, its cause chain up to five levels in all, params), and the page shows that detail in full. The title and action
+stay curated and code-keyed; a refused migration has its own code, `migrations.apply_failed`. The
+rule now lives in `docs/developers/conventions-ui.md` → "The unauthenticated recovery page".
+
 ## 2. Decisions (owner, 2026-09-10)
 
 1. **The recovery page is the operator's only window, so it must carry an actionable reason.**

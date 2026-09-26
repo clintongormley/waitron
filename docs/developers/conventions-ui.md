@@ -295,22 +295,31 @@ by `scripts/deploy-image-env.test.ts`; spec
 
 **The recovery page**
 
-## The unauthenticated recovery page renders fixed strings chosen by code, never the caught error's words
+## The unauthenticated recovery page: curated title and action, and the failed start's own lines
 
-The error's own text goes to the container's stdout only, through `redactSecrets` — the installer's
-channel. Three strings on the page come from outside the image: the error CODE, `lastFailureAt` and
-the LOG TAIL. The failure count also does, read as a number, and so does a recorded holder kind,
-which on the page only selects a fixed name from a closed table. `/recovery-api/status` returns the
-kind itself; the read of `recovery.json` keeps it only when it is one of `VENUE_HOLDER_KINDS`. The
+The title and action are fixed strings chosen by the error code, in English and Spanish, and never
+suggest wiping anything. Below them the page shows why the last start failed and the tail of
+`waitron.log`. Owner decision 2026-09-26: a box that failed during a migration showed `unknown` above
+a tail from the previous, successful run, and the reason was only in `docker logs`, which the
+operator cannot read. So every start counted as an attempt writes `server.boot_started` to
+`waitron.log`, and a failed one writes `server.boot_failed` carrying its code and `detail` — the
+error's name and message, the stack, each `caused by` in its cause chain up to five levels in all and an `AppError`'s params, through
+`redactSecrets` (`runEntry`, `apps/server/src/node-entry.ts`). The page shows the latest start's `detail` in full,
+read from the whole file so the tail's line cap cannot cut it off, and only when no later start
+began; in the tail each failure's `detail` is laid out on its own lines.
+
+Strings on the page that come from outside the image: the error CODE, `lastFailureAt`, the LOG TAIL
+and the last failure's detail, all HTML-escaped. The failure count also does, read as a number, and
+so does a recorded holder kind, which on the page only selects a fixed name from a closed table.
+`/recovery-api/status` returns the kind itself; the read of `recovery.json` keeps it only when it is one of `VENUE_HOLDER_KINDS`. The
 browser's `Accept-Language` also reaches the page, and only selects the language
-`resolveLoginLocale` returns from the supported set (`apps/server/src/login-locale.ts`). The tail is
-the widest, because the shared error boundary writes an `AppError`'s params into `waitron.log`. So the
-convention that params never carry a secret (stated in the header of `apps/server/src/errors.ts`) is
-what keeps a page anyone on the venue's LAN can open safe. A page edit that interpolated a caught
-message, or a new code carrying a credential in its params, breaks a security boundary nothing
-outside the design states. Pointer:
-`docs/superpowers/specs/2026-09-10-boot-failure-diagnosability-design.md` §5;
-`apps/server/src/recovery-surface.ts`.
+`resolveLoginLocale` returns from the supported set (`apps/server/src/login-locale.ts`). The log
+file's lines carry caught errors' own words and `AppError` params, and `redactSecrets` masks only a
+password in a URL. So the convention that params never carry a secret (stated in the header of
+`apps/server/src/errors.ts`) is what keeps a page anyone on the venue's LAN can open safe; a new code
+carrying a credential in its params, or a logged message carrying one in any other form, puts it on
+that page. Pointer: `docs/superpowers/specs/2026-09-10-boot-failure-diagnosability-design.md` §5 and
+its 2026-09-26 pointer; `apps/server/src/recovery-surface.ts`.
 
 The retired file's "Database tests that assert nothing" and "Workspace package boundaries" sections
 mostly restated rules that already live elsewhere in `CLAUDE.md` or in

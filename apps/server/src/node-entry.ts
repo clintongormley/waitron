@@ -36,6 +36,7 @@ import {
 } from "./config.js";
 import { isUnset } from "./env-value.js";
 import { createLogger, type Logger } from "./logger.js";
+import { createRotatingFileSink } from "./log-file.js";
 import { withRecoveryLock } from "./recovery-lock.js";
 import {
   afterFailure,
@@ -188,10 +189,9 @@ export interface EntryDeps {
    *  folder is held. */
   lockVenue?: (venueDir: string) => Promise<VenueLock>;
   /**
-   * The installer's channel — the container's stdout (`docker logs`), never the `waitron.log` the
-   * recovery page tails. It is the one place the caught error's own words may appear, and only
-   * after `redactSecrets`. Its no-op default, unlike `assertNotAhead`'s, is safe because it is
-   * diagnostic output, not a guard: omitting it changes no outcome.
+   * The installer's channel — the container's stdout (`docker logs`). Its no-op default, unlike
+   * `assertNotAhead`'s, is safe because it is diagnostic output, not a guard: omitting it changes
+   * no outcome.
    */
   reportFailure?: (text: string) => void;
   loadBoxEnv: (base: NodeJS.ProcessEnv, stateDir: string) => Promise<NodeJS.ProcessEnv>;
@@ -211,7 +211,7 @@ export interface EntryDeps {
   /** Runs `onStayedUp` once the process has survived `ms` — see the counter rule in `runEntry`. */
   scheduleStayedUp: (ms: number, onStayedUp: () => void) => void;
   log: Logger;
-  /** Where the recovery page reads its log tail from. */
+  /** Where the recovery page reads its log tail from, and where each start records itself. */
   logDir?: string;
   /**
    * Where the migration sets live. Never `null`: null means "resolve from the bundle's own
@@ -282,10 +282,10 @@ function paramsLine(params: unknown): string {
 }
 
 /**
- * What the installer's channel gets for a failed boot: the outer error's name, message and stack,
- * then every wrapped `cause` by name and message, and an `AppError`'s params at whichever level
- * carries them — all through `redactSecrets`, because this is the one place the caught error's own
- * words may appear, and it is `docker logs`, never the page.
+ * What a failed boot reports, to the installer's channel and to the log file the recovery page
+ * reads: the outer error's name, message and stack, then each wrapped `cause` by name and message
+ * down to `MAX_CAUSE_DEPTH` levels in all, and an `AppError`'s params at whichever of those levels
+ * carries them, all through `redactSecrets`.
  */
 function failureDetail(error: unknown): string {
   const lines: string[] = [];
@@ -305,6 +305,22 @@ function failureDetail(error: unknown): string {
     current = cause;
   }
   return redactSecrets(lines.join("\n"));
+}
+
+/**
+ * A logger onto the recovery page's log file, for the lines written before the server's own logger
+ * exists or after it has gone. It appends and never rotates: this start may be a second copy refused
+ * beside a running server, whose sink rotates the same file by a size it keeps in memory. A failed
+ * write is reported once on `log` and never thrown, because this runs on the failure path, whose
+ * outcome it must not change.
+ */
+function pageLog(logDir: string, now: () => Date, log: Logger): Logger {
+  return createLogger(
+    createRotatingFileSink({ dir: logDir, maxBytes: Number.POSITIVE_INFINITY, maxFiles: 1 }, () =>
+      log("warn", "log.file_unavailable"),
+    ),
+    now,
+  );
 }
 
 /** What the installer's channel gets for a start given arguments. The first argument is printed
@@ -387,10 +403,6 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   const now = deps.now ?? (() => new Date());
 
   if (state.level === "recovery") {
-    // A box escalated before the server ever started shows its `lastErrorCode` above an empty log
-    // tail: the entrypoint logs to stdout (`docker logs`), and nothing writes the server's log file
-    // until `startServer` gets far enough. Accepted rather than adding a second sink on the one
-    // path that must not fail.
     deps.log("warn", "recovery.serving", {
       failures: state.failures,
       lastErrorCode: state.lastErrorCode,
@@ -422,6 +434,9 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   const attempt = await changeState(deps, (current) =>
     afterFailure(current, BOOT_INCOMPLETE, now()),
   );
+  const page = pageLog(logDir, now, deps.log);
+  // Marks where this attempt's lines begin, so the page never presents an earlier run's as its own.
+  page("info", "server.boot_started");
 
   let server: { close(): Promise<void> };
   try {
@@ -475,9 +490,11 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
         .catch(() => {});
     }
   } catch (error) {
-    // The installer's channel first, so the real reason survives even if the state write fails.
-    (deps.reportFailure ?? (() => {}))(failureDetail(error));
+    // Both channels first, so the real reason survives even if the state write fails.
+    const detail = failureDetail(error);
+    (deps.reportFailure ?? (() => {}))(detail);
     const code = classifyBootFailure(error);
+    page("error", "server.boot_failed", { errorCode: code, detail });
     const at = now();
     if (code === "provisioning.database_in_use") {
       await recordRefusal(deps, attempt, at);
@@ -561,8 +578,7 @@ function bootThisProcess(): Promise<void> {
     log,
     exit: DEFAULT_EXIT,
   }).catch((error: unknown) => {
-    // `classifyBootFailure`, never the caught value: a driver failure's message can embed a path or
-    // a credential. The scrubbed text has already gone to stdout from `runEntry`'s catch.
+    // The code alone: for a failed attempt, `runEntry`'s catch has already reported the detail.
     log("error", "server.boot_failed", { errorCode: classifyBootFailure(error) });
     process.exit(1);
   });

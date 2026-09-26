@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { cp, mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { generateKeyPairSync } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -43,8 +43,21 @@ function deps(over: Partial<Parameters<typeof runEntry>[0]> = {}) {
     installShutdownHandlers: vi.fn(),
     scheduleStayedUp: vi.fn(),
     log: vi.fn(),
+    logDir: SHARED_LOG_DIR,
     ...over,
   };
+}
+
+/** Where cases that never read the log file let the entry write it. */
+const SHARED_LOG_DIR = mkdtempSync(join(tmpdir(), "wt-entry-log-"));
+
+/** The recovery page's log file, one parsed line each. */
+async function logEvents(logDir: string): Promise<Record<string, unknown>[]> {
+  const text = await readFile(join(logDir, "waitron.log"), "utf8");
+  return text
+    .split("\n")
+    .filter((line) => line !== "")
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
 }
 
 /** A state volume holding one `recovery.json`, so consecutive starts see each other's writes. */
@@ -767,10 +780,9 @@ describe("runEntry", () => {
     expect(reported).toContain("loops on itself");
   });
 
-  // The cause chain and the params are the installer's channel, and neither may reach the
-  // unauthenticated page. Probe and control in one test, because a page that rendered nothing would
-  // pass the first half alone.
-  it("keeps the walked cause chain and the params off the page", async () => {
+  // Owner decision 2026-09-26: the page shows the failed start's own detail, params included.
+  it("puts the params on the page, beside the curated line, through the log file", async () => {
+    const logDir = await mkdtemp(join(tmpdir(), "wt-entry-log-"));
     const reportFailure = vi.fn();
     const writeRecoveryState = vi.fn<(stateDir: string, next: RecoveryState) => Promise<void>>(() =>
       Promise.resolve(),
@@ -778,6 +790,7 @@ describe("runEntry", () => {
     await expect(
       runEntry(
         deps({
+          logDir,
           reportFailure,
           writeRecoveryState,
           startServer: vi.fn<StartServer>(() =>
@@ -794,11 +807,18 @@ describe("runEntry", () => {
 
     const persisted = writeRecoveryState.mock.calls.at(-1)![1];
     const body = await (
+      await recoveryApp({ state: persisted, logDir, onRetry: vi.fn() }).request("/")
+    ).text();
+    expect(body).toContain("provisioning.database_ahead");
+    expect(body).toContain("This box&#39;s database was set up by a different version");
+    expect(body).toContain(
+      "params: {&quot;set&quot;:&quot;core&quot;,&quot;unknownMigrations&quot;",
+    );
+    // The control: with no log file, only the recorded code and its curated line remain.
+    const withoutLog = await (
       await recoveryApp({ state: persisted, logDir: "/nonexistent", onRetry: vi.fn() }).request("/")
     ).text();
-    expect(body).not.toContain("deadbeefhash");
-    // The page says its curated line and the code, and nothing from the params.
-    expect(body).toContain("provisioning.database_ahead");
+    expect(withoutLog).not.toContain("deadbeefhash");
 
     const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
     expect(reported).toContain("deadbeefhash");
@@ -832,8 +852,9 @@ describe("runEntry", () => {
 
   // The message is injected as a real boot failure and followed to both channels: a test rendering
   // a page the message never reached would pass against an implementation that leaks everywhere.
-  it("keeps a leaked connection string off the page while the installer's channel carries it", async () => {
+  it("masks a leaked connection string on the page and in the installer's channel", async () => {
     const message = "connect failed: postgres://waitron:hunter2@db:5432/waitron";
+    const logDir = await mkdtemp(join(tmpdir(), "wt-entry-log-"));
     const reportFailure = vi.fn();
     const writeRecoveryState = vi.fn<(stateDir: string, next: RecoveryState) => Promise<void>>(() =>
       Promise.resolve(),
@@ -841,6 +862,7 @@ describe("runEntry", () => {
     await expect(
       runEntry(
         deps({
+          logDir,
           reportFailure,
           writeRecoveryState,
           startServer: vi.fn<StartServer>(() => Promise.reject(new Error(message))),
@@ -848,19 +870,147 @@ describe("runEntry", () => {
       ),
     ).rejects.toThrow();
 
-    // The PROBE: the state the page will render, rendered.
+    // The PROBE: the state the page will render, with the log the entry wrote, rendered.
     const persisted = writeRecoveryState.mock.calls.at(-1)![1];
     const body = await (
-      await recoveryApp({ state: persisted, logDir: "/nonexistent", onRetry: vi.fn() }).request("/")
+      await recoveryApp({ state: persisted, logDir, onRetry: vi.fn() }).request("/")
     ).text();
     expect(body).not.toContain("hunter2");
-    expect(body).not.toContain("postgres://");
+    // Present, masked: without this the line above would pass against a page showing no detail.
+    expect(body).toContain("postgres://waitron:***@db:5432/waitron");
 
     // The CONTROL, in the other direction: the same failure DOES reach the installer, scrubbed.
     // Without it, a page that rendered nothing at all would pass the assertions above.
     const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
     expect(reported).toContain("postgres://waitron:***@db:5432/waitron");
     expect(reported).not.toContain("hunter2");
+  });
+
+  it("records the start, then the failure's code and full detail, in the file the page reads", async () => {
+    const logDir = await mkdtemp(join(tmpdir(), "wt-entry-log-"));
+    const failure = new Error("Failed to run the query 'ALTER TABLE `devices` DROP COLUMN `x`;'", {
+      cause: new Error("no such column: new.has_cash_drawer"),
+    });
+    await expect(
+      runEntry(deps({ logDir, startServer: vi.fn<StartServer>(() => Promise.reject(failure)) })),
+    ).rejects.toBe(failure);
+
+    const events = await logEvents(logDir);
+    expect(events.map((line) => line.event)).toEqual(["server.boot_started", "server.boot_failed"]);
+    const failed = events[1]!;
+    expect(failed.level).toBe("error");
+    expect(failed.errorCode).toBe("unknown");
+    expect(String(failed.detail)).toContain("Error: Failed to run the query 'ALTER TABLE");
+    expect(String(failed.detail)).toContain(
+      "caused by: Error: no such column: new.has_cash_drawer",
+    );
+    // The stack: its first frame is this file.
+    expect(String(failed.detail)).toMatch(/\n\s+at .*node-entry\.test\.ts/);
+  });
+
+  it("records the start in the state folder's logs when no log folder is given", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-state-"));
+    await runEntry(deps({ stateDir, logDir: undefined }));
+    expect((await logEvents(join(stateDir, "logs"))).map((line) => line.event)).toEqual([
+      "server.boot_started",
+    ]);
+  });
+
+  // A copy started beside a running server writes into that server's file: a rotation by the entry
+  // would be a second process rotating it, with no lock between the two (`log-file.ts`).
+  it("appends its lines to a log file past the server's size limit without rotating it", async () => {
+    const logDir = await mkdtemp(join(tmpdir(), "wt-entry-log-"));
+    const earlier = `${JSON.stringify({ event: "earlier", pad: "x".repeat(10_000_000) })}\n`;
+    await writeFile(join(logDir, "waitron.log"), earlier);
+    const failure = new Error("probe");
+    await expect(
+      runEntry(deps({ logDir, startServer: vi.fn<StartServer>(() => Promise.reject(failure)) })),
+    ).rejects.toBe(failure);
+
+    expect((await logEvents(logDir)).map((line) => line.event)).toEqual([
+      "earlier",
+      "server.boot_started",
+      "server.boot_failed",
+    ]);
+    expect(existsSync(join(logDir, "waitron.log.1"))).toBe(false);
+  });
+
+  it("records only that it started when the start succeeds", async () => {
+    const logDir = await mkdtemp(join(tmpdir(), "wt-entry-log-"));
+    await runEntry(deps({ logDir }));
+    expect((await logEvents(logDir)).map((line) => line.event)).toEqual(["server.boot_started"]);
+  });
+
+  // A log folder under a regular file cannot be created: the write fails, and the failure path
+  // must end exactly as it would have with a working one.
+  it("fails the start with its own error and code when the log file cannot be written", async () => {
+    const blocker = join(await mkdtemp(join(tmpdir(), "wt-entry-log-")), "a-file");
+    await writeFile(blocker, "x");
+    const failure = new AppError("server.config_missing", { variable: "WAITRON_PROBE" });
+    const writeRecoveryState = vi.fn<(stateDir: string, next: RecoveryState) => Promise<void>>(() =>
+      Promise.resolve(),
+    );
+    const log = vi.fn();
+    await expect(
+      runEntry(
+        deps({
+          logDir: join(blocker, "logs"),
+          log,
+          writeRecoveryState,
+          startServer: vi.fn<StartServer>(() => Promise.reject(failure)),
+        }),
+      ),
+    ).rejects.toBe(failure);
+    expect(writeRecoveryState.mock.calls.at(-1)![1].lastErrorCode).toBe("server.config_missing");
+    // The first write fails and switches the sink off; the loss is reported once.
+    expect(log.mock.calls.filter((call) => call[1] === "log.file_unavailable")).toEqual([
+      ["warn", "log.file_unavailable"],
+    ]);
+  });
+
+  // Through the real migrator: a migration naming a table the venue does not have.
+  it("shows a refused migration's own line and the engine's reason on the page", async () => {
+    const logDir = await mkdtemp(join(tmpdir(), "wt-entry-log-"));
+    const venueDir = await mkdtemp(join(tmpdir(), "wt-venue-"));
+    const folder = await mkdtemp(join(tmpdir(), "wt-broken-set-"));
+    await mkdir(join(folder, "meta"));
+    await writeFile(
+      join(folder, "0000_broken.sql"),
+      "ALTER TABLE `devices` DROP COLUMN `has_cash_drawer`;",
+    );
+    await writeFile(
+      join(folder, "meta", "_journal.json"),
+      JSON.stringify({
+        version: "7",
+        dialect: "sqlite",
+        entries: [{ idx: 0, version: "6", when: 1, tag: "0000_broken", breakpoints: true }],
+      }),
+    );
+    const writeRecoveryState = vi.fn<(stateDir: string, next: RecoveryState) => Promise<void>>(() =>
+      Promise.resolve(),
+    );
+    await expect(
+      runEntry(
+        deps({
+          logDir,
+          writeRecoveryState,
+          startServer: vi.fn<StartServer>(async () => {
+            await applyMigrations(venueDir, [
+              { migrationsFolder: folder, migrationsTable: "__drizzle_migrations_broken" },
+            ]);
+            return { close: () => Promise.resolve() };
+          }),
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "migrations.apply_failed" });
+
+    const persisted = writeRecoveryState.mock.calls.at(-1)![1];
+    expect(persisted.lastErrorCode).toBe("migrations.apply_failed");
+    const body = await (
+      await recoveryApp({ state: persisted, logDir, onRetry: vi.fn() }).request("/")
+    ).text();
+    expect(body).toContain("The box&#39;s database could not be updated");
+    expect(body).toContain("no such table: devices");
   });
 
   it("refuses to start the server when the database is ahead of this image", async () => {

@@ -27,16 +27,58 @@ export function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+interface LogView {
+  tail: string[];
+  /** The detail `node-entry.ts` recorded for the latest start, when that start failed. */
+  lastFailure: { at: string; detail: string } | null;
+}
+
+type BootLine = { event?: unknown; at?: unknown; detail?: unknown } & Record<string, unknown>;
+
+/** A `server.boot_*` line as `node-entry.ts` writes it, or null for any other line or a torn one. */
+function bootLine(line: string): BootLine | null {
+  if (!line.includes('"server.boot_')) return null;
+  try {
+    return JSON.parse(line) as BootLine;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Walks back to the latest start's own lines. A later `server.boot_started` with no failure after it
+ * means the latest start hung or was killed, and an older failure would describe another start.
+ */
+function lastFailureIn(lines: readonly string[]): LogView["lastFailure"] {
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const parsed = bootLine(lines[index]!);
+    if (parsed?.event === "server.boot_started") return null;
+    if (parsed?.event === "server.boot_failed" && typeof parsed.detail === "string") {
+      return { at: String(parsed.at), detail: parsed.detail };
+    }
+  }
+  return null;
+}
+
+/** A failed start's detail on lines of its own, below the rest of its record. */
+function tailLine(line: string): string {
+  const parsed = bootLine(line);
+  if (parsed?.event !== "server.boot_failed" || typeof parsed.detail !== "string") return line;
+  const { detail, ...rest } = parsed;
+  return `${JSON.stringify(rest)}\n${detail}`;
+}
+
 /** Never throws: a box that failed before it ever wrote a log still has to serve this page. */
-async function tailLog(logDir: string): Promise<string[]> {
+async function readLog(logDir: string): Promise<LogView> {
   let text: string;
   try {
     text = await readFile(join(logDir, LOG_FILE_NAME), "utf8");
   } catch {
-    return [];
+    return { tail: [], lastFailure: null };
   }
   const lines = text.split("\n").filter((line) => line !== "");
-  return lines.slice(-MAX_LOG_LINES);
+  // Read from the whole file, so the tail's line cap cannot cut the failure off.
+  return { tail: lines.slice(-MAX_LOG_LINES), lastFailure: lastFailureIn(lines) };
 }
 
 /**
@@ -90,6 +132,7 @@ const PAGE_TEXT: Readonly<
       retry: string;
       forInstaller: string;
       logTail: string;
+      lastFailure: (at: string) => string;
       status: (level: string, failures: number) => string;
       lastError: (code: string, at: string) => string;
       noCode: string;
@@ -103,6 +146,7 @@ const PAGE_TEXT: Readonly<
     retry: "Retry a normal boot",
     forInstaller: "For whoever installed this box",
     logTail: "Log tail",
+    lastFailure: (at) => `Why the last start failed (${at})`,
     status: (level, failures) => `Level: ${level}. Failed ${failures} times.`,
     lastError: (code, at) => `Last error: ${code} at ${at}`,
     noCode: "none",
@@ -114,6 +158,7 @@ const PAGE_TEXT: Readonly<
     retry: "Reintentar un arranque normal",
     forInstaller: "Para quien instaló este equipo",
     logTail: "Final del registro",
+    lastFailure: (at) => `Por qué falló el último arranque (${at})`,
     status: (level, failures) => `Nivel: ${level}. Intentos fallidos: ${failures}.`,
     lastError: (code, at) => `Último error: ${code}, fecha: ${at}`,
     noCode: "ninguno",
@@ -158,14 +203,14 @@ export const HOLDER_STALLED = "provisioning.database_holder_stalled";
 type RecoveryCode = ErrorCode | typeof BOOT_INCOMPLETE | typeof HOLDER_STALLED;
 
 /**
- * Every string in this table is fixed and chosen by code. Three strings on the page are not — the
- * error code, the log tail and `lastFailureAt` — and all three are HTML-escaped, in either language,
- * as is the line carrying `level` and `failures`.
+ * Every string in this table is fixed and chosen by code. The strings on the page that are not —
+ * the error code, `lastFailureAt`, the log tail and the last failed start's detail — are
+ * HTML-escaped, in either language, as is the line carrying `level` and `failures`.
  *
- * The tail can carry a caught error's own words. What bounds it is not this page: the file sink,
- * which masks passwords in a URL (`log-file.ts` → `redactSecrets`) and nothing else, and the
- * convention that an `AppError`'s params never carry a secret (`apps/server/src/errors.ts`),
- * because the error boundary logs them.
+ * The tail and the detail carry caught errors' own words, stacks and `AppError` params: the
+ * operator's only window on why the box did not start (owner decision, 2026-09-26). What bounds
+ * them is not this page: `redactSecrets`, which masks passwords in a URL and nothing else, and the
+ * convention that an `AppError`'s params never carry a secret (`apps/server/src/errors.ts`).
  *
  * The wording never suggests wiping or resetting anything: a real venue's database holds fiscal
  * records that cannot be re-created, so the action is always restore or reinstall (owner decision,
@@ -272,28 +317,28 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
   "restore.placement_failed": {
     // Shown only if this is the last failure when the box reaches recovery; a failed setup restore
     // is not retried, so one failed placement does not get here. Which database was kept is in the
-    // params, which reach the server's own output (`node-entry.ts` → `failureDetail`), not this page.
+    // params (`node-entry.ts` → `failureDetail`).
     "en-GB": {
       title: "A restore could not put the restored database in place.",
       action:
-        "Ask whoever installed this box to look at it before anything else. The server's own output says whether the box's previous database is unchanged or was left in a folder inside its venue folder, which must be moved back before the box is used.",
+        "Ask whoever installed this box to look at it before anything else. The details under “Why the last start failed” below, and the server's own output, say whether the box's previous database is unchanged or was left in a folder inside its venue folder, which must be moved back before the box is used.",
     },
     "es-ES": {
       title: "Una restauración no pudo poner en su sitio la base de datos restaurada.",
       action:
-        "Antes de nada, pide a quien instaló este equipo que lo revise. La salida del propio servidor indica si la base de datos anterior del equipo sigue sin cambios o quedó en una carpeta dentro de la carpeta de su local; en ese caso hay que devolverla a su sitio antes de usar el equipo.",
+        "Antes de nada, pide a quien instaló este equipo que lo revise. Los detalles de «Por qué falló el último arranque», más abajo, y la salida del propio servidor indican si la base de datos anterior del equipo sigue sin cambios o quedó en una carpeta dentro de la carpeta de su local; en ese caso hay que devolverla a su sitio antes de usar el equipo.",
     },
   },
   "restore.database_set_aside": {
     "en-GB": {
       title: "This box's database was moved aside by a restore that did not finish.",
       action:
-        "Ask whoever installed this box to look at it before anything else. The database is in a folder inside the venue folder, named in the server's own output. It must be moved back, or the restore run again, before the box can start.",
+        "Ask whoever installed this box to look at it before anything else. The database is in a folder inside the venue folder, named under “Why the last start failed” below and in the server's own output. It must be moved back, or the restore run again, before the box can start.",
     },
     "es-ES": {
       title: "La base de datos de este equipo quedó apartada por una restauración que no terminó.",
       action:
-        "Antes de nada, pide a quien instaló este equipo que lo revise. La base de datos está en una carpeta dentro de la carpeta del local, cuyo nombre aparece en la salida del propio servidor. Hay que devolverla a su sitio, o volver a hacer la restauración, antes de que el equipo pueda arrancar.",
+        "Antes de nada, pide a quien instaló este equipo que lo revise. La base de datos está en una carpeta dentro de la carpeta del local, cuyo nombre aparece más abajo, en «Por qué falló el último arranque», y en la salida del propio servidor. Hay que devolverla a su sitio, o volver a hacer la restauración, antes de que el equipo pueda arrancar.",
     },
   },
   "restore.membership_invalid": {
@@ -309,6 +354,21 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
         "La lista de equipos de la copia restaurada está dañada o no tiene una firma válida, así que puede haberse cambiado después de guardarse.",
       action:
         "El equipo no arrancará con esta copia. Antes de nada, pide a quien instaló este equipo que lo revise.",
+    },
+  },
+  "migrations.apply_failed": {
+    // "Undone" and "can start again": `packages/migrations/src/apply-failed.test.ts`. Only the
+    // refused set is undone; a set that finished earlier in the same start stays applied.
+    "en-GB": {
+      title: "The box's database could not be updated for the installed version of Waitron.",
+      action:
+        "Ask whoever installed this box to install a version of Waitron that fixes this. The step that failed was undone, so the box can start once a fixed version is installed. Restoring a backup may not help: a restore runs the same update, and it can fail in the same place.",
+    },
+    "es-ES": {
+      title:
+        "No se ha podido actualizar la base de datos del equipo para la versión de Waitron instalada.",
+      action:
+        "Pide a quien instaló este equipo que instale una versión de Waitron que lo corrija. El paso que falló se deshizo, así que el equipo podrá arrancar cuando se instale una versión corregida. Restaurar una copia de seguridad puede no servir: una restauración ejecuta la misma actualización, y puede fallar en el mismo punto.",
     },
   },
   "migrations.set_missing": {
@@ -353,7 +413,7 @@ function operatorText(state: RecoveryState): OperatorText {
   return entries[lastErrorCode] ?? GENERIC_TEXT;
 }
 
-function renderPage(state: RecoveryState, logLines: string[], locale: SupportedLocale): string {
+function renderPage(state: RecoveryState, log: LogView, locale: SupportedLocale): string {
   const page = PAGE_TEXT[locale];
   const text = operatorText(state)[locale];
   const lastError = page.lastError(
@@ -361,9 +421,15 @@ function renderPage(state: RecoveryState, logLines: string[], locale: SupportedL
     state.lastFailureAt ?? page.noTime,
   );
   const tail =
-    logLines.length === 0
+    log.tail.length === 0
       ? escapeHtml(page.noLog)
-      : logLines.map((line) => escapeHtml(line)).join("\n");
+      : log.tail.map((line) => escapeHtml(tailLine(line))).join("\n");
+  const lastFailure =
+    log.lastFailure === null
+      ? ""
+      : `<h2>${escapeHtml(page.lastFailure(log.lastFailure.at))}</h2>
+<pre>${escapeHtml(log.lastFailure.detail)}</pre>
+`;
   // The retry form sits above the installer detail: the operator's action is the point of the page.
   return `<!doctype html>
 <html lang="${locale}">
@@ -371,6 +437,7 @@ function renderPage(state: RecoveryState, logLines: string[], locale: SupportedL
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(page.heading)}</title>
+<style>pre { white-space: pre-wrap; overflow-wrap: anywhere; }</style>
 </head>
 <body>
 <h1>${escapeHtml(page.heading)}</h1>
@@ -382,7 +449,7 @@ function renderPage(state: RecoveryState, logLines: string[], locale: SupportedL
 <h2>${escapeHtml(page.forInstaller)}</h2>
 <p>${escapeHtml(page.status(state.level, state.failures))}</p>
 <p>${escapeHtml(lastError)}</p>
-<h2>${escapeHtml(page.logTail)}</h2>
+${lastFailure}<h2>${escapeHtml(page.logTail)}</h2>
 <pre>${tail}</pre>
 </body>
 </html>
@@ -397,12 +464,12 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
   const app = new Hono();
 
   app.get("/", async (c) => {
-    const logLines = await tailLog(deps.logDir);
+    const log = await readLog(deps.logDir);
     // No venue locale: that is read from the venue database, which the recovery path never opens.
     const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
     c.header("Cache-Control", "no-store");
     c.header("Vary", "Accept-Language");
-    return c.html(renderPage(deps.state, logLines, locale));
+    return c.html(renderPage(deps.state, log, locale));
   });
 
   // Named one by one, to leave out the clear count.

@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { openVenueDatabase, removeChangeFeed, runMigrations, type Database } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import { AppError, sqliteFailureOf } from "@waitron/shared";
 import { installAppendOnlyTriggers } from "@waitron/store";
 import type { VenueMigrationOptions } from "./manifest.js";
 import { appliedSchemaVersion } from "./schema-version.js";
@@ -72,7 +72,7 @@ async function migrateEverySet(
     // `requires` (`orderedMigrationSets`, which refuses a missing dependency or a cycle). Core must
     // come before media, whose triggers are on core's `products`.
     for (const set of options) {
-      await runMigrations(store.venue, set);
+      await runSet(store.venue, set);
       await assertSetApplied(store.venue, set);
       // Inside the loop, not once at the end, so a set already migrated is protected even when a
       // LATER set aborts the run.
@@ -80,6 +80,22 @@ async function migrateEverySet(
     }
   } finally {
     await store.close();
+  }
+}
+
+/**
+ * Drizzle runs a set's pending migrations in one transaction and rolls it back when one fails.
+ * Pinned by "undoes every migration the set applied in the same run, not only the refused one"
+ * (`apply-failed.test.ts`).
+ */
+async function runSet(db: Database, set: VenueMigrationOptions): Promise<void> {
+  try {
+    await runMigrations(db, set);
+  } catch (error) {
+    if (sqliteFailureOf(error) === null) throw error;
+    throw Object.assign(new AppError("migrations.apply_failed", { set: set.migrationsTable }), {
+      cause: error,
+    });
   }
 }
 
