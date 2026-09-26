@@ -37,6 +37,7 @@ export const GENERIC_PACKAGES = [
   "diagnostics",
   "sync-enrolment",
   "stream",
+  "adjustments",
   "composition",
   "fiscal-none",
   "provisioning",
@@ -50,7 +51,6 @@ export const GENERIC_PACKAGES = [
   // deliberately outside this generic vocabulary boundary.
   "country",
   "country-packs",
-  "adjustments",
 ] as const;
 
 /**

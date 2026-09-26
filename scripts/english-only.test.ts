@@ -114,6 +114,7 @@ describe("configuration", () => {
       "diagnostics",
       "sync-enrolment",
       "stream",
+      "adjustments",
       "composition",
       "fiscal-none",
       "provisioning",
@@ -122,7 +123,6 @@ describe("configuration", () => {
       "dashboard-modules",
       "country",
       "country-packs",
-      "adjustments",
     ]);
   });
 
