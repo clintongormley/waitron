@@ -179,17 +179,28 @@ export async function listStationNotices(
   return rows.reverse().map((row) => ({ ...row, quantity: thousandthsToDecimal(row.quantity) }));
 }
 
-/** Clears a notice from its station. Acknowledging one twice keeps the first time. */
+/**
+ * Clears a notice from its station. Acknowledging one twice keeps the first time. With `stationId`,
+ * a notice at any other station is `kitchen_notice.not_found`, as a kitchen display bound to that
+ * station must not clear another's.
+ */
 export async function acknowledgeKitchenNotice(
   tx: Transaction,
   cfg: VenueScope,
   id: string,
+  scope: { stationId?: string } = {},
 ): Promise<void> {
   const [notice] = await tx
     .select({ acknowledgedAt: kitchenNotices.acknowledgedAt })
     .from(kitchenNotices)
     .innerJoin(kitchenStations, eq(kitchenStations.id, kitchenNotices.stationId))
-    .where(and(eq(kitchenNotices.id, id), eq(kitchenStations.locationId, cfg.locationId)));
+    .where(
+      and(
+        eq(kitchenNotices.id, id),
+        eq(kitchenStations.locationId, cfg.locationId),
+        scope.stationId === undefined ? undefined : eq(kitchenNotices.stationId, scope.stationId),
+      ),
+    );
   if (notice === undefined) throw new AppError("kitchen_notice.not_found", { noticeId: id });
   if (notice.acknowledgedAt !== null) return;
   await tx

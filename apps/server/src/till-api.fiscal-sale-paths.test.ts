@@ -1217,7 +1217,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
     const queueUrl = `/api/stations/${defaultStation.id}/queue`;
     const queue1 = await app.request(queueUrl, { headers: { cookie } });
     expect(queue1.status).toBe(200);
-    const groups1 = (await queue1.json()) as {
+    const groups1 = ((await queue1.json()) as { items: unknown }).items as {
       orderId: string;
       orderNumber: number;
       label: string | null;
@@ -1300,7 +1300,9 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
       expect(advance.status).toBe(200);
     }
     // A `ready` line stays on the queue until its order collects — the display drops it on handover.
-    const groupsReady = (await (await app.request(queueUrl, { headers: { cookie } })).json()) as {
+    const groupsReady = (
+      (await (await app.request(queueUrl, { headers: { cookie } })).json()) as { items: unknown }
+    ).items as {
       orderId: string;
       items: { state: string }[];
     }[];
@@ -1334,7 +1336,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
 
     // 6. Collect stamped `collected_at`, so the handed-over order drops off the station's display.
     const queueAfterCollect = await app.request(queueUrl, { headers: { cookie } });
-    expect(await queueAfterCollect.json()).toEqual([]);
+    expect(((await queueAfterCollect.json()) as { items: unknown }).items).toEqual([]);
   });
 });
 
@@ -1385,7 +1387,7 @@ describe("POST /api/working-orders/:id/prep — Mode P's send-to-prep route", ()
     const queue = await app.request(`/api/stations/${defaultStation.id}/queue`, {
       headers: { cookie },
     });
-    expect(await queue.json()).toEqual([
+    expect(((await queue.json()) as { items: unknown }).items).toEqual([
       expect.objectContaining({
         orderId: workingOrderId,
         items: [expect.objectContaining({ state: "queued" })],
@@ -1411,9 +1413,11 @@ describe("POST /api/working-orders/:id/prep — Mode P's send-to-prep route", ()
       error: { code: "working_order.not_settled", params: { workingOrderId: openId } },
     });
     // Refused before any write — never appears on the kitchen queue.
-    const queueAfterRefusal = (await (
-      await app.request(`/api/stations/${defaultStation.id}/queue`, { headers: { cookie } })
-    ).json()) as { orderId: string }[];
+    const queueAfterRefusal = (
+      (await (
+        await app.request(`/api/stations/${defaultStation.id}/queue`, { headers: { cookie } })
+      ).json()) as { items: { orderId: string }[] }
+    ).items;
     expect(queueAfterRefusal.find((g) => g.orderId === openId)).toBeUndefined();
   });
 });
@@ -1450,7 +1454,9 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
     const queueUrl = `/api/stations/${station.id}/queue`;
 
     // The group carries the order's `status` — the till reads COLLECTABLE off it (settled = Mode-P pickup).
-    const queued = (await (await app.request(queueUrl, { headers: { cookie } })).json()) as {
+    const queued = (
+      (await (await app.request(queueUrl, { headers: { cookie } })).json()) as { items: unknown }
+    ).items as {
       orderId: string;
       status: string;
       items: { id: string }[];
@@ -1468,7 +1474,9 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
       });
       expect(bump.status).toBe(200);
     }
-    const readyQueue = (await (await app.request(queueUrl, { headers: { cookie } })).json()) as {
+    const readyQueue = (
+      (await (await app.request(queueUrl, { headers: { cookie } })).json()) as { items: unknown }
+    ).items as {
       orderId: string;
     }[];
     expect(readyQueue.map((g) => g.orderId)).toEqual([workingOrderId]);
@@ -1496,7 +1504,7 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
     });
     expect(wo).toEqual({ collected: true, status: "settled" }); // fiscal state untouched; only the marker moved
     const afterCollect = await app.request(queueUrl, { headers: { cookie } });
-    expect(await afterCollect.json()).toEqual([]);
+    expect(((await afterCollect.json()) as { items: unknown }).items).toEqual([]);
 
     // A still-OPEN (parked, unpaid) order is refused — not settled, so there is no handover to mark.
     const openId = randomUUID();
@@ -2349,9 +2357,11 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
     ).json()) as { id: string; isDefault: boolean }[];
     const defaultStation = stations.find((s) => s.isDefault)!;
     const queue = async () =>
-      (await (
-        await app.request(`/api/stations/${defaultStation.id}/queue`, { headers: { cookie } })
-      ).json()) as { orderId: string }[];
+      (
+        (await (
+          await app.request(`/api/stations/${defaultStation.id}/queue`, { headers: { cookie } })
+        ).json()) as { items: { orderId: string }[] }
+      ).items;
     expect((await queue()).find((g) => g.orderId === workingOrderId)).toBeUndefined();
 
     const sent = await app.request(`/api/working-orders/${workingOrderId}/prep`, {

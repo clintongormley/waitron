@@ -713,7 +713,7 @@ describe("TillApi", () => {
         ],
       },
     ];
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(groups));
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ items: groups, notices: [] }));
 
     const r = await new TillApi("", fetchStub).getStationQueue("st-1");
 

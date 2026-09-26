@@ -891,15 +891,29 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
+  // The station's work, and the corrections to it (recalls, voids) a cook has not acknowledged.
   app.get("/api/stations/:id/queue", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("station.not_found", { stationId: id });
-      const queue = await withTransaction(deps.db, async (tx) => {
-        return listStationQueue(tx, id);
-      });
+      const queue = await withTransaction(deps.db, async (tx) => ({
+        items: await listStationQueue(tx, id),
+        notices: await VENUE_SERVICE.listStationNotices(tx, deps.cfg, id),
+      }));
       return c.json(queue);
+    }),
+  );
+
+  app.post("/api/kitchen-notices/:id/acknowledge", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("kitchen_notice.not_found", { noticeId: id });
+      await withTransaction(deps.db, async (tx) => {
+        await VENUE_SERVICE.acknowledgeKitchenNotice(tx, deps.cfg, id);
+      });
+      return c.body(null, 200);
     }),
   );
 

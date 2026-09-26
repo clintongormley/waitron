@@ -524,6 +524,24 @@ describe("acknowledgeKitchenNotice", () => {
   });
 });
 
+describe("acknowledgeKitchenNotice for one station", () => {
+  it("clears a notice at the named station, and refuses one at another station as not found", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 1, null);
+    const atGrill = await noticeAt(v.grill, order.orderId, new Date().toISOString());
+
+    await expect(
+      inTx((tx) => acknowledgeKitchenNotice(tx, v.cfg, atGrill, { stationId: v.bar })),
+    ).rejects.toMatchObject({ code: "kitchen_notice.not_found", params: { noticeId: atGrill } });
+    expect(
+      (await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).map((notice) => notice.id),
+    ).toEqual([atGrill]);
+
+    await inTx((tx) => acknowledgeKitchenNotice(tx, v.cfg, atGrill, { stationId: v.grill }));
+    expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).toEqual([]);
+  });
+});
+
 describe("the edit-sent-lines setting", () => {
   it("reads ON when the venue has no settings row", async () => {
     expect(await inTx((tx) => readEditSentLines(tx))).toBe(true);

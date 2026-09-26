@@ -33,6 +33,8 @@ import { createPairingMode, type PairingMode } from "./pairing-mode.js";
 import type { Logger } from "./logger.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import { VENUE_SERVICE } from "./modules.js";
+import { decimal } from "@waitron/shared";
 import "./errors.js";
 
 // Every test provisions its OWN tenant, and `tenants` is a singleton (id = 1), so the per-test reset
@@ -604,6 +606,90 @@ describe("Device API — the device-guarded routes", () => {
       stationId: null,
       tillId,
     });
+  });
+
+  it("the bound station's read carries its kitchen notices, and the display acknowledges its own only", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const fria = await withTransaction(suite.db, (tx) =>
+      createStation(tx, venue.cfg, { name: "Fría", isDefault: false }),
+    );
+    const { orderId } = await fireOrder(venue);
+    // One notice at the display's own station and one at another, as a void of each line records.
+    await withTransaction(suite.db, async (tx) => {
+      const { rows } = await tx.execute<{ id: string }>(sql`
+        select id from working_order_lines where working_order_id = ${orderId} order by line_no`);
+      await VENUE_SERVICE.recordKitchenNotices(
+        tx,
+        venue.cfg,
+        orderId,
+        [
+          {
+            workingOrderLineId: rows[0]!.id,
+            stationId: venue.defaultStationId,
+            quantity: decimal("1"),
+            wasStarted: false,
+          },
+          {
+            workingOrderLineId: rows[1]!.id,
+            stationId: fria.id,
+            quantity: decimal("1"),
+            wasStarted: false,
+          },
+        ],
+        "void",
+      );
+    });
+    const foreignNotice = (
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.listStationNotices(tx, venue.cfg, fria.id),
+      )
+    )[0]!.id;
+    const { jar } = await enrolKds(app, venue, venue.defaultStationId);
+    const notices = async () => {
+      const res = await send(app, "GET", "/api/device/station", { cookie: jar });
+      expect(res.status).toBe(200);
+      return ((await res.json()) as { station: { notices: { id: string; kind: string }[] } })
+        .station.notices;
+    };
+
+    const [own] = await notices();
+    expect(own).toMatchObject({ kind: "void", stationId: venue.defaultStationId });
+    const foreign = await send(
+      app,
+      "POST",
+      `/api/device/kitchen-notices/${foreignNotice}/acknowledge`,
+      {
+        cookie: jar,
+      },
+    );
+    expect(foreign.status).toBe(404);
+    expect(await foreign.json()).toMatchObject({ error: { code: "kitchen_notice.not_found" } });
+
+    const ack = await send(app, "POST", `/api/device/kitchen-notices/${own!.id}/acknowledge`, {
+      cookie: jar,
+    });
+    expect(ack.status).toBe(204);
+    expect(await notices()).toEqual([]);
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.listStationNotices(tx, venue.cfg, fria.id),
+      ),
+    ).toHaveLength(1);
+
+    const malformed = await send(
+      app,
+      "POST",
+      "/api/device/kitchen-notices/not-a-uuid/acknowledge",
+      {
+        cookie: jar,
+      },
+    );
+    expect(malformed.status).toBe(404);
+    const noCookie = await send(app, "POST", `/api/device/kitchen-notices/${own!.id}/acknowledge`, {
+      cookie: null,
+    });
+    expect(noCookie.status).toBe(401);
   });
 
   it("enrol → authenticated station read → bump own item → foreign 403 → revoke stops the cookie", async () => {

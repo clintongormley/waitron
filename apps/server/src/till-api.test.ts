@@ -46,6 +46,7 @@ import {
 import {
   AppError,
   SUPPORTED_LOCALES,
+  decimal,
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
@@ -59,6 +60,7 @@ import type { TillApiDeps } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import { VENUE_SERVICE } from "./modules.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE, requireSession } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
@@ -2332,11 +2334,13 @@ describe("KDS-1 station-display operate routes", () => {
     // 2. Read its queue → the order's group carries one queued line.
     const q1 = await app.request(`/api/stations/${cocina.id}/queue`, { headers: { cookie } });
     expect(q1.status).toBe(200);
-    const groups1 = (await q1.json()) as {
-      orderId: string;
-      label: string | null;
-      items: { id: string; state: string }[];
-    }[];
+    const { items: groups1 } = (await q1.json()) as {
+      items: {
+        orderId: string;
+        label: string | null;
+        items: { id: string; state: string }[];
+      }[];
+    };
     const group = groups1.find((g) => g.orderId === id)!;
     expect(group).toMatchObject({ label: "Mesa 8" });
     expect(group.items).toHaveLength(1);
@@ -2354,10 +2358,9 @@ describe("KDS-1 station-display operate routes", () => {
 
     // 4. The queue reflects it.
     const q2 = await app.request(`/api/stations/${cocina.id}/queue`, { headers: { cookie } });
-    const groups2 = (await q2.json()) as {
-      orderId: string;
-      items: { state: string }[];
-    }[];
+    const { items: groups2 } = (await q2.json()) as {
+      items: { orderId: string; items: { state: string }[] }[];
+    };
     expect(groups2.find((g) => g.orderId === id)!.items[0]!.state).toBe("preparing");
   });
 
@@ -2368,7 +2371,9 @@ describe("KDS-1 station-display operate routes", () => {
     const id = await placeFired(app, cookie);
     const cocina = await defaultStation(app, cookie);
     const q = await app.request(`/api/stations/${cocina.id}/queue`, { headers: { cookie } });
-    const groups = (await q.json()) as { orderId: string; items: { id: string }[] }[];
+    const { items: groups } = (await q.json()) as {
+      items: { orderId: string; items: { id: string }[] }[];
+    };
     const itemId = groups.find((g) => g.orderId === id)!.items[0]!.id;
 
     // The legal next step from `queued` is `preparing`; jumping to `ready` matches no row → refused.
@@ -2405,7 +2410,9 @@ describe("KDS-1 station-display operate routes", () => {
     const id = await placeFired(app, cookie);
     const cocina = await defaultStation(app, cookie);
     const q = await app.request(`/api/stations/${cocina.id}/queue`, { headers: { cookie } });
-    const groups = (await q.json()) as { orderId: string; items: { id: string }[] }[];
+    const { items: groups } = (await q.json()) as {
+      items: { orderId: string; items: { id: string }[] }[];
+    };
     const itemId = groups.find((g) => g.orderId === id)!.items[0]!.id;
 
     // A `to` outside {preparing, ready, queued} — no route-level screen, so it reaches the verb as-is.
@@ -2455,7 +2462,9 @@ describe("KDS-1 station-display operate routes", () => {
     });
 
     const after = await app.request(`/api/stations/${cocina.id}/queue`, { headers: { cookie } });
-    const afterGroups = (await after.json()) as { orderId: string; items: { state: string }[] }[];
+    const { items: afterGroups } = (await after.json()) as {
+      items: { orderId: string; items: { state: string }[] }[];
+    };
     expect(afterGroups.find((g) => g.orderId === id)!.items[0]!.state).toBe("queued");
   });
 
@@ -2513,10 +2522,73 @@ describe("KDS-1 station-display operate routes", () => {
     expect((await advance(id, cocina.id, "preparing")).status).toBe(200);
     expect((await advance(id, cocina.id, "ready")).status).toBe(200);
     const q = await app.request(`/api/stations/${cocina.id}/queue`, { headers: { cookie } });
-    const groups = (await q.json()) as { orderId: string; items: { state: string }[] }[];
+    const { items: groups } = (await q.json()) as {
+      items: { orderId: string; items: { state: string }[] }[];
+    };
     const items = groups.find((g) => g.orderId === id)!.items;
     expect(items).toHaveLength(2);
     expect(items.every((i) => i.state === "ready")).toBe(true);
+  });
+
+  it("a station's queue carries its unacknowledged kitchen notices, and acknowledging one clears it", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const id = await placeFired(app, cookie, "Mesa 3");
+    const cocina = await defaultStation(app, cookie);
+    // A notice as a void of that line records it.
+    await withTransaction(suite.db, async (tx) => {
+      const { rows } = await tx.execute<{ id: string }>(
+        sql`select id from working_order_lines where working_order_id = ${id}`,
+      );
+      await VENUE_SERVICE.recordKitchenNotices(
+        tx,
+        cfg,
+        id,
+        [
+          {
+            workingOrderLineId: rows[0]!.id,
+            stationId: cocina.id,
+            quantity: decimal("1"),
+            wasStarted: true,
+          },
+        ],
+        "void",
+      );
+    });
+    const notices = async () => {
+      const res = await app.request(`/api/stations/${cocina.id}/queue`, { headers: { cookie } });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        notices: { id: string; workingOrderId: string; kind: string; wasStarted: boolean }[];
+      };
+      return body.notices.filter((notice) => notice.workingOrderId === id);
+    };
+
+    const [notice] = await notices();
+    expect(notice).toMatchObject({
+      kind: "void",
+      wasStarted: true,
+      orderLabel: expect.stringContaining("Mesa 3"),
+    });
+    const ack = await app.request(`/api/kitchen-notices/${notice!.id}/acknowledge`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(ack.status).toBe(200);
+    expect(await ack.text()).toBe("");
+    expect(await notices()).toEqual([]);
+
+    for (const unknown of [randomUUID(), "not-a-uuid"]) {
+      const res = await app.request(`/api/kitchen-notices/${unknown}/acknowledge`, {
+        method: "POST",
+        headers: { cookie },
+      });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({
+        error: { code: "kitchen_notice.not_found", params: { noticeId: unknown } },
+      });
+    }
   });
 
   it("REJECTS every station-operate route with 401 session.required when no cookie is present", async () => {
@@ -2529,6 +2601,7 @@ describe("KDS-1 station-display operate routes", () => {
     const cases = [
       app.request("/api/stations"),
       app.request(`/api/stations/${someId}/queue`),
+      app.request(`/api/kitchen-notices/${someId}/acknowledge`, { method: "POST" }),
       app.request(`/api/ticket-items/${someId}/advance`, {
         method: "POST",
         headers: j,

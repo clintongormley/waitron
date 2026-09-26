@@ -15,7 +15,12 @@ import {
   resolveZoneOffer,
   resolveZoneContext,
 } from "./operations.js";
-import { readEditSentLines, recordKitchenNotices } from "./kitchen-notices.js";
+import {
+  acknowledgeKitchenNotice,
+  listStationNotices,
+  readEditSentLines,
+  recordKitchenNotices,
+} from "./kitchen-notices.js";
 
 /** The generic server-facing service seat; it owns no transaction and calls no server code. */
 export const VENUE_SERVICE: VenueServiceContribution = {
@@ -34,5 +39,7 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   recordLineContexts: recordWorkingLineContexts,
   getOrderContext: getOrderServiceContext,
   recordKitchenNotices,
+  listStationNotices,
+  acknowledgeKitchenNotice,
   readEditSentLines,
 };

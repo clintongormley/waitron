@@ -268,6 +268,32 @@ export interface VenueServiceContribution {
     }[],
     kind: "recalled" | "void" | "changed",
   ): Promise<void>;
+  /** A station's unacknowledged notices, oldest first: the newest fifty of the business day. */
+  listStationNotices(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    stationId: string,
+  ): Promise<
+    {
+      id: string;
+      stationId: string;
+      workingOrderId: string;
+      orderLabel: string;
+      kind: "recalled" | "void" | "changed";
+      lineName: string;
+      quantity: Decimal;
+      note: string | null;
+      wasStarted: boolean;
+      createdAt: string;
+    }[]
+  >;
+  /** Clears one notice; with `stationId`, only one at that station. */
+  acknowledgeKitchenNotice(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    id: string,
+    scope?: { stationId?: string },
+  ): Promise<void>;
   /** Whether staff may change an item already sent to the kitchen. */
   readEditSentLines(tx: Transaction): Promise<boolean>;
 }

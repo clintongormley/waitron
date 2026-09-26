@@ -1234,8 +1234,13 @@ export class TillApi {
    * One station's kitchen queue → `GET /api/stations/:id/queue`, grouped by order, oldest first. A
    * malformed or unknown station id rejects with `station.not_found`.
    */
-  getStationQueue(stationId: string): Promise<StationQueueGroup[]> {
-    return this.#request<StationQueueGroup[]>(`/api/stations/${stationId}/queue`, "GET");
+  async getStationQueue(stationId: string): Promise<StationQueueGroup[]> {
+    // The response also carries the station's kitchen notices, which this does not pass on yet.
+    const queue = await this.#request<{ items: StationQueueGroup[] }>(
+      `/api/stations/${stationId}/queue`,
+      "GET",
+    );
+    return queue.items;
   }
 
   /**

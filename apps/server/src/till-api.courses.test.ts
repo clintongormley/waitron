@@ -219,7 +219,7 @@ async function cocinaId(): Promise<string> {
 async function queueItemsByName(orderId: string, station: string): Promise<Map<string, QueueItem>> {
   const res = await app.request(`/api/stations/${station}/queue`, { headers: { cookie } });
   expect(res.status).toBe(200);
-  const groups = (await res.json()) as QueueGroup[];
+  const { items: groups } = (await res.json()) as { items: QueueGroup[] };
   const group = groups.find((g) => g.orderId === orderId)!;
   return new Map(group.items.map((i) => [i.name, i]));
 }

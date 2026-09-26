@@ -5,12 +5,14 @@ import { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.j
 describe("VENUE_SERVICE", () => {
   it("exposes every generic ordering capability", () => {
     expect(Object.keys(VENUE_SERVICE).sort()).toEqual([
+      "acknowledgeKitchenNotice",
       "copyLineContext",
       "copyOrderContext",
       "findOrderContext",
       "getOrderContext",
       "listLineContexts",
       "listServiceZones",
+      "listStationNotices",
       "listZoneOffers",
       "readEditSentLines",
       "recordKitchenNotices",
