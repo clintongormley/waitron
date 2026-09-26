@@ -72,7 +72,7 @@ the mechanism); rebinding the restored `trading.env`'s connection strings to the
 ## 2. The scenario, and what the CLI does not do
 
 Cold restore is for the venue with **no surviving peer** — the sole-box venue or the cloud-standalone
-basic tier ([promotion-failover §7.4](2026-08-29-promotion-failover-and-node-lifecycle-design.md)).
+basic tier (promotion-failover §7.4).
 The posture is decided (owner, 2026-08-29): **going live again is an unblocked path; data loss is the
 accepted price; being stuck offline is not.** The lost tail's *submitted* records come back from AEAT
 at month-end; the un-submitted, un-replicated remainder is the customer's paper factura only.

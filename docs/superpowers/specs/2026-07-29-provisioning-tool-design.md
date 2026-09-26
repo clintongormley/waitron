@@ -98,7 +98,7 @@ Every step establishes what already exists before acting. Running any command tw
 > added a second gate in front of it, on journal-TABLE existence, which is weaker than "the set
 > finished" and let an interrupted provision be reported as complete. The gate was removed on
 > `fix/provisioning-migrate-gate`; `migrate` is now emitted on every run, as this row always
-> described. See [`2026-07-30-provisioning-migrate-gate-design.md`](2026-07-30-provisioning-migrate-gate-design.md).
+> described. See `2026-07-30-provisioning-migrate-gate-design.md`.
 
 `tenant`:
 

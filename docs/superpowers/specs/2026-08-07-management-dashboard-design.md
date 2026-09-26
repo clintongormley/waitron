@@ -216,7 +216,7 @@ phase forces a change to the app or the fiscal core.
   client, with **no SNI inspection**; **SNI-based routing to the right box among many is NOT
   implemented** and remains the real T1 relay's job (the tunnel spec defers SNI-peek + multi-box
   routing —
-  [`2026-08-27-sync-cloud-mirror-tunnel-design.md` §3](2026-08-27-sync-cloud-mirror-tunnel-design.md)).
+  `2026-08-27-sync-cloud-mirror-tunnel-design.md` §3).
   It first ships as the cloud-mirror's outbound-tunnel leg rather than the dashboard's, but the
   box-dials-out mechanism is the *same* one T1 will reuse.
 

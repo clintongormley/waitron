@@ -128,7 +128,7 @@ question.
 > flowing.** Under a network partition an isolated-but-selling node's un-replicated tail is *unbounded* —
 > it grows for the whole partition. Not a chain-correctness issue (those are the node's own records on its
 > own chain), but it changes what "safe to discard a box" means. See
-> [`2026-08-29-promotion-failover-and-node-lifecycle-design.md`](2026-08-29-promotion-failover-and-node-lifecycle-design.md)
+> `2026-08-29-promotion-failover-and-node-lifecycle-design.md`
 > §4 (and §5 for the disposal guard). Text above left as written.
 
 ---
@@ -346,7 +346,7 @@ conflict-detection already handle a returning primary.
 > Promotion *physically fences* the old node (power-off *or* demote-to-sell-only, at the box) **and**
 > actively evicts it from the serving list — while eviction from *serving* is not eviction from
 > *replication* (an evicted/sell-only node stays a source until its tail drains). See
-> [`2026-08-29-promotion-failover-and-node-lifecycle-design.md`](2026-08-29-promotion-failover-and-node-lifecycle-design.md)
+> `2026-08-29-promotion-failover-and-node-lifecycle-design.md`
 > §3.5. Text above left as written.
 
 **A botched dual-designation is recoverable, not fatal.** The fiscal side is protected by new-chain +

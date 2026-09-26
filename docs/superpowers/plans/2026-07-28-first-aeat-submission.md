@@ -59,7 +59,7 @@
 
 **Tech Stack:** TypeScript (ESM), Vitest, undici (mTLS `Agent`), Drizzle, PostgreSQL, AEAT SOAP over `prewww1.aeat.es`.
 
-**Spec:** [`2026-07-28-first-aeat-submission-design.md`](../specs/2026-07-28-first-aeat-submission-design.md).
+**Spec:** `2026-07-28-first-aeat-submission-design.md`.
 
 ## Global Constraints
 

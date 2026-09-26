@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-17. **Status:** design (approved with the owner); plan alongside. **Track:** a small
 follow-on joining [KDS-3 (expo/pass)](2026-08-17-kds-3-expo-pass-design.md) to
-[device identity-1](2026-08-17-device-identity-1-station-enrolment-design.md). **Runs SUPERVISED**. Both
+device identity-1. **Runs SUPERVISED**. Both
 dependencies are specced, **unbuilt**.
 
 KDS-3 built the expo/pass display **session-gated** (a person logs in and picks the pass). Device-identity

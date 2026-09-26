@@ -68,7 +68,7 @@ till print agent behind.
 - **An unpromoted standby refuses a till.** The read-only gate 403s `POST /api/session` on a mirror,
   pinned by [`boot.mirror.rls.test.ts`](../../../apps/server/src/boot.mirror.rls.test.ts) (the
   "session-shaped, not routing-shaped" comment), so a till that fails over to an unpromoted cloud is
-  "reachable, pending promotion" ([promotion-failover §7.1](2026-08-29-promotion-failover-and-node-lifecycle-design.md)),
+  "reachable, pending promotion" (promotion-failover §7.1),
   never a silent sale. That same comment names the two R3a deferrals the build carries (§5).
 
 ## 3. The handheld walkthrough the owner confirmed (the accepted behaviours)
@@ -118,7 +118,7 @@ is not on the Public Suffix List (it is ours to keep off it).
 ## 5. What the build (Track B item 1's spec) must carry
 
 - Replicate `devices`, `tills`, `device_profiles`, `canvases` to the standby. _Pointer, same day:
-  Track A's swap spec ([`2026-09-05-outbox-to-native-replication-swap-design.md`](2026-09-05-outbox-to-native-replication-swap-design.md)
+  Track A's swap spec (`2026-09-05-outbox-to-native-replication-swap-design.md`
   §2.1) copies every table unless a module marks it local and names `tills`, `devices` and
   `device_profiles` in its `state` publication over the WireGuard link — so this requirement is met by
   that swap, not by an outbox enrolment; the reroute build sequences after the swap slice that ships

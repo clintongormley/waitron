@@ -2,12 +2,12 @@
 
 **Date:** 2026-08-29
 **Status:** APPROVED — landed 2026-08-29; implementation plan to follow. The next design pass flagged by
-[`2026-08-29-promotion-failover-and-node-lifecycle-design.md`](2026-08-29-promotion-failover-and-node-lifecycle-design.md)
+`2026-08-29-promotion-failover-and-node-lifecycle-design.md`
 §9 item 2 (hereafter **the lifecycle spec**), which called it "the biggest remaining gap." Inherits its
 topology from [`2026-08-01-local-server-sif-and-failover-design.md`](2026-08-01-local-server-sif-and-failover-design.md)
-(**#33**), its replication protocol from [`2026-08-02-app-level-sync-design.md`](2026-08-02-app-level-sync-design.md)
+(**#33**), its replication protocol from `2026-08-02-app-level-sync-design.md`
 (**sync**), and its mirror-mode mechanism from
-[`2026-08-28-sync-cloud-mirror-c2a-mirror-server-design.md`](2026-08-28-sync-cloud-mirror-c2a-mirror-server-design.md)
+`2026-08-28-sync-cloud-mirror-c2a-mirror-server-design.md`
 (**C2a**).
 
 **Decides:** the ordered action a human's "make this primary" triggers on a target node — its trigger

@@ -1,7 +1,7 @@
 # Boot-failure diagnosability — design
 
 **Status:** design approved in conversation 2026-09-10 (owner); plan next. Extends the recovery
-supervisor of [the node-containers design](2026-09-08-node-containers-design.md) §9 — that document
+supervisor of the node-containers design §9 — that document
 records what was true when written; this one changes what the recovery page carries.
 
 ## 1. The problem, in one paragraph

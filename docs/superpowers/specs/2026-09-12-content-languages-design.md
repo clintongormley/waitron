@@ -16,8 +16,8 @@ Receipt-language selection remains separate. The default-change guard is impleme
 
 Open **Products**, then **Content languages**, for the current settings dialog. The separate
 Languages page mentioned in the design below was not introduced.
-[Focused test evidence](../plans/2026-09-12-image-library.md#focused-evidence-2026-09-12) records the
-checks completed during development. [Final validation](../plans/2026-09-12-image-library.md#final-validation-2026-09-12)
+Focused test evidence records the
+checks completed during development. Final validation
 is complete; `finish-branch` is underway.
 The starting-point observations below describe the original tree, not current behaviour.
 

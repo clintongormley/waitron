@@ -10,15 +10,15 @@ or TLS yet, because none exists):
 
 - **A — Peer identity & auth. LANDED (#144).** Each subscriber has a DB-backed identity and a
   per-peer scrypt bearer token; the source derives `subscriberId` from the token, never the body
-  ([spec](2026-08-27-sync-cloud-mirror-peer-identity-design.md)).
+  (spec).
 - **B — Outbound tunnel. LANDED (#150).** The box dials outbound; the cloud's pull rides back down a
-  blind byte-splice relay, TLS end-to-end ([spec](2026-08-27-sync-cloud-mirror-tunnel-design.md)).
+  blind byte-splice relay, TLS end-to-end (spec).
 - **C — Cloud read-mirror.** A "mirror mode" of `apps/server` that pulls + applies into its own
   Postgres and serves the dashboard read-only. Split into **C1 (LANDED #153)** — the `dining_tables`
-  FK-closure enrolment ([spec](2026-08-27-sync-cloud-mirror-c1-enrolment-design.md)) — and **C2**,
+  FK-closure enrolment (spec) — and **C2**,
   itself split (owner, 2026-08-28) into **C2a (LANDED #155)** and **C2b (THIS spec)**.
 
-**C2a built the running mirror mechanism** ([spec](2026-08-28-sync-cloud-mirror-c2a-mirror-server-design.md)):
+**C2a built the running mirror mechanism** (spec):
 a third boot path keyed on `deployment.mode ∈ {primary, mirror}`, a runtime read-only write gate, an
 unauthenticated ambient-viewer dashboard, and the pull-through-tunnel + apply wiring — all driven by
 the mirror's **matching identity and connection details supplied by env / by hand**. C2a explicitly

@@ -11,7 +11,7 @@ in-process transport.
 - [`2026-07-19-sales-spine-and-fiscal-layer-design.md`](2026-07-19-sales-spine-and-fiscal-layer-design.md)
   §7 ("Reconciliation", "Acks flow downstream") owns the **regulation**; §6 is where
   `reconcile(period)` is the reserved-but-absent `FiscalBackend` name.
-- [`2026-07-21-submission-and-reconciliation-design.md`](2026-07-21-submission-and-reconciliation-design.md)
+- `2026-07-21-submission-and-reconciliation-design.md`
   §4 shapes *how* this deliverable is built (the independent-audit framing, the four mechanics, acks
   downstream, the honest unsent-count scope). **Where it and §7 disagree on code shape, it wins;
   where either disagrees with the primary AEAT source verified in §2 below, the source wins.**

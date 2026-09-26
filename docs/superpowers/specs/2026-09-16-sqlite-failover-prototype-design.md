@@ -19,7 +19,7 @@ prototype still gives an early, loud signal if that judgement is wrong.
 **Companion documents.** The mechanism this rig exercises is defined in the topology design's §2.2
 (generations and the `current.json` conditional write), §4 (the four topologies), §5.1 (promotion)
 and §5.2 (the tail shipper); the natural-key clash shapes come from the
-[outbox → native replication swap](2026-09-05-outbox-to-native-replication-swap-design.md) §4.2/§4.4.
+outbox → native replication swap §4.2/§4.4.
 Litestream's documented behaviour is quoted in the
 [SQLite instead of PostgreSQL discussion note](2026-09-16-sqlite-instead-of-postgres-discussion.md) §3.
 

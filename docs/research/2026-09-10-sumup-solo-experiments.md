@@ -6,7 +6,7 @@
 starting with the design-invalidating standalone question — is still empty. Each experiment has a _Result_ block to
 fill in as it is run.
 
-The four questions in [2026-09-08-sumup-questions.md](2026-09-08-sumup-questions.md) went to SumUp on
+The four questions in 2026-09-08-sumup-questions.md went to SumUp on
 2026-09-08 and have had no reply. The owner now has a SumUp Solo, so the gate on the card-reader
 build (backlog Track H item 4) changes from "wait for the answers" to "run these experiments and
 record what happened". Three of the four questions are settled by the device; the fourth is settled

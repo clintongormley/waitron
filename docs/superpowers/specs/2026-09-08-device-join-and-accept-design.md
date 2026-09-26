@@ -444,7 +444,7 @@ The trade this order takes, stated both ways so a later reader does not have to 
   the failure the one-table decision of §4 exists to prevent and this order removes outright.
 - **What it costs.** The device slice is the larger of the two, and the print agent slice is now
   **blocked on it** rather than merely amended — Tasks 5, 6, 7 and 8 of
-  [its plan](../plans/2026-09-08-print-agent-process.md) consume a table, a window and routes that do
+  its plan consume a table, a window and routes that do
   not exist until this lands. Its Tasks 1, 3 and 9 (the package scaffold, the router, the container
   host) are independent and can proceed in parallel.
 

@@ -236,7 +236,7 @@ never needs root — i.e. the port defaults differ appliance vs dev, driven by c
 
 **Dev story — the existing dev stack shortcuts onboarding, so building it needs a fresh-box mode.**
 The current laptop stack (`pnpm dev:setup` + `pnpm dev`, the
-[local-dev-run-stack design](2026-08-18-local-dev-run-stack-design.md)) deliberately **bypasses this
+local-dev-run-stack design) deliberately **bypasses this
 whole flow**: it provisions the venue directly, generates the credentials key, writes `.env`, and
 serves plain HTTP on `localhost:8080` — no wizard, no cert, no mDNS (its non-goals list TLS and LAN
 binding explicitly). That is correct for feature work, but it means the onboarding wizard is

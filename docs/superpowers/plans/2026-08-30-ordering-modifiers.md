@@ -1,6 +1,6 @@
 # Ordering Modifiers / Variants Implementation Plan
 
-> **2026-09-12 update:** The [four-type modifier design](../specs/2026-09-12-product-modifiers-design.md)
+> **2026-09-12 update:** The four-type modifier design
 > supersedes the each-only selection gate and the skip-empty-required-group behavior. Extras retain
 > decimal child-line pricing; text, options and Yes/no now use saved presentation snapshots.
 > Allergen and dietary effects still use current declarations, with source-free authoring controls.

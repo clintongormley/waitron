@@ -12,7 +12,7 @@
 **Date:** 2026-09-05. **Status:** design, awaiting owner review; plan follows. **Track B item 1.**
 Rests on decision (i) ([`2026-09-05-till-reroute-route-decision.md`](2026-09-05-till-reroute-route-decision.md)),
 decision (ii) (no relay), decision (iii) (registers/devices) and Track A's swap spec
-([`2026-09-05-outbox-to-native-replication-swap-design.md`](2026-09-05-outbox-to-native-replication-swap-design.md)).
+(`2026-09-05-outbox-to-native-replication-swap-design.md`).
 Owner decisions taken in this brainstorm (2026-09-05): **the till follows the primary — no manual
 "switch server" control** (a status line + "check again" instead); **only the primary sells**, so a
 returned box is a standby until a human promotes it back.

@@ -102,7 +102,7 @@ one line; the fix's detail belongs in its PR/commit, not here.
 
 ### General UI corrections — 2026-09-06
 
-Owner scope: **all UI**. Landed as #249. Plan: [UI navigation and controls](superpowers/plans/2026-09-06-ui-navigation-and-controls.md).
+Owner scope: **all UI**. Landed as #249. Plan: UI navigation and controls.
 
 - Keep the selected navigation tab in the URL so Back, Forward and refresh restore it. Includes
   dashboard sections, till canvas tabs, Schedule, Kitchen/station selection, Pass, Allergens, floor

@@ -56,7 +56,7 @@ All non-fiscal, pre-production (**no backfill**). Tenant + location scoped.
 
 Modelled on the device-identity design (its own tables, its `hashSecret`/`verifySecret` scrypt token,
 its WebAuthn-challenge-style single-use TTL pairing code — see
-[device identity-1](2026-08-17-device-identity-1-station-enrolment-design.md) §2), because a print agent
+device identity-1 §2), because a print agent
 is the same "enrol a trusted local box centrally, revoke it centrally" problem, just bound to printers.
 
 ```text

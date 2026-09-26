@@ -4,9 +4,9 @@
 folded in as one chain (owner decision below).
 **Inputs:** the owner's brief for item 3 (`docs/backlog.md` → Whole-project design review → Track A),
 the two prototype findings
-([2026-08-02](2026-08-02-replication-force-rls-prototype-findings.md),
-[2026-09-05](2026-09-05-native-replication-post-rls-prototype-findings.md)), the swap spec
-([2026-09-05-outbox-to-native-replication-swap-design.md](2026-09-05-outbox-to-native-replication-swap-design.md)),
+(2026-08-02,
+2026-09-05), the swap spec
+(2026-09-05-outbox-to-native-replication-swap-design.md),
 and a brainstorm with the owner the same evening.
 
 ## 0. Decisions taken with the owner (2026-09-05)

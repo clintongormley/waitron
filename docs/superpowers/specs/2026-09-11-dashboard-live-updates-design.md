@@ -1,7 +1,7 @@
 # Dashboard live updates
 
 Implemented on `live-updates`, 2026-09-11; branch validation and review follow the
-[implementation plan](../plans/2026-09-11-dashboard-live-updates.md).
+implementation plan.
 
 **2026-09-21: how a change leaves the database has been replaced, and the reconnect machinery above
 it went with it.** The trigger no longer calls `NOTIFY`. It writes a row into a `change_log` table,

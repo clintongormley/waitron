@@ -13,7 +13,7 @@ faithful fake AEAT.
   two routes, rejections, `Incidencia="S"`, reconciliation. Verified against primary AEAT sources
   (the XSDs/WSDL, `Descripcion_SWeb` v1.0.3, `Validaciones_Errores` v1.2.2, `FAQs-Desarrolladores`
   v1.3, Orden HAC/1177/2024 Anexo 2.2). **Where this and §7 disagree on regulation, §7 wins.**
-- [`2026-07-21-submission-and-reconciliation-design.md`](2026-07-21-submission-and-reconciliation-design.md)
+- `2026-07-21-submission-and-reconciliation-design.md`
   shapes *how* §7 is built — the deliverable split (0 → 1 → 2), the transport boundary, the
   fake-AEAT approach, the `FiscalBackend` interface changes, the cross-plan seams. **Where it and
   §7 disagree on code shape, it wins.**

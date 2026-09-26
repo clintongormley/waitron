@@ -3,7 +3,7 @@
 Date: 2026-09-09. Status: implementation design following the owner's onboarding discussion.
 The four choices and separate production database are agreed. Defaults below make the remaining
 implementation choices explicit; the fiscal readiness requirement is a product policy, not a
-verified legal obligation. [Implementation plan](../plans/2026-09-09-node-onboarding.md).
+verified legal obligation. Implementation plan.
 
 ## Your first choice
 

@@ -28,7 +28,7 @@ The installer and the installed server have separate permissions:
   in `deploy/compose.yml:17`, this is the configured mechanism for binding the box's low ports,
   including 80 and 443. This discussion did not run a fresh container probe. The earlier
   experiment and its limits are recorded in the
-  [container design's provenance](2026-09-08-node-containers-design.md#13-provenance).
+  container design's provenance.
 
 Do not give an everyday restaurant account unrestricted passwordless sudo. Adding it to the
 Docker group would also grant root-level privileges [S3]. Routine updates, diagnostics and

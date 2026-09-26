@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-17. **Status:** design (approved with the owner); plan alongside. **Track:** the
 hardening follow-on to
-[counter receipt + drawer printing](2026-08-17-counter-receipt-drawer-printing-design.md), and — more
+counter receipt + drawer printing, and — more
 importantly — the **first till-side privileged-action authorization path** (a shared foundation).
 **Runs SUPERVISED**. **Security-adjacent** (cash control + the first supervisor-override on the till).
 
@@ -11,7 +11,7 @@ The receipt+drawer slice made the manual "open drawer" **session-gated + audited
 path does not exist yet: `authorize(tx, { sessionId, permission, override? })` is built
 (`packages/identity/src/authorize.ts:39-67` — satisfied by the operator's role **or** a supervisor PIN
 override), but **no till route calls it**, and **no till route parses a supervisor override**
-([device identity-1](2026-08-17-device-identity-1-station-enrolment-design.md) §3c uses `authorize()`
+(device identity-1 §3c uses `authorize()`
 without an override; this slice adds the override hop). This slice builds that hop, applies it to the
 drawer, and leaves a **reusable supervisor-override component** on-till config and other privileged actions
 inherit.

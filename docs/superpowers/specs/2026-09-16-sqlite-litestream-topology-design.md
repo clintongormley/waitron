@@ -18,7 +18,7 @@ is built (§5.2, risk 2).
 regulation's own words, Litestream's documented behaviour, and the counts. Read it first.
 
 **Supersedes, if built:** the mechanism half of
-[outbox → native logical replication swap](2026-09-05-outbox-to-native-replication-swap-design.md)
+outbox → native logical replication swap
 (the `ledger`/`state`/`local` classification and the promotion/return *shape* survive; the Postgres
 publications/subscriptions do not); the "no relay — replication rides WireGuard" standing decision for
 the replication path (the stream goes to object storage; WireGuard's fate for remote dashboard access

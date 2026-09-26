@@ -148,7 +148,7 @@ speculation in a different place.
 >
 > **`forward` is a different case, and is DEFERRED rather than ruled out.** None of the three holds
 > for it. It is now a per-tenant object (`StripeOnDeviceProviderOptions.tenantId`, landed the same
-> day — see [`2026-07-26-provider-tenant-scoping-design.md`](./2026-07-26-provider-tenant-scoping-design.md)),
+> day — see `2026-07-26-provider-tenant-scoping-design.md`),
 > so it keys onto `tenant_id NOT NULL` exactly as a `PeriodDuty` does. It owns **no** durable
 > schedule state: its only cadence is an in-process `FORWARD_RETRY_MS` constant in the adapter,
 > which is the very thing this package exists to replace. And nothing about its failure mode is

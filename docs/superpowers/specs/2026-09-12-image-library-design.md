@@ -15,8 +15,8 @@ metadata, labels, search, product selection and deletion blocked by product refe
 as comma-separated text; the saved label set supplies the filter choices. The library does not
 provide a separate label manager.
 
-[Focused test evidence](../plans/2026-09-12-image-library.md#focused-evidence-2026-09-12) includes the
-real populated-image restore regression and browser checks. [Final validation](../plans/2026-09-12-image-library.md#final-validation-2026-09-12)
+Focused test evidence includes the
+real populated-image restore regression and browser checks. Final validation
 is complete; `finish-branch` is underway. The repository starting points below are historical observations
 from before implementation; their filesystem storage and fixed language assumptions are superseded
 by the media module and content-language configuration.

@@ -2,7 +2,7 @@
 
 **Status:** brainstormed 2026-09-07 (owner, this session); fresh-context Fable review folded (same
 day); plan not yet written. Prerequisite for the outbox→native-replication swap slices S3/S4
-([2026-09-05-outbox-to-native-replication-swap-design.md](2026-09-05-outbox-to-native-replication-swap-design.md)
+(2026-09-05-outbox-to-native-replication-swap-design.md
 §4.4). Its own PR, ahead of the two-node fixture (swap S1).
 
 **Model note:** this spec touches the immutable working-time record and adds a line to `CLAUDE.md`

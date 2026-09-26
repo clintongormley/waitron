@@ -9,7 +9,7 @@ a module's package is derived from `migrations.from` rather than declared on the
 ("vocabulary + error codes — the regime terms it legitimately uses, generalising the english-only
 `EXEMPT_PACKAGES` list to 'a module declares its own vocabulary'"), §4 (the vocabulary registry the
 guard reads) and §9 ("English-only guard preserved, not exempted-around"). The second of SP-3's four
-slices ([sp-3a](2026-09-05-module-sp3a-fiscal-record-lane-design.md) lists them); independent of 3a,
+slices (sp-3a lists them); independent of 3a,
 3c and 3d.
 
 **Implementation notes (2026-09-05, the simplify pass before the PR; supersede §4–§6 where they

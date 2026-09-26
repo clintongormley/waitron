@@ -14,7 +14,7 @@ into a new `@waitron/composition` package; (3) `FiscalBackend` gains an `id`, an
 
 **Implements:** [module-system-architecture §8 SP-3](2026-09-04-module-system-architecture-design.md) —
 the third of the four slices SP-3 was split into (owner decision 2026-09-05; see
-[SP-3a](2026-09-05-module-sp3a-fiscal-record-lane-design.md) for the split):
+SP-3a for the split):
 
 - **SP-3a — LANDED #238** — the fiscal module's sync enrolment.
 - **SP-3b — LANDED #240** — module-owned vocabulary.

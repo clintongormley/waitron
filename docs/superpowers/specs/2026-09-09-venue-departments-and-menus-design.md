@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-09. **Status:** the owner approved the domain direction; the implementation
 defaults below are proposed decisions for this plan, not separately approved behaviour.
-**Implementation:** [execution plan](../plans/2026-09-09-venue-departments-and-menus.md).
+**Implementation:** execution plan.
 **Inspection baseline:** `menus` at `67047fb3`. This note records source inspection, not a runtime
 verification of the existing system. No implementation is included with these documents.
 

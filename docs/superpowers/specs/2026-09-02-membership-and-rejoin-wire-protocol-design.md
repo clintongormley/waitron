@@ -1,7 +1,7 @@
 # Membership & rejoin wire-protocol — design
 
 **Status:** design (spec-only; no code in this cycle).
-**Resolves:** [promotion-failover-and-node-lifecycle](2026-08-29-promotion-failover-and-node-lifecycle-design.md)
+**Resolves:** promotion-failover-and-node-lifecycle
 §9 **item 1** — "Membership & rejoin wire-protocol." That parent spec fixed the *policy* (human is the
 consensus, physical fence + config-borne membership fence, witness is a latency optimisation only); this
 spec fixes the *wire-protocol* underneath it.
@@ -180,7 +180,7 @@ sequence is therefore **drain-first, then rebuild**:
 
 > **Dated pointer, 2026-09-05 — step 4's mechanism is now built.** The wipe-and-restore composition this
 > step describes is supplied by the R3 slice of the rejoin arc:
-> [membership-rejoin-r3-wipe-and-restore](2026-09-05-membership-rejoin-r3-wipe-and-restore-design.md)
+> membership-rejoin-r3-wipe-and-restore
 > (`feat/membership-rejoin-r3-wipe-restore`, pending land). The rest of this document is as written.
 
 The gate between 3 and 4 is strict: **drain to completion, *then* wipe-and-restore** — a wipe before the
@@ -272,7 +272,7 @@ conflict-surface policy for shared config; the `node_membership` singleton; and 
 
 ## 10. What this supersedes and interacts with
 
-- **Resolves** [promotion-failover-and-node-lifecycle](2026-08-29-promotion-failover-and-node-lifecycle-design.md)
+- **Resolves** promotion-failover-and-node-lifecycle
   §9 **item 1**, and gives §3.5's "membership fence" its concrete wire-protocol. Leaves parent §9 items
   2–7 as written; a dated pointer should be added to parent §9 item 1 at land noting this spec resolves it.
 - **Depends on** the parent's role model, boot resolution, disposal guard (§5.1), restore-then-stream

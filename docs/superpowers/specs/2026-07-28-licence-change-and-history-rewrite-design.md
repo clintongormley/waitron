@@ -269,7 +269,7 @@ untouched until the push.
    Twenty-two remote refs deleted, plus one force-push of `main`.
 5. **Replay the `db-exports-map` branch onto the new `main`.** It carries one commit of its own —
    `f3f2233`, *"docs(db): design the exports map…"*, whose spec is
-   [2026-07-28-db-exports-map-design.md](2026-07-28-db-exports-map-design.md) — with a clean
+   2026-07-28-db-exports-map-design.md — with a clean
    working tree, and its work is paused rather than abandoned. Rebase it onto the rewritten
    `main` (`git rebase --onto origin/main <old-main-sha> db-exports-map`); the replayed commit
    inherits ELv2 from its new parent. **Check for uncommitted work in that worktree immediately

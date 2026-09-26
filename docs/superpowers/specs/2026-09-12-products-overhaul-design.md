@@ -12,10 +12,10 @@ your draft. Recipes are outside the supported product workflow for this version.
 
 | Section    | Specification                                         | Plan                                                           | Branch                |
 | ---------- | ----------------------------------------------------- | -------------------------------------------------------------- | --------------------- |
-| Units      | [Units](2026-09-12-product-units-design.md)           | [Build](../plans/2026-09-12-product-units.md)                  | `products-units`      |
-| Modifiers  | [Modifiers](2026-09-12-product-modifiers-design.md)   | [Build](../plans/2026-09-12-product-modifiers.md)              | `products-modifiers`  |
-| Categories | [Categories](2026-09-12-product-categories-design.md) | [Build](../plans/2026-09-12-product-categories.md)             | `products-categories` |
-| Products   | [Products](2026-09-12-product-editor-design.md)       | [Build and integration](../plans/2026-09-12-product-editor.md) | `products-editor`     |
+| Units      | [Units](2026-09-12-product-units-design.md)           | Build                  | `products-units`      |
+| Modifiers  | Modifiers   | Build              | `products-modifiers`  |
+| Categories | Categories | Build             | `products-categories` |
+| Products   | [Products](2026-09-12-product-editor-design.md)       | Build and integration | `products-editor`     |
 
 Read this shared contract and your section's spec and plan before implementation. These documents
 describe the intended result. Existing behavior cited below was inspected, not exercised in this
