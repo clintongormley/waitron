@@ -244,8 +244,8 @@ export class OptionListForm extends LitElement {
     this.#openedFrom = label === "new" ? null : label.id;
   }
 
-  /** Closes the option editor and puts focus back on the control that opened it, once the dialog
-   * has closed and put focus back where IT recorded. */
+  /** Closes the option editor and puts focus back on the control that opened it. The focus waits
+   * for the editor's dialog to close, because closing it moves focus too and would undo it. */
   #closeEditor(): void {
     this.editingLabel = null;
     void this.#returnFocus(this.#openedFrom);
