@@ -3062,7 +3062,7 @@ image constraints under *Detail → Box image*.
     the backup status, so anyone who can read the status can test a guessed key against it (Codex's
     probe matched one of three candidates); #656 deleted the comment calling it revealing nothing,
     and the owner decided on 2026-09-25 to leave it as it is. **Done (2026-09-26, lane A's A40,
-    branch `fix/backup-stored-flag-old-sweep`):** an archive the old sweep stored under the OLD key
+    #672):** an archive the old sweep stored under the OLD key
     while `reload()` waited for it to stop set `archiveUnderCurrentKey`, so the backup status
     reported it true (the Backups screen shows "yes" beside "Backup under the current key") before
     the new sweep had stored anything — reproduced at the supervisor in `backup-supervisor.test.ts`,
