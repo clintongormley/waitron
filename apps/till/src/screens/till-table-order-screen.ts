@@ -12,15 +12,24 @@ import {
   MONEY_SCALE,
   subtractDecimal,
   sumDecimals,
+  perDishOptionQuantity,
   toScale,
   type Decimal,
 } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
+import type { StringKey } from "../i18n/strings.js";
 import { selectStyles } from "../select-styles.js";
 import { type DietPredicate, hasDietData, visibleProducts } from "../menu-filter.js";
 import { lineProductName, productName } from "../widgets/product-name.js";
 import { trimQuantity } from "../widgets/dish-format.js";
-import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
+import {
+  WorkingOrderStore,
+  type LineSelection,
+  type OrderLine,
+  type SelectedExtra,
+} from "../state/working-order.js";
+import { deriveExtraSelections } from "../state/held-extras.js";
+import { deriveOptionSelections } from "../state/held-options.js";
 import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "../state/order-line.js";
 import { StoreChangeController } from "../state/store-controller.js";
 import "../widgets/product-grid.js";
@@ -30,7 +39,10 @@ import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "../widgets/menu-switcher.js";
 import "../widgets/diet-filter.js";
+import "../widgets/modifier-picker.js";
+import type { ModifierConfirmDetail } from "../widgets/modifier-picker.js";
 import type {
+  OrderLinePatch,
   RoundLine,
   TabLine,
   TableServiceStatus,
@@ -44,6 +56,13 @@ import type { ConfirmPaymentDetail } from "../widgets/tender-pay.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
 
 export type { TableServiceStatus };
+
+/** `change-line`: one sent line's edit, from the copy of the order read at `revision`. */
+export interface ChangeLineDetail {
+  lineNo: number;
+  patch: OrderLinePatch;
+  revision: number;
+}
 
 /**
  * The tab's LOCKED total and line count, fed to the embedded `tender-pay`. A tab never re-prices: the
@@ -81,7 +100,8 @@ class TabPayStore extends WorkingOrderStore {
 export class TillTableOrderScreen extends LitElement {
   static override styles = [
     css`
-      .modifier-answer {
+      .modifier-answer,
+      .line-note {
         display: block;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
@@ -179,16 +199,33 @@ export class TillTableOrderScreen extends LitElement {
 
       .line {
         display: grid;
-        /* Up to SIX direct grid children on a pending line: name, qty, line-total, #lineCourse (a course
-           control when a venue has courses configured, else nothing), #lineAction (a Send/Recall/Cancel
-           button when the line offers one, else nothing) and the always-present serve button. Any track
-           whose child renders nothing collapses to 0 width, so sizing to the max keeps the serve button
-           on one row when both optional children render. The narrower .served-line overrides this below. */
-        grid-template-columns: 1fr auto auto auto auto auto;
+        /* A pending line's first row: name, qty, line-total, #lineCourse (nothing when the venue has no
+           courses; its track then collapses) and the serve button. The narrower .served-line overrides
+           this below. */
+        grid-template-columns: 1fr auto auto auto auto;
         align-items: center;
         gap: var(--wt-space-3);
         padding: var(--wt-space-2) 0;
         border-bottom: 1px solid var(--wt-color-border);
+      }
+
+      /* The line's actions take a row of their own: Change, Recall and Cancel together do not fit
+         beside the name in the drawer at phone width. */
+      .line-actions {
+        grid-column: 1 / -1;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: var(--wt-space-2);
+      }
+
+      /* Three buttons do not fit on one line of the dialog at phone width, so they wrap rather than
+         squeeze their labels onto two lines each. */
+      .cancel-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: var(--wt-space-2);
       }
 
       .served-line {
@@ -375,8 +412,25 @@ export class TillTableOrderScreen extends LitElement {
   /** null shows every dish in the selected menu. */
   @property({ attribute: false }) selectedDiet: DietPredicate | null = null;
 
-  /** Cancelling a STARTED dish bins food, so — unlike Send/Recall — the void fires only once confirmed. */
+  /** The revision {@link lines} was read at. */
+  @property({ attribute: false }) revision = 0;
+  /** The venue's setting. When off, the server refuses to change or recall a sent line that has a
+   * ticket item, so those lines offer Cancel instead. */
+  @property({ attribute: false }) editSentLines = true;
+  /** Set by the app when a change was refused because the kitchen had started the line: that line's
+   * Cancel confirm opens. */
+  @property({ attribute: false }) cancelOffer: number | null = null;
+
+  /** Cancelling takes a dish off the bill (and bins it once started), so — unlike Send/Recall — the
+   * void fires only once confirmed. */
   @state() private cancelLine: TabLine | null = null;
+
+  /** The line open in the Change editor. */
+  @state() private changeLine: TabLine | null = null;
+  /** Built once when the editor opens, not per render: the picker seeds from these once. */
+  #changeProduct?: TillProduct;
+  #changeSelection?: LineSelection;
+  #changeRevision = 0;
 
   @state() private actionStep: "closed" | "menu" | "pick" | "transfer-lines" | "split-lines" =
     "closed";
@@ -401,6 +455,9 @@ export class TillTableOrderScreen extends LitElement {
   #payStore?: TabPayStore;
   /** Memoised so a render triggered by a round change does not recompute every line's gross. */
   #lineGrossByLineNo = new Map<number, Decimal>();
+  /** Built with {@link products}, so each line's Change lookup is not a scan. */
+  #productsByOffer?: Map<string, TillProduct>;
+  #productsById = new Map<string, TillProduct>();
 
   constructor() {
     super();
@@ -419,6 +476,21 @@ export class TillTableOrderScreen extends LitElement {
     // A tab switch must not carry a half-open action flow across: its targets belong to the OLD tab.
     if (changed.has("orderId") && changed.get("orderId") !== undefined) {
       this.#closeActions();
+    }
+    if (changed.has("products") || this.#productsByOffer === undefined) {
+      this.#productsByOffer = new Map();
+      this.#productsById = new Map();
+      for (const product of this.products) {
+        if (product.menuItemId !== undefined && !this.#productsByOffer.has(product.menuItemId))
+          this.#productsByOffer.set(product.menuItemId, product);
+        if (!this.#productsById.has(product.id)) this.#productsById.set(product.id, product);
+      }
+    }
+    if (changed.has("cancelOffer") && this.cancelOffer !== null) {
+      const offered = this.lines.find(
+        (line) => line.lineNo === this.cancelOffer && !this.#isChild(line),
+      );
+      if (offered !== undefined) this.cancelLine = offered;
     }
   }
 
@@ -556,7 +628,7 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  /** Shared by the Send button ({@link #lineAction}) and the Send-all gate ({@link #anyHeld}) so the two
+  /** Shared by the Send button ({@link #lineActions}) and the Send-all gate ({@link #anyHeld}) so the two
    * stay in lockstep. A ticket-item-less parent (`state === null` — a moved/merged line or an
    * openTab-initial line) has nothing to send. The child exclusion is stated in its own right although
    * the server gives a child no ticket item, so `state === null` already refuses it. */
@@ -564,48 +636,106 @@ export class TillTableOrderScreen extends LitElement {
     return !this.#isChild(line) && line.firedAt === null && line.state !== null;
   }
 
-  /** HELD → Send; FIRED + not started → Recall; FIRED + started → Cancel, behind a confirm because a
-   * started dish is binned. A CHILD extras row is part of its dish and offers no action of its own. */
-  #lineAction(line: TabLine): TemplateResult | typeof nothing {
-    if (this.#isChild(line)) return nothing;
+  #isStarted(line: TabLine): boolean {
+    return line.state === "preparing" || line.state === "ready";
+  }
+
+  /** Sent and still holding a ticket item, with the venue's setting off: the server refuses to change
+   * or recall it (`ticket.already_fired`), so it offers Cancel in their place. */
+  #lockedBySetting(line: TabLine): boolean {
+    return !this.editSentLines && line.sentAt !== null && line.state !== null;
+  }
+
+  /** The live product a Change edits against: the offer the line was sold under, else its product (a
+   * variant line's parent). */
+  #liveProduct(line: TabLine): TillProduct | undefined {
+    const byOffer =
+      line.menuItemId === null ? undefined : this.#productsByOffer?.get(line.menuItemId);
+    const productId = line.parentProductId ?? line.productId;
+    return byOffer ?? (productId === null ? undefined : this.#productsById.get(productId));
+  }
+
+  /** A no-route line (no ticket item) is changed whatever its `sentAt`; a line with a ticket item only
+   * once it was sent, because a held line never sent keeps Send alone. */
+  #canChange(line: TabLine): boolean {
+    if (this.#isChild(line) || this.#isStarted(line) || this.#lockedBySetting(line)) return false;
+    if (line.state !== null && line.sentAt === null) return false;
+    return this.#liveProduct(line) !== undefined;
+  }
+
+  #canRecall(line: TabLine): boolean {
+    return (
+      !this.#isChild(line) &&
+      line.firedAt !== null &&
+      line.state === "queued" &&
+      !this.#lockedBySetting(line)
+    );
+  }
+
+  #canCancel(line: TabLine): boolean {
+    if (this.#isChild(line)) return false;
+    const firedQueued = line.firedAt !== null && line.state === "queued";
+    return this.#isStarted(line) || firedQueued || this.#lockedBySetting(line);
+  }
+
+  /** A CHILD extras row is part of its dish and offers no action of its own. */
+  #lineActions(line: TabLine): TemplateResult | typeof nothing {
     const name = this.#nameForLine(line);
-    if (this.#isSendable(line)) {
-      return html`<wt-button
-        class="line-send"
-        size="sm"
-        variant="primary"
-        data-send-line=${line.lineNo}
-        aria-label=${`${t("table.send_line")} · ${name}`}
-        @click=${() => this.#sendLine(line.lineNo)}
-      >
-        ${t("table.send_line")}
-      </wt-button>`;
-    }
-    if (line.state === "queued") {
-      return html`<wt-button
-        class="line-recall"
-        size="sm"
-        variant="secondary"
-        data-recall-line=${line.lineNo}
-        aria-label=${`${t("table.recall_line")} · ${name}`}
-        @click=${() => this.#recallLine(line.lineNo)}
-      >
-        ${t("table.recall_line")}
-      </wt-button>`;
-    }
-    if (line.state === "preparing" || line.state === "ready") {
-      return html`<wt-button
-        class="line-cancel"
-        size="sm"
-        variant="danger"
-        data-cancel-line=${line.lineNo}
-        aria-label=${`${t("table.cancel_line")} · ${name}`}
-        @click=${() => this.#requestCancel(line)}
-      >
-        ${t("table.cancel_line")}
-      </wt-button>`;
-    }
-    return nothing;
+    const label = (key: StringKey) => `${t(key)} · ${name}`;
+    const actions: TemplateResult[] = [];
+    if (this.#isSendable(line))
+      actions.push(
+        html`<wt-button
+          class="line-send"
+          size="sm"
+          variant="primary"
+          data-send-line=${line.lineNo}
+          aria-label=${label("table.send_line")}
+          @click=${() => this.#sendLine(line.lineNo)}
+        >
+          ${t("table.send_line")}
+        </wt-button>`,
+      );
+    if (this.#canChange(line))
+      actions.push(
+        html`<wt-button
+          class="line-change"
+          size="sm"
+          variant="secondary"
+          data-change-line=${line.lineNo}
+          aria-label=${label("table.change_line")}
+          @click=${() => this.#openChange(line)}
+        >
+          ${t("table.change_line")}
+        </wt-button>`,
+      );
+    if (this.#canRecall(line))
+      actions.push(
+        html`<wt-button
+          class="line-recall"
+          size="sm"
+          variant="secondary"
+          data-recall-line=${line.lineNo}
+          aria-label=${label("table.recall_line")}
+          @click=${() => this.#recallLine(line.lineNo)}
+        >
+          ${t("table.recall_line")}
+        </wt-button>`,
+      );
+    if (this.#canCancel(line))
+      actions.push(
+        html`<wt-button
+          class="line-cancel"
+          size="sm"
+          variant="danger"
+          data-cancel-line=${line.lineNo}
+          aria-label=${label("table.cancel_line")}
+          @click=${() => this.#requestCancel(line)}
+        >
+          ${t("table.cancel_line")}
+        </wt-button>`,
+      );
+    return actions.length === 0 ? nothing : html`<span class="line-actions">${actions}</span>`;
   }
 
   #anyHeld(): boolean {
@@ -643,13 +773,15 @@ export class TillTableOrderScreen extends LitElement {
     this.cancelLine = line;
   }
 
-  #confirmCancel(): void {
+  /** `quantity` absent cancels the whole line. */
+  #confirmCancel(quantity?: string): void {
     const line = this.cancelLine;
     if (line === null) return;
     this.cancelLine = null;
     this.dispatchEvent(
       new CustomEvent("void-line", {
-        detail: { lineNo: line.lineNo },
+        detail:
+          quantity === undefined ? { lineNo: line.lineNo } : { lineNo: line.lineNo, quantity },
         bubbles: true,
         composed: true,
       }),
@@ -660,10 +792,18 @@ export class TillTableOrderScreen extends LitElement {
     this.cancelLine = null;
   }
 
+  /** A line sold by the unit and holding more than one can be cancelled one at a time; a weighed
+   * line cancels whole. */
+  #cancelsOneAtATime(line: TabLine): boolean {
+    return line.unitPrecision === 0 && compareDecimal(decimal(line.quantity), decimal("1")) > 0;
+  }
+
   /** Always present, driven by {@link cancelLine}, so an Escape close flows back through `wt-close` into
    * the state rather than fighting the `.open` binding. */
   #cancelDialog(): TemplateResult {
     const line = this.cancelLine;
+    const started = line !== null && this.#isStarted(line);
+    const oneAtATime = line !== null && this.#cancelsOneAtATime(line);
     return html`<wt-dialog
       class="cancel-confirm"
       .open=${line !== null}
@@ -671,7 +811,7 @@ export class TillTableOrderScreen extends LitElement {
       @wt-close=${() => this.#dismissCancel()}
     >
       <p class="cancel-body">
-        ${t("table.cancel_started")}
+        ${started ? t("table.cancel_started") : t("table.cancel_sent")}
         ${
           line !== null
             ? html`<span class="cancel-dish"
@@ -680,25 +820,128 @@ export class TillTableOrderScreen extends LitElement {
             : nothing
         }
       </p>
-      <wt-button
-        slot="footer"
-        class="cancel-keep"
-        variant="secondary"
-        data-cancel-dismiss
-        @click=${() => this.#dismissCancel()}
-      >
-        ${t("table.cancel_keep")}
-      </wt-button>
-      <wt-button
-        slot="footer"
-        class="cancel-do"
-        variant="danger"
-        data-cancel-confirm
-        @click=${() => this.#confirmCancel()}
-      >
-        ${t("table.cancel_confirm")}
-      </wt-button>
+      ${
+        oneAtATime
+          ? html`<p class="cancel-how-many">
+              ${t("table.cancel_one_of").replace("{n}", this.#displayQty(line.quantity))}
+            </p>`
+          : nothing
+      }
+      <div slot="footer" class="cancel-actions">
+        <wt-button
+          class="cancel-keep"
+          variant="secondary"
+          data-cancel-dismiss
+          @click=${() => this.#dismissCancel()}
+        >
+          ${t("table.cancel_keep")}
+        </wt-button>
+        ${
+          oneAtATime
+            ? html`<wt-button
+                class="cancel-one"
+                variant="danger"
+                data-cancel-one
+                @click=${() => this.#confirmCancel("1")}
+              >
+                ${t("table.cancel_one")}
+              </wt-button>`
+            : nothing
+        }
+        <wt-button
+          class="cancel-do"
+          variant="danger"
+          data-cancel-confirm
+          @click=${() => this.#confirmCancel()}
+        >
+          ${
+            oneAtATime
+              ? t("table.cancel_all")
+              : started
+                ? t("table.cancel_confirm")
+                : t("table.cancel_do")
+          }
+        </wt-button>
+      </div>
     </wt-dialog>`;
+  }
+
+  #openChange(line: TabLine): void {
+    const live = this.#liveProduct(line)!;
+    const offered = live.offeredModifiers ?? [];
+    const sendsExtras = offered.some((entry) => entry.kind === "extras");
+    const extras: SelectedExtra[] = [];
+    for (const child of this.lines.filter((row) => row.parentLineNo === line.lineNo)) {
+      const held = {
+        productId: child.productId,
+        listId: child.listId,
+        name: this.#nameForLine(child),
+        price: child.unitPriceGross,
+        quantity: perDishOptionQuantity(child.quantity, line.quantity),
+      };
+      const [kept] = deriveExtraSelections(offered, [held]).extras;
+      // A pick no offered list carries still stands on the line. When the edit sends extras it would
+      // drop it, so it goes in as a stale pick, which the picker names and keeps Save shut on.
+      if (kept !== undefined) extras.push(kept);
+      else if (sendsExtras)
+        extras.push({ ...held, listId: held.listId ?? "", productId: held.productId ?? "" });
+    }
+    this.#changeProduct = {
+      ...live,
+      name: this.#nameForLine(line),
+      unitPrice: line.unitPriceGross,
+      // An edit cannot move a line to another variant.
+      variants: [],
+    };
+    this.#changeSelection = {
+      extras,
+      options: deriveOptionSelections(offered, line.optionSnapshots).options,
+      ...(line.note === null ? {} : { note: line.note }),
+    };
+    this.#changeRevision = this.revision;
+    this.changeLine = line;
+  }
+
+  #closeChange(): void {
+    this.changeLine = null;
+    this.#changeProduct = undefined;
+    this.#changeSelection = undefined;
+  }
+
+  /** `options` and `extras` go only when the dish offers a list of that kind: either, sent, replaces the
+   * line's whole set, so an absent one keeps what the line holds. */
+  #confirmChange(detail: ModifierConfirmDetail): void {
+    const line = this.changeLine!;
+    const offered = this.#changeProduct!.offeredModifiers ?? [];
+    this.#closeChange();
+    const patch: OrderLinePatch = { note: detail.note ?? null };
+    if (offered.some((entry) => entry.kind === "options")) patch.options = detail.options ?? [];
+    if (offered.some((entry) => entry.kind === "extras"))
+      patch.extras = toWireModifiers({ extras: detail.extras }).extras ?? [];
+    const change: ChangeLineDetail = { lineNo: line.lineNo, patch, revision: this.#changeRevision };
+    this.dispatchEvent(
+      new CustomEvent("change-line", { detail: change, bubbles: true, composed: true }),
+    );
+  }
+
+  #changeEditor(): TemplateResult | typeof nothing {
+    const line = this.changeLine;
+    if (line === null) return nothing;
+    return html`<till-modifier-picker
+      class="change-editor"
+      withNote
+      .product=${this.#changeProduct}
+      .quantity=${this.#displayQty(line.quantity)}
+      .initialSelections=${this.#changeSelection}
+      @wt-modifier-confirm=${(event: CustomEvent<ModifierConfirmDetail>) => {
+        event.stopPropagation();
+        this.#confirmChange(event.detail);
+      }}
+      @wt-modifier-cancel=${(event: Event) => {
+        event.stopPropagation();
+        this.#closeChange();
+      }}
+    ></till-modifier-picker>`;
   }
 
   /** Falls back to the raw id for a course DEACTIVATED since the line was rung — never blank. */
@@ -859,7 +1102,7 @@ export class TillTableOrderScreen extends LitElement {
             ${t("table.send_round")}
           </wt-button>
         </div>
-        ${this.#cancelDialog()}
+        ${this.#cancelDialog()} ${this.#changeEditor()}
       </section>
     `;
   }
@@ -954,15 +1197,21 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
+  #lineNote(line: TabLine): TemplateResult | typeof nothing {
+    return line.note === null
+      ? nothing
+      : html`<span class="line-note">${t("line.note.label")}: ${line.note}</span>`;
+  }
+
   #pendingLine(line: TabLine): TemplateResult {
     const name = this.#nameForLine(line);
     return html`<li class="line pending-line${this.#isChild(line) ? " child-line" : ""}">
       <span class="name"
-        >${name}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}</span
+        >${name}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}</span
       >
       <span class="qty">${this.#displayQty(line.quantity)}</span>
       <span class="line-total">${formatMoney(this.#lineGross(line), currentLocale())}</span>
-      ${this.#lineCourse(line)}${this.#lineAction(line)}
+      ${this.#lineCourse(line)}
       <wt-button
         class="serve"
         size="sm"
@@ -973,6 +1222,7 @@ export class TillTableOrderScreen extends LitElement {
       >
         <span aria-hidden="true">✓</span>
       </wt-button>
+      ${this.#lineActions(line)}
     </li>`;
   }
 
@@ -988,7 +1238,7 @@ export class TillTableOrderScreen extends LitElement {
                 (line) =>
                   html`<li class="line served-line${this.#isChild(line) ? " child-line" : ""}">
                     <span class="name"
-                      >${this.#nameForLine(line)}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}</span
+                      >${this.#nameForLine(line)}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}</span
                     >
                     <span class="qty">${this.#displayQty(line.quantity)}</span>
                     <span class="line-total"

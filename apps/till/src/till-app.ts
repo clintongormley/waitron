@@ -21,6 +21,7 @@ import "./screens/till-ticket-view.js";
 import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
+import type { ChangeLineDetail } from "./screens/till-table-order-screen.js";
 import "./screens/till-station-screen.js";
 import "./screens/till-enrol-screen.js";
 import "./screens/till-device-chooser.js";
@@ -120,6 +121,20 @@ const PERMANENT_SALE_REFUSALS = new Set([
 function tableWriteError(error: unknown): CounterError {
   const code = (error as { code?: string } | undefined)?.code;
   return code === "order.payment_in_flight" ? { code } : "table.error";
+}
+
+/** Refusals of changing or cancelling one tab line, shown in their code's own words: each says what
+ * the operator can still do. */
+const LINE_REFUSALS = new Set([
+  "product.unavailable",
+  "ticket.already_started",
+  "ticket.already_fired",
+  "tab.void_quantity_invalid",
+]);
+
+function lineWriteError(error: unknown): CounterError {
+  const code = (error as { code?: string } | undefined)?.code;
+  return code !== undefined && LINE_REFUSALS.has(code) ? { code } : tableWriteError(error);
 }
 
 /** Refusals the counter shows in their own words (`codeMessage`): each names what to do next, where
@@ -400,6 +415,12 @@ export class TillApp extends LitElement {
   @state() private activeTableId?: string;
   /** The open tab's lines at their locked add-time prices; a tab does not re-price. */
   @state() private tabLines: TabLine[] = [];
+  /** The revision {@link tabLines} was read at. */
+  @state() private tabRevision = 0;
+  /** The venue's setting for changing sent lines, read with {@link tabLines}. */
+  @state() private editSentLines = true;
+  /** The line a change refused as started offers to cancel; the table screen opens its Cancel. */
+  @state() private cancelOffer: number | null = null;
   /** Defaults to prepay, so an unresolved boot never shows the Place/Collect controls. */
   @state() private orderFlow: OrderFlow = "prepay";
   @state() private onboardingIntent?: TillInfo["onboardingIntent"];
@@ -1530,6 +1551,7 @@ export class TillApp extends LitElement {
       .detail;
     const offerRequest = ++this.#tableOfferRequest;
     this.errorKey = undefined;
+    this.cancelOffer = null;
     const table = this.tables.find((candidate) => candidate.id === tableId);
     if (table?.zoneId !== null && table?.zoneId !== undefined) {
       try {
@@ -1581,7 +1603,10 @@ export class TillApp extends LitElement {
       return;
     }
     try {
-      this.tabLines = (await this.api.getTabLines(this.activeTabId)).lines;
+      const tab = await this.api.getTabLines(this.activeTabId);
+      this.tabLines = tab.lines;
+      this.tabRevision = tab.revision;
+      this.editSentLines = tab.editSentLines;
     } catch {
       this.tabLines = [];
     }
@@ -1670,17 +1695,44 @@ export class TillApp extends LitElement {
     await this.#loadTabLines();
   }
 
-  /** Already confirmed on the screen. The reload runs on both paths, as in {@link #onRecallLines}. */
+  /** Already confirmed on the screen; an absent `quantity` cancels the whole line. The reload runs on
+   * both paths, as in {@link #onRecallLines}. */
   async #onVoidLine(event: Event): Promise<void> {
-    const { lineNo } = (event as CustomEvent<{ lineNo: number }>).detail;
+    const { lineNo, quantity } = (event as CustomEvent<{ lineNo: number; quantity?: string }>)
+      .detail;
     if (this.activeTabId === undefined) return;
     this.errorKey = undefined;
     try {
-      await this.api.voidLine(this.activeTabId, lineNo);
+      await (quantity === undefined
+        ? this.api.voidLine(this.activeTabId, lineNo)
+        : this.api.voidLine(this.activeTabId, lineNo, quantity));
     } catch (error) {
-      this.errorKey = tableWriteError(error);
+      this.errorKey = lineWriteError(error);
     }
     await this.#loadTabLines();
+  }
+
+  /**
+   * The reload runs on every path: a changed line the kitchen had goes to it again under a new line
+   * number, and a refused one has stale actions. A change refused because the kitchen has started the
+   * line offers to cancel it once the reload shows it started.
+   */
+  async #onChangeLine(event: Event): Promise<void> {
+    const { lineNo, patch, revision } = (event as CustomEvent<ChangeLineDetail>).detail;
+    if (this.activeTabId === undefined) return;
+    this.errorKey = undefined;
+    this.cancelOffer = null;
+    let refusal: string | undefined;
+    try {
+      const saved = await this.api.updateOrderLine(this.activeTabId, lineNo, patch, revision);
+      this.tabRevision = saved.revision;
+    } catch (error) {
+      refusal = (error as { code?: string } | undefined)?.code;
+      this.errorKey =
+        refusal === "working_order.out_of_date" ? "held.changed_elsewhere" : lineWriteError(error);
+    }
+    await this.#loadTabLines();
+    if (refusal === "ticket.already_started") this.cancelOffer = lineNo;
   }
 
   /** Keyed by {@link activeTableId}, not the tab's order id. */
@@ -1884,6 +1936,7 @@ export class TillApp extends LitElement {
    * just-opened table as free.
    */
   #onBackToFloor(): void {
+    this.cancelOffer = null;
     if (this.#inShell()) {
       this.errorKey = undefined;
       this.#popDrill();
@@ -2029,6 +2082,9 @@ export class TillApp extends LitElement {
       .statuses=${this.statuses}
       .courses=${this.courses}
       .tabLines=${this.tabLines}
+      .tabRevision=${this.tabRevision}
+      .editSentLines=${this.editSentLines}
+      .cancelOffer=${this.cancelOffer}
       .orderId=${this.activeTabId}
     ></till-card-grid>`;
   }
@@ -2046,6 +2102,9 @@ export class TillApp extends LitElement {
         return html`<till-table-order-screen
           slot="drill"
           .lines=${this.tabLines}
+          .revision=${this.tabRevision}
+          .editSentLines=${this.editSentLines}
+          .cancelOffer=${this.cancelOffer}
           .products=${this.tableProducts}
           .menus=${this.tableMenus}
           .selectedMenuId=${this.tableSelectedCatalogueId}
@@ -2142,6 +2201,7 @@ export class TillApp extends LitElement {
         @send-lines=${(event: Event) => void this.#onSendLines(event)}
         @recall-lines=${(event: Event) => void this.#onRecallLines(event)}
         @void-line=${(event: Event) => void this.#onVoidLine(event)}
+        @change-line=${(event: Event) => void this.#onChangeLine(event)}
         @set-status=${(event: Event) => void this.#onSetStatus(event)}
         @move-tab=${(event: Event) => void this.#onMoveTab(event)}
         @join-table=${(event: Event) => void this.#onJoinTable(event)}

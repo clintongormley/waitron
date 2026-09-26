@@ -985,12 +985,22 @@ export interface TabResult {
   orderNumber: number;
 }
 
+/** One dish line's edit. An absent field keeps the line's own; a null `note` clears it; `options` and
+ * `extras`, when present, replace the line's whole set. */
+export interface OrderLinePatch {
+  quantity?: string;
+  note?: string | null;
+  options?: OptionSelection[];
+  extras?: ExtraSelection[];
+}
+
 /** `GET /api/working-orders/:id/lines` — an open tab's lines and the revision they were read at. */
 export interface TabLines {
   lines: TabLine[];
   revision: number;
   /** The venue's setting. When false the server refuses to change or recall a dish line with
-   * `sentAt !== null && state !== null` (`ticket.already_fired`); a void still works. */
+   * `sentAt !== null && state !== null` (`ticket.already_fired`). Cancelling it through the void route
+   * ({@link TillApi.voidLine}) still works; removing it inside an edit is refused like a change. */
   editSentLines: boolean;
 }
 
@@ -1266,12 +1276,7 @@ export class TillApi {
   updateOrderLine(
     orderId: string,
     lineNo: number,
-    patch: {
-      quantity?: string;
-      note?: string | null;
-      options?: OptionSelection[];
-      extras?: ExtraSelection[];
-    },
+    patch: OrderLinePatch,
     revision: number,
   ): Promise<{ revision: number }> {
     return this.#request<{ revision: number }>(
@@ -1575,7 +1580,7 @@ export class TillApi {
 
   /**
    * Cancel (VOID) ONE line of an open tab → `DELETE /api/working-orders/:orderId/lines/:lineNo`: the
-   * cancel path for a line the kitchen has already STARTED, which can no longer be recalled. NON-FISCAL;
+   * cancel path for a sent line, whether or not the kitchen has started it. NON-FISCAL;
    * the server prints a correction slip. `quantity`, a decimal string, voids that part of the line
    * only; absent voids all of it. Rejects `tab.not_open`, `tab.line_not_found`,
    * `tab.void_quantity_invalid` or `order.payment_in_flight`.

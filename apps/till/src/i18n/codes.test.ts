@@ -79,3 +79,19 @@ it("tells staff a card payment is running on the order, and that a dish has sold
     "Un artículo de este pedido está agotado. Quítalo e inténtalo de nuevo",
   );
 });
+
+it("localises the refusals of changing or cancelling a sent line in both languages", () => {
+  for (const code of [
+    "ticket.already_started",
+    "ticket.already_fired",
+    "tab.void_quantity_invalid",
+  ]) {
+    const generic = codeMessage("some.unmapped_code", "en");
+    expect(codeMessage(code, "en")).not.toBe(generic);
+    expect(codeMessage(code, "es")).not.toBe(codeMessage("some.unmapped_code", "es"));
+    expect(codeMessage(code, "en")).not.toBe(codeMessage(code, "es"));
+  }
+  expect(codeMessage("ticket.already_started", "en")).toBe(
+    "The kitchen has already started this item, so it can no longer be changed. You can cancel it",
+  );
+});

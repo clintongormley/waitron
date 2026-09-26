@@ -2,10 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { productUnit } from "./widgets/product-name.js";
 import { TillApp } from "./till-app.js";
-import { setLocale, t } from "./i18n/t.js";
+import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { formatMoney } from "@waitron/shared";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
+import type { TillModifierPicker } from "./widgets/modifier-picker.js";
 import type { CanvasDef, CapabilityFlag } from "./layout.js";
 import type {
   FloorZone,
@@ -215,7 +217,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listZones: vi.fn().mockResolvedValue([floorZone]),
     listStatuses: vi.fn().mockResolvedValue([]),
     openTab: vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 }),
-    getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
+    getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0, editSentLines: true }),
     addTabRound: vi.fn().mockResolvedValue(undefined),
     fireCourse: vi.fn().mockResolvedValue(undefined),
     markLineServed: vi.fn().mockResolvedValue(undefined),
@@ -223,6 +225,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     sendLines: vi.fn().mockResolvedValue(undefined),
     recallLines: vi.fn().mockResolvedValue(undefined),
     voidLine: vi.fn().mockResolvedValue(undefined),
+    updateOrderLine: vi.fn().mockResolvedValue({ revision: 1 }),
     setTableStatus: vi.fn().mockResolvedValue(undefined),
     moveTab: vi.fn().mockResolvedValue(undefined),
     joinTable: vi.fn().mockResolvedValue(undefined),
@@ -432,6 +435,7 @@ describe("till-app table ordering: a handheld's Order tab with no table opened",
     ["send-lines", { lineNos: [] }, "sendLines"],
     ["recall-lines", { lineNos: [1] }, "recallLines"],
     ["void-line", { lineNo: 1 }, "voidLine"],
+    ["change-line", { lineNo: 1, patch: { note: "sin sal" }, revision: 0 }, "updateOrderLine"],
     ["set-status", { statusId: "s1" }, "setTableStatus"],
     ["move-tab", { toTableId: "t9" }, "moveTab"],
     ["join-table", { tableId: "t9" }, "joinTable"],
@@ -459,6 +463,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
     ["send-round", { lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }] }, "addTabRound"],
     ["recall-lines", { lineNos: [1] }, "recallLines"],
     ["void-line", { lineNo: 1 }, "voidLine"],
+    ["change-line", { lineNo: 1, patch: { note: "sin sal" }, revision: 0 }, "updateOrderLine"],
     ["serve-line", { lineNo: 1 }, "markLineServed"],
     ["send-lines", { lineNos: [] }, "sendLines"],
     ["transfer-lines", { toTabId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferLines"],
@@ -554,6 +559,234 @@ describe("till-app table ordering: refused and failed table actions", () => {
     expect(api.addTabRound).toHaveBeenCalledOnce();
     expect(tableOrder(el)!.lines).toEqual([]);
     expect(banner(el)).toBeNull();
+  });
+});
+
+describe("till-app table ordering: changing and cancelling a sent line", () => {
+  const sent = "2026-08-17T09:59:00.000Z";
+  const burgerOffers: ZoneOfferCatalogue = (() => {
+    const offers = zoneOffers(
+      {
+        menus: diningMenus,
+        products: [
+          {
+            ...cafe,
+            id: "burger",
+            menuItemId: "menu-item-burger",
+            name: "Burger",
+            unitPrice: "9.50",
+            catalogueId: "menu-dinner",
+          },
+        ],
+      },
+      null,
+    );
+    // Three different texts for the three names, so a surface reading the wrong one fails.
+    offers.offers[0] = {
+      ...offers.offers[0]!,
+      customerName: { es: "Hamburguesa de la casa" },
+      kitchenName: "BRG",
+    };
+    return offers;
+  })();
+  const burgerLine: TabLine = {
+    lineNo: 5,
+    name: "Burger",
+    productId: "burger",
+    quantity: "1.000",
+    unitPrecision: 0,
+    unitPriceGross: "9.50",
+    servedAt: null,
+    courseId: null,
+    sentAt: sent,
+    firedAt: sent,
+    state: "queued",
+    note: null,
+    listId: null,
+    menuItemId: "menu-item-burger",
+    parentProductId: null,
+  };
+  const change = { lineNo: 5, patch: { note: "no onions" }, revision: 7 };
+
+  async function openBurgerTab(overrides: Record<string, unknown> = {}) {
+    const { el } = await mountApp({
+      listZoneOffers: vi.fn().mockResolvedValue(burgerOffers),
+      getTabLines: vi
+        .fn()
+        .mockResolvedValue({ lines: [burgerLine], revision: 7, editSentLines: true }),
+      ...overrides,
+    });
+    const screen = await toTableOrder(el);
+    return { el, screen };
+  }
+
+  const dialogOf = (screen: TillTableOrderScreen) =>
+    screen.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("wt-dialog.cancel-confirm")!;
+
+  it("saves a note typed into Change with the order's revision, and the line then shows it at the same price", async () => {
+    const getTabLines = vi
+      .fn()
+      .mockResolvedValueOnce({ lines: [burgerLine], revision: 7, editSentLines: true })
+      .mockResolvedValueOnce({
+        lines: [{ ...burgerLine, lineNo: 6, note: "no onions" }],
+        revision: 8,
+        editSentLines: true,
+      });
+    const { el, screen } = await openBurgerTab({
+      getTabLines,
+      updateOrderLine: vi.fn().mockResolvedValue({ revision: 8 }),
+    });
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await screen.updateComplete;
+    screen.shadowRoot!.querySelector<HTMLElement>('[data-change-line="5"]')!.click();
+    await screen.updateComplete;
+    const picker = screen.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker")!;
+    await picker.updateComplete;
+    const note = picker.shadowRoot!.querySelector<HTMLTextAreaElement>('[data-test="line-note"]')!;
+    note.value = "no onions";
+    note.dispatchEvent(new Event("input"));
+    await picker.updateComplete;
+    picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+    await flush(el);
+
+    expect(api.updateOrderLine).toHaveBeenCalledWith("wo-7", 5, { note: "no onions" }, 7);
+    const row = tableOrder(el)!.shadowRoot!.querySelector(".pending-line")!;
+    expect(row.querySelector(".line-note")!.textContent).toContain("no onions");
+    expect(row.querySelector(".line-total")!.textContent).toBe(
+      formatMoney("9.50", currentLocale()),
+    );
+    expect(tableOrder(el)!.revision).toBe(8);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("hands the order's revision and the venue's setting to the drilled-in table screen", async () => {
+    const { screen } = await openBurgerTab({
+      getTabLines: vi
+        .fn()
+        .mockResolvedValue({ lines: [burgerLine], revision: 7, editSentLines: false }),
+    });
+    expect(screen.revision).toBe(7);
+    expect(screen.editSentLines).toBe(false);
+  });
+
+  it("hands them to the table screen a handheld mounts as a card too", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "h1", formFactor: "phone-portrait", stationId: null }),
+      listZoneOffers: vi.fn().mockResolvedValue(burgerOffers),
+      getTabLines: vi
+        .fn()
+        .mockResolvedValue({ lines: [burgerLine], revision: 7, editSentLines: false }),
+    });
+    await logIn(el);
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+    await openFromFloor(el, openTable);
+    await flush(el);
+    const screen = tableOrder(el)!;
+    expect(screen.embedded).toBe(true);
+    expect(screen.revision).toBe(7);
+    expect(screen.editSentLines).toBe(false);
+  });
+
+  it("reloads the order and says so when another device changed it first", async () => {
+    const { el, screen } = await openBurgerTab({
+      updateOrderLine: vi.fn().mockRejectedValue({ code: "working_order.out_of_date" }),
+    });
+    const reads = vi.mocked(api.getTabLines).mock.calls.length;
+
+    emit(screen, "change-line", change);
+    await flush(el);
+
+    expect(api.updateOrderLine).toHaveBeenCalledWith("wo-7", 5, { note: "no onions" }, 7);
+    expect(api.getTabLines).toHaveBeenCalledTimes(reads + 1);
+    expect(banner(el)!.textContent).toContain(t("held.changed_elsewhere"));
+  });
+
+  it("says the kitchen has started the line, and offers to cancel it", async () => {
+    const getTabLines = vi
+      .fn()
+      .mockResolvedValueOnce({ lines: [burgerLine], revision: 7, editSentLines: true })
+      .mockResolvedValueOnce({
+        lines: [{ ...burgerLine, state: "preparing" }],
+        revision: 7,
+        editSentLines: true,
+      });
+    const { el, screen } = await openBurgerTab({
+      getTabLines,
+      updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
+    });
+
+    emit(screen, "change-line", change);
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(
+      "La cocina ya ha empezado este plato, así que ya no se puede cambiar. Puedes cancelarlo",
+    );
+    const dialog = dialogOf(tableOrder(el)!);
+    expect(dialog.open).toBe(true);
+    expect(dialog.textContent).toContain(t("table.cancel_started"));
+  });
+
+  it("offers Cancel again when a second change of the same line is refused the same way", async () => {
+    const { el, screen } = await openBurgerTab({
+      getTabLines: vi.fn().mockResolvedValue({
+        lines: [{ ...burgerLine, state: "preparing" }],
+        revision: 7,
+        editSentLines: true,
+      }),
+      updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
+    });
+    emit(screen, "change-line", change);
+    await flush(el);
+    dialogOf(tableOrder(el)!).querySelector<HTMLElement>("[data-cancel-dismiss]")!.click();
+    await flush(el);
+    expect(dialogOf(tableOrder(el)!).open).toBe(false);
+
+    emit(tableOrder(el)!, "change-line", change);
+    await flush(el);
+
+    expect(dialogOf(tableOrder(el)!).open).toBe(true);
+  });
+
+  it("says changes to sent items are switched off, and reloads the line's actions", async () => {
+    const { el, screen } = await openBurgerTab({
+      updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_fired" }),
+    });
+    const reads = vi.mocked(api.getTabLines).mock.calls.length;
+
+    emit(screen, "change-line", change);
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(
+      "Este plato ya ha ido a cocina y en este local no se pueden cambiar los platos enviados. Puedes cancelarlo",
+    );
+    expect(api.getTabLines).toHaveBeenCalledTimes(reads + 1);
+  });
+
+  it("cancels one of a line through the void route with the quantity", async () => {
+    const { el, screen } = await openBurgerTab();
+
+    emit(screen, "void-line", { lineNo: 5, quantity: "1" });
+    await flush(el);
+
+    expect(api.voidLine).toHaveBeenCalledWith("wo-7", 5, "1");
+    expect(api.updateOrderLine).not.toHaveBeenCalled();
+  });
+
+  it("says so when the quantity to cancel is refused", async () => {
+    const { el, screen } = await openBurgerTab({
+      voidLine: vi.fn().mockRejectedValue({ code: "tab.void_quantity_invalid" }),
+    });
+
+    emit(screen, "void-line", { lineNo: 5, quantity: "1" });
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(
+      "No se puede cancelar esa cantidad de esta línea. Comprueba cuántos quedan",
+    );
   });
 });
 

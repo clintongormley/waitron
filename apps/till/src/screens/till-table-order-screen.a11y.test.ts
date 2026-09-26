@@ -2,8 +2,9 @@ import { afterEach, describe, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./till-table-order-screen.js";
 import type { TableServiceStatus, TillTableOrderScreen } from "./till-table-order-screen.js";
-import type { TabLine, TillProduct } from "../api/client.js";
+import type { OfferedModifier, TabLine, TillProduct } from "../api/client.js";
 import type { TillProductGrid } from "../widgets/product-grid.js";
+import type { TillModifierPicker } from "../widgets/modifier-picker.js";
 
 const products: TillProduct[] = [
   {
@@ -127,6 +128,100 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
     await expectNoA11yViolations(host);
+  });
+
+  describe("changing and cancelling a sent line", () => {
+    const sentLine: TabLine = {
+      ...lines[0]!,
+      lineNo: 5,
+      name: "Café",
+      courseId: null,
+      sentAt: "2026-08-20T09:59:00.000Z",
+      firedAt: "2026-08-20T09:59:00.000Z",
+      note: "sin azúcar",
+      menuItemId: null,
+    };
+    const cookedList: OfferedModifier = {
+      kind: "options",
+      id: "list-cooked",
+      name: "Punto",
+      customerName: { es: "Punto carta" },
+      kitchenName: "Punto KDS",
+      defaultLabelId: null,
+      labels: [
+        {
+          id: "label-rare",
+          name: "Poco hecha",
+          customerName: { es: "Poco hecha carta" },
+          kitchenName: "Poco hecha KDS",
+          available: true,
+        },
+      ],
+    };
+    const extrasList: OfferedModifier = {
+      kind: "extras",
+      id: "list-extras",
+      name: "Extras",
+      customerName: { es: "Extras carta" },
+      kitchenName: "Extras KDS",
+      minPicks: 0,
+      maxPicks: null,
+      items: [
+        {
+          productId: "p-cheese",
+          name: "Queso",
+          customerName: { es: "Queso carta" },
+          kitchenName: "Queso KDS",
+          price: "1.00",
+          vatClass: "general",
+          maxQuantity: 3,
+          preselected: false,
+          addAllergens: null,
+          suitableFor: [],
+        },
+      ],
+    };
+
+    async function mountDrawer(lineList: TabLine[], dishes: TillProduct[] = products) {
+      const mounted = await mountWidget<TillTableOrderScreen>(
+        "till-table-order-screen",
+        { products: dishes, lines: lineList, orderId: "wo-1", revision: 4 },
+        theme,
+      );
+      mounted.el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+      await mounted.el.updateComplete;
+      return mounted;
+    }
+
+    async function settle(el: TillTableOrderScreen): Promise<void> {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await el.updateComplete;
+    }
+
+    it("has no violations on a line offering Change, Recall and Cancel with its note shown", async () => {
+      const { el, host } = await mountDrawer([sentLine]);
+      await settle(el);
+      await expectNoA11yViolations(host);
+    });
+
+    it("has no violations in the open Change editor", async () => {
+      const dish: TillProduct = { ...products[0]!, offeredModifiers: [cookedList, extrasList] };
+      const { el, host } = await mountDrawer([sentLine], [dish]);
+      el.shadowRoot!.querySelector<HTMLElement>('[data-change-line="5"]')!.click();
+      await el.updateComplete;
+      await el.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker")!
+        .updateComplete;
+      await settle(el);
+      await expectNoA11yViolations(host);
+    });
+
+    it("has no violations in the dialog asking how many to cancel", async () => {
+      const { el, host } = await mountDrawer([sentLine]);
+      el.shadowRoot!.querySelector<HTMLElement>('[data-cancel-line="5"]')!.click();
+      await el.updateComplete;
+      await settle(el);
+      await expectNoA11yViolations(host);
+    });
   });
 
   it("has no violations in the split quantity picker", async () => {
