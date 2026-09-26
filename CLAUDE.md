@@ -492,8 +492,7 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   removing `await loop` or `liveEvents.close()` from the undos still passes. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md).
 - **There is no tenant column. The taxpayer is the one row in `tenants` (id = 1, singleton check); a
-  query that wants "this tenant's rows" reads the table.** (2026-09-14, spec
-  [2026-09-14-drop-tenant-id-design.md](docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md).)
+  query that wants "this tenant's rows" reads the table.** (2026-09-14, #378.)
   This retired two rules a reader may still meet in older text — that a by-id read needs its own
   tenant clause, and that a configuration route compares `authorizeManager`'s tenant with the
   configured one; both are marked superseded in
@@ -577,7 +576,7 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   new site that does not. Receipt: [conventions-data.md](docs/developers/conventions-data.md).
 - **A `local` row belongs to one node, so no foreign key may join a `local` table to a
   `ledger`/`state` one, in either direction.** Every table is in `venue.db`, which a primary streams
-  whole to the owner's bucket once one is set up (slice-2 spec §2); `node.db` is reserved and empty, and a key across the classes would stop
+  whole to the owner's bucket once one is set up (#548); `node.db` is reserved and empty, and a key across the classes would stop
   a later slice moving `local` tables into it. A `local` row that needs a venue row keeps the plain
   id and names, at the column, what establishes the target exists — or that nothing does, and where
   the refusal moved to. Guard: `scripts/two-file-foreign-keys.test.ts`, weaker than its name — it
@@ -880,7 +879,7 @@ Adding a database test to a new package: give it `useVenueDb` and the migration 
   attached drawer enqueues a separate audited `drawer` job; receipt jobs are `document` jobs and contain no drawer command. Handhelds cannot
   open the drawer, even with a profile capability, and drawer jobs cannot be manually resent.
   The receipt review reproduced a resent cash receipt opening the drawer without a new audit row.
-  Pointer: `docs/superpowers/specs/2026-09-12-receipts-payment-slips-and-duplicates-design.md` §3.
+  Pointer: #324.
 
 - **One database per environment.** A pre-production database is never promoted:
   `invoice_series.next_number` carries across and pre-production sales would leave a permanent hole
@@ -895,7 +894,7 @@ Adding a database test to a new package: give it `useVenueDb` and the migration 
   being no failover — the MVP's accepted case. TODAY there is none of it: a venue has ONE node and no
   failover at all until slice 3 (2026-09-19, `docs/backlog.md` → _Replication, membership & failover —
   residuals_). The till follows the primary and never chooses
-  (`2026-09-05-till-reroute-design.md` §2); only the primary sells. Fiscal submission is an outbox,
+  (till reroute, #244 to #265); only the primary sells. Fiscal submission is an outbox,
   never inline.
 - **The bucket stream is external too: it never blocks a sale and never fails `/health`.** A copy
   fifteen minutes behind raises `backup.stream_behind`, unless a stopped, refused or
@@ -927,7 +926,7 @@ Adding a database test to a new package: give it `useVenueDb` and the migration 
   would mint two installation numbers. It floors the installation counter by the clock (the counter is in
   the backup, so an older artifact would otherwise re-mint a number a previous restore used), retires
   the node's invoice series and opens disjoint ones, and writes the box's identity only after that
-  commits — `docs/superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md`. UNLIKE the
+  commits — #248. UNLIKE the
   fiscal chain, the working-time chain is NOT reset on a cold restore — it continues from the backup's
   head, because the fiscal reset exists to mint a fresh SIF for AEAT and the working-time record has
   no equivalent. A survivor's forked row is refused by the chain-position unique index

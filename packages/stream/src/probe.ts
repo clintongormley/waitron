@@ -22,8 +22,7 @@ export type ProbeResult = { ok: true } | { ok: false; reason: ProbeFailure; deta
 /**
  * The settings screen's Test: write, read, list and delete one object, and prove both conditional
  * writes the stream depends on — "only if absent" refused for an object that exists, and "only if
- * unchanged" refused for a stale version. Spec §4.3 names the write, read, delete and both refusals;
- * the listing step is the plan's addition (Task 5), and it matters beyond itself: without
+ * unchanged" refused for a stale version. The listing step matters beyond itself: without
  * the list permission, S3 answers a read of a missing key with 403 rather than 404 (the client's own
  * GetObject documentation), so the pointer's "nothing written yet" would read as a failure.
  *

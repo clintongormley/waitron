@@ -7,7 +7,7 @@ const STATE = "manager configuration / live service; copied to a standby, never 
  * Identity's tables. Every one means the same on every node of the venue: a person, their
  * authenticators, their logins and their sign-in ceremonies. A sign-in's cookie token is stored
  * only as its hash, so neither that session's row id nor its stored hash, read from a copy of the
- * database, signs anybody in (slice-2 spec §2).
+ * database, signs anybody in.
  * Completeness against identity's migrations is guarded by `classification.test.ts`.
  */
 export const IDENTITY_CLASSIFICATION: readonly ClassifiedTable[] = [

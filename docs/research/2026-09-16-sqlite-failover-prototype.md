@@ -552,15 +552,15 @@ Two design decisions this measurement hands to slice 2:
   [Slice 2 measurements §2](#slice-2-measurements). Doing that on the sale path is
   the thing risk 9 exists to forbid, so bounding that log is a design question slice 2 inherits open.
   **2026-09-25 (slice 2):** the offline side file is bounded by stopping Litestream at a 256 MiB limit
-  and then folding the file back with a checkpoint that does not wait on a busy database (slice-2 spec
-  §4.5; `StreamSupervisor`, `packages/stream/src/supervisor.ts`, #590).
+  and then folding the file back with a checkpoint that does not wait on a busy database
+  (`StreamSupervisor`, `packages/stream/src/supervisor.ts`, #590).
 - **The fence-before-ship rule removes S2's failing sequences** — an argument from the design, since
   nothing here fences a sender — so whichever slice turns promotion on owns it, together with the
   restart reset above. **2026-09-23:** the restart reset is built — `resetInFlightClaims` (`packages/fiscal-verifactu/src/drain.ts`), see `docs/backlog.md`.
 
 ## Slice 2 measurements
 
-**Date:** 2026-09-23. **For:** [slice 2 spec §8.1](../superpowers/specs/2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md).
+**Date:** 2026-09-23. **For:** slice 2 spec §8.1 (the probes landed in #540).
 **Pins:** the table above, plus node:26-slim for measurement 5. **Reproducer:** `bench/sqlite-failover`'s
 `probe:*` scripts (the package README, "Slice 2 probes"). Every figure is one run; nothing here should
 be quoted as a single number where S4's spread already shows these move run to run.

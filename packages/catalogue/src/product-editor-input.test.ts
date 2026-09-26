@@ -29,7 +29,7 @@ const input: ProductEditorInput = {
 const parse = (value: unknown) => parseProductEditorInput(value, { isVariant: false });
 const parseVariant = (value: unknown) => parseProductEditorInput(value, { isVariant: true });
 
-// A variant's inherited fields, each left blank so it reads its parent's (spec §4.4, §9.1).
+// A variant's inherited fields, each left blank so it reads its parent's.
 const inheriting = {
   ...input,
   description: null,
@@ -291,7 +291,7 @@ it("accepts none, one or two variants, and parses each variant's own names", () 
     available: true,
     active: true,
   };
-  // Spec §15.1: a product with exactly one variant is allowed.
+  // A product with exactly one variant is allowed.
   expect(parse({ ...input, variants: [one] }).variants).toEqual([one]);
   expect(parse({ ...input, variants: [] }).variants).toEqual([]);
   const parsed = parse({

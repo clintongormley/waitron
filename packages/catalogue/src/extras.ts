@@ -26,9 +26,8 @@ import "./errors.js";
 
 /**
  * What one of this extra costs on a line: the menu offer's price if that offer set one, else the
- * list item's own, else the product's `unitPrice` (spec
- * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.3). Only null and undefined
- * fall through — `"0.00"` is a price a venue chose. `undefined` back means nothing can price it.
+ * list item's own, else the product's `unitPrice`. Only null and undefined fall through —
+ * `"0.00"` is a price a venue chose. `undefined` back means nothing can price it.
  */
 export function resolveExtraPrice(
   item: ExtraListItem,
@@ -397,8 +396,7 @@ async function assertProductsOffered(
 
 /**
  * Replace what one menu offer publishes: which extras lists it carries, in which order
- * (`display_order` is the position in `lists`), and how it narrows and reprices each one (spec
- * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.2).
+ * (`display_order` is the position in `lists`), and how it narrows and reprices each one.
  *
  * **An item row is an OVERRIDE, not a publication.** A list item with no row here is offered on this
  * menu at its own resolved price; a row replaces that price when it carries one, and withdraws the

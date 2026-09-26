@@ -280,7 +280,7 @@ harness for the cases PGlite cannot show (`useRealPostgres` + `startRealPostgres
 > per-file `startRealPostgres` this paragraph describes was removed.
 > `withTenant` no longer exists anywhere under `packages/` or `apps/`
 > (`grep -rn withTenant --include="*.ts" packages apps` returns nothing); it went with the tenant
-> column, `docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md`. `asAppUser` beside it does
+> column, #378. `asAppUser` beside it does
 > still exist. The scope lists below were not re-checked.
 
 - **Scope 3 (PGlite):** a two-business-day range summing both days' per-rate figures; a range that

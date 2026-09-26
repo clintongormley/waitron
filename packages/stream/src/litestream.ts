@@ -62,7 +62,7 @@ export function litestreamEnv(
  *   characters are parsed as YAML after substitution; {@link litestreamEnv} refuses what a quote
  *   cannot hold. A `$` inside a value the environment supplies is not expanded again
  *   (`bench/sqlite-failover/src/litestream.ts`, on `ENV_ACCESS_KEY_ID`).
- * - One full copy a day and a week of history (spec §4.4); `retention` takes hours only.
+ * - One full copy a day and a week of history; `retention` takes hours only.
  * - `l0-retention` is Litestream's default, written out because the freshness reader relies on a
  *   level-0 file staying listed at least that long after it is compacted.
  * - The path and the address are double-quoted YAML scalars (JSON's escaping is valid there), so a

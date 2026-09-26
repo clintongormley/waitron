@@ -5,9 +5,8 @@ import { productLabels } from "./schema/labels.js";
 import { productUnits } from "./schema/units.js";
 
 /**
- * The one place a variant's blanks are read as its parent's (spec
- * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §1.2, as revised by §15.2 and
- * §15.3).
+ * The one place a variant's blanks are read as its parent's (how variants work:
+ * `docs/developers/products.md`, under _Variants_).
  *
  * A `products` row with a `parent_id` is a variant. Every field in the inherited set below that the
  * variant leaves NULL reads as its parent's value; one it sets reads as its own. The exceptions are

@@ -140,7 +140,7 @@ const VERSION_TIMEOUT_MS = 10_000;
 const STOP_WAIT_MS = 1_000;
 /** How often old generations are pruned, at most. */
 export const PRUNE_EVERY_MS = 24 * 60 * 60_000;
-/** A generation untouched for this long, and not the live one, is deleted: the week of history (spec §4.4). */
+/** A generation untouched for this long, and not the live one, is deleted: the week of history. */
 export const PRUNE_WINDOW_MS = 168 * 60 * 60_000;
 /** Level 0's retention as the configuration sets it (`l0-retention: 5m`, `./litestream.ts`). */
 export const L0_RETENTION_MS = 5 * 60_000;
@@ -160,7 +160,7 @@ const CONFIG_FILE = "litestream.yml";
 const LEFTOVER_GRACE_MS = 5_000;
 
 /**
- * The side file size at which Litestream is stopped and the file folded back (spec §4.5): below the
+ * The side file size at which Litestream is stopped and the file folded back: below the
  * largest side file anything here has been measured trading against.
  */
 export const DEFAULT_WAL_LIMIT_BYTES = 256 * 1024 * 1024;
@@ -244,7 +244,7 @@ interface Keeper {
 /**
  * Streams `venue.db` into a generation this box opened, and keeps it streaming.
  *
- * Opening (spec §4.4): claim the generation with a create-only marker, start Litestream into it,
+ * Opening: claim the generation with a create-only marker, start Litestream into it,
  * wait until a full copy is visible in the bucket, then move `current.json` only if it is unchanged
  * since it was read at the start. A pointer that changed to anything but a pointer this process sent
  * (see `#movePointer`) stops the supervisor, which reads `refused`. Nothing on the sale path waits for any of it: `start()`
@@ -252,7 +252,7 @@ interface Keeper {
  *
  * It restarts an exited Litestream with a backoff. From the moment Litestream starts, the side file
  * is measured on a timer whatever the bucket is doing; at the limit Litestream is stopped, the file
- * folded back and the bucket waited for (spec §4.5). The SAME generation then resumes from
+ * folded back and the bucket waited for. The SAME generation then resumes from
  * Litestream's kept local state, unless its first full copy had not landed, when the next attempt
  * opens a new one.
  *
@@ -617,7 +617,7 @@ export class StreamSupervisor {
   }
 
   /**
-   * Reads the live generation's newest file (spec §7) and forgets the commits it covers, then
+   * Reads the live generation's newest file and forgets the commits it covers, then
    * checks the bucket when that is due: after a failed read, or with a problem named, at most every
    * ten minutes; otherwise daily. A listing answered once the run has stopped, or once a newer read
    * has replaced this one, changes nothing and starts no check: it may be older than the newer
@@ -802,7 +802,7 @@ export class StreamSupervisor {
 
   /**
    * Deletes this venue's generations older than a week, never `live`, at most once a day. Litestream
-   * tidies only the generation it writes (spec §4.4). Not awaited: a bucket that never answers must
+   * tidies only the generation it writes. Not awaited: a bucket that never answers must
    * not hold the tick, which is where the side-file limit is checked. One prune at a time.
    */
   #pruneDaily(live: string): void {

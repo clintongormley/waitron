@@ -30,16 +30,16 @@ export interface ModifierHolder {
  */
 export interface AttachedModifiers {
   /** Keyed by MENU-ITEM id on the offer path and by PRODUCT id otherwise — extras are published by
-   * the offer when there is one and held by the product when there is not (spec §3.2). */
+   * the offer when there is one and held by the product when there is not. */
   extrasByHolder: ReadonlyMap<string, ResolvedExtraList[]>;
   /** Keyed by the underlying PRODUCT id on both paths: an options list is attached to the product
-   * and a menu offer neither republishes nor narrows one (spec §3.1). */
+   * and a menu offer neither republishes nor narrows one. */
   optionsByProduct: ReadonlyMap<string, OptionList[]>;
 }
 
 /**
  * {@link AttachedModifiers} plus each product's ordered attachment list, keyed by the LOWER-CASED
- * product id, which {@link readOfferedModifiers} walks to interleave extras and options (spec §5).
+ * product id, which {@link readOfferedModifiers} walks to interleave extras and options.
  */
 interface WalkedAttachments extends AttachedModifiers {
   attachments: ReadonlyMap<string, ProductModifierRef[]>;
@@ -112,7 +112,7 @@ async function walkAttachedModifiers(
 }
 
 /** The `products` columns an offered extras item borrows — everything its own row deliberately does
- * not duplicate (spec §3.1). */
+ * not duplicate. */
 type OfferedExtraItemFacts = Omit<OfferedExtraItem, "price" | "maxQuantity" | "preselected">;
 
 const activeVariant = alias(products, "active_variant");
@@ -177,14 +177,14 @@ type WalkedList =
  * The ordered extras and options lists each dish offers a till, keyed by the MENU-ITEM id when the
  * dish was reached through an offer and by the PRODUCT id when it was not, LOWER-CASED.
  *
- * The order is the product's own `product_modifiers.sort` on BOTH paths (spec §5). A menu offer
+ * The order is the product's own `product_modifiers.sort` on BOTH paths. A menu offer
  * changes what is IN an extras entry, and whether it is there at all; it does not move the entry, so
  * `menu_item_extra_lists.display_order` decides nothing here.
  *
  * Only ACTIVE lists are offered, and an options list offers only its AVAILABLE labels: exactly what
  * `validateExtraSelections` and `validateOptionSelections` will accept an answer from. An extras
- * item is left out when its product row is missing, Inactive or Unavailable (spec §15.6), or has an
- * Active variant (spec §15.1). The order path refuses a pick of the last three on its own read.
+ * item is left out when its product row is missing, Inactive or Unavailable, or has an
+ * Active variant. The order path refuses a pick of the last three on its own read.
  *
  * With `includeEveryModifierItem`, what a published document holds: every label, and an extras
  * item whether or not its product is Available and whether or not the offer withdraws it; an item

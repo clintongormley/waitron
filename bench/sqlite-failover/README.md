@@ -32,7 +32,7 @@ pnpm --filter @waitron/bench-sqlite-failover typecheck
 
 ### Slice 2 probes (2026-09-23)
 
-One-off measurements for the slice-2 spec §8.1, not scenarios: the runner never discovers them, and
+One-off measurements for slice 2 (#540), not scenarios: the runner never discovers them, and
 each ends with one result line. Their recorded results are in the results note under "Slice 2
 measurements".
 
@@ -1088,7 +1088,7 @@ would cost. Neither changes the measurement.
   — a wasted call, not a record filed twice. That reading compares no content when AEAT says
   `Correcta`, and it is safe here only because the shipped row is a verbatim copy (same node, same
   `secuencia`, same `huella`). A DIFFERENT record filed under a reused invoice number is the case
-  `docs/superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md` guards with fresh
+  the fiscal restore hook (#248) guards with fresh
   series; S2 does not model it.
 - **The designed order is decommission first, then promote.** The old primary boots fenced —
   read-only — and only then ships its tail (topology design §5.2; owner, 2026-09-17: the primary is
@@ -1154,7 +1154,7 @@ out, and neither is a double filing a run here could show:
 - **A DIFFERENT identity for one economic sale** — an invoice number reissued under re-keying — is
   the one genuine double-filing shape, and the only real-system concern that survives. AEAT does not
   refuse it, because the identity triple differs. S2 does not model it; fresh-series-on-restore
-  (`docs/superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md`) is what guards it,
+  (#248) is what guards it,
   and measuring it would be its own scenario, not a change to S2.
 
 The second follow-up is done on this branch: the topology design now states that the old primary is
@@ -1432,8 +1432,8 @@ those three passes with the hole open.
 The `smoke` scenario is what runs them: it asserts all four refusals and reads the row back to confirm
 its huella and payload survived. Flipping the pragma off makes that scenario fail.
 
-That matters beyond this rig — the slice-1 spec commits to the same mechanism for the real ledger once
-PostgreSQL's row-level trigger is gone, and it carries the pragma for this reason.
+That matters beyond this rig — the real ledger has used the same mechanism since slice 1 (#489), and
+`packages/store/src/index.ts` turns the pragma on for this reason.
 
 ## Several files, not one
 

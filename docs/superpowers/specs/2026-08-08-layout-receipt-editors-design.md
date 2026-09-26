@@ -27,7 +27,7 @@ Two facts define the gap this slice fills:
    from screen-level `@property`s, not from the per-widget bag.
 2. **The owner intent is a "dashboard of movable blocks"**, built as a seam "from the start" so the
    editor is "a plug-in later slice, not a rewrite"
-   (`docs/superpowers/specs/2026-08-05-counter-pos-walkup-sale-design.md` §3).
+   (the walk-up sale design, built in #60, §3).
 
 So the editor is a **new authoring surface** that produces a `LayoutDef` (+ a receipt config), persists
 it tenant-scoped, and the till reads it in place of the hardcoded `LAYOUT_A`. The owner-facing home is

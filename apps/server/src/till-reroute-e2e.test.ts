@@ -28,7 +28,7 @@ import { startServer, type StartedServer } from "./boot.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
-// The till-reroute HEADLINE proof (S6, till-reroute design §6): TWO booted `apps/server` instances
+// The till-reroute HEADLINE proof (S6, #265): TWO booted `apps/server` instances
 // (two `startServer` boots, in ONE test process — not two OS processes), each on its OWN venue
 // DIRECTORY of SQLite files. One venue, two nodes: A (primary, box) and B (mirror, cloud), with the
 // SAME identity seeded directly into each directory, because nothing copies rows between the two

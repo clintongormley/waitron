@@ -913,7 +913,7 @@ realice la remisión de todos los registros de facturación a la AEAT» = Veri\*
 **Designation.** The document need **not** be captioned "factura simplificada" — the law distinguishes
 ticket-vs-full-invoice by **separate numbering series** (art. 7.1.a), not a printed label.
 
-**Consequences for the till ticket** (`2026-08-05-counter-pos-walkup-sale-design.md` §7):
+**Consequences for the till ticket** (the walk-up sale design, built in #60):
 
 - **Required, non-removable:** número+serie, **fecha de expedición**, issuer NIF+name, goods
   identification, tipo(s) + **base imponible per rate**, contraprestación total, QR, VERI\*FACTU legend.
@@ -945,7 +945,7 @@ source: BOE consolidated texts fetched 2026-09-12, and the DGT consulta read on 
 
 ### 15.1 Only ONE original per invoice, and a reprint is a *duplicado*
 
-**Implementation update, 2026-09-12:** the [receipts branch design](../superpowers/specs/2026-09-12-receipts-payment-slips-and-duplicates-design.md) adds `DUPLICADO` to the reprint action while preserving the filed invoice and recorded payment facts. The code observations below describe the behavior before that implementation.
+**Implementation update, 2026-09-12:** the receipts branch design (#324) adds `DUPLICADO` to the reprint action while preserving the filed invoice and recorded payment facts. The code observations below describe the behavior before that implementation.
 
 **RD 1619/2012 art. 14** (BOE-A-2012-14696, consolidated), in full:
 

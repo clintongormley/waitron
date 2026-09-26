@@ -5,8 +5,7 @@ Two commands under one bundle, `waitron-provision`, matching how `@waitron/crede
 path (below), so each manifest declares its name under `waitron.commands` rather than `bin` —
 `scripts/manifest-commands.test.ts` records why.
 
-Design: [`docs/superpowers/specs/2026-07-29-provisioning-tool-design.md`](../../docs/superpowers/specs/2026-07-29-provisioning-tool-design.md).
-This document is the operational half of that spec — written for whoever runs the tool, not whoever
+The tool was first built in #11. This document is written for whoever runs the tool, not whoever
 reads its source.
 
 The command that **did** stand a deployment up — `waitron-provision instance`, which created a
@@ -37,7 +36,7 @@ and neither surviving command migrates anything.
 `venue` creates the taxpayer row, a location, a till, a node and its standard and rectificative
 invoice series, then runs each composed module's provisioning seed (the fiscal module's registers the
 node as a SIF and starts its chain) — replacing the retired `apps/server/sql/bootstrap-tenant.sql`
-(removed 2026-08-04, spec [`2026-08-04-locations-provisioning-design.md`](../../docs/superpowers/specs/2026-08-04-locations-provisioning-design.md)).
+(removed 2026-08-04, #57).
 `register-till` (`apps/server`) remains the standalone path for an EXISTING node: it runs the same
 module seeds against one node — a reimaged node getting a fresh chain, or a node that otherwise has
 no fiscal identity.

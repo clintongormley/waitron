@@ -104,7 +104,7 @@ function vatClass(value: unknown, field: string): VatClass {
   if (!VAT_CLASSES.includes(value as VatClass)) invalid(field);
   return value as VatClass;
 }
-/** A variant has no variants or attached lists of its own (spec §4.4), so only an empty one is taken. */
+/** A variant has no variants or attached lists of its own, so only an empty one is taken. */
 function emptyOnVariant<T>(values: T[], field: string, isVariant: boolean): T[] {
   if (isVariant && values.length > 0) invalid(field);
   return values;
@@ -161,7 +161,7 @@ export function parseProductEditorInput(
       customerName: nullableTranslations(variant.customerName, `${field}.customerName`),
       kitchenName: nullableText(variant.kitchenName, `${field}.kitchenName`),
       image: nullableText(variant.image, `${field}.image`),
-      // Every listed entry is a variant, so a blank price follows the product's (spec §15.3).
+      // Every listed entry is a variant, so a blank price follows the product's.
       unitPrice: inheritable(variant.unitPrice, `${field}.unitPrice`, true, price),
       available: boolean(variant.available, `${field}.available`),
       active: boolean(variant.active, `${field}.active`),

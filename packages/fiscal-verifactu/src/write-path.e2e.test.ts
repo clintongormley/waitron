@@ -594,9 +594,8 @@ describe("till_id is inert to the huella and the chain (SP-A.2 §16.4(b))", () =
 });
 
 describe("the extras/options rework leaves the fiscal fingerprint byte-identical", () => {
-  // THE GATE for the extras/options rework (Task 9 of
-  // `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`): the same basket, filed before
-  // and after the rework, must produce the SAME `Huella`, `ImporteTotal` and `CuotaTotal` — down to
+  // THE GATE for the extras/options rework (added in #469): the same basket, filed before and after
+  // the rework, must produce the SAME `Huella`, `ImporteTotal` and `CuotaTotal` — down to
   // the byte, not merely "passes the validator". A filed record is append-only and hash-chained, so
   // a value written wrong here stays wrong (CLAUDE.md §5).
   //
@@ -623,9 +622,8 @@ describe("the extras/options rework leaves the fiscal fingerprint byte-identical
   // child line's `vatRate` moved from "10.00" to "21.00" and NOTHING else touched: `cuota_total`
   // came back "2.54" and the huella
   // `A445E2BA3E533EE363B05CA272293EC015AE419B4785C4946F0D3E8BD57C0AF3` — both different, so an
-  // extra's VAT rate, which is the picked product's own (spec
-  // `docs/superpowers/specs/2026-09-18-one-product-model-design.md` decision 9) and the figure this
-  // rework could have moved, is a figure this fixture can see. WHAT THAT PROBE DOES NOT COVER:
+  // extra's VAT rate, which is the picked product's own and the figure this rework could have moved,
+  // is a figure this fixture can see. WHAT THAT PROBE DOES NOT COVER:
   // `importe_total` stayed "14.41". It is `sale.total` copied verbatim (`ImporteTotal: sale.total`,
   // `./backend.ts`), an explicit field of `saleInput` rather than anything derived from the lines,
   // so the third literal is pinned against the CALLER's total and not against the basket.

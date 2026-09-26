@@ -25,7 +25,7 @@ import { createLabel, readProductLabels, setProductLabels } from "./labels.js";
 
 /**
  * Variants against a real database, plus the pure selection core. A variant is a `products` row
- * with a `parent_id` (spec §15); the per-menu settings of one live in
+ * with a `parent_id`; the per-menu settings of one live in
  * `menu_item_variant_overrides`, and a row there exists only while it overrides something.
  */
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
@@ -411,7 +411,7 @@ describe("a variant's id is not a product's id to the product-by-id functions bu
   }
   const notFound = (productId: string) => ({ code: "product.not_found", params: { productId } });
 
-  // The editor is the one exception: it is a variant's own page too (spec §4.4).
+  // The editor is the one exception: it is a variant's own page too.
   it("reads and saves a variant's own editor, and never takes a product's body for it", async () => {
     const f = await variantOfParent();
     const value = await app((tx) => readProductEditor(tx, f.variantId));
@@ -677,7 +677,7 @@ it("a variant removed while its override is being written ends Inactive, the ove
 
   // One write transaction runs on the venue file at a time, so the removal runs second and sees
   // the committed override; `racePair` (`test/fixtures.ts`) carries the measurement that it does
-  // not start early. Removing is always allowed (spec §15.6), so both succeed.
+  // not start early. Removing is always allowed, so both succeed.
   const [overriding, removing] = await racePair(
     suite.db,
     (tx) => setMenuVariants(tx, f.offerId, [{ variantId: w125!.id, price: "4.00", offered: true }]),

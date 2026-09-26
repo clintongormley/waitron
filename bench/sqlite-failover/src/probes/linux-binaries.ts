@@ -1,4 +1,4 @@
-// Measurement 5 (slice-2 spec §8.1 item 5): the pinned binary on Linux, both processor types.
+// Measurement 5 (#540): the pinned binary on Linux, both processor types.
 //
 // For each of linux/amd64 and linux/arm64: build `node:26-slim` + ca-certificates (deploy/Dockerfile's
 // runtime stage installs them the same way), run ./linux-inside.ts in it against a MinIO on a private

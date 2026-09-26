@@ -27,8 +27,7 @@ exception named under _What a sold line freezes_ below.
 name falls back to Name. They do not fall back to each other, and a product with a customer-facing
 name but no kitchen name still prints its staff Name to the kitchen.
 
-**A variant is named in full and shown under its own names alone** (spec
-`docs/superpowers/specs/2026-09-18-one-product-model-design.md` §15.2). "Wine by the glass" has the
+**A variant is named in full and shown under its own names alone.** "Wine by the glass" has the
 variants "Wine 125" and "Wine 175", and a line sold as Wine 125 reads `Wine 125` on the till, the
 tab, the kitchen ticket, the kitchen screens, the receipt and the sales report, where it sits nested
 under its product (a screen reader hears the product's name first: "Wine by the glass, Wine 125").
@@ -196,9 +195,8 @@ holds no map for the report to read.
 A variant is a `products` row whose `parent_id` names its parent product — "Wine 125" and
 "Wine 175" under "Wine by the glass". There is no separate variant table. A variant's parent is a
 top-level product in the same catalogue, is fixed when the variant is created, and a variant has no
-variants of its own (spec `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §15; the
-one-level rule is the core migration `packages/db/drizzle/0004_variant_one_level.sql`). A product
-may have any number of variants, one included (§15.1); `product.variant_count_invalid` stays
+variants of its own (the one-level rule is the core migration `packages/db/drizzle/0004_variant_one_level.sql`). A product
+may have any number of variants, one included; `product.variant_count_invalid` stays
 registered and nothing throws it.
 
 ### What a variant reads from its parent
@@ -242,7 +240,7 @@ row exists only while it does one of those, keyed by the parent's menu row and t
 
 ### Active and Available
 
-A variant has the same two states as a product (spec §15.6; _One save, one transaction_ below).
+A variant has the same two states as a product (_One save, one transaction_ below).
 Removing a variant makes it Inactive and keeps its row; a saved variant left out of a product save
 is made Inactive too (`setProductVariants`). An Inactive variant is on no menu offer. An Active one
 is listed under its parent's offer, and marked available only while it is Available and that menu
@@ -275,7 +273,7 @@ lists). A variant itself may be an extra.
 
 ### The sale line
 
-**A product with an Active variant, Available or not, is never sold as itself** (spec §15.1): a
+**A product with an Active variant, Available or not, is never sold as itself** (#556): a
 line that rings it up without naming a variant is refused `product.variant_required`, and so is an
 extras pick of it. Every sale line names a zone's menu offer, and `selectMenuVariant`
 (`packages/catalogue/src/variants.ts`) refuses a dish line that names no variant. An extras pick
@@ -415,7 +413,7 @@ and a saved variant left out of the body is made Inactive (`setProductVariants`,
 `packages/catalogue/src/variants.ts`). A customer-facing name whose every entry is blank parses to
 `null`, so "I typed spaces" and "I left it empty" store identically.
 
-A product has two states (spec §15.6). **Active / Inactive** is whether it exists for the venue:
+A product has two states. **Active / Inactive** is whether it exists for the venue:
 Delete sends `active: false`, Restore sends `active: true`, and Delete removes no row.
 **Available / Unavailable** is "sold out for now": the editor's Available switch sends `available`,
 and it hides nothing in the dashboard. The till sells a product, or offers it as an extra, only when

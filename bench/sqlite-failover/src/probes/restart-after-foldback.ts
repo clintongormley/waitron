@@ -1,6 +1,6 @@
-// Measurement 1 (slice-2 spec §8.1 item 1): restart after an outside fold-back.
+// Measurement 1 (#540): restart after an outside fold-back.
 //
-// Spec §4.5's plan for a bucket outage: stop Litestream, fold the side file back into the database
+// Slice 2's plan for a bucket outage: stop Litestream, fold the side file back into the database
 // from our own connection, restart Litestream when the bucket answers. Sales Litestream saw but could
 // not upload, and sales made while it was stopped, are then only in the database FILE — the fold-back
 // moved them out of the side file Litestream reads. The question is whether a restarted Litestream
@@ -15,7 +15,7 @@
 // probe thinks it is, and the line reads `VOID`.
 //
 // It also records whether a foreign object at the generation's root (`opened.json`, the marker slice
-// 2 writes before Litestream starts — spec §4.4) disturbs Litestream or survives it.
+// 2 writes before Litestream starts) disturbs Litestream or survives it.
 import assert from "node:assert";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

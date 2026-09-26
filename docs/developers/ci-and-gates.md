@@ -474,8 +474,7 @@ exercise it.
 A merge to `main` runs the unfiltered suite whenever its `code` output is true — anything but a
 change made only of inert paths, documentation, or machinery `ROOT_SCOPE_CONSUMERS` does not list;
 that run verifies the narrowing. Read the `changes` job's `code`, `scope` and `packages` outputs
-before treating a green PR as evidence about the workspace. Design:
-`docs/superpowers/specs/2026-07-31-scoped-ci-design.md`.
+before treating a green PR as evidence about the workspace. Designed and built in #27.
 
 ### Two pushes to `main` must never share a concurrency group
 

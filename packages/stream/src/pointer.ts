@@ -77,7 +77,7 @@ export function signPointer(body: StreamPointer, privateKeyPkcs8: string): Signe
 
 /**
  * True only for a well-formed pointer signed by `publicKeySpki`. A restore checks against the key the
- * recovery kit carries, never one read from the bucket (spec §5.1 step 2).
+ * recovery kit carries, never one read from the bucket.
  */
 export function verifyPointer(pointer: SignedPointer, publicKeySpki: string): boolean {
   return (
@@ -118,7 +118,7 @@ export const SENT_POINTERS_KEPT = 16;
 /**
  * The exact bytes of the pointers a process has sent most recently, so a refusal caused by one of
  * them landing after a later read is told from another box's write. Byte-exact, not "this node id
- * and term": a rebuild reuses the dead box's node id and can sign the same term (spec §4.4).
+ * and term": a rebuild reuses the dead box's node id and can sign the same term.
  */
 export class SentPointers {
   /** In the order first added, oldest first. */

@@ -56,8 +56,8 @@ export function detectTrustDevice(headers: { userAgent?: string; platform?: stri
   const ua = headers.userAgent ?? "";
   const system = fromPlatformHint(headers.platform ?? "") ?? fromUserAgent(ua);
   // Firefox on Linux needs Firefox's own certificate manager: Mozilla names only "Windows, macOS and
-  // Android" as systems whose store Firefox can use (provenance in
-  // docs/superpowers/specs/2026-09-12-box-trust-onboarding-design.md).
+  // Android" as systems whose store Firefox can use
+  // (https://support.mozilla.org/en-US/kb/setting-certificate-authorities-firefox).
   return system === "linux" && ua.includes("Firefox/") ? "firefox-linux" : system;
 }
 

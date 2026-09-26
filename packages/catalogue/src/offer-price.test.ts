@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { decimal } from "@waitron/shared";
 import { resolveOfferPrice } from "./offer-price.js";
 
-// Four DIFFERENT prices, one per step of spec §15.3's chain, so a step read from the wrong level
+// Four DIFFERENT prices, one per step of the price chain, so a step read from the wrong level
 // answers a value no other step holds.
 const chain = {
   variantMenuPrice: decimal("6.00"),

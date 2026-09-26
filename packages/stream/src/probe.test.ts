@@ -214,7 +214,7 @@ describe("probeBucket", () => {
     });
   });
 
-  // The plan's Reconciliation N13: a bucket that gave no answer is thrown, not reported, so a caller
+  // #569: a bucket that gave no answer is thrown, not reported, so a caller
   // can tell an unreachable bucket from a refusing one.
   it.each(["put", "list"] as const)(
     "throws the store's own error when the bucket gives no answer at the %s step, leaving nothing behind",

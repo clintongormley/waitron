@@ -99,7 +99,7 @@ describe("SetupRestoreBucketScreen", () => {
     await expect(outcome).resolves.toMatchObject({ environment: "preproduction" });
   });
 
-  // Reconciliation N26: the restored copy's names, and nothing is sent until the owner confirms them.
+  // #646: the restored copy's names, and nothing is sent until the owner confirms them.
   it("shows whose copy the bucket holds and sends its tax id only once the owner confirms it", async () => {
     const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
       "setup-restore-bucket-screen",

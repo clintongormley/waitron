@@ -26,7 +26,7 @@ export function venuePrefix(venueId: string): string {
 
 /**
  * A generation is one primary's unbroken stream. The name carries the time it was opened because a
- * rebuilt box reuses the dead box's node id and can sign the same next term (spec §4.4); the
+ * rebuilt box reuses the dead box's node id and can sign the same next term; the
  * create-only marker (`claimGeneration`) refuses the one collision this leaves, two openings in the
  * same second.
  */

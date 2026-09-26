@@ -1647,7 +1647,7 @@ describe("while streaming", () => {
 
 const DAY = 24 * 60 * 60_000;
 
-// Reconciliation N25: Litestream tidies only the generation it writes (spec §4.4), so the
+// #590: Litestream tidies only the generation it writes, so the
 // supervisor prunes the others, from its streaming tick, at most once a day.
 describe("generation housekeeping", () => {
   /** A generation of this venue whose one object was last written at `at`, on the bucket's clock. */
@@ -1744,7 +1744,7 @@ describe("generation housekeeping", () => {
   });
 });
 
-// Reconciliation N20: the recovery page shows the log's tail to anyone on the box's network
+// #590: the recovery page shows the log's tail to anyone on the box's network
 // (`apps/server/src/recovery-surface.ts`), and Litestream's output can name the bucket, the
 // endpoint and the access key id. Only the exit code and a fixed word are logged.
 describe("what the supervisor logs about Litestream", () => {
@@ -1774,7 +1774,7 @@ describe("what the supervisor logs about Litestream", () => {
   });
 });
 
-// Reconciliation N21: a server that died without stopping its Litestream (a development machine's
+// #590: a server that died without stopping its Litestream (a development machine's
 // Esc, a killed parent) leaves one running. The next start stops it — only when the recorded PID's
 // command line is this box's own `replicate -config <its configuration>`.
 describe("a Litestream left running by a server that died", () => {

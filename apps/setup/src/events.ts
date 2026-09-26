@@ -47,7 +47,7 @@ export interface RestoreRequestDetail {
   artifact: File;
   recoveryKey: string;
   environment: "production" | "preproduction";
-  /** The owner answered the old-server question (Reconciliation N23). */
+  /** The owner answered the old-server question (#646). */
   oldBoxGone: boolean;
 }
 

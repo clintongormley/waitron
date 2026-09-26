@@ -1,7 +1,7 @@
 /**
- * What the slice-2 probes share (`docs/superpowers/specs/2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md`
- * §8.1). A probe is a one-off measurement, not a scenario: `../scenarios.ts` discovers only
- * `src/scenarios/`, so nothing here runs in the scenario table, the pre-push hook or CI. Each probe
+ * What the slice-2 probes share (#540). A probe is a one-off measurement, not a scenario:
+ * `../scenarios.ts` discovers only `src/scenarios/`, so nothing here runs in the scenario table, the
+ * pre-push hook or CI. Each probe
  * prints exactly one result line in the table's shape, so the results note can quote it verbatim.
  */
 import { existsSync, statSync } from "node:fs";

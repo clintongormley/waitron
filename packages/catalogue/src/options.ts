@@ -142,7 +142,7 @@ function listValues(input: OptionListInput) {
  * Replaces the list's labels with the body's, in the body's order. A label the body omits is
  * removed: nothing outside these two tables names an options label, so there is no usage to check
  * (see {@link optionListDependants}), and an order line copies the names as text rather than
- * pointing back by id (spec §2.3).
+ * pointing back by id.
  *
  * A body label carrying the id of a label this list already holds is updated in place; one with no
  * id, or with an id nothing holds, is inserted. An id that names a label of a DIFFERENT list is
@@ -235,7 +235,7 @@ export async function updateOptionList(
 export async function deleteOptionList(tx: Transaction, optionListId: string): Promise<void> {
   await assertOptionList(tx, optionListId);
   // The labels go with it through `option_labels_list_fk`'s cascade. There is no open-order check:
-  // an order line carries the chosen names as text and points at nothing here (spec §2.3).
+  // an order line carries the chosen names as text and points at nothing here.
   await tx.delete(optionLists).where(eq(optionLists.id, optionListId));
 }
 
@@ -244,10 +244,9 @@ export type { OptionListDependants } from "./modifier-list-types.js";
 /**
  * What deleting this list would touch — the preview a delete confirmation reads. Both sides are
  * detached by the delete rather than blocking it: the `product_modifiers` key cascades, and an
- * order line carries the chosen names as text and points at nothing here (spec
- * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §2.3).
+ * order line carries the chosen names as text and points at nothing here.
  *
- * Options lists have no per-menu row at all (spec §2.2), so `menus` is every menu offer of a dish
+ * Options lists have no per-menu row at all, so `menus` is every menu offer of a dish
  * that holds the list, named by that product's staff name. An INACTIVE offer is listed like any
  * other. Products come back alphabetical by staff name with the id breaking a tie; menus in
  * offer-id order.

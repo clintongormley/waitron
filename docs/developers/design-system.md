@@ -366,8 +366,9 @@ independently, so your footer actions stay visible. It uses the raised surface a
 white in the light theme, with the matching dark surface in the dark theme. Put `wt-form-actions` in
 its `footer` slot to keep Cancel on the left and Save on the right. The one standing exception is
 the setup wizard, which uses a non-dismissible `wt-modal` as its whole page and keeps Back and Next
-in the scrolling body (see the Decisions in
-`docs/superpowers/specs/2026-09-13-onboarding-flow-corrections-design.md`):
+in the scrolling body (#347: a wizard that Escape could dismiss would leave the operator on an empty
+page with no way back, and moving Back and Next into the footer would mean every screen handing its
+actions up to the shell):
 
 ```html
 <wt-modal heading="Add printer">
@@ -604,8 +605,7 @@ tree; the same reference inside the shadow root did describe it).
 #### A field that falls back to another value
 
 Some fields store a value only to override one they would otherwise take from somewhere else — a
-variant's VAT, unit, station or photo from its parent product, an extra's price from its product's
-(spec `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §9.1). Such a field is
+variant's VAT, unit, station or photo from its parent product, an extra's price from its product's. Such a field is
 **empty while it falls back**, and shows the value it falls back to as a placeholder hint, so the operator sees
 what will apply without a copy being stored. Leaving it empty keeps the fallback; typing or choosing
 a value overrides it; clearing it returns to the fallback and saves `null`. Never mark such a field
@@ -639,7 +639,7 @@ record's own value applies and its blank languages show no placeholder hint.
   a dietary set) saves an emptied choice as `null` — "falls back" — never as an empty set, which
   would declare the record free of what the fallback contains.
 
-A name never shows a placeholder hint this way: a variant's names are its own (§15.2), and a blank one falls back
+A name never shows a placeholder hint this way: a variant's names are its own, and a blank one falls back
 to the record's own staff name, which the catalogue owns.
 
 ### Fold a long form into collapsible sections with summaries
@@ -1256,7 +1256,7 @@ a product from a menu removes that offer.
 
 ### Products: Active and Available are two different words
 
-On the products screens (spec §15.6), **Active / Inactive** says whether a product exists for the
+On the products screens, **Active / Inactive** says whether a product exists for the
 venue, and **Available / Unavailable** says whether it is sold out for now. Delete makes a product
 Inactive, and Restore makes it Active again; never label either of them "unavailable". The products
 list's Status filter starts on Active, so an Inactive product is hidden until the filter is changed,

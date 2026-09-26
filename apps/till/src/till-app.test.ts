@@ -2410,7 +2410,7 @@ describe("till-app", () => {
     expect(line.options).toBeUndefined();
   });
 
-  // A frozen answer carries six names and no ids (spec §2.3), so a retrieved line re-derives the
+  // A frozen answer carries six names and no ids, so a retrieved line re-derives the
   // `{ listId, labelId }` the wire wants by matching those names against the dish's LIVE offer —
   // the same problem `deriveExtraSelections` solves for a pick. The three names of the list and of
   // the label differ, so a match made on the wrong one of the six fails (CLAUDE.md §3).
@@ -2591,7 +2591,7 @@ describe("till-app", () => {
 
   it("shows sale.unconfirmed, basket kept, when the sale request got no answer", async () => {
     // A `recordSale` whose `fetch` rejects at the NETWORK level (a TypeError — the host never answered)
-    // is not the same as a server that refused with a `{ code }` (till-reroute §4.3): the operator must
+    // is not the same as a server that refused with a `{ code }` (#264): the operator must
     // check whether the sale went through before retrying, so the banner is `sale.unconfirmed`, not the
     // free-to-retry `sale.error`. Basket kept, still on the counter.
     const recordSale = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
@@ -5422,7 +5422,7 @@ describe("till-app", () => {
     it("collect-order: a NETWORK failure (no answer) shows sale.unconfirmed, basket kept", async () => {
       // Collect is a terminal fiscal-file moment (Mode T files immediate, Mode I settles the deferred
       // invoice), so a `collectOrder` whose `fetch` got no answer has the same "did it file?" ambiguity
-      // as `#onConfirmPayment` (till-reroute §4.3): `sale.unconfirmed`, not the free-to-retry
+      // as `#onConfirmPayment` (#264): `sale.unconfirmed`, not the free-to-retry
       // `sale.error`. The `{ code }` refusal path stays `sale.error` (the test above).
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
@@ -7308,7 +7308,7 @@ it.each(["station", "expo", "schedule"])(
   },
 );
 
-// The venue's servers (till-reroute §4.1). Mirrors the un-exported helpers in server-router.test.ts —
+// The venue's servers (#261). Mirrors the un-exported helpers in server-router.test.ts —
 // redefined locally rather than exported from there (they are private test fixtures).
 const BOX = "https://box.deli.test";
 const CLOUD = "https://cloud.deli.test";

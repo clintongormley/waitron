@@ -315,7 +315,7 @@ describe("prepareStreamRestore", () => {
     await prepared.discard();
   });
 
-  // The ten minutes are measured on the bucket's clock, never this box's (plan Reconciliation N19).
+  // The ten minutes are measured on the bucket's clock, never this box's (#642).
   // The memory bucket stamps its own clock, NOW; this box's clock is moved half an hour either way.
   it.each([
     ["runs fast", 30 * 60_000],
@@ -641,7 +641,7 @@ describe("refuseIfSourceLive", () => {
   });
 });
 
-// Plan Reconciliation N23: an archive whose database holds bucket settings runs the same check.
+// #642: an archive whose database holds bucket settings runs the same check.
 describe("refuseIfArchiveSourceLive", () => {
   const VAULT_KEY = Buffer.alloc(32, 5).toString("base64");
   const ring = loadKeyRing({
@@ -932,7 +932,7 @@ describe("restoreFromStream (the command line's whole path)", () => {
     ).toEqual([]);
   });
 
-  // Plan Reconciliation N26: the operator sees whose copy this is before anything changes.
+  // #642: the operator sees whose copy this is before anything changes.
   it("shows the restored venue and changes nothing when the operator does not confirm it", async () => {
     const venueDir = await fresh("waitron-stream-venue-");
     await writeFile(join(venueDir, "venue.db"), "the box's own database");

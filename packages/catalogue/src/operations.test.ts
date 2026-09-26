@@ -1503,8 +1503,8 @@ describe("catalogue operations", () => {
 });
 
 /**
- * A parent's variants follow it onto every menu it is on (spec §15.5, V5), nested under its offer
- * and priced by the chain in `offer-price.ts` (§15.3). The parent's own price (4.00) and its price
+ * A parent's variants follow it onto every menu it is on, nested under its offer
+ * and priced by the chain in `offer-price.ts`. The parent's own price (4.00) and its price
  * on this menu (4.50) differ, so a variant priced from the wrong step of the chain fails.
  */
 describe("menu offers nest a product's variants", () => {

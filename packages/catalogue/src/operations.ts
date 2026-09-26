@@ -321,7 +321,7 @@ export async function addProductToMenu(
     .where(eq(products.id, input.productId));
   if (product === undefined)
     throw new AppError("product.not_found", { productId: input.productId });
-  // A variant follows its parent onto every menu (spec §15.5) and never has a menu row of its own.
+  // A variant follows its parent onto every menu and never has a menu row of its own.
   if (product.parentId !== null)
     throw new AppError("menu_item.variant_not_allowed", { productId: input.productId });
   await addMember(tx, rootSectionId, { kind: "product", productId: input.productId });
@@ -447,7 +447,7 @@ function offerLineValues(row: OfferLineRow, defaultLanguage: string) {
 /**
  * The Active offers on the given menus: the products each menu's structure reaches, menus by name
  * and each in its structure's order (`reachableProducts`). Unavailable (sold-out) products are left
- * out unless the caller is a management read passing `includeUnavailable`: spec §15.6 lets Available
+ * out unless the caller is a management read passing `includeUnavailable`: Available may
  * hide an item from the till, never from the dashboard. A product switched off on the menu
  * (`menu_items.active`) is left out unless the caller passes `includeSwitchedOff`, so the dashboard
  * can switch it back on. Only a top-level product is an offer; each Active variant of it is nested
@@ -606,7 +606,7 @@ async function offersOn(
   if (offered.length === 0) return [];
   const content = await readContentLanguages(tx, FALLBACK_LOCALE);
   // The extras/options walk, keyed by MENU-ITEM id: on an offer each extras list is the version
-  // this offer publishes (spec §3.2), while the order stays the product's own.
+  // this offer publishes, while the order stays the product's own.
   const offeredByItem = await readOfferedModifiers(
     tx,
     offered.map((row) => ({ productId: row.productId, menuItemId: row.id })),
@@ -1323,7 +1323,7 @@ export async function listAvailableProducts(
     .orderBy(catalogues.name, products.createdAt, products.id);
 
   // No menu offer is in this read at all, so each extras list is the one the product itself
-  // carries, priced without an offer's overrides (spec §3.3, minus the menu step).
+  // carries, priced without an offer's overrides (the chain minus the menu step).
   const offeredByProduct = await readOfferedModifiers(
     tx,
     rows.map((row) => ({ productId: row.id, menuItemId: null })),

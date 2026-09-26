@@ -19,8 +19,8 @@ name: CI
 # The job ids below are therefore NOT a stable public interface, and removing that property is the
 # whole point of the `ci` job. Until the ruleset was changed, five ids here were required by name:
 # renaming one silently broke the ruleset, and skipping one left a pull request waiting for a status
-# that would never report. Both of those are now free moves, which is what makes the scoping in
-# docs/superpowers/specs/2026-07-31-scoped-ci-design.md possible at all.
+# that would never report. Both of those are now free moves, which is what makes the scoping (#27)
+# possible at all.
 #
 # The one rule that replaces it: every other job in this file must appear in `ci`'s `needs`, with a
 # single deliberate exception. A job that does not is reporting to nothing — it could fail while the
@@ -64,7 +64,7 @@ concurrency:
 jobs:
   # Works out what the rest of the workflow needs to do. Everything below gates on its outputs.
   #
-  # Two independent decisions, deliberately not merged into one (design §3.2):
+  # Two independent decisions, deliberately not merged into one:
   #   `code`  — does anything here reach a code-gated job? If not, only the `lint` job runs (eslint
   #             AND format:check AND the repo-level Vitest project, all ungated), on pull requests
   #             AND on main, so an inert change — prose, or root config no code-gated job reads —

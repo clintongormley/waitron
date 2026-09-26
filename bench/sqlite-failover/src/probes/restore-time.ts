@@ -1,4 +1,4 @@
-// Measurement 4 (slice-2 spec §8.1 item 4): how long a rebuild's restore takes, with a day of changes
+// Measurement 4 (#540): how long a rebuild's restore takes, with a day of changes
 // on top of the last full copy, on a database carrying product images (they live in the database:
 // `media_image_data.bytes`, packages/media/src/schema/images.ts).
 //
@@ -42,7 +42,7 @@ import {
 
 const PROBE = "m4-restore-time";
 const PREFIX = "venues/v1/gen-1-box-a-20260923T000000Z";
-/** Slice 2's production snapshot settings (spec §4.4), so the restore replays onto a daily full copy. */
+/** Slice 2's production snapshot settings, so the restore replays onto a daily full copy. */
 const PRODUCTION_SNAPSHOT = [`snapshot:`, `  interval: 24h`, `  retention: 168h`];
 /** A generous bound on one restore or upload of a gigabyte-scale database against a local store. */
 const LONG_CHILD_MS = 15 * 60_000;

@@ -12,10 +12,9 @@ import type { DietaryLabel } from "./dietary-declarations.js";
  */
 
 /**
- * One entry in a product's ordered attachment list: an extras list or an options list, never both
- * (spec `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §5). The `id` is the LIST's
- * id, not the attachment row's — the row's own key is a surrogate nothing outside
- * `product-modifiers.ts` names.
+ * One entry in a product's ordered attachment list: an extras list or an options list, never both.
+ * The `id` is the LIST's id, not the attachment row's — the row's own key is a surrogate nothing
+ * outside `product-modifiers.ts` names.
  *
  * It lives HERE rather than beside the read/write code because the dashboard's product editor sends
  * and receives it, and this file is the one the browser may import: `product-modifiers.ts` imports
@@ -57,7 +56,7 @@ export interface ProductVariant {
   image: string | null;
   unitPrice: string | null;
   available: boolean;
-  /** False once the variant has been removed; it is kept, never deleted (spec §15.6). */
+  /** False once the variant has been removed; it is kept, never deleted. */
   active: boolean;
 }
 
@@ -114,7 +113,7 @@ export interface Product {
   /** GROSS (VAT-inclusive): per selected unit. */
   unitPrice: string;
   vatClass: VatClass;
-  /** Whether the product exists for the venue; deleting it makes it Inactive (spec §15.6). */
+  /** Whether the product exists for the venue; deleting it makes it Inactive. */
   active: boolean;
   /** Whether it can be sold right now: false is "sold out for now", and hides nothing in the
    * dashboard. The till sells a product only when it is both Active and Available — except that a
@@ -140,8 +139,8 @@ export interface Product {
  * routing (`stationId`/`courseId`) is NOT here — it rides in {@link ProductRouting} and the two combine
  * as {@link ProductEditorBody}, the complete body the editor sends.
  *
- * On a VARIANT every inherited field may be blank — `null` — and a blank reads as the parent's value
- * (spec §4.4, §9.1). On a product with no parent, `unitPrice`, `vatClass`
+ * On a VARIANT every inherited field may be blank — `null` — and a blank reads as the parent's value.
+ * On a product with no parent, `unitPrice`, `vatClass`
  * and `dietaryDeclarations` are required.
  */
 export interface ProductEditorInput {
@@ -170,7 +169,7 @@ export interface ProductEditorInput {
    * parent's" on a variant. */
   primaryCategoryId: string | null;
   /** The ordered extras and options lists to attach, replacing whatever the product carries today.
-   * Empty on a variant, which offers its parent's (spec §4.4). */
+   * Empty on a variant, which offers its parent's. */
   modifiers: ProductModifierRef[];
   allergens: ProductAllergens | null;
   dietaryDeclarations: DietaryLabel[] | null;

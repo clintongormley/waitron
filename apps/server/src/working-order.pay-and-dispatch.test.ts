@@ -516,7 +516,7 @@ async function addTill(cfg: TillConfig, name: string): Promise<TillConfig> {
 /**
  * The deployment holds one tenant per database. A SECOND node under the SAME tenant + location —
  * a `cfg` differing only in `node_id`. It never sells here; it exists so reads run under it prove
- * they are venue-wide (till-reroute §3.6): a node reaches the venue's open tabs regardless of the
+ * they are venue-wide (#259): a node reaches the venue's open tabs regardless of the
  * `node_id` they carry. `filing_module`/`tax_module` are nullable and unused for a listing-only node, so left out.
  */
 async function addNode(cfg: TillConfig, name: string): Promise<TillConfig> {
@@ -2121,7 +2121,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
 // The cross-station expo/pass read. `listExpoQueue` gathers every order that is not abandoned
 // or collected and has an item not yet away (open, placed or settled) across ALL stations; unlike
 // the per-station `listStationQueue` it takes NO station arg, and it is not node-scoped either
-// (till-reroute §3.6). `working-order.test.ts` covers the join/grouping/exclusions; this case takes
+// (#259). `working-order.test.ts` covers the join/grouping/exclusions; this case takes
 // the SAME venue-wide shape the `listStationQueue` test above uses.
 describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", () => {
   it("is VENUE-WIDE: each node's expo board shows the venue's orders, regardless of node (till-reroute §3.6)", async () => {

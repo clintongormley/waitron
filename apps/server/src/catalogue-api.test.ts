@@ -1781,7 +1781,7 @@ describe("mountCatalogueApi — products", () => {
     });
   });
 
-  // Spec §15.6: the editor writes Active and Available as two separate states. Each save sets the
+  // The editor writes Active and Available as two separate states. Each save sets the
   // two to DIFFERENT values, so a route that writes one flag into the other column fails.
   it("writes Active and Available as two states through the editor routes", async () => {
     const app = mountApp("es-ES");
@@ -1819,7 +1819,7 @@ describe("mountCatalogueApi — products", () => {
     });
   });
 
-  // Spec §15.6: Available "never hides the item from the dashboard", so the menu management route
+  // Available "never hides the item from the dashboard", so the menu management route
   // keeps a sold-out product's offer; an Inactive product's offer stays hidden.
   it("keeps an Unavailable product's offer on the management offers route and hides an Inactive one", async () => {
     const app = mountApp("es-ES");

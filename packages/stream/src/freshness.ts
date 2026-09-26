@@ -19,7 +19,7 @@ export interface LagInput {
 }
 
 /**
- * How long the oldest change not yet in the bucket has been waiting (spec §7), and the time up to
+ * How long the oldest change not yet in the bucket has been waiting, and the time up to
  * which the bucket is taken to hold everything. Zero when nothing waits — never "time since the
  * last upload", which would call a quiet night stale.
  *

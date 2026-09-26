@@ -21,7 +21,7 @@ export const optionLists = table("option_lists", {
 });
 
 /** One answer within an options list. `available` hides a label without disturbing saved orders —
- * nothing on an order line points back here by id (spec §2.3), so the cascade below only has to
+ * nothing on an order line points back here by id, so the cascade below only has to
  * clear the list's own labels. */
 export const optionLabels = table(
   "option_labels",

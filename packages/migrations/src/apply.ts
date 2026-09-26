@@ -31,8 +31,7 @@ const LOCK_WAIT_MS = 120_000;
 /**
  * Applies every set in order to the venue file under `directory`.
  *
- * Every set goes to the VENUE file, and `node.db` stays empty
- * (`docs/superpowers/specs/2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md` §2).
+ * Every set goes to the VENUE file, and `node.db` stays empty (#548).
  *
  * It also installs the append-only triggers, set by set, from each set's `appendOnlyTables`, so no
  * caller that migrates through here can forget them. A caller that hands over no

@@ -11,8 +11,7 @@
 > the time of writing; the
 > signing secret is now keyed by purpose alone. **Whoever administers the Stripe account has to edit
 > the endpoint URL by hand** — nothing in this repository can do it for them. The rest of this
-> document is left as it was written. Spec:
-> [drop-tenant-id](../specs/2026-09-14-drop-tenant-id-design.md).
+> document is left as it was written. Built in #378.
 
 **Status:** research/design only. No code written. Every "required / only / cannot" below carries a
 `file:line` receipt or is explicitly flagged as an assumption (per `CLAUDE.md` §1). Claims about

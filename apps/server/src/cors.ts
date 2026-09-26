@@ -3,7 +3,7 @@ import type { MiddlewareHandler } from "hono";
 import { DEV_DEVICE_HEADER } from "./device-session.js";
 
 /**
- * CORS for the venue's own origins only (till-reroute design §3.4). `origin` returning null makes
+ * CORS for the venue's own origins only (#257). `origin` returning null makes
  * hono/cors emit no Allow-Origin header, so the browser blocks a stranger; an allowed origin is echoed
  * exactly (never `*` — credentials ride these requests).
  *

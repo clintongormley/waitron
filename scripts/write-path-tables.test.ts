@@ -218,7 +218,7 @@ const SOURCES = productionSources();
 const ALLOWANCES = new Map(TABLES.map((table) => [table, new Set(ALLOWED[table])]));
 
 // Tables created after the privilege matrix froze, each inheriting a frozen table's rule.
-// `node_roles` holds the three columns that left `deployment` (slice-2 spec §2).
+// `node_roles` holds the three columns that left `deployment` (#548).
 const ADDED_SINCE_THE_MATRIX = ["node_roles"];
 
 describe("no source writes a table the application role may only read", () => {

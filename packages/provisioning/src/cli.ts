@@ -92,7 +92,7 @@ const USAGE = [
   "WAITRON_ADMIN_PASSWORD or an echo-off prompt — and from nowhere else. The admin display name",
   "(--admin-name) is not a secret and stays a flag.",
   "",
-  "There is no `tenant` yet: see docs/superpowers/specs/2026-07-29-provisioning-tool-design.md.",
+  "There is no `tenant` yet: see packages/provisioning/README.md.",
 ].join("\n");
 
 /** Returns the exit code rather than calling `process.exit`; `bin.ts` is the only thing that

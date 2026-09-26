@@ -270,7 +270,7 @@ These are required future checks, not tests run as part of writing this specific
 ## 8. Resume after the foundations land
 
 Implementation is explicitly deferred until all three workstreams named at the top have landed.
-The [SQLite storage design](2026-09-16-sqlite-slice1-storage-swap-design.md) is background for that
+The SQLite storage design (#489) is background for that
 dependency, not a source of schema choices for this spec.
 
 At that point, inspect the landed code and resolve these integration details before planning.

@@ -31,7 +31,7 @@ async function loadOrigins(
 }
 
 /**
- * Which browser origins may call this node's API with credentials (till-reroute design §3.4): this
+ * Which browser origins may call this node's API with credentials (#257): this
  * node's own advertised origin and the origin of every routable `contactUrl` in the held membership
  * document — the venue's own serving servers, nothing else. The document is re-read at most once per
  * `ttlMs` (default 30 s): a preflight or a cross-origin request must not cost a DB read each.

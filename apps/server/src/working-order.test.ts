@@ -490,7 +490,7 @@ async function seedVariantOffer(
 /**
  * Every screen that shows a sold line shows ONE label, and a line that named a variant froze its
  * product text and its variant text in separate columns. A variant is named in full, so the label is
- * the variant's own name (spec §15.2): without it a large coffee and a small one are
+ * the variant's own name: without it a large coffee and a small one are
  * indistinguishable on the tab, on the kitchen queue, on the pass and on the retrieve screen, at
  * prices that only make sense with the size.
  *
@@ -1232,7 +1232,7 @@ async function setStatus(id: string, status: "settled" | "abandoned"): Promise<v
 
 /**
  * Insert an open order on ANOTHER node at the same location. The row exists to prove reads are
- * venue-wide (till-reroute §3.6): a promoted node inherits the venue's open tabs even though they are
+ * venue-wide (#259): a promoted node inherits the venue's open tabs even though they are
  * tagged with the dead node's id (swap spec §4.3). `node_id` is the foreign node's on purpose.
  */
 async function seedForeignNodeOrder(cfg: TillConfig): Promise<string> {
@@ -5934,7 +5934,7 @@ describe("order path — extras and options", () => {
     expect(child!.name).toBe("Vino staff");
     expect(child!.descriptions).toEqual({ [LOCALE]: "Vino customer" });
     expect(child!.kitchenName).toBe("Vino kitchen");
-    // The extra PRODUCT's own VAT, never the 10% dish's (spec §3.3, decision 9).
+    // The extra PRODUCT's own VAT, never the 10% dish's.
     expect(child!.vatRate).toBe(2100);
     // The list ITEM's price, not the wine's own 3.00; dish ×2 × pick ×1 = 2. All three columns are
     // read straight off the row, each at its own scale: 450 is that 4.50 and 900 the 9.00 total in
@@ -7470,7 +7470,7 @@ describe("a variant is sold as the product it is", () => {
     const { cfg, zoneId, catalogueId } = await setupVenue();
     const { wine, options } = await withTransaction(db, async (tx) => {
       const wine = await seedWine(tx, cfg, catalogueId);
-      // The list is attached to the PARENT: a variant offers its parent's lists (spec §4.4).
+      // The list is attached to the PARENT: a variant offers its parent's lists.
       const options = await addOptionList(tx, wine.parentId, "Temperatura", ["Fría", "Natural"]);
       return { wine, options };
     });

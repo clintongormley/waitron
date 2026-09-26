@@ -312,9 +312,8 @@ algorithm URI — the classic way XAdES fails third-party verification.
 the first commit, and validate end-to-end against AEAT preproduction early. Budget real
 engineering time for the submission client.
 
-> **Corrected 2026-07-21 (Task 18 endgame, matching
-> [`2026-07-19-sales-spine-and-fiscal-layer-design.md`](2026-07-19-sales-spine-and-fiscal-layer-design.md)
-> §10's identical correction).** This paragraph said `borjamrd/verifactu-conformance` would be
+> **Corrected 2026-07-21 (Task 18 endgame, matching the identical correction in §10 of the
+> sales-spine design, #7).** This paragraph said `borjamrd/verifactu-conformance` would be
 > wired "into CI from the first commit". It was not: `PROVENANCE.md` names it under "References
 > consulted", but no dependency on it exists (`package.json`) and no test file loads vectors from
 > it. What IS wired into CI, from the first commit, is `packages/verifactu/src/conformance.test.ts`:
@@ -330,9 +329,8 @@ engineering time for the submission client.
 > **Superseded 2026-07-20.** This subsection previously read: *"The fiscal test suite runs against
 > both SQLite and Postgres in CI from the first commit."* There is no SQLite path any more, so
 > there is no dual suite to run. The decision, the empirical research behind it and the three
-> fiscal findings that forced it are recorded in
-> [`2026-07-19-sales-spine-and-fiscal-layer-design.md`](2026-07-19-sales-spine-and-fiscal-layer-design.md)
-> §3, "The standalone database is PGlite, not SQLite". The original text is not deleted, because
+> fiscal findings that forced it are recorded in §3 of the sales-spine design (#7), "The standalone
+> database is PGlite, not SQLite". The original text is not deleted, because
 > the reasoning that chose SQLite was sound on the information available at the time and knowing
 > *which* assumption broke is worth more than a document that reads as though it were always right.
 

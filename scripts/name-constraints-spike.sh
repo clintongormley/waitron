@@ -11,7 +11,6 @@
 # with "permitted subtree violation".
 #
 # Dependencies: openssl only (OpenSSL 3.x or compatible).
-# Design spec: docs/superpowers/specs/2026-09-08-lan-https-install-and-name-constraints-spike.md §2.
 #
 
 set -euo pipefail

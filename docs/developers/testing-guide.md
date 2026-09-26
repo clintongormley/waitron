@@ -610,8 +610,8 @@ the log line's check runs again over that.
 
 **Why versitygw 1.8.0.** Five candidates were weighed on 2026-09-23. Four were run with the same
 probe: a write "only if absent" over an existing key, a write "only if unchanged" with a stale ETag,
-and twenty parallel create-only writes (the slice-2 plan, Task 10's drafting notes, "Receipts for
-the choices in this task"). versitygw, SeaweedFS 4.47 and MinIO's last binary release refused both
+and twenty parallel create-only writes (taken while drafting slice 2's Task 10, which landed as
+#652). versitygw, SeaweedFS 4.47 and MinIO's last binary release refused both
 conditional writes with 412 and let one writer of twenty win. rclone `serve s3` overwrote the object
 both times. The fifth, Garage, was ruled out by reading, not run: it does not support the
 conditional write; its issue #1052 is open, and a maintainer wrote that "adding this to Garage is

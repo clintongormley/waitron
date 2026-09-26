@@ -6,9 +6,9 @@ import { helpLinkStyles, actionsStyles, errorStyles } from "../form-styles.js";
 
 /**
  * A page cannot tell whether it was reached over a trusted certificate or through a warning the
- * operator clicked past (`docs/superpowers/specs/2026-09-12-box-trust-onboarding-design.md`), so this
- * screen asks the operator to read the address bar and never reports a verdict. Continue only checks
- * that the server answers.
+ * operator clicked past (measured for #330 on Chrome 153: past the warning, `isSecureContext` was
+ * true and a fetch answered 200), so this screen asks the operator to read the address bar and never
+ * reports a verdict. Continue only checks that the server answers.
  */
 @customElement("setup-connection-screen")
 export class SetupConnectionScreen extends LitElement {

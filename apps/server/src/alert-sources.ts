@@ -23,7 +23,7 @@ import "./errors.js";
 /** The dashboard screen a backup alert links to. */
 export const BACKUP_SCREEN = "backup";
 
-/** How long a change may wait for the bucket before `backup.stream_behind` (slice 2 spec §4.5). */
+/** How long a change may wait for the bucket before `backup.stream_behind`. */
 export const STREAM_BEHIND_AFTER_MS = 15 * 60_000;
 
 /** A supervisor that is off for one of these stopped by itself, not because it was told to. */

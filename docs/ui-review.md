@@ -74,7 +74,7 @@ needs CLAUDE.md §3's classification line and nothing else.
 
 | # | Area | App | Status | Corrections logged |
 | --- | --- | --- | --- | --- |
-| 1 | First-run setup & onboarding wizard | setup | 🔧 | B1 connection flow implemented on its feature branch. Walked on the real box 2026-09-13; what that walk found is specced in [onboarding flow corrections](superpowers/specs/2026-09-13-onboarding-flow-corrections-design.md) and fixed on the `onboarding` branch — the wizard is a centred modal instead of a full-width page, it asks your name before your display name, tooltips stay on screen, the province question comes before the answer derived from it, your account is created in your browser's language, and a first sign-in offers you a passkey. Not merged at the time of writing. Still open: the device trust walkthrough, and the A2 wizard items — chiefly that the wizard's own text is English only, with no language chooser |
+| 1 | First-run setup & onboarding wizard | setup | 🔧 | B1 connection flow implemented on its feature branch. Walked on the real box 2026-09-13; what that walk found is specced in onboarding flow corrections (#347) and fixed on the `onboarding` branch — the wizard is a centred modal instead of a full-width page, it asks your name before your display name, tooltips stay on screen, the province question comes before the answer derived from it, your account is created in your browser's language, and a first sign-in offers you a passkey. Not merged at the time of writing. Still open: the device trust walkthrough, and the A2 wizard items — chiefly that the wizard's own text is English only, with no language chooser |
 | 2 | Till login & shift start (PIN) | till | 🔍 | shown 2026-09-01 — see candidates below, awaiting owner |
 | 3 | Counter / walk-up sales — menu, basket, modifiers, notes, park/retrieve, pay, receipt | till | 🔍 | shown 2026-09-01 — candidates below, awaiting owner |
 | 4 | Tables & tabs — floor view, open / move / join / merge / transfer / split | till | ⬜ | |
@@ -172,7 +172,7 @@ passes. The original run: the guide and built wizard were exercised in Chromium,
 on macOS, including HTTP/HTTPS certificate downloads, keyboard disclosure and 390/1280-pixel
 layouts. Those runs used isolated profiles with the fixture certificate error ignored;
 they verify rendering and navigation, not system trust. Setup accessibility checks cover light and
-dark themes. [Design and source boundaries](superpowers/specs/2026-09-12-box-trust-onboarding-design.md).
+dark themes. Designed and built in #330.
 
 For each row, install the box's current certificate through the displayed settings, close/reopen the
 browser without a warning, complete the setup connection check, then repeat after a re-image using
@@ -192,8 +192,7 @@ the versions walked are not recorded, and whether the HTTPS-only row below was w
 
 Also walk a browser with HTTPS-only navigation enabled. **The guide no longer documents a way
 through this** — the section carrying the browser's HTTP exception and the transfer-from-another-device
-route was deleted on 2026-09-13 (see *The guide restructured* in
-[the design](superpowers/specs/2026-09-12-box-trust-onboarding-design.md)). So this row is now
+route was deleted on 2026-09-13 (#346). So this row is now
 walking an UNANSWERED case: record what the operator is actually left with, because that is the
 finding. `deploy/README.md` still carries the advice for whoever installed the box, and neither ever
 claimed an HTTP link overrides browser or administrator policy.

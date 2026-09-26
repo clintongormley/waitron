@@ -28,8 +28,8 @@ export interface MenuItem {
 
 /** One sellable identity. The menu-item id, rather than the product id, selects its price. */
 export interface MenuOffer extends MenuItem {
-  /** The price the server's order path charges for this offer, RESOLVED along spec §15.3's chain
-   * (`offer-price.ts`): `grossPrice` when set, else the product's own price. Never null. */
+  /** The price the server's order path charges for this offer, RESOLVED along the chain in
+   * `offer-price.ts`: `grossPrice` when set, else the product's own price. Never null. */
   unitPrice: string;
   menuName: string;
   /** Each path of section ids from the menu's root to a list holding the product; `[]` is the top
@@ -50,7 +50,7 @@ export interface MenuOffer extends MenuItem {
   /** The ordered extras and options lists this OFFER puts in front of a diner — see
    * {@link OfferedModifier}. Each extras entry is the version this menu offer publishes. */
   offeredModifiers: OfferedModifier[];
-  /** The product's ACTIVE variants in the one variant order (spec §15.5); an Inactive one is left
+  /** The product's ACTIVE variants in the one variant order; an Inactive one is left
    * out. A variant is only ever listed here, under its parent's offer, never as an offer itself. */
   variants: MenuOfferVariant[];
 }
@@ -72,7 +72,7 @@ export interface MenuOfferVariant {
   customerName: Record<string, string> | null;
   kitchenName: string | null;
   image: string | null;
-  /** The price charged here, RESOLVED along spec §15.3's chain (`offer-price.ts`). */
+  /** The price charged here, RESOLVED along the chain in `offer-price.ts`. */
   unitPrice: string;
   /** The price this menu sets for the variant, or null when it sets none. */
   menuPrice: string | null;
@@ -186,14 +186,13 @@ export interface AccessibleCatalogue {
  * are always its own.
  *
  * `ExtraListItem` (modifier-list-types.ts) carries none of the product's facts on purpose: the row
- * duplicates nothing the `products` row already holds (spec
- * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.1). This shape is where the two
- * are put back together for a reader.
+ * duplicates nothing the `products` row already holds. This shape is where the two are put back
+ * together for a reader.
  *
  * `addAllergens` and `suitableFor` take the vocabulary of a CHILD line rather than of a product,
  * because that is what a pick becomes: the product's effective `allergens`, and its effective
  * `dietaryDeclarations` expanded the way a dish's own row is expanded. Shown BESIDE the dish's own
- * declarations, never folded into them (spec §3.4).
+ * declarations, never folded into them.
  */
 export interface OfferedExtraItem {
   productId: string;
@@ -202,7 +201,7 @@ export interface OfferedExtraItem {
   kitchenName: string | null;
   /** GROSS, in the money shape `unitPrice` uses. Never null: the inheritance is already resolved. */
   price: string;
-  /** Always the extra PRODUCT's effective rate, never the dish's (spec §3.3). */
+  /** Always the extra PRODUCT's effective rate, never the dish's. */
   vatClass: VatClass;
   maxQuantity: number;
   preselected: boolean;
@@ -239,7 +238,7 @@ export interface OfferedOptionsList {
 
 /**
  * One entry of the ordered list a dish offers a till: the extras widget or the options radio group
- * the picker draws (spec §5, §10). Walked in the PRODUCT's own `product_modifiers.sort` order on
+ * the picker draws. Walked in the PRODUCT's own `product_modifiers.sort` order on
  * both reads; what a menu offer changes is each extras entry's contents, and whether it is there at
  * all — not where it sits.
  */

@@ -87,7 +87,7 @@ declare module "@waitron/shared" {
     /** A menu offer operation names no item the menu's structure reaches; menuId is present when
      * the route supplies it. */
     "menu_item.not_found": { menuId?: string; menuItemId: string };
-    /** A variant follows its parent onto every menu (spec §15.5) and is never offered on its
+    /** A variant follows its parent onto every menu and is never offered on its
      * own. */
     "menu_item.variant_not_allowed": { productId: string };
     /** A variant field is malformed or a submitted variant identity is duplicated. */
@@ -95,7 +95,7 @@ declare module "@waitron/shared" {
     /** A submitted variant identity is not a variant of the product or, in a menu's variant
      * overrides, not an Active one. */
     "product.variant_not_found": { variantId: string };
-    /** Not thrown: removing a variant makes it Inactive and is always allowed (spec §15.6). Kept
+    /** Not thrown: removing a variant makes it Inactive and is always allowed. Kept
      * because a shipped code is never removed. */
     "product.variant_in_use": { variantId: string; menuItemIds: string[] };
     /** A product is Inactive or Unavailable, or its menu path is disabled. */
@@ -115,7 +115,7 @@ declare module "@waitron/shared" {
     /** A product-editor field is missing or malformed. */
     "product.invalid": { field: string };
     "product.not_found": { productId: string };
-    /** Not thrown: a product may have one variant (spec §15.1). Kept because a shipped code is
+    /** Not thrown: a product may have one variant. Kept because a shipped code is
      * never removed. */
     "product.variant_count_invalid": { minimum: number };
     /** `memberId` names a member the section's list does not hold. */

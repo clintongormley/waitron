@@ -28,7 +28,6 @@ export async function loadBoxEnv(
   for (const [k, v] of Object.entries(base)) {
     // An empty value is unset (`env-value.ts`), so it never masks a file value: compose passes
     // the backup variables as `${VAR:-}`, which is "".
-    // Spec: 2026-09-09-backup-recovery-key-wizard-design.md §3.2.
     if (!isUnset(v)) merged[k] = v;
   }
   return merged;
