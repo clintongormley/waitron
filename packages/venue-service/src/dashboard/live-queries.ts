@@ -5,6 +5,7 @@ export const QUERY_DEPENDENCIES = {
     "zone_menus",
     "preparation_routes",
     "department_hours",
+    "service_settings",
     "catalogues",
     "categories",
     "kitchen_stations",

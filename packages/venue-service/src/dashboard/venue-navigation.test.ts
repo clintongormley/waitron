@@ -20,6 +20,7 @@ const model: VenueServiceView = {
   stations: [],
   floorZones: [],
   products: [],
+  settings: { editSentLines: true },
 };
 
 beforeEach(() => setLocale("en"));

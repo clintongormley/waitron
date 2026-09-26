@@ -958,3 +958,57 @@ describe("venue service management routes", () => {
     ).resolves.toMatchObject({ zoneId: fx.zoneId, departmentId: department.id });
   });
 });
+
+describe("the venue's service settings", () => {
+  const SETTINGS = "/management-api/venue-service/settings";
+  async function stored(fx: Fixture): Promise<unknown> {
+    return (
+      (await (
+        await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+      ).json()) as { settings: unknown }
+    ).settings;
+  }
+
+  it("allows changes to items already sent to the kitchen until a manager turns it off", async () => {
+    const fx = await fixture();
+    expect(await stored(fx)).toEqual({ editSentLines: true });
+    expect(
+      (await send(fx.app, "PUT", SETTINGS, fx.managerCookie, { editSentLines: false })).status,
+    ).toBe(204);
+    expect(await stored(fx)).toEqual({ editSentLines: false });
+    expect(
+      (await send(fx.app, "PUT", SETTINGS, fx.managerCookie, { editSentLines: true })).status,
+    ).toBe(204);
+    expect(await stored(fx)).toEqual({ editSentLines: true });
+  });
+
+  it("refuses a value that is not true or false, naming the field, and keeps the stored one", async () => {
+    const fx = await fixture();
+    expect(
+      (await send(fx.app, "PUT", SETTINGS, fx.managerCookie, { editSentLines: false })).status,
+    ).toBe(204);
+    for (const body of [
+      {},
+      { editSentLines: "true" },
+      { editSentLines: null },
+      { editSentLines: 1 },
+    ]) {
+      const rejected = await send(fx.app, "PUT", SETTINGS, fx.managerCookie, body);
+      expect(rejected.status).toBe(400);
+      expect(await rejected.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "editSentLines" } },
+      });
+    }
+    expect(await stored(fx)).toEqual({ editSentLines: false });
+  });
+
+  it("lets only a signed-in manager change it", async () => {
+    const fx = await fixture();
+    const body = { editSentLines: false };
+    expect((await send(fx.app, "PUT", SETTINGS, undefined, body)).status).toBe(401);
+    const refused = await send(fx.app, "PUT", SETTINGS, fx.staffCookie, body);
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    expect(await stored(fx)).toEqual({ editSentLines: true });
+  });
+});

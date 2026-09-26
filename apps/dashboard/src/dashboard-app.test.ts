@@ -2746,7 +2746,15 @@ describe("dashboard URL navigation", () => {
     });
     const request: DashboardRequest = async (path) =>
       (path === "/management-api/venue-service"
-        ? { departments: [], zones: [], routes: [], hours: [], zoneMenus: [], readiness: [] }
+        ? {
+            departments: [],
+            zones: [],
+            routes: [],
+            hours: [],
+            zoneMenus: [],
+            readiness: [],
+            settings: { editSentLines: true },
+          }
         : []) as never;
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request });
     await flush(el);
@@ -2802,7 +2810,15 @@ describe("dashboard URL navigation", () => {
     const getMe = vi.fn().mockRejectedValue({ code: "management_session.required" });
     const request: DashboardRequest = async (path) =>
       (path === "/management-api/venue-service"
-        ? { departments: [], zones: [], routes: [], hours: [], zoneMenus: [], readiness: [] }
+        ? {
+            departments: [],
+            zones: [],
+            routes: [],
+            hours: [],
+            zoneMenus: [],
+            readiness: [],
+            settings: { editSentLines: true },
+          }
         : []) as never;
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ getMe }),

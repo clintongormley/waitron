@@ -31,6 +31,7 @@ import {
   updatePreparationRoute,
   type PreparationRouteInput,
 } from "./operations.js";
+import { readEditSentLines, writeEditSentLines } from "./kitchen-notices.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import "./errors.js";
 
@@ -125,8 +126,22 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           hours: await listDepartmentHours(tx, ctx.cfg),
           zoneMenus: await listZoneMenuAssignments(tx, ctx.cfg),
           readiness: await listVenueReadiness(tx, ctx.cfg),
+          settings: { editSentLines: await readEditSentLines(tx) },
         }));
         return c.json(result);
+      }),
+    );
+
+    app.put("/management-api/venue-service/settings", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        const editSentLines = body.editSentLines;
+        if (typeof editSentLines !== "boolean") {
+          throw new AppError("management.request_invalid", { field: "editSentLines" });
+        }
+        await gated(sessionId, (tx) => writeEditSentLines(tx, editSentLines));
+        return c.body(null, 204);
       }),
     );
 

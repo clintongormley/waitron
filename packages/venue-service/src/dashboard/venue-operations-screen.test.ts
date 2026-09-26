@@ -79,6 +79,7 @@ const model: VenueServiceView = {
     { id: "z2", name: "Deli counter" },
   ],
   products: [{ id: "p1", name: "Negroni" }],
+  settings: { editSentLines: true },
 };
 
 async function mount(api: VenueServiceApi): Promise<VenueOperationsScreen> {
@@ -1001,4 +1002,138 @@ it("returns focus to the row that opened an editor, or to the tabs once that row
   await vi.waitFor(() => expect(column(el, "departments", 0)).toEqual(["Restaurant and bar"]));
   await action(el, "cancel-editor");
   expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("wt-tabs"));
+});
+
+describe("the setting that allows changes to items already sent to the kitchen", () => {
+  function kitchenSwitch(el: VenueOperationsScreen) {
+    const host = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      'wt-switch[name="editSentLines"]',
+    )!;
+    expect(host).not.toBeNull();
+    return { host, input: host.shadowRoot!.querySelector<HTMLInputElement>('[role="switch"]')! };
+  }
+  function beside(el: VenueOperationsScreen) {
+    return el.shadowRoot!.querySelector('[data-field-error="editSentLines"]')?.textContent?.trim();
+  }
+  function withSetting(editSentLines: boolean): VenueServiceView {
+    return { ...structuredClone(model), settings: { editSentLines } };
+  }
+
+  // Fails if the switch stops reading the stored value, or loses its label or hint.
+  it("shows the stored value on the Preparation routing tab, on by default", async () => {
+    const on = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    await selectTab(on, "routing");
+    const { host, input } = kitchenSwitch(on);
+    expect(host.closest('[slot="routing"]')).not.toBeNull();
+    expect(host.shadowRoot!.querySelector("label")!.textContent).toBe(
+      "Allow changes to items already sent to the kitchen",
+    );
+    expect(input.checked).toBe(true);
+    expect(
+      on.shadowRoot!.querySelector('[data-test="edit-sent-lines-hint"]')!.textContent,
+    ).toContain("cancel it instead");
+    const off = await mount({
+      load: vi.fn().mockResolvedValue(withSetting(false)),
+    } as unknown as VenueServiceApi);
+    expect(kitchenSwitch(off).input.checked).toBe(false);
+  });
+
+  // Fails if the switch sends the old value rather than the new one, or stays usable mid-save.
+  it("saves the chosen value straight away and is disabled until the save finishes", async () => {
+    let finish!: () => void;
+    const api = {
+      load: vi.fn().mockResolvedValueOnce(model).mockResolvedValue(withSetting(false)),
+      saveSettings: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "routing");
+    kitchenSwitch(el).input.click();
+    await settle(el);
+    expect(api.saveSettings).toHaveBeenCalledWith({ editSentLines: false });
+    expect(kitchenSwitch(el).host.disabled).toBe(true);
+    expect(kitchenSwitch(el).input.disabled).toBe(true);
+    finish();
+    await settle(el);
+    expect(api.load).toHaveBeenCalledTimes(2);
+    expect(kitchenSwitch(el).input.checked).toBe(false);
+    expect(kitchenSwitch(el).input.disabled).toBe(false);
+    expect(el.shadowRoot!.querySelector("wt-form-error-summary")!.shadowRoot!.textContent).toBe("");
+  });
+
+  // Fails if the in-flight guard goes: two changes arriving before the switch is disabled would
+  // both be sent.
+  it("sends one save for two changes that arrive before the switch is disabled", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      saveSettings: vi.fn(() => new Promise<void>(() => {})),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    const { host } = kitchenSwitch(el);
+    for (const checked of [false, true])
+      host.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { checked }, bubbles: true, composed: true }),
+      );
+    await settle(el);
+    expect(api.saveSettings).toHaveBeenCalledTimes(1);
+    expect(api.saveSettings).toHaveBeenCalledWith({ editSentLines: false });
+  });
+
+  // Fails if a refused save leaves the switch showing the value that was never stored, or says
+  // nothing.
+  it("says a refused save failed, beside the switch and in the summary, and shows the stored value again", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      saveSettings: vi.fn().mockRejectedValue(new Error("offline")),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "routing");
+    kitchenSwitch(el).input.click();
+    await settle(el);
+    expect(api.saveSettings).toHaveBeenCalledWith({ editSentLines: false });
+    expect(summary(el)).toContain("could not be saved");
+    expect(beside(el)).toContain("could not be saved");
+    expect(kitchenSwitch(el).input.checked).toBe(true);
+  });
+
+  // Fails if a refresh failing after a stored change is reported as a failed save, or the switch
+  // falls back to the value from before the save.
+  it("reports a failed refresh after a stored change as a load failure, and keeps the stored value", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValueOnce(model).mockRejectedValue(new Error("offline")),
+      saveSettings: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "routing");
+    kitchenSwitch(el).input.click();
+    await settle(el);
+    expect(api.load).toHaveBeenCalledTimes(2);
+    expect(summary(el)).toContain("could not be loaded");
+    expect(summary(el)).not.toContain("could not be saved");
+    expect(beside(el)).toBeUndefined();
+    expect(kitchenSwitch(el).input.checked).toBe(false);
+  });
+
+  // Fails if the screen's live query stops depending on the settings table.
+  it("follows a change another dashboard makes", async () => {
+    const liveData = new LiveData();
+    const load = vi.fn().mockResolvedValue(model);
+    const el = await mount({ load, liveData } as unknown as VenueServiceApi);
+    expect(kitchenSwitch(el).input.checked).toBe(true);
+    load.mockResolvedValue(withSetting(false));
+    liveData.invalidate([{ type: "service_settings" }]);
+    await vi.waitFor(() => expect(kitchenSwitch(el).input.checked).toBe(false));
+  });
+
+  // Fails if the Spanish catalogue loses the label.
+  it("reads in Spanish", async () => {
+    setLocale("es");
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    expect(kitchenSwitch(el).host.shadowRoot!.querySelector("label")!.textContent).toBe(
+      "Permitir cambios en los artículos ya enviados a cocina",
+    );
+  });
 });

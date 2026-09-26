@@ -3,6 +3,7 @@ import { QueryController, currentLocale } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
+import { live } from "lit/directives/live.js";
 import { codeOf } from "@waitron/dashboard-kit";
 import { resolveEnabledContentText } from "@waitron/shared";
 import {
@@ -95,6 +96,11 @@ export class VenueOperationsScreen extends LitElement {
       }
       wt-form-actions {
         width: 100%;
+      }
+      .hint {
+        margin: var(--wt-space-1) 0 0;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
       }
     `,
   ];
@@ -203,6 +209,21 @@ export class VenueOperationsScreen extends LitElement {
           : code === "department.has_active_zones"
             ? t("venue.department_has_zones")
             : t("venue.save_error");
+    } finally {
+      this.busy = false;
+    }
+  }
+  async #saveEditSentLines(editSentLines: boolean): Promise<void> {
+    if (this.busy) return;
+    this.busy = true;
+    this.error = undefined;
+    this.fieldErrors = {};
+    try {
+      await this.api.saveSettings({ editSentLines });
+      this.model = { ...this.model!, settings: { editSentLines } };
+      await this.#load();
+    } catch {
+      this.fieldErrors = { editSentLines: t("venue.save_error") };
     } finally {
       this.busy = false;
     }
@@ -621,6 +642,23 @@ export class VenueOperationsScreen extends LitElement {
       )}
     </section>`;
   }
+  #kitchenChanges() {
+    return html`<section data-test="kitchen-changes">
+      <h2>${t("venue.kitchen_changes")}</h2>
+      <wt-switch
+        name="editSentLines"
+        label=${t("venue.edit_sent_lines")}
+        .checked=${live(this.model!.settings.editSentLines)}
+        .disabled=${this.busy}
+        @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+          event.stopPropagation();
+          void this.#saveEditSentLines(event.detail.checked);
+        }}
+      ></wt-switch>
+      <p class="hint" data-test="edit-sent-lines-hint">${t("venue.edit_sent_lines_hint")}</p>
+      ${this.#fieldError("editSentLines")}
+    </section>`;
+  }
   #hours(departmentId: string, omit?: number) {
     return this.model!.hours.filter(
       (row, index) => row.departmentId === departmentId && index !== omit,
@@ -861,7 +899,7 @@ export class VenueOperationsScreen extends LitElement {
                 <div slot="status">${this.#readiness()}</div>
                 <div slot="departments">${this.#departments()}</div>
                 <div slot="zones">${this.#zones()}</div>
-                <div slot="routing">${this.#routing()}</div> </wt-tabs
+                <div slot="routing">${this.#routing()}${this.#kitchenChanges()}</div> </wt-tabs
               >${this.#modal()}`
           : nothing
       }`;
