@@ -5678,9 +5678,8 @@ environment, no usable held key). So a first status read that fails and a later 
 now gets a key, and a refresh never replaces a key the screen made. The watcher shares a pending key
 request with Apply and Rotate, and a failed status read's alert clears when a later one succeeds;
 the owner ruled that CLAUDE.md §3's observer rule protects the shown key, and it now says so.
-Starting Apply or Rotate no longer clears a failed status read's alert, so after an Apply that
-reuses the held key (which asks for no fresh status) it stays until the next timed status read —
-`getBackupStatus` refreshes every 10 seconds (`apps/dashboard/src/api/live-queries.ts`). Left
+Starting Apply or Rotate clears that alert too, as before #684, and a later failed status read
+raises it again (lane A's A54, 2026-09-26, the owner's choice). Left
 open: the panel picks its message from `managedByEnvironment` alone, so with a key hand-edited too
 short in `backup.env` it can name a button that does not help: with archives on it names a button
 that is not shown (the status reads the running settings' still-long key, and the form shows only

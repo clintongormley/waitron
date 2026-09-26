@@ -319,6 +319,7 @@ export class BackupScreen extends LitElement {
     const sendsKey = !this.#reusesHeldKey;
     if (this.#applyDisabled || (sendsKey && this.#pastedKeyTooShort())) return;
     this.errorKey = null;
+    this.refreshErrorKey = null;
     this.submitting = true;
     const body: BackupApplyBody = {
       destinationDir: this.destinationDir.trim(),
@@ -344,6 +345,7 @@ export class BackupScreen extends LitElement {
   async #rotate(): Promise<void> {
     if (this.#rotateDisabled || this.#pastedKeyTooShort()) return;
     this.errorKey = null;
+    this.refreshErrorKey = null;
     this.submitting = true;
     try {
       this.status = await this.api.rotateBackupKey({ recoveryKey: this.#effectiveKey });
