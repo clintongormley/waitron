@@ -2043,7 +2043,7 @@ describe("till-app table ordering: a split-off bill left unpaid goes back to its
         .mockResolvedValue({ deviceId: "tb1", formFactor: "tablet-landscape", stationId: null }),
       getTablesState: vi.fn().mockResolvedValue([openTable, otherTable, freeTable]),
       getTabLines: linesOf(),
-      openTab: vi.fn(() => new Promise((resolve) => (opened = resolve))),
+      seatTable: vi.fn(() => new Promise((resolve) => (opened = resolve))),
       mergeTabs: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
     });
     await logIn(el);
