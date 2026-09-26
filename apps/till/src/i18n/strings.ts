@@ -327,8 +327,6 @@ export const en = {
   "locale.save_failed": "Could not save your language, try again",
   "station.collect_error": "Could not mark the order collected, try again",
   "table.error": "Could not update the table, try again",
-  "table.payment_in_flight":
-    "A card payment for this order is in progress. Wait for it to finish before changing the order",
   "boot.error": "Could not load the till, reload to try again",
   // Menu and service-zone names are server data, not keys here.
   "menu.switcher": "Menu",
@@ -639,8 +637,6 @@ export const es: Record<StringKey, string> = {
   "locale.save_failed": "No se pudo guardar tu idioma, inténtalo de nuevo",
   "station.collect_error": "No se pudo marcar el pedido como entregado, inténtalo de nuevo",
   "table.error": "No se pudo actualizar la mesa, inténtalo de nuevo",
-  "table.payment_in_flight":
-    "Se está cobrando este pedido con tarjeta. Espera a que termine antes de cambiarlo",
   "boot.error": "No se pudo cargar la caja, recarga para reintentar",
   "menu.switcher": "Menú",
   "service_zone.label": "Zona de servicio",

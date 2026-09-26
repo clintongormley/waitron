@@ -115,12 +115,11 @@ const PERMANENT_SALE_REFUSALS = new Set([
   "fiscal.foreign_recipient_unsupported",
 ]);
 
-/** A table write refused because a card payment of the order is running says so; any other says
- * the generic `table.error`. */
-function tableWriteError(error: unknown): StringKey {
-  return (error as { code?: string } | undefined)?.code === "order.payment_in_flight"
-    ? "table.payment_in_flight"
-    : "table.error";
+/** A table write refused because a card payment of the order is running says so, in the words the
+ * counter uses; any other says the generic `table.error`. */
+function tableWriteError(error: unknown): CounterError {
+  const code = (error as { code?: string } | undefined)?.code;
+  return code === "order.payment_in_flight" ? { code } : "table.error";
 }
 
 /** Refusals the counter shows in their own words (`codeMessage`): each names what to do next, where

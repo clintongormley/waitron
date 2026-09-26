@@ -468,7 +468,9 @@ describe("till-app table ordering: refused and failed table actions", () => {
       emit(screen, type, detail);
       await flush(el);
 
-      expect(banner(el)!.textContent).toContain(t("table.payment_in_flight"));
+      expect(banner(el)!.textContent).toContain(
+        "Se está cobrando este pedido con tarjeta. Espera a que termine antes de cambiarlo",
+      );
       expect(banner(el)!.textContent).not.toContain("order.payment_in_flight");
     },
   );
