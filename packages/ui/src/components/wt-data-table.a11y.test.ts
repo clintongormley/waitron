@@ -1,5 +1,6 @@
 import { html } from "lit";
 import { afterEach, describe, expect, test } from "vitest";
+import { userEvent } from "vitest/browser";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
@@ -162,6 +163,43 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     search.dispatchEvent(new Event("input"));
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[role=status]")!.textContent).toContain("No users match");
+    await expectNoA11yViolations(host);
+  });
+
+  async function chooserTable(): Promise<WtDataTable<Row>> {
+    const el = (await mountThemed(
+      '<wt-data-table aria-label="Users"></wt-data-table>',
+      theme,
+    )) as WtDataTable<Row>;
+    el.columns = [
+      { key: "name", label: "Name", cell: (row) => row.name, choosable: "shown" },
+      { key: "status", label: "Status", cell: (row) => row.status, choosable: "shown" },
+      { key: "id", label: "Code", cell: (row) => row.id, choosable: "hidden" },
+    ] satisfies DataTableColumn<Row>[];
+    el.rows = [{ id: "1", name: "Ada", status: "Active" }];
+    el.rowKey = (row) => row.id;
+    el.columnsLabel = "Columns shown";
+    await el.updateComplete;
+    return el;
+  }
+
+  test("column chooser closed", async () => {
+    await chooserTable();
+    await expectNoA11yViolations(host);
+  });
+
+  test("column chooser open, with the last shown column's box disabled", async () => {
+    const el = await chooserTable();
+    const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(".columns-trigger")!;
+    await userEvent.click(trigger);
+    el.shadowRoot!.querySelector<HTMLInputElement>('input[data-column="status"]')!.click();
+    await el.updateComplete;
+    const panel = el.shadowRoot!.querySelector<HTMLElement>(".columns-panel")!;
+    expect(panel.matches(":popover-open")).toBe(true);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(
+      el.shadowRoot!.querySelector<HTMLInputElement>('input[data-column="name"]')!.disabled,
+    ).toBe(true);
     await expectNoA11yViolations(host);
   });
 });

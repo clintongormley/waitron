@@ -257,7 +257,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-help-tooltip` | `aria-label`; default slot | — |
 | `wt-tabs` | `items` (`{ key, label }[]`), `value`, `label`; named slots matching item keys | `wt-change` — `detail: { value: string }` |
 | `wt-row-actions` | `label`, `icon` (default `kebab`), `iconSize` (property; `wt-icon`'s `sm`\|`md`\|`lg`, default `md`), `align` (`start`\|`end`, default `start` — which trigger edge the popup lines up with; the popup's text starts at the start edge either way); default slot of action buttons; `badge` slot (drawn inside the trigger, in its top trailing corner); `part="popup"` (so a consumer can size the menu); methods `show()` and `hide()` open and close it from code | native events from actions |
-| `wt-data-table` | `rows`, `columns` (each has `cell` — `(row, { ancestorOnly }) => content` — and may carry `sortValue`, `searchValue` and a `filter` — `{ label, allLabel, value, options, initial }`, which draws a dropdown whether or not the table is `searchable`, and whose optional `initial` is the option value it starts on while no choice has been made or restored and the column's options include it), `rowKey`, `rowParent` (opts into tree mode), `collapseLabel`, `expandLabel`, `initiallyCollapsed`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label`, `selectable`, `selected`, `selectionLabel` (`(row) => string`), `selectAllLabel`, `sortKey`, `sortDirection`, `searchable`, `searchLabel`, `searchPlaceholder` (defaults to `searchLabel`), `noMatchesMessage`, `viewKey`, `rowClick` (`(row) => void` — on a plain (non-tree) table, makes each row clickable via a stretched activator button rendered in the first cell; ignored in tree mode), `rowClickLabel` (`(row) => string` — the activator's accessible name; defaults to `"Open row"`) | `wt-selection-change` — `detail: { selected: string[] }`; `wt-sort-change` — `detail: { sortKey, sortDirection }`; native events from consumer-provided cells |
+| `wt-data-table` | `rows`, `columns` (each has `cell` — `(row, { ancestorOnly }) => content` — and may carry `sortValue`, `searchValue` and a `filter` — `{ label, allLabel, value, options, initial }`, which draws a dropdown whether or not the table is `searchable`, and whose optional `initial` is the option value it starts on while no choice has been made or restored and the column's options include it; and `choosable` — `"shown"`\|`"hidden"` — which offers the column in the column chooser, starting shown or hidden), `rowKey`, `rowParent` (opts into tree mode), `collapseLabel`, `expandLabel`, `initiallyCollapsed`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label`, `selectable`, `selected`, `selectionLabel` (`(row) => string`), `selectAllLabel`, `sortKey`, `sortDirection`, `searchable`, `searchLabel`, `searchPlaceholder` (defaults to `searchLabel`), `noMatchesMessage`, `columnsLabel` (the column chooser's button text and its group's accessible name; defaults to `"Columns"`), `viewKey`, `rowClick` (`(row) => void` — on a plain (non-tree) table, makes each row clickable via a stretched activator button rendered in the first cell; ignored in tree mode), `rowClickLabel` (`(row) => string` — the activator's accessible name; defaults to `"Open row"`) | `wt-selection-change` — `detail: { selected: string[] }`; `wt-sort-change` — `detail: { sortKey, sortDirection }`; `wt-columns-change` — `detail: { shown: string[] }` (every shown column's key, in column order); native events from consumer-provided cells |
 | `wt-combobox` | `options` (`{value,label}[]`), `multiple`, `value`, `values`, `allowAdd`, `label`, `name`, `placeholder`, `required`, `disabled`, `invalid`, `error`, `countLabel`, `noResultsLabel`, `searchPlaceholder`, `addLabel` | `wt-change` — `detail: { value: string }` or `detail: { values: string[] }`; `wt-combobox-add` — `detail: { text: string }` |
 
 `wt-button shape="round"` renders a circular button of exactly `--wt-tap-min` diameter, meant for
@@ -309,7 +309,8 @@ the branch's own collapsed state.
 
 ### Remembered, searchable, filterable tables
 
-`wt-data-table` renders its own toolbar when `searchable` is set or any column carries a `filter`.
+`wt-data-table` renders its own toolbar when `searchable` is set or any column carries a `filter` or
+is `choosable`.
 The search box appears only when `searchable` is set; each column with a `filter` gets one native
 dropdown whether or not it is, and a row must pass every active filter and the search to show. The
 search box is named `search` and each dropdown `<column key>-filter`. The search box grows to fill
@@ -343,6 +344,19 @@ next has a non-empty list. So one `viewKey` can serve two layouts that show diff
 stored "all" does not wait: it is kept only while its column is rendered with a `filter` that names
 an `initial`, and otherwise cleared and the stored view rewritten without it, so a layout that
 leaves the column out forgets that "all" was chosen.
+
+A column marked `choosable` is offered in a column chooser the toolbar draws at its trailing end: a
+button reading `columnsLabel` that opens a panel of one labelled checkbox per choosable column, over
+the table rather than pushing it down. It closes on Escape, which returns focus to the button, and on
+a press outside it. A column without `choosable` is always shown and not offered. The last column
+still shown cannot be hidden — its checkbox is disabled — and if every column would be hidden, by
+the columns' defaults or by a stored choice, the first is shown. A hidden column keeps its filter dropdown, which keeps narrowing rows, and search
+still reads it; it stops sorting the rows while hidden, but `sortKey` still names it, so showing it
+again restores the sort. With a `viewKey`, the choice is remembered per browser in local storage
+under `<viewKey>:columns` as `{ [column key]: boolean }`, apart from the sort and filter memory in
+session storage. An entry applies only to a column that is choosable now, and one that is not `true`
+or `false` is ignored; blocked storage, malformed JSON or a stored list reads as nothing stored. A
+new `viewKey` restores the choice stored under it, or the defaults when there is none.
 
 In tree mode the table keeps a match's ancestor rows and tells each cell, via its second argument's
 `ancestorOnly`, whether the row is present only to hold a descendant's place — mute those with a
