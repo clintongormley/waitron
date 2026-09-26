@@ -787,9 +787,8 @@ describe("the sharded jobs", () => {
 
 /**
  * The stream loop and pause tests run in a job of their own, beside the apps/server shards: they
- * need two downloaded binaries, and the pause test spends minutes filling its side file. Their blob
- * joins the server's coverage merge. Read from ci.yml as TEXT, so a step an `if:` switches off
- * still passes.
+ * need two downloaded binaries. Their blob joins the server's coverage merge. Read from ci.yml as
+ * TEXT, so a step an `if:` switches off still passes.
  */
 describe("the stream loop and pause tests' own job", () => {
   const stream = () => job(STREAM_JOB);
@@ -802,10 +801,13 @@ describe("the stream loop and pause tests' own job", () => {
   });
 
   it("runs exactly those files, unsharded, after installing both binaries", () => {
-    const run = streamText().indexOf('pnpm --filter "@waitron/server" test:shard');
-    expect(run).toBeGreaterThan(-1);
+    expect(streamText()).toContain('pnpm --filter "@waitron/server" test:shard');
     const body = stream().body;
-    const step = body.slice(body.findIndex((line) => line.includes("test:shard")));
+    const start = body.findIndex(
+      (line) => !line.trim().startsWith("#") && line.includes("test:shard"),
+    );
+    expect(start).toBeGreaterThan(-1);
+    const step = body.slice(start);
     const args = step
       .slice(0, step.findIndex((line) => !line.trimEnd().endsWith("\\")) + 1)
       .join(" ");
@@ -813,9 +815,9 @@ describe("the stream loop and pause tests' own job", () => {
     expect(args.match(/\bsrc\/\S+\.test\.ts\b/g)).toHaveLength(STREAM_TEST_FILES.length);
     expect(args).not.toContain("--shard=");
     for (const installer of STREAM_BINARY_INSTALLERS) {
-      const at = streamText().indexOf(installer);
+      const at = body.findIndex((line) => line.includes(installer));
       expect(at, installer).toBeGreaterThan(-1);
-      expect(at, installer).toBeLessThan(run);
+      expect(at, installer).toBeLessThan(start);
     }
   });
 

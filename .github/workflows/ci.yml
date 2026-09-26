@@ -789,7 +789,7 @@ jobs:
   # They run the pinned Litestream against versitygw as child processes, and fail rather than skip
   # without them in CI, so only this job downloads the two binaries. Downloaded, not cached: the
   # Actions cache is at its budget (docs/developers/ci-and-gates.md). Its blob joins the shards' in
-  # test-server-merge, so the coverage gate still counts what these two tests reach.
+  # test-server-merge, so the coverage gate counts what these two tests reach.
   test-server-stream:
     timeout-minutes: 15
     needs: changes
@@ -815,6 +815,7 @@ jobs:
           node scripts/setup-litestream.mjs
           node scripts/setup-s3-test-server.mjs
 
+      # Not named "Run the … shard": scripts/ci-workflow.test.mjs would count @waitron/server twice.
       - name: Run the stream loop and pause tests
         run: |
           set -euo pipefail
@@ -835,8 +836,7 @@ jobs:
   # The coverage GATE for apps/server — the mirror of test-heavy-merge. The three test-server shards
   # and test-server-stream each emit a PARTIAL-coverage blob; this job merges them and enforces the
   # package's real thresholds on the TOTAL. No tests, no container — `vitest --merge-reports` replays
-  # from the blobs. It gates on the SAME `server` output as its shards. `ci` names this job, the
-  # test-server matrix and test-server-stream.
+  # from the blobs. It gates on the SAME `server` output as its shards.
   test-server-merge:
     timeout-minutes: 15
     needs: [changes, test-server, test-server-stream]

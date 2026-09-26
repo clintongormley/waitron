@@ -698,8 +698,9 @@ them ([testing-guide.md](testing-guide.md), "The stream loop test skips locally 
 binaries, and a skip reads as a pass"). That is about 13.5 MB of Litestream and 27.5 MB of versitygw
 for linux/amd64 (the release APIs' `size` fields, read 2026-09-25), from GitHub's release downloads,
 each checked against a pinned SHA-256. Run locally with `CI=true` on the owner's Mac (2026-09-26),
-that job's command took 72 seconds: the loop test 13 and the pause test 70. Guard:
-`scripts/ci-workflow.test.mjs`, which reads `ci.yml` as TEXT.
+that job's command took 72 seconds: the loop test 13 and the pause test 70, the two files running
+side by side (`apps/server/vitest.config.ts` sets `maxWorkers: 4`). Its time on CI has not been
+measured yet. Guard: `scripts/ci-workflow.test.mjs`, which reads `ci.yml` as TEXT.
 
 They are not cached. On 2026-09-25 `gh api repos/:owner/:repo/actions/cache/usage` reported
 11,174,362,480 bytes across 1,066 entries, and the plan's grouping of the entries on 2026-09-23 put
@@ -716,7 +717,7 @@ same for `scripts/setup-s3-test-server.mjs`, each printed `code=true`, `scope=pa
 scripts/changed-scope.mjs`, the `changes` job's gate step for that scope, printed `server=true` with
 every other gate false. `test-server`'s and `test-server-stream`'s `if:` ask for `code` and
 `server` both true. On `main` the `changes` job forces `scope=global`, whose gate step prints every gate true. That a real pull
-request then runs the shards has not been checked on CI. The cost, read from the jobs' `if:` lines
+request then runs the shards and `test-server-stream` has not been checked on CI. The cost, read from the jobs' `if:` lines
 in `.github/workflows/ci.yml`: on a pull request an installer change runs the three server shards,
 `test-server-stream`, `test-server-merge`, and `typecheck` and `bundle-smoke`, which ask for
 `code` alone; on its merge to `main` those two run again, the forced global scope runs every test job and `mutation-shared`, and

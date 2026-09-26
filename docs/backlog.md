@@ -6092,9 +6092,11 @@ line with what slice 2 built. Left open:
   two binaries, and a skip reads as a pass").
 - **DONE (2026-09-26, lane A's A34, #665): a change to
   `scripts/setup-litestream.mjs` or `scripts/setup-s3-test-server.mjs` alone now selects
-  `@waitron/server` and so its `test-server` shards.** Both are in `ROOT_SCOPE_CONSUMERS` against
-  `apps/server`, and `scripts/root-scope-consumers.test.mjs` accepts a script run in the ci.yml job
-  that tests a member ([ci-and-gates.md](developers/ci-and-gates.md)). Left open, found by A34:
+  `@waitron/server` and so its `test-server` shards.** (Since A48, also `test-server-stream`,
+  which now runs both installers.) Both are in
+  `ROOT_SCOPE_CONSUMERS` against `apps/server`, and `scripts/root-scope-consumers.test.mjs`
+  accepts a script run in the ci.yml job that tests a member
+  ([ci-and-gates.md](developers/ci-and-gates.md)). Left open, found by A34:
   `scripts/changed-packages.mjs runnable` runs before the tests in the jobs of nine packages
   (dashboard, setup, till, bookings, fiscal-verifactu, media, payments-stripe, payments-sumup,
   venue-service), in the two-filter ui/ui-core job, and in `test-light-a` and `test-light-b`, fed
@@ -6171,11 +6173,11 @@ line with what slice 2 built. Left open:
   its 180 s allowance, about 13 KB a sale, where a local run wrote about 79 KB a sale; why the
   growth per sale differs so much was not tested (Litestream's own checkpoints reusing the file is
   the guess), so if the test turns unreliable on CI that margin is where to look. It also took 133.8
-  s of the `test-server (3)` shard. **DONE (2026-09-26, lane A's A48): the loop and pause tests
-  run in `test-server-stream`, a job of their own beside the three `test-server` shards**, which
-  pass `--exclude` for both files; only that job installs the two binaries, and its coverage blob
-  joins `test-server-merge` ([ci-and-gates.md](developers/ci-and-gates.md), "The stream loop and
-  pause tests run in a job of their own"). (2) DONE by A44 for the deadline: a question given up at it logs
+  s of the `test-server (3)` shard; no shard pays that since lane A's A48 (2026-09-26): the loop
+  and pause tests run in `test-server-stream`, a job of their own beside the three `test-server`
+  shards, which pass `--exclude` for both files ([ci-and-gates.md](developers/ci-and-gates.md),
+  "The stream loop and pause tests run in a job of their own"). The growth-per-sale question stays
+  open. (2) DONE by A44 for the deadline: a question given up at it logs
   `stream.pause_check_failed` with `errorCode: "timeout"`, as the freshness read's deadline logs
   `stream.freshness_unreadable`; the pause case fails with the line removed, and a case stopped
   during the wait fails once the line no longer checks for a stop. Still open: a refused question
