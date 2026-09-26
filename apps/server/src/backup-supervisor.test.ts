@@ -1,6 +1,5 @@
 // The supervisor's lifecycle against a REAL migrated venue directory.
 import { chmod, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -414,7 +413,8 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       // The old sweep did store, under the old key, during the reload.
       const [archive] = await listArchives(dest);
       expect(archive).toBeDefined();
-      expect(() => decryptArtifact(readFileSync(join(dest, archive!)), STRONG_KEY_1)).not.toThrow();
+      const bytes = await readFile(join(dest, archive!));
+      expect(() => decryptArtifact(bytes, STRONG_KEY_1)).not.toThrow();
       expect(sup.current().keyFingerprint).toBe(keyFingerprint(STRONG_KEY_2));
       expect((await sup.status()).archiveUnderCurrentKey).toBe(false);
     } finally {

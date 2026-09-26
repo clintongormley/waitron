@@ -3061,11 +3061,12 @@ image constraints under *Detail → Box image*.
     (`backup-supervisor.ts`) is the first 8 hex characters of the recovery key's SHA-256, shown in
     the backup status, so anyone who can read the status can test a guessed key against it (Codex's
     probe matched one of three candidates); #656 deleted the comment calling it revealing nothing,
-    and the owner decided on 2026-09-25 to leave it as it is. DONE by
-    `fix/backup-stored-flag-old-sweep`: an archive the old sweep stored under the OLD key while
-    `reload()` waited for it to stop set `archiveUnderCurrentKey`, so the Backups screen said "Backup
-    under the current key: yes" before the new sweep had stored anything — reproduced in
-    `backup-supervisor.test.ts`, and the old sweep's `onStored` now does nothing once it is aborted.
+    and the owner decided on 2026-09-25 to leave it as it is. **Done (2026-09-26, lane A's A40,
+    branch `fix/backup-stored-flag-old-sweep`):** an archive the old sweep stored under the OLD key
+    while `reload()` waited for it to stop set `archiveUnderCurrentKey`, so the backup status
+    reported it true (the Backups screen shows "yes" beside "Backup under the current key") before
+    the new sweep had stored anything — reproduced at the supervisor in `backup-supervisor.test.ts`,
+    and the old sweep's `onStored` now does nothing once it is aborted.
   - Found by #653 (`apps/server` part c2: `boot.ts`, `boot.test.ts`, `config.ts`), outside its
     files or not fixable in a comments-only change. `apps/server/README.md` (near line 230, the
     `WAITRON_SKIP_RETRY_MS` row) says the sleep clamp can round a value "past" a bound, which it
