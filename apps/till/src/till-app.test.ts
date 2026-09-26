@@ -922,7 +922,9 @@ describe("till-app", () => {
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "dev-1", formFactor: "kds", stationId: "st-dev" }),
-      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+      getDeviceStation: vi
+        .fn()
+        .mockResolvedValue({ station: { id: "st-dev", queue: [], notices: [] } }),
     });
     await flush(el);
     expect(currentApi.getDeviceStation).toHaveBeenCalled();
@@ -1194,7 +1196,9 @@ describe("till-app", () => {
           formFactor: "kds",
           stationId: "st-dev",
         }),
-      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+      getDeviceStation: vi
+        .fn()
+        .mockResolvedValue({ station: { id: "st-dev", queue: [], notices: [] } }),
     });
     await flush(el);
     expect(enrolScreen(el)).not.toBeNull();
@@ -1221,7 +1225,9 @@ describe("till-app", () => {
         .fn()
         .mockResolvedValueOnce({ deviceId: "dev-1", formFactor: "kds", stationId: "st-dev" })
         .mockRejectedValue({ code: "device.unauthorized" }),
-      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+      getDeviceStation: vi
+        .fn()
+        .mockResolvedValue({ station: { id: "st-dev", queue: [], notices: [] } }),
     });
     await flush(el);
     expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(true);
@@ -1247,7 +1253,9 @@ describe("till-app", () => {
         .fn()
         .mockResolvedValueOnce({ deviceId: "dev-1", formFactor: "kds", stationId: "st-dev" })
         .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
-      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+      getDeviceStation: vi
+        .fn()
+        .mockResolvedValue({ station: { id: "st-dev", queue: [], notices: [] } }),
     });
     await flush(el);
     expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(true);
@@ -3267,7 +3275,9 @@ describe("till-app", () => {
         stationId: "st-1",
         tillId: null,
       }),
-      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-1", queue: [] } }),
+      getDeviceStation: vi
+        .fn()
+        .mockResolvedValue({ station: { id: "st-1", queue: [], notices: [] } }),
     });
     const { el } = await mountWidget<TillApp>("till-app", { api, sessionActivity: sa as never });
     await flush(el);
@@ -5956,7 +5966,9 @@ describe("till-app", () => {
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "dev-1", formFactor: "kds", stationId: "st-dev" }),
-        getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+        getDeviceStation: vi
+          .fn()
+          .mockResolvedValue({ station: { id: "st-dev", queue: [], notices: [] } }),
       });
       await flush(el);
       const s = shell(el)!;
@@ -5983,7 +5995,9 @@ describe("till-app", () => {
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "dev-1", formFactor: "kds", stationId: "st-dev" }),
-        getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+        getDeviceStation: vi
+          .fn()
+          .mockResolvedValue({ station: { id: "st-dev", queue: [], notices: [] } }),
       });
       await flush(hidden.el);
       const hiddenGrid = hidden.el.shadowRoot!.querySelector("till-card-grid")!;
@@ -5999,7 +6013,9 @@ describe("till-app", () => {
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "dev-1", formFactor: "kds", stationId: "st-dev" }),
-        getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+        getDeviceStation: vi
+          .fn()
+          .mockResolvedValue({ station: { id: "st-dev", queue: [], notices: [] } }),
       });
       await flush(shown.el);
       const shownGrid = shown.el.shadowRoot!.querySelector("till-card-grid")!;
@@ -6661,7 +6677,9 @@ describe("till-app", () => {
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "dev-1", formFactor: "kds", stationId: "st-dev" }),
-      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+      getDeviceStation: vi
+        .fn()
+        .mockResolvedValue({ station: { id: "st-dev", queue: [], notices: [] } }),
       putLocale,
     });
     await flush(el);
@@ -7238,7 +7256,9 @@ describe("persistent till destinations", () => {
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "d1", formFactor: "kds", stationId: "st-dev" }),
-      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+      getDeviceStation: vi
+        .fn()
+        .mockResolvedValue({ station: { id: "st-dev", queue: [], notices: [] } }),
     });
     await flush(el);
     expect(station(el)!.deviceMode).toBe(true);

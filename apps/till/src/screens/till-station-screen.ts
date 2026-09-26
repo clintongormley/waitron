@@ -8,6 +8,7 @@ import "../widgets/station-queue.js";
 import type { BumpMode, FireControlMode } from "../widgets/station-queue.js";
 import type {
   DeviceStation,
+  KitchenNotice,
   Station,
   StationQueueGroup,
   TicketState,
@@ -23,6 +24,9 @@ const ADVANCE_FROM: Record<Exclude<TicketState, "queued">, TicketState> = {
   preparing: "queued",
   ready: "preparing",
 };
+
+/** How often the screen re-reads its queue and notices (plan decision D11). */
+const REFRESH_MS = 15_000;
 
 /**
  * The TILL station-display screen: one station's queue. It fetches its own data and handles the queue
@@ -113,13 +117,22 @@ export class TillStationScreen extends LitElement {
   @state() private stations: Station[] = [];
   @state() private activeStationId?: string;
   @state() private groups: StationQueueGroup[] = [];
+  @state() private notices: KitchenNotice[] = [];
   @state() private view: "kanban" | "rail" = "kanban";
   /**
    * UNLIKE the advance/collect/fire levers, a failed reprint is not swallowed: it changes no order state,
    * so a reload reconciles nothing and a silent failure would leave the operator no feedback.
    */
   @state() private reprintErrorCode?: string;
+  @state() private acknowledgeFailed = false;
   #initialConsumed = false;
+  #refreshTimer?: ReturnType<typeof setInterval>;
+  #refreshing = false;
+  /**
+   * Notices this screen has acknowledged, filtered out of every answer until one arrives without them:
+   * a read that set out before the acknowledgement landed still lists the notice.
+   */
+  readonly #acknowledged = new Set<string>();
 
   #queueRequest = 0;
   // Preserve the requested ID until the station list can validate it.
@@ -161,6 +174,29 @@ export class TillStationScreen extends LitElement {
     } else {
       void this.#load();
     }
+    this.#refreshTimer = setInterval(() => void this.#refresh(), REFRESH_MS);
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    clearInterval(this.#refreshTimer);
+  }
+
+  /** Skips a tick while the previous refresh is still out, so requests never stack up. */
+  async #refresh(): Promise<void> {
+    if (this.#refreshing) return;
+    this.#refreshing = true;
+    try {
+      await (this.deviceMode ? this.#loadDevice() : this.#reload());
+    } finally {
+      this.#refreshing = false;
+    }
+  }
+
+  #adoptNotices(notices: KitchenNotice[]): void {
+    const listed = new Set(notices.map((notice) => notice.id));
+    for (const id of this.#acknowledged) if (!listed.has(id)) this.#acknowledged.delete(id);
+    this.notices = notices.filter((notice) => !this.#acknowledged.has(notice.id));
   }
 
   async #load(): Promise<void> {
@@ -183,15 +219,13 @@ export class TillStationScreen extends LitElement {
     // A one-shot, so a later re-connect fetches and never reuses a stale initial.
     if (this.initialDeviceStation !== undefined && !this.#initialConsumed) {
       this.#initialConsumed = true;
-      const { station } = this.initialDeviceStation;
-      this.activeStationId = station.id;
-      this.groups = station.queue;
+      this.#adoptDeviceStation(this.initialDeviceStation);
       return;
     }
+    const request = ++this.#queueRequest;
     try {
-      const { station } = await this.api.getDeviceStation();
-      this.activeStationId = station.id;
-      this.groups = station.queue;
+      const answer = await this.api.getDeviceStation();
+      if (request === this.#queueRequest) this.#adoptDeviceStation(answer);
     } catch (error) {
       if ((error as { code?: string }).code === "device.unauthorized") {
         this.dispatchEvent(
@@ -201,13 +235,19 @@ export class TillStationScreen extends LitElement {
     }
   }
 
-  /** Ignores operator responses superseded by a later request. */
+  #adoptDeviceStation({ station }: DeviceStation): void {
+    this.activeStationId = station.id;
+    this.groups = station.queue;
+    this.#adoptNotices(station.notices);
+  }
+
+  /** Ignores responses superseded by a later request. */
   async #reload(): Promise<void> {
     if (this.deviceMode) {
+      const request = ++this.#queueRequest;
       try {
-        const { station } = await this.api.getDeviceStation();
-        this.activeStationId = station.id;
-        this.groups = station.queue;
+        const answer = await this.api.getDeviceStation();
+        if (request === this.#queueRequest) this.#adoptDeviceStation(answer);
       } catch {
         // Non-fatal — leave the last-known queue.
       }
@@ -216,8 +256,11 @@ export class TillStationScreen extends LitElement {
     if (this.activeStationId === undefined) return;
     const request = ++this.#queueRequest;
     try {
-      const { items: groups } = await this.api.getStationQueue(this.activeStationId);
-      if (this.isConnected && request === this.#queueRequest) this.groups = groups;
+      const { items, notices } = await this.api.getStationQueue(this.activeStationId);
+      if (this.isConnected && request === this.#queueRequest) {
+        this.groups = items;
+        this.#adoptNotices(notices);
+      }
     } catch {
       // Non-fatal — leave the last-known queue; the next reload reconciles.
     }
@@ -225,7 +268,10 @@ export class TillStationScreen extends LitElement {
 
   async #selectStation(id: string, replace = false): Promise<void> {
     if (this.deviceMode) return;
-    if (this.activeStationId !== id) this.groups = [];
+    if (this.activeStationId !== id) {
+      this.groups = [];
+      this.notices = [];
+    }
     this.activeStationId = id;
     if (this.#ownsStationPath()) this.#url.write({ "till-station": id }, replace);
     await this.#reload();
@@ -314,6 +360,26 @@ export class TillStationScreen extends LitElement {
     }
   }
 
+  /** `kitchen_notice.not_found` means another screen at this station acknowledged it first: the
+   * notice is gone either way, so the row goes rather than an error showing. */
+  async #onAcknowledgeNotice(event: Event): Promise<void> {
+    event.stopPropagation();
+    const { noticeId } = (event as CustomEvent<{ noticeId: string }>).detail;
+    this.acknowledgeFailed = false;
+    try {
+      await (this.deviceMode
+        ? this.api.deviceAcknowledgeKitchenNotice(noticeId)
+        : this.api.acknowledgeKitchenNotice(noticeId));
+    } catch (error) {
+      if ((error as { code?: string }).code !== "kitchen_notice.not_found") {
+        this.acknowledgeFailed = true;
+        return;
+      }
+    }
+    this.#acknowledged.add(noticeId);
+    this.notices = this.notices.filter((notice) => notice.id !== noticeId);
+  }
+
   override render() {
     return this.deviceMode ? this.#renderDevice() : this.#renderOperator();
   }
@@ -339,6 +405,7 @@ export class TillStationScreen extends LitElement {
         @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
         @fire-course=${(event: Event) => void this.#onFireCourse(event)}
         @reprint-order=${(event: Event) => void this.#onReprintOrder(event)}
+        @acknowledge-notice=${(event: Event) => void this.#onAcknowledgeNotice(event)}
       >
         ${
           this.embedded
@@ -374,6 +441,11 @@ export class TillStationScreen extends LitElement {
             ? html`<p class="error" role="alert">${codeMessage(this.reprintErrorCode)}</p>`
             : nothing
         }
+        ${
+          this.acknowledgeFailed
+            ? html`<p class="error" role="alert">${t("station.acknowledge_error")}</p>`
+            : nothing
+        }
         ${opts.body}
       </section>
     `;
@@ -397,6 +469,7 @@ export class TillStationScreen extends LitElement {
   #queue(advanceOnly: boolean): TemplateResult {
     return html`<till-station-queue
       .groups=${this.groups}
+      .notices=${this.notices}
       .view=${this.view}
       .bumpMode=${this.bumpMode}
       .fireControl=${this.fireControl}

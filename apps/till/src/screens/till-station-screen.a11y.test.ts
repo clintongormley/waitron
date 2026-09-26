@@ -3,7 +3,7 @@ import type { StationThresholds } from "@waitron/shared";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./till-station-screen.js";
 import type { TillStationScreen } from "./till-station-screen.js";
-import type { Station, StationQueueGroup, TillApi } from "../api/client.js";
+import type { KitchenNotice, Station, StationQueueGroup, TillApi } from "../api/client.js";
 
 const stations: Station[] = [
   { id: "st-1", name: "Cocina", displayOrder: 0, isDefault: true, active: true },
@@ -97,6 +97,26 @@ async function flush(el: TillStationScreen): Promise<void> {
   await el.updateComplete;
 }
 
+const baseNotice: KitchenNotice = {
+  id: "kn-void",
+  stationId: "st-1",
+  workingOrderId: "wo-1",
+  orderLabel: "#5 · Mesa 4",
+  kind: "void",
+  lineName: "Burger",
+  quantity: "1.000",
+  note: null,
+  wasStarted: true,
+  movedTo: null,
+  createdAt: "2026-08-17T10:10:00.000Z",
+};
+const notices: KitchenNotice[] = [
+  baseNotice,
+  { ...baseNotice, id: "kn-recalled", kind: "recalled", wasStarted: false },
+  { ...baseNotice, id: "kn-changed", kind: "changed", wasStarted: false, note: "no onions" },
+  { ...baseNotice, id: "kn-moved", kind: "moved", wasStarted: false, movedTo: "Terraza 2" },
+];
+
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-station-screen a11y (%s theme)", (theme) => {
@@ -134,6 +154,35 @@ describe.each(["light", "dark"] as const)("till-station-screen a11y (%s theme)",
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations with a notice of each kind above the queue", async () => {
+    const { el, host } = await mountWidget<TillStationScreen>(
+      "till-station-screen",
+      { api: stubApi({ getStationQueue: vi.fn().mockResolvedValue({ items: groups, notices }) }) },
+      theme,
+    );
+    await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations while an Acknowledge failure is shown", async () => {
+    const { el, host } = await mountWidget<TillStationScreen>(
+      "till-station-screen",
+      {
+        api: stubApi({
+          getStationQueue: vi.fn().mockResolvedValue({ items: groups, notices }),
+          acknowledgeKitchenNotice: vi.fn().mockRejectedValue({ code: "server.internal" }),
+        }),
+      },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector("till-station-queue")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-acknowledge]")!
+      .click();
+    await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations with no stations configured", async () => {
     const { el, host } = await mountWidget<TillStationScreen>(
       "till-station-screen",
@@ -147,7 +196,9 @@ describe.each(["light", "dark"] as const)("till-station-screen a11y (%s theme)",
 
 function deviceStubApi(overrides: Record<string, unknown> = {}): TillApi {
   return {
-    getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: groups } }),
+    getDeviceStation: vi
+      .fn()
+      .mockResolvedValue({ station: { id: "st-dev", queue: groups, notices: [] } }),
     deviceAdvance: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as TillApi;
@@ -160,6 +211,20 @@ describe.each(["light", "dark"] as const)(
       const { el, host } = await mountWidget<TillStationScreen>(
         "till-station-screen",
         { api: deviceStubApi(), deviceMode: true },
+        theme,
+      );
+      await flush(el);
+      await expectNoA11yViolations(host);
+    });
+    it("has no violations with the bound station's notices above its queue", async () => {
+      const api = deviceStubApi({
+        getDeviceStation: vi
+          .fn()
+          .mockResolvedValue({ station: { id: "st-dev", queue: groups, notices } }),
+      });
+      const { el, host } = await mountWidget<TillStationScreen>(
+        "till-station-screen",
+        { api, deviceMode: true },
         theme,
       );
       await flush(el);
