@@ -6406,7 +6406,12 @@ line with what slice 2 built. Left open:
   with the refusal's code, and a refusal arriving after the deadline or a stop is not; the line
   carries the code only, so a refusal the bucket answered (403) and one that got no answer both read
   `backup.stream_request_failed` in it ([testing-guide.md](developers/testing-guide.md), "A bucket
-  question the pause is waiting on"). Left by #686: that a real bucket's 403 to this LISTING reads
+  question the pause is waiting on"). **DONE by lane A's A57 (2026-09-26):** that line, and the
+  supervisor's other lines for a bucket request that failed (`stream.open_failed`,
+  `stream.list_failed`, `stream.pointer_write_failed`, `stream.freshness_unreadable`,
+  `stream.prune_failed`), also carry the bucket's HTTP `status` when the bucket answered, and
+  nothing more when it did not; a deadline's `errorCode: "timeout"` line is unchanged, since no
+  answer arrived to have a status. Left by #686: that a real bucket's 403 to this LISTING reads
   that code was shown by reading `packages/stream/src/s3-store.ts` and by the test stand-in, not
   against a real bucket; and the case "refused while the run is stopping" catches a removed stop
   check only through the order two pending steps finish in, so re-run that removal if

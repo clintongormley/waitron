@@ -203,6 +203,19 @@ const replicateArgs = (configPath: string): string[] => ["replicate", "-config",
 
 const codeOf = (error: unknown): string => (isAppError(error) ? error.code : "unknown");
 
+type FailureFields = { errorCode: string; status?: number };
+
+/** A failure's code, and the bucket's HTTP status when the bucket answered it — a number, never its
+ * reply. */
+function failureFields(error: unknown): FailureFields {
+  const errorCode = codeOf(error);
+  if (isAppError(error) && hasCode(error, "backup.stream_request_failed")) {
+    const { status } = error.params;
+    if (status !== null) return { errorCode, status };
+  }
+  return { errorCode };
+}
+
 /**
  * `process.hrtime`'s clock in milliseconds. Node's documentation for it: "These times are relative
  * to an arbitrary time in the past, and not related to the time of day and therefore not subject to
@@ -464,7 +477,7 @@ export class StreamSupervisor {
         return generation;
       } catch (error) {
         if (signal.aborted) throw error;
-        this.#deps.log("warn", "stream.open_failed", { errorCode: codeOf(error) });
+        this.#deps.log("warn", "stream.open_failed", failureFields(error));
         await this.#stopChild();
         await moving.catch(() => undefined);
         await this.#sleep(OPEN_RETRY_MS, signal);
@@ -496,7 +509,7 @@ export class StreamSupervisor {
       try {
         listed = await this.#store.list(prefix);
       } catch (error) {
-        this.#deps.log("warn", "stream.list_failed", { errorCode: codeOf(error) });
+        this.#deps.log("warn", "stream.list_failed", failureFields(error));
       }
       signal.throwIfAborted();
       if (listed.some((object) => FULL_COPY.test(object.key.slice(prefix.length)))) {
@@ -541,7 +554,7 @@ export class StreamSupervisor {
       } catch (error) {
         signal.throwIfAborted();
         if (isPreconditionFailure(error)) return false;
-        this.#deps.log("warn", "stream.pointer_write_failed", { errorCode: codeOf(error) });
+        this.#deps.log("warn", "stream.pointer_write_failed", failureFields(error));
       }
       await this.#sleep(OPEN_RETRY_MS, signal);
     }
@@ -582,7 +595,7 @@ export class StreamSupervisor {
     const readBucket = () => {
       const now = this.#monotonic();
       if (reading !== undefined && now - reading.since < READ_DEADLINE_MS) return;
-      if (reading !== undefined) this.#noteUnreadable("timeout");
+      if (reading !== undefined) this.#noteUnreadable({ errorCode: "timeout" });
       const mine = { since: now };
       reading = mine;
       void this.#readBucket(generation, signal, () => reading === mine).finally(() => {
@@ -616,7 +629,7 @@ export class StreamSupervisor {
       this.#unreadableLoggedAt = null;
       this.#newestUploadAt = read.newest;
     } else {
-      this.#noteUnreadable(read.errorCode);
+      this.#noteUnreadable(read.failure);
     }
     this.#commits.settle(this.#lagWith(this.#newestUploadAt).coveredUpTo);
     const now = this.#monotonic();
@@ -634,7 +647,7 @@ export class StreamSupervisor {
    */
   async #newestUpload(
     generation: string,
-  ): Promise<{ ok: true; newest: Date | null } | { ok: false; errorCode: string }> {
+  ): Promise<{ ok: true; newest: Date | null } | { ok: false; failure: FailureFields }> {
     try {
       const { venueId } = this.#deps;
       let newest = await newestUpload(this.#store, venueId, generation, {
@@ -646,17 +659,17 @@ export class StreamSupervisor {
       }
       return { ok: true, newest };
     } catch (error) {
-      return { ok: false, errorCode: codeOf(error) };
+      return { ok: false, failure: failureFields(error) };
     }
   }
 
-  #noteUnreadable(errorCode: string): void {
+  #noteUnreadable(failure: FailureFields): void {
     const now = this.#monotonic();
     if (this.#unreadableLoggedAt !== null && now - this.#unreadableLoggedAt < CLASSIFY_EVERY_MS) {
       return;
     }
     this.#unreadableLoggedAt = now;
-    this.#deps.log("warn", "stream.freshness_unreadable", { errorCode });
+    this.#deps.log("warn", "stream.freshness_unreadable", failure);
   }
 
   #lagWith(newestUploadAt: Date | null): { lagMs: number; coveredUpTo: number | null } {
@@ -689,7 +702,7 @@ export class StreamSupervisor {
       const offset = await bucketClockOffset(this.#store, key, started.steady, ended.steady);
       if (offset !== null) this.#skewMs = offset;
     } catch (error) {
-      this.#deps.log("warn", "stream.freshness_unreadable", { errorCode: codeOf(error) });
+      this.#deps.log("warn", "stream.freshness_unreadable", failureFields(error));
     }
   }
 
@@ -799,7 +812,7 @@ export class StreamSupervisor {
         }
       })
       .catch((error: unknown) => {
-        this.#deps.log("warn", "stream.prune_failed", { errorCode: codeOf(error) });
+        this.#deps.log("warn", "stream.prune_failed", failureFields(error));
       })
       .finally(() => {
         this.#pruning = false;
@@ -883,7 +896,7 @@ export class StreamSupervisor {
           !noted.has("stream.pause_check_failed")
         ) {
           noted.add("stream.pause_check_failed");
-          this.#deps.log("warn", "stream.pause_check_failed", { errorCode: codeOf(error) });
+          this.#deps.log("warn", "stream.pause_check_failed", failureFields(error));
         }
         return false;
       }

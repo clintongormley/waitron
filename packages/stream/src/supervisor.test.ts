@@ -1372,7 +1372,7 @@ describe("while streaming", () => {
     const refusal = {
       level: "warn",
       event: "stream.pause_check_failed",
-      fields: { errorCode: "backup.stream_request_failed" },
+      fields: { errorCode: "backup.stream_request_failed", status: 403 },
     };
 
     h.store.denied = true;
@@ -1690,7 +1690,7 @@ describe("generation housekeeping", () => {
       expect(h.logs).toContainEqual({
         level: "warn",
         event: "stream.prune_failed",
-        fields: { errorCode: "backup.stream_request_failed" },
+        fields: { errorCode: "backup.stream_request_failed", status: 403 },
       }),
     );
     expect(h.supervisor.status().state).toBe("streaming");
@@ -2515,5 +2515,131 @@ describe("abortableSleep", () => {
     controller.abort();
     await long;
     await abortableSleep(60_000, controller.signal);
+  });
+});
+
+describe("a refusal the bucket answered is logged with its HTTP status", () => {
+  const refused = (operation: BucketOperation, key: string, status: number | null) =>
+    new AppError("backup.stream_request_failed", { operation, key, status, name: "Refused" });
+  const firstGeneration = generationName(2, NODE, new Date(START));
+
+  it.each([403, 500])("a question during the pause answered %i", async (status) => {
+    const h = await streaming();
+    const list = h.store.list.bind(h.store);
+    let questions = 0;
+    h.store.list = async (prefix) => {
+      if (prefix.endsWith("/0000/") && h.supervisor.status().state === "paused") {
+        questions += 1;
+        if (questions === 1) throw refused("list", prefix, status);
+      }
+      return list(prefix);
+    };
+    h.setWal(LIMIT);
+    await h.clock.until(() => h.supervisor.status().state === "streaming" && questions > 1);
+    expect(h.logs.filter((line) => line.event === "stream.pause_check_failed")).toEqual([
+      {
+        level: "warn",
+        event: "stream.pause_check_failed",
+        fields: { errorCode: "backup.stream_request_failed", status },
+      },
+    ]);
+  });
+
+  it("a question during the pause that got no answer says nothing more than its code", async () => {
+    const h = await streaming();
+    const list = h.store.list.bind(h.store);
+    let questions = 0;
+    h.store.list = async (prefix) => {
+      if (prefix.endsWith("/0000/") && h.supervisor.status().state === "paused") {
+        questions += 1;
+        if (questions === 1) throw refused("list", prefix, null);
+      }
+      return list(prefix);
+    };
+    h.setWal(LIMIT);
+    await h.clock.until(() => h.supervisor.status().state === "streaming" && questions > 1);
+    expect(h.logs.filter((line) => line.event === "stream.pause_check_failed")).toEqual([
+      {
+        level: "warn",
+        event: "stream.pause_check_failed",
+        fields: { errorCode: "backup.stream_request_failed" },
+      },
+    ]);
+  });
+
+  it("an opening the bucket refuses", async () => {
+    const h = await harness();
+    h.store.failNext({
+      operation: "put",
+      key: markerOf(firstGeneration),
+      error: refused("put", markerOf(firstGeneration), 500),
+    });
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    expect(h.logs).toContainEqual({
+      level: "warn",
+      event: "stream.open_failed",
+      fields: { errorCode: "backup.stream_request_failed", status: 500 },
+    });
+  });
+
+  it("a listing refused while waiting for the full copy", async () => {
+    const h = await harness();
+    const prefix = generationPrefix(VENUE, firstGeneration);
+    h.store.failNext({ operation: "list", key: prefix, error: refused("list", prefix, 503) });
+    await h.supervisor.start();
+    await h.clock.until(() => h.logs.some((line) => line.event === "stream.list_failed"));
+    expect(h.logs.find((line) => line.event === "stream.list_failed")?.fields).toEqual({
+      errorCode: "backup.stream_request_failed",
+      status: 503,
+    });
+  });
+
+  it("a pointer write the bucket refuses", async () => {
+    const h = await harness();
+    h.store.failNext({
+      operation: "put",
+      key: pointerKey(VENUE),
+      error: refused("put", pointerKey(VENUE), 403),
+    });
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    h.store.upload(fullCopyOf(h.supervisor.status().generation!));
+    await h.clock.until(() => h.supervisor.status().state === "streaming");
+    expect(h.logs).toContainEqual({
+      level: "warn",
+      event: "stream.pointer_write_failed",
+      fields: { errorCode: "backup.stream_request_failed", status: 403 },
+    });
+  });
+
+  it("a marker listing the bucket refuses", async () => {
+    const h = await harness();
+    h.store.failNext({
+      operation: "list",
+      key: markerOf(firstGeneration),
+      error: refused("list", markerOf(firstGeneration), 500),
+    });
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    expect(h.logs).toContainEqual({
+      level: "warn",
+      event: "stream.freshness_unreadable",
+      fields: { errorCode: "backup.stream_request_failed", status: 500 },
+    });
+  });
+
+  it("a freshness read the bucket refuses", async () => {
+    const h = await streaming();
+    h.store.denied = true;
+    h.commit();
+    await h.clock.next();
+    await vi.waitFor(() =>
+      expect(h.logs).toContainEqual({
+        level: "warn",
+        event: "stream.freshness_unreadable",
+        fields: { errorCode: "backup.stream_request_failed", status: 403 },
+      }),
+    );
   });
 });
