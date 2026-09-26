@@ -3514,8 +3514,22 @@ image constraints under *Detail → Box image*.
     standby** in its signed list of machines, as a serving secondary with the contact address it
     sent; nothing on the primary removes another node (`evictNode` in
     `packages/membership/src/standings.ts` is reached only through a fenced node retiring itself,
-    `apps/server/src/retire.ts`), so a cleanup needs a new primary API — the owner's call. The
-    installation number the primary reserved for it is burned by design
+    `apps/server/src/retire.ts`), so a cleanup needs a new primary API — the owner's call.
+    **Done for (1) (2026-09-26, lane A's A61):** the dashboard's Servers screen lets an admin
+    (`mirror.create`) on the serving primary remove a standby that never finished joining
+    (`apps/server/src/membership-removal.ts`, `POST /management-api/servers/:nodeId/remove`). The
+    node is marked `evicted` in a chart this node re-signs, not dropped, so a node absent from the
+    chart is never treated as unfenced; each removal writes an append-only `membership_removals`
+    row naming the admin, in the same transaction as the chart. A `mirror-bundle` request naming a
+    removed id is refused `mirror.standby_removed`. Still open: an `evicted` entry keeps its place
+    under `MAX_NODES` (below); "never finished joining" is read as `serving-secondary` with no
+    `nodes` row in the primary's database, and a remote standby writes that row in its own
+    database, so the check cannot see a remote standby that finished — none can today
+    (`finish-adoption.ts`); and, read not run, a removed node still holds the primary's endorsement
+    of its key, and `verifyMembershipDocument` (`packages/membership/src/verify.ts`) does not check
+    the signer's standing in any held chart. `apps/dashboard/src/screens/printers-screen.ts` uses
+    `--wt-font-size-xs`, a token that does not exist (the Servers screen copied it; fixed there
+    only). The installation number the primary reserved for it is burned by design
     (`reserveInstallationNumber`, `packages/fiscal-verifactu/src/registro-sif.ts`: "a
     never-promoted standby simply burns it — gaps are permitted"). (2) An adopt saved before this
     change carries no proof, so the reset refuses it (`password.invalid`). (3) The proof shows the
