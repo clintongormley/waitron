@@ -40,6 +40,8 @@ export class ReorderController implements ReactiveController {
   #announcement = "";
   /** The page's own inline cursor, put back when a drag ends. */
   #pageCursor = "";
+  /** Relies on the host keying its rows (`repeat` by id), so this element moves with the row. */
+  #draggedRow: Element | null = null;
 
   static readonly styles: CSSResult = css`
     .handle {
@@ -190,8 +192,8 @@ export class ReorderController implements ReactiveController {
     // Keep the press from selecting the row's text or starting the browser's own drag.
     event.preventDefault();
     this.#drag = { id, pointerId: event.pointerId };
-    // Relies on the host keying its rows (`repeat` by id), so the marked <tr> moves with the row.
-    (event.currentTarget as HTMLElement).closest("tr")?.setAttribute("data-dragging", "");
+    this.#draggedRow = (event.currentTarget as HTMLElement).closest("tr");
+    this.#draggedRow?.setAttribute("data-dragging", "");
     this.#pageCursor = document.body.style.cursor;
     document.body.style.cursor = "grabbing";
     document.addEventListener("pointermove", this.#onPointerMove);
@@ -219,9 +221,8 @@ export class ReorderController implements ReactiveController {
 
   #endDrag(): void {
     if (this.#drag !== null) document.body.style.cursor = this.#pageCursor;
-    for (const row of this.#host.shadowRoot?.querySelectorAll("tr[data-dragging]") ?? []) {
-      row.removeAttribute("data-dragging");
-    }
+    this.#draggedRow?.removeAttribute("data-dragging");
+    this.#draggedRow = null;
     this.#drag = null;
     this.#rowBounds = null;
     document.removeEventListener("pointermove", this.#onPointerMove);
