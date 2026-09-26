@@ -346,9 +346,10 @@ an `initial`, and otherwise cleared and the stored view rewritten without it, so
 leaves the column out forgets that "all" was chosen.
 
 A column marked `choosable` is offered in a column chooser the toolbar draws at its trailing end: a
-button reading `columnsLabel` that opens a panel of one labelled checkbox per choosable column, over
-the table rather than pushing it down. It closes on Escape, which returns focus to the button, and on
-a press outside it. A column without `choosable` is always shown and not offered. The last column
+button reading `columnsLabel` that opens a panel of one labelled checkbox per choosable column,
+each named `<column key>-column`, over the table rather than pushing it down. The panel opens inside
+the screen, and scrolls its choices when it is taller than the screen. It closes on Escape, which
+returns focus to the button, and on a press outside it. A column without `choosable` is always shown and not offered. The last column
 still shown cannot be hidden — its checkbox is disabled — and if every column would be hidden, by
 the columns' defaults or by a stored choice, the first is shown. A hidden column keeps its filter dropdown, which keeps narrowing rows, and search
 still reads it; it stops sorting the rows while hidden, but `sortKey` still names it, so showing it

@@ -9,6 +9,7 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   sessionStorage.clear();
+  localStorage.clear();
 });
 
 type Row = { id: string; name: string; count: number };
@@ -1779,8 +1780,6 @@ async function choose(el: AnyTable, key: string): Promise<void> {
   await el.updateComplete;
 }
 
-afterEach(() => localStorage.clear());
-
 test("no column chooser is drawn when no column is choosable", async () => {
   const el = await table({ searchable: true });
   expect(el.shadowRoot!.querySelector(".columns-trigger")).toBeNull();
@@ -2259,6 +2258,49 @@ test("a chooser near the screen's trailing edge holds its panel 8px inside it", 
   el.style.width = "300px";
   await userEvent.click(trigger(el));
   expect(panel(el).getBoundingClientRect().right).toBeCloseTo(innerWidth - 8, 0);
+});
+
+function manyChoosable(count: number): DataTableColumn<Row>[] {
+  return [
+    choosable[0]!,
+    ...Array.from({ length: count }, (_, index) => ({
+      key: `extra${index}`,
+      label: `Extra ${index}`,
+      cell: (row: Row) => `${row.id}${index}`,
+      choosable: "shown" as const,
+    })),
+  ];
+}
+
+test("a chooser near the screen's bottom edge holds its panel 8px inside it", async () => {
+  const el = await table({ columns: manyChoosable(7) });
+  el.style.position = "fixed";
+  el.style.insetInlineStart = "0";
+  el.style.insetBlockEnd = "0";
+  el.style.width = "300px";
+  await userEvent.click(trigger(el));
+  const bounds = panel(el).getBoundingClientRect();
+  expect(bounds.bottom).toBeCloseTo(innerHeight - 8, 0);
+  expect(bounds.top).toBeLessThan(trigger(el).getBoundingClientRect().bottom);
+});
+
+test("a chooser panel taller than the screen stays 8px inside it and scrolls its choices", async () => {
+  const el = await table({ columns: manyChoosable(40) });
+  el.style.position = "fixed";
+  el.style.insetInlineStart = "0";
+  el.style.insetBlockStart = "0";
+  el.style.width = "300px";
+  await userEvent.click(trigger(el));
+  const popup = panel(el);
+  const bounds = popup.getBoundingClientRect();
+  expect(bounds.top).toBeCloseTo(8, 0);
+  expect(bounds.bottom).toBeCloseTo(innerHeight - 8, 0);
+  expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
+  popup.scrollTop = popup.scrollHeight;
+  const last = chooserBox(el, "extra39");
+  const lastBounds = last.getBoundingClientRect();
+  expect(lastBounds.top).toBeGreaterThanOrEqual(bounds.top);
+  expect(lastBounds.bottom).toBeLessThanOrEqual(bounds.bottom);
 });
 
 test("the chooser's button and panel paint from the theme tokens", async () => {

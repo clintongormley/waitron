@@ -98,10 +98,10 @@ const spanText = ({ low, high, lowCents, highCents }: Span): string =>
 const muted = (content: unknown) => html`<span part="muted">${content}</span>`;
 
 /**
- * One menu's prices, a row per product the menu reaches, and the window that edits one product's
- * settings on the menu: its price there, the menu's own switch, and each variant's price and
- * whether it is offered. The host performs the writes, opening and closing the window through
- * `editing` and reporting a refusal through `refusal`.
+ * One menu's prices, a row per product the menu reaches with its Active variants under it, and the
+ * window that edits one product's settings on the menu: its price there, the menu's own switch, and
+ * each variant's price and whether it is offered. The host performs the writes, opening and
+ * closing the window through `editing` and reporting a refusal through `refusal`.
  */
 @customElement("dashboard-menu-prices-table")
 export class MenuPricesTable extends LitElement {
@@ -693,10 +693,7 @@ export class MenuPricesTable extends LitElement {
         .rowParent=${({ item, variant }: Line) => (variant ? item.menuItemId : null)}
         initiallyCollapsed
         .rowToggleLabel=${({ item }: Line, expanded: boolean) =>
-          t(expanded ? "menu_prices.hide_variants" : "menu_prices.show_variants").replace(
-            "{name}",
-            item.name,
-          )}
+          t(expanded ? "menu_prices.collapse" : "menu_prices.expand").replace("{name}", item.name)}
         .loading=${this.loading}
         loadingMessage=${t("menu_prices.loading")}
         errorMessage=${this.failed ? t("menu_prices.error") : ""}

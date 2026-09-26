@@ -222,6 +222,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
       .columns-panel {
         position: fixed;
         margin: 0;
+        /* #toggleChooser keeps this same gutter above and below the panel. */
+        max-height: calc(100dvh - 2 * var(--wt-space-2));
+        overflow-y: auto;
         padding: var(--wt-space-2);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
@@ -460,12 +463,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
       return;
     }
     this.chooserPanel.showPopover();
-    // Placed synchronously after opening, so its first paint is already under the button.
+    // Placed synchronously after opening, so its first paint is already in place.
     const anchor = this.chooserTrigger.getBoundingClientRect();
     const box = this.chooserPanel.getBoundingClientRect();
     const left = Math.max(8, Math.min(anchor.right - box.width, innerWidth - box.width - 8));
     this.chooserPanel.style.left = `${left}px`;
-    this.chooserPanel.style.top = `${anchor.bottom}px`;
+    const top = Math.max(8, Math.min(anchor.bottom, innerHeight - box.height - 8));
+    this.chooserPanel.style.top = `${top}px`;
   }
 
   #chooserKeydown(event: KeyboardEvent): void {
