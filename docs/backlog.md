@@ -2723,7 +2723,8 @@ image constraints under *Detail → Box image*.
 
 - **Upgrade testing — blocking before go-live (owner, 2026-09-26).** On 2026-09-26 the box could not
   start after an upgrade: core `0013` dropped a column the change feed's trigger named, which no test
-  could see because every suite migrated a fresh database. `scripts/migration-upgrade.test.ts` now
+  could see because every suite migrated a fresh database. #692 removes the change feed before
+  migrating, and its `scripts/migration-upgrade.test.ts`
   walks one database through every shipped migration in date order, with the change feed installed
   between steps. What it still does not cover, each needed before a real venue is live:
   - **Rows.** Its tables are empty, so a migration that fails only on data passes — a new
