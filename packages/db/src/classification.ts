@@ -35,6 +35,11 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "ledger",
     "who removed which machine from the membership chart, and at which term; an audit row is never corrected",
   ),
+  appendOnly(
+    "membership_clearances",
+    "ledger",
+    "who cleared which removed machine from the membership chart, and at which term; an audit row is never corrected",
+  ),
 
   // state — manager configuration and live service; copied to a standby, never drained back.
   classify(

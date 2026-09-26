@@ -120,6 +120,13 @@
       "when": 1790444340055,
       "tag": "0016_membership_removals",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1790448136388,
+      "tag": "0017_membership_clearances",
+      "breakpoints": true
     }
   ]
 }
