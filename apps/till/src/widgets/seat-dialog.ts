@@ -3,14 +3,12 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-input.js";
+import { MAX_GUEST_COUNT } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 
 export interface SeatConfirmDetail {
   guestCount: number | null;
 }
-
-/** The seat route's own bound (`MAX_GUEST_COUNT` in `apps/server/src/till-api.ts`). */
-const MAX_GUEST_COUNT = 999;
 
 /** A blank field records no count; anything else must be a whole number from 1. */
 function parseGuestCount(value: string): { guestCount: number | null } | undefined {

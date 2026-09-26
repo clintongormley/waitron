@@ -312,20 +312,6 @@ describe("GET /api/visits/:id/bills", () => {
   });
 });
 
-describe("POST /api/tables/:id/tab", () => {
-  it("seats the party through a visit opened by the signed-in operator", async () => {
-    const tableId = await table();
-    const res = await post(`/api/tables/${tableId}/tab`, {});
-    expect(res.status).toBe(200);
-    const { tabId, visitId } = (await res.json()) as { tabId: string; visitId: string };
-    expect(await visitRow(visitId)).toMatchObject({ openedBy: ana.id, guestCount: null });
-    const [tab] = await withTransaction(suite.db, (tx) =>
-      tx.select().from(workingOrders).where(eq(workingOrders.id, tabId)),
-    );
-    expect(tab!.visitId).toBe(visitId);
-  });
-});
-
 describe("the tab routes carry the party's revision", () => {
   async function current(visitId: string): Promise<number> {
     return (await visitRow(visitId)).revision;

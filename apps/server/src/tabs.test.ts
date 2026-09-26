@@ -884,9 +884,7 @@ describe("listTablesWithState (occupancy)", () => {
     const paid = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
     expect(paid[0]).toMatchObject({ state: "open-tab", hasOpenTab: false });
 
-    await asApp(cfg, (tx) =>
-      finishTable(tx, cfg, { visitId, expectedVisitRevision: 0, operatorId }),
-    );
+    await asApp(cfg, (tx) => finishTable(tx, { visitId, expectedVisitRevision: 0, operatorId }));
     const freed = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
     expect(freed[0]).toMatchObject({ state: "free", hasOpenTab: false, visit: null });
   });

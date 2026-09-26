@@ -777,7 +777,7 @@ export async function createOpenOrder(
   } & LineExtras)[],
   label: string | null,
   // A tab's table link is `dining_tables.tab_id`, not `deliveryTableId`, so openTab passes none.
-  placement: { deliveryTableId?: string | null; zoneId?: string } = {},
+  placement: { deliveryTableId?: string | null; zoneId?: string; visitId?: string | null } = {},
 ): Promise<{
   orderNumber: number;
   priced: PricedBasket;
@@ -818,6 +818,7 @@ export async function createOpenOrder(
     status: "open",
     // Not a fiscal field.
     deliveryTableId,
+    visitId: placement.visitId ?? null,
   });
 
   // An empty tab has no lines, and `tx.insert(...).values([])` throws.
@@ -883,6 +884,7 @@ export async function openTab(
   req: {
     tableId: string;
     lines?: { menuItemId: string; quantity: string }[];
+    visitId?: string;
   },
 ): Promise<{ tabId: string; orderNumber: number }> {
   const [table] = await tx
@@ -924,6 +926,7 @@ export async function openTab(
   const tabId = randomUUID();
   const { orderNumber } = await createOpenOrder(tx, cfg, tabId, req.lines ?? [], null, {
     zoneId: table.zoneId ?? undefined,
+    visitId: req.visitId,
   });
   // Also clears any stale manual status as the new tab opens.
   await tx
@@ -1607,12 +1610,8 @@ async function openNextPartyTab(
     return null;
   }
   const nextTabId = randomUUID();
-  await createOpenOrder(tx, cfg, nextTabId, [], null);
+  await createOpenOrder(tx, cfg, nextTabId, [], null, { visitId: party.visitId });
   await VENUE_SERVICE.copyOrderContext(tx, cfg, tabId, nextTabId);
-  await tx
-    .update(workingOrders)
-    .set({ visitId: party.visitId })
-    .where(eq(workingOrders.id, nextTabId));
   await tx
     .update(diningTables)
     .set({ tabId: nextTabId })
@@ -1642,10 +1641,12 @@ async function closedPartyTab(
   const pointed = await tx
     .select({ id: diningTables.id })
     .from(diningTables)
+    .innerJoin(visitTables, eq(visitTables.tableId, diningTables.id))
     .where(
       and(
         eq(diningTables.tabId, tabId),
-        inArray(diningTables.id, await memberTables(tx, order.visitId)),
+        eq(visitTables.visitId, order.visitId),
+        isNull(visitTables.leftAt),
       ),
     );
   return pointed.length === 0
@@ -2393,26 +2394,10 @@ export async function mergeTabs(
       );
   }
 
-  if (options.freeSourceTable) {
-    await freeTablesCoveredBy(tx, cfg, fromTabId);
-    if (sourceTables.length > 0) {
-      await tx
-        .update(diningTables)
-        .set({ tabId: null, statusId: null })
-        .where(inArray(diningTables.id, sourceTables));
-    }
-  } else {
-    await tx
-      .update(diningTables)
-      .set({ tabId: intoTabId })
-      .where(eq(diningTables.tabId, fromTabId));
-    if (sourceTables.length > 0) {
-      await tx
-        .update(diningTables)
-        .set({ tabId: intoTabId })
-        .where(inArray(diningTables.id, sourceTables));
-    }
-  }
+  await tx
+    .update(diningTables)
+    .set(options.freeSourceTable ? { tabId: null, statusId: null } : { tabId: intoTabId })
+    .where(or(eq(diningTables.tabId, fromTabId), inArray(diningTables.id, sourceTables)));
 
   await tx
     .update(workingOrders)
@@ -2757,8 +2742,7 @@ export async function splitOffCheck(
 
   const { orderLabel } = await readReceiptOrder(tx, cfg, fromTabId);
   const checkId = randomUUID();
-  await createOpenOrder(tx, cfg, checkId, [], orderLabel);
-  await tx.update(workingOrders).set({ visitId }).where(eq(workingOrders.id, checkId));
+  await createOpenOrder(tx, cfg, checkId, [], orderLabel, { visitId });
   // The check takes the origin's service mode (or, like it, has none), so `carveOffLines` needs no
   // mode check on this path.
   await VENUE_SERVICE.copyOrderContext(tx, cfg, fromTabId, checkId);
@@ -2819,14 +2803,7 @@ export async function unjoinTable(
     throw new AppError("table.not_shared", { tableId, tabId });
   }
 
-  // Repointed before the move, so `newTabId` is a tab when `carveBetweenTabs` checks it.
-  const newTabId = randomUUID();
-  await createOpenOrder(tx, cfg, newTabId, [], null);
-  await VENUE_SERVICE.copyOrderContext(tx, cfg, tabId, newTabId);
-  if (table.zoneId !== null && (await VENUE_SERVICE.findOrderContext(tx, cfg, newTabId)) !== null) {
-    await VENUE_SERVICE.retargetOrderContext(tx, cfg, newTabId, table.zoneId);
-  }
-  await tx.update(diningTables).set({ tabId: newTabId }).where(eq(diningTables.id, tableId));
+  let newVisitId: string | null = null;
   if (visitId !== null) {
     // `guardVisits` has refused a party's tab sent without a command.
     await leaveTables(tx, [tableId]);
@@ -2835,11 +2812,16 @@ export async function unjoinTable(
       operatorId: command!.operatorId,
       tableId,
     });
-    await tx
-      .update(workingOrders)
-      .set({ visitId: opened.visitId })
-      .where(eq(workingOrders.id, newTabId));
+    newVisitId = opened.visitId;
   }
+  // Repointed before the move, so `newTabId` is a tab when `carveBetweenTabs` checks it.
+  const newTabId = randomUUID();
+  await createOpenOrder(tx, cfg, newTabId, [], null, { visitId: newVisitId });
+  await VENUE_SERVICE.copyOrderContext(tx, cfg, tabId, newTabId);
+  if (table.zoneId !== null && (await VENUE_SERVICE.findOrderContext(tx, cfg, newTabId)) !== null) {
+    await VENUE_SERVICE.retargetOrderContext(tx, cfg, newTabId, table.zoneId);
+  }
+  await tx.update(diningTables).set({ tabId: newTabId }).where(eq(diningTables.id, tableId));
   // Read after the repoint, so the kitchen is told of every sent item the unjoin takes: a joined
   // tab's slips name its lowest-id table (`readOrderHeader`), which need not be the one its tickets
   // printed before the join.

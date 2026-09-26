@@ -2772,7 +2772,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
 
     // Open a tab with TWO lines. `priceBasket` maps items 1:1 (it does NOT merge by product), so two
     // lines of the one seeded product become line_no 1 and 2 — pendingToServe starts at 2.
-    const tabRes = await app.request(`/api/tables/${tableId}/tab`, {
+    const tabRes = await app.request(`/api/tables/${tableId}/seat`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({
@@ -2885,7 +2885,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       body: JSON.stringify({ label: "served-bad-lineno", zoneId: tab.zoneId }),
     });
     const { id: tableId } = (await tableRes.json()) as { id: string };
-    const tabRes = await app.request(`/api/tables/${tableId}/tab`, {
+    const tabRes = await app.request(`/api/tables/${tableId}/seat`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({ lines: [{ menuItemId: tab.aguaOffer, quantity: "1" }] }),
@@ -2917,7 +2917,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       body: JSON.stringify({ label: "served-99", zoneId: tab.zoneId }),
     });
     const { id: tableId } = (await tableRes.json()) as { id: string };
-    const tabRes = await app.request(`/api/tables/${tableId}/tab`, {
+    const tabRes = await app.request(`/api/tables/${tableId}/seat`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({ lines: [{ menuItemId: tab.aguaOffer, quantity: "1" }] }),
@@ -3576,7 +3576,7 @@ describe("canonical modifier HTTP serialization", () => {
     expect(table.status).toBe(200);
     const { id: tableId } = (await table.json()) as { id: string };
     const line = { menuItemId: f.offer.id, quantity: "1", ...f.answers };
-    const opened = await f.app.request(`/api/tables/${tableId}/tab`, {
+    const opened = await f.app.request(`/api/tables/${tableId}/seat`, {
       method: "POST",
       headers: f.headers,
       body: JSON.stringify({ lines: [line] }),

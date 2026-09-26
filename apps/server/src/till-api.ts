@@ -2,7 +2,7 @@ import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq } from "drizzle-orm";
-import { AppError, isAppError, SUPPORTED_LOCALES } from "@waitron/shared";
+import { AppError, isAppError, MAX_GUEST_COUNT, SUPPORTED_LOCALES } from "@waitron/shared";
 import type { FloorAnnotator } from "@waitron/module";
 import { locations, readNodeMembership, readTenant, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -361,10 +361,16 @@ function requireTabParam(id: string): string {
   return id;
 }
 
-/** An order's revision as a body carries it: a whole number from 0, else `management.request_invalid`. */
-function requireRevision(value: unknown): number {
+/**
+ * A revision as a body carries it, an order's or a visit's: a whole number from 0, else
+ * `management.request_invalid` naming `field`.
+ */
+function requireRevision(
+  value: unknown,
+  field: "revision" | "expectedVisitRevision" | "expectedSourceVisitRevision" = "revision",
+): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
-    throw new AppError("management.request_invalid", { field: "revision" });
+    throw new AppError("management.request_invalid", { field });
   }
   return value;
 }
@@ -376,9 +382,6 @@ function requireVisitParam(id: string): string {
   }
   return id;
 }
-
-/** The largest party one seating records; a bigger number is a mistyped count. */
-const MAX_GUEST_COUNT = 999;
 
 /** An optional guest count: absent or null records none, otherwise a whole number from 1. */
 function requireGuestCount(value: unknown): number | null {
@@ -394,17 +397,6 @@ function requireGuestCount(value: unknown): number | null {
   return value;
 }
 
-/** A visit revision as a body carries it: a whole number from 0. */
-function requireVisitRevision(
-  value: unknown,
-  field: "expectedVisitRevision" | "expectedSourceVisitRevision" = "expectedVisitRevision",
-): number {
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
-    throw new AppError("management.request_invalid", { field });
-  }
-  return value;
-}
-
 /**
  * A tab route's visit revisions and the acting person. A revision may be absent here: the verb
  * refuses its absence only where the tab belongs to a party.
@@ -416,10 +408,13 @@ function visitCommand(
 ): VisitCommand {
   const command: VisitCommand = { operatorId: personId };
   if (body.expectedVisitRevision !== undefined) {
-    command.expectedVisitRevision = requireVisitRevision(body.expectedVisitRevision);
+    command.expectedVisitRevision = requireRevision(
+      body.expectedVisitRevision,
+      "expectedVisitRevision",
+    );
   }
   if (crossesVisits && body.expectedSourceVisitRevision !== undefined) {
-    command.expectedSourceVisitRevision = requireVisitRevision(
+    command.expectedSourceVisitRevision = requireRevision(
       body.expectedSourceVisitRevision,
       "expectedSourceVisitRevision",
     );
@@ -1274,36 +1269,23 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // The seat route without a guest count, which the till used before it had one.
-  app.post("/api/tables/:id/tab", (c) =>
-    run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
-      const id = c.req.param("id");
-      if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      const body = await readJsonBody<{
-        lines?: { menuItemId: string; quantity: string }[];
-      }>(c);
-      const result = await withTransaction(deps.db, async (tx) => {
-        return seatTable(tx, deps.cfg, {
-          tableId: id,
-          guestCount: null,
-          operatorId: personId,
-          lines: body.lines,
-        });
-      });
-      return c.json(result);
-    }),
-  );
-
   app.post("/api/tables/:id/seat", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      const body = await readJsonBody<{ guestCount?: unknown }>(c);
+      const body = await readJsonBody<{
+        guestCount?: unknown;
+        lines?: { menuItemId: string; quantity: string }[];
+      }>(c);
       const guestCount = requireGuestCount(body.guestCount);
       const result = await withTransaction(deps.db, async (tx) => {
-        return seatTable(tx, deps.cfg, { tableId: id, guestCount, operatorId: personId });
+        return seatTable(tx, deps.cfg, {
+          tableId: id,
+          guestCount,
+          operatorId: personId,
+          lines: body.lines,
+        });
       });
       return c.json(result);
     }),
@@ -1314,9 +1296,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId } = await requireSession(deps, c);
       const visitId = requireVisitParam(c.req.param("id"));
       const body = await readJsonBody<{ expectedVisitRevision?: unknown }>(c);
-      const expectedVisitRevision = requireVisitRevision(body.expectedVisitRevision);
+      const expectedVisitRevision = requireRevision(
+        body.expectedVisitRevision,
+        "expectedVisitRevision",
+      );
       const result = await withTransaction(deps.db, async (tx) => {
-        return finishTable(tx, deps.cfg, { visitId, expectedVisitRevision, operatorId: personId });
+        return finishTable(tx, { visitId, expectedVisitRevision, operatorId: personId });
       });
       return c.json(result);
     }),
@@ -1327,9 +1312,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const visitId = requireVisitParam(c.req.param("id"));
       const body = await readJsonBody<{ expectedVisitRevision?: unknown }>(c);
-      const expectedVisitRevision = requireVisitRevision(body.expectedVisitRevision);
+      const expectedVisitRevision = requireRevision(
+        body.expectedVisitRevision,
+        "expectedVisitRevision",
+      );
       await withTransaction(deps.db, async (tx) => {
-        await markCleared(tx, deps.cfg, { visitId, expectedVisitRevision });
+        await markCleared(tx, { visitId, expectedVisitRevision });
       });
       return c.body(null, 204);
     }),

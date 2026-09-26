@@ -21,7 +21,7 @@ import type {
   PlacementClear,
   ZoneTab,
 } from "@waitron/ui";
-import { compareDecimal, decimal } from "@waitron/shared";
+import { decimal, isZeroDecimal } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 import "../widgets/seat-dialog.js";
 import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
@@ -34,9 +34,7 @@ function needsClearing(table: TableState): table is TableState & { visit: TableV
 /** Nothing of the party is left to pay, and no tab is open that could still take a round. */
 function partyPaid(table: TableState): boolean {
   return (
-    table.visit !== null &&
-    !table.hasOpenTab &&
-    compareDecimal(decimal(table.visit.outstanding), decimal("0")) === 0
+    table.visit !== null && !table.hasOpenTab && isZeroDecimal(decimal(table.visit.outstanding))
   );
 }
 
@@ -445,7 +443,7 @@ export class TillFloorScreen extends LitElement {
     const tabTotal =
       table.visit === null
         ? table.tabTotal
-        : compareDecimal(decimal(table.visit.outstanding), decimal("0")) === 0
+        : isZeroDecimal(decimal(table.visit.outstanding))
           ? null
           : table.visit.outstanding;
     const status =
