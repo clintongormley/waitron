@@ -3903,7 +3903,7 @@ export async function updateHeldOrder(
   cfg: TillConfig,
   id: string,
   req: UpdateHeldOrderRequest,
-  issue?: { fiscal: TillSaleDeps; operatorId: string },
+  issue?: { fiscal: TillSaleDeps; operatorId: string; saleCfg: TillConfig | null },
 ): Promise<number> {
   return withTransaction(deps.db, async (tx) => {
     const { label } = await requireEditableOrder(tx, id, req.revision);
@@ -3960,7 +3960,7 @@ export async function updateHeldOrder(
     const revision = await countEdit(tx, id, req.revision, changed || relabelled);
     // An edit that lowers the total to what the bill has received issues its invoice (design §7).
     if (issue !== undefined) {
-      await issueBillsFullyPaid(tx, issue.fiscal, cfg, [id], issue.operatorId);
+      await issueBillsFullyPaid(tx, issue.fiscal, issue.saleCfg, [id], issue.operatorId);
     }
     return revision;
   });

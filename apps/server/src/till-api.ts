@@ -100,7 +100,7 @@ import { finishTable, markCleared, readVisitBills, seatTable } from "./visits.js
 import type { VisitCommand } from "./visits.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
 import { issueBillsFullyPaid } from "./bill-payments.js";
-import { mountBillPaymentsApi } from "./bill-payments-api.js";
+import { mountBillPaymentsApi, withSaleTillWhenIssuing } from "./bill-payments-api.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
 import {
   canonicaliseUuid,
@@ -926,16 +926,18 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         label?: string;
         revision?: unknown;
       }>(c);
-      const revision = await updateHeldOrder(
-        { db: deps.db },
-        deps.cfg,
-        id,
-        {
-          lines: body.lines,
-          label: body.label,
-          revision: requireRevision(body.revision),
-        },
-        { fiscal, operatorId: personId },
+      const revision = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
+        updateHeldOrder(
+          { db: deps.db },
+          deps.cfg,
+          id,
+          {
+            lines: body.lines,
+            label: body.label,
+            revision: requireRevision(body.revision),
+          },
+          { fiscal, operatorId: personId, saleCfg },
+        ),
       );
       return c.json({ revision });
     }),
@@ -1390,10 +1392,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
       // Absent voids the whole line; `voidTabLine` validates a given one.
       const quantity = c.req.query("quantity");
-      await withTransaction(deps.db, async (tx) => {
-        await voidTabLine(tx, deps.cfg, id, lineNo, quantity);
-        await issueBillsFullyPaid(tx, fiscal, deps.cfg, [id], personId);
-      });
+      await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
+        withTransaction(deps.db, async (tx) => {
+          await voidTabLine(tx, deps.cfg, id, lineNo, quantity);
+          await issueBillsFullyPaid(tx, fiscal, saleCfg, [id], personId);
+        }),
+      );
       return c.body(null, 200);
     }),
   );
@@ -1421,11 +1425,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
       const { revision, ...patch } = await readJsonBody<OrderLinePatch & { revision?: unknown }>(c);
       const copy = requireRevision(revision);
-      const saved = await withTransaction(deps.db, async (tx) => {
-        const edited = await updateOrderLine(tx, deps.cfg, id, lineNo, patch, copy);
-        await issueBillsFullyPaid(tx, fiscal, deps.cfg, [id], personId);
-        return edited;
-      });
+      const saved = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
+        withTransaction(deps.db, async (tx) => {
+          const edited = await updateOrderLine(tx, deps.cfg, id, lineNo, patch, copy);
+          await issueBillsFullyPaid(tx, fiscal, saleCfg, [id], personId);
+          return edited;
+        }),
+      );
       return c.json({ revision: saved });
     }),
   );
@@ -1629,10 +1635,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }>(c);
       if (!isUuid(body.toTabId)) throw new AppError("tab.not_open", { tabId: body.toTabId });
       const command = visitCommand(personId, body, true);
-      await withTransaction(deps.db, async (tx) => {
-        await transferLines(tx, deps.cfg, fromTabId, body.toTabId, body.transfers, command);
-        await issueBillsFullyPaid(tx, fiscal, deps.cfg, [fromTabId], personId);
-      });
+      await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
+        withTransaction(deps.db, async (tx) => {
+          await transferLines(tx, deps.cfg, fromTabId, body.toTabId, body.transfers, command);
+          await issueBillsFullyPaid(tx, fiscal, saleCfg, [fromTabId], personId);
+        }),
+      );
       return c.body(null, 200);
     }),
   );
@@ -1656,11 +1664,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         throw new AppError("management.request_invalid", { field: "transfers" });
       }
       const command = visitCommand(personId, body);
-      const result = await withTransaction(deps.db, async (tx) => {
-        const split = await splitOffCheck(tx, deps.cfg, fromTabId, body.transfers, command);
-        await issueBillsFullyPaid(tx, fiscal, deps.cfg, [fromTabId], personId);
-        return split;
-      });
+      const result = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
+        withTransaction(deps.db, async (tx) => {
+          const split = await splitOffCheck(tx, deps.cfg, fromTabId, body.transfers, command);
+          await issueBillsFullyPaid(tx, fiscal, saleCfg, [fromTabId], personId);
+          return split;
+        }),
+      );
       return c.json(result);
     }),
   );
@@ -1686,18 +1696,20 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         throw new AppError("management.request_invalid", { field: "transfers" });
       }
       const command = visitCommand(personId, body);
-      const result = await withTransaction(deps.db, async (tx) => {
-        const unjoined = await unjoinTable(
-          tx,
-          deps.cfg,
-          tabId,
-          body.tableId,
-          body.transfers,
-          command,
-        );
-        await issueBillsFullyPaid(tx, fiscal, deps.cfg, [tabId], personId);
-        return unjoined;
-      });
+      const result = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
+        withTransaction(deps.db, async (tx) => {
+          const unjoined = await unjoinTable(
+            tx,
+            deps.cfg,
+            tabId,
+            body.tableId,
+            body.transfers,
+            command,
+          );
+          await issueBillsFullyPaid(tx, fiscal, saleCfg, [tabId], personId);
+          return unjoined;
+        }),
+      );
       return c.json(result);
     }),
   );

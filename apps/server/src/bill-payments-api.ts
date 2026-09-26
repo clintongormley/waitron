@@ -2,7 +2,12 @@ import type { Context, Hono } from "hono";
 import { kindOfFormFactor } from "@waitron/layouts";
 import { AppError } from "@waitron/shared";
 import { readRawJsonBody } from "@waitron/server-kit";
-import { getBillBalance, previewBillPayment, takeBillPayment } from "./bill-payments.js";
+import {
+  getBillBalance,
+  previewBillPayment,
+  SaleTillRequired,
+  takeBillPayment,
+} from "./bill-payments.js";
 import type { BillPaymentAsk, BillPaymentRequest } from "./bill-payments.js";
 import { requireSaleTillId, tryReadDevice } from "./device-session.js";
 import type { Logger } from "./logger.js";
@@ -115,6 +120,35 @@ function requireBillParam(id: string): string {
   return id;
 }
 
+/** A sale made during a device's request files on that device's own till. */
+async function deviceSaleCfg(deps: TillApiDeps, c: Context): Promise<TillConfig> {
+  const device = await tryReadDevice(deps, c);
+  return {
+    ...deps.cfg,
+    tillId: await requireSaleTillId(deps, c, device),
+    allowCashDrawer: device === null || kindOfFormFactor(device.formFactor) === "till",
+  };
+}
+
+/**
+ * Runs a line write that can leave a bill exactly paid, so that the invoice it issues is filed on
+ * the requesting device's till. `write` runs first with no till, and again with the device's only
+ * when an invoice is due: reading the device runs a scrypt verification, and opens a transaction
+ * of its own, which the write queue refuses inside another (`packages/store/src/write-queue.ts`).
+ */
+export async function withSaleTillWhenIssuing<T>(
+  deps: TillApiDeps,
+  c: Context,
+  write: (saleCfg: TillConfig | null) => Promise<T>,
+): Promise<T> {
+  try {
+    return await write(null);
+  } catch (error) {
+    if (!(error instanceof SaleTillRequired)) throw error;
+  }
+  return write(await deviceSaleCfg(deps, c));
+}
+
 /**
  * The bill payment routes (bill payments design §3.6, §5.1, §7), behind the till session. A
  * payment is taken on the device's own till, which is the till its cash drawer and its invoice use.
@@ -144,12 +178,7 @@ export function mountBillPaymentsApi(app: Hono, deps: TillApiDeps, log: Logger, 
       const { personId } = await requireSession(deps, c);
       const id = requireBillParam(c.req.param("id"));
       const request = parseRequest(asObject(await readRawJsonBody<unknown>(c)));
-      const device = await tryReadDevice(deps, c);
-      const saleCfg: TillConfig = {
-        ...deps.cfg,
-        tillId: await requireSaleTillId(deps, c, device),
-        allowCashDrawer: device === null || kindOfFormFactor(device.formFactor) === "till",
-      };
+      const saleCfg = await deviceSaleCfg(deps, c);
       return c.json(await takeBillPayment(fiscal, saleCfg, id, request, personId));
     }),
   );

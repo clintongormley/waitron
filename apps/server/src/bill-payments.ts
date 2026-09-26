@@ -418,6 +418,16 @@ export async function readBillBalance(
 }
 
 /**
+ * Thrown by {@link issueIfFullyPaid} given no till when the bill is due its invoice: the caller
+ * reads the requesting device's till and runs its write again.
+ */
+export class SaleTillRequired extends Error {
+  constructor() {
+    super("a bill's invoice is due and no till was given to file it on");
+  }
+}
+
+/**
  * Issue the bill's invoice when a write has left it fully paid (design §7): it is open, holds no
  * pending payment, has at least one line and one received payment, and the net applied of its
  * received payments equals its total. Answers the ticket, or null when the bill is not fully paid.
@@ -428,7 +438,7 @@ export async function readBillBalance(
 export async function issueIfFullyPaid(
   tx: Transaction,
   deps: TillSaleDeps,
-  cfg: TillConfig,
+  cfg: TillConfig | null,
   workingOrderId: string,
   operatorId?: string,
 ): Promise<TillSaleResult | null> {
@@ -443,6 +453,7 @@ export async function issueIfFullyPaid(
   const total = await billTotal(tx, workingOrderId);
   if (compareDecimal(total, ZERO) === 0) return null;
   if (compareDecimal(fundsOf(workingOrderId, total, held).received, total) !== 0) return null;
+  if (cfg === null) throw new SaleTillRequired();
 
   const priced = await issuancePass(
     tx,
@@ -528,7 +539,7 @@ export async function issueIfFullyPaid(
 export async function issueBillsFullyPaid(
   tx: Transaction,
   deps: TillSaleDeps,
-  cfg: TillConfig,
+  cfg: TillConfig | null,
   workingOrderIds: readonly string[],
   operatorId?: string,
 ): Promise<void> {

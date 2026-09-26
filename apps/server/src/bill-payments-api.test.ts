@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -78,6 +78,8 @@ interface Venue {
   productIds: Map<string, string>;
   app: Hono;
   cookie: string;
+  /** The operator's session with no device. */
+  sessionCookie: string;
   /** The till the enrolled device rings on. */
   deviceTillId: string;
   printerId: string;
@@ -247,6 +249,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     productIds: seeded.productIds,
     app,
     cookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
+    sessionCookie: `${SESSION_COOKIE}=${session.token}`,
     deviceTillId: deviceRow!.till_id,
     printerId: seeded.printerId,
   };
@@ -282,10 +285,11 @@ async function request(
   method: string,
   path: string,
   body?: unknown,
+  cookie = venue.cookie,
 ): Promise<{ status: number; json: Record<string, unknown> }> {
   const res = await venue.app.request(path, {
     method,
-    headers: { "content-type": "application/json", cookie: venue.cookie },
+    headers: { "content-type": "application/json", cookie },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const text = await res.text();
@@ -980,6 +984,172 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     const [sale] = await saleOf(billId);
     expect(sale!.total).toBe(2500);
     expect(registroCount(billId)).toBe(1);
+  });
+});
+
+describe("a line write that leaves the bill exactly paid (design §7)", () => {
+  /** Issued in the write's own transaction, once, and filed on the till of the device that wrote. */
+  async function expectInvoicedOnDeviceTill(billId: string, totalCents: number): Promise<void> {
+    expect(await statusOf(billId)).toBe("settled");
+    expect(registroCount(billId)).toBe(1);
+    const [sale] = await saleOf(billId);
+    expect(sale!.total).toBe(totalCents);
+    expect(sale!.tillId).toBe(venue.deviceTillId);
+  }
+
+  async function revisionOf(billId: string): Promise<number> {
+    const lines = await request("GET", `/api/working-orders/${billId}/lines`);
+    return lines.json.revision as number;
+  }
+
+  async function raiseLine(billId: string, lineNo: number, quantity: string): Promise<void> {
+    const raised = await request("PUT", `/api/working-orders/${billId}/lines/${lineNo}`, {
+      revision: await revisionOf(billId),
+      quantity,
+    });
+    expect(raised.status).toBe(200);
+  }
+
+  it("files on the device's own till, which is not the box's configured one", () => {
+    expect(venue.deviceTillId).not.toBe(venue.cfg.tillId);
+  });
+
+  it("issues the invoice when a void leaves the bill exactly paid", async () => {
+    const billId = await tabWith("Chuletón", "Tarta");
+    expect((await contribute(billId, "25.00")).status).toBe(200);
+
+    const voided = await request("DELETE", `/api/working-orders/${billId}/lines/2`);
+
+    expect(voided.status).toBe(200);
+    await expectInvoicedOnDeviceTill(billId, 2500);
+  });
+
+  it("issues the invoice when a transfer leaves the bill exactly paid", async () => {
+    const billId = await tabWith("Chuletón", "Tarta");
+    const other = await tabWith("Ensalada");
+    expect((await contribute(billId, "25.00")).status).toBe(200);
+
+    const moved = await request("POST", `/api/tabs/${billId}/transfer`, {
+      toTabId: other,
+      transfers: [{ lineNo: 2 }],
+    });
+
+    expect(moved.status).toBe(200);
+    await expectInvoicedOnDeviceTill(billId, 2500);
+  });
+
+  it("issues the invoice when a split leaves the bill exactly paid", async () => {
+    const billId = await tabWith("Chuletón", "Tarta");
+    expect((await contribute(billId, "25.00")).status).toBe(200);
+
+    const split = await request("POST", `/api/tabs/${billId}/split`, {
+      transfers: [{ lineNo: 2 }],
+    });
+
+    expect(split.status).toBe(200);
+    await expectInvoicedOnDeviceTill(billId, 2500);
+  });
+
+  it("issues the invoice when an unjoin leaves the bill exactly paid", async () => {
+    const billId = await tabWith("Chuletón", "Tarta");
+    const second = await inTx((tx) =>
+      createTable(tx, venue.cfg, {
+        label: `M-${randomUUID().slice(0, 8)}`,
+        zoneId: venue.offers.zoneId,
+      }),
+    );
+    expect((await request("POST", `/api/tabs/${billId}/join`, { tableId: second.id })).status).toBe(
+      200,
+    );
+    expect((await contribute(billId, "25.00")).status).toBe(200);
+
+    const unjoined = await request("POST", `/api/tabs/${billId}/unjoin`, {
+      tableId: second.id,
+      transfers: [{ lineNo: 2 }],
+    });
+
+    expect(unjoined.status).toBe(200);
+    await expectInvoicedOnDeviceTill(billId, 2500);
+  });
+
+  it("issues the invoice when a line edit leaves the bill exactly paid", async () => {
+    const billId = await tabWith("Chuletón", "Caña");
+    await raiseLine(billId, 2, "2");
+    expect((await contribute(billId, "28.00")).status).toBe(200);
+
+    const edited = await request("PUT", `/api/working-orders/${billId}/lines/2`, {
+      revision: await revisionOf(billId),
+      quantity: "1",
+    });
+
+    expect(edited.status).toBe(200);
+    await expectInvoicedOnDeviceTill(billId, 2800);
+  });
+
+  it("issues the invoice when saving the whole order leaves the bill exactly paid", async () => {
+    const billId = await tabWith("Chuletón", "Tarta");
+    expect((await contribute(billId, "25.00")).status).toBe(200);
+    const [steak] = await inTx((tx) =>
+      tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(and(eq(workingOrderLines.workingOrderId, billId), eq(workingOrderLines.lineNo, 1))),
+    );
+
+    const saved = await request("PUT", `/api/working-orders/${billId}`, {
+      lines: [{ workingOrderLineId: steak!.id, menuItemId: offer("Chuletón"), quantity: "1" }],
+      revision: await revisionOf(billId),
+    });
+
+    expect(saved.status).toBe(200);
+    await expectInvoicedOnDeviceTill(billId, 2500);
+  });
+
+  it("refuses cutting part of a line when the rest would be less than the bill has received", async () => {
+    const billId = await tabWith("Paella", "Caña");
+    await raiseLine(billId, 2, "3");
+    expect((await contribute(billId, "42.00")).status).toBe(200);
+
+    const refused = await request("DELETE", `/api/working-orders/${billId}/lines/2?quantity=1`);
+
+    expect(refused.status).toBe(409);
+    expect(refused.json).toMatchObject({
+      code: "bill.received_exceeds_total",
+      params: { workingOrderId: billId, excess: "1.00" },
+    });
+    expect(await lineTotals(billId)).toEqual(["35.00", "9.00"]);
+  });
+
+  it("voids a line of a bill with no payments for a request with no device", async () => {
+    const billId = await tabWith("Chuletón", "Tarta");
+
+    const voided = await request(
+      "DELETE",
+      `/api/working-orders/${billId}/lines/2`,
+      undefined,
+      venue.sessionCookie,
+    );
+
+    expect(voided.status).toBe(200);
+    expect(await lineTotals(billId)).toEqual(["25.00"]);
+  });
+
+  it("refuses a void that would issue the invoice for a request with no device, writing nothing", async () => {
+    const billId = await tabWith("Chuletón", "Tarta");
+    expect((await contribute(billId, "25.00")).status).toBe(200);
+
+    const refused = await request(
+      "DELETE",
+      `/api/working-orders/${billId}/lines/2`,
+      undefined,
+      venue.sessionCookie,
+    );
+
+    expect(refused.status).toBe(401);
+    expect(refused.json).toMatchObject({ code: "device.unauthorized" });
+    expect(await statusOf(billId)).toBe("open");
+    expect(await lineTotals(billId)).toEqual(["25.00", "18.00"]);
+    expect(registroCount(billId)).toBe(0);
   });
 });
 
