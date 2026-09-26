@@ -1182,6 +1182,18 @@ describe("till-station-queue — kitchen notices strip", () => {
     expect(voided!.querySelector(".notice-moved")).toBeNull();
   });
 
+  it("shows a moved-to table label exactly as typed, `$` sequences included", async () => {
+    const label = "Terraza $& $` $'";
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+      notices: [notice({ kind: "moved", movedTo: label })],
+    });
+    expect(rows(el)[0]!.querySelector(".notice-moved")!.textContent!.trim()).toBe(
+      t("station.notice.moved_to").split("{table}").join(label),
+    );
+  });
+
   it("Acknowledge emits acknowledge-notice with the notice's id, bubbling and composed", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,

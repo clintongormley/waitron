@@ -655,6 +655,7 @@ export class TillStationQueue extends LitElement {
     const kind = t(`station.notice.${notice.kind}` as const);
     const line = `${trimQuantity(notice.quantity)}× ${notice.lineName}`;
     const acknowledge = t("station.notice.acknowledge");
+    const { movedTo } = notice;
     return html`<li class="notice kind-${notice.kind}" data-notice=${notice.id}>
       <span class="notice-kind"><wt-icon name=${`notice-${notice.kind}`}></wt-icon>${kind}</span>
       <span class="notice-body">
@@ -667,10 +668,13 @@ export class TillStationQueue extends LitElement {
         }
         ${notice.note ? html`<span class="notice-note">${notice.note}</span>` : nothing}
         ${
-          notice.movedTo === null
+          movedTo === null
             ? nothing
             : html`<span class="notice-moved"
-                >${t("station.notice.moved_to").replace("{table}", notice.movedTo)}</span
+                >${
+                  // A replacer function, so a `$` in the typed label is never read as a pattern.
+                  t("station.notice.moved_to").replace("{table}", () => movedTo)
+                }</span
               >`
         }
       </span>
