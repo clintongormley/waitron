@@ -54,10 +54,15 @@ async function flush(el: ServersScreen): Promise<void> {
   await el.shadowRoot!.querySelector("wt-data-table")?.updateComplete;
 }
 
+function rowMenu(el: ServersScreen, nodeId: string): HTMLElementTagNameMap["wt-row-actions"] {
+  return el
+    .shadowRoot!.querySelector("wt-data-table")!
+    .shadowRoot!.querySelector(`tr[data-row-key="${nodeId}"] wt-row-actions`)!;
+}
+
 async function openRemove(el: ServersScreen, nodeId = STANDBY): Promise<void> {
-  el.shadowRoot!.querySelector("wt-data-table")!
-    .shadowRoot!.querySelector<HTMLElement>(`[data-test="remove-${nodeId}"]`)!
-    .click();
+  rowMenu(el, nodeId).shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+  rowMenu(el, nodeId).querySelector<HTMLElement>(`[data-test="remove-${nodeId}"]`)!.click();
   await flush(el);
 }
 
@@ -70,6 +75,18 @@ describe.each(["light", "dark"] as const)("servers-screen a11y (%s theme)", (the
       { api: stubApi() },
       theme,
     );
+    await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders a row's open action menu accessibly", async () => {
+    const { el, host } = await mountWidget<ServersScreen>(
+      "dashboard-servers-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    rowMenu(el, STANDBY).shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
     await flush(el);
     await expectNoA11yViolations(host);
   });

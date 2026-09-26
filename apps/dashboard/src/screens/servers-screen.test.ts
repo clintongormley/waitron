@@ -91,8 +91,21 @@ function dialog(el: ServersScreen): HTMLElementTagNameMap["wt-dialog"] {
   )!;
 }
 
+function rowMenu(
+  el: ServersScreen,
+  nodeId: string,
+): HTMLElementTagNameMap["wt-row-actions"] | null {
+  return tableRoot(el).querySelector(`tr[data-row-key="${nodeId}"] wt-row-actions`);
+}
+
+function menuTrigger(el: ServersScreen, nodeId: string): HTMLButtonElement {
+  return rowMenu(el, nodeId)!.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+}
+
 async function openRemove(el: ServersScreen, nodeId = STANDBY): Promise<void> {
-  inTable(el, `remove-${nodeId}`)!.click();
+  menuTrigger(el, nodeId).click();
+  const remove = rowMenu(el, nodeId)!.querySelector<HTMLElement>(`[data-test="remove-${nodeId}"]`)!;
+  remove.click();
   await flush(el);
 }
 
@@ -141,17 +154,43 @@ describe("servers screen list", () => {
     expect(inTable(el, `address-${REMOVED}`)!.textContent!.trim()).toBe(t("servers.no_address"));
   });
 
-  it("offers Remove only on the rows the server says can be removed", async () => {
+  it("offers Remove, in a row menu, only on the rows the server says can be removed", async () => {
     const el = await mount();
-    expect(inTable(el, `remove-${STANDBY}`)).not.toBeNull();
-    for (const other of [SELF, FORMER, REMOVED]) expect(inTable(el, `remove-${other}`)).toBeNull();
+    expect(rowMenu(el, STANDBY)!.querySelector(`[data-test="remove-${STANDBY}"]`)).not.toBeNull();
+    for (const other of [SELF, FORMER, REMOVED]) {
+      expect(rowMenu(el, other)).toBeNull();
+      expect(inTable(el, `remove-${other}`)).toBeNull();
+    }
   });
 
-  it("names the address in the Remove button's accessible name", async () => {
+  it("names the address in the row menu's accessible name", async () => {
     const el = await mount();
-    expect(inTable(el, `remove-${STANDBY}`)!.getAttribute("aria-label")).toBe(
-      t("servers.remove_label").replace("{address}", "https://standby.venue.example:8443"),
+    const menu = rowMenu(el, STANDBY)!;
+    expect(menu.getAttribute("label")).toBe(
+      `${t("servers.actions")}: https://standby.venue.example:8443`,
     );
+    expect(menuTrigger(el, STANDBY).getAttribute("aria-label")).toBe(menu.getAttribute("label"));
+    expect(menu.querySelector(`[data-test="remove-${STANDBY}"]`)!.getAttribute("align")).toBe(
+      "start",
+    );
+  });
+
+  it.each(["en", "es-ES"] as const)(
+    "words the menu item and the confirm button with the same verb, in %s",
+    async (locale) => {
+      setLocale(locale);
+      const el = await mount();
+      const item = rowMenu(el, STANDBY)!.querySelector(`[data-test="remove-${STANDBY}"]`)!;
+      await openRemove(el);
+      const confirm = el.shadowRoot!.querySelector("[data-test=confirm-remove]")!;
+      expect(item.textContent!.trim()).toBe(t("servers.remove"));
+      expect(confirm.textContent!.trim()).toBe(t("servers.remove"));
+    },
+  );
+
+  it("words Remove as Retirar in Spanish, matching the rest of the screen", () => {
+    expect(es["servers.remove"]).toBe("Retirar");
+    expect(es["servers.remove"]).not.toBe(es["action.remove"]);
   });
 
   it("paints the this-server tag from the muted text token, inside the table's shadow root", async () => {
@@ -233,7 +272,7 @@ describe("servers screen list", () => {
     expect(getComputedStyle(inTable(el, `address-${STANDBY}`)!).fontFamily).not.toBe(mono);
   });
 
-  it("names a removable machine with no address by its short id, on the button and in the confirmation", async () => {
+  it("names a removable machine with no address by its short id, on the row menu and in the confirmation", async () => {
     const withBlank: ServerListing = {
       term: 3,
       nodes: [
@@ -248,9 +287,8 @@ describe("servers screen list", () => {
       ],
     };
     const el = await mount(stubApi({ listServers: vi.fn().mockResolvedValue(withBlank) }));
-    const button = inTable(el, `remove-${BLANK}`)!;
-    expect(button.getAttribute("aria-label")).toBe(
-      t("servers.remove_label_id").replace("{id}", "55555555"),
+    expect(rowMenu(el, BLANK)!.getAttribute("label")).toBe(
+      `${t("servers.actions")}: ${t("servers.machine")} 55555555`,
     );
     await openRemove(el, BLANK);
     const body = dialog(el).textContent!.replace(/\s+/g, " ");
@@ -326,6 +364,49 @@ describe("servers screen removal", () => {
     expect(dialog(el).open).toBe(false);
     expect(inTable(el, `role-${STANDBY}`)!.textContent!.trim()).toBe(t("servers.standing.removed"));
     expect(inTable(el, `remove-${STANDBY}`)).toBeNull();
+    expect(rowMenu(el, STANDBY)).toBeNull();
+  });
+
+  it("returns focus to the row's menu when the confirmation is cancelled or dismissed", async () => {
+    const el = await mount();
+    for (const close of [
+      () => el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-remove]")!.click(),
+      () =>
+        dialog(el).dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true })),
+    ]) {
+      // Real clicks, because a click is what moves focus onto the Remove item the popover then hides.
+      await userEvent.click(menuTrigger(el, STANDBY));
+      await userEvent.click(inTable(el, `remove-${STANDBY}`)!);
+      await flush(el);
+      expect(dialog(el).open).toBe(true);
+      close();
+      await flush(el);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      expect(dialog(el).open).toBe(false);
+      expect(rowMenu(el, STANDBY)!.shadowRoot!.activeElement).toBe(menuTrigger(el, STANDBY));
+      menuTrigger(el, STANDBY).blur();
+      expect(rowMenu(el, STANDBY)!.shadowRoot!.activeElement).toBeNull();
+    }
+  });
+
+  it("moves focus to the screen's heading after a removal, because the row's menu is gone", async () => {
+    const api = stubApi();
+    const el = await mount(api);
+    // Real clicks, because a click is what moves focus onto the Remove item the popover then hides.
+    await userEvent.click(menuTrigger(el, STANDBY));
+    await userEvent.click(inTable(el, `remove-${STANDBY}`)!);
+    await flush(el);
+    // A refresh slower than the dialog's close, as a real network's can be.
+    vi.mocked(api.listServers).mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve(afterRemoval), 200)),
+    );
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-remove]")!);
+    await vi.waitFor(async () => {
+      await flush(el);
+      expect(dialog(el).open).toBe(false);
+      expect(rowMenu(el, STANDBY)).toBeNull();
+      expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("h1"));
+    });
   });
 
   it("Cancel closes the confirmation without posting anything", async () => {

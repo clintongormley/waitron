@@ -6,6 +6,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-row-actions.js";
 import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -38,7 +39,7 @@ export class ServersScreen extends LitElement {
         color: var(--wt-color-text-muted);
       }
       /* The table sizes its columns to their content and scrolls sideways past the screen, so a
-         long address has to be bounded to wrap and keep Remove on a phone's screen. */
+         long address has to be bounded to wrap and keep the row's menu on a phone's screen. */
       wt-data-table::part(server-cell) {
         max-width: max(16ch, 45vw);
         overflow-wrap: anywhere;
@@ -119,6 +120,9 @@ export class ServersScreen extends LitElement {
   @state() private target: ServerRow | null = null;
   @state() private removeErrorKey: string | null = null;
   @state() private removing = false;
+  /** The Remove item's popover closes on the click, so the dialog has nothing visible to hand focus
+   * back to; the row menu's trigger takes it instead, or the heading once that menu is gone. */
+  #focusTarget: HTMLElement | null = null;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -138,7 +142,9 @@ export class ServersScreen extends LitElement {
     }
   }
 
-  #openRemove(row: ServerRow): void {
+  #openRemove(row: ServerRow, event: Event): void {
+    const menu = (event.currentTarget as HTMLElement).closest("wt-row-actions");
+    this.#focusTarget = menu?.shadowRoot?.querySelector<HTMLButtonElement>("button") ?? null;
     this.removeErrorKey = null;
     this.target = row;
   }
@@ -147,6 +153,10 @@ export class ServersScreen extends LitElement {
     if (this.removing) return;
     this.target = null;
     this.removeErrorKey = null;
+    requestAnimationFrame(() => {
+      if (this.#focusTarget?.isConnected) this.#focusTarget.focus();
+      else this.renderRoot.querySelector<HTMLElement>("h1")?.focus();
+    });
   }
 
   async #confirmRemove(): Promise<void> {
@@ -162,6 +172,8 @@ export class ServersScreen extends LitElement {
     } finally {
       this.removing = false;
     }
+    // A removed row loses its menu, and the refresh below may land after the dialog has closed.
+    this.#focusTarget = null;
     this.target = null;
     try {
       this.servers = (await this.api.listServers()).nodes;
@@ -180,10 +192,8 @@ export class ServersScreen extends LitElement {
     return row.nodeId.slice(0, 8);
   }
 
-  #removeLabel(row: ServerRow): string {
-    return row.contactUrl === ""
-      ? t("servers.remove_label_id").replace("{id}", this.#shortId(row))
-      : t("servers.remove_label").replace("{address}", row.contactUrl);
+  #rowName(row: ServerRow): string {
+    return row.contactUrl === "" ? `${t("servers.machine")} ${this.#shortId(row)}` : row.contactUrl;
   }
 
   #onPrimary(): boolean {
@@ -225,13 +235,14 @@ export class ServersScreen extends LitElement {
         label: t("servers.actions"),
         cell: (row) =>
           row.removable
-            ? html`<wt-button
-                variant="secondary"
-                size="sm"
-                data-test=${`remove-${row.nodeId}`}
-                aria-label=${this.#removeLabel(row)}
-                @click=${() => this.#openRemove(row)}
-                >${t("servers.remove")}</wt-button
+            ? html`<wt-row-actions label=${`${t("servers.actions")}: ${this.#rowName(row)}`}
+                ><wt-button
+                  align="start"
+                  variant="ghost"
+                  data-test=${`remove-${row.nodeId}`}
+                  @click=${(event: Event) => this.#openRemove(row, event)}
+                  >${t("servers.remove")}</wt-button
+                ></wt-row-actions
               >`
             : nothing,
       },
@@ -283,7 +294,7 @@ export class ServersScreen extends LitElement {
 
   override render(): TemplateResult {
     return html`
-      <h1 class="title">${t("servers.title")}</h1>
+      <h1 class="title" tabindex="-1">${t("servers.title")}</h1>
       <p class="intro">${t("servers.intro")}</p>
       ${
         // An empty list comes back whenever no chart is held, primary or not, so it says nothing.

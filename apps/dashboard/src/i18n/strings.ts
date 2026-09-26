@@ -850,8 +850,6 @@ export const en = {
   "servers.standing.sell_only": "Former primary, now only sells",
   "servers.standing.removed": "Removed",
   "servers.remove": "Remove",
-  "servers.remove_label": "Remove {address}",
-  "servers.remove_label_id": "Remove machine {id}",
   "servers.remove_title": "Remove this standby?",
   "servers.remove_explanation":
     "It will be taken off the list of servers, so tills stop trying to reach it. This cannot be undone: to use that machine again, it has to join from scratch.",
@@ -2583,8 +2581,6 @@ export const es: Record<StringKey, string> = {
   "servers.standing.sell_only": "Antiguo principal, ahora solo vende",
   "servers.standing.removed": "Retirado",
   "servers.remove": "Retirar",
-  "servers.remove_label": "Retirar {address}",
-  "servers.remove_label_id": "Retirar la máquina {id}",
   "servers.remove_title": "¿Retirar este servidor en espera?",
   "servers.remove_explanation":
     "Se quitará de la lista de servidores, para que las cajas dejen de intentar conectar con él. No se puede deshacer: para volver a usar esa máquina, tiene que unirse de nuevo desde el principio.",
