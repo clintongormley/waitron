@@ -760,25 +760,17 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # The stream loop and pause tests (apps/server/src/stream-loop.e2e.test.ts,
-      # apps/server/src/stream-pause.e2e.test.ts) run the pinned Litestream against versitygw as a
-      # child process, and fail rather than skip without them in CI. Every shard installs both
-      # because file sharding decides which shard runs each. Downloaded, not cached: the Actions
-      # cache is at its budget (docs/developers/ci-and-gates.md).
-      - name: Install the stream loop and pause tests' pinned binaries
-        run: |
-          set -euo pipefail
-          node scripts/setup-litestream.mjs
-          node scripts/setup-s3-test-server.mjs
-
       # `test:shard` emits a blob rather than enforcing thresholds; test-server-merge is where the
       # coverage gate lives. The per-shard `--shard`/`--outputFile` are appended with NO `--` separator
-      # (see test-heavy's shard step for why a bare `--` silently drops both flags).
+      # (see test-heavy's shard step for why a bare `--` silently drops both flags). The two stream
+      # tests run in test-server-stream instead; `--exclude` adds to the config's own excludes.
       - name: Run the server shard
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/server" test:shard \
             --shard=${{ matrix.shard }}/3 \
+            --exclude src/stream-loop.e2e.test.ts \
+            --exclude src/stream-pause.e2e.test.ts \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json
 
       # `if-no-files-found: error` guards a shard that silently ran nothing: no blob → the upload fails
@@ -793,13 +785,61 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  # apps/server's stream loop and pause tests, on a runner of their own beside the server shards.
+  # They run the pinned Litestream against versitygw as child processes, and fail rather than skip
+  # without them in CI, so only this job downloads the two binaries. Downloaded, not cached: the
+  # Actions cache is at its budget (docs/developers/ci-and-gates.md). Its blob joins the shards' in
+  # test-server-merge, so the coverage gate still counts what these two tests reach.
+  test-server-stream:
+    timeout-minutes: 15
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install the stream loop and pause tests' pinned binaries
+        run: |
+          set -euo pipefail
+          node scripts/setup-litestream.mjs
+          node scripts/setup-s3-test-server.mjs
+
+      - name: Run the stream loop and pause tests
+        run: |
+          set -euo pipefail
+          pnpm --filter "@waitron/server" test:shard \
+            src/stream-loop.e2e.test.ts \
+            src/stream-pause.e2e.test.ts \
+            --outputFile=.vitest-reports/blob-stream.json
+
+      - name: Upload the stream tests' coverage blob
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: server-blob-stream
+          path: apps/server/.vitest-reports/blob-stream.json
+          if-no-files-found: error
+          retention-days: 1
+
   # The coverage GATE for apps/server — the mirror of test-heavy-merge. The three test-server shards
-  # each emit a PARTIAL-coverage blob; this job merges them and enforces the package's real thresholds
-  # on the TOTAL. No tests, no container — `vitest --merge-reports` replays from the blobs. It gates on
-  # the SAME `server` output as its shards. `ci` names both this job and the test-server matrix.
+  # and test-server-stream each emit a PARTIAL-coverage blob; this job merges them and enforces the
+  # package's real thresholds on the TOTAL. No tests, no container — `vitest --merge-reports` replays
+  # from the blobs. It gates on the SAME `server` output as its shards. `ci` names this job, the
+  # test-server matrix and test-server-stream.
   test-server-merge:
     timeout-minutes: 15
-    needs: [changes, test-server]
+    needs: [changes, test-server, test-server-stream]
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -1531,6 +1571,7 @@ jobs:
       - test-heavy
       - test-heavy-merge
       - test-server
+      - test-server-stream
       - test-server-merge
       - test-fiscal-verifactu
       - test-ui

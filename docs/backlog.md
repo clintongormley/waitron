@@ -6080,9 +6080,10 @@ Litestream against versitygw 1.8.0, run as a plain child process
 against a pinned SHA-256): box A streams and dies, box B is rebuilt from the recovery kit, sells
 under a fresh installation number, streams into its own generation and moves the pointer, and a
 restore of that generation equals B's database; ten sales timed while the S3 server is frozen must
-keep their normal time. Every `test-server` shard in CI installs both binaries first, and
-`scripts/ci-workflow.test.mjs` checks that, reading `ci.yml` as text, so a comment naming
-the commands, or a step an `if:` switches off, also satisfies it. The sweep brought `CLAUDE.md`, the developer guides,
+keep their normal time. Since lane A's A48, CI runs it and the pause test in `test-server-stream`,
+the only job that installs both binaries, and `scripts/ci-workflow.test.mjs` checks that, reading
+`ci.yml` as text, so a comment naming the commands, or a step an `if:` switches off, also satisfies
+it. The sweep brought `CLAUDE.md`, the developer guides,
 `deploy/README.md`, `apps/server/README.md`, the topology design and the prototype results note in
 line with what slice 2 built. Left open:
 - Locally the test is skipped without its binaries, and Vitest's default reporter shows that only as
@@ -6170,7 +6171,11 @@ line with what slice 2 built. Left open:
   its 180 s allowance, about 13 KB a sale, where a local run wrote about 79 KB a sale; why the
   growth per sale differs so much was not tested (Litestream's own checkpoints reusing the file is
   the guess), so if the test turns unreliable on CI that margin is where to look. It also took 133.8
-  s of the `test-server (3)` shard. (2) DONE by A44 for the deadline: a question given up at it logs
+  s of the `test-server (3)` shard. **DONE (2026-09-26, lane A's A48): the loop and pause tests
+  run in `test-server-stream`, a job of their own beside the three `test-server` shards**, which
+  pass `--exclude` for both files; only that job installs the two binaries, and its coverage blob
+  joins `test-server-merge` ([ci-and-gates.md](developers/ci-and-gates.md), "The stream loop and
+  pause tests run in a job of their own"). (2) DONE by A44 for the deadline: a question given up at it logs
   `stream.pause_check_failed` with `errorCode: "timeout"`, as the freshness read's deadline logs
   `stream.freshness_unreadable`; the pause case fails with the line removed, and a case stopped
   during the wait fails once the line no longer checks for a stop. Still open: a refused question
