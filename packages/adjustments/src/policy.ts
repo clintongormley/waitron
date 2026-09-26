@@ -1,5 +1,5 @@
 import { roleAtLeast, type PersonRoleValue } from "@waitron/identity";
-import { addDecimal, compareDecimal, type Decimal } from "@waitron/shared";
+import { addDecimal, compareDecimal, decimal, type Decimal } from "@waitron/shared";
 
 export type AdjustmentAction = "cancel" | "comp" | "discount_percent" | "discount_amount";
 
@@ -41,6 +41,26 @@ export type AdjustmentVerdict =
         | "adjustment.reason_inactive";
     };
 
+const ZERO = decimal("0");
+
+/** A malformed request is the caller's bug, so it throws rather than being answered as a verdict. */
+function assertWellFormed(req: AdjustmentRequest): void {
+  if (compareDecimal(req.reduction, ZERO) < 0) throw new RangeError("reduction is negative");
+  if (compareDecimal(req.priorReductionOnBill, ZERO) < 0) {
+    throw new RangeError("priorReductionOnBill is negative");
+  }
+  if (!Number.isInteger(req.priorPercentOnLineBp) || req.priorPercentOnLineBp < 0) {
+    throw new RangeError("priorPercentOnLineBp is not a whole count of basis points");
+  }
+  const percent = req.percentBp;
+  if (
+    req.action === "discount_percent" &&
+    (percent === null || !Number.isInteger(percent) || percent < 1 || percent > 10000)
+  ) {
+    throw new RangeError("a percentage discount needs percentBp in 1..10000");
+  }
+}
+
 /**
  * Whether a reason's policy lets this request through. Limits are cumulative per reason: `maxAmount`
  * caps the total the reason takes off one bill, whatever the action, and `maxPercentBp` caps the
@@ -51,6 +71,7 @@ export function evaluateAdjustment(
   reason: AdjustmentReason,
   req: AdjustmentRequest,
 ): AdjustmentVerdict {
+  assertWellFormed(req);
   if (!reason.active) return { kind: "refused", code: "adjustment.reason_inactive" };
   if (!reason.actions.includes(req.action)) {
     return { kind: "refused", code: "adjustment.action_not_allowed" };
@@ -58,7 +79,7 @@ export function evaluateAdjustment(
   if (
     req.action === "discount_percent" &&
     reason.maxPercentBp !== null &&
-    req.priorPercentOnLineBp + (req.percentBp ?? 0) > reason.maxPercentBp
+    req.priorPercentOnLineBp + req.percentBp! > reason.maxPercentBp
   ) {
     return { kind: "refused", code: "adjustment.over_limit" };
   }

@@ -165,26 +165,25 @@ export async function deactivateAdjustmentReason(tx: Transaction, reasonId: stri
 }
 
 /**
- * Puts the active reasons in the order given. `ids` must name every active reason exactly once, so
- * a screen working from a stale list is refused rather than half-applied.
+ * Puts the active reasons in the order given, then the inactive ones after them in the order they
+ * already had, so no two reasons share a position. `ids` must name every active reason exactly
+ * once, so a screen working from a stale list is refused rather than half-applied.
  */
 export async function reorderAdjustmentReasons(
   tx: Transaction,
   ids: readonly string[],
 ): Promise<void> {
-  const active = new Set(
-    (
-      await tx
-        .select({ id: adjustmentReasons.id })
-        .from(adjustmentReasons)
-        .where(eq(adjustmentReasons.active, true))
-    ).map((row) => row.id),
-  );
+  const inactive: string[] = [];
+  const active = new Set<string>();
+  for (const reason of await listAdjustmentReasons(tx, { includeInactive: true })) {
+    if (reason.active) active.add(reason.id);
+    else inactive.push(reason.id);
+  }
   const unknown = ids.find((reasonId) => !active.has(reasonId));
   if (unknown !== undefined)
     throw new AppError("adjustment_reason.not_found", { reasonId: unknown });
   if (new Set(ids).size !== ids.length || ids.length !== active.size) throw invalid("ids");
-  for (const [position, reasonId] of ids.entries()) {
+  for (const [position, reasonId] of [...ids, ...inactive].entries()) {
     await tx.update(adjustmentReasons).set({ position }).where(eq(adjustmentReasons.id, reasonId));
   }
 }

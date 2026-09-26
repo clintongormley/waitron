@@ -266,8 +266,6 @@ export const ALL_MODULES: readonly WaitronModule[] = [
   {
     name: "adjustments",
     version: "0.0.0",
-    // Mandatory because every cancel writes to this module's tables, and a switched-off module's
-    // tables are never migrated.
     tier: "mandatory",
     requires: { core: "*" },
     migrations: {

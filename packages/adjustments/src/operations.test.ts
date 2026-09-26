@@ -190,6 +190,32 @@ describe("adjustment reason operations", () => {
     ).toEqual(["B", "A", "Gone"]);
   });
 
+  it("renumbers inactive reasons after the reordered active ones, keeping their own order", async () => {
+    const retiredFirst = await inTx((tx) =>
+      createAdjustmentReason(tx, complaint({ name: "Old A" })),
+    );
+    const x = await inTx((tx) => createAdjustmentReason(tx, complaint({ name: "X" })));
+    const retiredSecond = await inTx((tx) =>
+      createAdjustmentReason(tx, complaint({ name: "Old B" })),
+    );
+    const y = await inTx((tx) => createAdjustmentReason(tx, complaint({ name: "Y" })));
+    await inTx((tx) => deactivateAdjustmentReason(tx, retiredSecond.id));
+    await inTx((tx) => deactivateAdjustmentReason(tx, retiredFirst.id));
+
+    await inTx((tx) => reorderAdjustmentReasons(tx, [y.id, x.id]));
+    expect(
+      (await inTx((tx) => listAdjustmentReasons(tx, { includeInactive: true }))).map((r) => [
+        r.name,
+        r.position,
+      ]),
+    ).toEqual([
+      ["Y", 0],
+      ["X", 1],
+      ["Old A", 2],
+      ["Old B", 3],
+    ]);
+  });
+
   it.each<[string, Partial<AdjustmentReasonInput>]>([
     ["name", { name: "   " }],
     ["actions", { actions: [] }],

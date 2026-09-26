@@ -88,13 +88,69 @@ describe("evaluateAdjustment", () => {
     });
   });
 
-  it("counts a percentage discount given no percentage as adding none to the line", () => {
+  it.each<[string, Partial<AdjustmentRequest>]>([
+    ["a negative reduction", { reduction: decimal("-1.00") }],
+    ["a negative prior reduction on the bill", { priorReductionOnBill: decimal("-0.01") }],
+    ["a negative prior percentage on the line", { priorPercentOnLineBp: -1 }],
+    ["a percentage discount with no percentage", { action: "discount_percent", percentBp: null }],
+    ["a percentage discount of 0%", { action: "discount_percent", percentBp: 0 }],
+    ["a percentage discount above 100%", { action: "discount_percent", percentBp: 10001 }],
+    [
+      "a percentage discount of a fraction of a basis point",
+      { action: "discount_percent", percentBp: 12.5 },
+    ],
+  ])("throws on %s, which is a caller's bug and not a verdict", (_case, overrides) => {
+    expect(() => evaluateAdjustment(COMPLAINT, comp(overrides))).toThrow(RangeError);
+    // Even on a reason that would refuse anyway: malformed input is never answered with a verdict.
+    expect(() => evaluateAdjustment({ ...COMPLAINT, active: false }, comp(overrides))).toThrow(
+      RangeError,
+    );
+  });
+
+  it("accepts a percentage discount at the edges of 1..10000 basis points", () => {
+    const open = { ...COMPLAINT, maxPercentBp: null, maxAmount: null };
+    expect(evaluateAdjustment(open, percent(1))).toEqual({ kind: "allowed" });
+    expect(evaluateAdjustment(open, percent(10000))).toEqual({ kind: "allowed" });
+  });
+
+  it("counts a cancel's reduction against the bill limit", () => {
+    const voids = { ...COMPLAINT, actions: ["cancel" as const] };
+    const cancel = (priorReductionOnBill: string) =>
+      comp({
+        action: "cancel",
+        reduction: decimal("12.00"),
+        priorReductionOnBill: decimal(priorReductionOnBill),
+      });
+    expect(evaluateAdjustment(voids, cancel("18.01"))).toEqual({
+      kind: "refused",
+      code: "adjustment.over_limit",
+    });
+    expect(evaluateAdjustment(voids, cancel("18.00"))).toEqual({ kind: "allowed" });
+  });
+
+  it("allows a euro discount under a reason that lists it", () => {
     expect(
-      evaluateAdjustment(COMPLAINT, percent(0, { percentBp: null, priorPercentOnLineBp: 5000 })),
+      evaluateAdjustment(
+        { ...COMPLAINT, actions: ["discount_amount"] },
+        comp({ action: "discount_amount", reduction: decimal("5.00") }),
+      ),
     ).toEqual({ kind: "allowed" });
+  });
+
+  it("asks for approval from the reason's own approving role", () => {
     expect(
-      evaluateAdjustment(COMPLAINT, percent(0, { percentBp: null, priorPercentOnLineBp: 5001 })),
-    ).toEqual({ kind: "refused", code: "adjustment.over_limit" });
+      evaluateAdjustment(
+        { ...COMPLAINT, applyRole: "manager", approverRole: "admin" },
+        comp({ actorRole: "supervisor" }),
+      ),
+    ).toEqual({ kind: "needs_approval", approverRole: "admin" });
+  });
+
+  it("refuses a missing note before asking for approval", () => {
+    expect(evaluateAdjustment(COMPLAINT, comp({ actorRole: "staff", note: null }))).toEqual({
+      kind: "refused",
+      code: "adjustment.note_required",
+    });
   });
 
   it("never measures a comp against the percentage limit", () => {
