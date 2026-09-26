@@ -1805,9 +1805,24 @@ Spec §6; D3, D16; the approved Task 0 design. **Payments and fiscal issuance: f
 and the owner reviews before landing.** This task's Files and Interfaces come from the approved
 design. The tests below are the minimum it must contain whatever the design decides.
 
+**Scope added by the owner's answers of 2026-09-26** (design §11), beyond the payment routes
+themselves:
+- **the cash-up** (design §9a): `packages/reporting/src/cash-up.ts` counts `bill_payments` on the day
+  and till they are received and completed `bill_payment_refunds` on the day and till they are
+  given back, and stops counting tenders that carry a `bill_payment_id`, so issuing the invoice
+  counts nothing twice; the frozen daily close (`record-daily-close.ts`) reconciles against it.
+  Its guard suites and the daily-close tests are in this task;
+- **durable card refunds** (design §6b): the refund row is written `pending` before the provider
+  call; the call carries a key derived from the row; recovery by retry, by the loop and by M7b2's
+  manager action; a pending refund locks the whole bill and holds back the invoice. The payments
+  package's reverse path gains an optional caller-given idempotency key (a cross-package contract
+  change).
+
 - [ ] **Step 0: Read the approved design** (`docs/superpowers/specs/2026-09-26-bill-payments-design.md`)
-  and re-map the payment path after M7b2. Write this task's Files and Interfaces into the ledger
-  before any test.
+  and re-map the payment path after M7b2. Read Stripe's current documentation for how long it keeps
+  an idempotency key, and SumUp's API for any way to list a transaction's refunds; record both,
+  with the source's own words, in the ledger (design §6b depends on them). Write this task's Files
+  and Interfaces into the ledger before any test.
 - [ ] **Step 1: Write the failing tests:**
   - **Change versus tip (§12 item 7):**
     - selected items €40.00, cash €50.00: €40.00 applied, €10.00 change, tip €0.00;
@@ -1846,6 +1861,10 @@ design. The tests below are the minimum it must contain whatever the design deci
   - **An id reused for a different request (D8):** a payment `submission_id` resent with a changed
     amount, with other lines named, or on a refund instead of a payment is `submission.id_reused`,
     and nothing is written.
+  - **Every acceptance test in design §8**, including 17–23 (an interrupted card refund, retries,
+    provider refusal and silence, the loop and the manager action, SumUp, and the invoice waiting
+    for a pending refund) and 24–26 (the cash-up counting money on the day and till it moved, a
+    refund on another day and till, and today's paths unchanged).
 
   Run them: they FAIL.
 - [ ] **Step 2: Implement.** Step 3: run `apps/server`, `packages/core`, `packages/payments*` and

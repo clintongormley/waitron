@@ -1,8 +1,10 @@
 # Several payments against one bill — the payment and billing design
 
-**Status:** written 2026-09-26 by the lane B runner as plan Task 0. **Awaiting the owner's approval**;
-plan Task 14 (`bill-payments`) does not start until the owner approves it. The open points are
-listed in §11 with a recommended default for each, and copied to the lane's questions file.
+**Status:** written 2026-09-26 by the lane B runner as plan Task 0. **Amended the same day with the
+owner's answers to §11** (§11 records each), which added two things: the cash-up counts money on the
+day it moves (§9a), and a card refund is a durable attempt that survives an interrupted call (§6b).
+**Awaiting the owner's final approval of the amended design**; plan Task 14 (`bill-payments`) does
+not start until then.
 
 **What this is.** The owner decided on 2026-09-26 that a table's bill is invoiced when it is fully
 paid, and that several payments can be taken against it first
@@ -157,10 +159,16 @@ A line's **paid quantity** is the sum of its `bill_payment_lines.quantity` over 
 ### 2.3 `bill_payment_refunds` — money given back before the invoice
 
 `bill_payment_id`, `submission_id` (unique together with `bill_payment_id`, so a retried refund
-gives money back once, §5.1), `fingerprint` (§5.1), `applied_amount`, `tip_amount`, `reason`, `authorized_by`,
-`created_at`. **Append-only.** For a card, the provider refund it made is recorded where refunds
-already are (`payment_refunds`, `packages/payments/src/schema/payment-refunds.ts`), through the
-`payments` row. A payment's **net applied** is `applied − sum(applied_amount)` and its **net tip** is
+gives money back once, §5.1), `fingerprint` (§5.1), `applied_amount`, `tip_amount`, `reason`,
+`authorized_by`, `requested_by`, `till_id` (the device that gave the money back, for the cash-up,
+§9a), `state` (`pending | completed | failed`, §6b), `created_at`, `completed_at`, `failed_at`.
+**Classified `ledger`, not append-only**, for the same reason as `bill_payments`: the amounts are
+decided once and only the outcome arrives later. A behavioural trigger (a custom migration) allows
+only `pending → completed` and `pending → failed` and refuses any change to the amounts, the payment
+or the device. A cash refund is inserted `completed` in its own transaction; only a card refund is
+ever `pending`. For a card, the provider refund it made is also recorded where refunds already are
+(`payment_refunds`, `packages/payments/src/schema/payment-refunds.ts`), through the `payments` row.
+Only a `completed` refund counts in the sums below. A payment's **net applied** is `applied − sum(applied_amount)` and its **net tip** is
 `tip − sum(tip_amount)`. A refund gives back applied money first; it returns a tip only when the
 whole payment is refunded at the payer's request (§6).
 
@@ -414,6 +422,9 @@ checks are the ones below.
   (§3.1). So a second device may take cash while a card is at the terminal. **Why:** at a large
   table two guests paying at once is ordinary, and the reservation is what keeps it safe.
 - **A different bill of the same visit** is never locked by this bill's card payment.
+- **A pending card REFUND locks more than a pending payment** (§6b): while one is pending on a bill,
+  every payment, line write, adjustment, move, abandon and refund on that bill, and its invoice, is
+  refused with `bill.refund_in_progress`.
 
 **Both orders of every race are tested as sequential calls** (the engine takes one write
 transaction at a time, plan Global Constraints): cash then a card's P1 on the same last €40.00 (the
@@ -502,6 +513,69 @@ A pending bill payment is resolved from the provider's row, never from its age:
   either today, and Task 14 builds neither**: its scope is money before the invoice. The backlog
   keeps the post-invoice refund as its own item.
 
+### 6b. A card refund that is interrupted (owner, 2026-09-26: required before approval)
+
+**The problem.** On `main` a card refund is one provider call followed by a separate transaction
+that records it (`reverseViaStripe`, `packages/payments-stripe/src/reverse.ts`), and the call carries
+a fresh idempotency key every time (`idempotencyKey: randomUUID()`, same file). If the provider
+refunds and the process dies before the record is written, nothing on our side says a refund
+happened, and a staff retry sends a NEW key, so the provider refunds again. SumUp's refund call
+sends no idempotency key at all (`packages/payments-sumup/src/sumup-client.ts`, `refund`). A bill
+refund cannot inherit that.
+
+**The rule: the attempt is written before the call, and the call is keyed to the attempt.**
+
+1. **R1 (transaction):** check permission and the amounts; refuse if the bill has a pending payment
+   (`order.payment_in_flight`) or a pending refund (`bill.refund_in_progress`); insert the
+   `bill_payment_refunds` row as `pending` with its `submission_id`; commit. From here the bill is
+   locked as §5.2's last bullet says.
+2. **R2 (no transaction):** call the provider's `partialRefund` with an idempotency key DERIVED FROM
+   THE REFUND ROW (its id), never a random one, and with the row's id in the refund's metadata where
+   the provider takes metadata. The payments package's reverse path gains an optional caller-given
+   key; existing callers keep today's behaviour until the backlog item below changes them.
+3. **R3 (transaction):** on success, record the provider refund in `payment_refunds`, mark the row
+   `completed` and release the lock; on a provider refusal, mark it `failed` and release the lock;
+   on anything else (a timeout, a network error, a crash before R3), the row stays `pending` and
+   the bill stays locked.
+
+**Retrying.** The till's automatic retry and a staff retry both resend the SAME `submission_id`
+(plan Global Constraints). The server finds the pending row (§5.1) and runs R2 again with the SAME
+derived key, then R3. For Stripe, a request repeated with the same idempotency key returns the first
+request's result instead of refunding again. That is inferred from Stripe's documented idempotency
+behaviour, not tested here, and Stripe keeps a key for a limited time, so Task 14's Step 0 reads
+Stripe's current documentation and states the window. After that window, recovery lists the payment
+intent's refunds and matches the one carrying the row's id in its metadata. A retry with a NEW
+`submission_id` while one refund is pending is `bill.refund_in_progress`.
+
+**SumUp.** Its refund call takes no idempotency key, so a pending SumUp refund is NEVER re-sent
+automatically. Task 14's Step 0 checks what SumUp's API offers for listing a transaction's refunds
+(unverified here). If it offers one, recovery reads it; if not, a pending SumUp refund goes only to
+the manager action below.
+
+**Recovery without a retry.** The loop that finishes pending bill payments (§5.4) also resolves
+pending card refunds whose refund call has passed its own timeout, and only from the provider's
+word: a
+refund the provider shows as made → R3's success work; one it shows as not made → `failed`; no
+answer, or an ambiguous one → left pending for the manager. M7b2's manager action lists a bill's
+pending refunds beside its pending payments and resolves one at a time the same way; a provider it
+cannot reach is refused and the refund stays pending. It never marks a refund failed on a guess,
+because a wrong "failed" releases the lock and lets the bill be invoiced with money it no longer
+holds.
+
+**Why the whole bill is locked, not only the refunded payment.** While the refund's outcome is
+unknown, so is the bill's received total. A payment taken in that window could complete the bill,
+and completing it issues the invoice (§7) with tenders built from a received total that the
+refund then changes. A pending payment only ever ADDS money, which §5.2's reservation bounds; a
+pending refund takes money away by an amount not yet confirmed. Refunds are rare and each lasts
+seconds, so a short lock costs little.
+
+**The invoice.** `issueIfFullyPaid` (§7) refuses to issue while any refund on the bill is pending.
+A refund never runs on an invoiced bill through this path (§6, "after the invoice").
+
+**The post-invoice refund on `main` has the same key problem** (`reverseViaStripe` is also what
+today's single-payment refund uses). Changing it is outside Task 14 (§6); a backlog item records
+it.
+
 ### 6a. A reduction on a bill that already has contributions
 
 A €60.00 bill with €50.00 contributed takes a €20.00 comp; it would total €40.00 with €50.00
@@ -518,7 +592,7 @@ visit that closes has no home and no fiscal meaning. After the refund and the co
 ## 7. The invoice at full payment
 
 **A bill's invoice is issued by the transaction whose write leaves it fully paid:** the bill is
-open, it has no pending payment, it has at least one line and at least one received payment, and
+open, it has no pending payment and no pending refund (§6b), it has at least one line and at least one received payment, and
 the net applied of its received payments equals its total. A bill whose lines were all comped and
 that holds no payment is not issued by this helper. No product path issues a €0.00 sale today: the
 pay action sends one tender for the total, and `tenders_amount_ck` refuses a zero amount
@@ -596,6 +670,46 @@ its code.
 16. **No provider row** (§5.4): a pending bill payment with no `payments` row is failed by the loop;
     one whose row is `failed` stays pending.
 
+**Card refunds (§6b)**, each with a stub provider that records every call and its idempotency key:
+
+17. **Crash after the provider refunded:** a €20.00 card refund whose provider call succeeds, with
+    R3 made to throw. The refund row is `pending`, `payment_refunds` has nothing, and the bill is
+    locked: a cash payment, a line edit, an adjustment, a move and a second refund are each
+    `bill.refund_in_progress`, and no invoice is issued. A staff retry with the SAME
+    `submission_id` calls the provider once more with the SAME key; the stub returns the first
+    refund (as Stripe does for a repeated key); the row becomes `completed`, `payment_refunds` gets
+    one row, and the stub saw exactly one distinct key. The payer is refunded once.
+18. **A retry with a new id** while the refund is pending → `bill.refund_in_progress`, and the
+    provider is not called.
+19. **Provider refuses** (card already fully refunded at the provider, say): the row is `failed`,
+    the lock is released, and the bill's received total is unchanged.
+20. **Provider unreachable:** the row stays `pending` and the bill locked; a later retry with the
+    same id that reaches the provider completes it.
+21. **The loop and the manager action:** with no staff retry, the loop's pass asks the provider,
+    finds the refund made, and completes it once. With the provider answering "no such refund",
+    it marks it `failed`. With the provider unreachable, the loop leaves it pending and M7b2's
+    manager action refuses too; the bill stays locked.
+22. **SumUp:** a pending SumUp refund is never re-sent by a retry or the loop; it resolves only by
+    SumUp's own refund record, if Step 0 finds one, or by the manager action.
+23. **The invoice waits for the refund:** a €60.00 bill has €50.00 received (a €30.00 card payment
+    and €20.00 cash). A €10.00 refund of the card payment is left pending. A €10.00 comp, which would
+    lower the total to €50.00, equal to what was received, and so issue the invoice, is refused
+    `bill.refund_in_progress`, and no invoice exists. Once the refund completes (received €40.00),
+    a €20.00 cash payment issues ONE invoice for €60.00 whose tenders are €20.00 card (net of the
+    refund), €20.00 cash and €20.00 cash.
+
+**The cash-up (§9a):**
+
+24. **Money on the day it moves:** day 1, till A takes a €50.00 cash contribution on a €120.00 bill;
+    day 1's cash-up shows €50.00 cash on till A, and its VAT summary shows no sale. Day 2, till B
+    takes the remaining €70.00 by card and the invoice is issued: day 2 shows €70.00 card on till B,
+    day 1 still shows €50.00 (recomputed after the invoice, it is unchanged), and no day counts the
+    €120.00 of tenders a second time. The day-1 frozen close reconciles counted cash against
+    €50.00, not €0.00.
+25. **A refund on another day and till:** a €50.00 cash contribution on till A, day 1, refunded €20.00
+    in cash on till B, day 2: A shows +€50.00 on day 1, B shows −€20.00 on day 2.
+26. **Today's paths unchanged:** a walk-up cash sale's tender is counted exactly as before, once.
+
 ---
 
 ## 9. What this design does not change
@@ -610,8 +724,39 @@ its code.
   is told to collect, and §5.4's no-row rule does not apply to it.
 - **A payment before the invoice prints nothing of ours.** The card terminal prints its own slip; a
   "payment received" note is not an invoice (spec §6) and is not built.
-- **The daily close** is unchanged: money received against a bill whose invoice is not yet issued is
-  not a tender until then (open point §11.5).
+- **The daily close's VAT summary and record counts** are unchanged: money received against a
+  bill whose invoice is not yet issued is not a sale. The cash-up changes (§9a).
+
+### 9a. The cash-up counts money on the day it moves (owner, 2026-09-26: in Task 14)
+
+**Why it cannot wait.** The cash-up (`computeCashUp`, `packages/reporting/src/cash-up.ts`) counts
+only `tenders` joined to `sales`, by `tenders.settled_at` within the business day, grouped by the
+SALE's till. Under this design a bill payment becomes a tender only when the bill's invoice is
+issued (§2.5). So €50.00 cash taken against an unfinished bill is missing from that day's expected
+cash, and the frozen daily close (the cierre Z, `record-daily-close.ts`) reconciles the counted
+cash against a figure €50.00 short. And because §2.5 gives the tender `settled_at` = when the money
+moved, an invoice issued the NEXT day would add the €50.00 retroactively to a day already closed.
+
+**The rule.** The cash-up reads three sources, per till and method, within the business day:
+
+| Source | Counted when | Till | Amount | Tip |
+| --- | --- | --- | --- | --- |
+| `tenders` with `bill_payment_id` NULL (today's single-payment sales) | `tenders.settled_at` | the sale's | `amount` | `tip_amount` |
+| `bill_payments` `received` | `received_at` | the payment's `till_id` | `applied + tip` | `tip` |
+| `bill_payment_refunds` `completed` | `completed_at` | the refund's `till_id` | −(`applied_amount + tip_amount`) | −`tip_amount` |
+
+- **No double counting:** a tender with `bill_payment_id` set is NOT counted; its money was counted
+  when the bill payment was received. Issuing the invoice therefore changes no day's cash-up.
+- **Money on the day and till it moved:** a payment taken on till A on day 1 and refunded on till B
+  on day 2 counts +€X on A on day 1 and −€X on B on day 2.
+- **Kept apart from invoiced sales:** the VAT summary and the invoiced-sales totals read the filed
+  sales, unchanged; the cash-up says what money moved.
+- **Change is never counted** (it went back to the payer), as today.
+- A pending card payment or refund is not counted until it resolves, on the day it resolves.
+- An offline-accepted payment later declined (§5.4) is future Tap to Pay work (§11.9); that work
+  decides how a later decline shows in an earlier day's card figure.
+
+---
 
 ---
 
@@ -638,35 +783,33 @@ contribution is correct, and what to do when the invoice was printed first.
 
 ---
 
-## 11. Open points for the owner
+## 11. Open points for the owner — answered 2026-09-26
 
-Each has a recommended default; the design above is written with the default.
+The owner answered each on 2026-09-26. The design above is written with these answers.
 
-1. **Approve this design** so Task 14 can start. Default: approve as written.
-2. **A move that would leave the original owing less than it received** (§4.3). Default: refuse,
-   and offer "move fewer lines" or "refund the excess first". Alternative: carry the excess across
-   to the new bill as a contribution there.
-3. **A new round while a card is at the reader** (§5.2). Default: refused, as D22 refuses it today.
-   Alternative: allow additions (they only raise what is owed), refusing only writes that lower the
-   total or touch paid lines; this changes M7b's single refusal point into two.
-4. **A reduction on a bill with contributions** (§6a). Default: refuse with the excess, offer
-   "refund first". Alternatives: refund automatically in the same step (a cash refund could; a card
-   refund cannot share the transaction), or refuse the reduction outright.
-5. **Money received before the invoice at the daily close** (§9). Default: the close is unchanged
-   in Task 14, and a backlog item adds "received, not yet invoiced" to the cash-up. Alternative:
-   Task 14 adds it.
-6. **Refund permission** (§6). Default: the existing `sale.refund`. Alternative: a new permission
-   for refunds before the invoice.
-7. **Tips with the venue's tips switched off** (§3.1). Default: a card charge above the applied
-   amount and a cash tip are both refused (`bill.tip_not_allowed`). Alternative: allow tips on
-   bills whatever the switch says.
-8. **A walk-out after a contribution** (§4.5). Default: the bill stays open until Task 17 (unpaid
-   departure, waiting on Q28) can close it. Alternative: a manager close before Task 17 that records
-   the shortfall without an invoice, which is the reading Q28 asks the advisor about.
-9. **Offline card acceptance for a payment that does not complete the bill** (§5.4; nothing in the
-   server produces an offline acceptance today, so this matters when Tap to Pay is wired). Default:
-   allowed; a later decline before the invoice puts the amount back on the bill. Alternative: allow
-   offline only for the payment that completes the bill.
+1. **Approve this design:** the overall approach is approved, subject to the refund gap and item 5.
+   The owner asked for §6b (durable card refunds, recovery, and how a pending refund meets other
+   payments and the invoice) and its tests before final approval. **Awaiting that final approval.**
+2. **A move that would leave the original owing less than it received** (§4.3): **the default.**
+   Refuse, and offer "move fewer lines" or "refund €X first". Money never moves between bills
+   implicitly.
+3. **A new round while a card is at the reader** (§5.2): **the default.** That bill's contents stay
+   fixed until the payment finishes; other bills at the table stay usable.
+4. **A reduction on a bill with contributions** (§6a): **the default, "refund first".** Show the
+   exact amount to refund, then let staff retry the adjustment. Never refund automatically, and never
+   turn the difference into a tip.
+5. **Money received before the invoice at the daily close:** **the alternative — in Task 14** (§9a).
+   Payments and refunds appear on the day the money moves, against the till that took or gave it,
+   with no second count when the invoice is issued, and apart from invoiced-sales totals.
+6. **Refund permission** (§6): **the default,** the existing `sale.refund`.
+7. **Tips with the venue's tips switched off** (§3.1): **the default.** Refuse a tip, and show the
+   amount that can be charged without one.
+8. **A walk-out after a contribution** (§4.5): **the default, pending Q28.** The unpaid bill stays
+   visible; Task 14 adds no close-without-invoice route.
+9. **Offline card acceptance for a payment that does not complete the bill** (§5.4): **the direction
+   is accepted for the future Tap to Pay work, and Task 14 does not enable it.** That work must test
+   declines both before and after the invoice, including releasing an item payment's lines when an
+   uninvoiced payment is declined.
 
 ---
 

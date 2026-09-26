@@ -2238,8 +2238,17 @@ address that answers is then asked for its paper sizes on port 631.
   [plan](superpowers/plans/2026-09-26-service-ordering-and-billing.md), Revision 2, eighteen tasks,
   reviewed three times before the merge. What stays open:
   - **Task 0's [bill payments design](superpowers/specs/2026-09-26-bill-payments-design.md) awaits
-    the owner's approval**, with nine open points in its §11 (copied to lane B's questions file).
-    Task 14, several payments against one bill, does not start until it is approved.
+    the owner's final approval.** The owner answered its nine open points on 2026-09-26 (its §11):
+    the cash-up now counts money on the day it moves, in Task 14 (§9a), and a card refund is a
+    durable attempt that survives an interrupted call (§6b), both added that day. Task 14, several
+    payments against one bill, does not start until the amended design is approved.
+  - **A refund of an already-invoiced card sale can refund twice after a crash** (found by the owner
+    reviewing Task 0, 2026-09-26). `reverseViaStripe` (`packages/payments-stripe/src/reverse.ts`)
+    sends a fresh `randomUUID()` idempotency key on every call and records the refund only after the
+    call returns, so a crash between the two leaves no record and a retry refunds again. SumUp's
+    refund sends no key at all. Task 14 fixes this for refunds before the invoice only (design
+    §6b). **Next action:** apply §6b's durable-attempt rule to the post-invoice refund path when
+    that path is built or touched.
   - **Task 1** (adjustment reasons and policies, a new module) is the one build task that can start
     now.
   - **Every other task waits for lane C's menus tasks that change the same order and till code**
