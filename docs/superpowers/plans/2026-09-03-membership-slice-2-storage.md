@@ -363,6 +363,10 @@ export async function writeNodeMembership(
 }
 ```
 
+> 2026-09-26: no caller ever re-ran the check; the header now says a peer's document is checked by
+> `acceptMembershipDocument` when stored, every other one is minted by this node, and readers trust
+> the row (branch `chore/membership-reader-header`).
+
 - [ ] **Step 4: Run test, verify it passes**
 
 Run: `pnpm --filter @waitron/db test node-membership.test`

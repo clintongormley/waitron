@@ -3047,19 +3047,20 @@ image constraints under *Detail → Box image*.
     cannot (`sleepMsFor` in `loop.ts` is `Math.min(max, Math.max(min, wait))`, and config refuses
     `minTickMs > maxTickMs`; #653 corrected the same claim in `config.ts`); `config.test.ts`'s
     test title (near line 572) says "round back down past the floor" where it means "to the
-    floor". `packages/db/src/node-membership.ts`'s header says the caller of `readNodeMembership`
-    re-runs `verifyMembershipDocument` / `acceptMembershipDocument` on what it reads; none of the
-    nine non-test files that call it does (grepped 2026-09-25; `boot.ts` calls
-    `acceptMembershipDocument` only on a peer's incoming document). #653 restored the note at
-    boot's read. Two notes #653's prune deleted and nothing else recorded: nobody knows why the
-    5-second busy timeout did not absorb a `database is locked` in the pending-payment sweep; and
-    nothing proves `startServer` itself survives a backup duty that cannot start — only
+    floor". **Done (2026-09-26, lane A's A38, branch `chore/membership-reader-header`):**
+    `packages/db/src/node-membership.ts`'s header said the caller of `readNodeMembership` re-runs
+    `verifyMembershipDocument` / `acceptMembershipDocument` on what it reads, and none did; it now
+    says a peer's document is stored only after `acceptMembershipDocument` passes it, every other
+    one is minted and signed by this node, and readers trust the row. The restore question it raised
+    is open under Task 9a. Two notes #653's prune deleted and nothing else recorded: nobody knows
+    why the 5-second busy timeout did not absorb a `database is locked` in the pending-payment
+    sweep; and nothing proves `startServer` itself survives a backup duty that cannot start — only
     `backup-supervisor.test.ts` covers that, at the supervisor. Read, not run: on the trading path
     `boot.ts` leaves the venue store open when a step after the long-lived open throws
     (`readOrderFlow`/`readFilingModule`, `fiscalSlot`, `readVenueLocale`, `readVenueTimeZone`,
     `makeFiscalBackend`, `backupSupervisor.reload()`, `sealedState.refresh()`,
-    `streamHost.start()`). Test titles #653 could not touch in `boot.test.ts` carry the history
-    tags "(SP-1a)", "(SP-1b)", "(SP-1b spec §3)", "(SP-1c)", "(slice 3)" and "SP-C dev override".
+    `streamHost.start()`). Test titles #653 could not touch in `boot.test.ts` carry the history tags
+    "(SP-1a)", "(SP-1b)", "(SP-1b spec §3)", "(SP-1c)", "(slice 3)" and "SP-C dev override".
   - Found by #625 (`apps/server` part e1), outside its files or not fixable in a comments-only
     change. Docs: `docs/developers/conventions-ui.md` (the recovery page section) says a
     caught error's own text goes to the container's stdout only, but the page's log tail can carry
@@ -5696,6 +5697,14 @@ endorsement stored when that round reads, not the first round's"
   start runs whenever that box next starts trading unfenced and not as a mirror. Whether a rejoin
   should clear it is the owner's call.
 - A sell-only local secondary that is not fenced runs the first start and signs the next term.
+- **Open, left by A38 (branch `chore/membership-reader-header`): a restored membership row is signed
+  over unchecked.** A restore (archive or bucket) puts the copy's `node_membership` row back as it
+  was, and whatever this node next mints over it signs the next term over that row's node list
+  without verifying it — the start that finishes the restore (`completeRebuild`), or before it a
+  mirror promoted without a restart (the item below). A probe wrote a row with a broken signature
+  and an extra node, then ran `completeRebuild`: it returned true and stored a new, validly signed
+  document still listing the extra node. Whether a restore should verify the row is the owner's
+  call.
 - A mirror that deferred its first start and is then promoted without a restart
   (`promoteMirrorToPrimary`, `apps/server/src/promote.ts`) keeps the bucket copy held, reading off
   with the reason `first_start_pending` and raising no alert, until the box next starts; that start
