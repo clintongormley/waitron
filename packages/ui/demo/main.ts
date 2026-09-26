@@ -115,16 +115,12 @@ const panel = (theme: "light" | "dark") => `
         name="minimo"
         value="0"
         hint="0 hace la lista opcional"
-        decreaselabel="Reducir {label}"
-        increaselabel="Aumentar {label}"
       >
       </wt-number-stepper>
       <wt-number-stepper
         label="Máximo"
         name="maximo"
         placeholder="∞"
-        decreaselabel="Reducir {label}"
-        increaselabel="Aumentar {label}"
       >
       </wt-number-stepper>
       <wt-number-stepper
@@ -133,8 +129,6 @@ const panel = (theme: "light" | "dark") => `
         value="1"
         min="1"
         max="1"
-        decreaselabel="Reducir {label}"
-        increaselabel="Aumentar {label}"
       >
       </wt-number-stepper>
     </div>
@@ -341,6 +335,13 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
     price.addEventListener("wt-change", () => {
       price.error = "";
     });
+  }
+
+  for (const stepper of el.querySelectorAll<HTMLElementTagNameMap["wt-number-stepper"]>(
+    "wt-number-stepper",
+  )) {
+    stepper.decreaseLabel = (label) => `Reducir ${label}`;
+    stepper.increaseLabel = (label) => `Aumentar ${label}`;
   }
 }
 
