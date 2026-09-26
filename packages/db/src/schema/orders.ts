@@ -92,9 +92,10 @@ export const workingOrders = table(
 );
 
 /**
- * Prices and descriptions are snapshotted here, never read live from the catalogue, so a later
- * catalogue edit is a freshness problem, never a correctness one — and the filed `sale_lines`
- * carry these snapshots, naming a product only as a value, never a key.
+ * Gross prices and descriptions are snapshotted here, never read live from the catalogue, so a
+ * later catalogue edit to either is a freshness problem, never a correctness one — and the filed
+ * `sale_lines` carry these snapshots, naming a product only as a value, never a key. The VAT rate
+ * is the exception: issuance resolves it again (below).
  *
  * The line-add snapshot IS the filed price: a retrieved order is FILED from the locked gross unit
  * price without a re-price (priceLockedLines, @waitron/catalogue). `product_id` never re-prices an
@@ -137,9 +138,9 @@ export const workingOrderLines = table(
     // than recovered as `line_total ÷ quantity`, which DRIFTS for a weighed line (9.99/kg × 0.333 →
     // 3.33 stored, 3.33 ÷ 0.333 = 10.00 ≠ 9.99).
     unitPriceGross: money("unit_price_gross").notNull(),
-    // The add-time rate before issuance, and the issued rate after it: issuance resolves it from the
-    // product's current VAT class and writes it back, with `unit_price`, while the order is open. An
-    // order issued while placed keeps the add-time rate here; `sale_lines` has the issued one.
+    // The add-time rate, replaced by the then-current rate (with `unit_price`) each time issuance
+    // prices the order while it is open. An order issued while placed keeps its stored rate here;
+    // `sale_lines` holds the issued one.
     vatRate: rate("vat_rate").notNull(),
     // GROSS (VAT-inclusive) line total — the customer-facing number, so the held-orders list
     // `sum(line_total)` equals the basket total the operator saw. This DELIBERATELY DIVERGES from

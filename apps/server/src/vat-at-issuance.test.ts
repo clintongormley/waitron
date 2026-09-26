@@ -62,9 +62,9 @@ import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
 // Spec §11.4: a line's VAT rate is resolved from its product's CURRENT VAT class in the pass that
-// issues the invoice record, on every filing path, and written back onto the stored line. Every
-// product starts at `reduced` (10%); a case corrects one to `general` (21%). The gross the customer
-// pays never moves, so each case also pins the filed total.
+// issues the invoice record, on every filing path, and written back onto the stored line while the
+// order is open. Every product starts at `reduced` (10%); a case corrects one to `general` (21%).
+// The gross the customer pays never moves, so each case also pins the filed total.
 const LOCALE = "es-ES";
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000bb";
 
@@ -513,7 +513,7 @@ describe("the VAT rate is resolved when the invoice record is issued (spec §11.
     expect(await filed(before)).toEqual(placed);
     expect(await stored(before)).toEqual(storedAtPlacing);
     expect(ticket.vatBreakdown).toEqual(CANA_AT_10);
-    expect(prepared.filter((s) => /from "products"/.test(s))).toEqual([]);
+    expect(prepared.filter((s) => /"products"/.test(s))).toEqual([]);
     expect(prepared.filter((s) => /^update "working_order_lines"/.test(s))).toEqual([]);
     expect(await filed(after)).toMatchObject({ total: 250, vatBreakdown: CANA_AT_21 });
     expect(await rates(after)).toEqual([2100]);
@@ -564,7 +564,7 @@ describe("the VAT rate is resolved when the invoice record is issued (spec §11.
 });
 
 describe("the resolved rate is written back onto the stored line", () => {
-  it("after filing, the stored line holds the filed rate and net unit; a reprint and a replay after a further change print the filed rate and change no row", async () => {
+  it("after filing, the stored line holds the filed rate and net unit and the stored order rebuilds at it; a reprint and a replay after a further change leave the sale and the stored line unchanged, and the replay's lines and VAT breakdown match the original's", async () => {
     const v = await setupVenue();
     const id = await park(v, one(v, v.products.cana));
     const [atAdd] = await stored(id);
@@ -606,7 +606,7 @@ describe("the resolved rate is written back onto the stored line", () => {
     expect(await stored(id)).toEqual(storedAfterFiling);
   });
 
-  it("resolves every line's class in one read and writes the changed rates in one statement, however many lines the order has", async () => {
+  it("resolves every line's class in the line read and writes the changed rates in one statement, however many lines the order has", async () => {
     const v = await setupVenue();
     const single = await park(v, one(v, v.products.cana));
     const five = await park(v, [
@@ -633,7 +633,10 @@ describe("the resolved rate is written back onto the stored line", () => {
       const forFive = prepared.mock.calls.map(([query]) => query.sql);
 
       expect(forFive).toHaveLength(forOne.length);
-      expect(forFive.filter((s) => /from "products"/.test(s))).toHaveLength(1);
+      expect(forFive.filter((s) => /from "products"/.test(s))).toEqual([]);
+      expect(
+        forFive.filter((s) => /from "working_order_lines".*join "products"/.test(s)),
+      ).toHaveLength(1);
       expect(forFive.filter((s) => /^update "working_order_lines"/.test(s))).toHaveLength(1);
       expect(priced.priced.lines.map((l) => l.vatRate)).toEqual(Array(5).fill("21.00"));
     });
