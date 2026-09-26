@@ -603,16 +603,16 @@ it("emits one wt-cancel, and neither event while it is saving", async () => {
 });
 
 it("paints its own error text with the danger token and keeps the row controls tappable", async () => {
-  const { el, host } = await mount({
-    value: cooked,
-    fieldErrors: { "labels.0.name": "Already used." },
-  });
+  const { el, host } = await mount({ value: cooked });
   host.style.setProperty("--wt-color-danger", "rgb(13, 14, 15)");
   host.style.setProperty("--wt-tap-min", "44px");
 
   await editOption(el, 0, (form) => toggle(form, "label-available", false));
   await editOption(el, 1, (form) => toggle(form, "label-available", false));
   await click(el, "save");
+  // After the option saves above, which clear a refusal held for the option they save.
+  el.fieldErrors = { "labels.0.name": "Already used." };
+  await el.updateComplete;
 
   for (const testId of ["labels-error", "label-0-error"]) {
     const error = el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${testId}"]`)!;
@@ -906,3 +906,31 @@ it.each([1280, 390])(
     }
   },
 );
+
+it("clears a refusal held for an option once that option is saved in its editor, and only that option's", async () => {
+  const { el } = await mount({
+    value: cooked,
+    fieldErrors: { "labels.0.kitchenName": "Too long.", "labels.1.name": "Already used." },
+  });
+
+  await editOption(el, 1, (form) => type(form, "label-name", "Medium rare"));
+
+  expect(rowErrors(el, 1)).toEqual([]);
+  expect(summary(el)).toEqual(["Too long."]);
+  expect((await openEditor(el, 1)).errors).toEqual({});
+  await click(editor(el), "cancel");
+  expect(rowErrors(el, 0)).toEqual(["Too long."]);
+  expect((await openEditor(el, 0)).errors).toEqual({ "label-kitchen-name": "Too long." });
+});
+
+it("keeps a refusal held for an option when its editor is cancelled", async () => {
+  const { el } = await mount({ value: cooked, fieldErrors: { "labels.1.name": "Already used." } });
+
+  const form = await openEditor(el, 1);
+  await type(form, "label-name", "Medium rare");
+  await click(form, "cancel");
+  await el.updateComplete;
+
+  expect(rowErrors(el, 1)).toEqual(["Already used."]);
+  expect(summary(el)).toEqual(["Already used."]);
+});

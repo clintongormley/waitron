@@ -232,6 +232,9 @@ export class OptionListForm extends LitElement {
         ? this.labels.map((label) => (label.id === saved.id ? saved : label))
         : [...this.labels, saved];
       this.#keepDefault();
+      this.serverErrors = Object.fromEntries(
+        Object.entries(this.serverErrors).filter(([key]) => !key.startsWith(`label:${saved.id}:`)),
+      );
     });
     this.#closeEditor();
   }
@@ -399,7 +402,7 @@ export class OptionListForm extends LitElement {
           (message) => html`<p class="error" data-test=${`label-${index}-error`}>${message}</p>`,
         )}
       </td>
-      <td class="pick-cell">
+      <td>
         <label class="pick" data-test=${`label-${index}-pick`}
           ><input
             type="radio"
