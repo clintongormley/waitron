@@ -281,16 +281,28 @@ Zones tab still assigns menus to zones, and an old `…/venue-operations/view/me
 Status tab. `wt-data-table` filters may now match a list of values per row, and `wt-input` gains an
 optional always-shown `hint` line its input is described by. No migration. Left, none blocking:
 removing a product's last placement on the Structure tab clears its menu price and variant settings
-with no warning, where the old tab asked first (the spec's "starts fresh" needs none; the owner may
-want one back); a product sold only as its variants shows the product's own price on this menu as
-its resulting price, marked "Sold as its variants"; the main-category filter offers every category,
-not only those on the menu; the Prices tab replaces #541's struck-out product price with separate
-columns for the product's price, this menu's price and the resulting price, for the owner to
-confirm; and the product editor's help lines, and the price window's variant help sentence
-(`menu_prices.variants_help`), are still paragraphs beside their inputs rather than `wt-input`'s
-`hint`, so they are not linked to their inputs; and a product whose only override is a variant's
-price appears under "Overridden only" while its menu price column reads "None", for the owner to
-judge.
+with no warning, where the old tab asked first (the owner decided 2026-09-26 that none is needed);
+the main-category filter offers every category, not only those on the menu; and the product
+editor's help lines, and the price window's variant help sentence (`menu_prices.variants_help`), are
+still paragraphs beside their inputs rather than `wt-input`'s `hint`, so they are not linked to their
+inputs. (#670's other two open points — a variant-only product showing the product's own price, and
+"Overridden only" disagreeing with a "None" menu price — were settled by #680, below.)
+**The Prices tab shows variants, price ranges and a choice of columns, landed as #680 (2026-09-26,
+the owner's answers to #670's FYI):** each product's Active variants are rows under it (a tree,
+closed until opened), each with its own product price, this menu's price and the price charged; a
+product sold only as its variants shows ranges — product price over all its variants, charged price
+over the OFFERED ones, or "No variant offered" — never the product's own price; its Menu price reads
+"Variant overrides" when only variants carry a menu price, agreeing with "Overridden only". Both
+price displays exist: the three separate columns, and #541's struck-out "Price on this menu" column,
+hidden by default. `wt-data-table` gains a column chooser (`choosable: "shown" | "hidden"` on a
+column, `columnsLabel`, a `wt-columns-change` event; a hidden column's filter stays drawn and still
+filters, a hidden column stops sorting) remembered per browser in `localStorage` under
+`<viewKey>:columns`, and a `rowToggleLabel` for per-row expand/collapse names. No migration. Left,
+none blocking: the stored key uses a colon (`waitron.menus.prices:columns`) where every other stored
+key uses dots or dashes — cheap to change until a venue is live; a variant row is announced by its
+name alone ("Glass"), not with its product's, relying on the tree's level; and, from reading only, a
+Columns panel wider than a very narrow screen would not shrink to fit, and is not re-placed if the
+window is resized while it is open.
 **Menus Task 6 (publishing), landed as #677 (2026-09-26):** a menu can be published. Publishing
 freezes the menu's working state (structure, names, prices, photos, variants, extras, options,
 allergens and diet) as a numbered version in `menu_versions`, which can never be changed or deleted,
@@ -824,8 +836,8 @@ now that it has landed. What it left open, both put to the owner in #532 — now
   product, a price the menu sets shows plainly, as before; a blank price is still greyed, since the
   offer itself records that its price is blank. The edit form is unchanged.
   (2026-09-26: that offers list went with menus Task 5. The Prices tab shows the product's own
-  price, this menu's price and the resulting price in separate columns instead of a struck-out
-  price.)
+  price, this menu's price and the resulting price in separate columns; since #680 the struck-out
+  display is also there, as a "Price on this menu" column a manager can choose to show.)
   Two follow-ups #541's review raised, not taken, neither blocking: (1) the dashboard's product list
   shows a variant's blank price as its parent's with no marking
   (`apps/dashboard/src/widgets/product-list.ts`, the `price` column's cell) — whether it should grey
