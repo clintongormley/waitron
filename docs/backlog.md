@@ -3065,20 +3065,47 @@ image constraints under *Detail → Box image*.
     listed. The three restore routes already released on every failure (a new case each for the
     archive and bucket restores; the Cloud restore's existing cases fail when its release is
     deleted); `fiscal-test` and `configuration` release in a `finally` and never restart. A
-    completed operation replayed on a later request still keeps the lock set without restarting,
-    as before. Stale wording outside f2: "a device with no
-    profile" in `apps/server/src/till-api.test.ts` (near lines 1377–1395) and
-    `apps/till/src/till-app.test.ts` (near line 5765), though a device's profile column is NOT NULL;
-    the "four ids" test title in `apps/server/src/provision.test.ts`, which asserts five;
-    `config.ts`'s "minted once and reused" for the box certificate, which a restore re-issues; and
-    `errors.ts` describing `setup.already_provisioning` as a persistent-lease refusal, when it
-    mostly comes from the in-memory lock. Test titles carrying history, left because titles are
-    code: "(real Postgres)" describes and "(SP-A.2 §16, device-profile §5)" in
+    completed provision or adopt operation replayed on a later request still answers 200 without
+    restarting and keeps the lock set, as before (measured on the old and new code; the Cloud
+    restore's replay does restart). A body that fails while it is read now answers a 500 with the
+    JSON code `server.internal` on provision and adopt, instead of a plain-text 500.
+    Still open, not fixed, and predating A42: a refused adopt keeps its recorded operation. Adopt's
+    inner `runAdopt` turns a refusal into a returned answer, and the operation store deletes its
+    record only when the work throws while the record is at phase "started", so
+    `setup-operation.json` stays on disk at that phase. Measured with a real operation store on the
+    new code: after the `adopt` step failed with `mirror.bundle_fetch_failed` (502), the
+    original body resent got the 502 again while the primary still failed and 200 once it recovered;
+    after the body was refused with `setup.request_invalid` (400), the original body resent got the
+    400 again, because the body itself is the cause; in both, a different body got
+    `409 setup.operation_conflict`. So after a 400 nothing can adopt while `setup-operation.json`
+    stays, and an operator who corrects a wrong password cannot adopt. On the old code (same probe) it
+    was worse:
+    the different body got a plain-text 500 and the lock stayed set, so even the original body then
+    got `setup.already_provisioning`. Not measured: whether a server restart clears it (the file
+    stays on disk, so probably not). Read, not run: the store's conflict check compares the
+    operation's kind as well as its hash (`apps/server/src/setup-operation.ts`), so after a refused
+    adopt, provision and the restore routes are refused with `setup.operation_conflict` too.
+    Provision's own refusals before the venue is committed are thrown, so the record is deleted and
+    a corrected body succeeds; a provision failure after `advance("venue_committed")` keeps the
+    record by design, so the same request can resume. Read, not run: the setup wizard's
+    `#mapAdoptError` (`apps/setup/src/setup-app.ts`) has no `setup.operation_conflict` case, so that
+    409 shows the generic "Couldn't connect to the primary…" message and sends the operator back to
+    the form; the provision mapper has one.
+    Also open from A42's review, read and not run: if `operation.complete()` throws after `execute`
+    has scheduled the restart, the lock is now released while that restart is pending (before A42
+    that throw was outside the release and the lock stayed set).
+    Stale wording outside f2: "a device with no profile" in `apps/server/src/till-api.test.ts` (near
+    lines 1377–1395) and `apps/till/src/till-app.test.ts` (near line 5765), though a device's
+    profile column is NOT NULL; the "four ids" test title in `apps/server/src/provision.test.ts`,
+    which asserts five; `config.ts`'s "minted once and reused" for the box certificate, which a
+    restore re-issues; and `errors.ts` describing `setup.already_provisioning` as a persistent-lease
+    refusal, when it mostly comes from the in-memory lock. Test titles carrying history, left
+    because titles are code: "(real Postgres)" describes and "(SP-A.2 §16, device-profile §5)" in
     `device-session.test.ts`, "never a raw devices_pkey 23505" in `join-requests.test.ts`, and
-    "(SP-1b fiscal gate)" and "(unchanged)" in `setup-api.test.ts`. Read, not run:
-    `cookieDomainFor` (`device-session.ts`) lowercases the request's host but not the configured
-    tenant domain (whether configuration normalises it is unchecked), and `DeviceBinding`'s
-    `deviceProfileId` is typed `string | null` for a column that cannot be null.
+    "(SP-1b fiscal gate)" and "(unchanged)" in `setup-api.test.ts`. Read, not run: `cookieDomainFor`
+    (`device-session.ts`) lowercases the request's host but not the configured tenant domain
+    (whether configuration normalises it is unchecked), and `DeviceBinding`'s `deviceProfileId` is
+    typed `string | null` for a column that cannot be null.
   - Found by #656 (`apps/server` part e2: the backup and restore files), outside its files or not
     fixable in a comments-only change. `apps/server/src/errors.ts` still cites CLAUDE.md §5 for
     things §5 does not say, on `backup.recovery_key_unstorable` ("unrecoverable (CLAUDE.md §5)") and

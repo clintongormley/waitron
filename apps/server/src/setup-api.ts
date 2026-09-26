@@ -583,8 +583,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     }
 
     // SYNCHRONOUS before ANY `await`, so this check+set completes before a second near-simultaneous
-    // POST's handler begins. Reset on any failure (below) so a corrected retry works; LEFT set on
-    // success — the box is about to restart.
+    // POST's handler begins. Reset whenever the request does not end in a success answer (below),
+    // so the lock does not refuse a retry; left set after a success answer, which schedules a
+    // restart unless it is the replay of a completed operation.
     if (provisioning || fiscalTesting || configurationStaging) {
       return directError(c, log, "setup.already_provisioning", 409);
     }
@@ -665,7 +666,6 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       }
 
       const response = c.json({ provisioned: true, restarting: true }, 200);
-      // `setTimeout`, not `queueMicrotask`, so the response promise resolves before the restart.
       setTimeout(() => requestRestart(), 0);
       return response;
     };
@@ -711,8 +711,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     }
     provisioning = true;
 
-    // Its own boundary, so a failed adoption RETURNS a refusal inside the operation, which keeps
-    // the recorded operation for the same request to retry.
+    // Its own boundary, so a refusal is returned, not thrown; the outer one checks `response.ok`.
+    // A returned refusal keeps the recorded operation: open defect in docs/backlog.md (A42).
     const execute = () =>
       runAdopt(c, log, async () => {
         // The credential is validated PER FIELD at the mirror's own boundary, so a wrong-shape body
