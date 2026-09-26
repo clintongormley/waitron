@@ -2954,16 +2954,15 @@ image constraints under *Detail → Box image*.
   §1). The rule change and the checker every pruning pull request passes,
   `scripts/comments-only.mjs <base>`, came first; its header states what it refuses and misses.
   What a pruner meets: it reads commits only, never an uncommitted edit; any changed file that is
-  not TypeScript, JavaScript or Markdown fails it, while a Markdown file is listed as not compared
-  (since `fix/comments-only-all-files`: before it, the first Markdown file, such as this backlog,
-  failed the run and no file after it was compared); it checks every file and names every refusal;
-  and it refuses a trailing comma added or dropped after a
-  spread, where Prettier writes one, so a pruning edit that lets such a call, array or object
-  fold onto one line is refused. The packages follow, the fiscal ones under the
-  same gates as any other fiscal change: the golden huella test and the `inmutabilidad` suite pass
-  unedited. Not reached by any package's pull request: `bench/` (about 2,300 comment lines) and the
-  root `vitest.config.ts` and `eslint.config.js`. Landed so far: `workforce` (#555, about 2,700
-  comment lines to about 750), `payments` (#558, about 2,000 to about 750), `identity` (#559, about
+  not TypeScript, JavaScript or a `.md` file fails it, while a `.md` file is listed as not compared
+  and never read; it checks every other file and names every refused file; and it refuses a
+  trailing comma added or dropped after a spread, where Prettier writes one, so a pruning edit that
+  lets such a call, array or object fold onto one line is refused. The packages follow, the fiscal
+  ones under the same gates as any other fiscal change: the golden huella test and the
+  `inmutabilidad` suite pass unedited. Not reached by any package's pull request: `bench/` (about
+  2,300 comment lines) and the root `vitest.config.ts` and `eslint.config.js`. Landed so far:
+  `workforce` (#555, about 2,700 comment lines to about 750), `payments` (#558, about 2,000 to
+  about 750), `identity` (#559, about
   2,000 to about 640), `provisioning` (#561, about 1,740 to about 400), `fiscal-verifactu` (#562,
   about 3,250 to about 1,550), `apps/setup` (#567, about 1,390 to about 310), `packages/store`
   (#568, about 1,120 to about 555, tests included), `packages/payments-stripe` (#570, about 1,080

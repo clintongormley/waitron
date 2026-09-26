@@ -513,8 +513,8 @@ describe("checkCommentsOnly against a git repository", () => {
       expect(run(["main~1"])).toEqual({
         code: 0,
         out: [
-          "comments-only: compared src/a.ts",
-          "comments-only: 1 code file compared; only comments changed",
+          "comments-only: src/a.ts: compared",
+          "comments-only: 1 code file compared; only comments changed in it",
         ],
         err: [],
       });
@@ -525,9 +525,9 @@ describe("checkCommentsOnly against a git repository", () => {
       write("src/b.mjs", "export const b = 2;\n");
       commit("prune");
       expect(run(["main~1"]).out).toEqual([
-        "comments-only: compared src/a.ts",
-        "comments-only: compared src/b.mjs",
-        "comments-only: 2 code files compared; only comments changed",
+        "comments-only: src/a.ts: compared",
+        "comments-only: src/b.mjs: compared",
+        "comments-only: 2 code files compared; only comments changed in them",
       ]);
     });
 
@@ -538,9 +538,9 @@ describe("checkCommentsOnly against a git repository", () => {
       expect(run(["main~1"])).toEqual({
         code: 0,
         out: [
-          "comments-only: compared src/a.ts",
-          "comments-only: not compared (Markdown) README.md",
-          "comments-only: 1 code file compared; only comments changed",
+          "comments-only: src/a.ts: compared",
+          "comments-only: README.md: Markdown, so not compared",
+          "comments-only: 1 code file compared; only comments changed in it",
         ],
         err: [],
       });
@@ -552,7 +552,7 @@ describe("checkCommentsOnly against a git repository", () => {
       expect(run(["main~1"])).toEqual({
         code: 0,
         out: [
-          "comments-only: not compared (Markdown) README.md",
+          "comments-only: README.md: Markdown, so not compared",
           "comments-only: no code file changed, so nothing was compared",
         ],
         err: [],
@@ -583,7 +583,7 @@ describe("checkCommentsOnly against a git repository", () => {
       commit("edit");
       expect(run(["main~1"])).toEqual({
         code: 1,
-        out: ["comments-only: compared src/a.ts"],
+        out: ["comments-only: src/a.ts: compared"],
         err: ['comments-only: src/a.ts: line 2: code changed from "1" to "5"'],
       });
     });
@@ -594,7 +594,7 @@ describe("checkCommentsOnly against a git repository", () => {
       commit("config and code");
       expect(run(["main~1"])).toEqual({
         code: 1,
-        out: ["comments-only: compared src/a.ts"],
+        out: ["comments-only: src/a.ts: compared"],
         err: [
           "comments-only: package.json: not a code file, so not compared",
           'comments-only: src/a.ts: line 2: code changed from "1" to "5"',
