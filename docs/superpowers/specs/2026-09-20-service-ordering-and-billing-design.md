@@ -1,6 +1,6 @@
 # Service, ordering and billing workflows
 
-**Status:** Revision 2, 2026-09-26, **awaiting the owner's review**. Revision 1 (2026-09-20)
+**Status:** Revision 2, 2026-09-26, **approved by the owner** the same day. Revision 1 (2026-09-20)
 recorded the product decisions from the workflow discussion. This revision folds in:
 
 - the owner's decisions of 2026-09-26;
@@ -9,9 +9,10 @@ recorded the product decisions from the workflow discussion. This revision folds
 - what the [menus design](2026-09-20-menus-categories-and-home-layouts-design.md) §10–§11 has since
   decided, which this spec now follows.
 
-Rules marked **Proposed** were added by the planning session to close gaps the review found; they
-are not yet the owner's decisions. Rules marked **Owner, 2026-09-26** were decided that day. §14
-lists every change from Revision 1. Revision 1's text is in git history.
+The planning session proposed several rules to close gaps the review found; the owner accepted them
+on 2026-09-26, and changed two (who an item is credited to, §2, and discounts on weighed items,
+§7). Every such rule is marked **Owner, 2026-09-26**. §14 lists every change from Revision 1.
+Revision 1's text is in git history.
 
 You should be able to take orders quickly, see what needs attention, control when food reaches the
 kitchen, and collect payments without losing track of the table. The same service model must work
@@ -31,7 +32,8 @@ additions to those names, and a special initial-meal-ordering phase.
 
 **Terms.**
 
-- A **visit** is one seated party at a table, from seating until the table is finished. It holds
+- A **visit** is one seated party, from seating until the table is finished. A party at joined
+  tables is one visit across all of them. It holds
   the party's tab, every bill split from it, anything ordered after a payment, and the sequence of
   groups sent to the kitchen. **Owner, 2026-09-26:** the visit is a record of its own; it is the
   one new entity this spec chooses.
@@ -51,7 +53,7 @@ on a flat list of tabs, including tabs without a table, identified by a name or 
 
 The dashboard distinguishes unoccupied tables from occupied ones and highlights work needing
 attention. Several signals can coexist on one table; payment and kitchen progress are not one
-mutually exclusive status. **Proposed:** the signals are:
+mutually exclusive status. **Owner, 2026-09-26:** the signals are:
 
 - take an order (seated, nothing ordered or drafted yet);
 - an unsent draft, naming whose;
@@ -72,7 +74,10 @@ These are two views of the same work, not separate notifications to clear indepe
 
 Tap an occupied table to open its tab on **Ordering**, with **Current orders** as a second view.
 Tap an empty table to seat guests: this opens a visit, records the guest count (optional) and opens
-a tab. All bills split from the visit remain attached to it. You can see each bill's paid and
+a tab. Joining a table to a seated party adds it to that party's visit; moving the party moves the
+visit; unjoining a table that takes some items with it starts a separate visit there. A table
+belongs to at most one open visit at a time, whether it was the first table seated or one joined
+later. All bills split from the visit remain attached to it. You can see each bill's paid and
 outstanding amounts, the table's total outstanding balance, and settled bills when you need their
 receipts. **Paying does not free the table** (§8).
 
@@ -85,7 +90,7 @@ shortcut grid and section structure. A plain product tap adds one unit to your u
 taps on Beer produce Beer ×3. An item with extras or options opens its customisation screen first;
 confirming adds the configured item.
 
-**Combining identical items. Proposed:** within the same draft group, two lines combine
+**Combining identical items. Owner, 2026-09-26:** within the same draft group, two lines combine
 (quantities add) when they have the same product and variant, the same set of option values
 (compared as values, never by the order you picked them), the same extras (each counted as which
 product, from which extras list), and the same note. Anything different stays separate. A draft
@@ -99,7 +104,7 @@ can show browsing and the draft together.
 Use **Split quantity** to turn Burger ×3 into three individual rows before moving one elsewhere.
 Rows you split stay separate; do not regroup them and undo the separation you just requested.
 
-**Prices in a draft. Proposed:** a draft is priced like an unsaved basket in the menus design
+**Prices in a draft. Owner, 2026-09-26:** a draft is priced like an unsaved basket in the menus design
 (§11.2 there). It follows the live published menu until it is submitted, and staff confirm any
 price change the till shows. Its prices lock at submission, when its items join the tab; from then
 on the menus design's saved-order rules apply (a line keeps the price it was given; an edit prices
@@ -107,7 +112,7 @@ only what it adds).
 
 ### Separate drafts, shared submitted orders
 
-Each waiter has their own draft, so one can take drinks while another takes food. **Proposed:** a
+Each waiter has their own draft, so one can take drinks while another takes food. **Owner, 2026-09-26:** a
 draft belongs to the signed-in operator (the till's PIN lock screen identifies who that is) and to
 the visit, not the tab, so it survives "pay, then order dessert" opening a new tab. A person has at
 most one open draft per visit. Drafts are saved on the server, so leaving the ordering screen, a
@@ -115,10 +120,16 @@ reload or a change of device retains them, and the table shows an unsent-items i
 staff can see "Alex has an unsent order" and open its contents.
 
 To edit or submit another waiter's draft, explicitly **Take over draft**. Ownership transfers;
-Alex sees who took over and can no longer edit or submit that draft. Keep the identity of each
-item's author and the person who submits it. Concurrent takeover or a stale screen must not allow
-the same draft to be submitted twice, and a retried submission (a lost reply) must not submit it
-twice either.
+Alex sees who took over and can no longer edit or submit that draft. Concurrent takeover or a stale
+screen must not allow the same draft to be submitted twice, and a retried submission (a lost reply)
+must not submit it twice either.
+
+**Who an item is credited to. Owner, 2026-09-26:** every item in a draft is credited to whoever owns
+the draft when it is submitted, and only the owner can submit. A takeover therefore moves the credit
+for everything in the draft to the new owner; the history records the takeover (who took it from
+whom, and when), not a separate author per item. This credit is what the adjustment reports count
+as a person's sales (§7). Work added outside a draft — the till's Change action, a counter sale — is
+credited to the person who made it.
 
 The counter's basket is unchanged: it belongs to the till device, and the counter's "hold" keeps
 its meaning of parking an order. In this spec, "held" always means submitted to the tab but not
@@ -196,7 +207,7 @@ kitchen can switch off changes to sent items, leaving only cancellation. A line'
 the menus design's saved-order rules: it keeps the price it was given, and an edit prices only what
 it adds.
 
-**Groups and bills. Proposed:** a group belongs to the visit, not to one bill. Splitting items onto
+**Groups and bills. Owner, 2026-09-26:** a group belongs to the visit, not to one bill. Splitting items onto
 another bill of the same visit keeps them in their group, held or fired, so the kitchen's view does
 not change. Moving items to a DIFFERENT visit (another table's tab): an item in a held group cannot
 move until it is fired or taken out of the group; an item already fired moves, leaves its group,
@@ -216,7 +227,7 @@ kitchen progress. Mixed paper and screen stations must retain these distinctions
 Mark items **Served** from inside Current orders, where you can inspect what you are claiming to
 have delivered. Select items and quantities, or the visible group; undo is available. Do not put a
 blind Mark served action on the floor dashboard. Paper workflows can go directly from fired to
-served. **Proposed:** serving can be recorded on a bill that has already been paid, because a
+served. **Owner, 2026-09-26:** serving can be recorded on a bill that has already been paid, because a
 guest may pay before the food arrives; serving is an operational fact, not billing.
 
 There is no separate **Collected** state. Ready work stays visible until served, accepting that
@@ -224,7 +235,7 @@ some of it may briefly be in transit.
 
 ### Remind staff to release the next group
 
-Staff control the release of held groups, not guests. **Proposed rules:**
+Staff control the release of held groups, not guests. **Owner, 2026-09-26:**
 
 - The group needing release is the first held group in the visit's sequence.
 - Its reminder is due a configurable interval (default 10 minutes; the venue can switch reminders
@@ -247,7 +258,7 @@ instruction. If held work already appeared on an advance ticket, edits and cance
 clear HOLD corrections, also shown on kitchen screens as notices; otherwise the eventual preparation
 ticket simply contains the updated group.
 
-**Proposed:** kitchen output presents identical items as one entry ×N (the default) or as N
+**Owner, 2026-09-26:** kitchen output presents identical items as one entry ×N (the default) or as N
 entries, a venue setting independent of billing and draft grouping.
 
 Detected printing problems stay visible on the affected table and station, with Reprint, and
@@ -293,7 +304,7 @@ the table later splits; that option waits for the advisor (Q27, below).
 
 At any point you can pay for selected items, contribute a fixed amount, or divide the outstanding
 balance equally. Show the remaining balance after every successful payment. Equal shares must sum
-to the exact remaining amount. **Proposed:** each share is the amount divided equally in whole
+to the exact remaining amount. **Owner, 2026-09-26:** each share is the amount divided equally in whole
 cents, and the first shares take one extra cent each until the total is exact (€100.01 across three
 is €33.34, €33.34, €33.33).
 
@@ -378,7 +389,7 @@ complimentary, and applying euro or percentage discounts to lines or a bill. Rea
 not just free text: they say which actions apply, the amounts or percentages allowed, who can apply
 them, when approval is required and whether a note is mandatory.
 
-**Limits add up. Proposed:** a reason's euro limit caps the total that reason takes off one bill,
+**Limits add up. Owner, 2026-09-26:** a reason's euro limit caps the total that reason takes off one bill,
 percentage discounts included; its percentage limit caps the combined percentage it takes off one
 line. Asking above a limit is refused; the owner raises the policy to allow more. Someone below the
 reason's applying role needs approval from someone at or above its approving role.
@@ -393,7 +404,7 @@ to the separate training environment, not a reason to erase a live transaction.
 price. A whole-bill discount is spread across the bill's lines in proportion to their amounts, so
 each VAT rate's taxable amount drops correctly. A comp is the line at 100% off, shown on the invoice
 with its original price and €0.00. This rests on the advisor finding that a reduction agreed before
-the invoice is issued is a *descuento* (Q15, closed). **Proposed details:**
+the invoice is issued is a *descuento* (Q15, closed). **Details, Owner, 2026-09-26:**
 
 - A line always keeps a whole number of cents per unit, because the invoice is built from unit
   price × quantity. Comping or discounting part of a line (1 of Steak ×2) first splits that part
@@ -401,7 +412,18 @@ the invoice is issued is a *descuento* (Q15, closed). **Proposed details:**
   lines (Croquetas ×3 at €3.33 with 10% off: 2 × €3.00 and 1 × €2.99).
 - A whole-bill discount is shared out in whole cents, rounded down, and the cents left over go to
   the lines with the largest remainders, earlier lines first on a tie, so the shares sum exactly.
-- A weighed item (sold by weight) cannot take a line discount and takes no share of a bill discount.
+- **A weighed item (sold by weight) can take a discount (Owner, 2026-09-26)** by lowering its
+  per-kilo price to the whole-cent price whose line total comes nearest the discounted amount. Under
+  1 kg that is exact; on a heavier item the amount actually taken off can differ from the amount
+  asked by about a cent (at 2.5 kg, one cent of per-kilo price moves the line by 2.5 cents). Staff
+  see the exact amount before confirming, and the adjustment records the amount actually taken off.
+  A whole-bill discount shares out over every line, weighed ones included, and any cent a weighed
+  line could not take goes to the other lines, so the bill drops by exactly what was asked
+  wherever the bill has a line that is not weighed. A comp (100% off) is always exact. How this
+  appears on the invoice is put to the advisor as
+  [Q29](../../compliance/asesor-questions.md#q29-how-a-discount-or-comp-appears-on-a-simplified-invoice-added-2026-09-26).
+- A discount larger than what it applies to (the line, or the bill) is refused, never silently
+  reduced.
 - A comp or discount on a bill that is already paid is refused; the invoice is corrected through
   the fiscal correction workflow instead.
 
@@ -428,7 +450,11 @@ and after serving, and show who requested and approved them. Attribute an adjust
 actor, not automatically to the original order taker or whoever later owns the table. Guest
 cancellations have separate attribution.
 
-Show rates alongside totals so staff handling more sales can be compared sensibly. Keep the
+Show rates alongside totals so staff handling more sales can be compared sensibly. **Owner,
+2026-09-26:** a person's sales, for the rate, are the items credited to them (§2), each at its
+price before any adjustment; comped and cancelled items still count at their original price, so an
+item that appears in the adjustments also appears in the sales it is measured against. Who took
+the payment or issued the invoice plays no part. Keep the
 nominal value of cancelled items distinct from the financial reduction and any recorded stock
 loss. Do not count the same reduction twice because an item was first comped and then cancelled.
 Reports support investigation; a high total alone is not a conclusion about misconduct.
@@ -438,7 +464,7 @@ an issued fiscal record.
 ## 8. Finish the visit without hiding outstanding bills
 
 Paying does not by itself free an occupied table. By default, **Finish table** closes the visit
-and makes the table available. An optional clearing workflow, off by default, instead closes the
+and makes the table available (every table of a joined party). An optional clearing workflow, off by default, instead closes the
 visit into **Needs clearing**, followed by **Mark cleared** when ready for the next party. The next
 party's visit starts empty: it never shows the previous visit's bills.
 
@@ -474,7 +500,7 @@ If a guest wants bacon after their burger has fired, order bacon as a separate p
 standalone price, normally Fire now. There is no special retrospective Add extra action or required
 link to the burger. The restaurant must make bacon sellable to staff and include it in the menu.
 
-**Proposed:**
+**Owner, 2026-09-26:**
 
 - The published menu carries the setting, so changing it marks the menu as changed until it is
   published again (the menus design's publishing rules).
@@ -544,7 +570,8 @@ These are future acceptance requirements, not tests run while writing this docum
 
 1. Two staff take separate drafts on one visit; takeover makes the former owner read-only and only
    one submission succeeds, in either order of events, and a retried submission creates nothing
-   twice. Guests' unsubmitted baskets stay private.
+   twice. After a takeover, every item in the draft is credited to the new owner and the history
+   shows the takeover. Guests' unsubmitted baskets stay private.
 2. Three Beer taps group; different options, notes or extras lists do not; the same options picked
    in a different order do. Split quantity stays split for moving items. Partial submission
    preserves all unselected items.
@@ -566,10 +593,15 @@ These are future acceptance requirements, not tests run while writing this docum
    a €50 contribution on €120, two items (€30) split to their own bill are paid and invoiced there,
    and the original bill's invoice, issued at full payment, is for €90 with the €50 applied.
 9. A table with one bill paid and another outstanding never reads as paid, and Finish table is
-   refused. After Finish, the next party sees none of the previous visit's bills. Needs clearing is
+   refused. Tables 4 and 5 joined are one visit: neither can be seated again, paying leaves both
+   occupied, dessert opens a new bill on the same visit, Finish frees both, and unjoining Table 5
+   with items starts exactly one separate visit. After Finish, the next party sees none of the previous visit's bills. Needs clearing is
    optional and off by default. Unpaid departure preserves debt and attribution (after Q28).
 10. A manager approves with their PIN without replacing the waiter session. A comp of a served dish
-    sends nothing to the kitchen. A discount on Croquetas ×3 leaves whole cents per unit. Reports
+    sends nothing to the kitchen. A discount on Croquetas ×3 leaves whole cents per unit; a discount on a 2.5 kg weighed item
+    shows and records the amount actually taken off; a discount larger than its line or bill is
+    refused. A rate counts a waiter's credited items at their original prices, whoever took the
+    payment. Reports
     distinguish requester, approver, guest actions, nominal value and actual financial reductions
     without double-counting them.
 11. Staff-only bacon is searchable within its menu, absent from guest ordering, but visible on the
@@ -588,7 +620,8 @@ These are future acceptance requirements, not tests run while writing this docum
 - **The payment design** (plan Task 0): the questions §6 hands it. The owner approves it before
   multi-payment bills are built.
 - **Advisor questions:** Q19 (duplicates per guest), Q21 and Q14 (pre-bill versus invoice at the
-  table), Q27 (money before the invoice, and printing the invoice first), Q28 (unpaid departure).
+  table), Q27 (money before the invoice, and printing the invoice first), Q28 (unpaid departure),
+  Q29 (how a discount or comp appears on the invoice).
 - **Guest access:** its security and interaction design (§5).
 - **Interaction design:** signal priority and landing views (§1), alert channels for print problems
   (§4), and how a counter tab presents related bills (§6).
@@ -614,7 +647,7 @@ kitchen ticket and the "moved to table X" slip; the one-card-payment-at-a-time l
 on the line from the published menu (lane C's item M7v). Revision 1's §3 "price treatment not
 settled", §3 and §4's correction wording, and §10's held-work availability now defer to it.
 
-**Proposed by the planning session, for the owner's review:**
+**Proposed by the planning session and accepted by the owner, 2026-09-26:**
 
 - the dashboard's list of signals, with Bill requested as a visit fact (§1);
 - when identical items combine in a draft (§2);
@@ -627,11 +660,23 @@ settled", §3 and §4's correction wording, and §10's held-work availability no
 - kitchen tickets as ×N or N entries, a venue setting (§4);
 - equal shares in whole cents, first shares taking the extra cent (§6);
 - how adjustment limits add up, and approval by role (§7);
-- whole cents per unit on a reduced line, how a bill discount is shared, no discounts on weighed
-  items, no adjustments on a paid bill (§7);
+- whole cents per unit on a reduced line, how a bill discount is shared, no adjustments on a paid
+  bill (§7);
 - a comp sends nothing to the kitchen (§7);
 - the Standalone ordering details, including every product starting Public on upgrade (§9);
 - a held group with an unavailable item cannot fire (§10).
+
+**Changed by the owner, 2026-09-26, from what was proposed:**
+
+- items are credited to whoever owns the draft when it is submitted, not to a separate author per
+  item (§2);
+- weighed items CAN take discounts, to the nearest cent, instead of being excluded (§7);
+- a person's sales for adjustment rates are the items credited to them, at their original prices
+  (§7).
+
+**Added after a second review, 2026-09-26:** a party at joined tables is one visit across all of
+them (terms, §1, §8), because joining tables already exists and a visit keyed to one table would
+not stop the other tables being seated twice.
 
 **What the review of the code found, which shaped the above:** much of §3–§4 already exists
 (courses with hold and fire, per-line send and recall, kitchen screen states, void and recall slips,
