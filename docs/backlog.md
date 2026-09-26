@@ -1834,6 +1834,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
 
   Out of scope for this plan: guest access, inventory, seat and staff assignment, changing the floor
   layout during service, screen plugins and Bizum.
+- **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
+  2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
+  joined to it, but merging another table's bill into its paid bill, or moving items to or from
+  that paid bill, is refused with `tab.not_open` until a new round opens the party's next bill.
+  Decide whether a paid party should be mergeable before the till offers it.
 - **Later: optional seat/guest item assignment (owner, 2026-09-20).** Include shared items when
   this is designed. For now, orders remain at table/tab level and staff select items manually
   when splitting bills; seat assignment is not a prerequisite for the service workflow.

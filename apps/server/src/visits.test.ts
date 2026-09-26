@@ -771,12 +771,14 @@ describe("pay, then order dessert", () => {
     const soldBefore = await saleLinesOf(tabId);
     expect(soldBefore).toHaveLength(1);
     expect((await visitRow(visitId)).state).toBe("open");
+    const revisionBefore = await revisionOf(visitId);
 
     const { tabId: dessertTab } = await inTx((tx) =>
       addTabRound(tx, venue.cfg, tabId, [{ menuItemId: venue.item("Flan"), quantity: "1" }]),
     );
 
     expect(dessertTab).not.toBe(tabId);
+    expect(await revisionOf(visitId)).toBe(revisionBefore + 1);
     expect(await visitIdOf(dessertTab)).toBe(visitId);
     expect(await statusOf(dessertTab)).toBe("open");
     expect((await tableRow(mesa4)).tabId).toBe(dessertTab);
@@ -1001,6 +1003,189 @@ describe("joined tables (Mesa 4 and Mesa 5)", () => {
   });
 });
 
+describe("a paid party (paying changes no table of the party)", () => {
+  async function paid() {
+    const venue = await setupVenue();
+    const mesa4 = await venue.table("Mesa 4");
+    const seated = await seat(venue.cfg, mesa4, 2);
+    await order(venue, seated.tabId, "Burger");
+    await pay(venue.cfg, seated.tabId, "12.00");
+    return { venue, mesa4, ...seated };
+  }
+
+  it("moves from Mesa 4 to Mesa 7 on the same visit, leaving the settled tab as it was", async () => {
+    const { venue, mesa4, visitId, tabId } = await paid();
+    const mesa7 = await venue.table("Mesa 7");
+    const command = await cmd(visitId);
+    const [settledBefore] = await inTx((tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, tabId)),
+    );
+
+    await inTx((tx) => moveTab(tx, venue.cfg, tabId, mesa7, command));
+
+    expect(await inTx((tx) => visitForTable(tx, mesa4))).toBeNull();
+    expect((await floorRow(venue.cfg, mesa4)).state).toBe("free");
+    expect(await inTx((tx) => visitForTable(tx, mesa7))).toEqual({
+      visitId,
+      revision: command.expectedVisitRevision + 1,
+    });
+    expect((await tableRow(mesa7)).tabId).toBe(tabId);
+    const [settledAfter] = await inTx((tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, tabId)),
+    );
+    expect(settledAfter).toEqual(settledBefore);
+  });
+
+  it("joins Mesa 5, and the next round opens the party's next tab on both tables", async () => {
+    const { venue, mesa4, visitId, tabId } = await paid();
+    const mesa5 = await venue.table("Mesa 5");
+    const command = await cmd(visitId);
+
+    await inTx((tx) => joinTable(tx, venue.cfg, tabId, mesa5, command));
+
+    for (const table of [mesa4, mesa5]) {
+      expect(await inTx((tx) => visitForTable(tx, table))).toEqual({
+        visitId,
+        revision: command.expectedVisitRevision + 1,
+      });
+      expect((await tableRow(table)).tabId).toBe(tabId);
+    }
+    const { tabId: dessertTab } = await inTx((tx) =>
+      addTabRound(tx, venue.cfg, tabId, [{ menuItemId: venue.item("Flan"), quantity: "1" }]),
+    );
+    expect(await visitIdOf(dessertTab)).toBe(visitId);
+    for (const table of [mesa4, mesa5]) {
+      expect((await tableRow(table)).tabId).toBe(dessertTab);
+    }
+  });
+
+  it("refuses moving or joining with a settled tab the party has moved on from", async () => {
+    const { venue, visitId, tabId } = await paid();
+    await order(venue, tabId, "Flan");
+    const mesa7 = await venue.table("Mesa 7");
+    const command = await cmd(visitId);
+
+    for (const run of [
+      (tx: Transaction) => moveTab(tx, venue.cfg, tabId, mesa7, command),
+      (tx: Transaction) => joinTable(tx, venue.cfg, tabId, mesa7, command),
+    ]) {
+      expect(await captureError(() => inTx(run))).toMatchObject({
+        code: "tab.not_open",
+        params: { tabId },
+      });
+    }
+  });
+
+  it("still refuses merging or transferring with a settled tab", async () => {
+    const { venue, visitId, tabId } = await paid();
+    const other = await seat(venue.cfg, await venue.table("Mesa 6"));
+    await order(venue, other.tabId, "Flan");
+    const revisions = {
+      expectedVisitRevision: await revisionOf(visitId),
+      expectedSourceVisitRevision: await revisionOf(other.visitId),
+      operatorId: OPERATOR,
+    };
+
+    expect(
+      await captureError(() =>
+        inTx((tx) =>
+          mergeTabs(tx, venue.cfg, tabId, other.tabId, { freeSourceTable: true, ...revisions }),
+        ),
+      ),
+    ).toMatchObject({ code: "tab.not_open" });
+    expect(
+      await captureError(() =>
+        inTx((tx) => transferLines(tx, venue.cfg, other.tabId, tabId, [{ lineNo: 1 }], revisions)),
+      ),
+    ).toMatchObject({ code: "tab.not_open" });
+  });
+});
+
+describe("a split check moved to another table", () => {
+  /** Mesa 4 (visit V, tab A: Burger), with the Vino split to check C and C moved to Mesa 7. */
+  async function checkMoved() {
+    const venue = await setupVenue();
+    const mesa4 = await venue.table("Mesa 4");
+    const mesa7 = await venue.table("Mesa 7");
+    const { visitId, tabId } = await seat(venue.cfg, mesa4);
+    await order(venue, tabId, "Burger", "Vino");
+    const checkId = await split(venue.cfg, visitId, tabId, [2]);
+    const command = await cmd(visitId);
+    await inTx((tx) => moveTab(tx, venue.cfg, checkId, mesa7, command));
+    return { venue, mesa4, mesa7, visitId, tabId, checkId };
+  }
+
+  it("keeps Mesa 4 on the party's tab and seats the check at Mesa 7 on the same visit", async () => {
+    const { mesa4, mesa7, visitId, tabId, checkId } = await checkMoved();
+
+    expect(await inTx((tx) => visitForTable(tx, mesa4))).toMatchObject({ visitId });
+    expect((await tableRow(mesa4)).tabId).toBe(tabId);
+    expect(await inTx((tx) => visitForTable(tx, mesa7))).toMatchObject({ visitId });
+    expect((await tableRow(mesa7)).tabId).toBe(checkId);
+    const active = (await membershipsOf(visitId)).filter((m) => m.leftAt === null);
+    expect(active.map((m) => m.tableId)).toEqual([mesa4, mesa7]);
+  });
+
+  it("keeps Mesa 4 occupied once the tab is paid, and Finish frees both once every bill is", async () => {
+    const { venue, mesa4, mesa7, visitId, tabId, checkId } = await checkMoved();
+
+    await pay(venue.cfg, tabId, "12.00");
+    expect(await floorRow(venue.cfg, mesa4)).toMatchObject({
+      state: "open-tab",
+      visit: { id: visitId, outstanding: "30.00" },
+    });
+
+    await pay(venue.cfg, checkId, "30.00");
+    const expectedVisitRevision = await revisionOf(visitId);
+    await inTx((tx) =>
+      finishTable(tx, venue.cfg, { visitId, expectedVisitRevision, operatorId: OPERATOR }),
+    );
+    for (const table of [mesa4, mesa7]) {
+      expect((await floorRow(venue.cfg, table)).state).toBe("free");
+    }
+  });
+
+  it("points only Mesa 4 at the next tab when a round follows the paid tab", async () => {
+    const { venue, mesa4, mesa7, visitId, tabId, checkId } = await checkMoved();
+    await pay(venue.cfg, tabId, "12.00");
+
+    const { tabId: dessertTab } = await inTx((tx) =>
+      addTabRound(tx, venue.cfg, tabId, [{ menuItemId: venue.item("Flan"), quantity: "1" }]),
+    );
+
+    expect(await visitIdOf(dessertTab)).toBe(visitId);
+    expect((await tableRow(mesa4)).tabId).toBe(dessertTab);
+    expect((await tableRow(mesa7)).tabId).toBe(checkId);
+  });
+
+  it("frees Mesa 7 when it is unjoined from the check, and the party keeps Mesa 4", async () => {
+    const { venue, mesa4, mesa7, visitId, checkId } = await checkMoved();
+    const command = await cmd(visitId);
+
+    await inTx((tx) => unjoinTable(tx, venue.cfg, checkId, mesa7, undefined, command));
+
+    expect(await inTx((tx) => visitForTable(tx, mesa7))).toBeNull();
+    expect(await inTx((tx) => visitForTable(tx, mesa4))).toMatchObject({ visitId });
+  });
+
+  it("joins a table to a split check on the check's party, leaving the tab's table alone", async () => {
+    const venue = await setupVenue();
+    const mesa4 = await venue.table("Mesa 4");
+    const mesa8 = await venue.table("Mesa 8");
+    const { visitId, tabId } = await seat(venue.cfg, mesa4);
+    await order(venue, tabId, "Burger", "Vino");
+    const checkId = await split(venue.cfg, visitId, tabId, [2]);
+    const command = await cmd(visitId);
+
+    await inTx((tx) => joinTable(tx, venue.cfg, checkId, mesa8, command));
+
+    expect(await inTx((tx) => visitForTable(tx, mesa8))).toMatchObject({ visitId });
+    expect((await tableRow(mesa8)).tabId).toBe(checkId);
+    expect(await inTx((tx) => visitForTable(tx, mesa4))).toMatchObject({ visitId });
+    expect((await tableRow(mesa4)).tabId).toBe(tabId);
+  });
+});
+
 describe("unjoin without items", () => {
   it("ends the table's membership and frees it for a fresh visit", async () => {
     const venue = await setupVenue();
@@ -1021,6 +1206,24 @@ describe("unjoin without items", () => {
     const next = await seat(venue.cfg, mesa5);
     expect(next.visitId).not.toBe(visitId);
     expect(await inTx((tx) => visitForTable(tx, mesa4))).toMatchObject({ visitId });
+  });
+});
+
+describe("unjoin the party's only table", () => {
+  it("is refused as not shared, and the party keeps the table", async () => {
+    const venue = await setupVenue();
+    const mesa4 = await venue.table("Mesa 4");
+    const { visitId, tabId } = await seat(venue.cfg, mesa4);
+    const command = await cmd(visitId);
+
+    expect(
+      await captureError(() =>
+        inTx((tx) => unjoinTable(tx, venue.cfg, tabId, mesa4, undefined, command)),
+      ),
+    ).toMatchObject({ code: "table.not_shared", params: { tableId: mesa4, tabId } });
+
+    expect(await inTx((tx) => visitForTable(tx, mesa4))).toMatchObject({ visitId });
+    expect((await tableRow(mesa4)).tabId).toBe(tabId);
   });
 });
 
@@ -1162,7 +1365,7 @@ describe("stale moves", () => {
   ];
 
   it.each(PATHS)(
-    "$name is refused when another device has changed the party since",
+    "$name is refused when another device has changed the party since, and the rolled-back command leaves every table, party and bill as it was",
     async ({ name, run }) => {
       const p = await twoParties();
       if (name === "unjoin") await join(p.venue.cfg, p.a.visitId, p.a.tabId, p.mesa5);
@@ -1181,7 +1384,7 @@ describe("stale moves", () => {
   );
 
   it.each(PATHS.filter(({ name }) => name === "merge" || name === "transfer"))(
-    "$name is refused when the other party has changed since",
+    "$name is refused when the other party has changed since, and the rolled-back command leaves every table, party and bill as it was",
     async ({ run }) => {
       const p = await twoParties();
       const current = { a: await revisionOf(p.a.visitId), b: await revisionOf(p.b.visitId) };
@@ -1211,7 +1414,7 @@ describe("stale moves", () => {
   });
 
   it.each(PATHS)(
-    "$name is refused on a party that is no longer open, before its revision moves",
+    "$name is refused on a party that is no longer open, before its revision moves in the same transaction",
     async ({ name, run }) => {
       const p = await twoParties();
       if (name === "unjoin") await join(p.venue.cfg, p.a.visitId, p.a.tabId, p.mesa5);
@@ -1224,10 +1427,17 @@ describe("stale moves", () => {
           .where(eq(visits.id, p.a.visitId)),
       );
 
-      const error = await captureError(() => inTx((tx) => run(p, tx, current)));
+      const { error, revisionAtRefusal } = await inTx(async (tx) => {
+        const refused = await captureError(() => run(p, tx, current));
+        const [row] = await tx
+          .select({ revision: visits.revision })
+          .from(visits)
+          .where(eq(visits.id, p.a.visitId));
+        return { error: refused, revisionAtRefusal: row!.revision };
+      });
 
       expect(error).toMatchObject({ code: "visit.not_open", params: { visitId: p.a.visitId } });
-      expect(await revisionOf(p.a.visitId)).toBe(current.a);
+      expect(revisionAtRefusal).toBe(current.a);
     },
   );
 
