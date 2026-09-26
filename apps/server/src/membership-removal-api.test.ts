@@ -118,7 +118,7 @@ async function errorOf(res: Response): Promise<{ code: string; params: unknown }
 
 async function removals(db: Database): Promise<Record<string, unknown>[]> {
   const { rows } = await db.execute<Record<string, unknown>>(
-    sql`select node_id, contact_url, person_id, term from membership_removals`,
+    sql`select removed_node_id, contact_url, person_id, term from membership_removals`,
   );
   return rows;
 }
@@ -148,7 +148,7 @@ describe("POST /management-api/servers/:nodeId/remove", () => {
     expect(routableServers(after).map((s) => s.url)).toEqual([BOX_URL]);
     expect(await removals(p.db)).toEqual([
       {
-        node_id: gone.nodeId,
+        removed_node_id: gone.nodeId,
         contact_url: CLOUD_URL,
         person_id: p.adminPersonId,
         term: before.body.term + 1,
@@ -324,7 +324,7 @@ describe("POST /management-api/servers/:nodeId/remove", () => {
       const verdict = verifyMembershipDocument(after, { [p.nodeId]: p.publicKey });
       expect(verdict.valid ? "valid" : verdict.reason).toBe("valid");
       expect(await removals(p.db)).toEqual([
-        expect.objectContaining({ node_id: gone.nodeId, term: seedTerm + 2 }),
+        expect.objectContaining({ removed_node_id: gone.nodeId, term: seedTerm + 2 }),
       ]);
     });
 

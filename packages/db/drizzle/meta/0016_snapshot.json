@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "007fec39-035b-4110-acc6-fcbf5b42c32a",
+  "id": "27d821c3-2f8d-4222-86b9-8f86e2d5338f",
   "prevId": "b8387952-f8d5-4e6c-9234-13a8da5dc4d5",
   "tables": {
     "locations": {
@@ -5095,8 +5095,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "node_id": {
-          "name": "node_id",
+        "removed_node_id": {
+          "name": "removed_node_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
