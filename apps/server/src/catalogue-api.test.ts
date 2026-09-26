@@ -5,7 +5,14 @@ import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
-import { CATALOGUE_MIGRATIONS, menuDetails } from "@waitron/catalogue";
+import {
+  CATALOGUE_MIGRATIONS,
+  menuDetails,
+  menuPublications,
+  menuVersions,
+  sectionMembers,
+} from "@waitron/catalogue";
+import type { MenuPreview, MenuStatus } from "@waitron/catalogue";
 import type { ExtraList, OptionList } from "@waitron/catalogue";
 import {
   locationId as brandLocationId,
@@ -27,6 +34,7 @@ const noopLog: Logger = () => {};
 
 let locationId: string;
 let managerCookie: string;
+let managerPersonId: string;
 let staffCookie: string;
 
 const suite = useVenueDb({
@@ -60,6 +68,7 @@ const suite = useVenueDb({
       const staffSession = await startManagementSession(tx, {
         personId: stf!.id,
       });
+      managerPersonId = mgr!.id;
       return { managerSid: managerSession.token, staffSid: staffSession.token };
     });
     managerCookie = `${MANAGEMENT_COOKIE}=${managerSid}`;
@@ -3625,6 +3634,258 @@ describe("a menu's prices", () => {
     expect(await bad.json()).toMatchObject({
       error: { code: "shared.invalid_id", params: { kind: "MenuId", value: "bad-id" } },
     });
+  });
+});
+
+describe("publishing a menu", () => {
+  const HASH = /^[0-9a-f]{64}$/;
+
+  /** A new menu offering one new product at a menu price of 2.00. */
+  async function menuWithProduct(
+    app: Hono,
+  ): Promise<{ menuId: string; itemId: string; name: string }> {
+    const menuId = await createCatalogueVia(app, `Published menu ${crypto.randomUUID()}`);
+    const name = `Oferta ${crypto.randomUUID()}`;
+    const productId = await createNamedProductVia(app, name);
+    const created = await send(app, "POST", `/management-api/catalogues/${menuId}/items`, {
+      body: { productId, grossPrice: "2.00" },
+    });
+    expect(created.status).toBe(201);
+    return { menuId, itemId: ((await created.json()) as { id: string }).id, name };
+  }
+
+  async function preview(app: Hono, menuId: string): Promise<MenuPreview> {
+    const res = await send(app, "GET", `/management-api/catalogues/${menuId}/preview`);
+    expect(res.status).toBe(200);
+    return (await res.json()) as MenuPreview;
+  }
+
+  async function status(app: Hono, menuId: string): Promise<MenuStatus> {
+    const res = await send(app, "GET", `/management-api/catalogues/${menuId}/status`);
+    expect(res.status).toBe(200);
+    return (await res.json()) as MenuStatus;
+  }
+
+  async function versionsOf(menuId: string) {
+    return suite.db
+      .select({ number: menuVersions.number, publishedBy: menuVersions.publishedBy })
+      .from(menuVersions)
+      .where(eq(menuVersions.menuId, menuId))
+      .orderBy(menuVersions.number);
+  }
+
+  it("previews, publishes and reports a menu as unpublished, current, then changed", async () => {
+    const app = mountApp();
+    const { menuId, itemId, name } = await menuWithProduct(app);
+    expect(await status(app, menuId)).toEqual({ state: "unpublished" });
+
+    const first = await preview(app, menuId);
+    expect(first.hash).toMatch(HASH);
+    expect(first.changes).toEqual([
+      expect.objectContaining({ kind: "product_added", name, under: [], source: "this_menu" }),
+    ]);
+    expect(first.warnings).toEqual([]);
+    expect(first.status).toEqual({ state: "unpublished" });
+
+    const publish = `/management-api/catalogues/${menuId}/publish`;
+    const published = await send(app, "POST", publish, { body: { expectedHash: first.hash } });
+    expect(published.status).toBe(200);
+    const one = (await published.json()) as { versionId: string; number: number };
+    expect(one).toEqual({ versionId: expect.any(String), number: 1 });
+    expect(await versionsOf(menuId)).toEqual([{ number: 1, publishedBy: managerPersonId }]);
+    expect(await status(app, menuId)).toEqual({
+      state: "current",
+      version: 1,
+      publishedAt: expect.any(String),
+      hash: first.hash,
+    });
+    const current = await status(app, menuId);
+    expect(await preview(app, menuId)).toEqual({
+      hash: first.hash,
+      changes: [],
+      warnings: [],
+      status: current,
+    });
+
+    expect(
+      (
+        await send(app, "PATCH", `/management-api/catalogues/${menuId}/items/${itemId}`, {
+          body: { grossPrice: "2.50" },
+        })
+      ).status,
+    ).toBe(204);
+    expect(await status(app, menuId)).toMatchObject({ state: "changed", version: 1 });
+    const second = await preview(app, menuId);
+    expect(second.hash).not.toBe(first.hash);
+    expect(second.changes).toEqual([
+      expect.objectContaining({ kind: "price_changed", name, from: "2.00", to: "2.50" }),
+    ]);
+    expect(second.status).toEqual({ ...current, state: "changed" });
+    const again = await send(app, "POST", publish, { body: { expectedHash: second.hash } });
+    expect(again.status).toBe(200);
+    const two = (await again.json()) as { versionId: string; number: number };
+    expect(two.number).toBe(2);
+    expect(two.versionId).not.toBe(one.versionId);
+    const [live] = await suite.db
+      .select({ versionId: menuPublications.versionId })
+      .from(menuPublications)
+      .where(eq(menuPublications.menuId, menuId));
+    expect(live).toEqual({ versionId: two.versionId });
+    expect(await status(app, menuId)).toMatchObject({ state: "current", version: 2 });
+  });
+
+  it("refuses a hash from before the latest edit and writes nothing", async () => {
+    const app = mountApp();
+    const { menuId, itemId } = await menuWithProduct(app);
+    const stale = (await preview(app, menuId)).hash;
+    await send(app, "PATCH", `/management-api/catalogues/${menuId}/items/${itemId}`, {
+      body: { grossPrice: "3.00" },
+    });
+    const refused = await send(app, "POST", `/management-api/catalogues/${menuId}/publish`, {
+      body: { expectedHash: stale },
+    });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({
+      error: { code: "menu.changed_since_preview", params: { menuId } },
+    });
+    expect(await versionsOf(menuId)).toEqual([]);
+    expect(await status(app, menuId)).toEqual({ state: "unpublished" });
+  });
+
+  it("answers a publish of an unchanged menu with its live version, writing nothing", async () => {
+    const app = mountApp();
+    const { menuId } = await menuWithProduct(app);
+    const { hash } = await preview(app, menuId);
+    const publish = `/management-api/catalogues/${menuId}/publish`;
+    const first = await send(app, "POST", publish, { body: { expectedHash: hash } });
+    expect(first.status).toBe(200);
+    const live = (await first.json()) as { versionId: string; number: number };
+    const again = await send(app, "POST", publish, { body: { expectedHash: hash } });
+    expect(again.status).toBe(200);
+    expect(await again.json()).toEqual(live);
+    expect(await versionsOf(menuId)).toEqual([{ number: 1, publishedBy: managerPersonId }]);
+  });
+
+  it("lists a shortcut that publishing would leave out as a warning", async () => {
+    const app = mountApp();
+    const { menuId } = await menuWithProduct(app);
+    const offMenu = `Fuera ${crypto.randomUUID()}`;
+    const productId = await createNamedProductVia(app, offMenu);
+    const [details] = await suite.db
+      .select({ layoutId: menuDetails.defaultHomeLayoutId })
+      .from(menuDetails)
+      .where(eq(menuDetails.menuId, menuId));
+    await suite.db
+      .insert(sectionMembers)
+      .values({ sectionId: details!.layoutId, position: 0, productId });
+    expect((await preview(app, menuId)).warnings).toEqual([
+      { kind: "shortcut_omitted", layoutName: expect.any(String), name: offMenu },
+    ]);
+  });
+
+  it("answers every menu's status in one request", async () => {
+    const app = mountApp();
+    const published = await menuWithProduct(app);
+    const { hash } = await preview(app, published.menuId);
+    await send(app, "POST", `/management-api/catalogues/${published.menuId}/publish`, {
+      body: { expectedHash: hash },
+    });
+    const unpublished = await menuWithProduct(app);
+    const path = "/management-api/catalogues/status";
+    const anonymous = await send(app, "GET", path, { cookie: null });
+    expect(anonymous.status).toBe(401);
+    expect(await anonymous.json()).toMatchObject({
+      error: { code: "management_session.required" },
+    });
+    const staff = await send(app, "GET", path, { cookie: staffCookie });
+    expect(staff.status).toBe(403);
+    expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    const res = await send(app, "GET", path);
+    expect(res.status).toBe(200);
+    const all = (await res.json()) as Record<string, MenuStatus>;
+    expect(all[published.menuId]).toEqual({
+      state: "current",
+      version: 1,
+      publishedAt: expect.any(String),
+      hash,
+    });
+    expect(all[unpublished.menuId]).toEqual({ state: "unpublished" });
+    const menus = (await (await send(app, "GET", "/management-api/catalogues")).json()) as {
+      id: string;
+    }[];
+    expect(Object.keys(all).sort()).toEqual(menus.map((menu) => menu.id).sort());
+  });
+
+  it.each(["status", "preview"])(
+    "refuses GET …/%s without a manager, or for no menu",
+    async (tail) => {
+      const app = mountApp();
+      const { menuId } = await menuWithProduct(app);
+      const path = `/management-api/catalogues/${menuId}/${tail}`;
+      const anonymous = await send(app, "GET", path, { cookie: null });
+      expect(anonymous.status).toBe(401);
+      expect(await anonymous.json()).toMatchObject({
+        error: { code: "management_session.required" },
+      });
+      const staff = await send(app, "GET", path, { cookie: staffCookie });
+      expect(staff.status).toBe(403);
+      expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+      const missing = crypto.randomUUID();
+      const unknown = await send(app, "GET", `/management-api/catalogues/${missing}/${tail}`);
+      expect(unknown.status).toBe(404);
+      expect(await unknown.json()).toMatchObject({
+        error: { code: "catalogue.not_found", params: { catalogueId: missing } },
+      });
+      const bad = await send(app, "GET", `/management-api/catalogues/bad-id/${tail}`);
+      expect(bad.status).toBe(400);
+      expect(await bad.json()).toMatchObject({
+        error: { code: "shared.invalid_id", params: { kind: "MenuId", value: "bad-id" } },
+      });
+    },
+  );
+
+  it("refuses a publish without a manager, for no menu, or without a hash", async () => {
+    const app = mountApp();
+    const { menuId } = await menuWithProduct(app);
+    const { hash } = await preview(app, menuId);
+    const path = `/management-api/catalogues/${menuId}/publish`;
+    const body = { expectedHash: hash };
+    const anonymous = await send(app, "POST", path, { body, cookie: null });
+    expect(anonymous.status).toBe(401);
+    expect(await anonymous.json()).toMatchObject({
+      error: { code: "management_session.required" },
+    });
+    const staff = await send(app, "POST", path, { body, cookie: staffCookie });
+    expect(staff.status).toBe(403);
+    expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    const missing = crypto.randomUUID();
+    const unknown = await send(app, "POST", `/management-api/catalogues/${missing}/publish`, {
+      body,
+    });
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toMatchObject({
+      error: { code: "catalogue.not_found", params: { catalogueId: missing } },
+    });
+    const bad = await send(app, "POST", "/management-api/catalogues/bad-id/publish", { body });
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
+    for (const refusedBody of [{}, { expectedHash: 4 }, { expectedHash: null }, null]) {
+      const res = await send(app, "POST", path, { body: refusedBody });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "expectedHash" } },
+      });
+    }
+    const malformed = await app.request(path, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: managerCookie },
+      body: "{ not json",
+    });
+    expect(malformed.status).toBe(400);
+    expect(await malformed.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "expectedHash" } },
+    });
+    expect(await versionsOf(menuId)).toEqual([]);
   });
 });
 

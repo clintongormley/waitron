@@ -4,18 +4,18 @@ import { LitElement, type PropertyValues, type TemplateResult, css, html, nothin
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import {
-  MONEY_SCALE,
   addDecimal,
   compareDecimal,
   decimal,
-  type Decimal,
+  formatMoney,
   grossOf,
+  MONEY_SCALE,
   subtractDecimal,
   sumDecimals,
   toScale,
+  type Decimal,
 } from "@waitron/shared";
-import { formatMoney } from "../i18n/format.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { selectStyles } from "../select-styles.js";
 import { type DietPredicate, hasDietData, visibleProducts } from "../menu-filter.js";
 import { lineProductName, productName } from "../widgets/product-name.js";
@@ -907,7 +907,9 @@ export class TillTableOrderScreen extends LitElement {
         ${this.#fireSection()} ${this.#pendingSection(pending)} ${this.#servedSection()}
         <div class="total-row">
           <span class="label">${t("label.total")}</span>
-          <span class="amount" data-tab-total>${formatMoney(this.#payStore!.total)}</span>
+          <span class="amount" data-tab-total
+            >${formatMoney(this.#payStore!.total, currentLocale())}</span
+          >
         </div>
         ${
           this.canSettle
@@ -959,7 +961,7 @@ export class TillTableOrderScreen extends LitElement {
         >${name}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}</span
       >
       <span class="qty">${this.#displayQty(line.quantity)}</span>
-      <span class="line-total">${formatMoney(this.#lineGross(line))}</span>
+      <span class="line-total">${formatMoney(this.#lineGross(line), currentLocale())}</span>
       ${this.#lineCourse(line)}${this.#lineAction(line)}
       <wt-button
         class="serve"
@@ -989,7 +991,9 @@ export class TillTableOrderScreen extends LitElement {
                       >${this.#nameForLine(line)}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}</span
                     >
                     <span class="qty">${this.#displayQty(line.quantity)}</span>
-                    <span class="line-total">${formatMoney(this.#lineGross(line))}</span>
+                    <span class="line-total"
+                      >${formatMoney(this.#lineGross(line), currentLocale())}</span
+                    >
                     ${this.#lineCourse(line)}
                   </li>`,
               )}

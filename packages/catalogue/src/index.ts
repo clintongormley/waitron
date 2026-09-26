@@ -26,6 +26,16 @@ export {
   syncMenuOffers,
   type MenuStructureNode,
 } from "./menu-structure.js";
+export {
+  MENU_DOCUMENT_FORMAT,
+  applyLiveFields,
+  buildMenuDocument,
+  diffMenuDocuments,
+  menuDocumentHash,
+  type OmittedShortcut,
+} from "./menu-document.js";
+export type * from "./menu-document-types.js";
+export { menuStatus, previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
 export * from "./sale-classification.js";
 
 export * from "./option-contract.js";

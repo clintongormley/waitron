@@ -203,7 +203,7 @@ hold parts of it, each re-numbered from the body of whatever save writes it.
 | --- | --- | --- | --- |
 | `product_modifiers.sort` | a dish's options lists | `writeProductModifiers` (`packages/catalogue/src/product-modifiers.ts`), from the product save's body | yes — the product write |
 | `extra_list_items.sort` | the items WITHIN one extras list, which is the order its picks come back in | `writeItems` (`packages/catalogue/src/extras.ts`), from the list save's body | yes — `PATCH /management-api/modifiers/extras/:id`, and the `POST` that creates a list |
-| `menu_item_extra_lists.display_order` | the extras lists of a line naming a MENU OFFER | `setMenuItemExtraLists` (`packages/catalogue/src/extras.ts`), from the publication body | no — nothing outside `packages/catalogue` and the test suites calls it |
+| `menu_item_extra_lists.display_order` | the extras lists of a line naming a MENU OFFER | `setMenuItemExtraLists` (`packages/catalogue/src/extras.ts`), from the body that sets a menu offer's extras lists | no — nothing outside `packages/catalogue` and the test suites calls it |
 
 So a line parked before any of those saves keeps the old order while the rebuilt side comes back in
 the new one, and a comparison pairing the two up position by position reads that as a changed answer

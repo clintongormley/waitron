@@ -1274,7 +1274,7 @@ Module management tabs use `/manage/<section>/view/<key>`; Venue operations uses
 `departments`, `zones` and `routing`, and Categories uses `categories` and `labels`. The dashboard preserves module-owned `view` segments
 while the module validates its keys. The Menus screen (`/manage/menus`) puts the menu's id before
 the tab:
-`/manage/menus/menu/<id>/view/<key>`, with `structure` and `prices` (`dashboardPath`,
+`/manage/menus/menu/<id>/view/<key>`, with `structure`, `prices` and `preview` (`dashboardPath`,
 `apps/dashboard/src/navigation.ts`).
 
 Use `/manage/<section>` for dashboard destinations and `/tabs/<key>` for till tabs. Nested views,

@@ -1477,6 +1477,14 @@ sale-path change in one reviewable task.
 - [ ] **Step 3: Run to verify they pass. LOOK at the list and Preview in both themes and at 390px.
   Commit.**
 
+**What landed differently (2026-09-26).** Media's
+`packages/media/drizzle/0003_published_image_references.sql` has three triggers, not two: an insert
+check on `menu_version_images` as well as the delete and rename triggers on `media_images`.
+`menuStatus(tx, menuIds?)` treats a missing id list as every menu. `previewMenu` also returns
+`status`, the menu's `MenuStatus`. On the Preview tab the dashboard takes the menu's state from it
+and runs no separate status query (`#followStatus` and `#watchPreview`,
+`apps/dashboard/src/screens/menus-screen.ts`).
+
 ---
 
 ## Task 7a: VAT is resolved when the invoice record is issued — slug `vat-at-issuance`

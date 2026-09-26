@@ -102,6 +102,30 @@ describe("scales.ts crosses into the number type without rounding one", () => {
   });
 });
 
+describe("money-format.ts crosses into the number type only to hand it to the formatter", () => {
+  const code = sourceOf("money-format.ts")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/.*$/gm, "");
+
+  it.each([
+    ["parseFloat", "parseFloat"],
+    ["parseInt", "parseInt"],
+    ["toFixed", ".toFixed("],
+    ["Math", "Math."],
+  ])("contains no %s", (_label, token) => {
+    expect(code).not.toContain(token);
+  });
+
+  it("converts once, straight into the formatter's string", () => {
+    expect(code.match(/Number\(/g)).toEqual(["Number("]);
+    expect(code).toContain("return formatter.format(Number(value));");
+  });
+
+  it("does no arithmetic", () => {
+    expect(code).not.toMatch(/[-+*/%]/);
+  });
+});
+
 describe("errors never carry prose", () => {
   it.each(Object.entries(sources))("%s throws only AppError", (_path, source) => {
     // `new Error("...")` anywhere in this package would produce a message no translation table

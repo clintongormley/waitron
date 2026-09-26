@@ -262,3 +262,13 @@ it("has English and Spanish copy for each menu section code", () => {
     expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
   }
 });
+
+it("has English and Spanish copy for a publish refused because the menu changed", () => {
+  const code = "menu.changed_since_preview";
+  expect(codeMessage(code, "en")).toBe(
+    "This menu changed after the preview was shown, so it was not published. Check the new preview and publish again.",
+  );
+  expect(codeMessage(code, "es")).toBe(
+    "Este menú ha cambiado después de mostrar la vista previa, así que no se ha publicado. Revisa la nueva vista previa y vuelve a publicarlo.",
+  );
+});

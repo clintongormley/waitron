@@ -42,6 +42,22 @@ import type {
 export type { LibrarySection, MemberRef, SectionInput, SectionMember, SectionUsages };
 import type { MenuPriceRow, MenuVariant } from "@waitron/catalogue/src/menu-types.js";
 export type { MenuPriceRow, MenuVariant };
+import type {
+  MenuChange,
+  MenuPreview,
+  MenuStatus,
+  ProductChangeField,
+  PublishedMenuVersion,
+  SectionChangeField,
+} from "@waitron/catalogue/src/menu-document-types.js";
+export type {
+  MenuChange,
+  MenuPreview,
+  MenuStatus,
+  ProductChangeField,
+  PublishedMenuVersion,
+  SectionChangeField,
+};
 
 /** One member of a menu's structure (`readMenuStructure`, packages/catalogue/src/menu-structure.ts);
  * `children` is present exactly when the member is a section. */
@@ -1376,6 +1392,26 @@ export class DashboardApi {
 
   getMenuPrices(id: string): Promise<MenuPriceRow[]> {
     return this.#request<MenuPriceRow[]>(`/management-api/catalogues/${id}/prices`, "GET");
+  }
+
+  /** Every menu's publication status, keyed by menu id. */
+  getMenuStatuses(): Promise<Record<string, MenuStatus>> {
+    return this.#request<Record<string, MenuStatus>>("/management-api/catalogues/status", "GET");
+  }
+
+  getMenuStatus(id: string): Promise<MenuStatus> {
+    return this.#request<MenuStatus>(`/management-api/catalogues/${id}/status`, "GET");
+  }
+
+  getMenuPreview(id: string): Promise<MenuPreview> {
+    return this.#request<MenuPreview>(`/management-api/catalogues/${id}/preview`, "GET");
+  }
+
+  /** `expectedHash` is the preview's; a menu edited since is refused `menu.changed_since_preview`. */
+  publishMenu(id: string, expectedHash: string): Promise<PublishedMenuVersion> {
+    return this.#request<PublishedMenuVersion>(`/management-api/catalogues/${id}/publish`, "POST", {
+      expectedHash,
+    });
   }
 
   /** A null `grossPrice` clears the menu's price, so the product's own applies. */

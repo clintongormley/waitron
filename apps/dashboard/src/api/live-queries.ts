@@ -1,6 +1,28 @@
 import type { ResourceQuery } from "@waitron/dashboard-kit";
 import type { DashboardApi } from "./client.js";
 
+const MENU_PUBLICATION_READS = [
+  "catalogues",
+  "content_languages",
+  "extra_list_items",
+  "extra_lists",
+  "menu_details",
+  "menu_item_extra_items",
+  "menu_item_extra_lists",
+  "menu_item_variant_overrides",
+  "menu_items",
+  "menu_publications",
+  "menu_versions",
+  "option_labels",
+  "option_lists",
+  "product_modifiers",
+  "product_units",
+  "products",
+  "section_members",
+  "sections",
+  "units",
+] as const;
+
 /** Dependencies describe the read model, independently of which operation changes it. */
 export const QUERY_DEPENDENCIES = {
   getContentLanguages: ["content_languages"],
@@ -73,6 +95,12 @@ export const QUERY_DEPENDENCIES = {
     "products",
     "menu_item_variant_overrides",
   ],
+  // The tables `menuStatus` and `previewMenu` (packages/catalogue/src/menu-publication.ts) read
+  // over `menusFixture`, recorded from the statements they prepared. `categories` is read too, but
+  // the document strips the category, so a category change moves neither answer.
+  getMenuStatuses: MENU_PUBLICATION_READS,
+  getMenuStatus: MENU_PUBLICATION_READS,
+  getMenuPreview: MENU_PUBLICATION_READS,
   listCategories: ["categories", "category_details"],
   getCategory: ["categories", "category_details"],
   listCategoryProducts: ["categories", "category_details", "products", "product_labels"],

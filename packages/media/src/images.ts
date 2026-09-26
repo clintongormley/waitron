@@ -1,5 +1,8 @@
 import {
   categoryDetails,
+  menuPublications,
+  menuVersionImages,
+  menuVersions,
   parentJoin,
   parentProducts,
   readContentLanguages,
@@ -7,7 +10,7 @@ import {
   staffPresentationName,
   validateContentTranslations,
 } from "@waitron/catalogue";
-import { categories, products, type Transaction } from "@waitron/db";
+import { catalogues, categories, products, type Transaction } from "@waitron/db";
 import {
   AppError,
   contentLanguageCode,
@@ -29,10 +32,10 @@ export interface ImageRecord extends ImageMetadataInput {
   filename: string;
   createdAt: Date;
   updatedAt: Date;
-  /** How many products (variants among them), categories and sections reference this photo.
-   * `readImage` counts `listImageUsages`; `listImages` counts the same three sources in its own
-   * SQL, and the two must stay in step or the library shows a free photo that then refuses to
-   * delete. */
+  /** How many products (variants among them), categories, sections and live menu versions
+   * reference this photo. `readImage` counts `listImageUsages`; `listImages` counts the same
+   * sources in its own SQL, and the two must stay in step or the library shows a free photo that
+   * then refuses to delete. */
   usageCount: number;
 }
 export type ImageUsage =
@@ -57,7 +60,9 @@ export type ImageUsage =
       name: string;
       /** The variant AND its product are Active. */
       active: boolean;
-    };
+    }
+  /** A menu's LIVE version; a version another has replaced holds no use. */
+  | { kind: "menu_version"; id: string; menuId: string; menuName: string; number: number };
 export interface UploadImageOptions {
   fallbackLanguage?: string;
 }
@@ -172,6 +177,19 @@ export async function listImageUsages(tx: Transaction, imageId: string): Promise
     .from(sections)
     .where(eq(sections.image, image[0].filename))
     .orderBy(sections.id);
+  const versionRows = await tx
+    .select({
+      id: menuVersions.id,
+      menuId: menuVersions.menuId,
+      menuName: catalogues.name,
+      number: menuVersions.number,
+    })
+    .from(menuVersionImages)
+    .innerJoin(menuPublications, eq(menuPublications.versionId, menuVersionImages.versionId))
+    .innerJoin(menuVersions, eq(menuVersions.id, menuVersionImages.versionId))
+    .innerJoin(catalogues, eq(catalogues.id, menuVersions.menuId))
+    .where(eq(menuVersionImages.filename, image[0].filename))
+    .orderBy(catalogues.name, menuVersions.id);
   const usage = ({
     parentId,
     parentName,
@@ -193,6 +211,7 @@ export async function listImageUsages(tx: Transaction, imageId: string): Promise
     ...productRows.map(usage),
     ...categoryRows.map((row): ImageUsage => ({ kind: "category", ...row })),
     ...sectionRows.map((row): ImageUsage => ({ kind: "section", ...row })),
+    ...versionRows.map((row): ImageUsage => ({ kind: "menu_version", ...row })),
   ];
 }
 
@@ -536,11 +555,12 @@ export async function listImages(
 }
 
 /**
- * How many products (variants among them), categories and sections name each of `filenames`.
+ * How many products (variants among them), categories, sections and live menu versions name each
+ * of `filenames`.
  *
- * The three reads are the same three `listImageUsages` scans, and a source added there is added
- * here too — or the library shows a free photo that then refuses to delete. They are separate
- * statements on one transaction and are awaited in turn, never `Promise.all` (`CLAUDE.md` §3).
+ * The reads are the same scans `listImageUsages` makes, and a source added there is added here too
+ * — or the library shows a free photo that then refuses to delete. They are separate statements on
+ * one transaction and are awaited in turn, never `Promise.all` (`CLAUDE.md` §3).
  */
 async function countUsages(
   tx: Transaction,
@@ -568,6 +588,13 @@ async function countUsages(
     .select({ image: sections.image })
     .from(sections)
     .where(inArray(sections.image, wanted))) {
+    tally(row.image);
+  }
+  for (const row of await tx
+    .select({ image: menuVersionImages.filename })
+    .from(menuVersionImages)
+    .innerJoin(menuPublications, eq(menuPublications.versionId, menuVersionImages.versionId))
+    .where(inArray(menuVersionImages.filename, wanted))) {
     tally(row.image);
   }
   return counts;

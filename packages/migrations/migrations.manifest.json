@@ -18,7 +18,7 @@
     "name": "catalogue",
     "table": "__drizzle_migrations_catalogue",
     "from": "../catalogue/drizzle",
-    "appendOnlyTables": []
+    "appendOnlyTables": ["menu_versions", "menu_version_images"]
   },
   {
     "name": "media",

@@ -23,7 +23,8 @@ export type ImageUsage =
       catalogueId: string;
       name: string;
       active: boolean;
-    };
+    }
+  | { kind: "menu_version"; id: string; menuId: string; menuName: string; number: number };
 export interface ImageQuery {
   search: string;
   label: string;

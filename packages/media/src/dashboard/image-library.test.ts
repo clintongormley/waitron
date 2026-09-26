@@ -138,6 +138,34 @@ it("refreshes image ordering passively after content-language settings change", 
       .value,
   ).toBe("Draft label");
 });
+
+// `countUsages` (packages/media/src/images.ts) counts a live version's photos from these two.
+it.each(["menu_publications", "menu_version_images"])(
+  "refreshes the library passively when %s changes",
+  async (type) => {
+    const liveData = new LiveData();
+    const background = api();
+    const client = Object.assign(api(), { background, liveData });
+    await mount(client);
+    liveData.invalidate([{ type }]);
+    await vi.waitFor(() => expect(background.listImages).toHaveBeenCalledOnce());
+  },
+);
+
+// The library's live read (listImages, listLabels) names neither; only the delete dialog's one-off
+// getImage does, and it is not refreshed live.
+it.each(["menu_versions", "catalogues"])(
+  "does not refresh the library when %s changes",
+  async (type) => {
+    const liveData = new LiveData();
+    const background = api();
+    const client = Object.assign(api(), { background, liveData });
+    await mount(client);
+    liveData.invalidate([{ type }]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(background.listImages).not.toHaveBeenCalled();
+  },
+);
 afterEach(() => {
   el?.remove();
 });
@@ -668,6 +696,27 @@ it("links a section using the image by its internal name to its editor, and bloc
   );
   expect(el.shadowRoot!.querySelector("wt-modal li a")!.getAttribute("href")).toBe(
     "/manage/sections?section=drinks",
+  );
+  expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
+});
+
+it("links a live menu version using the image to its menu, and blocks the delete", async () => {
+  const client = api();
+  client.getImage.mockResolvedValue({
+    image,
+    uses: [
+      { kind: "menu_version", id: "version-1", menuId: "lunch", menuName: "Lunch Menu", number: 3 },
+    ],
+  });
+  await mount(client);
+  click("[data-test=delete-one]");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-modal li")?.textContent).toBe(
+      "Lunch Menu (Published menu)",
+    ),
+  );
+  expect(el.shadowRoot!.querySelector("wt-modal li a")!.getAttribute("href")).toBe(
+    "/manage/menus/menu/lunch",
   );
   expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
 });

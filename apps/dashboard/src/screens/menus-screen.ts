@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { ref } from "lit/directives/ref.js";
 import {
   baseStyles,
   setContentLanguages,
@@ -25,6 +26,7 @@ import "../widgets/menu-structure-tree.js";
 import "../widgets/section-add-products.js";
 import "../widgets/menu-prices-table.js";
 import type { OfferSave } from "../widgets/menu-prices-table.js";
+import { publishFailure, statusWords, type PublishResult } from "../widgets/menu-preview.js";
 import { textField } from "../widgets/form-fields.js";
 import { fieldOf, ListWriteQueue } from "../widgets/section-writes.js";
 import type {
@@ -33,7 +35,9 @@ import type {
   DashboardApi,
   LibrarySection,
   MemberRef,
+  MenuPreview,
   MenuPriceRow,
+  MenuStatus,
   MenuStructure,
   MenuStructureNode,
   Product,
@@ -45,7 +49,7 @@ import { dashboardPath } from "../navigation.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 
-const TABS = ["structure", "prices"] as const;
+const TABS = ["structure", "prices", "preview"] as const;
 type Tab = (typeof TABS)[number];
 
 const isTab = (value: string | null): value is Tab => TABS.includes(value as Tab);
@@ -61,6 +65,32 @@ interface ListTarget {
 
 const NO_USAGES: SectionUsages = { menus: [], sections: [] };
 const NO_NAMES: ReadonlyMap<string, string> = new Map();
+
+/** A menu on the list with its publication state, or where that state's read stands. */
+interface MenuRow extends CatalogueSummary {
+  status: MenuStatus | "loading" | "failed";
+}
+
+/** Sorted by status, the menus needing a publish come first. */
+const STATUS_ORDER = ["unpublished", "changed", "current", "loading", "failed"];
+
+/** The state in one line, for the editor's heading. */
+function statusLine(status: MenuStatus) {
+  const { label, live } = statusWords(status);
+  return live === null
+    ? label
+    : html`${label} · ${live.version} · <span class="time">${live.time}</span>`;
+}
+
+/** The state a publish answered as version `number` left, shown until the next read replaces it.
+ * The answer carries no publication time, so a new version shows this browser's clock. */
+function publishedStatus(number: number, hash: string, before: MenuStatus | null): MenuStatus {
+  const publishedAt =
+    before !== null && before.state !== "unpublished" && before.version === number
+      ? before.publishedAt
+      : new Date().toISOString();
+  return { state: "current", version: number, publishedAt, hash };
+}
 
 function refusal(error: unknown): Record<string, string> {
   return { [fieldOf(error)]: codeMessage(codeOf(error)) };
@@ -245,6 +275,48 @@ export class MenusScreen extends LitElement {
         overflow-wrap: anywhere;
         text-align: start;
       }
+      wt-data-table::part(note),
+      wt-data-table::part(muted),
+      .status-line {
+        color: var(--wt-color-text-muted);
+      }
+      wt-data-table::part(note) {
+        display: block;
+        font-size: var(--wt-font-size-sm);
+      }
+      .status-line {
+        margin: calc(var(--wt-space-3) * -1) 0 var(--wt-space-4);
+      }
+      .status-line .time {
+        white-space: nowrap;
+      }
+      .list {
+        container-type: inline-size;
+      }
+      .narrow-probe {
+        display: none;
+      }
+      @container (max-width: 30rem) {
+        .narrow-probe {
+          display: block;
+        }
+      }
+      wt-data-table::part(time) {
+        white-space: nowrap;
+      }
+      wt-data-table::part(name-text) {
+        text-align: start;
+      }
+      wt-data-table::part(stacked) {
+        display: block;
+        padding-inline: var(--wt-space-4);
+      }
+      /* The name and its status take the list's width less room for the row menu's column, and
+         wrap inside it: the table itself never narrows a column below its content. */
+      wt-data-table.narrow::part(name),
+      wt-data-table.narrow::part(stacked) {
+        max-width: calc(100cqi - 3 * var(--wt-tap-min));
+      }
     `,
   ];
 
@@ -275,6 +347,23 @@ export class MenusScreen extends LitElement {
   @state() private editingOffer: string | null = null;
   @state() private savingOffer = false;
   @state() private offerRefusal: { field: string; message: string } | null = null;
+
+  /** Every menu's publication state, followed while the list is shown; null until read. */
+  @state() private statuses: Record<string, MenuStatus> | null = null;
+  @state() private statusesError = false;
+  /** The open menu's publication state, followed while its editor is shown: on the Preview tab
+   * through the preview, which carries it. Null until read. */
+  @state() private status: MenuStatus | null = null;
+  @state() private statusError = false;
+  /** Null until the open menu's preview is read, which happens only on the Preview tab. */
+  @state() private preview: MenuPreview | null = null;
+  @state() private previewError = false;
+  /** The menus whose publish is out. Replaced, never mutated, so a change re-renders. */
+  @state() private publishing: ReadonlySet<string> = new Set();
+  /** The list is 30rem wide or less (the probe's container query), so each status sits under its
+   * menu's name. */
+  @state() private narrow = false;
+  @state() private publishResult: PublishResult | null = null;
 
   /** Null while closed; `id` is null while creating. */
   @state() private menuForm: { id: string | null; name: string } | null = null;
@@ -325,6 +414,27 @@ export class MenusScreen extends LitElement {
   /** The menu whose prices are being watched, so showing the Prices tab while they already are
    * starts no second read. */
   #pricesFor: string | null = null;
+  readonly #statusQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    () => {
+      if (this.menuId === null) this.statusesError = true;
+      else this.statusError = true;
+    },
+  );
+  /** The menu whose state is followed, null for every menu's, undefined before the first. */
+  #statusFor: string | null | undefined = undefined;
+  /** Whether the open menu's state is followed through its own query rather than the preview. */
+  #statusOwnQuery = false;
+  readonly #previewQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    () => {
+      this.previewError = true;
+      if (this.status === null) this.statusError = true;
+    },
+  );
+  #previewFor: string | null = null;
   readonly #usageQueries = new DashboardQueries(
     this,
     () => this.api,
@@ -338,7 +448,10 @@ export class MenusScreen extends LitElement {
 
   /** Built once: `dashboard-app.ts` renders each screen under `keyed(currentLocale(), …)`, so a
    * language change builds a new screen. */
-  readonly #columns: DataTableColumn<CatalogueSummary>[] = this.#buildColumns();
+  readonly #columns: DataTableColumn<MenuRow>[] = this.#buildColumns(false);
+  readonly #narrowColumns: DataTableColumn<MenuRow>[] = this.#buildColumns(true);
+  #listSize: ResizeObserver | null = null;
+  #rows: MenuRow[] = [];
   #sectionNames = new Map<string, string>();
   #parents: SectionParents = new Map();
   /** The nodes along {@link path}, one per member id. */
@@ -361,7 +474,24 @@ export class MenusScreen extends LitElement {
     void this.#load();
   }
 
+  /** A narrow list has no status column to sort by, so a status sort gives way, visibly, to the
+   * name order. */
+  protected override updated(changed: PropertyValues): void {
+    if (!changed.has("narrow") || !this.narrow) return;
+    const table = this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+      'wt-data-table[data-test="menus"]',
+    );
+    if (table?.sortKey !== "status") return;
+    table.sortKey = "name";
+    table.sortDirection = "ascending";
+  }
+
   protected override willUpdate(changed: PropertyValues): void {
+    if (changed.has("menus") || changed.has("statuses") || changed.has("statusesError"))
+      this.#rows = this.menus.map((menu) => ({
+        ...menu,
+        status: this.statuses?.[menu.id] ?? (this.statusesError ? "failed" : "loading"),
+      }));
     if (changed.has("sections")) {
       this.#sectionNames = new Map(this.sections.map(({ id, internalName }) => [id, internalName]));
       this.#parents = sectionParents(this.sections);
@@ -464,6 +594,7 @@ export class MenusScreen extends LitElement {
   async #load(): Promise<void> {
     this.loadError = false;
     this.usagesError = false;
+    this.#followStatus();
     // Kept apart from the load: a failure is reported beside the list it would describe.
     void this.#usageQueries
       .watch("listSectionUsages", [], (value) => {
@@ -533,6 +664,69 @@ export class MenusScreen extends LitElement {
     }
   }
 
+  /** Follows every menu's state while the list is shown, and the open menu's alone while its
+   * editor is — except on the Preview tab, where the preview's own answer carries it and a second
+   * query would only repeat the read. `again` reads it afresh even when it is already followed,
+   * keeping the open menu's state on screen until that read replaces it. */
+  #followStatus(again = false): void {
+    const menuId = this.menuId;
+    const ownQuery = menuId !== null && this.view !== "preview";
+    if (!again && this.#statusFor === menuId && this.#statusOwnQuery === ownQuery) return;
+    const sameMenu = this.#statusFor === menuId;
+    this.#statusFor = menuId;
+    this.#statusOwnQuery = ownQuery;
+    if (menuId === null) {
+      this.#statusQueries.release("getMenuStatus");
+      this.statuses = null;
+      this.statusesError = false;
+      void this.#statusQueries
+        .watch("getMenuStatuses", [], (value) => {
+          this.statuses = value;
+          this.statusesError = false;
+        })
+        .catch(() => undefined);
+      return;
+    }
+    this.#statusQueries.release("getMenuStatuses");
+    if (!sameMenu) this.status = null;
+    if (again || !sameMenu) this.statusError = false;
+    if (!ownQuery) {
+      this.#statusQueries.release("getMenuStatus");
+      if (again) void this.#watchPreview(menuId);
+      return;
+    }
+    void this.#statusQueries
+      .watch("getMenuStatus", [menuId], (value) => {
+        this.status = value;
+        this.statusError = false;
+      })
+      .catch(() => undefined);
+  }
+
+  /** Re-reads from scratch, as after a refused publish, so the preview is never an old one. */
+  async #watchPreview(menuId: string): Promise<void> {
+    this.#previewFor = menuId;
+    this.preview = null;
+    this.previewError = false;
+    try {
+      await this.#previewQueries.watch("getMenuPreview", [menuId], (value) => {
+        this.preview = value;
+        this.previewError = false;
+        this.status = value.status;
+        this.statusError = false;
+      });
+    } catch {
+      this.previewError = true;
+    }
+  }
+
+  #releasePreview(): void {
+    this.#previewFor = null;
+    this.#previewQueries.release("getMenuPreview");
+    this.preview = null;
+    this.previewError = false;
+  }
+
   /** Also forgets the rows, so the tab shows loading rather than old rows until the next read. */
   #releasePrices(): void {
     this.#pricesFor = null;
@@ -542,9 +736,13 @@ export class MenusScreen extends LitElement {
   }
 
   /** The prices are watched only while the Prices tab is shown: the structure edits made on the
-   * other tab write tables the prices read depends on. */
+   * other tab write tables the prices read depends on. The preview likewise. */
   #showView(view: Tab): void {
     this.view = view;
+    this.#followStatus();
+    if (view !== "preview") this.#releasePreview();
+    else if (this.menuId !== null && this.#previewFor !== this.menuId)
+      void this.#watchPreview(this.menuId);
     // The window lives in the Prices panel, which the tabs hide; left open, its modal dialog would
     // block the page. A save still out reports a refusal beside the list instead (`#saveOffer`).
     if (view !== "prices") {
@@ -577,9 +775,15 @@ export class MenusScreen extends LitElement {
     this.memberError = null;
     this.editingOffer = null;
     this.offerRefusal = null;
+    this.publishResult = null;
     this.#releasePrices();
-    if (menuId === null) this.#structureQueries.release("getMenuStructure");
-    else void this.#watchStructure();
+    this.#releasePreview();
+    // An open menu's state waits for `#showView`, which each caller opening a menu runs next and
+    // which knows whether the Preview tab carries it, so no query starts only to be released.
+    if (menuId === null) {
+      this.#followStatus();
+      this.#structureQueries.release("getMenuStructure");
+    } else void this.#watchStructure();
   }
 
   /** Replaces an address naming a menu that does not exist, or a tab the editor does not have. */
@@ -660,6 +864,50 @@ export class MenusScreen extends LitElement {
     this.menuForm = null;
     // A write that succeeded is never reported as a failed one: a failure here is a load failure.
     await this.#watchMenus().catch(() => undefined);
+    this.#followStatus(true);
+  }
+
+  // ── Publishing ───────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Publishes the working state the preview showed, as `hash`; the server refuses it as
+   * `menu.changed_since_preview` when the menu has changed since, and then the menu is previewed
+   * again. A refusal that lands after the person left the menu is named beside the list.
+   */
+  async #publish(hash: string): Promise<void> {
+    const menuId = this.menuId!;
+    if (this.publishing.has(menuId)) return;
+    const name = this.#menuName();
+    const live = this.status;
+    this.publishing = new Set([...this.publishing, menuId]);
+    this.publishResult = null;
+    let result: PublishResult;
+    try {
+      result = { kind: "published", number: (await this.api.publishMenu(menuId, hash)).number };
+    } catch (error) {
+      const code = codeOf(error);
+      result =
+        code === "menu.changed_since_preview"
+          ? { kind: "stale" }
+          : { kind: "failed", reason: codeMessage(code) };
+    }
+    this.publishing = new Set([...this.publishing].filter((id) => id !== menuId));
+    if (this.menuId !== menuId) {
+      if (result.kind !== "published")
+        this.memberError = publishFailure(
+          name,
+          live,
+          result.kind === "stale" ? codeMessage("menu.changed_since_preview") : result.reason,
+        );
+      return;
+    }
+    this.publishResult = result;
+    if (result.kind === "failed") return;
+    // A publish that succeeded is never reported as a failed one: a failure here is a load failure.
+    if (result.kind === "published") {
+      this.status = publishedStatus(result.number, hash, live);
+      this.#followStatus(true);
+    } else if (this.view === "preview") void this.#watchPreview(menuId);
   }
 
   // ── The list being edited ────────────────────────────────────────────────────────────────────
@@ -923,22 +1171,57 @@ export class MenusScreen extends LitElement {
 
   // ── Rendering ────────────────────────────────────────────────────────────────────────────────
 
-  #buildColumns(): DataTableColumn<CatalogueSummary>[] {
+  #statusCell(menu: MenuRow) {
+    const test = `status-${menu.id}`;
+    if (typeof menu.status === "string")
+      return html`<span part="muted" data-test=${test}
+        >${t(menu.status === "loading" ? "menus.status_loading" : "menus.status_error")}</span
+      >`;
+    const { label, live } = statusWords(menu.status);
+    return html`<span data-test=${test}
+      >${label}${
+        live === null
+          ? nothing
+          : html` <span part="note">${live.version} · <span part="time">${live.time}</span></span>`
+      }</span
+    >`;
+  }
+
+  /** On a narrow list the status moves under the name and its own column goes, as the variants
+   * table does with its prices (docs/developers/design-system.md). */
+  #buildColumns(narrow: boolean): DataTableColumn<MenuRow>[] {
+    const name = (menu: MenuRow) =>
+      html`<wt-button
+        variant="ghost"
+        part="name"
+        align="start"
+        data-test=${`open-${menu.id}`}
+        @click=${() => this.#open(menu.id)}
+        ><span part="name-text">${menu.name}</span></wt-button
+      >`;
     return [
       {
         key: "name",
         label: t("menus.name"),
         sortValue: (menu) => menu.name,
         searchValue: (menu) => menu.name,
-        cell: (menu) =>
-          html`<wt-button
-            variant="ghost"
-            part="name"
-            data-test=${`open-${menu.id}`}
-            @click=${() => this.#open(menu.id)}
-            >${menu.name}</wt-button
-          >`,
+        cell: narrow
+          ? (menu) => html`${name(menu)} <span part="stacked">${this.#statusCell(menu)}</span>`
+          : name,
       },
+      ...(narrow
+        ? []
+        : [
+            {
+              key: "status",
+              label: t("menus.status"),
+              sortValue: (menu: MenuRow) =>
+                STATUS_ORDER.indexOf(
+                  typeof menu.status === "string" ? menu.status : menu.status.state,
+                ),
+              cell: (menu: MenuRow) => this.#statusCell(menu),
+            },
+          ]),
       {
         key: "actions",
         label: t("menus.actions"),
@@ -1072,6 +1355,18 @@ export class MenusScreen extends LitElement {
     });
   }
 
+  /** The probe is observed rather than the list: the probe's width follows the list's container,
+   * not the table's contents. */
+  #observeProbe = (probe: Element | undefined): void => {
+    this.#listSize?.disconnect();
+    this.#listSize = null;
+    if (probe === undefined) return;
+    this.#listSize = new ResizeObserver(() => {
+      this.narrow = getComputedStyle(probe).display !== "none";
+    });
+    this.#listSize.observe(probe);
+  };
+
   #renderList() {
     return html`<h1>${t("menus.title")}</h1>
       ${this.#renderLoadState()} ${this.#renderMemberError()}
@@ -1085,17 +1380,21 @@ export class MenusScreen extends LitElement {
                   >${t("menus.add")}</wt-button
                 >
               </div>
-              <wt-data-table
-                data-test="menus"
-                aria-label=${t("menus.title")}
-                viewKey="waitron.menus.table"
-                sortKey="name"
-                sortDirection="ascending"
-                .rows=${this.menus}
-                .columns=${this.#columns}
-                .rowKey=${(menu: CatalogueSummary) => menu.id}
-                .emptyMessage=${t("menus.empty")}
-              ></wt-data-table>`
+              <div class="list">
+                <span class="narrow-probe" aria-hidden="true" ${ref(this.#observeProbe)}></span>
+                <wt-data-table
+                  data-test="menus"
+                  class=${this.narrow ? "narrow" : ""}
+                  aria-label=${t("menus.title")}
+                  viewKey="waitron.menus.table"
+                  sortKey="name"
+                  sortDirection="ascending"
+                  .rows=${this.#rows}
+                  .columns=${this.narrow ? this.#narrowColumns : this.#columns}
+                  .rowKey=${(menu: MenuRow) => menu.id}
+                  .emptyMessage=${t("menus.empty")}
+                ></wt-data-table>
+              </div>`
           : nothing
       }
       ${this.#renderMenuForm()}`;
@@ -1108,7 +1407,13 @@ export class MenusScreen extends LitElement {
     ${
       this.loadError
         ? html`<p class="error" role="alert" data-test="load-error">${t("menus.load_error")}</p>
-            <wt-button data-test="retry" variant="secondary" @click=${() => void this.#load()}
+            <wt-button
+              data-test="retry"
+              variant="secondary"
+              @click=${() => {
+                this.#followStatus(true);
+                void this.#load();
+              }}
               >${t("menus.retry")}</wt-button
             >`
         : nothing
@@ -1325,6 +1630,35 @@ export class MenusScreen extends LitElement {
       }`;
   }
 
+  #renderPreview() {
+    return html`<dashboard-menu-preview
+      menuName=${this.#menuName()}
+      .status=${this.status}
+      .statusFailed=${this.statusError}
+      .preview=${this.preview}
+      .failed=${this.previewError}
+      .publishing=${this.publishing.has(this.menuId!)}
+      .result=${this.publishResult}
+      @wt-menu-publish=${(event: CustomEvent<{ hash: string }>) => {
+        event.stopPropagation();
+        void this.#publish(event.detail.hash);
+      }}
+      @wt-preview-retry=${(event: Event) => {
+        event.stopPropagation();
+        void this.#watchPreview(this.menuId!);
+      }}
+    ></dashboard-menu-preview>`;
+  }
+
+  #renderStatusLine() {
+    const words = this.statusError
+      ? t("menus.status_error")
+      : this.status === null
+        ? t("menus.status_loading")
+        : statusLine(this.status);
+    return html`<p class="status-line" data-test="menu-status">${words}</p>`;
+  }
+
   #renderDuplicate() {
     const duplicating = this.duplicating;
     const errors = this.duplicateErrors;
@@ -1445,7 +1779,7 @@ export class MenusScreen extends LitElement {
         >
       </div>
       <h1>${name || t("menus.title")}</h1>
-      ${this.#renderLoadState()} ${this.#renderMemberError()}
+      ${this.#renderStatusLine()} ${this.#renderLoadState()} ${this.#renderMemberError()}
       <wt-tabs
         data-test="menu-tabs"
         label=${name || t("menus.title")}
@@ -1453,6 +1787,7 @@ export class MenusScreen extends LitElement {
         .items=${[
           { key: "structure", label: t("menus.tab_structure") },
           { key: "prices", label: t("menus.tab_prices") },
+          { key: "preview", label: t("menus.tab_preview") },
         ]}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           if (event.target !== event.currentTarget) return;
@@ -1462,6 +1797,7 @@ export class MenusScreen extends LitElement {
       >
         <div slot="structure">${this.#renderStructure()}</div>
         <div slot="prices" class="prices">${this.#renderPrices()}</div>
+        <div slot="preview">${this.#renderPreview()}</div>
       </wt-tabs>
       ${this.#renderDuplicate()} ${this.#renderNewSection()} ${this.#renderAddProducts()}`;
   }

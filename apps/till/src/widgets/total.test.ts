@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { formatMoney } from "@waitron/shared";
 import { WorkingOrderStore } from "../state/working-order.js";
-import { formatMoney } from "../i18n/format.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillTotal } from "./total.js";
 import type { TillProduct } from "../api/client.js";
@@ -29,25 +29,25 @@ describe("till-total", () => {
     store.addProduct(cafe, "2");
     const { el } = await mountWidget<TillTotal>("till-total", { store });
     expect(el.shadowRoot!.textContent).toContain(t("label.total"));
-    expect(el.shadowRoot!.textContent).toContain(formatMoney("3.00"));
+    expect(el.shadowRoot!.textContent).toContain(formatMoney("3.00", currentLocale()));
   });
 
   it("updates when the store changes after mount", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillTotal>("till-total", { store });
-    expect(el.shadowRoot!.textContent).toContain(formatMoney("0"));
+    expect(el.shadowRoot!.textContent).toContain(formatMoney("0", currentLocale()));
     store.addProduct(cafe, "2");
     await el.updateComplete;
-    expect(el.shadowRoot!.textContent).toContain(formatMoney("3.00"));
+    expect(el.shadowRoot!.textContent).toContain(formatMoney("3.00", currentLocale()));
   });
 
   it("unsubscribes on disconnect so a later change does not update it", async () => {
     const store = new WorkingOrderStore();
     const { el, host } = await mountWidget<TillTotal>("till-total", { store });
-    expect(el.shadowRoot!.textContent).toContain(formatMoney("0"));
+    expect(el.shadowRoot!.textContent).toContain(formatMoney("0", currentLocale()));
     host.remove(); // disconnectedCallback → unsubscribe
     store.addProduct(cafe, "2");
     await el.updateComplete;
-    expect(el.shadowRoot!.textContent).toContain(formatMoney("0"));
+    expect(el.shadowRoot!.textContent).toContain(formatMoney("0", currentLocale()));
   });
 });

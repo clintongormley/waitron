@@ -49,7 +49,7 @@ start to move it, or focus the handle and use the up and down arrow keys. That s
 **New extras list…** and **New options list…**, so you can build a list without abandoning the
 product you are editing.
 
-A product attachment and a menu publication are separate. Attaching a list to the product does not
+A product attachment and a menu offer's extras lists are separate. Attaching a list to the product does not
 change an existing menu offer. A menu offer can carry its own price for one of an extras list's
 products, and that price wins over the price on the list entry, which in turn wins over the
 product's own price — though no dashboard screen sets a menu price for an extra yet.

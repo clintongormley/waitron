@@ -33,6 +33,7 @@ export {
   workingOrderLineId,
 } from "./ids.js";
 export { centsToDecimal, decimalToCents, rawCentsToDecimal, stringToCents } from "./cents.js";
+export { formatMoney } from "./money-format.js";
 export {
   basisPointsToDecimal,
   decimalToBasisPoints,

@@ -9,21 +9,33 @@ import {
   type Database,
 } from "@waitron/db";
 import {
+  addMember,
   CATALOGUE_MIGRATIONS,
   categoryDetails,
+  createCatalogue,
+  createProduct,
   createSection,
+  menuVersionImages,
+  menuVersions,
+  previewMenu,
+  publishMenu,
+  readMenuStructure,
   sections,
+  updateProduct,
   updateSection,
 } from "@waitron/catalogue";
+import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { mediaImages } from "./schema/images.js";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
 
 /**
- * `products.image`, `category_details.image` and `sections.image` may only name a photo that
- * exists, and a photo one of them still names cannot be deleted or renamed. The rules are triggers, not keys
- * (`packages/media/drizzle/0001_image_references.sql`, whose header carries why, and
- * `0002_section_image_references.sql` for `sections.image`).
+ * `products.image`, `category_details.image`, `sections.image` and `menu_version_images.filename`
+ * may only name a photo that exists, and a photo one of the first three still names cannot be
+ * deleted or renamed. Nor can a photo a LIVE menu version names. The rules are triggers, not keys
+ * (`packages/media/drizzle/0001_image_references.sql`, whose header carries why,
+ * `0002_section_image_references.sql` for `sections.image`, and
+ * `0003_published_image_references.sql` for a published version's photos).
  *
  * READING `sqlite_master` IS NOT ENOUGH, so the names are pinned AND every rule has a real
  * offending write with an ACCEPTING control in the other direction — without the control a trigger
@@ -100,7 +112,7 @@ beforeEach(async () => {
   ids = await fixture(suite.db);
 });
 
-it("creates the twelve triggers that stand in for the three foreign keys", async () => {
+it("creates the triggers that stand in for the foreign keys", async () => {
   const rows = await suite.db.execute<{ name: string }>(sql`
     select name from sqlite_master where type = 'trigger' and name glob '*media_image_fk*'
     order by name`);
@@ -109,6 +121,9 @@ it("creates the twelve triggers that stand in for the three foreign keys", async
     "category_details_media_image_fk_parent_delete",
     "category_details_media_image_fk_parent_rename",
     "category_details_media_image_fk_update",
+    "menu_version_images_media_image_fk_insert",
+    "menu_version_images_media_image_fk_parent_delete",
+    "menu_version_images_media_image_fk_parent_rename",
     "products_media_image_fk_insert",
     "products_media_image_fk_parent_delete",
     "products_media_image_fk_parent_rename",
@@ -281,5 +296,91 @@ describe("an image a catalogue row still names", () => {
     await suite.db.execute(sql`update sections set image = null`);
     await removeImages();
     expect(await imageCount()).toBe(0);
+  });
+});
+
+describe("an image a live menu version names", () => {
+  /** A menu whose one product shows the image, published, and then the product letting it go. */
+  async function publishedOnly(): Promise<{ menuId: string; productId: string }> {
+    await seedTenant(suite.db);
+    return withTransaction(suite.db, async (tx) => {
+      const menu = await createCatalogue(tx, { name: "Lunch Menu" });
+      const product = await createProduct(tx, {
+        catalogueId: menu.id,
+        categoryId: null,
+        name: "Bread",
+        pricingUnit: "each",
+        unitPrice: "2.00",
+        vatClass: "general",
+        image: PRESENT,
+      });
+      const { rootSectionId } = await readMenuStructure(tx, menu.id);
+      await addMember(tx, rootSectionId, { kind: "product", productId: product.id });
+      await publishMenu(tx, menu.id, (await previewMenu(tx, menu.id)).hash, "person-1");
+      await updateProduct(tx, product.id, { image: null });
+      return { menuId: menu.id, productId: product.id };
+    });
+  }
+
+  /** Publishes the menu again, now without the image, so the version naming it is no longer live. */
+  async function republish(menuId: string): Promise<void> {
+    await withTransaction(suite.db, async (tx) =>
+      publishMenu(tx, menuId, (await previewMenu(tx, menuId)).hash, "person-1"),
+    );
+  }
+
+  it("cannot be deleted while the live version names it, and can once another version is live", async () => {
+    const { menuId } = await publishedOnly();
+    await expect(removeImages()).rejects.toMatchObject({
+      message: "menu_version_images_media_image_fk",
+    });
+    expect(await imageCount()).toBe(1);
+    await republish(menuId);
+    await removeImages();
+    expect(await imageCount()).toBe(0);
+  });
+
+  it("cannot be renamed while the live version names it, and can once another version is live", async () => {
+    const { menuId } = await publishedOnly();
+    await expect(renameImages()).rejects.toMatchObject({
+      message: "menu_version_images_media_image_fk",
+    });
+    await republish(menuId);
+    await renameImages();
+    const rows = await suite.db.execute<{ filename: string }>(
+      sql`select filename from media_images`,
+    );
+    expect(rows.rows.map((row) => row.filename)).toEqual([ABSENT]);
+  });
+
+  it("is refused on a menu_version_images insert unless an image carries it", async () => {
+    const [version] = await suite.db
+      .insert(menuVersions)
+      .values({
+        menuId: ids.catalogueId,
+        number: 1,
+        document: {} as never,
+        contentHash: "hash",
+        publishedAt: new Date(),
+        publishedBy: "person-1",
+      })
+      .returning({ id: menuVersions.id });
+    const insert = async (filename: string): Promise<void> => {
+      await suite.db.insert(menuVersionImages).values({ versionId: version!.id, filename });
+    };
+    await expect(insert(ABSENT)).rejects.toMatchObject({
+      message: "menu_version_images_media_image_fk",
+    });
+    await insert(PRESENT);
+    const rows = await suite.db.execute<{ filename: string }>(
+      sql`select filename from menu_version_images`,
+    );
+    expect(rows.rows.map((row) => row.filename)).toEqual([PRESENT]);
+  });
+
+  it("can be renamed to itself while the live version names it", async () => {
+    await publishedOnly();
+    await suite.db.execute(sql`update media_images set filename = filename`);
+    expect(await imageCount()).toBe(1);
   });
 });

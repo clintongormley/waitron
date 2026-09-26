@@ -6,6 +6,8 @@ export const QUERY_DEPENDENCIES = {
     "categories",
     "sections",
     "content_languages",
+    "menu_publications",
+    "menu_version_images",
   ],
   labels: ["media_images"],
 } as const;

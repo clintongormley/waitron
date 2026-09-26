@@ -1,8 +1,8 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import { formatMoney } from "../i18n/format.js";
-import { t } from "../i18n/t.js";
+import { formatMoney } from "@waitron/shared";
+import { currentLocale, t } from "../i18n/t.js";
 import type { HeldOrderSummary } from "../api/client.js";
 
 /**
@@ -97,7 +97,9 @@ export class TillHeldOrders extends LitElement {
                   <div class="summary">
                     <span class="number">#${order.orderNumber}</span>
                     ${order.label ? html`<span class="label">${order.label}</span>` : nothing}
-                    <span class="meta">${order.itemCount} · ${formatMoney(order.total)}</span>
+                    <span class="meta"
+                      >${order.itemCount} · ${formatMoney(order.total, currentLocale())}</span
+                    >
                   </div>
                   <wt-button
                     class="retrieve"

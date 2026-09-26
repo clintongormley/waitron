@@ -460,7 +460,7 @@ export async function listMenuOffers(
 ): Promise<MenuOffer[]> {
   if (menuIds.length === 0) return [];
   const roots = await menuRoots(tx, menuIds);
-  return offersOn(tx, roots, await loadSectionGraph(tx), options);
+  return offersOn(tx, roots, options.graph ?? (await loadSectionGraph(tx)), options);
 }
 
 /** `listMenuOffers` for one menu, each offer with its product's membership of the menu's top level. */
@@ -490,6 +490,11 @@ export async function listMenuOffersWithTopLevel(
 interface OfferOptions {
   includeUnavailable?: boolean;
   includeSwitchedOff?: boolean;
+  /** Every extras item and option label, whatever its availability: what a published document
+   * holds. */
+  includeEveryModifierItem?: boolean;
+  /** The graph the caller has already loaded for this operation. */
+  graph?: SectionGraph;
 }
 
 /** The rows `offersOn` builds each offer from, in its order, and the paths placing each row's
@@ -605,6 +610,7 @@ async function offersOn(
   const offeredByItem = await readOfferedModifiers(
     tx,
     offered.map((row) => ({ productId: row.productId, menuItemId: row.id })),
+    { includeEveryModifierItem: options.includeEveryModifierItem === true },
   );
   const variantsByItem = await readOfferVariants(
     tx,

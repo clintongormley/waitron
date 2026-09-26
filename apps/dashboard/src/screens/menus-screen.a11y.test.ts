@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
 import type { DashboardApi, LibrarySection, MenuStructureNode, Product } from "../api/client.js";
@@ -84,6 +85,41 @@ function api(state: State): DashboardApi {
     }),
     createSection: vi.fn(),
     duplicateSection: vi.fn(),
+    getMenuStatuses: vi.fn().mockResolvedValue({
+      "menu-lunch": {
+        state: "changed",
+        version: 2,
+        publishedAt: "2026-09-26T10:15:00.000Z",
+        hash: "a".repeat(64),
+      },
+      "menu-dinner": { state: "unpublished" },
+    }),
+    getMenuStatus: vi.fn().mockResolvedValue({
+      state: "changed",
+      version: 2,
+      publishedAt: "2026-09-26T10:15:00.000Z",
+      hash: "a".repeat(64),
+    }),
+    getMenuPreview: vi.fn().mockResolvedValue({
+      hash: "b".repeat(64),
+      changes: [
+        {
+          kind: "product_changed",
+          productId: "p-lager",
+          name: "Lager",
+          fields: ["allergens"],
+          source: "shared_product",
+          alsoOn: ["Dinner Menu"],
+        },
+      ],
+      warnings: [{ kind: "shortcut_omitted", layoutName: "Home", name: "Lager" }],
+      status: {
+        state: "changed",
+        version: 2,
+        publishedAt: "2026-09-26T10:15:00.000Z",
+        hash: "a".repeat(64),
+      },
+    }),
     getMenuPrices: vi.fn().mockResolvedValue([
       {
         menuItemId: "mi-lager",
@@ -204,6 +240,36 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     );
     const prices = q(el, "dashboard-menu-prices-table") as HTMLElement & { rows: unknown[] };
     await vi.waitFor(() => expect(prices.rows).toHaveLength(1));
+    await expectNoA11yViolations(host);
+  });
+
+  it("accessible Preview tab", async () => {
+    const { el, host } = await mount(
+      "populated",
+      theme,
+      "/manage/menus/menu/menu-lunch/view/preview",
+    );
+    const panel = q(el, "dashboard-menu-preview");
+    await vi.waitFor(() => {
+      if (!panel.shadowRoot!.querySelector('[data-test="changes"]')) throw new Error("preview");
+    });
+    await expectNoA11yViolations(host);
+  });
+
+  it.each([
+    ["under each name, on a phone", 390],
+    ["in its own column", 1280],
+  ])("accessible menus list with each menu's state %s", async (_where, width) => {
+    const frame = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(width, 900);
+    onTestFinished(() => page.viewport(frame.width, frame.height));
+    const { el, host } = await mount("populated", theme, "/manage/menus");
+    const table = q(el, '[data-test="menus"]');
+    await vi.waitFor(() =>
+      expect(
+        table.shadowRoot!.querySelector('[data-test="status-menu-dinner"]')?.textContent?.trim(),
+      ).toBe(t("menu_status.unpublished")),
+    );
     await expectNoA11yViolations(host);
   });
 

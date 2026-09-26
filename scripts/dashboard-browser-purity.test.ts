@@ -153,6 +153,7 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
       "packages/catalogue/src/menu-types.ts",
       "packages/catalogue/src/modifier-list-types.ts",
       "packages/catalogue/src/section-types.ts",
+      "packages/catalogue/src/menu-document-types.ts",
     ];
 
     /** Every top-level statement in `src` that would emit runtime JS: an `import` that is not

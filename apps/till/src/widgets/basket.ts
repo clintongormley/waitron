@@ -4,7 +4,7 @@ import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import { formatMoney } from "../i18n/format.js";
+import { formatMoney } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { optionAnswers } from "./option-snapshot.js";
@@ -309,7 +309,7 @@ export class TillBasket extends LitElement {
               >${this.#lineName(line)}${line.notOffered ? notOfferedMarker() : nothing}</span
             >
             ${this.#quantityCell(line, index)}
-            <span class="line-total">${formatMoney(dishGross(line))}</span>
+            <span class="line-total">${formatMoney(dishGross(line), currentLocale())}</span>
             <wt-button
               class="note-toggle"
               variant="ghost"
@@ -356,7 +356,9 @@ export class TillBasket extends LitElement {
               return html`
                 <div class="option">
                   <span class="name">${extra.name}${pickQuantityBadge(extra.quantity)}</span>
-                  <span class="option-total">${formatMoney(extraGross(line, extra))}</span>
+                  <span class="option-total"
+                    >${formatMoney(extraGross(line, extra), currentLocale())}</span
+                  >
                 </div>
                 ${own ? extraNutrition(own, `option-allergens-${index}-${i}`, `option-diet-${index}-${i}`) : nothing}
               `;
@@ -368,7 +370,9 @@ export class TillBasket extends LitElement {
                 <span class="name"
                   >${extra.name}${pickQuantityBadge(extra.quantity)}${notOfferedMarker()}</span
                 >
-                <span class="option-total">${formatMoney(extraGross(line, extra))}</span>
+                <span class="option-total"
+                  >${formatMoney(extraGross(line, extra), currentLocale())}</span
+                >
               </div>
             `,
           )}

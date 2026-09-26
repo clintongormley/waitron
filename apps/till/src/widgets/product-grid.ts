@@ -2,13 +2,14 @@ import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import { formatMoney } from "../i18n/format.js";
+import { formatMoney } from "@waitron/shared";
 import { productName, productUnit, unitName } from "./product-name.js";
 import "./modifier-picker.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import type { TillProduct } from "../api/client.js";
 import { needsModifierPicker } from "../state/order-line.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
+import { currentLocale } from "../i18n/t.js";
 
 /** A product with variants is sold only as one of them, so one whose variants are all unavailable
  * here has nothing to sell and gets no tile. */
@@ -62,7 +63,7 @@ export class TillProductGrid extends LitElement {
   @state() private pickerProduct?: TillProduct;
 
   #priceLabel(product: TillProduct): string {
-    const price = formatMoney(product.unitPrice);
+    const price = formatMoney(product.unitPrice, currentLocale());
     return `${price}/${unitName(product)}`;
   }
 

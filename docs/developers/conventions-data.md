@@ -969,10 +969,18 @@ of them sit on tables another set owns: `products`, created by core in
 `packages/db/drizzle/0000_baseline.sql` and rebuilt by core's
 `0003_variant_inherited_nullable.sql`, and `category_details`, created by catalogue.
 `drizzle/0002_section_image_references.sql` adds four more of the same shape for `sections.image`,
-two of them on catalogue's `sections`. Both edges are
-declared — media's descriptor reads `requires: { core: "*", modules: { catalogue: "*" } }`
-(`packages/media/src/module.ts`) — which is what the guard checks; the guard's job is the case where
-such an edge is NOT declared. Core's own triggers, in its migration files under
+two of them on catalogue's `sections`. `drizzle/0003_published_image_references.sql` adds three for
+`menu_version_images.filename`: one on catalogue's `menu_version_images`, and two on `media_images`
+whose bodies read catalogue's `menu_version_images` and `menu_publications` — an edge
+`scripts/module-graph-honesty.test.ts` cannot see, because it never reads a trigger's body. A
+catalogue rebuild of either table is the trigger-body shape described below, which fails on an
+upgrade. A rebuild of `menu_version_images` that got past that, by removing media's two body
+triggers first, would also drop the insert trigger ON it with no error — inferred from the
+`products` measurement below, not measured on this table. Media's two edges, to core and to
+catalogue, are both declared — media's descriptor reads
+`requires: { core: "*", modules: { catalogue: "*" } }` (`packages/media/src/module.ts`) — and for
+the triggers ON another set's tables that declaration is what the guard checks; the guard's job is
+the case where such an edge is NOT declared. Core's own triggers, in its migration files under
 `packages/db/drizzle/`, sit on core tables and name only core tables, and so are not edges at all.
 The live-update triggers are installed at boot and sit outside this migration-text guard; their
 behaviour is exercised by `packages/db/src/change-feed.test.ts`.

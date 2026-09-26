@@ -1,4 +1,4 @@
-import { classify, type ClassifiedTable } from "@waitron/sync-enrolment";
+import { appendOnly, classify, type ClassifiedTable } from "@waitron/sync-enrolment";
 import type { ChangeSource } from "@waitron/shared";
 
 const STATE = "menu configuration; copied to a standby, never drained back";
@@ -23,6 +23,17 @@ export const CATALOGUE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("sections", "state", STATE),
   classify("section_members", "state", STATE),
   classify("menu_details", "state", STATE),
+  appendOnly(
+    "menu_versions",
+    "state",
+    "published menu versions, never changed once written; copied to a standby, never drained back",
+  ),
+  appendOnly(
+    "menu_version_images",
+    "state",
+    "the photos each published menu version names; copied to a standby, never drained back",
+  ),
+  classify("menu_publications", "state", STATE),
 ];
 
 export const CATALOGUE_CHANGE_SOURCES: readonly ChangeSource[] = CATALOGUE_CLASSIFICATION.map(
