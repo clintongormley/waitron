@@ -88,12 +88,24 @@ const panelOf = (el: BackupScreen) =>
 async function flush(el: BackupScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
-  // A second turn: the auto-mint is fired AFTER the status load resolves, so give its render a tick.
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
 }
 
+/** Every later mint waits until the test hands it a key, in the order the mints were asked for. */
+function holdMints(api: DashboardApi): Array<(key: string) => void> {
+  const pending: Array<(key: string) => void> = [];
+  vi.mocked(api.mintBackupKey).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        pending.push((key) => resolve({ key }));
+      }),
+  );
+  return pending;
+}
+
 const q = (el: BackupScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
+const alertText = (el: BackupScreen) => q(el, "[role=alert]:not([data-test])")?.textContent;
 const errorKey = (el: BackupScreen): string | null =>
   (el as unknown as { errorKey: string | null }).errorKey;
 
@@ -653,7 +665,7 @@ it("refreshes backup status without minting another recovery key", async () => {
   expect(api.mintBackupKey).toHaveBeenCalledOnce();
 });
 
-describe("a status that arrives only after the first read failed", () => {
+describe("the status watcher's key requests and read alerts", () => {
   function failFirstRead(): DashboardApi {
     return stubApi({
       getBackupStatus: vi
@@ -766,6 +778,135 @@ describe("a status that arrives only after the first read failed", () => {
     expect((el as unknown as { mintedKey: string }).mintedKey).toBe("MINTED-KEY-abcdef012345");
   });
 
+  it("makes one key when a refresh arrives while Apply is still making the next one", async () => {
+    const api = stubApi({}, { ...OFF, recoveryKeySet: true });
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    const mints = holdMints(api);
+    vi.mocked(api.getBackupStatus).mockResolvedValue(ENABLED);
+    setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
+    await el.updateComplete;
+    q(el, "[data-test=apply]")!.click();
+    await vi.waitFor(() => expect(mints).toHaveLength(1));
+
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() => expect(api.getBackupStatus).toHaveBeenCalledTimes(2));
+    await flush(el);
+    mints[0]!("APPLY-KEY-abcdef012345");
+    await flush(el);
+    mints[1]?.("WATCHER-KEY-abcdef012345");
+    await flush(el);
+
+    expect(api.mintBackupKey).toHaveBeenCalledOnce();
+    expect(q(el, "[data-test=minted-key]")?.textContent).toBe("APPLY-KEY-abcdef012345");
+  });
+
+  it("makes one key when a refresh arrives while Rotate is still making the next one", async () => {
+    const api = stubApi({}, { ...OFF, recoveryKeySet: true });
+    vi.mocked(api.mintBackupKey).mockRejectedValueOnce({ code: "connection.failed" });
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    vi.mocked(api.getBackupStatus).mockResolvedValue(ENABLED);
+    setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
+    await el.updateComplete;
+    q(el, "[data-test=apply]")!.click();
+    await vi.waitFor(() => expect(api.mintBackupKey).toHaveBeenCalledOnce());
+    await flush(el);
+
+    const mints = holdMints(api);
+    q(el, "[data-test=show-old-key]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=old-key]")).not.toBeNull());
+    q(el, "[data-test=advanced-toggle]")!.click();
+    await el.updateComplete;
+    setInput(el, "[data-test=paste-key]", "correct-horse-battery-staple");
+    tickCheckbox(el, "[data-test=saved-it]");
+    await el.updateComplete;
+    q(el, "[data-test=rotate-confirm]")!.click();
+    await vi.waitFor(() => expect(mints.length).toBeGreaterThan(0));
+
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() => expect(api.getBackupStatus).toHaveBeenCalledTimes(3));
+    await flush(el);
+    mints[0]!("ROTATE-KEY-abcdef012345");
+    await flush(el);
+    mints[1]?.("WATCHER-KEY-abcdef012345");
+    await flush(el);
+
+    expect(mints).toHaveLength(1);
+    expect(q(el, "[data-test=minted-key]")?.textContent).toBe("ROTATE-KEY-abcdef012345");
+  });
+
+  it("gives Apply the key the status watcher is still making, rather than making a second", async () => {
+    const api = failFirstRead();
+    const mints = holdMints(api);
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() => expect(mints).toHaveLength(1));
+
+    setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
+    q(el, "[data-test=advanced-toggle]")!.click();
+    await el.updateComplete;
+    setInput(el, "[data-test=paste-key]", "correct-horse-battery-staple");
+    tickCheckbox(el, "[data-test=saved-it]");
+    await el.updateComplete;
+    q(el, "[data-test=apply]")!.click();
+    await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
+    await flush(el);
+    mints[0]!("WATCHER-KEY-abcdef012345");
+    await flush(el);
+    mints[1]?.("APPLY-KEY-abcdef012345");
+    await flush(el);
+
+    expect(api.mintBackupKey).toHaveBeenCalledOnce();
+    expect(q(el, "[data-test=minted-key]")?.textContent).toBe("WATCHER-KEY-abcdef012345");
+  });
+
+  it("clears the failed-read alert once a later read succeeds", async () => {
+    const api = failFirstRead();
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    expect(alertText(el)?.trim()).toBe(codeMessage("connection.failed"));
+
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() => expect(q(el, "[data-test=minted-key]")).not.toBeNull());
+    expect(alertText(el)).toBeUndefined();
+  });
+
+  it("still shows why making the key failed once a later read succeeds", async () => {
+    const api = failFirstRead();
+    vi.mocked(api.mintBackupKey).mockRejectedValue({ code: "backup.reload_in_progress" });
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() => expect(api.mintBackupKey).toHaveBeenCalledOnce());
+    await flush(el);
+    expect(alertText(el)?.trim()).toBe(codeMessage("backup.reload_in_progress"));
+
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() => expect(api.getBackupStatus).toHaveBeenCalledTimes(3));
+    await flush(el);
+    expect(alertText(el)?.trim()).toBe(codeMessage("backup.reload_in_progress"));
+  });
+
+  it("keeps a refused Apply's alert through a later refresh", async () => {
+    const api = stubApi(
+      { applyBackup: vi.fn().mockRejectedValue({ code: "backup.recovery_key_exists" }) },
+      { ...OFF, recoveryKeySet: true },
+    );
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
+    await el.updateComplete;
+    q(el, "[data-test=apply]")!.click();
+    await flush(el);
+
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() => expect(api.getBackupStatus).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(alertText(el)?.trim()).toBe(codeMessage("backup.recovery_key_exists"));
+  });
+
   it("makes no key when the late status says the box is not the primary", async () => {
     const api = stubApi({
       getBackupStatus: vi
@@ -788,8 +929,6 @@ describe("backup-screen failures and edit-mode prefill", () => {
     await vi.waitFor(() => expect(q(el, "[data-test=status]")).not.toBeNull());
     return el;
   }
-
-  const alertText = (el: BackupScreen) => q(el, "[role=alert]:not([data-test])")?.textContent;
 
   async function enterEdit(status: BackupStatusView) {
     const api = stubApi({}, status);
