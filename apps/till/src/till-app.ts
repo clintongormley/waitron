@@ -1715,24 +1715,35 @@ export class TillApp extends LitElement {
   /**
    * The reload runs on every path, so the line shows what the server stored and a refused change
    * leaves no stale actions. A change refused because the kitchen has started the line offers to
-   * cancel it once the reload shows it started.
+   * cancel it after the reload. An answer that arrives once another order is open is dropped whole:
+   * its revision, message, reload and line number all belong to the order it was sent for.
    */
   async #onChangeLine(event: Event): Promise<void> {
     const { lineNo, patch, revision } = (event as CustomEvent<ChangeLineDetail>).detail;
-    if (this.activeTabId === undefined) return;
+    const orderId = this.activeTabId;
+    if (orderId === undefined) return;
     this.errorKey = undefined;
     this.cancelOffer = null;
-    let refusal: string | undefined;
+    let outcome: { saved: { revision: number } } | { error: unknown };
     try {
-      const saved = await this.api.updateOrderLine(this.activeTabId, lineNo, patch, revision);
-      this.tabRevision = saved.revision;
+      outcome = { saved: await this.api.updateOrderLine(orderId, lineNo, patch, revision) };
     } catch (error) {
-      refusal = (error as { code?: string } | undefined)?.code;
+      outcome = { error };
+    }
+    if (this.activeTabId !== orderId) return;
+    let refusal: string | undefined;
+    if ("saved" in outcome) {
+      this.tabRevision = outcome.saved.revision;
+    } else {
+      refusal = (outcome.error as { code?: string } | undefined)?.code;
       this.errorKey =
-        refusal === "working_order.out_of_date" ? "held.changed_elsewhere" : lineWriteError(error);
+        refusal === "working_order.out_of_date"
+          ? "held.changed_elsewhere"
+          : lineWriteError(outcome.error);
     }
     await this.#loadTabLines();
-    if (refusal === "ticket.already_started") this.cancelOffer = lineNo;
+    if (refusal === "ticket.already_started" && this.activeTabId === orderId)
+      this.cancelOffer = lineNo;
   }
 
   /** Keyed by {@link activeTableId}, not the tab's order id. */

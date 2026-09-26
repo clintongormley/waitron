@@ -784,6 +784,73 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     expect(dialogOf(tableOrder(el)!).open).toBe(false);
   });
 
+  it("drops a refusal that arrives after the waiter has moved to another table", async () => {
+    const otherTable: TableState = { ...openTable, id: "t3", label: "3", tabId: "wo-8" };
+    const otherLine: TabLine = { ...burgerLine, name: "Tarta", state: "preparing" };
+    let refuse!: (reason: unknown) => void;
+    const { el, screen } = await openBurgerTab({
+      getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
+      getTabLines: vi.fn((orderId: string) =>
+        Promise.resolve({
+          lines: [orderId === "wo-8" ? otherLine : burgerLine],
+          revision: orderId === "wo-8" ? 2 : 7,
+          editSentLines: true,
+        }),
+      ),
+      updateOrderLine: vi.fn(() => new Promise((_resolve, reject) => (refuse = reject))),
+    });
+
+    emit(screen, "change-line", change);
+    await flush(el);
+    emit(screen, "back-to-floor");
+    await flush(el);
+    await openFromFloor(el, otherTable);
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-8");
+    const reads = vi.mocked(api.getTabLines).mock.calls.length;
+
+    refuse({ code: "ticket.already_started" });
+    await flush(el);
+
+    expect(dialogOf(tableOrder(el)!).open).toBe(false);
+    expect(tableOrder(el)!.revision).toBe(2);
+    expect(api.getTabLines).toHaveBeenCalledTimes(reads);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("offers no Cancel when the waiter moves to another table while the refused line reloads", async () => {
+    const otherTable: TableState = { ...openTable, id: "t3", label: "3", tabId: "wo-8" };
+    const otherLine: TabLine = { ...burgerLine, name: "Tarta", state: "preparing" };
+    let finishReload!: () => void;
+    const getTabLines = vi
+      .fn()
+      .mockResolvedValueOnce({ lines: [burgerLine], revision: 7, editSentLines: true })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishReload = () => resolve({ lines: [otherLine], revision: 7, editSentLines: true });
+          }),
+      )
+      .mockResolvedValue({ lines: [otherLine], revision: 2, editSentLines: true });
+    const { el, screen } = await openBurgerTab({
+      getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
+      getTabLines,
+      updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
+    });
+
+    emit(screen, "change-line", change);
+    await flush(el);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    await openFromFloor(el, otherTable);
+    await flush(el);
+    finishReload();
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-8");
+    expect(dialogOf(tableOrder(el)!).open).toBe(false);
+  });
+
   it("says changes to sent items are switched off, and reloads the line's actions", async () => {
     const { el, screen } = await openBurgerTab({
       updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_fired" }),

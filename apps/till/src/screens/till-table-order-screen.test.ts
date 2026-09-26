@@ -1064,11 +1064,12 @@ describe("till-table-order-screen", () => {
       await openDrawer(el);
       lineAction(el, "cancel", 5)!.click();
       await el.updateComplete;
-      el.orderId = "wo-9";
-      await el.updateComplete;
       const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
         "wt-dialog.cancel-confirm",
       )!;
+      expect(dialog.open).toBe(true);
+      el.orderId = "wo-9";
+      await el.updateComplete;
       expect(dialog.open).toBe(false);
     });
 
