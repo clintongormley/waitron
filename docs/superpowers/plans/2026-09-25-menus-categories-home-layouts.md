@@ -602,6 +602,12 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
     mark on an open order (`releaseStalePaymentAttempts`, `apps/server/src/till-sale.ts`). A card
     Pay over a mark is refused `order.payment_in_flight` on the same two conditions, after the
     recovery branch has had its turn.
+  - **2026-09-26, M7b2 (the owner's "yes" to a way out):** a Stripe Terminal payment a crash leaves
+    `attempting` holds its mark until a manager clears it from the Payments screen
+    (`GET /management-api/payments/stuck`, `POST …/stuck/:paymentId/resolve`,
+    `apps/server/src/payments-api.ts`). The server asks Stripe for the payment's own record: charged
+    files the sale once through the recovery branch; not charged cancels it at Stripe, fails the row
+    and clears the mark; unreachable or unclear refuses and keeps the lock.
 - **D23. "Duplicate and use the copy here" is one transaction** (spec §11.7 example 8). Two requests
   — remove Drinks, then add the copy — leave a moment in which Lunch reaches Lemonade through
   nothing, and D5's sync then resets its price and deletes its overrides. Task 1 adds

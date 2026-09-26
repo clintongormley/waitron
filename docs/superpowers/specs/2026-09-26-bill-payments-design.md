@@ -94,6 +94,10 @@ of scope here: this design changes the payment of a table's bill only (§9).
    row against SumUp's own record, and marks one SumUp has never heard of `failed` after 15 minutes
    (`packages/payments-sumup/src/provider.ts:271-361`). M7b2 exists because a crash during a Stripe
    payment leaves the order locked with no way out.
+   _(2026-09-26, M7b2: Stripe Terminal now records its PaymentIntent id before the reader is asked
+   to charge, and a manager clears a stuck payment from the Payments screen against Stripe's own
+   record. The automatic `resolvePending` sweep stays a no-op for Stripe Terminal; the M7b2 pull
+   request says why.)_
 7. **No refund path.** No route or screen refunds a payment. The provider interface has `void`,
    `refund` and `partialRefund` (`packages/payments/src/provider.ts:120-129`), and the only product
    caller is the automatic reversal of a card payment taken for an abandoned order
