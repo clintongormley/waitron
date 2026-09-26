@@ -186,6 +186,9 @@ names it so the owner can overturn it at review.
     not the check, is what fires), and a transfer out of the visit is refused. `tab.split_held_line`
     stays registered (codes are never renamed) and is no longer thrown; its server test, the till's
     handling of it (`apps/till/src/till-app.ts`) and the till's test for that are retired.
+    **Superseded 2026-09-26 (owner):** `tab.split_held_line` stays thrown, and a held line is still
+    refused onto a check; the owner routes paying for one held item through Tasks 14 and 15's bill
+    payment instead — see `docs/backlog.md`.
   - **No unique index on `position`.** A reorder rewrites several rows one at a time, and a unique
     index there breaks midway although the final state satisfies it (CLAUDE.md §3). Lists order by
     `position`, then `created_at`. Say so at the column.
@@ -1030,7 +1033,9 @@ tests drive the routes.
 - [ ] **Step 0: Re-map** `fireLines`, `sendLines`, `fireCourse`, `recallLines`, `voidTabLine`,
   `updateOrderLine`, `splitOffCheck`, `transferLines` and the `sent_at` stamping as M7b and M7c
   landed them. List every caller of the course firing verbs, the till's included. Read what
-  `tab.split_held_line` means after M7b.
+  `tab.split_held_line` means after M7b. **Superseded 2026-09-26 (owner):** `tab.split_held_line`
+  stays thrown and keeps its test; see the note under "The decisions this plan makes" and
+  `docs/backlog.md`.
 - [ ] **Step 1: Write the failing tests:**
   - **The spec's example (§3, §12 item 3):** a seated visit and a draft of Beer ×2 and Water
     (drinks), four cold starters, four warm starters, Steak ×2 and Fish (mains), and Flan ×2
@@ -1114,6 +1119,8 @@ tests drive the routes.
   - **Retired behaviour:** `till-api.courses.test.ts` and the course-firing cases; the
     `tab.split_held_line` refusal of a split onto a check and its test; and the transfer of a held
     line to another table, which `main` allows. Name each in the PR.
+    **Superseded 2026-09-26 (owner):** keep the `tab.split_held_line` refusal and its test; see the
+    note under "The decisions this plan makes" and `docs/backlog.md`.
 
   Run them: they FAIL.
 - [ ] **Step 2: Implement.** Step 3: run the focused tests plus `apps/server` `test:coverage`, and

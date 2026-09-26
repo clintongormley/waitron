@@ -402,7 +402,9 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
       **Overturned 2026-09-26 (the owner's answer):** a partial split gives the split row its own
       ticket row, copied from the source's, at the quantity moved, and the source's `quantity`
       drops by that much. A split onto a new check refuses a line whose ticket is still held
-      (`tab.split_held_line`), because a check cannot be sent.
+      (`tab.split_held_line`), because a check cannot be sent. **Decided 2026-09-26 (owner):** this
+      refusal stays; a guest pays for one held item through the service plan's bill payment (its
+      Tasks 14 and 15) instead.
     - **A no-route line under a HELD course** is not stamped when `fireLines` skips it, because its
       course has not fired. `fireCourse` and `sendLines` today act on `ticket_items` alone
       (`working-order.ts:942-1020`), so they gain a lookup of the course's no-route LINES and stamp
