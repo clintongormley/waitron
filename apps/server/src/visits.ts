@@ -106,7 +106,6 @@ export async function memberTables(tx: Transaction, visitId: string): Promise<st
 
 /** The table stops belonging to whichever visit holds it. */
 export async function leaveTables(tx: Transaction, tableIds: readonly string[]): Promise<void> {
-  if (tableIds.length === 0) return;
   await tx
     .update(visitTables)
     .set({ leftAt: nowIso() })
@@ -212,7 +211,6 @@ export async function visitFamilies(
   visitIds: readonly string[],
 ): Promise<Map<string, string[]>> {
   const families = new Map(visitIds.map((id) => [id, [] as string[]]));
-  if (visitIds.length === 0) return families;
   const { rows } = await tx.execute<{ root: string; id: string }>(sql`
     with recursive family(root, id) as (
       select value, value from json_each(${JSON.stringify(visitIds)})
