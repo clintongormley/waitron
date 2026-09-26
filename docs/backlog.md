@@ -2177,10 +2177,12 @@ Bluetooth delivery connection is still unimplemented in `liveBtDevicePath`.
 - **On-paper verification is still owed on the TM-T88III** (spec "Verification on paper" steps 1-6):
   whether the printer's built-in QR command prints anything at all, and whether the mandated 30-40mm
   QR size is meant to count the code's blank border or only its dark squares.
-- **Repeat the 58mm physical receipt after the print-area fix.** A 58mm roll in the owner's wider
-  printer clipped the right edge when native centring used the printer's default print area. The
-  formatter now sets a zero left margin and a 360-dot print area before centring; byte-level and
-  preview tests pass, but the corrected paper output has not yet been printed.
+- **Repeat the 58mm physical receipt after the print-area fix.** The owner's wider printer clipped
+  the right edge of a 58mm receipt whose payload centred without an explicit print area; whether the
+  printer's own width setting also contributed was not tested. The formatter now sets a zero left
+  margin and a 360-dot print area before centring. Byte-level tests pin those commands; the preview
+  test establishes only that its parser continues past them, not that the selected width fits the
+  paper. The corrected paper output has not yet been printed.
 - **Follow-up (ruling C): the preview no longer shows the QR link as text** for a raster receipt —
   only the earlier, now-unused native-QR path did that. A possible fix is to carry the link alongside
   the print job so the preview can still show it as text.

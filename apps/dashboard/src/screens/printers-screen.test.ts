@@ -17,6 +17,8 @@ import { PrintersScreen, SCAN_LISTEN_MS, SCAN_POLL_MS } from "./printers-screen.
 import { LiveData } from "@waitron/dashboard-kit";
 
 beforeEach(() => {
+  localStorage.removeItem("printers:agents:columns");
+  localStorage.removeItem("printers:table:columns");
   sessionStorage.removeItem("printers:agents");
   sessionStorage.removeItem("printers:table");
 });
