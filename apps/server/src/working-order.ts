@@ -3115,13 +3115,14 @@ async function applyLineEdits(
     const fired = await kitchenHas(parent);
     const action: Action = !fired ? "free" : changed ? "change" : rise > 0 ? "raise" : "drop";
 
-    // The picks the line carries after the edit, as a request names them.
+    // The picks the line carries after the edit, as a request names them. A child stored before
+    // lists were recorded names none, and pricing it again refuses it as `extras.invalid`.
     const picks: ExtraSelection[] =
       intent.extras === null
-        ? [...new Set(parent.children.map((child) => child.extraListId ?? ""))].map((listId) => ({
-            listId,
+        ? [...new Set(parent.children.map((child) => child.extraListId))].map((listId) => ({
+            listId: listId!,
             picks: extras.kept
-              .filter(({ child }) => (child.extraListId ?? "") === listId)
+              .filter(({ child }) => child.extraListId === listId)
               .map(({ child, perDish }) => ({ productId: child.productId!, quantity: perDish })),
           }))
         : (intent.extras.set as ExtraSelection[]);
@@ -3320,7 +3321,7 @@ async function applyLineEdits(
       if (row.parentLineId === null && as.fires) {
         fireNow.push({
           id: row.id!,
-          productId: row.productId ?? null,
+          productId: row.productId!,
           courseId: row.courseId ?? null,
           parentLineId: null,
           note: row.note ?? null,

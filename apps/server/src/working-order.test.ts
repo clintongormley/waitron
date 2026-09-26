@@ -6606,6 +6606,72 @@ describe("editing a saved order prices only what the edit adds", () => {
     ]);
   });
 
+  it("changes one line's options answer through the one-line edit, at its stored price, leaving what the patch omits", async () => {
+    const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
+    const punto = await withTransaction(db, (tx) =>
+      addOptionList(tx, cafeId, "Punto", ["Solo", "Cortado"]),
+    );
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [
+        {
+          menuItemId: premiumCafeOfferId,
+          quantity: "1",
+          note: "Caliente",
+          options: [{ listId: punto.listId, labelId: punto.labelIds[0]! }],
+        },
+      ],
+    });
+    const [before] = await storedRows(id);
+    await db.execute(
+      sql`update menu_items set gross_price = 9900 where id = ${premiumCafeOfferId}`,
+    );
+
+    await withTransaction(db, (tx) =>
+      updateOrderLine(
+        tx,
+        cfg,
+        id,
+        1,
+        { options: [{ listId: punto.listId, labelId: punto.labelIds[1]! }] },
+        0,
+      ),
+    );
+
+    expect(await storedRows(id)).toEqual([before]);
+    const [line] = await db
+      .select({ optionSnapshots: workingOrderLines.optionSnapshots })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    expect(line!.optionSnapshots[0]).toMatchObject({
+      labelName: { [CONTENT_LANGUAGE]: "Cortado staff" },
+    });
+  });
+
+  it("lowers a line of an order with no service context in place, and refuses what it has no offer to check", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const id = randomUUID();
+    await withTransaction(db, async (tx) => {
+      await createOpenOrder(tx, cfg, id, [], null);
+      await insertContextlessLines(tx, id, [cafeId]);
+    });
+
+    // The line records no unit, so any quantity the thousandths hold is taken.
+    await withTransaction(db, (tx) => updateOrderLine(tx, cfg, id, 1, { quantity: "0.5" }, 0));
+    expect((await storedRows(id)).map((row) => [row.quantity, row.lineTotal])).toEqual([[500, 75]]);
+    // A raise is checked against the offer, and so is an extras answer; the line names none.
+    for (const patch of [{ quantity: "2" }, { extras: [] }]) {
+      await expect(
+        withTransaction(db, (tx) => updateOrderLine(tx, cfg, id, 1, patch, 1)),
+      ).rejects.toMatchObject({
+        code: "order.service_context_missing",
+        params: { workingOrderId: id },
+      });
+    }
+  });
+
   it("keeps an extra from the list it was taken from, whatever that list later charges or offers", async () => {
     // Spec §11.7 example 7: Extra cheese on "Toppings" at 1.00 and on "Premium toppings" at 1.50,
     // and the line took it from Premium toppings.

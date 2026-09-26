@@ -690,6 +690,16 @@ describe("Device API — the device-guarded routes", () => {
       cookie: null,
     });
     expect(noCookie.status).toBe(401);
+    // A handheld is bound to no station, so it has no notices to clear.
+    const handheld = await enrolHandheld(app, venue, venue.cfg.tillId);
+    const fromHandheld = await send(
+      app,
+      "POST",
+      `/api/device/kitchen-notices/${foreignNotice}/acknowledge`,
+      { cookie: handheld.jar },
+    );
+    expect(fromHandheld.status).toBe(401);
+    expect(await fromHandheld.json()).toMatchObject({ error: { code: "device.unauthorized" } });
   });
 
   it("enrol → authenticated station read → bump own item → foreign 403 → revoke stops the cookie", async () => {
