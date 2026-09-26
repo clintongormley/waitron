@@ -157,7 +157,10 @@ export function formatReceipt({
   const locale = invoiceLocale;
   const columns = columnsFor(printer.paperWidth);
   const p = (s: string): string => prepareText(s, printer.characterSet);
-  const b = esc(printer.characterSet, printer.characterTable).init().align("center");
+  const b = esc(printer.characterSet, printer.characterTable)
+    .init()
+    .printArea(safeWidthDots(printer.paperWidth))
+    .align("center");
   // Equal-width lines centre the body as a block without centring each description within it.
   const bodyLine = (line: string): void => {
     b.line(line.padEnd(columns));

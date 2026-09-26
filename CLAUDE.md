@@ -331,6 +331,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   consumer observes the change twice.
 - **A retained hardware registration must remain re-addable after deactivation.** Discovery matches
   disabled records too; the dashboard offers them as Add again and reactivates the existing id.
+- **A narrower roll in a wider receipt printer needs an explicit print area before native centring.**
+  Native centring without `GS L`/`GS W` shifted and clipped a 58mm receipt on the owner's printer.
+  Guard: `apps/server/src/receipt-ticket.test.ts`; see [conventions-ui.md](docs/developers/conventions-ui.md).
 - **The hardware transport seam is `@waitron/print-agent`, and it is database-free.** It imports no
   other package in this repo, and `@waitron/printing` depends on IT, never the reverse. The guard is
   the `import-x/no-restricted-paths` zone in `eslint.config.js`, not the empty `dependencies` block.

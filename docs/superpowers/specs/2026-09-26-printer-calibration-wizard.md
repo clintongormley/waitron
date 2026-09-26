@@ -62,6 +62,11 @@ The owner approved the centred body and QR in the 13:39:49 photograph. The final
 sample, including the centred legend, was sent with `final-centered-sample.ts` in the probe folder.
 The owner approved the final QR-to-legend gap and the blank line after it in the 13:47:10 photograph.
 
+Follow-up, 2026-09-26: a 58mm roll in the owner's wider printer exposed that native centring still
+used the printer's default print area. Receipts now set a zero left margin and the configured safe
+print width before centring. The print-agent list also has its own remembered Active/Revoked/All
+status filter, separate from the printer list's saved filter.
+
 ## Drawer boundary
 
 Receipt and measurement documents contain no drawer command. The explicit calibration action

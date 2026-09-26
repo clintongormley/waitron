@@ -16,7 +16,10 @@ import type {
 import { PrintersScreen, SCAN_LISTEN_MS, SCAN_POLL_MS } from "./printers-screen.js";
 import { LiveData } from "@waitron/dashboard-kit";
 
-beforeEach(() => sessionStorage.removeItem("printers:table"));
+beforeEach(() => {
+  sessionStorage.removeItem("printers:agents");
+  sessionStorage.removeItem("printers:table");
+});
 afterEach(cleanupWidgets);
 afterEach(() => vi.restoreAllMocks());
 
@@ -272,7 +275,15 @@ function deepQuery(root: ShadowRoot | HTMLElement, sel: string): HTMLElement | n
 const q = (el: PrintersScreen, sel: string) => deepQuery(el.shadowRoot!, sel);
 const text = (el: PrintersScreen, sel: string) => q(el, sel)?.textContent?.trim();
 async function filterPrinters(el: PrintersScreen, value: string): Promise<void> {
-  const select = q(el, '[name="status-filter"]') as HTMLSelectElement;
+  const table = q(el, '[data-test="printers-table"]')!;
+  const select = table.shadowRoot!.querySelector<HTMLSelectElement>('[name="status-filter"]')!;
+  select.value = value === "all" ? "" : value;
+  select.dispatchEvent(new Event("change"));
+  await flush(el);
+}
+async function filterAgents(el: PrintersScreen, value: string): Promise<void> {
+  const table = q(el, '[data-test="agents-table"]')!;
+  const select = table.shadowRoot!.querySelector<HTMLSelectElement>('[name="status-filter"]')!;
   select.value = value === "all" ? "" : value;
   select.dispatchEvent(new Event("change"));
   await flush(el);
@@ -628,10 +639,11 @@ describe("guided printer calibration", () => {
     const api = stubApi({ listPrinters: vi.fn().mockResolvedValue([printers[0]]) });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
-    const select = q(el, '[name="status-filter"]') as HTMLSelectElement;
+    const table = q(el, '[data-test="printers-table"]')!;
+    const select = table.shadowRoot!.querySelector<HTMLSelectElement>('[name="status-filter"]')!;
     expect(select).not.toBeNull();
     expect(select.value).toBe("active");
-    await chooseOption(el, "status-filter", "disabled");
+    await filterPrinters(el, "disabled");
     expect(q(el, '[data-test="printer-row-p1"]')).toBeNull();
     expect(sessionStorage.getItem("printers:table")).toContain("disabled");
   });
@@ -747,6 +759,7 @@ describe("printers-screen", () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
+    await filterAgents(el, "all");
 
     expect(api.listAgents).toHaveBeenCalledTimes(1);
     expect(api.listPrinters).toHaveBeenCalledTimes(1);
@@ -763,6 +776,7 @@ describe("printers-screen", () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
+    await filterAgents(el, "all");
 
     expect(text(el, "[data-test=agent-name-a1]")).toBe("Cocina agent");
     expect(text(el, "[data-test=agent-status-a1]")).toBe(t("printers.status_active", "es-ES"));
@@ -770,6 +784,26 @@ describe("printers-screen", () => {
     // A revoked, never-authenticated agent.
     expect(text(el, "[data-test=agent-status-a2]")).toBe(t("printers.status_revoked", "es-ES"));
     expect(text(el, "[data-test=agent-last-seen-a2]")).toBe(t("printers.last_seen_never", "es-ES"));
+  });
+
+  it("filters print agents by status and remembers the choice independently", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    await selectTab(el, "agents");
+    const table = q(el, "[data-test=agents-table]")!;
+    const filter = table.shadowRoot!.querySelector<HTMLSelectElement>('[name="status-filter"]')!;
+    expect(filter.value).toBe("active");
+    expect(q(el, "[data-test=agent-row-a1]")).not.toBeNull();
+    expect(q(el, "[data-test=agent-row-a2]")).toBeNull();
+
+    await filterAgents(el, "disabled");
+
+    expect(q(el, "[data-test=agent-row-a1]")).toBeNull();
+    expect(q(el, "[data-test=agent-row-a2]")).not.toBeNull();
+    expect(sessionStorage.getItem("printers:agents")).toContain("disabled");
+    expect(sessionStorage.getItem("printers:table")).toBeNull();
   });
 
   it("renders each printer's transport and derived connection mode", async () => {
@@ -1135,6 +1169,7 @@ describe("printers-screen", () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
+    await filterAgents(el, "all");
 
     // a2 carries a node id → the "on this box" provenance marker shows.
     expect(q(el, "[data-test=agent-provenance-a2]")).toBeTruthy();
@@ -1149,6 +1184,7 @@ describe("printers-screen", () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
+    await filterAgents(el, "disabled");
 
     expect(q(el, "[data-test=allow-agent-a2]")).toBeTruthy();
     expect(q(el, "[data-test=allow-agent-a1]")).toBeNull();
@@ -1168,6 +1204,7 @@ describe("printers-screen", () => {
     const api = stubApi({ allowAgent: vi.fn().mockRejectedValue({ code: "agent.not_found" }) });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
+    await filterAgents(el, "disabled");
 
     q(el, "[data-test=allow-agent-a2]")!.click();
     await el.updateComplete;
@@ -3412,6 +3449,7 @@ describe("printer setup refinements", () => {
       api: stubApi(),
     });
     await flush(el);
+    await filterAgents(el, "all");
     const marker = q(el, '[data-test="agent-provenance-a2"]')!;
     const cell = marker.closest("td")!;
     expect(cell.cellIndex).toBe(1);

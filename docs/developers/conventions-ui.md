@@ -271,6 +271,15 @@ disappear from the add list. Cost: deleting a USB printer left it in the registe
 from discovery, blocking re-add. The table now defaults to Active with Disabled/All filters. Pointer:
 `docs/superpowers/specs/2026-09-11-printer-followups.md`.
 
+## Native centring starts inside the configured paper width
+
+Set the ESC/POS left margin to zero and the print area to the configured safe width before selecting
+native centre alignment. On 2026-09-26 the owner's wider printer received a receipt configured for a
+58mm roll without those print-area commands: the body and QR shifted right and their trailing edge
+was clipped. `apps/server/src/receipt-ticket.test.ts` pins the 360-dot and 504-dot print areas before
+the centre command; `apps/server/src/print-job-preview.test.ts` pins that the dashboard preview
+consumes both commands rather than stopping at them. A corrected physical reprint is still owed.
+
 ## The hardware transport seam is `@waitron/print-agent`, and it is database-free
 
 It becomes a standalone LAN process that reaches a server over HTTP only, so it imports no other

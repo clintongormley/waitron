@@ -1250,6 +1250,16 @@ export class PrintersScreen extends LitElement {
           html`<span data-test=${`agent-status-${a.id}`}
             >${a.active ? t("printers.status_active") : t("printers.status_revoked")}</span
           >`,
+        filter: {
+          label: t("printers.status"),
+          allLabel: t("printers.filter_all"),
+          initial: "active",
+          value: (a) => (a.active ? "active" : "disabled"),
+          options: [
+            { value: "active", label: t("printers.status_active") },
+            { value: "disabled", label: t("printers.status_revoked") },
+          ],
+        },
       },
       {
         key: "lastSeen",
@@ -1265,6 +1275,7 @@ export class PrintersScreen extends LitElement {
     return html`<section>
       <wt-data-table
         data-test="agents-table"
+        viewKey="printers:agents"
         aria-label=${t("printers.agents_title")}
         .rows=${this.agents}
         .columns=${columns}
