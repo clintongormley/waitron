@@ -632,7 +632,7 @@ its part done here when it lands.
   under A4). Open for A66, the stepper's first user: its button names are text with a
   `{label}` slot (as the plan chose) where other shared controls take a function; switch them there
   unless the owner prefers the text form.
-- **A65 (the list tables and the Used by popup) — built, no pull request number yet.** Both tabs'
+- **A65 (the list tables and the Used by popup) — LANDED, #716.** Both tabs'
   Status column and its filter read Active / Inactive; each editor's on/off switch shares the
   "Active" string, so its label now reads "Active" where it read "In use". A new Used by column
   counts what carries each list ("2 products · 1 menu item", "Not used" at zero), sorts by the
