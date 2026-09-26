@@ -52,6 +52,9 @@ import {
   listCategories,
   listMenuOffersWithTopLevel,
   menuPrices,
+  menuStatus,
+  previewMenu,
+  publishMenu,
   readMenuStructure,
   listOptionLists,
   getOptionList,
@@ -253,6 +256,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "menu_section.member_cycle": 409,
   "menu_section.member_duplicate": 409,
   "menu_section.not_library": 409,
+  // The working menu no longer matches the preview the publish was asked from.
+  "menu.changed_since_preview": 409,
   // The product editor's kitchen routing: an id that names no LIVE station or course of this venue.
   "station.not_found": 404,
   "course.not_found": 404,
@@ -396,8 +401,14 @@ function refuseLegacyAttachFields(body: Record<string, unknown>): void {
       throw new AppError("management.request_invalid", { field: legacy });
 }
 
-/** `mountCatalogueApi`'s `gated`: one transaction, with the caller's session checked first. */
-type GatedWork = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>) => Promise<T>;
+/**
+ * `mountCatalogueApi`'s `gated`: one transaction, with the caller's session checked first.
+ * `personId` is the manager the session belongs to.
+ */
+type GatedWork = <T>(
+  sessionId: string,
+  fn: (tx: Transaction, personId: string) => Promise<T>,
+) => Promise<T>;
 
 /** Everything that differs between one kind of modifier list and another. */
 interface ListSurface<TList, TDependants> {
@@ -624,13 +635,13 @@ function replaceTarget(value: unknown): { sectionId: string; memberId: string } 
 export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger): void {
   // Every `/management-api` route's DB work goes through here, so the gate is applied in exactly
   // one place.
-  const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
+  const gated: GatedWork = (sessionId, fn) =>
     withTransaction(deps.db, async (tx) => {
-      await authorizeManager(tx, {
+      const { authorizedBy } = await authorizeManager(tx, {
         managementSessionId: sessionId,
         permission: CATALOGUE_WRITE_PERMISSION,
       });
-      return fn(tx);
+      return fn(tx, authorizedBy);
     });
 
   /**
@@ -780,6 +791,20 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
+  // One request for every menu's status, so the menus list does not ask once per row.
+  app.get("/management-api/catalogues/status", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const status = await gated(sessionId, async (tx) =>
+        menuStatus(
+          tx,
+          (await listCatalogues(tx)).map((menu) => menu.id),
+        ),
+      );
+      return c.json(Object.fromEntries(status));
+    }),
+  );
+
   app.post("/management-api/catalogues", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -832,6 +857,38 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
       return c.json(await gated(sessionId, (tx) => menuPrices(tx, menuId)));
+    }),
+  );
+
+  app.get("/management-api/catalogues/:id/status", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      const status = await gated(sessionId, async (tx) =>
+        (await menuStatus(tx, [menuId])).get(menuId),
+      );
+      if (status === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
+      return c.json(status);
+    }),
+  );
+
+  app.get("/management-api/catalogues/:id/preview", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      return c.json(await gated(sessionId, (tx) => previewMenu(tx, menuId)));
+    }),
+  );
+
+  app.post("/management-api/catalogues/:id/publish", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      const body = await readJsonBody<{ expectedHash?: unknown }>(c);
+      const expectedHash = requireString(body.expectedHash, "expectedHash");
+      return c.json(
+        await gated(sessionId, (tx, personId) => publishMenu(tx, menuId, expectedHash, personId)),
+      );
     }),
   );
 

@@ -500,4 +500,56 @@ describe("DashboardApi routes", () => {
       ["/management-api/catalogues/c1/items/mi1/variants", "PUT", { variants }],
     ]);
   });
+
+  it("reads menus' publication status and preview, and publishes the previewed hash", async () => {
+    const current = {
+      state: "current" as const,
+      version: 2,
+      publishedAt: "2026-09-26T10:00:00.000Z",
+      hash: "a".repeat(64),
+    };
+    const statuses = { c1: current, c2: { state: "unpublished" as const } };
+    const preview = {
+      hash: "b".repeat(64),
+      changes: [
+        {
+          kind: "price_changed" as const,
+          productId: "p1",
+          name: "Lemonade",
+          from: "3.00",
+          to: "2.50",
+          source: "this_menu" as const,
+        },
+      ],
+      warnings: [{ kind: "shortcut_omitted" as const, layoutName: "Home", name: "Burger" }],
+    };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(statuses))
+      .mockResolvedValueOnce(jsonResponse(current))
+      .mockResolvedValueOnce(jsonResponse(preview))
+      .mockResolvedValueOnce(jsonResponse({ versionId: "v3", number: 3 }))
+      .mockResolvedValueOnce(refusal("menu.changed_since_preview", 409));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.getMenuStatuses()).resolves.toEqual(statuses);
+    await expect(api.getMenuStatus("c1")).resolves.toEqual(current);
+    await expect(api.getMenuPreview("c1")).resolves.toEqual(preview);
+    await expect(api.publishMenu("c1", preview.hash)).resolves.toEqual({
+      versionId: "v3",
+      number: 3,
+    });
+    await expect(api.publishMenu("c1", "stale")).rejects.toMatchObject({
+      code: "menu.changed_since_preview",
+      status: 409,
+    });
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/catalogues/status", "GET", undefined],
+      ["/management-api/catalogues/c1/status", "GET", undefined],
+      ["/management-api/catalogues/c1/preview", "GET", undefined],
+      ["/management-api/catalogues/c1/publish", "POST", { expectedHash: preview.hash }],
+      ["/management-api/catalogues/c1/publish", "POST", { expectedHash: "stale" }],
+    ]);
+  });
 });

@@ -19,7 +19,9 @@ import type {
   DocumentMember,
   MenuChange,
   MenuDocument,
+  MenuPreview,
   MenuStatus,
+  PublishedMenuVersion,
 } from "./menu-document-types.js";
 import type { MemberRef } from "./section-types.js";
 import "./errors.js";
@@ -153,14 +155,7 @@ function sameEdit(a: DiffEntry, b: DiffEntry): boolean {
  * section, in its working structure or its live version. A shared change's `alsoOn` names the
  * other published menus whose own preview holds the same change.
  */
-export async function previewMenu(
-  tx: Transaction,
-  menuId: string,
-): Promise<{
-  hash: string;
-  changes: MenuChange[];
-  warnings: { kind: "shortcut_omitted"; layoutName: string; name: string }[];
-}> {
+export async function previewMenu(tx: Transaction, menuId: string): Promise<MenuPreview> {
   const menuIds = (await tx.select({ menuId: menuDetails.menuId }).from(menuDetails)).map(
     (row) => row.menuId,
   );
@@ -273,7 +268,7 @@ export async function publishMenu(
   menuId: string,
   expectedHash: string,
   personId: string,
-): Promise<{ versionId: string; number: number }> {
+): Promise<PublishedMenuVersion> {
   const { document } = await buildMenuDocument(tx, menuId);
   const contentHash = menuDocumentHash(document);
   if (contentHash !== expectedHash) throw new AppError("menu.changed_since_preview", { menuId });

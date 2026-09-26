@@ -153,3 +153,16 @@ export type SectionChangeField = "names" | "image" | "color";
 export type MenuStatus =
   | { state: "unpublished" }
   | { state: "current" | "changed"; version: number; publishedAt: string; hash: string };
+
+/** What publishing the menu's working state now would change, and the hash a publish must match. */
+export interface MenuPreview {
+  hash: string;
+  changes: MenuChange[];
+  warnings: { kind: "shortcut_omitted"; layoutName: string; name: string }[];
+}
+
+/** The version a publish made live. */
+export interface PublishedMenuVersion {
+  versionId: string;
+  number: number;
+}

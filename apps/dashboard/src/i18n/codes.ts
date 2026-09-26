@@ -99,6 +99,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Some of the chosen items cannot be used. Refresh the list and try again.",
     es: "Algunos de los elementos elegidos no se pueden usar. Actualiza la lista e inténtalo de nuevo.",
   },
+  "menu.changed_since_preview": {
+    en: "This menu changed after the preview was shown, so it was not published. Check the new preview and publish again.",
+    es: "Este menú ha cambiado después de mostrar la vista previa, así que no se ha publicado. Revisa la nueva vista previa y vuelve a publicarlo.",
+  },
   "label.invalid": {
     en: "Enter a label name, and choose each label only once.",
     es: "Introduce un nombre de etiqueta y elige cada etiqueta una sola vez.",
