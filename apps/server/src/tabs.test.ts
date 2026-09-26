@@ -38,11 +38,16 @@ import { createTable, createZone, updateTable } from "./tables.js";
 import {
   addTabRound,
   createOpenOrder,
+  fireCourse,
   fireLines,
+  listExpoQueue,
+  listStationQueue,
   listTablesWithState,
   markLineServed,
   openTab,
   readTabLines,
+  recallLines,
+  sendLines,
   unmarkLineServed,
   voidTabLine,
 } from "./working-order.js";
@@ -980,5 +985,190 @@ it("returns a tab line's stored staff names and options answers", async () => {
       name: "Large",
       optionSnapshots,
     });
+  });
+});
+
+/** Route `productId` to no station: a bottled drink handed over at the bar. */
+async function routeToNoPreparation(productId: string): Promise<void> {
+  await db.execute(sql`
+    update preparation_routes set station_id = null, no_preparation = 1
+    where product_id = ${productId}`);
+}
+
+/** Each line of an order in `line_no` order: its product, when it was sent, and its ticket, if any. */
+async function sentState(orderId: string): Promise<
+  {
+    lineNo: number;
+    productId: string | null;
+    sentAt: string | null;
+    ticket: { quantity: number | null; firedAt: string | null } | null;
+  }[]
+> {
+  const lines = await db
+    .select({
+      id: workingOrderLines.id,
+      lineNo: workingOrderLines.lineNo,
+      productId: workingOrderLines.productId,
+      sentAt: workingOrderLines.sentAt,
+    })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, orderId))
+    .orderBy(workingOrderLines.lineNo);
+  const tickets = await db
+    .select({
+      lineId: ticketItems.workingOrderLineId,
+      quantity: ticketItems.quantity,
+      firedAt: ticketItems.firedAt,
+    })
+    .from(ticketItems)
+    .where(eq(ticketItems.workingOrderId, orderId));
+  const ticketByLine = new Map(tickets.map((t) => [t.lineId, t]));
+  return lines.map((line) => {
+    const ticket = ticketByLine.get(line.id);
+    return {
+      lineNo: line.lineNo,
+      productId: line.productId,
+      sentAt: line.sentAt,
+      ticket: ticket === undefined ? null : { quantity: ticket.quantity, firedAt: ticket.firedAt },
+    };
+  });
+}
+
+describe("sent_at: when a line is sent, and what the kitchen was asked to make", () => {
+  it("stamps a routed line and a no-preparation line sent in one round; only the routed one has a ticket, at the quantity fired", async () => {
+    const { cfg, tableId, cafeId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
+    await routeToNoPreparation(aguaId);
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { menuItemId: cafeOffer, quantity: "2" },
+        { menuItemId: aguaOffer, quantity: "1" },
+      ]),
+    );
+
+    const state = await sentState(tabId);
+    expect(state.map((line) => [line.productId, line.sentAt !== null])).toEqual([
+      [cafeId, true],
+      [aguaId, true],
+    ]);
+    // The ticket's quantity is a count of thousandths off the column: two cafés.
+    expect(state.map((line) => line.ticket?.quantity ?? null)).toEqual([2000, null]);
+  });
+
+  it("stamps neither line of a held course until the course fires, then both", async () => {
+    const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
+    await routeToNoPreparation(aguaId);
+    const course = await asApp(cfg, (tx) =>
+      createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
+    );
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { menuItemId: cafeOffer, quantity: "1", courseId: course.id, hold: true },
+        { menuItemId: aguaOffer, quantity: "1", courseId: course.id, hold: true },
+      ]),
+    );
+    expect((await sentState(tabId)).map((line) => line.sentAt)).toEqual([null, null]);
+
+    await asApp(cfg, (tx) => fireCourse(tx, cfg, tabId, course.id));
+
+    const fired = await sentState(tabId);
+    expect(fired.map((line) => line.sentAt !== null)).toEqual([true, true]);
+    expect(fired[0]!.ticket).toMatchObject({ quantity: 1000 });
+  });
+
+  it("stamps a held course's no-route line when its routed line is sent by sendLines", async () => {
+    const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
+    await routeToNoPreparation(aguaId);
+    const course = await asApp(cfg, (tx) =>
+      createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
+    );
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { menuItemId: cafeOffer, quantity: "1", courseId: course.id, hold: true },
+        { menuItemId: aguaOffer, quantity: "1", courseId: course.id, hold: true },
+      ]),
+    );
+
+    await asApp(cfg, (tx) => sendLines(tx, cfg, tabId, [1]));
+
+    expect((await sentState(tabId)).map((line) => line.sentAt !== null)).toEqual([true, true]);
+  });
+
+  it("stamps a no-route line with no course at the round even when the round holds another line", async () => {
+    const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
+    await routeToNoPreparation(aguaId);
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { menuItemId: cafeOffer, quantity: "1", hold: true },
+        { menuItemId: aguaOffer, quantity: "1" },
+      ]),
+    );
+
+    expect((await sentState(tabId)).map((line) => line.sentAt !== null)).toEqual([false, true]);
+  });
+
+  it("does not stamp a routed line that was never fired when a held line beside it is sent", async () => {
+    const { cfg, tableId, cafeOffer, aguaOffer } = await setupVenue();
+    // `openTab`'s initial lines are stored without being fired, so this one has no ticket item.
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
+    );
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ menuItemId: aguaOffer, quantity: "1", hold: true }]),
+    );
+
+    await asApp(cfg, (tx) => sendLines(tx, cfg, tabId, []));
+
+    expect((await sentState(tabId)).map((line) => [line.sentAt !== null, line.ticket])).toEqual([
+      [false, null],
+      [true, expect.objectContaining({ quantity: 1000 })],
+    ]);
+  });
+
+  it("keeps a recalled line's sent_at", async () => {
+    const { cfg, tableId, cafeOffer } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
+    );
+    const [sent] = await sentState(tabId);
+    expect(sent!.sentAt).not.toBeNull();
+
+    await asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]));
+
+    const [recalled] = await sentState(tabId);
+    expect(recalled!.ticket!.firedAt).toBeNull();
+    expect(recalled!.sentAt).toBe(sent!.sentAt);
+  });
+
+  it("reports the ticket's fired quantity on the station and expo queues, and the line's for an older ticket with none", async () => {
+    const { cfg, tableId, cafeOffer } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "2" }]),
+    );
+    // The line now bills three while the kitchen was asked for two.
+    await db.execute(sql`
+      update working_order_lines set quantity = 3000 where working_order_id = ${tabId}`);
+    const [{ stationId }] = await db
+      .select({ stationId: ticketItems.stationId })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, tabId));
+    const queued = async () =>
+      asApp(cfg, async (tx) => ({
+        station: (await listStationQueue(tx, stationId!))[0]!.items[0]!.quantity,
+        expo: (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items[0]!.qty,
+      }));
+
+    expect(await queued()).toEqual({ station: "2.000", expo: "2.000" });
+
+    // A ticket fired before the column existed carries no quantity.
+    await db.execute(
+      sql`update ticket_items set quantity = null where working_order_id = ${tabId}`,
+    );
+    expect(await queued()).toEqual({ station: "3.000", expo: "3.000" });
   });
 });

@@ -2811,6 +2811,43 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
     expect(items[0]!.state).toBe("queued");
   });
 
+  it("parking stamps no line sent; placing stamps every line, one its course still holds included", async () => {
+    const { cfg, catalogueId } = await setupVenue("ticket_then_pay");
+    const { cafe, postre } = await withTransaction(db, async (tx) => {
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const starters = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 1 });
+      const desserts = await createCourse(tx, cfg, { name: "Postres", displayOrder: 3 });
+      const cafe = await makeProduct(tx, cfg, catalogueId, {});
+      const postre = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, cafe, starters.id);
+      await setProductCourse(tx, cfg, postre, desserts.id);
+      return { cafe, postre };
+    });
+    const id = randomUUID();
+    await parkProducts(cfg, { id, lines: [line(cafe), line(postre)] });
+    const sentAt = async () =>
+      (
+        await db
+          .select({ sentAt: workingOrderLines.sentAt })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, id))
+          .orderBy(workingOrderLines.lineNo)
+      ).map((row) => row.sentAt !== null);
+    expect(await sentAt()).toEqual([false, false]);
+
+    await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR, cfg.tillId);
+
+    expect(await sentAt()).toEqual([true, true]);
+    // The dessert's course is held: it has a ticket that has not fired.
+    const items = await db
+      .select({ firedAt: ticketItems.firedAt })
+      .from(ticketItems)
+      .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+      .where(eq(ticketItems.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(items.map((item) => item.firedAt !== null)).toEqual([true, false]);
+  });
+
   it("sendToPrep refuses an order that is not settled (working_order.not_settled)", async () => {
     const { cfg, cafeId } = await setupVenue();
     const id = randomUUID();

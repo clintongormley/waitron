@@ -30,6 +30,17 @@ import type { TillConfig } from "./till-config.js";
 export interface FiredItem {
   workingOrderLineId: string;
   stationId: string;
+  /**
+   * The ticket item's fired quantity, as thousandths, printed in place of the line's current
+   * quantity. Absent or null prints the line's: a ticket item fired before `ticket_items.quantity`
+   * existed carries none.
+   */
+  quantity?: number | null;
+}
+
+/** `entry`'s printed item at the quantity `item` was fired at, where it records one. */
+function atFiredQuantity(entry: KitchenTicketItem, item: FiredItem): KitchenTicketItem {
+  return item.quantity == null ? entry : { ...entry, qty: thousandthsToDecimal(item.quantity) };
 }
 
 /**
@@ -250,7 +261,7 @@ export async function enqueueKitchenTickets(
   for (const fired of firedItems) {
     const entry = itemsByLine.get(fired.workingOrderLineId)!;
     const bucket = itemsByStation.get(fired.stationId) ?? [];
-    bucket.push(entry);
+    bucket.push({ lineNo: entry.lineNo, item: atFiredQuantity(entry.item, fired) });
     itemsByStation.set(fired.stationId, bucket);
   }
 
@@ -413,6 +424,7 @@ export async function reprintOrderTickets(
     .select({
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
+      quantity: ticketItems.quantity,
     })
     .from(ticketItems)
     .where(and(eq(ticketItems.workingOrderId, orderId), isNotNull(ticketItems.firedAt)));

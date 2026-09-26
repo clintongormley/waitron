@@ -1004,8 +1004,14 @@ export async function fireLines(
   const earliestDisplayOrder =
     orderDisplayOrders.length === 0 ? null : Math.min(...orderDisplayOrders);
 
-  // One clock reading for the whole round, so every item of it carries the same `fired_at`.
+  // One clock reading for the whole round, so every item of it carries the same `fired_at` and
+  // every line sent in it the same `sent_at`.
   const firedAt = nowIso();
+  const quantityByLine = await readLineQuantities(
+    tx,
+    lines.map((line) => line.id),
+  );
+  const sentLineIds: string[] = [];
   // A line with nowhere to go refuses the whole fire.
   const values = lines
     .map((line) => {
@@ -1014,14 +1020,6 @@ export async function fireLines(
         serviceContext === null || line.productId === null
           ? null
           : (serviceRouteByProduct.get(line.productId) ?? null);
-      if (serviceRoute?.kind === "no_preparation") return null;
-      const stationId =
-        serviceRoute?.kind === "station"
-          ? serviceRoute.stationId
-          : (route?.productStationId ?? route?.categoryStationId ?? defaultStationId);
-      if (stationId === null || stationId === undefined) {
-        throw new AppError("station.no_default", { locationId: cfg.locationId });
-      }
       const courseId = courseByLine.get(line.id) ?? null;
       // A line not fired now is HELD (`fired_at` NULL) until `fireCourse` or `sendLines` releases it.
       const fired =
@@ -1030,6 +1028,16 @@ export async function fireLines(
           : courseId === null ||
             firedCourseIds.has(courseId) ||
             displayOrderByCourse.get(courseId) === earliestDisplayOrder;
+      // A no-preparation line has no kitchen work, and is sent when it would have fired.
+      if (fired) sentLineIds.push(line.id);
+      if (serviceRoute?.kind === "no_preparation") return null;
+      const stationId =
+        serviceRoute?.kind === "station"
+          ? serviceRoute.stationId
+          : (route?.productStationId ?? route?.categoryStationId ?? defaultStationId);
+      if (stationId === null || stationId === undefined) {
+        throw new AppError("station.no_default", { locationId: cfg.locationId });
+      }
       return {
         nodeId: cfg.nodeId,
         workingOrderId: orderId,
@@ -1039,9 +1047,13 @@ export async function fireLines(
         note: line.note,
         firedAt: fired ? firedAt : null,
         state: "queued" as const,
+        // What the kitchen is asked to make. A later split or partial void of the line does not
+        // change what was asked; only a partial void reduces it.
+        quantity: quantityByLine.get(line.id)!,
       };
     })
     .filter((value): value is NonNullable<typeof value> => value !== null);
+  await stampSent(tx, orderId, sentLineIds, firedAt);
   if (values.length === 0) return;
   let inserted: { workingOrderLineId: string; stationId: string; firedAt: string | null }[];
   try {
@@ -1068,6 +1080,105 @@ export async function fireLines(
   await enqueueKitchenTickets(tx, cfg, orderId, firedItems);
 }
 
+/** Each line's stored quantity, as thousandths, by line id. */
+async function readLineQuantities(
+  tx: Transaction,
+  lineIds: readonly string[],
+): Promise<Map<string, number>> {
+  if (lineIds.length === 0) return new Map();
+  const rows = await tx
+    .select({ id: workingOrderLines.id, quantity: workingOrderLines.quantity })
+    .from(workingOrderLines)
+    .where(inArray(workingOrderLines.id, [...lineIds]));
+  return new Map(rows.map((row) => [row.id, row.quantity]));
+}
+
+/**
+ * Stamp `sent_at` on dish lines not stamped yet, and on their extras children, which follow their
+ * dish. A line already stamped keeps its first stamp, so a recalled line sent again keeps it.
+ *
+ * Only while the order is open: `working_order_lines_require_open_parent_update` refuses a line
+ * update on any other order. `placeOrder` stamps its lines itself before the order leaves `open`,
+ * and a settled order sent to preparation is stamped by nothing.
+ */
+async function stampSent(
+  tx: Transaction,
+  orderId: string,
+  lineIds: readonly string[],
+  at: string,
+): Promise<void> {
+  if (lineIds.length === 0) return;
+  await tx
+    .update(workingOrderLines)
+    .set({ sentAt: at })
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, orderId),
+        or(
+          inArray(workingOrderLines.id, [...lineIds]),
+          inArray(workingOrderLines.parentLineId, [...lineIds]),
+        ),
+        isNull(workingOrderLines.sentAt),
+        exists(
+          tx
+            .select({ one: sql`1` })
+            .from(workingOrders)
+            .where(and(eq(workingOrders.id, orderId), eq(workingOrders.status, "open"))),
+        ),
+      ),
+    );
+}
+
+/**
+ * The dish lines of an order that have no ticket item and are not yet stamped sent, whose route is
+ * `no_preparation`, and that sit in one of `courseIds` (`null` standing for no course) or are named
+ * in `lineIds`: the no-route lines a course releases when it fires. Only a zoned order has
+ * no-preparation routes.
+ */
+async function heldNoRouteLines(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  scope: { courseIds: readonly (string | null)[]; lineIds: readonly string[] },
+): Promise<string[]> {
+  const namedCourses = scope.courseIds.filter((id): id is string => id !== null);
+  const inScope = [
+    ...(namedCourses.length > 0 ? [inArray(workingOrderLines.courseId, namedCourses)] : []),
+    ...(scope.courseIds.includes(null) ? [isNull(workingOrderLines.courseId)] : []),
+    ...(scope.lineIds.length > 0 ? [inArray(workingOrderLines.id, [...scope.lineIds])] : []),
+  ];
+  if (inScope.length === 0) return [];
+  const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, orderId);
+  if (serviceContext === null) return [];
+  const candidates = await tx
+    .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+    .from(workingOrderLines)
+    .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, orderId),
+        isNull(workingOrderLines.parentLineId),
+        isNull(workingOrderLines.sentAt),
+        isNull(ticketItems.id),
+        or(...inScope),
+      ),
+    );
+  const productIds = [
+    ...new Set(candidates.flatMap((line) => (line.productId === null ? [] : [line.productId]))),
+  ];
+  const routes = await VENUE_SERVICE.resolvePreparationRoutes(
+    tx,
+    cfg,
+    serviceContext.zoneId,
+    productIds,
+  );
+  return candidates
+    .filter(
+      (line) => line.productId !== null && routes.get(line.productId)?.kind === "no_preparation",
+    )
+    .map((line) => line.id);
+}
+
 /**
  * Release held items of a course by stamping fired_at. Require the course to exist
  * in this venue, including a deactivated course whose food still needs release.
@@ -1080,9 +1191,10 @@ export async function fireCourse(
   courseId: string,
 ): Promise<void> {
   await requireCourse(tx, cfg, courseId);
+  const firedNow = nowIso();
   const firedItems = await tx
     .update(ticketItems)
-    .set({ firedAt: nowIso() })
+    .set({ firedAt: firedNow })
     .where(
       and(
         eq(ticketItems.workingOrderId, orderId),
@@ -1093,7 +1205,15 @@ export async function fireCourse(
     .returning({
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
+      quantity: ticketItems.quantity,
     });
+  const noRoute = await heldNoRouteLines(tx, cfg, orderId, { courseIds: [courseId], lineIds: [] });
+  await stampSent(
+    tx,
+    orderId,
+    [...firedItems.map((item) => item.workingOrderLineId), ...noRoute],
+    firedNow,
+  );
   // The `fired_at IS NULL` predicate makes `RETURNING` exactly the items that fired now, so a re-fire
   // prints nothing.
   await enqueueKitchenTickets(tx, cfg, orderId, firedItems);
@@ -1111,12 +1231,11 @@ export async function sendLines(
 ): Promise<void> {
   await assertAnchoredTabOpen(tx, cfg, tabId);
   // An empty list fires every HELD line of the tab.
-  const lineFilter =
+  const namedLineIds =
     lineNos.length === 0
-      ? undefined
-      : inArray(
-          ticketItems.workingOrderLineId,
-          tx
+      ? []
+      : (
+          await tx
             .select({ id: workingOrderLines.id })
             .from(workingOrderLines)
             .where(
@@ -1124,8 +1243,8 @@ export async function sendLines(
                 eq(workingOrderLines.workingOrderId, tabId),
                 inArray(workingOrderLines.lineNo, lineNos),
               ),
-            ),
-        );
+            )
+        ).map((line) => line.id);
   // One clock reading for both stamps: `queued_at` is what every age on the boards is measured from.
   const firedNow = nowIso();
   const firedItems = await tx
@@ -1135,15 +1254,37 @@ export async function sendLines(
       and(
         eq(ticketItems.workingOrderId, tabId),
         isNull(ticketItems.firedAt),
-        ...(lineFilter ? [lineFilter] : []),
+        ...(lineNos.length === 0 ? [] : [inArray(ticketItems.workingOrderLineId, namedLineIds)]),
       ),
     )
     .returning({
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
+      courseId: ticketItems.courseId,
+      quantity: ticketItems.quantity,
     });
+  // Sending a held line releases its course, so the course's no-route lines are sent with it.
+  const noRoute = await heldNoRouteLines(tx, cfg, tabId, {
+    courseIds: [...new Set(firedItems.map((item) => item.courseId))],
+    lineIds: namedLineIds,
+  });
+  await stampSent(
+    tx,
+    tabId,
+    [...firedItems.map((item) => item.workingOrderLineId), ...noRoute],
+    firedNow,
+  );
   // As in `fireCourse`, a re-send of an already-fired line prints nothing.
-  await enqueueKitchenTickets(tx, cfg, tabId, firedItems);
+  await enqueueKitchenTickets(
+    tx,
+    cfg,
+    tabId,
+    firedItems.map(({ workingOrderLineId, stationId, quantity }) => ({
+      workingOrderLineId,
+      stationId,
+      quantity,
+    })),
+  );
 }
 
 /**
@@ -2656,6 +2797,13 @@ export async function placeOrder(
     const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
     const orderFlow = serviceContext?.serviceMode ?? cfg.orderFlow;
 
+    // Placing commits the whole order, a course the kitchen holds included, so every line is sent.
+    // Stamped while the order is still open, which is the only time a line may be written.
+    await tx
+      .update(workingOrderLines)
+      .set({ sentAt: nowIso() })
+      .where(and(eq(workingOrderLines.workingOrderId, id), isNull(workingOrderLines.sentAt)));
+
     // Only invoice-first files at placing, from the stored locked lines: never a re-price.
     let placeResult: PlaceOrderResult = { id, status: "placed" };
     let issuedOrderLabel: string | null | undefined;
@@ -3093,6 +3241,12 @@ async function readQueueSubItems(
 }
 
 /**
+ * What the kitchen was asked to make: the ticket item's fired quantity. A ticket item fired before
+ * `ticket_items.quantity` existed carries none, and reads its line's current quantity instead.
+ */
+const firedQuantity = sql<number>`coalesce(${ticketItems.quantity}, ${workingOrderLines.quantity})`;
+
+/**
  * The venue's ticket items at one station, grouped by order, oldest first. An abandoned or collected
  * order drops out; items are not filtered by state, so a `ready` line stays until its order collects.
  */
@@ -3112,7 +3266,7 @@ export async function listStationQueue(
       variantName: workingOrderLines.variantName,
       variantKitchenName: workingOrderLines.variantKitchenName,
       optionSnapshots: workingOrderLines.optionSnapshots,
-      quantity: workingOrderLines.quantity,
+      quantity: firedQuantity,
       unitName: workingOrderLines.unitName,
       unitPrecision: workingOrderLines.unitPrecision,
       lineNo: workingOrderLines.lineNo,
@@ -3278,7 +3432,7 @@ export async function listExpoQueue(
       variantName: workingOrderLines.variantName,
       variantKitchenName: workingOrderLines.variantKitchenName,
       optionSnapshots: workingOrderLines.optionSnapshots,
-      quantity: workingOrderLines.quantity,
+      quantity: firedQuantity,
       unitName: workingOrderLines.unitName,
       unitPrecision: workingOrderLines.unitPrecision,
       lineNo: workingOrderLines.lineNo,

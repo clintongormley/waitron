@@ -30,6 +30,7 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
+  thousandthsToDecimal,
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
@@ -900,6 +901,49 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
     expect(groupTicket).toContain("Sopa");
     expect(groupTicket).toContain("Chuleton");
     expect(groupTicket).toContain("Cocina");
+  });
+
+  it("prints the quantity each item was fired at, not its line's current quantity", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const { released, reprinted } = await asApp(cfg, async (tx) => {
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
+      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
+      const soup = await makeProduct(tx, cfg, catalogueId, "Sopa", {
+        stationId: cocina.id,
+        courseId: ent.id,
+      });
+      const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", {
+        stationId: cocina.id,
+        courseId: pri.id,
+      });
+      // Three soups fire; two steaks are held by their course.
+      const orderId = await fireNewOrder(tx, cfg, [
+        { productId: soup, quantity: "3" },
+        { productId: steak, quantity: "2" },
+      ]);
+      // Each line now bills one, as after splitting the rest off to another check.
+      await tx.execute(sql`
+        update working_order_lines set quantity = 1000 where working_order_id = ${orderId}`);
+      const beforeRelease = new Set((await printJobsFor(tx)).map((job) => job.id));
+      await fireCourse(tx, cfg, orderId, pri.id);
+      const released = (await printJobsFor(tx)).filter((job) => !beforeRelease.has(job.id));
+      const beforeReprint = new Set((await printJobsFor(tx)).map((job) => job.id));
+      await reprintOrderTickets(tx, cfg, orderId);
+      const reprinted = (await printJobsFor(tx)).filter((job) => !beforeReprint.has(job.id));
+      return { released, reprinted };
+    });
+
+    expect(released).toHaveLength(1);
+    expect(decodeTicket(released[0]!.payload)).toContain(
+      `${thousandthsToDecimal(2000)} ea x Chuleton`,
+    );
+    expect(reprinted).toHaveLength(1);
+    const reprint = decodeTicket(reprinted[0]!.payload);
+    expect(reprint).toContain(`${thousandthsToDecimal(3000)} ea x Sopa`);
+    expect(reprint).toContain(`${thousandthsToDecimal(2000)} ea x Chuleton`);
   });
 
   it("enqueues nothing (and does NOT throw) for an order with no fired items", async () => {
