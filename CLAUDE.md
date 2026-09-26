@@ -672,12 +672,13 @@ browser test** — most of these rules exist because a test passed while proving
   `docker volume prune`, and `docker volume inspect` before any manual `rm`. Which rig is which:
   [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **The stream loop test (`apps/server/src/stream-loop.e2e.test.ts`) needs two pinned binaries:
-  without them it is SKIPPED locally and FAILS in CI.** It runs the real Litestream against
+  without them it is SKIPPED locally and FAILS in CI** — and so does the stream pause test,
+  `apps/server/src/stream-pause.e2e.test.ts`. Each runs the real Litestream against
   versitygw started as a plain child process. Install both with
   `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`; with `CI=true` or
   `WAITRON_REQUIRE_STREAM_BINARIES=1` a missing one fails the case. **Vitest's default reporter
   prints a skipped run as `1 skipped` and nothing else** — the reason shows only under
-  `--reporter=verbose` — so a local green run of `apps/server` may not have run it. That CI installs
+  `--reporter=verbose` — so a local green run of `apps/server` may not have run them. That CI installs
   them is guarded by `scripts/ci-workflow.test.mjs`, which reads `ci.yml` as TEXT, so the commands
   left only in a YAML comment, or in a step an `if:` switches off, pass it. See
   [testing-guide.md](docs/developers/testing-guide.md).
@@ -877,12 +878,14 @@ Adding a database test to a new package: give it `useVenueDb` and the migration 
   Litestream at a size limit (`backup.stream_paused`) and then folding the file back; that
   checkpoint takes its turn in the write queue with no busy wait (`checkpointTruncate`,
   `packages/store/src/index.ts`), so a sale can queue behind it but never waits on the bucket. Guards,
-  narrower than the rule: the frozen-server stage of `apps/server/src/stream-loop.e2e.test.ts`
-  times ten sales against a bound, never reaches the size limit, records them with `recordOneSale`
-  — which opens a second store, with its own write queue, rather than going through the server's
-  route and write queue, so no sale there queues behind the server's `checkpointTruncate` — and is
-  skipped locally without its binaries (§4); the bucket-copy cases in
-  `apps/server/src/health.test.ts` hold `/health`.
+  narrower than the rule: `apps/server/src/stream-pause.e2e.test.ts` freezes the bucket, then times
+  the sales three tills make through the server's own route against a bound while the side file
+  passes a 16 MiB limit, the server folds it back and the pause holds — it does not observe whether
+  a sale's write waited behind the fold-back rather than landing before it, nor time the fold-back
+  of a 256 MiB file; the frozen-server stage of `apps/server/src/stream-loop.e2e.test.ts` records
+  its sales through `recordOneSale`, a second store with its own write queue; both are skipped
+  locally without their binaries (§4); the bucket-copy cases in `apps/server/src/health.test.ts`
+  hold `/health`.
 - **`registros_facturacion` is immutable**: it is the table declared `appendOnly()`
   (`packages/fiscal-verifactu/src/classification.ts`), so `applyMigrations` puts a `RAISE(ABORT)`
   trigger on its updates and its deletes. Do not work around them; a value written wrong there stays
