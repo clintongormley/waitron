@@ -1311,12 +1311,15 @@ async function bootServer(
     environment: config.environment,
     incidents: recordIncidentOnce,
   });
+  // One backend and clock, shared by the till's pays and the payments surface's stuck-payment filing.
+  const tillBackend = makeFiscalBackend(setsToMigrate, filingModule, db, env);
+  const tillClock = systemClock();
   mountTillApi(
     app,
     {
       db,
-      backend: makeFiscalBackend(setsToMigrate, filingModule, db, env),
-      clock: systemClock(),
+      backend: tillBackend,
+      clock: tillClock,
       cfg: till,
       // From the ENABLED set: a disabled module's table is not migrated, so its annotator must not run.
       floorAnnotators: enabledFloorAnnotators(setsToMigrate),
@@ -1387,6 +1390,8 @@ async function bootServer(
       app,
       {
         db,
+        backend: tillBackend,
+        clock: tillClock,
         cfg: till,
         ring,
         environment: config.environment,
