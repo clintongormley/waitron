@@ -3,8 +3,9 @@
 **Status:** written 2026-09-26 by the lane B runner as plan Task 0. **Amended the same day with the
 owner's answers to §11** (§11 records each), which added two things: the cash-up counts money on the
 day it moves (§9a), and a card refund is a durable attempt that survives an interrupted call (§6b).
-**Awaiting the owner's final approval of the amended design**; plan Task 14 (`bill-payments`) does
-not start until then.
+**Approved by the owner on 2026-09-26, as amended (PR #698).** Plan Task 14 (`bill-payments`) may
+start once its dependencies have landed, and its Step 0 (the provider checks §6b depends on) comes
+before any implementation.
 
 **What this is.** The owner decided on 2026-09-26 that a table's bill is invoiced when it is fully
 paid, and that several payments can be taken against it first
@@ -596,9 +597,9 @@ action, so no path can conclude more than another.
 
 **The invariant: an uncertain send stays unresolved until evidence settles its outcome.** Absence
 is never failure once `sent_at` is set: a request that reached the provider can still be in flight
-there, and "nothing visible yet" does not show it cannot later succeed. A later send's answer never
-settles an earlier send. Only a lookup match with a success or failure status, or a confirmed manual
-resolution, settles an attempt that has had an uncertain send.
+there, and "nothing visible yet" does not show it cannot later succeed. A later send's HTTP refusal
+does not settle earlier uncertainty. A matching provider refund record with a definitive outcome —
+returned by the call or by lookup — or a confirmed manual resolution does.
 
 **Looking a refund up** (a new provider method, `lookupRefund`, the contract change below):
 
@@ -909,7 +910,8 @@ The owner answered each on 2026-09-26. The design above is written with these an
 
 1. **Approve this design:** the overall approach is approved, subject to the refund gap and item 5.
    The owner asked for §6b (durable card refunds, recovery, and how a pending refund meets other
-   payments and the invoice) and its tests before final approval. **Awaiting that final approval.**
+   payments and the invoice) and its tests before final approval, and **approved the amended design
+   on 2026-09-26** (PR #698).
 2. **A move that would leave the original owing less than it received** (§4.3): **the default.**
    Refuse, and offer "move fewer lines" or "refund €X first". Money never moves between bills
    implicitly.

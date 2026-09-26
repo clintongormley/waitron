@@ -2237,11 +2237,12 @@ address that answers is then asked for its paper sizes on port 631.
   approved by the owner and merged as #693 (§14 lists every change from Revision 1);
   [plan](superpowers/plans/2026-09-26-service-ordering-and-billing.md), Revision 2, eighteen tasks,
   reviewed three times before the merge. What stays open:
-  - **Task 0's [bill payments design](superpowers/specs/2026-09-26-bill-payments-design.md) awaits
-    the owner's final approval.** The owner answered its nine open points on 2026-09-26 (its §11):
-    the cash-up now counts money on the day it moves, in Task 14 (§9a), and a card refund is a
-    durable attempt that survives an interrupted call (§6b), both added that day. Task 14, several
-    payments against one bill, does not start until the amended design is approved.
+  - **Task 0's [bill payments design](superpowers/specs/2026-09-26-bill-payments-design.md) is
+    approved** (owner, 2026-09-26, PR #698), with the owner's answers to its open points (its §11):
+    the cash-up counts money on the day it moves, in Task 14 (§9a), and a card refund is a durable
+    attempt that survives an interrupted call (§6b). Task 14 waits only for its dependencies (Task 2
+    and lane C's M7b2), and its Step 0 checks the providers' documentation and the SumUp endpoint
+    before any implementation.
   - **The card refund path records only after the provider call, with a fresh key each time**
     (found by the owner reviewing Task 0, 2026-09-26). `reverseViaStripe`
     (`packages/payments-stripe/src/reverse.ts`) sends a fresh `randomUUID()` idempotency key on
