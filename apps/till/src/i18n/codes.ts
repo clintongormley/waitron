@@ -7,6 +7,22 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Someone else changed this order. Reload it and make your change again",
     es: "Otra persona ha cambiado este pedido. Vuelve a cargarlo y repite el cambio",
   },
+  "visit.out_of_date": {
+    en: "Someone else changed this table. Reload it and try again",
+    es: "Otra persona ha cambiado esta mesa. Vuelve a cargarla e inténtalo de nuevo",
+  },
+  "visit.not_open": {
+    en: "This table has changed since you opened it. Reload the floor and try again",
+    es: "Esta mesa ha cambiado desde que la abriste. Vuelve a cargar el plano e inténtalo de nuevo",
+  },
+  "visit.bill_outstanding": {
+    en: "A bill for this table is still unpaid. Take payment before finishing the table",
+    es: "Hay una cuenta de esta mesa sin pagar. Cóbrala antes de cerrar la mesa",
+  },
+  "submission.id_reused": {
+    en: "This request could not be matched to what was sent before. Reload and try again",
+    es: "Esta petición no coincide con la que se envió antes. Vuelve a cargar e inténtalo de nuevo",
+  },
   "order.payment_in_flight": {
     en: "A card payment for this order is in progress. Wait for it to finish before changing the order",
     es: "Se está cobrando este pedido con tarjeta. Espera a que termine antes de cambiarlo",

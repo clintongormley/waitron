@@ -97,6 +97,7 @@ import {
 } from "./working-order.js";
 import type { LineExtras, OrderLinePatch, TicketState } from "./working-order.js";
 import { listCourses, listStations } from "./kitchen.js";
+import { finishTable, markCleared, readVisitBills, seatTable } from "./visits.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
 import {
@@ -296,6 +297,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "table.not_shared": 409,
   "tab.transfer_modifier_line": 400,
   "tab.split_held_line": 400,
+  "visit.not_open": 409,
+  "visit.out_of_date": 409,
+  "visit.bill_outstanding": 409,
+  "submission.id_reused": 409,
   "status.not_found": 404,
   "status.inactive": 409,
   "drawer.no_printer": 400,
@@ -360,6 +365,39 @@ function requireTabParam(id: string): string {
 function requireRevision(value: unknown): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
     throw new AppError("management.request_invalid", { field: "revision" });
+  }
+  return value;
+}
+
+/** A non-UUID names no visit, so it gets the absent visit's `visit.not_open`. */
+function requireVisitParam(id: string): string {
+  if (!isUuid(id)) {
+    throw new AppError("visit.not_open", { visitId: id });
+  }
+  return id;
+}
+
+/** The largest party one seating records; a bigger number is a mistyped count. */
+const MAX_GUEST_COUNT = 999;
+
+/** An optional guest count: absent or null records none, otherwise a whole number from 1. */
+function requireGuestCount(value: unknown): number | null {
+  if (value === undefined || value === null) return null;
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 1 ||
+    value > MAX_GUEST_COUNT
+  ) {
+    throw new AppError("management.request_invalid", { field: "guestCount" });
+  }
+  return value;
+}
+
+/** A visit revision as a body carries it: a whole number from 0. */
+function requireVisitRevision(value: unknown): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    throw new AppError("management.request_invalid", { field: "expectedVisitRevision" });
   }
   return value;
 }
@@ -1223,6 +1261,57 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         return openTab(tx, deps.cfg, { tableId: id, lines: body.lines });
       });
       return c.json(result);
+    }),
+  );
+
+  app.post("/api/tables/:id/seat", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
+      const body = await readJsonBody<{ guestCount?: unknown }>(c);
+      const guestCount = requireGuestCount(body.guestCount);
+      const result = await withTransaction(deps.db, async (tx) => {
+        return seatTable(tx, deps.cfg, { tableId: id, guestCount, operatorId: personId });
+      });
+      return c.json(result);
+    }),
+  );
+
+  app.post("/api/visits/:id/finish", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const visitId = requireVisitParam(c.req.param("id"));
+      const body = await readJsonBody<{ expectedVisitRevision?: unknown }>(c);
+      const expectedVisitRevision = requireVisitRevision(body.expectedVisitRevision);
+      const result = await withTransaction(deps.db, async (tx) => {
+        return finishTable(tx, deps.cfg, { visitId, expectedVisitRevision, operatorId: personId });
+      });
+      return c.json(result);
+    }),
+  );
+
+  app.post("/api/visits/:id/cleared", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const visitId = requireVisitParam(c.req.param("id"));
+      const body = await readJsonBody<{ expectedVisitRevision?: unknown }>(c);
+      const expectedVisitRevision = requireVisitRevision(body.expectedVisitRevision);
+      await withTransaction(deps.db, async (tx) => {
+        await markCleared(tx, deps.cfg, { visitId, expectedVisitRevision });
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  app.get("/api/visits/:id/bills", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const visitId = requireVisitParam(c.req.param("id"));
+      const bills = await withTransaction(deps.db, async (tx) => {
+        return readVisitBills(tx, visitId);
+      });
+      return c.json(bills);
     }),
   );
 

@@ -327,6 +327,28 @@ declare module "@waitron/shared" {
      * `tab_id` (a settled/abandoned order) reads as free and is overwritten.
      */
     "tab.already_open": { tableId: string };
+    /**
+     * A visit verb found the visit is not in the state it needs — Finish needs `open`, Mark cleared
+     * needs `needs_clearing`, a new service command needs `open` — or the id names no visit. One code
+     * for all, as `tab.not_open` is.
+     */
+    "visit.not_open": { visitId: string };
+    /**
+     * A command carried a visit revision another write has since moved past, so it was prepared
+     * from a stale copy of the visit. `revision` is the visit's current one; the caller reloads and
+     * acts again. The sibling of `working_order.out_of_date`.
+     */
+    "visit.out_of_date": { visitId: string; revision: number };
+    /**
+     * Finish table found a bill of the party — its own, or one kept by a party merged into it — that
+     * is placed, or open with items on it: the table cannot be finished while a bill is unpaid.
+     */
+    "visit.bill_outstanding": { visitId: string };
+    /**
+     * A submission id already recorded in this scope arrived with another command kind or other
+     * arguments. The id is the device's own, made fresh for each person's action.
+     */
+    "submission.id_reused": { submissionId: string };
     // The four `booking.*` codes are declared in @waitron/bookings/src/errors.ts.
     /**
      * A tab verb found the order it was asked to modify is not an OPEN tab — not `open`, not pointed

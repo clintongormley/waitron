@@ -50,6 +50,7 @@ import {
   products,
   sales,
   ticketItems,
+  visitTables,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -902,6 +903,14 @@ export async function openTab(
     if (openTabRow !== undefined) {
       throw new AppError("tab.already_open", { tableId: req.tableId });
     }
+  }
+  // A party still holds the table after its tabs settle, until Finish table (or Mark cleared).
+  const [member] = await tx
+    .select({ id: visitTables.id })
+    .from(visitTables)
+    .where(and(eq(visitTables.tableId, req.tableId), isNull(visitTables.leftAt)));
+  if (member !== undefined) {
+    throw new AppError("tab.already_open", { tableId: req.tableId });
   }
 
   const tabId = randomUUID();
@@ -2129,8 +2138,7 @@ async function freeTablesCoveredBy(tx: Transaction, cfg: TillConfig, tabId: stri
 }
 
 /**
- * Relocate a party to a free table: no line moves, no fiscal effect. Both tables are turned over, and
- * the clears are explicit because the settle trigger does not fire on a move (the tab stays open).
+ * Relocate a party to a free table: no line moves, no fiscal effect. Both tables are turned over.
  * The kitchen is told of the tab's sent work ({@link enqueueMovedSlips}).
  */
 export async function moveTab(
@@ -2215,10 +2223,8 @@ export async function joinTable(
  * `freeSourceTable = true` frees the source table (it turns over); `false` re-points it at `intoTab`,
  * and the joined table KEEPS its status.
  *
- * ORDER MATTERS: the re-point precedes the abandon. The `working_orders_clear_table_status` trigger
- * clears the status of tables pointing at an abandoned order, so abandoning first would clear it on a
- * table that stays joined. The kitchen is told of moved sent work only after the re-point, which
- * can change the table its slips name for `intoTab`.
+ * The kitchen is told of moved sent work only after the re-point, which can change the table its
+ * slips name for `intoTab`.
  */
 export async function mergeTabs(
   tx: Transaction,
@@ -2248,7 +2254,6 @@ export async function mergeTabs(
   await moveOrderLines(tx, cfg, fromTabId, intoTabId, undefined, { modesChecked: false });
   await bumpRevision(tx, [fromTabId, intoTabId]);
 
-  // Before the abandon (see the docstring).
   if (options.freeSourceTable) {
     await freeTablesCoveredBy(tx, cfg, fromTabId);
   } else {
