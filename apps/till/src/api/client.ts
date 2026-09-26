@@ -989,8 +989,8 @@ export interface TabResult {
 export interface TabLines {
   lines: TabLine[];
   revision: number;
-  /** The venue's setting: when false the server refuses to change or recall a line already sent to
-   * a station (`ticket.already_fired`), and a void still works. */
+  /** The venue's setting. When false the server refuses to change or recall a dish line with
+   * `sentAt !== null && state !== null` (`ticket.already_fired`); a void still works. */
   editSentLines: boolean;
 }
 
@@ -1023,8 +1023,8 @@ export interface TabLine {
   servedAt: string | null;
   /** The line's RESOLVED kitchen course, or null when it has none. */
   courseId: string | null;
-  /** When the line was first sent to a station, or null if it never was. A recall clears `firedAt`
-   * and keeps this. */
+  /** When the line was first released: fired, or for a no-preparation line, when it would have
+   * fired; null if it never was. A recall clears `firedAt` and keeps this. */
   sentAt: string | null;
   /** When the line's kitchen ticket item FIRED, or null while its course is still HELD. */
   firedAt: string | null;

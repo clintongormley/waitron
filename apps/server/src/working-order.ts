@@ -1981,7 +1981,8 @@ export interface TabLine {
   unitPriceGross: string;
   servedAt: string | null;
   courseId: string | null;
-  /** When the line was first sent to a station. A recall clears `firedAt` and keeps this. */
+  /** When the line was first released: fired, or for a no-preparation line, when it would have
+   * fired. A recall clears `firedAt` and keeps this. */
   sentAt: string | null;
   /** Null when the line is HELD or has no ticket item at all, which a parent line can lack too:
    * `openTab` inserts its initial lines without firing them. */

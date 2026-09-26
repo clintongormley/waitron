@@ -1443,7 +1443,7 @@ describe("TillApi", () => {
         unitPriceGross: "2.00",
         servedAt: null,
         courseId: "course-1",
-        sentAt: null,
+        sentAt: "2026-08-06T09:59:00.000Z",
         firedAt: null,
         state: null,
       },

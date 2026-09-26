@@ -794,6 +794,18 @@ describe("readTabLines", () => {
     expect(held).toMatchObject({ lineNo: 2, firedAt: null, state: "queued", sentAt: null });
   });
 
+  it("reads a no-preparation line that was released as sent, with no ticket state", async () => {
+    const { cfg, tableId, aguaId, aguaOffer } = await setupVenue();
+    await routeToNoPreparation(aguaId);
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ menuItemId: aguaOffer, quantity: "1" }]),
+    );
+
+    const [line] = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    expect(line).toMatchObject({ sentAt: expect.any(String), firedAt: null, state: null });
+  });
+
   it("returns the STORED locked gross price, never a re-price after the catalogue changes", async () => {
     const { cfg, cafeId, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
@@ -1593,6 +1605,24 @@ describe("with changes to sent items switched off", () => {
 
     const [state] = await sentState(tabId);
     expect(state!.ticket!.firedAt).toBeNull();
+  });
+
+  it("still changes a no-preparation line that was released, which has no ticket item", async () => {
+    const { cfg, tableId, aguaId, aguaOffer } = await setupVenue();
+    await routeToNoPreparation(aguaId);
+    await asApp(cfg, (tx) => writeEditSentLines(tx, false));
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ menuItemId: aguaOffer, quantity: "1" }]),
+    );
+
+    await asApp(cfg, async (tx) =>
+      updateOrderLine(tx, cfg, tabId, 1, { note: "sin hielo" }, await revisionOf(tabId)),
+    );
+    await expect(asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]))).resolves.toBeUndefined();
+
+    const [line] = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    expect(line).toMatchObject({ sentAt: expect.any(String), state: null, note: "sin hielo" });
   });
 });
 
