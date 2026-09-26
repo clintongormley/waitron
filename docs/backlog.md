@@ -3047,11 +3047,14 @@ image constraints under *Detail → Box image*.
     cannot (`sleepMsFor` in `loop.ts` is `Math.min(max, Math.max(min, wait))`, and config refuses
     `minTickMs > maxTickMs`; #653 corrected the same claim in `config.ts`); `config.test.ts`'s
     test title (near line 572) says "round back down past the floor" where it means "to the
-    floor". `packages/db/src/node-membership.ts`'s header says the caller of `readNodeMembership`
-    re-runs `verifyMembershipDocument` / `acceptMembershipDocument` on what it reads; none of the
-    nine non-test files that call it does (grepped 2026-09-25; `boot.ts` calls
-    `acceptMembershipDocument` only on a peer's incoming document). #653 restored the note at
-    boot's read. Two notes #653's prune deleted and nothing else recorded: nobody knows why the
+    floor". **Done (A38):** `packages/db/src/node-membership.ts`'s header said the caller of
+    `readNodeMembership` re-runs `verifyMembershipDocument` / `acceptMembershipDocument` on what it
+    reads, and none did; it now says a document is checked when written (a peer's by
+    `acceptMembershipDocument`, every other one signed by this node) and readers trust the row.
+    Left open, the owner's call: a restore puts the copy's row back unchecked, and the first trading
+    start after it (`completeRebuild`) signs the next term over that row's node list without
+    verifying it — a probe wrote a row with a bad signature and an extra node, and the first start
+    signed a valid document keeping that node. Two notes #653's prune deleted and nothing else recorded: nobody knows why the
     5-second busy timeout did not absorb a `database is locked` in the pending-payment sweep; and
     nothing proves `startServer` itself survives a backup duty that cannot start — only
     `backup-supervisor.test.ts` covers that, at the supervisor. Read, not run: on the trading path

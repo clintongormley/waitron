@@ -8,8 +8,13 @@ import { nodeMembership } from "./schema/node-membership.js";
  * The held membership document, or `null` when the table or the row is absent. Callers must not
  * tell those two apart: both mean nothing has recorded who is currently in charge.
  *
- * Returns the document WHOLE and unverified — the caller re-runs `verifyMembershipDocument` /
- * `acceptMembershipDocument` (@waitron/membership) against it; this layer is storage, not the fence.
+ * Not verified here, because a document is checked when it is WRITTEN: a peer's is stored only after
+ * `acceptMembershipDocument` (@waitron/membership) passes it, and every other write is one this
+ * node signed with its own key (`mintNextMembershipDocument`). Readers trust the row as boot trusts
+ * its deployment axes. A row that arrived any other way is not re-checked: a restore (archive or
+ * bucket) puts back the copy's row as it was, and the first trading start after it
+ * (`completeRebuild`) signs the next term over that row's node list without verifying it; a raw SQL
+ * write or a database file edited outside the program is read as is.
  *
  * The table's existence is read off `sqlite_master` rather than discovered by running the select and
  * catching the refusal; the reason is on `deploymentTableExists` in `./deployment.js`.
