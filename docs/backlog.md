@@ -3112,7 +3112,7 @@ image constraints under *Detail → Box image*.
     bound (`ensureBoxSecrets`, called only there from `boot.ts`), now makes a real `tls/` folder
     0700 as a restore does; a `tls/` that is a symbolic link it leaves as it found it, and still
     writes the box's files through it (a restore refuses one pointing outside the destination).
-    **Done (2026-09-26, lane A's A52):** a trading start now makes a real `tls/` folder 0700 too,
+    **Done (2026-09-26, lane A's A52, #687):** a trading start now makes a real `tls/` folder 0700 too,
     through the same `tightenTlsDir` (`box-secrets.ts`), called in `boot.ts` ahead of the
     adoption-pending branch and both trading listeners. It creates none where there is none, and
     it opens the folder without following a link, so a linked `tls/` and the folder it points to
