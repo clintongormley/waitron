@@ -245,13 +245,17 @@ Removing a variant makes it Inactive and keeps its row; a saved variant left out
 is made Inactive too (`setProductVariants`). An Inactive variant is on no menu offer. An Active one
 is listed under its parent's offer, and marked available only while it is Available and that menu
 has not switched it off (`readOfferVariants` in `listMenuOffers`, `packages/catalogue/src/operations.ts`).
-The offer read the till sells from leaves out a parent that is Inactive or Unavailable, and its
-variants with it.
+The offers a till sells from are each menu's published version, which leaves out a product that was
+Inactive when it was published (`listMenuOffers`, `packages/catalogue/src/operations.ts`). A product
+that is Unavailable, or has become Inactive since, is served in its place marked unavailable
+(`applyLiveFields`, `packages/catalogue/src/menu-document.ts`).
 
 ### On the till
 
-Every Active, Available, top-level product on a menu gets a button, whether or not it is marked as
-sold alone (`listMenuOffers`). A variant never has a button: it is listed only nested under its
+Every top-level product on a menu's published version gets a button, whether or not it is marked as
+sold alone. One that cannot be sold now keeps its button, greyed, and a tap on it does nothing
+(`product-grid.ts`), so the buttons around it do not move; the till's menu-state poll greys and
+restores it without reloading the offers (`apps/till/src/till-app.ts`). A variant never has a button: it is listed only nested under its
 parent's offer (`MenuOffer.variants`). The till reads its offers from the zone
 (`GET /api/default-service-zone/offers`, `GET /api/service-zones/:zoneId/offers`).
 
@@ -264,7 +268,7 @@ variants were sent in). The first available one is chosen to start with; an unav
 listed, drawn disabled; each is labelled with its difference from the parent's price on that menu
 ("+€1.50") where it has one (`till-modifier-picker`, `apps/till/src/widgets/modifier-picker.ts`;
 the difference is worked out in `apps/till/src/api/client.ts`). A product none of whose variants is
-available on that menu gets no button (`product-grid.ts`). An extras list does not offer a product
+available on that menu keeps its button, greyed (`product-grid.ts`). An extras list does not offer a product
 that has an Active variant (`readExtraProducts`, `packages/catalogue/src/offered-modifiers.ts`),
 since the order path refuses one picked as an extra (below). The catalogue refuses both ways of
 putting one there: an extras list naming such a product (`extras.product_has_variants`), and an

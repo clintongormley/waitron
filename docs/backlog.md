@@ -341,7 +341,11 @@ is published; the dashboard's readiness list says so (`zone.menu_unpublished`). 
 read-only transaction (`packages/db/src/tenancy.ts` offers only `withTransaction`), so every poll
 takes a turn of it; and a till learns of a change only by polling, because the dashboard's
 live-update route accepts the management cookie only — a till-session branch on that route would let
-the server tell tills instead (plan D11), a later refinement.
+the server tell tills instead (plan D11), a later refinement. The till polls it every 15 seconds while
+signed in, greys what is sold out in place, and runs the basket refresh flow (D9) for the counter's
+basket. Also left open: a table's unsent round is not compared or marked — the table screen empties
+the round when it sends it, so a round refused `menu.version_changed` is lost and the waiter adds it
+again from the offers the till reloads.
 **M7b2 landed (#702, 2026-09-26): a manager can clear a card payment a crash left running.** The
 Payments screen lists open orders locked by a card payment nothing is finishing any more, and "Check
 with the card provider" files the sale once if the card was charged, marks the payment failed and
