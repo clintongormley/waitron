@@ -5787,10 +5787,11 @@ line with what slice 2 built. Left open:
   `1 skipped`; the reason shows under `--reporter=verbose`
   ([testing-guide.md](developers/testing-guide.md), "The stream loop test skips locally without its
   two binaries, and a skip reads as a pass").
-- A change to `scripts/setup-litestream.mjs` or `scripts/setup-s3-test-server.mjs` alone runs no
-  `test-server` shard, on its pull request or on its merge to `main`, because neither is in
-  `ROOT_SCOPE_CONSUMERS` ([ci-and-gates.md](developers/ci-and-gates.md)); the next run that tests
-  `apps/server` is the first real download through the changed script.
+- **DONE (2026-09-26, lane A's A34, branch `fix/installer-scripts-select-server`): a change to
+  `scripts/setup-litestream.mjs` or `scripts/setup-s3-test-server.mjs` alone now selects
+  `@waitron/server` and so its `test-server` shards.** Both are in `ROOT_SCOPE_CONSUMERS` against
+  `apps/server`, and `scripts/root-scope-consumers.test.mjs` accepts a script a ci.yml job runs
+  before testing a member ([ci-and-gates.md](developers/ci-and-gates.md)).
 - Linux is covered by one CI run only: #652's first (2026-09-25, run 36173603563), where each
   `test-server` shard's install step took about two seconds by GitHub's whole-second step
   timestamps, and the loop test passed in 15,989 ms with no test skipped in the merged report.

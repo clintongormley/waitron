@@ -686,6 +686,15 @@ describe("the CLI", () => {
     );
   });
 
+  it.each(["scripts/setup-litestream.mjs", "scripts/setup-s3-test-server.mjs"])(
+    "selects the server, whose CI test job runs %s",
+    (path) => {
+      expect(run(`${path}\n`).stdout).toBe(
+        "code=true\nscope=packages\npackages=@waitron/server\nroot=true\ndeploy=false\n",
+      );
+    },
+  );
+
   it("selects the real front-ends that import scripts/dev-server-proxy.ts", () => {
     expect(run("scripts/dev-server-proxy.ts\n").stdout).toBe(
       "code=true\nscope=packages\npackages=@waitron/dashboard @waitron/setup @waitron/till\n" +

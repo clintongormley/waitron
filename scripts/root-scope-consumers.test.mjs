@@ -6,17 +6,28 @@ import { ROOT_SCOPE_CONSUMERS } from "./changed-scope.mjs";
 import { PNPM_LS_SPAWN_TIMEOUT_MS, workspaceMembers } from "./workspace-members.mjs";
 
 // Holds ROOT_SCOPE_CONSUMERS (scripts/changed-scope.mjs) to the tree in both directions: a member
-// file that names a root `scripts/` file by relative path is listed there, and every listed pair is
-// such a reference.
+// file that names a root `scripts/` file by relative path is listed there, and so is a root
+// `scripts/` file a ci.yml job runs before testing a member; every listed pair is one or the other.
 //
-// Weaker than its name: it reads TEXT, so a path assembled from parts (`join(root, "scripts", x)`)
-// is invisible to it; it reads tracked files only, and skips Markdown, which no build or test runs;
-// a comment that spells such a path counts as a reference; it scans member files alone, so a root
-// script reached only THROUGH a listed one (a helper that one imports) is attributed to nobody; and
-// it looks for root `scripts/` alone, so a member reading a file under `.husky/` or `.github/`, also
-// root scope, is unchecked.
+// The member-file half is weaker than its name: it reads TEXT, so a path assembled from parts
+// (`join(root, "scripts", x)`) is invisible to it; it reads tracked files only, and skips Markdown,
+// which no build or test runs; a comment that spells such a path counts as a reference; it scans
+// member files alone, so a root script reached only THROUGH a listed one (a helper that one
+// imports) is attributed to nobody; and it looks for root `scripts/` alone, so a member reading a
+// file under `.husky/` or `.github/`, also root scope, is unchecked.
+//
+// The ci.yml half is weaker than its name too: it reads the workflow as TEXT, line by line, and
+// reads ci.yml alone. A script counts only on a line that STARTS with `node scripts/<file>` (after
+// an optional `- run:`), so one run at the end of a pipe, or any other way, is not counted — the
+// pipe is what leaves out `scripts/changed-packages.mjs runnable`, which several test jobs run
+// before their tests. A member counts only through `pnpm --filter "<name>" test:shard` or
+// `test:coverage` with that one quoted filter, so a job that tests through two filters or a
+// variable is attributed to nobody. It skips full-line comments, but a step an `if:` switches off,
+// or a line inside a heredoc, still counts, and it does not check that the script runs before the
+// tests.
 
 const REPO_ROOT = join(import.meta.dirname, "..");
+const CI_WORKFLOW = join(REPO_ROOT, ".github", "workflows", "ci.yml");
 const GIT_SPAWN_TIMEOUT_MS = 30_000;
 // Covers the real-tree test's waits: both kill timeouts, plus reading every tracked file. A
 // literal, because scripts/spawn-timeout-budget.test.ts cannot resolve an imported constant.
@@ -68,6 +79,58 @@ function rootScriptReaders(files, members, exists) {
   return sortedListing(readers);
 }
 
+/**
+ * ci.yml's jobs as arrays of lines. A job id is the only key at two-space indent below `jobs:`;
+ * scanning from `jobs:` keeps `on:`'s own keys, at that same indent, out. The same line matching
+ * scripts/ci-workflow.test.mjs uses, since there is no YAML library in this workspace.
+ */
+function workflowJobs(text) {
+  const lines = text.split("\n");
+  const jobsKey = lines.indexOf("jobs:");
+  if (jobsKey === -1) throw new Error("the workflow has no top-level `jobs:` key");
+  const starts = [];
+  for (let i = jobsKey + 1; i < lines.length; i++) {
+    if (/^ {2}[A-Za-z0-9_-]+:\s*$/.test(lines[i])) starts.push(i);
+  }
+  return starts.map((at, index) => lines.slice(at + 1, starts[index + 1] ?? lines.length));
+}
+
+const RUNS_ROOT_SCRIPT = /^(?:-\s+)?(?:run:\s+)?node (scripts\/[\w./-]+)/;
+const TESTS_MEMBER = /pnpm --filter "([^"]+)" test:(?:shard|coverage)\b/;
+
+/**
+ * `{ file: memberDirs[] }` of every root `scripts/` file a ci.yml job runs as a command of its own
+ * (`node scripts/<file>` at the start of a line), attributed to each member that same job tests
+ * with `pnpm --filter "<name>" test:shard` or `test:coverage`. Full-line comments are skipped.
+ */
+function ciRunReaders(text, members) {
+  const readers = new Map();
+  for (const job of workflowJobs(text)) {
+    const code = job.map((line) => line.trim()).filter((line) => !line.startsWith("#"));
+    const scripts = code.flatMap((line) => RUNS_ROOT_SCRIPT.exec(line)?.[1] ?? []);
+    const dirs = code
+      .flatMap((line) => TESTS_MEMBER.exec(line)?.[1] ?? [])
+      .flatMap((name) => members.find((member) => member.name === name)?.dir ?? []);
+    for (const script of scripts) {
+      for (const dir of dirs) {
+        if (!readers.has(script)) readers.set(script, new Set());
+        readers.get(script).add(dir);
+      }
+    }
+  }
+  return sortedListing(readers);
+}
+
+/** Two `{ file: memberDirs[] }` listings merged, in the order sortedListing gives. */
+function unionListing(a, b) {
+  const union = new Map();
+  for (const [file, dirs] of [...a, ...b]) {
+    if (!union.has(file)) union.set(file, new Set());
+    for (const dir of dirs) union.get(file).add(dir);
+  }
+  return sortedListing(union);
+}
+
 /** `spawn` is injected only so a test can assert the kill timeout and the isolated environment. */
 function trackedMemberPaths(members, spawn = spawnSync) {
   const env = { ...process.env };
@@ -98,14 +161,17 @@ const trackedMemberFiles = (members) =>
 
 describe("ROOT_SCOPE_CONSUMERS", () => {
   it(
-    "lists exactly the member directories that name each root scripts/ file",
+    "lists exactly the member directories that name, or whose CI test job runs, each root scripts/ file",
     () => {
       const members = workspaceMembers();
       expect(members.length, "guards against a vacuous pass over an empty listing").toBeGreaterThan(
         10,
       );
-      const readers = rootScriptReaders(trackedMemberFiles(members), members, (path) =>
-        existsSync(join(REPO_ROOT, path)),
+      const readers = unionListing(
+        rootScriptReaders(trackedMemberFiles(members), members, (path) =>
+          existsSync(join(REPO_ROOT, path)),
+        ),
+        ciRunReaders(readFileSync(CI_WORKFLOW, "utf8"), members),
       );
       expect(readers).toEqual(sortedListing(ROOT_SCOPE_CONSUMERS));
     },
@@ -180,6 +246,90 @@ describe("rootScriptReaders", () => {
     expect(rootScriptReaders(files, members, exists)).toEqual(
       new Map([["scripts/gone.mjs", ["apps/till"]]]),
     );
+  });
+});
+
+describe("ciRunReaders", () => {
+  const members = [
+    { name: "@waitron/server", dir: "apps/server" },
+    { name: "@waitron/till", dir: "apps/till" },
+  ];
+  const workflow = (...jobLines) =>
+    ["on:", "  push:", "    branches: [main]", "jobs:", ...jobLines, ""].join("\n");
+
+  it("attributes a script a job runs to the member whose tests that job runs", () => {
+    const text = workflow(
+      "  test-server:",
+      "    steps:",
+      "      - run: |",
+      "          node scripts/setup-x.mjs",
+      '          pnpm --filter "@waitron/server" test:shard --shard=1/3',
+    );
+    expect(ciRunReaders(text, members)).toEqual(
+      new Map([["scripts/setup-x.mjs", ["apps/server"]]]),
+    );
+  });
+
+  it("attributes a script to nobody when its job runs no member's tests", () => {
+    const text = workflow(
+      "  changes:",
+      "    steps:",
+      "      - run: node scripts/setup-x.mjs",
+      "      - run: pnpm --filter @waitron/server build",
+    );
+    expect(ciRunReaders(text, members)).toEqual(new Map());
+  });
+
+  it("attributes a script to the member its own job tests, not a member another job tests", () => {
+    const text = workflow(
+      "  test-till:",
+      "    steps:",
+      "      - run: node scripts/setup-x.mjs",
+      '      - run: pnpm --filter "@waitron/till" test:coverage',
+      "  test-server:",
+      "    steps:",
+      '      - run: pnpm --filter "@waitron/server" test:shard',
+    );
+    expect(ciRunReaders(text, members)).toEqual(new Map([["scripts/setup-x.mjs", ["apps/till"]]]));
+  });
+
+  it("counts neither a comment naming the command nor a script fed from a pipe", () => {
+    const text = workflow(
+      "  test-server:",
+      "    steps:",
+      "      # node scripts/setup-x.mjs",
+      "      - run: |",
+      '          pnpm --filter "@waitron/server" ls --depth -1 --json \\',
+      "            | node scripts/changed-packages.mjs runnable test:coverage",
+      '          pnpm --filter "@waitron/server" test:shard',
+    );
+    expect(ciRunReaders(text, members)).toEqual(new Map());
+  });
+
+  it("still refuses a listed entry that neither a member file nor a CI job names", () => {
+    const text = workflow(
+      "  test-server:",
+      "    steps:",
+      "      - run: node scripts/setup-x.mjs",
+      '      - run: pnpm --filter "@waitron/server" test:shard',
+    );
+    const files = [{ path: "apps/till/vite.config.ts", text: "../../scripts/dev-server-proxy.ts" }];
+    const readers = unionListing(
+      rootScriptReaders(files, members, () => true),
+      ciRunReaders(text, members),
+    );
+    expect(readers).toEqual(
+      new Map([
+        ["scripts/dev-server-proxy.ts", ["apps/till"]],
+        ["scripts/setup-x.mjs", ["apps/server"]],
+      ]),
+    );
+    const listed = new Map([
+      ["scripts/dev-server-proxy.ts", ["apps/till"]],
+      ["scripts/setup-x.mjs", ["apps/server"]],
+      ["scripts/unread.mjs", ["apps/till"]],
+    ]);
+    expect(readers).not.toEqual(sortedListing(listed));
   });
 });
 

@@ -61,9 +61,9 @@ taken locally instead. `docs/backlog.md` carries the work item.
 
 A machinery-only push (`scripts/`, `.husky/`, `.github/`) is `scope=root` and stops after the root
 guards — unless it changes a file `ROOT_SCOPE_CONSUMERS` (`scripts/changed-scope.mjs`) names, which
-also selects the members that read it and their dependents. A documentation-only push stops after
-formatting. Deletion-only pushes run no checks. Unknown ranges keep the full local gate, including
-workspace typechecking.
+also selects the members listed against it (those that read it, or whose CI test job runs it) and
+their dependents. A documentation-only push stops after formatting. Deletion-only pushes run no
+checks. Unknown ranges keep the full local gate, including workspace typechecking.
 
 The hook no longer runs `pnpm reap`, and what is left to run it by hand FOR has narrowed to one of
 its two halves. `pnpm reap` (`scripts/reap-testcontainers.mjs`) removes stale containers and, as a
@@ -483,13 +483,18 @@ The `changes` job skips the expensive `code`-gated jobs when every changed path 
 documentation, or root config no `code`-gated job reads (`.codex/`, `.vscode/`, the root
 `.gitignore`, the root `.editorconfig`) — or is the repository's own machinery (`scope=root`:
 `scripts/`, `.husky/`, `.github/`), and on a pull request narrows the shards and mutation jobs to
-the changed packages and their dependents. A root file that members read —
-`scripts/bundle-node.mjs`, `scripts/dev-server-proxy.ts` — is the exception: `ROOT_SCOPE_CONSUMERS`
-in `scripts/changed-scope.mjs` selects the members that read it, so its change is `code=true`, and
-`scripts/root-scope-consumers.test.mjs` fails when a member starts reading an unlisted one. That
-guard is weaker than its name: it reads text, so only a relative `../scripts/…` spelling counts and
-a path built from parts is invisible to it; a comment spelling the path counts as a reference; and
-only root `scripts/` is scanned.
+the changed packages and their dependents. A root file a member depends on is the exception —
+`scripts/bundle-node.mjs` and `scripts/dev-server-proxy.ts`, which member files read, and
+`scripts/setup-litestream.mjs` and `scripts/setup-s3-test-server.mjs`, which the `test-server` job
+runs before testing `apps/server`: `ROOT_SCOPE_CONSUMERS` in `scripts/changed-scope.mjs` selects
+those members, so its change is `code=true`. `scripts/root-scope-consumers.test.mjs` fails when a
+member file starts reading an unlisted one, when a ci.yml job starts running an unlisted one before
+a member's tests, or when a listed entry is neither. That guard is weaker than its name: it reads
+text, so in a member file only a relative `../scripts/…` spelling counts, a path built from parts
+is invisible to it, and a comment spelling the path counts as a reference; in ci.yml, and no other
+workflow, only a line starting `node scripts/…` counts, in a job that tests a member through one
+quoted `pnpm --filter "<name>" test:shard` or `test:coverage` — so a script fed from a pipe does
+not count, and a step an `if:` switches off does; and only root `scripts/` is scanned.
 
 `lint` is ungated and runs on every push — eslint, `format:check` AND the repo-level Vitest
 project — so a regression in a skipped path is caught there only as far as the root suites
@@ -694,15 +699,17 @@ with the pnpm store and Playwright entries the test jobs restore (see "The GHA c
 per-repository budget" above). An error answer from a release download fails the shard with a message
 naming the URL.
 
-**A change to either installer alone runs no `test-server` shard.** Neither script is in
-`ROOT_SCOPE_CONSUMERS` (`scripts/changed-scope.mjs`), so a push touching only one of them is root
-machinery. Checked 2026-09-25 by piping each path into `node scripts/changed-packages.mjs`: both
-printed `code=false`, `scope=root`, while `scripts/bundle-node.mjs`, a listed consumer, printed
-`code=true` with `@waitron/server` in `packages`. `main` forces `scope=global` but keeps that
-`code=false` (the `changes` job in `.github/workflows/ci.yml`), so the merge of such a change runs no
-shard either. The installers' own suites run in the root project on every push, with the download
-injected; the first real download through a changed installer is the next run that tests
-`apps/server`. Not fixed: listing them would send every installer change through the server shards.
+**A change to either installer alone selects `apps/server`**, because both are in
+`ROOT_SCOPE_CONSUMERS` (`scripts/changed-scope.mjs`) against it; until branch
+`fix/installer-scripts-select-server` neither was, and such a change ran no shard. Checked
+2026-09-26: `printf 'scripts/setup-litestream.mjs\n' | node scripts/changed-packages.mjs`, and the
+same for `scripts/setup-s3-test-server.mjs`, each printed `code=true`, `scope=packages`,
+`packages=@waitron/server`; and `pnpm --filter "...@waitron/server" ls --depth -1 --json | node
+scripts/changed-scope.mjs`, the `changes` job's gate step for that scope, printed `server=true` with
+every other gate false. `test-server`'s `if:` asks for `code` and `server` both true. On `main` the
+`changes` job forces `scope=global`, whose gate step prints every gate true. That a real pull
+request then runs the shards has not been checked on CI. The cost is that every installer change
+runs the three server shards.
 
 ## Two TypeScript compilers are installed, and that is deliberate
 
