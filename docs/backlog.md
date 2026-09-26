@@ -906,7 +906,8 @@ What B4 leaves open:
   `GET /api/products`, or keep them.
 - **A table in no zone still opens a tab, and nothing can be added to it.** The till opens a tab
   with no lines (`#onOpenTable`, `apps/till/src/till-app.ts`), and a booking seated at a table does
-  the same through `core.openTab` (`seatBooking`, `packages/bookings/src/bookings.ts`); on a table
+  the same through `core.seatTable`, which also opens a visit (`seatBooking`,
+  `packages/bookings/src/bookings.ts`); on a table
   in no zone that tab opens, and every round on it is refused `order.service_context_missing`. The
   till shows no products there: `#onOpenTable` loads offers only for a table with a zone and leaves
   the grid empty otherwise. Pinned by "openTab with no lines on a table in no zone opens an empty

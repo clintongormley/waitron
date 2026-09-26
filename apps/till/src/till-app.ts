@@ -2421,8 +2421,7 @@ export class TillApp extends LitElement {
 
   /**
    * Inside the shell only a till reaches this: a handheld's order tab is `embedded` and emits no
-   * `back-to-floor`. Neither `openTab` nor a round updates `.tables`, so a bare pop would show the
-   * just-opened table as free.
+   * `back-to-floor`.
    */
   #onBackToFloor(): void {
     this.#orderVisit++;

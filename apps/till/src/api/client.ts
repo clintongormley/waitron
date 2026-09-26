@@ -1681,7 +1681,8 @@ export class TillApi {
   /**
    * Relocate this tab's party to a FREE table → `POST /api/tabs/:tabId/move`. No line moves;
    * PRE-FISCAL. Rejects `table.occupied`, `table.inactive`, `table.not_found`, `tab.not_open`, and
-   * on a party's tab `visit.not_open` or `visit.out_of_date`.
+   * on a party's tab `visit.not_open`, `visit.out_of_date`, or `management.request_invalid` for a
+   * missing revision.
    */
   async moveTab(orderId: string, toTableId: string, revisions: VisitRevisions = {}): Promise<void> {
     await this.#request<void>(`/api/tabs/${orderId}/move`, "POST", { toTableId, ...revisions });
@@ -1699,7 +1700,8 @@ export class TillApi {
    * Combine ANOTHER open tab onto this one → `POST /api/tabs/:tabId/merge`, where the path names the
    * DESTINATION tab and `fromTabId` the source, whose lines move here before it is abandoned.
    * `freeSourceTable` frees the vacated table (`true`) or re-points it at this tab (`false`).
-   * PRE-FISCAL. Rejects `tab.not_open` or `tab.merge_self`.
+   * PRE-FISCAL. Rejects `tab.not_open` or `tab.merge_self`, and on a party's tab `visit.not_open`,
+   * `visit.out_of_date`, or `management.request_invalid` for a missing revision.
    */
   async mergeTabs(
     orderId: string,
@@ -1718,7 +1720,8 @@ export class TillApi {
    * Move SELECTED items OUT of this tab into another open tab → `POST /api/tabs/:tabId/transfer`, where
    * the path names the SOURCE tab (see {@link TabTransfer}). PRE-FISCAL. Rejects `tab.not_open`,
    * `tab.transfer_self`, `tab.line_not_found`, `tab.transfer_quantity_invalid` or
-   * `tab.transfer_duplicate_line`.
+   * `tab.transfer_duplicate_line`, and on a party's tab `visit.not_open`, `visit.out_of_date`, or
+   * `management.request_invalid` for a missing revision.
    */
   async transferLines(
     orderId: string,

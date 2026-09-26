@@ -88,11 +88,7 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "hash-chained order amendments in flight; copied to a standby, never drained back",
   ),
   classify("print_jobs", "state", STATE),
-  classify(
-    "visits",
-    "state",
-    "a seated party in flight and the tables it holds; copied to a standby, never drained back",
-  ),
+  classify("visits", "state", "a seated party in flight; copied to a standby, never drained back"),
   classify(
     "visit_tables",
     "state",

@@ -226,7 +226,7 @@ export async function seatBooking(
       throw new AppError("table.not_found", { tableId: req.tableId });
     }
   }
-  // A throw after `seatTable` relies on the caller's transaction to roll back the tab it opened.
+  // A throw after `seatTable` relies on the caller's transaction to roll back what it opened.
   const { tabId } = await core.seatTable(tx, {
     tableId,
     guestCount: booking.partySize,

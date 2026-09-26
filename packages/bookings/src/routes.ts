@@ -174,7 +174,7 @@ export const BOOKINGS_ROUTES: ModuleRoutes = {
       }),
     );
 
-    // ── Seat (open a tab and link it) ────────────────────────────────────────────────────────────────
+    // ── Seat (seat a party) ──────────────────────────────────────────────────────────────────────────
     app.post("/management-api/bookings/:id/seat", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);

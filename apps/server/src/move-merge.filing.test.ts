@@ -261,7 +261,7 @@ describe("joinTable → one bill", () => {
     await withTransaction(suite.db, async (tx) => {
       await joinTable(tx, cfg, tabId, t2);
     });
-    expect(await tabIdOf(t2)).toBe(tabId); // the join linked t2 to the one tab (durable: settle clears status_id, not tab_id)
+    expect(await tabIdOf(t2)).toBe(tabId); // the join linked t2 to the one tab
 
     // Pay the one tab (a retrieved open order files from its stored locked lines).
     await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {

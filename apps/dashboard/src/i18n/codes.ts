@@ -411,8 +411,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esa mesa ya no existe",
   },
   "tab.already_open": {
-    en: "That table already has an open tab",
-    es: "Esa mesa ya tiene una cuenta abierta",
+    en: "Another party is already seated at this table. Check the floor and try again",
+    es: "Ya hay clientes sentados en esta mesa. Revisa la sala e inténtalo de nuevo",
   },
   "placement.invalid": {
     en: "That table position isn't valid",

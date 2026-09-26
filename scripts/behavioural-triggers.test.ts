@@ -27,8 +27,8 @@ import {
 } from "../packages/db/src/trigger-refusals.js";
 
 /**
- * The nine BEHAVIOURAL rules of `packages/db/drizzle/0001_behavioural_triggers.sql` still refuse —
- * or still act — against a database the PRODUCT migrated: a settlement's tender coverage, a tender
+ * The BEHAVIOURAL rules of `packages/db/drizzle/0001_behavioural_triggers.sql` still refuse
+ * against a database the PRODUCT migrated: a settlement's tender coverage, a tender
  * after settlement, a working order's status transitions, lines written against an order that is
  * not open, a line's description maps matching the venue's invoice locales, a device profile's form
  * factor while an active device uses it, and a device's station-or-register binding against its
@@ -90,11 +90,12 @@ const IMAGE_REFERENCE_TRIGGERS = [
 ];
 
 /**
- * Every behavioural trigger the migrations create, pinned by name: fourteen for the nine rules of
+ * Every behavioural trigger the migrations create, pinned by name: those of
  * `0001_behavioural_triggers.sql` (SQLite has no `BEFORE INSERT OR UPDATE`, so a rule covering more
- * than one event is split and the suffix names the event), plus the three `products_*` names of
- * `0004_variant_one_level.sql`. Those live on `products`, so a later migration that RECREATES that
- * table drops them silently — this list is what notices.
+ * than one event is split and the suffix names the event), the `products_*` names of
+ * `0004_variant_one_level.sql`, and `visits_clear_table_status` of
+ * `0020_visit_clears_table_status.sql`. The `products_*` ones live on `products`, so a later
+ * migration that RECREATES that table drops them silently — this list is what notices.
  */
 const EXPECTED_TRIGGERS = [
   "device_binding_rule_insert",
@@ -111,9 +112,9 @@ const EXPECTED_TRIGGERS = [
   "working_order_lines_check_variant_locales_update",
   "working_order_lines_require_open_parent_delete",
   "working_order_lines_require_open_parent_insert",
-  "visits_clear_table_status",
   "working_order_lines_require_open_parent_update",
   "working_orders_enforce_transition",
+  "visits_clear_table_status",
 ];
 
 const scratch = [];

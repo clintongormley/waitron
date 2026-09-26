@@ -873,10 +873,11 @@ export async function parkOrder(
  * Open the running tab on a table. The link is the table's `tab_id` back-pointer; the order carries
  * no tab column.
  *
- * One open tab per table needs no lock and no unique index: the check-then-set below cannot
- * interleave with a second `openTab`, because `withTransaction` IS the venue file's write lock. A
- * STALE `tab_id`, pointing at a settled or abandoned order, reads as free and is overwritten, so the
- * pay path needs no settle-time write.
+ * Refused while the table's `tab_id` points at an open order, and while a party still holds the
+ * table (an active `visit_tables` row, `left_at` null) whatever its `tab_id` points at. The
+ * check-then-set below cannot interleave with a second `openTab`, because `withTransaction` IS the
+ * venue file's write lock. A `tab_id` pointing at a settled or abandoned order on a table no party
+ * holds is overwritten.
  */
 export async function openTab(
   tx: Transaction,
@@ -2188,8 +2189,8 @@ export async function readOrderRevision(tx: Transaction, orderId: string): Promi
 }
 
 /**
- * Assert a move/join TARGET table exists, is `active`, and is FREE: its `tab_id` is null or a stale
- * pointer at a settled or abandoned order.
+ * Assert a move/join TARGET table exists, is `active`, and is FREE: its `tab_id` is null or points
+ * at a settled or abandoned order, and no party holds it (an active `visit_tables` row).
  */
 async function assertTableAvailable(
   tx: Transaction,
