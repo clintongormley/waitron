@@ -20,7 +20,6 @@ const model: VenueServiceView = {
   stations: [],
   floorZones: [],
   products: [],
-  offers: [],
 };
 
 beforeEach(() => setLocale("en"));
@@ -92,34 +91,36 @@ async function traverse(
 
 describe("venue operations URL navigation", () => {
   it("restores the requested tab when mounted and remounted without adding history", async () => {
-    navigate("/manage/venue-operations/view/menus");
+    navigate("/manage/venue-operations/view/zones");
     const before = location.href;
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
     const screen = await mount();
-    expectSelected(screen, "menus");
+    expectSelected(screen, "zones");
     screen.remove();
-    expectSelected(await mount(), "menus");
+    expectSelected(await mount(), "zones");
     expect(location.href).toBe(before);
     expect(push).not.toHaveBeenCalled();
     expect(replace).not.toHaveBeenCalled();
   });
 
-  it.each(["/manage/venue-operations", "/manage/venue-operations/view/missing"])(
-    "replaces %s with the Status tab and preserves query parameters",
-    async (path) => {
-      navigate(path);
-      const query = location.search;
-      const push = vi.spyOn(history, "pushState");
-      const replace = vi.spyOn(history, "replaceState");
-      const screen = await mount();
-      expectSelected(screen, "status");
-      expect(location.pathname).toBe("/manage/venue-operations/view/status");
-      expect(location.search).toBe(query);
-      expect(replace).toHaveBeenCalledTimes(1);
-      expect(push).not.toHaveBeenCalled();
-    },
-  );
+  // The last is a saved link to the Menus tab this screen no longer has.
+  it.each([
+    "/manage/venue-operations",
+    "/manage/venue-operations/view/missing",
+    "/manage/venue-operations/view/menus",
+  ])("replaces %s with the Status tab and preserves query parameters", async (path) => {
+    navigate(path);
+    const query = location.search;
+    const push = vi.spyOn(history, "pushState");
+    const replace = vi.spyOn(history, "replaceState");
+    const screen = await mount();
+    expectSelected(screen, "status");
+    expect(location.pathname).toBe("/manage/venue-operations/view/status");
+    expect(location.search).toBe(query);
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect(push).not.toHaveBeenCalled();
+  });
 
   it("pushes each selected tab once and restores real Back and Forward navigation", async () => {
     navigate("/manage/venue-operations/view/status");
@@ -127,19 +128,19 @@ describe("venue operations URL navigation", () => {
     const screen = await mount();
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
-    await select(screen, "menus");
-    expectSelected(screen, "menus");
-    expect(location.pathname).toBe("/manage/venue-operations/view/menus");
+    await select(screen, "zones");
+    expectSelected(screen, "zones");
+    expect(location.pathname).toBe("/manage/venue-operations/view/zones");
     expect(push).toHaveBeenCalledTimes(1);
-    await select(screen, "menus");
+    await select(screen, "zones");
     expect(push).toHaveBeenCalledTimes(1);
     await select(screen, "departments");
     expectSelected(screen, "departments");
     expect(location.pathname).toBe("/manage/venue-operations/view/departments");
     expect(push).toHaveBeenCalledTimes(2);
     await traverse("back", screen);
-    expectSelected(screen, "menus");
-    expect(location.pathname).toBe("/manage/venue-operations/view/menus");
+    expectSelected(screen, "zones");
+    expect(location.pathname).toBe("/manage/venue-operations/view/zones");
     await traverse("forward", screen);
     expectSelected(screen, "departments");
     expect(location.pathname).toBe("/manage/venue-operations/view/departments");

@@ -18,10 +18,7 @@ import type {
   Department,
   FloorZone,
   HoursInterval,
-  MenuOffer,
-  NamedRow,
   PreparationRoute,
-  Product,
   ServiceMode,
   VenueReadinessIssue,
   VenueServiceApi,
@@ -31,21 +28,16 @@ import { t } from "./strings.js";
 
 const MODES: ServiceMode[] = ["table_tab", "prepay", "invoice_first", "ticket_then_pay"];
 const DAYS = [0, 1, 2, 3, 4, 5, 6] as const;
-const PRICE = /^\d+(?:\.\d{1,2})?$/;
-const VIEWS = ["status", "departments", "menus", "zones", "routing"] as const;
+const VIEWS = ["status", "departments", "zones", "routing"] as const;
 type View = (typeof VIEWS)[number];
 type Editor =
   | { kind: "department"; row?: Department }
-  | { kind: "menu"; row?: NamedRow }
-  | { kind: "offer"; menuId: string; row?: MenuOffer }
   | { kind: "hours"; row?: HoursInterval; index?: number }
   | { kind: "zone"; row: FloorZone }
   | { kind: "assignment"; zoneId: string; menuId?: string }
   | { kind: "route"; row?: PreparationRoute }
-  | { kind: "delete"; name: string; detail?: string; action: () => Promise<unknown> };
+  | { kind: "delete"; name: string; action: () => Promise<unknown> };
 type Action = { key: string; label: string; run: () => void; disabled?: boolean };
-
-const inSomeSection = (row: MenuOffer): boolean => row.placements.some((path) => path.length > 0);
 
 @customElement("dashboard-venue-operations-screen")
 export class VenueOperationsScreen extends LitElement {
@@ -101,56 +93,6 @@ export class VenueOperationsScreen extends LitElement {
         margin: 0;
         font-weight: normal;
       }
-      /* The offers table's price cell is markup handed to <wt-data-table>, so its nodes live in
-         that element's shadow root: only ::part() reaches them. */
-      wt-data-table::part(price-inherited) {
-        color: var(--wt-color-text-muted);
-      }
-      wt-data-table::part(visually-hidden) {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border: 0;
-      }
-      fieldset {
-        display: grid;
-        gap: var(--wt-space-3);
-        margin: 0;
-        padding: var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-      }
-      legend {
-        padding-inline: var(--wt-space-1);
-        font-weight: var(--wt-font-weight-bold);
-      }
-      .hint {
-        margin: 0;
-        color: var(--wt-color-text-muted);
-      }
-      .variant {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: end;
-        gap: var(--wt-space-2) var(--wt-space-4);
-      }
-      .variant > label:first-child {
-        flex: 1 1 calc(var(--wt-tap-min) * 4);
-      }
-      label.check {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-        font-weight: normal;
-      }
-      input::placeholder {
-        color: var(--wt-color-text-muted);
-      }
       wt-form-actions {
         width: 100%;
       }
@@ -171,11 +113,7 @@ export class VenueOperationsScreen extends LitElement {
   @state() private busy = false;
   @state() private view: View = "status";
   @state() private editor?: Editor;
-  @state() private menuId = "";
   @state() private zoneId = "";
-  @state() private offerProductId = "";
-  /** The offer's price as typed so far, while an offer editor is open; undefined until it is edited. */
-  @state() private offerPrice?: string;
   #opener?: HTMLElement;
 
   constructor() {
@@ -228,28 +166,8 @@ export class VenueOperationsScreen extends LitElement {
         ?.value ?? ""
     );
   }
-  // Cell markup handed to <wt-data-table> is styled with part=, never a class: see static styles.
-  /** An offer is always a top-level product, which owns its price (`addProductToMenu` refuses a
-   * variant), so that product's `unitPrice` is the price a blank menu price falls back to. */
-  #offerPrice(row: MenuOffer, products: readonly Product[]) {
-    if (row.grossPrice === null) {
-      return html`<span part="price-inherited"
-        >${row.unitPrice}<span part="visually-hidden"> ${t("venue.price_inherited")}</span></span
-      >`;
-    }
-    const own = products.find((product) => product.id === row.productId)?.unitPrice;
-    if (own === undefined || Number(own) === Number(row.grossPrice)) return row.unitPrice;
-    return html`<span part="visually-hidden">${t("venue.price_was")} </span
-      ><s>${own}</s> ${row.unitPrice}`;
-  }
   #open(editor: Editor): void {
     this.editor = editor;
-    // The operator has picked nothing yet; which product an offer form is about is derived where the
-    // form is built, from the products that menu can still be given.
-    if (editor.kind === "offer") {
-      this.offerProductId = "";
-      this.offerPrice = undefined;
-    }
     this.fieldErrors = {};
     this.error = undefined;
   }
@@ -289,11 +207,10 @@ export class VenueOperationsScreen extends LitElement {
       this.busy = false;
     }
   }
-  /** `value` overrides the field's own DOM value, for a control whose answer the screen holds itself. */
-  #validate(fields: readonly { name: string; label: string; value?: string }[]): boolean {
+  #validate(fields: readonly { name: string; label: string }[]): boolean {
     this.fieldErrors = Object.fromEntries(
       fields
-        .filter((field) => (field.value ?? this.#value(field.name)).trim() === "")
+        .filter((field) => this.#value(field.name).trim() === "")
         .map((field) => [field.name, `${field.label}: ${t("venue.field_required")}`]),
     );
     this.error = undefined;
@@ -306,40 +223,18 @@ export class VenueOperationsScreen extends LitElement {
         </p>`
       : nothing;
   }
-  #input(
-    name: string,
-    label: string,
-    value = "",
-    type = "text",
-    required = true,
-    extra: { placeholder?: string; hint?: string; onInput?: (value: string) => void } = {},
-  ) {
-    const { onInput, hint } = extra;
-    const describedBy = [
-      ...(this.fieldErrors[name] ? [`error-${name}`] : []),
-      ...(hint === undefined ? [] : [`hint-${name}`]),
-    ].join(" ");
+  #input(name: string, label: string, value = "", type = "text") {
     return html`<label
-        ><span>${label}${required ? html` <span class="required">*</span>` : nothing}</span
-        ><input
-          name=${name}
-          type=${type}
-          .value=${value}
-          placeholder=${extra.placeholder ?? nothing}
-          ?required=${required}
-          aria-invalid=${!!this.fieldErrors[name]}
-          aria-describedby=${describedBy || nothing}
-          @input=${
-            onInput === undefined
-              ? nothing
-              : (event: Event) => onInput((event.currentTarget as HTMLInputElement).value)
-          }
-        />${this.#fieldError(name)}</label
-      >${
-        hint === undefined
-          ? nothing
-          : html`<p id=${`hint-${name}`} class="hint" data-hint=${name}>${hint}</p>`
-      }`;
+      ><span>${label} <span class="required">*</span></span
+      ><input
+        name=${name}
+        type=${type}
+        .value=${value}
+        required
+        aria-invalid=${!!this.fieldErrors[name]}
+        aria-describedby=${this.fieldErrors[name] ? `error-${name}` : nothing}
+      />${this.#fieldError(name)}</label
+    >`;
   }
   #select(
     name: string,
@@ -348,7 +243,6 @@ export class VenueOperationsScreen extends LitElement {
     value?: string,
     required = true,
     disabled = false,
-    onChange?: (value: string) => void,
   ) {
     return html`<label
       ><span>${label}${required ? html` <span class="required">*</span>` : nothing}</span
@@ -358,11 +252,6 @@ export class VenueOperationsScreen extends LitElement {
         ?disabled=${disabled}
         aria-invalid=${!!this.fieldErrors[name]}
         aria-describedby=${this.fieldErrors[name] ? `error-${name}` : nothing}
-        @change=${
-          onChange === undefined
-            ? nothing
-            : (event: Event) => onChange((event.currentTarget as HTMLSelectElement).value)
-        }
       >
         ${choices.map((choice) => html`<option value=${choice.id} ?selected=${choice.id === value}>${choice.name}</option>`)}</select
       >${this.#fieldError(name)}</label
@@ -374,8 +263,8 @@ export class VenueOperationsScreen extends LitElement {
       ...MODES.map((id) => ({ id, name: t(`venue.${id}`) })),
     ];
   }
-  /** Resolve a content-translated name — a category's. A product's, a variant's
-   * and an offer's name are plain staff strings and are rendered directly, never through here. */
+  /** Resolve a content-translated name — a category's. A product's name is a plain staff string
+   * and is rendered directly, never through here. */
   #name(names: Record<string, string>): string {
     return resolveEnabledContentText(names, currentLocale(), currentContentLanguages());
   }
@@ -423,8 +312,8 @@ export class VenueOperationsScreen extends LitElement {
       ${this.#actions(label, actions)}
     </div>`;
   }
-  #confirm(name: string, action: () => Promise<unknown>, detail?: string): void {
-    this.#open({ kind: "delete", name, action, ...(detail === undefined ? {} : { detail }) });
+  #confirm(name: string, action: () => Promise<unknown>): void {
+    this.#open({ kind: "delete", name, action });
   }
   #readinessMessage(issue: VenueReadinessIssue): string {
     switch (issue.code) {
@@ -554,133 +443,6 @@ export class VenueOperationsScreen extends LitElement {
         (row) => String(model.hours.indexOf(row)),
       )}
     </section>`;
-  }
-  #menus() {
-    const model = this.model!;
-    const menu = model.menus.find((row) => row.id === this.menuId) ?? model.menus[0];
-    return html`<section>
-      ${this.#toolbar(t("venue.menus"), [{ key: "new-menu", label: t("venue.add_menu"), run: () => this.#open({ kind: "menu" }) }])}
-      ${this.#table(
-        "menus",
-        t("venue.menus"),
-        model.menus,
-        [
-          {
-            key: "name",
-            label: t("venue.menu_name"),
-            cell: (row) => row.name,
-            sortValue: (row) => row.name,
-          },
-          {
-            key: "state",
-            label: t("venue.status"),
-            cell: (row) => t(row.active ? "venue.active" : "venue.inactive"),
-          },
-          {
-            key: "actions",
-            label: t("venue.actions"),
-            cell: (row) =>
-              this.#actions(row.name, [
-                {
-                  key: `edit-menu-${row.id}`,
-                  label: t("venue.edit"),
-                  run: () => this.#open({ kind: "menu", row }),
-                },
-                {
-                  key: `products-${row.id}`,
-                  label: t("venue.products"),
-                  run: () => {
-                    this.menuId = row.id;
-                  },
-                },
-                {
-                  key: `new-offer-${row.id}`,
-                  label: t("venue.add_offer"),
-                  run: () => this.#open({ kind: "offer", menuId: row.id }),
-                },
-              ]),
-          },
-        ],
-        (row) => row.id,
-      )}
-      ${
-        menu
-          ? html` ${this.#toolbar(`${menu.name}: ${t("venue.products")}`, [{ key: "new-offer", label: t("venue.add_offer"), run: () => this.#open({ kind: "offer", menuId: menu.id }) }])}
-            ${this.#table(
-              `menu-offers-${menu.id}`,
-              menu.name,
-              model.offers.filter((row) => row.menuId === menu.id),
-              [
-                {
-                  key: "product",
-                  label: t("venue.product"),
-                  cell: (row) => row.name,
-                  sortValue: (row) => row.name,
-                },
-                {
-                  key: "price",
-                  label: t("venue.price"),
-                  align: "end",
-                  cell: (row) => this.#offerPrice(row, model.products),
-                  sortValue: (row) => Number(row.unitPrice),
-                },
-                {
-                  key: "placement",
-                  label: t("venue.placement"),
-                  cell: (row) => this.#placement(row),
-                },
-                {
-                  key: "switch",
-                  label: t("venue.status"),
-                  cell: (row) => t(row.active ? "venue.offer_on" : "venue.offer_off"),
-                },
-                {
-                  key: "actions",
-                  label: t("venue.actions"),
-                  cell: (row) => this.#actions(row.name, this.#offerActions(menu.id, row)),
-                },
-              ],
-              (row) => row.id,
-            )}`
-          : nothing
-      }
-    </section>`;
-  }
-  #placement(row: MenuOffer): string {
-    if (row.topLevelMember === null) return t("venue.placement_section");
-    return t(inSomeSection(row) ? "venue.placement_both" : "venue.placement_top");
-  }
-  /** A product the menu's top level holds is taken off it; one the menu reaches only through a
-   * section cannot be, so it keeps the menu's own switch instead. */
-  #offerActions(menuId: string, row: MenuOffer): Action[] {
-    const member = row.topLevelMember;
-    const actions: Action[] = [
-      {
-        key: `edit-offer-${row.id}`,
-        label: t("venue.edit"),
-        run: () => this.#open({ kind: "offer", menuId, row }),
-      },
-    ];
-    if (member !== null)
-      actions.push({
-        key: `remove-offer-${row.id}`,
-        label: t("venue.remove_offer"),
-        run: () =>
-          this.#confirm(
-            row.name,
-            () => this.api.removeMenuMember(member.sectionId, member.memberId),
-            t(inSomeSection(row) ? "venue.remove_offer_stays" : "venue.remove_offer_resets"),
-          ),
-      });
-    if (member === null || !row.active)
-      actions.push({
-        key: `switch-offer-${row.id}`,
-        label: t(row.active ? "venue.switch_offer_off" : "venue.switch_offer_on"),
-        run: () => {
-          void this.#save(() => this.api.updateMenuItem(menuId, row.id, { active: !row.active }));
-        },
-      });
-    return actions;
   }
   #zones() {
     const model = this.model!;
@@ -896,159 +658,6 @@ export class VenueOperationsScreen extends LitElement {
             );
           },
         };
-      case "menu":
-        return {
-          heading: t(editor.row ? "venue.edit_menu" : "venue.add_menu"),
-          body: html`${this.#input("menu-name", t("venue.menu_name"), editor.row?.name)}`,
-          save: () => {
-            if (!this.#validate([{ name: "menu-name", label: t("venue.menu_name") }])) return;
-            const name = this.#value("menu-name").trim();
-            void this.#save(() =>
-              editor.row ? this.api.updateMenu(editor.row.id, name) : this.api.createMenu(name),
-            );
-          },
-        };
-      case "offer": {
-        const { menuId, row } = editor;
-        const products = model.products.filter(
-          (product) =>
-            product.active &&
-            !model.offers.some(
-              (offer) => offer.menuId === menuId && offer.productId === product.id,
-            ),
-        );
-        const priceName = `offer-price-${row?.id ?? menuId}`;
-        // The one answer to which product this form is about: an existing offer's own product,
-        // otherwise the operator's pick, falling back to the first product the dropdown can show —
-        // the option a browser selects when the form marks none. The offer that gets saved and the
-        // variants whose overrides it lists and saves both read it, so they are never two products.
-        const product = row
-          ? model.products.find((candidate) => candidate.id === row.productId)
-          : (products.find((candidate) => candidate.id === this.offerProductId) ?? products[0]);
-        const productId = product?.id ?? "";
-        const overridesById = new Map(
-          (row?.variants ?? []).map((variant) => [variant.id, variant]),
-        );
-        // The price a variant is charged here when this menu sets none: its own, else the offer's
-        // price on this menu as typed, else the product's own (spec §15.3).
-        const typedPrice = (this.offerPrice ?? row?.grossPrice ?? "").trim();
-        const parentPrice = PRICE.test(typedPrice) ? typedPrice : (product?.unitPrice ?? "");
-        const offerVariants = (product?.variants ?? [])
-          .filter((variant) => variant.active)
-          .map((variant) => ({
-            id: variant.id,
-            name: variant.name,
-            menuPrice: overridesById.get(variant.id)?.menuPrice ?? null,
-            offered: overridesById.get(variant.id)?.offered ?? true,
-            applicablePrice: variant.unitPrice ?? parentPrice,
-          }));
-        return {
-          heading: `${model.menus.find((menu) => menu.id === menuId)?.name}: ${t(row ? "venue.edit_offer" : "venue.add_offer")}`,
-          body: html`${
-            row
-              ? html`<p>${row.name}</p>`
-              : html`${this.#select(
-                  `offer-product-${menuId}`,
-                  t("venue.product"),
-                  products.map((candidate) => ({
-                    id: candidate.id,
-                    name: candidate.name,
-                  })),
-                  productId,
-                  true,
-                  false,
-                  (value) => {
-                    this.offerProductId = value;
-                  },
-                )}`
-          }${this.#input(priceName, t("venue.price"), row?.grossPrice ?? "", "text", false, {
-            placeholder: product?.unitPrice ?? "",
-            hint: t("venue.offer_price_hint"),
-            onInput: (value) => {
-              this.offerPrice = value;
-            },
-          })}${
-            offerVariants.length === 0
-              ? nothing
-              : html`<fieldset class="variants">
-                  <legend>${t("venue.variants")}</legend>
-                  <p class="hint">${t("venue.variant_price_hint")}</p>
-                  ${offerVariants.map(
-                    (variant) =>
-                      html`<div class="variant" role="group" aria-label=${variant.name}>
-                        ${this.#input(
-                          `offer-variant-price-${variant.id}`,
-                          `${variant.name} · ${t("venue.price")}`,
-                          variant.menuPrice ?? "",
-                          "text",
-                          false,
-                          { placeholder: variant.applicablePrice },
-                        )}
-                        <label class="check">
-                          <input
-                            name=${`offer-variant-offered-${variant.id}`}
-                            type="checkbox"
-                            .checked=${variant.offered}
-                          />
-                          <span>${t("venue.offered")}</span>
-                        </label>
-                      </div>`,
-                  )}
-                </fieldset>`
-          }`,
-          save: () => {
-            if (
-              !this.#validate([
-                ...(row
-                  ? []
-                  : [
-                      {
-                        name: `offer-product-${menuId}`,
-                        label: t("venue.product"),
-                        value: productId,
-                      },
-                    ]),
-              ])
-            )
-              return;
-            const typed = this.#value(priceName).trim();
-            // Blank is a price: the product's own.
-            const grossPrice = typed === "" ? null : typed;
-            if (grossPrice !== null && !PRICE.test(grossPrice)) {
-              this.fieldErrors = { [priceName]: t("venue.price_invalid") };
-              return;
-            }
-            const variants = offerVariants.map((variant) => {
-              const price = this.#value(`offer-variant-price-${variant.id}`).trim();
-              return {
-                variantId: variant.id,
-                price: price === "" ? null : price,
-                offered:
-                  this.renderRoot.querySelector<HTMLInputElement>(
-                    `[name="offer-variant-offered-${variant.id}"]`,
-                  )?.checked ?? true,
-              };
-            });
-            const badVariant = variants.find(
-              (variant) => variant.price !== null && !PRICE.test(variant.price),
-            );
-            if (badVariant) {
-              this.fieldErrors = {
-                [`offer-variant-price-${badVariant.variantId}`]: t("venue.price_invalid"),
-              };
-              return;
-            }
-            void this.#save(async () => {
-              if (row) {
-                await this.api.updateMenuItem(menuId, row.id, { grossPrice });
-                return this.api.setMenuVariants(menuId, row.id, variants);
-              }
-              const created = await this.api.addProductToMenu(menuId, { productId, grossPrice });
-              await this.api.setMenuVariants(menuId, created.id, variants);
-            });
-          },
-        };
-      }
       case "hours":
         return {
           heading: t(editor.row ? "venue.edit_hours" : "venue.add_hours"),
@@ -1179,8 +788,7 @@ export class VenueOperationsScreen extends LitElement {
       case "delete":
         return {
           heading: t("venue.confirm_remove"),
-          body: html`<p>${editor.name}</p>
-            ${editor.detail === undefined ? nothing : html`<p class="hint">${editor.detail}</p>`}`,
+          body: html`<p>${editor.name}</p>`,
           save: () => {
             void this.#save(editor.action);
           },
@@ -1245,7 +853,6 @@ export class VenueOperationsScreen extends LitElement {
                 .items=${[
                   { key: "status", label: t("venue.status") },
                   { key: "departments", label: t("venue.departments") },
-                  { key: "menus", label: t("venue.menus") },
                   { key: "zones", label: t("venue.zones") },
                   { key: "routing", label: t("venue.routing") },
                 ]}
@@ -1253,7 +860,6 @@ export class VenueOperationsScreen extends LitElement {
               >
                 <div slot="status">${this.#readiness()}</div>
                 <div slot="departments">${this.#departments()}</div>
-                <div slot="menus">${this.#menus()}</div>
                 <div slot="zones">${this.#zones()}</div>
                 <div slot="routing">${this.#routing()}</div> </wt-tabs
               >${this.#modal()}`

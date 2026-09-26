@@ -1265,9 +1265,9 @@ replacement history for defaults and invalid destinations, and push history for 
 Keep passwords, PINs, pairing codes and unsaved form contents out of the URL.
 
 Module management tabs use `/manage/<section>/view/<key>`; Venue operations uses `status`,
-`departments`, `menus`, `zones` and `routing`, and Categories uses `categories` and `labels`. The dashboard preserves module-owned `view` segments
-while the module validates its keys. The Menus screen (`/manage/menus`, not Venue operations' `menus`
-view) puts the menu's id before the tab:
+`departments`, `zones` and `routing`, and Categories uses `categories` and `labels`. The dashboard preserves module-owned `view` segments
+while the module validates its keys. The Menus screen (`/manage/menus`) puts the menu's id before
+the tab:
 `/manage/menus/menu/<id>/view/structure` (`dashboardPath`, `apps/dashboard/src/navigation.ts`).
 
 Use `/manage/<section>` for dashboard destinations and `/tabs/<key>` for till tabs. Nested views,

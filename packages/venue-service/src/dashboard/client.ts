@@ -75,7 +75,6 @@ export interface VenueServiceChoices {
   stations: (NamedRow & { isDefault?: boolean })[];
   floorZones: FloorZone[];
   products: Product[];
-  offers: MenuOffer[];
 }
 /** The subset of `@waitron/catalogue`'s `Product` these screens read. `name` is the plain staff name
  * every dashboard surface shows; `customerName` is the language map only a diner ever sees. */
@@ -83,55 +82,6 @@ export interface Product {
   id: string;
   name: string;
   customerName: Record<string, string> | null;
-  pricingUnit: "each" | "weight";
-  unitPrice: string;
-  active: boolean;
-  variants?: ProductVariant[];
-}
-/** `unitPrice` is the variant's OWN price, null where it takes its parent's. */
-export interface ProductVariant {
-  id: string;
-  name: string;
-  customerName: Record<string, string> | null;
-  unitPrice: string | null;
-  available: boolean;
-  active: boolean;
-}
-/** One variant as a menu offers it: `menuPrice` is this menu's override, null where it sets none. */
-export interface MenuOfferVariant {
-  id: string;
-  name: string;
-  customerName: Record<string, string> | null;
-  unitPrice: string;
-  menuPrice: string | null;
-  offered: boolean;
-  available: boolean;
-}
-/** A menu's override for one variant. An entry that overrides nothing clears the stored one. */
-export interface MenuVariantOverride {
-  variantId: string;
-  price: string | null;
-  offered: boolean;
-}
-export interface MenuOffer {
-  id: string;
-  menuId: string;
-  productId: string;
-  name: string;
-  customerName: Record<string, string> | null;
-  /** The price this menu sets, or null when the product's own price applies. */
-  grossPrice: string | null;
-  /** The price the offer is charged at: `grossPrice`, else the product's own. */
-  unitPrice: string;
-  /** This menu's own switch for the product; a switched-off product is not sold on the menu. */
-  active: boolean;
-  /** Each path of section ids from the menu's top level to a list holding the product; `[]` is
-   * the top level itself. */
-  placements: string[][];
-  /** The product's membership of the menu's top level, when it has one: what taking it off the
-   * top level removes. */
-  topLevelMember: { sectionId: string; memberId: string } | null;
-  variants?: MenuOfferVariant[];
 }
 export type VenueServiceView = VenueServiceModel & VenueServiceChoices;
 
@@ -158,22 +108,12 @@ export class VenueServiceApi {
       this.#read<VenueServiceChoices["stations"]>("/management-api/stations"),
       this.#read<FloorZone[]>("/management-api/zones"),
     ]);
-    const [productLists, offerLists] = await Promise.all([
-      Promise.all(
-        menus.map((menu) =>
-          this.#read<Product[]>(`/management-api/catalogues/${menu.id}/products`),
-        ),
-      ),
-      Promise.all(
-        menus.map((menu) =>
-          this.#read<MenuOffer[]>(`/management-api/catalogues/${menu.id}/offers`),
-        ),
-      ),
-    ]);
+    const productLists = await Promise.all(
+      menus.map((menu) => this.#read<Product[]>(`/management-api/catalogues/${menu.id}/products`)),
+    );
     const products = [
       ...new Map(productLists.flat().map((product) => [product.id, product])).values(),
     ];
-    const offers = offerLists.flat();
     return {
       ...model,
       menus,
@@ -181,7 +121,6 @@ export class VenueServiceApi {
       stations,
       floorZones,
       products,
-      offers,
     };
   }
 
@@ -210,50 +149,6 @@ export class VenueServiceApi {
 
   deactivateDepartment(departmentId: string): Promise<void> {
     return this.request(`/management-api/venue-service/departments/${departmentId}`, "DELETE");
-  }
-
-  createMenu(name: string): Promise<NamedRow> {
-    return this.request("/management-api/catalogues", "POST", { name });
-  }
-
-  updateMenu(menuId: string, name: string): Promise<void> {
-    return this.request(`/management-api/catalogues/${menuId}`, "PATCH", { name });
-  }
-
-  /** Puts the product on the menu's top level, at `grossPrice` (null: the product's own). */
-  addProductToMenu(
-    menuId: string,
-    input: { productId: string; grossPrice: string | null },
-  ): Promise<{ id: string }> {
-    return this.request(`/management-api/catalogues/${menuId}/items`, "POST", input);
-  }
-
-  /** `active` is the menu's own switch for the product. */
-  updateMenuItem(
-    menuId: string,
-    menuItemId: string,
-    input: { grossPrice?: string | null; active?: boolean },
-  ): Promise<void> {
-    return this.request(`/management-api/catalogues/${menuId}/items/${menuItemId}`, "PATCH", input);
-  }
-
-  setMenuVariants(
-    menuId: string,
-    menuItemId: string,
-    variants: MenuVariantOverride[],
-  ): Promise<MenuVariantOverride[]> {
-    return this.request(
-      `/management-api/catalogues/${menuId}/items/${menuItemId}/variants`,
-      "PUT",
-      {
-        variants,
-      },
-    );
-  }
-
-  /** Takes one member off a list, such as a product off a menu's top level. */
-  removeMenuMember(sectionId: string, memberId: string): Promise<void> {
-    return this.request(`/management-api/sections/${sectionId}/members/${memberId}`, "DELETE");
   }
 
   replaceHours(departmentId: string, hours: Omit<HoursInterval, "departmentId">[]): Promise<void> {

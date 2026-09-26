@@ -15,6 +15,5 @@ export const QUERY_DEPENDENCIES = {
     "sections",
     "section_members",
     "menu_items",
-    "menu_item_variant_overrides",
   ],
 } as const;
