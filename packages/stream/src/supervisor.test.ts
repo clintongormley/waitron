@@ -1372,7 +1372,7 @@ describe("while streaming", () => {
     const refusal = {
       level: "warn",
       event: "stream.pause_check_failed",
-      fields: { errorCode: "backup.stream_request_failed", status: 403 },
+      fields: { errorCode: "backup.stream_request_failed", status: 403, errorName: "AccessDenied" },
     };
 
     h.store.denied = true;
@@ -1690,7 +1690,11 @@ describe("generation housekeeping", () => {
       expect(h.logs).toContainEqual({
         level: "warn",
         event: "stream.prune_failed",
-        fields: { errorCode: "backup.stream_request_failed", status: 403 },
+        fields: {
+          errorCode: "backup.stream_request_failed",
+          status: 403,
+          errorName: "AccessDenied",
+        },
       }),
     );
     expect(h.supervisor.status().state).toBe("streaming");
@@ -2540,7 +2544,7 @@ describe("a refusal the bucket answered is logged with its HTTP status", () => {
       {
         level: "warn",
         event: "stream.pause_check_failed",
-        fields: { errorCode: "backup.stream_request_failed", status },
+        fields: { errorCode: "backup.stream_request_failed", status, errorName: "other" },
       },
     ]);
   });
@@ -2604,7 +2608,7 @@ describe("a refusal the bucket answered is logged with its HTTP status", () => {
       expect(h.logs).toContainEqual({
         level: "warn",
         event: "stream.prune_failed",
-        fields: { errorCode: "backup.stream_request_failed", status: 200 },
+        fields: { errorCode: "backup.stream_request_failed", status: 200, errorName: "other" },
       }),
     );
     expect(h.store.has(fullCopyOf(old))).toBe(true);
@@ -2622,7 +2626,7 @@ describe("a refusal the bucket answered is logged with its HTTP status", () => {
     expect(h.logs).toContainEqual({
       level: "warn",
       event: "stream.open_failed",
-      fields: { errorCode: "backup.stream_request_failed", status: 500 },
+      fields: { errorCode: "backup.stream_request_failed", status: 500, errorName: "other" },
     });
   });
 
@@ -2635,6 +2639,7 @@ describe("a refusal the bucket answered is logged with its HTTP status", () => {
     expect(h.logs.find((line) => line.event === "stream.list_failed")?.fields).toEqual({
       errorCode: "backup.stream_request_failed",
       status: 503,
+      errorName: "other",
     });
   });
 
@@ -2652,7 +2657,7 @@ describe("a refusal the bucket answered is logged with its HTTP status", () => {
     expect(h.logs).toContainEqual({
       level: "warn",
       event: "stream.pointer_write_failed",
-      fields: { errorCode: "backup.stream_request_failed", status: 403 },
+      fields: { errorCode: "backup.stream_request_failed", status: 403, errorName: "other" },
     });
   });
 
@@ -2668,7 +2673,7 @@ describe("a refusal the bucket answered is logged with its HTTP status", () => {
     expect(h.logs).toContainEqual({
       level: "warn",
       event: "stream.freshness_unreadable",
-      fields: { errorCode: "backup.stream_request_failed", status: 500 },
+      fields: { errorCode: "backup.stream_request_failed", status: 500, errorName: "other" },
     });
   });
 
@@ -2681,8 +2686,99 @@ describe("a refusal the bucket answered is logged with its HTTP status", () => {
       expect(h.logs).toContainEqual({
         level: "warn",
         event: "stream.freshness_unreadable",
-        fields: { errorCode: "backup.stream_request_failed", status: 403 },
+        fields: {
+          errorCode: "backup.stream_request_failed",
+          status: 403,
+          errorName: "AccessDenied",
+        },
       }),
     );
   });
+});
+
+describe("a refusal the bucket answered names its error, from a fixed list only", () => {
+  const refusedAs = (
+    operation: BucketOperation,
+    key: string,
+    status: number | null,
+    name: string,
+  ) => new AppError("backup.stream_request_failed", { operation, key, status, name });
+
+  async function pauseCheckRefused(status: number | null, name: string) {
+    const h = await streaming();
+    const list = h.store.list.bind(h.store);
+    let questions = 0;
+    h.store.list = async (prefix) => {
+      if (prefix.endsWith("/0000/") && h.supervisor.status().state === "paused") {
+        questions += 1;
+        if (questions === 1) throw refusedAs("list", prefix, status, name);
+      }
+      return list(prefix);
+    };
+    h.setWal(LIMIT);
+    await h.clock.until(() => h.supervisor.status().state === "streaming" && questions > 1);
+    return h.logs.filter((line) => line.event === "stream.pause_check_failed");
+  }
+
+  it.each(["AccessDenied", "ConditionalRequestConflict", "MissingETag"])(
+    "a name on the list goes on the line: %s",
+    async (name) => {
+      expect(await pauseCheckRefused(403, name)).toEqual([
+        {
+          level: "warn",
+          event: "stream.pause_check_failed",
+          fields: { errorCode: "backup.stream_request_failed", status: 403, errorName: name },
+        },
+      ]);
+    },
+  );
+
+  it.each([
+    "SomeNewError",
+    "<img src=x onerror=alert(1)>",
+    "AKIAIOSFODNN7EXAMPLE wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    "constructor",
+    "accessdenied",
+  ])("a name not on the list shows only the placeholder: %s", async (name) => {
+    expect(await pauseCheckRefused(403, name)).toEqual([
+      {
+        level: "warn",
+        event: "stream.pause_check_failed",
+        fields: { errorCode: "backup.stream_request_failed", status: 403, errorName: "other" },
+      },
+    ]);
+  });
+
+  it("a refusal that got no answer carries no name, even one on the list", async () => {
+    expect(await pauseCheckRefused(null, "AccessDenied")).toEqual([
+      {
+        level: "warn",
+        event: "stream.pause_check_failed",
+        fields: { errorCode: "backup.stream_request_failed" },
+      },
+    ]);
+  });
+
+  it.each(["AccessDenied", "IncompleteDeleteResult"])(
+    "a file refused inside a batch delete the bucket answered 200 names that file's error: %s",
+    async (name) => {
+      const h = await streaming();
+      const old = generationName(1, "node-old", new Date(Date.parse(START) - 9 * DAY));
+      h.store.upload(fullCopyOf(old), new Date(Date.parse(START) - 8 * DAY));
+      h.store.failNext({
+        operation: "delete",
+        key: fullCopyOf(old),
+        error: refusedAs("delete", fullCopyOf(old), 200, name),
+      });
+      h.clock.advance(8 * DAY);
+      await h.clock.next(); // the streaming tick
+      await vi.waitFor(() =>
+        expect(h.logs).toContainEqual({
+          level: "warn",
+          event: "stream.prune_failed",
+          fields: { errorCode: "backup.stream_request_failed", status: 200, errorName: name },
+        }),
+      );
+    },
+  );
 });
