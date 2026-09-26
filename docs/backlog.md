@@ -3313,6 +3313,35 @@ image constraints under *Detail → Box image*.
     `expected <setup-connect-screen …> to be null` (`server.internal`, and
     `mirror.bundle_fetch_failed` at HTTP 502, run alone against the wizard of `17dd4b147`). Not run:
     the wizard against a real server.
+    **Done (2026-09-26, lane A's A56), for (a), box side only:** where the wizard shows the
+    stopped-partway message it now offers "Reset this server" instead of "contact support". The
+    operator types the admin person ID and password the join used; `POST
+    /setup-api/reset-incomplete-adopt` (`apps/server/src/setup-api.ts`) checks them against a proof
+    adopt now saves in `setup-operation.json` when the primary has accepted that login (the person
+    id and a scrypt hash of the password; `/setup-api/status` never returns it), with the dashboard
+    login's delay policy after repeated wrong passwords. It answers `setup.reset_unavailable` unless
+    an adopt is saved past "started" and short of "complete". The route deletes nothing: it stages
+    `reset-request.json` and restarts, and the next start (`runStagedReset`,
+    `apps/server/src/reset-request.ts`, run by `runEntry` after the staged restore) takes the venue
+    lock, re-checks that no `trading.env` exists, that the saved adopt is the one staged and still
+    stopped partway, and that the database holds no tenant and no operational venue, then removes
+    the venue databases (`wipeVenueDatabases`), `pending-adoption.json`, `modules.json` and the
+    record, the request marker last. Any failed check discards the request having deleted nothing.
+    Tests on a real migrated venue folder carrying adopt's own rows; a case in the same file adopts
+    again after the reset (409 before it, 200 after). Unlike `waitron.sh reset`, it does not refuse
+    a box stamped for production: what it guards instead is the venue data (tenant and venue rows),
+    which a half-finished adopt never writes. Left open: (1) **the primary still lists the abandoned
+    standby** in its signed list of machines, as a serving secondary with the contact address it
+    sent; nothing on the primary removes another node (`evictNode` in
+    `packages/membership/src/standings.ts` is reached only through a fenced node retiring itself,
+    `apps/server/src/retire.ts`), so a cleanup needs a new primary API — the owner's call. The
+    installation number the primary reserved for it is burned by design
+    (`reserveInstallationNumber`, `packages/fiscal-verifactu/src/registro-sif.ts`: "a
+    never-promoted standby simply burns it — gaps are permitted"). (2) An adopt saved before this
+    change carries no proof, so the reset refuses it (`password.invalid`). (3) The proof shows the
+    login the primary accepted at join time, not that the admin is still active there, and the
+    one-time code is not asked again. (4) A join that failed after writing `trading.env` boots the
+    trading branch, where no setup route is mounted, so this reset cannot reach it.
     Also open from A42's review, read and not run: if `operation.complete()` throws after `execute`
     has scheduled the restart, the lock is now released while that restart is pending (before A42
     that throw was outside the release and the lock stayed set).
