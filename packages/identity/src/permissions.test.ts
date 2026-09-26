@@ -4,6 +4,7 @@ import {
   type Permission,
   permissionsForRole,
   registerModulePermissions,
+  roleAtLeast,
   roleHasPermission,
 } from "./permissions.js";
 
@@ -172,4 +173,24 @@ it("grants print.resend separately to manager and admin", () => {
   expect(roleHasPermission("admin", "print.resend")).toBe(true);
   expect(roleHasPermission("staff", "print.resend")).toBe(false);
   expect(roleHasPermission("supervisor", "print.resend")).toBe(false);
+});
+
+describe("roleAtLeast", () => {
+  it("holds for a role above its floor", () => {
+    expect(roleAtLeast("manager", "supervisor")).toBe(true);
+  });
+  it("fails for a role below its floor", () => {
+    expect(roleAtLeast("staff", "supervisor")).toBe(false);
+  });
+  it("holds for a role equal to its floor", () => {
+    expect(roleAtLeast("supervisor", "supervisor")).toBe(true);
+  });
+  it("orders every pair of roles by the ladder, staff lowest and admin highest", () => {
+    const ladder = ["staff", "supervisor", "manager", "admin"] as const;
+    for (const [i, role] of ladder.entries()) {
+      for (const [j, floor] of ladder.entries()) {
+        expect(roleAtLeast(role, floor), `${role} >= ${floor}`).toBe(i >= j);
+      }
+    }
+  });
 });

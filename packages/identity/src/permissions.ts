@@ -87,6 +87,11 @@ const ROLE_LADDER = arrayOfAll<PersonRoleValue>()([
   "admin",
 ] as const);
 
+/** Whether `role` stands at or above `floor` on the ladder. A role check, not a permission check. */
+export function roleAtLeast(role: PersonRoleValue, floor: PersonRoleValue): boolean {
+  return ROLE_LADDER.indexOf(role) >= ROLE_LADDER.indexOf(floor);
+}
+
 // Populated once at boot, before any route auth runs (apps/server/src/boot.ts). A module's permission
 // lives here, never in the static PERMISSIONS catalog.
 const MODULE_PERMISSIONS = new Map<string, ReadonlySet<PersonRoleValue>>();
