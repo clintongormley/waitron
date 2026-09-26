@@ -583,119 +583,118 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     }
 
     // SYNCHRONOUS before ANY `await`, so this check+set completes before a second near-simultaneous
-    // POST's handler begins. Reset when `execute` fails (below) so a corrected retry works; LEFT set
-    // on success — the box is about to restart.
+    // POST's handler begins. Reset whenever the request does not end in a success answer (below),
+    // so the lock does not refuse a retry; left set after a success answer, which schedules a
+    // restart unless it is the replay of a completed operation.
     if (provisioning || fiscalTesting || configurationStaging) {
       return directError(c, log, "setup.already_provisioning", 409);
     }
     provisioning = true;
 
-    const requestHash = createHash("sha256")
-      .update(await c.req.raw.clone().text())
-      .digest("hex");
     const execute = async (operation?: ActiveSetupOperation): Promise<Response> => {
-      try {
-        // An unparseable or `null` body is refused as field "body"; any other read failure is
-        // rethrown, not masked as a client fault.
-        const parsed: unknown = await readRawJsonBody<unknown>(c);
-        const payload = parseProvisionPayload(
-          parsed,
-          deps.devMode === true,
-          c.req.header("Accept-Language"),
-        );
-        const {
-          mode,
-          request,
-          contribution,
-          secret,
-          secretExpected: expected,
-          rawSecret,
-        } = payload;
-        const { environment, venue } = request;
-        if (environment === "production") {
-          if (deps.assertFiscalReady === undefined) {
-            throw new AppError("setup.fiscal_test_required", { module: contribution.id });
-          }
-          await deps.assertFiscalReady({ request, contribution, secret: rawSecret });
+      // An unparseable or `null` body is refused as field "body"; any other read failure is
+      // rethrown, not masked as a client fault.
+      const parsed: unknown = await readRawJsonBody<unknown>(c);
+      const payload = parseProvisionPayload(
+        parsed,
+        deps.devMode === true,
+        c.req.header("Accept-Language"),
+      );
+      const { mode, request, contribution, secret, secretExpected: expected, rawSecret } = payload;
+      const { environment, venue } = request;
+      if (environment === "production") {
+        if (deps.assertFiscalReady === undefined) {
+          throw new AppError("setup.fiscal_test_required", { module: contribution.id });
         }
-        let result: VenueResult;
-        if (operation !== undefined && operation.phase !== "started") {
-          result = operation.data.result as VenueResult;
-        } else {
-          try {
-            result = await provision(request);
-          } catch (error) {
-            if (
-              operation === undefined ||
-              recoverProvision === undefined ||
-              !isAppError(error) ||
-              error.code !== "setup.already_provisioned"
-            ) {
-              throw error;
-            }
-            result = await recoverProvision(request);
-          }
-          await operation?.advance("venue_committed", { result });
-        }
-
-        if (!setupPhaseReached(operation, "content_seeded")) {
-          if (mode === "demo") {
-            await seedDemo(result, { environment, venue });
-          }
-          await operation?.advance("content_seeded");
-        }
-
-        if (!setupPhaseReached(operation, "identity_established")) {
-          await establishIdentity(result.nodeId);
-          await operation?.advance("identity_established");
-        }
-
-        if (!setupPhaseReached(operation, "membership_seeded")) {
-          await seedMembership(result.nodeId);
-          await operation?.advance("membership_seeded");
-        }
-
-        // Reaches the regime only through the `seal` seat, so this file imports no regime package.
-        if (!setupPhaseReached(operation, "secret_sealed")) {
-          if (expected) await secret!.seal({ db, ring }, rawSecret);
-          await operation?.advance("secret_sealed");
-        }
-
-        if (!setupPhaseReached(operation, "publishing")) {
-          await persistTrading({
-            tillId: result.tillId,
-            nodeId: result.nodeId,
-            seriesId: result.seriesIds[0],
-            locationId: result.locationId,
-            environment,
-            ...(deps.devMode === true ? { developmentMode: true } : {}),
-            onboardingIntent: mode,
-          });
-          await deps.clearConfiguration?.();
-          await operation?.advance("publishing");
-        }
-
-        const response = c.json({ provisioned: true, restarting: true }, 200);
-        // `setTimeout`, not `queueMicrotask`, so the response promise resolves before the restart.
-        setTimeout(() => requestRestart(), 0);
-        return response;
-      } catch (error) {
-        provisioning = false;
-        throw error;
+        await deps.assertFiscalReady({ request, contribution, secret: rawSecret });
       }
+      let result: VenueResult;
+      if (operation !== undefined && operation.phase !== "started") {
+        result = operation.data.result as VenueResult;
+      } else {
+        try {
+          result = await provision(request);
+        } catch (error) {
+          if (
+            operation === undefined ||
+            recoverProvision === undefined ||
+            !isAppError(error) ||
+            error.code !== "setup.already_provisioned"
+          ) {
+            throw error;
+          }
+          result = await recoverProvision(request);
+        }
+        await operation?.advance("venue_committed", { result });
+      }
+
+      if (!setupPhaseReached(operation, "content_seeded")) {
+        if (mode === "demo") {
+          await seedDemo(result, { environment, venue });
+        }
+        await operation?.advance("content_seeded");
+      }
+
+      if (!setupPhaseReached(operation, "identity_established")) {
+        await establishIdentity(result.nodeId);
+        await operation?.advance("identity_established");
+      }
+
+      if (!setupPhaseReached(operation, "membership_seeded")) {
+        await seedMembership(result.nodeId);
+        await operation?.advance("membership_seeded");
+      }
+
+      // Reaches the regime only through the `seal` seat, so this file imports no regime package.
+      if (!setupPhaseReached(operation, "secret_sealed")) {
+        if (expected) await secret!.seal({ db, ring }, rawSecret);
+        await operation?.advance("secret_sealed");
+      }
+
+      if (!setupPhaseReached(operation, "publishing")) {
+        await persistTrading({
+          tillId: result.tillId,
+          nodeId: result.nodeId,
+          seriesId: result.seriesIds[0],
+          locationId: result.locationId,
+          environment,
+          ...(deps.devMode === true ? { developmentMode: true } : {}),
+          onboardingIntent: mode,
+        });
+        await deps.clearConfiguration?.();
+        await operation?.advance("publishing");
+      }
+
+      const response = c.json({ provisioned: true, restarting: true }, 200);
+      setTimeout(() => requestRestart(), 0);
+      return response;
     };
     return runProvision(c, log, async () => {
-      if (deps.operations === undefined) return execute();
-      return deps.operations.run("provision", requestHash, async (operation) => {
-        if (operation.phase === "complete") {
-          return c.json(operation.data as { provisioned: true; restarting: true });
-        }
-        const response = await execute(operation);
-        if (response.ok) {
-          await operation.complete((await response.clone().json()) as Record<string, unknown>);
-        }
+      let succeeded = false;
+      try {
+        const requestHash = createHash("sha256")
+          .update(await c.req.raw.clone().text())
+          .digest("hex");
+        const response =
+          deps.operations === undefined
+            ? await execute()
+            : await deps.operations.run("provision", requestHash, async (operation) => {
+                if (operation.phase === "complete") {
+                  return c.json(operation.data as { provisioned: true; restarting: true });
+                }
+                const response = await execute(operation);
+                if (response.ok) {
+                  await operation.complete(
+                    (await response.clone().json()) as Record<string, unknown>,
+                  );
+                }
+                return response;
+              });
+        succeeded = response.ok;
         return response;
-      });
+      } finally {
+        if (!succeeded) provisioning = false;
+      }
     });
   });
 
@@ -712,49 +711,57 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     }
     provisioning = true;
 
-    const requestHash = createHash("sha256")
-      .update(await c.req.raw.clone().text())
-      .digest("hex");
+    // Its own boundary, so a refusal is returned, not thrown; the outer one checks `response.ok`.
+    // A returned refusal keeps the recorded operation: open defect in docs/backlog.md (A42).
     const execute = () =>
       runAdopt(c, log, async () => {
-        try {
-          // The credential is validated PER FIELD at the mirror's own boundary, so a wrong-shape body
-          // is a clean 400 rather than forwarded to fail at the primary as a 502. The password and
-          // TOTP are never logged: `asString` names the field, never its value.
-          const body = await readJsonBody<{ primaryUrl?: unknown; credential?: unknown }>(c);
-          const primaryUrl = asString(body.primaryUrl, "primaryUrl");
-          // SSRF guard: this route is UNAUTHENTICATED, so without it anyone who can reach a box in
-          // setup could point `primaryUrl` at a metadata endpoint or an internal host and have the
-          // box POST its admin credential there. Refused before `adopt` fetches anything.
-          assertSafePrimaryUrl(primaryUrl);
-          const cred = asObject(body.credential, "credential");
-          const credential: AdoptCredential = {
-            personId: asString(cred.personId, "credential.personId"),
-            password: asString(cred.password, "credential.password"),
-            totp: cred.totp === undefined ? undefined : asString(cred.totp, "credential.totp"),
-          };
+        // The credential is validated PER FIELD at the mirror's own boundary, so a wrong-shape body
+        // is a clean 400 rather than forwarded to fail at the primary as a 502. The password and
+        // TOTP are never logged: `asString` names the field, never its value.
+        const body = await readJsonBody<{ primaryUrl?: unknown; credential?: unknown }>(c);
+        const primaryUrl = asString(body.primaryUrl, "primaryUrl");
+        // SSRF guard: this route is UNAUTHENTICATED, so without it anyone who can reach a box in
+        // setup could point `primaryUrl` at a metadata endpoint or an internal host and have the
+        // box POST its admin credential there. Refused before `adopt` fetches anything.
+        assertSafePrimaryUrl(primaryUrl);
+        const cred = asObject(body.credential, "credential");
+        const credential: AdoptCredential = {
+          personId: asString(cred.personId, "credential.personId"),
+          password: asString(cred.password, "credential.password"),
+          totp: cred.totp === undefined ? undefined : asString(cred.totp, "credential.totp"),
+        };
 
-          const { breakGlassSecret } = await adopt({ primaryUrl, credential });
+        const { breakGlassSecret } = await adopt({ primaryUrl, credential });
 
-          // The operator's only chance to record the offline promote fallback. It is NEVER logged.
-          const response = c.json({ adopted: true, breakGlassSecret, restarting: true }, 200);
-          setTimeout(() => requestRestart(), 0);
-          return response;
-        } catch (error) {
-          provisioning = false;
-          throw error;
-        }
+        // The operator's only chance to record the offline promote fallback. It is NEVER logged.
+        const response = c.json({ adopted: true, breakGlassSecret, restarting: true }, 200);
+        setTimeout(() => requestRestart(), 0);
+        return response;
       });
-    if (deps.operations === undefined) return execute();
-    return deps.operations.run("adopt", requestHash, async (operation) => {
-      if (operation.phase === "complete") {
-        return c.json(operation.data as { adopted: true; restarting: true });
+    return runAdopt(c, log, async () => {
+      let succeeded = false;
+      try {
+        const requestHash = createHash("sha256")
+          .update(await c.req.raw.clone().text())
+          .digest("hex");
+        const response =
+          deps.operations === undefined
+            ? await execute()
+            : await deps.operations.run("adopt", requestHash, async (operation) => {
+                if (operation.phase === "complete") {
+                  return c.json(operation.data as { adopted: true; restarting: true });
+                }
+                const response = await execute();
+                if (response.ok) {
+                  await operation.complete({ adopted: true, restarting: true });
+                }
+                return response;
+              });
+        succeeded = response.ok;
+        return response;
+      } finally {
+        if (!succeeded) provisioning = false;
       }
-      const response = await execute();
-      if (response.ok) {
-        await operation.complete({ adopted: true, restarting: true });
-      }
-      return response;
     });
   });
 
