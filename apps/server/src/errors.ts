@@ -682,6 +682,12 @@ declare module "@waitron/shared" {
      * fresh join mints a fresh id.
      */
     "mirror.standby_removed": Record<string, never>;
+    /**
+     * A mirror-bundle request named a standby node id this node's held chart does not list, and
+     * the chart already lists `limit` (MAX_NODES) machines, the most a chart may hold. Clearing a
+     * removed machine frees a place.
+     */
+    "mirror.membership_full": { limit: number };
     /** The recovery-bundle download request carried no `passphrase` string (or an empty one). */
     "recovery.passphrase_required": Record<string, never>;
     /** A recovery-bundle passphrase shorter than the minimum. `min` is `MIN_PASSPHRASE_LENGTH`. */
