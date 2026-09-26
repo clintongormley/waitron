@@ -599,13 +599,18 @@ waiting for the fold-back: the stream reads {"state":"streaming",…}, the side 
 **A bucket question the pause is waiting on.** While paused, the supervisor asks the bucket for a
 listing and resumes once one is answered (`#bucketAnswers`, `packages/stream/src/supervisor.ts`).
 A server frozen with `SIGSTOP` answers the pending listing once it gets `SIGCONT`, as the pause test
-shows. A server that takes the connection and never replies is different: the S3 client sets no
-request timeout of its own. Measured 2026-09-26 with `@smithy/node-http-handler` 4.12.1: a listing
-sent to a TCP server that accepts and never writes was still pending after 20,000 ms, and the
-control, a server that closes each connection at once, was refused in 259 ms. So each question now
-gives up after `READ_DEADLINE_MS` (five minutes) and the pause asks again on its next tick; the
-supervisor case "asks the bucket again when a question during the pause goes unanswered, and resumes
-once one is answered" fails with the deadline removed.
+shows. A server that takes the connection and never replies is different. Measured 2026-09-26 with
+`@smithy/node-http-handler` 4.12.1, before the S3 store had a limit of its own: a listing sent to a
+TCP server that accepts and never writes was still pending after 20,000 ms, and the control, a
+server that closes each connection at once, was refused in 259 ms. So each question gives up after
+`READ_DEADLINE_MS` (five minutes), logs `stream.pause_check_failed` with `errorCode: "timeout"`, and
+the pause asks again on its next tick; the supervisor case "asks the bucket again when a question
+during the pause goes unanswered, logs it, and resumes once one is answered" fails with the deadline
+taken out of the race (re-run by A44). Since A44 the store also gives a request up once its
+connection has sent and received nothing for 30 seconds (`BUCKET_IDLE_MS`,
+`packages/stream/src/s3-store.ts`): with that default, a listing to such a server failed after
+90,116 ms, three attempts. A refused question is not logged, so against a server that never replies
+the pause now ends each question as a refusal, before the deadline, and logs nothing.
 
 **Why versitygw 1.8.0.** Five candidates were weighed on 2026-09-23. Four were run with the same
 probe: a write "only if absent" over an existing key, a write "only if unchanged" with a stale ETag,

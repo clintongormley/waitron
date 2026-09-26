@@ -5671,7 +5671,9 @@ must reload the stream only after its save commits, and refuse a bucket name hol
 `_` (both done by Task 8a; the screen's wording by Task 8b). Left open by #590's review, the owner's call (the PR description has the
 detail): (1) no S3 call has a request timeout, so a pointer write that never gets an answer holds up the
 supervisor's retry until the server stops or reloads — Litestream stays stopped meanwhile, so the side
-file is not at risk; (2) `StreamHost.reload()` can leave the old supervisor's pointer write in flight,
+file is not at risk (closed by A44 for a bucket that takes the connection and never replies: the
+entry "the stream's other bucket calls are bounded", below); (2)
+`StreamHost.reload()` can leave the old supervisor's pointer write in flight,
 landing after the new supervisor read the pointer, so the box takes its own write for another box's
 and refuses itself — closed on Task 8a's branch: a supervisor retries its pointer write when the
 refusal was caused by one of this process's own earlier pointers, matched byte for byte, the last 16
@@ -5707,7 +5709,10 @@ bucket, unable to use its settings, or stopped by itself, and for a failed refre
 state row; the `backup.disabled` alert now fires only when there is neither a scheduled backup nor a
 bucket copy that is on and current. Left open:
 - A bucket read given up after five minutes is not cancelled, because the bucket client's list
-  takes no way to stop it; the same root as #590's item (1), no request timeout on bucket calls.
+  takes no way to stop it. Since A44 the store ends a request itself once its connection has been
+  idle for 30 seconds, so what the deadline can still leave running is a listing whose answer keeps
+  arriving, or one whose answer stalls after its headers (the entry "the stream's other bucket
+  calls are bounded", below).
 - A commit that changes no row but writes to the side file, such as a schema change or a pragma
   such as `user_version`, is not reported, so the lag can read low.
 - An update that writes the same value, straight after a schema-only commit, is still reported,
@@ -5923,18 +5928,22 @@ open:
     holding files with no `venue.db` beside it is kept, and the start refused with
     `restore.database_set_aside`. Only the container's entry clears them: a server started any other
     way (the dev stack) does not.
-- The bucket client sets no time limit of its own: `createS3ObjectStore` (`packages/stream`) has
-  none. The command line and the setup restores wrap it for every object-store call they make
-  (`boundObjectStore`, which abandons a call but never cancels it),
-  the first start's pointer read has its own 15-second race (`readBucketPointerTerm`,
-  `apps/server/src/rebuild-first-start.ts`, reported as `restore.pointer_unreadable`), the
+- The bucket client's own time limit is on idle time only (A44, 2026-09-26): `createS3ObjectStore`
+  (`packages/stream`) gives a request up once its connection has sent and received nothing for 30
+  seconds (`BUCKET_IDLE_MS`), three attempts in all, and bounds no call's total time; it does not
+  reach the rest of an answer whose headers arrived within three seconds (measured; the entry "the
+  stream's other bucket calls are bounded", below). The command line and the setup restores also
+  wrap it for every object-store call they make (`boundObjectStore`, which abandons a call but never
+  cancels it), the first start's pointer read has its own 15-second race (`readBucketPointerTerm`,
+  `apps/server/src/rebuild-first-start.ts`, reported as `restore.pointer_unreadable`), and the
   replication supervisor's freshness read and the pause's bucket question are each abandoned after
-  `READ_DEADLINE_MS` (`packages/stream/src/supervisor.ts`) but never cancelled, and every other
-  caller's calls have no bound at all: the supervisor's other calls (the open item "the stream's
-  other bucket calls have no time bound either", below), and the bucket check the backup settings
-  screen's Test and Save buttons run (`probeBucket`, opened in
-  `apps/server/src/boot.ts`, called from `apps/server/src/stream-api.ts`). A per-call abort signal or request timeout
-  inside `createS3ObjectStore` would bound and cancel every caller's calls.
+  `READ_DEADLINE_MS` (`packages/stream/src/supervisor.ts`) but never cancelled. Every other caller
+  has the store's limit alone: the supervisor's other calls, and the bucket check the backup
+  settings screen's Test and Save buttons run (`probeBucket`, opened in `apps/server/src/boot.ts`,
+  called from `apps/server/src/stream-api.ts`). Read, not run: that check now throws
+  `backup.stream_request_failed` with no status once the store gives up, which the route answers
+  with 502 (`stream-api.ts`; its route test "Test reports a bucket that gives no answer at all as
+  unreachable, not as refused" covers that answer with a thrown error, not with a real bucket).
 - Open question: the first start's pointer read and the bucket rebuild's calls (the command line's
   `--from-bucket` and the wizard's `/setup-api/restore-bucket`) use different limits (15 seconds
   and 60 seconds) and report different codes (`restore.pointer_unreadable` and
@@ -6025,26 +6034,62 @@ line with what slice 2 built. Left open:
   (`#bucketAnswers`, `packages/stream/src/supervisor.ts`) now gives up after `READ_DEADLINE_MS` and
   the pause asks again. A server frozen with `SIGSTOP` answers after `SIGCONT` anyway: the pause test
   read `streaming` 253 ms after it.
-- **Open, found by A37: the stream's other bucket calls have no time bound either.** Measured: the S3
-  client sets no request timeout (above; the earlier entry "The bucket client sets no time limit of its
-  own" lists the calls that are bounded). Read in `packages/stream/src/supervisor.ts`, not run: while
-  opening, the probe, the pointer read, the generation claim and the pointer write are awaited with
-  no deadline, so a bucket that takes the connection and never replies would leave the stream
-  `opening` after the bucket is back, until a stop or a reload; a prune that never settles leaves
-  `#pruning` set, so no later prune starts. Also read, not run: the pause's deadline and the
-  freshness read's stop waiting but cannot cancel the request, since `ObjectStore` calls take no
-  abort signal, and the handler's default agent allows 50 sockets (`maxSockets` in
-  `@smithy/node-http-handler` 4.12.1's `resolveDefaultConfig`), so enough requests abandoned on
-  connections that never close might leave later calls waiting for a socket. A request timeout on
-  the S3 client would bound all of them at once.
+- **DONE (2026-09-26, lane A's A44): the stream's other bucket calls are bounded for a bucket that
+  takes the connection and never replies.** `createS3ObjectStore` now sets the handler's
+  `socketTimeout` to `BUCKET_IDLE_MS`, 30 seconds (`packages/stream/src/s3-store.ts`). What the
+  handler's options do was measured first, with `@smithy/node-http-handler` 4.12.1 and the S3 client
+  against local `node:net` and `node:http` servers: `requestTimeout` alone only printed a warning
+  and the listing was still pending at 4,000 ms; with `throwOnRequestTimeout` it failed at 1,009 ms,
+  stopped counting at the headers (a body trickled in ten pieces 300 ms apart was answered in 2,739
+  ms under a 1,000 ms limit), and cut off an 8 MiB upload the server read slowly at 1,016 ms.
+  `socketTimeout` counts time with nothing sent or received: at 1,000 ms a silent server failed the
+  call at 1,012 ms, and the same trickled body was answered in 2,739 ms. It counts this box's own
+  reads and writes, so an upload is idle once its last bytes are handed to the system: the 8 MiB
+  upload, read with a 40 ms pause after each chunk, failed at 5,278 ms, and read with 10 or 20 ms
+  pauses it was answered. Two more limits of it, both measured: from 6,000 ms up the handler sets it
+  three seconds into the request, so at 7,000 ms a body that stalled after headers arriving at once
+  was still pending at 15,000 ms; below 6,000 ms it waits for the connection, so at 2,000 ms a
+  connection to an address that never answered (10.255.255.1) was still pending at 15,000 ms, where
+  at 7,000 ms it failed at 7,009 ms. Read, not run: this client writes only small objects (the
+  check's, the pointer, the generation marker, and a one-byte object in
+  `apps/server/src/restore-stream.ts`), and its largest bodies are listing pages and multi-object
+  deletes of up to 1,000 keys; Litestream's uploads are not made through it (`litestream.ts` only
+  writes its configuration and `litestream-process.ts` only starts the binary; neither imports the
+  S3 client). The client makes three attempts (a silent server took three connections), and with the
+  store's default a listing to a silent server failed after 90,116 ms, and to 10.255.255.1 after
+  90,170 ms. Tests, each red before the change (a call that never ended, and the supervisor cases
+  waiting in vain for the log line): all five store operations against a silent server, with a
+  test-only 100 ms limit; the settings check (`probeBucket`) thrown as unreachable; each opening
+  step — the check, the pointer read, the claim — logged as `stream.open_failed` and retried after
+  `OPEN_RETRY_MS`, then opened once the bucket answered; the pointer write logged as
+  `stream.pointer_write_failed` and written again into the same generation; a prune's listing and
+  its delete logged as `stream.prune_failed`, and the next day's prune ran; and the store's client
+  built with `{ socketTimeout: 30_000 }`. An answer trickled in twelve pieces 50 ms apart, headers
+  included, is answered under a 400 ms limit. Each silent-server case fails with the setting
+  removed, the default case with the default dropped, and the trickled answer with `requestTimeout`
+  and `throwOnRequestTimeout` in its place. The 50-socket concern: with a warmed client, a server
+  that left the next 60 requests unanswered and answered the one after, the last was answered after
+  1,027 ms with a 1,000 ms limit; with no limit it was still waiting at 8,000 ms, the server having
+  taken 50 connections besides the warm-up's. Left open: an answer whose headers arrive within three
+  seconds and whose body then stalls is not bounded (measured above); the deadline on the pause and
+  the freshness read still cannot cancel a listing whose answer keeps arriving; the idle limit is
+  per request, not per call, so a listing of many pages, or a bucket answering each request just
+  inside the limit, can take longer; a bucket that takes more than 30 seconds to answer a request
+  whose body is already sent, such as a delete of 1,000 keys, is cut off, and how long real
+  providers take for one was not measured; and the tests run the handler's below-6,000 ms path,
+  while its production path was measured by hand, not by a test.
 - **Open, left by #668 (A37): two things about the pause test and its deadline.** (1) The test's
   fill of the side file to 16 MiB took 82 s and 895 sales on CI (run for head `464d9eca7`) against
-  its 180 s allowance, about 13 KB a sale, where a local run wrote about 79 KB a sale; why the growth
-  per sale differs so much was not tested (Litestream's own checkpoints reusing the file is the
-  guess), so if the test turns unreliable on CI that margin is where to look. It also took 133.8 s of
-  the `test-server (3)` shard. (2) When the pause's bucket question gives up at its deadline, nothing
-  is logged, while the supervisor's other two deadlines log; the old code logged nothing on a refusal
-  either, so adding a log event is left to the owner.
+  its 180 s allowance, about 13 KB a sale, where a local run wrote about 79 KB a sale; why the
+  growth per sale differs so much was not tested (Litestream's own checkpoints reusing the file is
+  the guess), so if the test turns unreliable on CI that margin is where to look. It also took 133.8
+  s of the `test-server (3)` shard. (2) DONE by A44 for the deadline: a question given up at it logs
+  `stream.pause_check_failed` with `errorCode: "timeout"`, as the freshness read's deadline logs
+  `stream.freshness_unreadable`; the pause case fails with the line removed, and a case stopped
+  during the wait fails once the line no longer checks for a stop. Still open: a refused question
+  logs nothing, and since A44 a bucket that never replies ends each question as a refusal after
+  about 90 seconds, before the deadline; a temporary supervisor case showed the pause stay paused
+  and log nothing of its own. Whether to log a refusal is left to the owner.
 
 **Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The
 owner's rule (2026-09-24) is that a change adding third-party code to the image carries its licence

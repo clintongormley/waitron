@@ -1,8 +1,12 @@
+import { createServer, type AddressInfo, type Socket } from "node:net";
 import { Readable } from "node:stream";
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
+import type { BucketOperation } from "./errors.js";
+import type { ObjectStore } from "./object-store.js";
 import { CONFLICT_ATTEMPTS, DELETE_CONCURRENCY, createS3ObjectStore } from "./s3-store.js";
 import type { BucketConfig } from "./s3-store.js";
+import { silentBucket } from "./testing/silent-bucket.js";
 
 type SentRequest = {
   method: string;
@@ -631,5 +635,78 @@ describe("addressing", () => {
     expect(sent[0]!.hostname).toBe("s3.example.test");
     expect(sent[0]!.port).toBe(9000);
     expect(sent[0]!.path).toBe("/owner-bucket/waitron/k");
+  });
+});
+
+describe("a bucket that stops answering", () => {
+  const IDLE_MS = 100;
+
+  const calls: [string, (store: ObjectStore) => Promise<unknown>, BucketOperation, string][] = [
+    ["get", (store) => store.get("k"), "get", "k"],
+    ["put", (store) => store.put("k", BYTES, { ifNoneMatch: "*" }), "put", "k"],
+    ["list", (store) => store.list("venues/"), "list", "venues/"],
+    ["delete", (store) => store.delete("k"), "delete", "k"],
+    ["deleteMany", (store) => store.deleteMany(["k1", "k2"]), "delete", "k1"],
+  ];
+  it.each(calls)(
+    "fails a %s sent to a bucket that takes the connection and never answers, after the client's three attempts",
+    async (_name, call, operation, key) => {
+      const bucket = await silentBucket();
+      try {
+        const store = createS3ObjectStore(bucket.config, { idleMs: IDLE_MS });
+        expect(await rejection(call(store))).toEqual({
+          code: "backup.stream_request_failed",
+          params: { operation, key, status: null, name: "TimeoutError" },
+        });
+        expect(bucket.connections()).toBe(3);
+      } finally {
+        await bucket.close();
+      }
+    },
+  );
+
+  // Every piece of the answer arrives well inside the bound, and the whole takes longer than it.
+  // The headers alone take longer too, so a limit on the wait for them would fail this as well.
+  it("does not cut off an answer that keeps arriving, however long it takes in all", async () => {
+    const TRICKLE_IDLE_MS = 400;
+    const PIECES = 12;
+    const GAP_MS = 50;
+    const body =
+      '<?xml version="1.0" encoding="UTF-8"?><ListBucketResult><IsTruncated>false</IsTruncated>' +
+      "<Contents><Key>venues/a</Key><LastModified>2026-09-26T10:00:00.000Z</LastModified></Contents>" +
+      "</ListBucketResult>";
+    const answer = Buffer.from(
+      "HTTP/1.1 200 OK\r\ncontent-type: application/xml\r\n" +
+        `x-padding: ${"a".repeat(4_000)}\r\n` +
+        `content-length: ${Buffer.byteLength(body)}\r\nconnection: close\r\n\r\n${body}`,
+    );
+    const sockets = new Set<Socket>();
+    const server = createServer((socket) => {
+      sockets.add(socket);
+      socket.on("error", () => {});
+      socket.once("data", async () => {
+        const size = Math.ceil(answer.length / PIECES);
+        for (let piece = 0; piece < PIECES; piece += 1) {
+          await new Promise((resolve) => setTimeout(resolve, GAP_MS));
+          socket.write(answer.subarray(piece * size, (piece + 1) * size));
+        }
+        socket.end();
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const { port } = server.address() as AddressInfo;
+      const store = createS3ObjectStore(
+        { ...CONFIG, endpoint: `http://127.0.0.1:${port}`, prefix: "" },
+        { idleMs: TRICKLE_IDLE_MS },
+      );
+      const started = performance.now();
+      const listed = await store.list("venues/");
+      expect(performance.now() - started).toBeGreaterThan(TRICKLE_IDLE_MS);
+      expect(listed.map((object) => object.key)).toEqual(["venues/a"]);
+    } finally {
+      for (const socket of sockets) socket.destroy();
+      await new Promise((resolve) => server.close(resolve));
+    }
   });
 });

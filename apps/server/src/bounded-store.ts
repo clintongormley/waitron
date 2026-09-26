@@ -5,8 +5,7 @@ import "@waitron/stream";
 
 type BucketOperation = ErrorParams["backup.stream_request_failed"]["operation"];
 
-/** A bound on each bucket call a restore makes; a `list` is one call however many pages it reads.
- * `createS3ObjectStore` gives its client no timeout of its own. */
+/** A bound on each bucket call a restore makes; a `list` is one call however many pages it reads. */
 export const BUCKET_CALL_TIMEOUT_MS = 60_000;
 
 /**
