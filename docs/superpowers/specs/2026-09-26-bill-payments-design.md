@@ -161,11 +161,13 @@ A line's **paid quantity** is the sum of its `bill_payment_lines.quantity` over 
 `bill_payment_id`, `submission_id` (unique together with `bill_payment_id`, so a retried refund
 gives money back once, §5.1), `fingerprint` (§5.1), `applied_amount`, `tip_amount`, `reason`,
 `authorized_by`, `requested_by`, `till_id` (the device that gave the money back, for the cash-up,
-§9a), `state` (`pending | completed | failed`, §6b), `created_at`, `completed_at`, `failed_at`.
+§9a), `state` (`pending | completed | failed`, §6b), `sent_at` (§6b R1b), `provider_refund_ref`,
+`attested_by` and `attestation_note` (§6b), `created_at`, `completed_at`, `failed_at`.
 **Classified `ledger`, not append-only**, for the same reason as `bill_payments`: the amounts are
 decided once and only the outcome arrives later. A behavioural trigger (a custom migration) allows
-only `pending → completed` and `pending → failed` and refuses any change to the amounts, the payment
-or the device. A cash refund is inserted `completed` in its own transaction; only a card refund is
+only `pending → completed` and `pending → failed`, plus, while the row is `pending`, setting
+`sent_at` once (null to a value) and the attestation columns with the outcome; it refuses any change
+to the amounts, the payment, the device, or a `sent_at` already set. A cash refund is inserted `completed` in its own transaction; only a card refund is
 ever `pending`. For a card, the provider refund it made is also recorded where refunds already are
 (`payment_refunds`, `packages/payments/src/schema/payment-refunds.ts`), through the `payments` row.
 Only a `completed` refund counts in the sums below. A payment's **net applied** is `applied − sum(applied_amount)` and its **net tip** is
@@ -530,68 +532,109 @@ capture (`packages/payments-stripe/src/reconciler.ts`). A bill refund built on t
 inherit both problems: a crash after the provider refunded leaves no record, and a retry refunds
 again.
 
-**The rule: the attempt is written before the call, the call is keyed to the attempt, and the
-refund is recorded only by the attempt's own completion.**
+**What the providers say about a refund's outcome** (read on 2026-09-26 by fetching each page):
+
+- Stripe's refund object: *"Status of the refund. This can be `pending`, `requires_action`,
+  `succeeded`, `failed`, or `canceled`."* (https://docs.stripe.com/api/refunds/object). Finding a
+  refund is therefore not proof it succeeded.
+- SumUp's transactions API tells integrators to *"inspect `events` or `transaction_events` when you
+  need refund, payout, or chargeback history"*. A transaction event has an `event_type` (`REFUND`
+  among them), an `id`, an `amount` and a `status`, where *"`PENDING`: The event has been created
+  but is not final yet … whose final outcome is not known yet"*, *"`REFUNDED`: A refund event has
+  been accepted and recorded in the refund flow. This is the status returned for refund events once
+  the transaction amount is being or has been returned to the payer"*, *"`SUCCESSFUL`: The event
+  completed successfully"* and *"`FAILED`: The event could not be completed"*
+  (https://developer.sumup.com/api/transactions). This is SumUp's documentation, not a test
+  against a merchant account; Task 14's Step 0 calls the endpoint with the venue's credentials
+  and records what it returns and which permission it needs.
+
+**The rule: the attempt is written before the call, the call is keyed to the attempt, and an
+outcome is recorded only on evidence.**
 
 1. **R1 (transaction):** check permission and amounts; refuse if the bill has a pending payment
    (`order.payment_in_flight`) or a pending refund (`bill.refund_in_progress`); insert the
    `bill_payment_refunds` row as `pending` with its `submission_id`; commit. From here the bill is
    locked (§5.2).
-2. **R2 (no transaction):** call the provider's refund for the exact amount WITHOUT recording
+2. **R1b (transaction):** stamp the row's `sent_at` immediately before the provider call; commit.
+   **A pending row with no `sent_at` provably never reached the provider**, because the stamp
+   commits before any network call.
+3. **R2 (no transaction):** call the provider's refund for the exact amount WITHOUT recording
    anything: a new provider method that only talks to the provider, never the existing
    `refund`/`partialRefund`/`reverseViaStripe`, which record in their own transactions. The call
    carries an idempotency key derived from the refund row's id and, where the provider takes
    metadata, the row's id as metadata.
-3. **R3 (transaction):** on success, write `payment_refunds` AND mark the row `completed` in ONE
-   transaction, and release the lock; on a DEFINITE refusal, mark it `failed` and release the lock;
-   on anything else the row stays `pending` and the bill locked. A definite refusal is a refund the
-   provider returns as `failed`, or an HTTP 4xx other than 408, 409 and 429; a timeout, a network
-   error, a 5xx, 408, 409 or 429 is not.
+4. **R3 (transaction):** record the outcome by the evidence table below; `completed` writes
+   `payment_refunds` and the provider's refund id (`provider_refund_ref`, a new column) in the SAME
+   transaction and releases the lock; `failed` releases the lock; anything else leaves the row
+   `pending` and the bill locked.
 
-**The contract change this needs** (plan Task 14), in `packages/payments` and each provider:
-a refund call that does not record, taking a caller-given idempotency key and metadata (Stripe's
-`StripeRefunder` and its client pass neither today); and a refund LOOKUP by payment, which no
-client has today.
+**Evidence for each outcome.** The same table decides R3's answer, a retry, the loop and the manager
+action, so no path can conclude more than another.
 
-**Who may resolve a pending refund, and when.** Only one actor at a time: a pending refund whose R2
-is still running in this process (the live attempts §5.4 already tracks for payments) is skipped by
-the loop and refused to the manager action and to a retry, which answers "in progress". Otherwise:
+| Evidence | Outcome |
+| --- | --- |
+| No `sent_at` on the row | `failed`: it never left us |
+| The provider's answer to the call, or a lookup match, says Stripe `succeeded`, or SumUp `REFUNDED` or `SUCCESSFUL` | `completed` |
+| The provider's answer, or a lookup match, says Stripe `failed` or `canceled`, or SumUp `FAILED` | `failed` |
+| An HTTP 4xx from the call itself other than 408, 409 and 429 (the request was refused, so it created nothing) | `failed` |
+| A match that is Stripe `pending` or `requires_action`, or SumUp `PENDING` | stays `pending` |
+| No match, an unchanged SumUp refunded total, a timeout, a 5xx, 408, 409 or 429, or no answer | stays `pending` |
+| Two or more candidate matches (SumUp, below) | stays `pending`; manager only |
+
+**Absence is never failure once `sent_at` is set.** A request that reached the provider can still be
+in flight there; "nothing visible yet" does not show it cannot later succeed.
+
+**Looking a refund up** (a new provider method, `lookupRefund`, the contract change below):
+
+- **Stripe:** list the payment intent's refunds and match the one whose metadata carries the row's
+  id; its `status` is the evidence.
+- **SumUp:** read the transaction and match a `REFUND` event created after `sent_at` whose amount
+  equals the pending refund and whose event id is not already the `provider_refund_ref` of one of
+  our completed refunds; its `status` is the evidence. Two or more such events is ambiguous.
+
+**Who resolves a pending refund, and how.** Only one actor at a time: a pending refund whose R2 is
+still running in this process (the live attempts §5.4 already tracks) is skipped by the loop, and a
+retry or the manager action is answered "in progress".
 
 - **A retry with the SAME `submission_id`** (the till's automatic retry, or staff): §5.1's replay
-  rule is amended for this one case: a `pending` refund row is RESUMED, not replayed. The server
-  first asks the provider (the lookup) whether the refund exists: found → R3's success work; not
-  found → R2 again with the same derived key, then R3. For Stripe, within its idempotency window, a
-  repeated key returns the first request's result instead of refunding again; this is inferred from
-  Stripe's documentation, not tested here, and Task 14's Step 0 records the window from Stripe's
-  own words. Outside the window the lookup, which matches the refund carrying the row's id in its
-  metadata, is what prevents a second refund.
+  rule is amended for this case: a `pending` card refund is RESUMED. With no `sent_at`, it runs
+  R1b–R3 now. With `sent_at`, it LOOKS UP first, and a match with an outcome completes or fails the
+  row locally with NO second refund request. **Stripe only:** when the lookup finds no match, it
+  re-sends R2 with the SAME derived key; within Stripe's idempotency window a repeated key returns
+  the first request's result instead of refunding again (inferred from Stripe's documentation, not
+  tested here; Task 14's Step 0 records the window in Stripe's own words), and outside it the lookup
+  has already shown that no refund carries the row's id. **SumUp:** never re-sent; its refund takes
+  no key, so re-sending could refund twice.
 - **A retry with a NEW `submission_id`** while a refund is pending → `bill.refund_in_progress`.
-- **The loop** (§5.4) resolves a pending refund only from the lookup: found → completed; the
-  provider answers definitely that no such refund exists → `failed`; anything else → left pending.
+- **The loop** (§5.4) only looks up and applies the table; it never sends a refund.
 - **M7b2's manager action** lists a bill's pending refunds beside its pending payments and resolves
-  one at a time the same way; a provider it cannot reach is refused.
+  one at a time by the same table, and for Stripe may re-send with the same key as a retry does.
+  **A manual resolution records a CONFIRMED outcome only** (owner, 2026-09-26): a manager, with
+  their PIN and a mandatory note, records `completed` or `failed` only when they have the
+  provider's confirmation of THAT request's outcome — a refund shown as refunded or failed in the
+  provider's dashboard, or the provider's support confirming it. An empty dashboard, or a total
+  that has not moved, is not a confirmed outcome, and the action refuses to record `failed` on it.
+  The attestation (who, when, the note) is kept on the row.
 - **If R3 finds its row already `failed` while the provider shows the refund made** (possible only
   if the rules above were broken), it records nothing, since the trigger refuses
   `failed → completed`, and raises an alert (Task 14 picks the code; the nearest sibling is
   `payment.pending_outcome_unactionable`).
 
-**SumUp.** Its refund takes no key and no metadata, so a SumUp refund is never re-sent while any
-earlier attempt on that payment is unresolved. How its lookup judges "made" without metadata: the
-transaction's refunded total at SumUp, compared with the sum of our COMPLETED refunds of that
-payment; exactly one pending refund's amount more means made, equal means not made, anything else
-is ambiguous and goes to the manager. **If Step 0 finds no way to read a SumUp transaction's
-refunds**, nothing could ever answer for a pending SumUp refund, and the bill would stay locked with
-no way out. So in that case the manager action offers an audited ATTESTATION: a manager, with their
-PIN and a mandatory note that they checked SumUp's own dashboard, records the refund as made or not
-made; the row moves to `completed` or `failed` and the attestation (who, when, the note) is kept on
-it. That is a person reading the provider's record, not a guess. This is new open point §11.10.
+**What this costs:** a SumUp refund that reached SumUp and whose outcome SumUp never shows keeps
+its bill locked until SumUp confirms one; only that bill, not the visit's others or the till. The
+loop raises an alert for a refund pending longer than an hour, so a manager chases SumUp. This is
+open point §11.10.
+
+**The contract change this needs** (plan Task 14), in `packages/payments` and each card provider:
+a refund call that does not record, taking a caller-given idempotency key and metadata (Stripe's
+`StripeRefunder` and its client pass neither today); and `lookupRefund`, returning the matched
+refund's id and outcome, which no client has today.
 
 **Why the whole bill is locked, not only the refunded payment.** While the refund's outcome is
 unknown, so is the bill's received total. A payment taken in that window could complete the bill,
 and completing it issues the invoice (§7) with tenders built from a received total the refund then
 changes. A pending payment only ever ADDS money, which §5.2's reservation bounds; a pending refund
-takes money away by an amount not yet confirmed. Refunds are rare and each lasts seconds, so a short
-lock costs little.
+takes money away by an amount not yet confirmed.
 
 **The invoice.** `issueIfFullyPaid` (§7) refuses to issue while any refund on the bill is pending.
 A refund never runs on an invoiced bill through this path (§6, "after the invoice").
@@ -696,26 +739,32 @@ its code.
 **Card refunds (§6b)**, each with a stub provider that records every call and its idempotency key:
 
 17. **Crash after the provider refunded:** a €20.00 card refund whose provider call succeeds, with
-    R3 made to throw. The refund row is `pending`, `payment_refunds` has nothing, and the bill is
-    locked: a cash payment, a line edit, an adjustment, a move, abandoning the bill and a second
-    refund are each `bill.refund_in_progress`, and no invoice is issued. A staff retry with the SAME
-    `submission_id` calls the provider once more with the SAME key; the stub returns the first
-    refund (as Stripe does for a repeated key); the row becomes `completed`, `payment_refunds` gets
-    one row, and the stub saw exactly one distinct key. The payer is refunded once.
+    R3 made to throw. The row is `pending` with `sent_at` set, `payment_refunds` has nothing, and
+    the bill is locked: a cash payment, a line edit, an adjustment, a move, abandoning the bill and a
+    second refund are each `bill.refund_in_progress`, and no invoice is issued. A staff retry with
+    the SAME `submission_id` LOOKS UP first, finds the refund `succeeded`, and completes the row
+    locally: the provider's refund method is NOT called again (the stub counts one refund call in
+    total), `payment_refunds` gets one row carrying the provider's refund id, and the lock is
+    released.
 18. **A retry with a new id** while the refund is pending → `bill.refund_in_progress`, and the
     provider is not called.
-19. **Provider refuses definitely** (the stub returns a refund with status `failed`; a second case
-    answers HTTP 400): the row is `failed`, the lock is released, and the bill's received total is
-    unchanged. A 429, a 409 and a 503 each leave it `pending` (a control that a non-definite answer
-    is not taken as a refusal).
-20. **Provider unreachable:** the row stays `pending` and the bill locked; a later retry with the
-    same id that reaches the provider completes it.
-21. **The loop and the manager action:** with no staff retry, the loop's pass asks the provider,
-    finds the refund made, and completes it once. With the provider answering "no such refund",
-    it marks it `failed`. With the provider unreachable, the loop leaves it pending and M7b2's
-    manager action refuses too; the bill stays locked.
-22. **SumUp:** a pending SumUp refund is never re-sent by a retry or the loop; it resolves only by
-    SumUp's own refund record, if Step 0 finds one, or by the manager action.
+19. **Each outcome, through each resolver.** For each lookup answer — Stripe `succeeded`, `failed`,
+    `canceled`, `pending`, `requires_action`, and no match; SumUp `REFUNDED`, `SUCCESSFUL`,
+    `FAILED`, `PENDING`, no match, and two candidate events — resolve the same pending row by a
+    retry, by the loop and by the manager action. Success statuses complete it; failure statuses
+    fail it; `pending`, `requires_action`, `PENDING`, no match and two candidates leave it `pending`
+    and the bill locked, with no refund sent (except the Stripe retry and manager re-send in 21).
+20. **The call's own answer:** a refund object `failed`, and a 400, fail the row; a 429, a 409, a 503
+    and a timeout leave it `pending` (the control that a non-definite answer is not taken as a
+    refusal).
+21. **Never sent, and sent but not found:** a crash between R1 and R1b leaves no `sent_at`; the loop
+    marks it `failed` and the lock is released, and no provider call was ever made. With `sent_at`
+    and no match: the loop leaves it `pending`; a Stripe retry re-sends with the SAME key (the stub
+    sees one distinct key); a SumUp retry sends nothing.
+22. **The manager needs a confirmed outcome:** on a pending SumUp refund with no match, the manager
+    action refuses to record `failed` from an empty lookup; recording `failed` or `completed` with a
+    confirmation note and PIN succeeds and keeps the attestation on the row. An hour-old pending
+    refund raises the alert.
 23. **The invoice waits for the refund:** a €60.00 bill has €50.00 received (a €30.00 card payment
     and €20.00 cash). A €10.00 refund of the card payment is left pending. A €10.00 comp, which would
     lower the total to €50.00, equal to what was received, and so issue the invoice, is refused
@@ -738,6 +787,9 @@ its code.
     in cash on till B, day 2: A shows +€50.00 on day 1, B shows −€20.00 on day 2, and day 2's frozen
     close is refused (`uncounted_cash_till`) until till B is counted.
 26. **Today's paths unchanged:** a walk-up cash sale's tender is counted exactly as before, once.
+27. **Zero-net cash activity is counted:** till C takes a €50.00 cash contribution and gives €50.00
+    back in cash the same day. Its net cash is €0.00, and the close still refuses
+    (`uncounted_cash_till`) until till C is counted. A card-only till is not forced (control).
 
 ---
 
@@ -786,11 +838,14 @@ moved, an invoice issued the NEXT day would add the €50.00 retroactively to a 
   `node_id` (`nodeScopeClause`, `packages/reporting/src/business-day.ts`). `bill_payments` has no
   node column, so sources 2 and 3 are scoped through their bill: `working_orders.node_id` of the
   payment's `working_order_id`.
-- **A till whose cash takings are below zero must be counted too.** The frozen close forces a count
+- **Every till that moved cash must be counted, whatever its net.** The frozen close forces a count
   only for a till whose cash takings are ABOVE zero (`record-daily-close.ts`, the
   `uncounted_cash_till` check), because today takings are never negative. A till that only gave
-  cash back (−€20.00) moved real money, so Task 14 changes that check to "not zero", and the
-  comment on `computeCashUp` that tenders are always positive is corrected.
+  cash back (−€20.00), or took €50.00 and gave €50.00 back (net €0.00), moved real money through
+  its drawer. So the cash-up reports, per till, whether it had ANY cash movement that day (a cash
+  tender, a received cash bill payment, or a completed cash refund), and the close forces a count
+  for every such till, whether its net is positive, negative or zero. A card-only till is still
+  not forced. The comment on `computeCashUp` that tenders are always positive is corrected.
 - An offline-accepted payment later declined (§5.4) is future Tap to Pay work (§11.9); that work
   decides how a later decline shows in an earlier day's card figure.
 
@@ -846,11 +901,12 @@ The owner answered each on 2026-09-26. The design above is written with these an
    is accepted for the future Tap to Pay work, and Task 14 does not enable it.** That work must test
    declines both before and after the invoice, including releasing an item payment's lines when an
    uninvoiced payment is declined.
-10. **New, from the check of §6b (2026-09-26): a pending SumUp refund when SumUp offers no way to
-    read a transaction's refunds** (§6b). Default: the manager action offers an audited attestation
-    (manager PIN and a mandatory note that they checked SumUp's dashboard) that records the refund
-    made or not made. Alternative: offer no card refund before the invoice on SumUp until a lookup
-    exists (staff refund in cash instead). Only needed if Task 14's Step 0 finds no lookup.
+10. **A card refund whose outcome the provider does not show** (§6b). **Owner, 2026-09-26:**
+    audited manual resolution only from a CONFIRMED outcome (the provider's dashboard showing that
+    refund refunded or failed, or its support confirming it), never from an empty dashboard or an
+    unchanged total. Until then the bill stays locked, and an alert fires after an hour. SumUp's
+    documented transaction events are the lookup Task 14 builds on; Step 0 verifies them against
+    the venue's account.
 
 ---
 
