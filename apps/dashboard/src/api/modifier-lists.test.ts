@@ -1,5 +1,13 @@
 import { expect, it, vi } from "vitest";
-import { DashboardApi, type ExtraListInput, type OptionListInput } from "./client.js";
+import {
+  DashboardApi,
+  type ExtraListDependants,
+  type ExtraListInput,
+  type ExtraListRow,
+  type OptionListDependants,
+  type OptionListInput,
+  type OptionListRow,
+} from "./client.js";
 
 it("unwraps the option- and extras-list envelopes and sends the authoring bodies", async () => {
   const optionInput: OptionListInput = {
@@ -10,12 +18,13 @@ it("unwraps the option- and extras-list envelopes and sends the authoring bodies
     active: true,
     labels: [{ name: "Rare", customerName: null, kitchenName: null, available: true }],
   };
-  const optionList = {
+  const optionList: OptionListRow = {
     id: "o1",
     ...optionInput,
     labels: [{ id: "l1", ...optionInput.labels[0]! }],
+    usage: { products: 1 },
   };
-  const optionDependants = { products: [{ id: "p1", name: "Steak" }], menus: [] };
+  const optionDependants: OptionListDependants = { products: [{ id: "p1", name: "Steak" }] };
 
   const extraInput: ExtraListInput = {
     name: "Toppings",
@@ -26,8 +35,16 @@ it("unwraps the option- and extras-list envelopes and sends the authoring bodies
     active: true,
     items: [{ productId: "p1", maxQuantity: 1, preselected: false, price: "1.50" }],
   };
-  const extraList = { id: "e1", ...extraInput, items: [{ id: "i1", ...extraInput.items[0]! }] };
-  const extraDependants = { products: [], menus: [{ id: "m1", name: "Burger" }] };
+  const extraList: ExtraListRow = {
+    id: "e1",
+    ...extraInput,
+    items: [{ id: "i1", ...extraInput.items[0]! }],
+    usage: { products: 0, menus: 1 },
+  };
+  const extraDependants: ExtraListDependants = {
+    products: [],
+    menus: [{ id: "m1", name: "Burger", menuName: "Lunch" }],
+  };
 
   const fetchImpl = vi
     .fn()

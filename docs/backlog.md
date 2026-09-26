@@ -631,6 +631,20 @@ its part done here when it lands.
   under A4). Open for A66, the stepper's first user: its button names are text with a
   `{label}` slot (as the plan chose) where other shared controls take a function; switch them there
   unless the owner prefers the text form.
+- **A65 (the list tables and the Used by popup) — built, no pull request number yet.** Both tabs'
+  Status column reads Active / Inactive, and so does each editor's switch, which shares the words. A
+  new Used by column counts what carries each list ("2 products · 1 menu item", "Not used" at zero),
+  sorts by the total, and its count is the link that opens the popup, titled "Used by {name}"; the
+  name is plain text. The menu figure counts menu ENTRIES, so it says "menu items" ("elementos de
+  menú"), not "menus": one menu offering the list on two dishes counts 2. An extras list's popup and
+  delete preview name each menu row "{dish} — {menu}"; an options list's popup lists products only,
+  with no Type column, and its delete warning never mentions menu items. The list reads now refresh
+  when `product_modifiers` (both) or `menu_item_extra_lists` (extras) change, which also refreshes
+  the catalogue screen's copies of the two lists. Where the screen is 480px wide or less (a phone),
+  the two counts, and a popup row's menu, each take a line of their own. Measured at 390px, the tables still scroll
+  sideways inside their own box, further than before by the new column: Extras 511px of content in
+  388px (439px before) in English, 607px (463px) in Spanish; Options 457px (402px) and 479px
+  (405px). The page itself does not scroll sideways.
 
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
@@ -1037,14 +1051,15 @@ What Task 11 left open:
 
 What option lists left open, none of it taken in #436 or #445:
 
-- **`dependants` now fills both of its sides, and both of them through `product_modifiers`.** An
-  options list has no per-menu publication row at all, so `optionListDependants`
-  (`packages/catalogue/src/options.ts`) reads the products that carry the list, then walks the same
-  attachment rows on to `menu_items` for the menus. The two queries repeat the same `option_list_id`
-  condition rather than sharing one predicate; nothing can drift from it yet, because
-  `options.in_use` is still thrown by nothing. **Next action:** whoever writes a refusal that uses
-  the same condition shares it then — the modifier code this replaced had already learned that
-  lesson in an `openOrderUse` helper, and that file went with the old model in Task 13.
+- **`dependants` reads products only.** An options list has no per-menu publication row at all, so
+  since A65 (owner decision D3, 2026-09-26) `optionListDependants`
+  (`packages/catalogue/src/options.ts`) returns the products that carry the list and no menu side.
+  The carrying `product_modifiers` rows are now selected twice in that file, each with its own
+  condition on `option_list_id`: there for one list, and in `listOptionLists`' usage count for every
+  list. Nothing can drift from them yet, because `options.in_use` is still thrown by nothing.
+  **Next action:** whoever writes a refusal that uses the same condition shares it then — the
+  modifier code this replaced had already learned that lesson in an `openOrderUse` helper, and that
+  file went with the old model in Task 13.
 - **`options.in_use` is registered and nothing throws it.** Deleting a list is designed to cascade
   its product attachments rather than be refused, so there may never be a thrower. It stays
   registered because a shipped code is never removed.

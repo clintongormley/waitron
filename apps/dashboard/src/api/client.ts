@@ -26,11 +26,13 @@ import type {
   ExtraListInput,
   ExtraListItem,
   ExtraListItemInput,
+  ExtraListRow,
   OptionLabel,
   OptionLabelInput,
   OptionList,
   OptionListDependants,
   OptionListInput,
+  OptionListRow,
 } from "@waitron/catalogue/src/modifier-list-types.js";
 import type {
   LibrarySection,
@@ -84,11 +86,13 @@ export type {
   ExtraListInput,
   ExtraListItem,
   ExtraListItemInput,
+  ExtraListRow,
   OptionLabel,
   OptionLabelInput,
   OptionList,
   OptionListDependants,
   OptionListInput,
+  OptionListRow,
 };
 
 export type PersonRole = "staff" | "supervisor" | "manager" | "admin";
@@ -1636,9 +1640,12 @@ export class DashboardApi {
 
   // ── Options lists and extras lists (`/management-api/modifiers/{options,extras}`) ───────────────
 
-  async listOptionLists(): Promise<OptionList[]> {
+  async listOptionLists(): Promise<OptionListRow[]> {
     return (
-      await this.#request<{ optionLists: OptionList[] }>("/management-api/modifiers/options", "GET")
+      await this.#request<{ optionLists: OptionListRow[] }>(
+        "/management-api/modifiers/options",
+        "GET",
+      )
     ).optionLists;
   }
   async getOptionList(id: string): Promise<OptionList> {
@@ -1679,9 +1686,9 @@ export class DashboardApi {
     ).dependants;
   }
 
-  async listExtraLists(): Promise<ExtraList[]> {
+  async listExtraLists(): Promise<ExtraListRow[]> {
     return (
-      await this.#request<{ extraLists: ExtraList[] }>("/management-api/modifiers/extras", "GET")
+      await this.#request<{ extraLists: ExtraListRow[] }>("/management-api/modifiers/extras", "GET")
     ).extraLists;
   }
   async getExtraList(id: string): Promise<ExtraList> {
