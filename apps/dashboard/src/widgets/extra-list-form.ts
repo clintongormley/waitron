@@ -3,10 +3,14 @@ import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { baseStyles, submitOnEnter } from "@waitron/ui";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
-import type { ContentLanguages } from "@waitron/shared";
+import { resolveContentText, type ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
+import "@waitron/ui/src/components/wt-disclosure.js";
+import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-number-stepper.js";
+import "@waitron/ui/src/components/wt-price-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -16,6 +20,9 @@ import { reorder } from "./reorder.js";
 import { ReorderController, type ReorderModel } from "./reorder-table.js";
 import type { ExtraList, ExtraListInput, Product } from "../api/client.js";
 import { t } from "../i18n/t.js";
+
+const decreaseLabel = (label: string) => t("action.decrease").replace("{label}", label);
+const increaseLabel = (label: string) => t("action.increase").replace("{label}", label);
 
 interface DraftItem {
   id: string;
@@ -45,10 +52,34 @@ export class ExtraListForm extends LitElement {
       .fields {
         display: grid;
         gap: var(--wt-space-4);
+        container-type: inline-size;
       }
       .names {
         display: grid;
         gap: var(--wt-space-3);
+      }
+      .picks-row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--wt-space-3);
+        align-items: start;
+      }
+      .picks-row wt-number-stepper {
+        --wt-stepper-field-width: var(--wt-stepper-field-width-wide);
+      }
+      /* Every price box the same width, rather than each stretched by the unit beside it. */
+      td wt-price-input {
+        width: fit-content;
+      }
+      /* The same narrow case, and the same width, as the variants table's (design-system.md): a
+         container query cannot read a token. There the column heading alone names the switches. */
+      @container (max-width: 30rem) {
+        .picks-row {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        td wt-switch::part(label) {
+          display: none;
+        }
       }
       .error {
         color: var(--wt-color-danger);
@@ -67,12 +98,15 @@ export class ExtraListForm extends LitElement {
       .picker {
         flex: 1 1 var(--wt-cell-name-max-width);
       }
-      /* A lone input in a cell has no width of its own, so the automatic table layout gives the
-         column what its HEADER needs and nothing more — and "Price" is the shortest word in this
-         table, which cut a two-digit price off mid-number. Same mechanism, token and fix as the
-         options form's own cell-field rule; the table's own scroller absorbs the extra width. */
-      .cell-field {
-        min-width: var(--wt-cell-name-max-width);
+      /* The grip and the bin are each a tap-target-wide button that already centres its icon. */
+      th:first-child,
+      td:first-child,
+      td:last-child {
+        padding-inline: 0;
+      }
+      /* A row lines up its text, not its boxes (spec D6); the handle cell keeps its centring. */
+      tbody td:not(.handle-cell) {
+        vertical-align: baseline;
       }
     `,
   ];
@@ -159,6 +193,17 @@ export class ExtraListForm extends LitElement {
 
   #inheritedPrice(productId: string): string {
     return this.#productById.get(productId)?.unitPrice ?? "";
+  }
+
+  /** The rule product-editor.ts's unit label uses: the abbreviation, else the name. */
+  #unitLabel(productId: string): string {
+    const unit = this.#productById.get(productId)?.unit;
+    if (!unit) return "";
+    const language = this.#primaryLanguage();
+    return (
+      resolveContentText(unit.abbreviation, language, language) ||
+      resolveContentText(unit.name, language, language)
+    );
   }
 
   /** The language a refusal naming a whole translated map is shown against: the first input on
@@ -349,6 +394,47 @@ export class ExtraListForm extends LitElement {
     };
   }
 
+  #namesSection(errors: Record<string, string>) {
+    const locales = this.languages.languages;
+    const filled =
+      locales.filter((locale) => (this.customerName[locale] ?? "").trim()).length +
+      (this.kitchenName.trim() ? 1 : 0);
+    const hasError =
+      !!errors["kitchen-name"] || locales.some((locale) => !!errors[`customer-name-${locale}`]);
+    return html`<wt-disclosure
+      data-test="names-section"
+      heading=${t("extras.names_section")}
+      summary=${t("extras.names_summary")
+        .replace("{filled}", String(filled))
+        .replace("{total}", String(locales.length + 1))}
+      .hasError=${hasError}
+    >
+      <div class="names">
+        ${optionalTextFields(
+          this.#fields(errors),
+          "customer-name",
+          t("extras.customer_name"),
+          this.customerName,
+          (customerName) => this.#edit(() => (this.customerName = customerName)),
+          this.name,
+        )}
+        <wt-input
+          name="kitchen-name"
+          label=${t("extras.kitchen_name")}
+          placeholder=${this.name}
+          .disabled=${this.busy}
+          .value=${this.kitchenName}
+          .error=${errors["kitchen-name"] ?? ""}
+          .invalid=${!!errors["kitchen-name"]}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            this.#edit(() => (this.kitchenName = event.detail.value));
+          }}
+        ></wt-input>
+      </div>
+    </wt-disclosure>`;
+  }
+
   #itemRow(item: DraftItem, index: number, errors: Record<string, string>) {
     const named = this.#productName(item.productId);
     const productError = errors[`item-${index}-product`];
@@ -363,10 +449,14 @@ export class ExtraListForm extends LitElement {
         }
       </td>
       <td>
-        <wt-input
+        <wt-number-stepper
           name=${`item-${index}-max-quantity`}
           label=${t("extras.max_quantity")}
+          hide-label
           required
+          .min=${1}
+          .decreaseLabel=${decreaseLabel}
+          .increaseLabel=${increaseLabel}
           .disabled=${this.busy}
           .value=${item.maxQuantity}
           .error=${errors[`item-${index}-max-quantity`] ?? ""}
@@ -375,7 +465,7 @@ export class ExtraListForm extends LitElement {
             event.stopPropagation();
             this.#editItem(item.id, { maxQuantity: event.detail.value });
           }}
-        ></wt-input>
+        ></wt-number-stepper>
       </td>
       <td>
         <wt-switch
@@ -391,24 +481,25 @@ export class ExtraListForm extends LitElement {
         ></wt-switch>
       </td>
       <td>
-        <wt-input
-          class="cell-field"
+        <wt-price-input
           name=${`item-${index}-price`}
           label=${t("extras.price")}
+          hide-label
+          fixed-unit
+          unit=${this.#unitLabel(item.productId)}
           placeholder=${this.#inheritedPrice(item.productId)}
           .disabled=${this.busy}
           .value=${item.price}
           .error=${errors[`item-${index}-price`] ?? ""}
-          .invalid=${!!errors[`item-${index}-price`]}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
             this.#editItem(item.id, { price: event.detail.value });
           }}
-        ></wt-input>
+        ></wt-price-input>
       </td>
       <td>
         <wt-button
-          variant="danger"
+          variant="ghost"
           data-test=${`remove-item-${index}`}
           aria-label=${`${t("extras.remove_item")}: ${named}`}
           .disabled=${this.busy}
@@ -416,8 +507,8 @@ export class ExtraListForm extends LitElement {
             event.stopPropagation();
             this.#removeItem(item.id);
           }}
-          >${t("action.remove")}</wt-button
-        >
+          ><wt-icon name="bin"></wt-icon
+        ></wt-button>
       </td>
     </tr>`;
   }
@@ -432,8 +523,7 @@ export class ExtraListForm extends LitElement {
               <th scope="col">${t("extras.product")}</th>
               <th scope="col">${t("extras.max_quantity")}</th>
               <th scope="col">${t("extras.preselected")}</th>
-              <th scope="col">${t("extras.price")}</th>
-              <th scope="col"><span class="visually-hidden">${t("action.remove")}</span></th>
+              <th scope="col" colspan="2">${t("extras.price")}</th>
             </tr>
           </thead>
           <tbody>
@@ -510,51 +600,42 @@ export class ExtraListForm extends LitElement {
               this.#edit(() => (this.name = event.detail.value));
             }}
           ></wt-input>
-          ${optionalTextFields(
-            this.#fields(errors),
-            "customer-name",
-            t("extras.customer_name"),
-            this.customerName,
-            (customerName) => this.#edit(() => (this.customerName = customerName)),
-            this.name,
-          )}
-          <wt-input
-            name="kitchen-name"
-            label=${t("extras.kitchen_name")}
-            placeholder=${this.name}
-            .disabled=${this.busy}
-            .value=${this.kitchenName}
-            .error=${errors["kitchen-name"] ?? ""}
-            .invalid=${!!errors["kitchen-name"]}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              this.#edit(() => (this.kitchenName = event.detail.value));
-            }}
-          ></wt-input>
-          <wt-input
-            name="min-picks"
-            label=${t("extras.min_picks")}
-            .disabled=${this.busy}
-            .value=${this.minPicks}
-            .error=${errors["min-picks"] ?? ""}
-            .invalid=${!!errors["min-picks"]}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              this.#edit(() => (this.minPicks = event.detail.value));
-            }}
-          ></wt-input>
-          <wt-input
-            name="max-picks"
-            label=${t("extras.max_picks")}
-            .disabled=${this.busy}
-            .value=${this.maxPicks}
-            .error=${errors["max-picks"] ?? ""}
-            .invalid=${!!errors["max-picks"]}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              this.#edit(() => (this.maxPicks = event.detail.value));
-            }}
-          ></wt-input>
+          ${this.#namesSection(errors)}
+          <div class="picks-row" data-test="picks-row">
+            <wt-number-stepper
+              name="min-picks"
+              label=${t("extras.min_picks")}
+              hint=${t("extras.min_picks_hint")}
+              .min=${0}
+              .decreaseLabel=${decreaseLabel}
+              .increaseLabel=${increaseLabel}
+              .disabled=${this.busy}
+              .value=${this.minPicks}
+              .error=${errors["min-picks"] ?? ""}
+              .invalid=${!!errors["min-picks"]}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                this.#edit(() => (this.minPicks = event.detail.value));
+              }}
+            ></wt-number-stepper>
+            <wt-number-stepper
+              name="max-picks"
+              label=${t("extras.max_picks")}
+              hint=${t("extras.max_picks_hint")}
+              placeholder=${t("extras.no_limit")}
+              .min=${0}
+              .decreaseLabel=${decreaseLabel}
+              .increaseLabel=${increaseLabel}
+              .disabled=${this.busy}
+              .value=${this.maxPicks}
+              .error=${errors["max-picks"] ?? ""}
+              .invalid=${!!errors["max-picks"]}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                this.#edit(() => (this.maxPicks = event.detail.value));
+              }}
+            ></wt-number-stepper>
+          </div>
           <wt-switch
             name="active"
             data-test="active"

@@ -18,8 +18,10 @@ offer: **Maximum quantity**, how many of it one dish may take (at least one, so 
 none"); **Preselected**, whether it starts chosen; and **Price**, what the diner is charged for it.
 That price REPLACES the product's own rather than adding to it, so 1.50 against a 3.00 product bills
 1.50. Leave it blank and the product's own price is what gets charged — the field shows you that
-price, greyed, while it is blank. The list itself sets **Minimum choices** — 0 makes the list optional, 1 or
-more makes it required — and **Maximum choices**, left blank for no limit.
+price, greyed, while it is blank. The product's unit is shown after the price, so you can see what
+one of it is. The list itself sets **Minimum choices** — 0 makes the list optional, 1 or more makes
+it required — and **Maximum choices**, left blank for no limit. Each of these numbers has − and +
+buttons, and you can also type it.
 
 Use **Options** when the diner picks exactly one label, such as a cup or a glass. A label carries
 names and nothing else: no price, no tax treatment and no allergens. Each label has its own
@@ -29,7 +31,9 @@ names and nothing else: no price, no tax treatment and no allergens. Each label 
 
 Give the list a staff name in plain text — what you and your staff call it. A **Customer-facing
 name**, with one field per content language, and a **Kitchen name** are both optional and fall back
-to the staff name when you leave them blank. An options label carries the same three names. See
+to the staff name when you leave them blank. On an extras list they sit in a **Customer and kitchen
+names** section that stays folded until you open it; its heading says how many are filled in, and
+it opens by itself when one of them needs correcting. An options label carries the same three names. See
 [content languages](content-and-images.md).
 
 Each list has an **Active** switch, and the list's **Status** column reads **Active** or

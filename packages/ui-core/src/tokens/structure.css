@@ -45,10 +45,10 @@
      it wrap and keeps the controls after it (a switch, a row menu) on screen at phone width
      instead of pushing the row into a sideways scroll.
 
-     As a FLOOR (`min-width`): the single-input cells of the options list form and of the extras
-     list form's price column, which have no width of their own and would otherwise shrink to the
-     tap-target minimum and cut the value off mid-word. Those tables accept a sideways scroll —
-     each has its own focusable horizontal scroller so the dialog does not scroll instead.
+     As a FLOOR (`min-width`): the single-input cells of the options list form, which have no
+     width of their own and would otherwise shrink to the tap-target minimum and cut the value off
+     mid-word. That table accepts a sideways scroll — it has its own focusable horizontal scroller
+     so the dialog does not scroll instead.
 
      As a FLEX BASIS: the extras list form's product picker, which is a combobox rather than a
      table cell and sizes its open panel to its trigger.

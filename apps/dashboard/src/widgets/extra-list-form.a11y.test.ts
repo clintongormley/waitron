@@ -1,8 +1,11 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { registerIcons } from "@waitron/ui";
+import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { ExtraListForm } from "./extra-list-form.js";
 import type { ExtraList, Product } from "../api/client.js";
 
+registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
 
 /**
@@ -98,7 +101,16 @@ const many: ExtraList = {
   ],
 };
 
-const states = ["create", "edit", "invalid", "busy", "server-error", "many-items"] as const;
+const states = [
+  "create",
+  "edit",
+  "invalid",
+  "busy",
+  "server-error",
+  "many-items",
+  "names-open",
+  "names-error",
+] as const;
 
 describe.each(["light", "dark"] as const)("extra list form (%s)", (theme) => {
   it.each(states)("renders %s accessibly", async (state) => {
@@ -117,7 +129,9 @@ describe.each(["light", "dark"] as const)("extra list form (%s)", (theme) => {
                 name: "That name is already used.",
                 "items.0.productId": "That product was deleted.",
               }
-            : {},
+            : state === "names-error"
+              ? { kitchenName: "Too long for the kitchen." }
+              : {},
       },
       theme,
     );
@@ -125,6 +139,14 @@ describe.each(["light", "dark"] as const)("extra list form (%s)", (theme) => {
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
       await el.updateComplete;
     }
+    const names = el.shadowRoot!.querySelector<
+      HTMLElement & { open: boolean; updateComplete: Promise<unknown> }
+    >('[data-test="names-section"]')!;
+    if (state === "names-open") names.open = true;
+    await names.updateComplete;
+    // Each named state is scanned in the shape it names: the names section closed unless opened or
+    // holding an error.
+    expect(names.open).toBe(state === "names-open" || state === "names-error");
     await expectNoA11yViolations(host);
   });
 });
