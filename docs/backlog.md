@@ -6035,7 +6035,7 @@ line with what slice 2 built. Left open:
   question (`#bucketAnswers`, `packages/stream/src/supervisor.ts`) now gives up after
   `READ_DEADLINE_MS` and the pause asks again. A server frozen with `SIGSTOP` answers after
   `SIGCONT` anyway: the pause test read `streaming` 253 ms after it.
-- **DONE (2026-09-26, lane A's A44): the stream's other bucket calls are bounded for a bucket that
+- **DONE (2026-09-26, lane A's A44, #676): the stream's other bucket calls are bounded for a bucket that
   takes the connection and never replies.** `createS3ObjectStore` now sets the handler's
   `socketTimeout` to `BUCKET_IDLE_MS`, 30 seconds (`packages/stream/src/s3-store.ts`). What the
   handler's options do was measured first, with `@smithy/node-http-handler` 4.12.1 and the S3 client
