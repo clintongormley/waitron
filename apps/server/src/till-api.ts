@@ -78,7 +78,6 @@ import {
   markLineServed,
   mergeTabs,
   moveTab,
-  openTab,
   parkOrder,
   placeOrder,
   readTabLines,
@@ -98,6 +97,7 @@ import {
 import type { LineExtras, OrderLinePatch, TicketState } from "./working-order.js";
 import { listCourses, listStations } from "./kitchen.js";
 import { finishTable, markCleared, readVisitBills, seatTable } from "./visits.js";
+import type { VisitCommand } from "./visits.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
 import {
@@ -395,11 +395,36 @@ function requireGuestCount(value: unknown): number | null {
 }
 
 /** A visit revision as a body carries it: a whole number from 0. */
-function requireVisitRevision(value: unknown): number {
+function requireVisitRevision(
+  value: unknown,
+  field: "expectedVisitRevision" | "expectedSourceVisitRevision" = "expectedVisitRevision",
+): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
-    throw new AppError("management.request_invalid", { field: "expectedVisitRevision" });
+    throw new AppError("management.request_invalid", { field });
   }
   return value;
+}
+
+/**
+ * A tab route's visit revisions and the acting person. A revision may be absent here: the verb
+ * refuses its absence only where the tab belongs to a party.
+ */
+function visitCommand(
+  personId: string,
+  body: { expectedVisitRevision?: unknown; expectedSourceVisitRevision?: unknown },
+  crossesVisits = false,
+): VisitCommand {
+  const command: VisitCommand = { operatorId: personId };
+  if (body.expectedVisitRevision !== undefined) {
+    command.expectedVisitRevision = requireVisitRevision(body.expectedVisitRevision);
+  }
+  if (crossesVisits && body.expectedSourceVisitRevision !== undefined) {
+    command.expectedSourceVisitRevision = requireVisitRevision(
+      body.expectedSourceVisitRevision,
+      "expectedSourceVisitRevision",
+    );
+  }
+  return command;
 }
 
 /** A value that cannot be a line number gets the absent line's `tab.line_not_found`. */
@@ -1249,16 +1274,22 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
+  // The seat route without a guest count, which the till used before it had one.
   app.post("/api/tables/:id/tab", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const { personId } = await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
       const body = await readJsonBody<{
         lines?: { menuItemId: string; quantity: string }[];
       }>(c);
       const result = await withTransaction(deps.db, async (tx) => {
-        return openTab(tx, deps.cfg, { tableId: id, lines: body.lines });
+        return seatTable(tx, deps.cfg, {
+          tableId: id,
+          guestCount: null,
+          operatorId: personId,
+          lines: body.lines,
+        });
       });
       return c.json(result);
     }),
@@ -1330,10 +1361,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           hold?: boolean;
         } & LineExtras)[];
       }>(c);
-      await withTransaction(deps.db, async (tx) => {
-        await addTabRound(tx, deps.cfg, id, body.lines);
+      const result = await withTransaction(deps.db, async (tx) => {
+        return addTabRound(tx, deps.cfg, id, body.lines);
       });
-      return c.body(null, 200);
+      return c.json(result);
     }),
   );
 
@@ -1520,13 +1551,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/tabs/:id/move", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const { personId } = await requireSession(deps, c);
       const tabId = requireTabParam(c.req.param("id"));
-      const body = await readJsonBody<{ toTableId: string }>(c);
+      const body = await readJsonBody<{ toTableId: string; expectedVisitRevision?: unknown }>(c);
       if (!isUuid(body.toTableId))
         throw new AppError("table.not_found", { tableId: body.toTableId });
+      const command = visitCommand(personId, body);
       await withTransaction(deps.db, async (tx) => {
-        await moveTab(tx, deps.cfg, tabId, body.toTableId);
+        await moveTab(tx, deps.cfg, tabId, body.toTableId, command);
       });
       return c.body(null, 200);
     }),
@@ -1534,12 +1566,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/tabs/:id/join", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const { personId } = await requireSession(deps, c);
       const tabId = requireTabParam(c.req.param("id"));
-      const body = await readJsonBody<{ tableId: string }>(c);
+      const body = await readJsonBody<{ tableId: string; expectedVisitRevision?: unknown }>(c);
       if (!isUuid(body.tableId)) throw new AppError("table.not_found", { tableId: body.tableId });
+      const command = visitCommand(personId, body);
       await withTransaction(deps.db, async (tx) => {
-        await joinTable(tx, deps.cfg, tabId, body.tableId);
+        await joinTable(tx, deps.cfg, tabId, body.tableId, command);
       });
       return c.body(null, 200);
     }),
@@ -1547,13 +1580,20 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/tabs/:id/merge", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const { personId } = await requireSession(deps, c);
       const intoTabId = requireTabParam(c.req.param("id"));
-      const body = await readJsonBody<{ fromTabId: string; freeSourceTable: boolean }>(c);
+      const body = await readJsonBody<{
+        fromTabId: string;
+        freeSourceTable: boolean;
+        expectedVisitRevision?: unknown;
+        expectedSourceVisitRevision?: unknown;
+      }>(c);
       if (!isUuid(body.fromTabId)) throw new AppError("tab.not_open", { tabId: body.fromTabId });
+      const command = visitCommand(personId, body, true);
       await withTransaction(deps.db, async (tx) => {
         await mergeTabs(tx, deps.cfg, intoTabId, body.fromTabId, {
           freeSourceTable: body.freeSourceTable,
+          ...command,
         });
       });
       return c.body(null, 200);
@@ -1562,15 +1602,18 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/tabs/:id/transfer", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const { personId } = await requireSession(deps, c);
       const fromTabId = requireTabParam(c.req.param("id"));
       const body = await readJsonBody<{
         toTabId: string;
         transfers: { lineNo: number; quantity?: string }[];
+        expectedVisitRevision?: unknown;
+        expectedSourceVisitRevision?: unknown;
       }>(c);
       if (!isUuid(body.toTabId)) throw new AppError("tab.not_open", { tabId: body.toTabId });
+      const command = visitCommand(personId, body, true);
       await withTransaction(deps.db, async (tx) => {
-        await transferLines(tx, deps.cfg, fromTabId, body.toTabId, body.transfers);
+        await transferLines(tx, deps.cfg, fromTabId, body.toTabId, body.transfers, command);
       });
       return c.body(null, 200);
     }),
@@ -1579,11 +1622,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // Spins selected items off into a new table-less check; nothing files until it is paid.
   app.post("/api/tabs/:id/split", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const { personId } = await requireSession(deps, c);
       const fromTabId = requireTabParam(c.req.param("id"));
       // `readRawJsonBody`, not `readJsonBody`: a null, empty or malformed body must be refused as
       // field "body", not coalesced to `{}`.
-      const body = await readRawJsonBody<{ transfers: { lineNo: number; quantity?: string }[] }>(c);
+      const body = await readRawJsonBody<{
+        transfers: { lineNo: number; quantity?: string }[];
+        expectedVisitRevision?: unknown;
+      }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
@@ -1591,8 +1637,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (!Array.isArray(body.transfers)) {
         throw new AppError("management.request_invalid", { field: "transfers" });
       }
+      const command = visitCommand(personId, body);
       const result = await withTransaction(deps.db, async (tx) => {
-        return splitOffCheck(tx, deps.cfg, fromTabId, body.transfers);
+        return splitOffCheck(tx, deps.cfg, fromTabId, body.transfers, command);
       });
       return c.json(result);
     }),
@@ -1600,12 +1647,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/tabs/:id/unjoin", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const { personId } = await requireSession(deps, c);
       const tabId = requireTabParam(c.req.param("id"));
       // Raw parse, as in `/split`.
       const body = await readRawJsonBody<{
         tableId: string;
         transfers?: { lineNo: number; quantity?: string }[];
+        expectedVisitRevision?: unknown;
       }>(c);
       // Body shape first: a missing body is a request-shape fault, not `table.not_joined`.
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
@@ -1617,8 +1665,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.transfers !== undefined && !Array.isArray(body.transfers)) {
         throw new AppError("management.request_invalid", { field: "transfers" });
       }
+      const command = visitCommand(personId, body);
       const result = await withTransaction(deps.db, async (tx) => {
-        return unjoinTable(tx, deps.cfg, tabId, body.tableId, body.transfers);
+        return unjoinTable(tx, deps.cfg, tabId, body.tableId, body.transfers, command);
       });
       return c.json(result);
     }),

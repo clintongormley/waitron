@@ -35,22 +35,130 @@ export type CommandScope =
   { kind: "visit"; visitId: string } | { kind: "bill"; workingOrderId: string };
 
 /**
+ * What a tab path that moves lines or tables is sent (D19): the revision of each visit it changes, as
+ * the caller last read it, and who acts. `expectedSourceVisitRevision` is the other visit's, on a
+ * merge or transfer between two parties.
+ */
+export interface VisitCommand {
+  expectedVisitRevision?: number;
+  expectedSourceVisitRevision?: number;
+  operatorId: string;
+}
+
+/**
  * Seat a party at a free table: one visit, its first table and its tab, in the caller's
  * transaction. A table that already belongs to a visit is refused inside `openTab`.
  */
 export async function seatTable(
   tx: Transaction,
   cfg: TillConfig,
-  args: { tableId: string; guestCount: number | null; operatorId: string },
-): Promise<{ visitId: string; tabId: string; revision: number }> {
-  const { tabId } = await openTab(tx, cfg, { tableId: args.tableId });
+  args: {
+    tableId: string;
+    guestCount: number | null;
+    operatorId: string;
+    lines?: { menuItemId: string; quantity: string }[];
+  },
+): Promise<{ visitId: string; tabId: string; revision: number; orderNumber: number }> {
+  const { tabId, orderNumber } = await openTab(tx, cfg, {
+    tableId: args.tableId,
+    lines: args.lines,
+  });
+  const { visitId, revision } = await openVisit(tx, {
+    guestCount: args.guestCount,
+    operatorId: args.operatorId,
+    tableId: args.tableId,
+  });
+  await tx.update(workingOrders).set({ visitId }).where(eq(workingOrders.id, tabId));
+  return { visitId, tabId, revision, orderNumber };
+}
+
+/** A new open visit holding one table. */
+export async function openVisit(
+  tx: Transaction,
+  args: { guestCount: number | null; operatorId: string; tableId: string },
+): Promise<{ visitId: string; revision: number }> {
   const [visit] = await tx
     .insert(visits)
     .values({ guestCount: args.guestCount, openedBy: args.operatorId })
-    .returning({ id: visits.id, revision: visits.revision });
-  await tx.insert(visitTables).values({ visitId: visit!.id, tableId: args.tableId });
-  await tx.update(workingOrders).set({ visitId: visit!.id }).where(eq(workingOrders.id, tabId));
-  return { visitId: visit!.id, tabId, revision: visit!.revision };
+    .returning({ visitId: visits.id, revision: visits.revision });
+  await tx.insert(visitTables).values({ visitId: visit!.visitId, tableId: args.tableId });
+  return visit!;
+}
+
+/** The visit a bill belongs to; null for a counter order, or an order that does not exist. */
+export async function visitOfOrder(tx: Transaction, orderId: string): Promise<string | null> {
+  const [order] = await tx
+    .select({ visitId: workingOrders.visitId })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  return order?.visitId ?? null;
+}
+
+/** The tables the visit holds now, in the order they joined it. */
+export async function memberTables(tx: Transaction, visitId: string): Promise<string[]> {
+  const rows = await tx
+    .select({ tableId: visitTables.tableId })
+    .from(visitTables)
+    .where(and(eq(visitTables.visitId, visitId), isNull(visitTables.leftAt)))
+    .orderBy(visitTables.joinedAt, visitTables.id);
+  return rows.map((row) => row.tableId);
+}
+
+/** The table stops belonging to whichever visit holds it. */
+export async function leaveTables(tx: Transaction, tableIds: readonly string[]): Promise<void> {
+  if (tableIds.length === 0) return;
+  await tx
+    .update(visitTables)
+    .set({ leftAt: nowIso() })
+    .where(and(inArray(visitTables.tableId, [...tableIds]), isNull(visitTables.leftAt)));
+}
+
+/** Whether a party holds the table, as a member of an open visit or one still needing clearing. */
+export async function tableHeld(tx: Transaction, tableId: string): Promise<boolean> {
+  const [member] = await tx
+    .select({ id: visitTables.id })
+    .from(visitTables)
+    .where(and(eq(visitTables.tableId, tableId), isNull(visitTables.leftAt)));
+  return member !== undefined;
+}
+
+async function bumpOpenVisit(
+  tx: Transaction,
+  visitId: string,
+  expected: number | undefined,
+  field: "expectedVisitRevision" | "expectedSourceVisitRevision",
+): Promise<void> {
+  if (expected === undefined) {
+    throw new AppError("management.request_invalid", { field });
+  }
+  if ((await readVisit(tx, visitId))?.state !== "open") {
+    throw new AppError("visit.not_open", { visitId });
+  }
+  await checkAndBumpVisit(tx, visitId, expected);
+}
+
+/**
+ * Check and move on the revision of each visit a tab path changes: the destination's against
+ * `expectedVisitRevision`, and a different source's against `expectedSourceVisitRevision`. A visit
+ * that is not open is refused before its revision moves. A bill on no visit needs no revision.
+ */
+export async function guardVisits(
+  tx: Transaction,
+  destination: string | null,
+  source: string | null,
+  command: Omit<VisitCommand, "operatorId"> | undefined,
+): Promise<void> {
+  if (destination !== null) {
+    await bumpOpenVisit(tx, destination, command?.expectedVisitRevision, "expectedVisitRevision");
+  }
+  if (source !== null && source !== destination) {
+    await bumpOpenVisit(
+      tx,
+      source,
+      command?.expectedSourceVisitRevision,
+      "expectedSourceVisitRevision",
+    );
+  }
 }
 
 /** The visit a table belongs to, while it belongs to one. */
@@ -95,15 +203,26 @@ export async function checkAndBumpVisit(
  * visit can absorb another and the absorbed one closes, so a chain cannot loop.
  */
 export async function visitFamily(tx: Transaction, visitId: string): Promise<string[]> {
-  const { rows } = await tx.execute<{ id: string }>(sql`
-    with recursive family(id) as (
-      select ${visitId}
+  return (await visitFamilies(tx, [visitId])).get(visitId)!;
+}
+
+/** {@link visitFamily} for several visits in one query, keyed by each visit asked about. */
+export async function visitFamilies(
+  tx: Transaction,
+  visitIds: readonly string[],
+): Promise<Map<string, string[]>> {
+  const families = new Map(visitIds.map((id) => [id, [] as string[]]));
+  if (visitIds.length === 0) return families;
+  const { rows } = await tx.execute<{ root: string; id: string }>(sql`
+    with recursive family(root, id) as (
+      select value, value from json_each(${JSON.stringify(visitIds)})
       union
-      select v.id from visits v join family f on v.merged_into_visit_id = f.id
+      select f.root, v.id from visits v join family f on v.merged_into_visit_id = f.id
     )
-    select id from family
+    select root, id from family
   `);
-  return rows.map((row) => row.id);
+  for (const row of rows) families.get(row.root)!.push(row.id);
+  return families;
 }
 
 async function readVisit(
@@ -122,7 +241,17 @@ export async function readVisitBills(tx: Transaction, visitId: string): Promise<
   if ((await readVisit(tx, visitId)) === undefined) {
     throw new AppError("visit.not_open", { visitId });
   }
-  const family = await visitFamily(tx, visitId);
+  return (await readBillsOfVisits(tx, [visitId])).get(visitId)!;
+}
+
+/** {@link readVisitBills} for several visits at once, keyed by each visit asked about. */
+export async function readBillsOfVisits(
+  tx: Transaction,
+  visitIds: readonly string[],
+): Promise<Map<string, VisitBill[]>> {
+  if (visitIds.length === 0) return new Map();
+  const families = await visitFamilies(tx, visitIds);
+  const members = [...new Set([...families.values()].flat())];
   const rows = await tx
     .select({
       workingOrderId: workingOrders.id,
@@ -133,7 +262,7 @@ export async function readVisitBills(tx: Transaction, visitId: string): Promise<
     })
     .from(workingOrders)
     .leftJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
-    .where(inArray(workingOrders.visitId, family))
+    .where(inArray(workingOrders.visitId, members))
     .groupBy(workingOrders.id)
     .orderBy(workingOrders.openedAt, workingOrders.orderNumber, workingOrders.id);
   const filed = new Set(
@@ -149,7 +278,7 @@ export async function readVisitBills(tx: Transaction, visitId: string): Promise<
         )
     ).map((sale) => sale.workingOrderId),
   );
-  return rows.map((row) => {
+  const bills = rows.map((row): VisitBill => {
     const total = rawCentsToDecimal(row.total);
     const owing = row.status === "open" || row.status === "placed";
     return {
@@ -162,6 +291,12 @@ export async function readVisitBills(tx: Transaction, visitId: string): Promise<
       receiptAvailable: filed.has(row.workingOrderId),
     };
   });
+  return new Map(
+    [...families].map(([root, family]) => {
+      const inFamily = new Set(family);
+      return [root, bills.filter((bill) => inFamily.has(bill.visitId))];
+    }),
+  );
 }
 
 /**

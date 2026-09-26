@@ -65,6 +65,7 @@ import {
   updateOrderLine,
   voidTabLine,
 } from "./working-order.js";
+import { finishTable, seatTable } from "./visits.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
@@ -845,8 +846,9 @@ describe("readTabLines", () => {
 });
 
 describe("listTablesWithState (occupancy)", () => {
-  it("reflects free → open-tab → free as a tab opens and pays", async () => {
+  it("reflects free → open-tab while the party is seated, paid or not → free once it finishes", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
+    const operatorId = randomUUID();
 
     const free = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
     expect(free).toEqual([
@@ -858,8 +860,13 @@ describe("listTablesWithState (occupancy)", () => {
       }),
     ]);
 
-    const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "2" }] }),
+    const { tabId, visitId } = await asApp(cfg, (tx) =>
+      seatTable(tx, cfg, {
+        tableId,
+        guestCount: null,
+        operatorId,
+        lines: [{ menuItemId: cafeOffer, quantity: "2" }],
+      }),
     );
     const busy = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
     expect(busy[0]).toMatchObject({
@@ -874,8 +881,14 @@ describe("listTablesWithState (occupancy)", () => {
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
     );
+    const paid = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    expect(paid[0]).toMatchObject({ state: "open-tab", hasOpenTab: false });
+
+    await asApp(cfg, (tx) =>
+      finishTable(tx, cfg, { visitId, expectedVisitRevision: 0, operatorId }),
+    );
     const freed = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
-    expect(freed[0]).toMatchObject({ state: "free", hasOpenTab: false });
+    expect(freed[0]).toMatchObject({ state: "free", hasOpenTab: false, visit: null });
   });
 
   it("shows delivery-pending while a fired delivery is uncollected, and free once collected", async () => {

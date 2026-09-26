@@ -311,3 +311,157 @@ describe("GET /api/visits/:id/bills", () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe("POST /api/tables/:id/tab", () => {
+  it("seats the party through a visit opened by the signed-in operator", async () => {
+    const tableId = await table();
+    const res = await post(`/api/tables/${tableId}/tab`, {});
+    expect(res.status).toBe(200);
+    const { tabId, visitId } = (await res.json()) as { tabId: string; visitId: string };
+    expect(await visitRow(visitId)).toMatchObject({ openedBy: ana.id, guestCount: null });
+    const [tab] = await withTransaction(suite.db, (tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, tabId)),
+    );
+    expect(tab!.visitId).toBe(visitId);
+  });
+});
+
+describe("the tab routes carry the party's revision", () => {
+  async function current(visitId: string): Promise<number> {
+    return (await visitRow(visitId)).revision;
+  }
+
+  /** Each route, sent to party `a`'s tab (party `b` is the other end of a merge or transfer). */
+  const ROUTES: {
+    name: string;
+    path: (a: Seated) => string;
+    body: (a: Seated, b: Seated, free: string, revisions: Record<string, unknown>) => unknown;
+  }[] = [
+    {
+      name: "move",
+      path: (a) => `/api/tabs/${a.tabId}/move`,
+      body: (_a, _b, free, r) => ({ toTableId: free, ...r }),
+    },
+    {
+      name: "join",
+      path: (a) => `/api/tabs/${a.tabId}/join`,
+      body: (_a, _b, free, r) => ({ tableId: free, ...r }),
+    },
+    {
+      name: "merge",
+      path: (a) => `/api/tabs/${a.tabId}/merge`,
+      body: (_a, b, _free, r) => ({ fromTabId: b.tabId, freeSourceTable: true, ...r }),
+    },
+    {
+      name: "transfer",
+      path: (a) => `/api/tabs/${a.tabId}/transfer`,
+      body: (_a, b, _free, r) => ({ toTabId: b.tabId, transfers: [{ lineNo: 1 }], ...r }),
+    },
+    {
+      name: "split",
+      path: (a) => `/api/tabs/${a.tabId}/split`,
+      body: (_a, _b, _free, r) => ({ transfers: [{ lineNo: 1 }], ...r }),
+    },
+    {
+      name: "unjoin",
+      path: (a) => `/api/tabs/${a.tabId}/unjoin`,
+      body: (a, _b, _free, r) => ({ tableId: a.tableId, ...r }),
+    },
+  ];
+
+  type Seated = Awaited<ReturnType<typeof seat>>;
+
+  it.each(ROUTES)("$name answers 409 visit.out_of_date for a stale revision", async (route) => {
+    const a = await seat();
+    const b = await seat();
+    const res = await post(
+      route.path(a),
+      route.body(a, b, await table(), {
+        expectedVisitRevision: 7,
+        expectedSourceVisitRevision: 7,
+      }),
+    );
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "visit.out_of_date" } });
+  });
+
+  it.each(ROUTES)("$name refuses a malformed revision as a bad field", async (route) => {
+    const a = await seat();
+    const b = await seat();
+    const crossesVisits = route.name === "merge" || route.name === "transfer";
+    const fields = crossesVisits
+      ? ["expectedVisitRevision", "expectedSourceVisitRevision"]
+      : ["expectedVisitRevision"];
+    for (const field of fields) {
+      const res = await post(route.path(a), route.body(a, b, await table(), { [field]: "0" }));
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+  });
+
+  it("move takes the party's revision and records nothing without it", async () => {
+    const a = await seat();
+    const to = await table();
+    const missing = await post(`/api/tabs/${a.tabId}/move`, { toTableId: to });
+    expect(missing.status).toBe(400);
+    expect(await missing.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "expectedVisitRevision" } },
+    });
+
+    const moved = await post(`/api/tabs/${a.tabId}/move`, {
+      toTableId: to,
+      expectedVisitRevision: 0,
+    });
+    expect(moved.status).toBe(200);
+    expect(await current(a.visitId)).toBe(1);
+  });
+
+  it("merge closes the absorbed party for the signed-in operator, and needs both revisions", async () => {
+    const a = await seat();
+    const b = await seat();
+    const missing = await post(`/api/tabs/${a.tabId}/merge`, {
+      fromTabId: b.tabId,
+      freeSourceTable: true,
+      expectedVisitRevision: 0,
+    });
+    expect(missing.status).toBe(400);
+    expect(await missing.json()).toMatchObject({
+      error: {
+        code: "management.request_invalid",
+        params: { field: "expectedSourceVisitRevision" },
+      },
+    });
+
+    const merged = await post(`/api/tabs/${a.tabId}/merge`, {
+      fromTabId: b.tabId,
+      freeSourceTable: true,
+      expectedVisitRevision: 0,
+      expectedSourceVisitRevision: 0,
+    });
+    expect(merged.status).toBe(200);
+    expect(await visitRow(b.visitId)).toMatchObject({
+      state: "closed",
+      mergedIntoVisitId: a.visitId,
+      closedBy: ana.id,
+    });
+  });
+
+  it("join then unjoin: the unjoined table leaves the party", async () => {
+    const a = await seat();
+    const other = await table();
+    const joined = await post(`/api/tabs/${a.tabId}/join`, {
+      tableId: other,
+      expectedVisitRevision: 0,
+    });
+    expect(joined.status).toBe(200);
+    const unjoined = await post(`/api/tabs/${a.tabId}/unjoin`, {
+      tableId: other,
+      expectedVisitRevision: 1,
+    });
+    expect(unjoined.status).toBe(200);
+    expect(await unjoined.json()).toEqual({});
+    expect(await current(a.visitId)).toBe(2);
+  });
+});

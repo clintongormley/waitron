@@ -378,7 +378,8 @@ describe("table + tab routes", () => {
       body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
     });
     expect(round.status).toBe(200);
-    expect(await round.text()).toBe("");
+    // The tab the round landed on: a seated party's settled tab gets a new one (visits.test.ts).
+    expect(await round.json()).toEqual({ tabId });
 
     const voided = await request(`/api/working-orders/${tabId}/lines/1`, { method: "DELETE" });
     expect(voided.status).toBe(200);
