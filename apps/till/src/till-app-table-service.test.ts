@@ -844,7 +844,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       await flush(el);
 
       expect(banner(el)!.textContent).toContain(
-        "El servidor no respondió a tu cambio en Burger de la mesa 2. Abre esa mesa y comprueba si se guardó.",
+        "El servidor no ha respondido a tu cambio en Burger de la mesa 2. Abre esa mesa y comprueba si se ha guardado.",
       );
     });
 
@@ -869,6 +869,244 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       expect(tableOrder(el)!.revision).toBe(2);
       expect(api.getTabLines).toHaveBeenCalledTimes(reads);
     });
+
+    /** Sends a change on table 2 and goes back to the floor; the server's answer and table 3's
+     * offers are each settled by the test. */
+    async function changeThenLeave(overrides: Record<string, unknown> = {}) {
+      let settle!: { resolve: (value: unknown) => void; reject: (reason: unknown) => void };
+      let releaseOffers: () => void = () => undefined;
+      const { el, screen } = await openBurgerTab({
+        getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
+        getTabLines: vi.fn((orderId: string) =>
+          Promise.resolve({
+            lines: [orderId === "wo-8" ? otherLine : burgerLine],
+            revision: orderId === "wo-8" ? 2 : 7,
+            editSentLines: true,
+          }),
+        ),
+        updateOrderLine: vi.fn(
+          () => new Promise((resolve, reject) => (settle = { resolve, reject })),
+        ),
+        listZoneOffers: vi
+          .fn()
+          .mockResolvedValueOnce(burgerOffers)
+          .mockImplementation(
+            () => new Promise((resolve) => (releaseOffers = () => resolve(burgerOffers))),
+          ),
+        ...overrides,
+      });
+      emit(screen, "change-line", change);
+      await flush(el);
+      emit(screen, "back-to-floor");
+      await flush(el);
+      return {
+        el,
+        settle: () => settle,
+        release: () => releaseOffers(),
+        reads: vi.mocked(api.getTabLines).mock.calls.length,
+      };
+    }
+
+    const startedRefusal =
+      "Tu cambio en Burger de la mesa 2 no se ha guardado. La cocina ya ha empezado este plato, así que ya no se puede cambiar. Puedes cancelarlo";
+
+    it("names the refused change, and offers nothing on the next table, when the refusal lands while that table is still opening", async () => {
+      const { el, settle, release, reads } = await changeThenLeave();
+      await openFromFloor(el, otherTable);
+
+      settle().reject({ code: "ticket.already_started" });
+      await flush(el);
+      release();
+      await flush(el);
+      await flush(el);
+
+      expect(tableOrder(el)!.orderId).toBe("wo-8");
+      expect(dialogOf(tableOrder(el)!).open).toBe(false);
+      expect(banner(el)!.textContent).toContain(startedRefusal);
+      expect(tableOrder(el)!.revision).toBe(2);
+      expect(vi.mocked(api.getTabLines).mock.calls.slice(reads)).toEqual([["wo-8"]]);
+    });
+
+    it("keeps the named refusal that landed on the floor once the waiter opens another table", async () => {
+      const { el, settle, release, reads } = await changeThenLeave();
+
+      settle().reject({ code: "ticket.already_started" });
+      await flush(el);
+      expect(banner(el)!.textContent).toContain(startedRefusal);
+      await openFromFloor(el, otherTable);
+      release();
+      await flush(el);
+      await flush(el);
+
+      expect(tableOrder(el)!.orderId).toBe("wo-8");
+      expect(banner(el)!.textContent).toContain(startedRefusal);
+      expect(dialogOf(tableOrder(el)!).open).toBe(false);
+      expect(vi.mocked(api.getTabLines).mock.calls.slice(reads)).toEqual([["wo-8"]]);
+    });
+
+    it("keeps the named refusal on screen when the waiter goes back to the floor again", async () => {
+      const { el, settle } = await changeThenOpenTable3();
+      settle.reject({ code: "ticket.already_started" });
+      await flush(el);
+
+      emit(tableOrder(el)!, "back-to-floor");
+      await flush(el);
+
+      expect(tableOrder(el)).toBeNull();
+      expect(banner(el)!.textContent).toContain(startedRefusal);
+    });
+
+    it("names the refused change on a handheld, which leaves the order through its Floor tab, while the next table is opening", async () => {
+      let settle!: { reject: (reason: unknown) => void };
+      let releaseOffers!: () => void;
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "h1", formFactor: "phone-portrait", stationId: null }),
+        getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
+        getTabLines: vi.fn((orderId: string) =>
+          Promise.resolve({
+            lines: [orderId === "wo-8" ? otherLine : burgerLine],
+            revision: orderId === "wo-8" ? 2 : 7,
+            editSentLines: true,
+          }),
+        ),
+        updateOrderLine: vi.fn(() => new Promise((_resolve, reject) => (settle = { reject }))),
+        listZoneOffers: vi
+          .fn()
+          .mockResolvedValueOnce(burgerOffers)
+          .mockImplementation(
+            () => new Promise((resolve) => (releaseOffers = () => resolve(burgerOffers))),
+          ),
+      });
+      await logIn(el);
+      emit(shell(el), "tab-select", { key: "floor" });
+      await flush(el);
+      await openFromFloor(el, openTable);
+      await flush(el);
+      emit(tableOrder(el)!, "change-line", change);
+      await flush(el);
+      emit(shell(el), "tab-select", { key: "floor" });
+      await flush(el);
+      await openFromFloor(el, otherTable);
+
+      settle.reject({ code: "ticket.already_started" });
+      await flush(el);
+      releaseOffers();
+      await flush(el);
+      await flush(el);
+
+      expect(tableOrder(el)!.orderId).toBe("wo-8");
+      expect(dialogOf(tableOrder(el)!).open).toBe(false);
+      expect(banner(el)!.textContent).toContain(startedRefusal);
+    });
+
+    it("leaves the table out of the message when the floor no longer lists the changed order's table", async () => {
+      const { el, settle } = await changeThenLeave({
+        getTablesState: vi
+          .fn()
+          .mockResolvedValueOnce([openTable, otherTable])
+          .mockResolvedValue([otherTable]),
+      });
+
+      settle().reject({ code: "ticket.already_started" });
+      await flush(el);
+
+      expect(banner(el)!.textContent!.trim()).toBe(
+        "Tu cambio en Burger no se ha guardado. La cocina ya ha empezado este plato, así que ya no se puede cambiar. Puedes cancelarlo",
+      );
+    });
+
+    it("leaves the table out of the unanswered message too", async () => {
+      const { el, settle } = await changeThenLeave({
+        getTablesState: vi
+          .fn()
+          .mockResolvedValueOnce([openTable, otherTable])
+          .mockResolvedValue([otherTable]),
+      });
+
+      settle().reject(new TypeError("Failed to fetch"));
+      await flush(el);
+
+      expect(banner(el)!.textContent!.trim()).toBe(
+        "El servidor no ha respondido a tu cambio en Burger. Abre su mesa y comprueba si se ha guardado.",
+      );
+    });
+  });
+
+  it("shows the table the waiter opened, not the lines of an earlier order whose read answers later", async () => {
+    const otherTable: TableState = { ...openTable, id: "t3", label: "3", tabId: "wo-8" };
+    const otherLine: TabLine = { ...burgerLine, name: "Tarta", state: "preparing" };
+    let finishReload!: () => void;
+    const getTabLines = vi
+      .fn()
+      .mockResolvedValueOnce({ lines: [burgerLine], revision: 7, editSentLines: true })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishReload = () =>
+              resolve({
+                lines: [{ ...burgerLine, note: "no onions" }],
+                revision: 8,
+                editSentLines: false,
+              });
+          }),
+      )
+      .mockResolvedValue({ lines: [otherLine], revision: 2, editSentLines: true });
+    const { el, screen } = await openBurgerTab({
+      getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
+      getTabLines,
+      updateOrderLine: vi.fn().mockResolvedValue({ revision: 8 }),
+    });
+
+    emit(screen, "change-line", change);
+    await flush(el);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    await openFromFloor(el, otherTable);
+    await flush(el);
+    finishReload();
+    await flush(el);
+
+    expect(getTabLines.mock.calls.map(([orderId]) => orderId)).toEqual(["wo-7", "wo-7", "wo-8"]);
+    expect(tableOrder(el)!.orderId).toBe("wo-8");
+    expect(tableOrder(el)!.lines.map((line) => line.name)).toEqual(["Tarta"]);
+    expect(tableOrder(el)!.revision).toBe(2);
+    expect(tableOrder(el)!.editSentLines).toBe(true);
+  });
+
+  it("keeps the opened table's lines when an earlier order's read fails after them", async () => {
+    const otherTable: TableState = { ...openTable, id: "t3", label: "3", tabId: "wo-8" };
+    const otherLine: TabLine = { ...burgerLine, name: "Tarta", state: "preparing" };
+    let failReload!: () => void;
+    const getTabLines = vi
+      .fn()
+      .mockResolvedValueOnce({ lines: [burgerLine], revision: 7, editSentLines: true })
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            failReload = () => reject(new TypeError("Failed to fetch"));
+          }),
+      )
+      .mockResolvedValue({ lines: [otherLine], revision: 2, editSentLines: true });
+    const { el, screen } = await openBurgerTab({
+      getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
+      getTabLines,
+      updateOrderLine: vi.fn().mockResolvedValue({ revision: 8 }),
+    });
+
+    emit(screen, "change-line", change);
+    await flush(el);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    await openFromFloor(el, otherTable);
+    await flush(el);
+    failReload();
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-8");
+    expect(tableOrder(el)!.lines.map((line) => line.name)).toEqual(["Tarta"]);
   });
 
   it("offers no Cancel when the waiter moves to another table while the refused line reloads", async () => {

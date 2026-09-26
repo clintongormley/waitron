@@ -147,10 +147,11 @@ function counterError(error: unknown, fallback: StringKey): CounterError {
   return code !== undefined && ACTIONABLE_REFUSALS.has(code) ? { code } : fallback;
 }
 
-/** A change to a line of an order that is no longer open on screen, and how it failed. */
+/** A change to a line of an order the waiter had started leaving, and how it failed. */
 interface LateChange {
   lineName: string;
-  tableLabel: string;
+  /** Absent when the floor no longer lists the table. */
+  tableLabel?: string;
   /** The server gave no answer, so the change may have been saved. */
   unanswered: boolean;
   code?: string;
@@ -158,9 +159,17 @@ interface LateChange {
 
 function lateChangeMessage(late: LateChange): string {
   // Replacer functions, so a `$` in a name is never read as a replacement pattern.
-  const text = t(late.unanswered ? "table.change_unconfirmed" : "table.change_not_saved")
+  const { tableLabel } = late;
+  const key = late.unanswered
+    ? tableLabel === undefined
+      ? "table.change_unconfirmed_no_table"
+      : "table.change_unconfirmed"
+    : tableLabel === undefined
+      ? "table.change_not_saved_no_table"
+      : "table.change_not_saved";
+  const text = t(key)
     .replace("{line}", () => late.lineName)
-    .replace("{table}", () => late.tableLabel);
+    .replace("{table}", () => tableLabel ?? "");
   return text.replace("{reason}", () => codeMessage(late.code ?? "server.internal"));
 }
 
@@ -406,6 +415,12 @@ export class TillApp extends LitElement {
   @state() private tableSelectedCatalogueId = "";
   /** Identifies the latest table-selection offer request so a slower prior selection cannot win. */
   #tableOfferRequest = 0;
+  /** Bumped when the waiter starts leaving the open order (back to the floor, or opening a table), so
+   * an answer for a request sent before can tell the order has been left while
+   * {@link activeTabId} still names it. */
+  #orderVisit = 0;
+  /** Identifies the latest tab-lines read, so an earlier read answering later cannot win. */
+  #tabLinesRead = 0;
   @state() private counterServiceZones: ServiceZoneSummary[] = [];
   @state() private counterServiceZoneId = "";
   #counterOfferRequest = 0;
@@ -1568,7 +1583,8 @@ export class TillApp extends LitElement {
     const { tableId, hasOpenTab } = (event as CustomEvent<{ tableId: string; hasOpenTab: boolean }>)
       .detail;
     const offerRequest = ++this.#tableOfferRequest;
-    this.errorKey = undefined;
+    this.#orderVisit++;
+    this.#clearErrorKeepingLateChange();
     this.cancelOffer = null;
     const table = this.tables.find((candidate) => candidate.id === tableId);
     if (table?.zoneId !== null && table?.zoneId !== undefined) {
@@ -1616,16 +1632,19 @@ export class TillApp extends LitElement {
 
   /** A failed read, or no tab id, leaves an empty tab rather than blocking the operator. */
   async #loadTabLines(): Promise<void> {
+    const read = ++this.#tabLinesRead;
     if (this.activeTabId === undefined) {
       this.tabLines = [];
       return;
     }
     try {
       const tab = await this.api.getTabLines(this.activeTabId);
+      if (read !== this.#tabLinesRead) return;
       this.tabLines = tab.lines;
       this.tabRevision = tab.revision;
       this.editSentLines = tab.editSentLines;
     } catch {
+      if (read !== this.#tabLinesRead) return;
       this.tabLines = [];
     }
   }
@@ -1733,15 +1752,18 @@ export class TillApp extends LitElement {
   /**
    * The reload runs on every path, so the line shows what the server stored and a refused change
    * leaves no stale actions. A change refused because the kitchen has started the line offers to
-   * cancel it after the reload. An answer that arrives once another order is open changes nothing on
-   * screen but the message: a failure is still said, naming the line and table it was for, because the
-   * waiter may believe a note (an allergy, say) was saved.
+   * cancel it after the reload. An answer that arrives once the waiter has started leaving the order
+   * (see {@link #orderVisit}) changes nothing on screen but the message: a failure is still said, naming
+   * the line, and its table while the floor lists it, because the waiter may believe a note (an
+   * allergy, say) was saved.
    */
   async #onChangeLine(event: Event): Promise<void> {
     const { lineNo, lineName, patch, revision } = (event as CustomEvent<ChangeLineDetail>).detail;
     const orderId = this.activeTabId;
     if (orderId === undefined) return;
-    const tableLabel = this.tables.find((table) => table.id === this.activeTableId)?.label ?? "";
+    const visit = this.#orderVisit;
+    const left = () => this.#orderVisit !== visit || this.activeTabId !== orderId;
+    const tableId = this.activeTableId;
     this.errorKey = undefined;
     this.cancelOffer = null;
     let outcome: { saved: { revision: number } } | { error: unknown };
@@ -1750,12 +1772,18 @@ export class TillApp extends LitElement {
     } catch (error) {
       outcome = { error };
     }
-    if (this.activeTabId !== orderId) {
+    if (left()) {
       if ("error" in outcome) {
         const unanswered = isNetworkFailure(outcome.error);
         const code = (outcome.error as { code?: string } | undefined)?.code;
+        const tableLabel = this.tables.find((table) => table.id === tableId)?.label;
         this.errorKey = {
-          lateChange: { lineName, tableLabel, unanswered, ...(code === undefined ? {} : { code }) },
+          lateChange: {
+            lineName,
+            unanswered,
+            ...(tableLabel === undefined ? {} : { tableLabel }),
+            ...(code === undefined ? {} : { code }),
+          },
         };
       }
       return;
@@ -1771,8 +1799,14 @@ export class TillApp extends LitElement {
           : lineWriteError(outcome.error);
     }
     await this.#loadTabLines();
-    if (refusal === "ticket.already_started" && this.activeTabId === orderId)
-      this.cancelOffer = lineNo;
+    if (refusal === "ticket.already_started" && !left()) this.cancelOffer = lineNo;
+  }
+
+  /** Leaving an order clears the banner, except a failed change to a line of an order already left,
+   * which has to outlive the switch. */
+  #clearErrorKeepingLateChange(): void {
+    if (typeof this.errorKey === "object" && "lateChange" in this.errorKey) return;
+    this.errorKey = undefined;
   }
 
   /** Keyed by {@link activeTableId}, not the tab's order id. */
@@ -1976,9 +2010,10 @@ export class TillApp extends LitElement {
    * just-opened table as free.
    */
   #onBackToFloor(): void {
+    this.#orderVisit++;
     this.cancelOffer = null;
     if (this.#inShell()) {
-      this.errorKey = undefined;
+      this.#clearErrorKeepingLateChange();
       this.#popDrill();
       void this.#refreshFloor();
     } else {

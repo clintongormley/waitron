@@ -276,6 +276,9 @@ export const en = {
   "table.change_not_saved": "Your change to {line} on table {table} was not saved. {reason}",
   "table.change_unconfirmed":
     "The server did not answer your change to {line} on table {table}. Open that table and check whether it was saved.",
+  "table.change_not_saved_no_table": "Your change to {line} was not saved. {reason}",
+  "table.change_unconfirmed_no_table":
+    "The server did not answer your change to {line}. Open its table and check whether it was saved.",
   // Table actions
   "table.actions_title": "Table actions",
   "table.action_move": "Move to table",
@@ -598,7 +601,10 @@ export const es: Record<StringKey, string> = {
   "table.cancel_all": "Cancelar todos",
   "table.change_not_saved": "Tu cambio en {line} de la mesa {table} no se ha guardado. {reason}",
   "table.change_unconfirmed":
-    "El servidor no respondió a tu cambio en {line} de la mesa {table}. Abre esa mesa y comprueba si se guardó.",
+    "El servidor no ha respondido a tu cambio en {line} de la mesa {table}. Abre esa mesa y comprueba si se ha guardado.",
+  "table.change_not_saved_no_table": "Tu cambio en {line} no se ha guardado. {reason}",
+  "table.change_unconfirmed_no_table":
+    "El servidor no ha respondido a tu cambio en {line}. Abre su mesa y comprueba si se ha guardado.",
   "table.actions_title": "Acciones de mesa",
   "table.action_move": "Mover a mesa",
   "table.action_join": "Unir una mesa",
