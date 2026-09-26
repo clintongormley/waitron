@@ -32,12 +32,9 @@ export class WtNumberStepper extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
-      /* Baseline, so the element's own baseline is the number's and a row aligned by baseline
-         lines the text up, rather than the - button's. */
       .control {
         display: grid;
         grid-template-columns: auto auto auto;
-        align-items: baseline;
         justify-content: start;
       }
 
@@ -50,7 +47,10 @@ export class WtNumberStepper extends LitElement {
         font: inherit;
       }
 
+      /* The only item aligned by baseline, so the element's baseline is the number's — a row
+         aligned by baseline lines the text up — while the buttons stretch level with the box. */
       input {
+        align-self: baseline;
         width: var(--wt-stepper-field-width);
         min-width: var(--wt-tap-min);
         padding: var(--wt-space-2);

@@ -360,6 +360,16 @@ test("focusing the stepper focuses the number box, not the - button before it", 
   expect(el.shadowRoot!.activeElement).toBe(parts(el).input);
 });
 
+test("the buttons stand level with the number box, top and bottom", async () => {
+  const el = await mount('<wt-number-stepper label="Q" value="3"></wt-number-stepper>');
+  const box = parts(el).input.getBoundingClientRect();
+  for (const button of [parts(el).minus, parts(el).plus]) {
+    const edge = button.getBoundingClientRect();
+    expect(Math.abs(edge.top - box.top)).toBeLessThan(0.5);
+    expect(Math.abs(edge.bottom - box.bottom)).toBeLessThan(0.5);
+  }
+});
+
 test("its baseline is the number's baseline, so a row aligned by baseline lines the text up", async () => {
   // A wt-input beside it shares the box's padding, border and font, so their text baselines line up
   // exactly when their boxes' tops do. Without baseline alignment inside the stepper, its baseline
