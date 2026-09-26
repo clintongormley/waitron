@@ -3218,8 +3218,7 @@ image constraints under *Detail → Box image*.
     `verifyMembershipDocument` / `acceptMembershipDocument` on what it reads, and none did; it now
     says a peer's document is stored only after `acceptMembershipDocument` passes it, every other
     one is minted and signed by this node, and readers trust the row. The restore question it raised
-    is open under Task 9a (the archive and bucket first start now checks the row, branch
-    `fix/verify-restored-membership`; the rest stays open there). Two notes #653's prune deleted and
+    is open under Task 9a (the archive and bucket first start now checks the row, #678; the rest stays open there). Two notes #653's prune deleted and
     nothing else recorded: nobody knows why the 5-second busy timeout did not absorb a
     `database is locked` in the pending-payment sweep; and nothing proves `startServer` itself
     survives a backup duty that cannot start — only `backup-supervisor.test.ts` covers that, at the
@@ -5887,7 +5886,7 @@ endorsement stored when that round reads, not the first round's"
   should clear it is the owner's call.
 - A sell-only local secondary that is not fenced runs the first start and signs the next term.
 - A restored membership row is now checked before the start that finishes the restore signs over
-  it (branch `fix/verify-restored-membership`, closing part of what A38, #669, left open).
+  it (#678, closing part of what A38, #669, left open).
   `completeRebuild` first runs `assertRestoredMembershipValid`
   (`apps/server/src/rebuild-first-start.ts`): a held document that fails `verifyMembershipDocument`
   against the `nodes` keys of the same database throws `restore.membership_invalid { reason }`
