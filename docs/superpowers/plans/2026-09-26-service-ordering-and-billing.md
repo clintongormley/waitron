@@ -545,9 +545,9 @@ Every task's requirements implicitly include this section.
   - Lane C also adds core migrations. On a rebase collision, regenerate; never hand-edit
     (CLAUDE.md §3).
   - Measure the upgrade on a seeded scratch venue, and state it in the PR and the backlog.
-- **Error codes name the domain concept and are never renamed** (CLAUDE.md §3). (2026-09-26: before
-  a venue is live a code may be renamed or deleted freely, CLAUDE.md §3.) This plan's new codes (grep the registries first and
-  reuse any sibling):
+- **Error codes name the domain concept and are never renamed** (CLAUDE.md §3). _(2026-09-26: before
+  a venue is live a code may be renamed or deleted freely, CLAUDE.md §3.)_ This plan's new codes
+  (grep the registries first and reuse any sibling):
   - `visit.bill_outstanding`, `visit.not_open`, `visit.out_of_date` (the sibling of M7b's
     `working_order.out_of_date`, D19)
   - `submission.id_reused` (D8)

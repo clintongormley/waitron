@@ -3281,8 +3281,8 @@ image constraints under *Detail → Box image*.
     reaches `settleSale`'s catch that turns a `sale_settlements` unique-key refusal into
     `sale.already_settled` (`packages/core/src/settle-sale.ts`); #598 measured the earlier check
     stopping both concurrent-settlement tests first. `sale.number_reused` is registered in
-    `packages/core/src/errors.ts` and `git grep number_reused -- apps packages` finds no thrower.
-    Outside core,
+    `packages/core/src/errors.ts` and `git grep number_reused -- apps packages` finds no thrower
+    (see *Delete the error codes nothing raises any more*). Outside core,
     `docs/developers/conventions-data.md` says the stored breakdown holds "the literals a fiscal
     record hashes" (#598 found the hash covers the totals, not the breakdown).
   - Found by #597 (`packages/payments-sumup`, `packages/migrations`), not fixable in a
@@ -3365,7 +3365,8 @@ image constraints under *Detail → Box image*.
     `packages/provisioning/src/errors.ts` as spelling engine errors by `errcode`; it no longer
     does.
   - `packages/provisioning` code, found by #561 and not changed: `provisioning.database_not_owned`
-    is declared and neither thrown nor read anywhere in `packages/` or `apps/`;
+    is declared and neither thrown nor read anywhere in `packages/` or `apps/` (see *Delete the
+    error codes nothing raises any more*);
     `provisioning.adopt_incomplete`'s `missing` type still lists `"tenant"`; `quoteIdent` has no
     caller outside its own suite, and the `quoteLiteral` re-export in `identifiers.ts` is used only
     by that suite; the `action.email === undefined` branch in `venue-apply.ts`'s seed-admin cannot
@@ -4601,18 +4602,31 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   that before a venue is live a code may be renamed or deleted freely (CLAUDE.md §3), so the deletion
   stands. Nothing to do.
 - **Delete the error codes nothing raises any more** (owner, 2026-09-26: before a venue is live a
-  code may be deleted freely). Several are still registered, each with a note saying nothing raises
-  it, and they survived because the old rule said a shipped code is never removed: the "Not thrown."
-  entries in `packages/catalogue/src/errors.ts`, the deprecated entry in
-  `packages/provisioning/src/errors.ts`, `sale.unknown_product` (above, *`sale.unknown_product` is
-  no longer raised*), `options.in_use` and `extras.in_use` (above) and the retired entry in
-  `apps/dashboard/src/i18n/codes.ts`. Two more registered codes are raised by nothing but were not
-  kept under that rule and are not in this list: `sale.number_reused` (`packages/core/src/errors.ts`:
-  no path translates the unique-index violation into it) and `provisioning.database_not_owned`
-  (`packages/provisioning/src/errors.ts`); check each before deleting it. **Next action:** delete
-  each with its wording, status-map entry and tests in one change, after checking that nothing
-  raises it and that no prefix matcher or stored copy needs it (docs/developers/conventions-data.md
-  lists both).
+  code may be deleted freely). Several are still registered although nothing raises them, most of
+  them kept because the old rule said a shipped code is never removed. A search on 2026-09-26 found,
+  by file:
+  - `packages/catalogue/src/errors.ts`: the entries marked not thrown, including the three
+    `modifier.*` codes.
+  - `packages/provisioning/src/errors.ts`: `provisioning.adopt_incomplete` (deprecated) and
+    `provisioning.database_not_owned`, whose throwers went in `aabdde6a8` (#489) while the entry
+    stayed.
+  - `apps/server/src/errors.ts`: `sale.unknown_product` (above, *`sale.unknown_product` is no longer
+    raised*), `device.profile_missing`, `option.not_found`, `options.selection_invalid`,
+    `options.unsupported_product`, `order_prep.invalid_transition` and `tenant.not_found` (only a
+    test raises it).
+  - `packages/payments-stripe/src/errors.ts`: `stripe.collect_timeout`.
+  - `packages/identity/src/errors.ts`: `totp.key_unavailable`.
+  - `options.in_use` and `extras.in_use` (above), and the retired entry in
+    `apps/dashboard/src/i18n/codes.ts`.
+
+  `sale.number_reused` (`packages/core/src/errors.ts`) is a different case: it was added in
+  `10b16fd57` for a translation of the invoice-number unique-index violation that was never
+  written, so decide whether that translation is still wanted before deleting it. The list above
+  comes from one search and may be incomplete or out of date. **Next action:** re-run the search
+  (grep each registered code for a raise site outside its registry, status maps, wording and
+  tests) rather than trusting the list, then delete each code nothing raises with its wording,
+  status-map entry and tests in one change, after checking that no prefix matcher or stored copy
+  needs it (docs/developers/conventions-data.md lists both).
 - **`server.credential_unusable` names an unusable credential, although `server.*` is reserved for
   facts about the process itself.** It is thrown for AEAT's certificate
   (`packages/fiscal-verifactu/src/aeat-transport.ts`) and for Stripe's secret key and webhook secret
