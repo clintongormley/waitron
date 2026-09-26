@@ -290,6 +290,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "status.not_found": 404,
   "status.inactive": 409,
   "drawer.no_printer": 400,
+  "drawer.not_attached": 400,
 };
 
 export const run = createErrorBoundary(STATUS, "till.failed");
@@ -1029,6 +1030,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const printer = await resolveReceiptPrinter(tx, deps.cfg);
         if (printer === undefined) {
           throw new AppError("drawer.no_printer", { tillId: deps.cfg.tillId });
+        }
+        if (!printer.hasCashDrawer) {
+          throw new AppError("drawer.not_attached", { printerId: printer.id });
         }
         await enqueueManualDrawerOpen(
           tx,

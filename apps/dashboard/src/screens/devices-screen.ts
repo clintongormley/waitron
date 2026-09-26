@@ -4,7 +4,6 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
-import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import { CARD_PROVIDER_PANELS } from "@waitron/dashboard-modules";
@@ -44,12 +43,10 @@ function bindingOf(formFactor: FormFactor): "station" | "register" | "none" {
 
 interface HardwareEdit {
   receiptPrinterId: string;
-  hasCashDrawer: boolean;
 }
 
 const DEFAULT_HARDWARE: HardwareEdit = {
   receiptPrinterId: "",
-  hasCashDrawer: false,
 };
 
 @customElement("dashboard-devices-screen")
@@ -435,13 +432,11 @@ export class DevicesScreen extends LitElement {
     try {
       const updated = await this.api.patchDeviceHardware(id, {
         receiptPrinterId: hw.receiptPrinterId === "" ? null : hw.receiptPrinterId,
-        hasCashDrawer: hw.hasCashDrawer,
       });
       this.hardwareEdits = {
         ...this.hardwareEdits,
         [id]: {
           receiptPrinterId: updated.receiptPrinterId ?? "",
-          hasCashDrawer: updated.hasCashDrawer,
         },
       };
     } catch (error) {
@@ -496,7 +491,6 @@ export class DevicesScreen extends LitElement {
   /** The printer list is deliberately not filtered to a location; the server's binding check is the
    * authority. */
   #renderHardware(device: DeviceRow): TemplateResult {
-    const hw = this.#hardwareFor(device.id);
     const activePrinters = this.printers.filter((p) => p.active);
     const activeReaders = this.readers.filter((r) => r.active);
     return html`<div class="hardware" data-test="hardware-${device.id}">
@@ -524,15 +518,6 @@ export class DevicesScreen extends LitElement {
           ${activeReaders.map((r) => html`<option value=${r.id}>${this.#readerLabel(r)}</option>`)}
         </select>
       </label>
-      <wt-switch
-        label=${t("devices.has_cash_drawer")}
-        data-test="hw-cash-drawer-${device.id}"
-        .checked=${hw.hasCashDrawer}
-        @wt-change=${(e: CustomEvent<{ checked: boolean }>) => {
-          e.stopPropagation();
-          this.#setHardware(device.id, { hasCashDrawer: e.detail.checked });
-        }}
-      ></wt-switch>
       <wt-button
         variant="secondary"
         size="sm"

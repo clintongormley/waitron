@@ -1,5 +1,5 @@
 import { FALLBACK_LOCALE, SUPPORTED_LOCALE_CODES, type SupportedLocale } from "@waitron/shared";
-import { prepareText, type CharacterSet } from "./charset.js";
+import type { CharacterSet } from "./charset.js";
 
 export interface TestCharacterEncoding {
   label: string;
@@ -37,20 +37,8 @@ const CHARACTER_ENCODING_DEFINITIONS: Readonly<Record<CharacterSet, CharacterEnc
   };
 
 export interface CharacterCalibration {
-  testPageSampleText: string;
   finderSampleLines: readonly string[];
   finderEncodings: readonly TestCharacterEncoding[];
-  commonProfiles: readonly {
-    characterSet: CharacterSet;
-    characterTable: number;
-  }[];
-}
-
-export interface TestCharacterSample {
-  value: string;
-  characterSet: CharacterSet;
-  characterTable: number;
-  text: string;
 }
 
 export interface CharacterFinderOption {
@@ -60,17 +48,10 @@ export interface CharacterFinderOption {
 }
 
 const WESTERN_EUROPEAN_CALIBRATION: CharacterCalibration = {
-  testPageSampleText: "Café jamón Ñ ¿¡ ç ü 5 €",
   finderSampleLines: ["áéíóú ÁÉÍÓÚ ñÑ üÜ", "¿¡ € £ çÇ “ ” ‘ ’"],
   finderEncodings: [
     { label: "W", characterSet: "wpc1252" },
     { label: "8", characterSet: "pc858" },
-  ],
-  commonProfiles: [
-    { characterSet: "wpc1252", characterTable: 6 },
-    { characterSet: "wpc1252", characterTable: 16 },
-    { characterSet: "pc858", characterTable: 19 },
-    { characterSet: "plain", characterTable: 0 },
   ],
 };
 
@@ -113,7 +94,7 @@ export function characterFinderOptions(
   const encodings = characterCalibration(locale).finderEncodings;
   return Array.from({ length: 16 }, (_, offset) => firstTable + offset).flatMap((characterTable) =>
     encodings.map(({ label, characterSet }) => ({
-      code: `T${characterTable}${label}`,
+      code: `${label}-${String(characterTable).padStart(2, "0")}`,
       characterSet,
       characterTable,
     })),
@@ -129,16 +110,5 @@ export function characterSetOptions(
   ).map(([value, definition]) => ({
     value,
     label: definition.settingLabels[supportedLocale],
-  }));
-}
-
-/** Printed samples and matching setup-dialog answers for the venue's receipt locale. */
-export function testCharsetSamples(locale: string): readonly TestCharacterSample[] {
-  const calibration = characterCalibration(locale);
-  return calibration.commonProfiles.map(({ characterSet, characterTable }, index) => ({
-    value: String(index + 1),
-    characterSet,
-    characterTable,
-    text: prepareText(calibration.testPageSampleText, characterSet),
   }));
 }

@@ -2,6 +2,9 @@
 
 Owner decisions, 2026-09-14. Brainstormed and drafted on Opus 5; reviewed on Opus 4.8.
 
+Update, 2026-09-26: the closest-to-35mm sizing preference below is superseded by the
+[largest-fitting QR decision](2026-09-26-printer-calibration-wizard.md#receipt-qr-size).
+
 ## Why this exists
 
 Everything Waitron prints is plain text plus a few printer commands, built by the command builder in

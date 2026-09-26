@@ -9,11 +9,11 @@ import type { SupportedLocale } from "@waitron/shared";
 const CAPTIONS: Readonly<Record<SupportedLocale, { title: string; instruction: string }>> = {
   "en-GB": {
     title: "CHARACTER TABLE FINDER",
-    instruction: "Choose the first code whose A and B lines match the screen.",
+    instruction: "Choose the first code whose two lines match the screen.",
   },
   "es-ES": {
     title: "BUSCADOR DE TABLAS",
-    instruction: "Elige el primer codigo cuyas lineas A y B coincidan con la pantalla.",
+    instruction: "Elige el primer codigo cuyas dos lineas coincidan con la pantalla.",
   },
 };
 
@@ -45,10 +45,11 @@ export function formatCharacterTableTest({
     startTable,
   )) {
     for (const [index, sample] of calibration.finderSampleLines.entries()) {
-      // If the candidate number is ignored, it must not inherit the previous candidate's table.
-      b.charset(characterSet, 0)
+      const prefix = index === 0 ? code : " ".repeat(code.length);
+      b.charset("plain")
+        .init()
         .charset(characterSet, characterTable)
-        .line(`${code} ${String.fromCharCode(65 + index)}: ${prepareText(sample, characterSet)}`);
+        .line(`${prefix} ${prepareText(sample, characterSet)}`);
     }
   }
   return b.feedAndCut().bytes();

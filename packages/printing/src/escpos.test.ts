@@ -3,6 +3,11 @@ import { FEED_BEFORE_CUT, esc } from "./escpos.js";
 
 // These pin the exact bytes, not that a physical printer accepts them.
 describe("esc() ESC/POS builder", () => {
+  it("selects line justification without changing the text", () => {
+    expect([...esc().align("center").line("A").align("right").align("left").bytes()]).toEqual([
+      0x1b, 0x61, 1, 65, 10, 0x1b, 0x61, 2, 0x1b, 0x61, 0,
+    ]);
+  });
   it("init emits ESC @ (0x1B 0x40)", () => {
     expect([...esc().init().bytes()]).toEqual([0x1b, 0x40]);
   });

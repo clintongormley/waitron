@@ -1,5 +1,8 @@
 # Printer paper width, resolution and character set — Implementation Plan
 
+Update, 2026-09-26: the closest-to-35mm sizing preference below is superseded by the
+[largest-fitting QR decision](../specs/2026-09-26-printer-calibration-wizard.md#receipt-qr-size).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Lay out every printed document for the actual printer — its paper width, dot density and character set — so receipts fit the paper, the fiscal QR prints at its legal 30–40 mm on any printer, and accents and the euro sign print correctly.

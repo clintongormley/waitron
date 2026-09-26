@@ -134,21 +134,16 @@ async function seedPrinter(cfg: TillConfig): Promise<string> {
   return row!.id;
 }
 
-/** The enrolled device row's binding columns, read straight off the row rather than through the
- *  route. Through the table definition so the column mappings decode: `has_cash_drawer` is stored
- *  as 0/1 and a raw read would hand back the integer. */
 async function deviceBindings(deviceId: string): Promise<{
   tillId: string | null;
   deviceProfileId: string;
   receiptPrinterId: string | null;
-  hasCashDrawer: boolean;
 }> {
   const [row] = await suite.db
     .select({
       tillId: devices.tillId,
       deviceProfileId: devices.deviceProfileId,
       receiptPrinterId: devices.receiptPrinterId,
-      hasCashDrawer: devices.hasCashDrawer,
     })
     .from(devices)
     .where(eq(devices.id, deviceId));
@@ -877,7 +872,7 @@ describe("Device management routes (device.manage)", () => {
 });
 
 describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
-  it("sets the receipt printer + cash drawer and returns the updated device", async () => {
+  it("sets the receipt printer and returns the updated device", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const printerId = await seedPrinter(venue.cfg);
@@ -887,19 +882,16 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
       cookie: venue.managerCookie,
       body: {
         receiptPrinterId: printerId,
-        hasCashDrawer: true,
       },
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       id: deviceId,
       receiptPrinterId: printerId,
-      hasCashDrawer: true,
     });
     // The row itself carries the new bindings, read straight off the row rather than the route.
     expect(await deviceBindings(deviceId)).toMatchObject({
       receiptPrinterId: printerId,
-      hasCashDrawer: true,
     });
   });
 
@@ -909,7 +901,7 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
     const { deviceId } = await enrolTill(app, venue, "Caja gate");
 
     const unauth = await send(app, "PATCH", `/management-api/devices/${deviceId}/hardware`, {
-      body: { hasCashDrawer: true },
+      body: { receiptPrinterId: null },
     });
     expect(unauth.status).toBe(401);
     expect((await unauth.json()) as { error: { code: string } }).toMatchObject({
@@ -918,7 +910,7 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
 
     const staff = await send(app, "PATCH", `/management-api/devices/${deviceId}/hardware`, {
       cookie: venue.staffCookie,
-      body: { hasCashDrawer: true },
+      body: { receiptPrinterId: null },
     });
     expect(staff.status).toBe(403);
     expect((await staff.json()) as { error: { code: string } }).toMatchObject({
@@ -932,7 +924,7 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
     const unknown = randomUUID();
     const res = await send(app, "PATCH", `/management-api/devices/${unknown}/hardware`, {
       cookie: venue.managerCookie,
-      body: { hasCashDrawer: true },
+      body: { receiptPrinterId: null },
     });
     expect(res.status).toBe(404);
     expect(
@@ -941,7 +933,7 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
 
     const malformed = await send(app, "PATCH", "/management-api/devices/not-a-uuid/hardware", {
       cookie: venue.managerCookie,
-      body: { hasCashDrawer: true },
+      body: { receiptPrinterId: null },
     });
     expect(malformed.status).toBe(404);
   });
@@ -963,14 +955,13 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
     });
   });
 
-  it("refuses a non-boolean hasCashDrawer, and a body naming no hardware field, leaving the row as it was", async () => {
+  it("refuses a body naming no hardware field, leaving the row as it was", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { deviceId } = await enrolTill(app, venue, "Caja screens");
     const before = await deviceBindings(deviceId);
 
     for (const [body, field] of [
-      [{ hasCashDrawer: "yes" }, "hasCashDrawer"],
       [{}, "hardware"],
       [{ somethingElse: true }, "hardware"],
     ] as const) {
@@ -1010,7 +1001,7 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
     const { deviceId, jar } = await enrolTill(app, venue, "Caja hw");
     await suite.db.execute(sql`
       update devices
-         set receipt_printer_id = ${printerId}, has_cash_drawer = true
+         set receipt_printer_id = ${printerId}
        where id = ${deviceId}`);
     const tillId = (await deviceBindings(deviceId)).tillId;
 
@@ -1023,7 +1014,6 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
       stationId: null,
       tillId,
       receiptPrinterId: printerId,
-      hasCashDrawer: true,
     });
   });
 

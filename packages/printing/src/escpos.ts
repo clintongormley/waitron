@@ -81,6 +81,12 @@ export class EscBuilder {
     return this;
   }
 
+  /** `ESC a n`, effective at the beginning of a line. */
+  align(alignment: "left" | "center" | "right"): this {
+    this.parts.push(ESC, 0x61, { left: 0, center: 1, right: 2 }[alignment]);
+    return this;
+  }
+
   /** `ESC d n`. */
   feed(n = 1): this {
     this.parts.push(ESC, 0x64, n & 0xff);

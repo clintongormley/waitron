@@ -721,7 +721,6 @@ export interface DeviceIdentity {
   tillId?: string | null;
   /** The per-device receipt printer; `null` when none. */
   receiptPrinterId?: string | null;
-  hasCashDrawer?: boolean;
 }
 
 /**

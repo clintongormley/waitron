@@ -116,6 +116,7 @@ const printers: Printer[] = [
     resolution: "180dpi",
     characterSet: "wpc1252",
     characterTable: 16,
+    hasCashDrawer: false,
     active: true,
   },
 ];
@@ -157,7 +158,6 @@ function stubApi(pairingOpen = false): DashboardApi {
     patchDeviceHardware: vi.fn().mockResolvedValue({
       id: "d1",
       receiptPrinterId: null,
-      hasCashDrawer: false,
     }),
   } as unknown as DashboardApi;
 }

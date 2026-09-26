@@ -49,6 +49,22 @@ describe("createAgent — phases", () => {
     });
   });
 
+  it.each(["http://192.168.10.40:9210", null])(
+    "reports the host's setup URL, including clearing one that is unavailable (%s)",
+    async (setupUrl) => {
+      const host = fakeHost({ config: CONFIG, token: "a1.s" });
+      Object.assign(host, { setupUrl: () => setupUrl, setupPort: () => 9210 });
+      const c = client();
+      await createAgent({ host, client: c }).runOnce();
+      expect(c.pullJobs).toHaveBeenCalledWith(A, "a1.s", {
+        visible: [],
+        scanned: [],
+        setupUrl,
+        setupPort: 9210,
+      });
+    },
+  );
+
   it("unconfigured: reports the phase and probes nothing", async () => {
     const host = fakeHost({ config: null });
     const c = client();

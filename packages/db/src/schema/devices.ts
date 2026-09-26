@@ -36,7 +36,6 @@ export const devices = table("devices", {
     onDelete: "restrict",
   }),
   /* v8 ignore stop */
-  hasCashDrawer: flag("has_cash_drawer").notNull().default(false),
   label: label("label").notNull(),
   // `hashSecret` of the device token, never the plaintext.
   tokenHash: label("token_hash").notNull(),

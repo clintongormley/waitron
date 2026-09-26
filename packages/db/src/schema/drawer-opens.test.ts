@@ -11,8 +11,6 @@ import { drawerOpens } from "./drawer-opens.js";
 import { printers } from "./printers.js";
 import { locations, tenants, tills } from "./tenants.js";
 
-// What this suite proves is the column mapping, the defaults, the reason CHECK and the two foreign
-// keys. Cases that change a seeded row restore it, so the suite stays order-independent.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A = "aaaaaaaa-0000-4000-8000-000000000011";
 const PRINTER_A = "aaaaaaaa-0000-4000-8000-000000000021";
@@ -98,7 +96,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
 
   it("the reason CHECK accepts 'cash_sale' and rejects an unknown reason", async () => {
     await seedOpen("cash_sale");
-    // Raw SQL, because the column's TypeScript type admits only the two labels; `id` and
+    // Raw SQL, because the column's TypeScript type excludes unknown labels; `id` and
     // `opened_at` are `$defaultFn` columns, so the statement supplies them.
     const e = await captureError(() =>
       inTx(async (tx) =>
@@ -116,6 +114,59 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
     const missingSale = "dddddddd-0000-4000-8000-0000000000ff";
     const e = await captureError(() => seedOpen("cash_sale", missingSale));
     expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
+  });
+
+  it("records calibration against a printer without a till or sale", async () => {
+    const [saved] = await inTx((tx) =>
+      tx
+        .insert(drawerOpens)
+        .values({
+          printerId: PRINTER_A,
+          personId: PERSON,
+          authorizedBy: AUTHORIZER,
+          reason: "calibration",
+        })
+        .returning(),
+    );
+    expect(saved).toMatchObject({
+      printerId: PRINTER_A,
+      tillId: null,
+      saleId: null,
+      personId: PERSON,
+      authorizedBy: AUTHORIZER,
+      reason: "calibration",
+      viaOverride: false,
+    });
+  });
+
+  it.each([
+    { reason: "calibration" as const },
+    { reason: "calibration" as const, printerId: PRINTER_A, tillId: TILL_A },
+    { reason: "manual" as const, printerId: PRINTER_A },
+    { reason: "cash_sale" as const, printerId: PRINTER_A },
+  ])("rejects a drawer audit with an invalid target: %j", async (target) => {
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx.insert(drawerOpens).values({
+          personId: PERSON,
+          ...target,
+        }),
+      ),
+    );
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+  });
+
+  it("refuses calibration against a missing printer", async () => {
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx.insert(drawerOpens).values({
+          printerId: "missing-printer",
+          personId: PERSON,
+          reason: "calibration",
+        }),
+      ),
+    );
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
   it("tills.receipt_printer_id is writable and its FK accepts a real printer", async () => {

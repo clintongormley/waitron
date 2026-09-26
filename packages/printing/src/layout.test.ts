@@ -142,14 +142,16 @@ describe("labelAmountLines", () => {
 const mm = (squares: number, dots: number, dpi: number): number => (squares * dots * 25.4) / dpi;
 
 describe("chooseQrDots", () => {
-  it("chooses the dot size closest to 35 mm within 30-40 mm (measured cases)", () => {
+  it("chooses the largest dot size within 30-40 mm that fits the paper", () => {
+    expect(chooseQrDots(33, 203, 504)).toBe(9); // 37.2 mm; 10 dots exceeds 40 mm
+    expect(chooseQrDots(33, 203, 360)).toBe(8); // 9 dots plus the border exceeds the paper
     expect(chooseQrDots(41, 180, 504)).toBe(6); // 34.7 mm
     expect(chooseQrDots(41, 203, 504)).toBe(7); // 35.9 mm
-    expect(chooseQrDots(45, 180, 504)).toBe(6); // 38.1 mm (5 dots: 31.75, further from 35)
-    expect(chooseQrDots(45, 203, 504)).toBe(6); // 33.8 mm
+    expect(chooseQrDots(45, 180, 504)).toBe(6); // 38.1 mm
+    expect(chooseQrDots(45, 203, 504)).toBe(7); // 39.4 mm
     expect(chooseQrDots(49, 180, 504)).toBe(5); // 34.6 mm (6 dots: 41.5, over 40)
     expect(chooseQrDots(49, 203, 504)).toBe(6); // 36.8 mm
-    expect(chooseQrDots(53, 203, 504)).toBe(5); // 33.2 mm (6 dots: 39.8, further from 35)
+    expect(chooseQrDots(53, 203, 504)).toBe(6); // 39.8 mm
     expect(chooseQrDots(65, 180, 360)).toBe(4); // 36.7 mm (5 dots: 45.9 mm, over 40)
     expect(chooseQrDots(25, 203, 360)).toBe(10); // 31.3 mm; 330 dots, without border would pick 11
   });
@@ -166,9 +168,7 @@ describe("chooseQrDots", () => {
           for (let other = 1; (squares + 8) * other <= width; other++) {
             const size = mm(squares, other, dpi);
             if (size >= 30 && size <= 40) {
-              expect(Math.abs(size - 35), label).toBeGreaterThanOrEqual(
-                Math.abs(mm(squares, dots, dpi) - 35) - 1e-9,
-              );
+              expect(size, label).toBeLessThanOrEqual(mm(squares, dots, dpi));
             }
           }
         }
@@ -176,9 +176,8 @@ describe("chooseQrDots", () => {
     }
   });
 
-  it("takes the smaller dot size on a tie", () => {
-    // 50 squares at 127 dpi: 3 dots = 30 mm and 4 dots = 40 mm, both 5 mm from 35.
-    expect(chooseQrDots(50, 127, 504)).toBe(3);
+  it("includes the exact 40 mm upper limit", () => {
+    expect(chooseQrDots(50, 127, 504)).toBe(4);
   });
 
   it("falls back without throwing when no size is legal", () => {

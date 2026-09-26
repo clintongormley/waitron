@@ -271,10 +271,14 @@ export function createAgent(opts: AgentOptions): Agent {
       }
     }
     const hostname = host.hostname?.();
+    const setupUrl = host.setupUrl?.();
+    const setupPort = host.setupPort?.();
     const pulled = await client.pullJobs(current, token, {
       visible,
       scanned,
       ...(hostname === undefined ? {} : { host: hostname }),
+      ...(setupUrl === undefined ? {} : { setupUrl }),
+      ...(setupPort === undefined ? {} : { setupPort }),
     });
     if (!pulled.ok) {
       if (pulled.failure.kind === "unauthorized") {

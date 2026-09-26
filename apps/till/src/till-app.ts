@@ -1337,7 +1337,10 @@ export class TillApp extends LitElement {
       if ((error as { code?: string }).code === "authorization.not_permitted") {
         await this.#openOverrideDialog();
       } else {
-        this.errorKey = "drawer.error";
+        this.errorKey =
+          (error as { code?: string }).code === "drawer.not_attached"
+            ? "drawer.not_attached"
+            : "drawer.error";
       }
     }
   }
@@ -1365,7 +1368,10 @@ export class TillApp extends LitElement {
         this.overrideError = "pin.invalid";
       } else {
         this.#closeOverrideDialog();
-        this.errorKey = "drawer.error";
+        this.errorKey =
+          (error as { code?: string }).code === "drawer.not_attached"
+            ? "drawer.not_attached"
+            : "drawer.error";
       }
     }
   }

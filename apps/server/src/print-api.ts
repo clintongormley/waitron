@@ -8,6 +8,7 @@ import { AppError, resolveActiveLocale } from "@waitron/shared";
 import type { SupportedLocale } from "@waitron/shared";
 import {
   drawerOpenPolicy,
+  drawerOpens,
   locations,
   printAgents,
   printCharacterSet,
@@ -36,6 +37,7 @@ import {
   MAX_DELIVERY_ATTEMPTS,
   reportPrintJob,
   updatePrinter,
+  esc,
   type CreatePrinterInput,
   type UpdatePrinterInput,
 } from "@waitron/printing";
@@ -72,6 +74,8 @@ export interface PrintApiDeps {
   enrolRateLimiter?: EnrolRateLimiter;
   /** Fallback language for test instructions when neither the user nor the browser has a preference. */
   venueLocale: SupportedLocale;
+  /** This node's advertised LAN addresses, for its self-enrolled print agent. */
+  listIpv4?: () => string[];
 }
 
 const PRINTER_MANAGE_PERMISSION: Permission = "printer.manage";
@@ -109,6 +113,38 @@ const run = createErrorBoundary(STATUS, "print.failed");
 function optionalString(v: unknown, field: string): string | undefined {
   if (v === undefined) return undefined;
   return requireString(v, field);
+}
+
+function optionalAgentSetupUrl(value: unknown): string | null | undefined {
+  if (value === undefined || value === null) return value;
+  const raw = requireString(value, "setupUrl");
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new AppError("management.request_invalid", { field: "setupUrl" });
+  }
+  if (
+    !["http:", "https:"].includes(url.protocol) ||
+    url.username !== "" ||
+    url.password !== "" ||
+    url.pathname !== "/" ||
+    url.search !== "" ||
+    url.hash !== "" ||
+    ["localhost", "0.0.0.0", "[::]", "[::1]"].includes(url.hostname) ||
+    url.hostname.startsWith("127.")
+  ) {
+    throw new AppError("management.request_invalid", { field: "setupUrl" });
+  }
+  return url.origin;
+}
+
+function optionalAgentSetupPort(value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 65535) {
+    throw new AppError("management.request_invalid", { field: "setupPort" });
+  }
+  return value;
 }
 
 function nullableOptionalString(v: unknown, field: string): string | null | undefined {
@@ -292,9 +328,17 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   app.post("/print-api/agent/jobs", (c) =>
     run(c, log, async () => {
       const { agentId } = await requireAgent({ db: deps.db }, c);
-      const body = await readJsonBody<{ visible?: unknown; scanned?: unknown; host?: unknown }>(c);
+      const body = await readJsonBody<{
+        visible?: unknown;
+        scanned?: unknown;
+        host?: unknown;
+        setupUrl?: unknown;
+        setupPort?: unknown;
+      }>(c);
       const reportedHost = optionalString(body.host, "host");
       const host = reportedHost === undefined ? undefined : reportedHost.trim() || null;
+      const setupUrl = optionalAgentSetupUrl(body.setupUrl);
+      const setupPort = optionalAgentSetupPort(body.setupPort);
       const visible = screenVisible(body.visible);
       const scanned = screenScanned(body.scanned);
 
@@ -318,12 +362,25 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       // and the agent reports the outcome in a separate request.
       // TODO(multi-location): this is the server's location, not the agent's `print_agents.location_id`.
       const claimed = await withTransaction(deps.db, async (tx) => {
-        if (host !== undefined) {
+        if (host !== undefined || setupUrl !== undefined || setupPort !== undefined) {
           await tx
             .update(printAgents)
-            .set({ host })
+            .set({ host, setupUrl, setupPort })
             .where(
-              and(eq(printAgents.id, agentId), sql`${printAgents.host} is distinct from ${host}`),
+              and(
+                eq(printAgents.id, agentId),
+                or(
+                  host === undefined
+                    ? undefined
+                    : sql`${printAgents.host} is distinct from ${host}`,
+                  setupUrl === undefined
+                    ? undefined
+                    : sql`${printAgents.setupUrl} is distinct from ${setupUrl}`,
+                  setupPort === undefined
+                    ? undefined
+                    : sql`${printAgents.setupPort} is distinct from ${setupPort}`,
+                ),
+              ),
             );
         }
         return claimPrintJobs(tx, agentId, {
@@ -381,6 +438,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             id: printAgents.id,
             name: printAgents.name,
             host: printAgents.host,
+            setupUrl: printAgents.setupUrl,
+            setupPort: printAgents.setupPort,
             active: printAgents.active,
             nodeId: printAgents.nodeId,
             lastSeenAt: printAgents.lastSeenAt,
@@ -389,7 +448,17 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .from(printAgents)
           .orderBy(desc(printAgents.enrolledAt)),
       );
-      return c.json(rows);
+      const address = deps.listIpv4?.()[0];
+      return c.json(
+        rows.map(({ setupPort, ...row }) => ({
+          ...row,
+          setupUrl:
+            row.setupUrl ??
+            (row.nodeId === deps.cfg.nodeId && setupPort !== null && address !== undefined
+              ? new URL(`http://${address}:${setupPort}`).origin
+              : null),
+        })),
+      );
     }),
   );
 
@@ -558,6 +627,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       }
       const characterTable = optionalByte(body.characterTable, "characterTable");
       if (characterTable !== undefined) input.characterTable = characterTable;
+      const hasCashDrawer = optionalBool(body.hasCashDrawer, "hasCashDrawer");
+      if (hasCashDrawer !== undefined) input.hasCashDrawer = hasCashDrawer;
       const created = await gated(sessionId, (tx) => createPrinter(tx, deps.cfg, input));
       return c.json(created, 201);
     }),
@@ -639,6 +710,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       }
       const characterTable = optionalByte(body.characterTable, "characterTable");
       if (characterTable !== undefined) patch.characterTable = characterTable;
+      const hasCashDrawer = optionalBool(body.hasCashDrawer, "hasCashDrawer");
+      if (hasCashDrawer !== undefined) patch.hasCashDrawer = hasCashDrawer;
       const active = optionalBool(body.active, "active");
       if (active !== undefined) patch.active = active;
       await gated(sessionId, (tx) => updatePrinter(tx, deps.cfg, id, patch));
@@ -655,6 +728,28 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     }),
   );
 
+  app.post("/management-api/printers/:id/test-drawer", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "PrinterId");
+      const result = await gated(sessionId, async (tx) => {
+        const { authorizedBy } = await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "cash.drawer",
+        });
+        const queued = await enqueuePrintJob(tx, deps.cfg, id, esc().kick().bytes(), "drawer");
+        await tx.insert(drawerOpens).values({
+          printerId: id,
+          personId: authorizedBy,
+          authorizedBy,
+          reason: "calibration",
+        });
+        return queued;
+      });
+      return c.json(result, 202);
+    }),
+  );
+
   app.post("/management-api/printers/:id/test-print", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -665,13 +760,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           session.locale,
           resolveLoginLocale(c.req.header("Accept-Language"), deps.venueLocale),
         );
-        const queued = await enqueuePrintJob(
-          tx,
-          deps.cfg,
-          id,
-          formatTestPage({ locale, calibrationLocale: deps.venueLocale }),
-        );
-        return { ...queued, calibrationLocale: deps.venueLocale };
+        return enqueuePrintJob(tx, deps.cfg, id, formatTestPage({ locale }));
       });
       return c.json(result, 202);
     }),

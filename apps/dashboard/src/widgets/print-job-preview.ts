@@ -37,6 +37,21 @@ export class PrintJobPreviewDialog extends LitElement {
         overflow-wrap: anywhere;
         font: inherit;
       }
+      pre[data-align] {
+        white-space: break-spaces;
+      }
+      pre[data-align="center"] {
+        text-align: center;
+      }
+      pre[data-align="right"] {
+        text-align: right;
+      }
+      img[data-align="center"] {
+        margin-inline: auto;
+      }
+      img[data-align="right"] {
+        margin-left: auto;
+      }
       img {
         display: block;
         max-width: 100%;
@@ -83,7 +98,7 @@ export class PrintJobPreviewDialog extends LitElement {
   #renderBlock(block: PrintPreviewBlock) {
     switch (block.kind) {
       case "text":
-        return html`<pre data-kind="text">${block.text}</pre>`;
+        return html`<pre data-kind="text" data-align=${block.align ?? nothing}>${block.text}</pre>`;
       case "feed":
         return html`<div
           data-kind="feed"
@@ -95,6 +110,7 @@ export class PrintJobPreviewDialog extends LitElement {
       case "image":
         return html`<img
           data-kind="image"
+          data-align=${block.align ?? nothing}
           src=${this.#bitmapUrl(block)}
           style=${`width:${block.width / 12}ch`}
           alt=${block.qrData === undefined ? t("printers.preview_image") : `${t("printers.preview_qr_data")}: ${block.qrData}`}

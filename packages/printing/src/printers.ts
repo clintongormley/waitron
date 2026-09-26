@@ -43,6 +43,7 @@ export interface CreatePrinterInput {
   resolution?: Resolution;
   characterSet?: CharacterSet;
   characterTable?: number;
+  hasCashDrawer?: boolean;
 }
 
 /**
@@ -84,6 +85,7 @@ export async function createPrinter(
         resolution: input.resolution,
         characterSet: input.characterSet,
         characterTable: input.characterTable,
+        hasCashDrawer: input.hasCashDrawer,
       })
       .returning({ id: printers.id });
     return { id: row!.id };
@@ -105,6 +107,7 @@ export interface UpdatePrinterInput {
   resolution?: Resolution;
   characterSet?: CharacterSet;
   characterTable?: number;
+  hasCashDrawer?: boolean;
   active?: boolean;
 }
 
@@ -121,6 +124,7 @@ export interface PrinterRow {
   resolution: Resolution;
   characterSet: CharacterSet;
   characterTable: number;
+  hasCashDrawer: boolean;
   active: boolean;
 }
 
@@ -192,6 +196,7 @@ export async function listPrinters(tx: Transaction, cfg: PrintConfig): Promise<P
       resolution: printers.resolution,
       characterSet: printers.characterSet,
       characterTable: printers.characterTable,
+      hasCashDrawer: printers.hasCashDrawer,
       active: printers.active,
     })
     .from(printers)

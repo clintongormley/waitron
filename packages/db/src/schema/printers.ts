@@ -48,6 +48,7 @@ export const printers = table(
     characterSet: printCharacterSet("character_set").notNull().default("wpc1252"),
     // `ESC t n` is model/firmware-specific even when the byte-to-glyph encoding is the same.
     characterTable: count("character_table").notNull().default(16),
+    hasCashDrawer: flag("has_cash_drawer").notNull().default(false),
     // Deactivate via active := false, never a hard delete (print_jobs reference it).
     active: flag("active").notNull().default(true),
   },

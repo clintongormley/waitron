@@ -3,6 +3,24 @@ import { esc } from "@waitron/printing";
 import { previewPrintJob } from "./print-job-preview.js";
 
 describe("print job preview", () => {
+  it("preserves justification on text and images and resets it at initialization", () => {
+    const result = previewPrintJob(
+      Uint8Array.from([
+        0x1b, 0x61, 1, 65, 10, 0x1d, 0x76, 0x30, 0, 1, 0, 1, 0, 128, 0x1b, 0x61, 2, 66, 10, 0x1b,
+        0x61, 0, 67, 10, 0x1b, 0x61, 1, 68, 10, 0x1b, 0x40, 69, 10,
+      ]),
+    );
+    expect(result.unsupported).toBe(false);
+    expect(result.text).toBe("A\nB\nC\nD\nE\n");
+    expect(result.blocks).toEqual([
+      { kind: "text", text: "A\n", align: "center" },
+      { kind: "image", width: 8, height: 1, data: "gA==", align: "center" },
+      { kind: "text", text: "B\n", align: "right" },
+      { kind: "text", text: "C\n" },
+      { kind: "text", text: "D\n", align: "center" },
+      { kind: "text", text: "E\n" },
+    ]);
+  });
   it("shows receipt text without the printer commands or drawer pulse", () => {
     expect(
       previewPrintJob(
@@ -64,6 +82,7 @@ describe("print job preview", () => {
 
   it.each([
     [0x1b],
+    [0x1b, 0x61],
     [0x1b, 0x70, 0],
     [0x1d, 0x28, 0x6b, 255, 255, 0x31, 0x50, 0x30, 65],
     [0x1d, 0x76, 0x30, 0, 255, 255, 255, 255, 65],
@@ -75,6 +94,7 @@ describe("print job preview", () => {
 
   it.each([
     [0x1b, 0x21, 65],
+    [0x1b, 0x61, 3],
     [0x1d, 0x21, 65],
     [0, 65],
   ])("stops at unsupported control sequences: %j", (...bytes) => {

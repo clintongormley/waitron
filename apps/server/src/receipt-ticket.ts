@@ -157,12 +157,16 @@ export function formatReceipt({
   const locale = invoiceLocale;
   const columns = columnsFor(printer.paperWidth);
   const p = (s: string): string => prepareText(s, printer.characterSet);
-  const b = esc(printer.characterSet, printer.characterTable).init();
+  const b = esc(printer.characterSet, printer.characterTable).init().align("center");
+  // Equal-width lines centre the body as a block without centring each description within it.
+  const bodyLine = (line: string): void => {
+    b.line(line.padEnd(columns));
+  };
   const text = (s: string, indent = 0): void => {
-    for (const line of wrapText(p(s), columns, indent)) b.line(line);
+    for (const line of wrapText(p(s), columns, indent)) bodyLine(line);
   };
   const row = (label: string, amount: string, indent = 0): void => {
-    for (const line of labelAmountLines(p(label), p(amount), columns, indent)) b.line(line);
+    for (const line of labelAmountLines(p(label), p(amount), columns, indent)) bodyLine(line);
   };
 
   // The practice warning surrounds the immutable receipt content. It never enters the filed record or
@@ -175,7 +179,7 @@ export function formatReceipt({
   // Issuer block — venue name, optional non-fiscal subtitle, NIF (art. 7.1.d).
   text(issuer.venueName);
   if (receipt.headerSubtitle) text(receipt.headerSubtitle);
-  if (duplicate) b.line("DUPLICADO");
+  if (duplicate) text("DUPLICADO");
   text(`${LABEL.nif}: ${issuer.nif}`);
   b.line();
 
@@ -236,7 +240,7 @@ export function formatReceipt({
     row(LABEL.cash, formatMoney(addDecimal(decimal(result.total), decimal(t.change)), locale));
     row(LABEL.change, formatMoney(t.change, locale));
   } else if (t.method === "card") {
-    b.line("Tarjeta");
+    text("Tarjeta");
     if (t.reference !== null) text(`Ref. ${t.reference}`);
     // String compare is safe: `readTenderBlock` renders the tip with `centsToDecimal`, always two
     // places.
@@ -256,11 +260,11 @@ export function formatReceipt({
       dpiValue(printer.resolution),
       safeWidthDots(printer.paperWidth),
     );
-    b.qrRaster(withQuietZone(matrix, QR_QUIET_ZONE), { moduleSize: dots }).line();
+    b.qrRaster(withQuietZone(matrix, QR_QUIET_ZONE), { moduleSize: dots });
   }
 
   // The VERI*FACTU legend — printed UNCONDITIONALLY in Veri*Factu mode (art. 20.1.b).
-  b.line(LEGEND);
+  b.line(LEGEND).line();
 
   // Non-fiscal footer trim, under the legend.
   if (receipt.footerMessage) text(receipt.footerMessage);

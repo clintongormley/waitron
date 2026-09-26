@@ -115,6 +115,8 @@ services:
       # The box's own origin; the agent trusts its self-signed leaf via the fetched CA. Overridable
       # for an agent that runs on a separate Pi and must name the box's LAN address instead.
       WAITRON_SERVER_URL: ${WAITRON_PRINT_AGENT_SERVER_URL:-https://127.0.0.1}
+      WAITRON_BOX_ADDRESSES: ${WAITRON_BOX_ADDRESSES:-}
+      WAITRON_SETUP_URL: ${WAITRON_PRINT_AGENT_SETUP_URL:-}
     # USB printer access, hot-plug safe. Measured on the real box 2026-09-10 (spec §5): a hard
     # `devices:` line refuses to start with no printer; a /dev/usb subdirectory mount goes stale on
     # re-plug. Mounting the whole /dev read-only plus the usblp char-device major (180) lets the node

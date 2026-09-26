@@ -21,6 +21,7 @@ const agents: PrintAgentRow[] = [
     host: null,
     nodeId: null,
     lastSeenAt: "2026-08-25T14:30:00.000Z",
+    setupUrl: null,
     enrolledAt: "2026-08-20T09:00:00.000Z",
   },
   {
@@ -30,6 +31,7 @@ const agents: PrintAgentRow[] = [
     host: null,
     nodeId: "n1", // self-enrolled + revoked: axe scans the provenance marker and the allow-again control
     lastSeenAt: null,
+    setupUrl: null,
     enrolledAt: "2026-08-19T09:00:00.000Z",
   },
 ];
@@ -48,6 +50,7 @@ const printers: Printer[] = [
     resolution: "180dpi",
     characterSet: "wpc1252",
     characterTable: 16,
+    hasCashDrawer: false,
     pendingJobs: 0,
     lastPrintAt: null,
     active: true,
@@ -65,6 +68,7 @@ const printers: Printer[] = [
     resolution: "180dpi",
     characterSet: "wpc1252",
     characterTable: 16,
+    hasCashDrawer: false,
     pendingJobs: 0,
     lastPrintAt: null,
     active: false,
@@ -82,6 +86,7 @@ const printers: Printer[] = [
     resolution: "180dpi",
     characterSet: "wpc1252",
     characterTable: 16,
+    hasCashDrawer: false,
     pendingJobs: 0,
     lastPrintAt: null,
     active: false,
@@ -93,7 +98,7 @@ const jobs: PrintJobRow[] = [
     id: "j1",
     printerId: "p1",
     status: "failed",
-    canResend: false,
+    canResend: true,
     attempts: 2,
     lastError: "printer offline",
     createdAt: "2026-08-25T14:00:00.000Z",
@@ -173,6 +178,7 @@ function stubApi(pairingOpen = false): DashboardApi {
     createPrinter: vi.fn().mockResolvedValue({ id: "p9" }),
     updatePrinter: vi.fn().mockResolvedValue(undefined),
     deactivatePrinter: vi.fn().mockResolvedValue(undefined),
+    testPrinterDrawer: vi.fn().mockResolvedValue({ jobId: "drawer-test" }),
     testPrint: vi.fn().mockResolvedValue({ jobId: "j9", calibrationLocale: "es-ES" }),
     testCharacterTables: vi.fn().mockResolvedValue({ jobId: "j11", calibrationLocale: "es-ES" }),
     startPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 60_000 }),
@@ -217,21 +223,26 @@ async function openDiscovery(el: PrintersScreen): Promise<void> {
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (theme) => {
-  it("renders the agents, printers and jobs lists plus the pending queue accessibly", async () => {
-    const { el, host } = await mountWidget<PrintersScreen>(
-      "dashboard-printers-screen",
-      { api: stubApi() },
-      theme,
-    );
-    await flush(el);
-    for (const key of ["queue", "printers", "agents"]) {
-      q(el, "wt-tabs")!
-        .shadowRoot!.querySelector<HTMLButtonElement>(`[data-key="${key}"]`)!
-        .click();
+  it.each([390, 1280])(
+    "renders the agents, printers and jobs lists accessibly at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const { el, host } = await mountWidget<PrintersScreen>(
+        "dashboard-printers-screen",
+        { api: stubApi() },
+        theme,
+      );
       await flush(el);
-      await expectNoA11yViolations(host);
-    }
-  });
+      for (const key of ["queue", "printers", "agents"]) {
+        q(el, "wt-tabs")!
+          .shadowRoot!.querySelector<HTMLButtonElement>(`[data-key="${key}"]`)!
+          .click();
+        await flush(el);
+        await expectNoA11yViolations(host);
+      }
+      await page.viewport(1280, 900);
+    },
+  );
 
   it("renders the open pairing window accessibly", async () => {
     const { el, host } = await mountWidget<PrintersScreen>(
@@ -290,7 +301,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await openPrinter(el);
     await expectNoA11yViolations(host);
   });
-  it("renders the test questions and fallback explanation accessibly", async () => {
+  it("renders each calibration step and the drawer result accessibly", async () => {
     const { el, host } = await mountWidget<PrintersScreen>(
       "dashboard-printers-screen",
       { api: stubApi() },
@@ -298,9 +309,24 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     );
     await flush(el);
     await openPrinter(el);
-    q(el, '[data-test="print-test-page-p1"]')!.click();
+    q(el, "[data-test=calibrate-printer]")!.click();
     await flush(el);
-    q(el, 'input[name="printer-test-line-reads"][value="3"]')!.click();
+    q(el, "[data-test=print-character-tables-p1]")!.click();
+    await flush(el);
+    await expectNoA11yViolations(host);
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
+    await expectNoA11yViolations(host);
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
+    await expectNoA11yViolations(host);
+    const drawer = q(el, '[name="printer-cash-drawer"]')!.shadowRoot!.querySelector("input")!;
+    drawer.checked = true;
+    drawer.dispatchEvent(new Event("change", { bubbles: true }));
+    await flush(el);
+    q(el, "[data-test=test-printer-drawer]")!.click();
+    await flush(el);
+    q(el, '[name="printer-drawer-result"][value="closed"]')!.click();
     await flush(el);
     await expectNoA11yViolations(host);
   });
@@ -315,6 +341,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     try {
       for (const width of [1280, 390]) {
         await page.viewport(width, 844);
+        expect(window.innerWidth).toBe(width);
         await openDiscovery(el);
         const address = q(el, '[data-test="probe-host"]')!.getBoundingClientRect();
         const port = q(el, '[data-test="probe-port"]')!.getBoundingClientRect();
@@ -333,41 +360,49 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
         q(el, '[data-test="cancel-new-printer"]')!.click();
         await flush(el);
         await openPrinter(el);
-        const layoutFields = ["printer-paper-width", "printer-resolution"].map((name) =>
-          q(el, `[name="${name}"]`)!.getBoundingClientRect(),
-        );
-        if (width === 1280)
-          expect(new Set(layoutFields.map((rect) => Math.round(rect.bottom))).size).toBe(1);
+        q(el, "[data-test=calibrate-printer]")!.click();
+        await flush(el);
         q(el, '[data-test="print-character-tables-p1"]')!.click();
         await flush(el);
         expect(q(el, '[data-test="finder-expected-W"]')).not.toBeNull();
-        await expectNoA11yViolations(host);
         q(el, 'wt-disclosure[data-test="advanced-character-settings"]')!
           .shadowRoot!.querySelector("button")!
           .click();
         await flush(el);
-        const fields = [
-          ...layoutFields,
-          ...[
-            "printer-table-block",
-            "printer-matching-code",
-            "printer-character-set",
-            "printer-character-table",
-          ].map((name) => q(el, `[name="${name}"]`)!.getBoundingClientRect()),
-        ];
-        const dialog = q(el, '[data-test="edit-printer-modal"]')!
-          .shadowRoot!.querySelector("dialog")!
-          .getBoundingClientRect();
-        for (const field of fields) {
-          expect(field.right).toBeLessThan(dialog.right);
-          expect(field.left).toBeGreaterThanOrEqual(dialog.left);
-        }
+        const assertInsideDialog = (names: string[]) => {
+          const dialog = q(el, '[data-test="edit-printer-modal"]')!
+            .shadowRoot!.querySelector("dialog")!
+            .getBoundingClientRect();
+          for (const name of names) {
+            const field = q(el, `[name="${name}"]`)!.getBoundingClientRect();
+            expect(field.width).toBeGreaterThan(0);
+            expect(field.right).toBeLessThan(dialog.right);
+            expect(field.left).toBeGreaterThanOrEqual(dialog.left);
+          }
+        };
+        assertInsideDialog([
+          "printer-table-block",
+          "printer-matching-code",
+          "printer-character-set",
+          "printer-character-table",
+        ]);
         await expectNoA11yViolations(host);
+        q(el, "[data-test=calibration-next]")!.click();
+        await flush(el);
+        assertInsideDialog(["printer-paper-width", "printer-resolution"]);
+        if (width === 1280) {
+          const fields = ["printer-paper-width", "printer-resolution"].map((name) =>
+            q(el, `[name="${name}"]`)!.getBoundingClientRect(),
+          );
+          expect(new Set(fields.map((rect) => Math.round(rect.bottom))).size).toBe(1);
+        }
         q(el, '[data-test="print-test-page-p1"]')!.click();
         await flush(el);
         await expectNoA11yViolations(host);
-        q(el, '[data-test="cancel-printer-test"]')!.click();
+        q(el, "[data-test=calibration-next]")!.click();
         await flush(el);
+        assertInsideDialog(["printer-cash-drawer"]);
+        await expectNoA11yViolations(host);
         q(el, '[data-test="cancel-edit-printer"]')!.click();
         await flush(el);
         q(el, '[data-test="open-add-agent"]')!.click();

@@ -1347,7 +1347,14 @@ async function bootServer(
     mountJoinApi(app, { db, cfg: till, pairingMode }, log);
     mountPrintApi(
       app,
-      { db, cfg: till, readMembership: () => readNodeMembership(db), pairingMode, venueLocale },
+      {
+        db,
+        cfg: till,
+        readMembership: () => readNodeMembership(db),
+        pairingMode,
+        venueLocale,
+        listIpv4: boxAddresses,
+      },
       log,
     );
     mountPaymentsApi(
