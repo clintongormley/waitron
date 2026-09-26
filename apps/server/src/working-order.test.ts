@@ -90,6 +90,7 @@ import type { PrintConfig } from "@waitron/printing";
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
+import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
@@ -228,6 +229,8 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
         (${zoneId}, ${premium.id}, 1)`);
       await tx.execute(sql`
       update zone_service_policies set default_menu_id = ${cat.id} where zone_id = ${zoneId}`);
+      await publishWorkingMenu(tx, cat.id);
+      await publishWorkingMenu(tx, premium.id);
       return {
         cafeId: cafe.id,
         aguaId: agua.id,
@@ -484,6 +487,7 @@ async function seedVariantOffer(
     { variantId: variants[0]!.id, price: "3.20", offered: true },
     { variantId: variants[1]!.id, price: "2.20", offered: true },
   ]);
+  await publishWorkingMenu(tx, catalogueId);
   return { offerId: offer.id, variantId: variants[0]!.id, productId: product.id };
 }
 
@@ -641,6 +645,7 @@ describe("parkOrder", () => {
         { variantId: variants[0]!.id, price: "3.20", offered: true },
         { variantId: variants[1]!.id, price: "2.20", offered: true },
       ]);
+      await publishWorkingMenu(tx, catalogueId);
       return { offerId: offer.id, large: variants[0]!.id, small: variants[1]!.id };
     });
 
@@ -736,7 +741,6 @@ describe("parkOrder", () => {
   it("loads one zone-offer snapshot for a basket with repeated offers", async () => {
     const { cfg, zoneId, premiumCafeOfferId } = await setupVenue();
     const listOffers = vi.spyOn(VENUE_SERVICE, "listZoneOffers");
-    const resolveOffer = vi.spyOn(VENUE_SERVICE, "resolveZoneOffer");
     try {
       await parkOrder({ db }, cfg, {
         id: randomUUID(),
@@ -747,10 +751,8 @@ describe("parkOrder", () => {
         ],
       });
       expect(listOffers).toHaveBeenCalledTimes(1);
-      expect(resolveOffer).not.toHaveBeenCalled();
     } finally {
       listOffers.mockRestore();
-      resolveOffer.mockRestore();
     }
   });
 
@@ -1338,6 +1340,7 @@ describe("getHeldOrder", () => {
         productId: product.id,
         grossPrice: "12.00",
       });
+      await publishWorkingMenu(tx, catalogueId);
       return { productId: product.id, menuItemId: menuItem.id, unitId };
     });
     const id = randomUUID();
@@ -1454,6 +1457,7 @@ describe("getHeldOrder", () => {
     await db.execute(sql`
       update products set customer_name = ${JSON.stringify({ [LOCALE]: "Café de la casa" })}
       where id = ${cafeId}`);
+    await withTransaction(db, republishMenus);
     await parkOrder({ db }, cfg, {
       id,
       zoneId,
@@ -1506,6 +1510,7 @@ describe("getHeldOrder", () => {
     await db.execute(sql`
       update products set allergens = ${JSON.stringify({ gluten: { presence: "contains" } })}
       where id = ${cafeId}`);
+    await withTransaction(db, republishMenus);
     const id = randomUUID();
     await parkOrder({ db }, cfg, {
       id,
@@ -2649,6 +2654,7 @@ describe("basket-wide modifier resolution (perf)", () => {
       ]);
       const cafe = await addOptionList(tx, cafeId, "Punto");
       const agua = await addOptionList(tx, aguaId, "Tamano");
+      await republishMenus(tx);
       return { aguaOfferId: aguaOffer.id, cafe, agua };
     });
     const resolve = vi.spyOn(catalogue, "resolveAttachedModifiers");
@@ -2893,6 +2899,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         productId: aguaId,
         grossPrice: "2.00",
       });
+      await republishMenus(tx);
       const table = await tx.execute<{ id: string }>(sql`
         insert into dining_tables (id, location_id, label, zone_id, created_at)
         values (${randomUUID()}, ${cfg.locationId}, 'Two of a kind', ${zoneId}, ${nowIso()})
@@ -5627,7 +5634,9 @@ describe("frozen answers through a fractional quantity edit", () => {
       // test below this one.
       const taza = await withTransaction(db, async (tx) => {
         await catalogue.assignProductUnit(tx, cafeId, kgUnitId);
-        return addOptionList(tx, cafeId, "Taza", ["Grande"]);
+        const list = await addOptionList(tx, cafeId, "Taza", ["Grande"]);
+        await republishMenus(tx);
+        return list;
       });
       const options = [{ listId: taza.listId, labelId: taza.labelIds[0]! }];
       // The product-priced offer carries no price of its own, so it sells at the product's.
@@ -5702,6 +5711,7 @@ describe("frozen answers through a fractional quantity edit", () => {
           items: [{ productId: attached.productId, price: "1.00", available: true }],
         },
       ]);
+      await republishMenus(tx);
       return attached;
     });
     // A child is priced at `dishQuantity × pickQuantity`, so half a kilo of dish carrying one extra
@@ -6921,6 +6931,7 @@ async function seedWine(tx: Transaction, cfg: TillConfig, catalogueId: string) {
       dietaryDeclarations: ["halal"],
     })
     .where(eq(products.id, wine175!.id));
+  await publishWorkingMenu(tx, catalogueId);
   return {
     parentId: parent.id,
     offerId: offer.id,
@@ -7037,7 +7048,10 @@ describe("a variant is sold as the product it is", () => {
       params: { productId: wine.parentId },
     });
 
-    await withTransaction(db, (tx) => setProductVariants(tx, wine.parentId, [], LOCALE));
+    await withTransaction(db, async (tx) => {
+      await setProductVariants(tx, wine.parentId, [], LOCALE);
+      await publishWorkingMenu(tx, catalogueId);
+    });
     const id = randomUUID();
     await parkOrder({ db }, cfg, {
       id,
@@ -7414,6 +7428,7 @@ describe("a variant is sold as the product it is", () => {
         .update(products)
         .set({ customerName: { "fr-FR": "Grand verre" } })
         .where(eq(products.id, seeded.wine175));
+      await publishWorkingMenu(tx, catalogueId);
       return seeded;
     });
     await parkOrder({ db }, twoLocales, {
@@ -7809,9 +7824,10 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
       .select({ id: workingOrderLines.id, quantity: workingOrderLines.quantity })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
-    await withTransaction(db, (tx) =>
-      setProductVariants(tx, cafeId, [{ ...doble!, active: true }], LOCALE),
-    );
+    await withTransaction(db, async (tx) => {
+      await setProductVariants(tx, cafeId, [{ ...doble!, active: true }], LOCALE);
+      await republishMenus(tx);
+    });
     const edit = async (quantity: string) =>
       updateHeldOrder({ db }, cfg, id, {
         revision: await revisionOf(id),

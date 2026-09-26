@@ -125,6 +125,32 @@ export interface ZoneMenuOffer {
    * EFFECTIVE inherited values — its own where set, else its parent's. */
   readonly variants: readonly ZoneMenuOfferVariant[];
   readonly courseId: string | null;
+  /** The product is Active and Available now. An unavailable offer is served in its place, marked. */
+  readonly available: boolean;
+}
+
+/** A menu a zone sells from: its live version, and whether it is the zone's default. */
+export interface ZoneMenu {
+  readonly id: string;
+  readonly name: string;
+  readonly isDefault: boolean;
+  readonly versionId: string;
+}
+
+/** What a zone sells: its published menus' live versions, each offer marked with its availability. */
+export interface ZoneOffers {
+  readonly defaultMenuId: string | null;
+  readonly menus: readonly ZoneMenu[];
+  readonly offers: readonly ZoneMenuOffer[];
+}
+
+/** What a zone's live menus hold that cannot be sold now. */
+export interface ZoneUnavailable {
+  /** Every product or variant that is Inactive or Unavailable, extras items' products included. */
+  readonly products: readonly string[];
+  readonly optionLabels: readonly string[];
+  /** Every extras item an offer has switched off. */
+  readonly extraItems: readonly { readonly menuItemId: string; readonly productId: string }[];
 }
 
 export interface ZoneMenuOfferVariant {
@@ -177,22 +203,13 @@ export interface VenueServiceContribution {
     tx: Transaction,
     cfg: { locationId: LocationId },
     zoneId: string,
-  ): Promise<{
-    defaultMenuId: string | null;
-    menus: readonly { id: string; name: string; isDefault: boolean }[];
-    offers: readonly ZoneMenuOffer[];
-  }>;
+  ): Promise<ZoneOffers>;
+  unavailableSet(tx: Transaction, zoneId: string): Promise<ZoneUnavailable>;
   resolveNewOrderZone(
     tx: Transaction,
     cfg: { locationId: LocationId },
     input: { zoneId?: string | null; deviceId?: string | null },
   ): Promise<OrderServiceContext>;
-  resolveZoneOffer(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    zoneId: string,
-    menuItemId: string,
-  ): Promise<ZoneMenuOffer>;
   recordOrderContext(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -237,11 +254,14 @@ export interface VenueServiceContribution {
       dietOverride: unknown;
     }[]
   >;
+  /** Each line's offer is looked up in `offers`, the zone's offers the lines were priced from; one
+   *  it does not hold is refused `service_zone.offer_not_allowed`. */
   recordLineContexts(
     tx: Transaction,
     cfg: { locationId: LocationId },
     workingOrderId: string,
     lines: readonly { workingOrderLineId: string; menuItemId: string }[],
+    offers: ZoneOffers,
   ): Promise<void>;
   copyOrderContext(
     tx: Transaction,

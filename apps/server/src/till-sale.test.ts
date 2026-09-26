@@ -57,6 +57,7 @@ import {
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
 import type { ZoneOffers } from "./testing/zone-offers.js";
 
 // Exercise the sale path and the chained fiscal write end to end: provision a venue, seed a
@@ -239,6 +240,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
       values (${randomUUID()}, ${cfg.locationId}, ${bebidas.id},
         (select id from kitchen_stations
          where location_id = ${cfg.locationId} and is_default))`);
+    await publishWorkingMenu(tx, cat.id);
     return {
       available: (await listAvailableProducts(tx, cfg.locationId)).products,
       zoneId: zone.rows[0]!.id,
@@ -362,7 +364,10 @@ describe("recordTillSale", () => {
   // own price (3.80), neither the parent's menu price (2.25) nor the old override (4.80).
   it("sells a variant this menu sets nothing for at the variant's own price", async () => {
     const { cfg, zoneId, waterOfferId, variantIds } = await setupVenue({ variants: true });
-    await withTransaction(suite.db, (tx) => setMenuVariants(tx, waterOfferId, []));
+    await withTransaction(suite.db, async (tx) => {
+      await setMenuVariants(tx, waterOfferId, []);
+      await republishMenus(tx);
+    });
     const result = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
       zoneId,
       lines: [{ menuItemId: waterOfferId, variantId: variantIds!.unavailable, quantity: "1" }],
@@ -376,7 +381,10 @@ describe("recordTillSale", () => {
     const { cfg, zoneId, waterOfferId, waterProductId, variantIds } = await setupVenue({
       variants: true,
     });
-    await withTransaction(suite.db, (tx) => setProductVariants(tx, waterProductId, [], LOCALE));
+    await withTransaction(suite.db, async (tx) => {
+      await setProductVariants(tx, waterProductId, [], LOCALE);
+      await republishMenus(tx);
+    });
     const deps = { db: suite.db, backend, clock };
     await expect(
       recordTillSale(deps, cfg, {
@@ -432,6 +440,7 @@ describe("recordTillSale", () => {
         { variantId: variantIds!.double, price: "4.10", offered: true },
         { variantId: variantIds!.unavailable, price: "4.80", offered: true },
       ]);
+      await republishMenus(tx);
       await createOpenOrder(
         tx,
         cfg,
@@ -548,9 +557,10 @@ describe("recordTillSale", () => {
   // (2.25) and never at nothing.
   it("files a walk-up from a blank menu price at the product's own price", async () => {
     const { cfg, zoneId, waterOfferId } = await setupVenue();
-    await withTransaction(suite.db, (tx) =>
-      tx.execute(sql`update menu_items set gross_price = null where id = ${waterOfferId}`),
-    );
+    await withTransaction(suite.db, async (tx) => {
+      await tx.execute(sql`update menu_items set gross_price = null where id = ${waterOfferId}`);
+      await republishMenus(tx);
+    });
 
     const result = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
       zoneId,

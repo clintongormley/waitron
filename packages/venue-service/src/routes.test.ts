@@ -605,13 +605,7 @@ describe("venue service management routes", () => {
         { departmentId: department.id, weekday: 6, opensAt: "18:00:00", closesAt: "01:00:00" },
       ],
       zoneMenus: [{ zoneId: fx.zoneId, menuId: fx.menuId, displayOrder: 0, isDefault: true }],
-      readiness: [
-        {
-          code: "zone.menu_empty",
-          zoneId: fx.zoneId,
-          menuId: fx.menuId,
-        },
-      ],
+      readiness: [{ code: "zone.menu_unpublished", zoneId: fx.zoneId }],
     });
     expect(
       (

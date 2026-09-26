@@ -22,6 +22,13 @@
       "when": 1790449466297,
       "tag": "0002_clearing_workflow",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790465727284,
+      "tag": "0003_working_line_menu_version",
+      "breakpoints": true
     }
   ]
 }

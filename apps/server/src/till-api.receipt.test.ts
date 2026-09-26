@@ -44,6 +44,7 @@ import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { DRAWER_KICK } from "./receipt-print.js";
 import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticket.js";
@@ -176,6 +177,7 @@ async function setupVenue(): Promise<{
         update zone_service_policies set default_menu_id = ${cat.id}
         where location_id = ${cfg.locationId}
           and is_counter_default`);
+    await publishWorkingMenu(tx, cat.id);
     await tx.insert(preparationRoutes).values({
       locationId: cfg.locationId,
       categoryId: bebidas.id,

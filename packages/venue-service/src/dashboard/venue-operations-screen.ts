@@ -344,6 +344,8 @@ export class VenueOperationsScreen extends LitElement {
         return `${issue.zoneName} ${t("venue.readiness.zone_department_missing")}`;
       case "zone.menu_missing":
         return `${issue.zoneName} ${t("venue.readiness.zone_menu_missing")}`;
+      case "zone.menu_unpublished":
+        return `${issue.zoneName} ${t("venue.readiness.zone_menu_unpublished")}`;
       case "zone.menu_empty":
         return `${issue.menuName} ${t("venue.readiness.menu_empty")} ${issue.zoneName}.`;
       case "zone.route_missing":

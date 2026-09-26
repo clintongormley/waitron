@@ -11,14 +11,19 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
+  applyLiveFields,
   effectiveProductColumns,
-  listMenuOffers,
+  menuItemExtraItems,
+  optionLabels,
   parentJoin,
   parentProducts,
   productWithId,
+  readLiveDocuments,
+  type LiveOffer,
+  type MenuDocument,
   type MenuOffer,
 } from "@waitron/catalogue";
-import type { PreparationRoute, ServiceMode } from "@waitron/module";
+import type { PreparationRoute, ServiceMode, ZoneOffers, ZoneUnavailable } from "@waitron/module";
 import { AppError, type LocationId, normaliseUuid } from "@waitron/shared";
 import {
   departments,
@@ -244,6 +249,7 @@ export type VenueReadinessIssue =
   | { code: "venue.department_missing" }
   | { code: "zone.department_missing"; zoneId: string; zoneName: string }
   | { code: "zone.menu_missing"; zoneId: string; zoneName: string }
+  | { code: "zone.menu_unpublished"; zoneId: string; zoneName: string }
   | {
       code: "zone.menu_empty";
       zoneId: string;
@@ -310,8 +316,12 @@ export async function listVenueReadiness(
     ) {
       continue;
     }
-    // A setup check, not a sale: a sold-out product still fills its menu and still needs a route.
-    const configured = await listZoneOffers(tx, cfg, zone.id, { includeUnavailable: true });
+    // A sold-out product is served marked, so it still fills its menu and still needs a route.
+    const configured = await listZoneOffers(tx, cfg, zone.id);
+    if (configured.menus.length === 0) {
+      issues.push({ code: "zone.menu_unpublished", zoneId: zone.id, zoneName: zone.name });
+      continue;
+    }
     for (const menu of configured.menus) {
       if (!configured.offers.some((offer) => offer.menuId === menu.id)) {
         issues.push({
@@ -457,41 +467,133 @@ export async function resolveZoneContext(
   };
 }
 
+/** The menus a zone may sell from, in the zone's order. */
+async function zoneMenuIds(tx: Transaction, zoneId: string): Promise<string[]> {
+  const rows = await tx
+    .select({ id: zoneMenus.menuId })
+    .from(zoneMenus)
+    .where(eq(zoneMenus.zoneId, zoneId))
+    .orderBy(zoneMenus.displayOrder, zoneMenus.menuId);
+  return rows.map((row) => row.id);
+}
+
+/** The zone's published menus, in the zone's order, each with its live version and document. */
+async function zoneLiveDocuments(
+  tx: Transaction,
+  zoneId: string,
+): Promise<{ menuId: string; versionId: string; document: MenuDocument }[]> {
+  const menuIds = await zoneMenuIds(tx, zoneId);
+  const live = await readLiveDocuments(tx, menuIds);
+  return menuIds.flatMap((menuId) => {
+    const version = live.get(menuId);
+    return version === undefined ? [] : [{ menuId, ...version }];
+  });
+}
+
+/**
+ * What the zone sells: each published menu's live version, with the current availability put back
+ * (an unavailable offer is served marked, in its place). A menu with no live version is left out,
+ * and an unpublished default gives way to the zone's first published menu.
+ */
 export async function listZoneOffers(
   tx: Transaction,
   cfg: VenueScope,
   zoneId: string,
-  options: { includeUnavailable?: boolean } = {},
 ): Promise<{
   defaultMenuId: string | null;
-  menus: { id: string; name: string; isDefault: boolean }[];
-  offers: MenuOffer[];
+  menus: { id: string; name: string; isDefault: boolean; versionId: string }[];
+  offers: LiveOffer[];
 }> {
   const context = await resolveZoneContext(tx, cfg, zoneId);
-  const menus = await tx
-    .select({ id: zoneMenus.menuId, name: catalogues.name })
-    .from(zoneMenus)
-    .innerJoin(catalogues, eq(catalogues.id, zoneMenus.menuId))
-    .where(eq(zoneMenus.zoneId, zoneId))
-    .orderBy(zoneMenus.displayOrder, zoneMenus.menuId);
-  const menuOrder = new Map(menus.map((menu, index) => [menu.id, index]));
-  const offers = await listMenuOffers(
+  const published = await zoneLiveDocuments(tx, zoneId);
+  const served = await applyLiveFields(
     tx,
-    menus.map((menu) => menu.id),
-    options,
+    published.map((menu) => menu.document),
   );
-  offers.sort(
-    (left, right) =>
-      (menuOrder.get(left.menuId) ?? Number.MAX_SAFE_INTEGER) -
-      (menuOrder.get(right.menuId) ?? Number.MAX_SAFE_INTEGER),
-  );
+  const defaultMenuId =
+    context.defaultMenuId === null ||
+    published.some((menu) => menu.menuId === context.defaultMenuId)
+      ? context.defaultMenuId
+      : (published[0]?.menuId ?? null);
   return {
-    defaultMenuId: context.defaultMenuId,
-    menus: menus.map((menu) => ({
-      ...menu,
-      isDefault: menu.id === context.defaultMenuId,
+    defaultMenuId,
+    menus: published.map(({ menuId, versionId, document }) => ({
+      id: menuId,
+      name: document.menuName,
+      isDefault: menuId === defaultMenuId,
+      versionId,
     })),
-    offers,
+    offers: published.flatMap((menu) => served.get(menu.menuId)!),
+  };
+}
+
+/**
+ * The products and variants (extras items' included), option labels and per-offer extras items the
+ * zone's live menus hold that cannot be sold now: one read of each table.
+ */
+export async function unavailableSet(tx: Transaction, zoneId: string): Promise<ZoneUnavailable> {
+  const productIds = new Set<string>();
+  const labelIds = new Set<string>();
+  const extraItems = new Map<string, { menuItemId: string; productId: string }>();
+  const itemKey = (menuItemId: string, productId: string) => `${menuItemId}\u0000${productId}`;
+  for (const { document } of await zoneLiveDocuments(tx, zoneId))
+    for (const offer of Object.values(document.offers)) {
+      productIds.add(offer.productId);
+      for (const variant of offer.variants) productIds.add(variant.id);
+      for (const entry of offer.offeredModifiers)
+        if (entry.kind === "options") for (const label of entry.labels) labelIds.add(label.id);
+        else
+          for (const item of entry.items) {
+            productIds.add(item.productId);
+            extraItems.set(itemKey(offer.id, item.productId), {
+              menuItemId: offer.id,
+              productId: item.productId,
+            });
+          }
+    }
+
+  const unavailableProducts: string[] = [];
+  if (productIds.size > 0)
+    for (const row of await tx
+      .select({ id: products.id })
+      .from(products)
+      .where(
+        and(
+          inArray(products.id, [...productIds]),
+          or(eq(products.active, false), eq(products.available, false)),
+        ),
+      ))
+      unavailableProducts.push(row.id);
+  const labels: string[] = [];
+  if (labelIds.size > 0)
+    for (const row of await tx
+      .select({ id: optionLabels.id })
+      .from(optionLabels)
+      .where(and(inArray(optionLabels.id, [...labelIds]), eq(optionLabels.available, false))))
+      labels.push(row.id);
+  const withdrawn = new Map<string, { menuItemId: string; productId: string }>();
+  const menuItemIds = [...new Set([...extraItems.values()].map((item) => item.menuItemId))];
+  if (menuItemIds.length > 0)
+    for (const row of await tx
+      .select({
+        menuItemId: menuItemExtraItems.menuItemId,
+        productId: menuItemExtraItems.productId,
+      })
+      .from(menuItemExtraItems)
+      .where(
+        and(
+          inArray(menuItemExtraItems.menuItemId, menuItemIds),
+          eq(menuItemExtraItems.available, false),
+        ),
+      )) {
+      const key = itemKey(row.menuItemId, row.productId);
+      const item = extraItems.get(key);
+      if (item !== undefined) withdrawn.set(key, item);
+    }
+  return {
+    products: unavailableProducts,
+    optionLabels: labels,
+    extraItems: [...withdrawn.values()],
   };
 }
 
@@ -565,21 +667,6 @@ export async function setDeviceDefaultZone(
       target: [deviceZoneDefaults.deviceId],
       set: { zoneId },
     });
-}
-
-/** Resolve a selling identity only when its menu is assigned to the service zone. */
-export async function resolveZoneOffer(
-  tx: Transaction,
-  cfg: VenueScope,
-  zoneId: string,
-  menuItemId: string,
-): Promise<MenuOffer> {
-  const { offers } = await listZoneOffers(tx, cfg, zoneId);
-  const offer = offers.find((candidate) => candidate.id === menuItemId);
-  if (offer === undefined) {
-    throw new AppError("service_zone.offer_not_allowed", { zoneId, menuItemId });
-  }
-  return offer;
 }
 
 /** Snapshot the zone's current department and payment flow when a new order opens. */
@@ -706,12 +793,16 @@ export async function listWorkingLineContexts(
   }));
 }
 
-/** Snapshot the commercial attribution of newly priced working-order lines. */
+/**
+ * Snapshot the commercial attribution of newly priced working-order lines, and the menu version
+ * each was priced from, from `offers`: the zone's offers the lines were priced from.
+ */
 export async function recordWorkingLineContexts(
   tx: Transaction,
   cfg: VenueScope,
   workingOrderId: string,
   lines: readonly { workingOrderLineId: string; menuItemId: string }[],
+  offers: ZoneOffers,
 ): Promise<void> {
   if (lines.length === 0) return;
   const context = await getOrderServiceContext(tx, cfg, workingOrderId);
@@ -722,22 +813,22 @@ export async function recordWorkingLineContexts(
   if (department === undefined) {
     throw new AppError("department.not_found", { departmentId: context.departmentId });
   }
-  const byMenuItem = new Map<string, MenuOffer>();
-  for (const line of lines) {
-    if (!byMenuItem.has(line.menuItemId)) {
-      byMenuItem.set(
-        line.menuItemId,
-        await resolveZoneOffer(tx, cfg, context.zoneId, line.menuItemId),
-      );
-    }
-  }
+  const byMenuItem = new Map(offers.offers.map((offer) => [offer.id, offer]));
+  const versions = new Map(offers.menus.map((menu) => [menu.id, menu.versionId]));
   await tx.insert(workingLineContexts).values(
     lines.map((line) => {
-      const offer = byMenuItem.get(line.menuItemId)!;
+      const offer = byMenuItem.get(line.menuItemId);
+      if (offer === undefined) {
+        throw new AppError("service_zone.offer_not_allowed", {
+          zoneId: context.zoneId,
+          menuItemId: line.menuItemId,
+        });
+      }
       return {
         workingOrderLineId: line.workingOrderLineId,
         menuItemId: offer.id,
         menuId: offer.menuId,
+        menuVersionId: versions.get(offer.menuId) ?? null,
         menuName: offer.menuName,
         departmentId: context.departmentId,
         departmentName: department.name,

@@ -22,8 +22,8 @@ describe("VENUE_SERVICE", () => {
       "resolveNewOrderZone",
       "resolvePreparationRoutes",
       "resolveZoneContext",
-      "resolveZoneOffer",
       "retargetOrderContext",
+      "unavailableSet",
     ]);
   });
 

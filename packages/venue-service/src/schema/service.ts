@@ -283,6 +283,7 @@ export const workingLineContexts = table(
     workingOrderLineId: id("working_order_line_id").notNull(),
     menuItemId: id("menu_item_id").notNull(),
     menuId: id("menu_id").notNull(),
+    menuVersionId: id("menu_version_id"),
     menuName: label("menu_name").notNull(),
     departmentId: id("department_id").notNull(),
     departmentName: label("department_name").notNull(),

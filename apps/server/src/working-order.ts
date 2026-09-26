@@ -102,7 +102,7 @@ import type {
   VatClass,
 } from "@waitron/catalogue";
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
-import type { FloorAnnotator, PreparationRoute } from "@waitron/module";
+import type { FloorAnnotator, PreparationRoute, ZoneOffers } from "@waitron/module";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { FloorTableShape } from "./tables.js";
 import { issuancePass } from "./issuance-pass.js";
@@ -257,16 +257,26 @@ async function priceOrderLines(
   priced: PricedBasket;
   identities: OrderLineIdentity[];
   lineContexts: { workingOrderLineId: string; menuItemId: string }[];
+  /** The zone's offers the lines were priced from, for `recordLineContexts`. */
+  offers: ZoneOffers;
 }> {
   if (requestedLines.length === 0) {
     // A lineless call (splitOffCheck, openTab, unjoin) needs no zone and reads nothing.
-    return { lineRows: [], priced: priceBasket([]), identities: [], lineContexts: [] };
+    return {
+      lineRows: [],
+      priced: priceBasket([]),
+      identities: [],
+      lineContexts: [],
+      offers: { defaultMenuId: null, menus: [], offers: [] },
+    };
   }
   if (zoneId === undefined) {
     throw new AppError("order.service_context_missing", { workingOrderId });
   }
   const offers = await VENUE_SERVICE.listZoneOffers(tx, cfg, zoneId);
-  const availableById = new Map(offers.offers.map((offer) => [offer.id, offer]));
+  const availableById = new Map(
+    offers.offers.filter((offer) => offer.available).map((offer) => [offer.id, offer]),
+  );
   const lines = requestedLines.map((line) => {
     // The wire body is JSON, so a line may still name a product the types no longer carry.
     if (typeof line.menuItemId !== "string" || Object.hasOwn(line, "productId")) {
@@ -481,7 +491,7 @@ async function priceOrderLines(
     workingOrderLineId: ids[index]!,
     menuItemId: meta.menuItemId,
   }));
-  return { lineRows, priced, identities, lineContexts };
+  return { lineRows, priced, identities, lineContexts, offers };
 }
 
 /**
@@ -800,7 +810,7 @@ export async function createOpenOrder(
     }
     effectiveZoneId = table.zoneId ?? effectiveZoneId;
   }
-  const { lineRows, priced, identities, lineContexts } = await priceOrderLines(
+  const { lineRows, priced, identities, lineContexts, offers } = await priceOrderLines(
     tx,
     cfg,
     id,
@@ -827,7 +837,7 @@ export async function createOpenOrder(
   }
   if (effectiveZoneId !== undefined) {
     await VENUE_SERVICE.recordOrderContext(tx, cfg, id, effectiveZoneId);
-    await VENUE_SERVICE.recordLineContexts(tx, cfg, id, lineContexts);
+    await VENUE_SERVICE.recordLineContexts(tx, cfg, id, lineContexts, offers);
   }
 
   return { orderNumber, priced, identities, lineRows };
@@ -1572,13 +1582,19 @@ export async function addTabRound(
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, tabId));
   const context = await VENUE_SERVICE.findOrderContext(tx, cfg, tabId);
-  const { lineRows, lineContexts } = await priceOrderLines(tx, cfg, tabId, lines, context?.zoneId);
+  const { lineRows, lineContexts, offers } = await priceOrderLines(
+    tx,
+    cfg,
+    tabId,
+    lines,
+    context?.zoneId,
+  );
   const appended = lineRows.map((row, i) => ({ ...row, lineNo: maxLineNo + i + 1 }));
   const appendedLines = await tx
     .insert(workingOrderLines)
     .values(appended)
     .returning({ ...fireableLineColumns, lineNo: workingOrderLines.lineNo });
-  await VENUE_SERVICE.recordLineContexts(tx, cfg, tabId, lineContexts);
+  await VENUE_SERVICE.recordLineContexts(tx, cfg, tabId, lineContexts, offers);
   // The k-th parent row by `line_no` is input line k. Correlated on `line_no`, not on the
   // `RETURNING` array position, so the mapping does not depend on the insert's row order.
   const holdByParentId = new Map<string, boolean>();
@@ -3700,7 +3716,7 @@ async function applyLineEdits(
   });
   if (inserted.length > 0) {
     await tx.insert(workingOrderLines).values(inserted);
-    await VENUE_SERVICE.recordLineContexts(tx, cfg, orderId, insertedContexts);
+    await VENUE_SERVICE.recordLineContexts(tx, cfg, orderId, insertedContexts, priced.offers);
   }
   // Fired while the removed lines' items still stand, so a course they held counts as fired.
   await fireLines(tx, cfg, orderId, fireNow);
