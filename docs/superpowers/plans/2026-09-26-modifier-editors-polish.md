@@ -113,7 +113,10 @@ its own tests, so add it to the file list. Its unit is a focusable button emitti
 `wt-unit-click`, which nothing handles in an extras row — show the unit without a dead control. The
 price box needs a named width token; there is none to reuse (the variants table's container query
 is a literal `30rem`). `extra-list-form.test.ts`'s "shows a whole price, not a truncated one, at
-phone width" case must still pass unedited. Add the Task 1 strings here.
+phone width" case must still pass unedited. Add the Task 1 strings here. As built in A64, the
+stepper's box (`--wt-stepper-field-width`, 64px) leaves 48px for text; measured in Chromium, the
+"No limit" placeholder needs 52.0px and "Sin límite" 62.1px, so the Maximum choices stepper needs a
+wider box or a shorter placeholder.
 
 **Task 4 (A67).** Also deliberately changed: `option-contract.test.ts`'s `labels[0]` `toEqual`,
 which gains an `id`. Tighten `writeLabels`'s types so the `label.id ?? randomUUID()` and
