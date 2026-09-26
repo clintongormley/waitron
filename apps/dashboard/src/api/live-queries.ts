@@ -33,6 +33,7 @@ export const QUERY_DEPENDENCIES = {
   // The venue's card readers, plus the per-reader device count aggregated over `device_card_readers`,
   // so a reader added/retired OR a device re-pointed refreshes the list.
   listReaders: ["card_readers", "device_card_readers"],
+  listStuckPayments: ["payments", "working_orders", "tills"],
   pairingMode: ["pairing"],
   joinRequests: ["join_requests"],
   listDiscoveredPrinters: ["printer_discovery", "printers", "print_agents"],

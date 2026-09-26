@@ -759,6 +759,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Those credentials are for a different environment (test vs live) than this venue",
     es: "Esas credenciales son de un entorno distinto (prueba o real) al de este local",
   },
+  "payment.not_stuck": {
+    en: "This payment is no longer stuck — the list has been refreshed.",
+    es: "Este cobro ya no está pendiente; se ha actualizado la lista.",
+  },
+  "payment.resolve_unsupported": {
+    en: "Waitron cannot ask this card provider about a stuck payment, so the order stays locked. Check the payment in the provider's dashboard.",
+    es: "Waitron no puede consultar un cobro pendiente con este proveedor de pagos, así que el pedido sigue bloqueado. Revisa el pago en el panel del proveedor.",
+  },
+  "payment.outcome_unknown": {
+    en: "The card provider could not say what happened to this payment; the order stays locked. Try again in a minute.",
+    es: "El proveedor de pagos no pudo confirmar qué pasó con este cobro; el pedido sigue bloqueado. Vuelve a intentarlo en un minuto.",
+  },
   "alert.not_found": {
     en: "This alert no longer exists. Refresh the list.",
     es: "Este aviso ya no existe. Actualiza la lista.",

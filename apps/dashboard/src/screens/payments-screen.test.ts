@@ -3,11 +3,13 @@ import { html } from "lit";
 import type { CardProviderPanel } from "@waitron/dashboard-kit";
 import { registerCatalogue } from "@waitron/dashboard-kit";
 import { setLocale, t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import type {
   DashboardApi,
   PaymentProviderRow,
   ReaderRow,
   ReaderStatusView,
+  StuckPaymentRow,
 } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./payments-screen.js";
@@ -69,6 +71,8 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     renameReader: vi.fn().mockResolvedValue(undefined),
     availableReaders: vi.fn().mockResolvedValue([]),
     adoptReader: vi.fn().mockResolvedValue({ id: "r-2", status: "paired" }),
+    listStuckPayments: vi.fn().mockResolvedValue([]),
+    resolveStuckPayment: vi.fn().mockResolvedValue({ outcome: "released" }),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -861,5 +865,294 @@ describe("payments-screen remaining edges", () => {
       expect(qCell(el, "[data-test=reader-status-r-1]")?.textContent).toBe("Online"),
     );
     expect(api.readerStatus).toHaveBeenCalledTimes(1);
+  });
+});
+
+const STUCK: StuckPaymentRow[] = [
+  {
+    paymentId: "pay-1",
+    workingOrderId: "wo-1",
+    orderNumber: 12,
+    label: "Terrace 3",
+    tillId: "till-1",
+    tillName: "Bar till",
+    provider: "acme",
+    amount: "12.50",
+    startedAt: "2026-09-26T10:05:00.000Z",
+  },
+  {
+    paymentId: "pay-2",
+    workingOrderId: "wo-2",
+    orderNumber: 13,
+    label: null,
+    tillId: "till-1",
+    tillName: "Bar till",
+    provider: "acme",
+    amount: "8.00",
+    startedAt: "2026-09-26T10:07:00.000Z",
+  },
+];
+
+describe("card payments stuck after a restart", () => {
+  const section = (el: PaymentsScreen) => q(el, "[data-test=stuck-payments]");
+  const result = (el: PaymentsScreen) => q(el, "[data-test=stuck-result]");
+
+  async function confirmResolve(el: PaymentsScreen, paymentId = "pay-1"): Promise<void> {
+    q(el, `[data-test=resolve-${paymentId}]`)!.click();
+    await flush(el);
+    q(el, "[data-test=confirm-resolve]")!.click();
+    await flush(el);
+  }
+
+  it("is hidden when no card payment is stuck", async () => {
+    const { el, api } = await mount();
+
+    expect(api.listStuckPayments).toHaveBeenCalled();
+    expect(section(el)).toBeNull();
+  });
+
+  it("lists each stuck payment's order, till, provider, amount and start time", async () => {
+    const { el } = await mount(stubApi({ listStuckPayments: vi.fn().mockResolvedValue(STUCK) }));
+
+    expect(section(el)!.querySelector("h2")!.textContent).toBe(
+      "Card payments stuck after a restart",
+    );
+    const row = q(el, "[data-test=stuck-pay-1]")!.textContent!;
+    expect(row).toContain("Order 12 · Terrace 3");
+    expect(row).toContain("Bar till");
+    expect(row).toContain("Acme Pay");
+    expect(row).toContain("€12.50");
+    expect(row).toContain("9/26/26, 10:05 AM");
+    expect(q(el, "[data-test=stuck-pay-2]")!.textContent).toContain("Order 13");
+    expect(q(el, "[data-test=stuck-pay-2]")!.textContent).not.toContain("·");
+    expect(q(el, "[data-test=resolve-pay-1]")!.textContent).toContain(
+      "Check with the card provider",
+    );
+  });
+
+  it("reads in Spanish", async () => {
+    setLocale("es");
+    const { el } = await mount(stubApi({ listStuckPayments: vi.fn().mockResolvedValue(STUCK) }));
+
+    expect(section(el)!.querySelector("h2")!.textContent).toBe(
+      "Cobros con tarjeta sin resolver tras un reinicio",
+    );
+    expect(q(el, "[data-test=stuck-pay-1]")!.textContent).toContain("Pedido 12 · Terrace 3");
+    // Intl puts a no-break space before the euro sign.
+    expect(q(el, "[data-test=stuck-pay-1]")!.textContent).toMatch(/12,50\u00a0€/);
+  });
+
+  it("asks for confirmation, explaining both outcomes, before asking the provider", async () => {
+    const { el, api } = await mount(
+      stubApi({ listStuckPayments: vi.fn().mockResolvedValue(STUCK) }),
+    );
+
+    q(el, "[data-test=resolve-pay-1]")!.click();
+    await flush(el);
+    expect(api.resolveStuckPayment).not.toHaveBeenCalled();
+    const dialog = q(el, "[data-test=resolve-dialog]")!;
+    expect(dialog.textContent).toContain("If it went through, the sale is recorded");
+    expect(dialog.textContent).toContain("cancelled at Acme Pay and the order is unlocked");
+
+    q(el, "[data-test=cancel-resolve]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=resolve-dialog]")).toBeNull();
+    expect(api.resolveStuckPayment).not.toHaveBeenCalled();
+  });
+
+  it("closes the confirmation when its dialog is dismissed", async () => {
+    const { el, api } = await mount(
+      stubApi({ listStuckPayments: vi.fn().mockResolvedValue(STUCK) }),
+    );
+    q(el, "[data-test=resolve-pay-1]")!.click();
+    await flush(el);
+
+    q(el, "[data-test=resolve-dialog]")!.dispatchEvent(new CustomEvent("wt-close"));
+    await flush(el);
+
+    expect(q(el, "[data-test=resolve-dialog]")).toBeNull();
+    expect(api.resolveStuckPayment).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      { outcome: "filed", invoiceNumber: "F-1" },
+      "Payment went through — the sale has been recorded.",
+    ],
+    [
+      { outcome: "released" },
+      "Payment did not go through — it was cancelled and the order is unlocked.",
+    ],
+  ])("reports %o and refreshes the list", async (answer, text) => {
+    const listStuckPayments = vi
+      .fn()
+      .mockResolvedValueOnce(STUCK)
+      .mockResolvedValue(STUCK.slice(1));
+    const { el, api } = await mount(
+      stubApi({ listStuckPayments, resolveStuckPayment: vi.fn().mockResolvedValue(answer) }),
+    );
+
+    await confirmResolve(el);
+
+    expect(api.resolveStuckPayment).toHaveBeenCalledWith("pay-1");
+    expect(result(el)!.getAttribute("role")).toBe("status");
+    expect(result(el)!.textContent!.trim()).toBe(`Order 12 · Terrace 3: ${text}`);
+    expect(listStuckPayments).toHaveBeenCalledTimes(2);
+    expect(q(el, "[data-test=stuck-pay-1]")).toBeNull();
+    expect(q(el, "[data-test=stuck-pay-2]")).not.toBeNull();
+  });
+
+  it("keeps the result showing after the last stuck payment is cleared", async () => {
+    const { el } = await mount(
+      stubApi({
+        listStuckPayments: vi.fn().mockResolvedValueOnce(STUCK.slice(0, 1)).mockResolvedValue([]),
+      }),
+    );
+
+    await confirmResolve(el);
+
+    expect(section(el)).not.toBeNull();
+    expect(q(el, "[data-test=stuck-pay-1]")).toBeNull();
+    expect(result(el)!.textContent).toContain("Payment did not go through");
+  });
+
+  it.each([
+    [
+      { code: "payment.outcome_unknown", params: { paymentId: "pay-1", reason: "unreachable" } },
+      "Could not reach the card provider; the order stays locked. Try again in a minute.",
+    ],
+    [
+      { code: "payment.outcome_unknown", params: { paymentId: "pay-1", reason: "ambiguous" } },
+      "The card provider's answer is unclear; the order stays locked. Check the payment in the provider's dashboard.",
+    ],
+    [
+      { code: "payment.outcome_unknown", params: { paymentId: "pay-1" } },
+      "The card provider could not say what happened to this payment; the order stays locked. Try again in a minute.",
+    ],
+    [
+      { code: "payment.not_stuck", params: { paymentId: "pay-1" } },
+      "This payment is no longer stuck — the list has been refreshed.",
+    ],
+    [
+      { code: "payment.resolve_unsupported", params: { provider: "acme" } },
+      "Waitron cannot ask this card provider about a stuck payment, so the order stays locked. Check the payment in the provider's dashboard.",
+    ],
+    [
+      { code: "reader.provider_disconnected", params: { providerId: "acme" } },
+      "This card provider is no longer connected. Connect it again, then check the payment.",
+    ],
+    [
+      { code: "server.internal", status: 500 },
+      "Something went wrong while checking this payment. If it is still listed, try again in a minute.",
+    ],
+  ])("shows the curated text for a %o refusal and refreshes the list", async (refusal, text) => {
+    const listStuckPayments = vi.fn().mockResolvedValue(STUCK);
+    const { el } = await mount(
+      stubApi({
+        listStuckPayments,
+        resolveStuckPayment: vi.fn().mockRejectedValue(refusal),
+      }),
+    );
+
+    await confirmResolve(el);
+
+    expect(result(el)!.getAttribute("role")).toBe("alert");
+    expect(result(el)!.textContent!.trim()).toBe(`Order 12 · Terrace 3: ${text}`);
+    expect(listStuckPayments).toHaveBeenCalledTimes(2);
+  });
+
+  it("reads a refusal the section has no wording of its own for by its code", async () => {
+    const { el } = await mount(
+      stubApi({
+        listStuckPayments: vi.fn().mockResolvedValue(STUCK),
+        resolveStuckPayment: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+      }),
+    );
+
+    await confirmResolve(el);
+
+    expect(result(el)!.textContent).not.toContain("authorization.not_permitted");
+    expect(result(el)!.textContent!.trim()).toMatch(/^Order 12 · Terrace 3: \S/);
+  });
+
+  it("treats an answer it does not recognise as the generic failure", async () => {
+    const { el } = await mount(
+      stubApi({
+        listStuckPayments: vi.fn().mockResolvedValue(STUCK),
+        resolveStuckPayment: vi.fn().mockResolvedValue({ outcome: "declined" }),
+      }),
+    );
+
+    await confirmResolve(el);
+
+    expect(result(el)!.getAttribute("role")).toBe("alert");
+    expect(result(el)!.textContent).toContain("Something went wrong while checking this payment");
+  });
+
+  it("keeps a successful resolve's result when the refresh after it fails", async () => {
+    const { el } = await mount(
+      stubApi({
+        listStuckPayments: vi
+          .fn()
+          .mockResolvedValueOnce(STUCK)
+          .mockRejectedValue({ code: "connection.failed" }),
+      }),
+    );
+
+    await confirmResolve(el);
+
+    expect(result(el)!.getAttribute("role")).toBe("status");
+    expect(result(el)!.textContent).toContain("Payment did not go through");
+    expect(q(el, "[data-test=stuck-load-error]")!.textContent!.trim()).toBe(
+      codeMessage("connection.failed"),
+    );
+  });
+
+  it("shows a failed load of the stuck list as a load failure", async () => {
+    const { el } = await mount(
+      stubApi({ listStuckPayments: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
+    );
+
+    expect(section(el)).not.toBeNull();
+    expect(q(el, "[data-test=stuck-load-error]")!.getAttribute("role")).toBe("alert");
+    expect(q(el, "[data-test=stuck-load-error]")!.textContent).not.toContain("server.internal");
+  });
+
+  it("asks the provider once, and disables every check, while a check is running", async () => {
+    let release!: (value: { outcome: "released" }) => void;
+    const pending = new Promise<{ outcome: "released" }>((resolve) => {
+      release = resolve;
+    });
+    const { el, api } = await mount(
+      stubApi({
+        listStuckPayments: vi.fn().mockResolvedValue(STUCK),
+        resolveStuckPayment: vi.fn().mockReturnValueOnce(pending),
+      }),
+    );
+
+    q(el, "[data-test=resolve-pay-1]")!.click();
+    await flush(el);
+    const confirm = q(el, "[data-test=confirm-resolve]")!;
+    confirm.click();
+    confirm.click();
+    await flush(el);
+    expect(q(el, "[data-test=resolve-pay-1]")!.hasAttribute("loading")).toBe(true);
+    expect(q(el, "[data-test=resolve-pay-2]")!.hasAttribute("disabled")).toBe(true);
+    q(el, "[data-test=resolve-pay-2]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=resolve-dialog]")).toBeNull();
+
+    release({ outcome: "released" });
+    await flush(el);
+    expect(api.resolveStuckPayment).toHaveBeenCalledTimes(1);
+    expect(q(el, "[data-test=resolve-pay-2]")!.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("names each check button after its order", async () => {
+    const { el } = await mount(stubApi({ listStuckPayments: vi.fn().mockResolvedValue(STUCK) }));
+
+    expect(q(el, "[data-test=resolve-pay-1]")!.getAttribute("aria-label")).toBe(
+      "Check with the card provider: Order 12 · Terrace 3",
+    );
   });
 });

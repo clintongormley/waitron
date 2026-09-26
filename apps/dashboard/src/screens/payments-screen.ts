@@ -9,6 +9,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import { CARD_PROVIDER_PANELS } from "@waitron/dashboard-modules";
+import { formatMoney } from "@waitron/shared";
 import {
   registerCatalogue,
   type CardProviderPanel,
@@ -21,9 +22,32 @@ import type {
   PaymentProviderRow,
   ReaderRow,
   ReaderStatusView,
+  StuckPaymentResolution,
+  StuckPaymentRow,
 } from "../api/client.js";
+import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
+import { formatAlertTime } from "../widgets/alert-format.js";
+
+/** The section's own wording for a refused check; any other code reads its shared message. */
+function stuckRefusalText(error: unknown): string {
+  const code = codeOf(error);
+  if (code === "payment.outcome_unknown") {
+    const reason = (error as { params?: { reason?: unknown } }).params?.reason;
+    if (reason === "unreachable") return t("payments.stuck.unknown_unreachable");
+    if (reason === "ambiguous") return t("payments.stuck.unknown_ambiguous");
+  }
+  if (code === "reader.provider_disconnected") return t("payments.stuck.provider_disconnected");
+  if (code === "server.internal") return t("payments.stuck.failed");
+  return codeMessage(code);
+}
+
+function stuckOutcomeText(resolution: StuckPaymentResolution): string | null {
+  if (resolution.outcome === "filed") return t("payments.stuck.filed");
+  if (resolution.outcome === "released") return t("payments.stuck.released");
+  return null;
+}
 
 /** Provider forms come through CARD_PROVIDER_PANELS; this screen never imports a provider package. */
 @customElement("dashboard-payments-screen")
@@ -116,6 +140,51 @@ export class PaymentsScreen extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
+      .stuck-section {
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+        padding: var(--wt-space-4);
+        margin-bottom: var(--wt-space-6);
+      }
+      .stuck-section.pending {
+        border-color: var(--wt-color-danger);
+      }
+      .stuck-section h2 {
+        margin-top: 0;
+      }
+      .stuck-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: var(--wt-space-3);
+      }
+      .stuck {
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        padding: var(--wt-space-3);
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-3);
+      }
+      .stuck-body {
+        flex: 1 1 calc(var(--wt-tap-min) * 6);
+      }
+      .stuck-order {
+        font-weight: 600;
+        margin: 0 0 var(--wt-space-2);
+      }
+      .stuck-details {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: var(--wt-space-1) var(--wt-space-3);
+        margin: 0;
+      }
+      .stuck-details dt {
+        color: var(--wt-color-text-muted);
+      }
     `,
   ];
 
@@ -151,12 +220,30 @@ export class PaymentsScreen extends LitElement {
   #statusVersion = 0;
   #pairSucceeded = false;
   @state() private errorKey: string | null = null;
+  @state() private stuck: StuckPaymentRow[] = [];
+  @state() private stuckLoadError: string | null = null;
+  @state() private confirmingStuck: StuckPaymentRow | null = null;
+  @state() private resolvingId: string | null = null;
+  @state() private stuckResult: { text: string; refused: boolean } | null = null;
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.stuckLoadError = codeOf(error);
+    },
+  );
 
   override connectedCallback(): void {
     super.connectedCallback();
     // So each panel's `displayNameKey` resolves even before its module has registered its strings.
     for (const panel of this.panels) registerCatalogue(panel.strings);
     void this.#load();
+    void this.#queries
+      .watch("listStuckPayments", [], (rows) => {
+        this.stuck = rows;
+        this.stuckLoadError = null;
+      })
+      .catch(() => undefined);
   }
 
   #simulator(): boolean {
@@ -331,6 +418,146 @@ export class PaymentsScreen extends LitElement {
     } finally {
       this.busy = false;
     }
+  }
+
+  #stuckOrder(row: StuckPaymentRow): string {
+    const order = t("payments.stuck.order").replace("{number}", String(row.orderNumber));
+    return row.label ? `${order} · ${row.label}` : order;
+  }
+
+  #openResolve(row: StuckPaymentRow): void {
+    if (this.resolvingId !== null) return;
+    this.confirmingStuck = row;
+  }
+
+  /** The list is refreshed whatever the answer; a failed refresh is a load failure, never the
+   * check's own outcome. */
+  async #resolve(): Promise<void> {
+    const row = this.confirmingStuck;
+    if (row === null) return;
+    this.confirmingStuck = null;
+    this.resolvingId = row.paymentId;
+    this.stuckResult = null;
+    const order = this.#stuckOrder(row);
+    try {
+      const outcome = stuckOutcomeText(await this.api.resolveStuckPayment(row.paymentId));
+      this.stuckResult =
+        outcome === null
+          ? { text: `${order}: ${t("payments.stuck.failed")}`, refused: true }
+          : { text: `${order}: ${outcome}`, refused: false };
+    } catch (error) {
+      this.stuckResult = { text: `${order}: ${stuckRefusalText(error)}`, refused: true };
+    }
+    try {
+      this.stuck = await (this.api.background ?? this.api).listStuckPayments();
+      this.stuckLoadError = null;
+    } catch (error) {
+      this.stuckLoadError = codeOf(error);
+    } finally {
+      this.resolvingId = null;
+    }
+  }
+
+  #renderStuck(): TemplateResult | typeof nothing {
+    if (this.stuck.length === 0 && this.stuckResult === null && this.stuckLoadError === null) {
+      return nothing;
+    }
+    return html`<section
+      class="stuck-section ${this.stuck.length ? "pending" : ""}"
+      data-test="stuck-payments"
+      aria-labelledby="stuck-heading"
+    >
+      <h2 id="stuck-heading">${t("payments.stuck.heading")}</h2>
+      ${this.stuck.length ? html`<p>${t("payments.stuck.intro")}</p>` : nothing}
+      ${
+        this.stuckResult
+          ? html`<p
+              data-test="stuck-result"
+              class=${this.stuckResult.refused ? "error" : ""}
+              role=${this.stuckResult.refused ? "alert" : "status"}
+            >
+              ${this.stuckResult.text}
+            </p>`
+          : nothing
+      }
+      ${
+        this.stuckLoadError
+          ? html`<p data-test="stuck-load-error" class="error" role="alert">
+              ${codeMessage(this.stuckLoadError)}
+            </p>`
+          : nothing
+      }
+      ${
+        this.stuck.length
+          ? html`<ul class="stuck-list">
+              ${this.stuck.map((row) => this.#renderStuckRow(row))}
+            </ul>`
+          : nothing
+      }
+    </section>`;
+  }
+
+  #renderStuckRow(row: StuckPaymentRow): TemplateResult {
+    const order = this.#stuckOrder(row);
+    return html`<li class="stuck" data-test="stuck-${row.paymentId}">
+      <div class="stuck-body">
+        <p class="stuck-order">${order}</p>
+        <dl class="stuck-details">
+          <dt>${t("payments.stuck.till")}</dt>
+          <dd>${row.tillName}</dd>
+          <dt>${t("payments.stuck.provider")}</dt>
+          <dd>${this.#providerName(row.provider)}</dd>
+          <dt>${t("payments.stuck.amount")}</dt>
+          <dd>${formatMoney(row.amount, currentLocale())}</dd>
+          <dt>${t("payments.stuck.started")}</dt>
+          <dd><time datetime=${row.startedAt}>${formatAlertTime(row.startedAt)}</time></dd>
+        </dl>
+      </div>
+      <wt-button
+        variant="secondary"
+        data-test="resolve-${row.paymentId}"
+        aria-label=${`${t("payments.stuck.check")}: ${order}`}
+        ?loading=${this.resolvingId === row.paymentId}
+        ?disabled=${this.resolvingId !== null}
+        @click=${() => this.#openResolve(row)}
+        >${t("payments.stuck.check")}</wt-button
+      >
+    </li>`;
+  }
+
+  #renderResolveDialog(): TemplateResult | typeof nothing {
+    const row = this.confirmingStuck;
+    if (row === null) return nothing;
+    const provider = this.#providerName(row.provider);
+    return html`<wt-dialog
+      data-test="resolve-dialog"
+      .open=${true}
+      heading=${t("payments.stuck.confirm_heading").replace("{provider}", provider)}
+      @wt-close=${() => {
+        this.confirmingStuck = null;
+      }}
+    >
+      <p>
+        ${t("payments.stuck.confirm_body")
+          .replaceAll("{provider}", provider)
+          .replace("{amount}", formatMoney(row.amount, currentLocale()))
+          .replace("{order}", this.#stuckOrder(row))}
+      </p>
+      <wt-form-actions slot="footer">
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          data-test="cancel-resolve"
+          @click=${() => {
+            this.confirmingStuck = null;
+          }}
+          >${t("action.cancel")}</wt-button
+        >
+        <wt-button data-test="confirm-resolve" @click=${() => void this.#resolve()}
+          >${t("payments.stuck.confirm")}</wt-button
+        >
+      </wt-form-actions>
+    </wt-dialog>`;
   }
 
   #renderProvider(provider: PaymentProviderRow): TemplateResult {
@@ -702,6 +929,7 @@ export class PaymentsScreen extends LitElement {
           ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
           : nothing
       }
+      ${this.#renderStuck()}
 
       <h2>${t("payments.providers_heading")}</h2>
       ${
@@ -745,7 +973,7 @@ export class PaymentsScreen extends LitElement {
         .rowKey=${(reader: ReaderRow) => reader.id}
         .emptyMessage=${t("payments.readers_empty")}
       ></wt-data-table>
-      ${this.#renderDiscovery()} ${this.#renderEditor()}
+      ${this.#renderDiscovery()} ${this.#renderEditor()} ${this.#renderResolveDialog()}
     `;
   }
 }
