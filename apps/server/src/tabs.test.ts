@@ -1135,6 +1135,19 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
     ]);
   });
 
+  it("sends nothing and stamps nothing when no line is held", async () => {
+    const { cfg, tableId, cafeOffer } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
+    );
+    const before = await sentState(tabId);
+
+    await asApp(cfg, (tx) => sendLines(tx, cfg, tabId, []));
+
+    expect(await sentState(tabId)).toEqual(before);
+  });
+
   it("keeps a recalled line's sent_at", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
@@ -1325,6 +1338,27 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
       expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
     },
   );
+
+  it("refuses to void part of an extras line, whose quantity follows its dish", async () => {
+    const { cfg, tableId, cafeId, aguaId, cafeOffer } = await setupVenue();
+    const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        {
+          menuItemId: cafeOffer,
+          quantity: "2",
+          extras: [{ listId, picks: [{ productId: aguaId, quantity: 1 }] }],
+        },
+      ]),
+    );
+
+    await expect(asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 2, "1"))).rejects.toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "quantity" },
+    });
+    expect((await linesOf(tabId)).map((line) => line.quantity)).toEqual([2000, 2000]);
+  });
 
   it("a recall records a RECALLED notice for the fired line only", async () => {
     const { cfg, tableId, cafeOffer, aguaOffer } = await setupVenue();

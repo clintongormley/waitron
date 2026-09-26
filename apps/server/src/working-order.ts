@@ -1114,7 +1114,6 @@ async function readLineQuantities(
   tx: Transaction,
   lineIds: readonly string[],
 ): Promise<Map<string, number>> {
-  if (lineIds.length === 0) return new Map();
   const rows = await tx
     .select({ id: workingOrderLines.id, quantity: workingOrderLines.quantity })
     .from(workingOrderLines)
@@ -1187,24 +1186,17 @@ async function heldNoRouteLines(
       and(
         eq(workingOrderLines.workingOrderId, orderId),
         isNull(workingOrderLines.parentLineId),
+        isNotNull(workingOrderLines.productId),
         isNull(workingOrderLines.sentAt),
         isNull(ticketItems.id),
         or(...inScope),
       ),
     );
-  const productIds = [
-    ...new Set(candidates.flatMap((line) => (line.productId === null ? [] : [line.productId]))),
-  ];
-  const routes = await VENUE_SERVICE.resolvePreparationRoutes(
-    tx,
-    cfg,
-    serviceContext.zoneId,
-    productIds,
-  );
+  const routes = await VENUE_SERVICE.resolvePreparationRoutes(tx, cfg, serviceContext.zoneId, [
+    ...new Set(candidates.map((line) => line.productId!)),
+  ]);
   return candidates
-    .filter(
-      (line) => line.productId !== null && routes.get(line.productId)?.kind === "no_preparation",
-    )
+    .filter((line) => routes.get(line.productId!)?.kind === "no_preparation")
     .map((line) => line.id);
 }
 

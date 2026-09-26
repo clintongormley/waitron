@@ -1449,6 +1449,33 @@ describe("getHeldOrder", () => {
     ]);
   });
 
+  it("shows the allergens a retrieved line was added with, not the product's current ones", async () => {
+    // Spec §11.1: a saved order keeps its facts; only a new line reads the live product.
+    const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
+    await db.execute(sql`
+      update products set allergens = ${JSON.stringify({ gluten: { presence: "contains" } })}
+      where id = ${cafeId}`);
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: premiumCafeOfferId, quantity: "1" }],
+    });
+    await db.execute(sql`
+      update products
+      set allergens = ${JSON.stringify({
+        milk: { presence: "contains" },
+        sulphites: { presence: "may_contain" },
+      })}
+      where id = ${cafeId}`);
+
+    const order = await getHeldOrder({ db }, cfg, id);
+
+    expect(order.lines.map((line) => line.product?.allergens)).toEqual([
+      { gluten: { presence: "contains" } },
+    ]);
+  });
+
   it("returns the open order's product/quantity lines, ordered by lineNo", async () => {
     const { cfg, cafeId, aguaId } = await setupVenue();
     const id = randomUUID();
@@ -7309,5 +7336,39 @@ describe("pricing a stored order to pay it refuses a line never sent whose produ
     await expect(
       withTransaction(db, (tx) => priceStoredOrderForIssuance(tx, orderId)),
     ).resolves.toMatchObject({ priced: { total: "3.20" } });
+  });
+});
+
+describe("fireCourse on an order with no service context", () => {
+  it("releases the held course and stamps its line sent", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const { id } = await withTransaction(db, async (tx) => {
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const starters = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 1 });
+      const desserts = await createCourse(tx, cfg, { name: "Postres", displayOrder: 3 });
+      const soup = await makeProduct(tx, cfg, catalogueId, {});
+      const flan = await makeProduct(tx, cfg, catalogueId, {});
+      const id = randomUUID();
+      await createOpenOrder(tx, cfg, id, [], null);
+      await insertContextlessLines(tx, id, [soup, flan]);
+      await tx.execute(sql`
+        update working_order_lines
+        set course_id = case line_no when 1 then ${starters.id} else ${desserts.id} end
+        where working_order_id = ${id}`);
+      await fireLines(tx, cfg, id, await fireableLines(tx, id));
+      await fireCourse(tx, cfg, id, desserts.id);
+      return { id };
+    });
+
+    const lines = await db
+      .select({ sentAt: workingOrderLines.sentAt, firedAt: ticketItems.firedAt })
+      .from(workingOrderLines)
+      .innerJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(lines.map((line) => [line.sentAt !== null, line.firedAt !== null])).toEqual([
+      [true, true],
+      [true, true],
+    ]);
   });
 });
