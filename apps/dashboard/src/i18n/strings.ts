@@ -1527,6 +1527,8 @@ export const en = {
   "menu_prices.variants_help":
     "An empty price uses the variant's own price, or else this menu's price for the product.",
   "menu_prices.variant_offered": "Offered on this menu",
+  "menu_prices.variants_not_saved":
+    "The menu price for {name}, and whether it is sold here, were saved, but its variants were not. {reason}",
   "menus.tree_heading": "What is on this menu",
   "menus.structure_empty": "Nothing is on this menu yet.",
   "menus.structure_loading": "Loading the menu…",
@@ -3111,6 +3113,8 @@ export const es: Record<StringKey, string> = {
   "menu_prices.variants_help":
     "Un precio vacío usa el precio propio de la variante o, si no lo tiene, el precio del producto en este menú.",
   "menu_prices.variant_offered": "Se ofrece en este menú",
+  "menu_prices.variants_not_saved":
+    "Se guardaron el precio de {name} en este menú y si se vende aquí, pero no sus variantes. {reason}",
   "menus.tree_heading": "Qué hay en este menú",
   "menus.structure_empty": "Todavía no hay nada en este menú.",
   "menus.structure_loading": "Cargando el menú…",

@@ -470,19 +470,18 @@ it("refuses a variant's malformed price beside that variant's field", async () =
   expect(await summary(el)).toEqual([t("editor.price_invalid")]);
 });
 
-it.each([
-  ["grossPrice", "grossPrice"],
-  ["variants.1", "variants.1.price"],
-])("shows a refusal naming %s beside its field and in the summary", async (refused, name) => {
+it("shows a refusal naming the menu price beside it and in the summary", async () => {
   const el = await mount({ editing: "mi-lemonade" });
-  el.refusal = { field: refused, message: "Refused here" };
+  el.refusal = { field: "grossPrice", message: "Refused here" };
   await el.updateComplete;
   expect(await summary(el)).toEqual(["Refused here"]);
-  expect(field(el, name).error).toBe("Refused here");
+  expect(field(el, "grossPrice").error).toBe("Refused here");
 });
 
-it.each(["_form", "active", "variants"])(
-  "shows a refusal naming %s, which has no text field, in the summary alone",
+// The server names a whole variant entry (`variants.N`) whichever of its values it refused, so
+// the refusal is not pinned on the variant's price.
+it.each(["_form", "active", "variants", "variants.1"])(
+  "shows a refusal naming %s, which is no one text field, in the summary alone",
   async (refused) => {
     const el = await mount({ editing: "mi-lemonade" });
     el.refusal = { field: refused, message: "Refused" };

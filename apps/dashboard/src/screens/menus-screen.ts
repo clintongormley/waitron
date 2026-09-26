@@ -535,6 +535,12 @@ export class MenusScreen extends LitElement {
   /** The prices are read only once the Prices tab is shown for the menu. */
   #showView(view: Tab): void {
     this.view = view;
+    // The window lives in the Prices panel, which the tabs hide; left open, its modal dialog would
+    // block the page. A save still out reports a refusal beside the list instead (`#saveOffer`).
+    if (view !== "prices") {
+      this.editingOffer = null;
+      this.offerRefusal = null;
+    }
     if (view === "prices" && this.menuId !== null && this.#pricesFor !== this.menuId)
       void this.#watchPrices(this.menuId);
   }
@@ -850,31 +856,41 @@ export class MenusScreen extends LitElement {
   // ── Prices ───────────────────────────────────────────────────────────────────────────────────
 
   /** One PATCH for the menu item, then one PUT of its variants when it has any. The window closes
-   * once both are saved; a refusal keeps it open, unless the person has gone to another menu, when
-   * it is named beside that menu instead. */
+   * once both are saved; a refusal keeps it open, unless the window has been closed meanwhile (by
+   * another menu or tab), when it is named beside the list instead. */
   async #saveOffer(save: OfferSave): Promise<void> {
     const menuId = this.menuId;
     if (menuId === null || this.savingOffer) return;
     this.savingOffer = true;
     this.offerRefusal = null;
+    /** `inWindow` and `elsewhere` are sentences with `{name}` and `{reason}` to fill. */
+    const refused = (error: unknown, field: string, inWindow: string, elsewhere: string): void => {
+      this.savingOffer = false;
+      const fill = (sentence: string) =>
+        sentence.replace("{name}", save.name).replace("{reason}", codeMessage(codeOf(error)));
+      if (this.menuId === menuId && this.editingOffer === save.menuItemId)
+        this.offerRefusal = { field, message: fill(inWindow) };
+      else this.memberError = fill(elsewhere);
+    };
     try {
       await this.api.updateMenuItem(menuId, save.menuItemId, {
         grossPrice: save.grossPrice,
         active: save.active,
       });
-      if (save.variants !== null)
-        await this.api.setMenuVariants(menuId, save.menuItemId, save.variants);
     } catch (error) {
-      this.savingOffer = false;
-      const message = codeMessage(codeOf(error));
-      if (this.menuId === menuId && this.editingOffer === save.menuItemId)
-        this.offerRefusal = { field: fieldOf(error), message };
-      else
-        this.memberError = t("menus.change_not_saved")
-          .replace("{name}", save.name)
-          .replace("{reason}", message);
+      refused(error, fieldOf(error), "{reason}", t("menus.change_not_saved"));
       return;
     }
+    if (save.variants !== null)
+      try {
+        await this.api.setMenuVariants(menuId, save.menuItemId, save.variants);
+      } catch (error) {
+        const partly = t("menu_prices.variants_not_saved");
+        refused(error, "_form", partly, partly);
+        // The menu price was saved, so the list behind the window is read again.
+        if (this.menuId === menuId) await this.#watchPrices(menuId);
+        return;
+      }
     this.savingOffer = false;
     if (this.menuId !== menuId) return;
     this.editingOffer = null;

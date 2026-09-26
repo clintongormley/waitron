@@ -2347,3 +2347,104 @@ it("stops following a menu's prices once another menu is opened, so its changes 
   dinner.resolve([]);
   await vi.waitFor(() => expect(prices(el).loading).toBe(false));
 });
+
+/** The native dialog inside the offer window: while it is open it blocks the rest of the page. */
+function offerDialogOpen(el: MenusScreen): boolean {
+  return pricesModal(el).shadowRoot!.querySelector("dialog")?.open ?? false;
+}
+
+it("closes the offer window when Back leaves the Prices tab, leaving the Structure tab usable", async () => {
+  const client = api();
+  const el = await mountLunch(client);
+  await chooseTab(el, "prices");
+  await vi.waitFor(() => expect(prices(el).rows.length).toBe(3));
+  await openOffer(el, "mi-burger");
+  expect(offerDialogOpen(el)).toBe(true);
+  history.back();
+  await vi.waitFor(() => expect(location.pathname).toBe(LUNCH_PATH));
+  await vi.waitFor(() =>
+    expect(q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!.value).toBe("structure"),
+  );
+  await vi.waitFor(() => expect(offerDialogOpen(el)).toBe(false));
+  expect(prices(el).editing).toBeNull();
+  await clickInTree(el, "edit-m-drinks");
+  await vi.waitFor(() => expect(breadcrumb(el)).toBe("Lunch Menu › Drinks"));
+});
+
+it("reports beside the Structure tab a save refused after Back left the Prices tab", async () => {
+  const pending = deferred<void>();
+  const client = api({ updateMenuItem: vi.fn(() => pending.promise) });
+  const el = await mountLunch(client);
+  await chooseTab(el, "prices");
+  await vi.waitFor(() => expect(prices(el).rows.length).toBe(3));
+  await openOffer(el, "mi-burger");
+  await inOffer(el, "offer-save");
+  history.back();
+  await vi.waitFor(() => expect(location.pathname).toBe(LUNCH_PATH));
+  await vi.waitFor(() => expect(offerDialogOpen(el)).toBe(false));
+  pending.reject({ code: "catalogue.not_found" });
+  await vi.waitFor(() =>
+    expect(text(q(el, '[data-test="member-error"]'))).toBe(
+      t("menus.change_not_saved")
+        .replace("{name}", "Burger")
+        .replace("{reason}", codeMessage("catalogue.not_found")),
+    ),
+  );
+  expect(offerDialogOpen(el)).toBe(false);
+});
+
+it("says the menu price was saved and the variants were not when only the variants are refused", async () => {
+  const client = api({
+    listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()),
+    setMenuVariants: vi
+      .fn()
+      .mockRejectedValue({ code: "management.request_invalid", params: { field: "variants.0" } }),
+  });
+  const el = await mountPrices(client);
+  await openOffer(el, "mi-lemonade");
+  type(offerField(el, "grossPrice"), "2.80");
+  await el.updateComplete;
+  const reads = client.getMenuPrices.mock.calls.length;
+  await inOffer(el, "offer-save");
+  const expected = t("menu_prices.variants_not_saved")
+    .replace("{name}", "Lemonade")
+    .replace("{reason}", codeMessage("management.request_invalid"));
+  await vi.waitFor(() => expect(prices(el).refusal?.message).toBe(expected));
+  expect(client.updateMenuItem).toHaveBeenCalledOnce();
+  expect(client.setMenuVariants).toHaveBeenCalledOnce();
+  expect(pricesModal(el).open).toBe(true);
+  expect(offerField(el, "grossPrice").value).toBe("2.80");
+  const summary =
+    pricesModal(el).querySelector<HTMLElementTagNameMap["wt-form-error-summary"]>(
+      "wt-form-error-summary",
+    )!;
+  await summary.updateComplete;
+  expect(text(summary.shadowRoot!.querySelector("li"))).toBe(expected);
+  // The menu price was saved, so the list is read again behind the window.
+  await vi.waitFor(() => expect(client.getMenuPrices.mock.calls.length).toBeGreaterThan(reads));
+});
+
+it("names the product and says its variants were not saved when that refusal lands after the person left its menu", async () => {
+  const pending = deferred<MenuVariantAnswer>();
+  const client = api({
+    listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()),
+    setMenuVariants: vi.fn(() => pending.promise),
+  });
+  const el = await mountPrices(client);
+  await openOffer(el, "mi-lemonade");
+  await inOffer(el, "offer-save");
+  await vi.waitFor(() => expect(client.setMenuVariants).toHaveBeenCalledOnce());
+  history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/prices");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Dinner Menu"));
+  pending.reject({ code: "management.request_invalid" });
+  await vi.waitFor(() =>
+    expect(text(q(el, '[data-test="member-error"]'))).toBe(
+      t("menu_prices.variants_not_saved")
+        .replace("{name}", "Lemonade")
+        .replace("{reason}", codeMessage("management.request_invalid")),
+    ),
+  );
+});
+
+type MenuVariantAnswer = { variantId: string; price: string | null; offered: boolean }[];

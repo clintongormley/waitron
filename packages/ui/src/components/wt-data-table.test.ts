@@ -1132,6 +1132,44 @@ test("search and filter combine with AND", async () => {
   expect(el.shadowRoot!.querySelector(".message")).not.toBeNull();
 });
 
+test("a filter whose value is one string keeps only the rows equal to the chosen option", async () => {
+  type Stated = { id: string; state: string };
+  const el = (await mount(
+    '<wt-data-table aria-label="Stated"></wt-data-table>',
+  )) as WtDataTable<Stated>;
+  Object.assign(el, {
+    rows: [
+      { id: "1", state: "active" },
+      { id: "2", state: "inactive" },
+    ],
+    rowKey: (r: Stated) => r.id,
+    columns: [
+      {
+        key: "state",
+        label: "State",
+        cell: (r: Stated) => r.state,
+        filter: {
+          label: "State",
+          allLabel: "Any state",
+          value: (r: Stated) => r.state,
+          options: [
+            { value: "active", label: "Active" },
+            { value: "inactive", label: "Inactive" },
+          ],
+        },
+      },
+    ],
+  });
+  await el.updateComplete;
+  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[data-filter="state"]')!;
+  select.value = "active";
+  select.dispatchEvent(new Event("change"));
+  await el.updateComplete;
+  expect(
+    [...el.shadowRoot!.querySelectorAll("tbody tr")].map((r) => r.getAttribute("data-row-key")),
+  ).toEqual(["1"]);
+});
+
 test("a filter whose value is a list keeps a row when the list holds the chosen option", async () => {
   type Tagged = { id: string; name: string; tags: string[] };
   const el = (await mount(

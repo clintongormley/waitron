@@ -42,12 +42,9 @@ interface Draft {
 
 const blankToNull = (text: string): string | null => (text.trim() === "" ? null : text.trim());
 
-/** The form field a refusal's `field` belongs beside; the server names a variant by its index. */
-function refusedField(field: string): string {
-  if (field === "grossPrice") return field;
-  const variant = /^variants\.(\d+)$/.exec(field);
-  return variant ? `variants.${variant[1]}.price` : "_form";
-}
+/** The form field a refusal's `field` belongs beside. The server names a variant by its whole
+ * entry (`variants.N`), whichever of its values it refused, so that goes to the summary alone. */
+const refusedField = (field: string): string => (field === "grossPrice" ? field : "_form");
 
 /**
  * One menu's prices, a row per product the menu reaches, and the window that edits one product's
