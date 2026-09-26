@@ -5,7 +5,7 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { DashboardApi, StreamSettingsView, StreamStatusView } from "../api/client.js";
 import type { StreamSettingsPanel } from "./stream-settings-panel.js";
 import "./stream-settings-panel.js";
@@ -782,7 +782,7 @@ describe("stream-settings-panel: once set up", () => {
         which === "save"
           ? stubApi({ saveStreamSettings: vi.fn().mockRejectedValue(refusal) })
           : stubApi({ getRecoveryKit: vi.fn().mockRejectedValue(refusal) }, ON);
-      const { el } = await mount(api);
+      const { el } = await mount(api, { managedByEnvironment: false });
       if (which === "save") {
         fillRequired(el);
         await press(el, "save");
@@ -790,6 +790,93 @@ describe("stream-settings-panel: once set up", () => {
         await press(el, "show-kit");
       }
       expect(text(el, "[role=alert]")).toBe(t("stream.error.recovery_key_too_short"));
+    },
+  );
+
+  it.each(["en-GB", "es-ES"])(
+    "in %s, points a too-short-key refusal at the button above that replaces the key",
+    async (locale) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const api = stubApi({
+          saveStreamSettings: vi
+            .fn()
+            .mockRejectedValue({ code: "backup.recovery_key_too_short", params: { min: 12 } }),
+        });
+        const { el } = await mount(api, { managedByEnvironment: false });
+        fillRequired(el);
+        await press(el, "save");
+        expect(text(el, "[role=alert]")).toContain(t("backup.apply"));
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
+  it.each([
+    ["en-GB", "save"],
+    ["en-GB", "kit"],
+    ["es-ES", "save"],
+    ["es-ES", "kit"],
+  ] as const)(
+    "in %s, sends a %s refused for a too-short key to the box's environment when the environment owns the backup settings",
+    async (locale, which) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const refusal = { code: "backup.recovery_key_too_short", params: { min: 12 } };
+        const api =
+          which === "save"
+            ? stubApi({ saveStreamSettings: vi.fn().mockRejectedValue(refusal) })
+            : stubApi({ getRecoveryKit: vi.fn().mockRejectedValue(refusal) }, ON);
+        const { el } = await mount(api, { managedByEnvironment: true });
+        if (which === "save") {
+          fillRequired(el);
+          await press(el, "save");
+        } else {
+          await press(el, "show-kit");
+        }
+        const alert = text(el, "[role=alert]");
+        expect(alert).toBe(t("stream.error.recovery_key_too_short_managed"));
+        expect(alert).not.toContain(t("backup.apply"));
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
+  it.each([
+    ["en-GB", "save"],
+    ["en-GB", "kit"],
+    ["es-ES", "save"],
+    ["es-ES", "kit"],
+  ] as const)(
+    "in %s, names neither the button nor the environment for a %s refused for a too-short key while the Backups status is not known",
+    async (locale, which) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const refusal = { code: "backup.recovery_key_too_short", params: { min: 12 } };
+        const api =
+          which === "save"
+            ? stubApi({ saveStreamSettings: vi.fn().mockRejectedValue(refusal) })
+            : stubApi({ getRecoveryKit: vi.fn().mockRejectedValue(refusal) }, ON);
+        const { el } = await mount(api);
+        expect(el.managedByEnvironment).toBeUndefined();
+        if (which === "save") {
+          fillRequired(el);
+          await press(el, "save");
+        } else {
+          await press(el, "show-kit");
+        }
+        const alert = text(el, "[role=alert]");
+        expect(alert).toBe(t("stream.error.recovery_key_too_short_unknown"));
+        expect(alert).not.toContain(t("backup.apply"));
+        expect(alert).not.toMatch(/environment|entorno/i);
+      } finally {
+        setLocale(before);
+      }
     },
   );
 

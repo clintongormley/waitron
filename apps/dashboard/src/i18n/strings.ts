@@ -934,7 +934,11 @@ export const en = {
   "stream.error.recovery_key_missing":
     "This box holds no recovery key, so there is no recovery kit to show.",
   "stream.error.recovery_key_too_short":
-    "The recovery key this box holds is too short, so the bucket copy cannot use it. It has to be replaced with a longer key first.",
+    "The recovery key this box holds is too short, so the bucket copy cannot use it. Use “Turn on backups” above: the new key it saves replaces the short one.",
+  "stream.error.recovery_key_too_short_managed":
+    "The recovery key this box holds is too short, so the bucket copy cannot use it. This box's backup settings come from its environment, so a longer key has to be set there.",
+  "stream.error.recovery_key_too_short_unknown":
+    "The recovery key this box holds is too short, so the bucket copy cannot use it.",
   "stream.show_kit": "Show recovery kit",
   "stream.change": "Change bucket",
   "stream.turn_off": "Turn off",
@@ -2421,7 +2425,11 @@ export const es: Record<StringKey, string> = {
   "stream.error.recovery_key_missing":
     "Este equipo no tiene clave de recuperación, así que no hay kit de recuperación que mostrar.",
   "stream.error.recovery_key_too_short":
-    "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla. Primero hay que sustituirla por una clave más larga.",
+    "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla. Usa «Activar las copias» más arriba: la clave nueva que guarda sustituye a la corta.",
+  "stream.error.recovery_key_too_short_managed":
+    "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla. Los ajustes de copia de este equipo vienen de su entorno, así que hay que poner allí una clave más larga.",
+  "stream.error.recovery_key_too_short_unknown":
+    "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla.",
   "stream.show_kit": "Mostrar el kit de recuperación",
   "stream.change": "Cambiar de bucket",
   "stream.turn_off": "Desactivar",

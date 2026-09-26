@@ -5371,10 +5371,26 @@ the 12-character minimum also took that reuse path and was refused with
 `backup.recovery_key_too_short`, so such a box could never turn archives on from the dashboard; fixed,
 for a box whose backup settings its environment does not own, in #649: the status now says `recoveryKeyTooShort`,
 the form then makes and sends a new key with a note that it replaces the short one, and `apply`
-writes it in the short key's place (a key long enough to use is still never replaced there). Left by
-#649: the bucket copy panel's own refusal for a too-short key (`stream.error.recovery_key_too_short`)
-still says only that the key must be replaced with a longer one; it could point the operator at
-turning backups on in the section above, which now does that. The edit-settings form can also meet
+writes it in the short key's place (a key long enough to use is still never replaced there). The
+bucket copy panel's own refusal for a too-short key (`stream.error.recovery_key_too_short`) now
+names the "Turn on backups" button above it when the dashboard can change the backup settings;
+when the box's environment owns them (`managedByEnvironment`, where that button is hidden) it says
+instead that a longer key has to be set there (`stream.error.recovery_key_too_short_managed`); and
+until the Backups screen's first status read succeeds it names neither
+(`stream.error.recovery_key_too_short_unknown`); in English and Spanish (2026-09-26, lane A's A35,
+branch `fix/bucket-panel-short-key-wording`). The refusal code is unchanged and the message does
+not link or scroll to the button. Left open, two cases. First, the panel picks its message from
+`managedByEnvironment` alone, so with a key hand-edited too short in `backup.env` it can name a
+button that does not help: with archives on it names a button that is not shown (the status reads
+the running settings' still-long key, and the form shows only with archives off); with archives
+off it names a button that sends no new key — the held key before the next status read, and none
+after it, because the screen makes a key only on its first load. Second, if the Backups screen's
+first status read fails and a later one succeeds, the panel then names "Turn on backups", but the
+screen never made a key (it does so only in its first load, since #628), so on a too-short-key box
+the form offers no key and Apply stays disabled until one is pasted. Making a key from the status
+watcher instead would break the dashboard rule that observer callbacks never mint recovery keys
+(CLAUDE.md §3), so this is the owner's call.
+The edit-settings form can also meet
 `backup.recovery_key_exists`, when a rotate (from another tab or admin) lands after it fetched the
 key. Left open: the
 "key rotated" date `rotate` writes is dropped by a later `apply`, because `readApplyBody` always

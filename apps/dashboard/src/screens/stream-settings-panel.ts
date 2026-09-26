@@ -234,6 +234,8 @@ export class StreamSettingsPanel extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  /** Whether the box's environment owns the backup settings: true, false, or undefined when not known. */
+  @property({ attribute: false }) managedByEnvironment: boolean | undefined = undefined;
 
   readonly #queries = new DashboardQueries(
     this,
@@ -525,6 +527,12 @@ export class StreamSettingsPanel extends LitElement {
   }
 
   #failureText(failure: Failure): string {
+    if (failure.code === "backup.recovery_key_too_short") {
+      if (this.managedByEnvironment === undefined) {
+        return t("stream.error.recovery_key_too_short_unknown");
+      }
+      if (this.managedByEnvironment) return t("stream.error.recovery_key_too_short_managed");
+    }
     const panelKey = PANEL_CODE_KEYS[failure.code];
     if (panelKey !== undefined) return t(panelKey);
     const reasonKey = failure.reason === null ? undefined : PROBE_REASON_KEYS[failure.reason];
