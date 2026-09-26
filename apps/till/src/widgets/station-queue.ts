@@ -486,13 +486,8 @@ export class TillStationQueue extends LitElement {
         overflow-wrap: anywhere;
       }
 
-      .notice-order,
-      .notice-moved {
-        color: var(--wt-color-text);
-      }
-
+      .notice-moved,
       .notice-note {
-        color: var(--wt-color-text-muted);
         overflow-wrap: anywhere;
       }
 
