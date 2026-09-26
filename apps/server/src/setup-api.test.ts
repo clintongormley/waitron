@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,7 +11,7 @@ import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { ProvisionRequest } from "./provision.js";
 import type { RestoreRequest } from "./restore-request.js";
-import type { AdoptCredential, AdoptRequest } from "./adopt.js";
+import type { AdoptCredential, AdoptHooks, AdoptRequest } from "./adopt.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
 import { createSetupOperationStore } from "./setup-operation.js";
@@ -2278,6 +2278,142 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     expect(await res.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
     expect(adopt).not.toHaveBeenCalled();
   });
+
+  describe("a refused adopt and the recorded setup operation", () => {
+    const conflict = { error: { code: "setup.operation_conflict", params: {} } };
+    const recordPath = (dir: string): string => join(dir, "setup-operation.json");
+    const CLOUD_POINT_ID = "9f41b8b8-b14e-472a-8eb4-f9259b80f0d1";
+
+    it.each([
+      [
+        "the primary refusing the login (502 mirror.bundle_fetch_failed)",
+        { ...adoptBody(), credential: { ...ADOPT_CREDENTIAL, password: "wrong-password" } },
+        502,
+        "mirror.bundle_fetch_failed",
+      ],
+      [
+        "a malformed body (400 setup.request_invalid)",
+        { primaryUrl: PRIMARY_URL },
+        400,
+        "setup.request_invalid",
+      ],
+      [
+        "an unsafe primaryUrl (400 mirror.primary_url_invalid)",
+        { primaryUrl: "http://169.254.169.254/latest/meta-data", credential: ADOPT_CREDENTIAL },
+        400,
+        "mirror.primary_url_invalid",
+      ],
+    ])(
+      "after %s, drops the record so a corrected request adopts",
+      async (_label, refusedBody, status, code) => {
+        const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-refused-"));
+        try {
+          const adopt = vi.fn(async (req: AdoptRequest) => {
+            if (req.credential.password === "wrong-password") {
+              throw new AppError("mirror.bundle_fetch_failed", {});
+            }
+            return { breakGlassSecret: BREAK_GLASS_SECRET };
+          });
+          const app = new Hono();
+          mountSetup(
+            app,
+            makeAdoptDeps({ adopt, operations: createSetupOperationStore(dir) }).deps,
+            noopLog,
+          );
+
+          const refused = await postAdopt(app, refusedBody);
+          expect(refused.status).toBe(status);
+          expect((await refused.json()).error.code).toBe(code);
+          expect(existsSync(recordPath(dir))).toBe(false);
+
+          const corrected = await postAdopt(app, adoptBody());
+          expect(await corrected.json()).not.toEqual(conflict);
+          expect(corrected.status).toBe(200);
+        } finally {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      },
+    );
+
+    it.each([
+      ["provision", (app: Hono) => postProvision(app, demoBody()), 200],
+      ["restore", (app: Hono) => postRestore(app, Uint8Array.from([1])), 202],
+      [
+        "restore-bucket",
+        (app: Hono) => postBucketRestore(app, { kit: "k", environment: "production" }),
+        202,
+      ],
+      [
+        "cloud-recovery/restore",
+        (app: Hono) =>
+          app.request("/setup-api/cloud-recovery/restore", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ pointId: CLOUD_POINT_ID }),
+          }),
+        202,
+      ],
+    ] as const)(
+      "after a refused adopt, %s is not refused as a conflicting operation",
+      async (_route, post, status) => {
+        const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-refused-other-"));
+        try {
+          const app = new Hono();
+          const { deps } = makeDeps({
+            operations: createSetupOperationStore(dir),
+            adopt: vi.fn(async () => {
+              throw new AppError("mirror.bundle_fetch_failed", {});
+            }),
+            stageRestore: vi.fn(async () => {}),
+            stageBucketRestore: vi.fn(async () => {}),
+            cloudRecovery: {
+              binding: vi.fn(async () => ({
+                requestId: "3728e560-fbb2-41aa-8c2b-d21f3ce1ce92",
+                pointId: CLOUD_POINT_ID,
+              })),
+              restore: vi.fn(async () => {}),
+            } as unknown as SetupDeps["cloudRecovery"],
+          });
+          mountSetup(app, deps, noopLog);
+
+          expect((await postAdopt(app, adoptBody())).status).toBe(502);
+
+          const next = await post(app);
+          expect(await next.json()).not.toEqual(conflict);
+          expect(next.status).toBe(status);
+          await tick();
+        } finally {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      },
+    );
+
+    it("keeps the record once adopt has written to this node, so a different request is refused", async () => {
+      const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-half-"));
+      try {
+        const operations = createSetupOperationStore(dir);
+        const adopt = vi.fn(async (_req: AdoptRequest, hooks?: AdoptHooks) => {
+          await hooks?.beforeFirstWrite();
+          throw new AppError("mirror.bundle_fetch_failed", {});
+        });
+        const app = new Hono();
+        mountSetup(app, makeAdoptDeps({ adopt, operations }).deps, noopLog);
+
+        expect((await postAdopt(app, adoptBody())).status).toBe(502);
+        expect((await operations.read())?.phase).toBe("venue_committed");
+
+        const other = await postAdopt(app, {
+          ...adoptBody(),
+          credential: { ...ADOPT_CREDENTIAL, password: "another-password" },
+        });
+        expect(other.status).toBe(409);
+        expect(await other.json()).toEqual(conflict);
+        expect(adopt).toHaveBeenCalledOnce();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
 });
 
 it("serves fiscal-owned venue defaults without exposing provider secrets", async () => {
@@ -2540,7 +2676,7 @@ describe("setup routes — remaining refusals and resumption paths", () => {
     });
   });
 
-  it("leaves a failed adoption unfinished so the same request can be retried", async () => {
+  it("drops a failed adoption's record, and the same request retried completes", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-retry-"));
     try {
       const operations = createSetupOperationStore(dir);
@@ -2556,7 +2692,7 @@ describe("setup routes — remaining refusals and resumption paths", () => {
         noopLog,
       );
       expect((await postAdopt(failing, adoptBody())).status).toBe(502);
-      expect((await operations.read())?.phase).toBe("started");
+      expect(await operations.read()).toBeNull();
 
       const retry = new Hono();
       const next = makeAdoptDeps({ operations });

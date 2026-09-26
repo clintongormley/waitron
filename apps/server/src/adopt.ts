@@ -31,6 +31,11 @@ export interface AdoptRequest {
   credential: AdoptCredential;
 }
 
+export interface AdoptHooks {
+  /** Awaited after every refusal and immediately before the first write to this node. */
+  beforeFirstWrite: () => Promise<void>;
+}
+
 export interface AdoptDeps {
   /** Writes `deployment`, `node_roles` and `mirror_config`. Nothing in the engine refuses these
    * writes; `scripts/write-path-tables.test.ts` is what keeps them in named files. */
@@ -68,6 +73,7 @@ export interface AdoptDeps {
 export async function adoptFromPrimary(
   deps: AdoptDeps,
   req: AdoptRequest,
+  hooks?: AdoptHooks,
 ): Promise<{ breakGlassSecret: string }> {
   const standby = generateStandbyIdentity();
   const bundle = await deps.fetchBundle(req.primaryUrl, req.credential, {
@@ -96,6 +102,7 @@ export async function adoptFromPrimary(
   );
   assertNoOperationalVenue(await readOperationalVenueIds(deps.ownerDb));
 
+  await hooks?.beforeFirstWrite();
   await stampDeployment(deps.ownerDb, bundle.environment);
   await setDeploymentMode(deps.ownerDb, standby.nodeId, "mirror");
   await writeMirrorConfig(deps.ownerDb, standby.nodeId, {

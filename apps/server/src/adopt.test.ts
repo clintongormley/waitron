@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   locations,
   readDeploymentEnvironment,
@@ -192,6 +192,47 @@ describe("adoptFromPrimary (mirror adopt)", () => {
       REQ,
     );
     expect(capturedStandby!.contactUrl).toBe(ADVERTISED_ORIGIN);
+  });
+
+  it("calls beforeFirstWrite once, before the deployment is stamped", async () => {
+    const stampedWhenCalled: (string | null)[] = [];
+    await adoptFromPrimary(deps(), REQ, {
+      beforeFirstWrite: async () => {
+        stampedWhenCalled.push(await readDeploymentEnvironment(suite.db));
+      },
+    });
+    expect(stampedWhenCalled).toEqual([null]);
+    expect(await readDeploymentEnvironment(suite.db)).toBe("preproduction");
+  });
+
+  it("writes nothing when beforeFirstWrite throws", async () => {
+    const error = await adoptFromPrimary(deps(), REQ, {
+      beforeFirstWrite: async () => {
+        throw new Error("could not record progress");
+      },
+    }).catch((e: unknown) => e);
+    expect((error as Error).message).toBe("could not record progress");
+    expect(await readDeploymentEnvironment(suite.db)).toBeNull();
+  });
+
+  it("never calls beforeFirstWrite for an environment mismatch or a foreign tenant", async () => {
+    const beforeFirstWrite = vi.fn(async () => {});
+    const mismatch = await adoptFromPrimary(
+      deps({ fetchBundle: async () => makeBundle({ environment: "production" }) }),
+      REQ,
+      { beforeFirstWrite },
+    ).catch((e: unknown) => e);
+    expect(isAppError(mismatch) && mismatch.code).toBe("mirror.environment_mismatch");
+
+    await suite.db
+      .insert(tenants)
+      .values({ id: 1, country: "ES", taxId: "99999999R", legalName: "Incumbent SL" });
+    const foreign = await adoptFromPrimary(deps(), REQ, { beforeFirstWrite }).catch(
+      (e: unknown) => e,
+    );
+    expect(isAppError(foreign) && foreign.code).toBe("provisioning.foreign_tenant");
+
+    expect(beforeFirstWrite).not.toHaveBeenCalled();
   });
 
   it("refuses a bundle for a DIFFERENT environment before any stamp", async () => {
