@@ -111,7 +111,7 @@ export class TillCounterScreen extends LitElement {
   @state() private showAllergens = false;
   /** null shows every dish in the selected menu. */
   @property({ attribute: false }) selectedDiet: DietPredicate | null = null;
-  /** A sale is in flight: the visible half of the app's single-flight double-file guard. */
+  /** Pay is shut: a sale is in flight, or a basket line must be resolved first (till-app). */
   @property({ type: Boolean }) busy = false;
   /** When undefined the grid renders nothing. */
   @property({ attribute: false }) counterTab?: TabDef;
