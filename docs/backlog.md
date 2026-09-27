@@ -1326,17 +1326,18 @@ What Task 11 left open:
   `categoryRefusalErrors`.**
 - **DONE (lane C's C24): with no colour chosen, the colour field's Custom square reads as
   empty.**
-- **Three more things about the colour field's Custom square — OPEN (seen 2026-09-27 in lane C's
-  C24 screenshots; not fixed, history not checked).** In
+- **Three more things about the colour field's Custom square — OPEN, queued as lane C's C25
+  (2026-09-27; seen 2026-09-27 in lane C's C24 screenshots; history not checked).** In
   `apps/dashboard/src/widgets/color-field.ts`: (1) with a custom colour chosen, the square has a
   light grey rim that stands out in dark theme; (2) with a custom colour chosen, nothing in the
   field shows as selected — neither "No colour", a palette swatch, nor the Custom square has a
-  selected ring; (3) C24's empty look hides the inner square through Chromium's
-  `::-webkit-color-swatch` only, and was measured in Chromium only, so what Firefox draws with no
-  colour chosen is unknown. A guess, not tested because a test cannot drive the browser's picker:
-  with no colour chosen the input still holds black, so choosing black in the picker from that
-  state may report no change. **Next action:** decide which of these to fix; (2) is the one a
-  manager would notice.
+  selected ring; (3) C24's empty look hides the inner square through `::-webkit-color-swatch`, and
+  was measured in Chromium only, so what other browsers (Firefox, Safari) draw with no colour
+  chosen is unknown. A guess, not tested (the tests set the input's value directly rather than
+  opening the browser's picker): with no colour chosen the input still holds black, so choosing
+  black in the picker from that state may report no change. **Next action:** C25 takes all three
+  (Firefox in (3) only if it can be run there) and checks the guess in Chromium; C25 does not
+  cover Safari, so that part of (3) stays open after it.
 - **`wt-tabs` shares the `wt-change` event name with every control a panel slots in, and five
   screens now carry the same `event.target !== event.currentTarget` guard against it**
   (`alerts-screen.ts`, `printers-screen.ts`, `profile-screen.ts`, `venue-operations-screen.ts`, and

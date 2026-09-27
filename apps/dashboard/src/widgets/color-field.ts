@@ -74,7 +74,7 @@ export const colorFieldStyles = css`
     cursor: pointer;
   }
   /* A native colour input always holds a colour (an empty value reads back as #000000), so with
-     none chosen it would paint black; draw the empty box the categories table uses instead. */
+     none chosen it would paint black. */
   .custom input[type="color"].empty {
     background: transparent;
   }
