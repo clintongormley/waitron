@@ -149,6 +149,26 @@ describe("dashboard-sales-screen", () => {
     );
   });
 
+  it("keeps today's business day at noon when Overview reports today", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-27T12:00:00Z"));
+    const api = stubApi({
+      getSalesOverview: vi.fn().mockResolvedValue(overview("2026-09-27")),
+    });
+    const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
+    await flush(el);
+
+    expect(api.getSalesOverview).toHaveBeenCalledOnce();
+    expect(api.getDailyClose).toHaveBeenCalledTimes(1);
+    expect(api.getDailyClose).toHaveBeenCalledWith("2026-09-27");
+    expect(el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=from-picker]")!.value).toBe(
+      "2026-09-27",
+    );
+    expect(el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=to-picker]")!.value).toBe(
+      "2026-09-27",
+    );
+  });
+
   it("keeps the daily close available when Overview refuses", async () => {
     const api = stubApi({
       getSalesOverview: vi.fn().mockRejectedValue({ code: "server.internal" }),
