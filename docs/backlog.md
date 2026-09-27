@@ -111,30 +111,49 @@ hosting, ingress controls and Cloud audit/retention remain deployment work.
 
 ## What to work on next
 
-Ranked 2026-09-12, with the reason for each place and the track it belongs to. Each item is its own
-brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
+Ranked 2026-09-27, after the specs still in `docs/superpowers/specs/` were checked against the code
+(each spec's state is under *Reference → Specs still in the tree*). Each item is its own brainstorm →
+spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
-1. **The till does not load its menu until a manual refresh** (A4). Seen on the blank-box-to-selling
+1. **Finish table service and paying a bill in parts** (A4, lane B). Eight of the service plan's
+   eighteen tasks have landed (0–6 and 14). Left: staff drafts (7, 8), marking dishes served (9), the
+   attention signals (10), applying a cancellation, comp or discount to an order (11) and its reports
+   (12), standalone ordering (13), several payments on the till (15 — the server side landed as #721
+   and nothing on the till calls it yet), counter handover (16) and a table that leaves without paying
+   (17). **Send asesor Q27–Q29 now:** Task 17 waits on Q28, how Task 11's discount appears on the
+   invoice on Q29, and printing the invoice before payment on Q27.
+
+2. **Staff cannot clock in or out** (A10). The working-time record is a legal duty from the first day
+   the deli employs anyone, and only its library is built: nothing in `apps/` calls `clockIn` or
+   `clockOut`.
+
+3. **What a standalone box still lacks before a real venue runs it:**
+   - an off-box home for the backup archive (B2) — the bucket stream of `venue.db` is built, but
+     archives can only be saved on the box itself (`LocalFsBackend`);
+   - installing or renewing the AEAT certificate after setup (A9) — today only the setup wizard can
+     set it, and nothing watches when it expires;
+   - upgrade testing with rows in the tables and a real older database (B4) — owner-marked blocking
+     before go-live;
+   - the bootable USB installer (B3), the last piece of "install without a terminal";
+   - the degraded-but-trading recovery spec (B5).
+
+4. **The till does not load its menu until a manual refresh** (A4). Seen on the blank-box-to-selling
    run; the box and sale path worked.
 
-2. **Somewhere for things that went wrong to show up** (A5) — the alerts framework and recorded
-   incidents LANDED (#363, #368), and the ongoing checks (#371). What A5 still lacks is the pairing alert ("devices tried to join") and a standby that has
-   fallen behind; see A5.
-
-3. **Backups that leave the box** (B2) — S3 first, then Drive. With the mirror deferred, a bucket is a
-   standalone primary's only off-box copy. The bucket stream of `venue.db` is built (slice 2); the
-   archive's S3 backend is not — only `LocalFsBackend` exists for archives.
-
-4. **The displays and the printers walked at the real box** (A4, A3) — till, handheld and KDS through
+5. **The displays and the printers walked at the real box** (A4, A3) — till, handheld and KDS through
    [ui-review.md](ui-review.md), and the first physical print since #327: slips, duplicates, the
    drawer pulse, the feed-before-cut. #689 printed calibration samples and a sample receipt on the
    owner's NT-806 and fired its drawer from the calibration test; a real sale's slip, the duplicates,
    the cash-settlement drawer job and the feed-before-cut are still unwalked.
 
-5. **The bootable USB installer** (B3) — the last piece of "install without a terminal".
+6. **Smaller, independent pieces**, in no fixed order: a dashboard screen for the modelo 303 download
+   (*Detail → Reporting*); refusing requests from a device that is not enrolled (A4); the pairing
+   alert, "devices tried to join" (A5); Logging Slice 2, the one-touch bug report (A9); the
+   print agent's Bluetooth command channel and dashboard pairing (A3, after the real-radio check);
+   paying at the table from a handheld (A6, Slice 2).
 
-Then the on-prem mirror, then the cloud primary — under *Afterwards*. Everything else ranks beneath
-these.
+Then the on-prem mirror and failover — slices 3 to 5 of the storage design — then the cloud primary,
+under *Afterwards*. Everything else ranks beneath these.
 
 ---
 
@@ -142,8 +161,9 @@ these.
 
 What staff and the operator touch: `apps/till`, `apps/dashboard`, `apps/setup`, `packages/ui`,
 `packages/layouts`, `packages/identity`, the dashboard-, till- and setup-facing routes in
-`apps/server`, `packages/printing`'s dashboard side, `packages/payments*`. Numbered in priority
-order; the small items at the end of each area live in Track C.
+`apps/server`, `packages/printing`'s dashboard side, `packages/payments*`. The numbers name areas;
+the current ranking is *What to work on next*. The small items at the end of each area live in
+Track C.
 
 **Planned for one campaign lane (owner, 2026-09-25): sales classification, then menus, reusable
 sections and home layouts.** Two specs and two plans, revised twice the same day after outside
@@ -890,10 +910,7 @@ LANDED (A67 last, #718).** The owner's review of the Modifiers screen: Active/In
 by column, an options popup that lists products only, collapsed name sections, steppers for choices
 and quantities, baseline-aligned rows, a bin icon, the product's unit beside each price, a wider
 standard modal everywhere, visible drag feedback, option rows as text with their own editor, and an
-options list that always has a default. Spec:
-[modifier editors polish](superpowers/specs/2026-09-26-modifier-editors-polish-design.md); plan:
-[modifier editors polish](superpowers/plans/2026-09-26-modifier-editors-polish.md). Each item marks
-its part done here when it lands.
+options list that always has a default.
 
 - **A64 (shared pieces) — LANDED, #714.** The `wt-number-stepper` control, the dashboard's `minus` and `bin` icons,
   a standard modal widened from 768px to 1024px (dialogs and help tooltips keep 768px), and a lifted
@@ -2380,10 +2397,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     recording which element has focus just before the Escape; then press a real Escape during a save
     on each form tried only with a hand-built event or not at all, and move the ones that close to
     `dismissible`.
-  - **Every other task waits for lane C's menus tasks that change the same order and till code**
-    (M9, the last, landed as #729 on 2026-09-27; M7b landed as #696, M7b2 as #702, M7c as
-    #710, M7b3 as #713, and M7v as #720). Building beside them would collide on
-    `apps/server/src/working-order.ts`, the till and the core migrations.
+  - **Tasks left: 7 to 13 and 15 to 17.** The menus tasks that change the same order and till code
+    have all landed (M9, the last, as #729 on 2026-09-27), so nothing on lane C blocks them now. The
+    plan's order: 7 then 8; 10 after 8 and 9; 12 after 11; 16 after 10. Task 15 is the till side of
+    Task 14 — no till code calls the bill-payment routes yet.
   - **Task 17** (unpaid departure) also waits for asesor Q28.
   - **Asesor questions to send:**
     [Q27](compliance/asesor-questions.md#q27-money-taken-against-a-bill-before-its-invoice-exists-then-a-split-added-2026-09-26)
@@ -2525,6 +2542,14 @@ approved print agents to try it, so a printer the two discovery passes cannot se
 - **Location-consistency guard** — nothing enforces that a sale-capable device's register lives in
   the box's configured location, so a mis-provisioned device could stamp a fiscal record with a
   different site. Guard at enrol or first sale.
+- **Refuse a request from a device that is not enrolled** (owner design of 2026-08-30, deferred
+  until after the demo: [design](superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md)).
+  Tills now enrol, selling needs an enrolled device, and a device profile's capabilities gate some
+  actions (`assertDeviceCapability`). But a request that carries NO device still passes both
+  `assertDeviceCapability` and `assertNotHandheld` (`apps/server/src/device-session.ts`), and the
+  handheld block is still a blocklist. Left: refuse a request with no device, one table of which
+  device kinds may do what with a guard that walks the routes, and printer identity (the design's
+  sub-project C). It sits on the sale and cash path, so it takes the full review.
 - Register/device follow-ups: `WAITRON_TILL_TILL_ID` still seeds a "Caja 1" register while a till
   enrol auto-creates its own; the device-management routes build their `devices ⨝ device_profiles`
   read inline where a `listDevices` store verb belongs.
@@ -2560,10 +2585,16 @@ pairing consumer, and a standby that has fallen behind.
 ### A6. Payments
 
 - **The SumUp Solo experiments** ([runbook](research/2026-09-10-sumup-solo-experiments.md)). Question
-  4 — does the reader still work standalone once paired to SumUp's cloud — governs whether the deli's
-  card-outage path holds; if it fails, the deli-hardware outage design must be rewritten. The other
-  three: whether we may supply the idempotency key, whether reader webhooks are signed, and whether
-  `void` maps onto the refund endpoint.
+  4 was answered on 2026-09-11: a Solo paired to SumUp's cloud cannot also take a payment on its own,
+  so the owner chose a separate standalone card machine for the internet-down case
+  ([deli hardware](superpowers/specs/2026-07-30-deli-hardware-design.md) §5). Still open: whether we
+  may supply the idempotency key, whether reader webhooks are signed, and whether `void` maps onto
+  the refund endpoint.
+- **The deli's outage card machine** (the deli hardware design §5). Buy the standalone machine, and
+  decide how a payment keyed on it and recorded in the till as a manual card tender is matched to the
+  record SumUp keeps with no sale of ours attached — the reconciler's sweep, and whether it can see a
+  manual tender at all, decide it. Replace the design's estimated prices with real quotes. A barcode
+  scanner only if the deli sells barcoded goods — nothing in the till reads one today.
 - **The printer-cradle experiment** (hardware not yet owned). SumUp's OpenAPI has no `print` and no
   receipt option on a reader checkout, so we can neither request nor suppress a cradle slip. State the
   failing case first (the cradle stays silent), with a standalone payment as the control. Also unread:
@@ -2870,8 +2901,13 @@ ongoing overhaul listed at the top of Track A.
   ([original design](superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md)):
   configurable content languages and their shared fallback landed in #339, separately from interface
   and receipt languages. Still open, and unchanged by it: the write-side drift, where a sale's
-  `sales.locale` is stamped from the boot-time `cfg` rather than from `locations.invoice_locales`.
-  Adding content translations does not translate Waitron's interface.
+  `sales.locale` is stamped from the boot-time `cfg` rather than from `locations.invoice_locales`
+  (fiscal-adjacent). There is still no single shared rule: the receipt's `lineName`
+  (`apps/server/src/receipt-ticket.ts`) and the kitchen ticket's `ticketName`
+  (`apps/server/src/kitchen-print.ts`) try the exact language and then take the first stored one.
+  Read in the code and not run: `resolveContentText` moves to another region of the same language
+  (es-ES to es-MX), which the design rules out. Adding content translations does not translate
+  Waitron's interface.
 - **Bookings**, each greenfield: public/online/QR booking, availability, reminders, a CRM entity,
   recurring, a calendar grid, deposits.
 - **Wages / labour cost (SP16)** — a per-person pay-rule set (hourly or fixed salary for N contracted
@@ -2885,8 +2921,36 @@ ongoing overhaul listed at the top of Track A.
   dashboard half is done. Migrate the remaining core dashboard screens onto the module UI seat and off
   the coarse `requiresManager` gate. A core nav item can now also name a `requiresPermission`
   (`apps/dashboard/src/dashboard-app.ts`); Servers (`mirror.create`) is the first to use it.
-- **AEAT certificate management UI** — first-run only today; `cert-expiry.ts` monitors but there is
-  no view/rotate/renew surface.
+- **Installing or renewing the AEAT certificate after setup.** Only the setup wizard can set it
+  (`apps/server/src/setup-api.ts`), and nothing watches when it expires: `cert-expiry.ts` reads the
+  box's own HTTPS certificate, not the AEAT one. Needs a view, renew and replace surface and an
+  expiry alert. Separate from getting the certificate onto a promoted standby (*Afterwards*). Fiscal:
+  the owner lands it.
+
+### A10. Clocking in and out — the working-time record
+
+**Staff cannot clock in or out today.** The *registro de jornada* is a legal duty from the first day
+the deli employs anyone ([design](superpowers/specs/2026-07-22-workforce-and-time-record-design.md)).
+Built: the append-only, hash-chained time entries (per node since #268), contracts, the daily
+projection of worked time, correction requests and approvals, the Spanish export
+(`packages/workforce-es`), and the rota, absences, swaps, planned-versus-actual view and staff portal.
+But `clockIn`, `clockOut`, the break events and the correction functions in
+`packages/workforce/src/clocking.ts` have no caller outside the package:
+`apps/server/src/workforce-api.ts` serves the rota and says it is "plumbed ahead of a clock-in
+route". So the planned-versus-actual view has no actual hours to compare.
+
+Left, as the legal minimum:
+- a till clock-in and clock-out screen and its routes;
+- correction requests and their approval, as routes and screens;
+- read access for the worker, their representatives and the labour inspectorate, with four years'
+  retention, and a route that produces the export.
+
+Then: shift templates and availability (the tables exist and the configuration export copies them,
+but no feature uses them); wages (A9); the payroll export, which waits on the gestoría's import
+format. **Before building, ask the labour
+advisor** whether the digital-registro decree is in force and which fields it requires
+([asesor-laboral-questions.md](compliance/asesor-laboral-questions.md)). The time record cannot be
+edited once written, so its chain and correction paths take the owner's sign-off at land.
 
 ---
 
@@ -2948,7 +3012,13 @@ itself is not named there. **Next action:** name it and its hedge on that rule's
 
 Runs `waitron.sh install` unattended. Open questions it owns: whether the stick carries the images so
 install needs no internet; unattended updates for a box we did not sell; AP-mode WiFi onboarding. Box
-image constraints under *Detail → Box image*.
+image constraints under *Detail → Box image*. Not started.
+
+Belongs with it: **a local maintenance account on each box**, its password printed on a sealed card
+and set when the box is imaged, with procedures for a lost card, a change of owner and a reinstall
+([box maintenance and remote support](superpowers/specs/2026-09-11-box-maintenance-and-remote-support.md),
+a discussion record, not an approved spec). Its remote-support half is tracked in Cloud and not
+approved.
 
 ### B4. Upgrades and migrations
 
@@ -6195,12 +6265,12 @@ partial scope; the detail for a live thread is in its track.
 | --- | --- | --- | --- |
 | 1 | Design system | `@waitron/ui` token layer + primitives (`--wt-*`); brand assets (#284); the till web-app manifest and its icons; the dashboard shell restyle — collapsible nav, account menu, profile modal (#333) | `wt-select` (A7) |
 | 2 | Sales spine | Immutable hash-chained sales, per-node series, catalogue, the one-taxpayer model | — |
-| 3 | Fiscal layer | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first; fiscal is a module (`fiscal-verifactu`, `fiscal-none`) | F3 asesor/XSD confirmations; cert distribution to a promoted node; a foreign business customer's identifier type (A1a) |
+| 3 | Fiscal layer | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first; fiscal is a module (`fiscal-verifactu`, `fiscal-none`) | F3 asesor/XSD confirmations; AEAT certificate install and renewal after setup (A9); cert distribution to a promoted node; a foreign business customer's identifier type (A1a) |
 | 4 | Payment layer | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook, SumUp Cloud API (#309); dashboard provider/reader configuration and adoption (#323, #329) | webhook `recordSale` hand-off; reconcile remediation UI; the handheld NFC/QR link (A6) |
 | 5 | Identity | persons/sessions, PIN (+ per-device throttle), `authorize()`, roles/permissions, passkeys, email-first dashboard login, emailed invitations and password resets, encrypted TOTP and recovery codes, user admin (#298, #328); a one-time passkey offer on first password sign-in (#347); identity state replicates to a standby | admin-editable roles; security-change emails; mid-shift-suspension enforce; discount gate; till-refund enforce |
 | 6 | Locations | provision-a-sellable-venue (`waitron-provision venue`); departments, zones and menus (#297) | multiple locations, edit/deactivate; then location-scope the by-id verb family |
 | 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, canvas/receipt editors, receipt/drawer printing, cash-drawer authorization — operable end to end | — |
-| 8 | Reporting | daily close, frozen *cierre Z*, VAT summary, modelo 303 output+input VAT + DR303 file/download, purchase-invoice UI; dashboard sales screen (with a category sales report, at time of sale or current, printable) + business-overview home | fiscal filing remainder parked (*Detail → Reporting*) |
+| 8 | Reporting | daily close, frozen *cierre Z*, VAT summary, modelo 303 output+input VAT + DR303 file and its download route (no dashboard screen yet), purchase-invoice UI; dashboard sales screen (with a category sales report, at time of sale or current, printable) + business-overview home | the modelo 303 screen; fiscal filing remainder parked (*Detail → Reporting*) |
 | 9 | Deployment | the box as two containers with `waitron.sh` install/reset (#285, #314); guided node onboarding (#296); boot diagnosability (#310); CA-trust onboarding + per-OS certificate walkthrough (#330); till reroute S1–S6; promotion endpoint (#272) | USB installer (B3); cloud standby live link + the Waitron Cloud boundary |
 | 10 | Tabs / table service | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer, till action-flow wiring, TS-5 split-bill (#324) | core COMPLETE; owner-added extensions parked |
 | 11 | Floor plan | FP-1 live floor + FP-2 spatial canvas/editor | — |
@@ -6208,7 +6278,7 @@ partial scope; the detail for a live thread is in its track.
 | 13 | Tips | attribution stored (`tenders.tip_amount`) — UI collection ONLY on the integrated-card idle screen | tip-collection UI for cash / manual card / handheld (A8); payroll export (integrate-not-build) |
 | 14 | Bookings | Bookings-1, now the `@waitron/bookings` module (#270, #273) | public/online/QR, availability, reminders, CRM, recurring, calendar grid, deposits |
 | 15 | Online ordering | — | not started (later phase) |
-| 16 | Workforce | *registro de jornada* (chain per node since #268), D2 scheduling, roster authoring + approvals, staff request path + portal | **wage-computation engine** (convenio-gated); D3 payroll export (integrate-not-build) |
+| 16 | Workforce | *registro de jornada* library (chain per node since #268), D2 scheduling, roster authoring + approvals, staff request path + portal | **clocking in and out — no route or screen (A10)**; wage-computation engine (convenio-gated); D3 payroll export (integrate-not-build) |
 | 17 | Accounting export | — | not started (core subset; extends Reporting) |
 | 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen inheritance, recipe-authoring UI (**withdrawn from the dashboard by #345**; declarations are now direct on the product), product images, location↔menu membership, extras and options lists end to end (the legacy option groups are gone — Task 13 dropped their tables), per-option and dish-line quantity, dietary classification, order-line customisation; departments and menus (#297) | counter/walk-up kitchen fire; menu draft/publish + schedule; customer-facing menu surface parked; nested sub-recipes / plate costing / stock depletion parked |
 | 19 | Opening hours & channel sync | — | not started (Google Business Profile / Maps) |
@@ -6491,6 +6561,12 @@ that slice 3 has to restore:
   point-of-no-return is a durable pg commit, so a power cut between the env write and the commit could
   reboot a box `mode=primary` still carrying the primary's series. Fsync the env write or resolve the
   series at boot — and selling must gate on REBOOT COMPLETION.
+- **Getting the AEAT certificate onto a promoted standby needs a new design.** The
+  [2026-09-07 design](superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md) landed as #279
+  and was reverted by #281 when Postgres replication changed how a standby is adopted, and that
+  replication was itself removed on 2026-09-19 — so the design and its plan describe a mechanism that
+  no longer exists. Redesign it with slice 3. Installing or renewing the certificate on the primary
+  does not wait for this (A9).
 - **Still owed after the cert-distribution rebuild:** the restore-onto-cloud re-encrypt; a dashboard
   promote UI; an a11y test for the break-glass panel.
 - **Mirror fidelity** — `adoptVenue` nulled `locations.catalogue_id` and `tills.receipt_printer_id`
@@ -6508,8 +6584,11 @@ that slice 3 has to restore:
 
 ### Reporting — the fiscal remainder (parked)
 
-[Spec](superpowers/specs/2026-08-08-reporting-desglose-and-modelo303-spec.md). Two pre-filing caveats
-a human must clear before the first LIVE 303 filing: validate the DR303 file once against the real
+Built: the VAT summary and the sales side of modelo 303 (#76), the purchases side, the form's boxes
+and the DR303 file (#91), and its download route, `GET /management-api/reports/modelo-303`, with
+quarterly and annual periods (#98). **No dashboard screen calls that route**, so today the file can
+only be fetched from the API. Two pre-filing caveats a human must clear before the first LIVE 303
+filing: validate the DR303 file once against the real
 AEAT "por fichero" uploader (we omit página 2, régimen simplificado); and an asesor must confirm the
 **prorrata** treatment (`computeInputVat` scales only the cuota by `deductible_proportion`). Deferred
 build slices: rectificativas de facturas recibidas (casilla 40/41, needs a
@@ -6568,6 +6647,35 @@ config, is in #558's first commit message (2026-09-24).
 worker count of their own.
 Either way a new package that copies one of those configs must hold `98/98/98/95` (CLAUDE.md §2) —
 anything else and `scripts/coverage-thresholds.test.ts` fails it in the ungated `lint` job.
+
+**Specs still in the tree** (checked against the code 2026-09-27). A spec whose work is built is
+deleted once nothing points at it; one stays while a developer doc or code comment points at it, or
+while it holds decisions still open.
+
+| Spec | State | Open work lives in |
+| --- | --- | --- |
+| [POS architecture](superpowers/specs/2026-07-18-pos-architecture-design.md) | the strategy; §2's sub-projects | *What's built* |
+| [Workforce and time record](superpowers/specs/2026-07-22-workforce-and-time-record-design.md) | partly built; no clocking in | A10, A9 (wages) |
+| [Deli hardware](superpowers/specs/2026-07-30-deli-hardware-design.md) | partly built; the outage path changed 2026-09-11 | A6 |
+| [Nested sub-recipes](superpowers/specs/2026-08-16-nested-sub-recipes-design.md) and its plan | not started; parked; the plan predates SQLite and Vitest 4 | *Later and parked* (recipes depth) |
+| [Expo device kind](superpowers/specs/2026-08-17-expo-device-kind-design.md) | not started; parked; written before device profiles | *Later and parked* |
+| [Star CloudPRNT](superpowers/specs/2026-08-17-printing-cloud-poll-transport-design.md) and [Epson Server Direct Print](superpowers/specs/2026-08-17-printing-epson-server-direct-print-design.md) | not started beyond the `cloud_poll` columns; low priority | B6 |
+| [Failover printing](superpowers/specs/2026-08-26-failover-printing-design.md) | partly built (the job lease, network printers any agent may claim, unprinted kitchen tickets shown on the till, #750) | B6, *Afterwards* |
+| [Every device enrolled, fail closed](superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md) | partly built; deferred | A4 |
+| [Language fallback](superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md) | partly built | A9 |
+| [Native app capabilities](superpowers/specs/2026-08-30-native-app-capabilities.md) | reference; nothing committed | the go-native decision |
+| [Logging and diagnostics](superpowers/specs/2026-08-31-logging-diagnostics-foundation-design.md) | Slice 1 built (#192) | A9, *Detail → Logging* |
+| [Fiscal certificate distribution](superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md) and its plan | reverted (#281); describes a removed mechanism | *Afterwards* |
+| [Handheld app store and kiosk](superpowers/specs/2026-09-08-handheld-app-store-and-kiosk-findings.md) | reference; its own-phones decision reversed 2026-09-18 | — |
+| [Box maintenance and remote support](superpowers/specs/2026-09-11-box-maintenance-and-remote-support.md) | discussion record; not started | B3 |
+| [Failover prototype](superpowers/specs/2026-09-16-sqlite-failover-prototype-design.md) and its plan | done (#425); `bench/sqlite-failover` points at it | *Afterwards* |
+| [SQLite + Litestream topologies](superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md) | slices 1 and 2 built; 3 to 5 not started | *Afterwards* |
+| [Handheld and till hardware decisions](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md) | decisions; the reader dropdown exists | A6 (Slice 2) |
+| [Menus, sections and home layouts](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md) and its plan | built (#729 last); owner decisions still open | Track A (menus entries) |
+| [Service, ordering and billing](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) and its plan | 8 of 18 tasks landed | A4 |
+| [Sales classification](superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md) and its plan | built (#738 last); a code comment points at it | Track A (classification entries) |
+| [Bill payments](superpowers/specs/2026-09-26-bill-payments-design.md) | server built (#721); the till is service Task 15 | A4 |
+| [Print agent setup lockdown](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and its plan | first branch built (#732); two to go | A3 |
 
 **Dev stack from a worktree.** `wa-wt demo|onboarding <worktree-name>` and
 `wa-wt reset demo|onboarding [worktree-name]` — the rule is in CLAUDE.md §6; detail in

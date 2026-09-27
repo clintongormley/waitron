@@ -674,8 +674,8 @@ nothing a person has filled in becomes invisible. Build it from the values thems
 empty ones, joined with a middot: the Kitchen section reads `Café c/leche · Bar · Drinks`. An empty
 summary means an empty section, which is a useful signal in itself. One exception: the extras list
 form's names section (`apps/dashboard/src/widgets/extra-list-form.ts`) summarises with a count of
-the names filled in ("2 of 3 filled in"), as
-[its spec](../superpowers/specs/2026-09-26-modifier-editors-polish-design.md) §3.3 chose.
+the names filled in ("2 of 3 filled in"), as the owner's review of the Extras and Options editors
+chose (2026-09-26).
 
 **A section holding a validation error opens itself and cannot be closed again while the error
 stands.** That is `has-error`: setting it forces `open` true and makes the header inert, so the
