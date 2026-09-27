@@ -731,7 +731,8 @@ export class TillStationQueue extends LitElement {
 
   #notice(notice: KitchenNotice): TemplateResult {
     const kind = t(`station.notice.${notice.kind}` as const);
-    const line = dishLine(notice.quantity, notice.unitName, notice.lineName);
+    const sign = notice.direction === null ? "" : notice.direction === "added" ? "+" : "\u2212";
+    const line = `${sign}${dishLine(notice.quantity, notice.unitName, notice.lineName)}`;
     const acknowledge = t("station.notice.acknowledge");
     const { movedTo } = notice;
     return html`<li class="notice kind-${notice.kind}" data-notice=${notice.id}>

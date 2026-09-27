@@ -40,6 +40,8 @@ export interface KitchenNotice {
   note: string | null;
   wasStarted: boolean;
   movedTo: string | null;
+  /** On a `changed` notice, whether the quantity was added to the work or taken from it. */
+  direction: KitchenNoticeDirection | null;
   createdAt: string;
 }
 
@@ -184,6 +186,7 @@ export async function listStationNotices(
       note: kitchenNotices.note,
       wasStarted: kitchenNotices.wasStarted,
       movedTo: kitchenNotices.movedTo,
+      direction: kitchenNotices.direction,
       createdAt: kitchenNotices.createdAt,
     })
     .from(kitchenNotices)

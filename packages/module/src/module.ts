@@ -427,6 +427,7 @@ export interface VenueServiceContribution {
       note: string | null;
       wasStarted: boolean;
       movedTo: string | null;
+      direction: "added" | "removed" | null;
       createdAt: string;
     }[]
   >;

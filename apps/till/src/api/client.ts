@@ -797,6 +797,8 @@ export interface KitchenNotice {
   wasStarted: boolean;
   /** On a `moved` notice, the table the work now belongs to. */
   movedTo: string | null;
+  /** On a `changed` notice, whether `quantity` was added to the work or taken from it. */
+  direction: "added" | "removed" | null;
   createdAt: string;
 }
 

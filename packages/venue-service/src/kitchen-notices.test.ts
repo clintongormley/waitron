@@ -208,6 +208,7 @@ describe("recordKitchenNotices", () => {
         note: "no onions",
         wasStarted: true,
         movedTo: null,
+        direction: null,
         createdAt: expect.any(String),
       },
     ]);
@@ -478,6 +479,31 @@ describe("recordKitchenNotices", () => {
     ]);
   });
 
+  // Fails if the list leaves out which way a changed notice went.
+  it("lists a changed notice with its direction", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 6, null);
+    const burger = [
+      {
+        workingOrderLineId: order.burgerLineId,
+        stationId: v.grill,
+        quantity: ONE,
+        wasStarted: false,
+      },
+    ];
+    await inTx(async (tx) => {
+      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed", null, "removed");
+      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed", null, "added");
+      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "void");
+    });
+    const notices = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+    expect(notices.map((notice) => [notice.kind, notice.direction])).toEqual([
+      ["changed", "removed"],
+      ["changed", "added"],
+      ["void", null],
+    ]);
+  });
+
   it("records a moved notice with the table the work moved to", async () => {
     const v = await venue();
     const order = await seedOrder(v.locationId, 9, null);
@@ -511,6 +537,7 @@ describe("recordKitchenNotices", () => {
         note: "no onions",
         wasStarted: false,
         movedTo: "Mesa 7",
+        direction: null,
         createdAt: expect.any(String),
       },
     ]);

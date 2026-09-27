@@ -1075,6 +1075,7 @@ describe("till-station-queue — kitchen notices strip", () => {
     note: null,
     wasStarted: false,
     movedTo: null,
+    direction: null,
     createdAt: "2026-08-17T10:10:00.000Z",
     ...overrides,
   });
@@ -1174,6 +1175,23 @@ describe("till-station-queue — kitchen notices strip", () => {
     expect(weighed!.querySelector(".notice-line")!.textContent!.trim()).toBe("0.5 kg× Pulpo");
     expect(counted!.querySelector(".notice-line")!.textContent!.trim()).toBe("2 ud× Croqueta");
     expect(noUnit!.querySelector(".notice-line")!.textContent!.trim()).toBe("2× Gilda");
+  });
+
+  // Fails if a HOLD correction's "-1" and "+1" notices read the same on the screen.
+  it("signs a changed notice's quantity by its direction, and leaves an unsigned one as it was", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+      notices: [
+        notice({ kind: "changed", direction: "removed", lineName: "Steak" }),
+        notice({ id: "kn-2", kind: "changed", direction: "added", lineName: "Steak" }),
+        notice({ id: "kn-3", kind: "changed", quantity: "2.000", unitName: { "es-ES": "ud" } }),
+      ],
+    });
+    const lines = rows(el).map((row) => row.querySelector(".notice-line")!.textContent!.trim());
+    expect(lines).toEqual(["\u22121× Steak", "+1× Steak", "2 ud× Burger"]);
+    const label = rows(el)[0]!.querySelector("[data-acknowledge]")!.getAttribute("aria-label");
+    expect(label).toContain("\u22121× Steak");
   });
 
   it("marks a started void as started, and says nothing of it on one that was not", async () => {
