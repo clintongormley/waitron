@@ -255,8 +255,10 @@ changed or deleted, and points `menu_publications` at it; the Menus list shows e
 a Preview tab words each change and publishes the one menu. Tills sell from the published version
 since menus Task 7. **M6c** (#705, 2026-09-26): an extras item's photo
 is in the frozen copy, so changing it flags every menu offering it; deleting a product flags its
-menus; and the Preview tab shows the whole proposed menu below the changes. A version published before M6c has no photo on its extras items, so each
-menu with extras shows unpublished changes until it is published again. Left, none blocking: after a
+menus, and Preview names an extra-only deleted product on its own line while retaining the affected
+dish's extras-change line; and the Preview tab shows the whole proposed menu below the changes. A
+version published before M6c has no photo on its extras items, so each menu with extras shows
+unpublished changes until it is published again. Left, none blocking: after a
 publish the editor's heading shows the browser's clock until the next read, because the publish
 answer carries no time; a re-enabled product's "added" change can name its section as the
 source; the status and preview reads build every menu's frozen copy inside `withTransaction`, the

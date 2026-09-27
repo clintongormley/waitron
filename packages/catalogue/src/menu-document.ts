@@ -602,6 +602,19 @@ function shapeOf(document: MenuDocument): Shape {
   return { document, sections, offers, extras };
 }
 
+/** Products that disappeared from this menu's extras and were not dishes in its live version. */
+export function removedExtraOnlyProducts(
+  live: MenuDocument | null,
+  proposed: MenuDocument,
+): { productId: string; name: string }[] {
+  if (live === null) return [];
+  const prev = shapeOf(live);
+  const next = shapeOf(proposed);
+  return [...prev.extras]
+    .filter(([productId]) => !prev.offers.has(productId) && !next.extras.has(productId))
+    .map(([productId, item]) => ({ productId, name: item.name }));
+}
+
 const same = (a: unknown, b: unknown): boolean => canonicalJson(a) === canonicalJson(b);
 const pathKey = (path: readonly string[]): string => path.join("/");
 const memberKey = (member: DocumentMember): string =>

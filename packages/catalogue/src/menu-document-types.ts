@@ -124,6 +124,7 @@ export type MenuChange = {
       /** The internal names of the sections from the top level to the list holding it. */
       under: string[];
     }
+  | { kind: "product_deleted"; productId: string; name: string }
   | { kind: "product_moved"; productId: string; name: string; from: string[][]; to: string[][] }
   | { kind: "price_changed"; productId: string; name: string; from: string; to: string }
   | { kind: "product_changed"; productId: string; name: string; fields: ProductChangeField[] }
