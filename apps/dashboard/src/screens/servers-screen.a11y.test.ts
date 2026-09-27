@@ -68,6 +68,11 @@ async function openRemove(el: ServersScreen, nodeId = STANDBY): Promise<void> {
   rowMenu(el, nodeId).shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
   rowMenu(el, nodeId).querySelector<HTMLElement>(`[data-test="remove-${nodeId}"]`)!.click();
   await flush(el);
+  const dialog = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>(
+    "wt-dialog[data-test=remove-dialog]",
+  )!;
+  expect(dialog.open).toBe(true);
+  expect(dialog.shadowRoot!.querySelector("dialog")!.open).toBe(true);
 }
 
 const REMOVED = "44444444-4444-4444-8444-444444444444";
@@ -82,7 +87,6 @@ async function openClear(el: ServersScreen): Promise<void> {
   rowMenu(el, REMOVED).shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
   rowMenu(el, REMOVED).querySelector<HTMLElement>(`[data-test="clear-${REMOVED}"]`)!.click();
   await flush(el);
-  // axe passes a closed dialog, so the scan below proves nothing unless the dialog is open.
   const dialog = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>(
     "wt-dialog[data-test=clear-dialog]",
   )!;
