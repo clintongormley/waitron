@@ -651,8 +651,9 @@ Every task's requirements implicitly include this section.
 - **Read `CLAUDE.md` first.** §1 (writing claims), §2 (the gate), §3 (conventions), §4 (testing) and
   §5 (fiscal invariants) apply to every task.
 - **Worktree, never `main`.** Each task is its own branch and worktree, created with
-  `python3 ~/workspace/tools/worktree.py new waitron feat/menus-<slug>`; the slug is in each task's
-  heading. One pull request per task, landed before the next starts.
+  `python3 ~/workspace/tools/worktree.py new waitron feat/menus-<slug> --headless` (flag added
+  2026-09-27, `CLAUDE.md` §6); the slug is in each task's heading. One pull request per task,
+  landed before the next starts.
 - **Every commit needs `git commit -s`.** Plain English in commit messages and PR text. Exact file,
   function and error-code names appear once as pointers, and a command that was run goes in
   verbatim.

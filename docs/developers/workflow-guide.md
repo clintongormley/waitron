@@ -10,8 +10,10 @@ run the development stack from a worktree.
 **Never commit directly to `main`.** Feature work happens in a worktree
 (`python3 ~/workspace/tools/worktree.py new waitron <branch> --headless` — not a plain
 `git worktree add`, which `/land-branch` cannot tear down). Claude always passes `--headless`; only
-the owner runs it without (owner decision 2026-09-27). Name the branch right at creation; renaming it afterwards
-desynchronises the worktree directory from the name both commands derive.
+the owner runs it without (owner decision 2026-09-27). Headless stops after git and the dependency
+install, with no VS Code workspace file and no editor window; those are for the owner's own
+interactive use. Name the branch right at creation; renaming it afterwards desynchronises the
+worktree directory from the name both commands derive.
 
 **A `docs/`-only change is exempt from the PR ceremony** (owner decision 2026-08-02): plain
 `git worktree add`, `commit -s`, fast-forward `main`, push direct — no PR, no CI wait, no Copilot.
@@ -61,8 +63,9 @@ the first real Dependabot PR.
 
 To land one — a sequence untested with a Dependabot branch name, which contains slashes: fetch the
 PR's branch into a local branch of the same name (`git fetch origin <branch>:<branch>`), then
-`python3 ~/workspace/tools/worktree.py new waitron <branch> --headless`, which checks out an existing local
-branch rather than making a new one; in that worktree run `git rebase --signoff origin/main`, then
+`python3 ~/workspace/tools/worktree.py new waitron <branch> --headless`, which checks out an
+existing local branch rather than making a new one; in that worktree run
+`git rebase --signoff origin/main`, then
 `git push --force-with-lease origin <branch>` through the hook, never `--no-verify`. The rebase
 rewrites the commit even when the branch is already on top of `main` (measured 2026-09-27 on git
 2.55.0: without `--signoff` the same rebase printed `Current branch … is up to date.` and left the

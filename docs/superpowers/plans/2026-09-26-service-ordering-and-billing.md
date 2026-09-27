@@ -498,8 +498,9 @@ Every task's requirements implicitly include this section.
   decision (D1–D5 or D21, or any rule the spec marks **Owner, 2026-09-26**), stop, write the question in the lane's `questions.md` with a
   recommended default, and mark the task `blocked`.
 - **Worktree, never `main`.** Each task is its own branch and worktree, created with
-  `python3 ~/workspace/tools/worktree.py new waitron feat/service-<slug>`, where the slug is in
-  each task's heading. One pull request per task, landed before the next starts.
+  `python3 ~/workspace/tools/worktree.py new waitron feat/service-<slug> --headless` (flag added
+  2026-09-27, `CLAUDE.md` §6), where the slug is in each task's heading. One pull request per
+  task, landed before the next starts.
 - **Every commit needs `git commit -s`.** Commit messages and PR text are in plain English. Exact
   file, function and error-code names appear once as pointers, and a command that was run goes in
   verbatim.
