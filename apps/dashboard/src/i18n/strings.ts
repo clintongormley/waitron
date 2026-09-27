@@ -166,7 +166,7 @@ export const en = {
   "modifiers.delete_preview_error": "The delete preview could not be loaded. Try again.",
   "modifiers.affected_products": "Affected products",
   "modifiers.affected_menus": "Affected menu items",
-  // Option lists (reusable label lists), the Options tab and its form. The three names are
+  // Option lists, the Options tab and its form. The three names are
   // deliberately different things: `name` is what staff see, `customer_name` is what the diner is
   // shown, `kitchen_name` is what the ticket prints (CLAUDE.md §3).
   "options.title": "Options",
@@ -184,16 +184,19 @@ export const en = {
   "options.kitchen_name": "Kitchen name",
   "options.active": "Active",
   "options.labels": "Labels",
-  "options.label": "Label",
-  "options.add_label": "Add label",
-  "options.remove_label": "Remove label",
+  "options.list_options": "Options in this list",
+  "options.add_option": "Add option",
+  "options.edit_option": "Edit option",
+  "options.option_actions": "Option actions",
+  "options.unavailable": "Unavailable",
+  "options.names_section": "Customer and kitchen names",
+  "options.names_summary": "{filled} of {total} filled in",
   "options.reorder": "Drag to reorder",
   "options.available": "Available",
   "options.default": "Default",
-  "options.clear_default": "Clear default",
   "options.name_required": "Enter a name.",
-  "options.label_name_required": "Enter a name for this label.",
-  "options.labels_required": "Add or enable a label, or make this list inactive.",
+  "options.label_name_required": "Enter a name for this option.",
+  "options.labels_required": "Add or enable an option, or make this list inactive.",
 
   // The three names mean the same three things as in the options block above. A blank price is
   // not zero: the item charges the product's own.
@@ -1928,16 +1931,19 @@ export const es: Record<StringKey, string> = {
   "options.kitchen_name": "Nombre de cocina",
   "options.active": "Activa",
   "options.labels": "Etiquetas",
-  "options.label": "Etiqueta",
-  "options.add_label": "Añadir etiqueta",
-  "options.remove_label": "Quitar etiqueta",
+  "options.list_options": "Opciones de esta lista",
+  "options.add_option": "Añadir opción",
+  "options.edit_option": "Editar opción",
+  "options.option_actions": "Acciones de la opción",
+  "options.unavailable": "No disponible",
+  "options.names_section": "Nombres para el cliente y la cocina",
+  "options.names_summary": "{filled} de {total} rellenados",
   "options.reorder": "Arrastrar para reordenar",
   "options.available": "Disponible",
   "options.default": "Predeterminada",
-  "options.clear_default": "Quitar predeterminada",
   "options.name_required": "Introduce un nombre.",
-  "options.label_name_required": "Introduce un nombre para esta etiqueta.",
-  "options.labels_required": "Añade o habilita una etiqueta, o desactiva esta lista.",
+  "options.label_name_required": "Introduce un nombre para esta opción.",
+  "options.labels_required": "Añade o habilita una opción, o desactiva esta lista.",
 
   // Ver el bloque en `en` para qué significa cada uno de los tres nombres y el precio en blanco.
   "extras.title": "Extras",

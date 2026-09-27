@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { AppError, contentLanguageCode, isUuid } from "@waitron/shared";
-import type { OptionLabelInput, OptionList, OptionListInput } from "./modifier-list-types.js";
+import type { OptionLabel, OptionList } from "./modifier-list-types.js";
 import type { OptionSelection } from "@waitron/shared";
+import { effectiveDefaultLabelId } from "./option-default.js";
 import { nonBlankTranslations } from "./product-presentation.js";
 import "./errors.js";
 
@@ -12,6 +14,9 @@ export type {
   OptionList,
   OptionListInput,
 } from "./modifier-list-types.js";
+
+/** A body as `parseOptionListInput` hands it on: unlike the wire shape, every label has an id. */
+export type ParsedOptionList = Omit<OptionList, "id">;
 
 function invalid(field: string): never {
   throw new AppError("options.invalid", { field });
@@ -65,7 +70,7 @@ function id(value: unknown, field: string): string {
   return value.toLowerCase();
 }
 
-export function parseOptionListInput(value: unknown): OptionListInput {
+export function parseOptionListInput(value: unknown): ParsedOptionList {
   const row = record(value, "optionList");
   keys(
     row,
@@ -83,18 +88,15 @@ export function parseOptionListInput(value: unknown): OptionListInput {
   };
   if (!Array.isArray(row.labels)) invalid("labels");
   const seen = new Set<string>();
-  const labels = row.labels.map((entry, index): OptionLabelInput => {
+  const labels = row.labels.map((entry, index): OptionLabel => {
     const field = `labels.${index}`;
     const label = record(entry, field);
     keys(label, ["id", "name", "customerName", "kitchenName", "available"], field);
-    let labelId: string | undefined;
-    if (label.id !== undefined) {
-      labelId = id(label.id, `${field}.id`);
-      if (seen.has(labelId)) invalid(`${field}.id`);
-      seen.add(labelId);
-    }
+    const labelId = label.id === undefined ? randomUUID() : id(label.id, `${field}.id`);
+    if (seen.has(labelId)) invalid(`${field}.id`);
+    seen.add(labelId);
     return {
-      ...(labelId === undefined ? {} : { id: labelId }),
+      id: labelId,
       name: staffName(label.name, `${field}.name`),
       customerName: translations(label.customerName, `${field}.customerName`),
       kitchenName: kitchenName(label.kitchenName, `${field}.kitchenName`),
@@ -108,15 +110,7 @@ export function parseOptionListInput(value: unknown): OptionListInput {
   const defaultLabelId =
     row.defaultLabelId == null ? null : id(row.defaultLabelId, "defaultLabelId");
   if (defaultLabelId !== null && !seen.has(defaultLabelId)) invalid("defaultLabelId");
-  return {
-    ...list,
-    // A default naming a label that is not on offer is dropped rather than refused, so withdrawing a
-    // label does not make every later save of its list fail.
-    defaultLabelId: labels.some((label) => label.id === defaultLabelId && label.available)
-      ? defaultLabelId
-      : null,
-    labels,
-  };
+  return { ...list, defaultLabelId: effectiveDefaultLabelId(labels, defaultLabelId), labels };
 }
 
 /**

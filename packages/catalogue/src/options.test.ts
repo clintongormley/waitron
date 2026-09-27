@@ -97,6 +97,24 @@ describe("option list CRUD", () => {
     );
   });
 
+  it("stores the first available label as the default when the body names none", async () => {
+    const created = await run((tx) =>
+      createOptionList(
+        tx,
+        {
+          name: "Cooked",
+          defaultLabelId: null,
+          labels: [{ name: "Medium rare" }, { name: "Well done" }],
+        },
+        "en",
+      ),
+    );
+    const read = await run((tx) => getOptionList(tx, created.id));
+
+    expect(read.defaultLabelId).toBe(read.labels[0]!.id);
+    expect(read.labels.map((label) => label.name)).toEqual(["Medium rare", "Well done"]);
+  });
+
   it("returns the lists in sort order then id order, each with its labels in sort order", async () => {
     // Written straight to the tables: `sort` is not part of the authoring body. The three rows are
     // inserted in an order that matches neither the expected order nor plain id order, so the
@@ -173,6 +191,21 @@ describe("option list CRUD", () => {
     ]);
     const left = await fx.db.execute<{ count: number }>(
       sql`select count(*) as count from option_labels where id = ${dropped.id}`,
+    );
+    expect(left.rows[0]!.count).toBe(0);
+  });
+
+  it("removes every label when an inactive list is saved with none", async () => {
+    const created = await run((tx) => createOptionList(tx, cookedList(), "en"));
+
+    const updated = await run((tx) =>
+      updateOptionList(tx, created.id, { name: "Cooked", active: false, labels: [] }, "en"),
+    );
+
+    expect(updated.labels).toEqual([]);
+    expect(updated.defaultLabelId).toBeNull();
+    const left = await fx.db.execute<{ count: number }>(
+      sql`select count(*) as count from option_labels where list_id = ${created.id}`,
     );
     expect(left.rows[0]!.count).toBe(0);
   });

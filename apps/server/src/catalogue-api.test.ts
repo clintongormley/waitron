@@ -2898,9 +2898,9 @@ describe("mountCatalogueApi — option lists", () => {
       name: "Punto de la carne",
       customerName: { es: "¿Cómo la quiere?" },
       kitchenName: "PTO",
-      defaultLabelId: null,
       active: true,
     });
+    expect(list.defaultLabelId).toBe(list.labels[0]!.id);
     expect(list.labels.map((label) => label.name)).toEqual(["Poco hecho", "Al punto"]);
     expect(list.labels[0]).toMatchObject({
       customerName: { es: "Poco hecha" },
