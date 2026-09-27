@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const REPO_ROOT = join(import.meta.dirname, "..");
+const MAILPIT_TAG = /^ {4}image: axllent\/mailpit:(v\d+\.\d+\.\d+)$/m;
 
 describe("development account email", () => {
   const compose = readFileSync(join(REPO_ROOT, "docker-compose.yml"), "utf8");
@@ -14,7 +15,7 @@ describe("development account email", () => {
     // The service KEY, not just the image: every dev script names `mailpit`, and the image and port
     // lines below would stay right under a renamed key.
     expect(compose).toMatch(/^ {2}mailpit:$/m);
-    expect(compose).toContain("image: axllent/mailpit:v1.31.1");
+    expect(compose).toMatch(MAILPIT_TAG);
     expect(compose).toContain('"127.0.0.1:1025:1025"');
     expect(compose).toContain('"127.0.0.1:8025:8025"');
   });
@@ -29,7 +30,8 @@ describe("development account email", () => {
 
   it("packages the same loopback-only capture service for installed nodes", () => {
     const installed = readFileSync(join(REPO_ROOT, "deploy/compose.yml"), "utf8");
-    expect(installed).toContain("image: axllent/mailpit:v1.31.1");
+    expect(installed.match(MAILPIT_TAG)?.[1]).toBe(compose.match(MAILPIT_TAG)?.[1]);
+    expect(installed).toMatch(MAILPIT_TAG);
     expect(installed).toContain('"127.0.0.1:1025:1025"');
     expect(installed).toContain('"127.0.0.1:8025:8025"');
     expect(installed).toContain("mailpit:/data");

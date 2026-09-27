@@ -11,7 +11,7 @@ services:
   # `wa-wt` starts this under the fixed `waitron` Compose project, because Compose otherwise names
   # the project after the directory and each worktree would race for the fixed SMTP and UI ports.
   mailpit:
-    image: axllent/mailpit:v1.31.1
+    image: axllent/mailpit:v1.31.2
     environment:
       MP_MAX_MESSAGE_SIZE: 1
     ports:
