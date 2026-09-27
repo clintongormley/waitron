@@ -51,8 +51,7 @@ function refuseUnverifiableChart(
     });
   }
   if (revoked.length > MAX_REVOKED) {
-    throw new AppError("membership.chart_too_large", {
-      list: "revoked",
+    throw new AppError("membership.cleared_list_full", {
       count: revoked.length,
       limit: MAX_REVOKED,
     });

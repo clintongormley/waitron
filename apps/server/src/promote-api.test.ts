@@ -167,6 +167,7 @@ describe("POST /management-api/promote (two-path auth over the promote closure)"
   it("run's chart-minting refusals map to 409", async () => {
     const refusals = [
       new AppError("membership.chart_too_large", { list: "nodes", count: 9, limit: 8 }),
+      new AppError("membership.cleared_list_full", { count: 257, limit: 256 }),
       new AppError("membership.revoked_duplicate", { nodeId: "x" }),
       new AppError("membership.revoked_node_listed", { nodeId: "x" }),
     ];

@@ -2921,8 +2921,12 @@ image constraints under *Detail → Box image*.
     which moves its id into the chart's new signed `revoked` list (outside `MAX_NODES`, capped by
     `MAX_REVOKED`) and writes an append-only `membership_clearances` row. The primary refuses a join
     to a full chart (`mirror.membership_full`), minting refuses a chart over either cap
-    (`membership.chart_too_large`), and a receiver refuses a chart signed by a machine its own held
+    (`membership.chart_too_large` for its machines, `membership.cleared_list_full` for its cleared
+    machines), and a receiver refuses a chart signed by a machine its own held
     chart lists removed or cleared (`signer_removed`, `verifyMembershipDocument`).
+    **Done (2026-09-27, lane D's A74):** clearing a machine when the cleared list is full now raises
+    `membership.cleared_list_full`, with its own English and Spanish wording, instead of the same
+    `membership.chart_too_large` code as an over-size machine list.
     **Still open after A63:** (i) a removed trust anchor (a machine whose key sits in the receiver's
     own `nodes` table) can still make up a key for a machine in good standing that is not an anchor,
     vouch for it, and sign as that machine — unless that machine signed the receiver's held chart and
@@ -2936,7 +2940,7 @@ image constraints under *Detail → Box image*.
     contains the clearing, and a standby that never finished joining never receives it; (iv) so, of
     these guards, only those that run where a chart is made or a join is served work in production
     today: the primary's join refusals (`mirror.standby_removed` for a removed or cleared id,
-    `mirror.membership_full` for a full chart) and the mint's `membership.chart_too_large`; (v) a receiver whose held chart predates a removal accepts the removed machine's charts
+    `mirror.membership_full` for a full chart) and the mint's size refusals; (v) a receiver whose held chart predates a removal accepts the removed machine's charts
     until it learns of the removal; (vi) a joining standby sees `mirror.bundle_fetch_failed` rather
     than the primary's reason, because `apps/server/src/mirror-bundle-fetch.ts` turns every non-2xx
     answer into that code — this predates A63, and `mirror.standby_removed` has the same gap; (vii)

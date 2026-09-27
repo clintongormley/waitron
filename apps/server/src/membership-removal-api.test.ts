@@ -603,15 +603,15 @@ describe("POST /management-api/servers/:nodeId/clear", () => {
       await expectRefused(p, gone.nodeId, 409, "membership.not_primary");
     });
 
-    it("refuses when the revoked list is full as membership.chart_too_large (409)", async () => {
+    it("refuses when the cleared-machine list is full as membership.cleared_list_full (409)", async () => {
       const p = await primary();
       const gone = evicted();
       const full = Array.from({ length: MAX_REVOKED }, () => randomUUID());
       await holdChartRevoking(p, [self(p), gone], full);
 
-      const error = await expectRefused(p, gone.nodeId, 409, "membership.chart_too_large");
+      const error = await expectRefused(p, gone.nodeId, 409, "membership.cleared_list_full");
 
-      expect(error.params).toEqual({ list: "revoked", count: MAX_REVOKED + 1, limit: MAX_REVOKED });
+      expect(error.params).toEqual({ count: MAX_REVOKED + 1, limit: MAX_REVOKED });
     });
   });
 

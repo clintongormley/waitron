@@ -343,6 +343,7 @@ it("has a sentence in both languages for each refusal of clearing a server", () 
   for (const code of [
     "membership.node_not_removed",
     "membership.chart_too_large",
+    "membership.cleared_list_full",
     "membership.revoked_duplicate",
     "membership.revoked_node_listed",
   ]) {

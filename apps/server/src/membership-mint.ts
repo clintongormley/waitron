@@ -16,6 +16,7 @@ export const MAX_CHART_WRITE_ROUNDS = 8;
  */
 export const CHART_MINT_REFUSALS: Record<string, ContentfulStatusCode> = {
   "membership.chart_too_large": 409,
+  "membership.cleared_list_full": 409,
   "membership.revoked_duplicate": 409,
   "membership.revoked_node_listed": 409,
 };

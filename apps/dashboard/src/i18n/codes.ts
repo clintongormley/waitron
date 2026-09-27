@@ -855,6 +855,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The list of servers has reached its size limit, so this change cannot be made.",
     es: "La lista de servidores ha llegado a su tamaño máximo, así que no se puede hacer este cambio.",
   },
+  "membership.cleared_list_full": {
+    en: "The list of cleared servers has reached its size limit, so this server cannot be cleared.",
+    es: "La lista de servidores que se han quitado ha llegado a su tamaño máximo, así que este servidor no se puede quitar.",
+  },
   "membership.revoked_duplicate": {
     en: "The list of servers this server holds is not valid, so it cannot be changed here.",
     es: "La lista de servidores que tiene este servidor no es válida, así que no se puede cambiar aquí.",
