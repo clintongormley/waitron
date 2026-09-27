@@ -127,8 +127,10 @@ const TABLE_REQUEST_LIMIT_MS = 150_000;
 
 /**
  * What a round's send leaves to do once the round is open for edits again. `find-tab`, after a send
- * that got no answer, follows the table the round was sent from to the tab the floor shows for it
- * now; `landedOn` names the tab the server added the round to, when it is not the one it was sent to.
+ * that got no answer, moves to the tab the floor now shows for the table the round was sent from,
+ * only while that table still holds the party the screen showed at the send and the operator is
+ * still on it; `landedOn` names the tab the server added the round to, when it is not the one it was
+ * sent to.
  */
 type RoundFollowUp = "read-tab" | "find-tab" | "mark-sold-out" | { landedOn: string } | undefined;
 
@@ -2250,6 +2252,7 @@ export class TillApp extends LitElement {
     ).detail;
     const tabId = this.activeTabId;
     const tableId = this.activeTableId;
+    const partyId = this.orderParty?.id;
     if (tabId === undefined || round?.sending === true) return;
     // The round is shut to edits until the answer, so a retry sends what the screen shows and success
     // takes out exactly what was sent.
@@ -2265,12 +2268,19 @@ export class TillApp extends LitElement {
       if (round !== undefined) await this.#markSoldOut(round);
       return;
     }
-    // The tab may have moved to another table meanwhile, and a new party sat down at this one.
     const onSentTable = () => this.activeTabId === tabId && this.activeTableId === tableId;
     if (followUp === "find-tab" && onSentTable()) {
       await this.#refreshFloor();
-      const now = this.tables.find((row) => row.id === tableId)?.tabId;
-      if (now !== undefined && onSentTable()) this.#followRound(tabId, now);
+      // The server moves a round only onto its own party's next tab, so the table is followed only
+      // while it still holds the party the screen showed when the round was sent.
+      const now = this.tables.find((row) => row.id === tableId);
+      if (
+        now?.tabId !== undefined &&
+        partyId !== undefined &&
+        now.visit?.id === partyId &&
+        onSentTable()
+      )
+        this.#followRound(tabId, now.tabId);
     } else if (typeof followUp === "object" && this.activeTabId === tabId) {
       await this.#reloadTables();
       this.#followRound(tabId, followUp.landedOn);

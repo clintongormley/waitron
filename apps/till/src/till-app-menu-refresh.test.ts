@@ -1498,6 +1498,16 @@ describe("a remembered round when another table's menu cannot be loaded", () => 
 // ── A round that lands on the party's next tab ───────────────────────────────────────────────────
 
 const shownTab = (el: TillApp) => (tableScreen(el) as unknown as { orderId?: string }).orderId;
+const party = {
+  id: "visit-a",
+  revision: 1,
+  guestCount: 2,
+  state: "open" as const,
+  outstanding: "3.00",
+  billCount: 1,
+  tableIds: ["t2"],
+};
+const seated = { ...table, visit: party };
 
 describe("a round the server adds to another tab", () => {
   it("moves the screen to that tab and takes the sent lines out of the round", async () => {
@@ -1545,27 +1555,75 @@ describe("a round that got no answer while the party moved on to its next tab", 
   const unconfirmed =
     "The server did not answer, so the round may have been added. Check the tab before sending it again.";
 
+  const shownParty = (el: TillApp) =>
+    (tableScreen(el) as unknown as { visit: { id: string } | null }).visit?.id;
+
   it("reads the table's party again and shows the tab the table now points at", async () => {
     const { el } = await mountApp(
-      tableStubs(DINING, { addTabRound: vi.fn().mockRejectedValue(new TypeError("offline")) }),
+      tableStubs(DINING, {
+        getTablesState: vi.fn().mockResolvedValue([seated]),
+        getVisitBills: vi.fn().mockResolvedValue([]),
+        addTabRound: vi.fn().mockRejectedValue(new TypeError("offline")),
+      }),
     );
     await toTable(el);
-    api.getTablesState.mockResolvedValue([{ ...table, tabId: "wo-next" }]);
+    api.getTablesState.mockResolvedValue([
+      { ...seated, tabId: "wo-next", visit: { ...party, revision: 2 } },
+    ]);
     const round = roundStore(el);
     await sendLemonadeRound(el);
     await flush(el);
 
     expect(shownTab(el)).toBe("wo-next");
     expect(api.getTabLines).toHaveBeenLastCalledWith("wo-next");
+    expect(shownParty(el)).toBe("visit-a");
+    expect(api.getVisitBills).toHaveBeenLastCalledWith("visit-a");
     expect(round.lineCount).toBe(0);
     expect(banner(el)!.textContent).toContain(unconfirmed);
+  });
+
+  it("does not follow the table onto a new party's tab", async () => {
+    const { el } = await mountApp(
+      tableStubs(DINING, {
+        getTablesState: vi.fn().mockResolvedValue([seated]),
+        getVisitBills: vi.fn().mockResolvedValue([]),
+        addTabRound: vi.fn().mockRejectedValue(new TypeError("offline")),
+      }),
+    );
+    await toTable(el);
+    // Another till settled and cleared the party, and seated a new one at the same table.
+    api.getTablesState.mockResolvedValue([
+      { ...seated, tabId: "wo-other", visit: { ...party, id: "visit-b" } },
+    ]);
+    await sendLemonadeRound(el);
+    await flush(el);
+
+    expect(shownTab(el)).toBe("wo-7");
+    expect(api.getTabLines).not.toHaveBeenCalledWith("wo-other");
+    expect(shownParty(el)).toBe("visit-a");
+    expect(api.getVisitBills).not.toHaveBeenCalledWith("visit-b");
+    expect(banner(el)!.textContent).toContain(unconfirmed);
+  });
+
+  it("does not follow the table when the tab had no party", async () => {
+    const { el } = await mountApp(
+      tableStubs(DINING, { addTabRound: vi.fn().mockRejectedValue(new TypeError("offline")) }),
+    );
+    await toTable(el);
+    api.getTablesState.mockResolvedValue([{ ...table, tabId: "wo-other" }]);
+    await sendLemonadeRound(el);
+    await flush(el);
+
+    expect(shownTab(el)).toBe("wo-7");
+    expect(api.getTabLines).not.toHaveBeenCalledWith("wo-other");
   });
 
   it("leaves the operator on the table they opened while the send was out", async () => {
     let fail!: (error: unknown) => void;
     const { el } = await mountApp(
       tableStubs(DINING, {
-        getTablesState: vi.fn().mockResolvedValue([table, tableB]),
+        getTablesState: vi.fn().mockResolvedValue([seated, tableB]),
+        getVisitBills: vi.fn().mockResolvedValue([]),
         addTabRound: vi.fn(() => new Promise((_resolve, reject) => (fail = reject))),
       }),
     );
@@ -1580,7 +1638,10 @@ describe("a round that got no answer while the party moved on to its next tab", 
     await flush(el);
     expect(shownTab(el)).toBe("wo-8");
 
-    api.getTablesState.mockResolvedValue([{ ...table, tabId: "wo-next" }, tableB]);
+    api.getTablesState.mockResolvedValue([
+      { ...seated, tabId: "wo-next", visit: { ...party, revision: 2 } },
+      tableB,
+    ]);
     fail(new TypeError("offline"));
     await flush(el);
     await flush(el);
@@ -1664,16 +1725,19 @@ describe("a round that got no answer while its tab moved to another table", () =
     let fail!: (error: unknown) => void;
     const { el } = await mountApp(
       tableStubs(DINING, {
+        getTablesState: vi.fn().mockResolvedValue([seated]),
+        getVisitBills: vi.fn().mockResolvedValue([]),
         addTabRound: vi.fn(() => new Promise((_resolve, reject) => (fail = reject))),
         moveTab: vi.fn().mockResolvedValue(undefined),
       }),
     );
     await toTable(el);
     await sendLemonadeRound(el);
-    // The tab moves from t2 to t4, and another party is seated at t2.
+    // The tab moves from t2 to t4, and the party, which holds both, has a new tab at t2.
+    const spread = { ...party, revision: 2, tableIds: ["t2", "t4"] };
     api.getTablesState.mockResolvedValue([
-      { ...table, tabId: "wo-other" },
-      { ...table, id: "t4", label: "4" },
+      { ...seated, tabId: "wo-other", visit: spread },
+      { ...seated, id: "t4", label: "4", visit: spread },
     ]);
     emit(tableScreen(el), "move-tab", { toTableId: "t4" });
     await flush(el);
