@@ -15,10 +15,11 @@ appendOnly("registros_facturacion", "ledger", LEDGER),
 ```
 
 `appendOnlyTablesIn` collects those names onto the set's `MigrationSet.appendOnlyTables`, and
-`applyMigrations` (`packages/migrations/src/apply.ts:105`) calls `installAppendOnlyTriggers`
-(`packages/store/src/append-only.ts`) after each set migrates — the one place that knows the set's
-tables now exist. Every migrating path in the product goes through it, so there is no install step a
-new table can miss and no gap between creating a table and protecting it.
+`applyMigrations` (`packages/migrations/src/apply.ts`, in `migrateEverySet`) calls
+`installAppendOnlyTriggers` (`packages/store/src/append-only.ts`) after each set migrates, from the
+`appendOnlyTables` each set hands it, which a `migrationOptionsFor(...)` result always carries; a
+plain options array carries none and gets none (`scripts/apply-migrations-callers.test.ts` holds
+every non-test caller under `packages/` and `apps/` to `migrationOptionsFor`).
 
 Re-running it over a database that already carries the triggers is a no-op, which is why it sits on
 the boot path rather than in a one-shot install.

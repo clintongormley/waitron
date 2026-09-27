@@ -771,22 +771,24 @@ will meet:
 - **Raising the root entry to version 7 breaks `pnpm lint`,** with the message above and no lint
   results at all. Leave it on the alias until typescript-eslint's issue 10940 ships version 7
   support — the message names 7.1 as its target — then, after porting `scripts/comments-only.mjs`
-  to version 7's API or keeping the alias for it, collapse both back to one plain range
+  and `scripts/apply-migrations-callers.test.ts` to version 7's API or keeping the alias for them,
+  collapse both back to one plain range
   (`docs/backlog.md` → Track C).
 
 The root DOES therefore have a working TypeScript compiler API, at version 6, importable from the
-root Vitest project. The one root script that imports it is `scripts/comments-only.mjs`, which
-parses with `ts.createSourceFile`. Two places had named its absence as the reason a guard
+root Vitest project. Two root scripts import it, `scripts/comments-only.mjs` and
+`scripts/apply-migrations-callers.test.ts`, and both parse with `ts.createSourceFile`. Two places had named its absence as the reason a guard
 reads text instead of parsing — the header of `scripts/dashboard-browser-purity.test.ts`, and the
 backlog note on `scripts/column-vocabulary.test.ts` — and both were corrected in the same change.
 
-Beyond that script, lint and typechecking, nothing in the repository depends on which compiler is
-installed, because **`tsc` is never asked to emit here**: every use of it is `tsc --noEmit` inside a
+Beyond those two scripts, lint and typechecking, nothing in the repository depends on which
+compiler is installed, because **`tsc` is never asked to emit here**: every use of it is `tsc --noEmit` inside a
 `typecheck` script, the bundles are esbuild's, and Vitest strips types without typechecking — a
 claim the tree also makes in `packages/payments-stripe/src/wiring.test.ts`'s barrel test, and one
 you can check directly by running a package's suite with no `tsc` involved. That is what bounds a
-TypeScript bump's blast radius to `pnpm typecheck`, `pnpm lint`, and `scripts/comments-only.mjs`
-with its suite `scripts/comments-only.test.mjs` in the root Vitest project.
+TypeScript bump's blast radius to `pnpm typecheck`, `pnpm lint`, `scripts/comments-only.mjs` with
+its suite `scripts/comments-only.test.mjs`, and `scripts/apply-migrations-callers.test.ts`, the last
+two in the root Vitest project.
 
 One thing version 7 catches that 5.9.3 did not: a file imported by a relative path that climbs out
 of its own package is `error TS6059` ("not under `rootDir`"). Exactly one **typechecked** file in

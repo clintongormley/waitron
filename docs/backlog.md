@@ -4308,14 +4308,16 @@ exported (the `CLAUDE.md` §3 rule, unguarded, is what stands against a new call
 near-identical word-matching checks in `constraint-target.ts` could share one private helper.
 
 **`VenueMigrationOptions.appendOnlyTables` is optional while `MigrationSet.appendOnlyTables` is
-required — OPEN (found 2026-09-23, task F1's review wave).** `applyMigrations` reads it as `?? []`,
-so a caller passing a plain `MigrationOptions[]` gets a migrated database with NO append-only
-triggers, silently. It is a stated hedge rather than an accident — `applyMigrations`' own comment says a caller
-that "hands over no `appendOnlyTables` gets a migrated database with no triggers on it" — and there are
-no standing violations: all ten product callers go through `migrationOptionsFor`, which always
-carries the set's tables (checked at this head). Given `CLAUDE.md` §5, the property deserves a guard
-rather than a paragraph. **Next action:** a root guard that every non-test `applyMigrations` call
-passes a `migrationOptionsFor(...)` result.
+required — DONE (2026-09-27, lane C's C14; found 2026-09-23, task F1's review wave).**
+`applyMigrations` reads the field as `?? []`, so a caller passing a plain options array gets a
+migrated database with no append-only triggers and no error. The field stayed optional; instead
+`scripts/apply-migrations-callers.test.ts` now holds that every non-test `applyMigrations` call
+under `packages/` and `apps/` passes a `migrationOptionsFor(...)` result, directly or through a
+`const` declared once in the file. There were twelve product callers at landing, all through
+`migrationOptionsFor`. Left open, among others the guard's header lists: the guard never reads the
+sets handed to `migrationOptionsFor`, so a subset, or hand-built sets with `appendOnlyTables: []`,
+passes; and a path that migrates through `runMigrations` directly, without `applyMigrations`, is
+unseen by it.
 
 **A person row written from outside `packages/identity` still folds its key ASCII-only — OPEN
 (found 2026-09-23, task F1's review wave).** SQLite's `lower()` folds ASCII and nothing else, so the
@@ -4461,8 +4463,9 @@ Either bring the three decisions across and re-baseline, or change the sentence 
   in any case. typescript-eslint tracks the work in its issue 10940,
   and the message it prints today names version **7.1** as the target. When a typescript-eslint
   release supports it, the root entry goes back to a plain `^7` range and the alias disappears.
-  `scripts/comments-only.mjs` parses with the version 6 API (`ts.createSourceFile`), so it has to be
-  ported, or the alias kept for it, before that move. The whole arrangement, with the receipts, is in
+  `scripts/comments-only.mjs` and `scripts/apply-migrations-callers.test.ts` parse with the version
+  6 API (`ts.createSourceFile`), so they have to be ported, or the alias kept for them, before that
+  move. The whole arrangement, with the receipts, is in
   [ci-and-gates.md](developers/ci-and-gates.md) → *Two TypeScript compilers are installed, and that
   is deliberate*.
 - **`apps/server` → `apps/print-agent` is the first app-to-app workspace edge in the tree, and the
