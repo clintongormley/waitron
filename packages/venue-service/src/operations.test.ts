@@ -131,6 +131,19 @@ async function publish(tx: Transaction, menuId: string): Promise<string> {
   return (await publishMenu(tx, menuId, menuDocumentHash(document), "person-1")).versionId;
 }
 
+/** Makes a copy of the menu's live version, in the document format before VAT was frozen, live. */
+async function liveInEarlierFormat(tx: Transaction, menuId: string, versionId: string) {
+  const earlier = randomUUID();
+  await tx.execute(sql`
+    insert into menu_versions (id, menu_id, number, document, content_hash, published_at, published_by)
+    select ${earlier}, menu_id, number + 1, json_set(document, '$.format', 1), 'earlier',
+      published_at, published_by
+    from menu_versions where id = ${versionId}`);
+  await tx.execute(
+    sql`update menu_publications set version_id = ${earlier} where menu_id = ${menuId}`,
+  );
+}
+
 async function seedUnitTenant(): Promise<{
   eachUnitId: string;
   kgUnitId: string;
@@ -1884,15 +1897,7 @@ describe("zone offers from the published menus", () => {
     const venue = await seedTwoMenuVenue();
     const { cfg } = venue;
     await scoped(async (tx) => {
-      const earlier = randomUUID();
-      await tx.execute(sql`
-        insert into menu_versions (id, menu_id, number, document, content_hash, published_at, published_by)
-        select ${earlier}, menu_id, number + 1, json_set(document, '$.format', 1), 'earlier',
-          published_at, published_by
-        from menu_versions where id = ${venue.dinnerVersionId}`);
-      await tx.execute(
-        sql`update menu_publications set version_id = ${earlier} where menu_id = ${venue.dinner}`,
-      );
+      await liveInEarlierFormat(tx, venue.dinner, venue.dinnerVersionId);
       const served = await listZoneOffers(tx, cfg, venue.diningZone);
       expect(served.menus.map((menu) => menu.id)).toEqual([venue.menuId]);
       expect(served.offers.map((offer) => offer.id)).toEqual([venue.menuItemId]);
@@ -1986,6 +1991,21 @@ describe("zone offers from the published menus", () => {
       ]);
       await publish(tx, brunch.id);
       await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([]);
+    });
+  });
+
+  it("reports a zone whose only published menu is live in the format before VAT was frozen", async () => {
+    const venue = await seedTwoMenuVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      for (const productId of [venue.productId, venue.lemonade, venue.burger])
+        await createPreparationRoute(tx, cfg, { productId, target: { kind: "no_preparation" } });
+      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([]);
+      // The bar sells All day alone; the dining room still has Dinner in the current format.
+      await liveInEarlierFormat(tx, venue.menuId, venue.versionId);
+      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([
+        { code: "zone.menu_unpublished", zoneId: venue.barZone, zoneName: "Bar" },
+      ]);
     });
   });
 
