@@ -229,6 +229,51 @@ it("words a change in Spanish, with the price in the Spanish money format", asyn
   ]);
 });
 
+/** A dish's VAT change, a variant's own (named in the variants too), and an extra's. */
+const VAT_CHANGES: MenuChange[] = [
+  {
+    kind: "product_changed",
+    productId: "p-lemonade",
+    name: "Lemonade",
+    fields: ["vat"],
+    source: "shared_product",
+    alsoOn: ["Dinner Menu"],
+  },
+  {
+    kind: "product_changed",
+    productId: "p-burger",
+    name: "Burger",
+    fields: ["allergens", "vat", "variants"],
+    source: "shared_product",
+  },
+  {
+    kind: "product_changed",
+    productId: "p-cheese",
+    name: "Cheese",
+    fields: ["vat"],
+    source: "shared_product",
+  },
+];
+
+it("names a VAT change among a product's changed facts", async () => {
+  const el = await mount({ preview: preview(VAT_CHANGES) });
+  expect(items(el, "changes")).toEqual([
+    "Lemonade: VAT — shared product, also on Dinner Menu",
+    "Burger: allergens, VAT, variants — shared product",
+    "Cheese: VAT — shared product",
+  ]);
+});
+
+it("names a VAT change in Spanish", async () => {
+  setLocale("es-ES");
+  const el = await mount({ preview: preview(VAT_CHANGES) });
+  expect(items(el, "changes")).toEqual([
+    "Lemonade: IVA — producto compartido, también en Dinner Menu",
+    "Burger: alérgenos, IVA, variantes — producto compartido",
+    "Cheese: IVA — producto compartido",
+  ]);
+});
+
 it("shows the live version and when it was published, apart from the pending changes", async () => {
   const el = await mount({
     preview: preview([
