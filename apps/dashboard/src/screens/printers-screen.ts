@@ -112,7 +112,7 @@ export class PrintersScreen extends LitElement {
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-sm);
         padding: 0 var(--wt-space-2);
-        font-size: var(--wt-font-size-xs);
+        font-size: var(--wt-font-size-sm);
       }
       wt-data-table::part(discovered-details) {
         max-width: min(28vw, 24dvh);

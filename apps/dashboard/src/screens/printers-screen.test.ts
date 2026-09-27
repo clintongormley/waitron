@@ -1182,6 +1182,27 @@ describe("printers-screen", () => {
     expect(q(el, "[data-test=agent-provenance-a1]")).toBeNull();
   });
 
+  it("sizes the provenance marker from the small font token, inside the table's shadow root", async () => {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi({
+        listAgents: vi.fn().mockResolvedValue([{ ...agents[1]!, host: "Kitchen box" }]),
+      }),
+    });
+    await flush(el);
+    await filterAgents(el, "all");
+    const marker = q(el, "[data-test=agent-provenance-a2]")!;
+    const hostCell = marker.parentElement!;
+    expect(hostCell.textContent).toContain("Kitchen box");
+    const probe = document.createElement("span");
+    probe.style.fontSize = "var(--wt-font-size-sm)";
+    el.shadowRoot!.append(probe);
+    const small = getComputedStyle(probe).fontSize;
+    probe.remove();
+    expect(getComputedStyle(marker).fontSize).toBe(small);
+    // The control: the host text in the marker's own cell is at the body size, so the marker's size is the part rule's doing.
+    expect(getComputedStyle(hostCell).fontSize).not.toBe(small);
+  });
+
   it("re-allows a revoked agent only on the confirming second click, then reloads", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
