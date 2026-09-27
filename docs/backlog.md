@@ -2286,6 +2286,12 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       correction can print at a station whose printer never printed that group's HOLD ticket — a
       dish from another station joined to the group, say, or a printer switched back on after the
       HOLD ticket went out.
+    - A failed kitchen ticket, fire or HOLD, whose dishes at that station are then all cancelled
+      stays a "Printing problem" on the table and the station until the party leaves, and Reprint
+      prints nothing for that station to clear it. The fire-ticket case predates Task 6 (the
+      clearing rule landed with #750); Task 6 makes it common, a held dessert the diner declines.
+      Fix: `readPrintProblems` drops a failed ticket whose bill has nothing left at that station a
+      Reprint would print.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card
