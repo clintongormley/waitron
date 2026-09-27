@@ -48,6 +48,7 @@ import type {
   BillFunds,
 } from "./bill-allocation.js";
 import { issuancePass } from "./issuance-pass.js";
+import { grossOnlyDate, issueMoment } from "./issue-date.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 import { ticketLinesFrom } from "./receipt-lines.js";
@@ -292,7 +293,9 @@ async function billTotal(tx: Transaction, workingOrderId: string): Promise<Decim
     .where(eq(workingOrderLines.workingOrderId, workingOrderId))
     .limit(1);
   // The same pricing the invoice is issued from; a lineless bill totals nothing.
-  return line === undefined ? ZERO : (await priceStoredOrder(tx, workingOrderId)).total;
+  return line === undefined
+    ? ZERO
+    : (await priceStoredOrder(tx, workingOrderId, grossOnlyDate())).total;
 }
 
 function fundsOf(
@@ -543,7 +546,10 @@ export async function readBillBalance(
   const lineNos = await readLineNos(tx, workingOrderId);
   const funds = fundsOf(
     workingOrderId,
-    total ?? (lineNos.size === 0 ? ZERO : (await priceStoredOrder(tx, workingOrderId)).total),
+    total ??
+      (lineNos.size === 0
+        ? ZERO
+        : (await priceStoredOrder(tx, workingOrderId, grossOnlyDate())).total),
     held,
   );
   const outstanding = subtractDecimal(subtractDecimal(funds.total, funds.received), funds.reserved);
@@ -612,11 +618,12 @@ async function issueWhenFullyPaid(
 
   // A card already captured cannot be undone by refusing its invoice, so a line whose product has
   // since gone off sale is filed as it stands, as a whole-order card recovery files it.
+  const issue = issueMoment(deps.clock);
   const priced = await issuancePass(
     tx,
     cfg,
     workingOrderId,
-    await priceStoredOrderForIssuance(tx, workingOrderId, {
+    await priceStoredOrderForIssuance(tx, workingOrderId, issue.on, {
       refuseUnsentUnavailable: options.moneyMoved !== true,
     }),
   );
@@ -645,7 +652,7 @@ async function issueWhenFullyPaid(
     total: priced.total,
     lines: priced.lines,
     vatBreakdown: priced.vatBreakdown,
-    clock: deps.clock,
+    clock: issue.clock,
     operatorId,
     settlement: { kind: "deferred" },
   });

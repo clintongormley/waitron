@@ -200,7 +200,7 @@ async function createOfferedOrder(
   lines: ProductLine[],
 ): ReturnType<typeof createOpenOrder> {
   const offers = await offerProducts(tx, cfg);
-  return createOpenOrder(tx, cfg, id, offers.toOfferLines(lines), null, {
+  return createOpenOrder(tx, cfg, id, offers.toOfferLines(lines), "2026-09-27", null, {
     zoneId: offers.zoneId,
   });
 }
@@ -243,15 +243,14 @@ async function fireContextlessDish(
   pickIds: string[],
 ): Promise<string> {
   const id = randomUUID();
-  await createOpenOrder(tx, cfg, id, [], null);
+  await createOpenOrder(tx, cfg, id, [], "2026-09-27", null);
   const placeholder = {
     workingOrderId: id,
     name: "Line",
     descriptions: { [LOCALE]: "Line" },
     quantity: 1000,
-    unitPrice: 124,
     unitPriceGross: 150,
-    vatRate: 2100,
+    vatClass: "general",
     lineTotal: 150,
   };
   const [parent] = await tx

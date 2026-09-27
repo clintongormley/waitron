@@ -604,7 +604,7 @@ describe("transferLines — extras children (FIX 2 cascade / FIX 4 split)", () =
   ): Promise<string> {
     return asApp(cfg, async (tx) => {
       const id = randomUUID();
-      await createOpenOrder(tx, cfg, id, lines, null, { zoneId });
+      await createOpenOrder(tx, cfg, id, lines, "2026-09-27", null, { zoneId });
       await tx.execute(sql`update dining_tables set tab_id = ${id} where id = ${tableId}`);
       return id;
     });

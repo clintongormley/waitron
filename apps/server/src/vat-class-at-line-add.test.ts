@@ -63,9 +63,10 @@ import {
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
-// A line takes the VAT rate the zone's published menu version froze, when its price locks, and
-// issuance files that stored rate on every path. Every product is published at `reduced` (10%); a
-// case changes one's class to `general` (21%) with or without publishing again.
+// A line takes the VAT class the zone's published menu version froze, when its price locks, and
+// issuance files that stored class's rate on every path. Every product is published at `reduced`
+// (10%); a case changes one's class to `general` (21%) with or without publishing again. The rate a
+// class carries on the day of issue is `vat-rate-at-issue.test.ts`'s subject.
 const LOCALE = "es-ES";
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000bb";
 
@@ -260,8 +261,7 @@ async function stored(workingOrderId: string) {
   return suite.db
     .select({
       productId: workingOrderLines.productId,
-      vatRate: workingOrderLines.vatRate,
-      unitPrice: workingOrderLines.unitPrice,
+      vatClass: workingOrderLines.vatClass,
       unitPriceGross: workingOrderLines.unitPriceGross,
       lineTotal: workingOrderLines.lineTotal,
     })
@@ -337,7 +337,7 @@ function cardDeps(provider: PaymentProvider): IntegratedPayDeps {
   return { ...deps(), provider, readerRef: "reader_1" };
 }
 
-describe("a product's VAT class changed with no new publish: the sale files the rate its line was added at", () => {
+describe("a product's VAT class changed with no new publish: the sale files the class its line was added at", () => {
   it("walk-up: files the published rate", async () => {
     const v = await setupVenue();
     await setVat(v.products.cana, "general");
@@ -358,7 +358,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     const v = await setupVenue();
     const id = await park(v, one(v, v.products.cana));
     const storedAtAdd = await stored(id);
-    expect(storedAtAdd[0]!.vatRate).toBe(1000);
+    expect(storedAtAdd[0]!.vatClass).toBe("reduced");
     await setVat(v.products.cana, "general");
 
     const ticket = await payWorkingOrder(deps(), v.cfg, {
@@ -384,7 +384,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
 
     expect(replay.lines).toEqual(ticket.lines);
     expect(replay.vatBreakdown).toEqual(ticket.vatBreakdown);
-    const rebuilt = await withTransaction(suite.db, (tx) => priceStoredOrder(tx, id));
+    const rebuilt = await withTransaction(suite.db, (tx) => priceStoredOrder(tx, id, "2026-09-27"));
     expect(rebuilt.vatBreakdown).toEqual(CANA_AT_10);
     expect(await filed(id)).toEqual(sale);
     expect(await stored(id)).toEqual(storedAtAdd);
@@ -473,14 +473,14 @@ describe("a product's VAT class changed with no new publish: the sale files the 
       { id, lines: [] },
     );
     expect(replay).toEqual(out);
-    expect((await stored(id)).map((line) => line.vatRate)).toEqual([1000]);
+    expect((await stored(id)).map((line) => line.vatClass)).toEqual(["reduced"]);
   });
 
   it("card recovery: a capture whose sale was never filed files the stored rate, and the gross is the captured amount less the tip", async () => {
     const v = await setupVenue();
     const id = randomUUID();
     await withTransaction(suite.db, async (tx) => {
-      await createOpenOrder(tx, v.cfg, id, one(v, v.products.cana), null, {
+      await createOpenOrder(tx, v.cfg, id, one(v, v.products.cana), "2026-09-27", null, {
         zoneId: v.counter.zoneId,
       });
       await insertCapturedPayment(tx, {
@@ -558,7 +558,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
 
     expect(await filed(id)).toMatchObject({ total: 250, vatBreakdown: CANA_AT_10 });
     expect(await rates(id)).toEqual([1000]);
-    expect((await stored(id)).map((line) => line.vatRate)).toEqual([1000]);
+    expect((await stored(id)).map((line) => line.vatClass)).toEqual(["reduced"]);
     const replay = await collectOrder(deps(), v.cfg, {
       id,
       lines: [],
@@ -594,7 +594,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
 
     await withTransaction(suite.db, async (tx) => {
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
-      const priced = await priceStoredOrderForIssuance(tx, id);
+      const priced = await priceStoredOrderForIssuance(tx, id, "2026-09-27");
 
       expect(priced.priced.lines.map((l) => l.vatRate)).toEqual(["10.00", "10.00"]);
       expect(
@@ -605,64 +605,12 @@ describe("a product's VAT class changed with no new publish: the sale files the 
   });
 });
 
-/**
- * Stands for a release changing a class's rate after the menu was published: the live version is
- * replaced by a copy whose every frozen `from` rate reads `to`, while each class stays as it was.
- */
-function freezeRateAs(v: Venue, from: string, to: string): void {
-  const copy = randomUUID();
-  suite.db.run(sql`
-    insert into menu_versions (id, menu_id, number, document, content_hash, published_at, published_by)
-    select ${copy}, v.menu_id, v.number + 1,
-      replace(v.document, ${`"vatRate":"${from}"`}, ${`"vatRate":"${to}"`}), 'rate-copy',
-      v.published_at, v.published_by
-    from menu_versions v join menu_publications p on p.version_id = v.id
-    where p.menu_id = ${v.counter.menuId}`);
-  suite.db.run(
-    sql`update menu_publications set version_id = ${copy} where menu_id = ${v.counter.menuId}`,
-  );
-}
-
-describe("a line takes the rate NUMBER the published version froze", () => {
-  it("prices a dish, a variant and an extras pick at the frozen rate, not their class's rate now, and files it", async () => {
-    const v = await setupVenue();
-    freezeRateAs(v, "10.00", "11.00");
-
-    const id = await park(v, [
-      ...one(v, v.products.cana),
-      {
-        menuItemId: v.counter.offerFor(v.products.cafe),
-        variantId: v.products.doble,
-        quantity: "1",
-      },
-      {
-        menuItemId: v.counter.offerFor(v.products.burger),
-        quantity: "1",
-        extras: [
-          {
-            listId: v.products.extrasListId,
-            picks: [{ productId: v.products.queso, quantity: 1 }],
-          },
-        ],
-      },
-    ]);
-    await payWorkingOrder(deps(), v.cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "15.45" },
-    });
-
-    expect((await stored(id)).map((line) => line.vatRate)).toEqual([1100, 1100, 1100, 1100]);
-    expect(await rates(id)).toEqual([1100, 1100, 1100, 1100]);
-    expect((await filed(id)).total).toBe(1545);
-  });
-});
-
 describe("an edit prices only what it adds", () => {
-  it("an extras pick added to a stored line by an edit takes the rate the published version froze", async () => {
+  it("an extras pick added to a stored line by an edit takes the class the published version froze", async () => {
     const v = await setupVenue();
     const id = await park(v, one(v, v.products.burger));
-    freezeRateAs(v, "10.00", "11.00");
+    await setVat(v.products.queso, "general");
+    await republish(v);
     const [dish] = await suite.db
       .select({ id: workingOrderLines.id })
       .from(workingOrderLines)
@@ -691,14 +639,14 @@ describe("an edit prices only what it adds", () => {
       tender: { method: "cash", amount: "10.75" },
     });
 
-    expect((await stored(id)).map((line) => [line.productId, line.vatRate])).toEqual([
-      [v.products.burger, 1000],
-      [v.products.queso, 1100],
+    expect((await stored(id)).map((line) => [line.productId, line.vatClass])).toEqual([
+      [v.products.burger, "reduced"],
+      [v.products.queso, "general"],
     ]);
-    expect(await rates(id)).toEqual([1000, 1100]);
+    expect(await rates(id)).toEqual([1000, 2100]);
   });
 
-  it("raising the quantity of a line the kitchen does not have keeps the rate it locked with its price, after a new publish; a line the same edit adds takes the new rate", async () => {
+  it("raising the quantity of a line the kitchen does not have keeps the class it locked with its price, after a new publish; a line the same edit adds takes the new class", async () => {
     const v = await setupVenue();
     const id = await park(v, one(v, v.products.cana));
     await setVat(v.products.cana, "general");

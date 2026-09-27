@@ -30,7 +30,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { Decimal, SaleId } from "@waitron/shared";
-import type { PricedLines } from "@waitron/catalogue";
+import { repriceOn, type PricedLines } from "@waitron/catalogue";
 import {
   payments,
   associatePaymentWithSale,
@@ -52,6 +52,7 @@ import {
 } from "./working-order.js";
 import type { LineExtras, PricedOrder, TillSaleDeps } from "./working-order.js";
 import { issuancePass } from "./issuance-pass.js";
+import { grossOnlyDate, issueMoment } from "./issue-date.js";
 import { cashChange } from "./bill-allocation.js";
 import { perDatabase } from "./live-in-process.js";
 import { refuseBillWithPayments } from "./bill-payments.js";
@@ -449,7 +450,9 @@ export async function payWorkingOrder(
       }
 
       // A walk-up reuses the price `createOpenOrder` derived to build its line rows; a retrieved
-      // order ignores `req.lines` and files its stored locked lines.
+      // order ignores `req.lines` and files its stored locked lines. Either is priced at the rates
+      // of the day the invoice is issued.
+      const issue = issueMoment(deps.clock);
       let order: PricedOrder;
       let newlyCreatedLines: Awaited<ReturnType<typeof createOpenOrder>>["lineRows"] = [];
       if (locked === undefined) {
@@ -457,14 +460,14 @@ export async function payWorkingOrder(
         if (req.lines.length === 0) {
           throw new AppError("sale.empty_basket", {});
         }
-        const created = await createOpenOrder(tx, cfg, req.id, req.lines, null, {
+        const created = await createOpenOrder(tx, cfg, req.id, req.lines, issue.on, null, {
           deliveryTableId: req.deliveryTableId,
           zoneId: req.zoneId,
         });
         order = created;
         newlyCreatedLines = created.lineRows;
       } else {
-        order = await priceStoredOrderForIssuance(tx, req.id);
+        order = await priceStoredOrderForIssuance(tx, req.id, issue.on);
       }
 
       const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, req.id);
@@ -484,7 +487,15 @@ export async function payWorkingOrder(
         );
       }
 
-      return fileImmediateSale(tx, deps, cfg, req.id, req.tender, order, operatorId);
+      return fileImmediateSale(
+        tx,
+        { ...deps, clock: issue.clock },
+        cfg,
+        req.id,
+        req.tender,
+        order,
+        operatorId,
+      );
     });
   } catch (error) {
     // Step 6. Anything but a unique violation is a real failure and surfaces unchanged.
@@ -537,7 +548,7 @@ export async function readSettledTicket(
 
   // Rebuilt from the stored lock rather than `sale_lines`, which stores the NET base, so recovering
   // the gross could drift by a cent.
-  const ticketLines = ticketLinesFrom(await priceStoredOrder(tx, workingOrderId));
+  const ticketLines = ticketLinesFrom(await priceStoredOrder(tx, workingOrderId, grossOnlyDate()));
 
   // Reads the already-filed record; never re-files.
   const filed = await backend.filedReceiptFor(tx, brandSaleId(issued.saleId));
@@ -838,10 +849,14 @@ async function payIntegrated(
       }
     }
 
+    // The rates are taken again in P3, on the day the invoice is issued; the gross charged is the
+    // same on any day.
     const order: PricedOrder =
       locked === undefined
-        ? await createOpenOrder(tx, cfg, req.id, req.lines, null, { zoneId: req.zoneId })
-        : await priceStoredOrderForIssuance(tx, req.id);
+        ? await createOpenOrder(tx, cfg, req.id, req.lines, grossOnlyDate(), null, {
+            zoneId: req.zoneId,
+          })
+        : await priceStoredOrderForIssuance(tx, req.id, grossOnlyDate());
     // The record is issued from THIS pricing, in P3, whatever changes while the reader runs.
     const priced = await issuancePass(tx, cfg, req.id, order);
     // A `placed` order here is a counter collect, so `finalizeCapture` stamps `collected_at`.
@@ -1040,7 +1055,7 @@ async function finalizeCapture(
   deps: IntegratedPayDeps,
   cfg: TillConfig,
   req: IntegratedPayRequest,
-  priced: PricedLines,
+  pricedInP1: PricedLines,
   tip: Decimal,
   result: PaymentResult,
   operatorId?: string,
@@ -1057,6 +1072,8 @@ async function finalizeCapture(
   /* v8 ignore stop */
   try {
     return await withTransaction(deps.db, async (tx) => {
+      const issue = issueMoment(deps.clock);
+      const priced = repriceOn(pricedInP1, issue.on);
       const { saleId, fiscal } = await recordSale(tx, deps.backend, {
         tillId: cfg.tillId,
         nodeId: cfg.nodeId,
@@ -1068,7 +1085,7 @@ async function finalizeCapture(
         total: priced.total,
         lines: priced.lines,
         vatBreakdown: priced.vatBreakdown,
-        clock: deps.clock,
+        clock: issue.clock,
         operatorId,
         settlement: {
           kind: "immediate",
@@ -1166,11 +1183,12 @@ async function finalizeRecovery(
       };
     }
 
+    const issue = issueMoment(deps.clock);
     const priced = await issuancePass(
       tx,
       cfg,
       req.id,
-      await priceStoredOrderForIssuance(tx, req.id, { refuseUnsentUnavailable: false }),
+      await priceStoredOrderForIssuance(tx, req.id, issue.on, { refuseUnsentUnavailable: false }),
     );
     const capturedAmount = decimal(captured.amount);
 
@@ -1203,7 +1221,7 @@ async function finalizeRecovery(
       total: priced.total,
       lines: priced.lines,
       vatBreakdown: priced.vatBreakdown,
-      clock: deps.clock,
+      clock: issue.clock,
       operatorId,
       settlement: {
         kind: "immediate",
@@ -1550,8 +1568,18 @@ export async function collectOrder(
       return ticket;
     }
 
-    const order = await priceStoredOrderForIssuance(tx, req.id);
-    return fileImmediateSale(tx, deps, cfg, req.id, req.tender, order, operatorId, true);
+    const issue = issueMoment(deps.clock);
+    const order = await priceStoredOrderForIssuance(tx, req.id, issue.on);
+    return fileImmediateSale(
+      tx,
+      { ...deps, clock: issue.clock },
+      cfg,
+      req.id,
+      req.tender,
+      order,
+      operatorId,
+      true,
+    );
   });
 }
 

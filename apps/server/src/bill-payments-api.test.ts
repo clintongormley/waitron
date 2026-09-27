@@ -970,7 +970,6 @@ describe("what an item payment may name", () => {
         lineNo: Math.max(...lineNos.map((line) => line.lineNo)) + 1,
         parentLineId: dish!.id,
         name: "Extra de queso",
-        unitPrice: cents,
         unitPriceGross: cents,
         lineTotal: cents,
       });

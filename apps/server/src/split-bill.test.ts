@@ -184,7 +184,7 @@ describe("receipt order grouping", () => {
     for (const label of ["Blue umbrella", null]) {
       await asApp(cfg, async (tx) => {
         const id = randomUUID();
-        const { orderNumber } = await createOpenOrder(tx, cfg, id, [], label);
+        const { orderNumber } = await createOpenOrder(tx, cfg, id, [], "2026-09-27", label);
         expect(await readReceiptOrder(tx, cfg, id)).toEqual({ orderLabel: label, orderNumber });
       });
     }
@@ -194,9 +194,17 @@ describe("receipt order grouping", () => {
     const { cfg, tableId, tableId2 } = await setupVenue();
     await asApp(cfg, async (tx) => {
       const id = randomUUID();
-      const { orderNumber } = await createOpenOrder(tx, cfg, id, [], "Operator label", {
-        deliveryTableId: tableId,
-      });
+      const { orderNumber } = await createOpenOrder(
+        tx,
+        cfg,
+        id,
+        [],
+        "2026-09-27",
+        "Operator label",
+        {
+          deliveryTableId: tableId,
+        },
+      );
       expect(await readReceiptOrder(tx, cfg, id)).toEqual({ orderLabel: "T1", orderNumber });
       await tx.update(diningTables).set({ tabId: id }).where(eq(diningTables.id, tableId2));
       expect(await readReceiptOrder(tx, cfg, id)).toEqual({ orderLabel: "T2", orderNumber });
@@ -556,8 +564,8 @@ it("retains the frozen options answers and the frozen names when a dish quantity
       .set({ optionSnapshots, ...names })
       .where(eq(workingOrderLines.workingOrderId, tabId));
     const { checkId } = await splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]);
-    const source = await priceStoredOrder(tx, tabId);
-    const check = await priceStoredOrder(tx, checkId);
+    const source = await priceStoredOrder(tx, tabId, "2026-09-27");
+    const check = await priceStoredOrder(tx, checkId, "2026-09-27");
     const answersOn = async (orderId: string) =>
       (
         await tx

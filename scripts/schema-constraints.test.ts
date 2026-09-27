@@ -495,7 +495,7 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "working_order_lines_line_no_ck",
   "working_order_lines_quantity_ck",
   "working_order_lines_unit_precision_ck",
-  "working_order_lines_vat_rate_ck",
+  "working_order_lines_vat_class_ck",
   "working_orders_settled_at_ck",
   "zone_service_policies_mode_ck",
 ];

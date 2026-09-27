@@ -109,23 +109,22 @@ describe("park & retrieve schema", () => {
     // Positive control: a product_id naming a real row is accepted — so the rejection below
     // is the FK biting, not the line being malformed for some other reason.
     await suite.db.execute(
-      sql`insert into working_order_lines (id, working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total) values (${randomUUID()}, ${wo}, 1, ${productA}, 'Café solo', ${DESCRIPTIONS_A},
-         1000, 100, 110, 1000, 100)`,
+      sql`insert into working_order_lines (id, working_order_id, line_no, product_id, name, descriptions, quantity, unit_price_gross, vat_class, line_total) values (${randomUUID()}, ${wo}, 1, ${productA}, 'Café solo', ${DESCRIPTIONS_A},
+         1000, 110, 'reduced', 100)`,
     );
-    // Read back to pin the insert's scales: a `1` and a `10` would be accepted and mean a
-    // thousandth of a unit at a hundredth of a percent. Cast to text so the assertion does not
-    // turn on how the driver renders the integer.
-    const stored = await suite.db.execute<{ quantity: string; vat_rate: string }>(
-      sql`select cast(quantity as text) as quantity, cast(vat_rate as text) as vat_rate
+    // Read back to pin the insert's scale: a `1` would be accepted and mean a thousandth of a
+    // unit. Cast to text so the assertion does not turn on how the driver renders the integer.
+    const stored = await suite.db.execute<{ quantity: string; vat_class: string }>(
+      sql`select cast(quantity as text) as quantity, vat_class
             from working_order_lines where working_order_id = ${wo} and line_no = 1`,
     );
-    expect(stored.rows).toEqual([{ quantity: "1000", vat_rate: "1000" }]);
+    expect(stored.rows).toEqual([{ quantity: "1000", vat_class: "reduced" }]);
     // A foreign-key refusal names no key, so the positive control above carries WHICH key: it is
     // the same insert with a real `product_id`, differing otherwise only in line number.
     const error = await captureError(() =>
       suite.db.execute(
-        sql`insert into working_order_lines (id, working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total) values (${randomUUID()}, ${wo}, 2, ${BOGUS_PRODUCT}, 'Café solo', ${DESCRIPTIONS_A},
-           1000, 100, 110, 1000, 100)`,
+        sql`insert into working_order_lines (id, working_order_id, line_no, product_id, name, descriptions, quantity, unit_price_gross, vat_class, line_total) values (${randomUUID()}, ${wo}, 2, ${BOGUS_PRODUCT}, 'Café solo', ${DESCRIPTIONS_A},
+           1000, 110, 'reduced', 100)`,
       ),
     );
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);

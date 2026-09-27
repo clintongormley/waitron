@@ -74,9 +74,8 @@ async function seedFiredOrder(
       name: "Item",
       descriptions: { "es-ES": "Item" },
       quantity: 1000,
-      unitPrice: 100,
       unitPriceGross: 100,
-      vatRate: 1000,
+      vatClass: "reduced",
       lineTotal: 100,
     })
     .returning({ id: workingOrderLines.id });

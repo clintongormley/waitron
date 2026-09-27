@@ -175,6 +175,7 @@ async function seedSale(
     cfg,
     workingOrderId,
     [{ menuItemId, quantity: "1" }],
+    "2026-09-27",
     null,
     { zoneId },
   );

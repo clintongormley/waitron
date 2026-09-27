@@ -261,9 +261,17 @@ async function setup(
 async function openOrder(v: Venue): Promise<string> {
   const id = randomUUID();
   await withTransaction(suite.db, (tx) =>
-    createOpenOrder(tx, v.cfg, id, [{ menuItemId: v.menuItemId, quantity: "1" }], null, {
-      zoneId: v.zoneId,
-    }),
+    createOpenOrder(
+      tx,
+      v.cfg,
+      id,
+      [{ menuItemId: v.menuItemId, quantity: "1" }],
+      "2026-09-27",
+      null,
+      {
+        zoneId: v.zoneId,
+      },
+    ),
   );
   return id;
 }

@@ -145,6 +145,7 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
         cfg,
         orderId,
         offers.toOfferLines([{ productId: product, quantity: "1" }]),
+        "2026-09-27",
         null,
         { zoneId: offers.zoneId },
       );

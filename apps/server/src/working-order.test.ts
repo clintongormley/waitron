@@ -525,6 +525,7 @@ describe("a sold line naming a variant is labelled by the variant's own name", (
         cfg,
         orderId,
         [{ menuItemId: offerId, variantId, quantity: "1" }],
+        "2026-09-27",
         null,
         { zoneId },
       );
@@ -575,6 +576,7 @@ describe("a sold line naming a variant is labelled by the variant's own name", (
         cfg,
         orderId,
         [{ menuItemId: seeded.offerId, variantId: seeded.variantId, quantity: "1" }],
+        "2026-09-27",
         null,
         { zoneId },
       );
@@ -785,25 +787,24 @@ describe("parkOrder", () => {
     // The line carries its product FK + quantity AND the full display snapshot priceBasket produced:
     // 1.50 gross each × 2 = 3.00 gross. `line_total` on this DRAFT is the GROSS 3.00 (the
     // customer-facing total the held list shows), NOT the net base 2.48 the FILED sale line carries;
-    // `unit_price` stays the net unit 1.24 and `vat_rate` 21%. Every one of these four columns is
-    // read straight off the row, so each is the whole number its own scale stores: 300 is that
-    // gross 3.00 in cents and 124 the net unit 1.24, 2000 is two units in thousandths, and 2100 is
-    // the 21% rate in basis points.
+    // `vat_class` is the product's class, general. Each number is read straight off the row, so each
+    // is the whole number its own scale stores: 300 is that gross 3.00 in cents, 150 the gross unit
+    // 1.50, and 2000 is two units in thousandths.
     expect(lines[0]).toMatchObject({
       productId: cafeId,
       lineNo: 1,
       quantity: 2000,
       descriptions: { [LOCALE]: "Café" },
-      unitPrice: 124,
-      vatRate: 2100,
+      unitPriceGross: 150,
+      vatClass: "general",
       lineTotal: 300,
       category: "Bebidas",
     });
   });
 
-  it("stores a quantity as whole thousandths and a rate as whole basis points", async () => {
-    // The two scaled-integer columns on `working_order_lines`, pinned as COUNTS. Nothing else does:
-    // every other assertion in this file reads a quantity or a rate back through a converter, so a
+  it("stores a quantity as whole thousandths", async () => {
+    // The scaled-integer quantity on `working_order_lines`, pinned as a COUNT. Nothing else does:
+    // every other assertion in this file reads a quantity back through a converter, so a
     // conversion applied at the wrong scale on BOTH sides would round-trip and pass. The quantity
     // carries three decimal places on purpose — 1.500 is the one figure that separates thousandths
     // (1500) from cents (150) and from a bare unit count (1 or 2).
@@ -821,11 +822,11 @@ describe("parkOrder", () => {
 
     // Read as TEXT rather than through drizzle, so what is asserted is the number the column holds
     // and not a driver's or an engine's rendering of it.
-    const stored = await db.execute<{ quantity: string; vat_rate: string }>(sql`
-      select cast(quantity as text) as quantity, cast(vat_rate as text) as vat_rate
+    const stored = await db.execute<{ quantity: string; vat_class: string }>(sql`
+      select cast(quantity as text) as quantity, vat_class
       from working_order_lines where working_order_id = ${id}`);
-    // 1.500 kg is 1500 thousandths, and the general 21.00% rate is 2100 basis points.
-    expect(stored.rows).toEqual([{ quantity: "1500", vat_rate: "2100" }]);
+    // 1.500 kg is 1500 thousandths.
+    expect(stored.rows).toEqual([{ quantity: "1500", vat_class: "general" }]);
   });
 
   it("parks a multi-line order without a label, snapshotting a category-less line as null", async () => {
@@ -1213,7 +1214,7 @@ async function grossBasketTotal(
         quantity: l.quantity,
       };
     });
-    return priceBasket(items).total;
+    return priceBasket(items, "2026-09-27").total;
   });
 }
 
@@ -1263,7 +1264,7 @@ describe("listHeldOrders", () => {
     await parkProducts(cfg, { id: idB, lines: linesB });
 
     // The held `total` is the GROSS (VAT-inclusive) basket total the operator saw —
-    // `priceBasket(sameItems).total`, computed independently of the persisted column — NOT the
+    // `priceBasket(sameItems, "2026-09-27").total`, computed independently of the persisted column — NOT the
     // summed net base. A: 1.50 × 2 = 3.00 gross; B: 1.50 + 6.00 = 7.50. Both asserted as literals AND against the pricer, so the test fails if the held
     // total ever reverts to net (2.48 ≠ 3.00) or if the pricer itself drifts.
     const grossA = await grossBasketTotal(cfg, linesA);
@@ -2044,7 +2045,7 @@ describe("updateHeldOrder", () => {
     expect(lines[1]).toMatchObject({ lineNo: 3, productId: cafeId });
 
     // Re-priced: the new total differs from the parked one AND equals the GROSS basket total for the
-    // replaced lines (`priceBasket(newLines).total`, computed independently of the persisted column) —
+    // replaced lines (`priceBasket(newLines, "2026-09-27").total`, computed independently of the persisted column) —
     // agua 2.00 + café 1.50 = 3.50 gross, where the parked cafe×2 was 3.00. Asserting against the
     // gross pricer (not the summed line_total column) is what fails if the held total reverts to net.
     const grossAfter = await grossBasketTotal(cfg, newLines);
@@ -2349,7 +2350,7 @@ async function createOfferedOrder(
   lines: ProductLine[],
 ): ReturnType<typeof createOpenOrder> {
   const offers = await offerProducts(tx, cfg);
-  return createOpenOrder(tx, cfg, id, offers.toOfferLines(lines), null, {
+  return createOpenOrder(tx, cfg, id, offers.toOfferLines(lines), "2026-09-27", null, {
     zoneId: offers.zoneId,
   });
 }
@@ -2394,7 +2395,7 @@ async function fireContextless(
   productIds: string[],
 ): Promise<{ id: string }> {
   const id = randomUUID();
-  await createOpenOrder(tx, cfg, id, [], null);
+  await createOpenOrder(tx, cfg, id, [], "2026-09-27", null);
   await insertContextlessLines(tx, id, productIds);
   await fireLines(tx, cfg, id, await fireableLines(tx, id));
   return { id };
@@ -2413,9 +2414,8 @@ async function insertContextlessLines(
       name: "Line",
       descriptions: { [LOCALE]: "Line" },
       quantity: 1000,
-      unitPrice: 124,
       unitPriceGross: 150,
-      vatRate: 2100,
+      vatClass: "general",
       lineTotal: 150,
     })),
   );
@@ -2494,7 +2494,7 @@ describe("createOpenOrder's catalogue reads (perf)", () => {
     const { cfg } = await setupVenue();
     const spy = vi.spyOn(catalogue, "readInvoiceLocales");
     await withTransaction(db, async (tx) => {
-      await createOpenOrder(tx, cfg, randomUUID(), [], null);
+      await createOpenOrder(tx, cfg, randomUUID(), [], "2026-09-27", null);
     });
     expect(spy).not.toHaveBeenCalled();
   });
@@ -2505,9 +2505,17 @@ describe("createOpenOrder's catalogue reads (perf)", () => {
     const locationRead = vi.spyOn(catalogue, "readInvoiceLocales");
     const productList = vi.spyOn(catalogue, "listAvailableProducts");
     await withTransaction(db, async (tx) => {
-      await createOpenOrder(tx, cfg, randomUUID(), offers.toOfferLines([line(cafeId)]), null, {
-        zoneId: offers.zoneId,
-      });
+      await createOpenOrder(
+        tx,
+        cfg,
+        randomUUID(),
+        offers.toOfferLines([line(cafeId)]),
+        "2026-09-27",
+        null,
+        {
+          zoneId: offers.zoneId,
+        },
+      );
     });
     expect(productList).not.toHaveBeenCalled();
     expect(locationRead).toHaveBeenCalledTimes(1);
@@ -2524,7 +2532,7 @@ describe("createOpenOrder's catalogue reads (perf)", () => {
       .where(eq(locations.id, cfg.locationId));
     const id = randomUUID();
     await withTransaction(db, async (tx) => {
-      await createOpenOrder(tx, cfg, id, offers.toOfferLines([line(cafeId)]), null, {
+      await createOpenOrder(tx, cfg, id, offers.toOfferLines([line(cafeId)]), "2026-09-27", null, {
         zoneId: offers.zoneId,
       });
     });
@@ -5093,7 +5101,7 @@ describe("voidTabLine extras cascade (FIX 2)", () => {
   ): Promise<string> {
     const id = randomUUID();
     const offers = await tableOffers(tx, cfg);
-    await createOpenOrder(tx, cfg, id, offers.toOfferLines(lines), null, {
+    await createOpenOrder(tx, cfg, id, offers.toOfferLines(lines), "2026-09-27", null, {
       zoneId: offers.zoneId,
     });
     await tx.execute(sql`update dining_tables set tab_id = ${id} where id = ${tableId}`);
@@ -5929,7 +5937,7 @@ describe("order path — extras and options", () => {
         kitchenName: workingOrderLines.kitchenName,
         quantity: workingOrderLines.quantity,
         unitPriceGross: workingOrderLines.unitPriceGross,
-        vatRate: workingOrderLines.vatRate,
+        vatClass: workingOrderLines.vatClass,
         lineTotal: workingOrderLines.lineTotal,
       })
       .from(workingOrderLines)
@@ -5937,8 +5945,7 @@ describe("order path — extras and options", () => {
       .orderBy(workingOrderLines.lineNo);
     expect(lines).toHaveLength(2);
     const [dish, child] = lines;
-    // `vat_rate` is read straight off the column, so 1000 is the dish's 10% in basis points.
-    expect(dish!.vatRate).toBe(1000);
+    expect(dish!.vatClass).toBe("reduced");
     expect(child!.parentLineId).toBe(
       (
         await db
@@ -5960,7 +5967,7 @@ describe("order path — extras and options", () => {
     expect(child!.descriptions).toEqual({ [LOCALE]: "Vino customer" });
     expect(child!.kitchenName).toBe("Vino kitchen");
     // The extra PRODUCT's own VAT, never the 10% dish's.
-    expect(child!.vatRate).toBe(2100);
+    expect(child!.vatClass).toBe("general");
     // The list ITEM's price, not the wine's own 3.00; dish ×2 × pick ×1 = 2. All three columns are
     // read straight off the row, each at its own scale: 450 is that 4.50 and 900 the 9.00 total in
     // whole cents, and 2000 is the two picks in thousandths.
@@ -6599,7 +6606,7 @@ async function storedRows(id: string) {
       quantity: workingOrderLines.quantity,
       unitPriceGross: workingOrderLines.unitPriceGross,
       lineTotal: workingOrderLines.lineTotal,
-      vatRate: workingOrderLines.vatRate,
+      vatClass: workingOrderLines.vatClass,
       note: workingOrderLines.note,
       extraListId: workingOrderLines.extraListId,
       sentAt: workingOrderLines.sentAt,
@@ -6812,7 +6819,7 @@ describe("editing a saved order prices only what the edit adds", () => {
     const { cfg, cafeId } = await setupVenue();
     const id = randomUUID();
     await withTransaction(db, async (tx) => {
-      await createOpenOrder(tx, cfg, id, [], null);
+      await createOpenOrder(tx, cfg, id, [], "2026-09-27", null);
       await insertContextlessLines(tx, id, [cafeId]);
     });
 
@@ -7022,7 +7029,7 @@ describe("a variant is sold as the product it is", () => {
         variantDescriptions: workingOrderLines.variantDescriptions,
         variantKitchenName: workingOrderLines.variantKitchenName,
         unitPriceGross: workingOrderLines.unitPriceGross,
-        vatRate: workingOrderLines.vatRate,
+        vatClass: workingOrderLines.vatClass,
         courseId: workingOrderLines.courseId,
         category: workingOrderLines.category,
       })
@@ -7044,7 +7051,7 @@ describe("a variant is sold as the product it is", () => {
         variantDescriptions: { [LOCALE]: "Wine 125" },
         variantKitchenName: null,
         unitPriceGross: 450,
-        vatRate: 1000,
+        vatClass: "reduced",
         courseId: wine.primeroId,
         category: "Vinos",
       },
@@ -7055,7 +7062,7 @@ describe("a variant is sold as the product it is", () => {
         variantDescriptions: { [LOCALE]: "Copa grande" },
         variantKitchenName: "V175",
         unitPriceGross: 550,
-        vatRate: 2100,
+        vatClass: "general",
         courseId: wine.segundoId,
         category: "Copas",
       },
@@ -7091,12 +7098,12 @@ describe("a variant is sold as the product it is", () => {
         productId: workingOrderLines.productId,
         variantName: workingOrderLines.variantName,
         unitPriceGross: workingOrderLines.unitPriceGross,
-        vatRate: workingOrderLines.vatRate,
+        vatClass: workingOrderLines.vatClass,
       })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
     expect(rows).toEqual([
-      { productId: wine.parentId, variantName: null, unitPriceGross: 400, vatRate: 1000 },
+      { productId: wine.parentId, variantName: null, unitPriceGross: 400, vatClass: "reduced" },
     ]);
   });
 
@@ -7174,7 +7181,7 @@ describe("a variant is sold as the product it is", () => {
       // An order with no service context, so the station comes from the product and category
       // routes. Its two lines name the two variants, which is what an order line for each carries.
       const orderId = randomUUID();
-      await createOpenOrder(tx, cfg, orderId, [], null);
+      await createOpenOrder(tx, cfg, orderId, [], "2026-09-27", null);
       await insertContextlessLines(tx, orderId, [wine.wine125, wine.wine175]);
       const [first, second] = await fireableLines(tx, orderId);
       await fireLines(tx, cfg, orderId, [first!, second!]);
@@ -7201,7 +7208,7 @@ describe("a variant is sold as the product it is", () => {
       await setCategoryStation(tx, cfg, wine.vinosId, bodega.id);
       await setCategoryStation(tx, cfg, wine.copasId, terraza.id);
       const orderId = randomUUID();
-      await createOpenOrder(tx, cfg, orderId, [], null);
+      await createOpenOrder(tx, cfg, orderId, [], "2026-09-27", null);
       await insertContextlessLines(tx, orderId, [wine.wine125, wine.wine175]);
       const [first, second] = await fireableLines(tx, orderId);
       await fireLines(tx, cfg, orderId, [first!, second!]);
@@ -7237,6 +7244,7 @@ describe("a variant is sold as the product it is", () => {
           { menuItemId: wine.offerId, variantId: wine.wine125, quantity: "1" },
           { menuItemId: wine.offerId, variantId: wine.wine175, quantity: "1" },
         ],
+        "2026-09-27",
         null,
         { zoneId },
       );
@@ -7264,6 +7272,7 @@ describe("a variant is sold as the product it is", () => {
           { menuItemId: wine.offerId, variantId: wine.wine125, quantity: "1" },
           { menuItemId: wine.offerId, variantId: wine.wine175, quantity: "1" },
         ],
+        "2026-09-27",
         null,
         { zoneId },
       );
@@ -7289,6 +7298,7 @@ describe("a variant is sold as the product it is", () => {
           { menuItemId: wine.offerId, variantId: wine.wine125, quantity: "1" },
           { menuItemId: wine.offerId, variantId: wine.wine175, quantity: "1" },
         ],
+        "2026-09-27",
         null,
         { zoneId },
       );
@@ -7371,6 +7381,7 @@ describe("a variant is sold as the product it is", () => {
             ],
           },
         ],
+        "2026-09-27",
         null,
         { zoneId },
       );
@@ -7409,6 +7420,7 @@ describe("a variant is sold as the product it is", () => {
         twoLocales,
         orderId,
         [{ menuItemId: wine.offerId, variantId: wine.wine125, quantity: "1" }],
+        "2026-09-27",
         null,
         { zoneId },
       );
@@ -7425,7 +7437,9 @@ describe("a variant is sold as the product it is", () => {
         expo: (await listExpoQueue(tx, twoLocales))[0]!.courses.flatMap((c) =>
           c.items.map((i) => i.name),
         ),
-        receipt: ticketLinesFrom(await priceStoredOrder(tx, orderId)).map((l) => l.descriptions),
+        receipt: ticketLinesFrom(await priceStoredOrder(tx, orderId, "2026-09-27")).map(
+          (l) => l.descriptions,
+        ),
       };
     });
     expect(seen).toEqual({
@@ -7501,12 +7515,17 @@ describe("a variant is sold as the product it is", () => {
         productId: workingOrderLines.productId,
         variantName: workingOrderLines.variantName,
         unitPriceGross: workingOrderLines.unitPriceGross,
-        vatRate: workingOrderLines.vatRate,
+        vatClass: workingOrderLines.vatClass,
       })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
     expect(after).toEqual([
-      { productId: wine.wine175, variantName: "Wine 175", unitPriceGross: 550, vatRate: 2100 },
+      {
+        productId: wine.wine175,
+        variantName: "Wine 175",
+        unitPriceGross: 550,
+        vatClass: "general",
+      },
     ]);
   });
 
@@ -7894,6 +7913,7 @@ describe("pricing a stored order to pay it refuses a line never sent whose produ
         cfg,
         orderId,
         [{ menuItemId: offer.offerId, variantId: offer.variantId, quantity: "1" }],
+        "2026-09-27",
         null,
         { zoneId },
       );
@@ -7907,21 +7927,21 @@ describe("pricing a stored order to pay it refuses a line never sent whose produ
     await db.execute(sql`update products set available = 0 where id = ${productId}`);
 
     await expect(
-      withTransaction(db, (tx) => priceStoredOrderForIssuance(tx, orderId)),
+      withTransaction(db, (tx) => priceStoredOrderForIssuance(tx, orderId, "2026-09-27")),
     ).rejects.toMatchObject({ code: "product.unavailable", params: { productId: variantId } });
   });
 
   it("prices the same line while both are available, and once it was sent", async () => {
     const { orderId, productId } = await variantOrder();
     await expect(
-      withTransaction(db, (tx) => priceStoredOrderForIssuance(tx, orderId)),
+      withTransaction(db, (tx) => priceStoredOrderForIssuance(tx, orderId, "2026-09-27")),
     ).resolves.toMatchObject({ priced: { total: "3.20" } });
 
     await db.execute(sql`update working_order_lines set sent_at = ${nowIso()}
       where working_order_id = ${orderId}`);
     await db.execute(sql`update products set available = 0 where id = ${productId}`);
     await expect(
-      withTransaction(db, (tx) => priceStoredOrderForIssuance(tx, orderId)),
+      withTransaction(db, (tx) => priceStoredOrderForIssuance(tx, orderId, "2026-09-27")),
     ).resolves.toMatchObject({ priced: { total: "3.20" } });
   });
 });
@@ -7936,7 +7956,7 @@ describe("fireCourse on an order with no service context", () => {
       const soup = await makeProduct(tx, cfg, catalogueId, {});
       const flan = await makeProduct(tx, cfg, catalogueId, {});
       const id = randomUUID();
-      await createOpenOrder(tx, cfg, id, [], null);
+      await createOpenOrder(tx, cfg, id, [], "2026-09-27", null);
       await insertContextlessLines(tx, id, [soup, flan]);
       await tx.execute(sql`
         update working_order_lines

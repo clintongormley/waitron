@@ -93,9 +93,8 @@ async function seedOrder(
   const line = {
     workingOrderId: order!.id,
     quantity: 2000,
-    unitPrice: 1000,
     unitPriceGross: 1100,
-    vatRate: 1000,
+    vatClass: "reduced",
     lineTotal: 2200,
   };
   const [burger] = await db
@@ -255,9 +254,8 @@ describe("recordKitchenNotices", () => {
         descriptions: { en: "Galician octopus" },
         unitName: { en: "kg", "es-ES": "kilo" },
         quantity: 500,
-        unitPrice: 4000,
         unitPriceGross: 4400,
-        vatRate: 1000,
+        vatClass: "reduced",
         lineTotal: 2200,
       })
       .returning({ id: workingOrderLines.id });

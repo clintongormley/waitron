@@ -453,6 +453,7 @@ describe("recordTillSale", () => {
           { menuItemId: waterOfferId, variantId: variantIds!.double, quantity: "1" },
           { menuItemId: waterOfferId, variantId: variantIds!.unavailable, quantity: "1" },
         ],
+        "2026-09-27",
         null,
         { zoneId },
       );
@@ -1384,6 +1385,7 @@ describe("ordering extras and options — parent + child lines", () => {
             options: [{ listId: v.sizeListId, labelId: v.sizeLabelGrandeId }],
           },
         ],
+        "2026-09-27",
         null,
         { zoneId: v.zoneId },
       );
@@ -1477,6 +1479,7 @@ describe("ordering extras and options — parent + child lines", () => {
             ]),
           },
         ],
+        "2026-09-27",
         null,
         { zoneId: v.zoneId },
       );
@@ -1569,6 +1572,7 @@ describe("ordering extras and options — parent + child lines", () => {
               extras: extrasPick(v, [{ productId: v.baconId, quantity: baconQuantity }]),
             },
           ],
+          "2026-09-27",
           null,
           { zoneId: v.zoneId },
         ),
@@ -1621,6 +1625,7 @@ describe("ordering extras and options — parent + child lines", () => {
           },
           { menuItemId: v.offerFor(v.jamonId), quantity: "0.1" },
         ],
+        "2026-09-27",
         null,
         { zoneId: v.zoneId },
       ),
@@ -2010,6 +2015,7 @@ describe("ordering extras and options — parent + child lines", () => {
           { menuItemId: burgerOffer, quantity: "1", extras },
           { menuItemId: baconOffer, quantity: "1" },
         ],
+        "2026-09-27",
         null,
         { zoneId: v.zoneId },
       ),
@@ -2063,6 +2069,7 @@ describe("ordering extras and options — parent + child lines", () => {
         v.cfg,
         id,
         [{ menuItemId: v.offerFor(v.burgerId), quantity: "1" }],
+        "2026-09-27",
         null,
         {
           zoneId: v.zoneId,
@@ -2146,6 +2153,7 @@ describe("ordering extras and options — parent + child lines", () => {
             extras: extrasPick(v, [{ productId: v.baconId, quantity: 1 }]),
           },
         ],
+        "2026-09-27",
         null,
         { zoneId: v.zoneId },
       );

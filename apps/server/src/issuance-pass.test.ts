@@ -677,6 +677,7 @@ describe("the snapshot is taken when the line is added, on every till filing pat
         v.cfg,
         id,
         [{ menuItemId: v.counter.offerFor(v.products.negroni), quantity: "1" }],
+        "2026-09-27",
         null,
         { zoneId: v.counter.zoneId },
       );
@@ -763,6 +764,7 @@ describe("issuancePass", () => {
           quantity: "1",
           ...(line.variantId ? { variantId: line.variantId } : {}),
         })),
+        "2026-09-27",
         null,
         { zoneId: v.counter.zoneId },
       ),
@@ -781,7 +783,7 @@ describe("issuancePass", () => {
     ]);
 
     await withTransaction(suite.db, async (tx) => {
-      const pricedFive = await priceStoredOrderForIssuance(tx, five);
+      const pricedFive = await priceStoredOrderForIssuance(tx, five, "2026-09-27");
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
       prepared.mockClear();
 
@@ -812,6 +814,7 @@ describe("issuancePass", () => {
             quantity: "1",
             ...(line.variantId ? { variantId: line.variantId } : {}),
           })),
+          "2026-09-27",
           null,
           { zoneId: v.counter.zoneId },
         );
@@ -852,7 +855,7 @@ describe("issuancePass", () => {
       .where(and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.lineNo, 3)));
 
     const issued = await withTransaction(suite.db, async (tx) =>
-      issuancePass(tx, v.cfg, id, await priceStoredOrderForIssuance(tx, id)),
+      issuancePass(tx, v.cfg, id, await priceStoredOrderForIssuance(tx, id, "2026-09-27")),
     );
 
     const negroni = {
@@ -874,7 +877,7 @@ describe("issuancePass", () => {
     );
 
     const issued = await withTransaction(suite.db, async (tx) =>
-      issuancePass(tx, v.cfg, id, await priceStoredOrderForIssuance(tx, id)),
+      issuancePass(tx, v.cfg, id, await priceStoredOrderForIssuance(tx, id, "2026-09-27")),
     );
 
     expect(issued.lines.map((l) => [l.productId, l.menuId])).toEqual([[v.products.negroni, null]]);
@@ -885,7 +888,11 @@ describe("issuancePass", () => {
     const id = await basketOrder(v, [{ productId: v.products.negroni }]);
 
     await withTransaction(suite.db, async (tx) => {
-      const { priced, identities }: PricedOrder = await priceStoredOrderForIssuance(tx, id);
+      const { priced, identities }: PricedOrder = await priceStoredOrderForIssuance(
+        tx,
+        id,
+        "2026-09-27",
+      );
       const doubled = { ...priced, lines: [...priced.lines, ...priced.lines] };
       await expect(issuancePass(tx, v.cfg, id, { priced: doubled, identities })).rejects.toThrow(
         /do not line up/,

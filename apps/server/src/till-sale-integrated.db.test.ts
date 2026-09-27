@@ -850,9 +850,17 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     // Payment refs are unique per provider across the database.
     const externalRef = `pi_lost_${randomUUID()}`;
     await withTransaction(suite.db, async (tx) => {
-      await createOpenOrder(tx, cfg, id, [{ menuItemId: cafe.menuItemId, quantity }], null, {
-        zoneId: cafe.zoneId,
-      });
+      await createOpenOrder(
+        tx,
+        cfg,
+        id,
+        [{ menuItemId: cafe.menuItemId, quantity }],
+        "2026-09-27",
+        null,
+        {
+          zoneId: cafe.zoneId,
+        },
+      );
       await insertCapturedPayment(tx, {
         workingOrderId: id,
         provider: "stripe",
@@ -1787,6 +1795,7 @@ describe("an order being paid by card cannot be changed from another device (pla
           t.cfg,
           id,
           [{ menuItemId: t.cafe.menuItemId, quantity: "1" }],
+          "2026-09-27",
           null,
           {
             zoneId: t.cafe.zoneId,

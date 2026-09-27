@@ -408,9 +408,8 @@ export async function seedFiredLine(
       name: "Item",
       descriptions: { "es-ES": "Item" },
       quantity: stringToThousandths("1.000"),
-      unitPrice: stringToCents("1.00"),
       unitPriceGross: stringToCents("1.00"),
-      vatRate: stringToBasisPoints("10.00"),
+      vatClass: "reduced",
       lineTotal: stringToCents("1.00"),
       servedAt: opts.served ? firedAt : null,
     })

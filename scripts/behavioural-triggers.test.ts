@@ -204,9 +204,9 @@ function line(id, orderId, descriptions, variantDescriptions = null) {
   return (
     `insert into working_order_lines ` +
     `(id, working_order_id, line_no, name, descriptions, variant_descriptions, ` +
-    ` quantity, unit_price, unit_price_gross, vat_rate, line_total) ` +
+    ` quantity, unit_price_gross, vat_class, line_total) ` +
     `values ('${id}', '${orderId}', ${nextLineNo}, 'Item', '${descriptions}', ${variant}, ` +
-    ` 1000, 100, 121, 2100, 121)`
+    ` 1000, 121, 'general', 121)`
   );
 }
 

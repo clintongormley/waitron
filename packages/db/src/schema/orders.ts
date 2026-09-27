@@ -13,7 +13,6 @@ import {
   newId,
   nowIso,
   quantity,
-  rate,
   table,
   tsString,
 } from "./columns.js";
@@ -107,13 +106,14 @@ export const workingOrders = table(
 );
 
 /**
- * Gross prices, VAT rates, descriptions and the reporting classification are snapshotted here when
- * a line is added, never read live from the catalogue, so a later catalogue edit to any of them is
- * a freshness problem, never a correctness one — and the filed `sale_lines` carry these snapshots,
- * naming a product only as a value, never a key.
+ * Gross prices, VAT classes, descriptions and the reporting classification are snapshotted here
+ * when a line is added, never read live from the catalogue, so a later catalogue edit to any of them
+ * is a freshness problem, never a correctness one — and the filed `sale_lines` carry these
+ * snapshots, naming a product only as a value, never a key.
  *
- * The line-add snapshot IS the filed price: a retrieved order is FILED from the locked gross unit
- * price and VAT rate without a re-price (priceLockedLines, @waitron/catalogue).
+ * The line-add snapshot IS the filed gross: a retrieved order is FILED from the locked gross unit
+ * price without a re-price, at its class's rate on the day the invoice is issued (priceLockedLines,
+ * @waitron/catalogue).
  *
  * `descriptions` is a locale→string map holding EXACTLY the venue's configured
  * locales, checked by trigger against locations.invoice_locales.
@@ -145,14 +145,13 @@ export const workingOrderLines = table(
     unitName: json<Record<string, string>>("unit_name"),
     unitPrecision: count("unit_precision"),
     quantity: quantity("quantity").notNull(),
-    unitPrice: money("unit_price").notNull(),
     // The GROSS (VAT-inclusive) unit price LOCKED at add time — the authoritative input the FILED
-    // sale_lines are rebuilt from; `unit_price` above is the NET unit, informational. Stored rather
-    // than recovered as `line_total ÷ quantity`, which DRIFTS for a weighed line (9.99/kg × 0.333 →
+    // sale_lines are rebuilt from. Stored rather than recovered as `line_total ÷ quantity`, which DRIFTS for a weighed line (9.99/kg × 0.333 →
     // 3.33 stored, 3.33 ÷ 0.333 = 10.00 ≠ 9.99).
     unitPriceGross: money("unit_price_gross").notNull(),
-    // The rate the published menu version froze, taken when the line was added; the filed rate.
-    vatRate: rate("vat_rate").notNull(),
+    // The class the published menu version froze, taken when the line was added. The rate it
+    // carries is looked up on the day the invoice is issued, so no rate is stored here.
+    vatClass: label("vat_class").notNull(),
     // GROSS (VAT-inclusive) line total — the customer-facing number, so the held-orders list
     // `sum(line_total)` equals the basket total the operator saw. This DELIBERATELY DIVERGES from
     // the FILED `sale_lines.line_total`, which is the NET base.
@@ -202,8 +201,10 @@ export const workingOrderLines = table(
     ),
     index("working_order_lines_order_idx").on(t.workingOrderId),
     check("working_order_lines_quantity_ck", sql`${t.quantity} <> 0`),
-    // 10000 basis points is 100%.
-    check("working_order_lines_vat_rate_ck", sql`${t.vatRate} >= 0 and ${t.vatRate} <= 10000`),
+    check(
+      "working_order_lines_vat_class_ck",
+      sql`${t.vatClass} in ('general','reduced','super_reduced','zero')`,
+    ),
     check("working_order_lines_line_no_ck", sql`${t.lineNo} >= 1`),
   ],
 );

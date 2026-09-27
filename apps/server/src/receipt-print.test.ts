@@ -332,6 +332,7 @@ describe("receipt grouping after table changes", () => {
           cfg,
           orderId,
           [{ menuItemId: base.each.menuItemId, quantity: "1" }],
+          "2026-09-27",
           null,
           { deliveryTableId: table.id, zoneId: base.zoneId },
         );

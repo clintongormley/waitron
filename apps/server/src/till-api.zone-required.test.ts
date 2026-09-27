@@ -303,7 +303,7 @@ describe("an order with no service context takes no lines", () => {
     const venue = await seedVenue(suite.db);
     const id = randomUUID();
     const opened = await withTransaction(suite.db, (tx) =>
-      createOpenOrder(tx, venue.cfg, id, [], null),
+      createOpenOrder(tx, venue.cfg, id, [], "2026-09-27", null),
     );
     expect(opened.lineRows).toEqual([]);
     expect(await recorded()).toEqual({ orders: 1, lines: 0 });
