@@ -1532,6 +1532,66 @@ export const en = {
     "This card provider is no longer connected. Connect it again, then check the payment.",
   "payments.stuck.failed":
     "Something went wrong while checking this payment. If it is still listed, try again in a minute.",
+  "payments.bill.heading": "Bill payments and refunds awaiting a card provider",
+  "payments.bill.intro":
+    "Check with the card provider before recording an outcome. A manager may record only the outcome the provider confirms, with a note and their PIN.",
+  "payments.bill.payments": "Bill payments",
+  "payments.bill.refunds": "Refunds",
+  "payments.bill.no_payments": "No bill payments need attention.",
+  "payments.bill.no_refunds": "No bill refunds need attention.",
+  "payments.bill.refresh": "Refresh list",
+  "payments.bill.provider_unknown": "Provider not recorded",
+  "payments.bill.provider_state": "Payment record",
+  "payments.bill.state_attempting": "Still processing at the reader",
+  "payments.bill.state_failed": "Marked failed; confirm with the provider",
+  "payments.bill.state_charged": "Charge recorded",
+  "payments.bill.state_started": "Started",
+  "payments.bill.state_missing": "No provider record",
+  "payments.bill.refund_reason": "Reason",
+  "payments.bill.sent_at": "Sent to provider",
+  "payments.bill.not_sent": "Not sent",
+  "payments.bill.send_count": "Send attempts",
+  "payments.bill.payment_attempting":
+    "The reader is still processing this payment. Wait for it to finish before recording an outcome.",
+  "payments.bill.payment_unreachable":
+    "Waitron could not reach the card provider. The bill stays locked; reconnect the provider and try again.",
+  "payments.bill.payment_ambiguous":
+    "The provider's answer does not settle this payment. Check its transaction or ask provider support before recording an outcome.",
+  "payments.bill.payment_mismatched":
+    "The provider shows a charge for a different amount. The bill stays locked; check the provider transaction before recording an outcome.",
+  "payments.bill.refund_pending":
+    "The provider has not finished this refund. The bill stays locked; check again after it completes.",
+  "payments.bill.refund_not_found":
+    "The provider did not find this refund. That alone does not confirm it failed; check the request with the provider before recording an outcome.",
+  "payments.bill.refund_ambiguous":
+    "The provider shows more than one possible refund. Confirm which request this is before recording an outcome.",
+  "payments.bill.refund_unreachable":
+    "Waitron could not reach the provider about this refund. The bill stays locked; reconnect the provider and try again.",
+  "payments.bill.check": "Check with provider",
+  "payments.bill.check_heading": "Check this bill item with the provider?",
+  "payments.bill.check_body":
+    "Waitron will ask the card provider about {order} and record an outcome only if it can confirm one. If the outcome is unclear, the bill stays locked.",
+  "payments.bill.check_failed":
+    "Waitron could not read the provider's answer. Refresh the list and try again.",
+  "payments.bill.attest": "Record confirmed outcome",
+  "payments.bill.attest_heading": "Record the provider's confirmed outcome",
+  "payments.bill.attest_body":
+    "Check {order} in the provider's own dashboard or ask its support. An empty dashboard or an unchanged total does not confirm an outcome. Record only what the provider confirms; your note and manager PIN become part of the audit record.",
+  "payments.bill.outcome": "Confirmed outcome",
+  "payments.bill.choose_outcome": "Choose an outcome",
+  "payments.bill.received_option": "Payment received",
+  "payments.bill.completed_option": "Refund completed",
+  "payments.bill.failed_payment_option": "Payment not charged",
+  "payments.bill.failed_refund_option": "Refund not made",
+  "payments.bill.note": "Provider confirmation note",
+  "payments.bill.pin": "Manager PIN",
+  "payments.bill.outcome_required": "Choose the outcome the provider confirmed.",
+  "payments.bill.note_required": "Enter what the provider confirmed.",
+  "payments.bill.pin_required": "Enter your manager PIN.",
+  "payments.bill.received": "Payment received. The bill has been updated.",
+  "payments.bill.not_charged": "Payment not charged. The bill has been updated.",
+  "payments.bill.completed": "Refund completed. The bill has been updated.",
+  "payments.bill.failed": "Refund not made. The bill has been updated.",
   "members.name": "Name",
   "members.kind": "Type",
   "members.kind_product": "Product",
@@ -3365,6 +3425,66 @@ export const es: Record<StringKey, string> = {
     "Este proveedor de pagos ya no está conectado. Vuelve a conectarlo y consulta de nuevo el cobro.",
   "payments.stuck.failed":
     "Algo salió mal al consultar este cobro. Si sigue en la lista, vuelve a intentarlo en un minuto.",
+  "payments.bill.heading": "Pagos de cuentas y devoluciones pendientes del proveedor de tarjetas",
+  "payments.bill.intro":
+    "Consulta al proveedor de pagos antes de registrar un resultado. Un gerente solo puede registrar el resultado que confirme el proveedor, con una nota y su PIN.",
+  "payments.bill.payments": "Pagos de cuentas",
+  "payments.bill.refunds": "Devoluciones",
+  "payments.bill.no_payments": "No hay pagos de cuentas pendientes.",
+  "payments.bill.no_refunds": "No hay devoluciones pendientes.",
+  "payments.bill.refresh": "Actualizar lista",
+  "payments.bill.provider_unknown": "Proveedor no registrado",
+  "payments.bill.provider_state": "Registro del pago",
+  "payments.bill.state_attempting": "El lector sigue procesando el pago",
+  "payments.bill.state_failed": "Marcado como fallido; confírmalo con el proveedor",
+  "payments.bill.state_charged": "Cobro registrado",
+  "payments.bill.state_started": "Iniciado",
+  "payments.bill.state_missing": "Sin registro del proveedor",
+  "payments.bill.refund_reason": "Motivo",
+  "payments.bill.sent_at": "Enviado al proveedor",
+  "payments.bill.not_sent": "No enviado",
+  "payments.bill.send_count": "Intentos de envío",
+  "payments.bill.payment_attempting":
+    "El lector sigue procesando este pago. Espera a que termine antes de registrar un resultado.",
+  "payments.bill.payment_unreachable":
+    "Waitron no pudo contactar con el proveedor de tarjetas. La cuenta sigue bloqueada; vuelve a conectar el proveedor e inténtalo de nuevo.",
+  "payments.bill.payment_ambiguous":
+    "La respuesta del proveedor no resuelve este pago. Revisa la operación o consulta con el soporte del proveedor antes de registrar un resultado.",
+  "payments.bill.payment_mismatched":
+    "El proveedor muestra un cobro de otro importe. La cuenta sigue bloqueada; revisa la operación del proveedor antes de registrar un resultado.",
+  "payments.bill.refund_pending":
+    "El proveedor aún no ha completado esta devolución. La cuenta sigue bloqueada; vuelve a consultarla cuando termine.",
+  "payments.bill.refund_not_found":
+    "El proveedor no encontró esta devolución. Eso por sí solo no confirma que haya fallado; comprueba la solicitud con el proveedor antes de registrar un resultado.",
+  "payments.bill.refund_ambiguous":
+    "El proveedor muestra más de una posible devolución. Confirma cuál es esta solicitud antes de registrar un resultado.",
+  "payments.bill.refund_unreachable":
+    "Waitron no pudo contactar con el proveedor sobre esta devolución. La cuenta sigue bloqueada; vuelve a conectar el proveedor e inténtalo de nuevo.",
+  "payments.bill.check": "Consultar al proveedor",
+  "payments.bill.check_heading": "¿Consultar esta operación con el proveedor?",
+  "payments.bill.check_body":
+    "Waitron consultará al proveedor de tarjetas sobre {order} y solo registrará un resultado si puede confirmarlo. Si la respuesta no es clara, la cuenta seguirá bloqueada.",
+  "payments.bill.check_failed":
+    "Waitron no pudo interpretar la respuesta del proveedor. Actualiza la lista y vuelve a intentarlo.",
+  "payments.bill.attest": "Registrar resultado confirmado",
+  "payments.bill.attest_heading": "Registrar el resultado confirmado por el proveedor",
+  "payments.bill.attest_body":
+    "Comprueba {order} en el panel del proveedor o consulta con su soporte. Un panel vacío o un total sin cambios no confirman un resultado. Registra solo lo que confirme el proveedor; tu nota y PIN de gerente quedarán en el registro de auditoría.",
+  "payments.bill.outcome": "Resultado confirmado",
+  "payments.bill.choose_outcome": "Elige un resultado",
+  "payments.bill.received_option": "Pago recibido",
+  "payments.bill.completed_option": "Devolución completada",
+  "payments.bill.failed_payment_option": "Pago no cobrado",
+  "payments.bill.failed_refund_option": "Devolución no realizada",
+  "payments.bill.note": "Nota de confirmación del proveedor",
+  "payments.bill.pin": "PIN de gerente",
+  "payments.bill.outcome_required": "Elige el resultado que confirmó el proveedor.",
+  "payments.bill.note_required": "Indica qué confirmó el proveedor.",
+  "payments.bill.pin_required": "Introduce tu PIN de gerente.",
+  "payments.bill.received": "Pago recibido. La cuenta se ha actualizado.",
+  "payments.bill.not_charged": "Pago no cobrado. La cuenta se ha actualizado.",
+  "payments.bill.completed": "Devolución completada. La cuenta se ha actualizado.",
+  "payments.bill.failed": "Devolución no realizada. La cuenta se ha actualizado.",
   "members.name": "Nombre",
   "members.kind": "Tipo",
   "members.kind_product": "Producto",

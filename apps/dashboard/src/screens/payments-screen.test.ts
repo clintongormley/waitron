@@ -74,6 +74,8 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     adoptReader: vi.fn().mockResolvedValue({ id: "r-2", status: "paired" }),
     listStuckPayments: vi.fn().mockResolvedValue([]),
     resolveStuckPayment: vi.fn().mockResolvedValue({ outcome: "not_charged", orderUnlocked: true }),
+    listStuckBillPayments: vi.fn().mockResolvedValue([]),
+    listStuckBillRefunds: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as DashboardApi;
 }

@@ -343,6 +343,56 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("lists unresolved bill payments and refunds and sends confirmed outcomes with the manager PIN", async () => {
+    const payment = [{ billPaymentId: "bp-1", orderNumber: 12 }];
+    const refund = [{ refundId: "br-1", orderNumber: 12 }];
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(payment))
+      .mockResolvedValueOnce(jsonResponse(refund))
+      .mockResolvedValueOnce(jsonResponse({ outcome: "not_charged" }))
+      .mockResolvedValueOnce(jsonResponse({ outcome: "failed" }))
+      .mockResolvedValueOnce(jsonResponse({ outcome: "completed" }))
+      .mockResolvedValueOnce(jsonResponse({ outcome: "completed" }));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.listStuckBillPayments()).resolves.toEqual(payment);
+    await expect(api.listStuckBillRefunds()).resolves.toEqual(refund);
+    await expect(api.resolveStuckBillPayment("bp-1")).resolves.toEqual({ outcome: "not_charged" });
+    await expect(
+      api.attestStuckBillPayment("bp-1", {
+        outcome: "failed",
+        note: "Provider confirmed no charge",
+        pin: "1234",
+      }),
+    ).resolves.toEqual({ outcome: "failed" });
+    await expect(api.resolveStuckBillRefund("br-1")).resolves.toEqual({ outcome: "completed" });
+    await expect(
+      api.attestStuckBillRefund("br-1", {
+        outcome: "completed",
+        note: "Provider confirmed refund",
+        pin: "1234",
+      }),
+    ).resolves.toEqual({ outcome: "completed" });
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/payments/bill-payments", "GET", undefined],
+      ["/management-api/payments/bill-refunds", "GET", undefined],
+      ["/management-api/payments/bill-payments/bp-1/resolve", "POST", undefined],
+      [
+        "/management-api/payments/bill-payments/bp-1/attest",
+        "POST",
+        { outcome: "failed", note: "Provider confirmed no charge", pin: "1234" },
+      ],
+      ["/management-api/payments/bill-refunds/br-1/resolve", "POST", undefined],
+      [
+        "/management-api/payments/bill-refunds/br-1/attest",
+        "POST",
+        { outcome: "completed", note: "Provider confirmed refund", pin: "1234" },
+      ],
+    ]);
+  });
+
   it.each([
     ["finishTotp", "totp.invalid", 400, (api: DashboardApi) => api.finishTotp("enr-1", "000000")],
     [
