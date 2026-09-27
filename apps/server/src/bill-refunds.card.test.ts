@@ -121,6 +121,7 @@ interface RefundAsk {
   submissionId?: string;
   applied: string;
   tip?: string;
+  manualConfirmed?: boolean;
   app?: Hono;
   cookie?: string;
 }
@@ -141,6 +142,7 @@ async function refund(billId: string, paymentId: string, ask: RefundAsk) {
       tipAmount: ask.tip ?? "0.00",
       reason: REASON,
       override: { personId: venue.adminId, pin: "1234" },
+      ...(ask.manualConfirmed === undefined ? {} : { manualConfirmed: ask.manualConfirmed }),
     },
   );
   return {
@@ -391,6 +393,24 @@ describe("the evidence table (design §6b)", () => {
 });
 
 describe("a card refund, sent once (design §6b R1–R3)", () => {
+  it("still asks the connected reader's provider when manual confirmation is supplied", async () => {
+    const billId = await bill("Pulpo", "Croquetas");
+    const card = await pay(billId, "card", "20.00");
+
+    const { answer } = await refund(billId, card.id, {
+      applied: "5.00",
+      manualConfirmed: true,
+    });
+
+    expect(answer.status).toBe(200);
+    const row = await onlyRefundOf(card.id);
+    expect(row).toMatchObject({ state: "completed", sendCount: 1 });
+    expect(callsFor(row.id)).toHaveLength(1);
+    expect(await providerRefundsOf(card.id)).toEqual([
+      { amount: 500, providerRefundRef: row.providerRefundRef },
+    ]);
+  });
+
   it("records a refund the provider completed, with its reference, on both records", async () => {
     const billId = await bill("Pulpo", "Croquetas", "Croquetas");
     const card = await pay(billId, "card", "20.00");

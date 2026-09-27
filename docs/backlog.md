@@ -2272,13 +2272,15 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     paid the rest is refused `working_order.not_open`, and the resolve routes sit beside M7b2's,
     both accepted and recorded as dated corrections in the design by lane D item A76. Two follow-ups,
     both assigned to lane D before Task 15:
-    - **Refund a hand-keyed card payment on staff's word, with a manager PIN** (lane D item B14a,
-      owner's choice). Task 14 refuses it today.
+    - **A hand-keyed card payment can be refunded before the invoice** (lane D item B14a,
+      owner's choice). Staff first give the money back on the separate terminal, then explicitly
+      confirm the completed refund with a manager's PIN. The server records it on the bill and the
+      manual payment in one transaction; Task 15 will supply the till screen for that confirmation.
     - **Dashboard recovery for a bill's unsettled card payment or refund is done** (lane D item
       B14b): the Payments screen (`apps/dashboard/src/screens/payments-screen.ts`) lists both kinds,
       can ask the provider to resolve one, and lets a manager record a provider-confirmed outcome
       with a note and their PIN. The screen has English and Spanish text and browser accessibility
-      cases. Once B14a lands, Task 15 can build the till flow that creates bill payments.
+      cases. Task 15 can build the till flow that creates bill payments.
   - **A keydown guard that cancels Escape while a save runs did not keep one dialog open.** Measured
     on Task 1's reasons screen (`packages/adjustments/src/dashboard/reasons-screen.ts`): a real
     Escape pressed with Vitest's `userEvent` during a save closed the editor, although the screen's

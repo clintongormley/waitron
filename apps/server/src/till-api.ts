@@ -357,6 +357,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "bill.refund_exceeds_payment": 422,
   "bill.refund_not_whole": 422,
   "bill.refund_unsupported": 422,
+  "bill.manual_refund_pin_required": 403,
   "bill.refund_in_progress": 409,
   "payment.not_refundable": 409,
   "payment.refund_exceeds_capture": 422,

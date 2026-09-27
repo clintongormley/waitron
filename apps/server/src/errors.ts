@@ -409,6 +409,8 @@ declare module "@waitron/shared" {
      * here.
      */
     "bill.refund_unsupported": { paymentId: string };
+    /** A standalone terminal refund requires a manager's PIN on this request. */
+    "bill.manual_refund_pin_required": { paymentId: string };
     /**
      * A card refund of the bill is still pending: until the card provider shows its outcome, the
      * bill's payments, lines and invoice stay as they are.

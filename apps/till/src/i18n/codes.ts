@@ -88,8 +88,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Un pago de artículos concretos solo se puede devolver entero, y así esos artículos se pueden volver a cobrar",
   },
   "bill.refund_unsupported": {
-    en: "A card payment keyed in on a separate terminal can't be given back before the bill is paid. Don't refund it on the terminal: Waitron would still count it as paid",
-    es: "Un pago con tarjeta tecleado en otro datáfono no se puede devolver antes de cobrar la cuenta. No lo devuelvas en el datáfono: Waitron lo seguiría contando como pagado",
+    en: "Refund this card payment on the separate terminal, then confirm the refund with a manager's PIN",
+    es: "Devuelve este pago con tarjeta en el otro datáfono y confirma después la devolución con el PIN de un responsable",
+  },
+  "bill.manual_refund_pin_required": {
+    en: "A manager must enter their PIN to confirm this terminal refund",
+    es: "Un responsable debe introducir su PIN para confirmar esta devolución en el datáfono",
   },
   "payment.not_refundable": {
     en: "This card payment can no longer be given back. Reload the bill and try again",

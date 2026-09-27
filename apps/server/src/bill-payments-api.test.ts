@@ -1641,6 +1641,7 @@ interface RefundBody {
   tipAmount: string;
   reason?: string;
   override?: { personId: string; pin: string };
+  manualConfirmed?: boolean;
 }
 
 /** A refund of the payment, authorised by the admin's PIN unless the body says otherwise. */
@@ -1958,6 +1959,174 @@ describe("a cash refund before the invoice (design §6)", () => {
     expect(await refundRows(paymentId)).toEqual([]);
   });
 
+  it("records a manager-confirmed hand-keyed card refund completed in both payment ledgers", async () => {
+    const billId = await bill120();
+    const paymentId = paymentIdOf(
+      await pay(billId, {
+        kind: "contribution",
+        amount: "40.00",
+        method: "card",
+        entry: "manual",
+        externalRef: "OP-7781",
+        applied: "40.00",
+        tip: "0.00",
+      }),
+    );
+
+    const confirmed = await refund(billId, paymentId, {
+      appliedAmount: "10.00",
+      tipAmount: "0.00",
+      manualConfirmed: true,
+    });
+
+    expect(confirmed.status).toBe(200);
+    expect(confirmed.json).toMatchObject({
+      refund: { paymentId, state: "completed", appliedAmount: "10.00" },
+      balance: { received: "30.00", outstanding: "90.00" },
+    });
+    expect(await refundRows(paymentId)).toMatchObject([
+      {
+        state: "completed",
+        appliedAmount: 1000,
+        requestedBy: venue.staffId,
+        authorizedBy: venue.adminId,
+        tillId: venue.deviceTillId,
+      },
+    ]);
+    const [manual] = await inTx((tx) =>
+      tx.select().from(payments).where(eq(payments.billPaymentId, paymentId)),
+    );
+    expect(manual).toMatchObject({ provider: "manual", state: "partially_refunded" });
+    expect(
+      suite.db.all(
+        sql`select amount, state, authorized_by from payment_refunds where payment_id = ${manual!.id}`,
+      ),
+    ).toEqual([{ amount: 1000, state: "succeeded", authorized_by: venue.adminId }]);
+    expect(await saleOf(billId)).toEqual([]);
+  });
+
+  it("requires the manager's PIN for a confirmed hand-keyed card refund", async () => {
+    const billId = await bill120();
+    const paymentId = paymentIdOf(
+      await pay(billId, {
+        kind: "contribution",
+        amount: "40.00",
+        method: "card",
+        entry: "manual",
+        applied: "40.00",
+        tip: "0.00",
+      }),
+    );
+
+    const refused = await refund(billId, paymentId, {
+      appliedAmount: "10.00",
+      tipAmount: "0.00",
+      manualConfirmed: true,
+      override: undefined,
+    });
+
+    expect(refused.status).toBe(403);
+    expect(refused.json).toMatchObject({ code: "authorization.not_permitted" });
+    expect(await refundRows(paymentId)).toEqual([]);
+  });
+
+  it("requires a manager PIN even when the operator has the refund permission", async () => {
+    const billId = await bill120();
+    const paymentId = paymentIdOf(
+      await pay(billId, {
+        kind: "contribution",
+        amount: "40.00",
+        method: "card",
+        entry: "manual",
+        applied: "40.00",
+        tip: "0.00",
+      }),
+    );
+    const adminSession = await inTx((tx) =>
+      loginWithPin(tx, { tillId: venue.cfg.tillId, personId: venue.adminId, pin: "1234" }),
+    );
+    const deviceCookie = venue.cookie
+      .split("; ")
+      .find((part) => part.startsWith(`${DEVICE_COOKIE}=`));
+    const adminCookie = `${SESSION_COOKIE}=${adminSession.token}; ${deviceCookie}`;
+
+    const refused = await request(
+      "POST",
+      `/api/working-orders/${billId}/payments/${paymentId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        appliedAmount: "10.00",
+        tipAmount: "0.00",
+        reason: "Devuelto en datáfono",
+        manualConfirmed: true,
+      },
+      adminCookie,
+    );
+
+    expect(refused.status).toBe(403);
+    expect(refused.json).toMatchObject({
+      code: "bill.manual_refund_pin_required",
+      params: { paymentId },
+    });
+    expect(await refundRows(paymentId)).toEqual([]);
+  });
+
+  it("refuses terminal confirmation by a wrong PIN or a person without refund permission", async () => {
+    const billId = await bill120();
+    const paymentId = paymentIdOf(
+      await pay(billId, {
+        kind: "contribution",
+        amount: "40.00",
+        method: "card",
+        entry: "manual",
+        applied: "40.00",
+        tip: "0.00",
+      }),
+    );
+    const ask = { appliedAmount: "10.00", tipAmount: "0.00", manualConfirmed: true };
+
+    const wrongPin = await refund(billId, paymentId, {
+      ...ask,
+      override: { personId: venue.adminId, pin: "9999" },
+    });
+    const noPermission = await refund(billId, paymentId, {
+      ...ask,
+      override: { personId: venue.staffId, pin: "5555" },
+    });
+
+    expect(wrongPin.status).toBe(401);
+    expect(wrongPin.json).toMatchObject({ code: "pin.invalid" });
+    expect(noPermission.status).toBe(403);
+    expect(noPermission.json).toMatchObject({
+      code: "authorization.not_permitted",
+      params: { permission: "sale.refund" },
+    });
+    expect(await refundRows(paymentId)).toEqual([]);
+  });
+
+  it("does not replay a confirmed terminal refund as an unconfirmed request", async () => {
+    const billId = await bill120();
+    const paymentId = paymentIdOf(
+      await pay(billId, {
+        kind: "contribution",
+        amount: "40.00",
+        method: "card",
+        entry: "manual",
+        applied: "40.00",
+        tip: "0.00",
+      }),
+    );
+    const submissionId = randomUUID();
+    const ask = { submissionId, appliedAmount: "10.00", tipAmount: "0.00" };
+
+    expect((await refund(billId, paymentId, { ...ask, manualConfirmed: true })).status).toBe(200);
+    const replay = await refund(billId, paymentId, ask);
+
+    expect(replay.status).toBe(409);
+    expect(replay.json).toMatchObject({ code: "submission.id_reused", params: { submissionId } });
+    expect(await refundRows(paymentId)).toHaveLength(1);
+  });
+
   it("refuses a refund while a card payment on the bill is at the reader", async () => {
     const billId = await bill120();
     const paymentId = paymentIdOf(await contribute(billId, "50.00"));
@@ -2037,6 +2206,7 @@ describe("a cash refund before the invoice (design §6)", () => {
       [{ ...good, appliedAmount: "0.00", tipAmount: "0.00" }, "appliedAmount"],
       [{ ...good, reason: "   " }, "reason"],
       [{ ...good, override: "1234" }, "override"],
+      [{ ...good, manualConfirmed: null }, "manualConfirmed"],
     ];
     for (const [body, field] of cases) {
       const refused = await request("POST", path, body);

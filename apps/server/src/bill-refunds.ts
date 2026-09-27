@@ -4,6 +4,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { authorize } from "@waitron/identity";
 import type { Override } from "@waitron/identity";
 import {
+  MANUAL_PROVIDER,
   assertReversible,
   findPaymentByBillPayment,
   recordRefund,
@@ -45,6 +46,8 @@ export interface BillRefundRequest {
   reason: string;
   /** A second person holding `sale.refund`, when the operator does not. */
   override?: Override;
+  /** Staff confirms the refund has already completed on the standalone card terminal. */
+  manualConfirmed?: boolean;
 }
 
 export interface BillRefundResult {
@@ -87,12 +90,14 @@ export function refundFingerprint(
   appliedAmount: string,
   tipAmount: string,
   reason: string,
+  manualConfirmed = false,
 ): string {
   return fingerprint({
     paymentId,
     appliedAmount: money(decimal(appliedAmount)),
     tipAmount: money(decimal(tipAmount)),
     reason,
+    ...(manualConfirmed ? { manualConfirmed: true } : {}),
   });
 }
 
@@ -455,9 +460,9 @@ export async function attestCardRefund(
  * first and writes nothing, except that a card refund still pending is resumed; the id with another
  * request, of another payment, or naming one of the bill's payments is `submission.id_reused`.
  *
- * Cash is written `completed`, and opens the till's drawer, in one transaction. A card refund is
- * written `pending` before its provider is asked (design §6b), and the bill is locked until the
- * evidence settles it.
+ * Cash and staff-confirmed standalone-terminal refunds are completed in this transaction. A
+ * connected card refund is written `pending` before its provider is asked (design §6b), and the
+ * bill is locked until the evidence settles it.
  */
 export async function refundBillPayment(
   deps: BillRefundDeps,
@@ -469,7 +474,13 @@ export async function refundBillPayment(
 ): Promise<BillRefundResult> {
   const applied = money(decimal(req.appliedAmount));
   const tip = money(decimal(req.tipAmount));
-  const print = refundFingerprint(paymentId, req.appliedAmount, req.tipAmount, req.reason);
+  const print = refundFingerprint(
+    paymentId,
+    req.appliedAmount,
+    req.tipAmount,
+    req.reason,
+    req.manualConfirmed,
+  );
   let release = (): void => {};
   try {
     const begun = await withTransaction(deps.db, async (tx) => {
@@ -554,6 +565,22 @@ export async function refundBillPayment(
       }
 
       const provided = await findPaymentByBillPayment(tx, paymentId);
+      if (provided?.provider === MANUAL_PROVIDER && req.manualConfirmed === true) {
+        if (!authorization.viaOverride) {
+          throw new AppError("bill.manual_refund_pin_required", { paymentId });
+        }
+        const [refund] = await tx
+          .insert(billPaymentRefunds)
+          .values({ ...values, state: "completed", completedAt: createdAt })
+          .returning();
+        await recordRefund(tx, {
+          provider: provided.provider,
+          paymentRef: provided.paymentRef,
+          amount: centsToDecimal(values.appliedAmount + values.tipAmount),
+          authorizedBy: authorization.authorizedBy,
+        });
+        return { kind: "done" as const, result: await resultOf(tx, refund!, workingOrderId) };
+      }
       const provider =
         provided === undefined ? undefined : await deps.refundProviderFor?.(provided.provider);
       if (provided === undefined || provider?.sendRefund === undefined) {

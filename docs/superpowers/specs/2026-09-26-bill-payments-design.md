@@ -569,6 +569,11 @@ A pending bill payment is resolved from the provider's row, never from its age:
   the invoice. An item payment is refunded whole, which
   releases its lines. _(2026-09-27: a partial refund of an item payment is refused
   `bill.refund_not_whole`, `apps/server/src/bill-refunds.ts`.)_
+
+  _(2026-09-27, B14a: a card payment keyed on a separate terminal has no provider refund call.
+  After staff complete the refund there, an explicit confirmation with a manager's PIN records the
+  bill refund and the manual payment refund together as completed. An ordinary request without that
+  confirmation still refuses it.)_
 - **After the invoice**, the bill's payments are tenders on a filed sale. A refund of one of them is
   a payment action with no fiscal effect when the charge was right. When the charge was wrong, it is
   the fiscal correction workflow (`recordCorrection`, which "settles nothing; a refund is a separate
