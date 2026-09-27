@@ -3,21 +3,13 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
-import { productName, productUnit, unitName } from "./product-name.js";
+import { productName, unitName } from "./product-name.js";
+import { hasSomethingToSell, pickProduct } from "./product-pick.js";
 import "./modifier-picker.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import type { TillProduct } from "../api/client.js";
-import { needsModifierPicker } from "../state/order-line.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale } from "../i18n/t.js";
-
-/** A product with variants is sold only as one of them, so one whose variants are all unavailable
- * here has nothing to sell. It keeps its tile, greyed, so the tiles around it do not move (D12). */
-function hasSomethingToSell(product: TillProduct): boolean {
-  if (product.available === false) return false;
-  const variants = product.variants ?? [];
-  return variants.length === 0 || variants.some((variant) => variant.available);
-}
 
 /** Tiles coordinate only through the store: they never reference the basket or total widgets. */
 @customElement("till-product-grid")
@@ -69,15 +61,9 @@ export class TillProductGrid extends LitElement {
   }
 
   #pick(product: TillProduct): void {
-    if (!hasSomethingToSell(product)) return;
-    const unit = productUnit(product);
-    if (unit.hardwareUnit !== null || unit.precision > 0) {
-      this.store.emit("product-selected", product);
-    } else if (needsModifierPicker(product)) {
-      this.pickerProduct = product;
-    } else {
-      this.store.addProduct(product, "1");
-    }
+    pickProduct(product, this.store, (picked) => {
+      this.pickerProduct = picked;
+    });
   }
 
   #onModifierConfirm(detail: ModifierConfirmDetail): void {
