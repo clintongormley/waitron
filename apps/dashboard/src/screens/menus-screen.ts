@@ -25,6 +25,7 @@ import {
 import "../widgets/menu-structure-tree.js";
 import "../widgets/section-add-products.js";
 import "../widgets/menu-prices-table.js";
+import "../widgets/home-layout-editor.js";
 import type { OfferSave } from "../widgets/menu-prices-table.js";
 import { publishFailure, statusWords, type PublishResult } from "../widgets/menu-preview.js";
 import { textField } from "../widgets/form-fields.js";
@@ -33,6 +34,7 @@ import type {
   CatalogueSummary,
   CategorySummary,
   DashboardApi,
+  HomeLayout,
   LibrarySection,
   MemberRef,
   MenuPreview,
@@ -49,7 +51,7 @@ import { dashboardPath } from "../navigation.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 
-const TABS = ["structure", "prices", "preview"] as const;
+const TABS = ["structure", "prices", "home", "preview"] as const;
 type Tab = (typeof TABS)[number];
 
 const isTab = (value: string | null): value is Tab => TABS.includes(value as Tab);
@@ -105,6 +107,20 @@ function reachableProducts(nodes: MenuStructureNode[]): string[] {
   };
   walk(nodes);
   return [...found];
+}
+
+/** Every library section the structure holds, at any depth. */
+function reachableSections(nodes: MenuStructureNode[]): Set<string> {
+  const found = new Set<string>();
+  const walk = (list: MenuStructureNode[]): void => {
+    for (const node of list)
+      if (node.ref.kind === "section") {
+        found.add(node.ref.sectionId);
+        walk(node.children ?? []);
+      }
+  };
+  walk(nodes);
+  return found;
 }
 
 /** The section nodes `path` follows from the menu's top level, as far as the structure still has it. */
@@ -261,7 +277,8 @@ export class MenusScreen extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
-      .prices {
+      .prices,
+      .home {
         display: grid;
         grid-template-columns: minmax(0, 1fr);
         gap: var(--wt-space-3);
@@ -390,6 +407,24 @@ export class MenusScreen extends LitElement {
   @state() private addingProducts: ListTarget | null = null;
   @state() private addProductsError: string | null = null;
 
+  /** Null until the open menu's home page layouts are read, which happens only on their tab. */
+  @state() private homeLayouts: HomeLayout[] | null = null;
+  @state() private homeLoadError = false;
+  /** Why a change on the Home page tab was refused. */
+  @state() private homeError: string | null = null;
+  /** The layout being edited; empty for the menu's default. */
+  @state() private homeLayoutId = "";
+  /** The layout form while it is open: a new layout, a copy of `layoutId`, or its new name. */
+  @state() private layoutForm: {
+    kind: "create" | "duplicate" | "rename";
+    layoutId: string | null;
+    name: string;
+  } | null = null;
+  @state() private layoutFormName = "";
+  @state() private layoutFormErrors: Record<string, string> = {};
+  @state() private deletingLayout: { id: string; name: string } | null = null;
+  @state() private deleteLayoutError: string | null = null;
+
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -435,6 +470,14 @@ export class MenusScreen extends LitElement {
     },
   );
   #previewFor: string | null = null;
+  readonly #homeQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    () => {
+      this.homeLoadError = true;
+    },
+  );
+  #homeFor: string | null = null;
   readonly #usageQueries = new DashboardQueries(
     this,
     () => this.api,
@@ -463,6 +506,10 @@ export class MenusScreen extends LitElement {
   #excluded: string[] = [];
   #memberProducts: Product[] = [];
   #addable: Product[] = [];
+  /** What a home page tile may point at: the active products and the sections the structure
+   * reaches. The server checks reach by membership alone; an inactive product is not offered. */
+  #tileProducts: { id: string; name: string }[] = [];
+  #tileSections: { id: string; internalName: string }[] = [];
   readonly #writes = new ListWriteQueue();
   /** Per list, the current batch of moves: those made since the list last had none unanswered,
    * until one is refused. `out` counts the unanswered; `answered` holds the orders answered by
@@ -510,6 +557,16 @@ export class MenusScreen extends LitElement {
       );
     }
     if (changed.has("products")) this.#addable = this.products.filter((product) => product.active);
+    if (changed.has("structure") || changed.has("products") || changed.has("sections")) {
+      const products = new Set(this.#onMenu);
+      const sections = reachableSections(this.structure?.nodes ?? []);
+      this.#tileProducts = this.products
+        .filter((product) => product.active && products.has(product.id))
+        .map(({ id, name }) => ({ id, name }));
+      this.#tileSections = this.sections
+        .filter((section) => sections.has(section.id))
+        .map(({ id, internalName }) => ({ id, internalName }));
+    }
   }
 
   /** Keeps the longest part of the path the structure still has, and derives the list it names. */
@@ -727,6 +784,28 @@ export class MenusScreen extends LitElement {
     this.previewError = false;
   }
 
+  /** The query slot holds one watch, so watching another menu's layouts stops the earlier one. */
+  async #watchHome(menuId: string): Promise<void> {
+    this.#homeFor = menuId;
+    this.homeLoadError = false;
+    try {
+      await this.#homeQueries.watch("listHomeLayouts", [menuId], (value) => {
+        this.homeLayouts = value;
+        this.homeLoadError = false;
+      });
+    } catch {
+      if (this.#homeFor === menuId) this.homeLoadError = true;
+    }
+  }
+
+  #releaseHome(): void {
+    this.#homeFor = null;
+    this.#homeQueries.release("listHomeLayouts");
+    this.homeLayouts = null;
+    this.homeLoadError = false;
+    this.homeError = null;
+  }
+
   /** Also forgets the rows, so the tab shows loading rather than old rows until the next read. */
   #releasePrices(): void {
     this.#pricesFor = null;
@@ -745,6 +824,9 @@ export class MenusScreen extends LitElement {
       void this.#watchPreview(this.menuId);
     // The window lives in the Prices panel, which the tabs hide; left open, its modal dialog would
     // block the page. A save still out reports a refusal beside the list instead (`#saveOffer`).
+    if (view !== "home") this.#releaseHome();
+    else if (this.menuId !== null && this.#homeFor !== this.menuId)
+      void this.#watchHome(this.menuId);
     if (view !== "prices") {
       this.editingOffer = null;
       this.offerRefusal = null;
@@ -778,6 +860,10 @@ export class MenusScreen extends LitElement {
     this.publishResult = null;
     this.#releasePrices();
     this.#releasePreview();
+    this.#releaseHome();
+    this.homeLayoutId = "";
+    this.layoutForm = null;
+    this.deletingLayout = null;
     // An open menu's state waits for `#showView`, which each caller opening a menu runs next and
     // which knows whether the Preview tab carries it, so no query starts only to be released.
     if (menuId === null) {
@@ -1106,6 +1192,130 @@ export class MenusScreen extends LitElement {
       this.#reportSavedToLost(target);
       this.busy = false;
     });
+  }
+
+  // ── Home page ────────────────────────────────────────────────────────────────────────────────
+
+  /** Reads the layouts again after a write, when their tab still shows the same menu. */
+  async #rereadHome(menuId: string): Promise<void> {
+    if (this.menuId === menuId && this.view === "home") await this.#watchHome(menuId);
+  }
+
+  /** Adds, removes and a new default hold `busy` until the layouts are read again. */
+  #homeWrite(write: () => Promise<unknown>): void {
+    const menuId = this.menuId!;
+    this.homeError = null;
+    this.busy = true;
+    this.#writes.run(`home:${menuId}`, async () => {
+      try {
+        await write();
+      } catch (error) {
+        if (this.menuId === menuId) this.homeError = codeMessage(codeOf(error));
+        this.busy = false;
+        return;
+      }
+      await this.#rereadHome(menuId);
+      this.busy = false;
+    });
+  }
+
+  /** Not `busy`, as for a move in the Structure tab: the keyboard user's focus stays on the row. The
+   * last queued move's answer is shown when it names exactly the tiles on screen. */
+  #moveTile(layoutId: string, memberId: string, to: number): void {
+    const menuId = this.menuId!;
+    this.homeError = null;
+    this.#writes.move(
+      layoutId,
+      () => this.api.moveHomeTile(layoutId, memberId, to),
+      async (ordered, last) => {
+        if (!last || this.menuId !== menuId || this.homeLayouts === null) return;
+        const layout = this.homeLayouts.find(({ id }) => id === layoutId);
+        const tiles = new Map(layout?.tiles.map((tile) => [tile.memberId, tile]));
+        if (ordered.length !== tiles.size || ordered.some(({ id }) => !tiles.has(id))) {
+          await this.#rereadHome(menuId);
+          return;
+        }
+        this.homeLayouts = this.homeLayouts.map((each) =>
+          each.id === layoutId
+            ? {
+                ...each,
+                tiles: ordered.map(({ id }, position) => ({ ...tiles.get(id)!, position })),
+              }
+            : each,
+        );
+      },
+      async (error) => {
+        if (this.menuId !== menuId) return;
+        this.homeError = codeMessage(codeOf(error));
+        await this.#rereadHome(menuId);
+      },
+    );
+  }
+
+  #openLayoutForm(kind: "create" | "duplicate" | "rename", layoutId: string | null): void {
+    const name = this.homeLayouts?.find(({ id }) => id === layoutId)?.name ?? "";
+    this.layoutForm = { kind, layoutId, name };
+    this.layoutFormName =
+      kind === "duplicate"
+        ? t("sections.copy_name").replace("{name}", name)
+        : kind === "rename"
+          ? name
+          : "";
+    this.layoutFormErrors = {};
+  }
+
+  /** A new layout or a copy is the one edited next. */
+  async #saveLayout(): Promise<void> {
+    const form = this.layoutForm;
+    if (form === null || this.busy) return;
+    const name = this.layoutFormName.trim();
+    if (name === "") {
+      this.layoutFormErrors = { name: t("home.name_required") };
+      return;
+    }
+    const menuId = this.menuId!;
+    this.busy = true;
+    this.layoutFormErrors = {};
+    let made: string | null = null;
+    try {
+      if (form.kind === "create") made = (await this.api.createHomeLayout(menuId, name)).id;
+      else if (form.kind === "duplicate")
+        made = (await this.api.duplicateHomeLayout(form.layoutId!, name)).id;
+      else await this.api.renameHomeLayout(form.layoutId!, name);
+    } catch (error) {
+      this.layoutFormErrors = refusal(error);
+      this.busy = false;
+      return;
+    }
+    this.busy = false;
+    this.layoutForm = null;
+    if (made !== null && this.menuId === menuId) this.homeLayoutId = made;
+    await this.#rereadHome(menuId);
+  }
+
+  #openDeleteLayout(layoutId: string): void {
+    const layout = this.homeLayouts?.find(({ id }) => id === layoutId);
+    if (layout === undefined) return;
+    this.deletingLayout = { id: layout.id, name: layout.name };
+    this.deleteLayoutError = null;
+  }
+
+  async #deleteLayout(): Promise<void> {
+    const target = this.deletingLayout;
+    if (target === null || this.busy) return;
+    const menuId = this.menuId!;
+    this.busy = true;
+    this.deleteLayoutError = null;
+    try {
+      await this.api.deleteHomeLayout(target.id);
+    } catch (error) {
+      this.deleteLayoutError = codeMessage(codeOf(error));
+      this.busy = false;
+      return;
+    }
+    this.busy = false;
+    this.deletingLayout = null;
+    await this.#rereadHome(menuId);
   }
 
   // ── Prices ───────────────────────────────────────────────────────────────────────────────────
@@ -1650,6 +1860,162 @@ export class MenusScreen extends LitElement {
     ></dashboard-menu-preview>`;
   }
 
+  #renderHome() {
+    const error = this.homeError
+      ? html`<p class="error" role="alert" data-test="home-error">${this.homeError}</p>`
+      : nothing;
+    const loadError = this.homeLoadError
+      ? html`<p class="error" role="alert" data-test="home-load-error">${t("home.error")}</p>
+          <div>
+            <wt-button
+              data-test="home-retry"
+              variant="secondary"
+              @click=${() => void this.#watchHome(this.menuId!)}
+              >${t("menus.retry")}</wt-button
+            >
+          </div>`
+      : nothing;
+    if (this.homeLayouts === null)
+      return html`${error}${loadError}${
+        this.homeLoadError
+          ? nothing
+          : html`<p role="status" data-test="home-loading">${t("home.loading")}</p>`
+      }`;
+    const layoutId = (event: CustomEvent<{ layoutId: string }>): string => {
+      event.stopPropagation();
+      return event.detail.layoutId;
+    };
+    return html`${error}${loadError}
+      <dashboard-home-layout-editor
+        .layouts=${this.homeLayouts}
+        selected=${this.homeLayoutId}
+        .products=${this.#tileProducts}
+        .sections=${this.#tileSections}
+        .busy=${this.busy}
+        menuName=${this.#menuName()}
+        @wt-layout-select=${(event: CustomEvent<{ layoutId: string }>) => {
+          this.homeLayoutId = layoutId(event);
+          this.homeError = null;
+        }}
+        @wt-layout-add=${(event: Event) => {
+          event.stopPropagation();
+          this.#openLayoutForm("create", null);
+        }}
+        @wt-layout-rename=${(event: CustomEvent<{ layoutId: string }>) =>
+          this.#openLayoutForm("rename", layoutId(event))}
+        @wt-layout-duplicate=${(event: CustomEvent<{ layoutId: string }>) =>
+          this.#openLayoutForm("duplicate", layoutId(event))}
+        @wt-layout-delete=${(event: CustomEvent<{ layoutId: string }>) =>
+          this.#openDeleteLayout(layoutId(event))}
+        @wt-layout-default=${(event: CustomEvent<{ layoutId: string }>) => {
+          const id = layoutId(event);
+          const menuId = this.menuId!;
+          this.#homeWrite(() => this.api.setDefaultHomeLayout(menuId, id));
+        }}
+        @wt-tile-add=${(event: CustomEvent<{ layoutId: string; ref: MemberRef }>) => {
+          event.stopPropagation();
+          const { layoutId: id, ref } = event.detail;
+          this.#homeWrite(() => this.api.addHomeTile(id, ref));
+        }}
+        @wt-tile-remove=${(event: CustomEvent<{ layoutId: string; memberId: string }>) => {
+          event.stopPropagation();
+          const { layoutId: id, memberId } = event.detail;
+          this.#homeWrite(() => this.api.removeHomeTile(id, memberId));
+        }}
+        @wt-tile-move=${(
+          event: CustomEvent<{ layoutId: string; memberId: string; to: number }>,
+        ) => {
+          event.stopPropagation();
+          this.#moveTile(event.detail.layoutId, event.detail.memberId, event.detail.to);
+        }}
+      ></dashboard-home-layout-editor>`;
+  }
+
+  #renderLayoutForm() {
+    const form = this.layoutForm;
+    const errors = this.layoutFormErrors;
+    const heading =
+      form === null
+        ? ""
+        : form.kind === "create"
+          ? t("home.create_heading")
+          : t(form.kind === "duplicate" ? "home.duplicate_heading" : "home.rename_heading").replace(
+              "{name}",
+              form.name,
+            );
+    return this.#formModal({
+      test: "layout-form",
+      open: form !== null,
+      heading,
+      body: html`<div class="fields">
+        ${this.#summary(errors)}
+        ${this.#nameInput({
+          name: "name",
+          label: t("home.name"),
+          value: this.layoutFormName,
+          errors,
+          save: "layout-save",
+          change: (value) => {
+            this.layoutFormName = value;
+            this.layoutFormErrors = {};
+          },
+        })}
+        ${
+          form?.kind === "duplicate"
+            ? html`<p class="help">${t("home.duplicate_note")}</p>`
+            : nothing
+        }
+      </div>`,
+      save: "layout-save",
+      saveLabel: form?.kind === "duplicate" ? t("home.duplicate_save") : t("action.save"),
+      close: () => {
+        this.layoutForm = null;
+      },
+      submit: () => void this.#saveLayout(),
+    });
+  }
+
+  #renderDeleteLayout() {
+    const target = this.deletingLayout;
+    return html`<wt-modal
+      data-test="layout-delete"
+      .open=${target !== null}
+      heading=${t("home.delete_heading").replace("{name}", target?.name ?? "")}
+      @keydown=${this.#guardEscape}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        if (!this.busy) this.deletingLayout = null;
+      }}
+    >
+      ${target !== null ? html`<p>${t("home.delete_note")}</p>` : nothing}
+      ${
+        this.deleteLayoutError
+          ? html`<p class="error" role="alert" data-test="layout-delete-error">
+              ${this.deleteLayoutError}
+            </p>`
+          : nothing
+      }
+      <wt-form-actions slot="footer"
+        ><wt-button
+          slot="cancel"
+          variant="secondary"
+          data-test="layout-delete-cancel"
+          .disabled=${this.busy}
+          @click=${() => {
+            if (!this.busy) this.deletingLayout = null;
+          }}
+          >${t("action.cancel")}</wt-button
+        ><wt-button
+          variant="danger"
+          data-test="layout-delete-confirm"
+          .disabled=${this.busy}
+          @click=${() => void this.#deleteLayout()}
+          >${t("action.delete")}</wt-button
+        ></wt-form-actions
+      >
+    </wt-modal>`;
+  }
+
   #renderStatusLine() {
     const words = this.statusError
       ? t("menus.status_error")
@@ -1787,6 +2153,7 @@ export class MenusScreen extends LitElement {
         .items=${[
           { key: "structure", label: t("menus.tab_structure") },
           { key: "prices", label: t("menus.tab_prices") },
+          { key: "home", label: t("menus.tab_home") },
           { key: "preview", label: t("menus.tab_preview") },
         ]}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
@@ -1797,9 +2164,11 @@ export class MenusScreen extends LitElement {
       >
         <div slot="structure">${this.#renderStructure()}</div>
         <div slot="prices" class="prices">${this.#renderPrices()}</div>
+        <div slot="home" class="home">${this.#renderHome()}</div>
         <div slot="preview">${this.#renderPreview()}</div>
       </wt-tabs>
-      ${this.#renderDuplicate()} ${this.#renderNewSection()} ${this.#renderAddProducts()}`;
+      ${this.#renderDuplicate()} ${this.#renderNewSection()} ${this.#renderAddProducts()}
+      ${this.#renderLayoutForm()} ${this.#renderDeleteLayout()}`;
   }
 
   override render() {

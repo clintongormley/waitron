@@ -138,6 +138,37 @@ function api(state: State): DashboardApi {
         { "p-lager": "Lager" },
       ),
     } satisfies MenuPreview),
+    listHomeLayouts: vi.fn().mockResolvedValue([
+      {
+        id: "l-home",
+        name: "Home",
+        isDefault: true,
+        tiles: [
+          {
+            memberId: "t-lager",
+            position: 0,
+            ref: { kind: "product", productId: "p-lager" },
+            name: "Lager",
+            reachable: true,
+          },
+          {
+            memberId: "t-drinks",
+            position: 1,
+            ref: { kind: "section", sectionId: "s-drinks" },
+            name: "Drinks",
+            reachable: true,
+          },
+          {
+            memberId: "t-soup",
+            position: 2,
+            ref: { kind: "product", productId: "p-soup" },
+            name: "Soup",
+            reachable: false,
+          },
+        ],
+      },
+      { id: "l-counter", name: "Counter", isDefault: false, tiles: [] },
+    ]),
     getMenuPrices: vi.fn().mockResolvedValue([
       {
         menuItemId: "mi-lager",
@@ -294,6 +325,51 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
         table.shadowRoot!.querySelector('[data-test="status-menu-dinner"]')?.textContent?.trim(),
       ).toBe(t("menu_status.unpublished")),
     );
+    await expectNoA11yViolations(host);
+  });
+
+  async function mountHome(width: number) {
+    const frame = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(width, 900);
+    onTestFinished(() => page.viewport(frame.width, frame.height));
+    const mounted = await mount("populated", theme, "/manage/menus/menu/menu-lunch/view/home");
+    await vi.waitFor(() => {
+      if (!mounted.el.shadowRoot!.querySelector("dashboard-home-layout-editor"))
+        throw new Error("layouts");
+    });
+    return mounted;
+  }
+
+  it.each([390, 1280])(
+    "accessible Home page tab with a tile off the menu and both previews, %ipx wide",
+    async (width) => {
+      const { el, host } = await mountHome(width);
+      const editor = q(el, "dashboard-home-layout-editor");
+      expect(
+        editor.shadowRoot!.querySelector('[data-test="preview-till"] [data-tile="t-soup"]'),
+      ).not.toBeNull();
+      await expectNoA11yViolations(host);
+    },
+  );
+
+  it("accessible new layout form refusing a blank name", async () => {
+    const { el, host } = await mountHome(1280);
+    const editor = q(el, "dashboard-home-layout-editor");
+    editor.shadowRoot!.querySelector<HTMLElement>('[data-test="add-layout"]')!.click();
+    await el.updateComplete;
+    q(el, 'wt-modal[data-test="layout-form"] [data-test="layout-save"]').click();
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it("accessible layout delete window", async () => {
+    const { el, host } = await mountHome(1280);
+    const editor = q(el, "dashboard-home-layout-editor");
+    editor.shadowRoot!.querySelector<HTMLElement>('[data-test="delete-l-counter"]')!.click();
+    await el.updateComplete;
+    expect(
+      (q(el, 'wt-modal[data-test="layout-delete"]') as HTMLElement & { open: boolean }).open,
+    ).toBe(true);
     await expectNoA11yViolations(host);
   });
 

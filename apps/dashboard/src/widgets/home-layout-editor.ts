@@ -117,9 +117,15 @@ export class HomeLayoutEditor extends LitElement {
         grid-template-columns: repeat(3, minmax(0, 1fr));
         max-width: calc(var(--wt-tap-min) * 9);
       }
+      /* Six tiles squeezed into a phone's width break every word, so the till's preview keeps
+         a till-like width and scrolls sideways instead. */
       .till {
         grid-template-columns: repeat(6, minmax(0, 1fr));
+        min-width: calc(var(--wt-tap-min) * 13);
         max-width: calc(var(--wt-tap-min) * 18);
+      }
+      .scroller {
+        overflow-x: auto;
       }
       .tile {
         display: flex;
@@ -303,17 +309,20 @@ export class HomeLayoutEditor extends LitElement {
       <figcaption id=${`preview-${which}-caption`} data-test=${`preview-${which}-caption`}>
         ${t(which === "handheld" ? "home.preview_handheld" : "home.preview_till")}
       </figcaption>
-      <ol
-        class=${`grid ${which}`}
-        data-test=${`preview-${which}`}
+      <div
+        class="scroller"
+        tabindex="0"
+        role="region"
         aria-labelledby=${`preview-${which}-caption`}
       >
-        ${repeat(
-          this.order,
-          (tile) => tile.memberId,
-          (tile) => this.#tile(tile),
-        )}
-      </ol>
+        <ol class=${`grid ${which}`} data-test=${`preview-${which}`}>
+          ${repeat(
+            this.order,
+            (tile) => tile.memberId,
+            (tile) => this.#tile(tile),
+          )}
+        </ol>
+      </div>
     </figure>`;
   }
 
