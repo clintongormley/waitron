@@ -4,6 +4,7 @@ import { fromMajorUnits, toMinorUnits } from "./client.js";
 import type {
   CreateCheckoutOutcome,
   SumUpClient,
+  SumUpRefundEvent,
   SumUpTransaction,
   TransactionQuery,
 } from "./client.js";
@@ -37,6 +38,40 @@ export interface SumUpClientOptions {
   timeoutMs?: number;
 }
 
+/** An event as SumUp lists it: `transaction_events[]` names its kind `event_type`, `events[]`
+ * names it `type`, and both carry the same numeric `id` (B14 ledger, Step 0 B.2). */
+interface RawEvent {
+  event_type?: string;
+  type?: string;
+  status?: string;
+  id?: number | string;
+  amount?: number;
+  timestamp?: string;
+}
+
+/** SumUp's refund history of a transaction: "inspect `events` or `transaction_events` when you
+ * need refund, payout, or chargeback history" (https://developer.sumup.com/api/transactions). */
+function refundEventsOf(t: { transaction_events?: RawEvent[]; events?: RawEvent[] }): {
+  refundEvents?: SumUpRefundEvent[];
+} {
+  const raw = t.transaction_events ?? t.events;
+  if (raw === undefined) return {};
+  return {
+    refundEvents: raw
+      .filter((e) => (e.event_type ?? e.type) === "REFUND")
+      .filter(
+        (e) =>
+          e.id !== undefined && typeof e.amount === "number" && typeof e.timestamp === "string",
+      )
+      .map((e) => ({
+        id: String(e.id),
+        status: e.status ?? "",
+        amount: fromMajorUnits(e.amount!),
+        timestamp: e.timestamp!,
+      })),
+  };
+}
+
 /**
  * `SumUpClient` over SumUp's REST API (paths and shapes from SumUp's OpenAPI file —
  * docs/research/2026-09-10-sumup-solo-experiments.md, Provenance). Every request is
@@ -53,6 +88,7 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
     method: "GET" | "POST" | "DELETE",
     path: string,
     body?: unknown,
+    { answerServerErrors = false }: { answerServerErrors?: boolean } = {},
   ): Promise<{ status: number; json: unknown }> => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -70,7 +106,10 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
         signal: controller.signal,
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
-      if (res.status >= 500) throw new Error(`sumup ${method} ${path}: HTTP ${res.status}`);
+      if (res.status >= 500) {
+        if (answerServerErrors) return { status: res.status, json: null };
+        throw new Error(`sumup ${method} ${path}: HTTP ${res.status}`);
+      }
       const text = await res.text();
       return { status: res.status, json: text === "" ? null : (JSON.parse(text) as unknown) };
     } finally {
@@ -130,6 +169,8 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
         card?: { last_4_digits?: string; type?: string };
         entry_mode?: string;
         auth_code?: string | null;
+        transaction_events?: RawEvent[];
+        events?: RawEvent[];
       };
       // Card facts are best-effort receipt decoration: emit the `card` block only when it is
       // well-formed enough to PERSIST — `last_4_digits` exactly four digits (matching the
@@ -148,6 +189,7 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
         ...(card === undefined ? {} : { card }),
         ...(t.entry_mode === undefined ? {} : { entryMode: t.entry_mode }),
         ...(t.auth_code === undefined ? {} : { authCode: t.auth_code }),
+        ...refundEventsOf(t),
       };
     },
     async refund(p: { transactionId: string; amount?: Decimal }) {
@@ -161,6 +203,16 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
         p.amount === undefined ? {} : { amount: toMinorUnits(p.amount) },
       );
       return { status: r.status >= 400 ? "refused" : "accepted" } as const;
+    },
+    async sendRefund(p: { transactionId: string; amount: Decimal }) {
+      const r = await call(
+        "POST",
+        `/v1.0/merchants/${mc}/payments/${encodeURIComponent(p.transactionId)}/refunds`,
+        // In minor units, as `refund` above sends it.
+        { amount: toMinorUnits(p.amount) },
+        { answerServerErrors: true },
+      );
+      return { httpStatus: r.status };
     },
     async listReaders() {
       const r = await call("GET", `/v0.1/merchants/${mc}/readers`);

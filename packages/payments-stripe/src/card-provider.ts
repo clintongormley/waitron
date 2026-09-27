@@ -31,6 +31,8 @@ const CLIENT_METHODS = [
   "retrievePaymentIntent",
   "cancelPaymentIntent",
   "refund",
+  "createRefund",
+  "listRefunds",
 ] as const;
 
 // `deferredStripeClient` casts its wrapper to `StripeClient`, so a method missing from the list

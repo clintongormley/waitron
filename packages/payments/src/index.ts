@@ -13,6 +13,11 @@ export type {
   PaymentResultState,
   PaymentState,
   ProviderCapabilities,
+  RefundAnswer,
+  RefundLookup,
+  RefundLookupQuery,
+  RefundOutcome,
+  RefundSend,
 } from "./provider.js";
 // The test doubles under ./testing/ are NOT re-exported, so importing the package root cannot
 // reach one.

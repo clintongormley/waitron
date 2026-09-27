@@ -286,3 +286,79 @@ describe("FakeSumUp", () => {
     expect(fake.lastRefund).toEqual({ transactionId: "txn_y", amount: decimal("2.00") });
   });
 });
+
+describe("FakeSumUp.sendRefund and refund events", () => {
+  async function captured(fake: FakeSumUp): Promise<string> {
+    const created = await fake.createCheckout({
+      readerId: "rdr",
+      amount: decimal("10.00"),
+      currency: "EUR",
+      description: "d",
+      foreignTransactionId: "ours",
+    });
+    if (!created.accepted) throw new Error("not accepted");
+    return (await fake.findTransaction({ clientTransactionId: created.clientTransactionId }))!.id;
+  }
+
+  it("answers 201 and adds a REFUNDED event for the amount, stamped by the fake's clock", async () => {
+    const fake = new FakeSumUp();
+    fake.eventClock = () => new Date("2026-09-27T10:00:05.000Z");
+    const id = await captured(fake);
+
+    const answer = await fake.sendRefund({ transactionId: id, amount: decimal("4.00") });
+
+    expect(answer).toEqual({ httpStatus: 201 });
+    expect(fake.sendRefundCalls).toEqual([{ transactionId: id, amount: decimal("4.00") }]);
+    expect((await fake.findTransaction({ id }))?.refundEvents).toEqual([
+      {
+        id: expect.stringMatching(/^\d+$/) as unknown as string,
+        status: "REFUNDED",
+        amount: decimal("4.00"),
+        timestamp: "2026-09-27T10:00:05.000Z",
+      },
+    ]);
+  });
+
+  it("scriptNextSendRefund answers a status making nothing, or makes an event and answers or throws", async () => {
+    const fake = new FakeSumUp();
+    const id = await captured(fake);
+    fake.scriptNextSendRefund({ httpStatus: 409 });
+    fake.scriptNextSendRefund({ made: "PENDING", httpStatus: 500 });
+    fake.scriptNextSendRefund({ made: "REFUNDED", throws: true });
+
+    const refused = await fake.sendRefund({ transactionId: id, amount: decimal("1.00") });
+    const serverError = await fake.sendRefund({ transactionId: id, amount: decimal("2.00") });
+    await expect(fake.sendRefund({ transactionId: id, amount: decimal("3.00") })).rejects.toThrow();
+
+    expect(refused).toEqual({ httpStatus: 409 });
+    expect(serverError).toEqual({ httpStatus: 500 });
+    expect(
+      (await fake.findTransaction({ id }))?.refundEvents?.map((e) => [e.status, e.amount]),
+    ).toEqual([
+      ["PENDING", decimal("2.00")],
+      ["REFUNDED", decimal("3.00")],
+    ]);
+  });
+
+  it("addRefundEvent places an event the fake never refunded; a transaction with none lists none", async () => {
+    const fake = new FakeSumUp();
+    const id = await captured(fake);
+    expect((await fake.findTransaction({ id }))?.refundEvents).toBeUndefined();
+
+    fake.addRefundEvent(id, {
+      id: "77",
+      status: "FAILED",
+      amount: decimal("5.00"),
+      timestamp: "2026-09-27T09:00:00.000Z",
+    });
+
+    expect((await fake.findTransaction({ id }))?.refundEvents).toEqual([
+      {
+        id: "77",
+        status: "FAILED",
+        amount: decimal("5.00"),
+        timestamp: "2026-09-27T09:00:00.000Z",
+      },
+    ]);
+  });
+});

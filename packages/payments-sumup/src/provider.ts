@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { AppError, tillId as brandTillId } from "@waitron/shared";
+import { AppError, compareDecimal, tillId as brandTillId } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -11,6 +11,11 @@ import type {
   PaymentProvider,
   PaymentResult,
   ProviderCapabilities,
+  RefundAnswer,
+  RefundLookup,
+  RefundLookupQuery,
+  RefundOutcome,
+  RefundSend,
 } from "@waitron/payments";
 import {
   captureAttempting,
@@ -39,6 +44,37 @@ export const RESOLVE_RETRY_MS = 60_000;
  * lost may have been accepted; SumUp's own 60 s reader window plus a generous tap allowance is far
  * inside 15 min. After it, SumUp having nothing means no money moved: `failed`, no incident. */
 export const NOT_FOUND_GRACE_MS = 15 * 60_000;
+
+/**
+ * Refusals of `POST /v1.0/merchants/{merchant_code}/payments/{transaction_id}/refunds` that SumUp's
+ * OpenAPI file (`RefundTransaction`, read 2026-09-27) documents as the refund not happening: "'400':
+ * The refund request is invalid.", "'403': The request is authenticated but not permitted for this
+ * operation.", "'404': The requested transaction does not exist or does not belong to the
+ * merchant.", "'409': The transaction cannot be refunded due to business constraints." and "'422':
+ * The refund could not be processed by the payment processor." None says "not created" in those
+ * words. No 401, 429 or 5xx is documented for this operation, so those settle nothing.
+ */
+const DOCUMENTED_REFUND_REFUSALS = new Set([400, 403, 404, 409, 422]);
+
+/**
+ * How far before `sentAt` a REFUND event may be stamped and still be the refund sent then. The
+ * event carries SumUp's clock and `sentAt` the box's, stamped before the call, so with both clocks
+ * right an event always follows it; a box whose clock runs ahead of SumUp's would put the event
+ * before it. Two minutes is reasoned, not measured: a box keeping network time is within seconds,
+ * and a window this short keeps an earlier refund of the same amount made outside Waitron from
+ * reading as this one. `excludeRefs` keeps out the refunds already recorded against the payment.
+ */
+const CLOCK_ALLOWANCE_MS = 2 * 60_000;
+
+/** SumUp's event statuses: "`REFUNDED`: A refund event has been accepted and recorded in the refund
+ * flow", "`SUCCESSFUL`: The event completed successfully", "`FAILED`: The event could not be
+ * completed" and "`PENDING`: … whose final outcome is not known yet"
+ * (https://developer.sumup.com/api/transactions). A status it adds later is `pending`. */
+function refundOutcomeOf(status: string): RefundOutcome {
+  if (status === "REFUNDED" || status === "SUCCESSFUL") return "completed";
+  if (status === "FAILED") return "failed";
+  return "pending";
+}
 
 export interface SumUpCloudProviderOptions {
   client: SumUpClient;
@@ -110,6 +146,8 @@ type PollOutcome =
 export class SumUpCloudProvider implements PaymentProvider {
   readonly provider = SUMUP_PROVIDER;
   readonly capabilities: ProviderCapabilities = { partialRefund: true };
+  /** SumUp's refund takes no idempotency key, so a resend could refund twice. */
+  readonly refundResendWindowMs = null;
   private readonly poll: Required<NonNullable<SumUpCloudProviderOptions["poll"]>>;
   private readonly now: () => Date;
 
@@ -358,6 +396,51 @@ export class SumUpCloudProvider implements PaymentProvider {
       forwarded,
       declined,
       incidentsRaised,
+    };
+  }
+
+  /** SumUp answers an accepted refund `201` with the body `{}` (the OpenAPI example, and what the
+   * 2026-09-11 experiment recorded), so it names no refund and only `lookupRefund` can find it. */
+  async sendRefund(req: RefundSend): Promise<RefundAnswer> {
+    let httpStatus: number;
+    try {
+      ({ httpStatus } = await this.opts.client.sendRefund({
+        transactionId: req.processorRef,
+        amount: req.amount,
+      }));
+    } catch (error) {
+      const timedOut = (error as { name?: unknown } | null)?.name === "AbortError";
+      return { kind: "uncertain", reason: timedOut ? "timeout" : "network" };
+    }
+    if (httpStatus >= 200 && httpStatus < 300) return { kind: "accepted" };
+    if (httpStatus >= 500) return { kind: "uncertain", reason: "server_error", httpStatus };
+    return { kind: "refused", httpStatus, documented: DOCUMENTED_REFUND_REFUSALS.has(httpStatus) };
+  }
+
+  /** A `REFUND` event of the transaction for the same amount, stamped after `sentAt` less
+   * {@link CLOCK_ALLOWANCE_MS}, and not one of `excludeRefs`. */
+  async lookupRefund(query: RefundLookupQuery): Promise<RefundLookup> {
+    let t: SumUpTransaction | null;
+    try {
+      t = await this.opts.client.findTransaction({ id: query.processorRef });
+    } catch {
+      return { kind: "unreachable" };
+    }
+    const from = query.sentAt.getTime() - CLOCK_ALLOWANCE_MS;
+    const candidates = (t?.refundEvents ?? []).filter(
+      (event) =>
+        Date.parse(event.timestamp) >= from &&
+        compareDecimal(event.amount, query.amount) === 0 &&
+        !query.excludeRefs.includes(event.id),
+    );
+    if (candidates.length === 0) return { kind: "none" };
+    if (candidates.length > 1) return { kind: "ambiguous", candidates: candidates.length };
+    const [event] = candidates;
+    return {
+      kind: "match",
+      providerRefundRef: event!.id,
+      outcome: refundOutcomeOf(event!.status),
+      providerStatus: event!.status,
     };
   }
 

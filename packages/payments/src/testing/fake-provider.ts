@@ -13,6 +13,11 @@ import type {
   PaymentProvider,
   PaymentResult,
   ProviderCapabilities,
+  RefundAnswer,
+  RefundLookup,
+  RefundLookupQuery,
+  RefundOutcome,
+  RefundSend,
 } from "../provider.js";
 import type { PaymentRow } from "../store.js";
 import { recordAttemptResolution } from "../resolutions.js";
@@ -35,6 +40,32 @@ import { getPaymentPolicy, resolveOfflineDecision } from "../policy.js";
 
 let counter = 0;
 const nextRef = (): string => `fake-${String(++counter).padStart(8, "0")}`;
+let refundCounter = 0;
+const nextRefundRef = (): string => `fake-re-${String(++refundCounter).padStart(8, "0")}`;
+
+/** A refund the fake processor holds. */
+interface MadeRefund {
+  ref: string;
+  idempotencyKey: string;
+  refundId: string;
+  outcome: RefundOutcome;
+  status: string;
+}
+
+const STATUS_OF: Record<RefundOutcome, string> = {
+  completed: "succeeded",
+  failed: "failed",
+  pending: "pending",
+};
+
+/** What the next `sendRefund` does: whether the processor makes a refund, in which state, and what
+ * it answers — the made refund's own record (`"made"`), a throw after making it (`"throw"`), or a
+ * given answer. */
+export interface RefundScript {
+  made: RefundOutcome | false;
+  status?: string;
+  answer: RefundAnswer | "made" | "throw";
+}
 
 /**
  * A DB-backed test double, not a stub: it persists to the real `payments`/`payment_refunds` tables,
@@ -55,6 +86,15 @@ export class FakePaymentProvider implements PaymentProvider {
   private abandonedAnswer: AbandonedAttemptOutcome = { outcome: "unknown", reason: "unreachable" };
   /** Every `resolveAbandonedAttempt` call, in order. */
   readonly abandonedAttemptCalls: { paymentRef: string; now: Date }[] = [];
+  /** Every `sendRefund` call, in order, recorded as it starts. */
+  readonly refundCalls: RefundSend[] = [];
+  /** Every `lookupRefund` call, in order. */
+  readonly lookupCalls: RefundLookupQuery[] = [];
+  refundResendWindowMs: number | null = 24 * 60 * 60 * 1000;
+  private readonly madeRefunds: MadeRefund[] = [];
+  private refundScripts: RefundScript[] = [];
+  private lookupScript: RefundLookup | null = null;
+  private holdRefund: Promise<void> | null = null;
 
   constructor(private readonly db: Database) {}
 
@@ -100,6 +140,85 @@ export class FakePaymentProvider implements PaymentProvider {
    * scripted again. Unscripted, it answers `unknown`/`unreachable` and touches nothing. */
   scriptAbandonedAttempt(answer: AbandonedAttemptOutcome): void {
     this.abandonedAnswer = answer;
+  }
+
+  /** Test affordance: what the next `sendRefund` does. Queued, one per call; unscripted, a send makes
+   * a completed refund and answers its record, and a resend with a key already used answers the
+   * refund that key made. */
+  scriptNextRefund(script: RefundScript): void {
+    this.refundScripts.push(script);
+  }
+
+  /** Test affordance: every `lookupRefund` answers this until called again with null. */
+  scriptLookups(answer: RefundLookup | null): void {
+    this.lookupScript = answer;
+  }
+
+  /** Test affordance: the next `sendRefund` records its call and then waits, doing nothing, until the
+   * returned function is called. One-shot. */
+  holdNextRefund(): () => void {
+    let release!: () => void;
+    this.holdRefund = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return release;
+  }
+
+  async sendRefund(req: RefundSend): Promise<RefundAnswer> {
+    this.refundCalls.push(req);
+    const hold = this.holdRefund;
+    this.holdRefund = null;
+    if (hold !== null) await hold;
+    const script = this.refundScripts.shift();
+    if (script === undefined) {
+      const earlier = this.madeRefunds.find((r) => r.idempotencyKey === req.idempotencyKey);
+      return this.answerOf(earlier ?? this.make(req, "completed"));
+    }
+    const made = script.made === false ? undefined : this.make(req, script.made, script.status);
+    if (script.answer === "throw") {
+      throw new Error("fake provider: the process stopped after the processor refunded");
+    }
+    if (script.answer === "made") {
+      if (made === undefined) throw new Error("fake provider: answer 'made' needs a made refund");
+      return this.answerOf(made);
+    }
+    return script.answer;
+  }
+
+  lookupRefund(query: RefundLookupQuery): Promise<RefundLookup> {
+    this.lookupCalls.push(query);
+    if (this.lookupScript !== null) return Promise.resolve(this.lookupScript);
+    const found = this.madeRefunds.filter((r) => r.refundId === query.refundId);
+    if (found.length === 0) return Promise.resolve({ kind: "none" });
+    if (found.length > 1) return Promise.resolve({ kind: "ambiguous", candidates: found.length });
+    const [refund] = found;
+    return Promise.resolve({
+      kind: "match",
+      providerRefundRef: refund!.ref,
+      outcome: refund!.outcome,
+      providerStatus: refund!.status,
+    });
+  }
+
+  private make(req: RefundSend, outcome: RefundOutcome, status?: string): MadeRefund {
+    const made: MadeRefund = {
+      ref: nextRefundRef(),
+      idempotencyKey: req.idempotencyKey,
+      refundId: req.refundId,
+      outcome,
+      status: status ?? STATUS_OF[outcome],
+    };
+    this.madeRefunds.push(made);
+    return made;
+  }
+
+  private answerOf(made: MadeRefund): RefundAnswer {
+    return {
+      kind: "outcome",
+      outcome: made.outcome,
+      providerRefundRef: made.ref,
+      providerStatus: made.status,
+    };
   }
 
   async collect(params: CollectParams): Promise<PaymentResult> {

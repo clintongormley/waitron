@@ -1,6 +1,17 @@
 import type Stripe from "stripe";
-import type { StripeClient } from "./client.js";
+import type { StripeClient, StripeRefund } from "./client.js";
 import { toMinorUnits } from "./client.js";
+
+function refundOf(refund: Stripe.Refund): StripeRefund {
+  return { id: refund.id, status: refund.status ?? "unknown", metadata: refund.metadata ?? {} };
+}
+
+/** The SDK's errors carry the HTTP status of Stripe's answer as `statusCode`; a connection error
+ * or a timeout carries none. */
+function httpStatusOf(error: unknown): number | null {
+  const status = (error as { statusCode?: unknown } | null)?.statusCode;
+  return typeof status === "number" ? status : null;
+}
 
 export function stripeClient(stripe: Stripe): StripeClient {
   return {
@@ -53,6 +64,31 @@ export function stripeClient(stripe: Stripe): StripeClient {
       const status =
         refund.status === "succeeded" || refund.status === "pending" ? refund.status : "failed";
       return { id: refund.id, status };
+    },
+    async createRefund({ paymentIntentId, amount, idempotencyKey, metadata }) {
+      try {
+        const refund = await stripe.refunds.create(
+          { payment_intent: paymentIntentId, amount: toMinorUnits(amount), metadata },
+          { idempotencyKey },
+        );
+        return { ok: true, refund: refundOf(refund) };
+      } catch (error) {
+        return { ok: false, httpStatus: httpStatusOf(error) };
+      }
+    },
+    async listRefunds(paymentIntentId) {
+      const refunds: StripeRefund[] = [];
+      let startingAfter: string | undefined;
+      for (;;) {
+        const page = await stripe.refunds.list({
+          payment_intent: paymentIntentId,
+          limit: 100,
+          ...(startingAfter === undefined ? {} : { starting_after: startingAfter }),
+        });
+        refunds.push(...page.data.map(refundOf));
+        if (!page.has_more || page.data.length === 0) return refunds;
+        startingAfter = page.data.at(-1)!.id;
+      }
     },
   };
 }

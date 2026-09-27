@@ -1,6 +1,17 @@
 import { decimal, toScale } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 
+/** A refund as Stripe reports it; `status` is Stripe's own word, `unknown` when it gave none. */
+export interface StripeRefund {
+  id: string;
+  status: string;
+  metadata: Record<string, string>;
+}
+
+/** `httpStatus` is null when the call failed with no HTTP answer at all. */
+export type StripeRefundCreate =
+  { ok: true; refund: StripeRefund } | { ok: false; httpStatus: number | null };
+
 export interface StripeClient {
   createPaymentIntent(params: {
     amount: Decimal;
@@ -22,6 +33,15 @@ export interface StripeClient {
     amount?: Decimal;
     idempotencyKey: string;
   }): Promise<{ id: string; status: "succeeded" | "pending" | "failed" }>;
+  /** A refund whose answer is returned as data, Stripe's refusals included; never thrown. */
+  createRefund(params: {
+    paymentIntentId: string;
+    amount: Decimal;
+    idempotencyKey: string;
+    metadata: Record<string, string>;
+  }): Promise<StripeRefundCreate>;
+  /** Every refund of the payment intent, all pages; rejects when Stripe cannot be read. */
+  listRefunds(paymentIntentId: string): Promise<StripeRefund[]>;
 }
 
 /** `Number` parses a pure integer string, never a float, so the conversion is exact for any amount

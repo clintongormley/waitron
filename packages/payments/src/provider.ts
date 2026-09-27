@@ -114,6 +114,66 @@ export interface AbandonedAttemptAudit {
   personId: string;
 }
 
+/** One refund request for part or all of a captured payment, as the caller has already recorded it. */
+export interface RefundSend {
+  /** The payment's `external_ref`: what the processor's refund addresses. */
+  processorRef: string;
+  /** The exact amount to give back, never the whole capture unless that is what was asked. */
+  amount: Decimal;
+  /** Derived from the caller's own refund record, so a resend of the same record carries it again.
+   * Ignored by a processor whose refund takes no key. */
+  idempotencyKey: string;
+  /** The caller's refund record id. A processor whose refund takes metadata carries it there, so
+   * `lookupRefund` can find that refund again by it. */
+  refundId: string;
+}
+
+/** What a refund's evidence says of it: made, not made, or not yet known. */
+export type RefundOutcome = "completed" | "failed" | "pending";
+
+/**
+ * The processor's own answer to one refund request, as data; never thrown.
+ * - `outcome`: the processor returned its refund record, whose status it maps to an outcome.
+ * - `accepted`: the processor took the request and returned no record to read (SumUp's
+ *   `201 {}`), so only a lookup can say what became of it.
+ * - `refused`: an HTTP refusal. `documented` is true only for a status the processor's own
+ *   documentation says means the refund was not made; it settles nothing about an earlier request.
+ * - `uncertain`: no answer that says anything — a timeout, a network failure, a server error.
+ */
+export type RefundAnswer =
+  | {
+      kind: "outcome";
+      outcome: RefundOutcome;
+      providerRefundRef: string;
+      providerStatus: string;
+    }
+  | { kind: "accepted" }
+  | { kind: "refused"; httpStatus: number; documented: boolean }
+  | {
+      kind: "uncertain";
+      reason: "timeout" | "network" | "server_error";
+      httpStatus?: number;
+    };
+
+export interface RefundLookupQuery {
+  processorRef: string;
+  /** The `RefundSend.refundId` the refund was asked for with. */
+  refundId: string;
+  amount: Decimal;
+  /** When the caller first sent the request, by its own clock. */
+  sentAt: Date;
+  /** Processor refund ids the caller has already recorded against other refunds of this payment. */
+  excludeRefs: readonly string[];
+}
+
+/** `ambiguous`: more than one processor refund could be this one. `unreachable`: the processor
+ * could not be asked. */
+export type RefundLookup =
+  | { kind: "match"; providerRefundRef: string; outcome: RefundOutcome; providerStatus: string }
+  | { kind: "none" }
+  | { kind: "ambiguous"; candidates: number }
+  | { kind: "unreachable" };
+
 /**
  * No method takes a transaction handle: every method makes a network call, and a database
  * transaction is never held across one. Each does its own short-transaction bookkeeping and returns
@@ -165,6 +225,19 @@ export interface PaymentProvider {
   /** Return part of the captured amount. Throws `payment.refund_exceeds_capture` if the running
    * total of refunds would exceed what was captured. */
   partialRefund(ref: string, amount: Decimal): Promise<PaymentResult>;
+
+  /** Ask the processor to refund, recording NOTHING: the caller has written its own record of the
+   * attempt before the call and records the outcome after it. Absent on an adapter that offers no
+   * such refund. */
+  sendRefund?(req: RefundSend): Promise<RefundAnswer>;
+
+  /** Find a refund `sendRefund` asked for, reading the processor only. */
+  lookupRefund?(query: RefundLookupQuery): Promise<RefundLookup>;
+
+  /** How long after the first send a resend with the same key is still answered with the first
+   * request's result rather than refunding again; null when a resend is never safe. Read only where
+   * `sendRefund` exists. */
+  readonly refundResendWindowMs?: number | null;
 }
 
 /**

@@ -549,3 +549,134 @@ describe("FakePaymentProvider.resolveAbandonedAttempt", () => {
     expect((error as AppError).code).toBe("payment.not_found");
   });
 });
+
+describe("FakePaymentProvider.sendRefund and lookupRefund", () => {
+  const send = (refundId: string, key = `bpr_${refundId}`, amount = "4.00") => ({
+    processorRef: "fake-ext-1",
+    amount: decimal(amount),
+    idempotencyKey: key,
+    refundId,
+  });
+  const query = (refundId: string, amount = "4.00") => ({
+    processorRef: "fake-ext-1",
+    refundId,
+    amount: decimal(amount),
+    sentAt: new Date("2026-09-27T10:00:00Z"),
+    excludeRefs: [],
+  });
+
+  it("refunds by default, answering the refund's own outcome, and records the call", async () => {
+    const provider = new FakePaymentProvider(pg.db);
+
+    const answer = await provider.sendRefund(send("r-1"));
+
+    expect(answer).toEqual({
+      kind: "outcome",
+      outcome: "completed",
+      providerRefundRef: expect.stringMatching(/^fake-re-/) as unknown as string,
+      providerStatus: "succeeded",
+    });
+    expect(provider.refundCalls).toEqual([send("r-1")]);
+    expect(await provider.lookupRefund(query("r-1"))).toEqual({
+      kind: "match",
+      providerRefundRef: (answer as { providerRefundRef: string }).providerRefundRef,
+      outcome: "completed",
+      providerStatus: "succeeded",
+    });
+  });
+
+  it("answers a resend with the same key with the first refund, making no second one", async () => {
+    const provider = new FakePaymentProvider(pg.db);
+
+    const first = await provider.sendRefund(send("r-2"));
+    const again = await provider.sendRefund(send("r-2"));
+
+    expect(again).toEqual(first);
+    expect(provider.refundCalls).toHaveLength(2);
+    expect((await provider.lookupRefund(query("r-2"))).kind).toBe("match");
+  });
+
+  it("finds nothing for a refund it was never asked for", async () => {
+    const provider = new FakePaymentProvider(pg.db);
+    expect(await provider.lookupRefund(query("r-none"))).toEqual({ kind: "none" });
+    expect(provider.lookupCalls).toEqual([query("r-none")]);
+  });
+
+  it("scriptNextRefund answers as told, once, and makes the refund only when told to", async () => {
+    const provider = new FakePaymentProvider(pg.db);
+    provider.scriptNextRefund({
+      made: "completed",
+      answer: { kind: "uncertain", reason: "timeout" },
+    });
+
+    const lost = await provider.sendRefund(send("r-3"));
+    const next = await provider.sendRefund(send("r-4"));
+    provider.scriptNextRefund({
+      made: false,
+      answer: { kind: "refused", httpStatus: 400, documented: true },
+    });
+    const refused = await provider.sendRefund(send("r-5"));
+
+    expect(lost).toEqual({ kind: "uncertain", reason: "timeout" });
+    expect((await provider.lookupRefund(query("r-3"))).kind).toBe("match");
+    expect(next.kind).toBe("outcome");
+    expect(refused).toEqual({ kind: "refused", httpStatus: 400, documented: true });
+    expect(await provider.lookupRefund(query("r-5"))).toEqual({ kind: "none" });
+  });
+
+  it("scriptNextRefund can make a refund in another state, and throw after making it", async () => {
+    const provider = new FakePaymentProvider(pg.db);
+    provider.scriptNextRefund({ made: "failed", status: "canceled", answer: "made" });
+    const failed = await provider.sendRefund(send("r-6"));
+    provider.scriptNextRefund({ made: "completed", answer: "throw" });
+
+    await expect(provider.sendRefund(send("r-7"))).rejects.toThrow(/stopped/);
+    expect(failed).toMatchObject({
+      kind: "outcome",
+      outcome: "failed",
+      providerStatus: "canceled",
+    });
+    expect(await provider.lookupRefund(query("r-7"))).toMatchObject({
+      kind: "match",
+      outcome: "completed",
+    });
+  });
+
+  it("scriptLookups answers every lookup as told until cleared", async () => {
+    const provider = new FakePaymentProvider(pg.db);
+    await provider.sendRefund(send("r-8"));
+    provider.scriptLookups({ kind: "ambiguous", candidates: 2 });
+
+    const scripted = [
+      await provider.lookupRefund(query("r-8")),
+      await provider.lookupRefund(query("r-8")),
+    ];
+    provider.scriptLookups(null);
+
+    expect(scripted).toEqual([
+      { kind: "ambiguous", candidates: 2 },
+      { kind: "ambiguous", candidates: 2 },
+    ]);
+    expect((await provider.lookupRefund(query("r-8"))).kind).toBe("match");
+  });
+
+  it("holdNextRefund waits, having recorded the call, until released", async () => {
+    const provider = new FakePaymentProvider(pg.db);
+    const release = provider.holdNextRefund();
+
+    const pending = provider.sendRefund(send("r-9"));
+    await vi.waitFor(() => expect(provider.refundCalls).toHaveLength(1));
+    const during = await provider.lookupRefund(query("r-9"));
+    release();
+
+    expect(during).toEqual({ kind: "none" });
+    expect((await pending).kind).toBe("outcome");
+  });
+
+  it("resends safely for a day by default, and can be told otherwise", () => {
+    const provider = new FakePaymentProvider(pg.db);
+    expect(provider.refundResendWindowMs).toBe(24 * 60 * 60 * 1000);
+    provider.refundResendWindowMs = null;
+    expect(provider.refundResendWindowMs).toBeNull();
+  });
+});
