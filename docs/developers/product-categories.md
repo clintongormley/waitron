@@ -114,8 +114,9 @@ the menu's own switch for the product (a boolean, else `management.request_inval
 it where the structure put it. An item whose product the structure no longer reaches is
 `menu_item.not_found` (404). `GET /management-api/catalogues/:id/offers` lists the Active
 products the structure reaches that are not variants, sold-out ones included, or nothing while the
-menu is inactive; switched-off ones are included with `active: false`, and the till's offers leave
-them out. Each of its offers also carries `topLevelMember`: `{ sectionId, memberId }`, the
+menu is inactive; switched-off ones are included with `active: false`. A menu's published version
+leaves out the products switched off when it was published, so switching one off takes it off the
+till only once the menu is published again. Each of its offers also carries `topLevelMember`: `{ sectionId, memberId }`, the
 product's membership of the menu's top level (what
 `DELETE /management-api/sections/:id/members/:memberId` removes), or null when only a
 section holds it. The till's offers carry no such field.
@@ -142,8 +143,10 @@ makes the working menu the live version. It rebuilds the menu and refuses with
 `menu.changed_since_preview` (409) when that hashes to anything but `expectedHash`; a menu that
 already matches its live version answers that version and writes nothing. A missing or non-string
 `expectedHash` is `management.request_invalid` (400). On the three routes that name a menu, an
-unknown menu is `catalogue.not_found` (404) and a malformed id `shared.invalid_id` (400). Nothing
-sells from a live version yet: the till's offers are read from the working menu.
+unknown menu is `catalogue.not_found` (404) and a malformed id `shared.invalid_id` (400). Tills
+sell from each menu's live version; only availability, VAT class, course and reporting category are
+read from the current rows when it is served (`applyLiveFields`,
+`packages/catalogue/src/menu-document.ts`).
 
 ## Moving and deleting
 
@@ -247,7 +250,8 @@ and colour. `labels` holds each label, with the unique index `labels_name_uq` on
 the catalogue tables are classified `state`. All but the three that hold published menus
 (`menu_versions`, `menu_publications` and `menu_version_images`) travel in the configuration
 transfer, `labels` before `product_labels`. The three are left out, so an imported venue's menus
-arrive unpublished.
+arrive unpublished, and a zone sells nothing until a menu it offers is published; the dashboard's
+readiness list reports such a zone as `zone.menu_unpublished`.
 
 The product-to-category membership table, `product_categories`, is gone. It was created by
 `packages/catalogue/drizzle/0000_baseline.sql` and is dropped by

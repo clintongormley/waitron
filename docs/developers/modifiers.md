@@ -291,10 +291,14 @@ Six things it is worth knowing about that payload:
 - **Every price is settled**: the menu's price, then the list item's, then the product's
   `unit_price` — its own, or its parent's where a variant leaves it blank. A till has
   no way to walk that chain itself, because the last rung is not on the list item.
-- **Only ACTIVE lists are offered, and an options list offers only its AVAILABLE labels** — which
-  is exactly the set `validateExtraSelections` (`extra-contract.ts`) and `validateOptionSelections`
-  (`option-contract.ts`) will accept an answer from. That agreement is the reason a till and the
-  order path read the same lists: since menus Task 7 both take them from the menu's published
+- **A published version holds the lists that were Active when it was published, and every label
+  of each options list; each label is served marked with whether it is Available now**
+  (`applyLiveFields`, which reads no list's `active`, so a list switched off after publishing is
+  still offered until the menu is published again, and a label deleted since is served marked
+  unavailable). The lists and the labels marked available are the set `validateExtraSelections`
+  (`extra-contract.ts`) and `validateOptionSelections` (`option-contract.ts`) will accept an answer
+  from. That agreement is the reason a till and the
+  order path read the same lists: both take them from the menu's published
   version, which `listMenuOffers` builds through `readOfferedModifiers` when the menu is published
   (`buildMenuDocument`, `packages/catalogue/src/menu-document.ts`), with availability put back
   when it is served (`applyLiveFields`). One exception: an edit of a saved line whose dish the live
@@ -315,9 +319,10 @@ Six things it is worth knowing about that payload:
   is refused `product.unavailable`; and a line whose quantity rises, the kitchen's or not, is priced
   afresh as a check, so there it is refused like a new pick. All of these are pinned by "keeps an extra whose product sold out on a line the kitchen does not have, and
   refuses to send it again on one it has" in `apps/server/src/tabs.test.ts`. The filter's own tests:
-  "an extra the till cannot sell" in `packages/catalogue/src/offered-modifiers.test.ts`, and
   "refuses an extras pick of an Unavailable or an Inactive product as a pick the list does not
-  offer" in `apps/server/src/till-sale.test.ts`.
+  offer" in `apps/server/src/till-sale.test.ts`, and "puts availability, VAT, course and category
+  back from the current rows" in `packages/catalogue/src/menu-document.test.ts`, which clears an
+  extras item's flag only through the menu withdrawing it, not through its product.
   An extras list also leaves out a product that has an Active variant (it is never sold as
   itself; `readExtraProducts`), and a basket priced afresh refuses a pick of one with a
   different code, `product.variant_required`, in `priceOrderLines`

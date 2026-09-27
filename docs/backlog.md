@@ -309,7 +309,8 @@ refresh read that has not answered after 25 seconds is cancelled. No migration. 
 weighed line's notice reads "0.5×" without "kg"; the counter's prep-queue card shows no notices and
 does not refresh; a failed kitchen refresh is silent, so a display that loses the server goes stale
 without a warning; the till's API client has no general request timeout (only the kitchen refresh
-reads are bounded); a refusal that lands after the tab is paid, or after a server switch, shows the
+and menu-state reads are bounded, at 25 seconds, and a table's round sends and offer reloads, at 150
+seconds); a refusal that lands after the tab is paid, or after a server switch, shows the
 ordinary unnamed message; the till's screen-to-app events use plain names, while
 [conventions-ui.md](developers/conventions-ui.md) says every custom event is `wt-*` — the rule or
 the till needs to change.
@@ -335,11 +336,14 @@ request naming one that is no longer live is refused `menu.version_changed` (409
 affected menu's live version, before anything is priced or written. A held or tab line records the
 version it was added from, and its filed sale line carries that version. `GET /api/menu-state?zoneId=`
 answers each live version and what is sold out now. **Upgrading:** a box or dev venue seeded before
-this branch, and a venue imported from a configuration file, sells nothing until each of its menus
-is published; the dashboard's readiness list says so (`zone.menu_unpublished`). Left open:
-`/api/menu-state` runs inside `withTransaction`, the venue's write lock, because there is no
-read-only transaction (`packages/db/src/tenancy.ts` offers only `withTransaction`), so every poll
-takes a turn of it; and a till learns of a change only by polling, because the dashboard's
+this branch, and a venue imported from a configuration file, arrives with every menu unpublished,
+and a zone sells nothing until a menu it offers is published (an unpublished menu is left out, and
+the zone sells its published ones); the dashboard's readiness list reports a zone with none
+(`zone.menu_unpublished`). Left open: every
+`/api/menu-state` poll waits its turn in the write queue, because the route and `requireSession`
+(`apps/server/src/till-session.ts`) read inside `withTransaction`; reading outside a transaction
+would skip the queue but give `menuState`'s queries no single consistent view, and there is no
+read-only transaction (`packages/db/src/tenancy.ts`); and a till learns of a change only by polling, because the dashboard's
 live-update route accepts the management cookie only — a till-session branch on that route would let
 the server tell tills instead (plan D11), a later refinement. The till polls it every 15 seconds while
 signed in, greys what is sold out in place, and runs the basket refresh flow (D9) for the counter's
