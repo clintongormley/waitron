@@ -712,9 +712,9 @@ export async function enqueueMovedSlips(
  * which prints only its own round, and the held items of each still-held group whose HOLD ticket was
  * queued, on a ticket marked HOLD. Each ticket is marked REPRINT and stamped with the reprint time,
  * not the original fire time. Both tickets for one printer and station, or for one pass printer, go
- * as ONE job: two printed reprints linked to the same bill, station and printer would let either
- * one's printing clear the other's failure ({@link readPrintProblems}). It changes no line, ticket
- * item or group event. An order with neither is a no-op.
+ * as ONE job: as two, the later one's printing would clear every earlier failure for that bill and
+ * station on that printer, including tickets it does not carry ({@link readPrintProblems}). It
+ * changes no line, ticket item or group event. An order with neither is a no-op.
  */
 export async function reprintOrderTickets(
   tx: Transaction,
@@ -785,8 +785,9 @@ export interface PrintProblem {
  * The printing problems among the kitchen tickets `scope` selects, abandoned bills left out. A
  * ticket is a problem while {@link printJobInTrouble} holds for its job, until a reprint for the same
  * bill and station, on the same printer, queued after it has printed: only a reprint carries every
- * dish fired before it, and the held dishes of each group whose HOLD ticket was queued, so a later
- * round's ticket printing clears nothing, and another printer's paper says nothing of this one's.
+ * dish still fired on the bill, and the held dishes of each still-held group whose HOLD ticket was
+ * queued, so a later round's ticket printing clears nothing, and another printer's paper says
+ * nothing of this one's.
  * "After" is the link row's `rowid`, not `created_at`, which two jobs can share to the millisecond:
  * SQLite gives a new row one more than the table's largest `rowid`, and a link row goes only when
  * its job or its bill is deleted, or when {@link moveKitchenPrintLinks} writes it again. Oldest
