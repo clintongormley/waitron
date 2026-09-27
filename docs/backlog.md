@@ -2266,10 +2266,14 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     columns read null or 0, `pragma foreign_key_check` returned nothing, the change feed's triggers
     came back after `installChangeFeed` and logged updates, and setting `direction = 'added'` on a
     `void` notice was refused with `CHECK constraint failed: kitchen_notices_direction_kind_ck`.
+    A failed HOLD ticket shows "Printing problem" on the table and the station as a fire ticket
+    does, and Reprint prints the held dishes of each still-held group whose HOLD ticket was queued
+    again, marked REPRINT and HOLD, beside the fired work: one job per printer and station, or per
+    pass printer, carries both.
     Left open:
-    - A failed HOLD ticket or HOLD correction raises no "Printing problem": neither is recorded in
-      `kitchen_print_jobs`, which is all the printing problems read, because only fired work can be
-      reprinted to clear one. The FIRE ticket is recorded, as any fire ticket is.
+    - A failed HOLD correction slip (HOLD CHANGED or HOLD CANCELLED) raises no "Printing problem",
+      like every correction slip: none is recorded in `kitchen_print_jobs`, which is all the
+      printing problems read.
     - A printed HOLD ticket goes stale when held groups are reordered or a party is merged into
       another, since both renumber `GROUP n` and later slips print the new number; and when the
       party's table moves or is joined, since no MOVED slip goes out for held work (MOVED slips
