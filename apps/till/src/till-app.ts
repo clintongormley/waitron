@@ -21,10 +21,15 @@ import "./screens/till-ticket-view.js";
 import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
-import type { ChangeLineDetail, SubmitDraftDetail } from "./screens/till-table-order-screen.js";
+import type {
+  ChangeLineDetail,
+  Draft,
+  SubmitDraftDetail,
+} from "./screens/till-table-order-screen.js";
 import { heldGroupIds, sendsAlone } from "./state/round-groups.js";
 import type { DraftGroup } from "./state/draft-groups.js";
 import "@waitron/ui/src/components/wt-toast.js";
+import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import "./screens/till-station-screen.js";
 import "./screens/till-enrol-screen.js";
 import "./screens/till-device-chooser.js";
@@ -2260,8 +2265,9 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** Send all and Fire course release by group, so with the groups unread they send nothing: the
-   * refusal is said and the order read again for the next press. */
+  /** The sent lines' Send all and Fire course release the held groups the read found, and a draft's
+   * Add to held group joins one, so with the groups unread they send nothing: the refusal is said
+   * and the order read again for the next press. */
   async #refuseWithGroupsUnread(): Promise<boolean> {
     if (!this.#groupsUnread) return false;
     this.errorKey = "table.error";
@@ -2382,17 +2388,15 @@ export class TillApp extends LitElement {
     this.errorKey = tableWriteError(error);
   }
 
-  /** The groups each draft's submissions have filed so far, for the notice once it is all sent. */
-  readonly #draftTally = new WeakMap<
-    WorkingOrderStore,
-    { fired: number; held: number; joined: number }
-  >();
+  /** The groups each draft's submissions have filed so far, for the notice once it is all sent. Keyed
+   * by the screen's draft, not its store: a store emptied by hand starts a new draft. */
+  readonly #draftTally = new WeakMap<Draft, { fired: number; held: number; joined: number }>();
 
   /** A draft sent to a seated party's settled or abandoned tab lands on the party's next tab, which
    * the screen follows. Once a submission leaves the draft empty, the till goes back to the floor
    * and says what the draft's submissions filed. */
   async #onSubmitDraft(event: Event): Promise<void> {
-    const { lines, groups, joinGroupId, round, sent } = (
+    const { lines, groups, joinGroupId, round, sent, draft } = (
       event as CustomEvent<
         Pick<SubmitDraftDetail, "lines" | "groups" | "joinGroupId"> & Partial<SubmitDraftDetail>
       >
@@ -2433,7 +2437,7 @@ export class TillApp extends LitElement {
       return;
     }
     const onSentTable = () => this.activeTabId === tabId && this.activeTableId === tableId;
-    if (followUp !== "find-tab" && round !== undefined) this.#tally(round, groups, joinGroupId);
+    if (followUp !== "find-tab" && draft !== undefined) this.#tally(draft, groups, joinGroupId);
     if (followUp === "find-tab" && onSentTable()) {
       await this.#retakePartyFromFloor();
       // The server moves a draft only onto its own party's next tab, so the table is followed only
@@ -2447,22 +2451,23 @@ export class TillApp extends LitElement {
     }
     await this.#loadTabLines();
     if (this.orderParty !== null) await this.#loadVisitBills();
-    if (round === undefined || round.lineCount > 0) return;
-    const tally = this.#draftTally.get(round);
-    this.#draftTally.delete(round);
+    if (round === undefined || round.lineCount > 0 || draft === undefined) return;
+    const tally = this.#draftTally.get(draft);
+    this.#draftTally.delete(draft);
     if (followUp === "find-tab" || tally === undefined || this.activeTableId !== tableId) return;
     this.submittedNotice = submittedText(tally);
+    this.renderRoot.querySelector<WtToast>("wt-toast[data-submitted-toast]")?.show();
     this.#returnToFloor();
   }
 
-  #tally(round: WorkingOrderStore, groups: readonly DraftGroup[], joinGroupId?: string): void {
-    const tally = this.#draftTally.get(round) ?? { fired: 0, held: 0, joined: 0 };
+  #tally(draft: Draft, groups: readonly DraftGroup[], joinGroupId?: string): void {
+    const tally = this.#draftTally.get(draft) ?? { fired: 0, held: 0, joined: 0 };
     for (const group of groups) {
       if (group.release === "fire") tally.fired += 1;
       else if (joinGroupId !== undefined) tally.joined += 1;
       else tally.held += 1;
     }
-    this.#draftTally.set(round, tally);
+    this.#draftTally.set(draft, tally);
   }
 
   /**

@@ -255,7 +255,7 @@ async function placeOrder(names: string[]): Promise<string> {
 }
 
 /** Seat a fresh table and send SOPA (Entrantes) as a fired group and FILETE (Principales) as a held
- *  group, as the till's Send round does; returns the tab id. SOPA is line 1, fired and not started (so
+ *  group in one submission; returns the tab id. SOPA is line 1, fired and not started (so
  *  recallable); FILETE is line 2, held. */
 async function tabWithSopaAndFilete(): Promise<string> {
   const ids = await offerIdsByName();

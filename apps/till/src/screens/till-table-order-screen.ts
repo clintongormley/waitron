@@ -85,6 +85,13 @@ export interface SubmitDraftDetail {
   joinGroupId?: string;
   round: WorkingOrderStore;
   sent: readonly OrderLine[];
+  draft: Draft;
+}
+
+/** One draft, from its first line until its store is empty again, through its partial submissions.
+ * `laterAddition`: the party already had a group when the draft got its first line. */
+export interface Draft {
+  readonly laterAddition: boolean;
 }
 
 /** Where a later addition goes: `add-to-held` is offered only while the party has a held group. */
@@ -93,8 +100,17 @@ type Destination = "fire-now" | "add-to-held" | "add-as-new";
 /** An action's preview, and the submission its Confirm sends. */
 interface PendingDraft {
   preview: DraftPreview;
-  joinPosition?: number;
+  join?: { group: OrderGroup; index: number };
   detail: SubmitDraftDetail;
+}
+
+/** A held group as the picker names it: `index` is its place among the party's held groups. */
+function heldGroupLabel(group: OrderGroup, index: number): string {
+  return index === 0
+    ? t("table.held_next").replace("{summary}", group.summary)
+    : t("table.held_group")
+        .replace("{n}", String(group.position))
+        .replace("{summary}", group.summary);
 }
 
 /** `change-line`: one sent line's edit, from the copy of the order read at `revision`. */
@@ -610,17 +626,24 @@ export class TillTableOrderScreen extends LitElement {
     };
   }
 
-  /** Whether each draft is a later addition: the party already had a group when the draft got its
-   * first line. Kept through the draft's partial submissions, dropped once it is empty. */
-  readonly #laterAddition = new WeakMap<WorkingOrderStore, boolean>();
+  readonly #drafts = new WeakMap<WorkingOrderStore, Draft>();
+
+  #draftOf(round: WorkingOrderStore): Draft {
+    let draft = this.#drafts.get(round);
+    if (draft === undefined) {
+      draft = { laterAddition: this.groups.length > 0 };
+      this.#drafts.set(round, draft);
+    }
+    return draft;
+  }
 
   #noteDraftStart(round: WorkingOrderStore): void {
     if (round.lineCount === 0) {
-      this.#laterAddition.delete(round);
+      this.#drafts.delete(round);
       this.destination = "fire-now";
       this.joinTarget = null;
-    } else if (!this.#laterAddition.has(round)) {
-      this.#laterAddition.set(round, this.groups.length > 0);
+    } else {
+      this.#draftOf(round);
     }
   }
 
@@ -772,7 +795,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #isLaterAddition(): boolean {
-    return this.#laterAddition.get(this.#roundStore) === true;
+    return this.#drafts.get(this.#roundStore)?.laterAddition === true;
   }
 
   /** The party's held groups in position order: the ones a later addition may join. */
@@ -839,11 +862,13 @@ export class TillTableOrderScreen extends LitElement {
       ...(submission.joinGroupId === undefined ? {} : { joinGroupId: submission.joinGroupId }),
       round,
       sent,
+      draft: this.#draftOf(round),
     };
-    const joined = this.groups.find((group) => group.id === submission.joinGroupId);
+    const held = this.#heldGroups();
+    const index = held.findIndex((group) => group.id === submission.joinGroupId);
     this.pendingDraft = {
       preview,
-      ...(joined === undefined ? {} : { joinPosition: joined.position }),
+      ...(index < 0 ? {} : { join: { group: held[index]!, index } }),
       detail,
     };
   }
@@ -1560,13 +1585,7 @@ export class TillTableOrderScreen extends LitElement {
                     aria-pressed=${group.id === joining?.id}
                     @click=${() => (this.joinTarget = group.id)}
                   >
-                    ${
-                      index === 0
-                        ? t("table.held_next").replace("{summary}", group.summary)
-                        : t("table.held_group")
-                            .replace("{n}", String(group.position))
-                            .replace("{summary}", group.summary)
-                    }
+                    ${heldGroupLabel(group, index)}
                   </button>`,
               )}
             </div>`
@@ -1599,13 +1618,16 @@ export class TillTableOrderScreen extends LitElement {
                   : nothing
               }
               ${
-                preview.joinGroupId !== undefined
+                pending!.join !== undefined
                   ? html`<p data-preview-join>
                       ${count(
                         "table.preview_join",
                         "table.preview_join_one",
                         preview.holdItems,
-                      ).replace("{position}", String(pending!.joinPosition ?? ""))}
+                      ).replace(
+                        "{group}",
+                        heldGroupLabel(pending!.join.group, pending!.join.index),
+                      )}
                     </p>`
                   : preview.holdGroups > 0
                     ? html`<p data-preview-hold>

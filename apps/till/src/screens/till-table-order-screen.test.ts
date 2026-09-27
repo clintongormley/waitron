@@ -947,11 +947,20 @@ describe("till-table-order-screen", () => {
         el.shadowRoot!.querySelector<HTMLElement>('[data-held-group="g-desserts"]')!.click();
         await el.updateComplete;
         const text = await openPreview(el, "submit");
-        expect(text).toContain("Add to held group 3: 2 items.");
+        expect(text).toContain("Add to held group “Group 3: 1 × Flan”: 2 items.");
         expect(text).not.toContain("Hold:");
         const sent = confirmPreview(el)!;
         expect(sent.detail.groups).toEqual([{ release: "hold", lineIndexes: [0] }]);
         expect(sent.detail.joinGroupId).toBe("g-desserts");
+      });
+
+      it("names the first held group in the preview as the picker does, as Next", async () => {
+        const { el } = await mount({ courses: serviceCourses, products: menu, groups: held });
+        await ring(el, [croquetas, "1"]);
+        await pickDestination(el, "add-to-held");
+        expect(await openPreview(el, "submit")).toContain(
+          "Add to held group “Next: 2 × Steak, 1 × Fish”: 1 item.",
+        );
       });
 
       it("Add as new group appends one held group, of the selection when there is one", async () => {

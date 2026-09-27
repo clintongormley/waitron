@@ -82,7 +82,7 @@ export function itemCount(entry: Pick<DraftEntry, "quantity" | "wholeUnits">): n
   return entry.wholeUnits ? Number(entry.quantity) : 1;
 }
 
-/** The groups `action` submits. A group's lines follow the order the screen shows them in. */
+/** The groups `action` submits. */
 export function draftSubmission(
   action: DraftAction,
   entries: readonly DraftEntry[],

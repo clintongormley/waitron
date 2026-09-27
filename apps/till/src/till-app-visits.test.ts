@@ -1965,9 +1965,9 @@ describe("till-app: submitting the draft", () => {
   }
 
   const toast = (el: TillApp) =>
-    el.shadowRoot!.querySelector<HTMLElement & { open: boolean; message: string; tone: string }>(
-      "wt-toast[data-submitted-toast]",
-    );
+    el.shadowRoot!.querySelector<
+      HTMLElement & { open: boolean; message: string; tone: string; duration: number }
+    >("wt-toast[data-submitted-toast]");
 
   it("files the spec's five groups from one draft, then returns to the floor saying what it did", async () => {
     const server = groupsServer();
@@ -2023,6 +2023,23 @@ describe("till-app: submitting the draft", () => {
     expect(toast(el)?.open ?? false).toBe(false);
   });
 
+  it("counts only this draft's groups when the last one was emptied by hand after a partial submission", async () => {
+    const server = groupsServer();
+    const { el } = await mountApp({ ...withCourses(), ...server });
+    const order = await openMesa(el);
+    await ring(el, order, beer, steak);
+    await toggle(el, order, "Beer");
+    await act(el, order, "fire-selected");
+    draftOf(order).removeLines(draftOf(order).lines);
+    await flush(el);
+
+    await ring(el, order, flan);
+    await act(el, order, "submit");
+
+    expect(server.groups).toHaveLength(2);
+    expect(toast(el)!.message).toBe("Fired: 1 group.");
+  });
+
   it("says one group in the singular, and leaves out a clause with nothing in it", async () => {
     const server = groupsServer();
     const { el } = await mountApp({ ...withCourses(), ...server });
@@ -2030,6 +2047,29 @@ describe("till-app: submitting the draft", () => {
     await ring(el, order, beer, steak);
     await act(el, order, "fire-all");
     expect(toast(el)!.message).toBe("Fired: 1 group.");
+  });
+
+  it("gives a second identical notice its own full time on screen", async () => {
+    const server = groupsServer();
+    const { el } = await mountApp({ ...withCourses(), ...server });
+    const order = await openMesa(el);
+    toast(el)!.duration = 1000;
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    await ring(el, order, beer);
+    await act(el, order, "fire-all");
+    expect(toast(el)!.message).toBe("Fired: 1 group.");
+
+    await wait(600);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    await ring(el, tableOrder(el)!, flan);
+    await act(el, tableOrder(el)!, "submit");
+    expect(server.groups).toHaveLength(2);
+    expect(toast(el)!.message).toBe("Fired: 1 group.");
+    expect(toast(el)!.open).toBe(true);
+
+    await wait(600);
+    expect(toast(el)!.open).toBe(true);
   });
 
   it("does not count a draft added to a held group as a new group", async () => {

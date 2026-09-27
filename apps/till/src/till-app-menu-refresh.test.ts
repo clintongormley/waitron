@@ -963,6 +963,58 @@ describe("a table round refused because the menu changed", () => {
     expect(round.lineCount).toBe(0);
   });
 
+  it("re-asserts each line's own dish on the re-send, with the lines in course order rather than tap order", async () => {
+    const offers = [
+      offer("offer-lemonade", "Lemonade", "3.00", { courseId: "desserts" }),
+      offer("offer-water", "Water", "2.00", { courseId: "starters" }),
+    ];
+    const dining = (version: string) => ({
+      ...catalogue(version, offers),
+      context: DINING.context,
+    });
+    const { el } = await mountApp(
+      tableStubs(dining("v2"), {
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          canvas: tableCanvas,
+          courses: [
+            { id: "starters", name: "Starters", displayOrder: 0 },
+            { id: "desserts", name: "Desserts", displayOrder: 1 },
+          ],
+        }),
+        listZoneOffers: vi.fn((zoneId: string) =>
+          Promise.resolve(zoneId === "zone-dining" ? dining("v1") : V1),
+        ),
+        submitGroups: vi
+          .fn()
+          .mockRejectedValueOnce(versionRefusal)
+          .mockResolvedValueOnce(landed("wo-7")),
+      }),
+    );
+    await toTable(el);
+    for (const name of ["Lemonade", "Water"]) {
+      [...roundGrid(el).shadowRoot!.querySelectorAll<HTMLElement>("wt-button")]
+        .find((button) => button.querySelector(".name")!.textContent === name)!
+        .click();
+      await flush(el);
+    }
+    pressFireAll(el);
+    await flush(el);
+    confirmPreview(el);
+    await flush(el);
+
+    expect(api.submitGroups.mock.calls.map(sentLines)).toEqual([
+      [
+        { menuItemId: "offer-water", menuVersionId: "v1", quantity: "1" },
+        { menuItemId: "offer-lemonade", menuVersionId: "v1", quantity: "1" },
+      ],
+      [
+        { menuItemId: "offer-water", menuVersionId: "v2", quantity: "1" },
+        { menuItemId: "offer-lemonade", menuVersionId: "v2", quantity: "1" },
+      ],
+    ]);
+  });
+
   it("keeps the round and shows the dialog when a price in it changed, sending nothing more", async () => {
     const { el } = await mountApp(
       tableStubs(catalogue("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]), {
