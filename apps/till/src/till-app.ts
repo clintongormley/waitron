@@ -2553,8 +2553,7 @@ export class TillApp extends LitElement {
   }
 
   /** Moves the screen from the tab a draft was sent to onto the tab it went to, only while the
-   * operator is still on the first, and the rest of the draft with it; the floor has already been
-   * read after the send. */
+   * operator is still on the first; the floor has already been read after the send. */
   #followDraft(sentTo: string, landedOn: string, carryTo?: (orderId: string) => void): void {
     if (landedOn === sentTo || this.activeTabId !== sentTo) return;
     carryTo?.(landedOn);

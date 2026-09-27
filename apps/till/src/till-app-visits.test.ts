@@ -2539,6 +2539,40 @@ describe("till-app: submitting the draft", () => {
       expect(draftOf(next).lines.map((line) => line.product.id)).toEqual(["steak"]);
       expect(next.shadowRoot!.querySelector("[data-destination-choice]")).not.toBeNull();
     });
+
+    it("keeps a later addition's chosen destination and held group for its rest", async () => {
+      const held = (id: string, position: number): OrderGroup => ({
+        ...firedGroup(id, `1 × ${id}`),
+        position,
+        state: "held",
+        firedAt: null,
+      });
+      const { el } = await mountApp(
+        toNextBill({
+          listGroups: vi
+            .fn()
+            .mockResolvedValue({ revision: 3, groups: [held("g-a", 1), held("g-b", 2)] }),
+        }),
+      );
+      const order = await openMesa(el);
+      await ring(el, order, beer, steak);
+      order.shadowRoot!.querySelector<HTMLElement>('[data-destination="add-to-held"]')!.click();
+      await flush(el);
+      order.shadowRoot!.querySelector<HTMLElement>('[data-held-group="g-b"]')!.click();
+      await flush(el);
+      partyOnNextBill();
+
+      await toggle(el, order, "Beer");
+      await act(el, order, "submit");
+
+      const next = tableOrder(el)!;
+      const pressed = (selector: string) =>
+        next.shadowRoot!.querySelector(selector)!.getAttribute("aria-pressed");
+      expect(next.orderId).toBe("wo-next");
+      expect(vi.mocked(api.submitGroups).mock.calls[0]![1].joinGroupId).toBe("g-b");
+      expect(pressed('[data-destination="add-to-held"]')).toBe("true");
+      expect(pressed('[data-held-group="g-b"]')).toBe("true");
+    });
   });
 
   it("counts only this draft's groups when the last one was emptied by hand after a partial submission", async () => {

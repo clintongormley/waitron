@@ -697,7 +697,12 @@ export class TillTableOrderScreen extends LitElement {
     for (const [from, kept] of this.#draftStores)
       if (kept === store) this.#draftStores.delete(from);
     this.#draftStores.set(orderId, store);
+    this.#carried = { orderId, destination: this.destination, joinTarget: this.joinTarget };
   }
+
+  /** Restored when the screen switches to the order the draft was carried to: the switch resets the
+   * destination, and so can a render on the order it leaves, whose draft is now empty. */
+  #carried?: { orderId: string; destination: Destination; joinTarget: string | null };
 
   /** The draft this screen re-renders on; it follows {@link orderId}. */
   #watchedDraft?: { store: WorkingOrderStore; stop: () => void };
@@ -803,7 +808,14 @@ export class TillTableOrderScreen extends LitElement {
       this.fireGroupPending = null;
       this.movePending = null;
       this.pendingDraft = null;
-      this.#resetDestination();
+      const carried = this.#carried;
+      this.#carried = undefined;
+      if (carried?.orderId === this.orderId) {
+        this.destination = carried.destination;
+        this.joinTarget = carried.joinTarget;
+      } else {
+        this.#resetDestination();
+      }
     }
     if (changed.has("groups") || this.#heldGroupIds === undefined) {
       this.#heldGroupIds = heldGroupIds(this.groups);
