@@ -91,9 +91,11 @@ export interface SubmitDraftDetail {
 }
 
 /** One draft, from its first line until its store is empty again, through its partial submissions.
- * `laterAddition`: the party already had a group when the draft got its first line. */
+ * `laterAddition`: the party already had a group when the draft got its first line. `tally`: the
+ * groups its submissions have filed so far, which the app counts. */
 export interface Draft {
   readonly laterAddition: boolean;
+  readonly tally: { fired: number; held: number; joined: number };
 }
 
 /** Where a later addition goes: `add-to-held` is offered only while the party has a held group. */
@@ -719,7 +721,7 @@ export class TillTableOrderScreen extends LitElement {
   #draftOf(round: WorkingOrderStore): Draft {
     let draft = this.#drafts.get(round);
     if (draft === undefined) {
-      draft = { laterAddition: this.groups.length > 0 };
+      draft = { laterAddition: this.groups.length > 0, tally: { fired: 0, held: 0, joined: 0 } };
       this.#drafts.set(round, draft);
     }
     return draft;

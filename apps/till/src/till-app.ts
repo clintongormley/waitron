@@ -2403,10 +2403,6 @@ export class TillApp extends LitElement {
     this.errorKey = tableWriteError(error);
   }
 
-  /** The groups each draft's submissions have filed so far, for the notice once it is all sent. Keyed
-   * by the screen's draft, not its store: a store emptied by hand starts a new draft. */
-  readonly #draftTally = new WeakMap<Draft, { fired: number; held: number; joined: number }>();
-
   /** A draft sent to a seated party's settled or abandoned tab lands on the party's next tab, which
    * the screen follows. Once a submission leaves the draft empty, the till goes back to the floor
    * and says what the draft's submissions filed. */
@@ -2467,22 +2463,20 @@ export class TillApp extends LitElement {
     await this.#loadTabLines();
     if (this.orderParty !== null) await this.#loadVisitBills();
     if (round === undefined || round.lineCount > 0 || draft === undefined) return;
-    const tally = this.#draftTally.get(draft);
-    this.#draftTally.delete(draft);
-    if (followUp === "find-tab" || tally === undefined || this.activeTableId !== tableId) return;
+    const { tally } = draft;
+    const filed = tally.fired + tally.held + tally.joined > 0;
+    if (followUp === "find-tab" || !filed || this.activeTableId !== tableId) return;
     this.submittedNotice = submittedText(tally);
     this.renderRoot.querySelector<WtToast>("wt-toast[data-submitted-toast]")?.show();
     this.#returnToFloor();
   }
 
-  #tally(draft: Draft, groups: readonly DraftGroup[], joinGroupId?: string): void {
-    const tally = this.#draftTally.get(draft) ?? { fired: 0, held: 0, joined: 0 };
+  #tally({ tally }: Draft, groups: readonly DraftGroup[], joinGroupId?: string): void {
     for (const group of groups) {
       if (group.release === "fire") tally.fired += 1;
       else if (joinGroupId !== undefined) tally.joined += 1;
       else tally.held += 1;
     }
-    this.#draftTally.set(draft, tally);
   }
 
   /**
