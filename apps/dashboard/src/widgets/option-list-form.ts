@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { baseStyles, submitOnEnter } from "@waitron/ui";
 import type { ContentLanguages } from "@waitron/shared";
+import { effectiveDefaultLabelId } from "@waitron/catalogue/src/option-default.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -21,10 +22,9 @@ import type { OptionList, OptionListInput } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
 /**
- * Two rules of `parseOptionListInput` (packages/catalogue/src/option-contract.ts), mirrored so the
- * operator sees them before saving: an ACTIVE list with no available option is refused, and a list
- * with an available option always has one as its default — the first available one when none is
- * chosen, so the form shows the default the server will store.
+ * An ACTIVE list with no available option is refused here before saving, as `parseOptionListInput`
+ * (packages/catalogue/src/option-contract.ts) refuses it; both take the default from
+ * `effectiveDefaultLabelId`.
  */
 @customElement("dashboard-option-list-form")
 export class OptionListForm extends LitElement {
@@ -113,7 +113,6 @@ export class OptionListForm extends LitElement {
   @state() private active = true;
   @state() private labels: DraftLabel[] = [];
   @state() private defaultLabelId: string | null = null;
-  /** The option open in the option editor: "new" while adding one, null while it is closed. */
   @state() private editingLabel: DraftLabel | "new" | null = null;
   @state() private validation: Record<string, string> = {};
   /** `fieldErrors` with each path turned into one of this form's own keys. A label's message is
@@ -164,8 +163,7 @@ export class OptionListForm extends LitElement {
   }
 
   #keepDefault(): void {
-    const chosen = this.labels.some((label) => label.id === this.defaultLabelId && label.available);
-    if (!chosen) this.defaultLabelId = this.labels.find((label) => label.available)?.id ?? null;
+    this.defaultLabelId = effectiveDefaultLabelId(this.labels, this.defaultLabelId);
   }
 
   /** The language a refusal naming a whole translated map is shown against: the first input on
@@ -205,15 +203,23 @@ export class OptionListForm extends LitElement {
   #errors(): Record<string, string> {
     const errors: Record<string, string> = {};
     for (const [key, message] of Object.entries(this.serverErrors)) {
-      const held = /^label:([^:]+):(.+)$/.exec(key);
-      if (held === null) {
-        errors[key] = message;
-        continue;
-      }
-      const index = this.labels.findIndex((label) => label.id === held[1]);
-      errors[index < 0 ? "labels" : `label-${index}-${held[2]}`] = message;
+      const held = /^label:([^:]+):/.exec(key);
+      errors[held && !this.labels.some((label) => label.id === held[1]) ? "labels" : key] = message;
     }
     return { ...errors, ...this.validation };
+  }
+
+  /** Each option's messages, keyed as the option editor names its inputs (`label-name`). */
+  #errorsByLabel(errors: Record<string, string>): Map<string, Record<string, string>> {
+    const byLabel = new Map<string, Record<string, string>>();
+    for (const [key, message] of Object.entries(errors)) {
+      const held = /^label:([^:]+):(.+)$/.exec(key);
+      if (held === null) continue;
+      const row = byLabel.get(held[1]!) ?? {};
+      row[`label-${held[2]}`] = message;
+      byLabel.set(held[1]!, row);
+    }
+    return byLabel;
   }
 
   #edit(change: () => void): void {
@@ -221,8 +227,6 @@ export class OptionListForm extends LitElement {
     this.validation = {};
   }
 
-  /** Puts the option editor's draft in place of the option it was opened on, or after the others
-   * when it was opened to add one. */
   #saveLabel(event: CustomEvent<{ value: DraftLabel }>): void {
     event.stopPropagation();
     const saved = event.detail.value;
@@ -239,26 +243,21 @@ export class OptionListForm extends LitElement {
     this.#closeEditor();
   }
 
-  /** The row whose menu opened the option editor, or null for Add option. */
-  #openedFrom: string | null = null;
-
   #openEditor(label: DraftLabel | "new"): void {
     this.editingLabel = label;
-    this.#openedFrom = label === "new" ? null : label.id;
   }
 
   /** Closes the option editor and puts focus back on the control that opened it. The focus waits
    * for the editor's dialog to close, because closing it moves focus too and would undo it. */
   #closeEditor(): void {
+    const editing = this.editingLabel;
     this.editingLabel = null;
-    void this.#returnFocus(this.#openedFrom);
+    void this.#returnFocus(editing === null || editing === "new" ? null : editing.id);
   }
 
   async #returnFocus(id: string | null): Promise<void> {
     await this.updateComplete;
-    const form = this.shadowRoot!.querySelector("dashboard-option-label-form")!;
-    await form.updateComplete;
-    await form.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+    await this.shadowRoot!.querySelector("dashboard-option-label-form")!.updateComplete;
     const target =
       id === null
         ? this.shadowRoot!.querySelector<HTMLElement>('[data-test="add-option"]')
@@ -334,16 +333,6 @@ export class OptionListForm extends LitElement {
     };
   }
 
-  /** A row's messages, keyed as the option editor names its inputs (`label-3-name` → `label-name`). */
-  #rowErrors(index: number, errors: Record<string, string>): Record<string, string> {
-    const prefix = `label-${index}-`;
-    return Object.fromEntries(
-      Object.entries(errors)
-        .filter(([key]) => key.startsWith(prefix))
-        .map(([key, message]) => [`label-${key.slice(prefix.length)}`, message]),
-    );
-  }
-
   #namesSection(errors: Record<string, string>) {
     const locales = this.languages.languages;
     const filled =
@@ -385,7 +374,7 @@ export class OptionListForm extends LitElement {
     </wt-disclosure>`;
   }
 
-  #labelRow(label: DraftLabel, index: number, errors: Record<string, string>) {
+  #labelRow(label: DraftLabel, index: number, rowErrors: Record<string, string>) {
     return html`<tr data-label=${label.id}>
       <td class="handle-cell">${this.#reorder.handle(label.id)}</td>
       <td>
@@ -398,7 +387,7 @@ export class OptionListForm extends LitElement {
                 >`
           }
         </div>
-        ${Object.values(this.#rowErrors(index, errors)).map(
+        ${Object.values(rowErrors).map(
           (message) => html`<p class="error" data-test=${`label-${index}-error`}>${message}</p>`,
         )}
       </td>
@@ -440,7 +429,7 @@ export class OptionListForm extends LitElement {
     </tr>`;
   }
 
-  #labelsSection(errors: Record<string, string>) {
+  #labelsSection(errors: Record<string, string>, byLabel: Map<string, Record<string, string>>) {
     return html`${this.#reorder.liveRegion()}
       <div class="table-wrap" tabindex="0" role="region" aria-label=${t("options.list_options")}>
         <table>
@@ -458,7 +447,7 @@ export class OptionListForm extends LitElement {
             ${repeat(
               this.labels,
               (label) => label.id,
-              (label, index) => this.#labelRow(label, index, errors),
+              (label, index) => this.#labelRow(label, index, byLabel.get(label.id) ?? {}),
             )}
           </tbody>
         </table>
@@ -482,18 +471,14 @@ export class OptionListForm extends LitElement {
       </div>`;
   }
 
-  #labelEditor(errors: Record<string, string>) {
+  #labelEditor(byLabel: Map<string, Record<string, string>>) {
     const editing = this.editingLabel;
-    const index =
-      editing === null || editing === "new"
-        ? -1
-        : this.labels.findIndex((label) => label.id === editing.id);
     return html`<dashboard-option-label-form
       .open=${editing !== null}
       .busy=${this.busy}
       .languages=${this.languages}
       .value=${editing === "new" ? null : editing}
-      .errors=${index < 0 ? {} : this.#rowErrors(index, errors)}
+      .errors=${editing === null || editing === "new" ? {} : (byLabel.get(editing.id) ?? {})}
       @wt-submit=${(event: CustomEvent<{ value: DraftLabel }>) => this.#saveLabel(event)}
       @wt-cancel=${(event: Event) => {
         event.stopPropagation();
@@ -504,6 +489,7 @@ export class OptionListForm extends LitElement {
 
   override render() {
     const errors = this.#errors();
+    const byLabel = this.#errorsByLabel(errors);
     return html`<wt-modal
         .open=${this.open}
         heading=${t(this.value ? "options.edit" : "options.create")}
@@ -549,7 +535,7 @@ export class OptionListForm extends LitElement {
               }}
             ></wt-switch>
           </div>
-          ${this.#labelsSection(errors)}
+          ${this.#labelsSection(errors, byLabel)}
         </div>
         <wt-form-actions slot="footer"
           ><wt-button
@@ -569,7 +555,7 @@ export class OptionListForm extends LitElement {
           ></wt-form-actions
         >
       </wt-modal>
-      ${this.#labelEditor(errors)}`;
+      ${this.#labelEditor(byLabel)}`;
   }
 }
 declare global {

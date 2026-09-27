@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { AppError, contentLanguageCode, isUuid } from "@waitron/shared";
 import type { OptionLabel, OptionList } from "./modifier-list-types.js";
 import type { OptionSelection } from "@waitron/shared";
+import { effectiveDefaultLabelId } from "./option-default.js";
 import { nonBlankTranslations } from "./product-presentation.js";
 import "./errors.js";
 
@@ -90,8 +92,7 @@ export function parseOptionListInput(value: unknown): ParsedOptionList {
     const field = `labels.${index}`;
     const label = record(entry, field);
     keys(label, ["id", "name", "customerName", "kitchenName", "available"], field);
-    const labelId =
-      label.id === undefined ? globalThis.crypto.randomUUID() : id(label.id, `${field}.id`);
+    const labelId = label.id === undefined ? randomUUID() : id(label.id, `${field}.id`);
     if (seen.has(labelId)) invalid(`${field}.id`);
     seen.add(labelId);
     return {
@@ -109,12 +110,7 @@ export function parseOptionListInput(value: unknown): ParsedOptionList {
   const defaultLabelId =
     row.defaultLabelId == null ? null : id(row.defaultLabelId, "defaultLabelId");
   if (defaultLabelId !== null && !seen.has(defaultLabelId)) invalid("defaultLabelId");
-  // Always a default while a label is available: the named one if it is on offer, else the first.
-  const firstAvailable = labels.find((label) => label.available)?.id ?? null;
-  const named = labels.some((label) => label.id === defaultLabelId && label.available)
-    ? defaultLabelId
-    : null;
-  return { ...list, defaultLabelId: named ?? firstAvailable, labels };
+  return { ...list, defaultLabelId: effectiveDefaultLabelId(labels, defaultLabelId), labels };
 }
 
 /**

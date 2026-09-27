@@ -9,7 +9,7 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
-import { optionalTextFields, type FieldContext } from "./form-fields.js";
+import { optionalTextFields, switchField, textField, type FieldContext } from "./form-fields.js";
 import { t } from "../i18n/t.js";
 
 export interface DraftLabel {
@@ -57,6 +57,13 @@ export class OptionLabelForm extends LitElement {
   @state() private kitchenName = "";
   @state() private available = true;
   @state() private validation: Record<string, string> = {};
+
+  /** Also waits for the dialog, whose native close moves focus, so a caller can place focus after it. */
+  protected override async getUpdateComplete(): Promise<boolean> {
+    const result = await super.getUpdateComplete();
+    await this.renderRoot.querySelector("wt-modal")?.updateComplete;
+    return result;
+  }
 
   protected override willUpdate(changes: PropertyValues<this>): void {
     if ((changes.has("open") && this.open) || changes.has("value")) this.#reseed();
@@ -152,25 +159,22 @@ export class OptionLabelForm extends LitElement {
           (customerName) => this.#edit(() => (this.customerName = customerName)),
           this.name,
         )}
-        <wt-input
-          name="label-kitchen-name"
-          label=${t("options.kitchen_name")}
-          placeholder=${this.name}
-          .disabled=${this.busy}
-          .value=${this.kitchenName}
-          .error=${errors["label-kitchen-name"] ?? ""}
-          .invalid=${!!errors["label-kitchen-name"]}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            this.#edit(() => (this.kitchenName = event.detail.value));
-          }}
-        ></wt-input>
+        ${textField(
+          this.#fields(errors),
+          "label-kitchen-name",
+          t("options.kitchen_name"),
+          this.kitchenName,
+          (kitchenName) => this.#edit(() => (this.kitchenName = kitchenName)),
+          false,
+          this.name,
+        )}
       </div>
     </wt-disclosure>`;
   }
 
   override render() {
     const errors = this.#errors();
+    const fields = this.#fields(errors);
     return html`<wt-modal
       .open=${this.open}
       heading=${t(this.value ? "options.edit_option" : "options.add_option")}
@@ -189,31 +193,22 @@ export class OptionLabelForm extends LitElement {
           heading=${t("form.error_heading")}
           .errors=${Object.values(errors)}
         ></wt-form-error-summary>
-        <wt-input
-          name="label-name"
-          label=${t("options.name")}
-          required
-          .disabled=${this.busy}
-          .value=${this.name}
-          .error=${errors["label-name"] ?? ""}
-          .invalid=${!!errors["label-name"]}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            this.#edit(() => (this.name = event.detail.value));
-          }}
-        ></wt-input>
+        ${textField(
+          fields,
+          "label-name",
+          t("options.name"),
+          this.name,
+          (name) => this.#edit(() => (this.name = name)),
+          true,
+        )}
         ${this.#namesSection(errors)}
-        <wt-switch
-          name="label-available"
-          data-test="label-available"
-          label=${t("options.available")}
-          .checked=${this.available}
-          .disabled=${this.busy}
-          @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-            event.stopPropagation();
-            this.#edit(() => (this.available = event.detail.checked));
-          }}
-        ></wt-switch>
+        ${switchField(
+          fields,
+          "label-available",
+          t("options.available"),
+          this.available,
+          (available) => this.#edit(() => (this.available = available)),
+        )}
       </div>
       <wt-form-actions slot="footer"
         ><wt-button
