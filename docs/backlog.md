@@ -2525,14 +2525,20 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   shows `44.00 €` while the table screen shows `44,00 €` in Spanish. The floor's format predates
   the visits work; Task 2 now also uses it for what a party still owes. Make the floor follow the
   locale, as the table screen does.
-- **A party's table can be pointed at a counter order, or at another party's bill (plan Task 2
-  review, 2026-09-26).** `joinTable` and `mergeTabs` (`apps/server/src/working-order.ts`) accept a
-  parked counter order, which belongs to no party, as a tab: `joinTable` accepts any open order
-  whose zone is the table's (or when either has none), and `mergeTabs` one whose service mode
-  matches. So a table can stay in its party while pointing at that counter order, or be held by
-  one party while pointing at another party's bill. "a paid check reached by a table outside its party"
-  (`apps/server/src/visits.test.ts`) reaches both. The till does not send that sequence (read, not
-  tested). **Next action:** decide whether to refuse it.
+- **Join and merge keep a table, its bill and its party consistent — done (A73, PR TBD,
+  2026-09-28).** `joinTable` and `mergeTabs` (`apps/server/src/working-order.ts`) now refuse a
+  counter order (an order no table points at and no party holds) as a bill to join a table to, as a
+  merge target, or as a source merged into a party's bill (`tab.not_table_tab`); a merge between a
+  party's bill and a table's bill with no party (`tab.party_mismatch`); and another party's split
+  check while that party still has another open bill (`tab.party_has_other_open_bill`). Merging a
+  party's last open bill still takes the whole party with it, and a split check still goes back
+  into its own party's tab. **Still open:** a table's bill with no party still accepts an order
+  with no party and no table as a merge source, because that is exactly what putting a split check
+  back looks like when neither has a party. So the test "refuses a detached open order as the
+  merge source" in `apps/server/src/move-merge.test.ts` stays red. Only a test opens a table's
+  bill with no party: `seatTable` always opens a party with its tab (read, not tested).
+  **Next action:** the owner decides whether that test goes, or bills with no party stop being
+  something a table can hold.
 - **Later: optional seat/guest item assignment (owner, 2026-09-20).** Include shared items when
   this is designed. For now, orders remain at table/tab level and staff select items manually
   when splitting bills; seat assignment is not a prerequisite for the service workflow.

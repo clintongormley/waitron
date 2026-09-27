@@ -502,6 +502,22 @@ declare module "@waitron/shared" {
      * settled or abandoned tab a seated party's tables still point at.
      */
     "tab.not_open": { tabId: string };
+    /**
+     * `joinTable` or `mergeTabs` named an order no table points at and no seated party holds — a
+     * counter order — as a bill a table would join, as a merge target, or as a merge source for a
+     * party's bill.
+     */
+    "tab.not_table_tab": { tabId: string };
+    /**
+     * `mergeTabs` named one bill that belongs to a seated party and one table's bill that belongs
+     * to none; `tabId` is the one with no party.
+     */
+    "tab.party_mismatch": { tabId: string };
+    /**
+     * `mergeTabs` named, as its source, a bill of another party that no table points at while that
+     * party still has another open bill, so the merge would not take the whole party.
+     */
+    "tab.party_has_other_open_bill": { tabId: string };
     /** A per-line void named no line on the open tab. Pre-fiscal: a void of an open tab files nothing. */
     "tab.line_not_found": { tabId: string; lineNo: number };
     /**

@@ -2571,6 +2571,60 @@ export async function moveTab(
   await enqueueMovedSlips(tx, cfg, before, tabId);
 }
 
+/** Whether any dining table's `tab_id` points at the order. */
+async function tablePointsAt(tx: Transaction, orderId: string): Promise<boolean> {
+  const [pointer] = await tx
+    .select({ id: diningTables.id })
+    .from(diningTables)
+    .where(eq(diningTables.tabId, orderId))
+    .limit(1);
+  return pointer !== undefined;
+}
+
+/**
+ * Refuse a merge that would leave a table, a bill and a party pointing at each other
+ * inconsistently. An order with no party that no table points at is a counter order.
+ */
+async function refuseInconsistentMerge(
+  tx: Transaction,
+  into: { id: string; visitId: string | null },
+  from: { id: string; visitId: string | null },
+): Promise<void> {
+  if (into.visitId === null && !(await tablePointsAt(tx, into.id))) {
+    throw new AppError("tab.not_table_tab", { tabId: into.id });
+  }
+  const fromAtTable = await tablePointsAt(tx, from.id);
+  if (into.visitId === null && from.visitId === null) {
+    return;
+  }
+  if (from.visitId === null) {
+    throw new AppError(fromAtTable ? "tab.party_mismatch" : "tab.not_table_tab", {
+      tabId: from.id,
+    });
+  }
+  if (into.visitId === null) {
+    throw new AppError("tab.party_mismatch", { tabId: into.id });
+  }
+  // A bill of another party that no table points at is one of its split checks. Merging it
+  // absorbs that whole party, which is intended only when no other bill of that party is open.
+  if (!fromAtTable && from.visitId !== into.visitId) {
+    const [otherOpenBill] = await tx
+      .select({ id: workingOrders.id })
+      .from(workingOrders)
+      .where(
+        and(
+          eq(workingOrders.visitId, from.visitId),
+          eq(workingOrders.status, "open"),
+          ne(workingOrders.id, from.id),
+        ),
+      )
+      .limit(1);
+    if (otherOpenBill !== undefined) {
+      throw new AppError("tab.party_has_other_open_bill", { tabId: from.id });
+    }
+  }
+}
+
 /**
  * Join an active, free table to an open tab, or to the settled or abandoned tab a seated party's
  * tables point at.
@@ -2585,6 +2639,9 @@ export async function joinTable(
 ): Promise<void> {
   await assertTabOpenOrPartyCurrent(tx, cfg, tabId);
   const visitId = await visitOfOrder(tx, tabId);
+  if (visitId === null && !(await tablePointsAt(tx, tabId))) {
+    throw new AppError("tab.not_table_tab", { tabId });
+  }
   await guardVisits(tx, visitId, null, command);
 
   const [table] = await tx
@@ -2651,26 +2708,15 @@ export async function mergeTabs(
   if (from === undefined || from.status !== "open") {
     throw new AppError("tab.not_open", { tabId: fromTabId });
   }
+  await refuseInconsistentMerge(tx, into, from);
   await guardVisits(tx, into.visitId, from.visitId, options);
   // The source is abandoned below; money it holds never moves to another bill implicitly.
   await refuseBillHoldingMoney(tx, [fromTabId]);
-  // Onto a bill of no visit the lines leave their groups, which stay with their visit.
-  const sourceLineIds =
-    from.visitId !== null && into.visitId === null
-      ? (
-          await tx
-            .select({ id: workingOrderLines.id })
-            .from(workingOrderLines)
-            .where(eq(workingOrderLines.workingOrderId, fromTabId))
-        ).map((line) => line.id)
-      : [];
-  await refuseHeldLeavingVisit(tx, fromTabId, sourceLineIds);
   const before = await readSentWork(tx, cfg, fromTabId);
   await moveOrderLines(tx, cfg, fromTabId, intoTabId, undefined, { modesChecked: false });
   // A failed ticket's dishes now sit on `intoTabId`, and the source is abandoned below, which
   // `listPrintProblems` leaves out.
   await moveKitchenPrintLinks(tx, fromTabId, intoTabId);
-  await clearGroups(tx, sourceLineIds);
   await bumpRevision(tx, [fromTabId, intoTabId]);
 
   // Two parties becoming one (D2): the source visit is absorbed into the target's.
