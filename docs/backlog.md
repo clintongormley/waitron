@@ -4462,12 +4462,29 @@ names the engine, which is the thing `packages/store` exists to prevent — the 
 `columns.ts` makes for column types. The lock file does need a connection the store does not offer
 today, so the fix is a small `openLock(path)` export, not a restructure. Nothing guards this.
 
-**The store's file layout is re-declared in two app files — OPEN (found 2026-09-23, task F1's review
-wave).** `packages/store/src/index.ts` declares `VENUE_FILE`, `NODE_FILE` and the sidecar suffixes
-privately; `apps/server/src/db-wipe.ts` and `apps/server/src/restore.ts` each name them again. Which
-files a venue directory holds is the store's property. Add a file or a sidecar and the wipe and the
-restore silently miss it — and the restore is the cold-recovery path (`CLAUDE.md` §5). **Next
-action:** export the names from `@waitron/store` and read them.
+**The store's file layout is re-declared in two app files — DONE (2026-09-27, #TBD; found
+2026-09-23, task F1's review wave).** `@waitron/store` exports `VENUE_FILE`, `NODE_FILE`,
+`DATABASE_FILES`, `WAL_SUFFIX` and `SIDE_FILE_SUFFIXES`, which `apps/server/src/db-wipe.ts`,
+`restore.ts`, `reset-request.ts`, `stream-host.ts` and `restore-stream.ts` read, and
+`VENUE_HOLDER_FILE`, which `apps/server/src/db-wipe.test.ts` reads. The case "exports the name of
+every file an open store with rows in both databases has created"
+(`packages/store/src/index.test.ts`) opens a store, writes a row in each file and fails if the
+folder holds a file the exported names and the lock's own files (`venue.lock`, its `-journal` while
+held, `venue.holder.json`) do not account for; the new case in `apps/server/src/db-wipe.test.ts`
+fails if a wipe leaves anything but those lock files. Dropping `NODE_FILE` from `DATABASE_FILES`, or
+`-shm` from `SIDE_FILE_SUFFIXES`, turns the store's case red. Neither setup migrates, streams or
+restores, so `migrations.lock` (`packages/migrations/src/apply.ts`), Litestream's
+`.venue.db-litestream/` folder, and the restore's `venue.db.incoming` file and
+`.venue.db-replaced-*` folder are outside what they check. Outside test files and `bench/`, these
+still spell the names themselves: `apps/server/src/cloud-snapshot-archive.ts` (a staging file
+outside the venue folder), `packages/stream/src/litestream.ts` and `packages/stream/src/restore.ts`
+(`@waitron/stream` does not depend on the store), `deploy/waitron.sh` (a `node -e` snippet run in
+the app image, whose `/app/node_modules` holds only sharp), the fixture scripts
+`apps/server/scripts/cloud-backup-fixture.ts` and
+`apps/server/scripts/cloud-recovery-client-fixture.ts`, and the store's own
+`packages/store/src/connections.ts`, which builds the `-wal` path itself; `WAL_SUFFIX` lives in
+`index.ts`, which imports `connections.ts`, so using it there means moving the names into a module
+of their own.
 
 **`RESTRICT_VIOLATION` and `TRIGGER_ABORT` are the same number — DONE (2026-09-27, #731; found in
 task F1's review wave).** SQLite gives a foreign key's `ON DELETE RESTRICT` and every hand-written
@@ -5441,8 +5458,8 @@ run against a real provider's bucket — the unit tests drive the real S3 client
 network, and since Task 10 (#652) the loop test drives it against versitygw 1.8.0, a real
 S3-compatible server run on the test machine.
 `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe: its fixture
-closes the handles first, which removes the sidecars, so with `db-wipe.ts`'s `SIDECARS` cut to
-`[""]` it still passes 18 of 18 (the assertions predate #548: aabdde6a8, #489). The wipe's
+closes the handles first, which removes the sidecars, so with `db-wipe.ts`'s former `SIDECARS`
+list cut to `[""]` it still passed 18 of 18 (the assertions predate #548: aabdde6a8, #489). The wipe's
 sidecar removal is pinned by `apps/server/src/db-wipe.test.ts`; what is missing is only a
 rejoin-level case with sidecars on disk.
 Every synchronous `deriveKey` caller still blocks the event loop while it derives, among them:

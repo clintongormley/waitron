@@ -3,6 +3,7 @@ import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { lockVenueDatabase, openVenueDatabase, type VenueLock } from "@waitron/db";
 import { readOperationalVenueIds, readTenantIdentities } from "@waitron/provisioning";
+import { VENUE_FILE } from "@waitron/store";
 import { wipeVenueDatabases } from "./db-wipe.js";
 import { PENDING_ADOPTION_FILE } from "./finish-adoption.js";
 import { writeFileAtomic } from "./fs-atomic.js";
@@ -50,7 +51,7 @@ async function recordMatches(stateDir: string, operationId: string): Promise<boo
 async function holdsVenue(venueDir: string): Promise<boolean> {
   // Opening would create an empty file whose unmigrated tables fail the read, and a reset re-run
   // after its wipe meets exactly that.
-  if (!existsSync(join(venueDir, "venue.db"))) return false;
+  if (!existsSync(join(venueDir, VENUE_FILE))) return false;
   let store: Awaited<ReturnType<typeof openVenueDatabase>> | undefined;
   try {
     store = await openVenueDatabase(venueDir);

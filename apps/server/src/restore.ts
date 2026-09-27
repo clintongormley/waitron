@@ -20,6 +20,7 @@ import {
   type VenueLock,
 } from "@waitron/db";
 import { applyMigrations, expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";
+import { SIDE_FILE_SUFFIXES, VENUE_FILE } from "@waitron/store";
 import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 import { orderedMigrationSets, type ProvisionedNode, type WaitronModule } from "@waitron/module";
 import { codeOf } from "@waitron/server-kit";
@@ -52,17 +53,11 @@ const IDENTITY_KEYS = [
   "WAITRON_TILL_LOCATION_ID",
   "WAITRON_TILL_SERIES_ID",
 ] as const;
-const VENUE_FILE = "venue.db";
 /** The folder inside the state folder that the restore command, the staged restore and boot pass as `stagingDir`. */
 export const RESTORE_STAGING_DIR = "restore-staging";
-/**
- * SQLite's write-ahead sidecars, kept beside the main file and named from its PATH. A committed row
- * can live in `-wal` alone, so these are part of the database, not scratch.
- */
-const VENUE_SIDECARS = ["-wal", "-shm"] as const;
 /** Where the incoming database sits while it is still incoming — same directory, so the rename is atomic. */
 const INCOMING_SUFFIX = ".incoming";
-const ASIDE_PREFIX = ".venue.db-replaced-";
+const ASIDE_PREFIX = `.${VENUE_FILE}-replaced-`;
 /** The venue file holds the whole database, the same protected content the artifact carried. */
 const VENUE_FILE_MODE = 0o600;
 
@@ -363,7 +358,7 @@ export async function restoreDatabase(args: {
   }
   const moved: string[] = [];
   try {
-    for (const suffix of ["", ...VENUE_SIDECARS]) {
+    for (const suffix of ["", ...SIDE_FILE_SUFFIXES]) {
       const member = `${target}${suffix}`;
       const found = lstatSync(member, { throwIfNoEntry: false });
       if (found === undefined) continue;

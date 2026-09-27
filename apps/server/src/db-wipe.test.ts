@@ -1,9 +1,10 @@
-import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openVenueDatabase, type VenueDatabase } from "@waitron/db";
+import { VENUE_HOLDER_FILE, VENUE_LOCK_FILE } from "@waitron/store";
 import { wipeVenueDatabases } from "./db-wipe.js";
 
 const WIPED = [
@@ -59,6 +60,16 @@ describe("wipeVenueDatabases", () => {
     await wipeVenueDatabases(venueDir);
 
     for (const name of WIPED) expect(await exists(name), `after the wipe: ${name}`).toBe(false);
+  });
+
+  it("leaves nothing but the lock's own files in a folder that never migrated", async () => {
+    open = await venueWithBothFilesWritten();
+
+    await wipeVenueDatabases(venueDir);
+
+    // The held lock keeps a rollback journal beside it; none of them holds data.
+    const lockFiles = [VENUE_LOCK_FILE, `${VENUE_LOCK_FILE}-journal`, VENUE_HOLDER_FILE];
+    expect((await readdir(venueDir)).filter((name) => !lockFiles.includes(name))).toEqual([]);
   });
 
   it("leaves the venue file with nothing in it — a row committed only to the sidecar is gone", async () => {

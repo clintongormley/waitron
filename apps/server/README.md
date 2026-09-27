@@ -188,11 +188,13 @@ FENCED ex-primary (membership rejoin R1) — it cannot sell, because the cloud i
 `waitron-rejoin rejoin` WIPES that box's local database and re-adopts it as a secondary of the current
 primary. There is no artifact input: the wipe deletes both database files, their write-ahead
 sidecars and Litestream's `.venue.db-litestream/` folder out of the venue directory
-(`src/db-wipe.ts` — a committed row can live in a `-wal` file alone, so the sidecars go too),
+(`src/db-wipe.ts`; a committed row can live in a `-wal` file alone, so the sidecars go too — see
+`SIDE_FILE_SUFFIXES` in `packages/store/src/index.ts`),
 re-migrates the directory from source, then adopts in setup mode.
 The whole command runs holding the venue folder's lock (`venue.lock`). `migrations.lock` and
 `venue.lock` (with `venue.lock-journal` while it is held) are deliberately left in place: they hold no
 data, and removing either would let a second process take a fresh lock beside the one holding it.
+`venue.holder.json`, which names the process holding `venue.lock`, is left in place too.
 
 ```
 waitron-rejoin rejoin [--accept-loss]

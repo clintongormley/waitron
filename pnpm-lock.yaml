@@ -241,6 +241,9 @@ importers:
       '@waitron/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@waitron/store':
+        specifier: workspace:*
+        version: link:../../packages/store
       '@waitron/stream':
         specifier: workspace:*
         version: link:../../packages/stream

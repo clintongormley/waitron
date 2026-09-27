@@ -19,6 +19,7 @@ export {
   isVenueHolderFresh,
   readVenueHolder,
   readVenueHolderAsync,
+  VENUE_HOLDER_FILE,
   VENUE_HOLDER_KINDS,
 } from "./venue-holder.js";
 export type { VenueHolder, VenueHolderKind } from "./venue-holder.js";
@@ -29,8 +30,15 @@ export {
 } from "./venue-liveness.js";
 import { createWriteQueue } from "./write-queue.js";
 
-const VENUE_FILE = "venue.db";
-const NODE_FILE = "node.db";
+export const VENUE_FILE = "venue.db";
+export const NODE_FILE = "node.db";
+export const DATABASE_FILES = [VENUE_FILE, NODE_FILE] as const;
+export const WAL_SUFFIX = "-wal";
+/**
+ * SQLite's write-ahead side files, named by suffixing a database file's path. A committed row can
+ * live in `-wal` alone, so they are part of the database.
+ */
+export const SIDE_FILE_SUFFIXES = [WAL_SUFFIX, "-shm"] as const;
 
 export interface VenueStoreConfig<
   TVenueSchema extends Record<string, unknown>,

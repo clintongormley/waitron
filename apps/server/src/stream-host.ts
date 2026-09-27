@@ -5,6 +5,7 @@ import { readNodeMembership, withTransaction, type Database } from "@waitron/db"
 import { signBytes } from "@waitron/membership";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
+import { VENUE_FILE, WAL_SUFFIX } from "@waitron/store";
 import {
   DEFAULT_WAL_LIMIT_BYTES,
   SentPointers,
@@ -139,7 +140,7 @@ export class StreamHost {
       // overlapping start() may land while this waits.
       await this.#retiring;
       if (this.#stopped || this.#supervisor !== undefined) return;
-      const venueDbPath = join(this.#deps.venueDir, "venue.db");
+      const venueDbPath = join(this.#deps.venueDir, VENUE_FILE);
       const supervisor = new StreamSupervisor({
         litestreamBin: this.#deps.litestreamBin,
         venueDbPath,
@@ -150,7 +151,7 @@ export class StreamHost {
         term: membership.body.term,
         sign: async (message) => signBytes(message, await readNodeIdentityKey(db, ring)),
         foldBack: () => db.checkpointTruncate(),
-        walBytes: () => fileBytes(`${venueDbPath}-wal`),
+        walBytes: () => fileBytes(`${venueDbPath}${WAL_SUFFIX}`),
         walLimitBytes: this.#deps.walLimitBytes ?? DEFAULT_WAL_LIMIT_BYTES,
         now: this.#deps.now,
         log,
