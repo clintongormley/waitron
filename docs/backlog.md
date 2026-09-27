@@ -3043,6 +3043,19 @@ image constraints under *Detail → Box image*.
 
 ### B9. CI and test infra
 
+- **Dependabot, switched on by #760 (2026-09-27) — three things OPEN.** Config:
+  `.github/dependabot.yml`; how to land one of its PRs: `docs/developers/workflow-guide.md` →
+  Dependabot pull requests. (1) **Confirm on the first real Dependabot PR** that its commit lacks a
+  `Signed-off-by` line (expected, not yet seen), that the documented `git rebase --signoff` landing
+  sequence works with its slash-containing branch name, and whether Dependabot keeps updating the PR
+  afterwards; correct the workflow guide with what happens. (2) **Owner decision: mailpit arrives
+  twice.** The compose entry lists `/` and `/deploy` with no `group-by`, and mailpit is pinned in
+  both `docker-compose.yml` and `deploy/compose.yml`, so each bump should open one PR per folder;
+  adding `group-by: dependency-name` would make it one. (3) **Triage the security-fix PRs.** On
+  2026-09-27 a push to this repo printed `GitHub found 15 vulnerabilities on
+  clintongormley/waitron's default branch (10 high, 5 moderate)`; which are reachable in this
+  product is unassessed. The `versioning-strategy` question is recorded under #432's loose ends in
+  Track C.
 - **`apps/server/src/stream-host.test.ts` passes only in file order — OPEN (found by #752's review,
   2026-09-27).** Codex ran the file under Vitest's shuffled order (`--sequence.shuffle`, seeds 577 and
   578): seed 578 failed 3 cases, because cases expecting no bucket credential ran after a case that
@@ -4748,7 +4761,7 @@ latest minor or patch release; one loose end came with it.
   raised them so that every package declares one identical range, which is now the shape of all
   nineteen. No commit or doc explains why those floors were low, so this was a judgement, not a
   rule being followed. If low floors were deliberate, the revert is one line per manifest.
-  Dependabot's npm updates (once `.github/dependabot.yml` is on `main`) set no
+  Dependabot's npm updates (on `main` since #760, 2026-09-27) set no
   `versioning-strategy`, so its default applies — GitHub's options reference says that default
   raises the minimum version for apps and widens the range for libraries; which of these manifests
   it treats as which is untested. So each weekly PR may keep raising floors, and for any manifest it
