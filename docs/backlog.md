@@ -2885,6 +2885,17 @@ image constraints under *Detail → Box image*.
 
 ### B9. CI and test infra
 
+- **A main server shard lost the landing listener's chosen port — OPEN (2026-09-27, after #736).**
+  Exact-merge CI run 36317643554 at `30d9836028e44180feca9578b87d389ab8cdd786` logged
+  `landing.listen_failed` with `EADDRINUSE` on port 40141; the
+  `apps/server/src/boot.test.ts` case "serves the plain-HTTP landing page beside a trading boot"
+  then failed with `fetch failed` / `UND_ERR_SOCKET` (other side closed). The preceding main run
+  36317491782 passed on `6515a6aa7`, and `git diff --name-only 6515a6aa7..30d983602` lists only
+  dashboard test/configuration files and this backlog. One focused local run of that server case
+  passed; the port collision's cause remains unverified. **Next action:** reproduce with the CI
+  server shard's concurrency, identify who held the chosen port between `freePort()` and the landing
+  listener's bind, then add a failing regression before changing allocation or listener startup.
+
 - **`scripts/waitron-sh.test.mjs` failed at random when its temporary folder's name held a word it
   matched — DONE (lane A's A31b, **PR #661**).** The docker stub now drops `compose` and one leading
   `-f <file>` and takes the subcommand by position, and every check on a compose subcommand reads
