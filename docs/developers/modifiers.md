@@ -295,7 +295,13 @@ Six things it is worth knowing about that payload:
   of each options list; each label is served marked with whether it is Available now**
   (`applyLiveFields`, which reads no list's `active`, so a list switched off after publishing is
   still offered until the menu is published again, and a label deleted since is served marked
-  unavailable). The lists and the labels marked available are the set `validateExtraSelections`
+  unavailable). A published default naming a label that is unavailable now is served as no
+  default for as long as the label stays unavailable (`applyLiveFields`, which works it out on every
+  read; clearing: "clears the default label while it is unavailable" in
+  `packages/catalogue/src/menu-document.test.ts`). The till's
+  menu-state poll clears it the same way (`withUnavailable`, `apps/till/src/state/menu-refresh.ts`),
+  working from the offers as it loaded them, so it cannot give back a default those offers were
+  served without. The lists and the labels marked available are the set `validateExtraSelections`
   (`extra-contract.ts`) and `validateOptionSelections` (`option-contract.ts`) will accept an answer
   from. That agreement is the reason a till and the
   order path read the same lists: both take them from the menu's published

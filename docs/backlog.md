@@ -324,10 +324,12 @@ orders); and the counter's Held orders list shows every open order, a table's ow
 (seen in the same run, not investigated).
 **Menus Task 7 (tills sell from the published version), on `feat/menus-sell-published`:** a till
 is offered, and every new line is charged, what each menu's published version says: the dish, its
-variant, its extras and its options. What is still read from the current rows: availability (a
-sold-out dish is served in its place marked unavailable, and a line for it is refused
-`product.unavailable`; an extras item sold out or switched off on the offer is refused as a pick the
-list does not offer); the VAT class, kitchen course and reporting category the served offer carries,
+variant, its extras and its options. What is still read from the current rows: whether each product
+and variant is Active and Available, whether each option label is Available, and whether an offer
+has switched an extras item off (a sold-out dish is served in its place marked unavailable, and a
+line for it is refused `product.unavailable`; an extras item sold out or switched off on the offer is
+refused as a pick the list does not offer), while whether a menu has switched a variant off is read
+from the published version; the VAT class, kitchen course and reporting category the served offer carries,
 and each extras item's VAT class (`applyLiveFields`, `packages/catalogue/src/menu-document.ts`), so
 a VAT change still reaches a new line and a new extra without a publish, which menus M7v changes next; and whether a picked extra has since gained
 an Active variant, which refuses the pick `product.variant_required`.
@@ -2053,9 +2055,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
 - **Two modifier-picker states, and how far each is actually out of reach** — a fact worth having
   before anyone writes a test claiming to cover them, and one half of it is NOT what the looking
   pass first wrote down. An options label marked unavailable never reaches the picker at all: the
-  sell-side read filters withdrawn labels out and nulls a `defaultLabelId` that names one
-  (`packages/catalogue/src/offered-modifiers.ts`, the `labels` filter and the `defaultLabelId`
-  ternary beside it) — traced through the code, not run. An over-cap count is different. Stepping
+  published version keeps every label, the served offer and the till's menu-state poll null a
+  `defaultLabelId` that names an unavailable one (`applyLiveFields`,
+  `packages/catalogue/src/menu-document.ts`; `withUnavailable`, `apps/till/src/state/menu-refresh.ts`),
+  and the till filters unavailable labels out before the picker is given them (`sellableModifiers`,
+  `apps/till/src/api/client.ts`) — traced through the code, not run. An over-cap count is different. Stepping
   cannot produce one, because `#step` clamps against both the item's own cap and what is left of the
   list's allowance; but a REOPENED line is seeded straight from `initialSelections` with no clamp at
   all, so `#allSatisfied`'s `total <= entry.maxPicks` arm is reachable after all. Run in the till's

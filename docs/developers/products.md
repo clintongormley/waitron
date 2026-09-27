@@ -246,12 +246,18 @@ Removing a variant makes it Inactive and keeps its row; a saved variant left out
 is made Inactive too (`setProductVariants`). A variant Inactive when its menu was published is on
 none of that menu's offers, and one made Inactive since is served marked unavailable
 (`applyLiveFields`, `packages/catalogue/src/menu-document.ts`). An Active one
-is listed under its parent's offer, and marked available only while it is Available and that menu
-has not switched it off (`readOfferVariants` in `listMenuOffers`, `packages/catalogue/src/operations.ts`).
+is listed under its parent's offer with whether that menu offers it, read when the menu is published
+(`readOfferVariants` in `listMenuOffers`, `packages/catalogue/src/operations.ts`). The offers the
+dashboard's menu editor reads are not published ones, and mark a variant available only while it is
+Available and that menu has not switched it off (`listMenuOffersWithTopLevel`).
 The offers a till sells from are each menu's published version, which leaves out a product that was
 Inactive when it was published (`listMenuOffers`, `packages/catalogue/src/operations.ts`). A product
 that is Unavailable, or has become Inactive since, is served in its place marked unavailable
-(`applyLiveFields`, `packages/catalogue/src/menu-document.ts`).
+(`applyLiveFields`, `packages/catalogue/src/menu-document.ts`). As served, whether a menu has
+switched a variant off is read from the published version, so a switch-off made since reaches the
+tills only when the menu is published again; whether an offer has switched an extras item off is
+read from the current rows, as is whether each product and variant is Active and Available
+(`applyLiveFields`).
 
 ### On the till
 
