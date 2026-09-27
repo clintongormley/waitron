@@ -810,7 +810,7 @@ export class TillTableOrderScreen extends LitElement {
       this.pendingDraft = null;
       const carried = this.#carried;
       this.#carried = undefined;
-      if (carried?.orderId === this.orderId) {
+      if (carried !== undefined && carried.orderId === this.orderId) {
         this.destination = carried.destination;
         this.joinTarget = carried.joinTarget;
       } else {
