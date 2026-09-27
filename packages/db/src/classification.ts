@@ -129,6 +129,21 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "state",
     "who submitted, fired, reordered or moved a party's groups; never corrected, copied to a standby, never drained back",
   ),
+  classify(
+    "order_drafts",
+    "state",
+    "each operator's unsent order on a seated party; copied to a standby, never drained back",
+  ),
+  classify(
+    "order_draft_lines",
+    "state",
+    "the lines of an unsent order; copied to a standby, never drained back",
+  ),
+  appendOnly(
+    "order_draft_events",
+    "state",
+    "who owned an unsent order and what became of it; never corrected, copied to a standby, never drained back",
+  ),
 
   // state — one row per database, the same whichever node reads it.
   classify(
