@@ -50,6 +50,7 @@ import { readVisitBills, seatTable } from "./visits.js";
 import {
   fireGroup,
   listOrderGroups,
+  moveLinesToGroup,
   submitGroups,
   type GroupLine,
   type GroupRelease,
@@ -893,6 +894,72 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
     expect(await problemsOf(mesa4.visitId)).toEqual([]);
   });
 
+  it("reprints a pass printer attached to one station with the other station's held dishes its failed HOLD ticket carried", async () => {
+    const v = await holdingVenue();
+    const pase = await passPrinter(v, [v.cocina]);
+    const mesa4 = await seated(v, "Mesa 4");
+    await submit(v, mesa4.visitId, [
+      { release: "hold", lines: [line(v, "burger"), line(v, "beer")] },
+    ]);
+    const [hold] = await jobsAt(pase);
+    expect(hold!.lines).toContain(`1.000 ea x ${DISHES.beer.kitchen}`);
+    await setJob(hold!.id, exhausted);
+    const [burger] = await db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.name, DISHES.burger.staff));
+    const moved = await command(mesa4.visitId);
+    await inTx((tx) =>
+      moveLinesToGroup(
+        tx,
+        v.cfg,
+        mesa4.visitId,
+        [{ lineId: burger!.id, quantity: "1" }],
+        "new",
+        moved,
+      ),
+    );
+    const [newGroup] = await db
+      .select({ id: workingOrderLines.groupId })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.id, burger!.id));
+    await inTx(async (tx) =>
+      fireGroup(tx, v.cfg, mesa4.visitId, newGroup!.id!, await command(mesa4.visitId)),
+    );
+    const earlier = await jobsAt(pase);
+    const before = (await links()).length;
+
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa4.tabId));
+
+    const head = ["PASE", "Mesa 4", hold!.lines[3], TIME];
+    const reprints = (await jobsAt(pase)).slice(earlier.length);
+    expect(reprints.map((job) => job.lines)).toEqual([
+      [
+        "*** REPRINT ***",
+        ...head,
+        "GROUP 2",
+        "Cocina",
+        `1.000 ea x ${DISHES.burger.kitchen}`,
+        "*** REPRINT ***",
+        "*** HOLD ***",
+        ...head,
+        "GROUP 1",
+        "Barra",
+        `1.000 ea x ${DISHES.beer.kitchen}`,
+      ],
+    ]);
+    const added = (await links()).slice(before);
+    expect(
+      added
+        .filter((row) => row.printJobId === reprints[0]!.id)
+        .map((row) => row.stationId)
+        .sort(),
+    ).toEqual([v.cocina, v.barra].sort());
+
+    for (const row of added) await setJob(row.printJobId, { status: "done" });
+    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+  });
+
   it("does not reprint a held group whose HOLD ticket was never queued", async () => {
     const v = await setupVenue();
     const mesa4 = await seated(v, "Mesa 4");
@@ -1051,8 +1118,8 @@ async function mergeBills(v: Venue, source: Seated, destination: Seated): Promis
   await inTx((tx) => mergeTabs(tx, v.cfg, destination.tabId, source.tabId, merge));
 }
 
-/** An order-scope (pass) printer attached to both stations. */
-async function passPrinter(v: Venue): Promise<string> {
+/** An order-scope (pass) printer attached to `stations`, by default both. */
+async function passPrinter(v: Venue, stations = [v.cocina, v.barra]): Promise<string> {
   return inTx(async (tx) => {
     const { id } = await createPrinter(
       tx,
@@ -1060,8 +1127,8 @@ async function passPrinter(v: Venue): Promise<string> {
       { name: "Pase", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
     );
     await updatePrinter(tx, { locationId: v.cfg.locationId }, id, { ticketScope: "order" });
-    await attachPrinterToStation(tx, { stationId: v.cocina, printerId: id });
-    await attachPrinterToStation(tx, { stationId: v.barra, printerId: id });
+    for (const stationId of stations)
+      await attachPrinterToStation(tx, { stationId, printerId: id });
     return id;
   });
 }

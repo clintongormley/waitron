@@ -283,20 +283,28 @@ interface KitchenJob {
  * ticket of that station's own items; every attached `order`-scope (group) printer gets ONE consolidated
  * ticket of the WHOLE event — deduped by printer id, so a group printer attached to N involved stations
  * prints a single ticket carrying all their items, not N. A `HOLD` ticket's `firedItems` are the held
- * items printed in advance.
+ * items printed in advance. An `order`-scope printer attached to one of `orderScopeAlsoAt`'s
+ * stations also gets the consolidated ticket, which still lists, and is linked to, only the involved
+ * stations.
  */
 async function planKitchenTickets(
   tx: Transaction,
   cfg: TillConfig,
   orderId: string,
   firedItems: FiredItem[],
-  { reprint, mark }: { reprint: boolean; mark?: "HOLD" | "FIRE" },
+  {
+    reprint,
+    mark,
+    orderScopeAlsoAt = [],
+  }: { reprint: boolean; mark?: "HOLD" | "FIRE"; orderScopeAlsoAt?: readonly string[] },
 ): Promise<KitchenJob[]> {
   if (firedItems.length === 0) return [];
 
   const stationIds = [...new Set(firedItems.map((f) => f.stationId))];
 
-  const mappingRows = await activePrinterMappings(tx, stationIds);
+  const mappingRows = await activePrinterMappings(tx, [
+    ...new Set([...stationIds, ...orderScopeAlsoAt]),
+  ]);
 
   if (mappingRows.length === 0) return [];
 
@@ -387,6 +395,12 @@ async function planKitchenTickets(
           bytes: stationTicket,
         });
       }
+    }
+  }
+
+  for (const mapping of mappingRows) {
+    if (mapping.ticketScope === "order" && !groupPrinters.has(mapping.printerId)) {
+      groupPrinters.set(mapping.printerId, mapping);
     }
   }
 
@@ -746,10 +760,16 @@ export async function reprintOrderTickets(
         isNotNull(orderGroups.holdPrintedAt),
       ),
     );
-  const jobs = await planKitchenTickets(tx, cfg, orderId, fired, { reprint: true });
+  // Pass printers are chosen over both parts: a pass printer's failed ticket can name a station the
+  // printer is not attached to, and only a reprint on that printer linked to that station clears it.
+  const jobs = await planKitchenTickets(tx, cfg, orderId, fired, {
+    reprint: true,
+    orderScopeAlsoAt: held.map((item) => item.stationId),
+  });
   const holdJobs = await planKitchenTickets(tx, cfg, orderId, held, {
     reprint: true,
     mark: "HOLD",
+    orderScopeAlsoAt: fired.map((item) => item.stationId),
   });
   for (const hold of holdJobs) {
     const same = jobs.find(
