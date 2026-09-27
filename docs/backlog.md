@@ -4731,6 +4731,13 @@ latest minor or patch release; one loose end came with it.
   raised them so that every package declares one identical range, which is now the shape of all
   nineteen. No commit or doc explains why those floors were low, so this was a judgement, not a
   rule being followed. If low floors were deliberate, the revert is one line per manifest.
+  Dependabot's npm updates (once `.github/dependabot.yml` is on `main`) set no
+  `versioning-strategy`, so its default applies — GitHub's options reference says that default
+  raises the minimum version for apps and widens the range for libraries; which of these manifests
+  it treats as which is untested. So each weekly PR may keep raising floors, and for any manifest it
+  treats as a library it widens the range instead, which would bring back the mixed-floor state
+  #432 removed — until this is decided (set `versioning-strategy` in `.github/dependabot.yml` once
+  it is).
 
 **Left behind by the esbuild upgrade (#439, 2026-09-19).** The four packages that build bundles
 moved from esbuild 0.25.12 to 0.28.2. Two things it could not take with it:

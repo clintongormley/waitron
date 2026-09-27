@@ -1,6 +1,6 @@
-# Dependabot's commits carry no Signed-off-by trailer, so its pull requests fail the required
-# "Every commit is signed off" check until someone runs `git rebase --signoff` on them (owner
-# decision 2026-09-27: the check stays strict).
+# Weekly dependency update pull requests. Dependabot's pull requests are expected to fail the
+# required sign-off check; how to land one: docs/developers/workflow-guide.md → Dependabot pull
+# requests.
 version: 2
 
 updates:
