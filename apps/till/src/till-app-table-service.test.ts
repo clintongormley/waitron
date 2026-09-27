@@ -459,7 +459,7 @@ describe("till-app table ordering: a handheld's Order tab with no table opened",
 
   it.each([
     [
-      "send-round",
+      "submit-draft",
       {
         lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }],
         groups: [{ release: "fire", lineIndexes: [0] }],
@@ -501,7 +501,7 @@ describe("till-app table ordering: a handheld's Order tab with no table opened",
 describe("till-app table ordering: refused and failed table actions", () => {
   it.each([
     [
-      "send-round",
+      "submit-draft",
       {
         lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }],
         groups: [{ release: "fire", lineIndexes: [0] }],
@@ -605,7 +605,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
     const screen = await toTableOrder(el);
     expect(screen.lines).toEqual([tabLine]);
 
-    emit(screen, "send-round", {
+    emit(screen, "submit-draft", {
       lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }],
       groups: [{ release: "fire", lineIndexes: [0] }],
     });
@@ -2244,7 +2244,7 @@ describe("till-app table ordering: a menu published while a table is open", () =
     expect(api.listZoneOffers).toHaveBeenCalledTimes(1);
 
     const round = new WorkingOrderStore();
-    emit(screen, "send-round", {
+    emit(screen, "submit-draft", {
       lines: [{ menuItemId: "menu-item-sopa-0", quantity: "1" }],
       groups: [{ release: "fire", lineIndexes: [0] }],
       round,

@@ -9,6 +9,7 @@ import "./till-table-order-screen.js";
 import type { TableServiceStatus, TillTableOrderScreen } from "./till-table-order-screen.js";
 import type {
   OfferedModifier,
+  OrderGroup,
   TabLine,
   TableVisit,
   TillProduct,
@@ -301,6 +302,68 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       await expectNoA11yViolations(host);
     },
   );
+
+  describe("the draft's actions", () => {
+    /** Rings two cafés, checks the first when `select` is set, and lets the nested widgets settle. */
+    async function withDraft(over: Partial<TillTableOrderScreen>, select: boolean) {
+      const mounted = await mountWidget<TillTableOrderScreen>(
+        "till-table-order-screen",
+        { products, menus, lines: [], statuses, courses, orderId: "wo-1", ...over },
+        theme,
+      );
+      const { el } = mounted;
+      const store = el.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!.store;
+      store.addProduct(products[0]!, "1");
+      store.addProduct(products[0]!, "2");
+      await el.updateComplete;
+      if (select) {
+        el.shadowRoot!.querySelector<HTMLElement>('[data-draft-select="0"]')!.click();
+        await el.updateComplete;
+      }
+      await el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+        "till-basket",
+      )!.updateComplete;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await el.updateComplete;
+      return mounted;
+    }
+
+    it("has no violations in the action bar, with nothing and with a line checked", async () => {
+      const { host } = await withDraft({}, false);
+      await expectNoA11yViolations(host);
+      cleanupWidgets();
+      const selected = await withDraft({}, true);
+      await expectNoA11yViolations(selected.host);
+    });
+
+    it("has no violations in the preview dialog", async () => {
+      const { el, host } = await withDraft({}, true);
+      el.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-selected"]')!.click();
+      await el.updateComplete;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await el.updateComplete;
+      await expectNoA11yViolations(host);
+    });
+
+    it("has no violations in a later addition's destination and held-group picker", async () => {
+      const group = (id: string, position: number, state: OrderGroup["state"]): OrderGroup => ({
+        id,
+        position,
+        state,
+        firedAt: state === "fired" ? "2026-08-20T09:59:00.000Z" : null,
+        remindAt: null,
+        lineIds: [],
+        summary: `${position} × Café`,
+      });
+      const { el, host } = await withDraft(
+        { groups: [group("g1", 1, "fired"), group("g2", 2, "held"), group("g3", 3, "held")] },
+        false,
+      );
+      el.shadowRoot!.querySelector<HTMLElement>('[data-destination="add-to-held"]')!.click();
+      await el.updateComplete;
+      await expectNoA11yViolations(host);
+    });
+  });
 
   it("has no violations in the split quantity picker", async () => {
     const splitLines: TabLine[] = [

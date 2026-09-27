@@ -22,9 +22,8 @@ export interface DraftGroup {
   lineIndexes: number[];
 }
 
-/** What a draft action does: with nothing selected, Send all or Fire all now; with a selection, Send
- * selected or Fire selected now. A later addition goes to its destination: Fire now, Add to held
- * group, or Add as new group — the selection, or everything when nothing is selected. */
+/** A draft action. `fire-now`, `add-to-held` and `add-as-new` act on the selection, or on everything
+ * when nothing is selected. */
 export type DraftAction =
   | { kind: "send-all" }
   | { kind: "fire-all" }

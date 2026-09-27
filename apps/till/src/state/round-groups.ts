@@ -1,37 +1,4 @@
-import type { GroupRelease, OrderGroup, TabLine, TillCourse } from "../api/client.js";
-import { draftSections } from "./draft-groups.js";
-
-/** One round line as the grouping reads it: its course, and whether the waiter held it. */
-export interface RoundEntry {
-  courseId: string | null;
-  held: boolean;
-}
-
-/** One group of a round: the positions of its lines in the round, and when it is released. */
-export interface RoundGroup {
-  release: GroupRelease;
-  lineIndexes: number[];
-}
-
-/**
- * Splits a round into groups by course, in the venue's course order. The earliest course goes to
- * the kitchen now, less the lines the waiter held, which wait as a group of their own; every later
- * course waits as a group. A line with no course, or with one the till does not list (so cannot
- * order or offer a Fire for), goes with the earliest course.
- */
-export function groupRound(
-  entries: readonly RoundEntry[],
-  courses: readonly TillCourse[],
-): RoundGroup[] {
-  const [first, ...later] = draftSections(entries, courses);
-  if (first === undefined) return [];
-  const groups: RoundGroup[] = [
-    { release: "fire", lineIndexes: first.lineIndexes.filter((index) => !entries[index]!.held) },
-    { release: "hold", lineIndexes: first.lineIndexes.filter((index) => entries[index]!.held) },
-    ...later.map((section) => ({ release: "hold" as const, lineIndexes: section.lineIndexes })),
-  ];
-  return groups.filter((group) => group.lineIndexes.length > 0);
-}
+import type { OrderGroup, TabLine } from "../api/client.js";
 
 /** The ids of the party's HELD groups. */
 export function heldGroupIds(groups: readonly Pick<OrderGroup, "id" | "state">[]): Set<string> {

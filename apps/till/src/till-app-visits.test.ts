@@ -7,6 +7,7 @@ import { codeMessage } from "./i18n/codes.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
+import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import type { CanvasDef, CapabilityFlag } from "./layout.js";
 import { WorkingOrderStore } from "./state/working-order.js";
 import type {
@@ -1236,7 +1237,7 @@ describe("till-app: the order's groups", () => {
     const order = await openMesa(el);
     const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
 
-    emit(order, "send-round", {
+    emit(order, "submit-draft", {
       lines: roundLines,
       groups: [
         { release: "fire", lineIndexes: [1] },
@@ -1267,9 +1268,9 @@ describe("till-app: the order's groups", () => {
     });
     const order = await openMesa(el);
     const round = { lines: roundLines, groups: [{ release: "fire", lineIndexes: [0, 1] }] };
-    emit(order, "send-round", round);
+    emit(order, "submit-draft", round);
     await flush(el);
-    emit(order, "send-round", round);
+    emit(order, "submit-draft", round);
     await flush(el);
     const [first, second] = vi
       .mocked(api.submitGroups)
@@ -1282,7 +1283,7 @@ describe("till-app: the order's groups", () => {
       submitGroups: vi.fn().mockResolvedValue({ tabId: "wo-4", revision: 4, groups: [] }),
     });
     const order = await openMesa(el);
-    emit(order, "send-round", {
+    emit(order, "submit-draft", {
       lines: roundLines,
       groups: [{ release: "fire", lineIndexes: [0, 1] }],
     });
@@ -1300,7 +1301,7 @@ describe("till-app: the order's groups", () => {
     const order = await openMesa(el);
     const reads = vi.mocked(api.getTablesState).mock.calls.length;
 
-    emit(order, "send-round", {
+    emit(order, "submit-draft", {
       lines: [roundLines[0]],
       groups: [{ release: "fire", lineIndexes: [0] }],
     });
@@ -1320,7 +1321,7 @@ describe("till-app: the order's groups", () => {
     const round = new WorkingOrderStore();
     round.addProduct(cafe, "1");
 
-    emit(order, "send-round", {
+    emit(order, "submit-draft", {
       lines: [{ menuItemId: "menu-item-cafe", quantity: "1" }],
       groups: [{ release: "fire", lineIndexes: [0] }],
       round,
@@ -1337,7 +1338,7 @@ describe("till-app: the order's groups", () => {
     const barTab = table({ state: "open-tab", hasOpenTab: true, tabId: "wo-bar" });
     const { el } = await mountApp({ getTablesState: vi.fn().mockResolvedValue([barTab]) });
     const order = await openMesa(el);
-    emit(order, "send-round", {
+    emit(order, "submit-draft", {
       lines: roundLines,
       groups: [{ release: "fire", lineIndexes: [0, 1] }],
     });
@@ -1360,7 +1361,7 @@ describe("till-app: the order's groups", () => {
       }),
     });
     const order = await openMesa(el);
-    emit(order, "send-round", {
+    emit(order, "submit-draft", {
       lines: roundLines,
       groups: [{ release: "fire", lineIndexes: [0, 1] }],
     });
@@ -1382,7 +1383,7 @@ describe("till-app: the order's groups", () => {
       ),
     });
     const order = await openMesa(el);
-    emit(order, "send-round", {
+    emit(order, "submit-draft", {
       lines: roundLines,
       groups: [{ release: "fire", lineIndexes: [0, 1] }],
     });
@@ -1409,7 +1410,7 @@ describe("till-app: the order's groups", () => {
     const round = new WorkingOrderStore();
     round.addProduct(cafe, "1");
 
-    emit(tableOrder(el)!, "send-round", {
+    emit(tableOrder(el)!, "submit-draft", {
       lines: [{ menuItemId: "menu-item-cafe", quantity: "1" }],
       groups: [{ release: "fire", lineIndexes: [0] }],
       round,
@@ -1437,7 +1438,7 @@ describe("till-app: the order's groups", () => {
     await flush(el);
     expect(tableOrder(el)!.orderId).toBe("wo-new");
 
-    emit(tableOrder(el)!, "send-round", {
+    emit(tableOrder(el)!, "submit-draft", {
       lines: roundLines,
       groups: [{ release: "fire", lineIndexes: [0, 1] }],
     });
@@ -1699,7 +1700,7 @@ describe("till-app: the order's groups", () => {
 
         emit(order, "void-line", { lineNo: 1 });
         await flush(el);
-        emit(tableOrder(el)!, "send-round", {
+        emit(tableOrder(el)!, "submit-draft", {
           lines: roundLines,
           groups: [{ release: "fire", lineIndexes: [0, 1] }],
         });
@@ -1762,7 +1763,7 @@ describe("till-app: the order's groups", () => {
 
         emit(order, "void-line", { lineNo: 1 });
         await flush(el);
-        emit(tableOrder(el)!, "send-round", {
+        emit(tableOrder(el)!, "submit-draft", {
           lines: roundLines,
           groups: [{ release: "fire", lineIndexes: [0, 1] }],
         });
@@ -1834,9 +1835,9 @@ describe("till-app: the order's groups", () => {
         const order = await openMesa(el);
         const round = { lines: roundLines, groups: [{ release: "fire", lineIndexes: [0, 1] }] };
 
-        emit(order, "send-round", round);
+        emit(order, "submit-draft", round);
         await flush(el);
-        emit(tableOrder(el)!, "send-round", round);
+        emit(tableOrder(el)!, "submit-draft", round);
         await flush(el);
         emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
         await flush(el);
@@ -1862,5 +1863,283 @@ describe("till-app: the order's groups", () => {
         expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 3 });
       });
     });
+  });
+});
+
+describe("till-app: submitting the draft", () => {
+  const serviceCourses = [
+    { id: "drinks", name: "Drinks", displayOrder: 0 },
+    { id: "cold", name: "Cold starters", displayOrder: 1 },
+    { id: "warm", name: "Warm starters", displayOrder: 2 },
+    { id: "mains", name: "Mains", displayOrder: 3 },
+    { id: "desserts", name: "Desserts", displayOrder: 4 },
+  ];
+  const dish = (id: string, name: string, courseId: string): TillProduct => ({
+    id,
+    menuItemId: `offer-${id}`,
+    name,
+    pricingUnit: "each",
+    unitPrice: "5.00",
+    vatClass: "general",
+    category: null,
+    allergens: null,
+    courseId,
+  });
+  const beer = dish("beer", "Beer", "drinks");
+  const salad = dish("salad", "Salad", "cold");
+  const croquetas = dish("croquetas", "Croquetas", "warm");
+  const steak = dish("steak", "Steak", "mains");
+  const flan = dish("flan", "Flan", "desserts");
+
+  /** The server's side of groups: each submission appends its groups at the end of the party's
+   * sequence, or adds its lines to the held group it joins; each is refused unless it carries the
+   * party's current revision, which it moves on by one. */
+  function groupsServer(start = 3) {
+    let revision = start;
+    let lineIds = 0;
+    const groups: OrderGroup[] = [];
+    return {
+      groups,
+      /** The floor lists the party at the revision the server holds. */
+      getTablesState: vi.fn(async () => [seated({}, { revision }), mesa7, mesa9]),
+      listGroups: vi.fn(async () => ({ revision, groups: groups.map((group) => ({ ...group })) })),
+      submitGroups: vi.fn(
+        async (
+          _visitId: string,
+          submission: {
+            expectedVisitRevision: number;
+            joinGroupId?: string;
+            groups: { release: "fire" | "hold"; lines: { menuItemId?: string }[] }[];
+          },
+        ) => {
+          if (submission.expectedVisitRevision !== revision)
+            throw { code: "visit.out_of_date", visitId: "v1" };
+          for (const group of submission.groups) {
+            const ids = group.lines.map(() => `line-${++lineIds}`);
+            const joined = groups.find((held) => held.id === submission.joinGroupId);
+            if (joined !== undefined) {
+              joined.lineIds.push(...ids);
+              continue;
+            }
+            groups.push({
+              id: `g${groups.length + 1}`,
+              position: groups.length + 1,
+              state: group.release === "fire" ? "fired" : "held",
+              firedAt: group.release === "fire" ? "2026-09-27T10:00:00.000Z" : null,
+              remindAt: null,
+              lineIds: ids,
+              summary: group.lines.map((line) => `1 × ${line.menuItemId}`).join(", "),
+            });
+          }
+          revision += 1;
+          return { tabId: "wo-4", revision, groups: [] };
+        },
+      ),
+    };
+  }
+
+  const withCourses = () => ({
+    getTill: vi.fn().mockResolvedValue({ ...till, courses: serviceCourses }),
+  });
+
+  const draftOf = (order: TillTableOrderScreen) =>
+    order.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!.store;
+
+  async function ring(el: TillApp, order: TillTableOrderScreen, ...products: TillProduct[]) {
+    for (const product of products) draftOf(order).addProduct(product, "1");
+    await flush(el);
+  }
+
+  async function toggle(el: TillApp, order: TillTableOrderScreen, name: string): Promise<void> {
+    [...order.shadowRoot!.querySelectorAll<HTMLElement>("[data-draft-select]")]
+      .find((button) => button.textContent!.includes(name))!
+      .click();
+    await flush(el);
+  }
+
+  async function act(el: TillApp, order: TillTableOrderScreen, kind: string): Promise<void> {
+    order.shadowRoot!.querySelector<HTMLElement>(`[data-draft-action="${kind}"]`)!.click();
+    await flush(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
+    await flush(el);
+  }
+
+  const toast = (el: TillApp) =>
+    el.shadowRoot!.querySelector<HTMLElement & { open: boolean; message: string; tone: string }>(
+      "wt-toast[data-submitted-toast]",
+    );
+
+  it("files the spec's five groups from one draft, then returns to the floor saying what it did", async () => {
+    const server = groupsServer();
+    const { el } = await mountApp({ ...withCourses(), ...server });
+    const order = await openMesa(el);
+    await ring(el, order, beer, salad, croquetas, steak, flan);
+
+    await toggle(el, order, "Beer");
+    await act(el, order, "fire-selected");
+    await toggle(el, tableOrder(el)!, "Salad");
+    await act(el, tableOrder(el)!, "fire-selected");
+    await toggle(el, tableOrder(el)!, "Croquetas");
+    await act(el, tableOrder(el)!, "send-selected");
+    expect(tableOrder(el)).not.toBeNull();
+    expect(toast(el)?.open ?? false).toBe(false);
+    await act(el, tableOrder(el)!, "send-all");
+
+    expect(
+      server.groups.map((group) => ({
+        position: group.position,
+        state: group.state,
+        summary: group.summary,
+      })),
+    ).toEqual([
+      { position: 1, state: "fired", summary: "1 × offer-beer" },
+      { position: 2, state: "fired", summary: "1 × offer-salad" },
+      { position: 3, state: "held", summary: "1 × offer-croquetas" },
+      { position: 4, state: "held", summary: "1 × offer-steak" },
+      { position: 5, state: "held", summary: "1 × offer-flan" },
+    ]);
+    expect(api.submitGroups).toHaveBeenCalledTimes(4);
+    expect(tableOrder(el)).toBeNull();
+    expect(floor(el)).not.toBeNull();
+    expect(toast(el)!.open).toBe(true);
+    expect(toast(el)!.tone).toBe("info");
+    expect(toast(el)!.message).toBe("Fired: 2 groups. Held: 3 groups.");
+    expect(toast(el)!.getAttribute("close-label")).toBe(t("table.submitted_close"));
+  });
+
+  it("stays on the table after a partial submission, keeping the unchecked lines in the draft", async () => {
+    const server = groupsServer();
+    const { el } = await mountApp({ ...withCourses(), ...server });
+    const order = await openMesa(el);
+    await ring(el, order, beer, steak);
+    const draft = draftOf(order);
+
+    await toggle(el, order, "Beer");
+    await act(el, order, "fire-selected");
+
+    expect(api.submitGroups).toHaveBeenCalledOnce();
+    expect(tableOrder(el)).toBe(order);
+    expect(draft.lines.map((line) => line.product.id)).toEqual(["steak"]);
+    expect(toast(el)?.open ?? false).toBe(false);
+  });
+
+  it("says one group in the singular, and leaves out a clause with nothing in it", async () => {
+    const server = groupsServer();
+    const { el } = await mountApp({ ...withCourses(), ...server });
+    const order = await openMesa(el);
+    await ring(el, order, beer, steak);
+    await act(el, order, "fire-all");
+    expect(toast(el)!.message).toBe("Fired: 1 group.");
+  });
+
+  it("does not count a draft added to a held group as a new group", async () => {
+    const server = groupsServer();
+    const { el } = await mountApp({ ...withCourses(), ...server });
+    let order = await openMesa(el);
+    await ring(el, order, steak);
+    await act(el, order, "send-all");
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    order = tableOrder(el)!;
+    await ring(el, order, flan);
+    order.shadowRoot!.querySelector<HTMLElement>('[data-destination="add-to-held"]')!.click();
+    await flush(el);
+    await act(el, order, "submit");
+
+    expect(vi.mocked(api.submitGroups).mock.calls[1]![1]).toEqual({
+      submissionId: expect.any(String),
+      expectedVisitRevision: 4,
+      joinGroupId: "g1",
+      groups: [{ release: "hold", lines: [{ menuItemId: "offer-flan", quantity: "1" }] }],
+    });
+    expect(server.groups).toHaveLength(1);
+    expect(toast(el)!.message).toBe(t("table.submitted_joined"));
+  });
+
+  it("returns a handheld to its floor tab after a complete submission, keeping the order it showed", async () => {
+    const server = groupsServer();
+    const { el } = await mountApp({
+      ...server,
+      getTill: vi.fn().mockResolvedValue({ ...till, courses: serviceCourses, canvas: phone }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+    });
+    await flush(el);
+    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+    await flush(el);
+    emit(shell(el), "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    const card =
+      tabGrid(el)!.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
+    await ring(el, card, beer);
+    await act(el, card, "fire-all");
+
+    expect((shell(el) as HTMLElement & { activeTabKey?: string }).activeTabKey).toBe("floor");
+    expect(toast(el)!.message).toBe("Fired: 1 group.");
+    emit(shell(el), "tab-select", { key: "order" });
+    await flush(el);
+    expect(
+      tabGrid(el)!.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!
+        .orderId,
+    ).toBe("wo-4");
+  });
+
+  it("reloads and says so when another device changed the party first, and never sends again", async () => {
+    const { el } = await mountApp({
+      ...withCourses(),
+      submitGroups: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v1" }),
+    });
+    const order = await openMesa(el);
+    await ring(el, order, beer);
+    const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
+    const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
+
+    await act(el, order, "fire-all");
+    await flush(el);
+
+    expect(api.submitGroups).toHaveBeenCalledOnce();
+    expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
+    expect(api.getTablesState).toHaveBeenCalledTimes(floorReads + 1);
+    expect(banner(el)!.textContent).toContain(t("visit.changed").replace("{table}", "4"));
+    expect(draftOf(order).lineCount).toBe(1);
+    expect(tableOrder(el)).toBe(order);
+    expect(toast(el)?.open ?? false).toBe(false);
+  });
+
+  it("refuses to add to a held group while the groups could not be read, and reads them again", async () => {
+    // A preview opened before a read failed still names the group it joins.
+    const listGroups = vi.fn().mockRejectedValue(new TypeError("offline"));
+    const { el } = await mountApp({ ...withCourses(), listGroups });
+    const order = await openMesa(el);
+    const reads = listGroups.mock.calls.length;
+    const round = new WorkingOrderStore();
+    round.addProduct(flan, "1");
+
+    emit(order, "submit-draft", {
+      lines: [{ menuItemId: "offer-flan", quantity: "1" }],
+      groups: [{ release: "hold", lineIndexes: [0] }],
+      joinGroupId: "g1",
+      round,
+      sent: round.lines,
+    });
+    await flush(el);
+
+    expect(api.submitGroups).not.toHaveBeenCalled();
+    expect(banner(el)!.textContent).toContain(t("table.error"));
+    expect(listGroups).toHaveBeenCalledTimes(reads + 1);
+    expect(round.lineCount).toBe(1);
+  });
+
+  it("still submits a first-order draft while the groups could not be read", async () => {
+    const { el } = await mountApp({
+      ...withCourses(),
+      listGroups: vi.fn().mockRejectedValue(new TypeError("offline")),
+    });
+    const order = await openMesa(el);
+    await ring(el, order, beer);
+    await act(el, order, "fire-all");
+    expect(api.submitGroups).toHaveBeenCalledOnce();
+    expect(banner(el)).toBeNull();
   });
 });

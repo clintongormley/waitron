@@ -3903,7 +3903,7 @@ describe("till-app", () => {
         expect(screen.statuses).toEqual(catalogue);
       });
 
-      it("send-round submits the round to the table's party then reloads its lines", async () => {
+      it("submit-draft submits the round to the table's party then reloads its lines", async () => {
         const submitGroups = vi.fn().mockResolvedValue({ tabId: "wo-7", revision: 4, groups: [] });
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
@@ -3915,7 +3915,7 @@ describe("till-app", () => {
         const screen = await toTableOrder(el, seatedTable);
         expect(getTabLines).toHaveBeenCalledTimes(1);
 
-        emit(screen, "send-round", {
+        emit(screen, "submit-draft", {
           lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }],
           groups: [{ release: "fire", lineIndexes: [0] }],
         });
@@ -3936,7 +3936,7 @@ describe("till-app", () => {
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 
-      it("send-round forwards a per-line course OVERRIDE verbatim to submitGroups (KDS-2 §5b)", async () => {
+      it("submit-draft forwards a per-line course OVERRIDE verbatim to submitGroups (KDS-2 §5b)", async () => {
         const submitGroups = vi.fn().mockResolvedValue({ tabId: "wo-7", revision: 4, groups: [] });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([seatedTable]),
@@ -3945,7 +3945,7 @@ describe("till-app", () => {
           getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
         });
         const screen = await toTableOrder(el, seatedTable);
-        emit(screen, "send-round", {
+        emit(screen, "submit-draft", {
           lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1", courseId: "postres" }],
           groups: [{ release: "fire", lineIndexes: [0] }],
         });
@@ -3958,7 +3958,7 @@ describe("till-app", () => {
         ]);
       });
 
-      it("send-round sends a held line's group held (coursing A3)", async () => {
+      it("submit-draft sends a held line's group held (coursing A3)", async () => {
         const submitGroups = vi.fn().mockResolvedValue({ tabId: "wo-7", revision: 4, groups: [] });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([seatedTable]),
@@ -3967,7 +3967,7 @@ describe("till-app", () => {
           getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
         });
         const screen = await toTableOrder(el, seatedTable);
-        emit(screen, "send-round", {
+        emit(screen, "submit-draft", {
           lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }],
           groups: [{ release: "hold", lineIndexes: [0] }],
         });
@@ -4134,7 +4134,7 @@ describe("till-app", () => {
 
         for (const [type, detail] of [
           [
-            "send-round",
+            "submit-draft",
             {
               lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }],
               groups: [{ release: "fire", lineIndexes: [0] }],

@@ -22,7 +22,7 @@ import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { selectStyles } from "../select-styles.js";
 import { type DietPredicate, hasDietData, memoVisibleProducts, shownMenu } from "../menu-filter.js";
-import { lineProductName, productName } from "../widgets/product-name.js";
+import { lineProductName, productName, productUnit } from "../widgets/product-name.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import {
   WorkingOrderStore,
@@ -59,26 +59,42 @@ import type {
 } from "../api/client.js";
 import type { ConfirmPaymentDetail } from "../widgets/tender-pay.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
+import { heldGroupIds, inHeldGroup, sendsAlone } from "../state/round-groups.js";
 import {
-  groupRound,
-  heldGroupIds,
-  inHeldGroup,
-  sendsAlone,
-  type RoundGroup,
-} from "../state/round-groups.js";
+  draftPreview,
+  draftSections,
+  draftSubmission,
+  type DraftAction,
+  type DraftEntry,
+  type DraftGroup,
+  type DraftPreview,
+} from "../state/draft-groups.js";
+import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
 
 export type { TableServiceStatus };
 
 /**
- * A round to add to the tab, in `groups` naming its lines by their place in `lines`. The round stays
- * in `round` until the app has the server's answer: it takes out the `sent` lines (the ones `lines`
- * was built from, in order) once the round is added, and a refused round is kept (D9).
+ * `submit-draft`: the groups a confirmed preview named, each naming its lines by their place in
+ * `lines`. The draft stays in `round` until the app has the server's answer: it takes out the `sent`
+ * lines (the ones `lines` was built from, in order) once they are added, and a refused submission is
+ * kept (D9). `joinGroupId` adds the one held group's lines to that existing group.
  */
-export interface SendRoundDetail {
+export interface SubmitDraftDetail {
   lines: GroupLine[];
-  groups: RoundGroup[];
+  groups: DraftGroup[];
+  joinGroupId?: string;
   round: WorkingOrderStore;
   sent: readonly OrderLine[];
+}
+
+/** Where a later addition goes: `add-to-held` is offered only while the party has a held group. */
+type Destination = "fire-now" | "add-to-held" | "add-as-new";
+
+/** An action's preview, and the submission its Confirm sends. */
+interface PendingDraft {
+  preview: DraftPreview;
+  joinPosition?: number;
+  detail: SubmitDraftDetail;
 }
 
 /** `change-line`: one sent line's edit, from the copy of the order read at `revision`. */
@@ -402,32 +418,57 @@ export class TillTableOrderScreen extends LitElement {
         border-radius: 50%;
       }
 
-      .round-courses {
+      .draft-sections {
         display: flex;
         flex-direction: column;
-        gap: var(--wt-space-2);
+        gap: var(--wt-space-3);
         padding-top: var(--wt-space-3);
         border-top: 1px solid var(--wt-color-border);
       }
 
-      .round-course {
+      .draft-section {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+      }
+
+      .draft-section-name {
+        margin: 0;
+        font-size: var(--wt-font-size-md);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .draft-line {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: var(--wt-space-3);
       }
 
-      /* The course name + select group; display:contents so its children stay direct flex items of
-         .round-course (unchanged layout) while the hold switch sits beside them as a sibling. */
-      .round-course-field {
-        display: contents;
+      .draft-select {
+        min-width: 0;
       }
 
-      .round-course-name {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+      .draft-select[aria-pressed="true"] {
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .draft-line-name {
+        overflow-wrap: anywhere;
+      }
+
+      .draft-bar {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        flex: 0 0 auto;
+      }
+
+      .draft-actions,
+      .destination {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
       }
 
       .fire-options {
@@ -467,11 +508,8 @@ export class TillTableOrderScreen extends LitElement {
         flex: 1 1 auto;
         min-width: 0;
       }
-
-      .round-bar .send-round {
-        flex: 0 0 auto;
-      }
     `,
+    segmentedOptionStyles,
   ];
 
   /** The APP owns and reloads them; the drawer, total and badge render from these, never a re-price. */
@@ -563,7 +601,27 @@ export class TillTableOrderScreen extends LitElement {
     const round = this.#roundStore;
     if (this.#watchedRound?.round === round) return;
     this.#watchedRound?.stop();
-    this.#watchedRound = { round, stop: round.subscribe(() => this.requestUpdate()) };
+    this.#watchedRound = {
+      round,
+      stop: round.subscribe(() => {
+        this.#noteDraftStart(round);
+        this.requestUpdate();
+      }),
+    };
+  }
+
+  /** Whether each draft is a later addition: the party already had a group when the draft got its
+   * first line. Kept through the draft's partial submissions, dropped once it is empty. */
+  readonly #laterAddition = new WeakMap<WorkingOrderStore, boolean>();
+
+  #noteDraftStart(round: WorkingOrderStore): void {
+    if (round.lineCount === 0) {
+      this.#laterAddition.delete(round);
+      this.destination = "fire-now";
+      this.joinTarget = null;
+    } else if (!this.#laterAddition.has(round)) {
+      this.#laterAddition.set(round, this.groups.length > 0);
+    }
   }
 
   override connectedCallback(): void {
@@ -582,8 +640,12 @@ export class TillTableOrderScreen extends LitElement {
    * ABSENT here takes its product's default course server-side.
    */
   #roundCourses = new WeakMap<OrderLine, string>();
-  /** Same lifecycle as {@link #roundCourses}. */
-  #roundHolds = new WeakMap<OrderLine, boolean>();
+  /** The draft lines the waiter checked; same lifecycle as {@link #roundCourses}. */
+  #selected = new WeakSet<OrderLine>();
+  @state() private destination: Destination = "fire-now";
+  /** The held group Add to held group joins; the first held group when unset or gone. */
+  @state() private joinTarget: string | null = null;
+  @state() private pendingDraft: PendingDraft | null = null;
   #payStore?: TabPayStore;
   /** Memoised so a render triggered by a round change does not recompute every line's gross. */
   #lineGrossByLineNo = new Map<number, Decimal>();
@@ -612,6 +674,9 @@ export class TillTableOrderScreen extends LitElement {
       this.#closeActions();
       this.#closeChange();
       this.cancelLine = null;
+      this.pendingDraft = null;
+      this.destination = "fire-now";
+      this.joinTarget = null;
     }
     if (changed.has("groups") || this.#heldGroupIds === undefined) {
       this.#heldGroupIds = heldGroupIds(this.groups);
@@ -684,33 +749,116 @@ export class TillTableOrderScreen extends LitElement {
     return trimQuantity(quantity);
   }
 
-  /** An unoverridden line OMITS `courseId`, so the server applies the product's default course. The
-   * answers name lists, products and labels by id alone: the server takes every price, VAT class and
-   * name from the published offer. */
-  #sendRound(): void {
-    const sent = this.#roundStore.lines;
-    const lines = sent.map((line) => {
-      const roundLine: GroupLine = {
-        ...toWireProductIdentity(line.product),
-        quantity: line.quantity,
-        ...toWireLineExtras(line),
-        ...toWireModifiers(line),
-      };
-      const courseId = this.#roundCourses.get(line);
-      if (courseId !== undefined) {
-        roundLine.courseId = courseId;
-      }
-      return roundLine;
-    });
-    const groups = groupRound(
-      sent.map((line) => ({
+  #draftEntries(lines: readonly OrderLine[]): DraftEntry[] {
+    return lines.map((line) => {
+      const unit = productUnit(line.product);
+      return {
         courseId: this.#selectedCourseId(line) || null,
-        held: this.#isHeld(line),
+        quantity: line.quantity,
+        wholeUnits: unit.hardwareUnit === null && unit.precision === 0,
+      };
+    });
+  }
+
+  #selectedIndexes(lines: readonly OrderLine[]): Set<number> {
+    return new Set(lines.flatMap((line, index) => (this.#selected.has(line) ? [index] : [])));
+  }
+
+  /** `requestUpdate` because {@link #selected} is a `WeakSet`, not a reactive property. */
+  #toggleSelected(line: OrderLine): void {
+    if (this.#selected.has(line)) this.#selected.delete(line);
+    else this.#selected.add(line);
+    this.requestUpdate();
+  }
+
+  #isLaterAddition(): boolean {
+    return this.#laterAddition.get(this.#roundStore) === true;
+  }
+
+  /** The party's held groups in position order: the ones a later addition may join. */
+  #heldGroups(): OrderGroup[] {
+    return this.groups
+      .filter((group) => group.state === "held")
+      .sort((a, b) => a.position - b.position);
+  }
+
+  #effectiveDestination(): Destination {
+    return this.destination === "add-to-held" && this.#heldGroups().length === 0
+      ? "fire-now"
+      : this.destination;
+  }
+
+  #joinGroup(): OrderGroup | undefined {
+    const held = this.#heldGroups();
+    return held.find((group) => group.id === this.joinTarget) ?? held[0];
+  }
+
+  #laterAction(): DraftAction {
+    switch (this.#effectiveDestination()) {
+      case "fire-now":
+        return { kind: "fire-now" };
+      case "add-as-new":
+        return { kind: "add-as-new" };
+      case "add-to-held":
+        return { kind: "add-to-held", groupId: this.#joinGroup()!.id };
+    }
+  }
+
+  /**
+   * The preview and the submission are worked out together, from the same draft, and Confirm sends the
+   * submission kept here, so it is exactly what the preview named. An unoverridden line OMITS
+   * `courseId`, so the server applies the product's default course. The answers name lists, products
+   * and labels by id alone: the server takes every price, VAT class and name from the published offer.
+   */
+  #openPreview(action: DraftAction): void {
+    const round = this.#roundStore;
+    const lines = round.lines;
+    const entries = this.#draftEntries(lines);
+    const selected = this.#selectedIndexes(lines);
+    const submission = draftSubmission(action, entries, this.courses, selected);
+    const preview = draftPreview(action, entries, this.courses, selected);
+    const order = submission.groups.flatMap((group) => group.lineIndexes);
+    const place = new Map(order.map((index, position) => [index, position]));
+    const sent = order.map((index) => lines[index]!);
+    const detail: SubmitDraftDetail = {
+      lines: sent.map((line) => {
+        const wire: GroupLine = {
+          ...toWireProductIdentity(line.product),
+          quantity: line.quantity,
+          ...toWireLineExtras(line),
+          ...toWireModifiers(line),
+        };
+        const courseId = this.#roundCourses.get(line);
+        if (courseId !== undefined) wire.courseId = courseId;
+        return wire;
+      }),
+      groups: submission.groups.map((group) => ({
+        release: group.release,
+        lineIndexes: group.lineIndexes.map((index) => place.get(index)!),
       })),
-      this.courses,
+      ...(submission.joinGroupId === undefined ? {} : { joinGroupId: submission.joinGroupId }),
+      round,
+      sent,
+    };
+    const joined = this.groups.find((group) => group.id === submission.joinGroupId);
+    this.pendingDraft = {
+      preview,
+      ...(joined === undefined ? {} : { joinPosition: joined.position }),
+      detail,
+    };
+  }
+
+  #confirmPreview(): void {
+    const pending = this.pendingDraft;
+    if (pending === null) return;
+    this.pendingDraft = null;
+    this.dispatchEvent(
+      new CustomEvent("submit-draft", { detail: pending.detail, bubbles: true, composed: true }),
     );
-    const detail: SendRoundDetail = { lines, groups, round: this.#roundStore, sent };
-    this.dispatchEvent(new CustomEvent("send-round", { detail, bubbles: true, composed: true }));
+  }
+
+  #dismissPreview(): void {
+    this.pendingDraft = null;
   }
 
   #selectedCourseId(line: OrderLine): string {
@@ -733,17 +881,6 @@ export class TillTableOrderScreen extends LitElement {
   #pickCourse(line: OrderLine, courseId: string): void {
     if (courseId === "") this.#roundCourses.delete(line);
     else this.#roundCourses.set(line, courseId);
-    this.requestUpdate();
-  }
-
-  #isHeld(line: OrderLine): boolean {
-    return this.#roundHolds.get(line) === true;
-  }
-
-  /** `requestUpdate` because {@link #roundHolds} is a `WeakMap`, not a reactive property. */
-  #toggleHold(line: OrderLine, held: boolean): void {
-    if (held) this.#roundHolds.set(line, true);
-    else this.#roundHolds.delete(line);
     this.requestUpdate();
   }
 
@@ -1264,61 +1401,239 @@ export class TillTableOrderScreen extends LitElement {
             : nothing
         }
         <div class="round-control" data-round-controls ?inert=${this.#roundStore.sending}>
-          ${this.#roundCoursesSection()}
+          ${this.#draftSections()}
           <div class="round-bar">
             ${keyed(this.orderId, html`<till-basket .store=${this.#roundStore}></till-basket>`)}
-            <wt-button
-              class="send-round"
-              data-send-round
-              variant="primary"
-              size="lg"
-              ?disabled=${this.#roundStore.lineCount === 0 || this.#roundStore.sending}
-              @click=${() => this.#sendRound()}
-            >
-              ${t("table.send_round")}
-            </wt-button>
+            ${this.#draftBar()}
           </div>
         </div>
-        ${this.#cancelDialog()} ${this.#changeEditor()}
+        ${this.#previewDialog()} ${this.#cancelDialog()} ${this.#changeEditor()}
       </section>
     `;
   }
 
-  /** The `""` placeholder means "use the product default", not "no course" (no such option). */
-  #roundCoursesSection(): TemplateResult | typeof nothing {
+  /** One section per course present, in the venue's course order; each line with its selection
+   * toggle and, when the venue has courses, its course picker, whose `""` placeholder means "use the
+   * product default", not "no course" (no such option). */
+  #draftSections(): TemplateResult | typeof nothing {
     const lines = this.#roundStore.lines;
-    if (lines.length === 0 || this.courses.length === 0) return nothing;
-    return html`<div class="round-courses" data-round-courses>
-      ${lines.map((line, index) => this.#roundCourseRow(line, index))}
+    if (lines.length === 0) return nothing;
+    const sections = draftSections(this.#draftEntries(lines), this.courses);
+    return html`<div class="draft-sections" data-draft-sections>
+      ${sections.map(
+        (section) =>
+          html`<section
+            class="draft-section"
+            data-draft-section=${section.course?.id ?? ""}
+            aria-label=${section.course?.name ?? nothing}
+          >
+            ${
+              section.course === null
+                ? nothing
+                : html`<h3 class="draft-section-name">${section.course.name}</h3>`
+            }
+            ${section.lineIndexes.map((index) => this.#draftLine(lines[index]!, index))}
+          </section>`,
+      )}
     </div>`;
   }
 
-  #roundCourseRow(line: OrderLine, index: number): TemplateResult {
+  #draftLine(line: OrderLine, index: number): TemplateResult {
     const name = lineProductName(line.product);
-    const selected = this.#selectedCourseId(line);
-    // The hold switch is a SIBLING of the course `<label>`, not nested in it: a `<label>` may wrap only
-    // its one control, and the switch carries its own inner label.
-    return html`<div class="round-course">
-      <label class="round-course-field">
-        <span class="round-course-name">${name} ×${this.#displayQty(line.quantity)}</span>
-        <select
-          data-round-course=${index}
-          aria-label=${`${t("table.course_label")} · ${name}`}
-          @change=${(event: Event) =>
-            this.#pickCourse(line, (event.target as HTMLSelectElement).value)}
-        >
-          ${this.#courseOptions(selected, t("table.course_default"))}
-        </select>
-      </label>
-      <wt-switch
-        class="round-hold"
-        data-round-hold=${index}
-        .checked=${this.#isHeld(line)}
-        .label=${`${t("table.hold_label")} · ${name}`}
-        @wt-change=${(event: Event) =>
-          this.#toggleHold(line, (event as CustomEvent<{ checked: boolean }>).detail.checked)}
-      ></wt-switch>
+    const selected = this.#selected.has(line);
+    return html`<div class="draft-line">
+      <wt-button
+        class="draft-select"
+        data-draft-select=${index}
+        variant="secondary"
+        size="sm"
+        aria-pressed=${selected}
+        @click=${() => this.#toggleSelected(line)}
+      >
+        <span aria-hidden="true">${selected ? "☑" : "☐"}</span>
+        <span class="draft-line-name">${name} ×${this.#displayQty(line.quantity)}</span>
+      </wt-button>
+      ${
+        this.courses.length === 0
+          ? nothing
+          : html`<select
+              data-round-course=${index}
+              aria-label=${`${t("table.course_label")} · ${name}`}
+              @change=${(event: Event) =>
+                this.#pickCourse(line, (event.target as HTMLSelectElement).value)}
+            >
+              ${this.#courseOptions(this.#selectedCourseId(line), t("table.course_default"))}
+            </select>`
+      }
     </div>`;
+  }
+
+  /** A first-order draft: Send all and Fire all now with nothing checked, Send selected and Fire
+   * selected now with a selection. A later addition: its destination, then one Send. Firing now is
+   * offered under every `fireControl`: releasing at submission was never gated, and the kitchen and
+   * the pass cannot fire a held group of lines with no course. */
+  #draftBar(): TemplateResult {
+    const round = this.#roundStore;
+    const disabled = round.lineCount === 0 || round.sending;
+    const button = (
+      action: DraftAction,
+      key: StringKey,
+      variant: "primary" | "secondary",
+      name: string = action.kind,
+    ) =>
+      html`<wt-button
+        class="draft-action"
+        data-draft-action=${name}
+        variant=${variant}
+        size="lg"
+        ?disabled=${disabled}
+        @click=${() => this.#openPreview(action)}
+      >
+        ${t(key)}
+      </wt-button>`;
+    if (this.#isLaterAddition()) {
+      return html`<div class="draft-bar">
+        ${this.#destinationChoice()}
+        <div class="draft-actions" role="group" aria-label=${t("table.draft_actions")}>
+          ${button(this.#laterAction(), "table.draft_submit", "primary", "submit")}
+        </div>
+      </div>`;
+    }
+    const anySelected = this.#selectedIndexes(round.lines).size > 0;
+    return html`<div class="draft-bar">
+      <div class="draft-actions" role="group" aria-label=${t("table.draft_actions")}>
+        ${
+          anySelected
+            ? html`${button({ kind: "send-selected" }, "table.draft_send_selected", "secondary")}
+              ${button({ kind: "fire-selected" }, "table.draft_fire_selected", "primary")}`
+            : html`${button({ kind: "send-all" }, "table.draft_send_all", "secondary")}
+              ${button({ kind: "fire-all" }, "table.draft_fire_all", "primary")}`
+        }
+      </div>
+    </div>`;
+  }
+
+  #destinationChoice(): TemplateResult {
+    const chosen = this.#effectiveDestination();
+    const held = this.#heldGroups();
+    const options: [Destination, StringKey][] = [
+      ["fire-now", "table.destination_fire_now"],
+      ...(held.length === 0
+        ? []
+        : [["add-to-held", "table.destination_add_to_held"] as [Destination, StringKey]]),
+      ["add-as-new", "table.destination_add_as_new"],
+    ];
+    const joining = this.#joinGroup();
+    return html`<div
+        class="destination"
+        role="group"
+        aria-label=${t("table.destination_label")}
+        data-destination-choice
+      >
+        ${options.map(
+          ([kind, key]) =>
+            html`<button
+              type="button"
+              class="option"
+              data-destination=${kind}
+              aria-pressed=${chosen === kind}
+              @click=${() => (this.destination = kind)}
+            >
+              ${t(key)}
+            </button>`,
+        )}
+      </div>
+      ${
+        chosen === "add-to-held"
+          ? html`<div
+              class="destination held-picker"
+              role="group"
+              aria-label=${t("table.held_picker_label")}
+              data-held-picker
+            >
+              ${held.map(
+                (group, index) =>
+                  html`<button
+                    type="button"
+                    class="option"
+                    data-held-group=${group.id}
+                    aria-pressed=${group.id === joining?.id}
+                    @click=${() => (this.joinTarget = group.id)}
+                  >
+                    ${
+                      index === 0
+                        ? t("table.held_next").replace("{summary}", group.summary)
+                        : t("table.held_group")
+                            .replace("{n}", String(group.position))
+                            .replace("{summary}", group.summary)
+                    }
+                  </button>`,
+              )}
+            </div>`
+          : nothing
+      }`;
+  }
+
+  /** Always present, driven by {@link pendingDraft}, as the cancel dialog is. */
+  #previewDialog(): TemplateResult {
+    const pending = this.pendingDraft;
+    const preview = pending?.preview;
+    const count = (key: StringKey, one: StringKey, n: number) =>
+      n === 1 ? t(one) : t(key).replace("{n}", String(n));
+    return html`<wt-dialog
+      class="draft-preview"
+      data-draft-preview
+      .open=${pending !== null}
+      .heading=${t("table.preview_title")}
+      @wt-close=${() => this.#dismissPreview()}
+    >
+      <div class="preview-body" data-preview-body>
+        ${
+          preview === undefined
+            ? nothing
+            : html`${
+                preview.fireItems > 0
+                  ? html`<p data-preview-fire>
+                      ${count("table.preview_fire", "table.preview_fire_one", preview.fireItems)}
+                    </p>`
+                  : nothing
+              }
+              ${
+                preview.joinGroupId !== undefined
+                  ? html`<p data-preview-join>
+                      ${count(
+                        "table.preview_join",
+                        "table.preview_join_one",
+                        preview.holdItems,
+                      ).replace("{position}", String(pending!.joinPosition ?? ""))}
+                    </p>`
+                  : preview.holdGroups > 0
+                    ? html`<p data-preview-hold>
+                        ${count("table.preview_hold", "table.preview_hold_one", preview.holdGroups)}
+                      </p>`
+                    : nothing
+              }`
+        }
+      </div>
+      <div slot="footer" class="cancel-actions">
+        <wt-button
+          class="preview-back"
+          variant="secondary"
+          data-draft-dismiss
+          @click=${() => this.#dismissPreview()}
+        >
+          ${t("table.preview_back")}
+        </wt-button>
+        <wt-button
+          class="preview-confirm"
+          variant="primary"
+          data-draft-confirm
+          @click=${() => this.#confirmPreview()}
+        >
+          ${t("table.preview_confirm")}
+        </wt-button>
+      </div>
+    </wt-dialog>`;
   }
 
   #drawer(pending: TabLine[]): TemplateResult {

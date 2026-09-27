@@ -327,7 +327,7 @@ export class WorkingOrderStore {
   }
 
   /** Rewrites each line named by its index, as a basket refresh re-priced it. The line object stays
-   * the same one, so whatever a screen keys on it (a round line's course or hold) is kept. */
+   * the same one, so whatever a screen keys on it (a draft line's course or selection) is kept. */
   adoptLines(adopted: ReadonlyMap<number, OrderLine>): void {
     for (const [index, line] of adopted) {
       const own = this.#lines[index];
