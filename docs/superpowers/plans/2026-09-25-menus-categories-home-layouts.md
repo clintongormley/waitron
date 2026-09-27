@@ -1549,7 +1549,8 @@ was deleted. The Preview tab also shows the whole menu read-only, in the Structu
 ## Task 7a: VAT is resolved when the invoice record is issued — slug `vat-at-issuance`
 
 _2026-09-27: replaced by menus M7v (the note under the Goal). Issuance no longer resolves a rate,
-nothing is written back, and the test file is now `apps/server/src/vat-rate-at-line-add.test.ts`._
+nothing is written back, and the test file is now `apps/server/src/vat-rate-at-line-add.test.ts`
+(renamed `apps/server/src/vat-class-at-line-add.test.ts` by A68, 2026-09-27)._
 
 Spec §11.4 (which sharpens §10.4's "at payment") and D6. **Fiscal-adjacent: it changes the VAT rate
 filed for a held order, a tab, an invoice-first order and a card payment. The golden huella and

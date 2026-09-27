@@ -283,7 +283,7 @@ file `apps/server/src/vat-at-issuance.test.ts` copies about 150 lines of setup f
 `issuance-pass.test.ts`, which a shared helper could absorb.
 _2026-09-27: menus M7v replaced this rule (see its note below): issuance no longer resolves a
 rate, and the write-back is gone, so the placed-order FYI above no longer applies. Asesor Q26 is
-still open, reworded. The test file is now `apps/server/src/vat-rate-at-line-add.test.ts` and still
+still open, reworded. The test file is now `apps/server/src/vat-class-at-line-add.test.ts` and still
 copies its setup from `issuance-pass.test.ts`._
 **Menus Task 7b landed (#696, 2026-09-26): editing a saved order — the server rules.** An edit keeps
 each line's locked price and prices only what it adds; every change to work the kitchen has is a

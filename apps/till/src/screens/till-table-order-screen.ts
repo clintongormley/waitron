@@ -667,7 +667,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** An unoverridden line OMITS `courseId`, so the server applies the product's default course. The
-   * answers name lists, products and labels by id alone: the server takes every price, VAT rate and
+   * answers name lists, products and labels by id alone: the server takes every price, VAT class and
    * name from the published offer. */
   #sendRound(): void {
     const lines = this.#roundStore.lines.map((line) => {

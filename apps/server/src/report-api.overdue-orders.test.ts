@@ -62,9 +62,8 @@ async function seedFiredOrder(
     .values({ tillId, nodeId, orderNumber: opts.orderNumber, status: "open" })
     .returning({ id: workingOrders.id });
   const orderId = order!.id;
-  // A quantity is a count of whole thousandths and a rate a count of whole basis points, so this
-  // line is one unit at 10 per cent: a bare 1 and a bare 10 would be accepted in silence and mean a
-  // thousandth of a unit at a tenth of a percent. The money columns are cents.
+  // A quantity is a count of whole thousandths, so this line is one unit: a bare 1 would be accepted
+  // in silence and mean a thousandth of a unit. The money columns are cents.
   const [line] = await db
     .insert(workingOrderLines)
     .values({

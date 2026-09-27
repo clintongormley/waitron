@@ -161,7 +161,7 @@ describe("buildLineExtras", () => {
     expect(optionSnapshots[0]!.labelName).toEqual({ es: "Medium rare staff" });
   });
 
-  it("turns a pick into a child carrying the product's own three names, VAT class and rate and the resolved price", () => {
+  it("turns a pick into a child carrying the product's own three names, VAT class and the resolved price", () => {
     const { extraChildren } = buildLineExtras(
       { extras: [drinks], options: [] },
       products,

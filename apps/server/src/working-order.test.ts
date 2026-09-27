@@ -5901,7 +5901,7 @@ describe("order path — extras and options", () => {
     ]);
   });
 
-  it("an extra child line carries product_id and the extra product's OWN vat rate", async () => {
+  it("an extra child line carries product_id and the extra product's OWN VAT class", async () => {
     const seeded = await seedDish();
     const id = randomUUID();
     await parkProducts(seeded.cfg, {

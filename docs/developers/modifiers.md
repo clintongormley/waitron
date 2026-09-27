@@ -118,8 +118,8 @@ column underneath holds a count of whole cents and the row converts (`stringToCe
 
 The VAT class is never resolved that way — an extra always carries the picked PRODUCT's VAT class,
 because it is sold as that product: the product's own, or its parent's where a variant leaves it
-blank, and never the dish's. It is taxed at the rate the published menu version froze for that
-product.
+blank, and never the dish's — as the published menu version froze it for that product — and it is
+taxed at that class's rate on the day the invoice is issued.
 
 ### The dashboard
 

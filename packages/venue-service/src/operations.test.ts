@@ -497,7 +497,7 @@ describe("venue service routing", () => {
         productId: ham.id,
         name: "Sliced ham",
         descriptions: { "en-GB": "Sliced ham" },
-        // 250 g, counted in whole thousandths, beside a rate in whole basis points.
+        // 250 g, counted in whole thousandths.
         quantity: 250,
         unitPriceGross: 2490,
         vatClass: "reduced",

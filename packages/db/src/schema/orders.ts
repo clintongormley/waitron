@@ -108,8 +108,9 @@ export const workingOrders = table(
 /**
  * Gross prices, VAT classes, descriptions and the reporting classification are snapshotted here
  * when a line is added, never read live from the catalogue, so a later catalogue edit to any of them
- * is a freshness problem, never a correctness one — and the filed `sale_lines` carry these
- * snapshots, naming a product only as a value, never a key.
+ * is a freshness problem, never a correctness one. The filed `sale_lines` carry the gross prices,
+ * descriptions and classification, and the percentage the class had on the day of issue, naming a
+ * product only as a value, never a key.
  *
  * The line-add snapshot IS the filed gross: a retrieved order is FILED from the locked gross unit
  * price without a re-price (grossLockedLines, @waitron/catalogue), at its class's rate on the day the
@@ -146,8 +147,8 @@ export const workingOrderLines = table(
     unitPrecision: count("unit_precision"),
     quantity: quantity("quantity").notNull(),
     // The GROSS (VAT-inclusive) unit price LOCKED at add time — the authoritative input the FILED
-    // sale_lines are rebuilt from. Stored rather than recovered as `line_total ÷ quantity`, which DRIFTS for a weighed line (9.99/kg × 0.333 →
-    // 3.33 stored, 3.33 ÷ 0.333 = 10.00 ≠ 9.99).
+    // sale_lines are rebuilt from. Stored rather than recovered as `line_total ÷ quantity`, which
+    // DRIFTS for a weighed line (9.99/kg × 0.333 → 3.33 stored, 3.33 ÷ 0.333 = 10.00 ≠ 9.99).
     unitPriceGross: money("unit_price_gross").notNull(),
     // The class the published menu version froze, taken when the line was added. The rate it
     // carries is looked up on the day the invoice is issued, so no rate is stored here.

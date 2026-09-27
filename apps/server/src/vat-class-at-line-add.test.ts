@@ -87,7 +87,7 @@ beforeAll(() => {
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
     resolveClient: () =>
-      Promise.reject(new Error("vat-rate-at-line-add.test: resolveClient must never be called")),
+      Promise.reject(new Error("vat-class-at-line-add.test: resolveClient must never be called")),
   });
 });
 
@@ -339,7 +339,7 @@ function cardDeps(provider: PaymentProvider): IntegratedPayDeps {
 }
 
 describe("a product's VAT class changed with no new publish: the sale files the class its line was added at", () => {
-  it("walk-up: files the published rate", async () => {
+  it("walk-up: files at the rate of the published class", async () => {
     const v = await setupVenue();
     await setVat(v.products.cana, "general");
     const id = randomUUID();
@@ -391,7 +391,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     expect(await stored(id)).toEqual(storedAtAdd);
   });
 
-  it("a tab: a dish line keeps its published rate, and an extras line keeps the PICKED product's published rate, not the dish's", async () => {
+  it("a tab: a dish line keeps its published class, and an extras line keeps the PICKED product's published class, not the dish's", async () => {
     const v = await setupVenue();
     await setVat(v.products.queso, "general");
     await republish(v);
@@ -426,7 +426,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     expect(sale.total).toBe(1325);
   });
 
-  it("a variant with no VAT class of its own keeps the rate its parent was published at", async () => {
+  it("a variant with no VAT class of its own keeps the class its parent was published with", async () => {
     const v = await setupVenue();
     const id = await park(v, [
       {
@@ -450,7 +450,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     expect(sale.total).toBe(220);
   });
 
-  it("card (P1): files the stored rate, even when the class changes again during the charge, and the receipt and a replay match the sale", async () => {
+  it("card (P1): files at the stored class's rate, even when the class changes again during the charge, and the receipt and a replay match the sale", async () => {
     const v = await setupVenue();
     const id = await park(v, one(v, v.products.cana));
     await setVat(v.products.cana, "general");
@@ -477,7 +477,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     expect((await stored(id)).map((line) => line.vatClass)).toEqual(["reduced"]);
   });
 
-  it("card recovery: a capture whose sale was never filed files the stored rate, and the gross is the captured amount less the tip", async () => {
+  it("card recovery: a capture whose sale was never filed files at the stored class's rate, and the gross is the captured amount less the tip", async () => {
     const v = await setupVenue();
     const id = randomUUID();
     await withTransaction(suite.db, async (tx) => {
@@ -687,7 +687,7 @@ describe("an edit prices only what it adds", () => {
   });
 });
 
-describe("a new version published with the new rate", () => {
+describe("a new version published with the new class", () => {
   it("a held order: a line added before the publish keeps 10%, and one added after it takes 21%", async () => {
     const v = await setupVenue();
     const id = await park(v, one(v, v.products.cana));
