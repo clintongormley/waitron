@@ -7,6 +7,7 @@ import { locations, openVenueDatabase, tenants, type VenueDatabase } from "@wait
 import { manifestSets } from "@waitron/migrations";
 import { assertNotAhead } from "@waitron/provisioning";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
+import { VENUE_FILE } from "@waitron/store";
 import {
   PROBE_PREFIX,
   bucketClockOffset,
@@ -165,7 +166,7 @@ export async function refuseIfArchiveSourceLive(args: {
   if (secrets === undefined) return;
   const scratch = await scratchFolder(args.stateDir, ARCHIVE_SCRATCH);
   try {
-    await writeFile(join(scratch, "venue.db"), args.validated.dumpEntry.bytes, { mode: 0o600 });
+    await writeFile(join(scratch, VENUE_FILE), args.validated.dumpEntry.bytes, { mode: 0o600 });
     const copy = await openVenueDatabase(scratch);
     let settings;
     try {
@@ -297,7 +298,7 @@ export async function prepareStreamRestore(deps: PrepareStreamDeps): Promise<Pre
 
   const scratch = await scratchFolder(deps.stateDir, SCRATCH);
   const discard = () => rm(scratch, { recursive: true, force: true });
-  const databasePath = join(scratch, "venue.db");
+  const databasePath = join(scratch, VENUE_FILE);
   try {
     try {
       await (deps.restoreGeneration ?? restoreGeneration)({

@@ -1,13 +1,19 @@
 import { AsyncResource } from "node:async_hooks";
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtempSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { openVenueStore } from "./index.js";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import {
+  DATABASE_FILES,
+  openVenueStore,
+  SIDE_FILE_SUFFIXES,
+  VENUE_HOLDER_FILE,
+  VENUE_LOCK_FILE,
+} from "./index.js";
 import { runningWatchdog } from "./venue-liveness.js";
 
 // One table per file, to show each handle reaches its own file. The split is this suite's, not the
@@ -63,6 +69,29 @@ describe("openVenueStore", () => {
         .filter((name) => name.endsWith(".db"))
         .sort(),
     ).toEqual(["node.db", "venue.db"]);
+  });
+
+  it("exports the name of every file an open store with rows in both databases has created", async () => {
+    const { directory, store } = await open();
+    onTestFinished(() => rmSync(directory, { recursive: true, force: true }));
+    // Left open: a clean close folds the side files back and deletes them.
+    store.venue.run(sql`create table sales (id integer primary key, total integer)`);
+    store.venue.run(sql`insert into sales (id, total) values (1, 100)`);
+    store.node.run(sql`create table sessions (id integer primary key, token text)`);
+    store.node.run(sql`insert into sessions (id, token) values (1, 'NODE-ROW')`);
+
+    const databaseFiles = DATABASE_FILES.flatMap((file) =>
+      ["", ...SIDE_FILE_SUFFIXES].map((suffix) => `${file}${suffix}`),
+    );
+    // The lock's `begin immediate` keeps a rollback journal beside it while the lock is held.
+    const lockFiles = [VENUE_LOCK_FILE, `${VENUE_LOCK_FILE}-journal`, VENUE_HOLDER_FILE];
+    const present = readdirSync(directory).sort();
+
+    // Without this, a layout naming files the store never creates would pass too.
+    for (const name of databaseFiles) expect(present, `created: ${name}`).toContain(name);
+    expect(
+      present.filter((name) => !databaseFiles.includes(name) && !lockFiles.includes(name)),
+    ).toEqual([]);
   });
 
   it("creates the directory when it does not exist yet", async () => {

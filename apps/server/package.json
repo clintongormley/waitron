@@ -65,6 +65,7 @@
     "@waitron/scheduler": "workspace:*",
     "@waitron/server-kit": "workspace:*",
     "@waitron/shared": "workspace:*",
+    "@waitron/store": "workspace:*",
     "@waitron/stream": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
     "@waitron/tunnel": "workspace:*",

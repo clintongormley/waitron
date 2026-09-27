@@ -21,20 +21,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { registroSif, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { restoreDatabase } from "./restore.js";
 
-/**
- * The trigger statements in `setup` are redundant: `useVenueDb` already installs each set's
- * declared append-only triggers. They are `create trigger if not exists`, so the duplicate is
- * silent, and copied rather than imported because `apps/server` does not depend on `@waitron/store`.
- */
 const LEDGER_TABLE = "registros_facturacion";
-
-/** `installAppendOnlyTriggers`'s own statements, for the one table this suite seeds. */
-const APPEND_ONLY_TRIGGERS = (["update", "delete"] as const).map(
-  (event) =>
-    `create trigger if not exists "${LEDGER_TABLE}_append_only_${event}" ` +
-    `before ${event} on "${LEDGER_TABLE}" for each row ` +
-    `begin select raise(abort, '${LEDGER_TABLE} is append-only'); end`,
-);
 
 /** SQLite's `SQLITE_CONSTRAINT_TRIGGER`, which `node:sqlite` puts on the thrown error's `errcode`. */
 const SQLITE_CONSTRAINT_TRIGGER = 1811;
@@ -116,7 +103,6 @@ const suite = useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   setup: async (db) => {
-    for (const statement of APPEND_ONLY_TRIGGERS) db.run(sql.raw(statement));
     await seedFiscalRegistro(db);
   },
   timeoutMs: 120_000,
