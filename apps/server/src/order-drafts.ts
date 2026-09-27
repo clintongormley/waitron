@@ -24,8 +24,10 @@ import {
 } from "@waitron/shared";
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
-import { visitTab } from "./order-groups.js";
+import { placeGroups, visitTab } from "./order-groups.js";
+import type { GroupLine, GroupRelease, SubmittedGroups } from "./order-groups.js";
 import type { TillConfig } from "./till-config.js";
+import { checkAndBumpVisit, runServiceCommand } from "./visits.js";
 import { screenNote } from "./working-order.js";
 import "./errors.js";
 
@@ -249,6 +251,99 @@ export async function takeOverDraft(
   return (await readOpenDrafts(tx, cfg, draft.visitId, own.id))[0]!;
 }
 
+export interface SubmitDraftInput {
+  submissionId: string;
+  draftRevision: number;
+  expectedVisitRevision: number;
+  /** Lines of the draft's current revision, each named once across the groups. */
+  groups: { lineIds: string[]; release: GroupRelease }[];
+  /** As `submitGroups` takes it: add the one held group's lines to this held group. */
+  joinGroupId?: string;
+}
+
+/** The groups placed, and the operator's draft as it is left: null once every line was sent. */
+export type SubmittedDraft = SubmittedGroups & { draft: Draft | null };
+
+/**
+ * Send the named lines of the operator's own draft as groups, through {@link placeGroups}, so each
+ * line is credited to the operator and each group submitted by them. The sent lines leave the
+ * draft and the rest keep their positions; the draft is `submitted` once it has no line left. A
+ * retry under the same submission id answers the first result (D8).
+ */
+export async function submitDraft(
+  tx: Transaction,
+  cfg: TillConfig,
+  draftId: string,
+  operatorId: string,
+  input: SubmitDraftInput,
+): Promise<SubmittedDraft> {
+  const id = draftIdOf(draftId);
+  const [found] = await tx
+    .select({ visitId: orderDrafts.visitId })
+    .from(orderDrafts)
+    .where(eq(orderDrafts.id, id));
+  if (found === undefined) throw new AppError("draft.not_found", { draftId: id });
+  const { visitId } = found;
+  const groups = input.groups.map(({ lineIds, release }) => ({
+    lineIds: lineIds.map(lineIdOf),
+    release,
+  }));
+  const { joinGroupId } = input;
+  return runServiceCommand(
+    tx,
+    { kind: "visit", visitId },
+    input.submissionId,
+    "draft.submit",
+    { visitId, draftId: id, operatorId, groups, joinGroupId },
+    async () => {
+      const draft = await requireDraft(tx, id);
+      if (draft.ownerId !== operatorId) {
+        throw new AppError("draft.taken_over", {
+          draftId: id,
+          ownerId: draft.ownerId,
+          ownerName: await personName(tx, draft.ownerId),
+        });
+      }
+      if (draft.revision !== input.draftRevision) {
+        throw new AppError("draft.out_of_date", { draftId: id, revision: draft.revision });
+      }
+      await checkAndBumpVisit(tx, visitId, input.expectedVisitRevision, "open");
+      const lines = (await storedLines(tx, [id])).map(({ line }) => line);
+      const known = new Set(lines.map((line) => line.id));
+      const named = new Set<string>();
+      for (const lineId of groups.flatMap((group) => group.lineIds)) {
+        if (!known.has(lineId) || named.has(lineId)) throw invalid("groups");
+        named.add(lineId);
+      }
+      const placed = await placeGroups(tx, cfg, visitId, {
+        groups: groups.map(({ lineIds, release }) => {
+          const inGroup = new Set(lineIds);
+          return { release, lines: lines.filter((line) => inGroup.has(line.id)).map(groupLine) };
+        }),
+        joinGroupId,
+        operatorId,
+      });
+      const emptied = named.size === lines.length;
+      await tx.delete(orderDraftLines).where(inArray(orderDraftLines.id, [...named]));
+      await tx
+        .update(orderDrafts)
+        .set({
+          revision: draft.revision + 1,
+          updatedAt: nowIso(),
+          ...(emptied ? { state: "submitted" as const } : {}),
+        })
+        .where(eq(orderDrafts.id, id));
+      await recordDraftEvent(tx, id, "submitted", operatorId, operatorId, operatorId, {
+        groupIds: placed.groups.map((group) => group.id),
+      });
+      return {
+        ...placed,
+        draft: emptied ? null : (await readOpenDrafts(tx, cfg, visitId, id))[0]!,
+      };
+    },
+  );
+}
+
 /** Each visit's open drafts holding at least one line, oldest first, in one query. */
 export async function readUnsentDrafts(
   tx: Transaction,
@@ -294,6 +389,25 @@ function uuid(value: unknown, field: string): string {
 function optionalId(value: unknown, field: string): string | null {
   if (value === undefined || value === null) return null;
   return uuid(value, field);
+}
+
+/** A line id that is no UUID names no line, so it is kept as sent and then refused. */
+function lineIdOf(lineId: string): string {
+  return isUuid(lineId) ? normaliseUuid(lineId, "groups") : lineId;
+}
+
+/** A draft line as pricing takes a basket line, with each null field left out. */
+function groupLine(line: DraftLine): GroupLine {
+  return {
+    menuItemId: line.menuItemId,
+    quantity: line.quantity,
+    options: line.options,
+    extras: line.extras,
+    ...(line.variantId === null ? {} : { variantId: line.variantId }),
+    ...(line.menuVersionId === null ? {} : { menuVersionId: line.menuVersionId }),
+    ...(line.courseId === null ? {} : { courseId: line.courseId }),
+    ...(line.note === null ? {} : { note: line.note }),
+  };
 }
 
 /** A draft id that is no UUID names no draft, so it is kept as sent and then not found. */
@@ -430,7 +544,7 @@ async function personName(tx: Transaction, personId: string): Promise<string> {
 async function recordDraftEvent(
   tx: Transaction,
   draftId: string,
-  kind: "created" | "taken_over" | "discarded",
+  kind: "created" | "taken_over" | "submitted" | "discarded",
   fromPerson: string | null,
   toPerson: string,
   actorId: string,
