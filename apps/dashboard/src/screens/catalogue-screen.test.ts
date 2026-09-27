@@ -1,3 +1,4 @@
+import type { LitElement } from "lit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   CatalogueSummary,
@@ -14,6 +15,7 @@ import type {
   ProductEditorValue,
   Unit,
 } from "../api/client.js";
+import type { ProductChildKind } from "../state/product-child-create.js";
 import type { AddToMenus } from "../widgets/add-to-menus.js";
 import type { ProductEditor } from "../widgets/product-editor.js";
 import type { ProductList } from "../widgets/product-list.js";
@@ -440,8 +442,7 @@ describe("catalogue-screen", () => {
   });
 
   // Both nested forms show a refused save themselves, keyed by the field path the server named —
-  // the same wiring the Modifiers screen gives them. Without it the form stays open saying nothing,
-  // because the modal covers this screen's own banner.
+  // the same wiring the Modifiers screen gives them. Without it the form stays open saying nothing.
   it("gives a refused nested list write back to the form that sent it", async () => {
     const refusal = {
       code: "extras.translation_required",
@@ -529,6 +530,179 @@ describe("catalogue-screen", () => {
     emit(extras, "wt-cancel", {});
     await flush(el);
     expect([options.open, extras.open, editor(el).childOpen]).toEqual([true, false, true]);
+  });
+
+  async function openNested(api: DashboardApi, kind: ProductChildKind): Promise<CatalogueScreen> {
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(list(el), "edit-product", { productId: "p1" });
+    await flush(el);
+    emit(editor(el), "wt-create-related", { kind });
+    await el.updateComplete;
+    return el;
+  }
+  async function submitNested(
+    el: CatalogueScreen,
+    form: LitElement,
+    value: unknown,
+  ): Promise<void> {
+    emit(form, "wt-submit", { value });
+    await flush(el);
+    await form.updateComplete;
+  }
+  const summaryOf = (form: Element): readonly string[] =>
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-error-summary"]>(
+      "wt-form-error-summary",
+    )!.errors;
+  const errorBeside = (form: Element, selector: string): string =>
+    form.shadowRoot!.querySelector<HTMLElement & { error: string }>(selector)!.error;
+
+  // The unit and category forms key their errors by their OWN field names, not by the path a refusal
+  // carries.
+  it("gives a refused nested unit create back to the unit form, beside the field it concerns", async () => {
+    const api = stubApi({
+      createUnit: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "unit.precision_invalid", params: {}, status: 400 })
+        .mockRejectedValueOnce({
+          code: "content.translation_required",
+          params: { language: "es" },
+          status: 400,
+        }),
+    });
+    const el = await openNested(api, "unit");
+    const form = el.shadowRoot!.querySelector("dashboard-unit-form")!;
+    await submitNested(el, form, {
+      name: { es: "ración" },
+      abbreviation: { es: "ra" },
+      precision: 2,
+    });
+    expect(form.open).toBe(true);
+    expect(form.shadowRoot!.querySelector("#precision-error")?.textContent).toBe(
+      codeMessage("unit.precision_invalid"),
+    );
+    expect(summaryOf(form)).toEqual([codeMessage("unit.precision_invalid")]);
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+
+    // The refusal names only a LANGUAGE, and a unit sends two translated maps: the one empty in that
+    // language is the one refused.
+    await submitNested(el, form, { name: { es: "ración" }, abbreviation: {}, precision: 2 });
+    expect(errorBeside(form, "[data-test=abbreviation-es]")).toBe(
+      codeMessage("content.translation_required"),
+    );
+    expect(errorBeside(form, "[data-test=name-es]")).toBe("");
+    expect(form.shadowRoot!.querySelector("#precision-error")).toBeNull();
+    expect(summaryOf(form)).toEqual([codeMessage("content.translation_required")]);
+  });
+
+  it("gives a refused nested category create back to the category form, beside the field it concerns", async () => {
+    const api = stubApi({
+      getContentLanguages: vi
+        .fn()
+        .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
+      createCategory: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "category.color_invalid", params: {}, status: 400 })
+        .mockRejectedValueOnce({ code: "category.parent_cycle", params: {}, status: 400 })
+        .mockRejectedValueOnce({
+          code: "content.translation_required",
+          params: { language: "es" },
+          status: 400,
+        }),
+    });
+    const el = await openNested(api, "category");
+    const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
+    const input = {
+      name: { es: "Postres", en: "" },
+      parentId: "c1",
+      image: null,
+      color: "#abcdef",
+    };
+    await submitNested(el, form, input);
+    expect(form.open).toBe(true);
+    expect(form.shadowRoot!.querySelector("#category-color-error")?.textContent).toBe(
+      codeMessage("category.color_invalid"),
+    );
+    expect(summaryOf(form)).toEqual([codeMessage("category.color_invalid")]);
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+
+    await submitNested(el, form, input);
+    expect(errorBeside(form, "wt-combobox[name=category-parent]")).toBe(
+      codeMessage("category.parent_cycle"),
+    );
+    expect(summaryOf(form)).toEqual([codeMessage("category.parent_cycle")]);
+
+    await submitNested(el, form, input);
+    expect(errorBeside(form, "wt-input[name=category-name-es]")).toBe(
+      codeMessage("content.translation_required"),
+    );
+    expect(errorBeside(form, "wt-input[name=category-name-en]")).toBe("");
+    expect(errorBeside(form, "wt-combobox[name=category-parent]")).toBe("");
+    expect(summaryOf(form)).toEqual([codeMessage("content.translation_required")]);
+  });
+
+  it("still says a nested unit or category refusal that names no field of the form, in its summary", async () => {
+    const api = stubApi({
+      createUnit: vi.fn().mockRejectedValue({ code: "server.internal", status: 500 }),
+      createCategory: vi
+        .fn()
+        .mockRejectedValue({ code: "content.translation_invalid", params: {}, status: 400 }),
+    });
+    const el = await openNested(api, "unit");
+    const unitForm = el.shadowRoot!.querySelector("dashboard-unit-form")!;
+    await submitNested(el, unitForm, {
+      name: { es: "ración" },
+      abbreviation: { es: "ra" },
+      precision: 2,
+    });
+    expect(unitForm.open).toBe(true);
+    expect(summaryOf(unitForm)).toEqual([codeMessage("server.internal")]);
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+
+    emit(unitForm, "wt-cancel", {});
+    await flush(el);
+    emit(editor(el), "wt-create-related", { kind: "category" });
+    await el.updateComplete;
+    const categoryForm = el.shadowRoot!.querySelector("dashboard-category-form")!;
+    await categoryForm.updateComplete;
+    // The unit form's refusal is not carried into the next form.
+    expect(summaryOf(categoryForm)).toEqual([]);
+    await submitNested(el, categoryForm, {
+      name: { es: "Postres" },
+      parentId: null,
+      image: null,
+      color: null,
+    });
+    expect(categoryForm.open).toBe(true);
+    expect(summaryOf(categoryForm)).toEqual([codeMessage("content.translation_invalid")]);
+  });
+
+  it("ignores a closed unit form's second cancel once the category form is open", async () => {
+    const el = await openNested(stubApi(), "unit");
+    const unitForm = el.shadowRoot!.querySelector("dashboard-unit-form")!;
+    emit(unitForm, "wt-cancel", {});
+    await flush(el);
+    emit(editor(el), "wt-create-related", { kind: "category" });
+    await el.updateComplete;
+    const categoryForm = el.shadowRoot!.querySelector("dashboard-category-form")!;
+    expect(categoryForm.open).toBe(true);
+    emit(unitForm, "wt-cancel", {});
+    await flush(el);
+    expect([categoryForm.open, unitForm.open, editor(el).childOpen]).toEqual([true, false, true]);
+  });
+
+  it("ignores a closed category form's second cancel once the unit form is open", async () => {
+    const el = await openNested(stubApi(), "category");
+    const categoryForm = el.shadowRoot!.querySelector("dashboard-category-form")!;
+    emit(categoryForm, "wt-cancel", {});
+    await flush(el);
+    emit(editor(el), "wt-create-related", { kind: "unit" });
+    await el.updateComplete;
+    const unitForm = el.shadowRoot!.querySelector("dashboard-unit-form")!;
+    expect(unitForm.open).toBe(true);
+    emit(categoryForm, "wt-cancel", {});
+    await flush(el);
+    expect([unitForm.open, categoryForm.open, editor(el).childOpen]).toEqual([true, false, true]);
   });
 
   it("reports a refused attachment inside the editor, not behind it", async () => {

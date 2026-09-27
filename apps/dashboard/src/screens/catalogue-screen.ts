@@ -40,13 +40,13 @@ import {
   type PlacementFailure,
   type PlacementMenu,
 } from "../widgets/add-to-menus.js";
-import "../widgets/category-form.js";
+import { categoryRefusalErrors } from "../widgets/category-form.js";
 import "../widgets/content-languages.js";
 import "../widgets/extra-list-form.js";
 import "../widgets/option-list-form.js";
 import "../widgets/product-editor.js";
 import "../widgets/product-list.js";
-import "../widgets/unit-form.js";
+import { unitRefusalErrors } from "../widgets/unit-form.js";
 
 /** The staff names of the extras lists a `product.offered_as_extra` refusal carries. */
 function extraListNames(error: unknown): string[] {
@@ -154,6 +154,7 @@ export class CatalogueScreen extends LitElement {
     },
     dashboardPath,
   );
+  #submittedUnitName: Readonly<Record<string, string>> = {};
   readonly #child = new ProductChildCreate(this, {
     accept: (kind, value) => {
       // A nested form that was EDITING an existing list must not attach it: which lists a product
@@ -480,8 +481,7 @@ export class CatalogueScreen extends LitElement {
 
   /**
    * Keyed by the field path the server named, or `_form` when it names none. Empty while nothing has
-   * been refused: the create controller clears its error whenever a form opens or is cancelled. Without
-   * this the modal covers the screen's own banner and a refused create says nothing at all.
+   * been refused: the create controller clears its error whenever a form opens or is cancelled.
    */
   #childFieldErrors(): Record<string, string> {
     const error = this.#child.error;
@@ -489,6 +489,10 @@ export class CatalogueScreen extends LitElement {
     const params = (error as { params?: { field?: unknown } }).params ?? {};
     const field = typeof params.field === "string" ? params.field : "_form";
     return { [field]: codeMessage(codeOf(error)) };
+  }
+
+  #childRefusal(kind: ProductChildKind): unknown {
+    return this.#child.kind === kind ? (this.#child.error ?? null) : null;
   }
 
   async #refreshRelated(kind: ProductChildKind): Promise<void> {
@@ -500,6 +504,7 @@ export class CatalogueScreen extends LitElement {
 
   #submitUnit(event: CustomEvent<{ value: UnitInput }>): void {
     event.stopPropagation();
+    this.#submittedUnitName = event.detail.value.name;
     void this.#child.submit(async () => {
       const value = await this.api.createUnit(event.detail.value);
       return { id: value.id, name: value.name };
@@ -552,7 +557,7 @@ export class CatalogueScreen extends LitElement {
    * and by then a different form can be open. The same kind reopened inside that task needs no check:
    * `wt-dialog.ts` drops the late report for a dialog that is open again.
    */
-  #cancelList(kind: "extras" | "options"): void {
+  #cancelChild(kind: ProductChildKind): void {
     if (this.#child.kind !== kind) return;
     this.editingList = null;
     this.#child.cancel();
@@ -561,6 +566,8 @@ export class CatalogueScreen extends LitElement {
   override render() {
     const locales = this.contentLanguages?.languages ?? [];
     const childErrors = this.#childFieldErrors();
+    const unitRefusal = this.#childRefusal("unit");
+    const categoryRefusal = this.#childRefusal("category");
     return html`
       <div class="header">
         <h1>${t("nav.catalogue")}</h1>
@@ -700,8 +707,11 @@ export class CatalogueScreen extends LitElement {
         .open=${this.#child.kind === "unit"}
         .busy=${this.#child.busy}
         .locales=${locales}
+        .fieldErrors=${
+          unitRefusal === null ? {} : unitRefusalErrors(unitRefusal, this.#submittedUnitName)
+        }
         @wt-submit=${this.#submitUnit}
-        @wt-cancel=${() => this.#child.cancel()}
+        @wt-cancel=${() => this.#cancelChild("unit")}
       ></dashboard-unit-form>
       ${
         // The form's name fields follow the content languages, so it waits for them rather than
@@ -713,8 +723,13 @@ export class CatalogueScreen extends LitElement {
               .languages=${this.contentLanguages}
               .categories=${this.categories}
               .api=${this.api}
+              .fieldErrors=${
+                categoryRefusal === null
+                  ? {}
+                  : categoryRefusalErrors(categoryRefusal, this.contentLanguages.defaultLanguage)
+              }
               @wt-submit=${this.#submitCategory}
-              @wt-cancel=${() => this.#child.cancel()}
+              @wt-cancel=${() => this.#cancelChild("category")}
             ></dashboard-category-form>`
           : nothing
       }
@@ -730,7 +745,7 @@ export class CatalogueScreen extends LitElement {
                 .products=${this.products}
                 .fieldErrors=${childErrors}
                 @wt-submit=${this.#submitExtraList}
-                @wt-cancel=${() => this.#cancelList("extras")}
+                @wt-cancel=${() => this.#cancelChild("extras")}
               ></dashboard-extra-list-form>
               <dashboard-option-list-form
                 .open=${this.#child.kind === "options"}
@@ -743,7 +758,7 @@ export class CatalogueScreen extends LitElement {
                 }
                 .fieldErrors=${childErrors}
                 @wt-submit=${this.#submitOptionList}
-                @wt-cancel=${() => this.#cancelList("options")}
+                @wt-cancel=${() => this.#cancelChild("options")}
               ></dashboard-option-list-form>`
           : nothing
       }
