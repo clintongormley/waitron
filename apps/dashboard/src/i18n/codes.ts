@@ -59,10 +59,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Choose a parent outside this category and its descendants.",
     es: "Elige una categoría superior fuera de esta categoría y sus descendientes.",
   },
-  "category.primary_required": {
-    en: "Choose a replacement main category.",
-    es: "Elige una categoría principal de reemplazo.",
-  },
   "category.membership_invalid": {
     en: "Some of the chosen products cannot be moved here. Refresh the list and try again.",
     es: "Algunos de los productos elegidos no se pueden mover aquí. Actualiza la lista e inténtalo de nuevo.",
@@ -140,18 +136,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "No se pudieron leer las categorías actuales: la configuración de categorías de un producto no es coherente. El informe en el momento de la venta sigue funcionando.",
   },
 
-  "modifier.invalid": {
-    en: "Check the modifier's names, choices, defaults and quantity limits.",
-    es: "Revisa los nombres, las opciones, los valores predeterminados y los límites de cantidad del modificador.",
-  },
-  "modifier.not_found": {
-    en: "This modifier could not be found. Refresh the list and try again.",
-    es: "No se encontró este modificador. Actualiza la lista e inténtalo de nuevo.",
-  },
-  "modifier.in_use": {
-    en: "This modifier is used by a product, menu or saved order. Detach it from the product or remove it from the menu before changing its type.",
-    es: "Este modificador se usa en un producto, menú o pedido guardado. Desvincúlalo del producto o retíralo del menú antes de cambiar su tipo.",
-  },
   "printer.probe_busy": {
     en: "Several addresses are being checked. Wait a moment and try again.",
     es: "Se están comprobando varias direcciones. Espera un momento e inténtalo de nuevo.",
@@ -520,11 +504,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That allergen isn't valid",
     es: "Ese alérgeno no es válido",
   },
-  // No route answers with this any more.
-  "options.group_invalid": {
-    en: "Check the group's min/max selection settings",
-    es: "Revisa los ajustes de selección mínima/máxima del grupo",
-  },
   // `options.label_required` and `extras.limit_exceeded` are deliberately absent: only the order
   // path's selection validators throw them, never a management route.
   "options.invalid": {
@@ -564,17 +543,9 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Enter a name",
     es: "Introduce un nombre",
   },
-  "media.missing": {
-    en: "No image was provided",
-    es: "No se ha proporcionado ninguna imagen",
-  },
   "media.read_failed": {
     en: "The image couldn't be read, try again",
     es: "No se pudo leer la imagen, inténtalo de nuevo",
-  },
-  "media.too_large": {
-    en: "The image is too large",
-    es: "La imagen es demasiado grande",
   },
   "media.unsupported_type": {
     en: "That image type isn't supported",

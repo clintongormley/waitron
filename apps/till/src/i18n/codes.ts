@@ -127,18 +127,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The menu has changed since this order was started. Check the order and try again",
     es: "La carta ha cambiado desde que se empezó este pedido. Revisa el pedido e inténtalo de nuevo",
   },
-  "modifier.invalid": {
-    en: "Check the modifier choices and try again",
-    es: "Revisa las opciones del modificador e inténtalo de nuevo",
-  },
-  "modifier.not_found": {
-    en: "That modifier is no longer available",
-    es: "Ese modificador ya no está disponible",
-  },
-  "modifier.in_use": {
-    en: "This modifier is in use. Deactivate it instead",
-    es: "Este modificador está en uso. Desactívalo",
-  },
   "swap.not_permitted": {
     en: "You can only offer your own shifts and accept swaps offered to you",
     es: "Solo puedes ofrecer tus propios turnos y aceptar los cambios que te ofrezcan",

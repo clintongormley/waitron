@@ -254,8 +254,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "menu_item.variant_not_allowed": 400,
   "product.not_found": 404,
   "product.invalid": 400,
-  // Retired: nothing throws it since a product may have one variant.
-  "product.variant_count_invalid": 400,
   "menu_section.not_found": 404,
   "menu_section.invalid": 400,
   "menu_section.translation_required": 400,
@@ -278,29 +276,17 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "diet.invalid_origin": 400,
   "diet.invalid_label": 400,
   "diet.add_remove_conflict": 400,
-  // Retired with the option-group machinery; nothing throws them.
-  "modifier.invalid": 400,
-  "modifier.not_found": 404,
-  "modifier.in_use": 409,
-  "options.group_invalid": 400,
-  "options.item_invalid": 400,
   "options.invalid": 400,
   "options.translation_required": 400,
   "options.not_found": 404,
-  // Nothing throws it: a list delete cascades its product attachments rather than refusing.
-  "options.in_use": 409,
   "extras.invalid": 400,
   "extras.translation_required": 400,
   "extras.not_found": 404,
-  // Nothing throws it: an extras list delete cascades rather than refusing.
-  "extras.in_use": 409,
   // Raised on the till surface (a diner's picks), never by a route here.
   "extras.limit_exceeded": 400,
   // 409: the body was well formed, and what another stored row holds refused it.
   "extras.product_has_variants": 409,
   "product.offered_as_extra": 409,
-  // Nothing throws it, and no route deletes a product.
-  "product.in_use": 409,
 };
 
 const run = createErrorBoundary(STATUS, "catalogue.failed");

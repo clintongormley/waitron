@@ -75,11 +75,6 @@ declare module "@waitron/shared" {
      * is a name from `PURPOSES`, so it is ours to echo.
      */
     "server.credential_unusable": { purpose: string; field: string };
-    /**
-     * No such tenant. `id` is an operator-supplied argument, not a secret. Nothing in production
-     * raises it today.
-     */
-    "tenant.not_found": { id: string };
     /** No node with this id. The id is a caller-supplied uuid, not a secret. */
     "node.not_found": { id: string };
     /**
@@ -213,11 +208,6 @@ declare module "@waitron/shared" {
      * percentage; neither is a secret.
      */
     "reader.battery_low": { reader: string; percent: number };
-    /**
-     * NOTHING RAISES THIS ANY MORE: a basket line named a product the catalogue did not sell. A line
-     * not offered in its zone is now `service_zone.offer_not_allowed` (`priceOrderLines`).
-     */
-    "sale.unknown_product": { productId: string };
     /** The till was asked to ring a sale with no lines; refused before any catalogue read or fiscal write. */
     "sale.empty_basket": Record<string, never>;
     /**
@@ -225,17 +215,6 @@ declare module "@waitron/shared" {
      * name what was attempted; it is caller-supplied text, never a secret.
      */
     "sale.unsupported_tender": { method: string };
-    /**
-     * NOTHING RAISES THIS ANY MORE: an option-group item that belonged to no active option group of
-     * the product. The table `optionGroupItemId` named no longer exists.
-     */
-    "option.not_found": { optionGroupItemId: string; productId: string };
-    /** NOTHING RAISES THIS ANY MORE — the legacy option payload it validated is gone. An unanswered
-     *  options list is now `options.label_required` and a pick outside a list's limits is
-     *  `extras.limit_exceeded`, both from the contracts in `@waitron/catalogue`. */
-    "options.selection_invalid": { productId: string; groupId: string; reason: string };
-    /** NOTHING RAISES THIS ANY MORE: the `options.`-prefixed twin of `extras.unsupported_product`. */
-    "options.unsupported_product": { productId: string; pricingUnit: string };
     /** An extras pick on a dish that is not priced `each`. A child line is priced at the dish's
      *  quantity times the pick count, so a dish sold by weight would bill a fraction of an extra.
      *  Raised by `priceOrderLines` (working-order.ts); `pricingUnit` echoes what the dish resolved
@@ -296,8 +275,6 @@ declare module "@waitron/shared" {
      * settled.
      */
     "working_order.already_collected": { workingOrderId: string };
-    /** NOTHING RAISES THIS ANY MORE: an order-level prep move that was not legal. */
-    "order_prep.invalid_transition": { workingOrderId: string };
     // `table.not_found` is declared in @waitron/db's errors.ts.
     /** A dining table label already exists in this venue. `label` is the operator's own text. */
     "table.label_taken": { label: string };
@@ -674,8 +651,6 @@ declare module "@waitron/shared" {
     "device.binding_invalid": {
       field: "tillId" | "receiptPrinterId" | "deviceProfileId";
     };
-    /** NOTHING RAISES THIS ANY MORE: a missing profile on accept is now `device_profile.not_found`. */
-    "device.profile_missing": Record<string, never>;
     /**
      * A knock arrived at `POST /api/device/join` while pairing mode is shut — the ordinary state, not
      * an anomaly. NO params: nothing about the window is the joiner's business.

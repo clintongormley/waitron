@@ -11,7 +11,7 @@ import "./errors.js";
 // Test-local codes, declared only so the fixtures typecheck; AppError validates nothing at runtime.
 declare module "@waitron/shared" {
   interface ErrorParams {
-    "tenant.not_found": { id: string };
+    "test.not_found": { id: string };
     "session.required": Record<string, never>;
     "recovery.state_incomplete": { missing: string };
   }
@@ -41,18 +41,18 @@ describe("createErrorBoundary (the shared error boundary till-api and management
   it("maps an AppError whose code IS in the map to that status and logs it at warn", async () => {
     const lines: Line[] = [];
     // A NON-default status proves the boundary reads the map it was handed.
-    const status: Record<string, ContentfulStatusCode> = { "tenant.not_found": 404 };
+    const status: Record<string, ContentfulStatusCode> = { "test.not_found": 404 };
     const boundary = createErrorBoundary(status, "widget.failed");
     const id = randomUUID();
     const app = new Hono();
     app.get("/boom", (c) =>
-      boundary(c, collect(lines), () => Promise.reject(new AppError("tenant.not_found", { id }))),
+      boundary(c, collect(lines), () => Promise.reject(new AppError("test.not_found", { id }))),
     );
 
     const res = await app.request("/boom");
     expect(res.status).toBe(404);
-    expect(await res.json()).toEqual({ error: { code: "tenant.not_found", params: { id } } });
-    expect(lines).toEqual([{ level: "warn", event: "tenant.not_found", fields: { id } }]);
+    expect(await res.json()).toEqual({ error: { code: "test.not_found", params: { id } } });
+    expect(lines).toEqual([{ level: "warn", event: "test.not_found", fields: { id } }]);
   });
 
   it("maps an AppError whose code is mapped to 500 to that status but still logs it at warn", async () => {
@@ -80,7 +80,7 @@ describe("createErrorBoundary (the shared error boundary till-api and management
   it("maps an AppError whose code is NOT in the map to 400 (the default) and logs it at warn", async () => {
     const lines: Line[] = [];
     // `session.required` is deliberately absent from this map, so it takes the `?? 400` fallback.
-    const status: Record<string, ContentfulStatusCode> = { "tenant.not_found": 404 };
+    const status: Record<string, ContentfulStatusCode> = { "test.not_found": 404 };
     const boundary = createErrorBoundary(status, "widget.failed");
     const app = new Hono();
     app.get("/boom", (c) =>
@@ -95,14 +95,14 @@ describe("createErrorBoundary (the shared error boundary till-api and management
 
   it("includes the request id on an AppError warn line", async () => {
     const lines: Line[] = [];
-    const status: Record<string, ContentfulStatusCode> = { "tenant.not_found": 404 };
+    const status: Record<string, ContentfulStatusCode> = { "test.not_found": 404 };
     const boundary = createErrorBoundary(status, "widget.failed");
     const app = new Hono();
     app.get("/boom", (c) => {
       // The request-id middleware seeds this on a real request.
       c.set("requestId", "req-xyz");
       return boundary(c, collect(lines), () =>
-        Promise.reject(new AppError("tenant.not_found", { id: "s1" })),
+        Promise.reject(new AppError("test.not_found", { id: "s1" })),
       );
     });
 

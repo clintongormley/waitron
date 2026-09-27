@@ -1260,12 +1260,8 @@ What B4 leaves open:
   copies it to the new line (`copyLineContext`, `transferLines`).
   **Next action:** delete both branches, since no backwards-compatibility code is owed before
   production (CLAUDE.md §3), or say what keeps them.
-- **`sale.unknown_product` is no longer raised.** A line naming an item the zone does not offer is
-  refused `service_zone.offer_not_allowed` instead. The code stays registered, with its note in
-  `apps/server/src/errors.ts` saying nothing raises it, and keeps its 400 in the till surface's
-  status map (`apps/server/src/till-api.ts`), under the rule of the time that a shipped code was
-  never removed. **Next action:** delete it, under *Delete the error codes nothing raises any more*
-  below (the owner ruled on 2026-09-26 that before a venue is live a code may be deleted freely).
+- **`sale.unknown_product` was retired by A77.** A line naming an item the zone does not offer is
+  refused `service_zone.offer_not_allowed` instead.
 
 Task 10 has landed as **#471**: the built-in `doneness` field was removed end to end, and the demo
 steak now carries a `Punto` cooking options list instead. The per-line free-text note stays.
@@ -1367,13 +1363,10 @@ What option lists left open, none of it taken in #436 or #445:
   (`packages/catalogue/src/options.ts`) returns the products that carry the list and no menu side.
   The carrying `product_modifiers` rows are now selected twice in that file, each with its own
   condition on `option_list_id`: there for one list, and in `listOptionLists`' usage count for every
-  list. Nothing can drift from them yet, because `options.in_use` is still thrown by nothing.
+  list.
   **Next action:** whoever writes a refusal that uses the same condition shares it then — the
   modifier code this replaced had already learned that lesson in an `openOrderUse` helper, and that
   file went with the old model in Task 13.
-- **`options.in_use` is registered and nothing throws it.** Deleting a list is designed to cascade
-  its product attachments rather than be refused, so there may never be a thrower. **Next action:**
-  delete it, under *Delete the error codes nothing raises any more* below.
 - **A trap that fooled three readers on #445, not yet written into `CLAUDE.md`.**
   `pnpm --filter <pkg> test <file> -t "name"` SILENTLY DROPS the `-t` and runs the whole file; only a
   bare `--` before it passes it through. Measured both ways: without `--` the echoed command is
@@ -1418,8 +1411,6 @@ What extras lists left open, and what #449 found on the way:
   `extraListDependants` (`packages/catalogue/src/extras.ts`) reads the menus a delete would touch
   straight out of `menu_item_extra_lists` rather than reaching them through the products, and the
   products out of `product_modifiers`. Its options twin has only the one table to read.
-- **`extras.in_use` is registered and nothing throws it**, the same posture as `options.in_use`.
-  **Next action:** delete it, under *Delete the error codes nothing raises any more* below.
 
 - **A save reaches the database once per submitted label.** The read that finds which list each
   submitted label belongs to, and the delete that drops the labels a body omits, are each one
@@ -3531,7 +3522,7 @@ image constraints under *Detail → Box image*.
     `sale.already_settled` (`packages/core/src/settle-sale.ts`); #598 measured the earlier check
     stopping both concurrent-settlement tests first. `sale.number_reused` is registered in
     `packages/core/src/errors.ts` and `git grep number_reused -- apps packages` finds no thrower
-    (see *Delete the error codes nothing raises any more*). Outside core,
+    (see *Decide whether to implement `sale.number_reused`*). Outside core,
     `docs/developers/conventions-data.md` says the stored breakdown holds "the literals a fiscal
     record hashes" (#598 found the hash covers the totals, not the breakdown).
   - Found by #597 (`packages/payments-sumup`, `packages/migrations`), not fixable in a
@@ -3589,10 +3580,9 @@ image constraints under *Detail → Box image*.
     and `workforce-es` (#611 fixed `venue-service`'s) say an unnamed unique constraint reaches the
     factory's refusal; drizzle-orm 0.45.2 names an unnamed `unique()` itself, so nothing reaches it
     (`packages/db/src/testing/schema-conformance.ts`).
-  - Identity code, found by #559 and not changed: `setEmail` in `packages/identity/src/staff.ts`,
+  - Identity code, found by #559: `setEmail` in `packages/identity/src/staff.ts`,
     unlike `updatePersonDetails`, never checks the new email against other people's pending
-    emails; `totp.key_unavailable` is declared in `errors.ts` and thrown nowhere; and
-    `manager-login.ts` reports an authenticator secret it cannot decrypt as `totp.invalid`.
+    emails; `manager-login.ts` reports an authenticator secret it cannot decrypt as `totp.invalid`.
     Identity's coverage reads 99.85 statements / 99.75 branches, not 100: the
     `management_session.required` throw in `profile.ts`'s `ownSession`, as it stands since #554,
     is reached by no test.
@@ -3613,10 +3603,7 @@ image constraints under *Detail → Box image*.
     runs straight from source). `docs/developers/conventions-data.md` cites
     `packages/provisioning/src/errors.ts` as spelling engine errors by `errcode`; it no longer
     does.
-  - `packages/provisioning` code, found by #561 and not changed: `provisioning.database_not_owned`
-    is declared and neither thrown nor read anywhere in `packages/` or `apps/` (see *Delete the
-    error codes nothing raises any more*);
-    `provisioning.adopt_incomplete`'s `missing` type still lists `"tenant"`; `quoteIdent` has no
+  - `packages/provisioning` code, found by #561 and not changed: `quoteIdent` has no
     caller outside its own suite, and the `quoteLiteral` re-export in `identifiers.ts` is used only
     by that suite; the `action.email === undefined` branch in `venue-apply.ts`'s seed-admin cannot
     run, because the action's `email` is a required string; the coverage config leaves `src/bin.ts`
@@ -4848,32 +4835,14 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   the condition they described — two taxpayers disagreeing — stopped being reachable. The owner ruled
   that before a venue is live a code may be renamed or deleted freely (CLAUDE.md §3), so the deletion
   stands. Nothing to do.
-- **Delete the error codes nothing raises any more** (owner, 2026-09-26: before a venue is live a
-  code may be deleted freely). Several are still registered although nothing raises them, most of
-  them kept because the old rule said a shipped code is never removed. A search on 2026-09-26 found,
-  by file:
-  - `packages/catalogue/src/errors.ts`: the entries marked not thrown, including the three
-    `modifier.*` codes.
-  - `packages/provisioning/src/errors.ts`: `provisioning.adopt_incomplete` (deprecated) and
-    `provisioning.database_not_owned`, whose throwers went in `aabdde6a8` (#489) while the entry
-    stayed.
-  - `apps/server/src/errors.ts`: `sale.unknown_product` (above, *`sale.unknown_product` is no longer
-    raised*), `device.profile_missing`, `option.not_found`, `options.selection_invalid`,
-    `options.unsupported_product`, `order_prep.invalid_transition` and `tenant.not_found` (only a
-    test raises it).
-  - `packages/payments-stripe/src/errors.ts`: `stripe.collect_timeout`.
-  - `packages/identity/src/errors.ts`: `totp.key_unavailable`.
-  - `options.in_use` and `extras.in_use` (above), and the retired entry in
-    `apps/dashboard/src/i18n/codes.ts`.
-
-  `sale.number_reused` (`packages/core/src/errors.ts`) is a different case: it was added in
-  `10b16fd57` for a translation of the invoice-number unique-index violation that was never
-  written, so decide whether that translation is still wanted before deleting it. The list above
-  comes from one search and may be incomplete or out of date. **Next action:** re-run the search
-  (grep each registered code for a raise site outside its registry, status maps, wording and
-  tests) rather than trusting the list, then delete each code nothing raises with its wording,
-  status-map entry and tests in one change, after checking that no prefix matcher or stored copy
-  needs it (docs/developers/conventions-data.md lists both).
+- **Unused error codes retired by A77.** The 2026-09-27 source search found 25 codes with no
+  literal production raise site outside their registry and status entries. Their registry entries,
+  status mappings, English and Spanish wording, and code-specific tests were removed together.
+  `media.unsupported_type` stayed: `packages/catalogue/src/media.ts` still raises it.
+  `sale.number_reused` also stays pending the decision below.
+- **Decide whether to implement `sale.number_reused`.** It was added in `10b16fd57` for a
+  translation of the invoice-number unique-index violation that was never written. Decide whether
+  that translation is still wanted before deleting the code.
 - **`server.credential_unusable` names an unusable credential, although `server.*` is reserved for
   facts about the process itself.** It is thrown for AEAT's certificate
   (`packages/fiscal-verifactu/src/aeat-transport.ts`) and for Stripe's secret key and webhook secret
@@ -5056,9 +5025,9 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   in `packages/fiscal-verifactu/src/backend.ts`. Safe
   seam: a helper taking the assembled `Omit<AltaInput,"Encadenamiento">` plus a `buildDesglose`; needs
   a huella-invariance re-run across all three.
-- `tenant.not_found` has no production thrower — keep or remove is an owner call; `mirror-bundle.ts`'s
-  `r.series ?? []` branch is un-exercised; export `ID_SISTEMA_MAX_LENGTH` when either package is next
-  touched; `insertNodeSeriesTx`'s held-code check is SELECT-then-INSERT; the SP-3d restore overlapping
+- `mirror-bundle.ts`'s `r.series ?? []` branch is un-exercised; export `ID_SISTEMA_MAX_LENGTH`
+  when either package is next touched; `insertNodeSeriesTx`'s held-code check is SELECT-then-INSERT;
+  the SP-3d restore overlapping
   a live SIF registration deadlocks (`40P01`) — revisit locking before the hook runs live.
 
 **Product decisions to take before production:**

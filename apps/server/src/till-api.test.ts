@@ -760,16 +760,14 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
 describe("the run wrapper (the shared error boundary Tasks 5 & 6 reuse)", () => {
   it("maps a registered but UNMAPPED AppError code to 400 (its default)", async () => {
     const app = new Hono();
-    // `tenant.not_found` is a real code deliberately absent from STATUS, so it takes the `?? 400`
+    // `content.language_invalid` is a real code deliberately absent from STATUS, so it takes the `?? 400`
     // default.
     app.get("/boom", (c) =>
-      run(c, collect([]), () =>
-        Promise.reject(new AppError("tenant.not_found", { id: randomUUID() })),
-      ),
+      run(c, collect([]), () => Promise.reject(new AppError("content.language_invalid", {}))),
     );
     const res = await app.request("/boom");
     expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ error: { code: "tenant.not_found" } });
+    expect(await res.json()).toMatchObject({ error: { code: "content.language_invalid" } });
   });
 
   /* The two refusals the FISCAL FILING itself raises are not client faults, so they are listed in

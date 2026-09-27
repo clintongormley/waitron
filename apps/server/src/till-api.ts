@@ -270,13 +270,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "session.required": 401,
   "locale.unsupported": 400,
   "sale.empty_basket": 400,
-  "sale.unknown_product": 400,
   "product.variant_required": 400,
   // A line never sent whose product sold out, refused at send and at pay (spec §11.3).
   "product.unavailable": 409,
   // A basket priced against a menu version that is no longer live: nothing was priced or written.
   "menu.version_changed": 409,
-  "modifier.invalid": 400,
   "sale.unsupported_tender": 400,
   "sale.tender_shortfall": 400,
   "quantity.invalid": 400,
