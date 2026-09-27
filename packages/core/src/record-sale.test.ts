@@ -321,7 +321,7 @@ describe("recordSale — the happy path", () => {
 
   it("takes a rate's tax from the summed base, not from each line's rounded tax", async () => {
     // 1.07 at 21% is 0.2247, so two lines taxed one by one give 0.22 + 0.22 = 0.44; the grouped
-    // base 2.14 gives 0.4494, which is 0.45.
+    // base 2.14 gives 0.4494, which is 0.45, so the total is 2.14 + 0.45 = 2.59.
     const backend = new FakeFiscalBackend(suite.db);
     const line = {
       name: "Café solo",
@@ -337,10 +337,7 @@ describe("recordSale — the happy path", () => {
         { lineNo: 1, ...line },
         { lineNo: 2, ...line },
       ],
-      settlement: {
-        kind: "immediate",
-        tenders: [{ method: "card", amount: "2.59", tipAmount: "0.00", settledAt: BASE }],
-      },
+      settlement: { kind: "deferred" },
     });
     const [saleRow] = await suite.db
       .select({ vb: sales.vatBreakdown })
