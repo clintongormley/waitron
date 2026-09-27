@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   withTransaction,
@@ -21,6 +21,7 @@ import {
   listImageLabels,
   listImageTranslationGaps,
   listImages,
+  datedImagePageQuery,
 } from "./images.js";
 import { mediaImageData, mediaImages } from "./schema/images.js";
 import type { PreparedImage } from "./prepare.js";
@@ -35,6 +36,20 @@ const prepare = (width: number): Promise<PreparedImage> => samplePreparedImage({
 const photo = await prepare(8);
 
 describe("image library", () => {
+  it("does not read the same image row again when counting its uses", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      const image = await uploadImage(
+        tx,
+        { image: photo, names: { en: "Bread" }, altText: {}, labels: [] },
+        { fallbackLanguage: "en" },
+      );
+      const selects = vi.spyOn(tx, "select");
+      expect((await readImage(tx, image.image.id)).usageCount).toBe(0);
+      expect(selects).toHaveBeenCalledTimes(5);
+      selects.mockRestore();
+    });
+  });
+
   it("stores a prepared photo with required default metadata and reuses it for a repeat upload", async () => {
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
@@ -385,6 +400,69 @@ describe("metadata, labels and references", () => {
 });
 
 describe("search and sorting", () => {
+  it("filters and pages a date-sorted library list in SQL", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      const added = [];
+      for (const [index, labels] of [["Food"], ["Other"], ["food"], ["Food"]].entries()) {
+        added.push(
+          (
+            await uploadImage(
+              tx,
+              {
+                image: await prepare(180 + index),
+                names: { en: `Photo ${index}` },
+                altText: {},
+                labels,
+              },
+              { fallbackLanguage: "en" },
+            )
+          ).image,
+        );
+        await tx
+          .update(mediaImages)
+          .set({ createdAt: new Date(2026, 0, index + 1) })
+          .where(eq(mediaImages.id, added[index]!.id));
+      }
+      const result = await listImages(tx, {
+        label: " FOOD ",
+        sort: "date",
+        direction: "desc",
+        offset: 1,
+        limit: 1,
+      });
+      expect(result.total).toBe(3);
+      expect(result.images.map((image) => image.id)).toEqual([added[2]!.id]);
+
+      const statement = datedImagePageQuery(tx, ["Food"], "desc", 1, 1).toSQL();
+      expect(statement.sql).toMatch(/json_each/);
+      expect(statement.sql).toMatch(/order by .*created_at.*desc.*id.*asc/);
+      expect(statement.sql).toMatch(/limit \? offset \?/);
+      expect(statement.params).toEqual(["Food", 1, 1]);
+      const unfiltered = datedImagePageQuery(tx, null, "asc", 2, 3).toSQL();
+      expect(unfiltered.sql).not.toMatch(/json_each/);
+      expect(unfiltered.sql).toMatch(/order by .*created_at.*asc.*id.*asc/);
+      expect(unfiltered.params).toEqual([3, 2]);
+    });
+  });
+
+  it("keeps Unicode label matching when the page is selected in SQL", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      const image = await uploadImage(
+        tx,
+        {
+          image: photo,
+          names: { en: "Summer" },
+          altText: {},
+          labels: ["Été"],
+        },
+        { fallbackLanguage: "en" },
+      );
+      const result = await listImages(tx, { label: "été", limit: 1 });
+      expect(result.total).toBe(1);
+      expect(result.images.map((row) => row.id)).toEqual([image.image.id]);
+    });
+  });
+
   it("searches labels, matches a quoted phrase and combines a label filter", async () => {
     await withTransaction(suite.db, async (tx) => {
       const add = async (
