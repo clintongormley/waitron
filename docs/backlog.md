@@ -1948,9 +1948,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   - **Task 0's [bill payments design](superpowers/specs/2026-09-26-bill-payments-design.md) is
     approved** (owner, 2026-09-26, PR #698), with the owner's answers to its open points (its §11):
     the cash-up counts money on the day it moves, in Task 14 (§9a), and a card refund is a durable
-    attempt that survives an interrupted call (§6b). Task 14 is being built on branch
-    `feat/service-bill-payments`; its Step 0, the check of the providers' documentation and the
-    SumUp endpoint, is done.
+    attempt that survives an interrupted call (§6b). Task 14 has landed (#721, below).
   - **The card refund path records only after the provider call, with a fresh key each time**
     (found by the owner reviewing Task 0, 2026-09-26). `reverseViaStripe`
     (`packages/payments-stripe/src/reverse.ts`) sends a fresh `randomUUID()` idempotency key on
@@ -1985,8 +1983,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     byte-identical to what was measured. Left open: `service_commands` rows are never pruned; a
     line void does not move the party's revision yet (Task 3 builds that with groups); the four
     items directly below.
-  - **Task 14 is built and reviewed, awaiting the owner's review and landing** (lane B item B14,
-    branch `feat/service-bill-payments`, 2026-09-27). The server lets a bill take several payments
+  - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
+    `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card
     on a reader), issues the invoice in the same transaction that leaves the bill fully paid, gives
     money back before the invoice (a card refund keeps its record through an interrupted call), and
@@ -1994,9 +1992,15 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     No till screen calls these routes yet; Task 15 builds them. The questions it raised, and how
     each was ruled, are in lane B's questions log. With M7v landed (#720), the invoice issued at a
     bill's last payment files each line at the VAT rate recorded on it, however long the payments
-    took. One follow-up:
+    took. The owner's rulings at landing (2026-09-27): a SumUp payment stuck mid-charge keeps its
+    bill locked until SumUp answers (no "failed" after a time limit); a card arriving after cash
+    paid the rest is refused `working_order.not_open`, and the resolve routes sit beside M7b2's,
+    both accepted and to be written into the design (lane A item A76). Two follow-ups, both queued
+    for lane B before Task 15:
+    - **Refund a hand-keyed card payment on staff's word, with a manager PIN** (lane B item B14a,
+      owner's choice). Task 14 refuses it today.
     - **A dashboard screen for card payments and refunds on a bill that nothing has settled**
-      (Task 14's Ruling STOP 5), needed before or with Task 15. The routes exist:
+      (Task 14's Ruling STOP 5; lane B item B14b), needed before Task 15. The routes exist:
       `GET /management-api/payments/bill-payments` and `.../bill-refunds` list them, and each has a
       `resolve` (ask the card provider) and an `attest` (a manager records the outcome the provider
       confirmed, with a note and their PIN re-entered). Nothing in the dashboard calls them. Until a
