@@ -1,4 +1,4 @@
-import { afterEach, describe, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import "./wt-switch.js";
@@ -18,6 +18,15 @@ describe.each(["light", "dark"] as const)("wt-switch a11y (%s theme)", (theme) =
 
   test("hidden label", async () => {
     await mountThemed('<wt-switch label="Disponible" hide-label checked></wt-switch>', theme);
+    await expectNoA11yViolations(host);
+  });
+
+  test("row-specific accessible name", async () => {
+    const el = await mountThemed(
+      '<wt-switch label="Disponible" accessible-name="Media" hide-label checked></wt-switch>',
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector("input")!.getAttribute("aria-label")).toBe("Media");
     await expectNoA11yViolations(host);
   });
 

@@ -96,6 +96,7 @@ export class WtSwitch extends LitElement {
   @property({ type: Boolean, reflect: true }) checked = false;
   @property({ type: Boolean, reflect: true }) disabled = false;
   @property() label = "";
+  @property({ attribute: "accessible-name" }) accessibleName = "";
   /** Names the switch for assistive technology without drawing the label beside it — for a
    * switch whose column or row heading already says what it is. */
   @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
@@ -118,7 +119,7 @@ export class WtSwitch extends LitElement {
           role="switch"
           .checked=${this.checked}
           ?disabled=${this.disabled}
-          aria-label=${this.label || nothing}
+          aria-label=${this.accessibleName || this.label || nothing}
           @change=${this.onChange}
         />
         <span class="track"></span>

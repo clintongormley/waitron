@@ -55,8 +55,8 @@ async function mount(
 
 describe.each(["light", "dark"] as const)("variant table (%s)", (theme) => {
   it.each([
-    ["en-GB", ["Available: Media", "Available: Entera"]],
-    ["es-ES", ["Disponible: Media", "Disponible: Entera"]],
+    ["en-GB", ["Media", "Entera"]],
+    ["es-ES", ["Media", "Entera"]],
   ])("names each available switch for its variant in %s", async (locale, labels) => {
     setLocale(locale as "en-GB" | "es-ES");
     const { el, host } = await mount(false, theme);
