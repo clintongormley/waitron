@@ -174,12 +174,52 @@ export type ZoneOfferedModifier =
       }[];
     };
 
-/** A menu a zone sells from: its live version, and whether it is the zone's default. */
-export interface ZoneMenu {
+/** One entry of a live menu's structure: an offer, or a section holding its own entries in order. */
+export type ZoneMenuMember =
+  | { readonly kind: "product"; readonly menuItemId: string; readonly productId: string }
+  | {
+      readonly kind: "section";
+      readonly sectionId: string;
+      readonly internalName: string;
+      /** The customer-facing name, locale -> text. */
+      readonly names: Readonly<Record<string, string>>;
+      readonly image: string | null;
+      readonly color: string | null;
+      readonly members: readonly ZoneMenuMember[];
+    };
+
+/** A home layout as the live version holds it: its shortcuts, in order. */
+export interface ZoneHomeLayout {
+  readonly id: string;
+  readonly name: string;
+  readonly tiles: readonly (
+    | { readonly kind: "product"; readonly productId: string }
+    | { readonly kind: "section"; readonly sectionId: string }
+  )[];
+}
+
+/** Why a device shows its menu's default layout rather than its profile's choice. */
+export type ZoneLayoutFallback = "layout_removed" | "layout_unpublished";
+
+/** The home layout a device shows for one menu, resolved against the live version. */
+export interface ZoneDeviceHomeLayout {
+  readonly homeLayoutId: string;
+  readonly layoutFallback: ZoneLayoutFallback | null;
+}
+
+/**
+ * A menu a zone sells from: its live version, whether it is the zone's default, that version's
+ * structure and home layouts, and the layout the requesting device shows.
+ */
+export interface ZoneMenu extends ZoneDeviceHomeLayout {
   readonly id: string;
   readonly name: string;
   readonly isDefault: boolean;
   readonly versionId: string;
+  readonly structure: { readonly members: readonly ZoneMenuMember[] };
+  /** The default first. */
+  readonly homeLayouts: readonly ZoneHomeLayout[];
+  readonly defaultHomeLayoutId: string;
 }
 
 /** What a zone sells: its published menus' live versions, each offer marked with its availability. */
@@ -203,9 +243,13 @@ export interface ZoneUnavailable {
   }[];
 }
 
-/** A zone's live menu versions, and what they hold that cannot be sold now. */
+/** A zone's live menu versions with the layout the device shows for each, and what they hold that
+ * cannot be sold now. */
 export interface ZoneMenuState {
-  readonly menus: readonly { readonly menuId: string; readonly versionId: string }[];
+  readonly menus: readonly ({
+    readonly menuId: string;
+    readonly versionId: string;
+  } & ZoneDeviceHomeLayout)[];
   readonly unavailable: ZoneUnavailable;
 }
 
@@ -256,7 +300,8 @@ export interface VenueServiceContribution {
     productIds: readonly string[],
   ): Promise<ReadonlyMap<string, PreparationRoute>>;
   /** Refused `menu.version_changed` unless every `asserted` version is the live version of one of
-   *  the zone's menus. With `menuItemIds`, only the offers it names are served. */
+   *  the zone's menus. With `menuItemIds`, only the offers it names are served. Each menu's home
+   *  layout is the one `deviceProfileId` chose for it, or the menu's default. */
   listZoneOffers(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -264,10 +309,16 @@ export interface VenueServiceContribution {
     options?: {
       asserted?: readonly { menuId: string; versionId: string }[];
       menuItemIds?: readonly string[];
+      deviceProfileId?: string | null;
     },
   ): Promise<ZoneOffers>;
-  /** Does not check the zone: an unknown one holds nothing. */
-  menuState(tx: Transaction, zoneId: string): Promise<ZoneMenuState>;
+  /** Does not check the zone: an unknown one holds nothing. Each menu's home layout is the one
+   *  `deviceProfileId` chose for it, or the menu's default. */
+  menuState(
+    tx: Transaction,
+    zoneId: string,
+    deviceProfileId?: string | null,
+  ): Promise<ZoneMenuState>;
   resolveNewOrderZone(
     tx: Transaction,
     cfg: { locationId: LocationId },

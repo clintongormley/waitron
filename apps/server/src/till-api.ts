@@ -737,7 +737,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           zones: (await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).filter(
             (zone) => zone.serviceMode !== "table_tab",
           ),
-          ...(await VENUE_SERVICE.listZoneOffers(tx, deps.cfg, context.zoneId)),
+          ...(await VENUE_SERVICE.listZoneOffers(tx, deps.cfg, context.zoneId, {
+            deviceProfileId: device?.deviceProfileId,
+          })),
         };
       });
       return c.json(result);
@@ -751,9 +753,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
+      const device = await tryReadDevice(deps, c);
       const result = await withTransaction(deps.db, async (tx) => {
         const context = await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId);
-        return { context, ...(await VENUE_SERVICE.listZoneOffers(tx, deps.cfg, zoneId)) };
+        return {
+          context,
+          ...(await VENUE_SERVICE.listZoneOffers(tx, deps.cfg, zoneId, {
+            deviceProfileId: device?.deviceProfileId,
+          })),
+        };
       });
       return c.json(result);
     }),
@@ -764,7 +772,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const named = c.req.query("zoneId");
       const zoneId = named === undefined ? undefined : requireUuidParam(named, "ServiceZoneId");
-      const device = zoneId === undefined ? await tryReadDevice(deps, c) : null;
+      const device = await tryReadDevice(deps, c);
       const state = await withTransaction(deps.db, async (tx) => {
         const zone =
           zoneId === undefined
@@ -774,7 +782,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
                 })
               ).zoneId
             : (await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId)).zoneId;
-        return VENUE_SERVICE.menuState(tx, zone);
+        return VENUE_SERVICE.menuState(tx, zone, device?.deviceProfileId);
       });
       return c.json(state);
     }),

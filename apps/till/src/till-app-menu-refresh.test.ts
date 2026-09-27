@@ -113,7 +113,19 @@ function catalogue(version: string, offers: TillMenuOffer[]): ZoneOfferCatalogue
   return {
     context: { zoneId: "zone-counter", departmentId: "department-bar", serviceMode: "prepay" },
     defaultMenuId: "lunch",
-    menus: [{ id: "lunch", name: "Lunch", isDefault: true, versionId: version }],
+    menus: [
+      {
+        id: "lunch",
+        name: "Lunch",
+        isDefault: true,
+        versionId: version,
+        structure: { members: [] },
+        homeLayouts: [{ id: "layout-home", name: "Home", tiles: [] }],
+        defaultHomeLayoutId: "layout-home",
+        homeLayoutId: "layout-home",
+        layoutFallback: null,
+      },
+    ],
     offers,
   };
 }
@@ -124,7 +136,9 @@ const NOTHING: MenuUnavailable = { products: [], optionLabels: [], extraItems: [
 
 function menuState(version: string, unavailable: Partial<MenuUnavailable> = {}): MenuState {
   return {
-    menus: [{ menuId: "lunch", versionId: version }],
+    menus: [
+      { menuId: "lunch", versionId: version, homeLayoutId: "layout-home", layoutFallback: null },
+    ],
     unavailable: { ...NOTHING, ...unavailable },
   };
 }

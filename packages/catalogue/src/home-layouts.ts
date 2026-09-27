@@ -23,6 +23,7 @@ import type {
   MemberRef,
   SectionMember,
 } from "./section-types.js";
+import type { DeviceHomeLayout, MenuDocument } from "./menu-document-types.js";
 import "./errors.js";
 
 /*
@@ -341,4 +342,62 @@ export async function deviceHomeLayouts(
         selectedLayoutId !== null && !own.some((layout) => layout.id === selectedLayoutId),
     };
   });
+}
+
+/**
+ * The layout a device of the profile shows for each document's menu, keyed by menu id (D14). The
+ * profile's choice when the live document holds it, so a layout deleted or renamed since the publish
+ * still shows; otherwise the document's default, with why. A null profile shows every default.
+ */
+export async function resolveDeviceHomeLayouts(
+  tx: Transaction,
+  deviceProfileId: string | null,
+  documents: readonly MenuDocument[],
+): Promise<Map<string, DeviceHomeLayout>> {
+  const chosen = new Map<string, string>();
+  if (deviceProfileId !== null)
+    for (const row of await tx
+      .select({
+        menuId: deviceProfileHomeLayouts.menuId,
+        layoutId: deviceProfileHomeLayouts.layoutId,
+      })
+      .from(deviceProfileHomeLayouts)
+      .where(eq(deviceProfileHomeLayouts.deviceProfileId, deviceProfileId)))
+      chosen.set(row.menuId, row.layoutId);
+  const unpublished = (document: MenuDocument): string | null => {
+    const layoutId = chosen.get(document.menuId);
+    return layoutId === undefined || document.homeLayouts.some((layout) => layout.id === layoutId)
+      ? null
+      : layoutId;
+  };
+  const missing = documents.flatMap((document) => unpublished(document) ?? []);
+  // A chosen layout the live version lacks: its menu, if the working state still has it.
+  const working = new Map<string, string>();
+  if (missing.length > 0)
+    for (const row of await tx
+      .select({ id: sections.id, ownerMenuId: sections.ownerMenuId })
+      .from(sections)
+      .where(and(inArray(sections.id, missing), eq(sections.role, "home_layout"))))
+      working.set(row.id, row.ownerMenuId!);
+  return new Map(
+    documents.map((document): [string, DeviceHomeLayout] => {
+      const layoutId = unpublished(document);
+      if (layoutId === null)
+        return [
+          document.menuId,
+          {
+            homeLayoutId: chosen.get(document.menuId) ?? document.defaultHomeLayoutId,
+            layoutFallback: null,
+          },
+        ];
+      return [
+        document.menuId,
+        {
+          homeLayoutId: document.defaultHomeLayoutId,
+          layoutFallback:
+            working.get(layoutId) === document.menuId ? "layout_unpublished" : "layout_removed",
+        },
+      ];
+    }),
+  );
 }

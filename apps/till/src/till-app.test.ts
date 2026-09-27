@@ -2951,12 +2951,31 @@ describe("till-app", () => {
   });
 
   it("retrieve-order resolves the stored menu-item identity when one product has two offers", async () => {
+    const homeLayoutFields = {
+      structure: { members: [] },
+      homeLayouts: [{ id: "layout-home", name: "Home", tiles: [] }],
+      defaultHomeLayoutId: "layout-home",
+      homeLayoutId: "layout-home",
+      layoutFallback: null,
+    };
     const catalogue = {
       context: { zoneId: "zone-counter", departmentId: "department-bar", serviceMode: "prepay" },
       defaultMenuId: "menu-standard",
       menus: [
-        { id: "menu-standard", name: "Standard", isDefault: true, versionId: "version-standard" },
-        { id: "menu-happy", name: "Happy hour", isDefault: false, versionId: "version-happy" },
+        {
+          id: "menu-standard",
+          name: "Standard",
+          isDefault: true,
+          versionId: "version-standard",
+          ...homeLayoutFields,
+        },
+        {
+          id: "menu-happy",
+          name: "Happy hour",
+          isDefault: false,
+          versionId: "version-happy",
+          ...homeLayoutFields,
+        },
       ],
       offers: [
         {

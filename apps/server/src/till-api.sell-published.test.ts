@@ -2,24 +2,37 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { deviceProfiles, products, saleLines, sales, withTransaction } from "@waitron/db";
+import {
+  deviceProfiles,
+  products,
+  saleLines,
+  sales,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   addMember,
   addProductToMenu,
+  addShortcut,
   addProducts,
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
   createExtraList,
   createOptionList,
+  createHomeLayout,
   createProduct,
   createSection,
   deactivateMenuItem,
+  deleteHomeLayout,
+  listHomeLayouts,
   menuStatus,
   optionLabels,
+  renameHomeLayout,
   requireMenuRoot,
+  setDeviceHomeLayout,
   setMenuItemExtraLists,
   updateExtraList,
   updateMenuItem,
@@ -98,6 +111,10 @@ interface Lunch {
   rootId: string;
   app: Hono;
   cookie: string;
+  /** The same till session with no device cookie. */
+  sessionCookie: string;
+  /** The enrolled device's profile. */
+  profileId: string;
   lemonade: { productId: string; offerId: string };
   burger: { productId: string; offerId: string };
   /** "Extra lemon", offered at 0.50 by Lemonade's "Lemon" extras list. */
@@ -106,6 +123,7 @@ interface Lunch {
   punto: { listId: string; poco: string };
   /** A library section on Lunch holding Flan, which no basket here orders from. */
   postresId: string;
+  flanId: string;
 }
 
 /**
@@ -237,6 +255,7 @@ async function setupLunch(): Promise<Lunch> {
       extraLemon: { productId: extraLemon.id, listId: lemon.id },
       punto: { listId: punto.id, poco: punto.labels[0]!.id },
       postresId: postres.id,
+      flanId: flan.id,
     };
   });
   const [profile] = await suite.db
@@ -260,6 +279,8 @@ async function setupLunch(): Promise<Lunch> {
     cfg,
     app,
     cookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
+    sessionCookie: `${SESSION_COOKIE}=${session.token}`,
+    profileId: profile!.id,
     ...seeded,
   };
 }
@@ -575,10 +596,12 @@ describe("GET /api/menu-state", () => {
       extraItems: { menuItemId: string; productId: string; extraListId: string }[];
     };
   };
+  /** The answer, each menu narrowed to its version: the layout fields have their own cases. */
   const state = async (v: Lunch, query = `?zoneId=${v.zoneId}`): Promise<MenuState> => {
     const response = await send(v, "GET", `/api/menu-state${query}`);
     expect(response.status).toBe(200);
-    return (await response.json()) as MenuState;
+    const body = (await response.json()) as MenuState;
+    return { ...body, menus: body.menus.map(({ menuId, versionId }) => ({ menuId, versionId })) };
   };
   const nothing = { products: [], optionLabels: [], extraItems: [] };
 
@@ -650,5 +673,154 @@ describe("GET /api/menu-state", () => {
     const response = await v.app.request(`/api/menu-state?zoneId=${v.zoneId}`);
     expect(response.status).toBe(401);
     expect(await response.json()).toMatchObject({ error: { code: "session.required" } });
+  });
+});
+
+describe("the home layout each menu shows the device (D14)", () => {
+  type LayoutState = {
+    menus: { menuId: string; versionId: string; homeLayoutId: string; layoutFallback: unknown }[];
+  };
+  const layoutsOf = async (v: Lunch, query = `?zoneId=${v.zoneId}`, cookie = v.cookie) => {
+    const response = await v.app.request(`/api/menu-state${query}`, { headers: { cookie } });
+    expect(response.status).toBe(200);
+    return ((await response.json()) as LayoutState).menus.map(
+      ({ menuId, homeLayoutId, layoutFallback }) => ({ menuId, homeLayoutId, layoutFallback }),
+    );
+  };
+  const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
+  const homeOf = async (menuId: string) => (await app((tx) => listHomeLayouts(tx, menuId)))[0]!.id;
+
+  it("keeps showing a chosen layout deleted since the publish, and the default once a republish leaves it out", async () => {
+    const v = await setupLunch();
+    const counter = (await app((tx) => createHomeLayout(tx, v.menuId, "Counter"))).id;
+    await app((tx) => setDeviceHomeLayout(tx, v.profileId, v.menuId, counter));
+    await publish(v.menuId);
+    const chosen = [{ menuId: v.menuId, homeLayoutId: counter, layoutFallback: null }];
+    expect(await layoutsOf(v)).toEqual(chosen);
+
+    await app((tx) => deleteHomeLayout(tx, counter));
+    expect(await layoutsOf(v)).toEqual(chosen);
+
+    await publish(v.menuId);
+    expect(await layoutsOf(v)).toEqual([
+      { menuId: v.menuId, homeLayoutId: await homeOf(v.menuId), layoutFallback: "layout_removed" },
+    ]);
+  });
+
+  it("shows the default for a chosen layout never published, and a rename changes nothing", async () => {
+    const v = await setupLunch();
+    await publish(v.menuId);
+    const counter = (await app((tx) => createHomeLayout(tx, v.menuId, "Counter"))).id;
+    await app((tx) => setDeviceHomeLayout(tx, v.profileId, v.menuId, counter));
+    expect(await layoutsOf(v)).toEqual([
+      {
+        menuId: v.menuId,
+        homeLayoutId: await homeOf(v.menuId),
+        layoutFallback: "layout_unpublished",
+      },
+    ]);
+
+    await publish(v.menuId);
+    const chosen = [{ menuId: v.menuId, homeLayoutId: counter, layoutFallback: null }];
+    expect(await layoutsOf(v)).toEqual(chosen);
+    await app((tx) => renameHomeLayout(tx, counter, "Front counter"));
+    expect(await layoutsOf(v)).toEqual(chosen);
+    await publish(v.menuId);
+    expect(await layoutsOf(v)).toEqual(chosen);
+  });
+
+  it("resolves each of the zone's menus from its own choice, with or without a zone named", async () => {
+    const v = await setupLunch();
+    const brunch = await app(async (tx) => {
+      const menu = await createCatalogue(tx, { name: "Brunch" });
+      await addProductToMenu(tx, { menuId: menu.id, productId: v.burger.productId });
+      await tx.execute(sql`
+        insert into zone_menus (zone_id, menu_id, display_order) values (${v.zoneId}, ${menu.id}, 1)`);
+      return menu.id;
+    });
+    const counter = (await app((tx) => createHomeLayout(tx, v.menuId, "Counter"))).id;
+    const bar = (await app((tx) => createHomeLayout(tx, brunch, "Bar"))).id;
+    await app(async (tx) => {
+      await setDeviceHomeLayout(tx, v.profileId, v.menuId, counter);
+      await setDeviceHomeLayout(tx, v.profileId, brunch, bar);
+    });
+    await publish(v.menuId);
+    await publish(brunch);
+    const expected = [
+      { menuId: v.menuId, homeLayoutId: counter, layoutFallback: null },
+      { menuId: brunch, homeLayoutId: bar, layoutFallback: null },
+    ];
+    expect(await layoutsOf(v)).toEqual(expected);
+    expect(await layoutsOf(v, "")).toEqual(expected);
+  });
+
+  it("shows the default to a device whose profile chose nothing, and to a session with no device", async () => {
+    const v = await setupLunch();
+    await publish(v.menuId);
+    const home = [{ menuId: v.menuId, homeLayoutId: await homeOf(v.menuId), layoutFallback: null }];
+    expect(await layoutsOf(v)).toEqual(home);
+    const counter = (await app((tx) => createHomeLayout(tx, v.menuId, "Counter"))).id;
+    await app((tx) => setDeviceHomeLayout(tx, v.profileId, v.menuId, counter));
+    await publish(v.menuId);
+    expect(await layoutsOf(v, `?zoneId=${v.zoneId}`, v.sessionCookie)).toEqual(home);
+    expect(await layoutsOf(v, "", v.sessionCookie)).toEqual(home);
+  });
+
+  it("serves each menu's structure, layouts and the device's layout on both offers routes", async () => {
+    const v = await setupLunch();
+    await app((tx) => updateSection(tx, v.postresId, { names: { [LOCALE]: "Para terminar" } }));
+    const counter = (await app((tx) => createHomeLayout(tx, v.menuId, "Counter"))).id;
+    await app(async (tx) => {
+      await addShortcut(tx, counter, { kind: "section", sectionId: v.postresId });
+      await setDeviceHomeLayout(tx, v.profileId, v.menuId, counter);
+    });
+    const versionId = await publish(v.menuId);
+    const home = await homeOf(v.menuId);
+    const served = async (path: string, cookie = v.cookie) => {
+      const response = await v.app.request(path, { headers: { cookie } });
+      expect(response.status).toBe(200);
+      return (await response.json()) as {
+        menus: unknown[];
+        offers: { id: string; productId: string }[];
+      };
+    };
+    const zonePath = `/api/service-zones/${v.zoneId}/offers`;
+    const flanOffer = (await served(zonePath)).offers.find(
+      (offer) => offer.productId === v.flanId,
+    )!.id;
+    const lunch = {
+      id: v.menuId,
+      name: "Lunch",
+      isDefault: true,
+      versionId,
+      structure: {
+        members: [
+          { kind: "product", menuItemId: v.lemonade.offerId, productId: v.lemonade.productId },
+          { kind: "product", menuItemId: v.burger.offerId, productId: v.burger.productId },
+          {
+            kind: "section",
+            sectionId: v.postresId,
+            internalName: "Postres",
+            names: { [LOCALE]: "Para terminar" },
+            image: null,
+            color: null,
+            members: [{ kind: "product", menuItemId: flanOffer, productId: v.flanId }],
+          },
+        ],
+      },
+      homeLayouts: [
+        { id: home, name: "Home", tiles: [] },
+        { id: counter, name: "Counter", tiles: [{ kind: "section", sectionId: v.postresId }] },
+      ],
+      defaultHomeLayoutId: home,
+      homeLayoutId: counter,
+      layoutFallback: null,
+    };
+    for (const path of [zonePath, "/api/default-service-zone/offers"])
+      expect((await served(path)).menus).toEqual([lunch]);
+    // Without the device, the same menus show the default layout.
+    expect((await served(zonePath, v.sessionCookie)).menus).toEqual([
+      { ...lunch, homeLayoutId: home },
+    ]);
   });
 });
