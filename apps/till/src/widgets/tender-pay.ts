@@ -17,7 +17,7 @@ import { StoreChangeController } from "../state/store-controller.js";
 import type { OrderFlow, PayOutcome, TillActiveReader, TillProduct } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 import type { PropertyValues } from "lit";
-import { productUnit, unitName } from "./product-name.js";
+import { productUnit, soldByTheUnit, unitName } from "./product-name.js";
 import { needsModifierPicker } from "../state/order-line.js";
 
 /**
@@ -196,8 +196,7 @@ export class TillTenderPay extends LitElement {
   }
 
   #onProductSelected(product: TillProduct): void {
-    const unit = productUnit(product);
-    if (unit.hardwareUnit === null && unit.precision === 0) return;
+    if (soldByTheUnit(product)) return;
     this.selected = product;
     this.entry = "";
     this.view = "weighing";

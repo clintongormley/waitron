@@ -913,14 +913,25 @@ async function toTable(el: TillApp): Promise<void> {
   );
 }
 
-/** Taps the round's Lemonade tile and then Send. */
+/** Presses Fire all now; the preview it opens is confirmed by {@link confirmPreview}. */
+function pressFireAll(el: TillApp): void {
+  tableScreen(el).shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-all"]')!.click();
+}
+
+function confirmPreview(el: TillApp): void {
+  tableScreen(el).shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
+}
+
+/** Taps the round's Lemonade tile, then Fire all now, and confirms its preview. */
 async function sendLemonadeRound(el: TillApp): Promise<void> {
   const tileButton = [...roundGrid(el).shadowRoot!.querySelectorAll<HTMLElement>("wt-button")].find(
     (button) => button.querySelector(".name")!.textContent === "Lemonade",
   )!;
   tileButton.click();
   await flush(el);
-  tableScreen(el).shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+  pressFireAll(el);
+  await flush(el);
+  confirmPreview(el);
   await flush(el);
 }
 
@@ -941,6 +952,7 @@ describe("a table round refused because the menu changed", () => {
       }),
     );
     await toTable(el);
+    const round = roundGrid(el).store;
     await sendLemonadeRound(el);
 
     expect(api.submitGroups.mock.calls.map(sentLines)).toEqual([
@@ -948,7 +960,59 @@ describe("a table round refused because the menu changed", () => {
       [{ menuItemId: "offer-lemonade", menuVersionId: "v2", quantity: "1" }],
     ]);
     expect(dialog(el)).toBeNull();
-    expect(roundGrid(el).store.lineCount).toBe(0);
+    expect(round.lineCount).toBe(0);
+  });
+
+  it("re-asserts each line's own dish on the re-send, with the lines in course order rather than tap order", async () => {
+    const offers = [
+      offer("offer-lemonade", "Lemonade", "3.00", { courseId: "desserts" }),
+      offer("offer-water", "Water", "2.00", { courseId: "starters" }),
+    ];
+    const dining = (version: string) => ({
+      ...catalogue(version, offers),
+      context: DINING.context,
+    });
+    const { el } = await mountApp(
+      tableStubs(dining("v2"), {
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          canvas: tableCanvas,
+          courses: [
+            { id: "starters", name: "Starters", displayOrder: 0 },
+            { id: "desserts", name: "Desserts", displayOrder: 1 },
+          ],
+        }),
+        listZoneOffers: vi.fn((zoneId: string) =>
+          Promise.resolve(zoneId === "zone-dining" ? dining("v1") : V1),
+        ),
+        submitGroups: vi
+          .fn()
+          .mockRejectedValueOnce(versionRefusal)
+          .mockResolvedValueOnce(landed("wo-7")),
+      }),
+    );
+    await toTable(el);
+    for (const name of ["Lemonade", "Water"]) {
+      [...roundGrid(el).shadowRoot!.querySelectorAll<HTMLElement>("wt-button")]
+        .find((button) => button.querySelector(".name")!.textContent === name)!
+        .click();
+      await flush(el);
+    }
+    pressFireAll(el);
+    await flush(el);
+    confirmPreview(el);
+    await flush(el);
+
+    expect(api.submitGroups.mock.calls.map(sentLines)).toEqual([
+      [
+        { menuItemId: "offer-water", menuVersionId: "v1", quantity: "1" },
+        { menuItemId: "offer-lemonade", menuVersionId: "v1", quantity: "1" },
+      ],
+      [
+        { menuItemId: "offer-water", menuVersionId: "v2", quantity: "1" },
+        { menuItemId: "offer-lemonade", menuVersionId: "v2", quantity: "1" },
+      ],
+    ]);
   });
 
   it("keeps the round and shows the dialog when a price in it changed, sending nothing more", async () => {
@@ -989,9 +1053,10 @@ describe("a table round refused because the menu changed", () => {
   it("empties the round once the server has taken it", async () => {
     const { el } = await mountApp(tableStubs());
     await toTable(el);
+    const round = roundGrid(el).store;
     await sendLemonadeRound(el);
     expect(api.submitGroups).toHaveBeenCalledOnce();
-    expect(roundGrid(el).store.lineCount).toBe(0);
+    expect(round.lineCount).toBe(0);
     expect(banner(el)?.textContent ?? null).toBeNull();
   });
 });
@@ -1124,10 +1189,11 @@ describe("a table round while it is being sent", () => {
     );
     await toTable(el);
     await sendLemonadeRound(el);
+    const round = roundStore(el) as RoundStore & { sending: boolean };
 
-    roundStore(el).setLineQuantity(0, "2");
+    round.setLineQuantity(0, "2");
     await flush(el);
-    expect(roundStore(el).lines[0]!.quantity).toBe("1");
+    expect(round.lines[0]!.quantity).toBe("1");
     expect(tableScreen(el).shadowRoot!.querySelector("[data-round-sending]")).not.toBeNull();
 
     answer(landed("wo-7"));
@@ -1135,8 +1201,9 @@ describe("a table round while it is being sent", () => {
     expect(sentLines(api.submitGroups.mock.calls[0]!)).toEqual([
       { menuItemId: "offer-lemonade", menuVersionId: "v1", quantity: "1" },
     ]);
-    expect(roundStore(el).lineCount).toBe(0);
-    expect(tableScreen(el).shadowRoot!.querySelector("[data-round-sending]")).toBeNull();
+    expect(round.lineCount).toBe(0);
+    // The whole draft went, so the till is back on the floor, with the draft open for the next one.
+    expect(round.sending).toBe(false);
   });
 
   it("takes no removal while a refusal's reload is out, so the re-send is what the screen shows", async () => {
@@ -1156,15 +1223,16 @@ describe("a table round while it is being sent", () => {
         : Promise.resolve(V1),
     );
     await sendLemonadeRound(el);
+    const round = roundStore(el);
 
-    roundStore(el).removeLine(0);
+    round.removeLine(0);
     await flush(el);
-    expect(roundStore(el).lineCount).toBe(1);
+    expect(round.lineCount).toBe(1);
 
     answerReload(catalogue("v2", V1.offers));
     await flush(el);
     expect(api.submitGroups).toHaveBeenCalledTimes(2);
-    expect(roundStore(el).lineCount).toBe(0);
+    expect(round.lineCount).toBe(0);
   });
 });
 
@@ -1299,7 +1367,9 @@ describe("a kept round and another table", () => {
     expect(tableScreen(el)).toBe(screenForA);
     expect(roundStore(el).lineCount).toBe(0);
     expect(
-      tableScreen(el).shadowRoot!.querySelector("[data-send-round]")!.hasAttribute("disabled"),
+      tableScreen(el)
+        .shadowRoot!.querySelector('[data-draft-action="fire-all"]')!
+        .hasAttribute("disabled"),
     ).toBe(true);
 
     emit(floorScreen(), "open-table", { tableId: "t2", seated: true });
@@ -1335,7 +1405,9 @@ describe("a round send that gets no answer", () => {
     ].find((button) => button.querySelector(".name")!.textContent === "Lemonade")!;
     tileButton.click();
     await settle();
-    tableScreen(el).shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    pressFireAll(el);
+    await settle();
+    confirmPreview(el);
     await settle();
     const tabReads = api.getTabLines.mock.calls.length;
 
@@ -1351,7 +1423,7 @@ describe("a round send that gets no answer", () => {
     expect(roundStore(el).lineCount).toBe(0);
     expect(api.getTabLines.mock.calls.length).toBe(tabReads + 1);
     expect(banner(el)!.textContent).toContain(
-      "The server did not answer, so the round may have been added. Check the tab before sending it again.",
+      "The server did not answer, so the items may have been added. Check the tab before sending them again.",
     );
     expect(api.submitGroups).toHaveBeenCalledOnce();
   });
@@ -1441,7 +1513,9 @@ describe("a round's lock once its send is decided", () => {
     };
     lemonadeTile(el).click();
     await settle();
-    tableScreen(el).shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    pressFireAll(el);
+    await settle();
+    confirmPreview(el);
     await settle();
 
     await vi.advanceTimersByTimeAsync(149_999);
@@ -1558,10 +1632,13 @@ describe("a round the server adds to another tab", () => {
       expect.objectContaining({ expectedVisitRevision: 1 }),
       expect.anything(),
     );
-    expect(shownTab(el)).toBe("wo-next");
     expect(api.getTabLines).toHaveBeenLastCalledWith("wo-next");
     expect(round.lineCount).toBe(0);
     expect(banner(el)).toBeNull();
+    // The whole draft went, so the till is on the floor; its Order tab shows the tab it landed on.
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "order" });
+    await flush(el);
+    expect(shownTab(el)).toBe("wo-next");
   });
 
   it("leaves the operator on the table they opened while the answer was out", async () => {
@@ -1592,7 +1669,7 @@ describe("a round the server adds to another tab", () => {
 
 describe("a round that got no answer while the party moved on to its next tab", () => {
   const unconfirmed =
-    "The server did not answer, so the round may have been added. Check the tab before sending it again.";
+    "The server did not answer, so the items may have been added. Check the tab before sending them again.";
 
   const shownParty = (el: TillApp) =>
     (tableScreen(el) as unknown as { visit: { id: string } | null }).visit?.id;
@@ -1732,7 +1809,9 @@ describe("a round send that timed out while the floor cannot be read either", ()
     };
     lemonadeTile(el).click();
     await settle();
-    tableScreen(el).shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    pressFireAll(el);
+    await settle();
+    confirmPreview(el);
     await settle();
 
     await vi.advanceTimersByTimeAsync(150_000);

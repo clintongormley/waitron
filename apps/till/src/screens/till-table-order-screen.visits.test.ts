@@ -48,6 +48,7 @@ const abandoned: VisitBill = {
 };
 
 const wine: TabLine = {
+  id: "line-1",
   groupId: null,
   lineNo: 1,
   productId: "vino",

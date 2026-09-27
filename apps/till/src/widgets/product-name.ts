@@ -71,3 +71,9 @@ export function productUnit(product: TillProduct): NonNullable<TillProduct["unit
         })
   );
 }
+
+/** Counted in whole units, never weighed or measured. */
+export function soldByTheUnit(product: TillProduct): boolean {
+  const unit = productUnit(product);
+  return unit.hardwareUnit === null && unit.precision === 0;
+}

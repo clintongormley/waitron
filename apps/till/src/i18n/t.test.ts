@@ -1,10 +1,21 @@
 import { afterEach, expect, it } from "vitest";
-import { currentLocale, setLocale, subscribeLocale, t } from "./t.js";
+import { countText, currentLocale, setLocale, subscribeLocale, t } from "./t.js";
 import { catalogues, en } from "./strings.js";
 
 afterEach(() => {
   // t.ts's locale is module-level, so a setLocale in one test would leak into the next.
   setLocale("en-GB");
+});
+
+it("says a count of one with its singular key and any other count with the plural, in the active locale", () => {
+  const many = "table.submitted_fired" as const;
+  const one = "table.submitted_fired_one" as const;
+  expect(countText(1, many, one)).toBe("Fired: 1 group.");
+  expect(countText(2, many, one)).toBe("Fired: 2 groups.");
+  expect(countText(0, many, one)).toBe("Fired: 0 groups.");
+  setLocale("es-ES");
+  expect(countText(3, many, one)).toBe(t(many, "es-ES").replace("{n}", "3"));
+  expect(countText(1, many, one)).toBe(t(one, "es-ES"));
 });
 
 it("resolves an English base key to Spanish", () => {

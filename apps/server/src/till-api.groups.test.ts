@@ -781,6 +781,23 @@ describe("GET /api/working-orders/:id/lines", () => {
       ),
     ).toEqual([{ lineNo: 1, groupId: null }]);
   });
+
+  it("names each line by the id its group's lineIds and a move speak", async () => {
+    const visit = await withGroups();
+
+    const tab = await call("GET", `/api/working-orders/${visit.tabId}/lines`);
+
+    expect(
+      (tab.json.lines as { lineNo: number; id: string }[]).map(({ lineNo, id }) => ({
+        lineNo,
+        id,
+      })),
+    ).toEqual([
+      { lineNo: 1, id: visit.fired.lineIds[0] },
+      { lineNo: 2, id: visit.tarta.lineIds[0] },
+      { lineNo: 3, id: visit.croquetas.lineIds[0] },
+    ]);
+  });
 });
 
 describe("the tab routes that move or release lines, on a visit with groups", () => {

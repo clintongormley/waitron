@@ -17,12 +17,12 @@ import {
   toScale,
   type Decimal,
 } from "@waitron/shared";
-import { currentLocale, t } from "../i18n/t.js";
+import { countText, currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { selectStyles } from "../select-styles.js";
 import { type DietPredicate, hasDietData, memoVisibleProducts, shownMenu } from "../menu-filter.js";
-import { lineProductName, productName } from "../widgets/product-name.js";
+import { lineProductName, productName, soldByTheUnit } from "../widgets/product-name.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import {
   WorkingOrderStore,
@@ -59,26 +59,86 @@ import type {
 } from "../api/client.js";
 import type { ConfirmPaymentDetail } from "../widgets/tender-pay.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
+import { heldGroupIds, inHeldGroup, sendsAlone } from "../state/held-groups.js";
 import {
-  groupRound,
-  heldGroupIds,
-  inHeldGroup,
-  sendsAlone,
-  type RoundGroup,
-} from "../state/round-groups.js";
+  draftPreview,
+  draftSections,
+  draftSubmission,
+  type DraftAction,
+  type DraftEntry,
+  type DraftGroup,
+  type DraftPreview,
+} from "../state/draft-groups.js";
+import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
 
 export type { TableServiceStatus };
 
 /**
- * A round to add to the tab, in `groups` naming its lines by their place in `lines`. The round stays
- * in `round` until the app has the server's answer: it takes out the `sent` lines (the ones `lines`
- * was built from, in order) once the round is added, and a refused round is kept (D9).
+ * `submit-draft`: the groups a confirmed preview named, each naming its lines by their place in
+ * `lines`. The draft stays in `store` until the app has the server's answer: it takes out the `sent`
+ * lines (the ones `lines` was built from, in order) once they are added, and a refused submission is
+ * kept (D9). `joinGroupId` adds the one held group's lines to that existing group.
  */
-export interface SendRoundDetail {
+export interface SubmitDraftDetail {
   lines: GroupLine[];
-  groups: RoundGroup[];
-  round: WorkingOrderStore;
+  groups: DraftGroup[];
+  joinGroupId?: string;
+  store: WorkingOrderStore;
   sent: readonly OrderLine[];
+  draft: Draft;
+  /** Keeps what is left of the draft on `orderId`, the bill the same party's submission landed on. */
+  carryTo: (orderId: string) => void;
+}
+
+/** One draft, from its first line until its store is empty again, through its partial submissions.
+ * `laterAddition`: the party already had a group when the draft got its first line. `tally`: the
+ * groups its submissions have filed so far, which the app counts. */
+export interface Draft {
+  readonly laterAddition: boolean;
+  readonly tally: { fired: number; held: number; joined: number };
+}
+
+/** Where a later addition goes: `add-to-held` is offered only while the party has a held group. */
+type Destination = "fire-now" | "add-to-held" | "add-as-new";
+
+/** An action's preview, and the submission its Confirm sends. */
+interface PendingDraft {
+  preview: DraftPreview;
+  join?: { group: OrderGroup; index: number };
+  detail: SubmitDraftDetail;
+}
+
+/** A held group as the picker names it: `index` is its place among the party's held groups. */
+function heldGroupLabel(group: OrderGroup, index: number): string {
+  return index === 0
+    ? t("table.held_next").replace("{summary}", () => group.summary)
+    : t("table.held_group")
+        .replace("{n}", String(group.position))
+        .replace("{summary}", () => group.summary);
+}
+
+/** `fire-group`: a held group the waiter confirmed firing. */
+export interface FireGroupDetail {
+  groupId: string;
+}
+
+/** `reorder-groups`: every held group of the party, in the order they are to go. */
+export interface ReorderGroupsDetail {
+  heldGroupIds: string[];
+}
+
+/** `move-group-line`: a whole held line into another held group, or a new one at the end. */
+export interface MoveGroupLineDetail {
+  lineId: string;
+  quantity: string;
+  target: { groupId: string } | "new";
+}
+
+/** `split-group-line`: a held line of `quantity` units, to be made one row per unit in its group. */
+export interface SplitGroupLineDetail {
+  lineId: string;
+  groupId: string;
+  quantity: string;
 }
 
 /** `change-line`: one sent line's edit, from the copy of the order read at `revision`. */
@@ -112,7 +172,7 @@ class TabPayStore extends WorkingOrderStore {
 }
 
 /**
- * The TILL table-ordering screen: one open table's tab. The round bar holds the CURRENT round only,
+ * The TILL table-ordering screen: one open table's tab. The draft bar holds the CURRENT draft only,
  * never the whole tab.
  *
  * FISCAL FIREWALL. The screen owns NO fiscal path: every write is dispatched upward for the app to
@@ -402,38 +462,109 @@ export class TillTableOrderScreen extends LitElement {
         border-radius: 50%;
       }
 
-      .round-courses {
+      .draft-sections {
         display: flex;
         flex-direction: column;
-        gap: var(--wt-space-2);
+        gap: var(--wt-space-3);
         padding-top: var(--wt-space-3);
         border-top: 1px solid var(--wt-color-border);
       }
 
-      .round-course {
+      .draft-section {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+      }
+
+      .draft-section-name {
+        margin: 0;
+        font-size: var(--wt-font-size-md);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .draft-line {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: var(--wt-space-3);
       }
 
-      /* The course name + select group; display:contents so its children stay direct flex items of
-         .round-course (unchanged layout) while the hold switch sits beside them as a sibling. */
-      .round-course-field {
-        display: contents;
+      /* A native button, not a wt-button: wt-button does not pass aria-pressed to its inner button. */
+      .draft-select {
+        min-width: var(--wt-tap-min);
+        text-align: start;
       }
 
-      .round-course-name {
+      .draft-line-name {
+        overflow-wrap: anywhere;
+      }
+
+      .draft-bar {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        flex: 0 1 auto;
         min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
       }
 
-      .fire-options {
+      .draft-actions,
+      .destination {
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-2);
+      }
+
+      .group-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-3);
+      }
+
+      .group {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        padding-bottom: var(--wt-space-3);
+        border-bottom: 1px solid var(--wt-color-border);
+      }
+
+      .group-head,
+      .group-line {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wt-space-2);
+      }
+
+      .group-name {
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .group[data-group-state="fired"] {
+        color: var(--wt-color-text-muted);
+      }
+
+      .group-state,
+      .group-summary {
+        margin: 0;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+
+      .group-actions,
+      .group-line-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: var(--wt-space-2);
+      }
+
+      .group-line-name {
+        overflow-wrap: anywhere;
       }
 
       .round-bar {
@@ -445,7 +576,7 @@ export class TillTableOrderScreen extends LitElement {
         border-top: 1px solid var(--wt-color-border);
       }
 
-      /* A round being sent takes no edit until the answer comes back; the status line says why. */
+      /* A draft being sent takes no edit until the answer comes back; the status line says why. */
       .round-control[inert] {
         opacity: var(--wt-opacity-disabled);
       }
@@ -457,7 +588,7 @@ export class TillTableOrderScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      /* A round line's name may wrap inside a word, so on a narrow screen the line's controls and its
+      /* A draft line's name may wrap inside a word, so on a narrow screen the line's controls and its
          remove button stay on screen. */
       .round-bar till-basket::part(name) {
         overflow-wrap: anywhere;
@@ -467,11 +598,8 @@ export class TillTableOrderScreen extends LitElement {
         flex: 1 1 auto;
         min-width: 0;
       }
-
-      .round-bar .send-round {
-        flex: 0 0 auto;
-      }
     `,
+    segmentedOptionStyles,
   ];
 
   /** The APP owns and reloads them; the drawer, total and badge render from these, never a re-price. */
@@ -506,6 +634,8 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Boolean }) finishRefused = false;
   /** A handheld form factor, whose menu browser shows fewer columns. */
   @property({ type: Boolean }) handheld = false;
+  /** The visible half of the app's guard against a second group command while one runs. */
+  @property({ type: Boolean }) groupCommandBusy = false;
 
   @state() private drawerOpen = false;
 
@@ -525,6 +655,11 @@ export class TillTableOrderScreen extends LitElement {
    * void fires only once confirmed. */
   @state() private cancelLine: TabLine | null = null;
 
+  /** The held group whose Fire waits for confirmation. */
+  @state() private fireGroupPending: OrderGroup | null = null;
+  /** The held line whose Move to… picker is open, with the group it is in. */
+  @state() private movePending: { line: TabLine; group: OrderGroup } | null = null;
+
   /** The line open in the Change editor. */
   @state() private changeLine: TabLine | null = null;
   /** Built once when the editor opens, not per render: the picker seeds from these once. */
@@ -542,56 +677,112 @@ export class TillTableOrderScreen extends LitElement {
   @state() private splitQuantities = new Map<number, string>();
   @state() private splitAttempted = false;
 
-  /** One round per order, kept only as long as this screen is: another order shown here starts its
-   * own round. */
-  readonly #rounds = new Map<string, WorkingOrderStore>();
+  /** One draft per order, kept only as long as this screen is: another order shown here starts its
+   * own draft. */
+  readonly #draftStores = new Map<string, WorkingOrderStore>();
 
-  get #roundStore(): WorkingOrderStore {
+  get #draftStore(): WorkingOrderStore {
     const key = this.orderId ?? "";
-    let round = this.#rounds.get(key);
-    if (round === undefined) {
-      round = new WorkingOrderStore();
-      this.#rounds.set(key, round);
+    let store = this.#draftStores.get(key);
+    if (store === undefined) {
+      store = new WorkingOrderStore();
+      this.#draftStores.set(key, store);
     }
-    return round;
+    return store;
   }
 
-  /** The round this screen re-renders on; it follows {@link orderId}. */
-  #watchedRound?: { round: WorkingOrderStore; stop: () => void };
+  /** A draft already started on `orderId` is left where it is rather than replaced. */
+  #carryDraft(store: WorkingOrderStore, orderId: string): void {
+    if ((this.#draftStores.get(orderId)?.lineCount ?? 0) > 0) return;
+    for (const [from, kept] of this.#draftStores)
+      if (kept === store) this.#draftStores.delete(from);
+    this.#draftStores.set(orderId, store);
+    this.#carried = { orderId, destination: this.destination, joinTarget: this.joinTarget };
+  }
 
-  #watchRound(): void {
-    const round = this.#roundStore;
-    if (this.#watchedRound?.round === round) return;
-    this.#watchedRound?.stop();
-    this.#watchedRound = { round, stop: round.subscribe(() => this.requestUpdate()) };
+  /** Restored when the screen switches to the order the draft was carried to: the switch resets the
+   * destination, and so can a render on the order it leaves, whose draft is now empty. */
+  #carried?: { orderId: string; destination: Destination; joinTarget: string | null };
+
+  /** The draft this screen re-renders on; it follows {@link orderId}. */
+  #watchedDraft?: { store: WorkingOrderStore; stop: () => void };
+
+  #watchDraft(): void {
+    const store = this.#draftStore;
+    if (this.#watchedDraft?.store === store) return;
+    this.#watchedDraft?.stop();
+    // A draft can be emptied while another is shown, when the app takes out what it sent.
+    this.#noteDraftStart(store);
+    this.#watchedDraft = {
+      store,
+      stop: store.subscribe(() => {
+        this.#noteDraftStart(store);
+        this.requestUpdate();
+      }),
+    };
+  }
+
+  readonly #drafts = new WeakMap<WorkingOrderStore, Draft>();
+
+  #draftOf(store: WorkingOrderStore): Draft {
+    let draft = this.#drafts.get(store);
+    if (draft === undefined) {
+      draft = { laterAddition: this.groups.length > 0, tally: { fired: 0, held: 0, joined: 0 } };
+      this.#drafts.set(store, draft);
+    }
+    return draft;
+  }
+
+  #noteDraftStart(store: WorkingOrderStore): void {
+    if (store.lineCount === 0) {
+      this.#drafts.delete(store);
+      this.#resetDestination();
+    } else {
+      this.#draftOf(store);
+    }
+  }
+
+  #resetDestination(): void {
+    this.destination = "fire-now";
+    this.joinTarget = null;
   }
 
   override connectedCallback(): void {
     super.connectedCallback();
-    this.#watchRound();
+    this.#watchDraft();
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
-    this.#watchedRound?.stop();
-    this.#watchedRound = undefined;
+    this.#watchedDraft?.stop();
+    this.#watchedDraft = undefined;
   }
   /**
-   * Keyed by the round line's object identity: a store line is kept by reference until the round
-   * clears, so a `WeakMap` survives re-renders and drops its entries once the round is sent. A line
+   * Keyed by the draft line's object identity: a store line is kept by reference until the draft
+   * clears, so a `WeakMap` survives re-renders and drops its entries once the draft is sent. A line
    * ABSENT here takes its product's default course server-side.
    */
-  #roundCourses = new WeakMap<OrderLine, string>();
-  /** Same lifecycle as {@link #roundCourses}. */
-  #roundHolds = new WeakMap<OrderLine, boolean>();
+  #draftCourses = new WeakMap<OrderLine, string>();
+  /** The draft lines the waiter checked; same lifecycle as {@link #draftCourses}. */
+  #selected = new WeakSet<OrderLine>();
+  @state() private destination: Destination = "fire-now";
+  /** The held group Add to held group joins; the first held group when unset or gone. */
+  @state() private joinTarget: string | null = null;
+  @state() private pendingDraft: PendingDraft | null = null;
   #payStore?: TabPayStore;
-  /** Memoised so a render triggered by a round change does not recompute every line's gross. */
+  /** Memoised so a render triggered by a draft change does not recompute every line's gross. */
   #lineGrossByLineNo = new Map<number, Decimal>();
   /** Built with {@link products}, so each line's Change lookup is not a scan. */
   #productsByOffer?: Map<string, TillProduct>;
   #productsById = new Map<string, TillProduct>();
   /** Built with {@link groups}, so each line's Send check is not a scan. */
   #heldGroupIds?: ReadonlySet<string>;
+  /** Built with {@link groups}: every group, and the held ones, in position order. */
+  #groupsInOrder: OrderGroup[] = [];
+  #heldInOrder: OrderGroup[] = [];
+  /** Built with {@link lines}, for the held-groups list. */
+  #lineById = new Map<string, TabLine>();
+  #dishesWithExtras = new Set<number>();
 
   constructor() {
     super();
@@ -599,22 +790,37 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
-    this.#watchRound();
+    this.#watchDraft();
     // The gross map is filled BEFORE `#tabTotal` sums it below.
     if (changed.has("lines") || this.#payStore === undefined) {
       this.#lineGrossByLineNo = new Map(
         this.lines.map((line) => [line.lineNo, grossOf(line.unitPriceGross, line.quantity)]),
       );
       this.#payStore = new TabPayStore(this.#tabTotal(), this.lines.length);
+      this.#lineById = new Map(this.lines.map((line) => [line.id, line]));
+      this.#dishesWithExtras = new Set(this.lines.flatMap((line) => line.parentLineNo ?? []));
     }
     // A tab switch must not carry a half-open action flow across: its targets belong to the OLD tab.
     if (changed.has("orderId") && changed.get("orderId") !== undefined) {
       this.#closeActions();
       this.#closeChange();
       this.cancelLine = null;
+      this.fireGroupPending = null;
+      this.movePending = null;
+      this.pendingDraft = null;
+      const carried = this.#carried;
+      this.#carried = undefined;
+      if (carried !== undefined && carried.orderId === this.orderId) {
+        this.destination = carried.destination;
+        this.joinTarget = carried.joinTarget;
+      } else {
+        this.#resetDestination();
+      }
     }
     if (changed.has("groups") || this.#heldGroupIds === undefined) {
       this.#heldGroupIds = heldGroupIds(this.groups);
+      this.#groupsInOrder = [...this.groups].sort((a, b) => a.position - b.position);
+      this.#heldInOrder = this.#groupsInOrder.filter((group) => group.state === "held");
     }
     if (changed.has("products") || this.#productsByOffer === undefined) {
       this.#productsByOffer = new Map();
@@ -684,40 +890,114 @@ export class TillTableOrderScreen extends LitElement {
     return trimQuantity(quantity);
   }
 
-  /** An unoverridden line OMITS `courseId`, so the server applies the product's default course. The
-   * answers name lists, products and labels by id alone: the server takes every price, VAT class and
-   * name from the published offer. */
-  #sendRound(): void {
-    const sent = this.#roundStore.lines;
-    const lines = sent.map((line) => {
-      const roundLine: GroupLine = {
-        ...toWireProductIdentity(line.product),
-        quantity: line.quantity,
-        ...toWireLineExtras(line),
-        ...toWireModifiers(line),
-      };
-      const courseId = this.#roundCourses.get(line);
-      if (courseId !== undefined) {
-        roundLine.courseId = courseId;
-      }
-      return roundLine;
-    });
-    const groups = groupRound(
-      sent.map((line) => ({
-        courseId: this.#selectedCourseId(line) || null,
-        held: this.#isHeld(line),
+  #draftEntries(lines: readonly OrderLine[]): DraftEntry[] {
+    return lines.map((line) => ({
+      courseId: this.#selectedCourseId(line) || null,
+      quantity: line.quantity,
+      wholeUnits: soldByTheUnit(line.product),
+    }));
+  }
+
+  #selectedIndexes(lines: readonly OrderLine[]): Set<number> {
+    return new Set(lines.flatMap((line, index) => (this.#selected.has(line) ? [index] : [])));
+  }
+
+  /** `requestUpdate` because {@link #selected} is a `WeakSet`, not a reactive property. */
+  #toggleSelected(line: OrderLine): void {
+    if (this.#selected.has(line)) this.#selected.delete(line);
+    else this.#selected.add(line);
+    this.requestUpdate();
+  }
+
+  #isLaterAddition(): boolean {
+    return this.#drafts.get(this.#draftStore)?.laterAddition === true;
+  }
+
+  #effectiveDestination(): Destination {
+    return this.destination === "add-to-held" && this.#heldInOrder.length === 0
+      ? "fire-now"
+      : this.destination;
+  }
+
+  #joinGroup(): OrderGroup | undefined {
+    const held = this.#heldInOrder;
+    return held.find((group) => group.id === this.joinTarget) ?? held[0];
+  }
+
+  #laterAction(): DraftAction {
+    switch (this.#effectiveDestination()) {
+      case "fire-now":
+        return { kind: "fire-now" };
+      case "add-as-new":
+        return { kind: "add-as-new" };
+      case "add-to-held":
+        return { kind: "add-to-held", groupId: this.#joinGroup()!.id };
+    }
+  }
+
+  /**
+   * The preview is counted from the submission, and Confirm sends the submission kept here, so it is
+   * exactly what the preview named. An unoverridden line OMITS
+   * `courseId`, so the server applies the product's default course. The answers name lists, products
+   * and labels by id alone: the server takes every price, VAT class and name from the published offer.
+   */
+  #openPreview(action: DraftAction): void {
+    const store = this.#draftStore;
+    const lines = store.lines;
+    const entries = this.#draftEntries(lines);
+    const selected = this.#selectedIndexes(lines);
+    const submission = draftSubmission(action, entries, this.courses, selected);
+    const preview = draftPreview(submission, entries);
+    const order = submission.groups.flatMap((group) => group.lineIndexes);
+    const place = new Map(order.map((index, position) => [index, position]));
+    const sent = order.map((index) => lines[index]!);
+    const detail: SubmitDraftDetail = {
+      lines: sent.map((line) => {
+        const wire: GroupLine = {
+          ...toWireProductIdentity(line.product),
+          quantity: line.quantity,
+          ...toWireLineExtras(line),
+          ...toWireModifiers(line),
+        };
+        const courseId = this.#draftCourses.get(line);
+        if (courseId !== undefined) wire.courseId = courseId;
+        return wire;
+      }),
+      groups: submission.groups.map((group) => ({
+        release: group.release,
+        lineIndexes: group.lineIndexes.map((index) => place.get(index)!),
       })),
-      this.courses,
-    );
-    const detail: SendRoundDetail = { lines, groups, round: this.#roundStore, sent };
-    this.dispatchEvent(new CustomEvent("send-round", { detail, bubbles: true, composed: true }));
+      ...(submission.joinGroupId === undefined ? {} : { joinGroupId: submission.joinGroupId }),
+      store,
+      sent,
+      draft: this.#draftOf(store),
+      carryTo: (orderId) => this.#carryDraft(store, orderId),
+    };
+    const held = this.#heldInOrder;
+    const index = held.findIndex((group) => group.id === submission.joinGroupId);
+    this.pendingDraft = {
+      preview,
+      ...(index < 0 ? {} : { join: { group: held[index]!, index } }),
+      detail,
+    };
+  }
+
+  #confirmPreview(): void {
+    const pending = this.pendingDraft;
+    if (pending === null) return;
+    this.pendingDraft = null;
+    this.#dispatch("submit-draft", pending.detail);
+  }
+
+  #dismissPreview(): void {
+    this.pendingDraft = null;
   }
 
   #selectedCourseId(line: OrderLine): string {
-    return this.#roundCourses.get(line) ?? line.product.courseId ?? "";
+    return this.#draftCourses.get(line) ?? line.product.courseId ?? "";
   }
 
-  /** The placeholder's meaning is the CALLER's: "use the product default" for a round line (never sent
+  /** The placeholder's meaning is the CALLER's: "use the product default" for a draft line (never sent
    * as a course), "no course" for a tab line (the explicit `null`). */
   #courseOptions(selected: string, placeholder: string): TemplateResult {
     return html`<option value="" .selected=${selected === ""}>${placeholder}</option>
@@ -729,41 +1009,11 @@ export class TillTableOrderScreen extends LitElement {
       )}`;
   }
 
-  /** `requestUpdate` because {@link #roundCourses} is a `WeakMap`, not a reactive property. */
+  /** `requestUpdate` because {@link #draftCourses} is a `WeakMap`, not a reactive property. */
   #pickCourse(line: OrderLine, courseId: string): void {
-    if (courseId === "") this.#roundCourses.delete(line);
-    else this.#roundCourses.set(line, courseId);
+    if (courseId === "") this.#draftCourses.delete(line);
+    else this.#draftCourses.set(line, courseId);
     this.requestUpdate();
-  }
-
-  #isHeld(line: OrderLine): boolean {
-    return this.#roundHolds.get(line) === true;
-  }
-
-  /** `requestUpdate` because {@link #roundHolds} is a `WeakMap`, not a reactive property. */
-  #toggleHold(line: OrderLine, held: boolean): void {
-    if (held) this.#roundHolds.set(line, true);
-    else this.#roundHolds.delete(line);
-    this.requestUpdate();
-  }
-
-  #heldCourses(): TillCourse[] {
-    const heldIds = new Set(
-      this.lines
-        .filter((line) => line.firedAt === null && line.courseId !== null)
-        .map((line) => line.courseId),
-    );
-    return this.courses.filter((course) => heldIds.has(course.id));
-  }
-
-  #fire(courseId: string): void {
-    this.dispatchEvent(
-      new CustomEvent("fire-course", {
-        detail: { orderId: this.orderId, courseId },
-        bubbles: true,
-        composed: true,
-      }),
-    );
   }
 
   #serve(lineNo: number): void {
@@ -801,11 +1051,12 @@ export class TillTableOrderScreen extends LitElement {
     return byOffer ?? (productId === null ? undefined : this.#productsById.get(productId));
   }
 
-  /** A no-route line (no ticket item) is changed whatever its `sentAt`; a line with a ticket item only
-   * once it was sent, because a held line never sent keeps Send alone. */
+  /** A no-route line (no ticket item) is changed whatever its `sentAt`; a line with a ticket item once
+   * it was sent, or while its group is held, because a held line outside one keeps Send alone. */
   #canChange(line: TabLine): boolean {
     if (this.#isChild(line) || this.#isStarted(line) || this.#lockedBySetting(line)) return false;
-    if (line.state !== null && line.sentAt === null) return false;
+    if (line.state !== null && line.sentAt === null && !inHeldGroup(line, this.#heldGroupIds!))
+      return false;
     return this.#liveProduct(line) !== undefined;
   }
 
@@ -818,10 +1069,12 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  /** Every sent line with a ticket item, and a fired one: whatever else a line offers, cancelling it
-   * always has a button. A held line never sent keeps Send alone. */
+  /** Every sent line with a ticket item, a fired one, and every dish in a held group, a no-route one
+   * included: whatever else a line offers, cancelling it always has a button. A held line outside a
+   * group keeps Send alone. */
   #canCancel(line: TabLine): boolean {
     if (this.#isChild(line)) return false;
+    if (inHeldGroup(line, this.#heldGroupIds!)) return true;
     const queued = line.state === "queued" && (line.firedAt !== null || line.sentAt !== null);
     return this.#isStarted(line) || queued;
   }
@@ -886,13 +1139,6 @@ export class TillTableOrderScreen extends LitElement {
     return actions.length === 0 ? nothing : html`<span class="line-actions">${actions}</span>`;
   }
 
-  /** A held group releases its lines whether or not they have a ticket item: a no-route dish in one has
-   * none, and may have no Fire course button either. */
-  #anyHeld(): boolean {
-    const held = this.#heldGroupIds!;
-    return this.lines.some((line) => sendsAlone(line, held) || inHeldGroup(line, held));
-  }
-
   #sendLine(lineNo: number): void {
     this.dispatchEvent(
       new CustomEvent("send-lines", {
@@ -900,13 +1146,6 @@ export class TillTableOrderScreen extends LitElement {
         bubbles: true,
         composed: true,
       }),
-    );
-  }
-
-  /** An empty `lineNos` is the server's send-all, so the detail carries `[]`, not the held line numbers. */
-  #sendAll(): void {
-    this.dispatchEvent(
-      new CustomEvent("send-lines", { detail: { lineNos: [] }, bubbles: true, composed: true }),
     );
   }
 
@@ -943,9 +1182,8 @@ export class TillTableOrderScreen extends LitElement {
     this.cancelLine = null;
   }
 
-  /** A line sold by the unit and holding more than one can be cancelled one at a time; a weighed
-   * line cancels whole. */
-  #cancelsOneAtATime(line: TabLine): boolean {
+  /** Such a line can be cancelled, or split, one unit at a time; a weighed line cannot. */
+  #moreThanOneWholeUnit(line: TabLine): boolean {
     return line.unitPrecision === 0 && compareDecimal(decimal(line.quantity), decimal("1")) > 0;
   }
 
@@ -954,7 +1192,7 @@ export class TillTableOrderScreen extends LitElement {
   #cancelDialog(): TemplateResult {
     const line = this.cancelLine;
     const started = line !== null && this.#isStarted(line);
-    const oneAtATime = line !== null && this.#cancelsOneAtATime(line);
+    const oneAtATime = line !== null && this.#moreThanOneWholeUnit(line);
     return html`<wt-dialog
       class="cancel-confirm"
       .open=${line !== null}
@@ -1170,10 +1408,10 @@ export class TillTableOrderScreen extends LitElement {
     const menu = shownMenu(this.menus, this.selectedMenuId);
     return html`<till-menu-browser
       class="round-control"
-      ?inert=${this.#roundStore.sending}
+      ?inert=${this.#draftStore.sending}
       .menu=${menu}
       .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedDiet)}
-      .store=${this.#roundStore}
+      .store=${this.#draftStore}
       .columns=${this.handheld ? HANDHELD_COLUMNS : TILL_COLUMNS}
     ></till-menu-browser>`;
   }
@@ -1257,74 +1495,245 @@ export class TillTableOrderScreen extends LitElement {
           ${this.drawerOpen ? this.#drawer(pending) : nothing}
         </div>
         ${
-          this.#roundStore.sending
+          this.#draftStore.sending
             ? html`<p class="round-sending" role="status" data-round-sending>
                 ${t("table.round_sending")}
               </p>`
             : nothing
         }
-        <div class="round-control" data-round-controls ?inert=${this.#roundStore.sending}>
-          ${this.#roundCoursesSection()}
+        <div class="round-control" data-round-controls ?inert=${this.#draftStore.sending}>
+          ${this.#draftSections()}
           <div class="round-bar">
-            ${keyed(this.orderId, html`<till-basket .store=${this.#roundStore}></till-basket>`)}
-            <wt-button
-              class="send-round"
-              data-send-round
-              variant="primary"
-              size="lg"
-              ?disabled=${this.#roundStore.lineCount === 0 || this.#roundStore.sending}
-              @click=${() => this.#sendRound()}
-            >
-              ${t("table.send_round")}
-            </wt-button>
+            ${keyed(this.orderId, html`<till-basket .store=${this.#draftStore}></till-basket>`)}
+            ${this.#draftBar()}
           </div>
         </div>
-        ${this.#cancelDialog()} ${this.#changeEditor()}
+        ${this.#previewDialog()} ${this.#cancelDialog()} ${this.#fireGroupDialog()}
+        ${this.#moveDialog()} ${this.#changeEditor()}
       </section>
     `;
   }
 
-  /** The `""` placeholder means "use the product default", not "no course" (no such option). */
-  #roundCoursesSection(): TemplateResult | typeof nothing {
-    const lines = this.#roundStore.lines;
-    if (lines.length === 0 || this.courses.length === 0) return nothing;
-    return html`<div class="round-courses" data-round-courses>
-      ${lines.map((line, index) => this.#roundCourseRow(line, index))}
+  /** One section per course present, in the venue's course order; each line with its selection
+   * toggle and, when the venue has courses, its course picker, whose `""` placeholder means "use the
+   * product default", not "no course" (no such option). */
+  #draftSections(): TemplateResult | typeof nothing {
+    const lines = this.#draftStore.lines;
+    if (lines.length === 0) return nothing;
+    const sections = draftSections(this.#draftEntries(lines), this.courses);
+    return html`<div class="draft-sections" data-draft-sections>
+      ${sections.map(
+        (section) =>
+          html`<section
+            class="draft-section"
+            data-draft-section=${section.course?.id ?? ""}
+            aria-label=${section.course?.name ?? nothing}
+          >
+            ${
+              section.course === null
+                ? nothing
+                : html`<h3 class="draft-section-name">${section.course.name}</h3>`
+            }
+            ${section.lineIndexes.map((index) => this.#draftLine(lines[index]!, index))}
+          </section>`,
+      )}
     </div>`;
   }
 
-  #roundCourseRow(line: OrderLine, index: number): TemplateResult {
+  #draftLine(line: OrderLine, index: number): TemplateResult {
     const name = lineProductName(line.product);
-    const selected = this.#selectedCourseId(line);
-    // The hold switch is a SIBLING of the course `<label>`, not nested in it: a `<label>` may wrap only
-    // its one control, and the switch carries its own inner label.
-    return html`<div class="round-course">
-      <label class="round-course-field">
-        <span class="round-course-name">${name} ×${this.#displayQty(line.quantity)}</span>
-        <select
-          data-round-course=${index}
-          aria-label=${`${t("table.course_label")} · ${name}`}
-          @change=${(event: Event) =>
-            this.#pickCourse(line, (event.target as HTMLSelectElement).value)}
-        >
-          ${this.#courseOptions(selected, t("table.course_default"))}
-        </select>
-      </label>
-      <wt-switch
-        class="round-hold"
-        data-round-hold=${index}
-        .checked=${this.#isHeld(line)}
-        .label=${`${t("table.hold_label")} · ${name}`}
-        @wt-change=${(event: Event) =>
-          this.#toggleHold(line, (event as CustomEvent<{ checked: boolean }>).detail.checked)}
-      ></wt-switch>
+    const selected = this.#selected.has(line);
+    return html`<div class="draft-line">
+      <button
+        type="button"
+        class="option draft-select"
+        data-draft-select=${index}
+        aria-pressed=${selected}
+        @click=${() => this.#toggleSelected(line)}
+      >
+        <span aria-hidden="true">${selected ? "☑" : "☐"}</span>
+        <span class="draft-line-name">${name} ×${this.#displayQty(line.quantity)}</span>
+      </button>
+      ${
+        this.courses.length === 0
+          ? nothing
+          : html`<select
+              data-round-course=${index}
+              aria-label=${`${t("table.course_label")} · ${name}`}
+              @change=${(event: Event) =>
+                this.#pickCourse(line, (event.target as HTMLSelectElement).value)}
+            >
+              ${this.#courseOptions(this.#selectedCourseId(line), t("table.course_default"))}
+            </select>`
+      }
     </div>`;
+  }
+
+  /** A first-order draft: Send all and Fire all now with nothing checked, Send selected and Fire
+   * selected now with a selection. A later addition: its destination, then one Send. Firing now is
+   * offered under every `fireControl`: the kitchen and the pass cannot fire a held group of lines
+   * with no course. */
+  #draftBar(): TemplateResult {
+    const store = this.#draftStore;
+    const disabled = store.lineCount === 0 || store.sending;
+    const button = (
+      action: DraftAction,
+      key: StringKey,
+      variant: "primary" | "secondary",
+      name: string = action.kind,
+    ) =>
+      html`<wt-button
+        class="draft-action"
+        data-draft-action=${name}
+        variant=${variant}
+        size="lg"
+        ?disabled=${disabled}
+        @click=${() => this.#openPreview(action)}
+      >
+        ${t(key)}
+      </wt-button>`;
+    if (this.#isLaterAddition()) {
+      return html`<div class="draft-bar">
+        ${this.#destinationChoice()}
+        <div class="draft-actions" role="group" aria-label=${t("table.draft_actions")}>
+          ${button(this.#laterAction(), "table.draft_submit", "primary", "submit")}
+        </div>
+      </div>`;
+    }
+    const anySelected = store.lines.some((line) => this.#selected.has(line));
+    return html`<div class="draft-bar">
+      <div class="draft-actions" role="group" aria-label=${t("table.draft_actions")}>
+        ${
+          anySelected
+            ? html`${button({ kind: "send-selected" }, "table.draft_send_selected", "secondary")}
+              ${button({ kind: "fire-selected" }, "table.draft_fire_selected", "primary")}`
+            : html`${button({ kind: "send-all" }, "table.draft_send_all", "secondary")}
+              ${button({ kind: "fire-all" }, "table.draft_fire_all", "primary")}`
+        }
+      </div>
+    </div>`;
+  }
+
+  #destinationChoice(): TemplateResult {
+    const chosen = this.#effectiveDestination();
+    const held = this.#heldInOrder;
+    const options: [Destination, StringKey][] = [
+      ["fire-now", "table.destination_fire_now"],
+      ...(held.length === 0
+        ? []
+        : [["add-to-held", "table.destination_add_to_held"] as [Destination, StringKey]]),
+      ["add-as-new", "table.destination_add_as_new"],
+    ];
+    const joining = this.#joinGroup();
+    return html`<div
+        class="destination"
+        role="group"
+        aria-label=${t("table.destination_label")}
+        data-destination-choice
+      >
+        ${options.map(
+          ([kind, key]) =>
+            html`<button
+              type="button"
+              class="option"
+              data-destination=${kind}
+              aria-pressed=${chosen === kind}
+              @click=${() => (this.destination = kind)}
+            >
+              ${t(key)}
+            </button>`,
+        )}
+      </div>
+      ${
+        chosen === "add-to-held"
+          ? html`<div
+              class="destination held-picker"
+              role="group"
+              aria-label=${t("table.held_picker_label")}
+              data-held-picker
+            >
+              ${held.map(
+                (group, index) =>
+                  html`<button
+                    type="button"
+                    class="option"
+                    data-held-group=${group.id}
+                    aria-pressed=${group.id === joining?.id}
+                    @click=${() => (this.joinTarget = group.id)}
+                  >
+                    ${heldGroupLabel(group, index)}
+                  </button>`,
+              )}
+            </div>`
+          : nothing
+      }`;
+  }
+
+  #previewDialog(): TemplateResult {
+    const pending = this.pendingDraft;
+    const preview = pending?.preview;
+    return html`<wt-dialog
+      class="draft-preview"
+      data-draft-preview
+      .open=${pending !== null}
+      .heading=${t("table.preview_title")}
+      @wt-close=${() => this.#dismissPreview()}
+    >
+      <div class="preview-body" data-preview-body>
+        ${
+          preview === undefined
+            ? nothing
+            : html`${
+                preview.fireItems > 0
+                  ? html`<p data-preview-fire>
+                      ${countText(preview.fireItems, "table.preview_fire", "table.preview_fire_one")}
+                    </p>`
+                  : nothing
+              }
+              ${
+                pending!.join !== undefined
+                  ? html`<p data-preview-join>
+                      ${countText(
+                        preview.holdItems,
+                        "table.preview_join",
+                        "table.preview_join_one",
+                      ).replace("{group}", () =>
+                        heldGroupLabel(pending!.join!.group, pending!.join!.index),
+                      )}
+                    </p>`
+                  : preview.holdGroups > 0
+                    ? html`<p data-preview-hold>
+                        ${countText(preview.holdGroups, "table.preview_hold", "table.preview_hold_one")}
+                      </p>`
+                    : nothing
+              }`
+        }
+      </div>
+      <div slot="footer" class="cancel-actions">
+        <wt-button
+          class="preview-back"
+          variant="secondary"
+          data-draft-dismiss
+          @click=${() => this.#dismissPreview()}
+        >
+          ${t("action.back")}
+        </wt-button>
+        <wt-button
+          class="preview-confirm"
+          variant="primary"
+          data-draft-confirm
+          @click=${() => this.#confirmPreview()}
+        >
+          ${t("table.preview_confirm")}
+        </wt-button>
+      </div>
+    </wt-dialog>`;
   }
 
   #drawer(pending: TabLine[]): TemplateResult {
     return html`
       <aside class="drawer" data-drawer aria-label=${t("table.open_drawer")}>
-        ${this.#fireSection()} ${this.#pendingSection(pending)} ${this.#servedSection()}
+        ${this.#groupsSection()} ${this.#pendingSection(pending)} ${this.#servedSection()}
         <div class="total-row">
           <span class="label">${t("label.total")}</span>
           <span class="amount" data-tab-total
@@ -1461,19 +1870,6 @@ export class TillTableOrderScreen extends LitElement {
     return html`<section class="pending">
       <h2>${t("table.pending_title")}</h2>
       ${
-        this.#anyHeld()
-          ? html`<wt-button
-              class="send-all"
-              size="sm"
-              variant="primary"
-              data-send-all
-              @click=${() => this.#sendAll()}
-            >
-              ${t("table.send_all")}
-            </wt-button>`
-          : nothing
-      }
-      ${
         pending.length === 0
           ? html`<p class="empty">${t("table.none_pending")}</p>`
           : html`<ul>
@@ -1538,27 +1934,226 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
-  #fireSection(): TemplateResult | typeof nothing {
-    if (this.fireControl !== "waiter") return nothing;
-    const held = this.#heldCourses();
-    if (held.length === 0) return nothing;
-    return html`<section class="fire" data-fire-section>
-      <h2>${t("table.fire_title")}</h2>
-      <div class="fire-options">
-        ${held.map(
-          (course) =>
-            html`<wt-button
-              class="fire-course"
-              data-fire-course=${course.id}
-              variant="primary"
-              size="sm"
-              @click=${() => this.#fire(course.id)}
-            >
-              ${t("table.fire_course")} ${course.name}
-            </wt-button>`,
-        )}
-      </div>
+  /** Every group of the party in position order. A held group can be moved among the held ones,
+   * have its lines moved or split, and be fired where `fireControl` gives the waiter the release. Its
+   * line rows are this bill's: a line on another bill of the party shows only in the summary. */
+  #groupsSection(): TemplateResult | typeof nothing {
+    if (this.groups.length === 0) return nothing;
+    return html`<section class="groups" data-groups>
+      <h2>${t("table.groups_title")}</h2>
+      <ol class="group-list">
+        ${this.#groupsInOrder.map((group) => {
+          const lines = group.lineIds.flatMap((id) => {
+            const line = this.#lineById.get(id);
+            return line === undefined || this.#isChild(line) ? [] : [line];
+          });
+          return this.#groupRow(group, lines);
+        })}
+      </ol>
     </section>`;
+  }
+
+  #groupRow(group: OrderGroup, lines: TabLine[]): TemplateResult {
+    const held = this.#heldInOrder;
+    const isHeld = group.state === "held";
+    const name = t("table.group_n").replace("{n}", String(group.position));
+    const label = (key: StringKey) => `${t(key)} · ${name}`;
+    const place = held.indexOf(group);
+    return html`<li class="group" data-group=${group.id} data-group-state=${group.state}>
+      <div class="group-head">
+        <span class="group-name" data-group-position>${name}</span>
+        <span class="group-state">${t(isHeld ? "table.group_held" : "table.group_fired")}</span>
+      </div>
+      <p class="group-summary" data-group-summary>${group.summary}</p>
+      ${
+        isHeld
+          ? html`<div class="group-actions">
+              <wt-button
+                variant="secondary"
+                data-group-up=${group.id}
+                aria-label=${label("table.group_up")}
+                ?disabled=${this.groupCommandBusy || place === 0}
+                @click=${() => this.#reorderHeld(held, place, place - 1)}
+              >
+                <span aria-hidden="true">↑</span>
+              </wt-button>
+              <wt-button
+                variant="secondary"
+                data-group-down=${group.id}
+                aria-label=${label("table.group_down")}
+                ?disabled=${this.groupCommandBusy || place === held.length - 1}
+                @click=${() => this.#reorderHeld(held, place, place + 1)}
+              >
+                <span aria-hidden="true">↓</span>
+              </wt-button>
+              ${
+                this.fireControl === "waiter"
+                  ? html`<wt-button
+                      variant="primary"
+                      data-group-fire=${group.id}
+                      aria-label=${label("table.group_fire")}
+                      ?disabled=${this.groupCommandBusy}
+                      @click=${() => (this.fireGroupPending = group)}
+                    >
+                      ${t("table.group_fire")}
+                    </wt-button>`
+                  : nothing
+              }
+            </div>`
+          : nothing
+      }
+      <ul class="group-lines">
+        ${lines.map((line) => this.#groupLine(line, isHeld ? group : null))}
+      </ul>
+    </li>`;
+  }
+
+  /** `group` is null for a fired group's line, which offers nothing. Split quantity is offered on a
+   * dish sold by the unit, of more than one, with no extras: the server refuses to split a dish with
+   * extras. */
+  #groupLine(line: TabLine, group: OrderGroup | null): TemplateResult {
+    const name = this.#nameForLine(line);
+    const label = (key: StringKey) => `${t(key)} · ${name}`;
+    const splits =
+      group !== null &&
+      this.#moreThanOneWholeUnit(line) &&
+      !this.#dishesWithExtras.has(line.lineNo);
+    return html`<li class="group-line" data-group-line=${line.id}>
+      <span class="group-line-name">${name} ×${this.#displayQty(line.quantity)}</span>
+      ${
+        group === null
+          ? nothing
+          : html`<span class="group-line-actions">
+              <wt-button
+                variant="secondary"
+                data-move-line=${line.id}
+                aria-label=${label("table.move_line")}
+                ?disabled=${this.groupCommandBusy}
+                @click=${() => (this.movePending = { line, group })}
+              >
+                ${t("table.move_line")}
+              </wt-button>
+              ${
+                splits
+                  ? html`<wt-button
+                      variant="secondary"
+                      data-split-group-line=${line.id}
+                      aria-label=${label("table.split_group_line")}
+                      ?disabled=${this.groupCommandBusy}
+                      @click=${() =>
+                        this.#dispatch("split-group-line", {
+                          lineId: line.id,
+                          groupId: group.id,
+                          quantity: line.quantity,
+                        } satisfies SplitGroupLineDetail)}
+                    >
+                      ${t("table.split_group_line")}
+                    </wt-button>`
+                  : nothing
+              }
+            </span>`
+      }
+    </li>`;
+  }
+
+  #reorderHeld(held: OrderGroup[], from: number, to: number): void {
+    const ids = held.map((group) => group.id);
+    [ids[from], ids[to]] = [ids[to]!, ids[from]!];
+    this.#dispatch("reorder-groups", { heldGroupIds: ids } satisfies ReorderGroupsDetail);
+  }
+
+  #moveTo(target: MoveGroupLineDetail["target"]): void {
+    const pending = this.movePending;
+    if (pending === null) return;
+    this.movePending = null;
+    this.#dispatch("move-group-line", {
+      lineId: pending.line.id,
+      quantity: pending.line.quantity,
+      target,
+    } satisfies MoveGroupLineDetail);
+  }
+
+  #moveDialog(): TemplateResult {
+    const pending = this.movePending;
+    const held = this.#heldInOrder;
+    return html`<wt-dialog
+      class="move-line-dialog"
+      data-move-dialog
+      .open=${pending !== null}
+      .heading=${t("table.move_line")}
+      @wt-close=${() => (this.movePending = null)}
+    >
+      ${
+        pending === null
+          ? nothing
+          : html`<p class="move-dish">
+                ${this.#nameForLine(pending.line)} ×${this.#displayQty(pending.line.quantity)}
+              </p>
+              <div class="action-options">
+                ${held.map((group, index) =>
+                  group.id === pending.group.id
+                    ? nothing
+                    : html`<wt-button
+                        variant="secondary"
+                        data-move-target=${group.id}
+                        @click=${() => this.#moveTo({ groupId: group.id })}
+                      >
+                        ${heldGroupLabel(group, index)}
+                      </wt-button>`,
+                )}
+                <wt-button
+                  variant="secondary"
+                  data-move-target="new"
+                  @click=${() => this.#moveTo("new")}
+                >
+                  ${t("table.move_new_group")}
+                </wt-button>
+              </div>`
+      }
+      <div slot="footer" class="cancel-actions">
+        <wt-button variant="secondary" data-move-dismiss @click=${() => (this.movePending = null)}>
+          ${t("action.back")}
+        </wt-button>
+      </div>
+    </wt-dialog>`;
+  }
+
+  #confirmFireGroup(): void {
+    const group = this.fireGroupPending;
+    if (group === null) return;
+    this.fireGroupPending = null;
+    this.#dispatch("fire-group", { groupId: group.id } satisfies FireGroupDetail);
+  }
+
+  #fireGroupDialog(): TemplateResult {
+    const group = this.fireGroupPending;
+    return html`<wt-dialog
+      class="fire-group-dialog"
+      data-fire-dialog
+      .open=${group !== null}
+      .heading=${t("table.fire_group_title")}
+      @wt-close=${() => (this.fireGroupPending = null)}
+    >
+      ${
+        group === null
+          ? nothing
+          : html`<p data-fire-summary>
+              ${t("table.fire_group_body").replace("{summary}", () => group.summary)}
+            </p>`
+      }
+      <div slot="footer" class="cancel-actions">
+        <wt-button
+          variant="secondary"
+          data-fire-dismiss
+          @click=${() => (this.fireGroupPending = null)}
+        >
+          ${t("action.back")}
+        </wt-button>
+        <wt-button variant="primary" data-fire-confirm @click=${() => this.#confirmFireGroup()}>
+          ${t("table.group_fire")}
+        </wt-button>
+      </div>
+    </wt-dialog>`;
   }
 
   #statusSection(): TemplateResult {

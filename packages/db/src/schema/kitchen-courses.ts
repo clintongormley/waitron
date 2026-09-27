@@ -5,7 +5,8 @@ import { locations } from "./tenants.js";
 /**
  * A kitchen course. `display_order` is the firing sequence. On a counter order or a bill with no
  * party, the order's earliest course fires on send and later ones are held until fired; a line with
- * no course fires earliest. For a seated party the till groups each round by course in this order.
+ * no course fires earliest. For a seated party the till's draft shows its lines in sections in this
+ * order, and Send all holds one group per section.
  */
 export const kitchenCourses = table(
   "kitchen_courses",

@@ -1,6 +1,12 @@
 import { beforeEach, afterEach, describe, expect, it } from "vitest";
 import { setLocale } from "../i18n/t.js";
-import { customerProductName, lineProductName, productName, unitName } from "./product-name.js";
+import {
+  customerProductName,
+  lineProductName,
+  productName,
+  soldByTheUnit,
+  unitName,
+} from "./product-name.js";
 import type { TillProduct } from "../api/client.js";
 import { setContentLanguages } from "@waitron/ui";
 
@@ -123,5 +129,23 @@ describe("unitName", () => {
   it("falls back to the each abbreviation for a non-weight product with no unit", () => {
     // product() defaults pricingUnit to "each".
     expect(unitName(product())).toBe("ea");
+  });
+});
+
+describe("soldByTheUnit", () => {
+  const unit = (precision: number, hardwareUnit: "kg" | null) => ({
+    id: "u1",
+    name: { en: "unit" },
+    abbreviation: { en: "u" },
+    precision,
+    hardwareUnit,
+  });
+
+  it("is true only for a whole-number unit no scale weighs", () => {
+    expect(soldByTheUnit(product())).toBe(true);
+    expect(soldByTheUnit(product({ pricingUnit: "weight" }))).toBe(false);
+    expect(soldByTheUnit(product({ unit: unit(0, null) }))).toBe(true);
+    expect(soldByTheUnit(product({ unit: unit(2, null) }))).toBe(false);
+    expect(soldByTheUnit(product({ unit: unit(0, "kg") }))).toBe(false);
   });
 });

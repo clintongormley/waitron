@@ -2304,6 +2304,9 @@ async function assertTabOpen(tx: Transaction, cfg: TillConfig, tabId: string): P
 /** One line of an OPEN tab. `unitPriceGross` is the gross unit price LOCKED at add time, NOT a
  *  re-price. */
 export interface TabLine {
+  /** The row's id, which a group move names. A dish in an order group is listed by it in the group's
+   *  `lineIds`; a child extras row never is (`readGroups`, `apps/server/src/order-groups.ts`). */
+  id: string;
   /** The STAFF name (the variant's on a variant line): a waiter reads this list, not a diner. */
   name: string;
   /** The dish's frozen options answers; empty on a line that answered none and on every child. */
@@ -2388,6 +2391,7 @@ export async function readTabLines(
   return rows.map((row) => {
     const sold = soldProduct(row);
     return {
+      id: row.id,
       lineNo: row.lineNo,
       name: staffPresentationName({ name: row.name, variantName: row.variantName }),
       optionSnapshots: row.optionSnapshots,

@@ -1406,6 +1406,7 @@ describe("TillApi", () => {
     // ticket item (`state: null`), naming its parent dish by `parentLineNo` and its list by `listId`.
     const lines: TabLine[] = [
       {
+        id: "line-1",
         lineNo: 1,
         productId: "cafe-large",
         parentProductId: "cafe",
@@ -1422,6 +1423,7 @@ describe("TillApi", () => {
         groupId: "g1",
       },
       {
+        id: "line-2",
         lineNo: 2,
         productId: "agua",
         parentProductId: null,

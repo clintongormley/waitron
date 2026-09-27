@@ -3,9 +3,9 @@ import { isTillDestination, type TillDestination, tillPath } from "./navigation.
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
-import { UrlStateController, baseStyles } from "@waitron/ui";
+import { UrlStateController, baseStyles, registerIcons } from "@waitron/ui";
 import { formatMoney, resolveActiveLocale } from "@waitron/shared";
-import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { countText, currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { diag } from "./diagnostics.js";
 import { LocaleChangeController } from "./state/locale-controller.js";
@@ -21,9 +21,20 @@ import "./screens/till-ticket-view.js";
 import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
-import type { ChangeLineDetail, SendRoundDetail } from "./screens/till-table-order-screen.js";
-import { heldGroupIds, sendsAlone, type RoundGroup } from "./state/round-groups.js";
+import type {
+  ChangeLineDetail,
+  Draft,
+  FireGroupDetail,
+  MoveGroupLineDetail,
+  ReorderGroupsDetail,
+  SplitGroupLineDetail,
+  SubmitDraftDetail,
+} from "./screens/till-table-order-screen.js";
+import type { DraftGroup } from "./state/draft-groups.js";
+import "@waitron/ui/src/components/wt-toast.js";
+import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import "./screens/till-station-screen.js";
+import { CROSS_ICON_PATH } from "./widgets/station-queue.js";
 import "./screens/till-enrol-screen.js";
 import "./screens/till-device-chooser.js";
 import "./screens/till-expo-screen.js";
@@ -42,6 +53,7 @@ import type {
   OrderFlow,
   ServiceZoneSummary,
   PayOutcome,
+  GroupCommand,
   GroupLine,
   OrderGroup,
   SaleLine,
@@ -125,6 +137,9 @@ interface RefreshRetry {
 
 const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
 
+// wt-toast draws a `close` icon its consuming app registers.
+registerIcons({ close: CROSS_ICON_PATH });
+
 /**
  * How long a round's send, or a reload of the table's offers, may stay out before it is cancelled.
  * It is above the server watchdog's kill bound (`WATCHDOG_KILL_MS` plus `STACK_CAPTURE_MS`,
@@ -134,13 +149,13 @@ const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
 const TABLE_REQUEST_LIMIT_MS = 150_000;
 
 /**
- * What a round's send leaves to do once the round is open for edits again. `find-tab`, after a send
- * that got no answer, moves to the tab the floor now shows for the table the round was sent from,
- * only while that table still holds the party the screen showed at the send and the operator is
- * still on it; `landedOn` names the tab the server added the round to, when it is not the one it was
- * sent to.
+ * What a draft's submission leaves to do once the draft is open for edits again. `find-tab`, after a
+ * submission that got no answer, moves to the tab the floor now shows for the table the draft was
+ * sent from, only while that table still holds the party the screen showed at the submission and the
+ * operator is still on it; `landedOn` names the tab the server added the draft to, when it is not the
+ * one it was sent to.
  */
-type RoundFollowUp = "read-tab" | "find-tab" | "mark-sold-out" | { landedOn: string } | undefined;
+type DraftFollowUp = "read-tab" | "find-tab" | "mark-sold-out" | { landedOn: string } | undefined;
 
 /** A whole-count unit's three-place server quantity reads "2", not "2.000". */
 function displayQuantity(product: TillProduct, quantity: string): string {
@@ -158,7 +173,7 @@ const PERMANENT_SALE_REFUSALS = new Set([
   "fiscal.foreign_recipient_unsupported",
 ]);
 
-/** Table refusals shown in their code's own words: each tells the operator what to do instead. */
+/** Table refusals shown in their code's own words. */
 const TABLE_REFUSALS = new Set([
   "order.payment_in_flight",
   "table.occupied",
@@ -252,6 +267,11 @@ const LINE_REFUSALS = new Set([
   "submission.id_reused",
 ]);
 
+function isGroupGone(error: unknown): boolean {
+  const code = (error as { code?: string } | undefined)?.code;
+  return code === "group.not_held" || code === "group.not_found";
+}
+
 function lineWriteError(error: unknown): CounterError {
   const code = (error as { code?: string } | undefined)?.code;
   return code !== undefined && LINE_REFUSALS.has(code) ? { code } : tableWriteError(error);
@@ -309,6 +329,17 @@ function errorText(error: CounterError): string | TemplateResult {
   return error.also === undefined
     ? late
     : html`<span class="error-part">${late}</span><span class="error-part">${t(error.also)}</span>`;
+}
+
+/** "Fired: 2 groups. Held: 3 groups.", leaving out a clause with nothing in it. */
+function submittedText(tally: { fired: number; held: number; joined: number }): string {
+  const count = (n: number, many: StringKey, one: StringKey) =>
+    n === 0 ? [] : [countText(n, many, one)];
+  return [
+    ...count(tally.fired, "table.submitted_fired", "table.submitted_fired_one"),
+    ...count(tally.held, "table.submitted_held", "table.submitted_held_one"),
+    ...(tally.joined === 0 ? [] : [t("table.submitted_joined")]),
+  ].join(" ");
 }
 
 /** A request asserting a menu version that is no longer live (D9): nothing was written. */
@@ -423,6 +454,15 @@ export class TillApp extends LitElement {
 
       .error-part {
         display: block;
+      }
+
+      /* Over the page, above the language button: in the flow, its closing would move the floor under a
+         waiter's finger. */
+      .submitted-toast {
+        position: fixed;
+        inset-inline: var(--wt-space-3);
+        bottom: calc(var(--wt-tap-min) + 2 * var(--wt-space-3) + env(safe-area-inset-bottom));
+        z-index: 10;
       }
 
       .error-part + .error-part {
@@ -736,6 +776,7 @@ export class TillApp extends LitElement {
    * the screen shows of it, and the revision every command on it sends (D19). A floor read on its own
    * does not move it, so a glance at the floor cannot lend the order view a revision it never showed. */
   @state() private orderParty: TableVisit | null = null;
+  @state() private groupCommandBusy = false;
   /** Finish table was refused because a bill of the party is unpaid. */
   @state() private finishRefused = false;
   /** The venue's setting for changing sent lines, read with {@link tabLines}. */
@@ -786,6 +827,8 @@ export class TillApp extends LitElement {
   @state() private receipt: ReceiptConfig = {};
   /** The non-fatal error to show over the counter, or `undefined` for none. */
   @state() private errorKey?: CounterError;
+  /** What a complete submission of a draft did, said once the till is back on the floor. */
+  @state() private submittedNotice: string | null = null;
   /**
    * Authorizers for an open cash-drawer override; `undefined` means the dialog is closed, and a possibly
    * empty array opens it.
@@ -2236,8 +2279,9 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** Send all and Fire course release by group, so with the groups unread they send nothing: the
-   * refusal is said and the order read again for the next press. */
+  /** A command naming a held group, and a draft's Add to held group, act on the groups the read
+   * found, so with the groups unread they send nothing: the refusal is said and the order read again
+   * for the next press. */
   async #refuseWithGroupsUnread(): Promise<boolean> {
     if (!this.#groupsUnread) return false;
     this.errorKey = "table.error";
@@ -2358,16 +2402,19 @@ export class TillApp extends LitElement {
     this.errorKey = tableWriteError(error);
   }
 
-  /** A round sent to a seated party's settled or abandoned tab lands on the party's next tab, which
-   * the screen follows. */
-  async #onSendRound(event: Event): Promise<void> {
-    const { lines, groups, round, sent } = (
-      event as CustomEvent<Pick<SendRoundDetail, "lines" | "groups"> & Partial<SendRoundDetail>>
+  /** A draft sent to a seated party's settled or abandoned tab lands on the party's next tab, which
+   * the screen follows. Once a submission leaves the draft empty, the till goes back to the floor
+   * and says what the draft's submissions filed. */
+  async #onSubmitDraft(event: Event): Promise<void> {
+    const { lines, groups, joinGroupId, store, sent, draft, carryTo } = (
+      event as CustomEvent<
+        Pick<SubmitDraftDetail, "lines" | "groups" | "joinGroupId"> & Partial<SubmitDraftDetail>
+      >
     ).detail;
     const tabId = this.activeTabId;
     const tableId = this.activeTableId;
     const party = this.orderParty;
-    if (tabId === undefined || round?.sending === true) return;
+    if (tabId === undefined || store?.sending === true) return;
     if (party === null) {
       this.errorKey = "table.error";
       return;
@@ -2376,50 +2423,72 @@ export class TillApp extends LitElement {
       this.errorKey = lineWriteError({ code: "tab.not_open" });
       return;
     }
+    if (joinGroupId !== undefined && (await this.#refuseWithGroupsUnread())) return;
     const partyId = party.id;
-    // The round is shut to edits until the answer, so a retry sends what the screen shows and success
+    // The draft is shut to edits until the answer, so a retry sends what the screen shows and success
     // takes out exactly what was sent.
-    if (round !== undefined) round.sending = true;
-    let followUp: RoundFollowUp;
+    if (store !== undefined) store.sending = true;
+    let followUp: DraftFollowUp;
     try {
-      followUp = await this.#sendRound(tabId, party, lines, groups, round, sent ?? [], false);
+      followUp = await this.#submitDraft(
+        tabId,
+        party,
+        { lines, groups, joinGroupId },
+        store,
+        sent ?? [],
+        false,
+      );
     } finally {
-      if (round !== undefined) round.sending = false;
+      if (store !== undefined) store.sending = false;
     }
     if (followUp === undefined) return;
     if (followUp === "mark-sold-out") {
-      if (round !== undefined) await this.#markSoldOut(round);
+      if (store !== undefined) await this.#markSoldOut(store);
       return;
     }
     const onSentTable = () => this.activeTabId === tabId && this.activeTableId === tableId;
+    if (followUp !== "find-tab" && draft !== undefined) this.#tally(draft, groups, joinGroupId);
     if (followUp === "find-tab" && onSentTable()) {
       await this.#retakePartyFromFloor();
-      // The server moves a round only onto its own party's next tab, so the table is followed only
-      // while it still holds the party the screen showed when the round was sent.
+      // The server moves a draft only onto its own party's next tab, so the table is followed only
+      // while it still holds the party the screen showed when the draft was sent.
       const now = this.tables.find((row) => row.id === tableId);
       if (now?.tabId !== undefined && now.visit?.id === partyId && onSentTable())
-        this.#followRound(tabId, now.tabId);
+        this.#followDraft(tabId, now.tabId, carryTo);
     } else if (typeof followUp === "object" && this.activeTabId === tabId) {
       await this.#reloadTables();
-      this.#followRound(tabId, followUp.landedOn);
+      this.#followDraft(tabId, followUp.landedOn, carryTo);
     }
     await this.#loadTabLines();
     if (this.orderParty !== null) await this.#loadVisitBills();
+    if (store === undefined || store.lineCount > 0 || draft === undefined) return;
+    if (followUp === "find-tab" || this.activeTableId !== tableId) return;
+    this.submittedNotice = submittedText(draft.tally);
+    this.renderRoot.querySelector<WtToast>("wt-toast[data-submitted-toast]")?.show();
+    this.#returnToFloor();
+  }
+
+  #tally({ tally }: Draft, groups: readonly DraftGroup[], joinGroupId?: string): void {
+    for (const group of groups) {
+      if (group.release === "fire") tally.fired += 1;
+      else if (joinGroupId !== undefined) tally.joined += 1;
+      else tally.held += 1;
+    }
   }
 
   /**
-   * A refused round stays on the table screen. One the server may have added — no answer came —
+   * A refused submission stays on the table screen. One the server may have added — no answer came —
    * is taken out, because sending it again could put it on the tab twice.
    */
-  async #sendRound(
+  async #submitDraft(
     tabId: string,
     party: TableVisit,
-    lines: GroupLine[],
-    groups: readonly RoundGroup[],
-    round: WorkingOrderStore | undefined,
+    submission: { lines: GroupLine[]; groups: readonly DraftGroup[]; joinGroupId?: string },
+    store: WorkingOrderStore | undefined,
     sent: readonly OrderLine[],
     retried: boolean,
-  ): Promise<RoundFollowUp> {
+  ): Promise<DraftFollowUp> {
+    const { lines, groups, joinGroupId } = submission;
     this.errorKey = undefined;
     let landedOn: string;
     const send = new AbortController();
@@ -2430,6 +2499,7 @@ export class TillApp extends LitElement {
         {
           submissionId: crypto.randomUUID(),
           expectedVisitRevision: party.revision,
+          ...(joinGroupId === undefined ? {} : { joinGroupId }),
           groups: groups.map((group) => ({
             release: group.release,
             lines: group.lineIndexes.map((index) => lines[index]!),
@@ -2440,27 +2510,35 @@ export class TillApp extends LitElement {
       landedOn = submitted.tabId;
       this.#noteVisitRevision(party.id, submitted.revision);
     } catch (error) {
-      if (isVersionRefusal(error) && round !== undefined) {
-        const outcome = await this.#refreshRound(round);
+      if (isVersionRefusal(error) && store !== undefined) {
+        const outcome = await this.#refreshRound(store);
         if (outcome === "adopted" && !retried) {
           const reasserted = lines.map((line, index) => {
             const own = sent[index];
             return own === undefined ? line : { ...line, ...toWireProductIdentity(own.product) };
           });
-          return this.#sendRound(tabId, party, reasserted, groups, round, sent, true);
+          return this.#submitDraft(
+            tabId,
+            party,
+            { ...submission, lines: reasserted },
+            store,
+            sent,
+            true,
+          );
         }
         if (outcome !== "confirming") this.errorKey = { code: "menu.version_changed" };
         return;
       }
       if (isNetworkFailure(error)) {
         this.errorKey = "table.round_unconfirmed";
-        round?.removeLines(sent);
+        store?.removeLines(sent);
         return "find-tab";
       }
       if (isVisitOutOfDate(error)) {
         await this.#onVisitOutOfDate(error);
         return;
       }
+      if (isGroupGone(error)) await this.#loadTabLines();
       this.errorKey = lineWriteError(error);
       return (error as { code?: string }).code === "product.unavailable"
         ? "mark-sold-out"
@@ -2468,14 +2546,15 @@ export class TillApp extends LitElement {
     } finally {
       clearTimeout(limit);
     }
-    round?.removeLines(sent);
+    store?.removeLines(sent);
     return landedOn === tabId ? "read-tab" : { landedOn };
   }
 
-  /** Moves the screen from the tab a round was sent to onto the tab it went to, only while the
+  /** Moves the screen from the tab a draft was sent to onto the tab it went to, only while the
    * operator is still on the first; the floor has already been read after the send. */
-  #followRound(sentTo: string, landedOn: string): void {
+  #followDraft(sentTo: string, landedOn: string, carryTo?: (orderId: string) => void): void {
     if (landedOn === sentTo || this.activeTabId !== sentTo) return;
+    carryTo?.(landedOn);
     this.activeTabId = landedOn;
     this.#rememberOrderParty();
   }
@@ -2487,58 +2566,101 @@ export class TillApp extends LitElement {
     return open && !this.tables.some((table) => table.tabId === this.activeTabId);
   }
 
-  /** The party's held groups holding any of `lines`, in the party's order. */
-  #heldGroupsOf(lines: readonly TabLine[]): OrderGroup[] {
-    const ids = new Set(lines.map((line) => line.groupId));
-    return this.tabGroups
-      .filter((group) => group.state === "held" && ids.has(group.id))
-      .sort((a, b) => a.position - b.position);
-  }
-
-  /** Fires the groups in turn, each with the revision the one before it answered. */
-  async #fireGroups(groups: readonly OrderGroup[]): Promise<void> {
-    const party = this.orderParty;
-    if (party === null) return;
-    let revision = party.revision;
-    for (const group of groups) {
-      ({ revision } = await this.api.fireGroup(party.id, group.id, {
-        submissionId: crypto.randomUUID(),
-        expectedVisitRevision: revision,
-      }));
-      this.#noteVisitRevision(party.id, revision);
-    }
-  }
-
-  /** A refused send or fire: a party changed elsewhere is read again and described, anything else is
-   * said and the order read again, since part of it may have gone. */
+  /** A refused send or group command: a party changed elsewhere is read again and described, and never
+   * sent again; anything else reads the order and its groups again, since part of it may have gone,
+   * and then says what was refused. */
   async #onReleaseRefusal(error: unknown): Promise<void> {
     if (isVisitOutOfDate(error)) {
       await this.#onVisitOutOfDate(error);
       return;
     }
-    this.errorKey = lineWriteError(error);
     if (isNetworkFailure(error)) await this.#retakePartyFromFloor();
     await this.#loadTabLines();
+    this.errorKey = lineWriteError(error);
   }
 
-  /** Fires the course's held groups, then sends its lines outside them. */
-  async #onFireCourse(event: Event): Promise<void> {
-    const { courseId } = (event as CustomEvent<{ orderId?: string; courseId: string }>).detail;
-    const tabId = this.activeTabId;
-    if (tabId === undefined) return;
-    this.errorKey = undefined;
-    if (await this.#refuseWithGroupsUnread()) return;
-    const ofCourse = this.tabLines.filter((line) => line.courseId === courseId);
-    const held = heldGroupIds(this.tabGroups);
-    const alone = ofCourse.filter((line) => sendsAlone(line, held)).map((line) => line.lineNo);
+  /** A command on the party's held groups, sent with the revision the party was shown at; then the
+   * order and its groups are read again. A press while one is running is dropped: it would carry the
+   * revision the running one is about to move on. */
+  async #onGroupCommand(send: (party: TableVisit) => Promise<unknown>): Promise<void> {
+    if (this.groupCommandBusy) return;
+    this.groupCommandBusy = true;
     try {
-      await this.#fireGroups(this.#heldGroupsOf(ofCourse));
-      if (alone.length > 0) await this.api.sendLines(tabId, alone);
-    } catch (error) {
-      await this.#onReleaseRefusal(error);
-      return;
+      this.errorKey = undefined;
+      if (await this.#refuseWithGroupsUnread()) return;
+      const party = this.orderParty;
+      if (party === null) {
+        this.errorKey = "table.error";
+        return;
+      }
+      try {
+        await send(party);
+      } catch (error) {
+        await this.#onReleaseRefusal(error);
+        return;
+      }
+      await this.#loadTabLines();
+    } finally {
+      this.groupCommandBusy = false;
     }
-    await this.#loadTabLines();
+  }
+
+  /** One request on the party under a submission id of its own, at `revision`. The answer's revision
+   * is noted, so a later command carries it, and returned for a next request in the same command. */
+  async #partyRequest(
+    party: TableVisit,
+    revision: number,
+    request: (command: GroupCommand) => Promise<{ revision: number }>,
+  ): Promise<number> {
+    const answer = await request({
+      submissionId: crypto.randomUUID(),
+      expectedVisitRevision: revision,
+    });
+    this.#noteVisitRevision(party.id, answer.revision);
+    return answer.revision;
+  }
+
+  /** A group command of one request, at the revision the party was shown at. */
+  async #onGroupRequest(
+    request: (party: TableVisit, command: GroupCommand) => Promise<{ revision: number }>,
+  ): Promise<void> {
+    await this.#onGroupCommand((party) =>
+      this.#partyRequest(party, party.revision, (command) => request(party, command)),
+    );
+  }
+
+  async #onFireGroup(event: Event): Promise<void> {
+    const { groupId } = (event as CustomEvent<FireGroupDetail>).detail;
+    await this.#onGroupRequest((party, command) => this.api.fireGroup(party.id, groupId, command));
+  }
+
+  async #onReorderGroups(event: Event): Promise<void> {
+    const { heldGroupIds } = (event as CustomEvent<ReorderGroupsDetail>).detail;
+    await this.#onGroupRequest((party, command) =>
+      this.api.reorderGroups(party.id, heldGroupIds, command),
+    );
+  }
+
+  async #onMoveGroupLine(event: Event): Promise<void> {
+    const { lineId, quantity, target } = (event as CustomEvent<MoveGroupLineDetail>).detail;
+    await this.#onGroupRequest((party, command) =>
+      this.api.moveLinesToGroup(party.id, [{ lineId, quantity }], target, command),
+    );
+  }
+
+  /** One unit at a time moves off the line into a row of its own in the same group, each request at
+   * the revision the one before answered, until every row holds one. Each request is a command of its
+   * own, so a refusal part-way leaves the rows already split. */
+  async #onSplitGroupLine(event: Event): Promise<void> {
+    const { lineId, groupId, quantity } = (event as CustomEvent<SplitGroupLineDetail>).detail;
+    await this.#onGroupCommand(async (party) => {
+      let revision = party.revision;
+      for (let units = Number.parseInt(quantity, 10); units > 1; units -= 1) {
+        revision = await this.#partyRequest(party, revision, (command) =>
+          this.api.moveLinesToGroup(party.id, [{ lineId, quantity: "1" }], { groupId }, command),
+        );
+      }
+    });
   }
 
   async #onServeLine(event: Event): Promise<void> {
@@ -2569,16 +2691,14 @@ export class TillApp extends LitElement {
     await this.#loadTabLines();
   }
 
-  /** `lineNos: []` is Send all: the order's held groups are fired, then the server sends every held
-   * line outside them. The reload runs on both paths, as in {@link #onRecallLines}. */
+  /** Sends held lines outside any held group, such as a recalled one. The reload runs on both paths,
+   * as in {@link #onRecallLines}. */
   async #onSendLines(event: Event): Promise<void> {
     const { lineNos } = (event as CustomEvent<{ lineNos: number[] }>).detail;
     const tabId = this.activeTabId;
     if (tabId === undefined) return;
     this.errorKey = undefined;
-    if (lineNos.length === 0 && (await this.#refuseWithGroupsUnread())) return;
     try {
-      if (lineNos.length === 0) await this.#fireGroups(this.#heldGroupsOf(this.tabLines));
       await this.api.sendLines(tabId, lineNos);
     } catch (error) {
       await this.#onReleaseRefusal(error);
@@ -2836,6 +2956,11 @@ export class TillApp extends LitElement {
     this.tabGroups = [];
     this.#groupsUnread = false;
     this.visitBills = [];
+    this.#returnToFloor();
+  }
+
+  /** A till's drill goes back to the floor; a card mount selects the canvas's floor tab. */
+  #returnToFloor(): void {
     const floorTab = this.canvas?.tabs.find((tab) => this.#tabNeedsFloorData(tab))?.key;
     if (this.drill?.kind === "table-order" || !this.#inShell() || floorTab === undefined) {
       this.#onBackToFloor();
@@ -3221,6 +3346,7 @@ export class TillApp extends LitElement {
       .visit=${this.orderParty}
       .visitBills=${this.visitBills}
       .finishRefused=${this.finishRefused}
+      .groupCommandBusy=${this.groupCommandBusy}
       .handheld=${this.handheldMode}
     ></till-card-grid>`;
   }
@@ -3255,6 +3381,7 @@ export class TillApp extends LitElement {
           .bills=${this.visitBills}
           .finishRefused=${this.finishRefused}
           .busy=${this.submitting}
+          .groupCommandBusy=${this.groupCommandBusy}
           .handheld=${this.handheldMode}
         ></till-table-order-screen>`;
       case "ticket":
@@ -3335,8 +3462,11 @@ export class TillApp extends LitElement {
         @show-floor=${() => void this.#onShowFloor()}
         @floor-refresh=${() => void this.#refreshFloor()}
         @open-table=${(event: Event) => void this.#onOpenTable(event)}
-        @send-round=${(event: Event) => void this.#onSendRound(event)}
-        @fire-course=${(event: Event) => void this.#onFireCourse(event)}
+        @submit-draft=${(event: Event) => void this.#onSubmitDraft(event)}
+        @fire-group=${(event: Event) => void this.#onFireGroup(event)}
+        @reorder-groups=${(event: Event) => void this.#onReorderGroups(event)}
+        @move-group-line=${(event: Event) => void this.#onMoveGroupLine(event)}
+        @split-group-line=${(event: Event) => void this.#onSplitGroupLine(event)}
         @serve-line=${(event: Event) => void this.#onServeLine(event)}
         @set-line-course=${(event: Event) => void this.#onSetLineCourse(event)}
         @send-lines=${(event: Event) => void this.#onSendLines(event)}
@@ -3378,6 +3508,15 @@ export class TillApp extends LitElement {
             ? html`<p class="error" role="alert">${errorText(this.errorKey)}</p>`
             : nothing
         }
+        <wt-toast
+          class="submitted-toast"
+          data-submitted-toast
+          tone="info"
+          .open=${this.submittedNotice !== null}
+          .message=${this.submittedNotice ?? ""}
+          close-label=${t("table.submitted_close")}
+          @wt-close=${() => (this.submittedNotice = null)}
+        ></wt-toast>
         ${this.#renderRefreshNotice("held")} ${this.#renderRefreshNotice("station")}
         <!-- The waiting-for-promotion banner. On the shell surface (an operator
              mid-shift), the lock-screen's own status line is not visible, so the shell surfaces the same

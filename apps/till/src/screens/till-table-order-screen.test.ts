@@ -50,6 +50,7 @@ const courses = [
 // Two café lines locked at add-time (1.50 each): line 1 still to serve, line 2 already served. Both have
 // a null course fired immediately, so they surface no waiter-fire action by default.
 const pendingLine: TabLine = {
+  id: "line-1",
   groupId: null,
   lineNo: 1,
   productId: "cafe",
@@ -67,6 +68,7 @@ const pendingLine: TabLine = {
   parentProductId: null,
 };
 const servedLine: TabLine = {
+  id: "line-2",
   groupId: null,
   lineNo: 2,
   productId: "cafe",
@@ -122,6 +124,58 @@ async function openDrawer(el: TillTableOrderScreen): Promise<void> {
 }
 
 afterEach(cleanupWidgets);
+
+const draftAction = (el: TillTableOrderScreen, kind: string) =>
+  el.shadowRoot!.querySelector<HTMLElement>(`[data-draft-action="${kind}"]`);
+
+/** The draft line's selection toggle whose text names `name`. */
+const draftToggle = (el: TillTableOrderScreen, name: string) =>
+  [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-draft-select]")].find((toggle) =>
+    toggle.textContent!.includes(name),
+  )!;
+
+const previewDialog = (el: TillTableOrderScreen) =>
+  el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("[data-draft-preview]")!;
+
+/** Presses a draft action and answers the preview it opens; the preview's text is returned. */
+async function openPreview(el: TillTableOrderScreen, kind: string): Promise<string> {
+  draftAction(el, kind)!.click();
+  await el.updateComplete;
+  expect(previewDialog(el).open).toBe(true);
+  return previewDialog(el).querySelector("[data-preview-body]")!.textContent!.replace(/\s+/g, " ");
+}
+
+/** Confirms the open preview and returns the `submit-draft` it dispatched. */
+function confirmPreview(el: TillTableOrderScreen): CustomEvent | undefined {
+  let captured: CustomEvent | undefined;
+  el.addEventListener("submit-draft", (e) => (captured = e as CustomEvent), { once: true });
+  el.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
+  return captured;
+}
+
+async function submitDraft(
+  el: TillTableOrderScreen,
+  kind: string,
+): Promise<CustomEvent | undefined> {
+  await openPreview(el, kind);
+  return confirmPreview(el);
+}
+
+/** Each of `controls` whose tap target — a `wt-button`'s inner button, else the control itself —
+ * renders under 44 px on either axis, named by its data attributes and measured size. */
+function underTapSize(controls: Iterable<Element>): string[] {
+  return [...controls].flatMap((control) => {
+    const { width, height } = (
+      control.shadowRoot?.querySelector("button") ?? control
+    ).getBoundingClientRect();
+    if (width >= 44 && height >= 44) return [];
+    const name = [...control.attributes]
+      .filter((attribute) => attribute.name.startsWith("data-"))
+      .map((attribute) => `${attribute.name}=${attribute.value}`)
+      .join(" ");
+    return [`${name} ${width}×${height}`];
+  });
+}
 
 function orderGroup(id: string, state: OrderGroup["state"]): OrderGroup {
   return {
@@ -187,15 +241,13 @@ describe("till-table-order-screen", () => {
     expect(grid(el).products.map((p) => p.id)).toEqual(["vegan"]);
   });
 
-  it("accumulates a round and emits send-round with the picked lines, keeping the round for the app to empty once sent", async () => {
+  it("accumulates a round and emits submit-draft with the picked lines once the preview is confirmed, keeping the round for the app to empty once sent", async () => {
     const { el } = await mount();
     // Pick a café into the current round (the grid rings an `each` tile straight into its store).
     grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
     await el.updateComplete;
 
-    let captured: CustomEvent | undefined;
-    el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
-    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    const captured = await submitDraft(el, "fire-all");
 
     expect(captured).toBeInstanceOf(CustomEvent);
     expect(captured!.composed).toBe(true);
@@ -203,7 +255,7 @@ describe("till-table-order-screen", () => {
     expect(captured!.detail.lines).toEqual([{ menuItemId: "menu-item-cafe", quantity: "1" }]);
     expect(captured!.detail.groups).toEqual([{ release: "fire", lineIndexes: [0] }]);
     // The round stays until the app has the server's answer: a refused round must not be lost.
-    expect(captured!.detail.round).toBe(grid(el).store);
+    expect(captured!.detail.store).toBe(grid(el).store);
     expect(captured!.detail.sent).toEqual(grid(el).store.lines);
     expect(grid(el).store.lineCount).toBe(1);
   });
@@ -219,12 +271,50 @@ describe("till-table-order-screen", () => {
     expect(grid(el).store.lineCount).toBe(0);
     const basket = el.shadowRoot!.querySelector(".round-bar till-basket")!;
     expect(basket.shadowRoot!.textContent).toContain(t("basket.empty"));
-    expect(el.shadowRoot!.querySelector("[data-send-round]")!.hasAttribute("disabled")).toBe(true);
+    expect(draftAction(el, "fire-all")!.hasAttribute("disabled")).toBe(true);
 
     el.orderId = "wo-A";
     await el.updateComplete;
     expect(grid(el).store.lineCount).toBe(1);
-    expect(el.shadowRoot!.querySelector("[data-send-round]")!.hasAttribute("disabled")).toBe(false);
+    expect(draftAction(el, "fire-all")!.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("carries the draft to the order it is told to keep it on, and leaves nothing on the old one", async () => {
+    const { el } = await mount({ orderId: "wo-A" });
+    grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
+    await el.updateComplete;
+    const draft = grid(el).store;
+    const captured = await submitDraft(el, "fire-all");
+
+    captured!.detail.carryTo("wo-B");
+    el.orderId = "wo-B";
+    await el.updateComplete;
+    expect(grid(el).store).toBe(draft);
+
+    el.orderId = "wo-A";
+    await el.updateComplete;
+    expect(grid(el).store.lineCount).toBe(0);
+  });
+
+  it("does not carry a draft over one already started on the order it lands on", async () => {
+    const { el } = await mount({ orderId: "wo-B" });
+    grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
+    await el.updateComplete;
+    const started = grid(el).store;
+    el.orderId = "wo-A";
+    await el.updateComplete;
+    grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
+    await el.updateComplete;
+    const draft = grid(el).store;
+    const captured = await submitDraft(el, "fire-all");
+
+    captured!.detail.carryTo("wo-B");
+    el.orderId = "wo-B";
+    await el.updateComplete;
+    expect(grid(el).store).toBe(started);
+    el.orderId = "wo-A";
+    await el.updateComplete;
+    expect(grid(el).store).toBe(draft);
   });
 
   it("says a round is being sent, and shuts its controls, until the app has the answer", async () => {
@@ -238,7 +328,8 @@ describe("till-table-order-screen", () => {
     expect(status?.getAttribute("role")).toBe("status");
     expect(status!.textContent).toContain(t("table.round_sending"));
     expect(el.shadowRoot!.querySelector("[data-round-controls]")!.hasAttribute("inert")).toBe(true);
-    expect(el.shadowRoot!.querySelector("[data-send-round]")!.hasAttribute("disabled")).toBe(true);
+    for (const action of el.shadowRoot!.querySelectorAll("[data-draft-action]"))
+      expect(action.hasAttribute("disabled")).toBe(true);
 
     grid(el).store.sending = false;
     await el.updateComplete;
@@ -254,20 +345,23 @@ describe("till-table-order-screen", () => {
     grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
     await el.updateComplete;
 
-    let captured: CustomEvent | undefined;
-    el.addEventListener("send-round", (event) => (captured = event as CustomEvent));
-    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    const captured = await submitDraft(el, "fire-all");
 
     expect(captured!.detail.lines).toEqual([{ menuItemId: "offer-cafe", quantity: "1" }]);
   });
 
-  it("disables Enviar ronda while the current round is empty", async () => {
+  it("disables the draft's actions while the current round is empty", async () => {
     const { el } = await mount();
-    const send = el.shadowRoot!.querySelector("[data-send-round]")!;
-    expect(send.hasAttribute("disabled")).toBe(true);
+    const actions = [...el.shadowRoot!.querySelectorAll("[data-draft-action]")];
+    expect(actions.map((action) => action.getAttribute("data-draft-action"))).toEqual([
+      "send-all",
+      "fire-all",
+    ]);
+    for (const action of actions) expect(action.hasAttribute("disabled")).toBe(true);
     grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
     await el.updateComplete;
-    expect(send.hasAttribute("disabled")).toBe(false);
+    for (const action of el.shadowRoot!.querySelectorAll("[data-draft-action]"))
+      expect(action.hasAttribute("disabled")).toBe(false);
   });
 
   it("keeps the tab drawer closed until its handle is tapped", async () => {
@@ -453,7 +547,7 @@ describe("till-table-order-screen", () => {
   it("renders a per-line course picker per round line, pre-selecting the product's default course", async () => {
     const { el } = await mount({ courses });
     // No round yet ⇒ no picker.
-    expect(el.shadowRoot!.querySelector("[data-round-courses]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-draft-sections]")).toBeNull();
     const [picker] = await ringAndPickers(el);
     // One select for the one round line, pre-selected to the café's default course (Postres), with an
     // option per active venue course plus the "use default" placeholder.
@@ -466,36 +560,32 @@ describe("till-table-order-screen", () => {
   it("hides the course picker when the venue has no courses to pick", async () => {
     const { el } = await mount({ courses: [] });
     await ringAndPickers(el);
-    expect(el.shadowRoot!.querySelector("[data-round-courses]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-round-course]")).toBeNull();
   });
 
-  it("send-round OMITS courseId for an unoverridden line (the server applies the product default)", async () => {
+  it("OMITS courseId for an unoverridden line (the server applies the product default)", async () => {
     const { el } = await mount({ courses });
     await ringAndPickers(el);
-    let captured: CustomEvent | undefined;
-    el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
-    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    const captured = await submitDraft(el, "fire-all");
     // No override picked ⇒ the line carries only menuItemId + quantity; the server resolves the product's
     // default course from `<override> ?? product.course_id`.
     expect(captured!.detail.lines).toEqual([{ menuItemId: "menu-item-cafe", quantity: "1" }]);
   });
 
-  it("send-round threads the picked course OVERRIDE for a line the waiter re-pointed", async () => {
+  it("threads the picked course OVERRIDE for a line the waiter re-pointed", async () => {
     const { el } = await mount({ courses });
     const [picker] = await ringAndPickers(el);
     // Override the café line from its default (Postres) to Entrantes.
     picker!.value = "entrantes";
     picker!.dispatchEvent(new Event("change"));
     await el.updateComplete;
-    let captured: CustomEvent | undefined;
-    el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
-    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    const captured = await submitDraft(el, "fire-all");
     expect(captured!.detail.lines).toEqual([
       { menuItemId: "menu-item-cafe", quantity: "1", courseId: "entrantes" },
     ]);
   });
 
-  it("send-round threads a line's picks as one entry per list, naming products and counts alone", async () => {
+  it("threads a line's picks as one entry per list, naming products and counts alone", async () => {
     const { el } = await mount();
     // Seed the round store with a line carrying a pick (through the UI the picker produces these);
     // only the list, the product and the count reach the wire — never the display name or price.
@@ -511,9 +601,7 @@ describe("till-table-order-screen", () => {
       ],
     });
     await el.updateComplete;
-    let captured: CustomEvent | undefined;
-    el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
-    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    const captured = await submitDraft(el, "fire-all");
     expect(captured!.detail.lines).toEqual([
       {
         menuItemId: "menu-item-cafe",
@@ -523,7 +611,7 @@ describe("till-table-order-screen", () => {
     ]);
   });
 
-  it("send-round carries each pick's own per-dish count, and groups two lists separately", async () => {
+  it("carries each pick's own per-dish count, and groups two lists separately", async () => {
     const { el } = await mount();
     grid(el).store.addProduct(cafe, "1", {
       extras: [
@@ -545,9 +633,7 @@ describe("till-table-order-screen", () => {
       options: [{ listId: "list-cooked", labelId: "label-medium" }],
     });
     await el.updateComplete;
-    let captured: CustomEvent | undefined;
-    el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
-    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    const captured = await submitDraft(el, "fire-all");
     expect(captured!.detail.lines).toEqual([
       {
         menuItemId: "menu-item-cafe",
@@ -561,7 +647,7 @@ describe("till-table-order-screen", () => {
     ]);
   });
 
-  it("forwards a per-line note set through the round basket's Note affordance on send-round (parity)", async () => {
+  it("forwards a per-line note set through the round basket's Note affordance on submission (parity)", async () => {
     const { el } = await mount();
     grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
     await el.updateComplete;
@@ -576,9 +662,7 @@ describe("till-table-order-screen", () => {
     note.dispatchEvent(new Event("input"));
     await el.updateComplete;
 
-    let captured: CustomEvent | undefined;
-    el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
-    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    const captured = await submitDraft(el, "fire-all");
     expect(captured!.detail.lines).toEqual([
       { menuItemId: "menu-item-cafe", quantity: "1", note: "table 4 — no ice" },
     ]);
@@ -594,66 +678,22 @@ describe("till-table-order-screen", () => {
     picker!.value = "";
     picker!.dispatchEvent(new Event("change"));
     await el.updateComplete;
-    let captured: CustomEvent | undefined;
-    el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
-    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    const captured = await submitDraft(el, "fire-all");
     expect(captured!.detail.lines).toEqual([{ menuItemId: "menu-item-cafe", quantity: "1" }]);
   });
 
-  async function ringAndHolds(el: TillTableOrderScreen): Promise<HTMLElement[]> {
+  it("offers no hold switch: Send all sends the line held, and Fire all now sends it released now", async () => {
+    const { el } = await mount({ courses });
     grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
     await el.updateComplete;
-    return [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-round-hold]")];
-  }
-
-  /** Clicks the inner native checkbox: a real `click()` flips `checked` before `change`. */
-  async function toggleHold(el: TillTableOrderScreen, sw: HTMLElement): Promise<void> {
-    await (sw as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-    sw.shadowRoot!.querySelector<HTMLInputElement>("input")!.click();
-    await el.updateComplete;
-  }
-
-  it("renders a per-line hold toggle per round line, defaulting OFF", async () => {
-    const { el } = await mount({ courses });
-    // No round yet ⇒ no toggle.
     expect(el.shadowRoot!.querySelector("[data-round-hold]")).toBeNull();
-    const [hold] = await ringAndHolds(el);
-    // One switch for the one round line, OFF by default (a round line fires unless the waiter holds it).
-    expect(hold).not.toBeUndefined();
-    expect((hold as HTMLElement & { checked: boolean }).checked).toBe(false);
-  });
-
-  it("send-round sends an un-held line in a group released now (the default — the line fires on send)", async () => {
-    const { el } = await mount({ courses });
-    await ringAndHolds(el);
-    let captured: CustomEvent | undefined;
-    el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
-    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
-    expect(captured!.detail.lines).toEqual([{ menuItemId: "menu-item-cafe", quantity: "1" }]);
-    expect(captured!.detail.groups).toEqual([{ release: "fire", lineIndexes: [0] }]);
-  });
-
-  it("send-round sends a line the waiter held in a held group", async () => {
-    const { el } = await mount({ courses });
-    const [hold] = await ringAndHolds(el);
-    await toggleHold(el, hold!);
-    let captured: CustomEvent | undefined;
-    el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
-    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
     // The group, not the line, carries the hold.
-    expect(captured!.detail.lines).toEqual([{ menuItemId: "menu-item-cafe", quantity: "1" }]);
-    expect(captured!.detail.groups).toEqual([{ release: "hold", lineIndexes: [0] }]);
-  });
-
-  it("toggling hold off again sends the line in a group released now", async () => {
-    const { el } = await mount({ courses });
-    const [hold] = await ringAndHolds(el);
-    await toggleHold(el, hold!);
-    await toggleHold(el, hold!);
-    let captured: CustomEvent | undefined;
-    el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
-    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
-    expect(captured!.detail.groups).toEqual([{ release: "fire", lineIndexes: [0] }]);
+    const held = await submitDraft(el, "send-all");
+    expect(held!.detail.lines).toEqual([{ menuItemId: "menu-item-cafe", quantity: "1" }]);
+    expect(held!.detail.groups).toEqual([{ release: "hold", lineIndexes: [0] }]);
+    const fired = await submitDraft(el, "fire-all");
+    expect(fired!.detail.lines).toEqual([{ menuItemId: "menu-item-cafe", quantity: "1" }]);
+    expect(fired!.detail.groups).toEqual([{ release: "fire", lineIndexes: [0] }]);
   });
 
   describe("a round of two courses", () => {
@@ -671,37 +711,29 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
     }
 
-    function sendRound(el: TillTableOrderScreen): CustomEvent {
-      let captured: CustomEvent | undefined;
-      el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
-      el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
-      return captured!;
-    }
-
-    it("groups the lines by course in the venue's order: the earliest goes now, the next is held", async () => {
+    it("Send all holds one group per course, in the venue's order", async () => {
       const { el } = await mount({ courses, products: [cafe, pan] });
       await ringTwoCourses(el);
-      const sent = sendRound(el);
-      expect(sent.detail.lines).toEqual([
-        { menuItemId: "menu-item-cafe", quantity: "1" },
+      const sent = await submitDraft(el, "send-all");
+      expect(sent!.detail.lines).toEqual([
         { menuItemId: "menu-item-pan", quantity: "2" },
+        { menuItemId: "menu-item-cafe", quantity: "1" },
       ]);
-      expect(sent.detail.groups).toEqual([
-        { release: "fire", lineIndexes: [1] },
+      expect(sent!.detail.groups).toEqual([
         { release: "hold", lineIndexes: [0] },
+        { release: "hold", lineIndexes: [1] },
       ]);
     });
 
-    it("holds both groups when the waiter holds every line", async () => {
+    it("Fire all now fires both courses as one group, in the venue's order", async () => {
       const { el } = await mount({ courses, products: [cafe, pan] });
       await ringTwoCourses(el);
-      for (const hold of el.shadowRoot!.querySelectorAll<HTMLElement>("[data-round-hold]")) {
-        await toggleHold(el, hold);
-      }
-      expect(sendRound(el).detail.groups).toEqual([
-        { release: "hold", lineIndexes: [1] },
-        { release: "hold", lineIndexes: [0] },
+      const sent = await submitDraft(el, "fire-all");
+      expect(sent!.detail.lines).toEqual([
+        { menuItemId: "menu-item-pan", quantity: "2" },
+        { menuItemId: "menu-item-cafe", quantity: "1" },
       ]);
+      expect(sent!.detail.groups).toEqual([{ release: "fire", lineIndexes: [0, 1] }]);
     });
 
     it("groups a line by the course the waiter picked over its product's", async () => {
@@ -711,7 +743,406 @@ describe("till-table-order-screen", () => {
       picker.value = "entrantes";
       picker.dispatchEvent(new Event("change"));
       await el.updateComplete;
-      expect(sendRound(el).detail.groups).toEqual([{ release: "fire", lineIndexes: [0, 1] }]);
+      const sent = await submitDraft(el, "send-all");
+      expect(sent!.detail.groups).toEqual([{ release: "hold", lineIndexes: [0, 1] }]);
+    });
+  });
+
+  describe("the draft in sections, and its actions", () => {
+    const serviceCourses = [
+      // Listed out of display order, so a screen that keeps the list's order fails.
+      { id: "mains", name: "Mains", displayOrder: 2 },
+      { id: "drinks", name: "Drinks", displayOrder: 0 },
+      { id: "starters", name: "Starters", displayOrder: 1 },
+    ];
+    const dish = (id: string, name: string, courseId: string | null): TillProduct => ({
+      ...cafe,
+      id,
+      menuItemId: `offer-${id}`,
+      name,
+      customerName: { es: `${name} para el cliente` },
+      courseId,
+    });
+    const beer = dish("beer", "Beer", "drinks");
+    const croquetas = dish("croquetas", "Croquetas", "starters");
+    const steak = dish("steak", "Steak", "mains");
+    const bread = dish("bread", "Bread", null);
+    const menu = [beer, croquetas, steak, bread];
+
+    function heldGroup(id: string, position: number, summary: string): OrderGroup {
+      return { ...orderGroup(id, "held"), position, summary };
+    }
+    function firedGroup(id: string, position: number, summary: string): OrderGroup {
+      return { ...orderGroup(id, "fired"), position, summary };
+    }
+
+    async function ring(el: TillTableOrderScreen, ...rung: [TillProduct, string][]) {
+      for (const [product, quantity] of rung) grid(el).store.addProduct(product, quantity);
+      await el.updateComplete;
+    }
+
+    const sectionNames = (el: TillTableOrderScreen) =>
+      [...el.shadowRoot!.querySelectorAll("[data-draft-section]")].map((section) => ({
+        heading: section.querySelector(".draft-section-name")?.textContent?.trim() ?? null,
+        lines: [...section.querySelectorAll("[data-draft-select]")].map((toggle) =>
+          toggle.textContent!.replace(/[☑☐]/g, "").replace(/\s+/g, " ").trim(),
+        ),
+      }));
+
+    const actionKinds = (el: TillTableOrderScreen) =>
+      [...el.shadowRoot!.querySelectorAll("[data-draft-action]")].map((action) =>
+        action.getAttribute("data-draft-action"),
+      );
+
+    async function toggle(el: TillTableOrderScreen, name: string): Promise<void> {
+      draftToggle(el, name).click();
+      await el.updateComplete;
+    }
+
+    it("shows Beer, Croquetas and Steak in three sections in the venue's course order, a dish with no default in the first", async () => {
+      const { el } = await mount({ courses: serviceCourses, products: menu });
+      await ring(el, [steak, "1"], [beer, "1"], [bread, "1"], [croquetas, "1"]);
+      expect(sectionNames(el)).toEqual([
+        { heading: "Drinks", lines: ["Beer ×1", "Bread ×1"] },
+        { heading: "Starters", lines: ["Croquetas ×1"] },
+        { heading: "Mains", lines: ["Steak ×1"] },
+      ]);
+    });
+
+    it("moves a line to the section of the course the waiter picks", async () => {
+      const { el } = await mount({ courses: serviceCourses, products: menu });
+      await ring(el, [steak, "1"], [beer, "1"]);
+      const picker = el.shadowRoot!.querySelector<HTMLSelectElement>('[data-round-course="0"]')!;
+      picker.value = "drinks";
+      picker.dispatchEvent(new Event("change"));
+      await el.updateComplete;
+      expect(sectionNames(el)).toEqual([{ heading: "Drinks", lines: ["Steak ×1", "Beer ×1"] }]);
+    });
+
+    it("shows one section with no heading when the venue has no courses, and still lets a line be picked", async () => {
+      const { el } = await mount({ courses: [], products: menu });
+      await ring(el, [steak, "1"], [beer, "1"]);
+      expect(sectionNames(el)).toEqual([{ heading: null, lines: ["Steak ×1", "Beer ×1"] }]);
+      await toggle(el, "Beer");
+      expect(actionKinds(el)).toEqual(["send-selected", "fire-selected"]);
+    });
+
+    describe("actions show their scope before acting", () => {
+      it("offers Send all and Fire all now with nothing checked", async () => {
+        const { el } = await mount({ courses: serviceCourses, products: menu });
+        await ring(el, [beer, "2"], [steak, "1"]);
+        expect(actionKinds(el)).toEqual(["send-all", "fire-all"]);
+        expect(draftAction(el, "send-all")!.textContent).toContain(t("table.draft_send_all"));
+        expect(draftAction(el, "fire-all")!.textContent).toContain(t("table.draft_fire_all"));
+      });
+
+      it("offers Send selected and Fire selected now with two lines checked, and the toggles say which", async () => {
+        const { el } = await mount({ courses: serviceCourses, products: menu });
+        await ring(el, [beer, "2"], [croquetas, "1"], [steak, "1"]);
+        await toggle(el, "Beer");
+        await toggle(el, "Steak");
+        // Read from the native button, the element a screen reader announces as pressed or not.
+        const pressed = (name: string) => {
+          const button = draftToggle(el, name);
+          expect(button).toBeInstanceOf(HTMLButtonElement);
+          return button.getAttribute("aria-pressed");
+        };
+        expect(pressed("Beer")).toBe("true");
+        expect(pressed("Croquetas")).toBe("false");
+        expect(pressed("Steak")).toBe("true");
+        expect(actionKinds(el)).toEqual(["send-selected", "fire-selected"]);
+        expect(draftAction(el, "send-selected")!.textContent).toContain(
+          t("table.draft_send_selected"),
+        );
+        expect(draftAction(el, "fire-selected")!.textContent).toContain(
+          t("table.draft_fire_selected"),
+        );
+
+        await toggle(el, "Beer");
+        await toggle(el, "Steak");
+        expect(actionKinds(el)).toEqual(["send-all", "fire-all"]);
+      });
+
+      it("previews each action: the items fired now and the groups held", async () => {
+        const { el } = await mount({ courses: serviceCourses, products: menu });
+        await ring(el, [beer, "2"], [croquetas, "1"], [steak, "1"]);
+        expect(await openPreview(el, "send-all")).toContain("Hold: 3 groups.");
+        el.shadowRoot!.querySelector<HTMLElement>("[data-draft-dismiss]")!.click();
+        await el.updateComplete;
+        expect(await openPreview(el, "fire-all")).toContain("Fire now: 4 items.");
+        el.shadowRoot!.querySelector<HTMLElement>("[data-draft-dismiss]")!.click();
+        await el.updateComplete;
+
+        await toggle(el, "Beer");
+        await toggle(el, "Croquetas");
+        expect(await openPreview(el, "fire-selected")).toContain("Fire now: 3 items.");
+        el.shadowRoot!.querySelector<HTMLElement>("[data-draft-dismiss]")!.click();
+        await el.updateComplete;
+        expect(await openPreview(el, "send-selected")).toContain("Hold: 1 group.");
+      });
+
+      it("keeps Send selected and Fire selected now inside a phone-width screen", async () => {
+        const { el, host } = await mount({ courses: serviceCourses, products: menu });
+        host.style.width = "390px";
+        await ring(el, [beer, "1"], [steak, "1"]);
+        await toggle(el, "Beer");
+        const edge = el.getBoundingClientRect().right;
+        const actions = [...el.shadowRoot!.querySelectorAll("[data-draft-action]")];
+        expect(actions.length).toBe(2);
+        expect(
+          actions.filter((action) => action.getBoundingClientRect().right > edge + 0.5),
+        ).toEqual([]);
+      });
+
+      it("counts a weighed line as one item", async () => {
+        const { el } = await mount({ courses: serviceCourses, products: menu });
+        await ring(el, [jamon, "0.250"], [beer, "2"]);
+        expect(await openPreview(el, "fire-all")).toContain("Fire now: 3 items.");
+      });
+
+      it("sends nothing when the preview is dismissed", async () => {
+        const { el } = await mount({ courses: serviceCourses, products: menu });
+        await ring(el, [beer, "1"]);
+        let sent = false;
+        el.addEventListener("submit-draft", () => (sent = true));
+        await openPreview(el, "fire-all");
+        el.shadowRoot!.querySelector<HTMLElement>("[data-draft-dismiss]")!.click();
+        await el.updateComplete;
+        expect(previewDialog(el).open).toBe(false);
+        expect(sent).toBe(false);
+      });
+
+      it("confirming sends exactly the groups the preview named", async () => {
+        const { el } = await mount({ courses: serviceCourses, products: menu });
+        await ring(el, [steak, "1"], [beer, "2"], [croquetas, "1"]);
+
+        expect(await openPreview(el, "send-all")).toContain("Hold: 3 groups.");
+        const all = confirmPreview(el)!;
+        expect(all.detail.lines).toEqual([
+          { menuItemId: "offer-beer", quantity: "2" },
+          { menuItemId: "offer-croquetas", quantity: "1" },
+          { menuItemId: "offer-steak", quantity: "1" },
+        ]);
+        expect(all.detail.groups).toEqual([
+          { release: "hold", lineIndexes: [0] },
+          { release: "hold", lineIndexes: [1] },
+          { release: "hold", lineIndexes: [2] },
+        ]);
+        expect(all.detail.sent).toEqual([
+          grid(el).store.lines[1],
+          grid(el).store.lines[2],
+          grid(el).store.lines[0],
+        ]);
+        await el.updateComplete;
+        expect(previewDialog(el).open).toBe(false);
+
+        await toggle(el, "Beer");
+        await toggle(el, "Steak");
+        expect(await openPreview(el, "fire-selected")).toContain("Fire now: 3 items.");
+        const selected = confirmPreview(el)!;
+        expect(selected.detail.lines).toEqual([
+          { menuItemId: "offer-beer", quantity: "2" },
+          { menuItemId: "offer-steak", quantity: "1" },
+        ]);
+        expect(selected.detail.groups).toEqual([{ release: "fire", lineIndexes: [0, 1] }]);
+        expect(selected.detail.sent).toEqual([grid(el).store.lines[1], grid(el).store.lines[0]]);
+        expect(selected.detail.joinGroupId).toBeUndefined();
+      });
+    });
+
+    describe("who may fire the draft now", () => {
+      it.each(["waiter", "kitchen", "expo"] as const)(
+        "offers Fire all now and Fire selected now under fire_control '%s'",
+        async (fireControl) => {
+          const { el } = await mount({ courses: serviceCourses, products: menu, fireControl });
+          await ring(el, [beer, "1"], [steak, "1"]);
+          expect(draftAction(el, "fire-all")).not.toBeNull();
+          expect(draftAction(el, "fire-all")!.hasAttribute("disabled")).toBe(false);
+          await toggle(el, "Beer");
+          expect(draftAction(el, "fire-selected")).not.toBeNull();
+          expect(draftAction(el, "fire-selected")!.hasAttribute("disabled")).toBe(false);
+        },
+      );
+    });
+
+    describe("later additions", () => {
+      const held = [
+        firedGroup("g-drinks", 1, "1 × Beer"),
+        heldGroup("g-mains", 2, "2 × Steak, 1 × Fish"),
+        heldGroup("g-desserts", 3, "1 × Flan"),
+      ];
+      const destinations = (el: TillTableOrderScreen) =>
+        [...el.shadowRoot!.querySelectorAll("[data-destination]")].map((option) => ({
+          kind: option.getAttribute("data-destination"),
+          pressed: option.getAttribute("aria-pressed"),
+        }));
+      const heldChoices = (el: TillTableOrderScreen) =>
+        [...el.shadowRoot!.querySelectorAll("[data-held-group]")].map((option) => ({
+          id: option.getAttribute("data-held-group"),
+          text: option.textContent!.replace(/\s+/g, " ").trim(),
+          pressed: option.getAttribute("aria-pressed"),
+        }));
+      async function pickDestination(el: TillTableOrderScreen, kind: string): Promise<void> {
+        el.shadowRoot!.querySelector<HTMLElement>(`[data-destination="${kind}"]`)!.click();
+        await el.updateComplete;
+      }
+
+      it("offers a destination, defaulting to Fire now, for a draft begun after the party had a group", async () => {
+        const { el } = await mount({ courses: serviceCourses, products: menu, groups: held });
+        await ring(el, [croquetas, "2"]);
+        expect(destinations(el)).toEqual([
+          { kind: "fire-now", pressed: "true" },
+          { kind: "add-to-held", pressed: "false" },
+          { kind: "add-as-new", pressed: "false" },
+        ]);
+        expect(actionKinds(el)).toEqual(["submit"]);
+        expect(await openPreview(el, "submit")).toContain("Fire now: 2 items.");
+        const sent = confirmPreview(el)!;
+        expect(sent.detail.groups).toEqual([{ release: "fire", lineIndexes: [0] }]);
+        expect(sent.detail.joinGroupId).toBeUndefined();
+      });
+
+      it("lists the held groups by position and contents, the first as Next, and never a fired one", async () => {
+        const { el } = await mount({ courses: serviceCourses, products: menu, groups: held });
+        await ring(el, [croquetas, "1"]);
+        expect(el.shadowRoot!.querySelector("[data-held-picker]")).toBeNull();
+        await pickDestination(el, "add-to-held");
+        expect(heldChoices(el)).toEqual([
+          { id: "g-mains", text: "Next: 2 × Steak, 1 × Fish", pressed: "true" },
+          { id: "g-desserts", text: "Group 3: 1 × Flan", pressed: "false" },
+        ]);
+      });
+
+      it("adds the draft to the held group picked, without calling it a new group", async () => {
+        const { el } = await mount({ courses: serviceCourses, products: menu, groups: held });
+        await ring(el, [croquetas, "2"]);
+        await pickDestination(el, "add-to-held");
+        el.shadowRoot!.querySelector<HTMLElement>('[data-held-group="g-desserts"]')!.click();
+        await el.updateComplete;
+        const text = await openPreview(el, "submit");
+        expect(text).toContain("Add to held group “Group 3: 1 × Flan”: 2 items.");
+        expect(text).not.toContain("Hold:");
+        const sent = confirmPreview(el)!;
+        expect(sent.detail.groups).toEqual([{ release: "hold", lineIndexes: [0] }]);
+        expect(sent.detail.joinGroupId).toBe("g-desserts");
+      });
+
+      it("shows a held group's contents as written, even when they hold $& or $'", async () => {
+        const odd = "1 × Tapa $& $'";
+        const { el } = await mount({
+          courses: serviceCourses,
+          products: menu,
+          groups: [heldGroup("g-first", 2, odd), heldGroup("g-second", 3, odd)],
+        });
+        await ring(el, [croquetas, "1"]);
+        await pickDestination(el, "add-to-held");
+        expect(heldChoices(el).map((choice) => choice.text)).toEqual([
+          `Next: ${odd}`,
+          `Group 3: ${odd}`,
+        ]);
+        expect(await openPreview(el, "submit")).toContain(
+          `Add to held group “Next: ${odd}”: 1 item.`,
+        );
+      });
+
+      it("names the first held group in the preview as the picker does, as Next", async () => {
+        const { el } = await mount({ courses: serviceCourses, products: menu, groups: held });
+        await ring(el, [croquetas, "1"]);
+        await pickDestination(el, "add-to-held");
+        expect(await openPreview(el, "submit")).toContain(
+          "Add to held group “Next: 2 × Steak, 1 × Fish”: 1 item.",
+        );
+      });
+
+      it("Add as new group appends one held group, of the selection when there is one", async () => {
+        const { el } = await mount({ courses: serviceCourses, products: menu, groups: held });
+        await ring(el, [croquetas, "1"], [steak, "1"]);
+        await pickDestination(el, "add-as-new");
+        await toggle(el, "Steak");
+        expect(await openPreview(el, "submit")).toContain("Hold: 1 group.");
+        const sent = confirmPreview(el)!;
+        expect(sent.detail.lines).toEqual([{ menuItemId: "offer-steak", quantity: "1" }]);
+        expect(sent.detail.groups).toEqual([{ release: "hold", lineIndexes: [0] }]);
+        expect(sent.detail.joinGroupId).toBeUndefined();
+      });
+
+      it("keeps every destination, held group and action inside a phone-width screen", async () => {
+        const { el, host } = await mount({ courses: serviceCourses, products: menu, groups: held });
+        host.style.width = "390px";
+        await ring(el, [croquetas, "1"]);
+        await pickDestination(el, "add-to-held");
+        const edge = el.getBoundingClientRect().right;
+        const controls = [
+          ...el.shadowRoot!.querySelectorAll(
+            "[data-destination], [data-held-group], [data-draft-action]",
+          ),
+        ];
+        expect(controls.length).toBe(6);
+        expect(
+          controls.filter((control) => control.getBoundingClientRect().right > edge + 0.5),
+        ).toEqual([]);
+      });
+
+      it("gives each draft line, destination, held group and action, and the preview's buttons, a tap target of 44 px each way", async () => {
+        const { el } = await mount({ courses: serviceCourses, products: menu, groups: held });
+        await ring(el, [croquetas, "1"], [steak, "1"]);
+        await pickDestination(el, "add-to-held");
+        const controls = el.shadowRoot!.querySelectorAll(
+          "[data-draft-select], [data-destination], [data-held-group], [data-draft-action]",
+        );
+        expect(controls.length).toBe(8);
+        expect(underTapSize(controls)).toEqual([]);
+
+        await openPreview(el, "submit");
+        expect(
+          underTapSize(
+            el.shadowRoot!.querySelectorAll("[data-draft-confirm], [data-draft-dismiss]"),
+          ),
+        ).toEqual([]);
+      });
+
+      it("offers no Add to held group when every group of the party has fired", async () => {
+        const { el } = await mount({
+          courses: serviceCourses,
+          products: menu,
+          groups: [firedGroup("g-drinks", 1, "1 × Beer")],
+        });
+        await ring(el, [croquetas, "1"]);
+        expect(destinations(el).map((option) => option.kind)).toEqual(["fire-now", "add-as-new"]);
+      });
+
+      it("keeps the four actions for a draft begun before the party had a group, through its partial submissions", async () => {
+        const { el } = await mount({ courses: serviceCourses, products: menu });
+        await ring(el, [beer, "1"], [steak, "1"]);
+        el.groups = [firedGroup("g-drinks", 1, "1 × Beer")];
+        await el.updateComplete;
+        expect(el.shadowRoot!.querySelector("[data-destination]")).toBeNull();
+        expect(actionKinds(el)).toEqual(["send-all", "fire-all"]);
+
+        // Once the draft is empty, the next one is a later addition.
+        grid(el).store.removeLines(grid(el).store.lines);
+        await el.updateComplete;
+        await ring(el, [croquetas, "1"]);
+        expect(actionKinds(el)).toEqual(["submit"]);
+      });
+
+      it("starts a table's next draft afresh when its last one emptied while another table's draft was shown", async () => {
+        const { el } = await mount({ courses: serviceCourses, products: menu, orderId: "wo-4" });
+        await ring(el, [steak, "1"]);
+        const first = grid(el).store;
+        el.orderId = "wo-7";
+        await el.updateComplete;
+        // The app takes the sent lines out once the answer comes, whichever table is on screen.
+        first.removeLines(first.lines);
+        el.groups = [heldGroup("g-mains", 1, "1 × Steak")];
+        el.orderId = "wo-4";
+        await el.updateComplete;
+        expect(grid(el).store).toBe(first);
+
+        await ring(el, [croquetas, "1"]);
+
+        expect(actionKinds(el)).toEqual(["submit"]);
+      });
     });
   });
 
@@ -719,6 +1150,7 @@ describe("till-table-order-screen", () => {
   // Held still means the round-send already inserted its ticket item (fireLines does this for every
   // parent line, fired or held), so `state` is the fresh-insert "queued", not null.
   const heldLine: TabLine = {
+    id: "line-3",
     groupId: null,
     lineNo: 3,
     productId: "cafe",
@@ -735,40 +1167,479 @@ describe("till-table-order-screen", () => {
     parentProductId: null,
   };
 
-  it("shows a Fire <course> action per HELD course under fire_control='waiter' and emits fire-course", async () => {
-    const { el } = await mount({
-      lines: [heldLine],
-      courses,
-      fireControl: "waiter",
-      orderId: "wo-9",
+  describe("the party's groups in the Tab drawer", () => {
+    const at = "2026-09-27T10:00:00.000Z";
+    /** A dish line of this bill in group `groupId`, held (never sent) unless `fired`. */
+    function dishLine(
+      id: string,
+      lineNo: number,
+      name: string,
+      quantity: string,
+      groupId: string,
+      over: Partial<TabLine> = {},
+    ): TabLine {
+      return {
+        id,
+        groupId,
+        lineNo,
+        name,
+        productId: "cafe",
+        quantity,
+        unitPrecision: 0,
+        unitPriceGross: "10.00",
+        servedAt: null,
+        courseId: null,
+        sentAt: null,
+        firedAt: null,
+        state: "queued",
+        note: null,
+        listId: null,
+        menuItemId: null,
+        parentProductId: null,
+        ...over,
+      };
+    }
+    function group(
+      id: string,
+      position: number,
+      state: OrderGroup["state"],
+      lineIds: string[],
+      summary: string,
+    ): OrderGroup {
+      return { ...orderGroup(id, state), position, lineIds, summary };
+    }
+    const fired = { sentAt: at, firedAt: at };
+    const beer = dishLine("l-beer", 1, "Beer", "1.000", "g1", fired);
+    const salad = dishLine("l-salad", 2, "Salad", "1.000", "g2", fired);
+    const croquetas = dishLine("l-croq", 3, "Croquetas", "1.000", "g3");
+    const steak = dishLine("l-steak", 4, "Steak", "2.000", "g4");
+    const fish = dishLine("l-fish", 5, "Fish", "1.000", "g4");
+    const flan = dishLine("l-flan", 6, "Flan", "1.000", "g5");
+    const tabLines = [beer, salad, croquetas, steak, fish, flan];
+    // Listed out of position order; g4 also holds a Wine on another bill of the party.
+    const groups = [
+      group(
+        "g4",
+        4,
+        "held",
+        ["l-steak", "l-fish", "l-wine-elsewhere"],
+        "2 × Steak, 1 × Fish, 1 × Wine",
+      ),
+      group("g1", 1, "fired", ["l-beer"], "1 × Beer"),
+      group("g5", 5, "held", ["l-flan"], "1 × Flan"),
+      group("g2", 2, "fired", ["l-salad"], "1 × Salad"),
+      group("g3", 3, "held", ["l-croq"], "1 × Croquetas"),
+    ];
+
+    async function mountGroups(over: Partial<TillTableOrderScreen> = {}) {
+      const mounted = await mount({ lines: tabLines, groups, orderId: "wo-4", ...over });
+      await openDrawer(mounted.el);
+      return mounted;
+    }
+
+    const groupRows = (el: TillTableOrderScreen) => [
+      ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-group]"),
+    ];
+    const groupRow = (el: TillTableOrderScreen, id: string) =>
+      el.shadowRoot!.querySelector<HTMLElement>(`[data-group="${id}"]`)!;
+    const text = (node: Element) => node.textContent!.replace(/\s+/g, " ").trim();
+    const control = (el: TillTableOrderScreen, selector: string) =>
+      el.shadowRoot!.querySelector<HTMLElement & { disabled?: boolean }>(selector);
+
+    function capture(el: TillTableOrderScreen, type: string): CustomEvent[] {
+      const events: CustomEvent[] = [];
+      el.addEventListener(type, (event) => events.push(event as CustomEvent));
+      return events;
+    }
+
+    it("lists every group of the party in position order, the fired ones marked and without controls", async () => {
+      const { el } = await mountGroups();
+      const rows = groupRows(el);
+      expect(rows.map((row) => row.dataset.group)).toEqual(["g1", "g2", "g3", "g4", "g5"]);
+      expect(rows.map((row) => text(row.querySelector("[data-group-position]")!))).toEqual(
+        [1, 2, 3, 4, 5].map((n) => t("table.group_n").replace("{n}", String(n))),
+      );
+      expect(rows.map((row) => row.dataset.groupState)).toEqual([
+        "fired",
+        "fired",
+        "held",
+        "held",
+        "held",
+      ]);
+      for (const row of rows.slice(0, 2)) {
+        expect(text(row)).toContain(t("table.group_fired"));
+        expect(row.querySelector("wt-button")).toBeNull();
+      }
+      for (const row of rows.slice(2)) expect(text(row)).toContain(t("table.group_held"));
     });
-    await openDrawer(el);
-    const fire = el.shadowRoot!.querySelector<HTMLElement>('[data-fire-course="postres"]');
-    expect(fire).not.toBeNull();
-    expect(fire!.textContent).toContain(t("table.fire_course"));
-    expect(fire!.textContent).toContain("Postres");
 
-    let captured: CustomEvent | undefined;
-    el.addEventListener("fire-course", (e) => (captured = e as CustomEvent));
-    fire!.click();
-    expect(captured).toBeInstanceOf(CustomEvent);
-    expect(captured!.composed).toBe(true);
-    expect(captured!.bubbles).toBe(true);
-    expect(captured!.detail).toEqual({ orderId: "wo-9", courseId: "postres" });
-  });
+    it("sits above To serve in the drawer, and is absent while the party has no group", async () => {
+      const { el } = await mountGroups();
+      const list = el.shadowRoot!.querySelector("[data-groups]")!;
+      const pending = el.shadowRoot!.querySelector(".pending")!;
+      expect(list.compareDocumentPosition(pending) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-  it("shows NO waiter-fire action under fire_control='kitchen' (the station display owns the fire)", async () => {
-    const { el } = await mount({ lines: [heldLine], courses, fireControl: "kitchen" });
-    await openDrawer(el);
-    expect(el.shadowRoot!.querySelector("[data-fire-section]")).toBeNull();
-    expect(el.shadowRoot!.querySelector('[data-fire-course="postres"]')).toBeNull();
-  });
+      el.groups = [];
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-groups]")).toBeNull();
+    });
 
-  it("shows no waiter-fire action when nothing is held (a fired / null-course line)", async () => {
-    // pendingLine has a null course fired immediately ⇒ not held ⇒ no fire action.
-    const { el } = await mount({ lines: [pendingLine], courses, fireControl: "waiter" });
-    await openDrawer(el);
-    expect(el.shadowRoot!.querySelector("[data-fire-section]")).toBeNull();
+    it("shows each group's contents as the server wrote them, and as rows only this bill's lines", async () => {
+      const { el } = await mountGroups();
+      const mains = groupRow(el, "g4");
+      expect(text(mains.querySelector("[data-group-summary]")!)).toBe(
+        "2 × Steak, 1 × Fish, 1 × Wine",
+      );
+      expect(
+        [...mains.querySelectorAll("[data-group-line]")].map((row) => [
+          (row as HTMLElement).dataset.groupLine,
+          text(row.querySelector(".group-line-name")!),
+        ]),
+      ).toEqual([
+        ["l-steak", "Steak ×2"],
+        ["l-fish", "Fish ×1"],
+      ]);
+      expect(text(groupRow(el, "g1").querySelector("[data-group-line]")!)).toContain("Beer ×1");
+    });
+
+    it("moves a held group up or down among the held groups, sending the whole held order", async () => {
+      const { el } = await mountGroups();
+      const reorders = capture(el, "reorder-groups");
+      expect(control(el, '[data-group-up="g3"]')!.disabled).toBe(true);
+      expect(control(el, '[data-group-down="g5"]')!.disabled).toBe(true);
+      expect(control(el, '[data-group-up="g1"]')).toBeNull();
+
+      control(el, '[data-group-down="g3"]')!.click();
+      control(el, '[data-group-up="g5"]')!.click();
+
+      expect(reorders.map((event) => event.detail)).toEqual([
+        { heldGroupIds: ["g4", "g3", "g5"] },
+        { heldGroupIds: ["g3", "g5", "g4"] },
+      ]);
+      expect(reorders[0]!.bubbles && reorders[0]!.composed).toBe(true);
+    });
+
+    it("Move to… offers the other held groups and a new one, and moves the whole line", async () => {
+      const { el } = await mountGroups();
+      const moves = capture(el, "move-group-line");
+      const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+        "[data-move-dialog]",
+      )!;
+      expect(dialog.open).toBe(false);
+
+      control(el, '[data-move-line="l-steak"]')!.click();
+      await el.updateComplete;
+      expect(dialog.open).toBe(true);
+      expect(text(dialog)).toContain("Steak ×2");
+      const targets = [...dialog.querySelectorAll<HTMLElement>("[data-move-target]")];
+      expect(targets.map((target) => target.dataset.moveTarget)).toEqual(["g3", "g5", "new"]);
+      expect(text(targets[0]!)).toBe("Next: 1 × Croquetas");
+      expect(text(targets[1]!)).toBe("Group 5: 1 × Flan");
+      expect(text(targets[2]!)).toBe(t("table.move_new_group"));
+      targets[1]!.click();
+      await el.updateComplete;
+      expect(dialog.open).toBe(false);
+
+      control(el, '[data-move-line="l-fish"]')!.click();
+      await el.updateComplete;
+      dialog.querySelector<HTMLElement>('[data-move-target="new"]')!.click();
+      await el.updateComplete;
+
+      expect(moves.map((event) => event.detail)).toEqual([
+        { lineId: "l-steak", quantity: "2.000", target: { groupId: "g5" } },
+        { lineId: "l-fish", quantity: "1.000", target: "new" },
+      ]);
+      expect(moves[0]!.bubbles && moves[0]!.composed).toBe(true);
+    });
+
+    it("names a Move to… target's contents as written, even when they hold $& or $'", async () => {
+      const odd = "1 × Tapa $& $'";
+      const { el } = await mountGroups({
+        groups: groups.map((row) => (row.id === "g5" ? { ...row, summary: odd } : row)),
+      });
+      control(el, '[data-move-line="l-steak"]')!.click();
+      await el.updateComplete;
+      expect(text(control(el, '[data-move-target="g5"]')!)).toBe(`Group 5: ${odd}`);
+    });
+
+    it("sends no move when Move to… is dismissed", async () => {
+      const { el } = await mountGroups();
+      const moves = capture(el, "move-group-line");
+      control(el, '[data-move-line="l-flan"]')!.click();
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>("[data-move-dismiss]")!.click();
+      await el.updateComplete;
+      expect(
+        el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("[data-move-dialog]")!.open,
+      ).toBe(false);
+      expect(moves).toEqual([]);
+    });
+
+    it("offers Split quantity only on a held dish sold by the unit, of more than one, with no extras", async () => {
+      const weighed = dishLine("l-ham", 7, "Ham", "1.500", "g5", { unitPrecision: 3 });
+      const burger = dishLine("l-burger", 8, "Burger", "2.000", "g5");
+      const cheese: TabLine = {
+        ...dishLine("l-cheese", 9, "Cheese", "2.000", "g5"),
+        parentLineNo: 8,
+        unitPrecision: null,
+        state: null,
+      };
+      const firedPair = dishLine("l-wine", 10, "Wine", "2.000", "g1", fired);
+      const { el } = await mountGroups({
+        lines: [...tabLines, weighed, burger, cheese, firedPair],
+        groups: groups.map((each) =>
+          each.id === "g5"
+            ? { ...each, lineIds: ["l-flan", "l-ham", "l-burger"] }
+            : each.id === "g1"
+              ? { ...each, lineIds: ["l-beer", "l-wine"] }
+              : each,
+        ),
+      });
+      const splits = capture(el, "split-group-line");
+      const offered = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-split-group-line]")];
+      expect(offered.map((button) => button.dataset.splitGroupLine)).toEqual(["l-steak"]);
+
+      offered[0]!.click();
+
+      expect(splits.map((event) => event.detail)).toEqual([
+        { lineId: "l-steak", groupId: "g4", quantity: "2.000" },
+      ]);
+      expect(splits[0]!.bubbles && splits[0]!.composed).toBe(true);
+    });
+
+    it("disables every held group's controls while a group command is running, and enables them after", async () => {
+      const { el } = await mountGroups({ fireControl: "waiter", groupCommandBusy: true });
+      const controls = [
+        '[data-group-down="g3"]',
+        '[data-group-up="g4"]',
+        '[data-group-down="g4"]',
+        '[data-group-up="g5"]',
+        '[data-group-fire="g4"]',
+        '[data-move-line="l-steak"]',
+        '[data-split-group-line="l-steak"]',
+      ];
+      const disabled = () => controls.map((selector) => control(el, selector)!.disabled);
+      expect(disabled()).toEqual(controls.map(() => true));
+
+      el.groupCommandBusy = false;
+      await el.updateComplete;
+      expect(disabled()).toEqual(controls.map(() => false));
+    });
+
+    it("Fire on a held group asks first, naming its contents, and fires it once confirmed", async () => {
+      const { el } = await mountGroups({ fireControl: "waiter" });
+      const fires = capture(el, "fire-group");
+      const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+        "[data-fire-dialog]",
+      )!;
+      expect(
+        [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-group-fire]")].map(
+          (button) => button.dataset.groupFire,
+        ),
+      ).toEqual(["g3", "g4", "g5"]);
+
+      control(el, '[data-group-fire="g4"]')!.click();
+      await el.updateComplete;
+      expect(fires).toEqual([]);
+      expect(dialog.open).toBe(true);
+      expect(text(dialog.querySelector("[data-fire-summary]")!)).toBe(
+        t("table.fire_group_body").replace("{summary}", "2 × Steak, 1 × Fish, 1 × Wine"),
+      );
+
+      dialog.querySelector<HTMLElement>("[data-fire-confirm]")!.click();
+      await el.updateComplete;
+
+      expect(fires.map((event) => event.detail)).toEqual([{ groupId: "g4" }]);
+      expect(fires[0]!.bubbles && fires[0]!.composed).toBe(true);
+      expect(dialog.open).toBe(false);
+    });
+
+    /** The messages of errors thrown out of event handlers while `act` runs. */
+    function errorsDuring(act: () => void): string[] {
+      const errors: string[] = [];
+      const trap = (event: ErrorEvent) => {
+        errors.push(event.message);
+        event.preventDefault();
+      };
+      window.addEventListener("error", trap);
+      try {
+        act();
+      } finally {
+        window.removeEventListener("error", trap);
+      }
+      return errors;
+    }
+
+    it("fires once, and throws nothing, when Fire's confirmation is pressed twice in one turn", async () => {
+      const { el } = await mountGroups({ fireControl: "waiter" });
+      const fires = capture(el, "fire-group");
+      control(el, '[data-group-fire="g3"]')!.click();
+      await el.updateComplete;
+      const confirm = control(el, "[data-fire-confirm]")!;
+
+      const errors = errorsDuring(() => {
+        confirm.click();
+        confirm.click();
+      });
+
+      expect(errors).toEqual([]);
+      expect(fires.map((event) => event.detail)).toEqual([{ groupId: "g3" }]);
+    });
+
+    it("moves once, and throws nothing, when a Move to… target is pressed twice in one turn", async () => {
+      const { el } = await mountGroups();
+      const moves = capture(el, "move-group-line");
+      control(el, '[data-move-line="l-flan"]')!.click();
+      await el.updateComplete;
+      const target = control(el, '[data-move-target="new"]')!;
+
+      const errors = errorsDuring(() => {
+        target.click();
+        target.click();
+      });
+
+      expect(errors).toEqual([]);
+      expect(moves.map((event) => event.detail)).toEqual([
+        { lineId: "l-flan", quantity: "1.000", target: "new" },
+      ]);
+    });
+
+    it("fires nothing when the Fire confirmation is dismissed", async () => {
+      const { el } = await mountGroups({ fireControl: "waiter" });
+      const fires = capture(el, "fire-group");
+      control(el, '[data-group-fire="g3"]')!.click();
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>("[data-fire-dismiss]")!.click();
+      await el.updateComplete;
+      expect(
+        el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("[data-fire-dialog]")!.open,
+      ).toBe(false);
+      expect(fires).toEqual([]);
+    });
+
+    it.each(["kitchen", "expo"] as const)(
+      "offers no Fire on a held group under fire_control '%s', and still lets the waiter arrange them",
+      async (fireControl) => {
+        const { el } = await mountGroups({ fireControl });
+        expect(el.shadowRoot!.querySelector("[data-group-fire]")).toBeNull();
+        expect(control(el, '[data-group-down="g3"]')).not.toBeNull();
+        expect(control(el, '[data-move-line="l-steak"]')).not.toBeNull();
+        expect(control(el, '[data-split-group-line="l-steak"]')).not.toBeNull();
+      },
+    );
+
+    it("offers Fire on a held group of a no-route line with no course, and not once it has fired", async () => {
+      // The kitchen and the pass fire by course, so the table screen is the only place this group
+      // can be released from.
+      const noRoute = dishLine("l-water", 1, "Water", "1.000", "g-held", { state: null });
+      const { el } = await mountGroups({
+        lines: [noRoute],
+        groups: [group("g-held", 1, "held", ["l-water"], "1 × Water")],
+        fireControl: "waiter",
+      });
+      expect(control(el, '[data-group-fire="g-held"]')).not.toBeNull();
+
+      el.groups = [group("g-held", 1, "fired", ["l-water"], "1 × Water")];
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-group-fire]")).toBeNull();
+    });
+
+    it("offers no Fire course section and no tab-level Send all", async () => {
+      const { el } = await mountGroups({ fireControl: "waiter", courses });
+      expect(el.shadowRoot!.querySelector("[data-fire-section]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-fire-course]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-send-all]")).toBeNull();
+    });
+
+    it("closes an open Fire confirmation and Move to… picker when another order is shown", async () => {
+      const { el } = await mountGroups({ fireControl: "waiter" });
+      const dialog = (name: string) =>
+        el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(`[data-${name}-dialog]`)!;
+      control(el, '[data-group-fire="g3"]')!.click();
+      await el.updateComplete;
+      control(el, '[data-move-line="l-flan"]')!.click();
+      await el.updateComplete;
+      expect([dialog("fire").open, dialog("move").open]).toEqual([true, true]);
+
+      el.orderId = "wo-7";
+      await el.updateComplete;
+
+      expect([dialog("fire").open, dialog("move").open]).toEqual([false, false]);
+    });
+
+    it("offers Change and Cancel on a dish in a held group, which comes off the bill once confirmed", async () => {
+      const { el } = await mountGroups();
+      const voids = capture(el, "void-line");
+      expect(control(el, '[data-change-line="4"]')).not.toBeNull();
+      expect(control(el, '[data-cancel-line="3"]')).not.toBeNull();
+      expect(control(el, '[data-send-line="3"]')).toBeNull();
+
+      control(el, '[data-cancel-line="3"]')!.click();
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector<HTMLElement>(".cancel-confirm")!;
+      expect(text(dialog.querySelector(".cancel-body")!)).toContain(t("table.cancel_sent"));
+      dialog.querySelector<HTMLElement>("[data-cancel-confirm]")!.click();
+
+      expect(voids.map((event) => event.detail)).toEqual([{ lineNo: 3 }]);
+    });
+
+    it("offers Cancel on a dish in a held group that goes to no kitchen, saying it comes off the bill", async () => {
+      const water = dishLine("l-water", 7, "Water", "1.000", "g5", { state: null });
+      const { el } = await mountGroups({
+        lines: [...tabLines, water],
+        groups: groups.map((row) =>
+          row.id === "g5" ? { ...row, lineIds: [...row.lineIds, "l-water"] } : row,
+        ),
+      });
+      const voids = capture(el, "void-line");
+
+      control(el, '[data-cancel-line="7"]')!.click();
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector<HTMLElement>(".cancel-confirm")!;
+      expect(text(dialog.querySelector(".cancel-body")!)).toContain(t("table.cancel_sent"));
+      dialog.querySelector<HTMLElement>("[data-cancel-confirm]")!.click();
+
+      expect(voids.map((event) => event.detail)).toEqual([{ lineNo: 7 }]);
+    });
+
+    it("gives every held group's control, and its dialogs' buttons, a tap target of 44 px each way", async () => {
+      const { el } = await mountGroups({ fireControl: "waiter" });
+      const listed = el.shadowRoot!.querySelectorAll(
+        "[data-group-up], [data-group-down], [data-group-fire], [data-move-line], [data-split-group-line]",
+      );
+      expect(listed.length).toBe(14);
+      expect(underTapSize(listed)).toEqual([]);
+
+      control(el, '[data-group-fire="g4"]')!.click();
+      await el.updateComplete;
+      expect(
+        underTapSize(el.shadowRoot!.querySelectorAll("[data-fire-confirm], [data-fire-dismiss]")),
+      ).toEqual([]);
+      control(el, "[data-fire-dismiss]")!.click();
+      control(el, '[data-move-line="l-steak"]')!.click();
+      await el.updateComplete;
+      expect(
+        underTapSize(el.shadowRoot!.querySelectorAll("[data-move-target], [data-move-dismiss]")),
+      ).toEqual([]);
+    });
+
+    it("opens a held-group dish's Change with the revision the lines were read at", async () => {
+      const { el } = await mountGroups({ revision: 7 });
+      const changes = capture(el, "change-line");
+      control(el, '[data-change-line="3"]')!.click();
+      await el.updateComplete;
+      const picker = el.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker")!;
+      picker.dispatchEvent(
+        new CustomEvent("wt-modifier-confirm", {
+          detail: { note: "no salt" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      expect(changes.map((event) => event.detail)).toEqual([
+        { lineNo: 3, lineName: "Croquetas", patch: { note: "no salt" }, revision: 7 },
+      ]);
+    });
   });
 
   it("renders an editable course picker for a NOT-yet-fired tab line, bound to its current course", async () => {
@@ -851,6 +1722,7 @@ describe("till-table-order-screen", () => {
     // editable course picker, if the child guard were absent. A fixture with `productId: null` would
     // pass against a screen that still read a null product as "child", so it carries one on purpose.
     const childLine: TabLine = {
+      id: "line-2",
       groupId: null,
       lineNo: 2,
       productId: "cafe",
@@ -898,16 +1770,6 @@ describe("till-table-order-screen", () => {
       expect(parseFloat(child.fontSize)).toBeLessThan(parseFloat(dish.fontSize));
     });
 
-    it("hides Send all on a fully-fired tab that merely contains a modifier'd dish (child excluded)", async () => {
-      // pendingLine: firedAt set (fired). childLine: firedAt null, so it is the held-LOOKING row — but
-      // it is not held. HONEST about what this pins: on the real wire a child never has a ticket item,
-      // so `state === null` refuses it here whether or not the parent-marker guard is in place. The
-      // guard itself is pinned by the course-picker assertion in the test above, which flips.
-      const { el } = await mount({ lines: [pendingLine, childLine], courses });
-      await openDrawer(el);
-      expect(el.shadowRoot!.querySelector("[data-send-all]")).toBeNull();
-    });
-
     it("shows Send on a HELD line and emits send-lines { lineNos: [lineNo] }", async () => {
       // heldLine: firedAt null ⇒ HELD ⇒ the Send action (release it to the kitchen).
       const { el } = await mount({ lines: [heldLine], courses });
@@ -941,42 +1803,17 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector('[data-cancel-line="4"]')).toBeNull();
     });
 
-    it("offers no Send on a line in a HELD group, which is released by firing its group, while Send all stays", async () => {
+    it("offers no Send on a line in a HELD group, which is released by firing its group", async () => {
       const inHeldGroup: TabLine = { ...heldLine, groupId: "g-held" };
       const { el } = await mount({
         lines: [inHeldGroup],
         groups: [orderGroup("g-held", "held")],
         courses,
-      });
-      await openDrawer(el);
-      expect(el.shadowRoot!.querySelector('[data-send-line="3"]')).toBeNull();
-      expect(el.shadowRoot!.querySelector("[data-send-all]")).not.toBeNull();
-    });
-
-    it("offers Send all for a no-route line with no course in a HELD group, and not once its group has fired", async () => {
-      // A no-route dish in a held group: no ticket item (state null) and never sent. It offers no
-      // per-line Send and no Fire course button, so Send all is its only release.
-      const noRouteHeld: TabLine = {
-        ...heldLine,
-        lineNo: 5,
-        courseId: null,
-        state: null,
-        groupId: "g-held",
-      };
-      const { el } = await mount({
-        lines: [noRouteHeld],
-        groups: [orderGroup("g-held", "held")],
-        courses,
         fireControl: "waiter",
       });
       await openDrawer(el);
-      expect(el.shadowRoot!.querySelector('[data-send-line="5"]')).toBeNull();
-      expect(el.shadowRoot!.querySelector("[data-fire-course]")).toBeNull();
-      expect(el.shadowRoot!.querySelector("[data-send-all]")).not.toBeNull();
-
-      el.groups = [orderGroup("g-held", "fired")];
-      await el.updateComplete;
-      expect(el.shadowRoot!.querySelector("[data-send-all]")).toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-send-line="3"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-group-fire="g-held"]')).not.toBeNull();
     });
 
     it("offers Send on a recalled line whose group has fired", async () => {
@@ -992,37 +1829,6 @@ describe("till-table-order-screen", () => {
       });
       await openDrawer(el);
       expect(el.shadowRoot!.querySelector('[data-send-line="3"]')).not.toBeNull();
-    });
-
-    it("offers a tab-level Send all that emits send-lines { lineNos: [] } (release every held line)", async () => {
-      const { el } = await mount({ lines: [heldLine], courses });
-      await openDrawer(el);
-      const sendAll = el.shadowRoot!.querySelector<HTMLElement>("[data-send-all]");
-      expect(sendAll).not.toBeNull();
-
-      let captured: CustomEvent | undefined;
-      el.addEventListener("send-lines", (e) => (captured = e as CustomEvent));
-      sendAll!.click();
-      expect(captured!.detail).toEqual({ lineNos: [] });
-      expect(captured!.composed).toBe(true);
-      expect(captured!.bubbles).toBe(true);
-    });
-
-    it("hides Send all when no line is held (every line already fired)", async () => {
-      // pendingLine: firedAt set ⇒ nothing held ⇒ no send-all affordance.
-      const { el } = await mount({ lines: [pendingLine], courses });
-      await openDrawer(el);
-      expect(el.shadowRoot!.querySelector("[data-send-all]")).toBeNull();
-    });
-
-    it("hides Send all when the only firedAt-null line is a ticket-item-less parent (state null)", async () => {
-      // Symmetric with the per-line Send guard: a moved/merged or openTab-initial parent carries
-      // firedAt null but state null (no ticket item), so #anyHeld must NOT count it — Send-all would
-      // no-op on it. A real held line (state "queued") DOES still surface Send-all (test above).
-      const ticketlessParent: TabLine = { ...heldLine, lineNo: 4, state: null };
-      const { el } = await mount({ lines: [ticketlessParent], courses });
-      await openDrawer(el);
-      expect(el.shadowRoot!.querySelector("[data-send-all]")).toBeNull();
     });
 
     it("shows Recall on a FIRED, queued line and emits recall-lines { lineNos: [lineNo] }", async () => {
@@ -1152,6 +1958,7 @@ describe("till-table-order-screen", () => {
       items: [extraItem("p-cheese", "Queso", false), extraItem("p-bacon", "Bacon", true)],
     };
     const burgerLine: TabLine = {
+      id: "line-5",
       groupId: null,
       lineNo: 5,
       name: "Burger",

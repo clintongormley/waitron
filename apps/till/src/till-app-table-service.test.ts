@@ -77,6 +77,7 @@ const seatedTable: TableState = {
 const seatedFloor = () => ({ getTablesState: vi.fn().mockResolvedValue([seatedTable]) });
 
 const tabLine: TabLine = {
+  id: "line-1",
   groupId: null,
   lineNo: 1,
   productId: "cafe",
@@ -458,7 +459,7 @@ describe("till-app table ordering: a handheld's Order tab with no table opened",
 
   it.each([
     [
-      "send-round",
+      "submit-draft",
       {
         lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }],
         groups: [{ release: "fire", lineIndexes: [0] }],
@@ -467,7 +468,7 @@ describe("till-app table ordering: a handheld's Order tab with no table opened",
     ],
     ["serve-line", { lineNo: 1 }, "markLineServed"],
     ["set-line-course", { lineNo: 1, courseId: null }, "setLineCourse"],
-    ["send-lines", { lineNos: [] }, "sendLines"],
+    ["send-lines", { lineNos: [1] }, "sendLines"],
     ["recall-lines", { lineNos: [1] }, "recallLines"],
     ["void-line", { lineNo: 1 }, "voidLine"],
     [
@@ -500,7 +501,7 @@ describe("till-app table ordering: a handheld's Order tab with no table opened",
 describe("till-app table ordering: refused and failed table actions", () => {
   it.each([
     [
-      "send-round",
+      "submit-draft",
       {
         lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }],
         groups: [{ release: "fire", lineIndexes: [0] }],
@@ -515,7 +516,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
       "updateOrderLine",
     ],
     ["serve-line", { lineNo: 1 }, "markLineServed"],
-    ["send-lines", { lineNos: [] }, "sendLines"],
+    ["send-lines", { lineNos: [1] }, "sendLines"],
     ["transfer-lines", { toTabId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferLines"],
   ] as const)(
     "a %s refused because a card payment of the order is running says so",
@@ -604,7 +605,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
     const screen = await toTableOrder(el);
     expect(screen.lines).toEqual([tabLine]);
 
-    emit(screen, "send-round", {
+    emit(screen, "submit-draft", {
       lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }],
       groups: [{ release: "fire", lineIndexes: [0] }],
     });
@@ -644,6 +645,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     return offers;
   })();
   const burgerLine: TabLine = {
+    id: "line-5",
     groupId: null,
     lineNo: 5,
     name: "Burger",
@@ -2242,10 +2244,10 @@ describe("till-app table ordering: a menu published while a table is open", () =
     expect(api.listZoneOffers).toHaveBeenCalledTimes(1);
 
     const round = new WorkingOrderStore();
-    emit(screen, "send-round", {
+    emit(screen, "submit-draft", {
       lines: [{ menuItemId: "menu-item-sopa-0", quantity: "1" }],
       groups: [{ release: "fire", lineIndexes: [0] }],
-      round,
+      store: round,
       sent: [],
     });
     await flush(el);

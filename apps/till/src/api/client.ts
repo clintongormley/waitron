@@ -1129,6 +1129,9 @@ export interface TabLines {
  * marker (`null` ⇒ still to serve).
  */
 export interface TabLine {
+  /** The row's id, which a group move names. A dish in an order group is listed by it in
+   * {@link OrderGroup.lineIds}; a child extras row never is. */
+  id: string;
   /** The line's frozen STAFF label — the variant's name on a variant line, else the product's. Absent
    * only on a fixture that omits it, which falls back to the live catalogue name. */
   name?: string;
@@ -1772,10 +1775,9 @@ export class TillApi {
   }
 
   /**
-   * Fire SPECIFIC held lines of an open tab → `POST /api/working-orders/:orderId/lines/send`. An empty
-   * `lineNos` releases every held line of the tab outside a held group. NON-FISCAL; idempotent — an
-   * unknown or already-fired line matches nothing. Rejects `tab.not_open`, and `group.line_held` for a
-   * named line in a held group, which only firing its group releases.
+   * Fire SPECIFIC held lines of an open tab → `POST /api/working-orders/:orderId/lines/send`.
+   * NON-FISCAL; idempotent — an unknown or already-fired line matches nothing. Rejects `tab.not_open`,
+   * and `group.line_held` for a named line in a held group, which only firing its group releases.
    */
   async sendLines(orderId: string, lineNos: number[]): Promise<void> {
     await this.#request<void>(`/api/working-orders/${orderId}/lines/send`, "POST", { lineNos });

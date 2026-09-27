@@ -767,6 +767,31 @@ describe("readTabLines", () => {
     });
   });
 
+  it("names each line, a child extras line too, by its stored row id", async () => {
+    const { cfg, cafeId, aguaId, tableId, cafeOffer } = await setupVenue();
+    const extraListId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        {
+          menuItemId: cafeOffer,
+          quantity: "1",
+          extras: [{ listId: extraListId, picks: [{ productId: aguaId, quantity: 1 }] }],
+        },
+      ]),
+    );
+    const stored = await db
+      .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId))
+      .orderBy(workingOrderLines.lineNo);
+
+    const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+
+    expect(lines.map(({ lineNo, id }) => ({ lineNo, id }))).toEqual(stored);
+    expect(stored).toHaveLength(2);
+  });
+
   it("reads a note-less line's note as null", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
