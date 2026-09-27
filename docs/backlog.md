@@ -2278,7 +2278,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - The route that removes a line, `DELETE /api/working-orders/:id/lines/:lineNo`, takes no
       revision and no retry id, so a retried removal of part of a held dish removes another part
       and prints a second HOLD CANCELLED slip. The route predates Task 6.
-    - Whether a group has printed its HOLD ticket is recorded per group, not per station, so a
+    - Whether a group's HOLD ticket was queued is recorded per group, not per station, so a
       correction can print at a station whose printer never printed that group's HOLD ticket — a
       dish from another station joined to the group, say, or a printer switched back on after the
       HOLD ticket went out.

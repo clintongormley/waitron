@@ -3931,8 +3931,8 @@ describe("advance HOLD tickets (Task 6)", () => {
       expect(await noticesAt(v)).toEqual([]);
     });
 
-    // A fired group keeps the time its HOLD ticket printed; its work is corrected as fired work.
-    it("prints no HOLD correction for a line recalled from a fired group whose HOLD ticket printed", async () => {
+    // A fired group keeps the time its HOLD ticket was queued; its work is corrected as fired work.
+    it("prints no HOLD correction for a line recalled from a fired group whose HOLD ticket was queued", async () => {
       const v = await setupVenue();
       await printHeldWork(true);
       const s = await specExample(v);
@@ -4071,7 +4071,7 @@ describe("advance HOLD tickets (Task 6)", () => {
       ]);
     });
 
-    it("prints nothing for the same edits on a group whose HOLD ticket never printed", async () => {
+    it("prints nothing for the same edits on a group whose HOLD ticket was never queued", async () => {
       const v = await setupVenue();
       const tuna = await tunaWithDoneness(v);
       const { s, steak } = await rareSteaks(v);
@@ -4265,7 +4265,7 @@ describe("advance HOLD tickets (Task 6)", () => {
       ]);
     });
 
-    it("is the marker, not the setting: a group whose HOLD ticket printed still fires with a FIRE slip once the setting is off", async () => {
+    it("is the marker, not the setting: a group whose HOLD ticket was queued still fires with a FIRE slip once the setting is off", async () => {
       const v = await setupVenue();
       await printHeldWork(true);
       const s = await specExample(v);

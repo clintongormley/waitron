@@ -439,13 +439,14 @@ export function isStarted(state: TicketState | null): boolean {
  */
 export const firedQuantity = sql<number>`coalesce(${ticketItems.quantity}, ${workingOrderLines.quantity})`;
 
-/** One correction to work a station was sent: the quantity it corrects, and whether the cook had
+/** One correction to work a station has: the quantity it corrects, and whether the cook had
  *  started it. */
 export interface CorrectionItem {
   workingOrderLineId: string;
   stationId: string;
-  /** As thousandths: what the station was asked for on a recall or a whole void, and the part
-   *  removed on a partial void. */
+  /** As thousandths: what the station was asked for on a recall, a move, or a whole void or HOLD
+   *  cancellation; the part removed on a partial one; the quantity added or removed on a HOLD
+   *  CHANGED. */
   quantity: number;
   wasStarted: boolean;
   /** On a HOLD correction, the position of the group whose HOLD ticket it corrects. */
@@ -458,7 +459,7 @@ type CorrectionChange =
   | { kind: "MOVED"; movedFrom: { tableLabel: string | null; orderNumber: string } }
   | HoldCorrection;
 
-/** A change to held work a HOLD ticket printed: its quantity `added` or `removed`, or cancelled. */
+/** A change to held work on a queued HOLD ticket: quantity `added` or `removed`, or cancelled. */
 export type HoldCorrection =
   { kind: "HOLD CHANGED"; direction: "added" | "removed" } | { kind: "HOLD CANCELLED" };
 
@@ -493,7 +494,7 @@ export async function enqueueCorrectionSlips(
 }
 
 /**
- * Record a kitchen notice per item for a change to held work its HOLD ticket printed — `changed`
+ * Record a kitchen notice per item for a change to held work on a queued HOLD ticket — `changed`
  * with its direction, or `void` for a cancellation — then enqueue a HOLD correction slip per item,
  * naming its group, as {@link enqueueCorrectionSlips} enqueues a slip.
  */

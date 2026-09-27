@@ -83,7 +83,7 @@ export interface SubmittedGroups {
  * until {@link fireGroup}. Every line is credited to the operator. A group never matches another by
  * course; only `joinGroupId` adds to an existing one. A new held group prints its HOLD ticket where
  * the venue prints held work in advance ({@link printHoldTickets}); lines joining a group whose HOLD
- * ticket printed print `+N` for it.
+ * ticket was queued print `+N` for it.
  */
 export async function submitGroups(
   tx: Transaction,
@@ -387,7 +387,7 @@ async function releaseGroup(
     .select({ holdPrintedAt: orderGroups.holdPrintedAt })
     .from(orderGroups)
     .where(eq(orderGroups.id, groupId));
-  // The marker, not the setting: a group whose HOLD ticket printed is fired by a FIRE slip.
+  // The marker, not the setting: a group whose HOLD ticket was queued is fired by a FIRE slip.
   const mark = group!.holdPrintedAt === null ? undefined : "FIRE";
   for (const [orderId, lineIds] of byOrder) {
     await fireOrderLines(tx, cfg, orderId, lineIds, mark);
@@ -460,8 +460,8 @@ export async function reorderHeldGroups(
  * Move dish lines, or part of one, from held groups into another held group or a new one at the end
  * of the sequence. A line stays on its bill; a part moved splits the row. A group the move empties
  * is removed. What moved prints `-N` for a group it left, and `+N` for one it joined, whose HOLD
- * ticket printed; a new group prints its own HOLD ticket where the venue prints held work in advance
- * ({@link printHoldTickets}).
+ * ticket was queued; a new group prints its own HOLD ticket where the venue prints held work in
+ * advance ({@link printHoldTickets}).
  */
 export async function moveLinesToGroup(
   tx: Transaction,
@@ -814,7 +814,7 @@ export async function printedHeldGroups(
   return new Map(rows.map((row) => [row.id, row.position]));
 }
 
-/** Held work a HOLD ticket printed that changed: the thousandths changed, and the group's position. */
+/** Changed held work on a queued HOLD ticket: the thousandths changed, and the group's position. */
 export interface HeldChange {
   workingOrderId: string;
   workingOrderLineId: string;
@@ -866,7 +866,7 @@ async function heldItemsOf(
   return new Map(rows.map((row) => [row.workingOrderLineId, row.stationId]));
 }
 
-/** `+N` on the HOLD ticket of the group these dish lines just joined, where it printed one. */
+/** `+N` on the HOLD ticket of the group these dish lines just joined, where one was queued. */
 async function correctJoin(
   tx: Transaction,
   cfg: TillConfig,

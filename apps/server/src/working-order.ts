@@ -1897,8 +1897,8 @@ async function assertTabOpenOrPartyCurrent(
  * voids that part only, reducing the line, its extras children (which follow their dish) and its
  * ticket item's fired quantity. A line that had already fired records a VOID kitchen notice for what
  * was removed — marked started when the cook had started it — and gets a VOID correction slip where
- * its station has a printer. A held line of a group whose HOLD ticket printed records a `void` notice
- * for what was removed and gets a HOLD CANCELLED slip instead.
+ * its station has a printer. A held line of a group whose HOLD ticket was queued records a `void`
+ * notice for what was removed and gets a HOLD CANCELLED slip instead.
  *
  * Voiding stays open with changes to sent items switched off: it is then the only correction.
  */
@@ -3832,7 +3832,7 @@ async function assertProductsSellable(
  *   edit adds is priced now — a new line, and an extra added to a line. A note or an options answer
  *   carries no price. A kept extra is matched by list, product and quantity.
  * - A line with no ticket item, or a held or recalled one, is changed in place. A held one whose
- *   group printed a HOLD ticket also prints HOLD corrections for its change or its removal
+ *   group has a queued HOLD ticket also prints HOLD corrections for its change or its removal
  *   ({@link planHeldCorrections}).
  * - A line the kitchen has, not started: a change recalls the old item with a notice and slip and
  *   fires the changed line as a new item; a quantity rise leaves the item and adds the difference as
@@ -4281,11 +4281,11 @@ async function applyLineEdits(
 }
 
 /**
- * The HOLD corrections an edit makes to held lines of groups whose HOLD ticket printed: a removed
- * line is `cancelled`; a line whose quantity alone changes loses (`taken`) or gains (`given`) the
- * difference; any other change takes the line away as it read, at its old quantity, and gives it
- * back as it now reads, at its new one. `taken` and `cancelled` print before the line changes and
- * `given` after, as each slip reads the line as it stands.
+ * The HOLD corrections an edit makes to held lines of groups whose HOLD ticket was queued: a
+ * removed line is `cancelled`; a line whose quantity alone changes loses (`taken`) or gains
+ * (`given`) the difference; any other change takes the line away as it read, at its old quantity,
+ * and gives it back as it now reads, at its new one. `taken` and `cancelled` print before the line
+ * changes and `given` after, as each slip reads the line as it stands.
  */
 async function planHeldCorrections(
   tx: Transaction,
