@@ -1254,7 +1254,7 @@ describe("setup-app", () => {
   });
 
   it.each([
-    ["mirror.bundle_fetch_failed", 502, "reach the primary"],
+    ["mirror.bundle_fetch_failed", 502, "its reply couldn't be used"],
     ["setup.request_invalid", 400, "rejected the details"],
     ["setup.not_ready", 503, "isn't ready"],
     ["server.internal", 500, "Couldn't connect"],

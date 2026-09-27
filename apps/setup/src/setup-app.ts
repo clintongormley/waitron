@@ -122,7 +122,7 @@ const NOT_READY_MESSAGE = "The server isn't ready yet. Wait a moment, then try a
 
 const ADOPT_ERROR_MESSAGES: Record<string, string> = {
   "mirror.bundle_fetch_failed":
-    "Couldn't reach the primary server or the login was refused. Check the address and login, then try again.",
+    "Couldn't join the primary server: it couldn't be reached, it refused the login, or its reply couldn't be used. Check that the address is your restaurant's primary Waitron server and that the login is correct, then try again.",
   "setup.request_invalid":
     "The server rejected the details. Check the address and login, then try again.",
   "setup.not_ready": NOT_READY_MESSAGE,
