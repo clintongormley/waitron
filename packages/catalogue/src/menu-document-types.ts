@@ -203,6 +203,7 @@ export interface DeviceHomeLayout {
 export interface ServedMenu extends DeviceHomeLayout {
   id: string;
   name: string;
+  /** Whether this is the zone's default menu, which the till selects first. */
   isDefault: boolean;
   versionId: string;
   /** The live document's `root`. */

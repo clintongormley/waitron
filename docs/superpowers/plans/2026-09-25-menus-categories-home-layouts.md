@@ -2110,7 +2110,7 @@ Spec §5, plus §9's shortcut and deleted-layout behaviour, and D11, D12 and D14
       `/api/menu-state` returns the default with `layoutFallback: "layout_removed"`;
     - a selection naming a layout that was never published returns the default with
       `layout_unpublished`;
-    - the till shows a warning naming the old layout ("The home layout "Counter" was removed —
+    - the till shows a warning naming the old layout ("The home page layout "Counter" was removed —
       showing the default") ONLY for `layout_removed`, then shows the default. It switches silently
       for `layout_unpublished`, and when a manager chose a different layout;
     - a rename changes nothing (D14);

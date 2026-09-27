@@ -1849,7 +1849,7 @@ describe("the device's home layout", () => {
     api.menuState.mockResolvedValue(layoutState("v2", "layout-home", "layout_removed"));
     await poll(el);
     expect(layoutNotice(el)).toContain(
-      'The home layout "Counter" was removed — showing the default',
+      'The home page layout "Counter" was removed — showing the default',
     );
     expect(shortcuts(el)).toEqual([]);
 
@@ -1894,7 +1894,9 @@ describe("the device's home layout", () => {
     api.listZoneOffers.mockResolvedValue(laidOut("v3", [HOME], "layout-home", "layout_removed"));
     api.menuState.mockResolvedValue(layoutState("v3", "layout-home", "layout_removed"));
     await poll(el);
-    expect(layoutNotice(el)).toContain('The home layout "Bar" was removed — showing the default');
+    expect(layoutNotice(el)).toContain(
+      'The home page layout "Bar" was removed — showing the default',
+    );
     expect(shortcuts(el)).toEqual([]);
   });
 
@@ -1923,7 +1925,7 @@ describe("the device's home layout", () => {
     });
     await toCounter(el);
     expect(layoutNotice(el)).toContain(
-      "The home layout chosen for the Lunch menu was removed — showing the default",
+      "The home page layout chosen for the Lunch menu was removed — showing the default",
     );
     expect(shortcuts(el)).toEqual([]);
   });
@@ -1939,7 +1941,7 @@ describe("the device's home layout", () => {
     api.menuState.mockResolvedValue(layoutState("v1", "layout-home", "layout_removed"));
     await poll(el);
     expect(layoutNotice(el)).toContain(
-      "The home layout chosen for the Lunch menu was removed — showing the default",
+      "The home page layout chosen for the Lunch menu was removed — showing the default",
     );
   });
 
@@ -2009,7 +2011,9 @@ describe("the device's home layout", () => {
       }),
     );
     await toTable(el);
-    expect(layoutNotice(el)).toContain("The home layout chosen for the Lunch menu was removed");
+    expect(layoutNotice(el)).toContain(
+      "The home page layout chosen for the Lunch menu was removed",
+    );
   });
 
   it("warns once when the counter and the open table both lose the layout they showed", async () => {
@@ -2033,7 +2037,7 @@ describe("the device's home layout", () => {
     expect(api.listZoneOffers).toHaveBeenCalledWith("zone-dining", expect.anything());
     const lines = el.shadowRoot!.querySelectorAll("[data-layout-notice] [role='status']");
     expect([...lines].map((line) => line.textContent!.trim())).toEqual([
-      'The home layout "Counter" was removed — showing the default',
+      'The home page layout "Counter" was removed — showing the default',
     ]);
   });
 

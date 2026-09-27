@@ -403,9 +403,9 @@ export const en = {
   "menu.not_found": "Not found",
   "menu.sold_out": "Sold out",
   // `{name}` and `{menu}` are substituted at the call site.
-  "home_layout.removed": 'The home layout "{name}" was removed — showing the default',
+  "home_layout.removed": 'The home page layout "{name}" was removed — showing the default',
   "home_layout.removed_unnamed":
-    "The home layout chosen for the {menu} menu was removed — showing the default",
+    "The home page layout chosen for the {menu} menu was removed — showing the default",
   "home_layout.dismiss": "Dismiss",
   "service_zone.label": "Service area",
   "service_zone.refresh": "Refresh menus",

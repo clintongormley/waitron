@@ -542,14 +542,16 @@ caller of `verifySecret` still derives the key with the synchronous `scryptSync`
 password checks (`packages/identity/src/verify-pin.ts`, `verify-password.ts`), break-glass
 (`apps/server/src/break-glass.ts`), join requests (`apps/server/src/join-requests.ts`) and the print
 agent's token (`packages/printing/src/agent.ts`). `scryptSync` stops the whole event loop while it
-runs, inside a transaction or not. Two of the callers also run inside `withTransaction`, so every
-other write waits behind them: the print agent's token (`requireAgent` in
-`apps/server/src/print-agent-session.ts` calls `authenticateAgent` inside it) and a join request's
-status (`readJoinStatus`, called inside it in `apps/server/src/device-api.ts`). The PIN check
+runs, inside a transaction or not. At least three of the callers also run inside `withTransaction`,
+so every other write waits behind them: the print agent's token (`requireAgent` in
+`apps/server/src/print-agent-session.ts` calls `authenticateAgent` inside it), a join request's
+status (`readJoinStatus`, called inside it in `apps/server/src/device-api.ts`) and a print agent's
+join status (`readAgentJoinStatus`, called inside it in `apps/server/src/print-api.ts`). The PIN check
 (`verifyPersonCredential`, `packages/identity/src/credential.ts`) and the manager login
 (`packages/identity/src/manager-login.ts`) take a transaction too; their routes were not followed.
 **Next action:** switch every caller to `verifySecretAsync`, and move the check out of
-`withTransaction` wherever it sits inside one, the print agent's and join status's first.
+`withTransaction` wherever it sits inside one, the print agent's token and the two join-status
+checks first.
 
 **The till's removed-layout warning outlives a sign-out.** When the home layout a device's profile
 chose is removed, the till warns (naming the layout if it had shown it, otherwise the menu) until
@@ -563,10 +565,11 @@ owner agrees the warning belongs to the operator who was signed in.
 menu browser leaves a section out, from the structure and as a shortcut, when no product beneath it
 is among the offers it is given (`indexMenu`, `apps/till/src/widgets/menu-browser.ts`). That happens
 when every product in it is switched off on the menu (Task 9's choice, pinned by the D5 case in
-`apps/till/src/widgets/menu-browser.test.ts`), and, from reading only, while a diet filter is on and
-every product in it fails the filter, because the card grid hands the browser only the products the
-filter keeps (`apps/till/src/widgets/card-grid.ts`) — as a dish the filter rejects already
-disappears. A section whose products are all sold out keeps its place, and its tile is not greyed;
+`apps/till/src/widgets/menu-browser.test.ts`), and while a diet filter is on and every product in it
+fails the filter, because the card grid hands the browser only the products the filter keeps
+(`apps/till/src/widgets/card-grid.ts`; pinned by "hides a product the diet lens rejects, and a
+section it leaves with nothing" in `apps/till/src/widgets/card-grid.test.ts`) — as a dish the
+filter rejects already disappears. A section whose products are all sold out keeps its place, and its tile is not greyed;
 the products inside it are. Spec §5 wants buttons in predictable positions during service. **Next
 action:** the owner decides whether either kind of empty section should keep its place, for example
 greyed.

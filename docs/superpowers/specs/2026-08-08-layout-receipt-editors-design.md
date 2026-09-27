@@ -228,8 +228,10 @@ JSON: `layout` (the authored `definition`, or `DEFAULT_LAYOUT`) and `receipt` (a
   the `grid-template-columns: repeat(auto-fill, minmax(9rem,1fr))` with
   `repeat(${columns}, 1fr)` (via a style binding). This is the ONE widget touched.
   (2026-09-27: `product-grid.ts` was retired by the menus plan's Task 9; the `product-grid` card now
-  renders `till-menu-browser`, `apps/till/src/widgets/menu-browser.ts`, which takes the same
-  `columns`.)
+  renders `till-menu-browser`, `apps/till/src/widgets/menu-browser.ts`. The card's `columns` keeps
+  its name but not its meaning: the browser treats it as a maximum and shows fewer columns where a
+  tile would be narrower than its minimum width, and a card that sets none gets 3 on a handheld and
+  6 on a till (`apps/till/src/widgets/card-grid.ts`), where before it filled the width.)
 
 ---
 

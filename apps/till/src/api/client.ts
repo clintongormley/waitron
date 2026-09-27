@@ -339,10 +339,7 @@ export function sellingValuesOf(source: TillSellingValues): TillSellingValues {
   };
 }
 
-/**
- * One menu. In a zone-offers body `isDefault` flags the zone's default menu, which the till selects
- * first; in {@link ProductCatalogue.menus} it flags the location's default.
- */
+/** One menu. In {@link ProductCatalogue.menus} `isDefault` flags the location's default. */
 export type TillMenu = AccessibleCatalogue;
 
 /** The `GET /api/products` payload. The app builds its product grid from zone offers, not this route;

@@ -48,7 +48,7 @@ export function verifySecret(secret: string, stored: string): boolean {
 
 /**
  * {@link verifySecret}, deriving the key on libuv's thread pool, so the event loop keeps turning —
- * and a caller holding no lock blocks nobody — for the tens of milliseconds scrypt takes.
+ * and a caller holding no lock blocks nobody — while scrypt runs.
  */
 export async function verifySecretAsync(secret: string, stored: string): Promise<boolean> {
   const parsed = parseStored(stored);
