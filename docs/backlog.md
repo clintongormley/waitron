@@ -4133,12 +4133,9 @@ give it the lock check), with a receipt each; key the label lookup on own proper
 rewrite that wake-lock test; and rename those two show-floor test titles.
 
 **`quoteLiteral` quotes the way SQLite does — DONE (2026-09-27, C13; found 2026-09-23, identity's
-coverage review, PR #526).** `packages/shared/src/sql-literal.ts` used to double every backslash and
-wrap the value in PostgreSQL's `E'…'` form, which this engine refuses (`near "as": syntax error`). It
-now doubles the single quote only, and a backslash stays as itself.
-`packages/db/src/quote-literal.sqlite.test.ts` round-trips a backslash, a trailing backslash, a
-quote, a backslash before a quote and an empty value through a real `node:sqlite` `select`; the
-three backslash cases failed with that syntax error before the change.
+coverage review, PR #526).** `packages/shared/src/sql-literal.ts` used to double the backslashes in
+a value holding one and wrap it in PostgreSQL's `E'…'` form, which this engine refuses. It now
+doubles the single quote only, and a backslash stays as itself.
 
 **Two identity error descriptions say less than the code raises — OPEN (found 2026-09-23, identity's
 coverage review, PR #526).** In `packages/identity/src/errors.ts`, `account_action.invalid` reads

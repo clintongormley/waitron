@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { quoteLiteral } from "./sql-literal.js";
 
 describe("quoteLiteral", () => {
-  it("keeps a value with no quote or backslash in the plain form", () => {
+  it("wraps a value with no quote in single quotes, unchanged", () => {
     expect(quoteLiteral("abc123")).toBe("'abc123'");
   });
 
