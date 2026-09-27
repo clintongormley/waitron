@@ -47,7 +47,7 @@ import {
   type GroupLine,
   type GroupRelease,
 } from "./order-groups.js";
-import { JOBS_WAITING_MS } from "./alert-sources.js";
+import { JOBS_WAITING_MS } from "./print-job-trouble.js";
 import "./errors.js";
 
 // Review Focus 6: a kitchen ticket that failed or is stuck shows as a printing problem on the table

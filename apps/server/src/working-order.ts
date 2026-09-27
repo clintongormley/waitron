@@ -4845,8 +4845,8 @@ export interface StationQueueGroup {
   status: WorkingOrderStatus;
   /** Absent for a bill of no visit. */
   visit?: QueueVisit;
-  /** Present only when one of this bill's tickets for the station was not printed after two minutes,
-   *  or was given up on (`listPrintProblems`). */
+  /** Present only when one of this bill's tickets for the station was not printed after
+   *  `JOBS_WAITING_MS`, or was given up on (`listPrintProblems`). */
   printProblem?: true;
   items: StationQueueItem[];
   thresholds: StationThresholds;

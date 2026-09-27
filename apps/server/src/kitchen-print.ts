@@ -645,7 +645,7 @@ export async function reprintOrderTickets(
   await enqueueKitchenTickets(tx, cfg, orderId, fired, { reprint: true });
 }
 
-/** A kitchen ticket for a bill and station not printed after two minutes, or given up on. */
+/** A kitchen ticket for a bill and station not printed after `JOBS_WAITING_MS`, or given up on. */
 export interface PrintProblem {
   workingOrderId: string;
   stationId: string;

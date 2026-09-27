@@ -51,7 +51,7 @@ export type KitchenTicket = { reprint?: boolean } & (
     }
 );
 
-/** D14: `combined` prints identical entries as one `N x`, `separate` prints one entry per unit. */
+/** `combined` prints identical entries as one `N x`, `separate` prints one entry per unit. */
 export type KitchenTicketGrouping = "combined" | "separate";
 
 /** Entries with equal keys print identically, quantity aside: the note is compared as it prints. */
@@ -66,7 +66,7 @@ function entryKey(item: KitchenTicketItem): string {
 }
 
 /**
- * One ticket list laid out under D14. `combined` merges entries that would print identically into
+ * One ticket list laid out by grouping. `combined` merges entries that would print identically into
  * the first of them, adding the quantities. `separate` prints a whole-number quantity N as N entries
  * of 1. A `measured` entry, or a quantity that is not a whole number, is never merged and never
  * split: two 350 g portions are two pieces to cook, not one of 700 g nor 700 of 1 g.

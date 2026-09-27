@@ -33,8 +33,8 @@ function groupOrder(group: ExpoGroup): number {
  * The TILL EXPO / PASS display: a card per open order, its items grouped BY COURSE across stations,
  * or by group for a seated party's bill.
  *
- * A fully-away course DROPS OFF the board: the server keeps the order while any item is not away and
- * returns all its items, so the SCREEN filters `course.away`.
+ * A fully-away course or group DROPS OFF the board: the server keeps the order while any item is not
+ * away and returns all its items, so the SCREEN filters `course.away` and `group.away`.
  *
  * AGE. An expo order's items can span several stations, each with its own thresholds, so each item is
  * classified against its OWN `queuedAt`/`thresholds`. The server's `ExpoItem.band`/`ExpoOrder.worstBand`
@@ -210,8 +210,7 @@ export class TillExpoScreen extends LitElement {
 
       /* An item row — the dish, its station, and its kitchen state. A non-interactive box (the pass acts
          per course or group, not per item), themed like the station display's line cell. Column layout so the dish
-         row (.item-main) can carry an indented modifiers list beneath it (ordering modifiers, Task 14); a
-         modifier-free item has none, so it renders exactly as the single-row box did before. */
+         row (.item-main) can carry an indented modifiers list beneath it. */
       .item {
         display: flex;
         flex-direction: column;
@@ -226,15 +225,14 @@ export class TillExpoScreen extends LitElement {
         color: var(--wt-color-text);
       }
 
-      /* The dish row: name, station and state — the SAME row .item rendered as its whole content before
-         Task 14 added the modifiers list beneath it. */
+      /* The dish row: name, station and state. */
       .item-main {
         display: flex;
         align-items: center;
         gap: var(--wt-space-2);
       }
 
-      /* The dish's selected options (ordering modifiers, Task 14), indented beneath it — matching the
+      /* The dish's selected options, indented beneath it — matching the
          kitchen-print ticket's own "+ name" sub-text style (apps/server/src/kitchen-ticket.ts). */
       .item-modifiers {
         display: flex;
@@ -402,7 +400,7 @@ export class TillExpoScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: TillApi;
-  /** Decides who FIRES a held course; the ready/away levers are the pass's own regardless. */
+  /** Decides who FIRES a held course or group; the ready/away levers are the pass's own regardless. */
   @property() fireControl: FireControlMode = "waiter";
   /** Injectable clock for age classification; unset falls back to the {@link #clock}'s ticked time. */
   @property({ attribute: false }) now?: number;

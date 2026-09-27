@@ -644,7 +644,7 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) courses: TillCourse[] = [];
   /** The party's order groups, read with {@link lines}. */
   @property({ attribute: false }) groups: OrderGroup[] = [];
-  /** The party's kitchen tickets that did not print; they never hold up ordering. */
+  /** The party's kitchen tickets that have not printed; they never hold up ordering. */
   @property({ attribute: false }) printProblems: PrintProblem[] = [];
   /** The bills whose kitchen tickets were sent to print again since the table was opened: their
    * problems say so and offer no second Reprint. */

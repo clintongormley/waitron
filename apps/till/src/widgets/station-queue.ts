@@ -46,7 +46,7 @@ const COLUMNS: readonly TicketState[] = ["queued", "preparing", "ready"];
  *  order at the station. */
 export type BumpMode = "line" | "ticket";
 
-/** Which surface owns the per-course fire action (`locations.fire_control`): `kitchen` is this widget;
+/** Which surface owns the per-course and per-group fire action (`locations.fire_control`): `kitchen` is this widget;
  *  under `waiter` the table-order screen fires and under `expo` the expo screen does. */
 export type FireControlMode = "waiter" | "kitchen" | "expo";
 
@@ -193,8 +193,7 @@ export class TillStationQueue extends LitElement {
 
       /* A line cell — the tappable bump target (a plain button so it themes like the floor cards). A
          ready-tail cell renders the same box as a non-interactive span (.line.terminal). Column layout so
-         the dish row (.line-main) can carry an indented modifiers list beneath it (ordering modifiers,
-         Task 14); a modifier-free item has none, so it renders exactly as the single-row box did before. */
+         the dish row (.line-main) can carry an indented modifiers list beneath it. */
       .line {
         display: flex;
         flex-direction: column;
@@ -215,8 +214,7 @@ export class TillStationQueue extends LitElement {
         cursor: pointer;
       }
 
-      /* The dish row: qty× name (left) and the lens-specific secondary element (right) — the SAME row
-         .line rendered as its whole content before Task 14 added the modifiers list beneath it. */
+      /* The dish row: qty× name (left) and the lens-specific secondary element (right). */
       .line-main {
         display: flex;
         align-items: center;
@@ -225,7 +223,7 @@ export class TillStationQueue extends LitElement {
         width: 100%;
       }
 
-      /* The dish's selected options (ordering modifiers, Task 14), indented beneath it — matching the
+      /* The dish's selected options, indented beneath it — matching the
          kitchen-print ticket's own "+ name" sub-text style (apps/server/src/kitchen-ticket.ts). Muted
          text, never a tap target of its own (removing an option removes the whole dish). */
       .line-modifiers {
@@ -445,8 +443,8 @@ export class TillStationQueue extends LitElement {
         margin: 0 0 var(--wt-space-2);
       }
 
-      /* The per-order Mode-P handover action (.collect) and the per-course kitchen-fire action (.fire,
-         KDS-2 §5a) — full-width primary buttons at the foot of a rail card / course section. The
+      /* The per-order Mode-P handover action (.collect) and the per-course or per-group kitchen-fire
+         action (.fire, KDS-2 §5a) — full-width primary buttons at the foot of a rail card / course section. The
          wt-color-primary on wt-color-on-primary pairing is the SAME a11y-correct one wt-button's primary
          variant uses, so contrast holds in both themes. */
       .collect,
@@ -857,7 +855,7 @@ export class TillStationQueue extends LitElement {
     </div>`;
   }
 
-  /** Kanban columns cut across orders, so the orders whose tickets did not print are named above them. */
+  /** Kanban columns cut across orders, so the orders whose tickets have not printed are named above them. */
   #printProblems(): TemplateResult | typeof nothing {
     const troubled = this.groups.filter((group) => group.printProblem);
     if (troubled.length === 0) return nothing;

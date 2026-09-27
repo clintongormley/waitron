@@ -771,7 +771,7 @@ export class TillApp extends LitElement {
   @state() private tabRevision = 0;
   /** The order groups of {@link orderParty}, read with {@link tabLines}; empty with no party. */
   @state() private tabGroups: OrderGroup[] = [];
-  /** The kitchen tickets of {@link orderParty} that did not print, read with {@link tabGroups}. */
+  /** The kitchen tickets of {@link orderParty} that have not printed, read with {@link tabGroups}. */
   @state() private printProblems: PrintProblem[] = [];
   /** The bills whose kitchen tickets Reprint sent again since the table was opened. The server
    * reports a problem until the reprint prints, so the next opening of the table is the read that

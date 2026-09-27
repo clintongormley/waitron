@@ -245,7 +245,6 @@ export function awaitingCertAlertSource(holder: AwaitingCertStatus): AlertSource
 
 /** An agent quiet for longer than this has stopped checking in; printing may be stalled. */
 export const AGENT_SILENT_MS = 5 * 60 * 1000;
-export { JOBS_WAITING_MS } from "./print-job-trouble.js";
 
 /** The printing alert source. A drawer pulse never counts — only document jobs surface here. */
 export function printingAlertSource(): AlertSource {

@@ -963,8 +963,8 @@ export interface ExpoGroup {
  * One order on the cross-station expo/pass board, its items grouped BY COURSE, or by group for a
  * seated party's bill. `tableLabel` is omitted
  * when the order maps to no table. The server excludes abandoned, collected and FULLY-away orders; a
- * surviving order still carries its away items, so the SCREEN hides fully-away courses (via
- * {@link ExpoCourse.away}).
+ * surviving order still carries its away items, so the SCREEN hides fully-away courses and groups
+ * (via {@link ExpoCourse.away} and {@link ExpoGroup.away}).
  */
 export interface ExpoOrder {
   orderId: string;
@@ -1220,7 +1220,7 @@ export interface TabLine {
    * (`editSentLines`); "preparing"/"ready" is cancel-only. */
   state: TicketState | null;
   /** The order group the line is released with; null when it is in none, as on a bill with no party
-   * or for a line moved here from another party's bill. */
+   * or for a line moved or merged in from another party's bill, or from a bill with no party. */
   groupId: string | null;
   note: string | null;
   /** The extras list a CHILD row was picked from, which a prefilled pick goes back to; null on a
@@ -1650,8 +1650,8 @@ export class TillApi {
   }
 
   /**
-   * The cross-station expo/pass queue → `GET /api/expo/queue`: orders aggregated into courses ACROSS all
-   * stations, oldest first. See {@link ExpoOrder} for what the server excludes.
+   * The cross-station expo/pass queue → `GET /api/expo/queue`: orders aggregated into courses, or into
+   * groups for a seated party's bill, ACROSS all stations, oldest first. See {@link ExpoOrder} for what the server excludes.
    */
   getExpoQueue(): Promise<ExpoOrder[]> {
     return this.#request<ExpoOrder[]>("/api/expo/queue", "GET");
@@ -1801,7 +1801,7 @@ export class TillApi {
     return this.#request(`/api/visits/${visitId}/groups/${groupId}/away`, "POST", command);
   }
 
-  /** A party's kitchen tickets that did not print → `GET /api/visits/:visitId/print-problems`. */
+  /** A party's kitchen tickets that have not printed → `GET /api/visits/:visitId/print-problems`. */
   listPrintProblems(visitId: string): Promise<{ problems: PrintProblem[] }> {
     return this.#request(`/api/visits/${visitId}/print-problems`, "GET");
   }
