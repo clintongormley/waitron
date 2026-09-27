@@ -115,13 +115,13 @@ Ranked 2026-09-27, after the specs still in `docs/superpowers/specs/` were check
 (each spec's state is under *Reference → Specs still in the tree*). Each item is its own brainstorm →
 spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
-1. **Finish table service and paying a bill in parts** (A4, lane B). Eight of the service plan's
-   eighteen tasks have landed (0–6 and 14). Left: staff drafts (7, 8), marking dishes served (9), the
-   attention signals (10), applying a cancellation, comp or discount to an order (11) and its reports
-   (12), standalone ordering (13), several payments on the till (15 — the server side landed as #721
-   and nothing on the till calls it yet), counter handover (16) and a table that leaves without paying
-   (17). **Send asesor Q27–Q29 now:** Task 17 waits on Q28, how Task 11's discount appears on the
-   invoice on Q29, and printing the invoice before payment on Q27.
+1. **Finish table service and paying a bill in parts** (A4, lane B). Nine of the service plan's
+   eighteen tasks have landed (0–7 and 14). Left: drafts on the till (8), marking dishes served (9),
+   the attention signals (10), applying a cancellation, comp or discount to an order (11) and its
+   reports (12), standalone ordering (13), several payments on the till (15 — the server side landed
+   as #721 and nothing on the till calls it yet), counter handover (16) and a table that leaves
+   without paying (17). **Send asesor Q27–Q29 now:** Task 17 waits on Q28, how Task 11's discount
+   appears on the invoice on Q29, and printing the invoice before payment on Q27.
 
 2. **Staff cannot clock in or out** (A10). The working-time record is a legal duty from the first day
    the deli employs anyone, and only its library is built: nothing in `apps/` calls `clockIn` or
@@ -2201,13 +2201,14 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     is a later addition is decided when its first line is rung, so a line rung before the groups
     are read makes a first order; group summaries come from the server, so a weighed quantity
     shows a dot decimal in Spanish; the draft shows its lines both in the course sections and in
-    the basket (the draft rebuild is Task 7/8); the held-groups list shows each group's summary and
-    then its lines; group numbers are the server's positions, so the list can read "Group 1,
-    Group 3"; the preview gives counts, not contents; the screen's older small buttons are 32 px
-    tall, under the 44 px tap target (this branch's new ones are 44 px); per-line Send, Change and
-    Cancel have no guard against a second press while the first is running (the group commands
-    do); whether the floating language button covers the new draft bar at 390 px has not been
-    re-checked.
+    the basket (the draft rebuild is Task 7/8) _(Task 7, 2026-09-27: the server now keeps each
+    person's draft; the till does not use it yet, so this stays until Task 8)_; the held-groups
+    list shows each group's summary and then its lines; group numbers are the server's positions,
+    so the list can read "Group 1, Group 3"; the preview gives counts, not contents; the screen's
+    older small buttons are 32 px tall, under the 44 px tap target (this branch's new ones are
+    44 px); per-line Send, Change and Cancel have no guard against a second press while the first is
+    running (the group commands do); whether the floating language button covers the new draft bar
+    at 390 px has not been re-checked.
   - **Splitting a held line's quantity on the till takes one request per unit** (found on the
     Task 4 branch, 2026-09-27). Splitting a quantity of N sends N−1 move requests, each at the
     revision the one before it answered with (`#onSplitGroupLine`, `apps/till/src/till-app.ts`),
@@ -2353,6 +2354,77 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       result on the base commit `1d524b6e5`, so it predates Task 6.
       Fix: `readPrintProblems` drops a failed ticket whose bill has nothing a Reprint would print on
       that printer for that station.
+  - **Task 7 landed as #PR** (lane B item B7, 2026-09-27, main `MAIN`): the server keeps each
+    person's unsent order on a seated party, a "draft", so two waiters at one table each have their
+    own. Core migration `0031_order_drafts` adds `order_drafts` (one open draft per person and
+    party, by the partial unique index `order_drafts_open_owner_uq`), `order_draft_lines` and
+    `order_draft_events` (append-only: created, taken over, submitted, discarded). They are in core
+    beside `visits` and `order_groups`, the tables they belong with. The work is in
+    `apps/server/src/order-drafts.ts`, reached through `GET` and `PUT /api/visits/:id/drafts` and
+    `POST /api/visits/:id/drafts/:did/take-over` and `.../submit`; the person is always the one
+    signed in, never a name in the body. A save replaces the draft's lines and adds identical lines
+    together (same dish, variant, menu version, course, options, extras and note), except a line
+    marked not to merge or one whose quantity is not a whole number; it does not move the party's
+    revision. A line whose dish, variant, extras pick or chosen option is no longer offered reads
+    `unavailable`, worked out on each read and never stored. Submitting sends some or all of the
+    draft's lines as groups through the code the groups route uses (`placeGroups`, split out of
+    `submitGroups`), credits them to the draft's owner, and answers a retried submission from its
+    record. Merging parties carries each open draft's lines to the surviving party, into its owner's
+    draft there when there is one, and Finish table discards the party's open drafts, each with an
+    event. The table list gives each seated party its `unsentDrafts` (owner's name and line count).
+    New codes `draft.taken_over`, `draft.already_submitted`, `draft.out_of_date` (409) and
+    `draft.not_found` (404) have English and Spanish till text. Upgrade: a venue built on the merge
+    base `853c94f0a` with dev-setup's own `devSetup` (421 back-dated sales), plus two seated parties
+    each with a fired group, was migrated with the branch's migrations. Every existing table kept
+    its rows (a hash of each table's rows was unchanged, except the core migration log, which gained
+    its one row) and its `CREATE` text; the three tables, four indexes and the append-only trigger
+    pair on `order_draft_events` were added. On a copy, an update and a delete of an event row were
+    refused (errcode 1811) while an update of a draft went through. On another copy, a control that
+    deleted one row and rebuilt one table was caught: the row counts and hashes showed the lost row,
+    the `CREATE` text the rebuild.
+    Left open:
+    - A draft that moves to the other party in a merge, because its owner had none there, records
+      no history event: the event kinds have no "moved", so only its party and revision change.
+    - An options list a line leaves unanswered (one added to the dish after the draft was saved,
+      say) is refused at submission with `options.label_required`, but the draft does not flag the
+      line unavailable. Nor does it flag a fractional quantity of a dish sold whole, refused at
+      submission with `quantity.invalid`.
+    - A line whose course is switched off after it was saved is kept by later saves and refused at
+      submission with `course.not_found`; the draft does not flag it unavailable.
+    - A line saved against a menu version that is no longer live (the menu was republished) is
+      refused at submission with `menu.version_changed`, and the draft does not flag it unavailable
+      either. Whether the till re-saves such lines against the new version is Task 8's.
+    - A retried submission of a draft a merge moved or discarded is answered as the tests in
+      `apps/server/src/order-drafts.db.test.ts` pin: a draft discarded into its owner's draft on
+      the other party, and a moved draft asked on the party it was sent from (the party a request
+      prepared before the merge names), replay the first answer and write nothing; a moved draft
+      asked on the party it moved to is refused `draft.out_of_date`. The branch's first ruling
+      expected a refusal in every case; a replay was accepted because it writes nothing.
+    - Only the draft routes fold the ids in the path to lower case, the visit id
+      (`requireDraftVisitParam`, `apps/server/src/till-api.ts`) and the draft id; a draft
+      submission also folds its `joinGroupId` (`submitDraft`, `apps/server/src/order-drafts.ts`).
+      The other visit routes only check that the visit or group id in the path is an id, and the
+      group submission passes `joinGroupId` on as sent.
+    - The till does not read or save drafts yet: nothing in `apps/till` calls these routes, and its
+      `TableVisit` type does not declare `unsentDrafts`. Task 8.
+    - After a takeover into the taker's existing draft, or a merge that discards a draft, the
+      previous owner's next save of the old draft is answered `draft.not_found`, not
+      `draft.taken_over`.
+    - A save must carry `draftId` (null for a new draft) and `revision` even for a new draft, whose
+      revision is ignored; a detail for Task 8's client. A chosen option whose label id is not a
+      UUID is refused `options.invalid` at save, where pricing answers `options.label_required`.
+      An options or extras refusal at save names only the field, as pricing does (`labelId`,
+      `quantity`), not the line (`lines.<n>.…`) as the save's other line refusals do, so with
+      several lines the till cannot tell which line was refused.
+    - A merge that names no operator records the draft's owner as the one who discarded it; the one
+      product caller, the merge route, always names one.
+    - Three rulings made on the branch for the owner to confirm:
+      - a line whose quantity is not a whole number (a weighed portion) never adds into another
+        line, so two portions of fish stay two rows the kitchen can cook separately;
+      - Finish table discards the party's open drafts, keeping their lines, instead of refusing
+        while one is open;
+      - taking over someone's draft when you already have one on the party adds their lines to
+        yours (identical lines add together) and discards theirs, instead of refusing.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card
@@ -6766,7 +6838,7 @@ while it holds decisions still open.
 | [SQLite + Litestream topologies](superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md) | slices 1 and 2 built; 3 to 5 not started | *Afterwards* |
 | [Handheld and till hardware decisions](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md) | decisions; the reader dropdown exists | A6 (Slice 2) |
 | [Menus, sections and home layouts](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md) and its plan | built (#729 last); owner decisions still open | Track A (menus entries) |
-| [Service, ordering and billing](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) and its plan | 8 of 18 tasks landed | A4 |
+| [Service, ordering and billing](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) and its plan | 9 of 18 tasks landed | A4 |
 | [Sales classification](superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md) and its plan | built (#738 last); a code comment points at it | Track A (classification entries) |
 | [Bill payments](superpowers/specs/2026-09-26-bill-payments-design.md) | server built (#721); the till is service Task 15 | A4 |
 | [Print agent setup lockdown](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and its plan | first branch built (#732); two to go | A3 |

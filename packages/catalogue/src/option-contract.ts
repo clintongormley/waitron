@@ -114,6 +114,38 @@ export function parseOptionListInput(value: unknown): ParsedOptionList {
 }
 
 /**
+ * One sent answer, lower-cased for the same reason `id` above lower-cases an authored id.
+ * Deliberately NOT `id()`: a `labelId` that is no uuid at all stays `options.label_required` in
+ * {@link validateOptionSelections} — the list does not carry it — rather than becoming a shape fault.
+ */
+function optionAnswer(entry: unknown): OptionSelection {
+  const row = record(entry, "optionSelections");
+  keys(row, ["listId", "labelId"], "optionSelections");
+  const { listId, labelId } = row;
+  if (typeof listId !== "string") invalid("listId");
+  if (typeof labelId !== "string") invalid("labelId");
+  return { listId: listId.toLowerCase(), labelId: labelId.toLowerCase() };
+}
+
+/**
+ * A line's answers read without the lists they answer, for a caller that stores them unpriced:
+ * every refusal {@link validateOptionSelections} makes without consulting a list, with the same
+ * code and field — a shape fault, or two answers to one list. Every id must also be a UUID, since
+ * nothing here can find out that a list does not carry it.
+ */
+export function readOptionSelections(value: unknown): OptionSelection[] {
+  if (!Array.isArray(value)) invalid("optionSelections");
+  const answered = new Set<string>();
+  return value.map((entry) => {
+    const answer = optionAnswer(entry);
+    if (!isUuid(answer.listId) || answered.has(answer.listId)) invalid("listId");
+    if (!isUuid(answer.labelId)) invalid("labelId");
+    answered.add(answer.listId);
+    return answer;
+  });
+}
+
+/**
  * An active list is always "pick exactly one available label". The names are resolved separately
  * from this validated answer, which carries ids alone.
  *
@@ -130,17 +162,7 @@ export function validateOptionSelections(
   const offered = new Map(lists.filter((list) => list.active).map((list) => [list.id, list]));
   const answers = new Map<string, string>();
   for (const entry of value) {
-    const row = record(entry, "optionSelections");
-    keys(row, ["listId", "labelId"], "optionSelections");
-    const sentListId = row.listId;
-    const sentLabelId = row.labelId;
-    if (typeof sentListId !== "string") invalid("listId");
-    if (typeof sentLabelId !== "string") invalid("labelId");
-    // Lower-cased for the same reason `id` above lower-cases an authored id. Deliberately NOT
-    // `id()`: a `labelId` that is no uuid at all stays `options.label_required` — the list does not
-    // carry it — rather than becoming a shape fault.
-    const listId = sentListId.toLowerCase();
-    const labelId = sentLabelId.toLowerCase();
+    const { listId, labelId } = optionAnswer(entry);
     if (!offered.has(listId) || answers.has(listId)) invalid("listId");
     answers.set(listId, labelId);
   }

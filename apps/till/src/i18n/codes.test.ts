@@ -120,3 +120,28 @@ it("explains each refusal a bill paid in parts can give, in both languages, nami
     "Ya se ha cobrado dinero en esta cuenta. Cobra el resto desde los pagos de la cuenta. Para descartar o combinar la cuenta, devuelve primero ese dinero",
   );
 });
+
+it("explains each refusal of an unsent order, in both languages", () => {
+  expect(
+    ["draft.taken_over", "draft.already_submitted", "draft.out_of_date", "draft.not_found"].map(
+      (code) => [codeMessage(code, "en"), codeMessage(code, "es")],
+    ),
+  ).toEqual([
+    [
+      "This order belongs to someone else. Reload the table to see it",
+      "Este pedido es de otra persona. Vuelve a cargar la mesa para verlo",
+    ],
+    [
+      "This order has already been sent. Reload the table to see it",
+      "Este pedido ya se ha enviado. Vuelve a cargar la mesa para verlo",
+    ],
+    [
+      "This order has changed since you opened it. Reload it and make your change again",
+      "Este pedido ha cambiado desde que lo abriste. Vuelve a cargarlo y repite el cambio",
+    ],
+    [
+      "This unsent order is no longer on this table. Reload the table and try again",
+      "Este pedido sin enviar ya no está en esta mesa. Vuelve a cargar la mesa e inténtalo de nuevo",
+    ],
+  ]);
+});

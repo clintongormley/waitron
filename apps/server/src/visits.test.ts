@@ -842,6 +842,7 @@ describe("pay, then order dessert", () => {
       outstanding: "0.00",
       billCount: 1,
       tableIds: [mesa4],
+      unsentDrafts: [],
     });
   });
 

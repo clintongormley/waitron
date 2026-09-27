@@ -23,6 +23,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { openTab } from "./working-order.js";
 import { readReceivedByBill, refuseBillHoldingMoney } from "./bill-payments.js";
+import { discardVisitDrafts } from "./order-drafts.js";
 import "./errors.js";
 
 /** One bill of a visit's party, as the table screen lists it. */
@@ -266,6 +267,12 @@ async function readVisit(
   return visit;
 }
 
+export async function requireOpenVisit(tx: Transaction, visitId: string): Promise<void> {
+  if ((await readVisit(tx, visitId))?.state !== "open") {
+    throw new AppError("visit.not_open", { visitId });
+  }
+}
+
 /** Every bill of the visit's family, in the order they were opened. */
 export async function readVisitBills(tx: Transaction, visitId: string): Promise<VisitBill[]> {
   if ((await readVisit(tx, visitId)) === undefined) {
@@ -396,6 +403,8 @@ export async function finishTable(
       .where(inArray(workingOrders.id, empty));
   }
 
+  await discardVisitDrafts(tx, visitId, args.operatorId);
+
   const state = (await VENUE_SERVICE.readClearingWorkflow(tx)) ? "needs_clearing" : "closed";
   const at = nowIso();
   await tx
@@ -489,9 +498,7 @@ export async function runServiceCommand<R>(
     }
     return recorded.result.value as R;
   }
-  if (scope.kind === "visit" && (await readVisit(tx, scope.visitId))?.state !== "open") {
-    throw new AppError("visit.not_open", { visitId: scope.visitId });
-  }
+  if (scope.kind === "visit") await requireOpenVisit(tx, scope.visitId);
   const result = await run();
   await tx.insert(serviceCommands).values({
     scopeKind: scope.kind,

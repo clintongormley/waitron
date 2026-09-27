@@ -328,6 +328,21 @@ declare module "@waitron/shared" {
      * arguments. The id is the device's own, made fresh for each person's action.
      */
     "submission.id_reused": { submissionId: string };
+    /** The draft is owned by someone else; `ownerId` and `ownerName` say who owns it now. */
+    "draft.taken_over": { draftId: string; ownerId: string; ownerName: string };
+    /** The draft has been submitted, so no command can act on it. */
+    "draft.already_submitted": { draftId: string };
+    /**
+     * A draft command carried a draft revision another write has since moved past, or asked for a
+     * new draft where the person already has one open on the visit. `draftId` and `revision` are
+     * that draft's current ones; the caller reloads and acts again.
+     */
+    "draft.out_of_date": { draftId: string; revision: number };
+    /**
+     * The id names no draft that is open or submitted, or names one of another visit than the one
+     * the request is on. A discarded draft is not found.
+     */
+    "draft.not_found": { draftId: string };
     /**
      * A group command needs a HELD group — a join, a move into or out of one, a fire, a reorder —
      * and this one has fired. `groupId` is the group named or the group a moved line sits in.

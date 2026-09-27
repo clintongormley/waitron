@@ -15,7 +15,8 @@
       "membership_clearances",
       "bill_payment_lines",
       "order_amendments",
-      "order_group_events"
+      "order_group_events",
+      "order_draft_events"
     ]
   },
   {
