@@ -162,16 +162,19 @@ export class MyScheduleScreen extends LitElement {
     try {
       await this.#queries.watch("getStaffRoster", [], (value) => {
         this.roster = value;
+        if (!this.#colleagues().some((person) => person.personId === this.coverColleagueId)) {
+          this.coverColleagueId = "";
+        }
       });
       await this.#loadLists();
       this.loadFailed = false;
     } catch {
       this.loadFailed = true;
-      // Clear the loading state so the load-failed status shows rather than a stuck spinner.
-      this.shifts ??= [];
-      this.swaps ??= [];
-      this.absences ??= [];
     }
+  }
+
+  #colleagues(): RosterEntry[] {
+    return this.roster.filter((person) => person.personId !== this.myPersonId);
   }
 
   async #loadLists(): Promise<void> {
@@ -179,6 +182,7 @@ export class MyScheduleScreen extends LitElement {
     await Promise.all([
       this.#queries.watch("listMyShifts", [from, to], (value) => {
         this.shifts = value;
+        if (!value.some((shift) => shift.id === this.coverShiftId)) this.coverShiftId = "";
       }),
       this.#queries.watch("listMySwaps", [], (value) => {
         this.swaps = value;
@@ -261,8 +265,10 @@ export class MyScheduleScreen extends LitElement {
   }
 
   #body(): TemplateResult {
-    if (this.shifts === undefined) {
-      return html`<p class="muted" data-test="loading">${t("myschedule.loading")}</p>`;
+    if (this.shifts === undefined && !this.loadFailed) {
+      return html`<p class="muted" role="status" data-test="loading">
+        ${t("myschedule.loading")}
+      </p>`;
     }
     return html`
       ${
@@ -278,34 +284,42 @@ export class MyScheduleScreen extends LitElement {
   }
 
   #shiftsSection(): TemplateResult {
-    const shifts = this.shifts ?? [];
+    const shifts = this.shifts;
     return html`<section class="shifts" aria-labelledby="shifts-h">
       <h2 id="shifts-h">${t("myschedule.shifts_title")}</h2>
       ${
-        shifts.length === 0
-          ? html`<p class="muted" data-test="shifts-empty">${t("myschedule.shifts_empty")}</p>`
-          : html`<ul>
-              ${shifts.map(
-                (shift) =>
-                  html`<li data-test=${`shift-${shift.id}`}>
-                    <span>${this.#shiftLabel(shift)}</span>
-                  </li>`,
-              )}
-            </ul>`
+        shifts === undefined
+          ? nothing
+          : shifts.length === 0
+            ? html`<p class="muted" data-test="shifts-empty">${t("myschedule.shifts_empty")}</p>`
+            : html`<ul>
+                ${shifts.map(
+                  (shift) =>
+                    html`<li data-test=${`shift-${shift.id}`}>
+                      <span>${this.#shiftLabel(shift)}</span>
+                    </li>`,
+                )}
+              </ul>`
       }
     </section>`;
   }
 
   #swapsSection(): TemplateResult {
-    const swaps = this.swaps ?? [];
+    const swaps = this.swaps;
     return html`<section class="swaps" aria-labelledby="swaps-h">
       <h2 id="swaps-h">${t("myschedule.swaps_title")}</h2>
       ${
-        swaps.length === 0
-          ? html`<p class="muted" data-test="swaps-empty">${t("myschedule.swaps_empty")}</p>`
-          : html`<ul>
-              ${swaps.map((swap) => this.#swapRow(swap))}
-            </ul>`
+        swaps === undefined
+          ? this.loadFailed
+            ? nothing
+            : html`<p class="muted" role="status" data-test="swaps-loading">
+                ${t("myschedule.loading")}
+              </p>`
+          : swaps.length === 0
+            ? html`<p class="muted" data-test="swaps-empty">${t("myschedule.swaps_empty")}</p>`
+            : html`<ul>
+                ${swaps.map((swap) => this.#swapRow(swap))}
+              </ul>`
       }
     </section>`;
   }
@@ -339,7 +353,7 @@ export class MyScheduleScreen extends LitElement {
 
   #coverSection(): TemplateResult {
     const shifts = this.shifts ?? [];
-    const colleagues = this.roster.filter((r) => r.personId !== this.myPersonId);
+    const colleagues = this.#colleagues();
     return html`<section class="cover" aria-labelledby="cover-h">
       <h2 id="cover-h">${t("myschedule.cover_title")}</h2>
       <div class="form">
@@ -347,13 +361,16 @@ export class MyScheduleScreen extends LitElement {
           <label for="cover-shift">${t("myschedule.cover_shift")}</label>
           <select
             id="cover-shift"
+            name="cover-shift"
             data-test="cover-shift"
-            .value=${this.coverShiftId}
             @change=${(e: Event) => (this.coverShiftId = (e.target as HTMLSelectElement).value)}
           >
-            <option value="">—</option>
+            <option value="" .selected=${this.coverShiftId === ""}>—</option>
             ${shifts.map(
-              (shift) => html`<option value=${shift.id}>${this.#shiftLabel(shift)}</option>`,
+              (shift) =>
+                html`<option value=${shift.id} .selected=${shift.id === this.coverShiftId}>
+                  ${this.#shiftLabel(shift)}
+                </option>`,
             )}
           </select>
         </div>
@@ -361,13 +378,19 @@ export class MyScheduleScreen extends LitElement {
           <label for="cover-colleague">${t("myschedule.cover_colleague")}</label>
           <select
             id="cover-colleague"
+            name="cover-colleague"
             data-test="cover-colleague"
-            .value=${this.coverColleagueId}
             @change=${(e: Event) => (this.coverColleagueId = (e.target as HTMLSelectElement).value)}
           >
-            <option value="">—</option>
+            <option value="" .selected=${this.coverColleagueId === ""}>—</option>
             ${colleagues.map(
-              (person) => html`<option value=${person.personId}>${person.displayName}</option>`,
+              (person) =>
+                html`<option
+                  value=${person.personId}
+                  .selected=${person.personId === this.coverColleagueId}
+                >
+                  ${person.displayName}
+                </option>`,
             )}
           </select>
         </div>
@@ -383,24 +406,32 @@ export class MyScheduleScreen extends LitElement {
   }
 
   #absencesSection(): TemplateResult {
-    const absences = this.absences ?? [];
+    const absences = this.absences;
     return html`<section class="absences" aria-labelledby="absences-h">
       <h2 id="absences-h">${t("myschedule.absences_title")}</h2>
       ${
-        absences.length === 0
-          ? html`<p class="muted" data-test="absences-empty">${t("myschedule.absences_empty")}</p>`
-          : html`<ul>
-              ${absences.map(
-                (absence) =>
-                  html`<li data-test=${`absence-${absence.id}`}>
-                    <span
-                      >${absenceKindName(absence.kind)} ·
-                      ${absence.startsOn}–${absence.endsOn}</span
-                    >
-                    <span class="meta">${absenceStatusName(absence.status)}</span>
-                  </li>`,
-              )}
-            </ul>`
+        absences === undefined
+          ? this.loadFailed
+            ? nothing
+            : html`<p class="muted" role="status" data-test="absences-loading">
+                ${t("myschedule.loading")}
+              </p>`
+          : absences.length === 0
+            ? html`<p class="muted" data-test="absences-empty">
+                ${t("myschedule.absences_empty")}
+              </p>`
+            : html`<ul>
+                ${absences.map(
+                  (absence) =>
+                    html`<li data-test=${`absence-${absence.id}`}>
+                      <span
+                        >${absenceKindName(absence.kind)} ·
+                        ${absence.startsOn}–${absence.endsOn}</span
+                      >
+                      <span class="meta">${absenceStatusName(absence.status)}</span>
+                    </li>`,
+                )}
+              </ul>`
       }
     </section>`;
   }
@@ -413,18 +444,22 @@ export class MyScheduleScreen extends LitElement {
           <label for="abs-kind">${t("myschedule.absence_kind")}</label>
           <select
             id="abs-kind"
+            name="abs-kind"
             data-test="abs-kind"
-            .value=${this.absKind}
             @change=${(e: Event) =>
               (this.absKind = (e.target as HTMLSelectElement).value as AbsenceKind)}
           >
             ${ABSENCE_KINDS.map(
-              (kind) => html`<option value=${kind}>${absenceKindName(kind)}</option>`,
+              (kind) =>
+                html`<option value=${kind} .selected=${kind === this.absKind}>
+                  ${absenceKindName(kind)}
+                </option>`,
             )}
           </select>
         </div>
         <wt-input
           @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=abs-submit]"))}
+          name="abs-from"
           data-test="abs-from"
           type="date"
           .label=${t("myschedule.absence_from")}
@@ -436,6 +471,7 @@ export class MyScheduleScreen extends LitElement {
         ></wt-input>
         <wt-input
           @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=abs-submit]"))}
+          name="abs-to"
           data-test="abs-to"
           type="date"
           .label=${t("myschedule.absence_to")}
@@ -447,6 +483,7 @@ export class MyScheduleScreen extends LitElement {
         ></wt-input>
         <wt-input
           @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=abs-submit]"))}
+          name="abs-note"
           data-test="abs-note"
           .label=${t("myschedule.absence_note")}
           .value=${this.absNote}

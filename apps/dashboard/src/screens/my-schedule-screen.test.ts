@@ -247,14 +247,6 @@ describe("my-schedule-screen", () => {
     resolve();
   });
 
-  it("shows the load-failed banner when the initial load rejects, never a stuck spinner", async () => {
-    const api = stubApi({ listMyShifts: vi.fn().mockRejectedValue({ code: "server.internal" }) });
-    const { el } = await mount(api);
-    await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-test=load-failed]")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=loading]")).toBeNull();
-  });
-
   it("labels a role-less shift without a trailing role, and names an off-roster swap party by raw id", async () => {
     const roleless: MyShift = { ...shifts[0]!, id: "s-noRole", role: null };
     const fromStranger: MySwap = {
@@ -351,5 +343,189 @@ describe("my-schedule-screen — keyboard submit and partial loads", () => {
     expect(
       el.shadowRoot!.querySelectorAll("[data-test^=swap-], [data-test^=absence-]"),
     ).toHaveLength(0);
+    for (const list of ["swaps", "absences"]) {
+      const loading = el.shadowRoot!.querySelector(`[data-test=${list}-loading]`);
+      expect(loading?.textContent ?? "").toContain("Cargando…");
+      expect(loading?.getAttribute("role")).toBe("status");
+      expect(el.shadowRoot!.querySelector(`[data-test=${list}-empty]`)).toBeNull();
+    }
+  });
+
+  it("marks the page-level loading line as a status", async () => {
+    const { el } = await mount(
+      stubApi({ listMyShifts: vi.fn().mockReturnValue(new Promise(() => {})) }),
+    );
+    await flush(el);
+    const loading = el.shadowRoot!.querySelector("[data-test=loading]");
+    expect(loading?.textContent ?? "").toContain("Cargando…");
+    expect(loading?.getAttribute("role")).toBe("status");
+  });
+
+  it.each([
+    ["shifts", "listMyShifts", "loading"],
+    ["swaps", "listMySwaps", "swaps-loading"],
+    ["absences", "listMyAbsences", "absences-loading"],
+  ] as const)(
+    "says neither empty nor loading for %s when its read fails, beside the load-failed banner",
+    async (list, method, loadingId) => {
+      const { el } = await mount(
+        stubApi({ [method]: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
+      );
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=load-failed]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector(`[data-test=${list}-empty]`)).toBeNull();
+      expect(el.shadowRoot!.querySelector(`[data-test=${loadingId}]`)).toBeNull();
+    },
+  );
+
+  it("says neither empty nor loading for any list when the roster read fails", async () => {
+    const api = stubApi({
+      getStaffRoster: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    const { el } = await mount(api);
+    await flush(el);
+    expect(api.listMyShifts).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("[data-test=load-failed]")).not.toBeNull();
+    for (const [list, loadingId] of [
+      ["shifts", "loading"],
+      ["swaps", "swaps-loading"],
+      ["absences", "absences-loading"],
+    ]) {
+      expect(el.shadowRoot!.querySelector(`[data-test=${list}-empty]`)).toBeNull();
+      expect(el.shadowRoot!.querySelector(`[data-test=${loadingId}]`)).toBeNull();
+    }
+  });
+
+  it.each([
+    ["shifts", "listMyShifts", "listMySwaps", "loading", "shift-s1"],
+    ["swaps", "listMySwaps", "listMyAbsences", "swaps-loading", "swap-sw-offered"],
+    ["absences", "listMyAbsences", "listMySwaps", "absences-loading", "absence-a1"],
+  ] as const)(
+    "says nothing for %s while it is still open after a sibling read fails, then shows it when it arrives",
+    async (list, pendingMethod, failingMethod, loadingId, rowId) => {
+      const loaded = {
+        listMyShifts: shifts,
+        listMySwaps: [offeredToMe, requestedByMe],
+        listMyAbsences: absences,
+      };
+      let arrive: () => void = () => {};
+      const held = new Promise((r) => (arrive = () => r(loaded[pendingMethod])));
+      const { el } = await mount(
+        stubApi({
+          [pendingMethod]: vi.fn().mockReturnValue(held),
+          [failingMethod]: vi.fn().mockRejectedValue({ code: "server.internal" }),
+        }),
+      );
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=load-failed]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector(`[data-test=${list}-empty]`)).toBeNull();
+      expect(el.shadowRoot!.querySelector(`[data-test=${loadingId}]`)).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-test=loading]")).toBeNull();
+      arrive();
+      await flush(el);
+      expect(el.shadowRoot!.querySelector(`[data-test=${rowId}]`)).not.toBeNull();
+    },
+  );
+});
+
+describe("my-schedule-screen — dropdowns that keep their choice", () => {
+  function chosenText(el: MyScheduleScreen, dataTest: string): string | undefined {
+    const select = el.shadowRoot!.querySelector<HTMLSelectElement>(`[data-test=${dataTest}]`)!;
+    return select.selectedOptions[0]?.textContent?.trim();
+  }
+
+  it("keeps the chosen colleague when the roster refreshes in a different order", async () => {
+    const liveData = new LiveData();
+    const withCol2: RosterEntry[] = [...roster, { personId: "col2", displayName: "Segunda" }];
+    const api = Object.assign(stubApi({ getStaffRoster: vi.fn().mockResolvedValue(withCol2) }), {
+      liveData,
+    });
+    const { el } = await mount(api);
+    await flush(el);
+    selectValue(el, "cover-colleague", "col2");
+    await flush(el);
+    vi.mocked(api.getStaffRoster).mockResolvedValue([...withCol2].reverse());
+    liveData.invalidate([{ type: "persons", id: "col2" }]);
+    await vi.waitFor(() => expect(api.getStaffRoster).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(chosenText(el, "cover-colleague")).toBe("Segunda");
+  });
+
+  it("keeps the chosen shift when my shifts refresh in a different order", async () => {
+    const liveData = new LiveData();
+    const second: MyShift = { ...shifts[0]!, id: "s2", role: "cocina" };
+    const api = Object.assign(
+      stubApi({ listMyShifts: vi.fn().mockResolvedValue([shifts[0]!, second]) }),
+      { liveData },
+    );
+    const { el } = await mount(api);
+    await flush(el);
+    selectValue(el, "cover-shift", "s2");
+    await flush(el);
+    vi.mocked(api.listMyShifts).mockResolvedValue([second, shifts[0]!]);
+    liveData.invalidate([{ type: "shifts", id: "s2" }]);
+    await vi.waitFor(() => expect(api.listMyShifts).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(chosenText(el, "cover-shift")).toContain("cocina");
+  });
+
+  it.each([
+    {
+      field: "shift",
+      refresh: (api: DashboardApi) => {
+        vi.mocked(api.listMyShifts).mockResolvedValue([shifts[0]!]);
+        return { type: "shifts", id: "s2", read: api.listMyShifts };
+      },
+    },
+    {
+      field: "colleague",
+      refresh: (api: DashboardApi) => {
+        vi.mocked(api.getStaffRoster).mockResolvedValue(roster);
+        return { type: "persons", id: "col2", read: api.getStaffRoster };
+      },
+    },
+  ])(
+    "drops the chosen $field when a refresh removes it, so it cannot be submitted",
+    async ({ field, refresh }) => {
+      const liveData = new LiveData();
+      const api = Object.assign(
+        stubApi({
+          listMyShifts: vi.fn().mockResolvedValue([shifts[0]!, { ...shifts[0]!, id: "s2" }]),
+          getStaffRoster: vi
+            .fn()
+            .mockResolvedValue([...roster, { personId: "col2", displayName: "Segunda" }]),
+        }),
+        { liveData },
+      );
+      const { el } = await mount(api);
+      await flush(el);
+      selectValue(el, "cover-shift", "s2");
+      selectValue(el, "cover-colleague", "col2");
+      await flush(el);
+      const { type, id, read } = refresh(api);
+      liveData.invalidate([{ type, id }]);
+      await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+      await flush(el);
+      expect(chosenText(el, `cover-${field}`)).toBe("—");
+      const submit = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+        "[data-test=cover-submit]",
+      )!;
+      expect(submit.disabled).toBe(true);
+      submit.click();
+      await flush(el);
+      expect(api.requestSwap).not.toHaveBeenCalled();
+    },
+  );
+
+  it("opens the absence-kind dropdown on a kind that is not the first", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<MyScheduleScreen>("dashboard-my-schedule-screen", {
+      api,
+      myPersonId: "me",
+      absKind: "sick_leave",
+    } as Partial<MyScheduleScreen>);
+    await flush(el);
+    const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=abs-kind]")!;
+    expect(select.selectedOptions[0]?.value).toBe("sick_leave");
   });
 });

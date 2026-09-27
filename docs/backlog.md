@@ -2619,18 +2619,35 @@ ongoing overhaul listed at the top of Track A.
   `Intl.Collator`; lists in a lifecycle order say so; then migrate the screens, including the filter
   dropdowns `wt-data-table` draws in its toolbar, which are raw `<select>`s too. Fix
   `wt-data-table`'s locale-less `localeCompare` at the same time.
-- **Seven dropdowns still bind `.value` alone over options from a list, but none is known to show
-  the wrong choice today** (2026-09-14; read, not run). Each binds `.value` on a `<select>` whose
-  options come from a `.map(…)` and marks no option `selected` — the shape that showed "Downstairs
-  bar" on the till while it sold from Deli counter, fixed by #365 (CLAUDE.md §3). Found by a text scan, checked by
-  hand: `apps/dashboard/src/screens/my-schedule-screen.ts:351`, `:365`, `:417`,
-  `apps/dashboard/src/screens/units-screen.ts:486`, and
-  `apps/till/src/screens/till-schedule-screen.ts:353`, `:367`, `:420`. By reading, every one opens
-  on its first option — an empty placeholder or the first absence type — which is what that shape
-  shows anyway, so the fault stays hidden until one opens with another value. **Next action:** when
-  one of them is next touched, mark its options `.selected` the way
-  `apps/till/src/screens/till-counter-screen.ts` now does, with a test that opens it on a non-first
-  choice and reads `select.selectedOptions[0]`.
+- **The till's schedule screen still has the My Schedule defects the dashboard fixed.** Its three
+  dropdowns bind `.value` alone over options from a list (found 2026-09-14 by a text scan;
+  re-checked 2026-09-27): `apps/till/src/screens/till-schedule-screen.ts:356`, `:370`, `:423`. Each
+  binds `.value` on a `<select>` whose options come from a `.map(…)` and marks no option
+  `selected` — the shape that showed "Downstairs bar" on the till while it sold from Deli counter,
+  fixed by #365 (CLAUDE.md §3).
+  The dashboard's My Schedule screen had the same three, fixed by lane C's C16 (2026-09-27, branch
+  `fix/my-schedule-loading-and-selects`): there, run red first, a chosen shift or colleague showed
+  ANOTHER entry once its list refreshed in a different order, and the absence-type dropdown opened
+  on its first type when the screen's chosen type was another — a state the test reaches by setting
+  that choice before the first render; we know of no product path that opens it on another type
+  today (`absKind` defaults to `"holiday"`, the first of the fixed `ABSENCE_KINDS`). The till's
+  markup is the same, but it loads its lists in one `Promise.all` in `#reload` with no live refresh:
+  a list changes only after an action (`#act` reloads, e.g. accepting a swap) or when
+  `apps/till/src/till-app.ts` hands in a new `staff` array. We believe (by reading, not run) that a
+  reorder, or an entry inserted above the chosen one, on one of those shows the wrong choice: Lit
+  reuses options by position, and accepting a swap adds a shift. Units' list was fixed by #382. The
+  same screen also still carries the other defects the dashboard's branch fixed, found 2026-09-27 by
+  reading `apps/till/src/screens/till-schedule-screen.ts`, not run: its failed-load catch
+  (`:193`-`:198`) fills the lists with `[]`, so the sections say "none" (`:303`, `:324`, `:397`)
+  beside the load-failed alert (`:289`); its loading line (`:284`) has no `role="status"`; and a
+  chosen shift or colleague that a reload removes stays chosen (`coverShiftId` and
+  `coverColleagueId` are cleared only after a cover request is sent, `:228`-`:229`). **Next
+  action:** mark each till option `.selected` and drop the `<select>`'s `.value` binding, the way
+  `apps/dashboard/src/screens/my-schedule-screen.ts` and
+  `apps/till/src/screens/till-counter-screen.ts` do, with tests that reorder a list AND insert an
+  entry above the chosen one through the till's own triggers (not the dashboard's
+  `LiveData.invalidate`) and read `select.selectedOptions[0]`; and fix the three defects above the
+  way the dashboard screen now does.
 - **The counter till may start in a zone its service zone dropdown does not list** (found
   2026-09-14; read, not run). The till's zone list drops `table_tab` zones (`listDefaultZoneOffers`
   in `apps/server/src/till-api.ts`), but its starting zone comes from `resolveNewOrderZone`
@@ -4238,15 +4255,21 @@ reading unless marked run:
   dialog itself. `apps/dashboard/src/widgets/allergen-picker.ts` avoids the problem by mounting a
   fresh dialog for each open (`keyed`, about lines 215-222). Seen once under coverage load in a test
   (run); we believe a person cannot reopen it that fast; not tested.
-- `my-schedule-screen.ts` shows "no swaps" / "no absences" while those lists are still loading.
 - `content-languages.ts` sends `languages-closed` twice on Cancel (counted in a test run), and its
   Enter-to-save cannot fire because the dialog holds no text box.
 - `login-screen.ts` checks an account link's purpose with `=== null`, so a reply with no purpose at
   all would pass; the server always sends one.
+- My Schedule's load-failed banner (`loadFailed` in
+  `apps/dashboard/src/screens/my-schedule-screen.ts`) is cleared only after a first load that fully
+  succeeds (`#load`, the one `loadFailed = false`), and the screen offers no retry. So a list whose
+  first read failed but arrives on a later live refresh shows its rows under a banner that never
+  clears. Clearing the flag in each list's callback would bring back a stuck "Loading…" for a list
+  that did fail; the fix is failure state per list, plus a retry as `menus-screen.ts` offers. Found
+  2026-09-27 in review; by reading, not run.
 - Guards no test can reach, left uncovered rather than deleted: the canvas editor's "no draft" and
   "no selected card" guards, several `?? []` and `?? null` fallbacks in the printers, payments,
-  kitchen, backup, devices, printing-rules, my-schedule, profile, extra-list and option-list files,
-  and a handful in `dashboard-app.ts` and `login-screen.ts`. **Next action:** delete them with a
+  kitchen, backup, devices, printing-rules, profile, extra-list and option-list files, and a
+  handful in `dashboard-app.ts` and `login-screen.ts`. **Next action:** delete them with a
   receipt each, or leave them as defensive code by decision.
 
 **What the till shows the NEXT operator when the previous one's request answers late — CLOSED, no
