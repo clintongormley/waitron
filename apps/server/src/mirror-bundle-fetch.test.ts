@@ -147,6 +147,15 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
   });
 
+  it("maps a 200 with JSON null to mirror.bundle_fetch_failed", async () => {
+    const app = new Hono();
+    app.post("/management-api/mirror-bundle", (c: Context) => c.json(null));
+    const base = await startServer(app);
+
+    const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
+    expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
+  });
+
   it("maps a network failure (nothing listening) to mirror.bundle_fetch_failed", async () => {
     // A port just closed refuses the connect fast and deterministically.
     const app = new Hono();
