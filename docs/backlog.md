@@ -2210,7 +2210,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - "Ready" and "Fired N min ago" on the table screen are the plan's default, not an owner
       decision.
     - A fired group with nothing for the kitchen (bottled water, say) never reads Ready.
-    - `*** REPRINT ***` and `GROUP n` print in English.
+    - `*** REPRINT ***` and `GROUP n` print in English. _(Task 6, 2026-09-27: so do `*** HOLD ***`,
+      `*** FIRE ***`, `*** HOLD CHANGED ***` and `*** HOLD CANCELLED ***`.)_
     - A resend from the dashboard's Printers screen does not clear a table's printing problem, and
       there is no way to dismiss one: a detached or replaced printer leaves it showing.
     - A failed ticket on a pass printer (one ticket for the whole order) shows on the card of every
@@ -2231,6 +2232,25 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       still fires a party's held groups, is to be removed in a follow-up.
     - The setting's upgrade was measured with a throwaway script over the real migration folders
       and a database holding one settings row, not on a seeded venue.
+  - **Task 6 (advance HOLD tickets)**, on branch `feat/service-advance-hold-tickets`, not yet
+    landed: with the venue's "Print held groups in advance" setting on, a held group prints a
+    kitchen ticket marked HOLD; later changes to it print HOLD CHANGED or HOLD CANCELLED slips, each
+    also a notice on the station screen; firing it prints its ticket marked FIRE. Left open:
+    - A failed HOLD ticket or HOLD correction raises no "Printing problem": neither is recorded in
+      `kitchen_print_jobs`, which is all the printing problems read, because only fired work can be
+      reprinted to clear one. The FIRE ticket is recorded, as any fire ticket is.
+    - A printed HOLD ticket goes stale when held groups are reordered or a party is merged into
+      another, since both renumber `GROUP n` and later slips print the new number; and when the
+      party's table moves or is joined, since no MOVED slip goes out for held work (MOVED slips
+      cover fired work only, `readSentWork` in `apps/server/src/kitchen-print.ts`). Only the FIRE
+      ticket, which prints the group as it stands, can be relied on.
+    - The route that removes a line, `DELETE /api/working-orders/:id/lines/:lineNo`, takes no
+      revision and no retry id, so a retried removal of part of a held dish removes another part
+      and prints a second HOLD CANCELLED slip. The route predates Task 6.
+    - Whether a group has printed its HOLD ticket is recorded per group, not per station, so a
+      correction can print at a station whose printer never printed that group's HOLD ticket — a
+      dish from another station joined to the group, say, or a printer switched back on after the
+      HOLD ticket went out.
     - Every pass press moves the party's revision, so a waiter's open Tab drawer meets
       `visit.out_of_date` after it and reads again.
     - Setting up a venue from an imported configuration deletes every kitchen station, and the new
