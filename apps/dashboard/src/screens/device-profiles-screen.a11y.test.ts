@@ -1,4 +1,4 @@
-import { afterEach, describe, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./device-profiles-screen.js";
 import type { DeviceProfilesScreen } from "./device-profiles-screen.js";
@@ -29,6 +29,30 @@ function stubApi(): DashboardApi {
     updateDeviceProfile: vi.fn().mockResolvedValue(profiles[0]),
     deleteDeviceProfile: vi.fn().mockResolvedValue(undefined),
     listCanvases: vi.fn().mockResolvedValue(canvases),
+    // Lunch offers a choice; Bar's chosen layout was deleted.
+    getDeviceHomeLayouts: vi.fn().mockResolvedValue([
+      {
+        menuId: "m-bar",
+        menuName: "Bar",
+        layouts: [
+          { id: "l-bar", name: "Bar home", isDefault: true },
+          { id: "l-late", name: "Late", isDefault: false },
+        ],
+        selectedLayoutId: "l-old",
+        selectedRemoved: true,
+      },
+      {
+        menuId: "m-lunch",
+        menuName: "Lunch",
+        layouts: [
+          { id: "l-home", name: "Home", isDefault: true },
+          { id: "l-counter", name: "Counter", isDefault: false },
+        ],
+        selectedLayoutId: null,
+        selectedRemoved: false,
+      },
+    ]),
+    setDeviceHomeLayout: vi.fn().mockRejectedValue({ code: "menu.layout_not_found" }),
   } as unknown as DashboardApi;
 }
 
@@ -59,6 +83,35 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
     await flush(el);
+    await vi.waitFor(() => {
+      if (!el.shadowRoot!.querySelector('select[name="home-layout-m-lunch"]'))
+        throw new Error("layouts");
+    });
+    // The home page layout pickers are on screen, one holding a removed choice.
+    expect(el.shadowRoot!.querySelector("[data-test=home-reset-m-bar]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders a refused home page layout choice accessibly", async () => {
+    const { el, host } = await mountWidget<DeviceProfilesScreen>(
+      "dashboard-device-profiles-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await vi.waitFor(() => {
+      if (!el.shadowRoot!.querySelector('select[name="home-layout-m-lunch"]'))
+        throw new Error("layouts");
+    });
+    const select = el.shadowRoot!.querySelector<HTMLSelectElement>(
+      'select[name="home-layout-m-lunch"]',
+    )!;
+    select.value = "l-counter";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() => {
+      if (!el.shadowRoot!.querySelector("#home-error-m-lunch")) throw new Error("refusal");
+    });
     await expectNoA11yViolations(host);
   });
 });

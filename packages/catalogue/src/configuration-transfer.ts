@@ -20,5 +20,6 @@ export const CATALOGUE_CONFIGURATION_TRANSFER = {
     { name: "sections" },
     { name: "section_members" },
     { name: "menu_details" },
+    { name: "device_profile_home_layouts" },
   ],
 } as const;

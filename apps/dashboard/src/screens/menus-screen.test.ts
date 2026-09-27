@@ -13,7 +13,9 @@ import type {
   CatalogueSummary,
   CategorySummary,
   DashboardApi,
+  HomeLayout,
   LibrarySection,
+  MemberRef,
   MenuPreview,
   MenuPriceRow,
   MenuStatus,
@@ -23,6 +25,7 @@ import type {
   SectionMember,
   SectionUsages,
 } from "../api/client.js";
+import type { HomeLayoutEditor } from "../widgets/home-layout-editor.js";
 import type { MenuPricesTable } from "../widgets/menu-prices-table.js";
 import type { MemberListEditor } from "../widgets/member-list-editor.js";
 import type { MenuStructureTree } from "../widgets/menu-structure-tree.js";
@@ -38,6 +41,7 @@ beforeEach(() => history.replaceState(null, "", "/manage/menus"));
 const LUNCH_PATH = "/manage/menus/menu/menu-lunch/view/structure";
 const PRICES_PATH = "/manage/menus/menu/menu-lunch/view/prices";
 const PREVIEW_PATH = "/manage/menus/menu/menu-lunch/view/preview";
+const HOME_PATH = "/manage/menus/menu/menu-lunch/view/home";
 
 /** The three names read differently (docs/developers/products.md), so a surface showing the
  * customer-facing or kitchen name where the staff name belongs fails. */
@@ -279,6 +283,14 @@ const WRITES = [
   "updateMenuItem",
   "setMenuVariants",
   "publishMenu",
+  "createHomeLayout",
+  "duplicateHomeLayout",
+  "renameHomeLayout",
+  "deleteHomeLayout",
+  "setDefaultHomeLayout",
+  "addHomeTile",
+  "removeHomeTile",
+  "moveHomeTile",
 ] as const;
 
 const PUBLISHED_AT = "2026-09-26T10:15:00.000Z";
@@ -364,6 +376,36 @@ function dinnerPreview(): MenuPreview {
   };
 }
 
+/** Lunch's home page: Home, its default, holds Burger, the Drinks section and Chips, which is not
+ * on Lunch; Counter holds Lemonade. */
+function homeLayouts(): HomeLayout[] {
+  const tile = (memberId: string, position: number, ref: MemberRef, name: string) => ({
+    memberId,
+    position,
+    ref,
+    name,
+    reachable: memberId !== "t-chips",
+  });
+  return [
+    {
+      id: "l-home",
+      name: "Home",
+      isDefault: true,
+      tiles: [
+        tile("t-burger", 0, { kind: "product", productId: "p-burger" }, "Burger"),
+        tile("t-drinks", 1, { kind: "section", sectionId: "s-drinks" }, "Drinks"),
+        tile("t-chips", 2, { kind: "product", productId: "p-chips" }, "Chips"),
+      ],
+    },
+    {
+      id: "l-counter",
+      name: "Counter",
+      isDefault: false,
+      tiles: [tile("t-lemonade", 0, { kind: "product", productId: "p-lemonade" }, "Lemonade")],
+    },
+  ];
+}
+
 /** A menu's top level the fake keeps, so a move is visible in what the next read answers. */
 function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
   let root = lunchNodes();
@@ -420,6 +462,24 @@ function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
       id === "menu-lunch" ? lunchPreview() : dinnerPreview(),
     ),
     publishMenu: vi.fn().mockResolvedValue({ versionId: "v-lunch-3", number: 3 }),
+    listHomeLayouts: vi.fn(async (id: string) => (id === "menu-lunch" ? homeLayouts() : [])),
+    createHomeLayout: vi.fn().mockResolvedValue({ id: "l-new" }),
+    duplicateHomeLayout: vi.fn().mockResolvedValue({ id: "l-copy" }),
+    renameHomeLayout: vi.fn().mockResolvedValue(undefined),
+    deleteHomeLayout: vi.fn().mockResolvedValue(undefined),
+    setDefaultHomeLayout: vi.fn().mockResolvedValue(undefined),
+    addHomeTile: vi.fn().mockResolvedValue(productMember("t-new", 3, "p-lager")),
+    removeHomeTile: vi.fn().mockResolvedValue(undefined),
+    moveHomeTile: vi.fn(async (_layout: string, memberId: string, to: number) => {
+      const ids = homeLayouts()[0]!.tiles.map((tile) => tile.memberId);
+      ids.splice(ids.indexOf(memberId), 1);
+      ids.splice(to, 0, memberId);
+      return ids.map((id, position) => ({
+        id,
+        position,
+        ref: homeLayouts()[0]!.tiles.find((tile) => tile.memberId === id)!.ref,
+      }));
+    }),
     ...overrides,
   };
   return client as unknown as DashboardApi & {
@@ -579,7 +639,7 @@ it("lists the menus and opens one, recording the menu and its tab in the address
   await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Lunch Menu"));
   const tabs = q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!;
   expect(tabs.value).toBe("structure");
-  expect(tabs.items.map((item) => item.key)).toEqual(["structure", "prices", "preview"]);
+  expect(tabs.items.map((item) => item.key)).toEqual(["structure", "prices", "home", "preview"]);
   history.back();
   await vi.waitFor(() => expect(location.pathname).toBe("/manage/menus"));
   await vi.waitFor(() => expect(text(q(el, "h1"))).toBe(t("menus.title")));
@@ -3058,7 +3118,7 @@ describe("publishing", () => {
     expect(client.getMenuPreview).toHaveBeenCalledWith("menu-lunch");
     expect(text(inPanel(el, "live"))).toBe(`Version 2, published ${formatIsoMinute(PUBLISHED_AT)}`);
     expect(text(inPanel(el, "warnings"))).toBe(
-      "The shortcut to Lager is left out of Home: it is no longer on this menu.",
+      "The shortcut to Lager is left out of Home: it is not offered on this menu.",
     );
     const reads = client.getMenuPreview.mock.calls.length;
     await chooseTab(el, "structure");
@@ -3407,5 +3467,560 @@ describe("publishing", () => {
     inPanel(el, "preview-retry")!.click();
     await vi.waitFor(() => expect(inPanel(el, "changes")).not.toBeNull());
     expect(inPanel(el, "preview-error")).toBeNull();
+  });
+});
+
+describe("home page", () => {
+  function homeEditor(el: MenusScreen): HomeLayoutEditor {
+    return q<HomeLayoutEditor>(el, "dashboard-home-layout-editor")!;
+  }
+
+  /** Opens Lunch's Home page tab from its address and waits for its layouts. */
+  async function mountHome(client: Api = api()) {
+    const el = await mount(client, HOME_PATH);
+    await vi.waitFor(() => expect(homeEditor(el)?.layouts.length).toBe(2));
+    await homeEditor(el).updateComplete;
+    return el;
+  }
+
+  function layoutModal(el: MenusScreen) {
+    return modal(el, "layout-form");
+  }
+
+  async function nameLayout(el: MenusScreen, name: string): Promise<void> {
+    type(inModal(el, "layout-form", 'wt-input[name="name"]'), name);
+    await el.updateComplete;
+  }
+
+  it("puts the Home page tab between Prices and Preview, and keeps it in the address", async () => {
+    const client = api();
+    const el = await mountLunch(client);
+    const tabs = q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!;
+    expect(tabs.items.map(({ key }) => key)).toEqual(["structure", "prices", "home", "preview"]);
+    expect(tabs.items[2]!.label).toBe(t("menus.tab_home"));
+    expect(client.listHomeLayouts).not.toHaveBeenCalled();
+    await chooseTab(el, "home");
+    expect(location.pathname).toBe(HOME_PATH);
+    await vi.waitFor(() => expect(homeEditor(el)?.layouts).toEqual(homeLayouts()));
+    expect(client.listHomeLayouts).toHaveBeenCalledWith("menu-lunch");
+    expect(homeEditor(el).menuName).toBe("Lunch Menu");
+    await chooseTab(el, "structure");
+    history.back();
+    await vi.waitFor(() => expect(tabs.value).toBe("home"));
+  });
+
+  it("offers as tiles only the active products and the sections the menu's structure reaches", async () => {
+    const el = await mountHome();
+    const editor = homeEditor(el);
+    // Chips is in no list on Lunch, and Old soup is inactive; Desserts is on no menu.
+    expect(editor.products.map(({ id }) => id).sort()).toEqual([
+      "p-burger",
+      "p-lager",
+      "p-lemonade",
+    ]);
+    expect(editor.products.find(({ id }) => id === "p-lager")!.name).toBe("Lager");
+    expect(editor.sections.map(({ id }) => id).sort()).toEqual(["s-beer", "s-drinks", "s-fav"]);
+    expect(editor.sections.find(({ id }) => id === "s-fav")!.internalName).toBe("Favourites");
+  });
+
+  it("follows the layouts while the tab is shown, and stops once another tab is", async () => {
+    const live = new LiveData();
+    const client = api({ liveData: live });
+    const el = await mountHome(client);
+    const renamed = homeLayouts();
+    renamed[1]!.name = "Bar";
+    client.listHomeLayouts.mockResolvedValue(renamed);
+    live.invalidate([{ type: "sections" }]);
+    await vi.waitFor(() => expect(homeEditor(el).layouts[1]!.name).toBe("Bar"));
+    await chooseTab(el, "structure");
+    const reads = client.listHomeLayouts.mock.calls.length;
+    live.invalidate([{ type: "sections" }]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(client.listHomeLayouts.mock.calls.length).toBe(reads);
+  });
+
+  it("adds, removes and moves tiles through the layout's own routes, never the section member routes", async () => {
+    const client = api();
+    const el = await mountHome(client);
+    const editor = homeEditor(el);
+    emit(editor, "wt-tile-add", {
+      layoutId: "l-home",
+      ref: { kind: "product", productId: "p-lager" },
+    });
+    await vi.waitFor(() =>
+      expect(client.addHomeTile).toHaveBeenCalledWith("l-home", {
+        kind: "product",
+        productId: "p-lager",
+      }),
+    );
+    await vi.waitFor(() => expect(client.listHomeLayouts).toHaveBeenCalledTimes(2));
+    emit(editor, "wt-tile-remove", { layoutId: "l-home", memberId: "t-chips" });
+    await vi.waitFor(() => expect(client.removeHomeTile).toHaveBeenCalledWith("l-home", "t-chips"));
+    await vi.waitFor(() => expect(client.listHomeLayouts).toHaveBeenCalledTimes(3));
+    emit(editor, "wt-tile-move", { layoutId: "l-home", memberId: "t-chips", to: 0 });
+    await vi.waitFor(() =>
+      expect(homeEditor(el).layouts[0]!.tiles.map(({ memberId }) => memberId)).toEqual([
+        "t-chips",
+        "t-burger",
+        "t-drinks",
+      ]),
+    );
+    expect(client.moveHomeTile).toHaveBeenCalledWith("l-home", "t-chips", 0);
+    // The move's answer is shown without reading the layouts again.
+    expect(client.listHomeLayouts).toHaveBeenCalledTimes(3);
+    expect(writeCalls(client)).toEqual(["addHomeTile", "removeHomeTile", "moveHomeTile"]);
+  });
+
+  it("keeps the tile list usable during a move, and disables it during an add until the layouts are read again", async () => {
+    const reread = deferred<HomeLayout[]>();
+    const client = api();
+    const el = await mountHome(client);
+    client.listHomeLayouts.mockImplementationOnce(() => reread.promise);
+    emit(homeEditor(el), "wt-tile-move", { layoutId: "l-home", memberId: "t-chips", to: 0 });
+    await el.updateComplete;
+    expect(homeEditor(el).busy).toBe(false);
+    emit(homeEditor(el), "wt-tile-add", {
+      layoutId: "l-home",
+      ref: { kind: "product", productId: "p-lager" },
+    });
+    await el.updateComplete;
+    expect(homeEditor(el).busy).toBe(true);
+    await vi.waitFor(() => expect(client.addHomeTile).toHaveBeenCalled());
+    reread.resolve(homeLayouts());
+    await vi.waitFor(() => expect(homeEditor(el).busy).toBe(false));
+  });
+
+  it("explains a refused tile beside the layouts, and reads them again after a refused move", async () => {
+    const client = api({
+      addHomeTile: vi.fn().mockRejectedValue({ code: "menu.shortcut_unreachable" }),
+      moveHomeTile: vi.fn().mockRejectedValue({ code: "menu_section.not_found" }),
+    });
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-tile-add", {
+      layoutId: "l-home",
+      ref: { kind: "product", productId: "p-lager" },
+    });
+    await vi.waitFor(() =>
+      expect(text(q(el, '[data-test="home-error"]'))).toBe(
+        codeMessage("menu.shortcut_unreachable"),
+      ),
+    );
+    expect(homeEditor(el).busy).toBe(false);
+    const reads = client.listHomeLayouts.mock.calls.length;
+    emit(homeEditor(el), "wt-tile-move", { layoutId: "l-home", memberId: "t-chips", to: 0 });
+    await vi.waitFor(() =>
+      expect(text(q(el, '[data-test="home-error"]'))).toBe(codeMessage("menu_section.not_found")),
+    );
+    await vi.waitFor(() => expect(client.listHomeLayouts.mock.calls.length).toBe(reads + 1));
+  });
+
+  it("reads the layouts again when a move's answer names tiles the list does not show", async () => {
+    const client = api({
+      moveHomeTile: vi
+        .fn()
+        .mockResolvedValue([
+          productMember("t-other", 0, "p-lager"),
+          productMember("t-burger", 1, "p-burger"),
+        ]),
+    });
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-tile-move", { layoutId: "l-home", memberId: "t-burger", to: 1 });
+    await vi.waitFor(() => expect(client.listHomeLayouts).toHaveBeenCalledTimes(2));
+    expect(homeEditor(el).layouts[0]!.tiles.map(({ memberId }) => memberId)).toEqual([
+      "t-burger",
+      "t-drinks",
+      "t-chips",
+    ]);
+  });
+
+  it("shows only the last of several queued moves' answers", async () => {
+    const first = deferred<SectionMember[]>();
+    const client = api();
+    const answer = client.moveHomeTile.getMockImplementation() as (
+      layoutId: string,
+      memberId: string,
+      to: number,
+    ) => Promise<SectionMember[]>;
+    client.moveHomeTile.mockImplementationOnce(() => first.promise);
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-tile-move", { layoutId: "l-home", memberId: "t-chips", to: 0 });
+    emit(homeEditor(el), "wt-tile-move", { layoutId: "l-home", memberId: "t-drinks", to: 0 });
+    first.resolve(await answer("l-home", "t-chips", 0));
+    await vi.waitFor(() => expect(client.moveHomeTile).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() =>
+      expect(homeEditor(el).layouts[0]!.tiles.map(({ memberId }) => memberId)).toEqual([
+        "t-drinks",
+        "t-burger",
+        "t-chips",
+      ]),
+    );
+  });
+
+  it("drops a refused move quietly once the person has gone to another menu", async () => {
+    const refusal = deferred<SectionMember[]>();
+    const client = api({ moveHomeTile: vi.fn(() => refusal.promise) });
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-tile-move", { layoutId: "l-home", memberId: "t-chips", to: 0 });
+    history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/home");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Dinner Menu"));
+    const lunchReads = () =>
+      client.listHomeLayouts.mock.calls.filter(([id]) => id === "menu-lunch").length;
+    const before = lunchReads();
+    refusal.reject({ code: "menu_section.not_found" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(q(el, '[data-test="home-error"]')).toBeNull();
+    expect(lunchReads()).toBe(before);
+  });
+
+  it("opens no delete window for a layout the list no longer holds", async () => {
+    const el = await mountHome();
+    emit(homeEditor(el), "wt-layout-delete", { layoutId: "l-gone" });
+    await el.updateComplete;
+    expect(modal(el, "layout-delete").open).toBe(false);
+  });
+
+  it("sends one layout save and one delete while each is out", async () => {
+    const created = deferred<{ id: string }>();
+    const deleted = deferred<void>();
+    const client = api({
+      createHomeLayout: vi.fn(() => created.promise),
+      deleteHomeLayout: vi.fn(() => deleted.promise),
+    });
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-layout-add", {});
+    await el.updateComplete;
+    await nameLayout(el, "Terrace");
+    inModal(el, "layout-form", '[data-test="layout-save"]').click();
+    inModal(el, "layout-form", '[data-test="layout-save"]').click();
+    expect(client.createHomeLayout).toHaveBeenCalledTimes(1);
+    created.resolve({ id: "l-new" });
+    await vi.waitFor(() => expect(layoutModal(el).open).toBe(false));
+    await vi.waitFor(() => expect(homeEditor(el).busy).toBe(false));
+    emit(homeEditor(el), "wt-layout-delete", { layoutId: "l-counter" });
+    await el.updateComplete;
+    expect(
+      inModal(el, "layout-delete", '[data-test="layout-delete-confirm"]').getAttribute("variant"),
+    ).toBe("danger");
+    inModal(el, "layout-delete", '[data-test="layout-delete-confirm"]').click();
+    inModal(el, "layout-delete", '[data-test="layout-delete-confirm"]').click();
+    expect(client.deleteHomeLayout).toHaveBeenCalledTimes(1);
+    deleted.resolve();
+    await vi.waitFor(() => expect(modal(el, "layout-delete").open).toBe(false));
+  });
+
+  it("marks a tile whose target left the menu, as the layouts read it", async () => {
+    const el = await mountHome();
+    const editor = homeEditor(el);
+    const list = editor.shadowRoot!.querySelector<MemberListEditor>(
+      "dashboard-member-list-editor",
+    )!;
+    await list.updateComplete;
+    expect(
+      text(list.shadowRoot!.querySelector('tr[data-member="t-chips"] [data-test="note"]')),
+    ).toBe(t("home.not_on_menu"));
+  });
+
+  it("edits another layout when asked, and keeps editing it when the layouts are read again", async () => {
+    const live = new LiveData();
+    const client = api({ liveData: live });
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-layout-select", { layoutId: "l-counter" });
+    await el.updateComplete;
+    expect(homeEditor(el).selected).toBe("l-counter");
+    live.invalidate([{ type: "section_members" }]);
+    await vi.waitFor(() => expect(client.listHomeLayouts).toHaveBeenCalledTimes(2));
+    await el.updateComplete;
+    expect(homeEditor(el).selected).toBe("l-counter");
+  });
+
+  it("creates a layout from a named form, refusing an empty name beside the field, and edits the new one", async () => {
+    const client = api();
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-layout-add", {});
+    await el.updateComplete;
+    expect(layoutModal(el).open).toBe(true);
+    expect(layoutModal(el).heading).toBe(t("home.create_heading"));
+    const field = inModal<HTMLElementTagNameMap["wt-input"]>(
+      el,
+      "layout-form",
+      'wt-input[name="name"]',
+    );
+    expect(field.required).toBe(true);
+    inModal(el, "layout-form", '[data-test="layout-save"]').click();
+    await el.updateComplete;
+    expect(field.error).toBe(t("home.name_required"));
+    expect(await summary(el, "layout-form")).toEqual([t("home.name_required")]);
+    expect(client.createHomeLayout).not.toHaveBeenCalled();
+    const created = [
+      ...homeLayouts(),
+      { id: "l-new", name: "Terrace", isDefault: false, tiles: [] },
+    ];
+    client.listHomeLayouts.mockResolvedValue(created);
+    await nameLayout(el, "  Terrace ");
+    inModal(el, "layout-form", '[data-test="layout-save"]').click();
+    await vi.waitFor(() => expect(layoutModal(el).open).toBe(false));
+    expect(client.createHomeLayout).toHaveBeenCalledWith("menu-lunch", "Terrace");
+    await vi.waitFor(() => expect(homeEditor(el).layouts).toHaveLength(3));
+    expect(homeEditor(el).selected).toBe("l-new");
+  });
+
+  it("keeps the form and the name when the server refuses a layout, putting a name refusal beside the field", async () => {
+    const client = api({
+      createHomeLayout: vi.fn().mockRejectedValue({
+        code: "menu_section.invalid",
+        params: { field: "name" },
+      }),
+    });
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-layout-add", {});
+    await el.updateComplete;
+    await nameLayout(el, "Terrace");
+    inModal(el, "layout-form", '[data-test="layout-save"]').click();
+    const field = inModal<HTMLElementTagNameMap["wt-input"]>(
+      el,
+      "layout-form",
+      'wt-input[name="name"]',
+    );
+    await vi.waitFor(() => expect(field.error).toBe(codeMessage("menu_section.invalid")));
+    expect(layoutModal(el).open).toBe(true);
+    expect(field.value).toBe("Terrace");
+  });
+
+  it("duplicates a layout under a copy's name and edits the copy", async () => {
+    const client = api();
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-layout-duplicate", { layoutId: "l-home" });
+    await el.updateComplete;
+    expect(layoutModal(el).heading).toBe(t("home.duplicate_heading").replace("{name}", "Home"));
+    const field = inModal<HTMLElementTagNameMap["wt-input"]>(
+      el,
+      "layout-form",
+      'wt-input[name="name"]',
+    );
+    expect(field.value).toBe(t("sections.copy_name").replace("{name}", "Home"));
+    client.listHomeLayouts.mockResolvedValue([
+      ...homeLayouts(),
+      { ...homeLayouts()[0]!, id: "l-copy", name: "Home (copia)", isDefault: false },
+    ]);
+    inModal(el, "layout-form", '[data-test="layout-save"]').click();
+    await vi.waitFor(() => expect(layoutModal(el).open).toBe(false));
+    expect(client.duplicateHomeLayout).toHaveBeenCalledWith(
+      "l-home",
+      t("sections.copy_name").replace("{name}", "Home"),
+    );
+    await vi.waitFor(() => expect(homeEditor(el).selected).toBe("l-copy"));
+  });
+
+  it("renames a layout", async () => {
+    const client = api();
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-layout-rename", { layoutId: "l-counter" });
+    await el.updateComplete;
+    expect(layoutModal(el).heading).toBe(t("home.rename_heading").replace("{name}", "Counter"));
+    await nameLayout(el, "Bar");
+    inModal(el, "layout-form", '[data-test="layout-save"]').click();
+    await vi.waitFor(() => expect(layoutModal(el).open).toBe(false));
+    expect(client.renameHomeLayout).toHaveBeenCalledWith("l-counter", "Bar");
+    expect(client.listHomeLayouts).toHaveBeenCalledTimes(2);
+  });
+
+  it("closes the form once a layout is saved, even when the layouts then fail to reload", async () => {
+    const client = api();
+    const el = await mountHome(client);
+    client.listHomeLayouts.mockRejectedValue(new Error("offline"));
+    emit(homeEditor(el), "wt-layout-rename", { layoutId: "l-counter" });
+    await el.updateComplete;
+    await nameLayout(el, "Bar");
+    inModal(el, "layout-form", '[data-test="layout-save"]').click();
+    await vi.waitFor(() => expect(q(el, '[data-test="home-load-error"]')).not.toBeNull());
+    expect(layoutModal(el).open).toBe(false);
+    expect(q(el, '[data-test="home-error"]')).toBeNull();
+  });
+
+  it("deletes a layout once the person confirms, saying what happens to a profile that chose it", async () => {
+    const client = api();
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-layout-delete", { layoutId: "l-counter" });
+    await el.updateComplete;
+    const confirm = modal(el, "layout-delete");
+    expect(confirm.open).toBe(true);
+    expect(confirm.heading).toBe(t("home.delete_heading").replace("{name}", "Counter"));
+    expect(text(confirm)).toContain(t("home.delete_note"));
+    expect(client.deleteHomeLayout).not.toHaveBeenCalled();
+    inModal(el, "layout-delete", '[data-test="layout-delete-confirm"]').click();
+    await vi.waitFor(() => expect(confirm.open).toBe(false));
+    expect(client.deleteHomeLayout).toHaveBeenCalledWith("l-counter");
+    expect(client.listHomeLayouts).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the delete window open and says why when the layout is the default", async () => {
+    const client = api({
+      deleteHomeLayout: vi.fn().mockRejectedValue({ code: "menu.default_layout_required" }),
+    });
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-layout-delete", { layoutId: "l-counter" });
+    await el.updateComplete;
+    inModal(el, "layout-delete", '[data-test="layout-delete-confirm"]').click();
+    await vi.waitFor(() =>
+      expect(text(inModal(el, "layout-delete", '[data-test="layout-delete-error"]'))).toBe(
+        codeMessage("menu.default_layout_required"),
+      ),
+    );
+    expect(modal(el, "layout-delete").open).toBe(true);
+    inModal(el, "layout-delete", '[data-test="layout-delete-cancel"]').click();
+    await el.updateComplete;
+    expect(modal(el, "layout-delete").open).toBe(false);
+  });
+
+  it("makes a layout the menu's default", async () => {
+    const client = api();
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-layout-default", { layoutId: "l-counter" });
+    await vi.waitFor(() =>
+      expect(client.setDefaultHomeLayout).toHaveBeenCalledWith("menu-lunch", "l-counter"),
+    );
+    await vi.waitFor(() => expect(client.listHomeLayouts).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(homeEditor(el).busy).toBe(false));
+  });
+
+  it("keeps editing the default when another layout is made the default", async () => {
+    const client = api();
+    const el = await mountHome(client);
+    expect(text(homeEditor(el).shadowRoot!.querySelector('[data-test="tiles-heading"]'))).toBe(
+      t("home.tiles_heading").replace("{name}", "Home"),
+    );
+    const [home, counter] = homeLayouts();
+    client.listHomeLayouts.mockResolvedValue([
+      { ...counter!, isDefault: true },
+      { ...home!, isDefault: false },
+    ]);
+    emit(homeEditor(el), "wt-layout-default", { layoutId: "l-counter" });
+    await vi.waitFor(() => expect(homeEditor(el).layouts[0]!.id).toBe("l-counter"));
+    await homeEditor(el).updateComplete;
+    expect(homeEditor(el).selected).toBe("l-home");
+    expect(text(homeEditor(el).shadowRoot!.querySelector('[data-test="tiles-heading"]'))).toBe(
+      t("home.tiles_heading").replace("{name}", "Home"),
+    );
+  });
+
+  it("reads the layouts again, rather than showing a move's answer, when a newer read changed the order while it was out", async () => {
+    const live = new LiveData();
+    const moved = deferred<SectionMember[]>();
+    const client = api({ liveData: live, moveHomeTile: vi.fn(() => moved.promise) });
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-tile-move", { layoutId: "l-home", memberId: "t-chips", to: 0 });
+    await vi.waitFor(() => expect(client.moveHomeTile).toHaveBeenCalled());
+    // Another change lands first: Drinks, Chips, Burger.
+    const newer = homeLayouts();
+    const [burger, drinks, chips] = newer[0]!.tiles;
+    newer[0]!.tiles = [
+      { ...drinks!, position: 0 },
+      { ...chips!, position: 1 },
+      { ...burger!, position: 2 },
+    ];
+    client.listHomeLayouts.mockResolvedValue(newer);
+    live.invalidate([{ type: "section_members" }]);
+    await vi.waitFor(() =>
+      expect(homeEditor(el).layouts[0]!.tiles.map(({ memberId }) => memberId)).toEqual([
+        "t-drinks",
+        "t-chips",
+        "t-burger",
+      ]),
+    );
+    const reads = client.listHomeLayouts.mock.calls.length;
+    moved.resolve([
+      productMember("t-chips", 0, "p-chips"),
+      productMember("t-burger", 1, "p-burger"),
+      sectionMember("t-drinks", 2, "s-drinks"),
+    ]);
+    await vi.waitFor(() => expect(client.listHomeLayouts.mock.calls.length).toBe(reads + 1));
+    expect(homeEditor(el).layouts[0]!.tiles.map(({ memberId }) => memberId)).toEqual([
+      "t-drinks",
+      "t-chips",
+      "t-burger",
+    ]);
+  });
+
+  it("counts a tile add as a write to the same layout as a move, so the move's answer waits for the add's read", async () => {
+    const moved = deferred<SectionMember[]>();
+    const added = deferred<SectionMember>();
+    const client = api({
+      moveHomeTile: vi.fn(() => moved.promise),
+      addHomeTile: vi.fn(() => added.promise),
+    });
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-tile-move", { layoutId: "l-home", memberId: "t-chips", to: 0 });
+    emit(homeEditor(el), "wt-tile-add", {
+      layoutId: "l-home",
+      ref: { kind: "product", productId: "p-lager" },
+    });
+    moved.resolve([
+      productMember("t-chips", 0, "p-chips"),
+      productMember("t-burger", 1, "p-burger"),
+      sectionMember("t-drinks", 2, "s-drinks"),
+    ]);
+    await vi.waitFor(() => expect(client.addHomeTile).toHaveBeenCalled());
+    // The move was not the layout's last write, so its answer is not shown over the add.
+    expect(homeEditor(el).layouts[0]!.tiles.map(({ memberId }) => memberId)).toEqual([
+      "t-burger",
+      "t-drinks",
+      "t-chips",
+    ]);
+    added.resolve(productMember("t-new", 3, "p-lager"));
+    await vi.waitFor(() => expect(client.listHomeLayouts).toHaveBeenCalledTimes(2));
+  });
+
+  it("says why a new default was refused", async () => {
+    const client = api({
+      setDefaultHomeLayout: vi.fn().mockRejectedValue({ code: "menu.layout_not_found" }),
+    });
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-layout-default", { layoutId: "l-counter" });
+    await vi.waitFor(() =>
+      expect(text(q(el, '[data-test="home-error"]'))).toBe(codeMessage("menu.layout_not_found")),
+    );
+  });
+
+  it("says the layouts could not be loaded, and tries again", async () => {
+    const client = api({
+      listHomeLayouts: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("offline"))
+        .mockResolvedValue(homeLayouts()),
+    });
+    const el = await mount(client, HOME_PATH);
+    await vi.waitFor(() => expect(q(el, '[data-test="home-load-error"]')).not.toBeNull());
+    expect(text(q(el, '[data-test="home-load-error"]'))).toBe(t("home.error"));
+    await click(el, "home-retry");
+    await vi.waitFor(() => expect(homeEditor(el)?.layouts).toHaveLength(2));
+    expect(q(el, '[data-test="home-load-error"]')).toBeNull();
+  });
+
+  it("says the layouts are loading until they are read", async () => {
+    const pending = deferred<HomeLayout[]>();
+    const client = api({ listHomeLayouts: vi.fn(() => pending.promise) });
+    const el = await mount(client, HOME_PATH);
+    await vi.waitFor(() => expect(q(el, '[data-test="home-loading"]')).not.toBeNull());
+    expect(homeEditor(el)).toBeNull();
+    pending.resolve(homeLayouts());
+    await vi.waitFor(() => expect(homeEditor(el)).not.toBeNull());
+  });
+
+  it("never shows another menu's layouts after the person has gone to it", async () => {
+    const lunchRead = deferred<HomeLayout[]>();
+    const client = api({
+      listHomeLayouts: vi.fn((id: string) =>
+        id === "menu-lunch" ? lunchRead.promise : Promise.resolve([]),
+      ),
+    });
+    const el = await mount(client, HOME_PATH);
+    history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/home");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await vi.waitFor(() => expect(client.listHomeLayouts).toHaveBeenCalledWith("menu-dinner"));
+    await vi.waitFor(() => expect(homeEditor(el)?.layouts).toEqual([]));
+    lunchRead.resolve(homeLayouts());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(homeEditor(el).layouts).toEqual([]);
   });
 });

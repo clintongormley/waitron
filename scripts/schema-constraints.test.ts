@@ -53,6 +53,8 @@ const EXPECTED_FOREIGN_KEYS = [
   ["departments", ["location_id"], "locations"],
   ["device_card_readers", ["device_id"], "devices"],
   ["device_card_readers", ["reader_id"], "card_readers"],
+  ["device_profile_home_layouts", ["device_profile_id"], "device_profiles"],
+  ["device_profile_home_layouts", ["menu_id"], "catalogues"],
   ["device_profiles", ["canvas_id"], "canvases"],
   ["device_zone_defaults", ["device_id"], "devices"],
   ["device_zone_defaults", ["zone_id"], "floor_zones"],

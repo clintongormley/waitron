@@ -263,6 +263,18 @@ it("has English and Spanish copy for each menu section code", () => {
   }
 });
 
+it("has English and Spanish copy for each home page layout code", () => {
+  for (const code of [
+    "menu.layout_not_found",
+    "menu.default_layout_required",
+    "menu.shortcut_unreachable",
+  ]) {
+    expect(codeMessage(code, "en"), code).not.toBe(codeMessage("test.unmapped_code", "en"));
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage("test.unmapped_code", "es"));
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
+  }
+});
+
 it("has English and Spanish copy for a publish refused because the menu changed", () => {
   const code = "menu.changed_since_preview";
   expect(codeMessage(code, "en")).toBe(

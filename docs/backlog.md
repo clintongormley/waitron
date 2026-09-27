@@ -407,13 +407,34 @@ only an F2, as an R5), but no route calls it: its only callers under `apps/` are
 (`vatBreakdown` in `apps/till/src/state/working-order.ts`) that no screen shows; it uses the rate
 the menu froze for a dish and a variant (`vatRate`, filled in `apps/till/src/api/client.ts`),
 prices a retrieved held line by its class, and leaves out extras picks. Asesor Q26 is still open.
+**Menus Task 8 (home layouts), (2026-09-27): the Home page tab and a layout per device
+profile.** A menu's Home page tab (`/manage/menus/menu/<id>/view/home`) lists its home layouts with the
+default marked, and adds, duplicates, renames and deletes them and makes one the default; its tiles are
+edited with the sections editor, offer only products and sections the menu's structure reaches, show
+product and section tiles differently in words and shape, mark a tile whose target has left the
+structure "Not on this menu", and are previewed at handheld (3 columns) and till (6 columns) width.
+Device profiles gain a Home layouts section: one picker per menu that has more than one layout (or a
+saved choice), where "Default" follows the menu's default and a choice whose layout was deleted shows
+as removed with "Use the default". Choices are stored in the catalogue's new
+`device_profile_home_layouts` table (class `state`, carried by configuration export and import);
+`layout_id` has no key on purpose (plan D14). A tile is accepted when the menu's structure reaches
+its target, whether or not the product is switched on, active, or the menu active; publishing still
+leaves such a tile out and Preview warns (D13). **Upgrading** (measured: the new catalogue migration
+applied over a database at main's migration state with rows in place): it adds one table and the rows
+survive. **Left open, none blocking:** nothing on a till reads the
+layouts or the device's choice yet — that is Task 9, which also resolves a deleted layout against the
+live menu (D14); a profile's layout choice saves as soon as it is picked, outside the profile's own
+Save and Cancel (the section says so); which layout is being edited is not in the page address; the
+tile picker offers active products only, as the Structure tab's does, so an inactive product's tile
+shows no marker and cannot be added again until the product is switched back on; and no accessibility
+scan covers the delete window's error state.
 **M7b2 landed (#702, 2026-09-26): a manager can clear a card payment a crash left running.** The
 Payments screen lists open orders locked by a card payment nothing is finishing any more, and "Check
 with the card provider" files the sale once if the card was charged, marks the payment failed and
 unlocks the order if it was not, and refuses if the provider is unreachable or unclear; each
 resolution is recorded in the append-only `payment_resolutions` table. What it leaves open is under
 "What M7b2 left open" in the payments section.
-Next in the lane: 8, 9 and classification Task 3. The owner lifted the wait: the dependency upgrades are
+Next in the lane: 9 and classification Task 3. The owner lifted the wait: the dependency upgrades are
 finished, and the work does not wait for SQLite slice 2. The menus plan's decisions D1–D23 settle
 the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the ones flagged for the
 owner. Menus Task 3 wipes existing venues (it rebuilds `menu_items`); every other migrating task

@@ -148,6 +148,66 @@ sell from each menu's live version; only availability, course and reporting cate
 the current rows when it is served, and the VAT class and rate are the ones the version froze
 (`applyLiveFields`, `packages/catalogue/src/menu-document.ts`).
 
+### Home layout routes
+
+A home layout is a list its menu owns, holding the shortcuts ("tiles") a till or handheld shows on
+its home page. Every menu has one default layout, named Home when the menu is created, and may have
+more. A tile is a member of the layout's list, but it is written only through the tile routes below:
+the section member routes above refuse every write into a layout with `menu_section.not_library`.
+A tile adds nothing to the menu: no offer, no price and no place in its structure, and removing one
+removes only the tile. `mountHomeLayoutRoutes` in `apps/server/src/catalogue-api.ts` serves the
+first table, behind the same manager session and permission as the section routes, and
+`packages/catalogue/src/home-layouts.ts` does the work. A layout is
+`{ id, name, isDefault, tiles }`, and a tile is `{ memberId, position, ref, name, reachable }`,
+where `name` is the product's staff name or the section's internal name, and `reachable` is false
+once the menu's working structure no longer reaches the tile's target (the dashboard shows it as
+not on this menu).
+
+| Route | Body → success | Refusals |
+| --- | --- | --- |
+| `GET /management-api/catalogues/:id/home-layouts` | → 200, the menu's layouts, the default first and the others by name, each with its tiles in order | `catalogue.not_found` |
+| `POST /management-api/catalogues/:id/home-layouts` | `{ name }` → 201, `{ id }` | `catalogue.not_found`, `menu_section.invalid` |
+| `PUT /management-api/catalogues/:id/default-home-layout` | `{ layoutId }` → 204 | `catalogue.not_found`, `menu.layout_not_found` |
+| `POST /management-api/home-layouts/:layoutId/duplicate` | `{ name }` → 201, `{ id }`; the copy holds the same tiles in the same order | `menu.layout_not_found`, `menu_section.invalid` |
+| `PATCH /management-api/home-layouts/:layoutId` | `{ name }` → 204 | `menu.layout_not_found`, `menu_section.invalid` |
+| `DELETE /management-api/home-layouts/:layoutId` | → 204; its tiles go with it | `menu.layout_not_found`, `menu.default_layout_required` |
+| `POST /management-api/home-layouts/:layoutId/tiles` | `{ ref, position? }` → 201, the new member `{ id, position, ref }` | `menu.layout_not_found`, `menu_section.not_found`, `menu_section.not_library`, `menu_section.membership_invalid`, `menu_section.member_duplicate`, `menu_section.invalid`, `menu.shortcut_unreachable` |
+| `DELETE /management-api/home-layouts/:layoutId/tiles/:memberId` | → 204 | `menu.layout_not_found`, `menu_section.not_found` |
+| `PUT /management-api/home-layouts/:layoutId/tiles/:memberId/position` | `{ to }` → 200, the tiles in their new order | `menu.layout_not_found`, `menu_section.not_found`, `menu_section.invalid` |
+
+Besides those, a malformed id answers `shared.invalid_id` (400) and a malformed body
+`management.request_invalid` (400). `menu.layout_not_found` (404) is an id that names no home
+layout, or, where the route also names a menu, none of that menu's. `menu.default_layout_required`
+(409) is a delete of the menu's default layout: make another the default first.
+`menu.shortcut_unreachable` (409) is a tile for a product or library section the menu's working
+structure does not reach. Reach is by membership alone, so a product the menu has switched off, an
+inactive product, and any product on an inactive menu are accepted; publishing leaves such a tile
+out of the version and the preview names it in `warnings`. `menu_section.not_library` (409) is a
+tile naming a list a menu owns: any menu's top level or home layout. `menu_section.not_found`
+(404) is a section named in `ref` that does not exist, or a member the layout does not hold;
+`menu_section.membership_invalid` (400) a `ref` that is not a top-level product;
+`menu_section.member_duplicate` (409) a target the layout already holds; and
+`menu_section.invalid` (400) a blank name or a `position` or `to` that is not a whole number of
+zero or more.
+
+A device profile chooses one layout per menu; with no choice it shows the menu's default. The two
+routes are in `apps/server/src/management-api.ts`, behind the `layout.configure` permission like
+the other device-profile routes, and the choices are stored in `device_profile_home_layouts`.
+
+| Route | Body → success | Refusals |
+| --- | --- | --- |
+| `GET /management-api/device-profiles/:id/home-layouts` | → 200, an array with every menu by name, each `{ menuId, menuName, layouts, selectedLayoutId, selectedRemoved }`, where `layouts` is `{ id, name, isDefault }[]` with the default first | `device_profile.not_found` |
+| `PUT /management-api/device-profiles/:id/home-layouts/:menuId` | `{ layoutId }`, a layout id or null for the default → 204 | `device_profile.not_found`, `catalogue.not_found`, `menu.layout_not_found`, `management.request_invalid` |
+
+`selectedLayoutId` is null when the profile uses the default. Deleting a layout leaves a profile's
+choice of it in place, and `selectedRemoved` is then true, so the screen can show the choice as
+removed and offer to reset it (the plan's decision D14). `menu.layout_not_found` (404) here is a
+layout of another menu or an id that is no home layout; `layoutId` must be present, and anything
+but a well-formed id or null is `management.request_invalid` (400). A malformed profile id answers
+`device_profile.not_found` and a malformed menu id `catalogue.not_found`, both 404. Deleting a
+device profile deletes its choices, and a venue's configuration export carries them, remapped on
+import to the new menu and layout ids.
+
 ## Moving and deleting
 
 Moving a category to a new parent, or a product to a new main category, is always allowed. Sale

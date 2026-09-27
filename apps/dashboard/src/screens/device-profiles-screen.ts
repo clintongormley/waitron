@@ -1,6 +1,7 @@
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { live } from "lit/directives/live.js";
 import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -20,7 +21,12 @@ import {
   type FormFactor,
 } from "./canvas-editor/card-contracts.js";
 import { toggleMembership } from "../array-utils.js";
-import type { Canvas, DeviceProfile, DashboardApi } from "../api/client.js";
+import type { Canvas, DeviceMenuHomeLayouts, DeviceProfile, DashboardApi } from "../api/client.js";
+
+/** A menu gets a picker when there is a choice to make, or a saved choice to undo. */
+function hasChoice(menu: DeviceMenuHomeLayouts): boolean {
+  return menu.layouts.length > 1 || menu.selectedLayoutId !== null;
+}
 
 @customElement("dashboard-device-profiles-screen")
 export class DeviceProfilesScreen extends LitElement {
@@ -104,6 +110,44 @@ export class DeviceProfilesScreen extends LitElement {
         color: var(--wt-color-danger);
         margin-top: var(--wt-space-3);
       }
+      .home-layouts {
+        display: grid;
+        gap: var(--wt-space-3);
+        margin-top: var(--wt-space-6);
+      }
+      .home-layouts h2 {
+        margin: 0;
+        font-size: var(--wt-font-size-md);
+        color: var(--wt-color-text);
+      }
+      .home-layouts p {
+        margin: 0;
+      }
+      .home-help {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+      .home-menu {
+        display: grid;
+        gap: var(--wt-space-1);
+        max-width: calc(var(--wt-tap-min) * 10);
+      }
+      .home-menu label {
+        display: grid;
+        gap: var(--wt-space-1);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+      .home-menu select {
+        min-height: var(--wt-tap-min);
+      }
+      .home-menu select[aria-invalid="true"] {
+        border-color: var(--wt-color-danger);
+      }
+      .home-menu .error {
+        margin: 0;
+        font-size: var(--wt-font-size-sm);
+      }
     `,
   ];
 
@@ -135,6 +179,24 @@ export class DeviceProfilesScreen extends LitElement {
   @state() private saving = false;
 
   @state() private deleteTarget: DeviceProfile | null = null;
+
+  /** The profile's choice of home page layout per menu; null until read, and for a new profile. */
+  @state() private homeMenus: DeviceMenuHomeLayouts[] | null = null;
+  @state() private homeLoadError = false;
+  /** The menu whose choice is being saved. */
+  @state() private homeSaving: string | null = null;
+  /** Why a menu's choice was refused, by menu id. */
+  @state() private homeErrors: Record<string, string> = {};
+  /** The menu whose choice was last saved, named in a status line. */
+  @state() private homeSaved: string | null = null;
+  readonly #homeQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    () => {
+      this.homeLoadError = true;
+    },
+  );
+  #homeFor: string | null = null;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -168,6 +230,57 @@ export class DeviceProfilesScreen extends LitElement {
     }
   }
 
+  // ── Home page layouts ──────────────────────────────────────────────────────────────────────────
+
+  async #watchHome(profileId: string): Promise<void> {
+    this.#homeFor = profileId;
+    this.homeLoadError = false;
+    try {
+      await this.#homeQueries.watch("getDeviceHomeLayouts", [profileId], (value) => {
+        this.homeMenus = value;
+        this.homeLoadError = false;
+      });
+    } catch {
+      if (this.#homeFor === profileId) this.homeLoadError = true;
+    }
+  }
+
+  #releaseHome(): void {
+    this.#homeFor = null;
+    this.#homeQueries.release("getDeviceHomeLayouts");
+    this.homeMenus = null;
+    this.homeLoadError = false;
+    this.homeErrors = {};
+    this.homeSaved = null;
+  }
+
+  /** Saved at once, apart from the profile's own Save; null goes back to the menu's default. A
+   * choice that saved but could not be read back is a failed load, not a refused choice. */
+  async #chooseHome(
+    profileId: string,
+    menu: DeviceMenuHomeLayouts,
+    layoutId: string | null,
+  ): Promise<void> {
+    if (this.homeSaving !== null) return;
+    this.homeErrors = Object.fromEntries(
+      Object.entries(this.homeErrors).filter(([menuId]) => menuId !== menu.menuId),
+    );
+    this.homeSaved = null;
+    this.homeSaving = menu.menuId;
+    try {
+      await this.api.setDeviceHomeLayout(profileId, menu.menuId, layoutId);
+    } catch (error) {
+      if (this.editingId === profileId)
+        this.homeErrors = { ...this.homeErrors, [menu.menuId]: codeMessage(codeOf(error)) };
+      this.homeSaving = null;
+      return;
+    }
+    this.homeSaving = null;
+    if (this.editingId !== profileId) return;
+    this.homeSaved = menu.menuName;
+    await this.#watchHome(profileId);
+  }
+
   #canvasLabel(canvasId: string | null): string {
     if (canvasId === null) return t("device_profiles.canvas_default");
     const canvas = this.canvases.find((c) => c.id === canvasId);
@@ -184,6 +297,7 @@ export class DeviceProfilesScreen extends LitElement {
   // ── New / Edit ─────────────────────────────────────────────────────────────────────────────────
 
   #openCreate(): void {
+    this.#releaseHome();
     this.editingId = null;
     this.draftName = "";
     this.draftCanvasId = null;
@@ -210,6 +324,8 @@ export class DeviceProfilesScreen extends LitElement {
       this.draftInactivityMinutes =
         profile.inactivityTimeoutSeconds == null ? null : profile.inactivityTimeoutSeconds / 60;
       this.mode = "editor";
+      this.#releaseHome();
+      void this.#watchHome(id);
     } catch (error) {
       this.errorKey = codeOf(error);
     }
@@ -249,6 +365,7 @@ export class DeviceProfilesScreen extends LitElement {
   }
 
   #cancel(): void {
+    this.#releaseHome();
     this.mode = "list";
     this.editingId = null;
     this.draftName = "";
@@ -297,6 +414,7 @@ export class DeviceProfilesScreen extends LitElement {
             formFactor,
             inactivityTimeoutSeconds,
           );
+        this.#releaseHome();
         this.mode = "list";
         this.editingId = null;
         this.draftName = "";
@@ -435,6 +553,112 @@ export class DeviceProfilesScreen extends LitElement {
       )}`;
   }
 
+  /** `live` compares with the option as shown, so a refused choice goes back to the saved one. */
+  #renderHomeOptions(menu: DeviceMenuHomeLayouts): TemplateResult {
+    const chosen = menu.selectedLayoutId;
+    const named = menu.layouts.filter((layout) => !layout.isDefault || layout.id === chosen);
+    const fallback = menu.layouts.find((layout) => layout.isDefault);
+    return html`<option value="" .selected=${live(chosen === null)}>
+        ${
+          fallback === undefined
+            ? t("device_profiles.home_default_plain")
+            : t("device_profiles.home_default").replace("{name}", fallback.name)
+        }
+      </option>
+      ${named.map(
+        (layout) =>
+          html`<option value=${layout.id} .selected=${live(layout.id === chosen)}>
+            ${layout.name}
+          </option>`,
+      )}
+      ${
+        menu.selectedRemoved
+          ? html`<option value=${chosen!} .selected=${live(true)}>
+              ${t("device_profiles.home_removed")}
+            </option>`
+          : nothing
+      }`;
+  }
+
+  #renderHomeMenu(menu: DeviceMenuHomeLayouts): TemplateResult {
+    const error = this.homeErrors[menu.menuId];
+    const errorId = `home-error-${menu.menuId}`;
+    const saving = this.homeSaving !== null;
+    return html`<div class="home-menu" data-test=${`home-menu-${menu.menuId}`}>
+      <label
+        >${menu.menuName}
+        <select
+          name=${`home-layout-${menu.menuId}`}
+          .disabled=${saving}
+          aria-invalid=${error ? "true" : "false"}
+          aria-describedby=${error ? errorId : nothing}
+          @change=${(event: Event) => {
+            event.stopPropagation();
+            const value = (event.target as HTMLSelectElement).value;
+            void this.#chooseHome(this.editingId!, menu, value === "" ? null : value);
+          }}
+        >
+          ${this.#renderHomeOptions(menu)}
+        </select>
+      </label>
+      ${
+        menu.selectedRemoved
+          ? html`<p class="home-help" data-test=${`home-removed-${menu.menuId}`}>
+                ${t("device_profiles.home_removed_note").replace("{menu}", menu.menuName)}
+              </p>
+              <div>
+                <wt-button
+                  variant="secondary"
+                  size="sm"
+                  data-test=${`home-reset-${menu.menuId}`}
+                  .disabled=${saving}
+                  @click=${() => void this.#chooseHome(this.editingId!, menu, null)}
+                  >${t("device_profiles.home_reset")}</wt-button
+                >
+              </div>`
+          : nothing
+      }
+      ${error ? html`<p class="error" id=${errorId}>${error}</p>` : nothing}
+    </div>`;
+  }
+
+  #renderHomeBody() {
+    if (this.editingId === null)
+      return html`<p class="home-help" data-test="home-new">${t("device_profiles.home_new")}</p>`;
+    const loadError = this.homeLoadError
+      ? html`<p class="error" role="alert" data-test="home-load-error">
+            ${t("device_profiles.home_error")}
+          </p>
+          <div>
+            <wt-button
+              variant="secondary"
+              data-test="home-retry"
+              @click=${() => void this.#watchHome(this.editingId!)}
+              >${t("menus.retry")}</wt-button
+            >
+          </div>`
+      : nothing;
+    if (this.homeMenus === null)
+      return this.homeLoadError
+        ? loadError
+        : html`<p role="status" data-test="home-loading">${t("device_profiles.home_loading")}</p>`;
+    const menus = this.homeMenus.filter(hasChoice);
+    return html`${loadError}
+      <p class="home-help">${t("device_profiles.home_help")}</p>
+      ${
+        menus.length === 0
+          ? html`<p class="home-help" data-test="home-none">${t("device_profiles.home_none")}</p>`
+          : menus.map((menu) => this.#renderHomeMenu(menu))
+      }
+      <p role="status" class="home-help" data-test="home-saved">
+        ${
+          this.homeSaved === null
+            ? nothing
+            : t("device_profiles.home_saved").replace("{menu}", this.homeSaved)
+        }
+      </p>`;
+  }
+
   #renderEditor(): TemplateResult {
     return html`
       <div class="editor" data-test="editor-form" data-editing-id=${this.editingId ?? nothing}>
@@ -518,6 +742,10 @@ export class DeviceProfilesScreen extends LitElement {
           ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
           : nothing
       }
+      <section class="home-layouts" data-test="home-layouts" aria-labelledby="home-heading">
+        <h2 id="home-heading">${t("device_profiles.home_heading")}</h2>
+        ${this.#renderHomeBody()}
+      </section>
     `;
   }
 

@@ -2025,6 +2025,11 @@ Spec §5 ("A home layout is a menu-owned category", read as a menu-owned section
   ```
   - Classify `device_profile_home_layouts` as `state`. It is venue configuration, NOT `local`: a
     profile is venue-wide. Check it against `scripts/two-file-foreign-keys.test.ts`.
+  - _2026-09-27: `deviceHomeLayouts` landed returning `DeviceMenuHomeLayouts[]`, one entry per menu
+    with its layouts, `selectedLayoutId` and `selectedRemoved`
+    (`packages/catalogue/src/section-types.ts`). Tile reach is structural (D5, D13): a tile whose
+    product is switched off on the menu stays unmarked on the Home page tab, and publishing leaves
+    it out with a Preview warning._
 
 - [ ] **Step 1: Write the failing tests:**
   - **Layouts:**

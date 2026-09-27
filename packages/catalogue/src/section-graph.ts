@@ -102,20 +102,34 @@ export function wouldCreateCycle(graph: SectionGraph, parentId: string, childId:
   return false;
 }
 
-/** Every product the root reaches, depth first in member order, each at its first occurrence. */
-export function reachableProducts(graph: SectionGraph, rootId: string): string[] {
+/**
+ * Every product the root reaches, depth first in member order, each at its first occurrence; and
+ * every section a list the root reaches holds.
+ */
+export function reachableFrom(
+  graph: SectionGraph,
+  rootId: string,
+): { products: string[]; sections: Set<string> } {
   const products = new Set<string>();
+  const sections = new Set<string>();
   const visited = new Set<string>();
   const walk = (sectionId: string): void => {
     if (visited.has(sectionId)) return;
     visited.add(sectionId);
     for (const { ref } of graph.children(sectionId)) {
       if (ref.kind === "product") products.add(ref.productId);
-      else walk(ref.sectionId);
+      else {
+        sections.add(ref.sectionId);
+        walk(ref.sectionId);
+      }
     }
   };
   walk(rootId);
-  return [...products];
+  return { products: [...products], sections };
+}
+
+export function reachableProducts(graph: SectionGraph, rootId: string): string[] {
+  return reachableFrom(graph, rootId).products;
 }
 
 /** For every product the root reaches, each path of section ids from the root to a list holding it

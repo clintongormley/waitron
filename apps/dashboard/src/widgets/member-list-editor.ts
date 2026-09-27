@@ -86,6 +86,11 @@ export class MemberListEditor extends LitElement {
       td.kind {
         color: var(--wt-color-text-muted);
       }
+      .member-note {
+        display: block;
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+      }
       td.actions-cell {
         padding-inline: 0;
       }
@@ -139,6 +144,10 @@ export class MemberListEditor extends LitElement {
   @property() label = "";
   /** When set, a removal names the list it takes the member out of. */
   @property() listName = "";
+  /** Whether a section member offers Open, which asks the host to edit that section. */
+  @property({ type: Boolean }) openable = true;
+  /** A line of text shown under a member's name, by member id. */
+  @property({ attribute: false }) notes: ReadonlyMap<string, string> = new Map();
   /** The members in display order, which a move rewrites before the host confirms it. */
   @state() private order: SectionMember[] = [];
   @state() private choice = "";
@@ -274,7 +283,13 @@ export class MemberListEditor extends LitElement {
     const { ref } = member;
     return html`<tr data-member=${member.id}>
       <td class="handle-cell">${this.#reorder.handle(member.id)}</td>
-      <td class="name" data-test="name">${name}</td>
+      <td class="name" data-test="name">
+        ${name}${
+          this.notes.has(member.id)
+            ? html`<span class="member-note" data-test="note">${this.notes.get(member.id)}</span>`
+            : nothing
+        }
+      </td>
       <td class="kind" data-test="kind">${memberKindLabel(ref)}</td>
       <td class="actions-cell">
         <wt-row-actions
@@ -282,7 +297,7 @@ export class MemberListEditor extends LitElement {
           data-test=${`actions-${member.id}`}
           label=${`${t("members.actions")}: ${name}`}
           >${
-            ref.kind === "section"
+            ref.kind === "section" && this.openable
               ? this.#action(member, "open", t("members.open"), { sectionId: ref.sectionId })
               : nothing
           }${this.#action(

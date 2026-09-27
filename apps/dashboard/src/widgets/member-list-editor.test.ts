@@ -292,6 +292,20 @@ it("removes a member and opens a section member, stopping the click that asked",
   );
 });
 
+it("offers no Open action when its host says a section member is not opened from this list", async () => {
+  const el = await mount({ openable: false });
+  expect(el.shadowRoot!.querySelector('[data-test="open-m-drinks"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="remove-m-drinks"]')).not.toBeNull();
+});
+
+it("shows a note its host gives for a member under that member's name, and none for the others", async () => {
+  const el = await mount({ notes: new Map([["m-drinks", "Not on this menu"]]) });
+  const drinks = q(el, 'tr[data-member="m-drinks"]');
+  expect(drinks.querySelector('[data-test="note"]')!.textContent!.trim()).toBe("Not on this menu");
+  expect(drinks.querySelector('[data-test="name"]')!.textContent).toContain("Drinks");
+  expect(q(el, 'tr[data-member="m-burger"]').querySelector('[data-test="note"]')).toBeNull();
+});
+
 it("names the list a removal takes the member out of, when it is given one", async () => {
   const unnamed = await mount();
   expect(q(unnamed, '[data-test="remove-m-lemonade"]').textContent!.trim()).toBe(

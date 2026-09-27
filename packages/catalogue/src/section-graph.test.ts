@@ -3,6 +3,7 @@ import {
   buildSectionGraph,
   menusContaining,
   placementsByProduct,
+  reachableFrom,
   reachableProducts,
   wouldCreateCycle,
   type MemberRow,
@@ -74,6 +75,31 @@ describe("wouldCreateCycle", () => {
     // Drinks is already under Lunch; Favourites holding it too is sharing, not a loop.
     expect(wouldCreateCycle(lunch(), "favourites", "drinks")).toBe(false);
     expect(wouldCreateCycle(lunch(), "specials", "drinks")).toBe(false);
+  });
+});
+
+describe("reachableFrom", () => {
+  it("names every section below the root once, however many paths lead to it, and not the root", () => {
+    const graph = buildSectionGraph(
+      [root("brunch", "menu-brunch"), library("drinks"), library("beer"), library("specials")],
+      [
+        ...list("brunch", ["s:drinks", "s:beer"]),
+        ...list("drinks", ["s:beer"]),
+        ...list("beer", ["p:lager"]),
+        ...list("specials", ["s:beer"]),
+      ],
+    );
+    expect([...reachableFrom(graph, "brunch").sections].sort()).toEqual(["beer", "drinks"]);
+    expect([...reachableFrom(lunch(), "dinner").sections].sort()).toEqual(["beer", "drinks"]);
+  });
+
+  it("lists the products in reachableProducts' order beside the sections", () => {
+    expect(reachableFrom(lunch(), "lunch").products).toEqual(["lemonade", "water", "lager"]);
+    expect([...reachableFrom(lunch(), "lunch").sections].sort()).toEqual([
+      "beer",
+      "drinks",
+      "favourites",
+    ]);
   });
 });
 
@@ -175,6 +201,7 @@ describe("a section reached along two paths", () => {
       [...list("lunch", ["s:a"]), ...list("a", ["s:b", "p:tea"]), ...list("b", ["s:a"])],
     );
     expect(reachableProducts(graph, "lunch")).toEqual(["tea"]);
+    expect([...reachableFrom(graph, "lunch").sections].sort()).toEqual(["a", "b"]);
     expect(placementsByProduct(graph, "lunch").get("tea") ?? []).toEqual([["lunch", "a"]]);
     expect(menusContaining(graph, "b")).toEqual(["menu-lunch"]);
   });

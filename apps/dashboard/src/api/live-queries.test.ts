@@ -92,6 +92,15 @@ it.each([
       "menu_item_variant_overrides",
     ],
   ],
+  // `listHomeLayouts` (packages/catalogue/src/home-layouts.ts): the menu's root and default from
+  // `menu_details`, the section graph, and each tile's name from `products` or `sections`.
+  ["listHomeLayouts", ["menu-1"], ["menu_details", "sections", "section_members", "products"]],
+  // `deviceHomeLayouts` (the same file): every menu by name, each menu's layouts, and the choices.
+  [
+    "getDeviceHomeLayouts",
+    ["dp-1"],
+    ["device_profile_home_layouts", "sections", "menu_details", "catalogues"],
+  ],
   // "Below it too" walks `category_details`' parent links (`listCategoryProducts`, categories.ts).
   [
     "listCategoryProducts",

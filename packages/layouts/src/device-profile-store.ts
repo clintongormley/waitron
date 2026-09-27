@@ -69,9 +69,12 @@ const PROFILE_NAME: ConstraintTarget = { table: "device_profiles", columns: ["na
  * SQLite names no key in a foreign-key refusal, only its direction: 787 for a written value naming
  * no parent, 1811 for a delete a RESTRICT key refused. So the two foreign-key branches ask only the
  * class. That is sound only while each writer's `try` wraps ONE statement on `device_profiles`,
- * `canvas_id` is the only key out of it and `devices.device_profile_id` the only key into it — the
- * schema half is pinned by `has ONE key out of device_profiles and ONE key into it`
- * (device-profile-store.db.test.ts). Widen a `try` to a second statement and its foreign-key
+ * `canvas_id` is the only key out of it and `devices.device_profile_id` the only key into it that
+ * can refuse — the schema half is pinned by `has ONE key out of device_profiles and ONE key into
+ * it` (device-profile-store.db.test.ts), which migrates core and identity only. The catalogue's
+ * `device_profile_home_layouts.device_profile_id` also keys into it and cascades, so it refuses no
+ * delete (the profile-deleted case in `apps/server/src/management-api.device-profiles.test.ts`).
+ * Widen a `try` to a second statement and its foreign-key
  * (787) and 1811 refusals would be translated as this table's, with nothing to catch it.
  *
  * 1811 is also every trigger's `RAISE(ABORT)`, so `device_profile_form_factor_locked` refusing an
