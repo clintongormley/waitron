@@ -23,7 +23,12 @@ import { FakeStripe } from "./testing/fake-stripe.js";
 import { StripeTerminalProvider } from "./provider.js";
 import { reverseViaStripe } from "./reverse.js";
 import type { StripeClient } from "./client.js";
-import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
+import {
+  billPaymentOfRow,
+  freshNif,
+  seedBillPayment,
+  seedWorkingOrder,
+} from "@waitron/payments/test/seed.js";
 
 const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
@@ -918,5 +923,53 @@ describe("the Stripe idempotency key after a PaymentIntent was cancelled at Stri
     await resolved({ paymentId: other, workingOrderId: p.workingOrderId }, true);
     await providerFor(fake).collect(p);
     expect(fake.lastCreateIntent?.idempotencyKey).toBe(`wo_${p.workingOrderId}`);
+  });
+});
+
+describe("StripeTerminalProvider.collect for a bill payment", () => {
+  it("keys the PaymentIntent on the bill payment and names it on the row", async () => {
+    const fake = new FakeStripe();
+    const p = await collectParams();
+    const billPaymentId = await seedBillPayment(pg.db, p._seeded);
+
+    const result = await providerFor(fake).collect({ ...p, billPaymentId });
+
+    expect(result.state).toBe("captured");
+    expect(fake.lastCreateIntent?.idempotencyKey).toBe(`bp_${billPaymentId}`);
+    expect(await billPaymentOfRow(pg.db, result.paymentRef)).toBe(billPaymentId);
+  });
+
+  it("names the bill payment on a declined row", async () => {
+    const fake = new FakeStripe();
+    fake.declineNext();
+    const p = await collectParams();
+    const billPaymentId = await seedBillPayment(pg.db, p._seeded);
+
+    const result = await providerFor(fake).collect({ ...p, billPaymentId });
+
+    expect(result.state).toBe("failed");
+    expect(await billPaymentOfRow(pg.db, result.paymentRef)).toBe(billPaymentId);
+  });
+
+  it("keeps the bill payment's key when a PaymentIntent of the order was cancelled at Stripe", async () => {
+    const fake = new FakeStripe();
+    const p = await collectParams();
+    const stuck = await abandonedRow("pi_cancelled", p.workingOrderId);
+    await withTransaction(pg.db, (tx) =>
+      recordResolution(tx, {
+        paymentId: stuck.paymentId,
+        workingOrderId: p.workingOrderId,
+        personId: MANAGER,
+        outcome: "failed",
+        cancelledAtProvider: true,
+        providerStatus: null,
+        resolvedAt: NOW,
+      }),
+    );
+    const billPaymentId = await seedBillPayment(pg.db, p._seeded);
+
+    await providerFor(fake).collect({ ...p, billPaymentId });
+
+    expect(fake.lastCreateIntent?.idempotencyKey).toBe(`bp_${billPaymentId}`);
   });
 });

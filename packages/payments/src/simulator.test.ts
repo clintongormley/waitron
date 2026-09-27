@@ -10,7 +10,7 @@ import {
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { findPaymentByRef } from "./store.js";
 import { SimulatorPaymentProvider } from "./simulator.js";
-import { freshNif, seedWorkingOrder } from "../test/seed.js";
+import { billPaymentOfRow, freshNif, seedBillPayment, seedWorkingOrder } from "../test/seed.js";
 
 const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
@@ -117,5 +117,25 @@ describe("SimulatorPaymentProvider", () => {
     await expect(provider.void("sim-missing")).rejects.toMatchObject({
       code: "payment.not_found",
     });
+  });
+
+  it.each(["captured", "declined"] as const)(
+    "names the bill payment it charges for on its %s row",
+    async (simulationOutcome) => {
+      const { seeded, provider, params } = await setup();
+      const billPaymentId = await seedBillPayment(pg.db, seeded);
+
+      const result = await provider.collect({ ...params, simulationOutcome, billPaymentId });
+
+      expect(await billPaymentOfRow(pg.db, result.paymentRef)).toBe(billPaymentId);
+    },
+  );
+
+  it("names no bill payment for a payment of the whole order", async () => {
+    const { provider, params } = await setup();
+
+    const result = await provider.collect(params);
+
+    expect(await billPaymentOfRow(pg.db, result.paymentRef)).toBeNull();
   });
 });

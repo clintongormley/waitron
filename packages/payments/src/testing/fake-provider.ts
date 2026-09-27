@@ -24,6 +24,7 @@ import {
   findPaymentByRef,
   getPaymentByRef,
   insertAcceptedOffline,
+  insertAttempting,
   insertCapturedPayment,
   insertFailedPayment,
   recordRefund,
@@ -45,6 +46,11 @@ export class FakePaymentProvider implements PaymentProvider {
   readonly capabilities: ProviderCapabilities = { partialRefund: true };
   private failNext = false;
   private offlineNext = false;
+  private stallNext = false;
+  private crashNext: "captured" | "attempting" | null = null;
+  private holdNext: Promise<void> | null = null;
+  /** Every `collect` call, in order, recorded as it starts. */
+  readonly collectCalls: CollectParams[] = [];
   private readonly declineForwardRefs = new Set<string>();
   private abandonedAnswer: AbandonedAttemptOutcome = { outcome: "unknown", reason: "unreachable" };
   /** Every `resolveAbandonedAttempt` call, in order. */
@@ -63,6 +69,28 @@ export class FakePaymentProvider implements PaymentProvider {
     this.offlineNext = true;
   }
 
+  /** Test affordance: the next `collect` leaves its row `attempting` and answers `attempting`, as a
+   * reader that stopped answering does. One-shot. */
+  stallNextCollect(): void {
+    this.stallNext = true;
+  }
+
+  /** Test affordance: the next `collect` writes its row in `state` and then throws, as a process
+   * that died after the provider wrote and before the caller heard back. One-shot. */
+  crashNextCollect(state: "captured" | "attempting"): void {
+    this.crashNext = state;
+  }
+
+  /** Test affordance: the next `collect` records its call and then waits, writing nothing, until the
+   * returned function is called. One-shot. */
+  holdNextCollect(): () => void {
+    let release!: () => void;
+    this.holdNext = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return release;
+  }
+
   /** Test affordance: the next `forward` DECLINES this payment ref instead of settling it. */
   declineForwardFor(ref: string): void {
     this.declineForwardRefs.add(ref);
@@ -75,20 +103,46 @@ export class FakePaymentProvider implements PaymentProvider {
   }
 
   async collect(params: CollectParams): Promise<PaymentResult> {
+    this.collectCalls.push(params);
+    const hold = this.holdNext;
+    this.holdNext = null;
+    if (hold !== null) await hold;
     const paymentRef = nextRef();
     if (this.offlineNext) {
       this.offlineNext = false;
       return this.collectOffline(params, paymentRef);
     }
-    const willFail = this.failNext;
-    this.failNext = false;
-    const settledAt = willFail ? null : new Date();
     const common = {
       workingOrderId: params.workingOrderId,
       provider: this.provider,
       paymentRef,
       amount: params.amount,
+      billPaymentId: params.billPaymentId,
     };
+    const crash = this.crashNext;
+    this.crashNext = null;
+    if (crash !== null) {
+      await this.db.transaction((tx) =>
+        crash === "captured"
+          ? insertCapturedPayment(tx, { ...common, settledAt: new Date() })
+          : insertAttempting(tx, common),
+      );
+      throw new Error(`fake provider: the process stopped after writing a ${crash} row`);
+    }
+    if (this.stallNext) {
+      this.stallNext = false;
+      await this.db.transaction((tx) => insertAttempting(tx, common));
+      return {
+        provider: this.provider,
+        paymentRef,
+        state: "attempting",
+        amount: params.amount,
+        settledAt: null,
+      };
+    }
+    const willFail = this.failNext;
+    this.failNext = false;
+    const settledAt = willFail ? null : new Date();
     await this.db.transaction(async (tx) => {
       if (willFail) {
         await insertFailedPayment(tx, common);
@@ -240,6 +294,7 @@ export class FakePaymentProvider implements PaymentProvider {
         paymentRef,
         amount: params.amount,
         settledAt,
+        billPaymentId: params.billPaymentId,
       });
       return {
         provider: this.provider,

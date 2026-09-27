@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -17,7 +17,14 @@ import {
   insertAttempting,
 } from "../store.js";
 import { FakePaymentProvider } from "./fake-provider.js";
-import { freshNif, seedPaymentPolicy, seedSale, seedWorkingOrder } from "../../test/seed.js";
+import {
+  billPaymentOfRow,
+  freshNif,
+  seedBillPayment,
+  seedPaymentPolicy,
+  seedSale,
+  seedWorkingOrder,
+} from "../../test/seed.js";
 import type { Seeded } from "../../test/seed.js";
 
 const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
@@ -143,6 +150,115 @@ describe("FakePaymentProvider.partialRefund", () => {
 describe("FakePaymentProvider.capabilities", () => {
   it("advertises partialRefund support", () => {
     expect(new FakePaymentProvider(pg.db).capabilities.partialRefund).toBe(true);
+  });
+});
+
+describe("FakePaymentProvider.collect for a bill payment", () => {
+  function collectFor(provider: FakePaymentProvider, s: Seeded, billPaymentId: string) {
+    return provider.collect({
+      tillId: brandTillId(s.tillId),
+      workingOrderId: brandWorkingOrderId(s.workingOrderId),
+      amount: decimal("10.00"),
+      billPaymentId,
+    });
+  }
+
+  it("names the bill payment on a captured row and on a failed one", async () => {
+    const s = await seedTenant();
+    const provider = new FakePaymentProvider(pg.db);
+    const first = await seedBillPayment(pg.db, s);
+    const second = await seedBillPayment(pg.db, s);
+
+    const captured = await collectFor(provider, s, first);
+    provider.failNextCollect();
+    const failed = await collectFor(provider, s, second);
+
+    expect(await billPaymentOfRow(pg.db, captured.paymentRef)).toBe(first);
+    expect(await billPaymentOfRow(pg.db, failed.paymentRef)).toBe(second);
+  });
+
+  it("names the bill payment on a row accepted offline", async () => {
+    const s = await seedTenant();
+    await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
+    const provider = new FakePaymentProvider(pg.db);
+    const billPaymentId = await seedBillPayment(pg.db, s);
+    provider.offlineNextCollect();
+
+    const r = await provider.collect({
+      tillId: brandTillId(s.tillId),
+      workingOrderId: brandWorkingOrderId(s.workingOrderId),
+      amount: decimal("10.00"),
+      allowOffline: true,
+      billPaymentId,
+    });
+
+    expect(r.state).toBe("accepted_offline");
+    expect(await billPaymentOfRow(pg.db, r.paymentRef)).toBe(billPaymentId);
+  });
+
+  it("records every collect it is asked for, with its parameters", async () => {
+    const s = await seedTenant();
+    const provider = new FakePaymentProvider(pg.db);
+    const billPaymentId = await seedBillPayment(pg.db, s);
+
+    await collectFor(provider, s, billPaymentId);
+
+    expect(provider.collectCalls).toEqual([
+      expect.objectContaining({ amount: "10.00", billPaymentId }),
+    ]);
+  });
+
+  it("stallNextCollect leaves an attempting row and answers attempting, once", async () => {
+    const s = await seedTenant();
+    const provider = new FakePaymentProvider(pg.db);
+    const billPaymentId = await seedBillPayment(pg.db, s);
+    provider.stallNextCollect();
+
+    const stalled = await collectFor(provider, s, billPaymentId);
+    const next = await collect(provider, s);
+
+    expect(stalled).toMatchObject({ state: "attempting", settledAt: null });
+    const row = await pg.db.transaction((tx) => findPaymentByRef(tx, "fake", stalled.paymentRef));
+    expect(row?.state).toBe("attempting");
+    expect(await billPaymentOfRow(pg.db, stalled.paymentRef)).toBe(billPaymentId);
+    expect(next.state).toBe("captured");
+  });
+
+  it.each(["captured", "attempting"] as const)(
+    "crashNextCollect writes a %s row and then throws, as a process dying after the provider wrote",
+    async (state) => {
+      const s = await seedTenant();
+      const provider = new FakePaymentProvider(pg.db);
+      const billPaymentId = await seedBillPayment(pg.db, s);
+      provider.crashNextCollect(state);
+
+      const error = await collectFor(provider, s, billPaymentId).catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(Error);
+      const rows = await pg.db.execute<{ state: string }>(
+        sql`select state from payments where bill_payment_id = ${billPaymentId}`,
+      );
+      expect(rows.rows).toEqual([{ state }]);
+      expect((await collect(provider, s)).state).toBe("captured");
+    },
+  );
+
+  it("holdNextCollect waits, having recorded the call, until released", async () => {
+    const s = await seedTenant();
+    const provider = new FakePaymentProvider(pg.db);
+    const billPaymentId = await seedBillPayment(pg.db, s);
+    const release = provider.holdNextCollect();
+
+    const pending = collectFor(provider, s, billPaymentId);
+    await vi.waitFor(() => expect(provider.collectCalls).toHaveLength(1));
+    const before = await pg.db.execute<{ n: number }>(
+      sql`select count(*) as n from payments where bill_payment_id = ${billPaymentId}`,
+    );
+    release();
+    const result = await pending;
+
+    expect(before.rows[0]!.n).toBe(0);
+    expect(result.state).toBe("captured");
   });
 });
 

@@ -33,6 +33,7 @@ export class SimulatorPaymentProvider implements PaymentProvider {
       provider: this.provider,
       paymentRef,
       amount: params.amount,
+      billPaymentId: params.billPaymentId,
     };
     await this.db.transaction(async (tx) => {
       if (declined) await insertFailedPayment(tx, common);

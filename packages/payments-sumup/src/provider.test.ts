@@ -3,6 +3,7 @@ import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
+import { billPaymentOfRow, seedBillPayment } from "@waitron/payments/test/seed.js";
 import { setup } from "./testing/setup.js";
 import { SumUpCloudProvider, cardFromTransaction, mapEntryMode } from "./provider.js";
 
@@ -181,6 +182,28 @@ describe("SumUpCloudProvider.collect", () => {
     expect(r.state).toBe("captured");
     expect(r.cardLast4).toBeNull();
     expect(r.cardScheme).toBeNull();
+  });
+});
+
+describe("SumUpCloudProvider.collect for a bill payment", () => {
+  it("names the bill payment on the row it commits before calling SumUp", async () => {
+    const { t, provider, params, row } = await setup(suite, (f) => f.throwOnCreateNext());
+    const billPaymentId = await seedBillPayment(suite.db, t);
+
+    const result = await provider.collect({ ...params, billPaymentId });
+
+    expect((await row(result.paymentRef)).state).toBe("attempting");
+    expect(await billPaymentOfRow(suite.db, result.paymentRef)).toBe(billPaymentId);
+  });
+
+  it("keeps the bill payment on the row it captures", async () => {
+    const { t, provider, params } = await setup(suite);
+    const billPaymentId = await seedBillPayment(suite.db, t);
+
+    const result = await provider.collect({ ...params, billPaymentId });
+
+    expect(result.state).toBe("captured");
+    expect(await billPaymentOfRow(suite.db, result.paymentRef)).toBe(billPaymentId);
   });
 });
 

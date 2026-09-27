@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import { nodeId as brandNodeId, stringToCents } from "@waitron/shared";
 import {
+  billPayments,
   invoiceSeries,
   locations,
   nodes,
@@ -134,4 +136,31 @@ export async function seedPaymentPolicy(
   await db
     .insert(paymentPolicy)
     .values({ offlineMode: mode, offlineAmountCap: stringToCents(cap) });
+}
+
+/** A pending card bill payment on the seeded order, for a provider's `payments` row to name. */
+export async function seedBillPayment(db: Database, seeded: Seeded): Promise<string> {
+  const [row] = await db
+    .insert(billPayments)
+    .values({
+      workingOrderId: seeded.workingOrderId,
+      submissionId: `submission-${Math.random()}`,
+      fingerprint: "fingerprint",
+      kind: "contribution",
+      method: "card",
+      applied: 1000,
+      state: "pending",
+      requestedBy: "11111111-1111-1111-1111-111111111111",
+      tillId: seeded.tillId,
+    })
+    .returning({ id: billPayments.id });
+  return row!.id;
+}
+
+/** The bill payment a provider's `payments` row names, read by its reference. */
+export async function billPaymentOfRow(db: Database, paymentRef: string): Promise<string | null> {
+  const rows = await db.execute<{ bill_payment_id: string | null }>(
+    sql`select bill_payment_id from payments where payment_ref = ${paymentRef}`,
+  );
+  return rows.rows[0]!.bill_payment_id;
 }

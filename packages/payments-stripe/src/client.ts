@@ -49,3 +49,9 @@ export function fromMinorUnits(minor: number): Decimal {
 export function workingOrderIdempotencyKey(workingOrderId: string, cancelled = 0): string {
   return cancelled === 0 ? `wo_${workingOrderId}` : `wo_${workingOrderId}_r${cancelled}`;
 }
+
+/** One PaymentIntent per bill payment, whatever the order's key has moved to: a bill payment is
+ * collected once, and a failed one is never collected again, so its key needs no generation. */
+export function billPaymentIdempotencyKey(billPaymentId: string): string {
+  return `bp_${billPaymentId}`;
+}

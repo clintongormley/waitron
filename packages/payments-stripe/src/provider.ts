@@ -21,7 +21,7 @@ import {
   recordAttemptResolution,
   stampAttemptingRef,
 } from "@waitron/payments";
-import { fromMinorUnits, workingOrderIdempotencyKey } from "./client.js";
+import { billPaymentIdempotencyKey, fromMinorUnits, workingOrderIdempotencyKey } from "./client.js";
 import type { StripeClient } from "./client.js";
 import "./errors.js";
 import { reverseViaStripe } from "./reverse.js";
@@ -98,7 +98,11 @@ export class StripeTerminalProvider implements PaymentProvider {
         provider: PROVIDER,
         paymentRef,
         amount: params.amount,
+        billPaymentId: params.billPaymentId,
       });
+      if (params.billPaymentId !== undefined) {
+        return billPaymentIdempotencyKey(params.billPaymentId);
+      }
       const cancelled = await countProviderCancelledResolutions(tx, {
         provider: PROVIDER,
         workingOrderId: params.workingOrderId,

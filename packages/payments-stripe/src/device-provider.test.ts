@@ -17,7 +17,13 @@ import {
 import { openIncidents } from "@waitron/core";
 import { FakeStripeDevice } from "./testing/fake-stripe-device.js";
 import { StripeOnDeviceProvider } from "./device-provider.js";
-import { freshNif, seedPaymentPolicy, seedWorkingOrder } from "@waitron/payments/test/seed.js";
+import {
+  billPaymentOfRow,
+  freshNif,
+  seedBillPayment,
+  seedPaymentPolicy,
+  seedWorkingOrder,
+} from "@waitron/payments/test/seed.js";
 
 const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
@@ -346,4 +352,30 @@ describe("StripeOnDeviceProvider.connectionToken", () => {
     expect(secret.length).toBeGreaterThan(0);
     expect(secret).toMatch(/^pst_/);
   });
+});
+
+describe("StripeOnDeviceProvider.collect for a bill payment", () => {
+  it.each([
+    ["online", "captured"],
+    ["declined", "failed"],
+    ["offline", "accepted_offline"],
+  ] as const)(
+    "keys the PaymentIntent on the bill payment and names it on the %s row",
+    async (scenario, state) => {
+      const s = await seedWorkingOrder(pg.db, freshNif());
+      await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
+      const billPaymentId = await seedBillPayment(pg.db, s);
+      const client = new FakeStripeDevice();
+      client.nextCollect(scenario);
+
+      const r = await providerFor(client).collect({
+        ...collectParams(s, true),
+        billPaymentId,
+      });
+
+      expect(r.state).toBe(state);
+      expect(client.lastCollect?.idempotencyKey).toBe(`bp_${billPaymentId}`);
+      expect(await billPaymentOfRow(pg.db, r.paymentRef)).toBe(billPaymentId);
+    },
+  );
 });
