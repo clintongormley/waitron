@@ -81,6 +81,39 @@ test("forwards aria-label to the inner button so icon-only buttons have an acces
   expect(inner.getAttribute("aria-label")).toBe("Cerrar");
 });
 
+test("forwards aria-haspopup and aria-expanded to the inner button, where a screen reader reads them", async () => {
+  const el = await mount('<wt-button aria-haspopup="menu" aria-expanded="true">Idioma</wt-button>');
+  const inner = el.shadowRoot!.querySelector("button")!;
+  expect(inner.getAttribute("aria-haspopup")).toBe("menu");
+  expect(inner.getAttribute("aria-expanded")).toBe("true");
+});
+
+test("follows a change to the host's aria-expanded and aria-haspopup, and drops them when removed", async () => {
+  const el = (await mount(
+    '<wt-button aria-haspopup="menu" aria-expanded="true">Idioma</wt-button>',
+  )) as HTMLElement & { updateComplete: Promise<unknown> };
+  const inner = el.shadowRoot!.querySelector("button")!;
+
+  el.setAttribute("aria-expanded", "false");
+  el.setAttribute("aria-haspopup", "listbox");
+  await el.updateComplete;
+  expect(inner.getAttribute("aria-expanded")).toBe("false");
+  expect(inner.getAttribute("aria-haspopup")).toBe("listbox");
+
+  el.removeAttribute("aria-expanded");
+  el.removeAttribute("aria-haspopup");
+  await el.updateComplete;
+  expect(inner.hasAttribute("aria-expanded")).toBe(false);
+  expect(inner.hasAttribute("aria-haspopup")).toBe(false);
+});
+
+test("puts no aria-haspopup or aria-expanded on the inner button when the host has none", async () => {
+  const el = await mount("<wt-button>x</wt-button>");
+  const inner = el.shadowRoot!.querySelector("button")!;
+  expect(inner.hasAttribute("aria-haspopup")).toBe(false);
+  expect(inner.hasAttribute("aria-expanded")).toBe(false);
+});
+
 test("focusing the host delegates focus to the inner button", async () => {
   const el = await mount("<wt-button>x</wt-button>");
   el.focus();

@@ -22,6 +22,14 @@ describe.each(["light", "dark"] as const)("wt-button a11y (%s theme)", (theme) =
     await expectNoA11yViolations(host);
   });
 
+  test.each(["true", "false"] as const)("menu trigger, aria-expanded=%s", async (expanded) => {
+    await mountThemed(
+      `<wt-button aria-haspopup="menu" aria-expanded="${expanded}">Idioma</wt-button>`,
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   test.each(["primary", "secondary", "danger", "ghost"] as const)("%s variant", async (variant) => {
     await mountThemed(`<wt-button variant="${variant}">Cobrar</wt-button>`, theme);
     await expectNoA11yViolations(host);

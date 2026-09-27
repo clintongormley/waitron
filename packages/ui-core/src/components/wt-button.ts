@@ -118,6 +118,8 @@ export class WtButton extends LitElement {
   // the native accessor would otherwise just read/write) never reaches an icon-only button's
   // accessible name on its own, since the host itself carries no interactive semantics.
   @property({ attribute: "aria-label" }) override ariaLabel: string | null = null;
+  @property({ attribute: "aria-haspopup" }) override ariaHasPopup: string | null = null;
+  @property({ attribute: "aria-expanded" }) override ariaExpanded: string | null = null;
 
   // No `type` property: a shadow-DOM <button> is never form-associated (see
   // docs/developers/design-system.md, "Forms"), so a `type="submit"` here would be
@@ -136,6 +138,8 @@ export class WtButton extends LitElement {
         ?disabled=${this.disabled || this.loading}
         aria-busy=${this.loading ? "true" : nothing}
         aria-label=${this.ariaLabel ?? nothing}
+        aria-haspopup=${this.ariaHasPopup ?? nothing}
+        aria-expanded=${this.ariaExpanded ?? nothing}
       >
         ${this.loading ? html`<wt-spinner size="sm" decorative></wt-spinner>` : nothing}
         <slot></slot>
