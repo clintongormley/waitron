@@ -122,7 +122,7 @@ import {
   submissionIdOf,
   withSaleTillWhenIssuing,
 } from "./bill-payments-api.js";
-import { reprintOrderTickets } from "./kitchen-print.js";
+import { listPrintProblems, reprintOrderTickets } from "./kitchen-print.js";
 import {
   canonicaliseUuid,
   clearSessionCookie,
@@ -1465,6 +1465,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const visitId = requireVisitParam(c.req.param("id"));
       const groups = await withTransaction(deps.db, (tx) => listOrderGroups(tx, visitId));
       return c.json(groups);
+    }),
+  );
+
+  app.get("/api/visits/:id/print-problems", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const visitId = requireVisitParam(c.req.param("id"));
+      const problems = await withTransaction(deps.db, (tx) => listPrintProblems(tx, visitId));
+      return c.json({ problems });
     }),
   );
 

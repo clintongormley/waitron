@@ -2,7 +2,7 @@
 // polls. The registry stamps each returned alert's `kind` and `area`; a source only supplies the
 // per-alert facts.
 
-import { and, count, eq, gte, inArray, lt, min, or } from "drizzle-orm";
+import { and, count, eq, lt, min } from "drizzle-orm";
 import { printAgents, printJobs, printers } from "@waitron/db";
 import type { AlertSource, OngoingAlert } from "@waitron/module";
 import {
@@ -11,11 +11,11 @@ import {
   type CardProviderRuntimeDeps,
   cardReaders,
 } from "@waitron/payments";
-import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import type { StreamView } from "@waitron/stream";
 import type { BackupStatus } from "./backup-status.js";
 import type { AwaitingCertStatus } from "./pass.js";
 import type { SealedStateStatus } from "./sealed-state.js";
+import { printJobInTrouble } from "./print-job-trouble.js";
 import { FIRST_START_PENDING } from "./stream-host.js";
 import type { TtlCache } from "./ttl-cache.js";
 import "./errors.js";
@@ -245,8 +245,7 @@ export function awaitingCertAlertSource(holder: AwaitingCertStatus): AlertSource
 
 /** An agent quiet for longer than this has stopped checking in; printing may be stalled. */
 export const AGENT_SILENT_MS = 5 * 60 * 1000;
-/** A document job older than this that has not printed is stuck at its printer. */
-export const JOBS_WAITING_MS = 2 * 60 * 1000;
+export { JOBS_WAITING_MS } from "./print-job-trouble.js";
 
 /** The printing alert source. A drawer pulse never counts — only document jobs surface here. */
 export function printingAlertSource(): AlertSource {
@@ -280,7 +279,6 @@ export function printingAlertSource(): AlertSource {
         });
       }
 
-      const stuckBefore = new Date(now.getTime() - JOBS_WAITING_MS).toISOString();
       const rows = await tx
         .select({
           id: printers.id,
@@ -290,21 +288,7 @@ export function printingAlertSource(): AlertSource {
         })
         .from(printers)
         .innerJoin(printJobs, eq(printJobs.printerId, printers.id))
-        .where(
-          and(
-            eq(printers.active, true),
-            eq(printJobs.kind, "document"),
-            or(
-              // Waiting too long in a non-terminal state…
-              and(
-                inArray(printJobs.status, ["queued", "printing", "failed"]),
-                lt(printJobs.createdAt, stuckBefore),
-              ),
-              // …or failed with no attempts left, however recent.
-              and(eq(printJobs.status, "failed"), gte(printJobs.attempts, MAX_DELIVERY_ATTEMPTS)),
-            ),
-          ),
-        )
+        .where(and(eq(printers.active, true), printJobInTrouble(now)))
         .groupBy(printers.id, printers.name);
       for (const r of rows) {
         // A group only forms when a job matched, and `created_at` is notNull, so `oldest` is present.

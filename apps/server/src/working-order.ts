@@ -139,6 +139,7 @@ import {
   enqueueMovedSlips,
   firedQuantity,
   isStarted,
+  ordersWithPrintProblem,
   readSentWork,
 } from "./kitchen-print.js";
 import type { CorrectionItem, FiredItem, TicketState } from "./kitchen-print.js";
@@ -4840,6 +4841,9 @@ export interface StationQueueGroup {
   status: WorkingOrderStatus;
   /** Absent for a bill of no visit. */
   visit?: QueueVisit;
+  /** Present only when one of this bill's tickets for the station has not printed and will not on its
+   *  own (`listPrintProblems`). */
+  printProblem?: true;
   items: StationQueueItem[];
   thresholds: StationThresholds;
 }
@@ -5019,6 +5023,12 @@ export async function listStationQueue(
   );
 
   const nowMs = Date.now();
+  const printProblems = await ordersWithPrintProblem(
+    tx,
+    stationId,
+    [...new Set(rows.map((row) => row.orderId))],
+    new Date(nowMs),
+  );
   // The Map keeps insertion order, so groups come out oldest-first.
   const groups = new Map<string, StationQueueGroup>();
   for (const row of rows) {
@@ -5036,6 +5046,7 @@ export async function listStationQueue(
         queuedAt: row.queuedAt,
         status: row.status,
         ...optional("visit", queueVisit(row)),
+        ...optional("printProblem", printProblems.has(row.orderId) ? true : undefined),
         items: [],
         thresholds,
       };

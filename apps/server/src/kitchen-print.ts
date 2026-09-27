@@ -5,26 +5,33 @@
 // read keeps active printers only, and no other write transaction can run between that read and the
 // enqueue, because one write transaction runs on the venue file at a time (`withTransaction`,
 // `packages/db/src/tenancy.ts`). Receipt: `assertExtraListForWrite` in `packages/catalogue/src/extras.ts`.
-import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, ne, or, sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 import {
+  kitchenPrintJobs,
   kitchenStations,
   orderGroups,
+  printJobs,
   printers,
   stationPrinters,
   ticketItems,
   ticketState,
+  visits,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { perDishOptionQuantity, thousandthsToDecimal } from "@waitron/shared";
+import { AppError, perDishOptionQuantity, thousandthsToDecimal } from "@waitron/shared";
 import { kitchenPresentationName, optionSnapshotLabels } from "@waitron/catalogue";
 import { columnsFor, enqueuePrintJob } from "@waitron/printing";
 import type { CharacterSet, PaperWidth, PrintConfig } from "@waitron/printing";
 import { arrangeTicketItems, formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { printJobInTrouble } from "./print-job-trouble.js";
+import { visitFamily } from "./visits.js";
 import type { KitchenLayout, KitchenTicketItem, KitchenTicketStation } from "./kitchen-ticket.js";
 import type { TillConfig } from "./till-config.js";
+import "./errors.js";
 
 /**
  * One line that fired in THIS round. The caller captures it from its own write's `RETURNING`, never by
@@ -253,7 +260,8 @@ async function readOrderHeader(
  * Enqueue the kitchen tickets for a set of just-fired lines. For each INVOLVED station (one with ≥1 fired line), each attached `station`-scope printer gets a
  * ticket of that station's own items; every attached `order`-scope (group) printer gets ONE consolidated
  * ticket of the WHOLE event — deduped by printer id, so a group printer attached to N involved stations
- * prints a single ticket carrying all their items, not N.
+ * prints a single ticket carrying all their items, not N. Each job is linked to the bill and to every
+ * station its ticket carries (`kitchen_print_jobs`).
  */
 export async function enqueueKitchenTickets(
   tx: Transaction,
@@ -348,7 +356,8 @@ export async function enqueueKitchenTickets(
         layoutOf(group[0]!),
       );
       for (const printer of group) {
-        await enqueuePrintJob(tx, printCfg, printer.printerId, stationTicket);
+        const { jobId } = await enqueuePrintJob(tx, printCfg, printer.printerId, stationTicket);
+        await linkKitchenJob(tx, jobId, orderId, [station.id], reprint);
       }
     }
   }
@@ -369,9 +378,29 @@ export async function enqueueKitchenTickets(
       layoutOf(group[0]!),
     );
     for (const printer of group) {
-      await enqueuePrintJob(tx, printCfg, printer.printerId, consolidated);
+      const { jobId } = await enqueuePrintJob(tx, printCfg, printer.printerId, consolidated);
+      await linkKitchenJob(
+        tx,
+        jobId,
+        orderId,
+        stations.map((station) => station.id),
+        reprint,
+      );
     }
   }
+}
+
+/** Record which bill and stations a kitchen ticket's job carried. */
+async function linkKitchenJob(
+  tx: Transaction,
+  printJobId: string,
+  workingOrderId: string,
+  stationIds: string[],
+  reprint: boolean,
+): Promise<void> {
+  await tx
+    .insert(kitchenPrintJobs)
+    .values(stationIds.map((stationId) => ({ printJobId, workingOrderId, stationId, reprint })));
 }
 
 /** `queued → preparing → ready`. */
@@ -585,8 +614,8 @@ export async function enqueueMovedSlips(
 /**
  * Reprint an order's kitchen tickets: every fired item across every round (held items excluded), unlike
  * the fire path, which prints only its own round. Each ticket is marked REPRINT and stamped with the
- * reprint time, not the original fire time. It writes print jobs and nothing else. An order with
- * nothing fired is a no-op.
+ * reprint time, not the original fire time. It changes no line, ticket item or group event. An order
+ * with nothing fired is a no-op.
  */
 export async function reprintOrderTickets(
   tx: Transaction,
@@ -602,4 +631,106 @@ export async function reprintOrderTickets(
     .from(ticketItems)
     .where(and(eq(ticketItems.workingOrderId, orderId), isNotNull(ticketItems.firedAt)));
   await enqueueKitchenTickets(tx, cfg, orderId, fired, { reprint: true });
+}
+
+/** A kitchen ticket for a bill and station that has not printed and will not on its own. */
+export interface PrintProblem {
+  workingOrderId: string;
+  stationId: string;
+  stationName: string;
+  /** When the oldest such ticket was queued. */
+  since: string;
+}
+
+/**
+ * The printing problems among the kitchen tickets `scope` selects, abandoned bills left out. A
+ * ticket is a problem while {@link printJobInTrouble} holds for its job, until a reprint for the same
+ * bill and station queued after it has printed: only a reprint carries every dish fired before it,
+ * so a later round's ticket printing clears nothing. Oldest first.
+ */
+async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promise<PrintProblem[]> {
+  const troubled = printJobInTrouble(now);
+  const rows = await tx
+    .select({
+      workingOrderId: kitchenPrintJobs.workingOrderId,
+      stationId: kitchenPrintJobs.stationId,
+      stationName: kitchenStations.name,
+      createdAt: printJobs.createdAt,
+      troubled: sql<number>`${troubled}`,
+    })
+    .from(kitchenPrintJobs)
+    .innerJoin(printJobs, eq(printJobs.id, kitchenPrintJobs.printJobId))
+    .innerJoin(workingOrders, eq(workingOrders.id, kitchenPrintJobs.workingOrderId))
+    .innerJoin(kitchenStations, eq(kitchenStations.id, kitchenPrintJobs.stationId))
+    .where(
+      and(
+        scope,
+        ne(workingOrders.status, "abandoned"),
+        or(troubled, and(eq(kitchenPrintJobs.reprint, true), eq(printJobs.status, "done"))),
+      ),
+    );
+
+  const key = (row: { workingOrderId: string; stationId: string }) =>
+    `${row.workingOrderId}|${row.stationId}`;
+  const lastReprinted = new Map<string, string>();
+  for (const row of rows) {
+    if (row.troubled) continue;
+    const seen = lastReprinted.get(key(row));
+    if (seen === undefined || row.createdAt > seen) lastReprinted.set(key(row), row.createdAt);
+  }
+  const problems = new Map<string, PrintProblem>();
+  for (const row of rows) {
+    if (!row.troubled) continue;
+    const reprinted = lastReprinted.get(key(row));
+    if (reprinted !== undefined && reprinted > row.createdAt) continue;
+    const known = problems.get(key(row));
+    if (known === undefined || row.createdAt < known.since) {
+      problems.set(key(row), {
+        workingOrderId: row.workingOrderId,
+        stationId: row.stationId,
+        stationName: row.stationName,
+        since: row.createdAt,
+      });
+    }
+  }
+  return [...problems.values()].sort(
+    (a, b) =>
+      a.since.localeCompare(b.since) ||
+      a.stationName.localeCompare(b.stationName) ||
+      a.workingOrderId.localeCompare(b.workingOrderId),
+  );
+}
+
+/**
+ * The printing problems on a seated party's bills, the bills of every party merged into it
+ * included. A visit that does not exist is `visit.not_open`, as on the other visit reads.
+ */
+export async function listPrintProblems(
+  tx: Transaction,
+  visitId: string,
+  now: Date = new Date(),
+): Promise<PrintProblem[]> {
+  const [visit] = await tx.select({ id: visits.id }).from(visits).where(eq(visits.id, visitId));
+  if (visit === undefined) throw new AppError("visit.not_open", { visitId });
+  const family = await visitFamily(tx, visitId);
+  return readPrintProblems(tx, inArray(workingOrders.visitId, family), now);
+}
+
+/** Which of `orderIds` have a printing problem at `stationId`. */
+export async function ordersWithPrintProblem(
+  tx: Transaction,
+  stationId: string,
+  orderIds: readonly string[],
+  now: Date,
+): Promise<Set<string>> {
+  if (orderIds.length === 0) return new Set();
+  const problems = await readPrintProblems(
+    tx,
+    and(
+      eq(kitchenPrintJobs.stationId, stationId),
+      inArray(kitchenPrintJobs.workingOrderId, [...orderIds]),
+    )!,
+    now,
+  );
+  return new Set(problems.map((problem) => problem.workingOrderId));
 }
