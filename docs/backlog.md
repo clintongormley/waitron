@@ -4274,12 +4274,15 @@ files a venue directory holds is the store's property. Add a file or a sidecar a
 restore silently miss it — and the restore is the cold-recovery path (`CLAUDE.md` §5). **Next
 action:** export the names from `@waitron/store` and read them.
 
-**`RESTRICT_VIOLATION` and `TRIGGER_ABORT` are the same number — DONE (2026-09-27, found in task
-F1's review wave).** SQLite gives a foreign key's `ON DELETE RESTRICT` and every hand-written
+**`RESTRICT_VIOLATION` and `TRIGGER_ABORT` are the same number — DONE (2026-09-27, #731; found in
+task F1's review wave).** SQLite gives a foreign key's `ON DELETE RESTRICT` and every hand-written
 `RAISE(ABORT)` the same result code, 1811. `restrictRefused` (`packages/db/src/constraint-target.ts`)
 now matches the restrict direction by the engine's words, as `triggerRaised` does for a trigger, and
 `packages/layouts/src/canvas-store.ts` and `device-profile-store.ts` use it; the device-profile store
-matches `device_profile_form_factor_locked` by its own words.
+matches `device_profile_form_factor_locked` by its own words. Left as they were, from #731's review:
+`isRefusal` with `RESTRICT_VIOLATION` or `TRIGGER_ABORT` still reads the number alone and both stay
+exported (the `CLAUDE.md` §3 rule, unguarded, is what stands against a new caller); and the four
+near-identical word-matching checks in `constraint-target.ts` could share one private helper.
 
 **`VenueMigrationOptions.appendOnlyTables` is optional while `MigrationSet.appendOnlyTables` is
 required — OPEN (found 2026-09-23, task F1's review wave).** `applyMigrations` reads it as `?? []`,
