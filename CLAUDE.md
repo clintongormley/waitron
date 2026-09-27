@@ -987,8 +987,9 @@ drives. When CODEX drives, the roles reverse and Codex implements — so establi
 before treating an implementation as a rule violation.
 
 - **Never commit directly to `main`.** Feature work happens in a worktree
-  (`python3 ~/workspace/tools/worktree.py new waitron <branch>` — not a plain `git worktree add`,
-  which `/land-branch` cannot tear down). Name the branch right at creation.
+  (`python3 ~/workspace/tools/worktree.py new waitron <branch> --headless` — not a plain
+  `git worktree add`, which `/land-branch` cannot tear down). Claude always passes `--headless`; only
+  the owner runs it without. Name the branch right at creation.
 - **A `docs/`-only change is exempt from the PR ceremony**: branch, `commit -s`, fast-forward `main`,
   push direct. A ROOT `CLAUDE.md` or `README.md` is format-checked and takes the normal flow.
 - **Every commit needs `git commit -s`.** **A PR that goes `BEHIND` is not rebased for that alone**
