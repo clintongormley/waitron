@@ -1702,7 +1702,7 @@ describe("merge (D2)", () => {
     );
 
     expect(error).toMatchObject({
-      code: "tab.party_has_other_open_bill",
+      code: "tab.visit_has_other_open_bill",
       params: { tabId: openCheckId },
     });
     expect((await tableRow(mesa4)).tabId).toBe(t.tabId);
@@ -1723,12 +1723,41 @@ describe("merge (D2)", () => {
       ),
     );
 
-    expect(error).toMatchObject({ code: "tab.party_mismatch", params: { tabId: noPartyTabId } });
+    expect(error).toMatchObject({ code: "tab.visit_mismatch", params: { tabId: noPartyTabId } });
     expect(await statusOf(noPartyTabId)).toBe("open");
     expect((await tableRow(mesa8)).tabId).toBe(noPartyTabId);
     expect(await inTx((tx) => visitForTable(tx, mesa8))).toBeNull();
     expect((await tableRow(mesa4)).tabId).toBe(t.tabId);
     expect(await revisionOf(t.visitId)).toBe(command.expectedVisitRevision);
+  });
+
+  it("points a party's table at its split check when its tab merges into it without freeing the table", async () => {
+    const { venue, mesa6, s, openCheckId } = await parties();
+    const command = await cmd(s.visitId);
+
+    await inTx((tx) =>
+      mergeTabs(tx, venue.cfg, openCheckId, s.tabId, { freeSourceTable: false, ...command }),
+    );
+
+    expect((await tableRow(mesa6)).tabId).toBe(openCheckId);
+    expect(await statusOf(s.tabId)).toBe("abandoned");
+    expect(await statusOf(openCheckId)).toBe("open");
+    expect(await inTx((tx) => visitForTable(tx, mesa6))).toMatchObject({ visitId: s.visitId });
+  });
+
+  it("puts a split check at no table back into its party's tab when asked to free the source table", async () => {
+    const { venue, mesa6, s, openCheckId } = await parties();
+    const memberships = await membershipsOf(s.visitId);
+    const command = await cmd(s.visitId);
+
+    await inTx((tx) =>
+      mergeTabs(tx, venue.cfg, s.tabId, openCheckId, { freeSourceTable: true, ...command }),
+    );
+
+    expect(await statusOf(openCheckId)).toBe("abandoned");
+    expect(await statusOf(s.tabId)).toBe("open");
+    expect((await tableRow(mesa6)).tabId).toBe(s.tabId);
+    expect(await membershipsOf(s.visitId)).toEqual(memberships);
   });
 
   it("points the absorbed party's tables at T's tab when the merged bill is its check and its tab has settled", async () => {

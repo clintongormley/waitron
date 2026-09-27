@@ -517,7 +517,7 @@ describe("join and merge refuse bills that would leave a table, a bill and a par
     });
   });
 
-  it("409 tab.party_mismatch merging a party's tab into a table's bill of no party", async () => {
+  it("409 tab.visit_mismatch merging a party's tab into a table's bill of no party", async () => {
     const a = await seat();
     const tableId = await table();
     const noPartyTabId = await withTransaction(
@@ -533,11 +533,11 @@ describe("join and merge refuse bills that would leave a table, a bill and a par
 
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({
-      error: { code: "tab.party_mismatch", params: { tabId: noPartyTabId } },
+      error: { code: "tab.visit_mismatch", params: { tabId: noPartyTabId } },
     });
   });
 
-  it("409 tab.party_has_other_open_bill merging another party's separate bill while its tab is open", async () => {
+  it("409 tab.visit_has_other_open_bill merging another party's separate bill while its tab is open", async () => {
     const a = await seat();
     const b = await seat();
     const checkId = randomUUID();
@@ -554,7 +554,7 @@ describe("join and merge refuse bills that would leave a table, a bill and a par
 
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({
-      error: { code: "tab.party_has_other_open_bill", params: { tabId: checkId } },
+      error: { code: "tab.visit_has_other_open_bill", params: { tabId: checkId } },
     });
   });
 });

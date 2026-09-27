@@ -148,7 +148,7 @@ it("explains each refusal of an unsent order, in both languages", () => {
 
 it("explains each refusal of joining or merging bills that belong together differently, in both languages", () => {
   expect(
-    ["tab.not_table_tab", "tab.party_mismatch", "tab.party_has_other_open_bill"].map((code) => [
+    ["tab.not_table_tab", "tab.visit_mismatch", "tab.visit_has_other_open_bill"].map((code) => [
       codeMessage(code, "en"),
       codeMessage(code, "es"),
     ]),

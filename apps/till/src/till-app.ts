@@ -182,8 +182,8 @@ const TABLE_REFUSALS = new Set([
   "group.held_leaves_visit",
   "tab.already_open",
   "tab.not_table_tab",
-  "tab.party_mismatch",
-  "tab.party_has_other_open_bill",
+  "tab.visit_mismatch",
+  "tab.visit_has_other_open_bill",
   "visit.not_open",
   "visit.bill_outstanding",
 ]);

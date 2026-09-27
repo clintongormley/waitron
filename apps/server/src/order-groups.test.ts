@@ -2049,7 +2049,7 @@ describe("merging a party's tab into a bill of no visit", () => {
     });
   }
 
-  it("refuses a tab holding a held-group line before looking at the line (tab.party_mismatch), writing nothing", async () => {
+  it("refuses a tab holding a held-group line before looking at the line (tab.visit_mismatch), writing nothing", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
     const into = await noVisitTab(v);
@@ -2058,12 +2058,12 @@ describe("merging a party's tab into a bill of no visit", () => {
 
     await expect(
       inTx((tx) => mergeTabs(tx, v.cfg, into, s.tabId, { freeSourceTable: true, ...command })),
-    ).rejects.toMatchObject({ code: "tab.party_mismatch", params: { tabId: into } });
+    ).rejects.toMatchObject({ code: "tab.visit_mismatch", params: { tabId: into } });
 
     expect([await snapshot(v, s.visitId), await linesOfBill(into)]).toEqual(before);
   });
 
-  it("refuses a tab of fired groups (tab.party_mismatch), writing nothing", async () => {
+  it("refuses a tab of fired groups (tab.visit_mismatch), writing nothing", async () => {
     const v = await setupVenue();
     const s = await seated(v);
     await submit(v, s.visitId, [
@@ -2086,7 +2086,7 @@ describe("merging a party's tab into a bill of no visit", () => {
 
     await expect(
       inTx((tx) => mergeTabs(tx, v.cfg, into, s.tabId, { freeSourceTable: true, ...command })),
-    ).rejects.toMatchObject({ code: "tab.party_mismatch", params: { tabId: into } });
+    ).rejects.toMatchObject({ code: "tab.visit_mismatch", params: { tabId: into } });
 
     expect([await snapshot(v, s.visitId), await linesOfBill(into)]).toEqual(before);
   });

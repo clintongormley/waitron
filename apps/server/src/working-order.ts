@@ -2583,7 +2583,7 @@ async function tablePointsAt(tx: Transaction, orderId: string): Promise<boolean>
 
 /**
  * Refuse a merge that would leave a table, a bill and a party pointing at each other
- * inconsistently. An order with no party that no table points at is a counter order.
+ * inconsistently.
  */
 async function refuseInconsistentMerge(
   tx: Transaction,
@@ -2598,15 +2598,15 @@ async function refuseInconsistentMerge(
     return;
   }
   if (from.visitId === null) {
-    throw new AppError(fromAtTable ? "tab.party_mismatch" : "tab.not_table_tab", {
+    throw new AppError(fromAtTable ? "tab.visit_mismatch" : "tab.not_table_tab", {
       tabId: from.id,
     });
   }
   if (into.visitId === null) {
-    throw new AppError("tab.party_mismatch", { tabId: into.id });
+    throw new AppError("tab.visit_mismatch", { tabId: into.id });
   }
-  // A bill of another party that no table points at is one of its split checks. Merging it
-  // absorbs that whole party, which is intended only when no other bill of that party is open.
+  // Merging another party's bill that no table points at absorbs that whole party, which is
+  // intended only when no other bill of that party is open.
   if (!fromAtTable && from.visitId !== into.visitId) {
     const [otherOpenBill] = await tx
       .select({ id: workingOrders.id })
@@ -2620,7 +2620,7 @@ async function refuseInconsistentMerge(
       )
       .limit(1);
     if (otherOpenBill !== undefined) {
-      throw new AppError("tab.party_has_other_open_bill", { tabId: from.id });
+      throw new AppError("tab.visit_has_other_open_bill", { tabId: from.id });
     }
   }
 }
@@ -4944,7 +4944,7 @@ export interface QueueVisit {
 }
 
 /** The group a queue item's dish was submitted in; absent for a bill of no visit, or a line moved
- *  in from another party's bill, or moved or merged in from a bill with no party. */
+ *  in from another party's bill or from a bill with no party. */
 export interface QueueGroup {
   id: string;
   position: number;
@@ -5269,7 +5269,7 @@ export interface ExpoCourse {
 }
 
 /** One group of a seated party's bill on the expo board; the section of lines with no group (moved
- *  in from another party's bill, or moved or merged in from a bill with no party) has every group
+ *  in from another party's bill or from a bill with no party) has every group
  *  field `null` and sorts first. `fired` and `away` roll up as {@link ExpoCourse}'s do. */
 export interface ExpoGroup {
   groupId: string | null;

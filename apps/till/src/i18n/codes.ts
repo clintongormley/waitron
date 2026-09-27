@@ -31,11 +31,11 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That order is not a table's bill, so it cannot be joined to a table or merged with one",
     es: "Ese pedido no es la cuenta de una mesa, así que no se puede unir a una mesa ni combinar con una",
   },
-  "tab.party_mismatch": {
+  "tab.visit_mismatch": {
     en: "One of these bills belongs to seated guests and the other does not, so they cannot be merged",
     es: "Una de estas cuentas es de clientes sentados y la otra no, así que no se pueden combinar",
   },
-  "tab.party_has_other_open_bill": {
+  "tab.visit_has_other_open_bill": {
     en: "That separate bill's guests still have another open bill. Merge their table's bill instead",
     es: "Los clientes de esa cuenta separada aún tienen otra cuenta abierta. Combina en su lugar la cuenta de su mesa",
   },

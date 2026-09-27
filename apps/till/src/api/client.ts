@@ -1222,8 +1222,7 @@ export interface TabLine {
    * (`editSentLines`); "preparing"/"ready" is cancel-only. */
   state: TicketState | null;
   /** The order group the line is released with; null when it is in none, as on a bill with no party
-   * or for a line moved in from another party's bill, or moved or merged in from a bill with no
-   * party. */
+   * or for a line moved in from another party's bill or from a bill with no party. */
   groupId: string | null;
   note: string | null;
   /** The extras list a CHILD row was picked from, which a prefilled pick goes back to; null on a
@@ -1913,7 +1912,8 @@ export class TillApi {
 
   /**
    * Extend this tab onto an ADDITIONAL free table → `POST /api/tabs/:tabId/join`. No line moves;
-   * PRE-FISCAL. Same rejection codes as {@link moveTab}.
+   * PRE-FISCAL. Same rejection codes as {@link moveTab}, and `tab.not_table_tab` or
+   * `service_zone.join_mismatch`.
    */
   async joinTable(orderId: string, tableId: string, revisions: VisitRevisions = {}): Promise<void> {
     await this.#request<void>(`/api/tabs/${orderId}/join`, "POST", { tableId, ...revisions });
@@ -1923,8 +1923,9 @@ export class TillApi {
    * Combine ANOTHER open tab onto this one → `POST /api/tabs/:tabId/merge`, where the path names the
    * DESTINATION tab and `fromTabId` the source, whose lines move here before it is abandoned.
    * `freeSourceTable` frees the vacated table (`true`) or re-points it at this tab (`false`).
-   * PRE-FISCAL. Rejects `tab.not_open` or `tab.merge_self`, and on a party's tab `visit.not_open`,
-   * `visit.out_of_date`, or `management.request_invalid` for a missing revision.
+   * PRE-FISCAL. Rejects `tab.not_open`, `tab.merge_self`, `tab.not_table_tab`, `tab.visit_mismatch`,
+   * `tab.visit_has_other_open_bill` or `bill.payments_received`, and on a party's tab
+   * `visit.not_open`, `visit.out_of_date`, or `management.request_invalid` for a missing revision.
    */
   async mergeTabs(
     orderId: string,

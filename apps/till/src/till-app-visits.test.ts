@@ -1125,13 +1125,13 @@ describe("till-app: another device changed the table first", () => {
     ["tab.not_table_tab", "join-table", { tableId: "t9" }, "joinTable"],
     ["tab.not_table_tab", "merge-tabs", { fromTabId: "wo-7", freeSourceTable: false }, "mergeTabs"],
     [
-      "tab.party_mismatch",
+      "tab.visit_mismatch",
       "merge-tabs",
       { fromTabId: "wo-7", freeSourceTable: false },
       "mergeTabs",
     ],
     [
-      "tab.party_has_other_open_bill",
+      "tab.visit_has_other_open_bill",
       "merge-tabs",
       { fromTabId: "wo-7", freeSourceTable: false },
       "mergeTabs",
