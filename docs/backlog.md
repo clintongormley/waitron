@@ -2942,16 +2942,28 @@ image constraints under *Detail → Box image*.
 
 ### B7. Provisioning and build debt
 
-- **Every credential reader checks the fields it uses — decided 2026-09-15; the two readers DONE.**
-  Reading a credential (`getCredential`/`tryGetCredential`, `packages/credentials/src/store.ts`) does
-  not re-check it against `PURPOSES`, and the owner chose to keep it that way rather than refuse the
-  read (which would stop every venue holding that kind of secret the moment a field is added). DONE
-  for the last two readers that passed a missing field on unchecked (PR for
-  `fix/credential-field-checks`): `resolveEmailDelivery` (`apps/server/src/email-delivery.ts`) and
-  `readNodeIdentityKey` (`apps/server/src/node-identity.ts`) now raise `server.credential_unusable`
-  naming the field, through `credentialField` in `apps/server/src/credentials.ts`. `rotate` re-checks a
-  secret against the current list
-  only when it re-seals one: it skips a secret already on the current key (`rotateCredentials`,
+- **DONE (#752): the email and machine-key credential readers check the fields they use**,
+  through `credentialField` in `apps/server/src/credentials.ts`.
+- **The bucket-stream reader still passes a missing field on unchecked.** `readStreamSettings`
+  (`apps/server/src/stream-host.ts`) hands each `backup.stream` field on as read, so a row sealed
+  before a field was added yields `undefined` in the bucket settings; a missing `endpoint` reads as
+  Amazon's, pointing the stream at the wrong host. Routing each field through `credentialField` is
+  one line, but from reading the code on 2026-09-27 (nothing run), three callers would then refuse
+  where the owner needs a way forward: the Backups screen's `GET /api/backup/stream` (`view()` in
+  `apps/server/src/stream-api.ts`) would fail, and the dashboard panel then shows none of the form,
+  Change or Turn off, the only ways to repair it; the first start after a restore
+  (`readBucketPointerTerm`, `apps/server/src/rebuild-first-start.ts`) would fail on every start; and
+  the archive restore (`apps/server/src/restore-stream.ts`) reads the settings outside its mapping to
+  `restore.stream_source_unchecked`, so the command line would print a bare "restore failed". The
+  recovery-kit download and the stream host's start can refuse without harm. Reachable only once
+  the `backup.stream` field list changes. **Next action:** add the check together with those three
+  callers' handling, each with a failing test first.
+- **Reading a credential does not re-check it against `PURPOSES` — owner decision 2026-09-15.**
+  `getCredential`/`tryGetCredential` (`packages/credentials/src/store.ts`) return what was sealed,
+  rather than refuse the read, which would stop every venue holding that kind of secret the moment
+  a field is added; each reader is to check the fields it uses instead (the bucket-stream reader,
+  above, does not yet). `rotate` re-checks a secret against the current list only when it re-seals
+  one: it skips a secret already on the current key (`rotateCredentials`,
   `packages/credentials/src/store.ts`), so an out-of-date one stops a key rotation only when it is
   on an older key, until it is re-entered (measured by #577's review).
 - **`CardProviderBuildDeps.nodeId` is dead weight — nothing reads it** (2026-09-16, traced through
@@ -4955,8 +4967,9 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   that translation is still wanted before deleting the code.
 - **`server.credential_unusable` names an unusable credential, although `server.*` is reserved for
   facts about the process itself.** It is thrown for AEAT's certificate
-  (`packages/fiscal-verifactu/src/aeat-transport.ts`) and for Stripe's secret key and webhook secret
-  (`apps/server/src/stripe-account.ts`, `apps/server/src/webhook.ts`), and both
+  (`packages/fiscal-verifactu/src/aeat-transport.ts`), for Stripe's secret key and webhook secret
+  (`apps/server/src/stripe-account.ts`, `apps/server/src/webhook.ts`), and for the email and
+  machine-key credentials (`credentialField`, `apps/server/src/credentials.ts`); both
   `packages/fiscal-verifactu/src/errors.ts` and `apps/server/src/errors.ts` declare it. Before a
   venue is live a code may be renamed freely; once one is live a rename is a migration (CLAUDE.md
   §3). **Next action:** choose a prefix
