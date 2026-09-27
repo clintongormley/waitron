@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  kitchenPrintJobs,
   locations,
   orderDraftEvents,
   orderGroupEvents,
   orderDraftLines,
   orderDrafts,
   orderGroups,
+  printJobs,
   serviceCommands,
   ticketItems,
   tills,
@@ -46,8 +48,8 @@ import { createTable } from "./tables.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
-import { seatTable } from "./visits.js";
-import { listTablesWithState, splitOffCheck } from "./working-order.js";
+import { finishTable, seatTable } from "./visits.js";
+import { listTablesWithState, mergeTabs, splitOffCheck } from "./working-order.js";
 import { submitGroups } from "./order-groups.js";
 import type { GroupRelease } from "./order-groups.js";
 import { readDrafts, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
@@ -1339,6 +1341,8 @@ async function everything() {
     bills: await db.select().from(workingOrders).orderBy(asc(workingOrders.id)),
     billLines: await db.select().from(workingOrderLines).orderBy(asc(workingOrderLines.id)),
     tickets: await db.select().from(ticketItems).orderBy(asc(ticketItems.id)),
+    printJobs: await db.select().from(printJobs).orderBy(asc(printJobs.id)),
+    kitchenPrintJobs: await db.select().from(kitchenPrintJobs).orderBy(asc(kitchenPrintJobs.id)),
     commands: await db.select().from(serviceCommands).orderBy(asc(serviceCommands.id)),
   };
 }
@@ -1898,5 +1902,287 @@ describe("pricing (D9)", () => {
       { lineIds: lineIds(current), release: "fire" },
     ]);
     expect(groups).toHaveLength(1);
+  });
+});
+
+/** Merge `from`'s bill into `into`'s, its table joining `into`'s party, as the till's route does. */
+async function merge(v: Venue, into: Seated, from: Seated, operatorId?: string): Promise<void> {
+  const command = {
+    expectedVisitRevision: await visitRevision(into.visitId),
+    expectedSourceVisitRevision: await visitRevision(from.visitId),
+    ...(operatorId === undefined ? {} : { operatorId }),
+  };
+  await inTx((tx) =>
+    mergeTabs(tx, v.cfg, into.tabId, from.tabId, { freeSourceTable: false, ...command }),
+  );
+}
+
+async function openOwnersOn(visitId: string): Promise<string[]> {
+  const rows = await db
+    .select({ ownerId: orderDrafts.ownerId })
+    .from(orderDrafts)
+    .where(and(eq(orderDrafts.visitId, visitId), eq(orderDrafts.state, "open")));
+  return rows.map((row) => row.ownerId).sort();
+}
+
+describe("merging visits (D2)", () => {
+  it("moves the source's open drafts onto the target, and adds a person's source draft to the end of their draft there, discarding it with an event", async () => {
+    const v = await setupVenue();
+    const mesa4 = await seated(v);
+    const mesa5 = await seated(v, "Mesa 5");
+    const mia = randomUUID();
+    const miasSent = await save(v, mesa5.visitId, mia, null, 0, [item(v, "fish")]);
+    await submit(v, mesa5.visitId, miasSent, mia, [
+      { lineIds: lineIds(miasSent), release: "fire" },
+    ]);
+    const sentRow = await draftRow(miasSent.id);
+    const alexOn4 = await save(v, mesa4.visitId, ALEX, null, 0, [item(v, "beer"), item(v, "fish")]);
+    const alexOn5 = await save(v, mesa5.visitId, ALEX, null, 0, [
+      item(v, "beer", { quantity: "2" }),
+      burger(v),
+    ]);
+    const samOn5 = await save(v, mesa5.visitId, SAM, null, 0, [
+      item(v, "wine", { variantId: v.glass }),
+    ]);
+
+    await merge(v, mesa4, mesa5, SAM);
+
+    const [alex, sam] = byOwner(await draftsOf(v, mesa4.visitId));
+    // Alex's source Beer adds into his Beer on the target, as a save would add it; the Burger goes
+    // after his last line, keeping its id.
+    expect(alex).toEqual({
+      ...alexOn4,
+      revision: alexOn4.revision + 1,
+      lines: [{ ...alexOn4.lines[0]!, quantity: "3.000" }, alexOn4.lines[1], alexOn5.lines[1]],
+    });
+    expect((await storedLines(alexOn4.id)).map((row) => row.position)).toEqual([1, 2, 3]);
+    expect(sam).toEqual({ ...samOn5, visitId: mesa4.visitId, revision: samOn5.revision + 1 });
+    expect(await openOwnersOn(mesa4.visitId)).toEqual([ALEX, SAM].sort());
+    expect(await draftsOf(v, mesa5.visitId)).toEqual([]);
+
+    expect(await draftRow(alexOn5.id)).toMatchObject({
+      visitId: mesa5.visitId,
+      state: "discarded",
+      ownerId: ALEX,
+      revision: alexOn5.revision + 1,
+    });
+    expect(await storedLines(alexOn5.id)).toEqual([]);
+    expect(await eventsOf(alexOn5.id)).toEqual([
+      { kind: "created", fromPerson: null, toPerson: ALEX, actorId: ALEX, detail: {} },
+      {
+        kind: "discarded",
+        fromPerson: ALEX,
+        toPerson: ALEX,
+        actorId: SAM,
+        detail: { intoDraftId: alexOn4.id },
+      },
+    ]);
+    expect((await eventsOf(alexOn4.id)).map((event) => event.kind)).toEqual(["created"]);
+    expect((await eventsOf(samOn5.id)).map((event) => event.kind)).toEqual(["created"]);
+    // A draft that was no longer open stays with the party it was sent from.
+    expect(await draftRow(miasSent.id)).toEqual(sentRow);
+
+    // The source's table now seats the target's party, and shows its unsent orders.
+    expect(await unsentDraftsAt(v, mesa5.tableId)).toEqual([
+      { ownerName: "Alex", lineCount: 3 },
+      { ownerName: "Sam", lineCount: 1 },
+    ]);
+  });
+
+  it("names the draft's owner as the one who discarded it when the merge names no operator", async () => {
+    const v = await setupVenue();
+    const mesa4 = await seated(v);
+    const mesa5 = await seated(v, "Mesa 5");
+    const alexOn4 = await save(v, mesa4.visitId, ALEX, null, 0, [item(v, "beer")]);
+    const alexOn5 = await save(v, mesa5.visitId, ALEX, null, 0, [item(v, "fish")]);
+
+    await merge(v, mesa4, mesa5);
+
+    expect((await eventsOf(alexOn5.id)).at(-1)).toEqual({
+      kind: "discarded",
+      fromPerson: ALEX,
+      toPerson: ALEX,
+      actorId: ALEX,
+      detail: { intoDraftId: alexOn4.id },
+    });
+  });
+
+  it("refuses a save prepared before the merge, on the closed party or the one the draft moved to", async () => {
+    const v = await setupVenue();
+    const mesa4 = await seated(v);
+    const mesa5 = await seated(v, "Mesa 5");
+    const alexOn4 = await save(v, mesa4.visitId, ALEX, null, 0, [item(v, "beer")]);
+    const alexOn5 = await save(v, mesa5.visitId, ALEX, null, 0, [item(v, "fish")]);
+    const samOn5 = await save(v, mesa5.visitId, SAM, null, 0, [item(v, "fish")]);
+
+    await merge(v, mesa4, mesa5, SAM);
+
+    for (const [visitId, draft, operatorId, code] of [
+      [mesa5.visitId, samOn5, SAM, "visit.not_open"],
+      [mesa4.visitId, samOn5, SAM, "draft.out_of_date"],
+      [mesa5.visitId, alexOn5, ALEX, "visit.not_open"],
+      [mesa4.visitId, alexOn5, ALEX, "draft.not_found"],
+      [mesa4.visitId, alexOn4, ALEX, "draft.out_of_date"],
+    ] as const) {
+      await refusedWritingNothing(
+        () => save(v, visitId, operatorId, draft.id, draft.revision, [item(v, "wine")]),
+        { code },
+      );
+    }
+    const sam = await save(v, mesa4.visitId, SAM, samOn5.id, samOn5.revision + 1, [
+      item(v, "fish", { quantity: "2" }),
+    ]);
+    expect(orders(sam)).toEqual([
+      { menuItemId: v.offer("fish"), quantity: "2.000", unavailable: false },
+    ]);
+  });
+});
+
+describe("a retried submission of a draft a merge moved or discarded", () => {
+  it("answers the first result when the draft was added into its owner's draft on the target and discarded", async () => {
+    const v = await setupVenue();
+    const mesa4 = await seated(v);
+    const mesa5 = await seated(v, "Mesa 5");
+    await save(v, mesa4.visitId, ALEX, null, 0, [item(v, "fish")]);
+    const alexOn5 = await save(v, mesa5.visitId, ALEX, null, 0, [item(v, "beer"), burger(v)]);
+    const submissionId = randomUUID();
+    const visitRevisionSeen = await visitRevision(mesa5.visitId);
+    const sent = [{ lineIds: [alexOn5.lines[0]!.id], release: "fire" as const }];
+    const first = await submit(v, mesa5.visitId, alexOn5, ALEX, sent, { submissionId });
+    await merge(v, mesa4, mesa5, SAM);
+    const before = await everything();
+
+    const again = await submit(v, mesa5.visitId, alexOn5, ALEX, sent, {
+      submissionId,
+      visitRevision: visitRevisionSeen,
+    });
+
+    expect(again).toEqual(first);
+    expect(await everything()).toEqual(before);
+  });
+
+  it("answers the first result when asked on the party the draft was sent from, and refuses it as out of date on the party it moved to", async () => {
+    const v = await setupVenue();
+    const mesa4 = await seated(v);
+    const mesa5 = await seated(v, "Mesa 5");
+    const samOn5 = await save(v, mesa5.visitId, SAM, null, 0, [item(v, "beer"), item(v, "fish")]);
+    const submissionId = randomUUID();
+    const input = {
+      submissionId,
+      draftRevision: samOn5.revision,
+      expectedVisitRevision: await visitRevision(mesa5.visitId),
+      groups: [{ lineIds: [samOn5.lines[0]!.id], release: "fire" as const }],
+    };
+    const first = await inTx((tx) => submitDraft(tx, v.cfg, samOn5.id, SAM, input, mesa5.visitId));
+    await merge(v, mesa4, mesa5, SAM);
+    const before = await everything();
+
+    const again = await inTx((tx) => submitDraft(tx, v.cfg, samOn5.id, SAM, input, mesa5.visitId));
+
+    expect(again).toEqual(first);
+    expect(await everything()).toEqual(before);
+    await refusedWritingNothing(() => inTx((tx) => submitDraft(tx, v.cfg, samOn5.id, SAM, input)), {
+      code: "draft.out_of_date",
+      params: { draftId: samOn5.id, revision: samOn5.revision + 2 },
+    });
+  });
+});
+
+describe("a draft named on another party", () => {
+  it("is not found for a takeover or a submission scoped to that party", async () => {
+    const v = await setupVenue();
+    const mesa4 = await seated(v);
+    const mesa5 = await seated(v, "Mesa 5");
+    const alex = await save(v, mesa4.visitId, ALEX, null, 0, [item(v, "beer")]);
+
+    await refusedWritingNothing(
+      () => inTx((tx) => takeOverDraft(tx, v.cfg, alex.id, SAM, alex.revision, mesa5.visitId)),
+      { code: "draft.not_found", params: { draftId: alex.id } },
+    );
+    await refusedWritingNothing(
+      () =>
+        inTx(async (tx) =>
+          submitDraft(
+            tx,
+            v.cfg,
+            alex.id,
+            ALEX,
+            {
+              submissionId: randomUUID(),
+              draftRevision: alex.revision,
+              expectedVisitRevision: await visitRevision(mesa5.visitId),
+              groups: [{ lineIds: lineIds(alex), release: "fire" }],
+            },
+            mesa5.visitId,
+          ),
+        ),
+      { code: "draft.not_found", params: { draftId: alex.id } },
+    );
+    const taken = await inTx((tx) =>
+      takeOverDraft(tx, v.cfg, alex.id, SAM, alex.revision, mesa4.visitId),
+    );
+    expect(taken.ownerId).toBe(SAM);
+  });
+});
+
+describe("finishing the table", () => {
+  it("discards every open draft on the party, keeping its lines, with an event naming who finished", async () => {
+    const v = await setupVenue();
+    const { visitId } = await seated(v);
+    const alex = await save(v, visitId, ALEX, null, 0, [item(v, "beer")]);
+    const sam = await save(v, visitId, SAM, null, 0, [item(v, "fish"), burger(v)]);
+    const kept = { alex: await storedLines(alex.id), sam: await storedLines(sam.id) };
+
+    const { state } = await inTx(async (tx) =>
+      finishTable(tx, {
+        visitId,
+        expectedVisitRevision: await visitRevision(visitId),
+        operatorId: SAM,
+      }),
+    );
+
+    expect(state).toBe("closed");
+    for (const [draft, owner] of [
+      [alex, ALEX],
+      [sam, SAM],
+    ] as const) {
+      expect(await draftRow(draft.id)).toMatchObject({
+        state: "discarded",
+        revision: draft.revision + 1,
+      });
+      expect((await eventsOf(draft.id)).at(-1)).toEqual({
+        kind: "discarded",
+        fromPerson: owner,
+        toPerson: owner,
+        actorId: SAM,
+        detail: {},
+      });
+    }
+    expect(await storedLines(alex.id)).toEqual(kept.alex);
+    expect(await storedLines(sam.id)).toEqual(kept.sam);
+    expect(await draftsOf(v, visitId)).toEqual([]);
+    await expect(
+      save(v, visitId, ALEX, alex.id, alex.revision + 1, [item(v, "beer")]),
+    ).rejects.toMatchObject({ code: "visit.not_open" });
+  });
+
+  it("leaves the drafts open when finishing is refused", async () => {
+    const v = await setupVenue();
+    const { visitId } = await seated(v);
+    await save(v, visitId, ALEX, null, 0, [item(v, "beer")]);
+    const sam = await save(v, visitId, SAM, null, 0, [item(v, "fish")]);
+    await submit(v, visitId, sam, SAM, [{ lineIds: lineIds(sam), release: "fire" }]);
+
+    await refusedWritingNothing(
+      () =>
+        inTx(async (tx) =>
+          finishTable(tx, {
+            visitId,
+            expectedVisitRevision: await visitRevision(visitId),
+            operatorId: SAM,
+          }),
+        ),
+      { code: "visit.bill_outstanding" },
+    );
   });
 });

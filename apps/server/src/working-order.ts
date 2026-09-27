@@ -125,7 +125,7 @@ import { issuancePass } from "./issuance-pass.js";
 import { issueMoment } from "./issue-moment.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
-import { readUnsentDrafts } from "./order-drafts.js";
+import { moveDraftsToVisit, readUnsentDrafts } from "./order-drafts.js";
 import type { UnsentDraft } from "./order-drafts.js";
 import {
   correctHoldTickets,
@@ -2681,6 +2681,7 @@ export async function mergeTabs(
   const sourceTables = absorbed === null ? [] : await memberTables(tx, absorbed.from);
   if (absorbed !== null) {
     await moveGroupsToVisit(tx, absorbed.from, absorbed.into);
+    await moveDraftsToVisit(tx, absorbed.from, absorbed.into, options.operatorId);
     await leaveTables(tx, sourceTables);
     if (!options.freeSourceTable && sourceTables.length > 0) {
       await tx

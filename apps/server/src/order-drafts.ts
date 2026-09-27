@@ -196,7 +196,7 @@ export async function saveDraft(
  * Make the operator the owner of another person's open draft. Where the operator already has an
  * open draft on the visit, the taken lines are added to the end of it and the taken draft is
  * discarded, so no one holds two; the operator's draft is returned. Taking over one's own draft
- * changes nothing and returns it as it is.
+ * changes nothing and returns it as it is. With `visitId`, a draft of another visit is not found.
  */
 export async function takeOverDraft(
   tx: Transaction,
@@ -204,8 +204,9 @@ export async function takeOverDraft(
   draftId: string,
   operatorId: string,
   revision: number,
+  visitId?: string,
 ): Promise<Draft> {
-  const draft = await requireDraft(tx, draftIdOf(draftId));
+  const draft = await requireDraft(tx, draftIdOf(draftId), visitId);
   await requireOpenVisit(tx, draft.visitId);
   if (draft.ownerId === operatorId) {
     return (await readOpenDrafts(tx, cfg, draft.visitId, draft.id))[0]!;
@@ -236,19 +237,88 @@ export async function takeOverDraft(
   if (own === undefined) {
     return (await readOpenDrafts(tx, cfg, draft.visitId, draft.id))[0]!;
   }
-  await recordDraftEvent(tx, draft.id, "discarded", operatorId, operatorId, operatorId, {
-    intoDraftId: own.id,
-  });
-  const combined = [
-    ...(await storedLines(tx, [own.id])),
-    ...(await storedLines(tx, [draft.id])),
-  ].map(({ line }) => line);
-  await replaceLines(tx, [own.id, draft.id], own.id, normaliseDraftLines(combined));
+  await addDiscardedDraft(tx, draft.id, own, operatorId, operatorId);
+  return (await readOpenDrafts(tx, cfg, draft.visitId, own.id))[0]!;
+}
+
+/**
+ * A merge's drafts (D2): each open draft on `fromVisitId` moves to `intoVisitId`, unless its owner
+ * already has an open draft there; then that draft takes its lines at the end, as a takeover into
+ * the taker's own draft does, and it is discarded. Every draft this touches has its revision moved
+ * on. A merge naming no operator records the owner as the one who discarded.
+ */
+export async function moveDraftsToVisit(
+  tx: Transaction,
+  fromVisitId: string,
+  intoVisitId: string,
+  operatorId: string | undefined,
+): Promise<void> {
+  const moving = await openDraftsOn(tx, fromVisitId);
+  if (moving.length === 0) return;
+  const held = new Map(
+    (await openDraftsOn(tx, intoVisitId)).map((draft) => [draft.ownerId, draft] as const),
+  );
+  const moved = moving.filter((draft) => !held.has(draft.ownerId));
+  const absorbed = moving.filter((draft) => held.has(draft.ownerId));
+  if (moved.length > 0) {
+    await tx
+      .update(orderDrafts)
+      .set({
+        visitId: intoVisitId,
+        revision: sql`${orderDrafts.revision} + 1`,
+        updatedAt: nowIso(),
+      })
+      .where(
+        inArray(
+          orderDrafts.id,
+          moved.map((draft) => draft.id),
+        ),
+      );
+  }
+  if (absorbed.length > 0) {
+    await tx
+      .update(orderDrafts)
+      .set({ state: "discarded", revision: sql`${orderDrafts.revision} + 1`, updatedAt: nowIso() })
+      .where(
+        inArray(
+          orderDrafts.id,
+          absorbed.map((draft) => draft.id),
+        ),
+      );
+  }
+  for (const draft of absorbed) {
+    const actorId = operatorId ?? draft.ownerId;
+    await addDiscardedDraft(tx, draft.id, held.get(draft.ownerId)!, draft.ownerId, actorId);
+  }
+}
+
+/** Finishing a table: every open draft on the visit is discarded with an event, its lines kept. */
+export async function discardVisitDrafts(
+  tx: Transaction,
+  visitId: string,
+  operatorId: string,
+): Promise<void> {
+  const open = await openDraftsOn(tx, visitId);
+  if (open.length === 0) return;
   await tx
     .update(orderDrafts)
-    .set({ revision: own.revision + 1, updatedAt: nowIso() })
-    .where(eq(orderDrafts.id, own.id));
-  return (await readOpenDrafts(tx, cfg, draft.visitId, own.id))[0]!;
+    .set({ state: "discarded", revision: sql`${orderDrafts.revision} + 1`, updatedAt: nowIso() })
+    .where(
+      inArray(
+        orderDrafts.id,
+        open.map((draft) => draft.id),
+      ),
+    );
+  await tx.insert(orderDraftEvents).values(
+    open.map((draft) => ({
+      draftId: draft.id,
+      kind: "discarded" as const,
+      fromPerson: draft.ownerId,
+      toPerson: draft.ownerId,
+      actorId: operatorId,
+      detail: {},
+    })),
+  );
 }
 
 export interface SubmitDraftInput {
@@ -268,7 +338,9 @@ export type SubmittedDraft = SubmittedGroups & { draft: Draft | null };
  * Send the named lines of the operator's own draft as groups, through {@link placeGroups}, so each
  * line is credited to the operator and each group submitted by them. The sent lines leave the
  * draft and the rest keep their positions; the draft is `submitted` once it has no line left. A
- * retry under the same submission id answers the first result (D8).
+ * retry under the same submission id answers the first result (D8), from the record of the visit
+ * it is asked on: `scope` when given, where a draft of another visit is not found, else the
+ * draft's own.
  */
 export async function submitDraft(
   tx: Transaction,
@@ -276,14 +348,10 @@ export async function submitDraft(
   draftId: string,
   operatorId: string,
   input: SubmitDraftInput,
+  scope?: string,
 ): Promise<SubmittedDraft> {
   const id = draftIdOf(draftId);
-  const [found] = await tx
-    .select({ visitId: orderDrafts.visitId })
-    .from(orderDrafts)
-    .where(eq(orderDrafts.id, id));
-  if (found === undefined) throw new AppError("draft.not_found", { draftId: id });
-  const { visitId } = found;
+  const visitId = scope ?? (await draftVisit(tx, id));
   const groups = input.groups.map(({ lineIds, release }) => ({
     lineIds: lineIds.map(lineIdOf),
     release,
@@ -296,7 +364,7 @@ export async function submitDraft(
     "draft.submit",
     { visitId, draftId: id, operatorId, groups, joinGroupId },
     async () => {
-      const draft = await requireDraft(tx, id);
+      const draft = await requireDraft(tx, id, visitId);
       if (draft.ownerId !== operatorId) {
         throw new AppError("draft.taken_over", {
           draftId: id,
@@ -531,6 +599,48 @@ async function requireDraft(tx: Transaction, draftId: string, visitId?: string) 
   }
   if (draft.state === "submitted") throw new AppError("draft.already_submitted", { draftId });
   return draft;
+}
+
+async function draftVisit(tx: Transaction, draftId: string): Promise<string> {
+  const [found] = await tx
+    .select({ visitId: orderDrafts.visitId })
+    .from(orderDrafts)
+    .where(eq(orderDrafts.id, draftId));
+  if (found === undefined) throw new AppError("draft.not_found", { draftId });
+  return found.visitId;
+}
+
+async function openDraftsOn(tx: Transaction, visitId: string) {
+  return tx
+    .select({ id: orderDrafts.id, ownerId: orderDrafts.ownerId, revision: orderDrafts.revision })
+    .from(orderDrafts)
+    .where(and(eq(orderDrafts.visitId, visitId), eq(orderDrafts.state, "open")));
+}
+
+/**
+ * Discarding `fromDraftId` into `into`, which its owner holds: the event, then `into`'s lines
+ * followed by the discarded draft's, added together and numbered from one, and `into`'s revision
+ * moved on. The caller has already marked `fromDraftId` discarded.
+ */
+async function addDiscardedDraft(
+  tx: Transaction,
+  fromDraftId: string,
+  into: { id: string; revision: number },
+  ownerId: string,
+  actorId: string,
+): Promise<void> {
+  await recordDraftEvent(tx, fromDraftId, "discarded", ownerId, ownerId, actorId, {
+    intoDraftId: into.id,
+  });
+  const combined = [
+    ...(await storedLines(tx, [into.id])),
+    ...(await storedLines(tx, [fromDraftId])),
+  ].map(({ line }) => line);
+  await replaceLines(tx, [into.id, fromDraftId], into.id, normaliseDraftLines(combined));
+  await tx
+    .update(orderDrafts)
+    .set({ revision: into.revision + 1, updatedAt: nowIso() })
+    .where(eq(orderDrafts.id, into.id));
 }
 
 async function personName(tx: Transaction, personId: string): Promise<string> {

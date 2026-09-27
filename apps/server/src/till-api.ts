@@ -113,6 +113,8 @@ import {
   submitGroups,
 } from "./order-groups.js";
 import type { GroupLine, SubmitGroupsInput, VisitCommandArgs } from "./order-groups.js";
+import { readDrafts, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
+import type { DraftLineInput, SubmitDraftInput } from "./order-drafts.js";
 import { invalid } from "./bill-allocation.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
 import { issueIfFullyPaid } from "./bill-payments.js";
@@ -343,6 +345,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "visit.out_of_date": 409,
   "visit.bill_outstanding": 409,
   "submission.id_reused": 409,
+  "draft.taken_over": 409,
+  "draft.already_submitted": 409,
+  "draft.out_of_date": 409,
+  "draft.not_found": 404,
   "group.not_held": 409,
   "group.not_found": 404,
   "group.held_leaves_visit": 409,
@@ -427,7 +433,11 @@ function requireTabParam(id: string): string {
  */
 function requireRevision(
   value: unknown,
-  field: "revision" | "expectedVisitRevision" | "expectedSourceVisitRevision" = "revision",
+  field:
+    | "revision"
+    | "draftRevision"
+    | "expectedVisitRevision"
+    | "expectedSourceVisitRevision" = "revision",
 ): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
     throw new AppError("management.request_invalid", { field });
@@ -505,6 +515,34 @@ function parseSubmittedGroups(value: unknown): SubmitGroupsInput["groups"] {
     }
     if (release !== "fire" && release !== "hold") throw invalid("release");
     return { lines: lines as GroupLine[], release };
+  });
+}
+
+/** A draft route's visit, in lower case as ids are stored, so a draft on it compares equal. */
+function requireDraftVisitParam(id: string): string {
+  return requireVisitParam(id).toLowerCase();
+}
+
+/** A save's draft: null for the operator's new one, else a UUID. */
+function requireDraftId(value: unknown): string | null {
+  if (value === null) return null;
+  if (typeof value !== "string" || !isUuid(value)) throw invalid("draftId");
+  return value;
+}
+
+/** Groups of draft line ids, each with its release. Only the shape is screened. */
+function parseDraftGroups(value: unknown): SubmitDraftInput["groups"] {
+  if (!Array.isArray(value)) throw invalid("groups");
+  return value.map((entry: unknown) => {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+      throw invalid("groups");
+    }
+    const { lineIds, release } = entry as Record<string, unknown>;
+    if (!Array.isArray(lineIds) || !lineIds.every((id) => typeof id === "string")) {
+      throw invalid("lineIds");
+    }
+    if (release !== "fire" && release !== "hold") throw invalid("release");
+    return { lineIds: lineIds as string[], release };
   });
 }
 
@@ -1560,6 +1598,66 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         moveLinesToGroup(tx, deps.cfg, visitId, moves, target, command),
       );
       return c.json(moved);
+    }),
+  );
+
+  app.get("/api/visits/:id/drafts", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const visitId = requireDraftVisitParam(c.req.param("id"));
+      const drafts = await withTransaction(deps.db, (tx) => readDrafts(tx, deps.cfg, visitId));
+      return c.json({ drafts });
+    }),
+  );
+
+  app.put("/api/visits/:id/drafts", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const visitId = requireDraftVisitParam(c.req.param("id"));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const draftId = requireDraftId(body.draftId);
+      const revision = requireRevision(body.revision);
+      // `saveDraft` screens every line before it reads or writes anything.
+      const lines = body.lines as DraftLineInput[];
+      const draft = await withTransaction(deps.db, (tx) =>
+        saveDraft(tx, deps.cfg, visitId, personId, { draftId, revision, lines }),
+      );
+      return c.json(draft);
+    }),
+  );
+
+  app.post("/api/visits/:id/drafts/:did/take-over", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const visitId = requireDraftVisitParam(c.req.param("id"));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const revision = requireRevision(body.revision);
+      const draft = await withTransaction(deps.db, (tx) =>
+        takeOverDraft(tx, deps.cfg, c.req.param("did"), personId, revision, visitId),
+      );
+      return c.json(draft);
+    }),
+  );
+
+  app.post("/api/visits/:id/drafts/:did/submit", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const visitId = requireDraftVisitParam(c.req.param("id"));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const input: SubmitDraftInput = {
+        submissionId: submissionIdOf(body),
+        draftRevision: requireRevision(body.draftRevision, "draftRevision"),
+        expectedVisitRevision: requireRevision(body.expectedVisitRevision, "expectedVisitRevision"),
+        groups: parseDraftGroups(body.groups),
+      };
+      if (body.joinGroupId !== undefined) {
+        if (typeof body.joinGroupId !== "string") throw invalid("joinGroupId");
+        input.joinGroupId = body.joinGroupId;
+      }
+      const submitted = await withTransaction(deps.db, (tx) =>
+        submitDraft(tx, deps.cfg, c.req.param("did"), personId, input, visitId),
+      );
+      return c.json(submitted);
     }),
   );
 

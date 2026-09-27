@@ -23,6 +23,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { openTab } from "./working-order.js";
 import { readReceivedByBill, refuseBillHoldingMoney } from "./bill-payments.js";
+import { discardVisitDrafts } from "./order-drafts.js";
 import "./errors.js";
 
 /** One bill of a visit's party, as the table screen lists it. */
@@ -395,6 +396,8 @@ export async function finishTable(
       .set({ status: "abandoned" })
       .where(inArray(workingOrders.id, empty));
   }
+
+  await discardVisitDrafts(tx, visitId, args.operatorId);
 
   const state = (await VENUE_SERVICE.readClearingWorkflow(tx)) ? "needs_clearing" : "closed";
   const at = nowIso();
