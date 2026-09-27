@@ -114,10 +114,7 @@ describe("withRecoveryLock", () => {
 
   it("rejects at once, without waiting, when the lock file is not one the engine can lock", async () => {
     const dir = await stateDir();
-    await writeFile(
-      join(dir, RECOVERY_LOCK_FILE),
-      "not a database file, just enough text to fill the header the engine reads first",
-    );
+    await writeFile(join(dir, RECOVERY_LOCK_FILE), "these bytes are not a database");
     let ran = false;
     const started = performance.now();
     await expect(

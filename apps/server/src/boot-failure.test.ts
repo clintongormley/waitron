@@ -1,9 +1,9 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
-import { AppError } from "@waitron/shared";
+import { AppError, sqliteFailureOf } from "@waitron/shared";
 import { UNREACHABLE_RESULT_CODES, classifyBootFailure } from "./boot-failure.js";
 
 function wrapped(errcode: number): Error {
@@ -48,6 +48,16 @@ describe("classifyBootFailure on the engine the box runs", () => {
     expect(classifyBootFailure(error)).toBe("provisioning.schema_mismatch");
   });
 
+  it("leaves a venue file that is not a database unknown", () => {
+    const error = realSqliteError((dir) => {
+      const file = join(dir, "venue.db");
+      writeFileSync(file, "these bytes are not a database");
+      new DatabaseSync(file).exec("select * from tenants");
+    });
+    expect(sqliteFailureOf(error)?.errcode).toBe(26);
+    expect(classifyBootFailure(error)).toBe("unknown");
+  });
+
   it("leaves an ordinary SQL error unknown, though it carries the same result code", () => {
     const error = realSqliteError((dir) => {
       const db = new DatabaseSync(join(dir, "venue.db"));
@@ -72,6 +82,10 @@ describe("classifyBootFailure", () => {
     expect(classifyBootFailure(new AppError("server.config_missing", { variable: "X" }))).toBe(
       "server.config_missing",
     );
+  });
+
+  it("pins the unreachable-database codes to SQLITE_CANTOPEN alone", () => {
+    expect(UNREACHABLE_RESULT_CODES).toEqual([14]);
   });
 
   it("names every pinned result code as an unreachable database", () => {
