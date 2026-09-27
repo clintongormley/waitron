@@ -99,38 +99,25 @@ already holds, and `member_cycle` (409) one that would make a section contain it
 A menu's own structure is read with `GET /management-api/catalogues/:id/structure` → 200,
 `{ rootSectionId, nodes }`, where each node is `{ memberId, ref }` and a section's node also carries
 its `children`; an unknown menu is `catalogue.not_found` (404). The top level is written with the
-member routes above on `rootSectionId`, and `POST /management-api/catalogues/:id/items`
-(`{ productId, grossPrice }`) puts a product on it with the menu's price in one request. Besides
-a malformed id (`shared.invalid_id`, 400) or body (`management.request_invalid`, 400), that route
-refuses an unknown menu with `catalogue.not_found` (404), an unknown product with
-`product.not_found` (404), a variant with `menu_item.variant_not_allowed` (400), a product already
-on the top level with `menu_section.member_duplicate` (409), a `grossPrice` that is not a
-non-negative decimal or null with `management.request_invalid` (400) or `shared.invalid_decimal`
-(400), and one too wide for the money scale with `shared.decimal_overflow` (400).
+member routes above on `rootSectionId`.
 
 `PATCH /management-api/catalogues/:id/items/:itemId` → 204 sets the menu's settings for one
 product its structure reaches: `grossPrice` (a price, or null for the product's own) and `active`,
 the menu's own switch for the product (a boolean, else `management.request_invalid` naming
-`active`). Either may be left out. `DELETE` on the same path switches the product off, and leaves
-it where the structure put it. An item whose product the structure no longer reaches is
-`menu_item.not_found` (404). `GET /management-api/catalogues/:id/offers` lists the Active
-products the structure reaches that are not variants, sold-out ones included, or nothing while the
-menu is inactive; switched-off ones are included with `active: false`. A menu's published version
-leaves out the products switched off when it was published, so switching one off takes it off the
-till only once the menu is published again. Each of its offers also carries `topLevelMember`: `{ sectionId, memberId }`, the
-product's membership of the menu's top level (what
-`DELETE /management-api/sections/:id/members/:memberId` removes), or null when only a
-section holds it. The till's offers carry no such field.
+`active`). Either may be left out. An item whose product the structure no longer reaches is
+`menu_item.not_found` (404). A menu's published version leaves out the products switched off when
+it was published, so switching one off takes it off the till only once the menu is published again.
 
-`GET /management-api/catalogues/:id/prices` lists the same products, one row each, for the
-dashboard's price list: `{ menuItemId, productId, name, categoryId, placements, productPrice,
-override, effectivePrice, active, variants }`. `productPrice` is the product's own price,
-`override` the menu's (`grossPrice` above, null when it sets none), and `effectivePrice` the
-menu's price for the product itself: `override`, or else `productPrice`. A product with Active
-variants is sold only as one of them, and a variant with no price on this menu and none of its own
-is charged `effectivePrice`. `categoryId` is the product's reporting category, and each of
-`variants` is `{ variantId, price, offered }` as `GET …/items/:itemId/variants` gives it. An
-unknown menu is `catalogue.not_found` (404).
+`GET /management-api/catalogues/:id/prices` lists the products the structure reaches, one row
+each, for the dashboard's price list, sold-out ones and ones switched off on this menu included and
+Inactive ones left out, or nothing while the menu is inactive: `{ menuItemId, productId, name,
+categoryId, placements, productPrice, override, effectivePrice, active, variants }`.
+`productPrice` is the product's own price, `override` the menu's (`grossPrice` above, null when it
+sets none), and `effectivePrice` the menu's price for the product itself: `override`, or else
+`productPrice`. A product with Active variants is sold only as one of them, and a variant with no
+price on this menu and none of its own is charged `effectivePrice`. `categoryId` is the product's
+reporting category, and each of `variants` is `{ variantId, price, offered }` as
+`GET …/items/:itemId/variants` gives it. An unknown menu is `catalogue.not_found` (404).
 
 `GET /management-api/catalogues/:id/status` → 200 gives a menu's publication state:
 `{ state: "unpublished" }`, or `{ state, version, publishedAt, hash }` for its live version, where

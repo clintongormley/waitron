@@ -38,7 +38,6 @@ import {
   addProductToMenu,
   createProduct,
   deactivateCatalogue,
-  deactivateMenuItem,
   deactivateProduct,
   listAccessibleCatalogues,
   listAvailableProducts,
@@ -126,7 +125,7 @@ describe("catalogue operations", () => {
 
       await updateMenuItem(tx, downstairs.id, eleven.id, { grossPrice: "12.50" });
       expect((await listMenuOffers(tx, [downstairs.id]))[0]!.grossPrice).toBe("12.50");
-      await deactivateMenuItem(tx, downstairs.id, eleven.id);
+      await updateMenuItem(tx, downstairs.id, eleven.id, { active: false });
       await expect(listMenuOffers(tx, [downstairs.id])).resolves.toEqual([]);
       // Switched back on, on the same row.
       await updateMenuItem(tx, downstairs.id, eleven.id, { active: true, grossPrice: "13.00" });
@@ -1614,7 +1613,7 @@ describe("menu offers nest a product's variants", () => {
       });
     });
     expect(created).toMatchObject({ grossPrice: null, active: true });
-    await run((tx) => deactivateMenuItem(tx, f.menuId, f.offerId));
+    await run((tx) => updateMenuItem(tx, f.menuId, f.offerId, { active: false }));
     await run((tx) => updateMenuItem(tx, f.menuId, f.offerId, { active: true, grossPrice: null }));
     const restored = (await offers()).find((offer) => offer.id === f.offerId);
     expect(restored).toMatchObject({ id: f.offerId, active: true, grossPrice: null });

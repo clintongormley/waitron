@@ -53,13 +53,10 @@ import {
   type SectionPatch,
   type CategoryInput,
   type CategoryReassignment,
-  addProductToMenu,
   createProduct,
-  deactivateMenuItem,
   listCatalogues,
   listCataloguesForLocation,
   listCategories,
-  listMenuOffersWithTopLevel,
   menuPrices,
   menuStatus,
   previewMenu,
@@ -898,10 +895,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<{ name?: unknown }>(c);
-      if (typeof body.name !== "string") {
-        throw new AppError("management.request_invalid", { field: "name" });
-      }
-      const { name } = body;
+      const name = requireString(body.name, "name");
+      if (name.trim() === "") throw new AppError("management.request_invalid", { field: "name" });
       const created = await gated(sessionId, (tx) => createCatalogue(tx, { name }));
       return c.json(created, 201);
     }),
@@ -916,17 +911,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (name.trim() === "") throw new AppError("management.request_invalid", { field: "name" });
       await gated(sessionId, (tx) => renameCatalogue(tx, catalogueId, name));
       return c.body(null, 204);
-    }),
-  );
-
-  app.get("/management-api/catalogues/:id/offers", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
-      const rows = await gated(sessionId, (tx) =>
-        listMenuOffersWithTopLevel(tx, menuId, { includeSwitchedOff: true }),
-      );
-      return c.json(rows);
     }),
   );
 
@@ -978,27 +962,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  app.post("/management-api/catalogues/:id/items", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
-      const body = await readJsonBody<Record<string, unknown>>(c);
-      if (typeof body.productId !== "string") {
-        throw new AppError("management.request_invalid", { field: "productId" });
-      }
-      // Required on create, and null is a value: a blank menu price is the product's own price.
-      if (typeof body.grossPrice !== "string" && body.grossPrice !== null) {
-        throw new AppError("management.request_invalid", { field: "grossPrice" });
-      }
-      if (body.grossPrice !== null) refuseNegativePrice(body.grossPrice, "grossPrice");
-      const productId = requireUuidParam(body.productId, "ProductId");
-      const created = await gated(sessionId, (tx) =>
-        addProductToMenu(tx, { menuId, productId, grossPrice: body.grossPrice as string | null }),
-      );
-      return c.json(created, 201);
-    }),
-  );
-
   app.patch("/management-api/catalogues/:id/items/:itemId", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1022,16 +985,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
           ...(body.active === undefined ? {} : { active: body.active as boolean }),
         }),
       );
-      return c.body(null, 204);
-    }),
-  );
-
-  app.delete("/management-api/catalogues/:id/items/:itemId", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
-      const menuItemId = requireUuidParam(c.req.param("itemId"), "MenuItemId");
-      await gated(sessionId, (tx) => deactivateMenuItem(tx, menuId, menuItemId));
       return c.body(null, 204);
     }),
   );
