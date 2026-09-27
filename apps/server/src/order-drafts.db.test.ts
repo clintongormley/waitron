@@ -23,6 +23,7 @@ import {
   createCatalogue,
   createCategory,
   createExtraList,
+  createOptionList,
   createProduct,
   setMenuVariants,
   setProductVariants,
@@ -35,6 +36,7 @@ import {
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
+import type { OptionSelection } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createCourse } from "./kitchen.js";
 import { createTable } from "./tables.js";
@@ -43,6 +45,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { seatTable } from "./visits.js";
 import { listTablesWithState } from "./working-order.js";
+import { submitGroups } from "./order-groups.js";
 import { readDrafts, saveDraft, takeOverDraft } from "./order-drafts.js";
 import type { Draft, DraftLine } from "./order-drafts.js";
 import "./errors.js";
@@ -77,6 +80,9 @@ interface Venue {
   productId: Record<Dish, string>;
   courseId: string;
   sauceListId: string;
+  /** The Burger's doneness answers. */
+  rare: OptionSelection;
+  well: OptionSelection;
   /** The Wine's variants: the menu offers the glass and not the bottle. */
   glass: string;
   bottle: string;
@@ -143,7 +149,31 @@ async function setupVenue(): Promise<Venue> {
       },
       LOCALE,
     );
-    await writeProductModifiers(tx, productId.burger, [{ kind: "extras", id: sauces.id }]);
+    const doneness = await createOptionList(
+      tx,
+      {
+        name: "Doneness",
+        customerName: { es: "Punto" },
+        kitchenName: "K-DONE",
+        defaultLabelId: null,
+        active: true,
+        labels: ["Rare", "Well"].map((way) => ({
+          name: `${way} staff`,
+          customerName: { es: `${way} customer` },
+          kitchenName: `K-${way.toUpperCase()}`,
+          available: true,
+        })),
+      },
+      LOCALE,
+    );
+    await writeProductModifiers(tx, productId.burger, [
+      { kind: "extras", id: sauces.id },
+      { kind: "options", id: doneness.id },
+    ]);
+    const [rare, well] = doneness.labels.map((label) => ({
+      listId: doneness.id,
+      labelId: label.id,
+    }));
     const [glass, bottle] = await setProductVariants(
       tx,
       productId.wine,
@@ -179,6 +209,8 @@ async function setupVenue(): Promise<Venue> {
       productId,
       courseId,
       sauceListId: sauces.id,
+      rare: rare!,
+      well: well!,
       glass: glass!.id,
       bottle: bottle!.id,
       zoneId: offers.zoneId,
@@ -426,7 +458,7 @@ describe("saving a draft", () => {
       note: "  no salt  ",
       courseId: v.courseId,
       menuVersionId: versionId,
-      options: [{ listId: randomUUID(), labelId: "rare" }],
+      options: [v.rare],
       extras: [{ listId: v.sauceListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] }],
       noMerge: true,
     });
@@ -441,6 +473,51 @@ describe("saving a draft", () => {
       },
     ]);
     expect(await draftsOf(v, visitId)).toEqual([draft]);
+  });
+
+  it("folds every id it parses to lower case, so an upper-case line adds into its lower-case twin", async () => {
+    const v = await setupVenue();
+    const { visitId } = await seated(v);
+    const up = (id: string) => id.toUpperCase();
+    const versionId = randomUUID();
+    const sauce = { listId: v.sauceListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] };
+    const lower = {
+      menuVersionId: versionId,
+      courseId: v.courseId,
+      options: [v.rare],
+      extras: [sauce],
+    };
+    const draft = await save(v, visitId, ALEX, null, 0, [
+      item(v, "burger", lower),
+      item(v, "burger", {
+        menuItemId: up(v.offer("burger")),
+        menuVersionId: up(versionId),
+        courseId: up(v.courseId),
+        options: [{ listId: up(v.rare.listId), labelId: up(v.rare.labelId) }],
+        extras: [
+          { listId: up(sauce.listId), picks: [{ productId: up(v.productId.sauce), quantity: 1 }] },
+        ],
+      }),
+      item(v, "wine", { variantId: up(v.glass) }),
+    ]);
+    expect(draft.lines).toEqual([
+      {
+        ...item(v, "burger", lower),
+        id: draft.lines[0]!.id,
+        quantity: "2.000",
+        unavailable: false,
+      },
+      {
+        ...item(v, "wine", { variantId: v.glass }),
+        id: draft.lines[1]!.id,
+        quantity: "1.000",
+        unavailable: false,
+      },
+    ]);
+
+    const saved = await save(v, visitId, ALEX, up(draft.id), 0, [item(v, "beer")]);
+    expect(saved).toMatchObject({ id: draft.id, revision: 1 });
+    expect(await takeOver(v, up(draft.id), SAM, 1)).toMatchObject({ id: draft.id, ownerId: SAM });
   });
 
   it("stores an empty or blank note as no note, so the line adds into one without a note", async () => {
@@ -513,6 +590,14 @@ describe("saving a draft", () => {
     await expect(save(v, mesa4.visitId, ALEX, other.id, 0, [])).rejects.toMatchObject({
       code: "draft.not_found",
       params: { draftId: other.id },
+    });
+    await expect(save(v, mesa4.visitId, ALEX, "draft-1", 0, [])).rejects.toMatchObject({
+      code: "draft.not_found",
+      params: { draftId: "draft-1" },
+    });
+    await expect(takeOver(v, "draft-1", SAM, 0)).rejects.toMatchObject({
+      code: "draft.not_found",
+      params: { draftId: "draft-1" },
     });
     await db.update(orderDrafts).set({ state: "discarded" }).where(eq(orderDrafts.id, other.id));
     await expect(save(v, mesa5.visitId, ALEX, other.id, 0, [])).rejects.toMatchObject({
@@ -664,6 +749,23 @@ describe("a refused save writes nothing", () => {
       (v) => [{ ...item(v, "beer"), options: [{ listId: randomUUID() }] }],
       "management.request_invalid",
       "lines.0.options",
+    ],
+    [
+      "an option whose label is not an id",
+      (v) => [{ ...item(v, "burger"), options: [{ listId: v.rare.listId, labelId: "rare" }] }],
+      "management.request_invalid",
+      "lines.0.options",
+    ],
+    [
+      "an extras pick whose product is not an id",
+      (v) => [
+        {
+          ...item(v, "burger"),
+          extras: [{ listId: v.sauceListId, picks: [{ productId: "sauce", quantity: 1 }] }],
+        },
+      ],
+      "management.request_invalid",
+      "lines.0.extras",
     ],
     [
       "an option that is not an object",
@@ -960,17 +1062,148 @@ describe("unavailable lines (spec §10)", () => {
     expect((await draftsOf(v, visitId))[0]!.lines[0]!.unavailable).toBe(true);
   });
 
-  it("does not mark a pick sent in upper case, which pricing accepts", async () => {
+  it("marks a line whose chosen option label is withdrawn, clears the mark when it returns, and never rewrites the line", async () => {
     const v = await setupVenue();
     const { visitId } = await seated(v);
     const sauce = [
-      {
-        listId: v.sauceListId.toUpperCase(),
-        picks: [{ productId: v.productId.sauce.toUpperCase(), quantity: 1 }],
-      },
+      { listId: v.sauceListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] },
     ];
-    await save(v, visitId, ALEX, null, 0, [item(v, "burger", { extras: sauce })]);
-    expect((await draftsOf(v, visitId))[0]!.lines[0]!.unavailable).toBe(false);
+    const draft = await save(v, visitId, ALEX, null, 0, [
+      item(v, "burger", { options: [v.rare], extras: sauce }),
+      item(v, "burger", { options: [v.well] }),
+    ]);
+    expect(draft.lines.map((line) => line.unavailable)).toEqual([false, false]);
+    const stored = await storedLines(draft.id);
+
+    await db.run(sql`update option_labels set available = 0 where id = ${v.rare.labelId}`);
+    expect((await draftsOf(v, visitId))[0]!.lines.map((line) => line.unavailable)).toEqual([
+      true,
+      false,
+    ]);
+    expect(await storedLines(draft.id)).toEqual(stored);
+
+    await db.run(sql`update option_labels set available = 1 where id = ${v.rare.labelId}`);
+    expect(await draftsOf(v, visitId)).toEqual([draft]);
+    expect(await storedLines(draft.id)).toEqual(stored);
+  });
+
+  const refusedAtPricing: [string, (v: Venue) => Promise<LineInput>, string][] = [
+    [
+      "a sold-out dish",
+      async (v) => {
+        await db.run(sql`update products set available = 0 where id = ${v.productId.burger}`);
+        return item(v, "burger");
+      },
+      "product.unavailable",
+    ],
+    [
+      "a variant the menu does not offer",
+      async (v) => item(v, "wine", { variantId: v.bottle }),
+      "product.variant_unavailable",
+    ],
+    [
+      "a sold-out extras pick",
+      async (v) => {
+        await db.run(sql`update products set available = 0 where id = ${v.productId.sauce}`);
+        return item(v, "burger", {
+          options: [v.rare],
+          extras: [
+            { listId: v.sauceListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] },
+          ],
+        });
+      },
+      "extras.invalid",
+    ],
+    [
+      "a withdrawn option label",
+      async (v) => {
+        await db.run(sql`update option_labels set available = 0 where id = ${v.rare.labelId}`);
+        return item(v, "burger", { options: [v.rare] });
+      },
+      "options.label_required",
+    ],
+    [
+      "a menu item the zone does not offer",
+      async (v) => item(v, "beer", { menuItemId: randomUUID() }),
+      "service_zone.offer_not_allowed",
+    ],
+  ];
+
+  it("sends the same kinds of line when nothing is withdrawn (the control for the cases below)", async () => {
+    const v = await setupVenue();
+    const { visitId } = await seated(v);
+    const sauce = [
+      { listId: v.sauceListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] },
+    ];
+    const draft = await save(v, visitId, ALEX, null, 0, [
+      item(v, "burger", { options: [v.rare], extras: sauce }),
+      item(v, "wine", { variantId: v.glass }),
+    ]);
+    expect(draft.lines.map((line) => line.unavailable)).toEqual([false, false]);
+    const submitted = await inTx(async (tx) =>
+      submitGroups(tx, v.cfg, visitId, {
+        submissionId: randomUUID(),
+        expectedVisitRevision: await visitRevision(visitId),
+        operatorId: ALEX,
+        groups: [
+          {
+            lines: [
+              { menuItemId: v.offer("burger"), quantity: "1", options: [v.rare], extras: sauce },
+              { menuItemId: v.offer("wine"), quantity: "1", variantId: v.glass },
+            ],
+            release: "hold",
+          },
+        ],
+      }),
+    );
+    expect(submitted.groups).toHaveLength(1);
+  });
+
+  it.each(refusedAtPricing)(
+    "marks %s, which pricing refuses when the line is sent",
+    async (_name, prepare, code) => {
+      const v = await setupVenue();
+      const { visitId } = await seated(v);
+      const line = await prepare(v);
+      await save(v, visitId, ALEX, null, 0, [line]);
+      expect((await draftsOf(v, visitId))[0]!.lines[0]!.unavailable).toBe(true);
+      await expect(
+        inTx(async (tx) =>
+          submitGroups(tx, v.cfg, visitId, {
+            submissionId: randomUUID(),
+            expectedVisitRevision: await visitRevision(visitId),
+            operatorId: ALEX,
+            groups: [
+              {
+                lines: [
+                  {
+                    menuItemId: line.menuItemId,
+                    quantity: line.quantity,
+                    options: line.options,
+                    extras: line.extras,
+                    ...(line.variantId === null ? {} : { variantId: line.variantId }),
+                  },
+                ],
+                release: "hold",
+              },
+            ],
+          }),
+        ),
+      ).rejects.toMatchObject({ code });
+    },
+  );
+
+  it("marks a line answering an options list its dish does not carry, or with a label the list does not hold", async () => {
+    const v = await setupVenue();
+    const { visitId } = await seated(v);
+    await save(v, visitId, ALEX, null, 0, [
+      item(v, "beer", { options: [v.rare] }),
+      item(v, "burger", { options: [{ listId: v.rare.listId, labelId: randomUUID() }] }),
+    ]);
+    expect((await draftsOf(v, visitId))[0]!.lines.map((line) => line.unavailable)).toEqual([
+      true,
+      true,
+    ]);
   });
 
   it("marks a line whose pick names a product the list does not offer", async () => {

@@ -16,6 +16,7 @@ import {
   AppError,
   decimal,
   isUuid,
+  normaliseUuid,
   QUANTITY_SCALE,
   stringToThousandths,
   thousandthsToDecimal,
@@ -118,8 +119,8 @@ export interface UnsentDraft {
 }
 
 /**
- * Every open draft on the visit, whoever owns it, each line marked `unavailable` when the zone's
- * live offers would refuse it now. The mark is worked out on each read and never stored.
+ * Every open draft on the visit, whoever owns it, each line marked by {@link unavailable} against
+ * the zone's live offers. The mark is worked out on each read and never stored.
  */
 export async function readDrafts(
   tx: Transaction,
@@ -163,7 +164,7 @@ export async function saveDraft(
     await tx.insert(orderDrafts).values({ id: draftId, visitId, ownerId: operatorId });
     await recordDraftEvent(tx, draftId, "created", null, operatorId, operatorId);
   } else {
-    const draft = await requireDraft(tx, input.draftId, visitId);
+    const draft = await requireDraft(tx, draftIdOf(input.draftId), visitId);
     if (draft.ownerId !== operatorId) {
       throw new AppError("draft.taken_over", {
         draftId: draft.id,
@@ -202,7 +203,7 @@ export async function takeOverDraft(
   operatorId: string,
   revision: number,
 ): Promise<Draft> {
-  const draft = await requireDraft(tx, draftId);
+  const draft = await requireDraft(tx, draftIdOf(draftId));
   await requireOpenVisit(tx, draft.visitId);
   if (draft.ownerId === operatorId) {
     return (await readOpenDrafts(tx, cfg, draft.visitId, draft.id))[0]!;
@@ -283,15 +284,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isId(value: unknown): value is string {
-  return typeof value === "string" && isUuid(value);
+/** A UUID in lower case, the spelling the stored ids and the merge key compare in. */
+function uuid(value: unknown, field: string): string {
+  if (typeof value !== "string" || !isUuid(value)) throw invalid(field);
+  return normaliseUuid(value, field);
 }
 
 /** An id a line may leave out: absent or null is none. */
 function optionalId(value: unknown, field: string): string | null {
   if (value === undefined || value === null) return null;
-  if (!isId(value)) throw invalid(field);
-  return value;
+  return uuid(value, field);
+}
+
+/** A draft id that is no UUID names no draft, so it is kept as sent and then not found. */
+function draftIdOf(draftId: string): string {
+  return isUuid(draftId) ? normaliseUuid(draftId, "draftId") : draftId;
 }
 
 function parseOptions(value: unknown, field: string): OptionSelection[] {
@@ -299,9 +306,7 @@ function parseOptions(value: unknown, field: string): OptionSelection[] {
   if (!Array.isArray(value)) throw invalid(field);
   return value.map((entry: unknown) => {
     if (!isRecord(entry)) throw invalid(field);
-    const { listId, labelId } = entry;
-    if (typeof listId !== "string" || typeof labelId !== "string") throw invalid(field);
-    return { listId, labelId };
+    return { listId: uuid(entry.listId, field), labelId: uuid(entry.labelId, field) };
   });
 }
 
@@ -311,16 +316,16 @@ function parseExtras(value: unknown, field: string): ExtraSelection[] {
   if (!Array.isArray(value)) throw invalid(field);
   return value.map((entry: unknown) => {
     if (!isRecord(entry)) throw invalid(field);
-    const { listId, picks } = entry;
-    if (typeof listId !== "string" || !Array.isArray(picks)) throw invalid(field);
+    const listId = uuid(entry.listId, field);
+    const { picks } = entry;
+    if (!Array.isArray(picks)) throw invalid(field);
     return {
       listId,
       picks: picks.map((pick: unknown) => {
         if (!isRecord(pick)) throw invalid(field);
-        const { productId, quantity } = pick;
-        if (typeof productId !== "string" || !Number.isSafeInteger(quantity)) throw invalid(field);
-        if ((quantity as number) < 1) throw invalid(field);
-        return { productId, quantity: quantity as number };
+        const { quantity } = pick;
+        if (!Number.isSafeInteger(quantity) || (quantity as number) < 1) throw invalid(field);
+        return { productId: uuid(pick.productId, field), quantity: quantity as number };
       }),
     };
   });
@@ -335,8 +340,8 @@ function parseDraftLines(value: unknown): DraftLineInput[] {
   return value.map((entry: unknown, index): DraftLineInput => {
     const field = (name: string) => `lines.${index}.${name}`;
     if (!isRecord(entry)) throw invalid(`lines.${index}`);
-    const { menuItemId, quantity, note, noMerge } = entry;
-    if (!isId(menuItemId)) throw invalid(field("menuItemId"));
+    const { quantity, note, noMerge } = entry;
+    const menuItemId = uuid(entry.menuItemId, field("menuItemId"));
     if (
       typeof quantity !== "string" ||
       !QUANTITY_PATTERN.test(quantity) ||
@@ -557,9 +562,10 @@ async function offersFor(
 }
 
 /**
- * What pricing would refuse now: no offer, a dish or variant that cannot be sold, or an extras pick
- * the dish's lists do not offer as available. Pick ids are lower-cased as the extras validator
- * lower-cases them.
+ * True when the line's menu item has no offer; the dish cannot be sold; its variant is not offered
+ * or cannot be sold; an extras pick is not an available item of that extras list on the offer; or
+ * an option answer is not an available label of that options list on the offer. Each of those is
+ * refused when the line is priced. An options list the line leaves unanswered is not checked.
  */
 function unavailable(line: DraftLine, offer: ZoneMenuOffer | undefined): boolean {
   if (offer === undefined || !offer.available) return true;
@@ -569,19 +575,20 @@ function unavailable(line: DraftLine, offer: ZoneMenuOffer | undefined): boolean
   ) {
     return true;
   }
-  const pickable = new Set(
+  const offered = new Set(
     offer.offeredModifiers.flatMap((list) =>
-      list.kind === "extras"
-        ? list.items
-            .filter((item) => item.available)
-            .map((item) => JSON.stringify([list.id, item.productId]))
-        : [],
+      (list.kind === "extras"
+        ? list.items.filter((item) => item.available).map((item) => item.productId)
+        : list.labels.filter((label) => label.available).map((label) => label.id)
+      ).map((id) => JSON.stringify([list.kind, list.id, id])),
     ),
   );
-  return line.extras.some(({ listId, picks }) =>
-    picks.some(
-      ({ productId }) =>
-        !pickable.has(JSON.stringify([listId.toLowerCase(), productId.toLowerCase()])),
-    ),
+  return (
+    line.extras.some(({ listId, picks }) =>
+      picks.some(({ productId }) => !offered.has(JSON.stringify(["extras", listId, productId]))),
+    ) ||
+    line.options.some(
+      ({ listId, labelId }) => !offered.has(JSON.stringify(["options", listId, labelId])),
+    )
   );
 }
