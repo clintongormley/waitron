@@ -4136,16 +4136,10 @@ run without the code):
 give it the lock check), with a receipt each; key the label lookup on own properties; rename or
 rewrite that wake-lock test; and rename those two show-floor test titles.
 
-**`quoteLiteral` still quotes for PostgreSQL, and SQLite refuses its backslash form — OPEN (found
-2026-09-23, identity's coverage review, PR #526).** `packages/shared/src/sql-literal.ts` doubles every
-backslash and wraps the value in `E'…'` when it contains one, and its header argued from
-PostgreSQL's `standard_conforming_strings` (since #579 the header only says the `E'…'` form is
-PostgreSQL's and SQLite refuses it). Measured 2026-09-23 on `node:sqlite` (Node v26.7.0):
-`select E'a\\b' as v` fails with `near "as": syntax error`, and in a plain literal SQLite keeps a
-backslash as itself, so doubling it would also change the value. Its one product caller,
-`packages/db/src/change-feed.ts`, quotes fixed relation type names with no backslash, so nothing
-fails today. **Next action:** make it SQLite's rule (double the single quote only), test-first with a
-backslash case, and drop the header's note.
+**`quoteLiteral` quotes the way SQLite does — DONE (2026-09-27, C13; found 2026-09-23, identity's
+coverage review, PR #526).** `packages/shared/src/sql-literal.ts` used to double the backslashes in
+a value holding one and wrap it in PostgreSQL's `E'…'` form, which this engine refuses. It now
+doubles the single quote only, and a backslash stays as itself.
 
 **Two identity error descriptions say less than the code raises — OPEN (found 2026-09-23, identity's
 coverage review, PR #526).** In `packages/identity/src/errors.ts`, `account_action.invalid` reads

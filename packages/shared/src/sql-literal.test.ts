@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { quoteLiteral } from "./sql-literal.js";
 
 describe("quoteLiteral", () => {
-  it("keeps a value with no quote or backslash in the plain form", () => {
+  it("wraps a value with no quote in single quotes, unchanged", () => {
     expect(quoteLiteral("abc123")).toBe("'abc123'");
   });
 
@@ -11,11 +11,15 @@ describe("quoteLiteral", () => {
     expect(quoteLiteral("'; drop role waitron_app; --")).toBe("'''; drop role waitron_app; --'");
   });
 
-  it("escapes a backslash and marks the literal E", () => {
-    expect(quoteLiteral("a\\b")).toBe("E'a\\\\b'");
+  it("keeps a backslash as itself, since SQLite gives it no escaping meaning", () => {
+    expect(quoteLiteral("a\\b")).toBe("'a\\b'");
   });
 
-  it("doubles both a quote and a backslash under the E form", () => {
-    expect(quoteLiteral("a\\'b")).toBe("E'a\\\\''b'");
+  it("doubles a quote beside a backslash and leaves the backslash alone", () => {
+    expect(quoteLiteral("a\\'b")).toBe("'a\\''b'");
+  });
+
+  it("quotes an empty value as an empty literal", () => {
+    expect(quoteLiteral("")).toBe("''");
   });
 });

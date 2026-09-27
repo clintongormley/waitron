@@ -66,8 +66,8 @@ describe("quoteLiteral", () => {
     );
   });
 
-  it("escapes a backslash and marks the literal E", () => {
-    expect(quoteLiteral("a\\b")).toBe("E'a\\\\b'");
-    expect(quoteLiteral("a\\'b")).toBe("E'a\\\\''b'");
+  it("keeps a backslash as itself and doubles only the quote", () => {
+    expect(quoteLiteral("a\\b")).toBe("'a\\b'");
+    expect(quoteLiteral("a\\'b")).toBe("'a\\''b'");
   });
 });
