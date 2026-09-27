@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, ne, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, notExists, or, sql } from "drizzle-orm";
 import {
   diningTables,
   nowIso,
@@ -11,13 +11,17 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, stringToThousandths, thousandthsToDecimal } from "@waitron/shared";
+import { trimQuantityForDisplay } from "./receipt-lines.js";
 import type { TillConfig } from "./till-config.js";
-import { checkAndBumpVisit, runServiceCommand } from "./visits.js";
+import { checkAndBumpVisit, runServiceCommand, visitRevisionOfOrder } from "./visits.js";
 import {
-  addTabRound,
   bumpRevision,
+  fireLines,
   fireOrderLines,
-  splitLineWithinOrder,
+  insertTabRound,
+  priceTabRound,
+  refusePaymentInFlight,
+  splitLinesWithinOrder,
   type TabRoundLine,
 } from "./working-order.js";
 import "./errors.js";
@@ -91,19 +95,53 @@ export async function submitGroups(
         }
         await requireHeldGroup(tx, visitId, input.joinGroupId);
       }
-      let tabId = await visitTab(tx, visitId);
+      const lines = input.groups.flatMap((group) =>
+        group.lines.map((line) => ({
+          ...line,
+          hold: group.release === "hold",
+          release: group.release === "fire",
+        })),
+      );
+      // A first group with no lines prices nothing, as the tab is checked before the empty basket.
+      const round = await priceTabRound(
+        tx,
+        cfg,
+        await visitTab(tx, visitId),
+        input.groups[0]!.lines.length === 0 ? [] : lines,
+      );
+      if (input.groups.some((group) => group.lines.length === 0)) {
+        throw new AppError("sale.empty_basket", {});
+      }
+      const { tabId } = round;
       const groupIds: string[] = [];
       for (const group of input.groups) {
-        const fire = group.release === "fire";
+        groupIds.push(
+          input.joinGroupId ?? (await startGroup(tx, visitId, group.release, operatorId)),
+        );
+      }
+      // The k-th parent row is input line k; an extras child goes with its dish.
+      const groupOfLine = input.groups.flatMap((group, i) => group.lines.map(() => groupIds[i]!));
+      const groupOfRow = new Map<string, string>();
+      let parents = 0;
+      const rows = round.rows.map((row) => {
         const groupId =
-          input.joinGroupId ?? (await startGroup(tx, visitId, group.release, operatorId));
-        ({ tabId } = await addTabRound(
+          row.parentLineId == null ? groupOfLine[parents++]! : groupOfRow.get(row.parentLineId)!;
+        groupOfRow.set(row.id!, groupId);
+        return { ...row, groupId, creditedTo: operatorId };
+      });
+      const inserted = await insertTabRound(tx, cfg, round, rows);
+      for (const [i, group] of input.groups.entries()) {
+        const groupId = groupIds[i]!;
+        const fire = group.release === "fire";
+        await fireLines(
           tx,
           cfg,
           tabId,
-          group.lines.map((line) => ({ ...line, hold: !fire, release: fire })),
-          { groupId, creditedTo: operatorId },
-        ));
+          inserted
+            .filter((row) => row.groupId === groupId)
+            .map((row) => ({ ...row, hold: !fire, release: fire })),
+        );
+        await bumpRevision(tx, [tabId]);
         await recordGroupEvent(tx, {
           visitId,
           groupId,
@@ -111,9 +149,10 @@ export async function submitGroups(
           actorId: operatorId,
           detail: { workingOrderId: tabId, release: group.release },
         });
-        groupIds.push(groupId);
       }
-      const listed = new Map((await readGroups(tx, visitId)).map((group) => [group.id, group]));
+      const listed = new Map(
+        (await readGroups(tx, visitId, groupIds)).map((group) => [group.id, group]),
+      );
       return {
         tabId,
         revision: await currentRevision(tx, visitId),
@@ -141,10 +180,10 @@ export async function fireGroup(
     "group.fire",
     { visitId, groupId, operatorId: args.operatorId },
     async () => {
-      await checkAndBumpVisit(tx, visitId, args.expectedVisitRevision, "open");
+      const revision = await checkAndBumpVisit(tx, visitId, args.expectedVisitRevision, "open");
       await requireHeldGroup(tx, visitId, groupId);
       await releaseGroup(tx, cfg, visitId, groupId, args.operatorId, {});
-      return { revision: await currentRevision(tx, visitId) };
+      return { revision };
     },
   );
 }
@@ -163,12 +202,9 @@ export async function fireHeldGroupsOfCourse(
   courseId: string,
   operatorId: string,
 ): Promise<void> {
-  const [order] = await tx
-    .select({ visitId: workingOrders.visitId })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, orderId));
-  const visitId = order?.visitId ?? null;
-  if (visitId === null) return;
+  const visit = await visitRevisionOfOrder(tx, orderId);
+  if (visit === null) return;
+  const visitId = visit.id;
   const groups = await tx
     .selectDistinct({
       id: orderGroups.id,
@@ -188,7 +224,7 @@ export async function fireHeldGroupsOfCourse(
     )
     .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id));
   if (groups.length === 0) return;
-  await checkAndBumpVisit(tx, visitId, await currentRevision(tx, visitId), "open");
+  await checkAndBumpVisit(tx, visitId, visit.revision, "open");
   for (const group of groups) {
     await releaseGroup(tx, cfg, visitId, group.id, operatorId, {
       courseId,
@@ -259,7 +295,6 @@ async function releaseGroup(
  */
 export async function reorderHeldGroups(
   tx: Transaction,
-  _cfg: TillConfig,
   visitId: string,
   heldGroupIds: string[],
   args: VisitCommandArgs,
@@ -289,6 +324,7 @@ export async function reorderHeldGroups(
       ) {
         throw new AppError("management.request_invalid", { field: "heldGroupIds" });
       }
+      await refusePaymentInFlight(tx, await billsOfGroups(tx, heldGroupIds));
       const positions = held.map((group) => group.position).sort((a, b) => a - b);
       for (const [i, id] of heldGroupIds.entries()) {
         if (byId.get(id)!.position !== positions[i]) {
@@ -330,7 +366,7 @@ export async function moveLinesToGroup(
     "group.move",
     { visitId, moves, target, operatorId: args.operatorId },
     async () => {
-      await checkAndBumpVisit(tx, visitId, args.expectedVisitRevision, "open");
+      const revision = await checkAndBumpVisit(tx, visitId, args.expectedVisitRevision, "open");
       if (moves.length === 0 || new Set(moves.map((m) => m.lineId)).size !== moves.length) {
         throw new AppError("management.request_invalid", { field: "moves" });
       }
@@ -375,11 +411,12 @@ export async function moveLinesToGroup(
       const targetId =
         target === "new" ? await startGroup(tx, visitId, "hold", args.operatorId) : target.groupId;
       const sources = new Set<string>();
-      const bills = new Set<string>();
+      const splitsByBill = new Map<string, { lineNo: number; quantity: string }[]>();
       for (const { lineId, quantity } of moves) {
         const line = lineById.get(lineId)!;
         sources.add(line.groupId!);
-        bills.add(line.workingOrderId);
+        const splits = splitsByBill.get(line.workingOrderId) ?? [];
+        splitsByBill.set(line.workingOrderId, splits);
         if (isWholeLine(quantity, line.quantity)) {
           await tx
             .update(workingOrderLines)
@@ -388,20 +425,18 @@ export async function moveLinesToGroup(
               or(eq(workingOrderLines.id, lineId), eq(workingOrderLines.parentLineId, lineId)),
             );
         } else {
-          const splitId = await splitLineWithinOrder(
-            tx,
-            cfg,
-            line.workingOrderId,
-            line.lineNo,
-            quantity,
-          );
-          await tx
-            .update(workingOrderLines)
-            .set({ groupId: targetId })
-            .where(eq(workingOrderLines.id, splitId));
+          splits.push({ lineNo: line.lineNo, quantity });
         }
       }
-      await bumpRevision(tx, [...bills]);
+      for (const [billId, splits] of splitsByBill) {
+        if (splits.length === 0) continue;
+        const splitIds = await splitLinesWithinOrder(tx, cfg, billId, splits);
+        await tx
+          .update(workingOrderLines)
+          .set({ groupId: targetId })
+          .where(inArray(workingOrderLines.id, splitIds));
+      }
+      await bumpRevision(tx, [...splitsByBill.keys()]);
       await recordGroupEvent(tx, {
         visitId,
         groupId: targetId,
@@ -410,7 +445,7 @@ export async function moveLinesToGroup(
         detail: { moves, from: [...sources] },
       });
       await removeEmptiedHeldGroups(tx, visitId, [...sources], args.operatorId);
-      return { revision: await currentRevision(tx, visitId) };
+      return { revision };
     },
   );
 }
@@ -450,20 +485,34 @@ export async function removeEmptiedHeldGroups(
   groupIds: readonly string[],
   operatorId: string | undefined,
 ): Promise<void> {
+  if (groupIds.length === 0) return;
+  const emptied = new Set(
+    (
+      await tx
+        .select({ id: orderGroups.id })
+        .from(orderGroups)
+        .where(
+          and(
+            inArray(orderGroups.id, [...groupIds]),
+            eq(orderGroups.state, "held"),
+            notExists(
+              tx
+                .select({ id: workingOrderLines.id })
+                .from(workingOrderLines)
+                .where(eq(workingOrderLines.groupId, orderGroups.id)),
+            ),
+          ),
+        )
+    ).map((group) => group.id),
+  );
+  if (emptied.size === 0) return;
+  const actorId = requireOperator(operatorId);
+  await tx
+    .update(orderGroups)
+    .set({ state: "removed" })
+    .where(inArray(orderGroups.id, [...emptied]));
   for (const groupId of new Set(groupIds)) {
-    const [group] = await tx
-      .select({ state: orderGroups.state })
-      .from(orderGroups)
-      .where(eq(orderGroups.id, groupId));
-    if (group?.state !== "held") continue;
-    const [left] = await tx
-      .select({ id: workingOrderLines.id })
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.groupId, groupId))
-      .limit(1);
-    if (left !== undefined) continue;
-    const actorId = requireOperator(operatorId);
-    await tx.update(orderGroups).set({ state: "removed" }).where(eq(orderGroups.id, groupId));
+    if (!emptied.has(groupId)) continue;
     await recordGroupEvent(tx, { visitId, groupId, kind: "removed", actorId, detail: {} });
   }
 }
@@ -481,15 +530,16 @@ export async function listOrderGroups(
   tx: Transaction,
   visitId: string,
 ): Promise<{ revision: number; groups: OrderGroup[] }> {
-  const [visit] = await tx
-    .select({ revision: visits.revision })
-    .from(visits)
-    .where(eq(visits.id, visitId));
-  if (visit === undefined) throw new AppError("visit.not_open", { visitId });
-  return { revision: visit.revision, groups: await readGroups(tx, visitId) };
+  return { revision: await currentRevision(tx, visitId), groups: await readGroups(tx, visitId) };
 }
 
-async function readGroups(tx: Transaction, visitId: string): Promise<OrderGroup[]> {
+/** The visit's groups in sequence, removed ones left out; only those named, when `only` is given. */
+async function readGroups(
+  tx: Transaction,
+  visitId: string,
+  only?: readonly string[],
+): Promise<OrderGroup[]> {
+  const scope = only === undefined ? [] : [inArray(orderGroups.id, [...only])];
   const groups = await tx
     .select({
       id: orderGroups.id,
@@ -499,7 +549,7 @@ async function readGroups(tx: Transaction, visitId: string): Promise<OrderGroup[
       remindAt: orderGroups.remindAt,
     })
     .from(orderGroups)
-    .where(and(eq(orderGroups.visitId, visitId), ne(orderGroups.state, "removed")))
+    .where(and(eq(orderGroups.visitId, visitId), ne(orderGroups.state, "removed"), ...scope))
     .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id));
   const lines = await tx
     .select({
@@ -512,10 +562,16 @@ async function readGroups(tx: Transaction, visitId: string): Promise<OrderGroup[
     .from(workingOrderLines)
     .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-    .where(and(eq(orderGroups.visitId, visitId), isNull(workingOrderLines.parentLineId)))
+    .where(and(eq(orderGroups.visitId, visitId), isNull(workingOrderLines.parentLineId), ...scope))
     .orderBy(asc(workingOrders.orderNumber), asc(workingOrderLines.lineNo));
+  const linesByGroup = new Map<string, typeof lines>();
+  for (const line of lines) {
+    const own = linesByGroup.get(line.groupId!) ?? [];
+    own.push(line);
+    linesByGroup.set(line.groupId!, own);
+  }
   return groups.map((group) => {
-    const own = lines.filter((line) => line.groupId === group.id);
+    const own = linesByGroup.get(group.id) ?? [];
     const counts = new Map<string, number>();
     for (const line of own) {
       const label = line.variantName === null ? line.name : `${line.name} ${line.variantName}`;
@@ -526,15 +582,13 @@ async function readGroups(tx: Transaction, visitId: string): Promise<OrderGroup[
       state: group.state as "held" | "fired",
       lineIds: own.map((line) => line.id),
       summary: [...counts]
-        .map(([label, quantity]) => `${plainQuantity(quantity)} × ${label}`)
+        .map(
+          ([label, quantity]) =>
+            `${trimQuantityForDisplay(thousandthsToDecimal(quantity))} × ${label}`,
+        )
         .join(", "),
     };
   });
-}
-
-/** A stored quantity with no trailing zeros: 2000 is "2", 1500 is "1.5". */
-function plainQuantity(thousandths: number): string {
-  return thousandthsToDecimal(thousandths).replace(/0+$/, "").replace(/\.$/, "");
 }
 
 /** Whether `quantity` is exactly the line's stored quantity; a malformed one is not. */
@@ -544,6 +598,15 @@ function isWholeLine(quantity: string, stored: number): boolean {
   } catch {
     return false;
   }
+}
+
+/** The bills holding a line of any of these groups. */
+async function billsOfGroups(tx: Transaction, groupIds: readonly string[]): Promise<string[]> {
+  const rows = await tx
+    .selectDistinct({ workingOrderId: workingOrderLines.workingOrderId })
+    .from(workingOrderLines)
+    .where(inArray(workingOrderLines.groupId, [...groupIds]));
+  return rows.map((row) => row.workingOrderId);
 }
 
 async function requireHeldGroup(tx: Transaction, visitId: string, groupId: string): Promise<void> {
@@ -571,11 +634,11 @@ async function visitTab(tx: Transaction, visitId: string): Promise<string> {
 }
 
 async function lastPosition(tx: Transaction, visitId: string): Promise<number> {
-  const rows = await tx
-    .select({ position: orderGroups.position })
+  const [{ last }] = await tx
+    .select({ last: sql<number>`cast(coalesce(max(${orderGroups.position}), 0) as int)` })
     .from(orderGroups)
     .where(eq(orderGroups.visitId, visitId));
-  return Math.max(0, ...rows.map((row) => row.position));
+  return last;
 }
 
 async function currentRevision(tx: Transaction, visitId: string): Promise<number> {
@@ -583,7 +646,8 @@ async function currentRevision(tx: Transaction, visitId: string): Promise<number
     .select({ revision: visits.revision })
     .from(visits)
     .where(eq(visits.id, visitId));
-  return visit!.revision;
+  if (visit === undefined) throw new AppError("visit.not_open", { visitId });
+  return visit.revision;
 }
 
 export async function recordGroupEvent(

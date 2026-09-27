@@ -273,9 +273,9 @@ async function fire(v: Venue, visitId: string, groupId: string, opts: CommandOpt
   return inTx((tx) => fireGroup(tx, v.cfg, visitId, groupId, command));
 }
 
-async function reorder(v: Venue, visitId: string, ids: string[], opts: CommandOptions = {}) {
+async function reorder(visitId: string, ids: string[], opts: CommandOptions = {}) {
   const command = await args(visitId, opts);
-  return inTx((tx) => reorderHeldGroups(tx, v.cfg, visitId, ids, command));
+  return inTx((tx) => reorderHeldGroups(tx, visitId, ids, command));
 }
 
 async function move(
@@ -633,7 +633,7 @@ describe("editing held groups", () => {
     const v = await setupVenue();
     const s = await specExample(v);
 
-    await reorder(v, s.visitId, [s.warm, s.desserts, s.mains]);
+    await reorder(s.visitId, [s.warm, s.desserts, s.mains]);
 
     const { groups } = await groupsOf(s.visitId);
     expect(groups.map((group) => [group.id, group.position])).toEqual([
@@ -649,7 +649,7 @@ describe("editing held groups", () => {
     const v = await setupVenue();
     const s = await specExample(v);
 
-    await reorder(v, s.visitId, [s.desserts, s.mains, s.warm]);
+    await reorder(s.visitId, [s.desserts, s.mains, s.warm]);
 
     const { groups } = await groupsOf(s.visitId);
     expect(groups.map((group) => group.id)).toEqual([
@@ -667,7 +667,7 @@ describe("editing held groups", () => {
     await expectRefusedWithNothingWritten(
       v,
       s.visitId,
-      () => reorder(v, s.visitId, [s.desserts, s.mains, s.warm, s.drinks]),
+      () => reorder(s.visitId, [s.desserts, s.mains, s.warm, s.drinks]),
       { code: "group.not_held", params: { groupId: s.drinks } },
     );
   });
@@ -678,13 +678,13 @@ describe("editing held groups", () => {
     await expectRefusedWithNothingWritten(
       v,
       s.visitId,
-      () => reorder(v, s.visitId, [s.desserts, s.mains]),
+      () => reorder(s.visitId, [s.desserts, s.mains]),
       { code: "management.request_invalid", params: { field: "heldGroupIds" } },
     );
     await expectRefusedWithNothingWritten(
       v,
       s.visitId,
-      () => reorder(v, s.visitId, [s.desserts, s.mains, s.warm, s.warm]),
+      () => reorder(s.visitId, [s.desserts, s.mains, s.warm, s.warm]),
       { code: "management.request_invalid", params: { field: "heldGroupIds" } },
     );
   });
@@ -712,6 +712,31 @@ describe("editing held groups", () => {
         quantity: 1000,
       });
     }
+  });
+
+  it("answers the visit's revision as stored after a move that splits a row and empties a group", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const fishOnly = (await submit(v, s.visitId, [{ release: "hold", lines: [line(v, "fish")] }]))
+      .groups[0]!.id;
+    const [fish] = await linesIn(s.visitId, fishOnly);
+    const [steak] = await linesIn(s.visitId, s.mains);
+    const before = await revisionOf(s.visitId);
+
+    const result = await move(
+      v,
+      s.visitId,
+      [
+        { lineId: steak!.id, quantity: "1" },
+        { lineId: fish!.id, quantity: "1" },
+      ],
+      { groupId: s.desserts },
+    );
+
+    expect(result).toEqual({ revision: before + 1 });
+    expect(await revisionOf(s.visitId)).toBe(before + 1);
+    const [row] = await db.select().from(orderGroups).where(eq(orderGroups.id, fishOnly));
+    expect(row!.state).toBe("removed");
   });
 
   it("splits Steak ×2 into two rows by moving one into a new held group at the end", async () => {
@@ -772,7 +797,7 @@ describe("editing held groups", () => {
       ],
       [
         "reordered",
-        () => reorder(v, s.visitId, [fishGroup, s.warm, s.mains, s.desserts], { operatorId: MIA }),
+        () => reorder(s.visitId, [fishGroup, s.warm, s.mains, s.desserts], { operatorId: MIA }),
       ],
       [
         "lines_moved",
@@ -1105,13 +1130,13 @@ describe("stale screens (D19)", () => {
     const v = await setupVenue();
     const s = await specExample(v);
     const stale = await revisionOf(s.visitId);
-    await reorder(v, s.visitId, [s.warm, s.desserts, s.mains]);
+    await reorder(s.visitId, [s.warm, s.desserts, s.mains]);
     const [steak] = await linesIn(s.visitId, s.mains);
 
     await expectRefusedWithNothingWritten(
       v,
       s.visitId,
-      () => reorder(v, s.visitId, [s.mains, s.desserts, s.warm], { revision: stale }),
+      () => reorder(s.visitId, [s.mains, s.desserts, s.warm], { revision: stale }),
       { code: "visit.out_of_date" },
     );
     await expectRefusedWithNothingWritten(
@@ -1220,6 +1245,26 @@ describe("during a card payment", () => {
       () => move(v, s.visitId, [{ lineId: steak!.id, quantity: "1" }], { groupId: s.desserts }),
       { code: "order.payment_in_flight", params: { workingOrderId: s.tabId } },
     );
+  });
+
+  it("refuses a reorder of the held groups (order.payment_in_flight), writing nothing", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    await paying(s.tabId);
+    const revision = await revisionOf(s.visitId);
+    const before = (await groupsOf(s.visitId)).groups.map(({ id, position }) => ({ id, position }));
+    const events = await eventsOf(s.visitId);
+    await expectRefusedWithNothingWritten(
+      v,
+      s.visitId,
+      () => reorder(s.visitId, [s.desserts, s.mains, s.warm]),
+      { code: "order.payment_in_flight", params: { workingOrderId: s.tabId } },
+    );
+    expect(await revisionOf(s.visitId)).toBe(revision);
+    expect(
+      (await groupsOf(s.visitId)).groups.map(({ id, position }) => ({ id, position })),
+    ).toEqual(before);
+    expect(await eventsOf(s.visitId)).toEqual(events);
   });
 });
 
@@ -1347,6 +1392,21 @@ describe("malformed commands are refused, writing nothing", () => {
     });
   });
 
+  it("refuses a submission holding a group with no lines, first or later (sale.empty_basket)", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const empty = { release: "hold" as const, lines: [] };
+    const fish = { release: "fire" as const, lines: [line(v, "fish")] };
+    for (const groups of [
+      [empty, fish],
+      [fish, empty],
+    ]) {
+      await expectRefusedWithNothingWritten(v, s.visitId, () => submit(v, s.visitId, groups), {
+        code: "sale.empty_basket",
+      });
+    }
+  });
+
   it("refuses a join carrying two groups, or one released to fire", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
@@ -1387,7 +1447,7 @@ describe("malformed commands are refused, writing nothing", () => {
     await expectRefusedWithNothingWritten(
       v,
       s.visitId,
-      () => reorder(v, s.visitId, [s.warm, s.mains, s.desserts, missing]),
+      () => reorder(s.visitId, [s.warm, s.mains, s.desserts, missing]),
       { code: "group.not_found", params: { groupId: missing } },
     );
   });
@@ -1735,7 +1795,7 @@ describe("merging two bills (R9, D2)", () => {
     ]);
     const from = await specExample(v);
     // The source's held groups no longer sit in the order they were made.
-    await reorder(v, from.visitId, [from.desserts, from.warm, from.mains]);
+    await reorder(from.visitId, [from.desserts, from.warm, from.mains]);
     const command = await tabCommand(into.visitId, from.visitId);
 
     await inTx((tx) =>
@@ -2108,7 +2168,7 @@ describe("the course Fire of the station and the pass, on a visit (R4)", () => {
       { release: "hold", lines: [line(v, "warm")] },
     ]);
     const [steakGroup, fishGroup, warmGroup] = made.groups.map((group) => group.id);
-    await reorder(v, s.visitId, [fishGroup!, warmGroup!, steakGroup!]);
+    await reorder(s.visitId, [fishGroup!, warmGroup!, steakGroup!]);
 
     await inTx(async (tx) => fireCourse(tx, v.cfg, s.tabId, await courseIdOf(v, "steak"), ALEX));
 

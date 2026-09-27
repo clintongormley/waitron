@@ -1513,7 +1513,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         throw invalid("heldGroupIds");
       }
       const reordered = await withTransaction(deps.db, (tx) =>
-        reorderHeldGroups(tx, deps.cfg, visitId, heldGroupIds as string[], command),
+        reorderHeldGroups(tx, visitId, heldGroupIds as string[], command),
       );
       return c.json(reordered);
     }),

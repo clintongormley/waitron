@@ -1700,9 +1700,6 @@ export type TabRoundLine = {
 /**
  * APPEND a priced round to an OPEN tab, locking each new line's gross unit price at add time, WITHOUT
  * deleting or re-pricing existing lines: a tab does not re-price.
- *
- * The `max(line_no)+1` read-then-insert cannot interleave with another append, because
- * `withTransaction` IS the venue file's write lock.
  */
 export async function addTabRound(
   tx: Transaction,
@@ -1712,6 +1709,58 @@ export async function addTabRound(
   // Written on every row the round inserts, extras children included.
   stamp: { groupId?: string; creditedTo?: string } = {},
 ): Promise<{ tabId: string }> {
+  const round = await priceTabRound(tx, cfg, sentTabId, lines);
+  const { tabId } = round;
+  const appendedLines = await insertTabRound(
+    tx,
+    cfg,
+    round,
+    round.rows.map((row) => ({
+      ...row,
+      groupId: stamp.groupId ?? null,
+      creditedTo: stamp.creditedTo ?? null,
+    })),
+  );
+  // The k-th parent row by `line_no` is input line k. Correlated on `line_no`, not on the
+  // `RETURNING` array position, so the mapping does not depend on the insert's row order.
+  const requestByParentId = new Map<string, TabRoundLine | undefined>();
+  appendedLines
+    .filter((row) => row.parentLineId === null)
+    .sort((a, b) => a.lineNo - b.lineNo)
+    .forEach((row, k) => requestByParentId.set(row.id, lines[k]));
+  const withHold = appendedLines.map((row) => ({
+    ...row,
+    hold: requestByParentId.get(row.id)?.hold === true,
+    release: requestByParentId.get(row.id)?.release === true,
+  }));
+  await fireLines(tx, cfg, tabId, withHold);
+  await bumpRevision(tx, [tabId]);
+  return { tabId };
+}
+
+/** A round priced for an open tab and numbered after its last line, not yet written. */
+export interface PricedTabRound {
+  /** The tab the round goes on: the party's next tab when the one sent had been paid. */
+  tabId: string;
+  /** One row per line and per extras child, in the order the lines were sent. */
+  rows: WorkingOrderLineInsert[];
+  lineContexts: { workingOrderLineId: string; menuItemId: string }[];
+  offers: ZoneOffers;
+}
+
+/**
+ * Price a round for the tab and number its rows after the tab's last line, writing no line. A round
+ * sent to a paid party tab opens the party's next tab ({@link openNextPartyTab}) first.
+ *
+ * The `max(line_no)+1` read-then-insert cannot interleave with another append, because
+ * `withTransaction` IS the venue file's write lock.
+ */
+export async function priceTabRound(
+  tx: Transaction,
+  cfg: TillConfig,
+  sentTabId: string,
+  lines: TabRoundLine[],
+): Promise<PricedTabRound> {
   const tabId =
     lines.length > 0 ? ((await openNextPartyTab(tx, cfg, sentTabId)) ?? sentTabId) : sentTabId;
   await assertAnchoredTabOpen(tx, cfg, tabId);
@@ -1730,32 +1779,31 @@ export async function addTabRound(
     lines,
     context?.zoneId,
   );
-  const appended = lineRows.map((row, i) => ({
-    ...row,
-    lineNo: maxLineNo + i + 1,
-    groupId: stamp.groupId ?? null,
-    creditedTo: stamp.creditedTo ?? null,
-  }));
-  const appendedLines = await tx
+  return {
+    tabId,
+    rows: lineRows.map((row, i) => ({ ...row, lineNo: maxLineNo + i + 1 })),
+    lineContexts,
+    offers,
+  };
+}
+
+/** Insert a priced round's rows and record their line contexts; answers what {@link fireLines} reads. */
+export async function insertTabRound(
+  tx: Transaction,
+  cfg: TillConfig,
+  round: PricedTabRound,
+  rows: WorkingOrderLineInsert[],
+): Promise<(FireableLine & { lineNo: number; groupId: string | null })[]> {
+  const inserted = await tx
     .insert(workingOrderLines)
-    .values(appended)
-    .returning({ ...fireableLineColumns, lineNo: workingOrderLines.lineNo });
-  await VENUE_SERVICE.recordLineContexts(tx, cfg, tabId, lineContexts, offers);
-  // The k-th parent row by `line_no` is input line k. Correlated on `line_no`, not on the
-  // `RETURNING` array position, so the mapping does not depend on the insert's row order.
-  const requestByParentId = new Map<string, TabRoundLine | undefined>();
-  appendedLines
-    .filter((row) => row.parentLineId === null)
-    .sort((a, b) => a.lineNo - b.lineNo)
-    .forEach((row, k) => requestByParentId.set(row.id, lines[k]));
-  const withHold = appendedLines.map((row) => ({
-    ...row,
-    hold: requestByParentId.get(row.id)?.hold === true,
-    release: requestByParentId.get(row.id)?.release === true,
-  }));
-  await fireLines(tx, cfg, tabId, withHold);
-  await bumpRevision(tx, [tabId]);
-  return { tabId };
+    .values(rows)
+    .returning({
+      ...fireableLineColumns,
+      lineNo: workingOrderLines.lineNo,
+      groupId: workingOrderLines.groupId,
+    });
+  await VENUE_SERVICE.recordLineContexts(tx, cfg, round.tabId, round.lineContexts, round.offers);
+  return inserted;
 }
 
 /**
@@ -2669,14 +2717,18 @@ export async function transferLines(
   transfers: { lineNo: number; quantity?: string }[],
   command?: VisitCommand,
 ): Promise<void> {
-  await guardVisits(
-    tx,
-    await visitOfOrder(tx, toTabId),
-    await visitOfOrder(tx, fromTabId),
-    command,
-  );
+  const toVisitId = await visitOfOrder(tx, toTabId);
+  const fromVisitId = await visitOfOrder(tx, fromTabId);
+  await guardVisits(tx, toVisitId, fromVisitId, command);
   const before = await readSentWork(tx, cfg, fromTabId);
-  const splitFrom = await carveBetweenTabs(tx, cfg, fromTabId, toTabId, transfers);
+  const splitFrom = await carveBetweenTabs(
+    tx,
+    cfg,
+    fromTabId,
+    toTabId,
+    transfers,
+    fromVisitId !== toVisitId,
+  );
   await enqueueMovedSlips(tx, cfg, before, toTabId, splitFrom);
 }
 
@@ -2687,6 +2739,7 @@ async function carveBetweenTabs(
   fromTabId: string,
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
+  leavesVisit: boolean,
 ): Promise<ReadonlyMap<string, string>> {
   if (fromTabId === toTabId) {
     throw new AppError("tab.transfer_self", { tabId: fromTabId });
@@ -2703,6 +2756,7 @@ async function carveBetweenTabs(
 
   const { splitFrom } = await carveOffLines(tx, cfg, fromTabId, toTabId, transfers, {
     refuseHeld: false,
+    leavesVisit,
   });
   await bumpRevision(tx, [fromTabId, toTabId]);
   await assertBillInvariant(tx, [fromTabId]);
@@ -2721,7 +2775,8 @@ async function carveOffLines(
   fromTabId: string,
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
-  opts: { refuseHeld: boolean },
+  // `leavesVisit`: the two orders belong to different visits, or only one of them to a visit.
+  opts: { refuseHeld: boolean; leavesVisit: boolean },
 ): Promise<{ splitFrom: Map<string, string>; splitLines: Map<string, string> }> {
   // Every line, not only the named ones: which dishes carry modifiers needs the whole tab.
   const sourceRows = await tx
@@ -2828,7 +2883,7 @@ async function carveOffLines(
       partials.push({ line, quantity: t.quantity });
     }
   }
-  const leavesVisit = await crossesVisits(tx, fromTabId, toTabId);
+  const { leavesVisit } = opts;
   if (leavesVisit) {
     await refuseHeldLeavingVisit(
       tx,
@@ -2930,12 +2985,6 @@ async function carveOffLines(
   return { splitFrom, splitLines };
 }
 
-/** Whether the two orders belong to different visits, or only one of them to a visit. */
-async function crossesVisits(tx: Transaction, fromId: string, toId: string): Promise<boolean> {
-  if (fromId === toId) return false;
-  return (await visitOfOrder(tx, fromId)) !== (await visitOfOrder(tx, toId));
-}
-
 /**
  * Refuse `group.held_leaves_visit` for the lowest-numbered of these lines whose group is held: a
  * group belongs to its visit (D1), so held work leaves only once fired.
@@ -2973,21 +3022,21 @@ async function clearGroups(tx: Transaction, lineIds: readonly string[]): Promise
 }
 
 /**
- * Split `quantity` of a top-level line off into a new row of the same order, which keeps its
- * prices, group, credit and a ticket item of its own for the part; returns the new row's id.
- * `quantity` must be less than the line's.
+ * Split `quantity` of each of these top-level lines off into a new row of the same order, which
+ * keeps its prices, group, credit and a ticket item of its own for the part; returns the new rows'
+ * ids. Each `quantity` must be less than its line's.
  */
-export async function splitLineWithinOrder(
+export async function splitLinesWithinOrder(
   tx: Transaction,
   cfg: TillConfig,
   orderId: string,
-  lineNo: number,
-  quantity: string,
-): Promise<string> {
-  const { splitLines } = await carveOffLines(tx, cfg, orderId, orderId, [{ lineNo, quantity }], {
+  splits: { lineNo: number; quantity: string }[],
+): Promise<string[]> {
+  const { splitLines } = await carveOffLines(tx, cfg, orderId, orderId, splits, {
     refuseHeld: false,
+    leavesVisit: false,
   });
-  return [...splitLines.values()][0]!;
+  return [...splitLines.values()];
 }
 
 /**
@@ -3052,7 +3101,10 @@ export async function splitOffCheck(
   await VENUE_SERVICE.copyOrderContext(tx, cfg, fromTabId, checkId);
 
   // A check is paid, never sent, so held work moved onto it would never fire.
-  await carveOffLines(tx, cfg, fromTabId, checkId, transfers, { refuseHeld: true });
+  await carveOffLines(tx, cfg, fromTabId, checkId, transfers, {
+    refuseHeld: true,
+    leavesVisit: false,
+  });
   await bumpRevision(tx, [fromTabId, checkId]);
   await assertBillInvariant(tx, [fromTabId]);
 
@@ -3131,7 +3183,14 @@ export async function unjoinTable(
   // tab's slips name its lowest-id table (`readOrderHeader`), which need not be the one its tickets
   // printed before the join.
   const before = await readSentWork(tx, cfg, tabId);
-  const splitFrom = await carveBetweenTabs(tx, cfg, tabId, newTabId, transfers);
+  const splitFrom = await carveBetweenTabs(
+    tx,
+    cfg,
+    tabId,
+    newTabId,
+    transfers,
+    newVisitId !== visitId,
+  );
   await enqueueMovedSlips(tx, cfg, before, newTabId, splitFrom);
   return { tabId: newTabId };
 }

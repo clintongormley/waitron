@@ -3,7 +3,7 @@ import type { GrossLine } from "@waitron/catalogue";
 import type { TillSaleLine } from "./till-sale.js";
 
 /** Display only: "2.000" reads "2" and "0.320" reads "0.32"; the filed figures are untouched. */
-function trimQuantityForDisplay(quantity: string): string {
+export function trimQuantityForDisplay(quantity: string): string {
   return quantity.includes(".") ? quantity.replace(/0+$/, "").replace(/\.$/, "") : quantity;
 }
 
