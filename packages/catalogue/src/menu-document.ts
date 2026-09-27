@@ -602,7 +602,7 @@ function shapeOf(document: MenuDocument): Shape {
   return { document, sections, offers, extras };
 }
 
-/** Products that disappeared from this menu's extras while never being a dish in its live version. */
+/** Products that disappeared from this menu's extras and were not dishes in its live version. */
 export function removedExtraOnlyProducts(
   live: MenuDocument | null,
   proposed: MenuDocument,

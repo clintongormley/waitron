@@ -20,6 +20,7 @@ import * as menuDocument from "./menu-document.js";
 import * as operations from "./operations.js";
 import * as sectionGraph from "./section-graph.js";
 import { menuDocumentHash } from "./menu-document.js";
+import { writeProductModifiers } from "./product-modifiers.js";
 import {
   assertLiveVersions,
   menuStatus,
@@ -35,7 +36,7 @@ import {
   updateMenuItem,
   updateProduct,
 } from "./operations.js";
-import { getExtraList, updateExtraList } from "./extras.js";
+import { createExtraList, getExtraList, setMenuItemExtraLists, updateExtraList } from "./extras.js";
 import { addMember, createSection, moveMember, removeMember, updateSection } from "./sections.js";
 import { menuDetails } from "./schema/menu.js";
 import { menuPublications, menuVersionImages, menuVersions } from "./schema/publication.js";
@@ -691,6 +692,72 @@ describe("menuStatus", () => {
       ]);
     });
 
+    it("does not add a second deletion line when the extra was also a dish in that menu", async () => {
+      const f = await menusFixture(fx.db);
+      await app((tx) => addMember(tx, f.dinnerRoot, product(f.extraLemon)));
+      await publish(f.lunch);
+      await publish(f.dinner);
+      await app((tx) => deactivateProduct(tx, f.extraLemon));
+
+      const changes = (await app((tx) => previewMenu(tx, f.dinner))).changes.filter(
+        (change) => "productId" in change && change.productId === f.extraLemon,
+      );
+      expect(changes).toEqual([
+        {
+          kind: "product_removed",
+          productId: f.extraLemon,
+          name: "Extra lemon",
+          under: [],
+          source: "shared_product",
+        },
+      ]);
+    });
+
+    it("does not match different deleted extras across menus", async () => {
+      const f = await menusFixture(fx.db);
+      await app(async (tx) => {
+        await removeMember(tx, f.lunchRoot, await memberOf(f.lunchRoot, f.soup));
+        const lunchExtras = await createExtraList(
+          tx,
+          {
+            name: "Lunch extras",
+            customerName: { en: "Lunch additions" },
+            kitchenName: "LUNCH EXTRAS",
+            minPicks: 0,
+            maxPicks: 1,
+            items: [{ productId: f.soup, price: null }],
+          },
+          "en",
+        );
+        await writeProductModifiers(tx, f.lemonade, [
+          { kind: "extras", id: f.extrasList },
+          { kind: "extras", id: lunchExtras.id },
+          { kind: "options", id: f.iceList },
+        ]);
+        await setMenuItemExtraLists(tx, await offerOf(tx, f.lunch, f.lemonade), [
+          { listId: lunchExtras.id, items: [] },
+        ]);
+      });
+      await publish(f.lunch);
+      await publish(f.dinner);
+      await app(async (tx) => {
+        await deactivateProduct(tx, f.soup);
+        await deactivateProduct(tx, f.extraLemon);
+      });
+
+      for (const [menuId, productId, name] of [
+        [f.lunch, f.soup, "Soup"],
+        [f.dinner, f.extraLemon, "Extra lemon"],
+      ] as const) {
+        const deletions = (await app((tx) => previewMenu(tx, menuId))).changes.filter(
+          (change) => change.kind === "product_deleted",
+        );
+        expect(deletions).toEqual([
+          { kind: "product_deleted", productId, name, source: "shared_product" },
+        ]);
+      }
+    });
+
     it("does not call an active product deleted when its extras list is disabled", async () => {
       const f = await published();
       await app(async (tx) => {
@@ -705,7 +772,7 @@ describe("menuStatus", () => {
             minPicks: list.minPicks,
             maxPicks: list.maxPicks,
             active: false,
-            items: [],
+            items: list.items,
           },
           "en",
         );
