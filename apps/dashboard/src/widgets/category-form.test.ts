@@ -5,8 +5,10 @@ import {
   CategoryForm,
   categoryAncestors,
   categoryPath,
+  categoryRefusalErrors,
   categoryWithDescendants,
 } from "./category-form.js";
+import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { CategoryInput, CategorySummary } from "../api/client.js";
 afterEach(cleanupWidgets);
@@ -471,4 +473,41 @@ it("refuses to save with the name-required message when no content language is c
       "wt-form-error-summary",
     )!.errors,
   ).toEqual([t("categories.name_required")]);
+});
+
+const refusal = (code: string, params?: Record<string, unknown>) => ({ code, params, status: 400 });
+
+it("puts a refused category write beside the form field it concerns", () => {
+  for (const [code, field] of [
+    ["category.parent_cycle", "parent"],
+    ["category.image_not_found", "image"],
+    ["category.color_invalid", "color"],
+  ])
+    expect(categoryRefusalErrors(refusal(code, {}), "es")).toEqual({ [field]: codeMessage(code) });
+  expect(
+    categoryRefusalErrors(refusal("content.translation_required", { language: "en" }), "es"),
+  ).toEqual({ "name-en": codeMessage("content.translation_required") });
+  // The request's own field names, translated to the form's: `name` is a whole map of translations,
+  // and the default language's is the one the form requires.
+  for (const [field, key] of [
+    ["name", "name-es"],
+    ["parentId", "parent"],
+    ["image", "image"],
+    ["color", "color"],
+  ])
+    expect(categoryRefusalErrors(refusal("management.request_invalid", { field }), "es")).toEqual({
+      [key]: codeMessage("management.request_invalid"),
+    });
+});
+
+it("keeps a refused category write that names no field of the form for the summary alone", () => {
+  for (const error of [
+    refusal("content.translation_invalid", {}),
+    refusal("content.translation_required", {}),
+    refusal("management.request_invalid", { field: "toString" }),
+    refusal("management.request_invalid"),
+    refusal("toString"),
+    refusal("server.internal"),
+  ])
+    expect(categoryRefusalErrors(error, "es")).toEqual({ _form: codeMessage(error.code) });
 });

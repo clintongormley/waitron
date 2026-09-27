@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import type { UnitForm } from "./unit-form.js";
-import "./unit-form.js";
+import { codeMessage } from "../i18n/codes.js";
+import { unitRefusalErrors, type UnitForm } from "./unit-form.js";
 
 afterEach(cleanupWidgets);
 
@@ -240,5 +240,46 @@ describe("unit-form", () => {
       new CustomEvent("wt-close", { bubbles: true, composed: true }),
     );
     expect(seen).not.toHaveBeenCalled();
+  });
+});
+
+describe("unitRefusalErrors", () => {
+  const refusal = (code: string, params?: Record<string, unknown>) => ({
+    code,
+    params,
+    status: 400,
+  });
+
+  it("puts a refusal beside the unit field it concerns", () => {
+    const named = { es: "caja" };
+    expect(unitRefusalErrors(refusal("unit.precision_invalid", {}), named)).toEqual({
+      precision: codeMessage("unit.precision_invalid"),
+    });
+    for (const field of ["name", "abbreviation", "precision"])
+      expect(unitRefusalErrors(refusal("management.request_invalid", { field }), named)).toEqual({
+        [field]: codeMessage("management.request_invalid"),
+      });
+  });
+
+  // The refusal names a language, never which of the two translated maps was empty in it; the server
+  // checks the name first.
+  it("gives a missing translation to the name when the name is empty in that language, else the abbreviation", () => {
+    const missing = refusal("content.translation_required", { language: "es" });
+    const message = codeMessage("content.translation_required");
+    expect(unitRefusalErrors(missing, {})).toEqual({ name: message });
+    expect(unitRefusalErrors(missing, { es: "  " })).toEqual({ name: message });
+    expect(unitRefusalErrors(missing, { en: "box" })).toEqual({ name: message });
+    expect(unitRefusalErrors(missing, { es: "caja" })).toEqual({ abbreviation: message });
+  });
+
+  it("keeps a refusal that names no field of the form for the summary alone", () => {
+    for (const error of [
+      refusal("content.translation_invalid", {}),
+      refusal("content.translation_required", {}),
+      refusal("management.request_invalid", { field: "productIds" }),
+      refusal("management.request_invalid"),
+      refusal("server.internal"),
+    ])
+      expect(unitRefusalErrors(error, { es: "caja" })).toEqual({ _form: codeMessage(error.code) });
   });
 });

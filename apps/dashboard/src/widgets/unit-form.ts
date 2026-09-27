@@ -7,9 +7,35 @@ import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import type { Unit, UnitInput } from "../api/client.js";
+import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 
 type UnitField = "name" | "precision" | "abbreviation";
+/** `_form` is shown in the summary alone. */
+export type UnitFormErrors = Partial<Record<UnitField | "_form", string>>;
+
+/**
+ * A refused unit write, keyed by this form's fields. `content.translation_required` names a language,
+ * not which of the two translated maps was empty in it; `createUnit`
+ * (`packages/catalogue/src/units.ts`) checks the name before the abbreviation.
+ */
+export function unitRefusalErrors(
+  error: unknown,
+  submittedName: Readonly<Record<string, string>>,
+): UnitFormErrors {
+  const code = codeOf(error);
+  const message = codeMessage(code);
+  const params = (error as { params?: { field?: unknown; language?: unknown } }).params ?? {};
+  if (code === "unit.precision_invalid") return { precision: message };
+  if (code === "content.translation_required" && typeof params.language === "string")
+    return submittedName[params.language]?.trim() ? { abbreviation: message } : { name: message };
+  if (
+    code === "management.request_invalid" &&
+    (params.field === "name" || params.field === "abbreviation" || params.field === "precision")
+  )
+    return { [params.field]: message };
+  return { _form: message };
+}
 
 /** It owns a copy of its draft, never its host's object. */
 @customElement("dashboard-unit-form")
@@ -47,7 +73,7 @@ export class UnitForm extends LitElement {
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) locales: string[] = [];
   @property({ attribute: false }) value: Unit | null = null;
-  @property({ attribute: false }) fieldErrors: Partial<Record<UnitField, string>> = {};
+  @property({ attribute: false }) fieldErrors: UnitFormErrors = {};
 
   @state() private names: Record<string, string> = {};
   @state() private abbreviations: Record<string, string> = {};

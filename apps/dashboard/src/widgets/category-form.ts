@@ -13,6 +13,7 @@ import "./image-upload.js";
 import { colorField, colorFieldStyles } from "./color-field.js";
 import type { ImageUploader } from "./image-upload.js";
 import type { CategoryInput, CategorySummary } from "../api/client.js";
+import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t, currentLocale } from "../i18n/t.js";
 
 /** The category, then each category above it, stopping at a parent the list lacks or a loop. */
@@ -63,6 +64,36 @@ export function categoryWithDescendants(
       }
   }
   return ids;
+}
+
+const FIELD_BY_CODE = new Map([
+  ["category.parent_cycle", "parent"],
+  ["category.image_not_found", "image"],
+  ["category.color_invalid", "color"],
+]);
+const FIELD_BY_REQUEST_FIELD = new Map([
+  ["parentId", "parent"],
+  ["image", "image"],
+  ["color", "color"],
+]);
+
+/** A refused category write, keyed by the form's fields; `_form` is shown in the summary alone. */
+export function categoryRefusalErrors(
+  error: unknown,
+  defaultLanguage: string,
+): Record<string, string> {
+  const code = codeOf(error);
+  const message = codeMessage(code);
+  const params = (error as { params?: { field?: unknown; language?: unknown } }).params ?? {};
+  let field = FIELD_BY_CODE.get(code);
+  if (code === "content.translation_required" && typeof params.language === "string")
+    field = `name-${params.language}`;
+  if (code === "management.request_invalid" && typeof params.field === "string")
+    field =
+      params.field === "name"
+        ? `name-${defaultLanguage}`
+        : FIELD_BY_REQUEST_FIELD.get(params.field);
+  return { [field ?? "_form"]: message };
 }
 
 /** API writes belong to the host, so the same editor can create a category inside a product draft. */

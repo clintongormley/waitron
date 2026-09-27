@@ -1299,20 +1299,29 @@ What Task 11 left open:
   decide whether a second token for the floor is right, or whether one shared sizing value used
   three ways is the honest design.
 
-- **A refused nested create is silent on three of the catalogue screen's five child forms.** Task 11
-  wired `fieldErrors` from the create controller into the two list forms, after a review seat
-  reproduced a refused nested create sitting in an open modal that said nothing. The same gap is
-  still open on `unit-form.ts` and `category-form.ts`: each declares a `fieldErrors` property and
-  `apps/dashboard/src/screens/catalogue-screen.ts` passes it to neither. **Next action:** wire the same
-  `#childFieldErrors()` into both, one line each, and check each form's own field mapping rather
-  than assuming the paths match.
-- **Dismissing a nested form fires TWO cancels, and only two of five forms guard it.** The form
-  emits its own `wt-cancel`, then the native `<dialog>`'s `close` arrives a task later,
-  `wt-dialog.ts` turns it into `wt-close` and the form cancels again. If a second form has opened in
-  between, the late cancel closes THAT one — measured on Task 11's branch as a test that failed
-  about two runs in eight, traced rather than re-run to green. Task 11 guarded the extras and
-  options forms with a kind check; the unit, category and modifier handlers still call
-  `#child.cancel()` unguarded. **Next action:** the same guard on the other three.
+- **DONE (#741, lane C's C4): a refused nested unit or category create shows its refusal inside
+  the form.**
+- **DONE (#741, lane C's C4): a late second cancel can no longer close another nested catalogue
+  form.**
+- **The standalone Units screen says nothing inside its modal for most refused unit saves.**
+  `#save` in `apps/dashboard/src/screens/units-screen.ts` gives the form a field error only for
+  `unit.precision_invalid` and the two `content.translation_*` codes; any other refusal goes to the
+  screen's own banner alone, which sits behind the open modal's backdrop. Seen 2026-09-27 in a
+  throwaway browser screenshot: a create refused with `server.internal` left the New unit form open
+  with no message in it. The case "retains the editor on a failed write" in
+  `apps/dashboard/src/screens/units-screen.test.ts` pins the banner. The same mapping also puts a
+  `content.translation_required` beside the NAME when it was the abbreviation that was empty — read
+  from the code, not run: `createUnit` (`packages/catalogue/src/units.ts`) checks the name, then the
+  abbreviation. **Next action:** use `unitRefusalErrors`, as the catalogue screen's nested unit form
+  does; its precision message is the code's own (`unit.precision_invalid`) rather than
+  `units.precision_invalid`, so the wording on this screen changes too.
+- **The Categories screen maps a refused category save to form fields by hand.** `#save` in
+  `apps/dashboard/src/screens/categories-screen.ts` does by hand, less completely, what
+  `categoryRefusalErrors` (`apps/dashboard/src/widgets/category-form.ts`) does: it does not place a
+  `management.request_invalid` beside the field that refusal names, and it keys a refusal naming no
+  field `save` where the mapper uses `_form` (both show in the form's summary alone). **Next
+  action:** call `categoryRefusalErrors` there; the case expecting `{ save: … }` in
+  `apps/dashboard/src/screens/categories-screen.test.ts` changes with it.
 - **`wt-tabs` shares the `wt-change` event name with every control a panel slots in, and five
   screens now carry the same `event.target !== event.currentTarget` guard against it**
   (`alerts-screen.ts`, `printers-screen.ts`, `profile-screen.ts`, `venue-operations-screen.ts`, and
@@ -4112,8 +4121,8 @@ reading unless marked run:
   (#511 to #556) was then due to change that file.
 - `wt-dialog` re-sends the native dialog's `close` event as `wt-close`
   (`packages/ui/src/components/wt-dialog.ts`), and the native event arrives a task after the dialog
-  closes — the same mechanism the Task 11 entry "Dismissing a nested form fires TWO cancels, and
-  only two of five forms guard it" measured. So a dialog reopened within that task is shut again:
+  closes — the same mechanism the catalogue screen's nested forms guard against (#741). So a dialog
+  reopened within that task is shut again:
   `wt-dialog`'s own close handler (`onClose`, about lines 83-86) sets its `open` to false, which
   closes the native dialog, and then the screen's handler clears its state. `staff-screen.ts` and
   `purchases-screen.ts` have no guard; their tests wait out the late close rather than guard it
