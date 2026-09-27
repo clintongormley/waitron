@@ -604,8 +604,37 @@ describe("arrangeTicketItems (D14)", () => {
     expect(arrangeTicketItems(items, "combined")).toEqual(items);
   });
 
-  // Fails if a whole-number quantity is not split, or a weighed one is.
-  it("separate: splits a whole-number quantity into entries of one, never a weighed quantity", () => {
+  // Fails if two non-whole quantities are added together, or whole-number ones stop merging.
+  it("combined: prints each non-whole quantity on its own, still merging whole-number ones", () => {
+    const hake = { qty: "0.350", unit: "kg", name: "Hake" };
+    expect(arrangeTicketItems([hake, burger, { ...hake }, burger], "combined")).toEqual([
+      hake,
+      { ...burger, qty: "2.000" },
+      hake,
+    ]);
+  });
+
+  // Fails if the merge compares the note as typed rather than as it prints.
+  it("combined: merges entries whose notes print the same once cleaned", () => {
+    expect(
+      arrangeTicketItems(
+        [
+          burger,
+          { ...burger, note: "" },
+          { ...burger, note: "\n\t" },
+          { ...burger, note: " rare\n" },
+          { ...burger, note: "rare" },
+        ],
+        "combined",
+      ),
+    ).toEqual([
+      { ...burger, qty: "3.000" },
+      { ...burger, note: " rare\n", qty: "2.000" },
+    ]);
+  });
+
+  // Fails if a whole-number quantity is not split, or a non-whole one is.
+  it("separate: splits a whole-number quantity into entries of one, never a non-whole quantity", () => {
     expect(
       arrangeTicketItems(
         [

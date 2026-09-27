@@ -52,24 +52,22 @@ export type KitchenTicket = { reprint?: boolean } & (
 /** D14: `combined` prints identical entries as one `N x`, `separate` prints one entry per unit. */
 export type KitchenTicketGrouping = "combined" | "separate";
 
-/** What must match for two entries to print identically, quantity aside. */
-function sameEntry(a: KitchenTicketItem, b: KitchenTicketItem): boolean {
-  const ma = a.modifiers ?? [];
-  const mb = b.modifiers ?? [];
-  return (
-    a.name === b.name &&
-    a.unit === b.unit &&
-    a.note === b.note &&
-    a.group === b.group &&
-    ma.length === mb.length &&
-    ma.every((modifier, index) => modifier === mb[index])
-  );
+/** Entries with equal keys print identically, quantity aside: the note is compared as it prints. */
+function entryKey(item: KitchenTicketItem): string {
+  return JSON.stringify([
+    item.name,
+    item.unit ?? "",
+    item.note === undefined ? "" : sanitizeNote(item.note),
+    item.group ?? null,
+    item.modifiers ?? [],
+  ]);
 }
 
 /**
  * One ticket list laid out under D14. `combined` merges entries that would print identically into
  * the first of them, adding the quantities. `separate` prints a whole-number quantity N as N entries
- * of 1, and never splits a weighed quantity.
+ * of 1. A quantity that is not a whole number is never merged and never split: two 0.350 kg portions
+ * are two pieces to cook, not one of 0.700 kg.
  */
 export function arrangeTicketItems(
   items: readonly KitchenTicketItem[],
@@ -86,13 +84,21 @@ export function arrangeTicketItems(
       }));
     });
   }
-  const merged: { item: KitchenTicketItem; thousandths: number }[] = [];
+  const arranged: { item: KitchenTicketItem; thousandths: number }[] = [];
+  const byKey = new Map<string, { item: KitchenTicketItem; thousandths: number }>();
   for (const item of items) {
-    const same = merged.find((entry) => sameEntry(entry.item, item));
-    if (same === undefined) merged.push({ item, thousandths: count(item) });
-    else same.thousandths += count(item);
+    const thousandths = count(item);
+    const key = thousandths % 1000 === 0 ? entryKey(item) : undefined;
+    const same = key === undefined ? undefined : byKey.get(key);
+    if (same !== undefined) {
+      same.thousandths += thousandths;
+      continue;
+    }
+    const entry = { item, thousandths };
+    arranged.push(entry);
+    if (key !== undefined) byKey.set(key, entry);
   }
-  return merged.map(({ item, thousandths }) => ({
+  return arranged.map(({ item, thousandths }) => ({
     ...item,
     qty: thousandthsToDecimal(thousandths),
   }));
