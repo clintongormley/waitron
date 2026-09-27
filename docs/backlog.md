@@ -2119,9 +2119,29 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     once) and `service_commands` have no product caller yet; Tasks 3 onwards use them. Upgrade:
     before the rebase renumbered them, the implementer applied the new migrations to a seeded venue
     migrated on `main` and reported no row lost and no table rebuilt; the regenerated `0018` is
-    byte-identical to what was measured. Left open: `service_commands` rows are never pruned; a
-    line void does not move the party's revision yet (Task 3 builds that with groups); the four
-    items directly below.
+    byte-identical to what was measured. Left open: `service_commands` rows are never pruned; the
+    four items directly below.
+  - **Task 3 landed as #733** (lane B item B3, 2026-09-27, main `9ede66892`): order groups replace
+    course firing for a seated party. Core migration `0028_order_groups` (tables `order_groups` and
+    `order_group_events`, the second append-only; `working_order_lines.group_id` and
+    `credited_to`); `apps/server/src/order-groups.ts` and the routes under
+    `POST /api/visits/:id/groups` (submit, fire, reorder, move lines), each checking the party's
+    revision (`visit.out_of_date`) and refusing while a card payment is under way; the round route
+    `POST /api/working-orders/:id/round` is deleted. Splits, transfers, merges, voids and line edits
+    respect groups (`group.held_leaves_visit`; a void or edit that empties a held group removes it
+    and moves the party's revision). The till's table screen looks the same and maps Send round,
+    Fire course and Send all onto groups. Counter orders and bills with no party still fire by
+    course, and the station and pass Fire route stays until Task 5. Upgrade: a venue built and
+    seeded on `main` took the new migration with no row lost and no table rebuilt, with a control
+    showing the checks detect a rebuild (the PR has both). Left open, from the PR's "Parked points"
+    and review notes: a cross-party merge can leave a settled check's lines naming a group now on
+    the target party; `moveTabLines` (test-only caller) ignores groups; the till's Fire course and
+    Send all fire one group per request, so a failure part-way leaves some fired (Task 4 rebuilds
+    the screen); the till, not the server, refuses a round aimed at a split-off check, because the
+    route names the party, not the bill; a whole-order save replacing a held dish with another
+    variant moves it to a new held group at the end; the counter's whole-order save does not answer
+    the party's revision; a held no-route dish outside any group gets no Send all button (whether
+    one can occur on a party's tab is not established).
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card
