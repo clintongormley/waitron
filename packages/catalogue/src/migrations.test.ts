@@ -65,6 +65,7 @@ const TABLES = [
   "menu_versions",
   "menu_publications",
   "menu_version_images",
+  "device_profile_home_layouts",
 ];
 
 /**
@@ -174,6 +175,7 @@ describe("the catalogue migration set carries no tenant column", () => {
       menu_versions: "id",
       menu_publications: "menu_id",
       menu_version_images: "version_id, filename",
+      device_profile_home_layouts: "device_profile_id, menu_id",
     });
 
     expect(foreignKeys).toEqual({
@@ -211,6 +213,8 @@ describe("the catalogue migration set carries no tenant column", () => {
       "menu_publications(menu_id)": "catalogues(id) on delete no action",
       "menu_publications(version_id, menu_id)": "menu_versions(id, menu_id) on delete no action",
       "menu_version_images(version_id)": "menu_versions(id) on delete no action",
+      "device_profile_home_layouts(device_profile_id)": "device_profiles(id) on delete cascade",
+      "device_profile_home_layouts(menu_id)": "catalogues(id) on delete no action",
     });
 
     expect(checks).toEqual({

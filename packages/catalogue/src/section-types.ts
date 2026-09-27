@@ -33,7 +33,7 @@ export interface SectionInput {
   color?: string | null;
 }
 
-/** One tile of a home layout, as the Home page tab lists it. `ref.kind` says product or section. */
+/** One tile of a home layout, as the Home page tab lists it. */
 export interface HomeTile {
   memberId: string;
   position: number;

@@ -7,10 +7,10 @@ export const deviceProfileHomeLayouts = table(
   {
     deviceProfileId: id("device_profile_id").notNull(),
     menuId: id("menu_id").notNull(),
-    // No key, on purpose (D14): a deleted layout must leave the selection in place, so the server
-    // can report `layout_removed` rather than silently show the default. What establishes the
-    // target exists: `setDeviceHomeLayout` checks it; a configuration import copies it unchecked;
-    // afterwards, nothing does.
+    // No key, on purpose (D14): a deleted layout must leave the selection in place, so
+    // `deviceHomeLayouts` reports it as `selectedRemoved` rather than dropping it. What establishes
+    // the target exists: `setDeviceHomeLayout` checks it; a configuration import copies it
+    // unchecked; afterwards, nothing does.
     layoutId: id("layout_id").notNull(),
   },
   (t) => [
