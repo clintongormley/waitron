@@ -3920,24 +3920,25 @@ image constraints under *Detail → Box image*.
 - **The english-only guard blames the wrong lines when a comment contains a glob path — DONE
   (2026-09-27, lane A's A86; found 2026-09-21, task P6).** `packages/db/src/english-only.ts` now
   steps over strings, template literals (with their `${…}` parts) and regular expressions, so a
-  comment opener inside any of them, or inside a `//` comment, opens nothing. There is no parser (a
-  package's TypeScript 7 has no `createSourceFile`), so whether a `/` opens a regular expression is
-  still a guess from the code before it, and a wrong guess in either direction can hide a word in
-  code on a later line. The wrong guesses that remain include, each run: a regular expression read
-  as division after the `)` of `for await (…)` and after a word not on the scanner's keyword list,
-  such as `export default /x/` — both hid a Spanish word in a template on the next line; and a
-  division read as a regular expression after a variable spelled like a listed keyword (one called
-  `of`) and after a `!` separated from its value by a space. Experiment: the version before the
-  branch and the branch's final version, compared over all 2577 `.ts` files under `packages/` and
-  `apps/` (excluding `node_modules` and `dist`) with the guard's own assembled word list (135 words,
-  the base list plus every module's declared words, built as `scripts/english-only.test.ts` builds
-  it), differ in one file only, `apps/server/src/boot.test.ts`: newly reported, all in code,
-  `envios` at lines 2621, 2676 and 2815, `registro` twice at 2684, and `estado` and `incidencia` at
-  2704 and 2707; no longer reported, all backtick-cited words in `//` comments, `envios` at 2615,
-  2620, 2665 and 2857, and `envios` and `entorno` at 2845. `apps/` is outside the guard's scope, so
-  nothing newly fails. Twenty-two deletions of one scanner branch each, taken one at a time, each
-  failed a case in `scripts/english-only.test.ts`, and that suite covers the module at 100% of
-  statements, branches, functions and lines. The `CLAUDE.md` §3 warning is removed.
+  comment opener inside any of them, or inside a `//` comment, opens nothing unless a `/` before it
+  was misjudged. There is no parser (a package's TypeScript 7 has no `createSourceFile`), so whether
+  a `/` opens a regular expression is still a guess from the code before it, and a wrong guess in
+  either direction can hide a word in code on a later line. The wrong guesses that remain include,
+  each run: a regular expression read as division after the `)` of `for await (…)` and after a word
+  not on the scanner's keyword list, such as `export default /x/` — both hid a Spanish word in a
+  template on the next line; and a division read as a regular expression after a variable spelled
+  like a listed keyword (one called `of`) and after a `!` separated from its value by a space.
+  Experiment: the version before the branch and the branch's final version, compared over all 2577
+  `.ts` files under `packages/` and `apps/` (excluding `node_modules` and `dist`) with the guard's
+  own assembled word list (135 words, the base list plus every module's declared words, built as
+  `scripts/english-only.test.ts` builds it), differ in one file only,
+  `apps/server/src/boot.test.ts`: newly reported, all in code, `envios` at lines 2621, 2676 and
+  2815, `registro` twice at 2684, and `estado` and `incidencia` at 2704 and 2707; no longer
+  reported, all backtick-cited words in `//` comments, `envios` at 2615, 2620, 2665 and 2857, and
+  `envios` and `entorno` at 2845. `apps/` is outside the guard's scope, so nothing newly fails.
+  Twenty-two deletions of one scanner branch each, taken one at a time, each failed a case in
+  `scripts/english-only.test.ts`, and that suite covers the module at 100% of statements, branches,
+  functions and lines. The `CLAUDE.md` §3 warning is removed.
 
 - **Six other TypeScript-scanning guards strip comments with the same slash-star pattern — OPEN
   (found 2026-09-27 reading for A86; read, not run).**

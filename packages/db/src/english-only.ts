@@ -246,8 +246,8 @@ function isLineTerminator(code: number): boolean {
 /**
  * `source` with backtick citations blanked inside its comments, and nothing else changed.
  *
- * Comments are found by walking the source as the language reads it, so a `//` or `/*` inside a
- * string, a template literal or a regular expression is not a comment, and a `/*` inside a `//`
+ * Comments are found by walking the source, guessing as described below, so a `//` or `/*` inside
+ * a string, a template literal or a regular expression is not a comment, and a `/*` inside a `//`
  * comment opens nothing. Without a parser, whether a `/` opens a regular expression is guessed from
  * what precedes it, and known wrong guesses include: a regular expression after the `)` of
  * `for await (…)`, or after a word `REGEX_AFTER_WORD` does not list (`export default /x/`), is read
@@ -261,10 +261,9 @@ function scrubComments(source: string): string {
   const parts: string[] = [];
   let copiedFrom = 0;
   let i = 0;
-  // Whether a `/` at `i` opens a regular expression rather than dividing.
   let regexAllowed = true;
   let afterDot = false;
-  // The word just read, while no other token has followed it; "" after a `.`.
+  // The word just read, while no other token has followed it; "" for a property name.
   let lastWord = "";
   // One entry per open `(`: whether a statement follows its `)`.
   const parens: boolean[] = [];
@@ -349,7 +348,8 @@ function scrubComments(source: string): string {
       const start = i;
       do i += 1;
       while (i < source.length && isWordPart(source.charCodeAt(i)));
-      // A name after a `.` is a property, so a value even when it is spelled like a keyword.
+      // A name after a `.`, but not after a spread's `...`, is a property, so a value even when it
+      // is spelled like a keyword.
       lastWord = afterDot ? "" : source.slice(start, i);
       regexAllowed = REGEX_AFTER_WORD.has(lastWord);
       afterDot = false;
@@ -375,7 +375,7 @@ function scrubComments(source: string): string {
       i += 1;
     } else {
       i += 1;
-      afterDot = code === DOT;
+      afterDot = code === DOT && source.charCodeAt(i - 2) !== DOT;
       // A `/` dividing what a `}` ends is a type error (TS2362: arithmetic on an object, a function
       // or a class), so after `}` it opens a regular expression.
       regexAllowed = code !== BRACKET_CLOSE;

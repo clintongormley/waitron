@@ -395,10 +395,7 @@ describe("findSpanish", () => {
       "const query = sql`select from registros_facturacion`;",
       "/* a real block comment */",
     ].join("\n");
-    expect(findSpanish(source, FIXTURE).map((v) => `${v.line}: ${v.word}`)).toEqual([
-      "2: registros",
-      "2: facturacion",
-    ]);
+    expect(located(source)).toEqual(["2: registros", "2: facturacion"]);
   });
 
   it("keeps a cited word cited when a glob path in a line comment precedes it", () => {
@@ -417,9 +414,7 @@ describe("findSpanish", () => {
       "const query = sql`select from registros`;",
       'const closer = "*/";',
     ].join("\n");
-    expect(findSpanish(blockOpener, FIXTURE).map((v) => `${v.line}: ${v.word}`)).toEqual([
-      "2: registros",
-    ]);
+    expect(located(blockOpener)).toEqual(["2: registros"]);
     const lineOpener = "const path = 'a//b'; const query = sql`select from registros`;";
     expect(findSpanish(lineOpener, FIXTURE).map((v) => v.word)).toEqual(["registros"]);
   });
@@ -438,9 +433,7 @@ describe("findSpanish", () => {
       "const query = sql`select from registros`;",
       "/* a real block comment */",
     ].join("\n");
-    expect(findSpanish(source, FIXTURE).map((v) => `${v.line}: ${v.word}`)).toEqual([
-      "2: registros",
-    ]);
+    expect(located(source)).toEqual(["2: registros"]);
     // A `/` inside a character class does not end the expression.
     expect(findSpanish("const tick = /[/`]/;\n// the `cadena` row", FIXTURE)).toEqual([]);
     // After a keyword such as `return`, a `/` opens an expression rather than dividing.
@@ -496,6 +489,14 @@ describe("findSpanish", () => {
     const source = ["if (ok) {}", "/`/.test(value);", "const path = `https://${sql`registros`}`;"];
     expect(located(source.join("\n"))).toEqual(["3: registros"]);
   });
+
+  it.each(["const m = [...await /`/.exec(s)];", "f(...typeof /`/);"])(
+    "opens a regular expression after a keyword that follows a spread: %s",
+    (spread) => {
+      const source = [spread, "const path = `https://${sql`registros`}`;"];
+      expect(located(source.join("\n"))).toEqual(["2: registros"]);
+    },
+  );
 
   it("opens a regular expression at the start of a template's `${…}` part", () => {
     const opener = ['const s = String.raw`${/\\/*/.source}` + "`";', "const q = sql`registros`;"];
