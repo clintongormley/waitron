@@ -152,33 +152,115 @@ export async function fireGroup(
     async () => {
       await checkAndBumpVisit(tx, visitId, args.expectedVisitRevision, "open");
       await requireHeldGroup(tx, visitId, groupId);
-      const lines = await tx
-        .select({ id: workingOrderLines.id, workingOrderId: workingOrderLines.workingOrderId })
-        .from(workingOrderLines)
-        .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-        .where(and(eq(workingOrderLines.groupId, groupId), isNull(workingOrderLines.parentLineId)))
-        .orderBy(asc(workingOrders.orderNumber), asc(workingOrderLines.lineNo));
-      const byOrder = new Map<string, string[]>();
-      for (const line of lines) {
-        byOrder.set(line.workingOrderId, [...(byOrder.get(line.workingOrderId) ?? []), line.id]);
-      }
-      for (const [orderId, lineIds] of byOrder) {
-        await fireOrderLines(tx, cfg, orderId, lineIds);
-      }
-      await tx
-        .update(orderGroups)
-        .set({ state: "fired", firedAt: nowIso(), firedBy: args.operatorId })
-        .where(eq(orderGroups.id, groupId));
-      await recordEvent(tx, {
-        visitId,
-        groupId,
-        kind: "fired",
-        actorId: args.operatorId,
-        detail: {},
-      });
+      await releaseGroup(tx, cfg, visitId, groupId, args.operatorId, {});
       return { revision: await currentRevision(tx, visitId) };
     },
   );
+}
+
+/**
+ * The course Fire of the station and pass screens, until they fire groups themselves: on an order of
+ * a visit, release every held group of the visit that holds a dish of this course on this order,
+ * whole and in position order, as {@link fireGroup} does. It answers false, touching nothing, when
+ * the order is on no visit or no held group qualifies. It carries no submission id, so it records
+ * no replay: each group's `fired` event names the course and the order.
+ */
+export async function fireHeldGroupsOfCourse(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  courseId: string,
+  operatorId: string,
+): Promise<boolean> {
+  const [order] = await tx
+    .select({ visitId: workingOrders.visitId })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  const visitId = order?.visitId ?? null;
+  if (visitId === null) return false;
+  const groups = await tx
+    .selectDistinct({
+      id: orderGroups.id,
+      position: orderGroups.position,
+      createdAt: orderGroups.createdAt,
+    })
+    .from(orderGroups)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.groupId, orderGroups.id))
+    .where(
+      and(
+        eq(orderGroups.visitId, visitId),
+        eq(orderGroups.state, "held"),
+        eq(workingOrderLines.workingOrderId, orderId),
+        eq(workingOrderLines.courseId, courseId),
+        isNull(workingOrderLines.parentLineId),
+      ),
+    )
+    .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id));
+  if (groups.length === 0) return false;
+  await checkAndBumpVisit(tx, visitId, await currentRevision(tx, visitId), "open");
+  for (const group of groups) {
+    await releaseGroup(tx, cfg, visitId, group.id, operatorId, {
+      courseId,
+      workingOrderId: orderId,
+    });
+  }
+  return true;
+}
+
+/**
+ * Give every group of `fromVisitId` to `intoVisitId`, after its last position and in their own
+ * order: a merge of two parties' bills, whose lines keep their groups.
+ */
+export async function moveGroupsToVisit(
+  tx: Transaction,
+  fromVisitId: string,
+  intoVisitId: string,
+): Promise<void> {
+  const groups = await tx
+    .select({ id: orderGroups.id })
+    .from(orderGroups)
+    .where(eq(orderGroups.visitId, fromVisitId))
+    .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id));
+  let position = await lastPosition(tx, intoVisitId);
+  for (const group of groups) {
+    await tx
+      .update(orderGroups)
+      .set({ visitId: intoVisitId, position: ++position })
+      .where(eq(orderGroups.id, group.id));
+  }
+}
+
+/**
+ * Release a held group's lines bill by bill, in the order the bills were opened, as
+ * {@link fireOrderLines} releases them, and record it fired. The caller has moved the visit's
+ * revision on and checked the group is held.
+ */
+async function releaseGroup(
+  tx: Transaction,
+  cfg: TillConfig,
+  visitId: string,
+  groupId: string,
+  operatorId: string,
+  detail: Record<string, unknown>,
+): Promise<void> {
+  const lines = await tx
+    .select({ id: workingOrderLines.id, workingOrderId: workingOrderLines.workingOrderId })
+    .from(workingOrderLines)
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
+    .where(and(eq(workingOrderLines.groupId, groupId), isNull(workingOrderLines.parentLineId)))
+    .orderBy(asc(workingOrders.orderNumber), asc(workingOrderLines.lineNo));
+  const byOrder = new Map<string, string[]>();
+  for (const line of lines) {
+    byOrder.set(line.workingOrderId, [...(byOrder.get(line.workingOrderId) ?? []), line.id]);
+  }
+  for (const [orderId, lineIds] of byOrder) {
+    await fireOrderLines(tx, cfg, orderId, lineIds);
+  }
+  await tx
+    .update(orderGroups)
+    .set({ state: "fired", firedAt: nowIso(), firedBy: operatorId })
+    .where(eq(orderGroups.id, groupId));
+  await recordEvent(tx, { visitId, groupId, kind: "fired", actorId: operatorId, detail });
 }
 
 /**

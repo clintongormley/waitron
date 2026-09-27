@@ -916,10 +916,16 @@ describe("an item already paid for (design §8 test 5)", () => {
     });
     expect(round.status).toBe(200);
     const lines = await request("GET", `/api/working-orders/${billId}/lines`);
-    const held = (
-      lines.json.lines as { lineNo: number; firedAt: string | null; name: string }[]
-    ).find((line) => line.name === "Tarta")!;
+    const tabLines = lines.json.lines as {
+      lineNo: number;
+      firedAt: string | null;
+      sentAt: string | null;
+      name: string;
+    }[];
+    const held = tabLines.find((line) => line.name === "Tarta")!;
     expect(held.firedAt).toBeNull();
+    expect(held.sentAt).toBeNull();
+    expect(tabLines.find((line) => line.name === "Paella")!.sentAt).not.toBeNull();
 
     const paid = await pay(billId, {
       kind: "items",
@@ -934,6 +940,16 @@ describe("an item already paid for (design §8 test 5)", () => {
     expect((await balance(billId)).json).toMatchObject({
       paidLines: [{ lineNo: held.lineNo, paidQuantity: "1.000" }],
     });
+    const groups = await request("GET", `/api/visits/${visitId}/groups`);
+    expect(
+      (groups.json.groups as { state: string; summary: string }[]).map(({ state, summary }) => ({
+        state,
+        summary,
+      })),
+    ).toEqual([
+      { state: "fired", summary: "1 × Paella" },
+      { state: "held", summary: "1 × Tarta" },
+    ]);
   });
 
   it("refuses an item payment naming a line the bill does not have", async () => {

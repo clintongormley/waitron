@@ -2479,7 +2479,7 @@ describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #1
         await setLineCourse(tx, cfg, tabId, 1, otros.id);
       }),
       withTransaction(suite.db, async (tx) => {
-        await fireCourse(tx, cfg, tabId, postres.id);
+        await fireCourse(tx, cfg, tabId, postres.id, OPERATOR);
       }),
     ]);
     // `fireCourse` is legal in either order — it fires the held line (setLineCourse went second) or
@@ -2566,7 +2566,7 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
         await recallLines(tx, cfg, tabId, [1]);
       }),
       withTransaction(suite.db, async (tx) => {
-        await fireCourse(tx, cfg, tabId, postres.id);
+        await fireCourse(tx, cfg, tabId, postres.id, OPERATOR);
       }),
     ]);
     expect(results.map((r) => r.status)).toEqual(["fulfilled", "fulfilled"]);

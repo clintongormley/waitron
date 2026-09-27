@@ -26,7 +26,7 @@ import {
 } from "./visits.js";
 import type { VisitCommand } from "./visits.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, exists, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, exists, inArray, isNotNull, isNull, ne, notInArray, or, sql } from "drizzle-orm";
 import type { GetColumnData, SQL } from "drizzle-orm";
 import {
   AppError,
@@ -67,6 +67,7 @@ import {
   kitchenCourses,
   kitchenStations,
   nowIso,
+  orderGroups,
   products,
   sales,
   ticketItems,
@@ -123,6 +124,7 @@ import { issuancePass } from "./issuance-pass.js";
 import { issueMoment } from "./issue-moment.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
+import { fireHeldGroupsOfCourse, moveGroupsToVisit } from "./order-groups.js";
 import {
   enqueueCorrectionSlips,
   enqueueKitchenTickets,
@@ -1166,7 +1168,7 @@ export async function fireLines(
           ? null
           : (serviceRouteByProduct.get(line.productId) ?? null);
       const courseId = courseByLine.get(line.id) ?? null;
-      // A line not fired now is HELD (`fired_at` NULL) until `fireCourse` or `sendLines` releases it.
+      // A line not fired now is HELD (`fired_at` NULL) until a later release fires it.
       const fired =
         line.release === true ||
         (line.hold !== true &&
@@ -1347,14 +1349,19 @@ async function isOpenOrder(tx: Transaction, orderId: string): Promise<boolean> {
  * Release held items of a course by stamping fired_at. Require the course to exist
  * in this venue, including a deactivated course whose food still needs release.
  * Already-fired items retain their timestamps; an empty held set is a no-op.
+ *
+ * On a visit's order, the held groups holding the course's dishes fire instead, whole
+ * ({@link fireHeldGroupsOfCourse}); `operatorId` is who fired them.
  */
 export async function fireCourse(
   tx: Transaction,
   cfg: TillConfig,
   orderId: string,
   courseId: string,
+  operatorId: string,
 ): Promise<void> {
   await requireCourse(tx, cfg, courseId);
+  if (await fireHeldGroupsOfCourse(tx, cfg, orderId, courseId, operatorId)) return;
   await releaseHeld(tx, cfg, orderId, eq(ticketItems.courseId, courseId), {
     courseIds: [courseId],
     lineIds: [],
@@ -1445,7 +1452,21 @@ export async function sendLines(
   lineNos: number[],
 ): Promise<void> {
   await assertAnchoredTabOpen(tx, cfg, tabId);
-  // An empty list fires every HELD line of the tab.
+  // A held group's lines are released only by firing the group.
+  const heldGroupLines = await tx
+    .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
+    .from(workingOrderLines)
+    .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+    .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(orderGroups.state, "held")))
+    .orderBy(workingOrderLines.lineNo);
+  const named = new Set(lineNos);
+  const namedHeld = heldGroupLines.find((line) => named.has(line.lineNo));
+  if (namedHeld !== undefined) {
+    throw new AppError("group.line_held", { tabId, lineNo: namedHeld.lineNo });
+  }
+  const heldGroupLineIds = heldGroupLines.map((line) => line.id);
+  const heldGroupLineIdSet = new Set(heldGroupLineIds);
+  // An empty list fires every HELD line of the tab outside a held group.
   const namedLineIds =
     lineNos.length === 0
       ? []
@@ -1469,7 +1490,9 @@ export async function sendLines(
       and(
         eq(ticketItems.workingOrderId, tabId),
         isNull(ticketItems.firedAt),
-        ...(lineNos.length === 0 ? [] : [inArray(ticketItems.workingOrderLineId, namedLineIds)]),
+        ...(lineNos.length === 0
+          ? [notInArray(ticketItems.workingOrderLineId, heldGroupLineIds)]
+          : [inArray(ticketItems.workingOrderLineId, namedLineIds)]),
       ),
     )
     .returning({
@@ -1480,21 +1503,23 @@ export async function sendLines(
     });
   // Sending everything held releases every held no-route line. Sending named lines releases the
   // named ones, and a course's no-route lines once nothing routed in that course is still held.
-  const noRoute = await heldNoRouteLines(
-    tx,
-    cfg,
-    tabId,
-    lineNos.length === 0
-      ? "all"
-      : {
-          courseIds: await releasedCourses(
-            tx,
-            tabId,
-            firedItems.map((item) => item.courseId),
-          ),
-          lineIds: namedLineIds,
-        },
-  );
+  const noRoute = (
+    await heldNoRouteLines(
+      tx,
+      cfg,
+      tabId,
+      lineNos.length === 0
+        ? "all"
+        : {
+            courseIds: await releasedCourses(
+              tx,
+              tabId,
+              firedItems.map((item) => item.courseId),
+            ),
+            lineIds: namedLineIds,
+          },
+    )
+  ).filter((id) => !heldGroupLineIdSet.has(id));
   await finishRelease(tx, cfg, tabId, firedItems, noRoute, firedNow, true);
 }
 
@@ -2219,7 +2244,8 @@ export interface TabLine {
   firedAt: string | null;
   /** Null when the line has no ticket item (always, on a child). */
   state: TicketState | null;
-  /** The order group the line belongs to; null on a bill with no visit. */
+  /** The order group the line is released with; null when it is in none, as on a bill with no visit
+   * or for a line moved here from another visit's bill. */
   groupId: string | null;
   note: string | null;
   /** The extras list a CHILD row was picked from; null on a dish. */
@@ -2504,8 +2530,20 @@ export async function mergeTabs(
   await guardVisits(tx, into.visitId, from.visitId, options);
   // The source is abandoned below; money it holds never moves to another bill implicitly.
   await refuseBillHoldingMoney(tx, [fromTabId]);
+  // Onto a bill of no visit the lines leave their groups, which stay with their visit.
+  const sourceLineIds =
+    from.visitId !== null && into.visitId === null
+      ? (
+          await tx
+            .select({ id: workingOrderLines.id })
+            .from(workingOrderLines)
+            .where(eq(workingOrderLines.workingOrderId, fromTabId))
+        ).map((line) => line.id)
+      : [];
+  await refuseHeldLeavingVisit(tx, fromTabId, sourceLineIds);
   const before = await readSentWork(tx, cfg, fromTabId);
   await moveOrderLines(tx, cfg, fromTabId, intoTabId, undefined, { modesChecked: false });
+  await clearGroups(tx, sourceLineIds);
   await bumpRevision(tx, [fromTabId, intoTabId]);
 
   // Two parties becoming one (D2): the source visit is absorbed into the target's.
@@ -2515,6 +2553,7 @@ export async function mergeTabs(
       : null;
   const sourceTables = absorbed === null ? [] : await memberTables(tx, absorbed.from);
   if (absorbed !== null) {
+    await moveGroupsToVisit(tx, absorbed.from, absorbed.into);
     await leaveTables(tx, sourceTables);
     if (!options.freeSourceTable && sourceTables.length > 0) {
       await tx
@@ -2753,6 +2792,14 @@ async function carveOffLines(
       partials.push({ line, quantity: t.quantity });
     }
   }
+  const leavesVisit = await crossesVisits(tx, fromTabId, toTabId);
+  if (leavesVisit) {
+    await refuseHeldLeavingVisit(
+      tx,
+      fromTabId,
+      transfers.map((t) => byLineNo.get(t.lineNo)!.id),
+    );
+  }
   // A split keeps the source row, so its paid quantity may stay there while unpaid units move.
   await refusePaidLines(
     tx,
@@ -2838,7 +2885,55 @@ async function carveOffLines(
       }
     }
   }
+  if (leavesVisit) {
+    await clearGroups(tx, [
+      ...wholeLineNos.map((lineNo) => byLineNo.get(lineNo)!.id),
+      ...splitLines.values(),
+    ]);
+  }
   return { splitFrom, splitLines };
+}
+
+/** Whether the two orders belong to different visits, or only one of them to a visit. */
+async function crossesVisits(tx: Transaction, fromId: string, toId: string): Promise<boolean> {
+  if (fromId === toId) return false;
+  return (await visitOfOrder(tx, fromId)) !== (await visitOfOrder(tx, toId));
+}
+
+/**
+ * Refuse `group.held_leaves_visit` for the lowest-numbered of these lines whose group is held: a
+ * group belongs to its visit (D1), so held work leaves only once fired.
+ */
+async function refuseHeldLeavingVisit(
+  tx: Transaction,
+  tabId: string,
+  lineIds: readonly string[],
+): Promise<void> {
+  if (lineIds.length === 0) return;
+  const [held] = await tx
+    .select({ lineNo: workingOrderLines.lineNo })
+    .from(workingOrderLines)
+    .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+    .where(and(inArray(workingOrderLines.id, [...lineIds]), eq(orderGroups.state, "held")))
+    .orderBy(workingOrderLines.lineNo)
+    .limit(1);
+  if (held !== undefined) {
+    throw new AppError("group.held_leaves_visit", { tabId, lineNo: held.lineNo });
+  }
+}
+
+/** Take these lines, and their extras children, out of their group: they left its visit. */
+async function clearGroups(tx: Transaction, lineIds: readonly string[]): Promise<void> {
+  if (lineIds.length === 0) return;
+  await tx
+    .update(workingOrderLines)
+    .set({ groupId: null })
+    .where(
+      or(
+        inArray(workingOrderLines.id, [...lineIds]),
+        inArray(workingOrderLines.parentLineId, [...lineIds]),
+      ),
+    );
 }
 
 /**

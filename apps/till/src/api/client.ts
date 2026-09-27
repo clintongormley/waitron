@@ -1168,8 +1168,8 @@ export interface TabLine {
    * RECALLABLE line has `firedAt` set, `state === "queued"`, and the venue allows changes to sent items
    * (`editSentLines`); "preparing"/"ready" is cancel-only. */
   state: TicketState | null;
-  /** The order group the line belongs to; null on a bill with no party. Absent only on a fixture that
-   * omits it. */
+  /** The order group the line is released with; null when it is in none, as on a bill with no party
+   * or for a line moved here from another party's bill. Absent only on a fixture that omits it. */
   groupId?: string | null;
   note: string | null;
   /** The extras list a CHILD row was picked from, which a prefilled pick goes back to; null on a

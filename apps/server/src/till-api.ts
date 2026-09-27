@@ -543,16 +543,22 @@ function mountCourseVerb(
   deps: TillApiDeps,
   log: Logger,
   suffix: string,
-  verb: (tx: Transaction, cfg: TillConfig, orderId: string, courseId: string) => Promise<void>,
+  verb: (
+    tx: Transaction,
+    cfg: TillConfig,
+    orderId: string,
+    courseId: string,
+    operatorId: string,
+  ) => Promise<void>,
 ): void {
   app.post(`/api/orders/:id/courses/:courseId/${suffix}`, (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const { personId } = await requireSession(deps, c);
       const orderId = requireUuidId(c.req.param("id"), "working_order.not_found");
       const courseId = c.req.param("courseId");
       if (!isUuid(courseId)) throw new AppError("course.not_found", { courseId });
       await withTransaction(deps.db, async (tx) => {
-        await verb(tx, deps.cfg, orderId, courseId);
+        await verb(tx, deps.cfg, orderId, courseId, personId);
       });
       return c.body(null, 200);
     }),

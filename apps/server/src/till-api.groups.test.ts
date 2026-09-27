@@ -1,9 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { orderGroupEvents, serviceCommands, visits, workingOrderLines } from "@waitron/db";
+import {
+  orderGroupEvents,
+  products,
+  serviceCommands,
+  visits,
+  workingOrderLines,
+} from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { createCourse, setProductCourse } from "./kitchen.js";
 import { createTable } from "./tables.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import "./errors.js";
@@ -547,6 +554,27 @@ describe("PUT /api/visits/:id/groups/order", () => {
   });
 });
 
+describe("the order and move routes on a visit that does not exist", () => {
+  it.each([
+    ["PUT", "order", { heldGroupIds: [] }],
+    ["POST", "move", { moves: [{ lineId: randomUUID(), quantity: "1" }], target: "new" }],
+  ] as const)(
+    "refuse %s …/groups/%s 409 visit.not_open, for an unknown id and for an id that is not one",
+    async (method, suffix, body) => {
+      for (const visitId of [randomUUID(), "not-a-uuid"]) {
+        const refused = await call(method, `/api/visits/${visitId}/groups/${suffix}`, {
+          submissionId: randomUUID(),
+          expectedVisitRevision: 0,
+          ...body,
+        });
+
+        expect(refused.status).toBe(409);
+        expect(refused.json).toEqual(refusal("visit.not_open", { visitId }));
+      }
+    },
+  );
+});
+
 describe("POST /api/visits/:id/groups/move", () => {
   it("moves a line into another held group, or into a new one, and answers the visit's revision", async () => {
     const visit = await withGroups();
@@ -752,6 +780,94 @@ describe("GET /api/working-orders/:id/lines", () => {
         ({ lineNo, groupId }) => ({ lineNo, groupId }),
       ),
     ).toEqual([{ lineNo: 1, groupId: null }]);
+  });
+});
+
+describe("the tab routes that move or release lines, on a visit with groups", () => {
+  it("refuses 409 group.held_leaves_visit for a held line transferred to another party's tab, writing nothing", async () => {
+    const visit = await withGroups();
+    const other = await seated();
+    const lineNo = (
+      (await call("GET", `/api/working-orders/${visit.tabId}/lines`)).json.lines as {
+        lineNo: number;
+        groupId: string | null;
+      }[]
+    ).find((line) => line.groupId === visit.tarta.id)!.lineNo;
+    const before = [await snapshot(visit), await snapshot(other)];
+
+    const refused = await call("POST", `/api/tabs/${visit.tabId}/transfer`, {
+      toTabId: other.tabId,
+      transfers: [{ lineNo }],
+      expectedVisitRevision: await revisionOf(other.visitId),
+      expectedSourceVisitRevision: await revisionOf(visit.visitId),
+    });
+
+    expect(refused.status).toBe(409);
+    expect(refused.json).toEqual(
+      refusal("group.held_leaves_visit", { tabId: visit.tabId, lineNo }),
+    );
+    expect([await snapshot(visit), await snapshot(other)]).toEqual(before);
+  });
+
+  it("refuses 409 group.line_held for a held line sent on its own, writing nothing", async () => {
+    const visit = await withGroups();
+    const lineNo = (
+      (await call("GET", `/api/working-orders/${visit.tabId}/lines`)).json.lines as {
+        lineNo: number;
+        groupId: string | null;
+      }[]
+    ).find((line) => line.groupId === visit.croquetas.id)!.lineNo;
+    const before = await snapshot(visit);
+
+    const refused = await call("POST", `/api/working-orders/${visit.tabId}/lines/send`, {
+      lineNos: [lineNo],
+    });
+
+    expect(refused.status).toBe(409);
+    expect(refused.json).toEqual(refusal("group.line_held", { tabId: visit.tabId, lineNo }));
+    expect(await snapshot(visit)).toEqual(before);
+  });
+
+  it("fires the held group holding a course's dish through the course Fire route, as the signed-in operator", async () => {
+    const courseId = await inTx(venue, async (tx) => {
+      const course = await createCourse(tx, venue.cfg, {
+        name: `Postres-${randomUUID().slice(0, 6)}`,
+        displayOrder: 9,
+      });
+      const [tarta] = await tx
+        .select({ id: products.id })
+        .from(products)
+        .where(eq(products.name, "Tarta"));
+      await setProductCourse(tx, venue.cfg, tarta!.id, course.id);
+      return course.id;
+    });
+    const visit = await withGroups();
+    const revision = await revisionOf(visit.visitId);
+
+    const fired = await call("POST", `/api/orders/${visit.tabId}/courses/${courseId}/fire`);
+
+    expect(fired.status).toBe(200);
+    expect(await revisionOf(visit.visitId)).toBe(revision + 1);
+    const listed = (await call("GET", `/api/visits/${visit.visitId}/groups`)).json as {
+      groups: { id: string; state: string }[];
+    };
+    expect(listed.groups.map((group) => [group.id, group.state])).toEqual([
+      [visit.fired.id, "fired"],
+      [visit.tarta.id, "fired"],
+      [visit.croquetas.id, "held"],
+    ]);
+    const [event] = await inTx(venue, (tx) =>
+      tx
+        .select({ actorId: orderGroupEvents.actorId, detail: orderGroupEvents.detail })
+        .from(orderGroupEvents)
+        .where(
+          and(eq(orderGroupEvents.groupId, visit.tarta.id), eq(orderGroupEvents.kind, "fired")),
+        ),
+    );
+    expect(event).toEqual({
+      actorId: venue.operatorId,
+      detail: { courseId, workingOrderId: visit.tabId },
+    });
   });
 });
 
