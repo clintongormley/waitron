@@ -78,6 +78,13 @@
       "when": 1790394956138,
       "tag": "0010_menu_publication",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1790482432170,
+      "tag": "0011_device_profile_home_layouts",
+      "breakpoints": true
     }
   ]
 }
