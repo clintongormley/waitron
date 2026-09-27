@@ -2179,8 +2179,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     line is picked. The draft's line toggle was changed to a plain button on the Task 4 branch; the
     transfer picker was not, and neither was the split picker (`#splitLineRow`), which has the same
     shape.
-  - **Task 5 landed as #TBD** (lane B item B5, 2026-09-27, main `TBD`; written on the branch
-    `feat/service-groups-kitchen` before its pull request, so landing fills in both): the kitchen,
+  - **Task 5 landed as #750** (lane B item B5, 2026-09-27, main `4a4ca65c9`): the kitchen,
     the pass and the table screen work by a seated party's groups, and a kitchen ticket that has
     not printed shows on the table. **Kitchen screen:** a party's card is split into "Group n"
     sections; a held group reads "Held, not released" and, when the venue's who-fires setting
