@@ -1,6 +1,7 @@
 import { generateNodeKeyPair } from "@waitron/membership";
 import { getCredential, putCredential, type KeyRing } from "@waitron/credentials";
 import { setNodePublicKeyTx, withTransaction, type Database } from "@waitron/db";
+import { credentialField } from "./credentials.js";
 import "./errors.js";
 
 /** The credentials-vault purpose for the node's Ed25519 membership private key. */
@@ -38,6 +39,6 @@ export async function establishNodeIdentity(
 export function readNodeIdentityKey(appDb: Database, ring: KeyRing): Promise<string> {
   return withTransaction(appDb, async (tx) => {
     const c = await getCredential(tx, ring, { purpose: NODE_KEY_PURPOSE });
-    return c.privateKey as string;
+    return credentialField(c, NODE_KEY_PURPOSE, "privateKey");
   });
 }

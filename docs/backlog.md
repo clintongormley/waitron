@@ -2942,14 +2942,14 @@ image constraints under *Detail → Box image*.
 
 ### B7. Provisioning and build debt
 
-- **Every credential reader checks the fields it uses — decided 2026-09-15, now unblocked by #378.**
+- **Every credential reader checks the fields it uses — decided 2026-09-15; the two readers DONE.**
   Reading a credential (`getCredential`/`tryGetCredential`, `packages/credentials/src/store.ts`) does
   not re-check it against `PURPOSES`, and the owner chose to keep it that way rather than refuse the
-  read (which would stop every venue holding that kind of secret the moment a field is added). Two
-  readers still pass a missing field on unchecked and are the work: `apps/server/src/email-delivery.ts`
-  (`url`/`from` with `!`) and `apps/server/src/node-identity.ts`'s `readNodeIdentityKey` (`privateKey`
-  cast `as string`); both should raise `server.credential_unusable` naming the field, as
-  `apps/server/src/stripe-account.ts` does, each with a failing test first. `rotate` re-checks a
+  read (which would stop every venue holding that kind of secret the moment a field is added). DONE
+  for the last two readers that passed a missing field on unchecked (PR for
+  `fix/credential-field-checks`): `resolveEmailDelivery` (`apps/server/src/email-delivery.ts`) and
+  `readNodeIdentityKey` (`apps/server/src/node-identity.ts`) now raise `server.credential_unusable`
+  naming the field, through `credentialField` in `apps/server/src/credentials.ts`. `rotate` re-checks a
   secret against the current list
   only when it re-seals one: it skips a secret already on the current key (`rotateCredentials`,
   `packages/credentials/src/store.ts`), so an out-of-date one stops a key rotation only when it is
