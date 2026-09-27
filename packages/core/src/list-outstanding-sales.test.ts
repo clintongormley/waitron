@@ -97,6 +97,24 @@ describe("listOutstandingSales", () => {
     expect(await list()).toHaveLength(0);
   });
 
+  it("keeps another sale outstanding when one sale is settled", async () => {
+    const settledId = await seedBareSale(
+      suite.db,
+      { tillId, nodeId, seriesId },
+      { total: "70.00", invoiceNumber: 1 },
+    );
+    const outstandingId = await seedBareSale(
+      suite.db,
+      { tillId, nodeId, seriesId },
+      { total: "45.00", invoiceNumber: 2 },
+    );
+    await settleDirectly(settledId);
+
+    expect(await list()).toMatchObject([
+      { saleId: outstandingId, invoiceNumber: 2, total: "45.00", amountDue: "45.00" },
+    ]);
+  });
+
   it("hides a voided sale", async () => {
     const saleId = await seedBareSale(
       suite.db,

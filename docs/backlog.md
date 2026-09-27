@@ -4137,14 +4137,6 @@ image constraints under *Detail → Box image*.
   returns. One review point remains:
   - The loop guard reports the whole group of packages in a loop, not a path through it, so a failure
     does not say which link to cut. Optional: print one cycle path alongside the group.
-- **Nothing notices if the outstanding-sales query stops linking its settlement check to the sale**
-  (found 2026-09-14 while removing the tenant filters; the gap predates that branch). A sale is
-  excluded by `not exists (select 1 from sale_settlements ss where ss.sale_id = s.id)`
-  (`packages/core/src/list-outstanding-sales.ts`). Deleting the `ss.sale_id = s.id` link — which
-  would hide every outstanding sale as soon as any other sale was settled — left
-  `packages/core/src/list-outstanding-sales.test.ts` green when that mutation was run. The query is
-  correct; the test is what cannot tell. **Next action:** add a case holding one settled sale beside
-  one unsettled one, and confirm it goes red with the link removed.
 - **A throwaway script found six comments that described code that was no longer there, and it is
   not a guard yet** (written 2026-09-14 during the tenant-column removal). It flags a comment whose
   subject has gone from the lines beneath it; on that branch it found six real ones that a green
