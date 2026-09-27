@@ -582,7 +582,6 @@ describe("createAgent — setup controls", () => {
       },
     });
     let probeCalls = 0;
-    let agent!: ReturnType<typeof createAgent>;
     const probeNode = vi.fn(async () => {
       probeCalls += 1;
       if (probeCalls === 3) {
@@ -591,7 +590,7 @@ describe("createAgent — setup controls", () => {
       }
       return failR({ kind: "unreachable", detail: "offline" });
     });
-    agent = createAgent({ host, client: client({ probeNode }) });
+    const agent = createAgent({ host, client: client({ probeNode }) });
 
     await agent.runOnce();
     const running = agent.start();
