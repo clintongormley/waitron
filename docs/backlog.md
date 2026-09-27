@@ -5371,14 +5371,21 @@ it. Left open:
   `StreamHost.start`) catch it and log the code alone, and a staged stream restore writes bytes
   downloaded before staging. One case was run: `boot.test.ts`'s "keeps selling when a restore's
   first start fails" boots against a bucket failing with that code and stays up. The recovery
-  page's `server.boot_failed` detail was not tested with it. **DONE by lane A's A69:**
+  page's `server.boot_failed` detail was not tested with it. **DONE by lane A's A69 (#723):**
   `backup.stream_name_invalid`'s `value` for `field: "listedKey"` is the fixed word `other`, never
   the key the bucket listed, at both places it is built (the `list` in
   `packages/stream/src/s3-store.ts`, and `pruneGenerations` in
   `packages/stream/src/generations.ts`). The leak was run before the fix: `boot.test.ts`'s "keeps a
   key the bucket lists outside the folder asked for out of the answer and the log" sends the
   wizard's bucket restore to a local HTTP bucket whose listing names a key outside the folder, and
-  with the key put back the answer and the log file's warning line both carried it. Left by #686 and A57: that a real bucket's 403 to this LISTING reads
+  with the key put back the answer and the log file's warning line both carried it (#723).
+  **Open after #723:** the wizard route answers this refusal 400, where other bucket failures
+  answer 502 — the status table in `apps/server/src/setup-api.ts` maps the code as one, and the
+  same code also covers a bad value in the recovery kit, where 400 is right; and a batch delete's
+  `backup.stream_request_failed` still carries the file's name as the bucket listed it in `key`
+  (the `deleteMany` refusal in `packages/stream/src/s3-store.ts`). #723's review seat reported that
+  the prune logger drops `key` and that it found no path from there to an answer or the recovery
+  page's log; that is the seat's reading and one run, not a guard. Left by #686 and A57: that a real bucket's 403 to this LISTING reads
   that code, and the status on each line, were shown by reading `packages/stream/src/s3-store.ts`,
   by the store's scripted HTTP answers and by the supervisor's injected errors, not against a real
   bucket, and A60's `errorName` was shown the same way — its list was checked against Amazon's
