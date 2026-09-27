@@ -9,6 +9,7 @@ import {
   documentImages,
   MENU_DOCUMENT_FORMAT,
   menuDocumentHash,
+  removedExtraOnlyProducts,
   type DiffEntry,
   type OmittedShortcut,
 } from "./menu-document.js";
@@ -217,6 +218,7 @@ function changeSubject({ change, section }: DiffEntry): string {
   switch (change.kind) {
     case "product_added":
     case "product_removed":
+    case "product_deleted":
     case "product_moved":
     case "price_changed":
     case "product_changed":
@@ -259,6 +261,7 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
   if (mine === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
   const own = (await liveVersions(tx, [menuId], true)).get(menuId);
   const entries = diffEntries(own?.document ?? null, mine.document);
+  const removedExtras = removedExtraOnlyProducts(own?.document ?? null, mine.document);
 
   // Every published menu's live version, read only once a change needs another menu.
   let everyLive: Map<string, LiveVersion> | undefined;
@@ -281,18 +284,32 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
     return found;
   };
 
-  const inactiveOf = async (lists: readonly DiffEntry[][]): Promise<Set<string>> => {
+  const inactiveOf = async (
+    lists: readonly DiffEntry[][],
+    extraProductIds: readonly string[] = [],
+  ): Promise<Set<string>> => {
     const removed = lists.flatMap((list) =>
       list.flatMap(({ change }) => (change.kind === "product_removed" ? [change.productId] : [])),
     );
     const inactive = new Set<string>();
-    for (const batch of batches([...new Set(removed)]))
+    for (const batch of batches([...new Set([...removed, ...extraProductIds])]))
       for (const row of await tx
         .select({ id: products.id })
         .from(products)
         .where(and(inArray(products.id, batch), eq(products.active, false))))
         inactive.add(row.id);
     return inactive;
+  };
+  const appendDeletedExtras = (
+    list: DiffEntry[],
+    removed: readonly { productId: string; name: string }[],
+    inactive: ReadonlySet<string>,
+  ): void => {
+    for (const { productId, name } of removed)
+      if (inactive.has(productId))
+        list.push({
+          change: { kind: "product_deleted", productId, name, source: "shared_product" },
+        });
   };
   const refine = async (
     list: DiffEntry[],
@@ -318,7 +335,12 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
       }
     }
   };
-  await refine(entries, menuId, mine.rootSectionId, await inactiveOf([entries]));
+  const deleted = await inactiveOf(
+    [entries],
+    removedExtras.map(({ productId }) => productId),
+  );
+  appendDeletedExtras(entries, removedExtras, deleted);
+  await refine(entries, menuId, mine.rootSectionId, deleted);
 
   // The other menus are built and compared only to fill in a shared change's `alsoOn`.
   if (entries.some(({ change }) => change.source !== "this_menu")) {
@@ -334,11 +356,17 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
         name: document.menuName,
         rootSectionId,
         entries: diffEntries(live.get(other)!.document, document),
+        removedExtras: removedExtraOnlyProducts(live.get(other)!.document, document),
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
-    const deleted = await inactiveOf(others.map((other) => other.entries));
-    for (const other of others)
+    const deleted = await inactiveOf(
+      others.map((other) => other.entries),
+      others.flatMap((other) => other.removedExtras.map(({ productId }) => productId)),
+    );
+    for (const other of others) {
+      appendDeletedExtras(other.entries, other.removedExtras, deleted);
       await refine(other.entries, other.menuId, other.rootSectionId, deleted);
+    }
     for (const entry of entries) {
       if (entry.change.source === "this_menu") continue;
       const alsoOn = others

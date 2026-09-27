@@ -229,6 +229,40 @@ it("words a change in Spanish, with the price in the Spanish money format", asyn
   ]);
 });
 
+it("names a deleted extra-only product on its own line in English and Spanish", async () => {
+  const el = await mount({
+    preview: preview([
+      {
+        kind: "product_changed",
+        productId: "p-lemonade",
+        name: "Lemonade",
+        fields: ["extras"],
+        source: "shared_product",
+        alsoOn: ["Dinner Menu"],
+      },
+      {
+        kind: "product_deleted",
+        productId: "p-extra-lemon",
+        name: "Extra lemon",
+        source: "shared_product",
+        alsoOn: ["Dinner Menu"],
+      },
+    ]),
+  });
+  expect(items(el, "changes")).toEqual([
+    "Lemonade: extras — shared product, also on Dinner Menu",
+    "Extra lemon deleted — shared product, also on Dinner Menu",
+  ]);
+
+  setLocale("es-ES");
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(items(el, "changes")).toEqual([
+    "Lemonade: extras — producto compartido, también en Dinner Menu",
+    "Se ha eliminado Extra lemon — producto compartido, también en Dinner Menu",
+  ]);
+});
+
 /** A dish's VAT change, a variant's own (named in the variants too), and an extra's. */
 const VAT_CHANGES: MenuChange[] = [
   {

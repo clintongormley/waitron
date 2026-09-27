@@ -35,6 +35,7 @@ import {
   updateMenuItem,
   updateProduct,
 } from "./operations.js";
+import { getExtraList, updateExtraList } from "./extras.js";
 import { addMember, createSection, moveMember, removeMember, updateSection } from "./sections.js";
 import { menuDetails } from "./schema/menu.js";
 import { menuPublications, menuVersionImages, menuVersions } from "./schema/publication.js";
@@ -667,7 +668,7 @@ describe("menuStatus", () => {
       ]);
     });
 
-    it("flags both for Extra lemon deleted, naming each dish's extras as changed", async () => {
+    it("flags both for Extra lemon deleted, naming the product and each dish's extras", async () => {
       const f = await published();
       await app((tx) => deactivateProduct(tx, f.extraLemon));
       expect(await states(f)).toEqual({ lunch: "changed", dinner: "changed" });
@@ -677,6 +678,44 @@ describe("menuStatus", () => {
           productId: f.lemonade,
           name: "Lemonade",
           fields: ["extras"],
+          source: "shared_product",
+          alsoOn: ["Lunch Menu"],
+        },
+        {
+          kind: "product_deleted",
+          productId: f.extraLemon,
+          name: "Extra lemon",
+          source: "shared_product",
+          alsoOn: ["Lunch Menu"],
+        },
+      ]);
+    });
+
+    it("does not call an active product deleted when its extras list is disabled", async () => {
+      const f = await published();
+      await app(async (tx) => {
+        const list = await getExtraList(tx, f.extrasList);
+        await updateExtraList(
+          tx,
+          f.extrasList,
+          {
+            name: list.name,
+            customerName: list.customerName,
+            kitchenName: list.kitchenName,
+            minPicks: list.minPicks,
+            maxPicks: list.maxPicks,
+            active: false,
+            items: [],
+          },
+          "en",
+        );
+      });
+      expect((await app((tx) => previewMenu(tx, f.dinner))).changes).toEqual([
+        {
+          kind: "product_changed",
+          productId: f.lemonade,
+          name: "Lemonade",
+          fields: ["extras", "options"],
           source: "shared_product",
           alsoOn: ["Lunch Menu"],
         },

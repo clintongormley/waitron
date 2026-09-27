@@ -247,6 +247,8 @@ export class MenuPreviewPanel extends LitElement {
           change.under,
           { name: change.name },
         );
+      case "product_deleted":
+        return fill("menu_preview.product_deleted", { name: change.name });
       case "product_moved":
         return fill("menu_preview.product_moved", {
           name: change.name,
