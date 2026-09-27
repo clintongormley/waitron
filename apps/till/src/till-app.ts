@@ -773,6 +773,11 @@ export class TillApp extends LitElement {
   @state() private tabGroups: OrderGroup[] = [];
   /** The kitchen tickets of {@link orderParty} that did not print, read with {@link tabGroups}. */
   @state() private printProblems: PrintProblem[] = [];
+  /** The bills whose kitchen tickets Reprint sent again since the table was opened. The server
+   * reports a problem until the reprint prints, so the next opening of the table is the read that
+   * shows a problem still there. */
+  @state() private reprintSent: string[] = [];
+  #reprinting = false;
   /** Every bill of the party at {@link activeTableId}, read when the table opens and after it changes. */
   @state() private visitBills: VisitBill[] = [];
   /** The party of the order on screen as it was read just before that order's lines and bills: what
@@ -2205,6 +2210,7 @@ export class TillApp extends LitElement {
     // `set-status` is keyed by table id, so it is remembered alongside the tab's order id.
     this.activeTableId = tableId;
     this.finishRefused = false;
+    this.reprintSent = [];
     if (guestCount === undefined) {
       this.activeTabId = table?.tabId;
       this.orderParty = table?.visit ?? null;
@@ -2286,15 +2292,24 @@ export class TillApp extends LitElement {
   }
 
   /** Each bill's kitchen tickets are printed again in turn; the first refusal stops the rest and is
-   * said. The order is read again either way, so the notice shows what is still unprinted. */
+   * said. A press while one runs is ignored. The order is read again either way. */
   async #onReprintKitchenTickets(event: Event): Promise<void> {
+    if (this.#reprinting) return;
+    this.#reprinting = true;
     const { workingOrderIds } = (event as CustomEvent<{ workingOrderIds: string[] }>).detail;
+    const sent: string[] = [];
     this.errorKey = undefined;
     try {
-      for (const workingOrderId of workingOrderIds) await this.api.reprintOrder(workingOrderId);
+      for (const workingOrderId of workingOrderIds) {
+        await this.api.reprintOrder(workingOrderId);
+        sent.push(workingOrderId);
+      }
     } catch (error) {
       this.errorKey = { code: (error as { code?: string }).code ?? "server.internal" };
+    } finally {
+      this.#reprinting = false;
     }
+    this.reprintSent = [...new Set([...this.reprintSent, ...sent])];
     await this.#loadTabLines();
   }
 
@@ -2986,6 +3001,7 @@ export class TillApp extends LitElement {
     this.tabLines = [];
     this.tabGroups = [];
     this.printProblems = [];
+    this.reprintSent = [];
     this.#groupsUnread = false;
     this.visitBills = [];
     this.#returnToFloor();
@@ -3372,6 +3388,7 @@ export class TillApp extends LitElement {
       .tabLines=${this.tabLines}
       .tabGroups=${this.tabGroups}
       .printProblems=${this.printProblems}
+      .reprintSent=${this.reprintSent}
       .tabRevision=${this.tabRevision}
       .editSentLines=${this.editSentLines}
       .cancelOffer=${this.cancelOffer}
@@ -3399,6 +3416,7 @@ export class TillApp extends LitElement {
           .lines=${this.tabLines}
           .groups=${this.tabGroups}
           .printProblems=${this.printProblems}
+          .reprintSent=${this.reprintSent}
           .revision=${this.tabRevision}
           .editSentLines=${this.editSentLines}
           .cancelOffer=${this.cancelOffer}

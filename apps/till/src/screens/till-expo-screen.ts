@@ -373,29 +373,29 @@ export class TillExpoScreen extends LitElement {
         display: block;
       }
 
-      /* The reprint ERROR banner — the SAME danger-on-surface pairing the app + station screen use
-         (a11y-safe in both themes), never behind muted text. Shown when a reprint call rejects, so the
-         operator sees the ticket did NOT reprint rather than a silent no-op. */
-      .table-changed {
-        margin: 0;
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-warning);
-        color: var(--wt-color-on-warning);
-        font-weight: var(--wt-font-weight-bold);
-      }
-
       .held-note {
         font-weight: var(--wt-font-weight-normal);
         text-transform: none;
       }
 
+      /* The reprint ERROR banner — the SAME danger-on-surface pairing the app + station screen use
+         (a11y-safe in both themes), never behind muted text. Shown when a reprint call rejects, so the
+         operator sees the ticket did NOT reprint rather than a silent no-op. */
       .error {
         margin: 0;
         padding: var(--wt-space-2) var(--wt-space-3);
         border-radius: var(--wt-radius-md);
         background: var(--wt-color-danger);
         color: var(--wt-color-on-danger);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .table-changed {
+        margin: 0;
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-warning);
+        color: var(--wt-color-on-warning);
         font-weight: var(--wt-font-weight-bold);
       }
     `,
@@ -417,8 +417,10 @@ export class TillExpoScreen extends LitElement {
    * reload reconciles nothing and a silent failure would leave the expediter no signal.
    */
   @state() private reprintErrorCode?: string;
-  /** A group lever was refused because the party changed since the board was read. */
-  @state() private tableChanged = false;
+  /** The card whose group lever was refused because its party changed since the board was read:
+   * shown by the next successful read, and gone at the one after. */
+  @state() private tableChanged: string | null = null;
+  #tableChangedNext: string | null = null;
 
   /** Re-renders the idle display so an item's band can climb between refreshes, with no refetch. */
   readonly #clock = new TickingClock(this);
@@ -431,6 +433,8 @@ export class TillExpoScreen extends LitElement {
   async #reload(): Promise<void> {
     try {
       this.orders = await this.api.getExpoQueue();
+      this.tableChanged = this.#tableChangedNext;
+      this.#tableChangedNext = null;
     } catch {
       // Non-fatal — leave the last-known board; the next reload reconciles.
     }
@@ -450,14 +454,17 @@ export class TillExpoScreen extends LitElement {
   /** Refused `visit.out_of_date`, the board is read again and the expediter decides; nothing is
    * resent. Any other refusal is swallowed like a course lever's. */
   async #groupAct(
+    order: ExpoOrder,
     visit: QueueVisit,
     call: (command: GroupCommand) => Promise<{ revision: number }>,
   ): Promise<void> {
-    this.tableChanged = false;
+    this.tableChanged = null;
+    this.#tableChangedNext = null;
     try {
       await call({ submissionId: crypto.randomUUID(), expectedVisitRevision: visit.revision });
     } catch (error) {
-      this.tableChanged = (error as { code?: string }).code === "visit.out_of_date";
+      if ((error as { code?: string }).code === "visit.out_of_date")
+        this.#tableChangedNext = order.tableLabel ?? `#${order.orderNumber}`;
     }
     await this.#reload();
   }
@@ -495,11 +502,12 @@ export class TillExpoScreen extends LitElement {
             : nothing
         }
         ${
-          this.tableChanged
-            ? html`<p class="table-changed" role="status" data-table-changed>
+          this.tableChanged === null
+            ? nothing
+            : html`<p class="table-changed" role="status" data-table-changed>
+                ${t("station.table_changed_named").replace("{table}", () => this.tableChanged!)}
                 ${t("station.table_changed")}
               </p>`
-            : nothing
         }
         ${this.orders.length === 0 ? this.#empty() : this.#board()}
       </section>
@@ -525,7 +533,9 @@ export class TillExpoScreen extends LitElement {
       ${
         order.visit === undefined
           ? this.#visibleCourses(order).map((course) => this.#courseSection(order, course))
-          : this.#visibleGroups(order).map((group) => this.#groupSection(order.visit!, group))
+          : this.#visibleGroups(order).map((group) =>
+              this.#groupSection(order, order.visit!, group),
+            )
       }
       ${this.#reprintAction(order)}
     </article>`;
@@ -554,7 +564,7 @@ export class TillExpoScreen extends LitElement {
       .sort((a, b) => groupOrder(a) - groupOrder(b));
   }
 
-  #groupSection(visit: QueueVisit, group: ExpoGroup): TemplateResult {
+  #groupSection(order: ExpoOrder, visit: QueueVisit, group: ExpoGroup): TemplateResult {
     const name =
       group.position === null ? "" : t("table.group_n").replace("{n}", String(group.position));
     return html`<div class="course" data-group-section=${group.groupId ?? "none"}>
@@ -573,12 +583,13 @@ export class TillExpoScreen extends LitElement {
       <ul class="items">
         ${group.items.map((item) => html`<li>${this.#item(item)}</li>`)}
       </ul>
-      ${group.groupId === null ? nothing : this.#groupLever(visit, group, group.groupId, name)}
+      ${group.groupId === null ? nothing : this.#groupLever(order, visit, group, group.groupId, name)}
     </div>`;
   }
 
   /** The course lever's shape, one group at a time, through the group verbs. */
   #groupLever(
+    order: ExpoOrder,
     visit: QueueVisit,
     group: ExpoGroup,
     groupId: string,
@@ -591,7 +602,9 @@ export class TillExpoScreen extends LitElement {
         data-group-fire=${groupId}
         aria-label=${`${t("expo.fire")} ${name}`}
         @click=${() =>
-          void this.#groupAct(visit, (command) => this.api.fireGroup(visit.id, groupId, command))}
+          void this.#groupAct(order, visit, (command) =>
+            this.api.fireGroup(visit.id, groupId, command),
+          )}
       >
         ${t("expo.fire")}
       </button>`;
@@ -602,7 +615,7 @@ export class TillExpoScreen extends LitElement {
         data-group-away=${groupId}
         aria-label=${`${t("expo.away")} ${name}`}
         @click=${() =>
-          void this.#groupAct(visit, (command) =>
+          void this.#groupAct(order, visit, (command) =>
             this.api.markGroupAway(visit.id, groupId, command),
           )}
       >
@@ -614,7 +627,7 @@ export class TillExpoScreen extends LitElement {
       data-group-ready=${groupId}
       aria-label=${`${t("expo.group_ready")} ${name}`}
       @click=${() =>
-        void this.#groupAct(visit, (command) =>
+        void this.#groupAct(order, visit, (command) =>
           this.api.bumpGroupReady(visit.id, groupId, command),
         )}
     >

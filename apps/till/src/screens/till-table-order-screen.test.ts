@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget, servedMenus } from "../widgets/test-helpers.js";
 import { TillTableOrderScreen, type TableServiceStatus } from "./till-table-order-screen.js";
@@ -1686,6 +1686,36 @@ describe("till-table-order-screen", () => {
         const { el } = await mountGroups({ groups: withG1({}), now: minutesLater(-2) });
         expect(state(el, "g1")).toBe(t("table.group_fired_ago").replace("{n}", "0"));
       });
+
+      it("runs a clock only while a fired group's age is on screen", async () => {
+        vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+        try {
+          const { el } = await mount({ lines: tabLines, groups: withG1({}), orderId: "wo-4" });
+          expect(vi.getTimerCount()).toBe(0);
+          await openDrawer(el);
+          const ages = el.shadowRoot!.querySelectorAll("till-fired-ago").length;
+          expect(ages).toBeGreaterThan(0);
+          expect(vi.getTimerCount()).toBe(ages);
+          await openDrawer(el);
+          expect(vi.getTimerCount()).toBe(0);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("the age on screen moves on with the clock", async () => {
+        vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+        try {
+          vi.setSystemTime(minutesLater(20));
+          const { el } = await mountGroups({ groups: withG1({}) });
+          expect(state(el, "g1")).toBe(t("table.group_fired_ago").replace("{n}", "20"));
+          vi.advanceTimersByTime(60_000);
+          await groupRow(el, "g1").querySelector("till-fired-ago")!.updateComplete;
+          expect(state(el, "g1")).toBe(t("table.group_fired_ago").replace("{n}", "21"));
+        } finally {
+          vi.useRealTimers();
+        }
+      });
     });
   });
 
@@ -3173,6 +3203,33 @@ describe("till-table-order-screen — printing problems", () => {
     expect(events.map((e) => e.detail)).toEqual([{ workingOrderIds: ["wo-4", "wo-check"] }]);
     expect(events[0]!.bubbles).toBe(true);
     expect(events[0]!.composed).toBe(true);
+  });
+
+  it("a bill whose tickets were sent to print again says so and offers no Reprint", async () => {
+    const { el } = await mount({
+      orderId: "wo-4",
+      printProblems: problems,
+      reprintSent: ["wo-4", "wo-check"],
+    });
+    const text = notice(el)!.textContent!.replace(/\s+/g, " ");
+    expect(text).toContain(t("table.print_problem_sent").replace("{stations}", "Cocina, Barra"));
+    expect(text).not.toContain(t("table.print_problem_detail").replace("{stations}", ""));
+    expect(notice(el)!.querySelector("[data-print-problem-reprint]")).toBeNull();
+  });
+
+  it("Reprint asks only for the bills not sent to print again", async () => {
+    const { el } = await mount({
+      orderId: "wo-4",
+      printProblems: problems,
+      reprintSent: ["wo-4"],
+    });
+    const text = notice(el)!.textContent!.replace(/\s+/g, " ");
+    expect(text).toContain(t("table.print_problem_detail").replace("{stations}", "Cocina"));
+    expect(text).toContain(t("table.print_problem_sent").replace("{stations}", "Cocina, Barra"));
+    const events: CustomEvent[] = [];
+    el.addEventListener("reprint-kitchen-tickets", (e) => events.push(e as CustomEvent));
+    notice(el)!.querySelector<HTMLElement>("[data-print-problem-reprint]")!.click();
+    expect(events.map((e) => e.detail)).toEqual([{ workingOrderIds: ["wo-check"] }]);
   });
 
   it("never blocks ordering: a round is still sent while the problem shows", async () => {

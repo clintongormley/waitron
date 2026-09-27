@@ -3,7 +3,8 @@ import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
-import { TickingClock, baseStyles } from "@waitron/ui";
+import { baseStyles } from "@waitron/ui";
+import "../widgets/fired-ago.js";
 import {
   addDecimal,
   compareDecimal,
@@ -245,13 +246,17 @@ export class TillTableOrderScreen extends LitElement {
       }
 
       .print-problem-text {
-        flex: 1 1 12rem;
+        flex: 1 1 auto;
         margin: 0;
         overflow-wrap: anywhere;
       }
 
-      .print-problem-title {
+      .print-problem-title,
+      .print-problem-line {
         display: block;
+      }
+
+      .print-problem-title {
         font-weight: var(--wt-font-weight-bold);
       }
 
@@ -641,6 +646,9 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) groups: OrderGroup[] = [];
   /** The party's kitchen tickets that did not print; they never hold up ordering. */
   @property({ attribute: false }) printProblems: PrintProblem[] = [];
+  /** The bills whose kitchen tickets were sent to print again since the table was opened: their
+   * problems say so and offer no second Reprint. */
+  @property({ attribute: false }) reprintSent: string[] = [];
   /** Injectable clock for a fired group's age; unset reads the ticking clock. */
   @property({ attribute: false }) now?: number;
   @property() fireControl: FireControlMode = "waiter";
@@ -666,8 +674,6 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Boolean }) groupCommandBusy = false;
 
   @state() private drawerOpen = false;
-
-  readonly #clock = new TickingClock(this);
 
   /** null shows every dish in the selected menu. */
   @property({ attribute: false }) selectedDiet: DietPredicate | null = null;
@@ -1547,20 +1553,42 @@ export class TillTableOrderScreen extends LitElement {
 
   #printProblem(): TemplateResult | typeof nothing {
     if (this.printProblems.length === 0) return nothing;
-    const stations = [...new Set(this.printProblems.map((problem) => problem.stationName))];
-    const bills = [...new Set(this.printProblems.map((problem) => problem.workingOrderId))];
+    const sent = this.printProblems.filter((problem) =>
+      this.reprintSent.includes(problem.workingOrderId),
+    );
+    const waiting = this.printProblems.filter((problem) => !sent.includes(problem));
+    const stations = (problems: PrintProblem[]) =>
+      [...new Set(problems.map((problem) => problem.stationName))].join(", ");
+    const bills = [...new Set(waiting.map((problem) => problem.workingOrderId))];
     return html`<div class="print-problem" role="status" data-print-problem>
       <p class="print-problem-text">
         <span class="print-problem-title">${t("table.print_problem")}</span>
-        ${t("table.print_problem_detail").replace("{stations}", () => stations.join(", "))}
+        ${
+          waiting.length === 0
+            ? nothing
+            : html`<span class="print-problem-line">
+                ${t("table.print_problem_detail").replace("{stations}", () => stations(waiting))}
+              </span>`
+        }
+        ${
+          sent.length === 0
+            ? nothing
+            : html`<span class="print-problem-line" data-print-problem-sent>
+                ${t("table.print_problem_sent").replace("{stations}", () => stations(sent))}
+              </span>`
+        }
       </p>
-      <wt-button
-        variant="secondary"
-        data-print-problem-reprint
-        @click=${() => this.#dispatch("reprint-kitchen-tickets", { workingOrderIds: bills })}
-      >
-        ${t("table.print_problem_reprint")}
-      </wt-button>
+      ${
+        waiting.length === 0
+          ? nothing
+          : html`<wt-button
+              variant="secondary"
+              data-print-problem-reprint
+              @click=${() => this.#dispatch("reprint-kitchen-tickets", { workingOrderIds: bills })}
+            >
+              ${t("table.print_problem_reprint")}
+            </wt-button>`
+      }
     </div>`;
   }
 
@@ -2059,14 +2087,12 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** Only what a person recorded: a group nobody marked ready reads how long ago it was fired. */
-  #groupProgress(group: OrderGroup): string {
+  #groupProgress(group: OrderGroup): string | TemplateResult {
     if (group.state === "held") return t("table.group_held");
     if (group.away) return t("table.group_away");
     if (group.ready) return t("table.group_ready");
     if (group.firedAt === null) return t("table.group_fired");
-    const now = this.now ?? this.#clock.now;
-    const minutes = Math.max(0, Math.floor((now - Date.parse(group.firedAt)) / 60_000));
-    return t("table.group_fired_ago").replace("{n}", String(minutes));
+    return html`<till-fired-ago .firedAt=${group.firedAt} .now=${this.now}></till-fired-ago>`;
   }
 
   /** `group` is null for a fired group's line, which offers nothing. Split quantity is offered on a

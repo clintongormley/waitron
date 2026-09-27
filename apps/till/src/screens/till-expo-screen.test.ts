@@ -1143,6 +1143,56 @@ describe("till-expo-screen — a seated party's groups", () => {
     expect(api.getExpoQueue).toHaveBeenCalledTimes(3);
   });
 
+  const staleNotice = (label: string) =>
+    `${t("station.table_changed_named").replace("{table}", label)} ${t("station.table_changed")}`;
+
+  it("names the table that changed, and never says where it changed", async () => {
+    const api = partyApi({
+      markGroupAway: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v-4" }),
+    });
+    const el = await mount({ api, fireControl: "expo" });
+    el.shadowRoot!.querySelector<HTMLElement>('[data-group-away="g-3"]')!.click();
+    await flush(el);
+    const text = tableChanged(el)!.textContent!.replace(/\s+/g, " ").trim();
+    expect(text).toBe(staleNotice("Mesa 4"));
+    expect(text).not.toContain("till");
+  });
+
+  it("names a card with no table by its order number", async () => {
+    const unlabelled: ExpoOrder = { ...partyOrder };
+    delete unlabelled.tableLabel;
+    const api = partyApi({
+      markGroupAway: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v-4" }),
+    });
+    (api.getExpoQueue as ReturnType<typeof vi.fn>).mockResolvedValue([unlabelled]);
+    const el = await mount({ api, fireControl: "expo" });
+    el.shadowRoot!.querySelector<HTMLElement>('[data-group-away="g-3"]')!.click();
+    await flush(el);
+    expect(tableChanged(el)!.textContent!.replace(/\s+/g, " ").trim()).toBe(staleNotice("#9"));
+  });
+
+  it("the next successful read after the one that showed it clears the notice", async () => {
+    const api = partyApi({
+      markGroupAway: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v-4" }),
+    });
+    (api.getExpoQueue as ReturnType<typeof vi.fn>).mockResolvedValue([
+      threeCourseOrder,
+      partyOrder,
+    ]);
+    const el = await mount({ api, fireControl: "expo" });
+    el.shadowRoot!.querySelector<HTMLElement>('[data-group-away="g-3"]')!.click();
+    await flush(el);
+    expect(tableChanged(el)).not.toBeNull();
+    const counterAway = () => orderCard(el, 5)!.querySelector<HTMLElement>('[data-away="co-1"]')!;
+    (api.getExpoQueue as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new TypeError("offline"));
+    counterAway().click();
+    await flush(el);
+    expect(tableChanged(el)).not.toBeNull();
+    counterAway().click();
+    await flush(el);
+    expect(tableChanged(el)).toBeNull();
+  });
+
   it("a counter order beside a party's keeps its course sections and course levers", async () => {
     const api = partyApi();
     (api.getExpoQueue as ReturnType<typeof vi.fn>).mockResolvedValue([

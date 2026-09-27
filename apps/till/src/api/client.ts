@@ -489,7 +489,7 @@ export interface OrderGroup {
   summary: string;
 }
 
-/** A kitchen ticket of a party's bill that has not printed and will not on its own; `since` is when
+/** A kitchen ticket of a party's bill not printed after two minutes, or given up on; `since` is when
  * the oldest such ticket was queued. */
 export interface PrintProblem {
   workingOrderId: string;
@@ -820,8 +820,8 @@ export interface StationQueueGroup {
   status: WorkingOrderStatus;
   /** Absent on a bill with no party. */
   visit?: QueueVisit;
-  /** Present only when one of this bill's tickets for the station has not printed and will not on
-   *  its own. */
+  /** Present only when one of this bill's tickets for the station was not printed after two
+   *  minutes, or was given up on. */
   printProblem?: true;
   items: StationQueueItem[];
   /** This station's order-timing thresholds. Every group from one call shares them; they ride

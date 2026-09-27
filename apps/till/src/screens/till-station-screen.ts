@@ -152,8 +152,10 @@ export class TillStationScreen extends LitElement {
   @state() private reprintErrorCode?: string;
   @state() private acknowledgeFailed = false;
   @state() private stale = false;
-  /** A group command was refused because the party changed since the queue was read. */
-  @state() private tableChanged = false;
+  /** The card whose group command was refused because its party changed since the queue was read:
+   * shown by the next successful read, and gone at the one after. */
+  @state() private tableChanged: string | null = null;
+  #tableChangedNext: string | null = null;
   #lastGoodAt = new Date();
   #initialConsumed = false;
   #refreshTimer?: ReturnType<typeof setInterval>;
@@ -242,6 +244,8 @@ export class TillStationScreen extends LitElement {
   #readSucceeded(): void {
     this.#lastGoodAt = new Date();
     this.stale = false;
+    this.tableChanged = this.#tableChangedNext;
+    this.#tableChangedNext = null;
   }
 
   /** A failure of a read older than the answer on screen says nothing about that answer. */
@@ -428,16 +432,36 @@ export class TillStationScreen extends LitElement {
     const { visitId, groupId, expectedVisitRevision } = (
       event as CustomEvent<FireKitchenGroupDetail>
     ).detail;
-    this.tableChanged = false;
+    const card = this.#cardOfGroup(visitId, groupId);
+    this.tableChanged = null;
+    this.#tableChangedNext = null;
     try {
       await this.api.fireGroup(visitId, groupId, {
         submissionId: crypto.randomUUID(),
         expectedVisitRevision,
       });
     } catch (error) {
-      this.tableChanged = (error as { code?: string }).code === "visit.out_of_date";
+      if ((error as { code?: string }).code === "visit.out_of_date") this.#tableChangedNext = card;
     }
     await this.#reload();
+  }
+
+  #tableChangedMessage(card: string): string {
+    const changed =
+      card === ""
+        ? t("station.table_changed_unnamed")
+        : t("station.table_changed_named").replace("{table}", () => card);
+    return `${changed} ${t("station.table_changed")}`;
+  }
+
+  /** What the card holding the group is called on screen: its label, else its order number. */
+  #cardOfGroup(visitId: string, groupId: string): string {
+    const card =
+      this.groups.find(
+        (group) =>
+          group.visit?.id === visitId && group.items.some((item) => item.group?.id === groupId),
+      ) ?? this.groups.find((group) => group.visit?.id === visitId);
+    return card === undefined ? "" : (card.label ?? `#${card.orderNumber}`);
   }
 
   async #onReprintOrder(event: Event): Promise<void> {
@@ -532,11 +556,11 @@ export class TillStationScreen extends LitElement {
             ${this.stale ? this.#staleMessage() : nothing}
           </p>
           ${
-            this.tableChanged
-              ? html`<p class="table-changed" role="status" data-table-changed>
-                  ${t("station.table_changed")}
+            this.tableChanged === null
+              ? nothing
+              : html`<p class="table-changed" role="status" data-table-changed>
+                  ${this.#tableChangedMessage(this.tableChanged)}
                 </p>`
-              : nothing
           }
         </div>
         ${
