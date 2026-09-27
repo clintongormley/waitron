@@ -913,6 +913,55 @@ export interface SalesPeriodDto {
   topSellers: TopSellerRow[];
 }
 
+export type CategoryReportMode = "at_time_of_sale" | "current";
+
+/**
+ * One node of the category report. `name` is `""` for `uncategorised` and `not_recorded` (the screen
+ * names those); a `free_text` node's `id` and `name` are the recorded free-text category. `gross` and
+ * `net` include the children; `direct` is the lines whose own category is this node.
+ */
+export interface CategoryTotalDto {
+  kind: "category" | "uncategorised" | "not_recorded" | "free_text";
+  id: string;
+  name: string;
+  depth: number;
+  gross: string;
+  net: string;
+  direct: { gross: string; net: string; lines: number };
+  children: CategoryTotalDto[];
+}
+
+/** A label's totals overlap other labels' and cut across the category tree. */
+export interface LabelTotalDto {
+  id: string;
+  name: string;
+  gross: string;
+  net: string;
+}
+
+export interface CategorySalesDto {
+  mode: CategoryReportMode;
+  tree: CategoryTotalDto[];
+  labels: LabelTotalDto[];
+  gross: string;
+  net: string;
+  grossComplete: boolean;
+  linesWithoutGross: number;
+}
+
+export interface ReportPrinter {
+  id: string;
+  name: string;
+}
+
+export interface PrintCategorySalesInput {
+  from: string;
+  to: string;
+  mode: CategoryReportMode;
+  extrasIntoDish: boolean;
+  printerId: string;
+}
+
 // ── Diagnostics (recent logs + runtime verbosity) types ──────────────────────────────────────────
 
 export type DiagnosticsLine = {
@@ -2561,6 +2610,30 @@ export class DashboardApi {
     return this.#request<SalesPeriodDto>(
       `/management-api/reports/period?from=${from}&to=${to}`,
       "GET",
+    );
+  }
+
+  getCategorySales(
+    from: string,
+    to: string,
+    mode: CategoryReportMode,
+    extrasIntoDish: boolean,
+  ): Promise<CategorySalesDto> {
+    return this.#request<CategorySalesDto>(
+      `/management-api/reports/categories?from=${from}&to=${to}&mode=${mode}&extrasIntoDish=${extrasIntoDish}`,
+      "GET",
+    );
+  }
+
+  getReportPrinters(): Promise<ReportPrinter[]> {
+    return this.#request<ReportPrinter[]>("/management-api/reports/printers", "GET");
+  }
+
+  printCategorySales(input: PrintCategorySalesInput): Promise<{ jobId: string }> {
+    return this.#request<{ jobId: string }>(
+      "/management-api/reports/categories/print",
+      "POST",
+      input,
     );
   }
 

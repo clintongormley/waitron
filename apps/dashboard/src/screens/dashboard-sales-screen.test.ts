@@ -66,6 +66,16 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
     getDailyClose: vi.fn().mockResolvedValue(close),
     getSalesPeriod: vi.fn().mockResolvedValue(period),
+    getCategorySales: vi.fn().mockResolvedValue({
+      mode: "at_time_of_sale",
+      tree: [],
+      labels: [],
+      gross: "0.00",
+      net: "0.00",
+      grossComplete: true,
+      linesWithoutGross: 0,
+    }),
+    getReportPrinters: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as DashboardApi;
 }

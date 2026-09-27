@@ -76,6 +76,22 @@ export const QUERY_DEPENDENCIES = {
     "sale_settlements",
     "products",
   ],
+  // `computeCategorySales` (packages/reporting) on the venue clock; current mode adds today's
+  // classification (`currentClassifications`, packages/catalogue) in the saved default language.
+  getCategorySales: [
+    "sales",
+    "sale_lines",
+    "sale_voids",
+    "sale_substitutions",
+    "locations",
+    "products",
+    "categories",
+    "category_details",
+    "labels",
+    "product_labels",
+    "content_languages",
+  ],
+  getReportPrinters: ["printers"],
   listStaff: ["persons", "webauthn_credentials"],
   getStaffRoster: ["persons"],
   listPendingAbsences: ["absences"],

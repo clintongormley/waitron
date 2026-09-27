@@ -101,6 +101,28 @@ it.each([
     ["dp-1"],
     ["device_profile_home_layouts", "sections", "menu_details", "catalogues"],
   ],
+  // `computeCategorySales` (packages/reporting/src/category-sales.ts) reads the period's lines under
+  // the same inclusion clauses as the other reports, on the venue clock from `locations`; current
+  // mode adds today's classification (`currentClassifications`, packages/catalogue) named in the
+  // saved default content language.
+  [
+    "getCategorySales",
+    ["2026-09-01", "2026-09-11", "current", false],
+    [
+      "sales",
+      "sale_lines",
+      "sale_voids",
+      "sale_substitutions",
+      "locations",
+      "products",
+      "categories",
+      "category_details",
+      "labels",
+      "product_labels",
+      "content_languages",
+    ],
+  ],
+  ["getReportPrinters", [], ["printers"]],
   // "Below it too" walks `category_details`' parent links (`listCategoryProducts`, categories.ts).
   [
     "listCategoryProducts",

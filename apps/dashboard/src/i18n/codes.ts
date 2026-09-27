@@ -492,6 +492,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Check the printer's connection settings",
     es: "Revisa los ajustes de conexión de la impresora",
   },
+  "sale_classification.invalid": {
+    en: "Today's categories could not be read: a product's category setup is inconsistent. The report at time of sale still works.",
+    es: "No se pudieron leer las categorías actuales: la configuración de categorías de un producto no es coherente. El informe en el momento de la venta sigue funcionando.",
+  },
   "printer.not_found": {
     en: "That printer no longer exists",
     es: "Esa impresora ya no existe",
