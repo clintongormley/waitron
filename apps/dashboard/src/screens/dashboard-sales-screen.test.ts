@@ -150,17 +150,14 @@ describe("dashboard-sales-screen", () => {
   });
 
   it("keeps the daily close available when Overview refuses", async () => {
-    const api = stubApi({ getSalesOverview: vi.fn().mockRejectedValue({ code: "server.internal" }) });
+    const api = stubApi({
+      getSalesOverview: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
     const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
     await flush(el);
 
     expect(api.getDailyClose).toHaveBeenCalledWith(today());
-    expect(api.getCategorySales).toHaveBeenCalledWith(
-      today(),
-      today(),
-      "at_time_of_sale",
-      false,
-    );
+    expect(api.getCategorySales).toHaveBeenCalledWith(today(), today(), "at_time_of_sale", false);
     expect(el.shadowRoot!.querySelector("[data-test=tender-table]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=error]")).not.toBeNull();
   });
@@ -171,12 +168,7 @@ describe("dashboard-sales-screen", () => {
     await flush(el);
 
     expect(api.getDailyClose).toHaveBeenCalledWith(today());
-    expect(api.getCategorySales).toHaveBeenCalledWith(
-      today(),
-      today(),
-      "at_time_of_sale",
-      false,
-    );
+    expect(api.getCategorySales).toHaveBeenCalledWith(today(), today(), "at_time_of_sale", false);
     expect(el.shadowRoot!.querySelector("[data-test=tender-table]")).not.toBeNull();
   });
 
