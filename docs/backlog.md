@@ -4242,18 +4242,16 @@ carried. And the case pinning the adapter half of the window fix lives in
 (`packages/store/src/node-sqlite-adapter.ts`), so a reader looking for it in the adapter's own suite
 will not find it.
 
-**The media library reads the whole `media_images` table on every page load, inside the venue write
-lock — OPEN (found 2026-09-23, task F1's review wave).** `packages/media/src/images.ts` selects
-every row and every column, then filters by label, scores the search, sorts and pages in JavaScript.
-On PostgreSQL this was a GIN-indexed `tsvector` query with SQL `order by`, `limit` and `offset`. The
-route (`GET /management-api/images`) runs through `withTransaction`, which on this engine is the
-venue's exclusive write lock — so the scan blocks every writer on the file, a sale included. `limit`
-is capped at 100 but the READ is unbounded. `listImageLabels` and `listImageTranslationGaps` have
-the same shape. **What can and cannot go back to SQL:** the relevance ranking was argued not to, in a
-comment #609 deleted as partly false, so that is untested; the label filter, the date and name sorts and the paging can —
-`labels` is a JSON text column and this SQLite has `json_each`, and a page with no search term needs
-no scan at all. **Next action:** move the non-search path back into SQL; how far to push the search
-path is a separate decision.
+**The media library still reads every matching image for search and name sorting, inside the venue
+write lock — OPEN (found 2026-09-23, task F1's review wave).** The unsearched date sort now counts,
+filters by label, orders and pages in SQL. With no label filter, it reads only the page's metadata.
+Search still scores and pages in JavaScript, and name sorting still uses `Intl.Collator` for accented
+names. A label filter resolves its canonical spelling by reading the labels column across images
+before SQL filters the page, preserving Unicode case matching; `listImageLabels` and
+`listImageTranslationGaps` still read all rows of their selected columns. The route
+(`GET /management-api/images`) uses `withTransaction`, the venue's exclusive write lock, so these
+remaining scans can delay a sale. **Next action:** decide how far to push search ranking into SQL;
+measure a way to bound name sorting and label-spelling lookup without changing their results.
 
 **`sale_voids` has no index on `voided_at` — DONE (lane A's A33, #663; found by #605).** Core
 migration `0011_sale_voids_voided_at_idx` adds `sale_voids_voided_at_idx`, declared in
@@ -5017,10 +5015,6 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
 
 **Reads the database does not need:**
 
-- **`readImage` asks the database for the same row twice** (`readImage`, `packages/media/src/images.ts`). It
-  selects the image row, then calls `listImageUsages` only to take the `.length` of what comes back,
-  and that function opens by re-reading the same row by id just to get its filename. Handing it the
-  filename `readImage` already holds would turn five queries into four.
 - **Checking one product's translations re-reads the language configuration once per value**
   (`packages/catalogue/src/content-languages.ts`). `validateContentTranslations` reads the one-row
   configuration on every call (the advisory lock it also took went with the storage switch), and

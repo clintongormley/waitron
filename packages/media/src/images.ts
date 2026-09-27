@@ -17,8 +17,13 @@ import {
   FALLBACK_LOCALE,
   resolveContentText,
 } from "@waitron/shared";
-import { eq, inArray, isNotNull } from "drizzle-orm";
+import { count, eq, inArray, isNotNull } from "drizzle-orm";
 import { mediaImageData, mediaImages } from "./schema/images.js";
+import {
+  IMAGE_LIST_COLUMNS,
+  datedImagePageQuery,
+  imageLabelCondition,
+} from "./image-page-query.js";
 import type { PreparedImage } from "./prepare.js";
 import "./errors.js";
 
@@ -33,9 +38,9 @@ export interface ImageRecord extends ImageMetadataInput {
   createdAt: Date;
   updatedAt: Date;
   /** How many products (variants among them), categories, sections and live menu versions
-   * reference this photo. `readImage` counts `listImageUsages`; `listImages` counts the same
-   * sources in its own SQL, and the two must stay in step or the library shows a free photo that
-   * then refuses to delete. */
+   * reference this photo. `readImage` uses `listImageUsagesForFilename` and `listImages` uses
+   * `countUsages`; the counters must stay in step or the library shows a free photo that then
+   * refuses to delete. */
   usageCount: number;
 }
 export type ImageUsage =
@@ -149,6 +154,13 @@ export async function listImageUsages(tx: Transaction, imageId: string): Promise
     .from(mediaImages)
     .where(eq(mediaImages.id, imageId));
   if (!image[0]) throw new AppError("image.not_found", { imageId });
+  return listImageUsagesForFilename(tx, image[0].filename);
+}
+
+async function listImageUsagesForFilename(
+  tx: Transaction,
+  filename: string,
+): Promise<ImageUsage[]> {
   // A variant is a `products` row with a `parent_id`, so one column covers both. A variant with no
   // photo of its own shows its parent's and holds no use of it.
   const productRows = await tx
@@ -163,19 +175,19 @@ export async function listImageUsages(tx: Transaction, imageId: string): Promise
     })
     .from(products)
     .leftJoin(parentProducts, parentJoin)
-    .where(eq(products.image, image[0].filename))
+    .where(eq(products.image, filename))
     // Products before variants, each in id order.
     .orderBy(isNotNull(products.parentId), products.id);
   const categoryRows = await tx
     .select({ id: categories.id, names: categories.name })
     .from(categoryDetails)
     .innerJoin(categories, eq(categories.id, categoryDetails.categoryId))
-    .where(eq(categoryDetails.image, image[0].filename))
+    .where(eq(categoryDetails.image, filename))
     .orderBy(categories.id);
   const sectionRows = await tx
     .select({ id: sections.id, internalName: sections.internalName })
     .from(sections)
-    .where(eq(sections.image, image[0].filename))
+    .where(eq(sections.image, filename))
     .orderBy(sections.id);
   const versionRows = await tx
     .select({
@@ -188,7 +200,7 @@ export async function listImageUsages(tx: Transaction, imageId: string): Promise
     .innerJoin(menuPublications, eq(menuPublications.versionId, menuVersionImages.versionId))
     .innerJoin(menuVersions, eq(menuVersions.id, menuVersionImages.versionId))
     .innerJoin(catalogues, eq(catalogues.id, menuVersions.menuId))
-    .where(eq(menuVersionImages.filename, image[0].filename))
+    .where(eq(menuVersionImages.filename, filename))
     .orderBy(catalogues.name, menuVersions.id);
   const usage = ({
     parentId,
@@ -226,7 +238,7 @@ export async function readImage(tx: Transaction, imageId: string): Promise<Image
     labels: row.labels,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
-    usageCount: (await listImageUsages(tx, imageId)).length,
+    usageCount: (await listImageUsagesForFilename(tx, row.filename)).length,
   };
 }
 
@@ -444,9 +456,6 @@ export interface ListImagesOptions {
 /**
  * The image library's list: search, label filter, ordering and one page.
  *
- * **It reads every row and filters in JavaScript.** The bytes live in `media_image_data`, so what is
- * read here is metadata only.
- *
  * **The name ordering is JavaScript's collator:** SQLite ships `BINARY`, `NOCASE` and `RTRIM` and
  * nothing accent-aware.
  */
@@ -483,22 +492,35 @@ export async function listImages(
   // resolves to. The library's first load sends `sort=relevance` with no query.
   const effectiveSort = sort === "relevance" && !query ? "date" : sort;
   const groups = query ? parseSearch(query) : [];
+  // Resolve label spelling with JavaScript's Unicode case mapping before asking SQLite for a page.
+  const matchingLabels =
+    label === ""
+      ? null
+      : (await listImageLabels(tx)).filter((value) => value.toLowerCase() === label);
+
+  if (!query && effectiveSort === "date") {
+    const [{ total }] = await tx
+      .select({ total: count() })
+      .from(mediaImages)
+      .where(imageLabelCondition(matchingLabels));
+    const page = await datedImagePageQuery(tx, matchingLabels, direction, offset, limit);
+    const usage = await countUsages(
+      tx,
+      page.map((row) => row.filename),
+    );
+    return {
+      images: page.map((row) => ({ ...row, usageCount: usage.get(row.filename) ?? 0 })),
+      total,
+    };
+  }
 
   const rows = await tx
-    .select({
-      id: mediaImages.id,
-      filename: mediaImages.filename,
-      names: mediaImages.names,
-      altText: mediaImages.altText,
-      labels: mediaImages.labels,
-      createdAt: mediaImages.createdAt,
-      updatedAt: mediaImages.updatedAt,
-    })
-    .from(mediaImages);
+    .select(IMAGE_LIST_COLUMNS)
+    .from(mediaImages)
+    .where(imageLabelCondition(matchingLabels));
 
   const matched: { row: (typeof rows)[number]; nameMatch: boolean; score: number }[] = [];
   for (const row of rows) {
-    if (label !== "" && !row.labels.some((value) => value.toLowerCase() === label)) continue;
     if (!query) {
       matched.push({ row, nameMatch: false, score: 0 });
       continue;
