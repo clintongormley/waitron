@@ -140,15 +140,16 @@ function groupByLayout<T extends KitchenPrinterLayout>(printers: readonly T[]): 
 }
 
 /**
- * Each line's printed item, keyed by line id and carrying its `line_no`. The fire and correction paths
- * share it, so a correction slip prints a line exactly as the original ticket did. `lineIds` are
- * parent dish lines; a child modifier line prints as sub-text of its parent.
+ * Each line's printed item, keyed by line id and carrying its `line_no` and the position of the
+ * party's group it is in (null in none). The fire and correction paths share it, so a correction
+ * slip prints a line exactly as the original ticket did. `lineIds` are parent dish lines; a child
+ * modifier line prints as sub-text of its parent.
  */
 async function buildTicketItems(
   tx: Transaction,
   cfg: TillConfig,
   lineIds: string[],
-): Promise<Map<string, { lineNo: number; item: KitchenTicketItem }>> {
+): Promise<Map<string, { lineNo: number; group: number | null; item: KitchenTicketItem }>> {
   // The customer-facing `descriptions` is deliberately not read: the cook's name falls back to the
   // staff name (`kitchenPresentationName`), as on the station screen.
   const storedLineRows = await tx
@@ -163,8 +164,10 @@ async function buildTicketItems(
       variantName: workingOrderLines.variantName,
       variantKitchenName: workingOrderLines.variantKitchenName,
       note: workingOrderLines.note,
+      group: orderGroups.position,
     })
     .from(workingOrderLines)
+    .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .where(inArray(workingOrderLines.id, lineIds));
   const lineRows = storedLineRows.map((row) => ({
     ...row,
@@ -201,10 +204,14 @@ async function buildTicketItems(
     modifiersByParent.set(child.parentLineId!, names);
   }
 
-  const byLine = new Map<string, { lineNo: number; item: KitchenTicketItem }>();
+  const byLine = new Map<
+    string,
+    { lineNo: number; group: number | null; item: KitchenTicketItem }
+  >();
   for (const row of lineRows) {
     byLine.set(row.id, {
       lineNo: row.lineNo,
+      group: row.group,
       item: {
         qty: row.quantity,
         unit: row.unitName == null ? undefined : ticketName(row.unitName, cfg.locale),
@@ -219,19 +226,6 @@ async function buildTicketItems(
     });
   }
   return byLine;
-}
-
-/** The position of the party's group each line is in; a line in no group is absent. */
-async function readGroupPositions(
-  tx: Transaction,
-  lineIds: string[],
-): Promise<Map<string, number>> {
-  const rows = await tx
-    .select({ id: workingOrderLines.id, position: orderGroups.position })
-    .from(workingOrderLines)
-    .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
-    .where(inArray(workingOrderLines.id, lineIds));
-  return new Map(rows.map((row) => [row.id, row.position]));
 }
 
 async function readStationNames(
@@ -298,7 +292,6 @@ export async function enqueueKitchenTickets(
   const lineIds = [...new Set(firedItems.map((f) => f.workingOrderLineId))];
 
   const itemsByLine = await buildTicketItems(tx, cfg, lineIds);
-  const groupByLine = await readGroupPositions(tx, lineIds);
   const stationNames = await readStationNames(tx, stationIds);
   const order = await readOrderHeader(tx, cfg, orderId);
   const grouping = await VENUE_SERVICE.readKitchenTicketGrouping(tx);
@@ -306,10 +299,12 @@ export async function enqueueKitchenTickets(
   const itemsByStation = new Map<string, { lineNo: number; item: KitchenTicketItem }[]>();
   for (const fired of firedItems) {
     const entry = itemsByLine.get(fired.workingOrderLineId)!;
-    const group = groupByLine.get(fired.workingOrderLineId);
     const item = atFiredQuantity(entry.item, fired);
     const bucket = itemsByStation.get(fired.stationId) ?? [];
-    bucket.push({ lineNo: entry.lineNo, item: group === undefined ? item : { ...item, group } });
+    bucket.push({
+      lineNo: entry.lineNo,
+      item: entry.group === null ? item : { ...item, group: entry.group },
+    });
     itemsByStation.set(fired.stationId, bucket);
   }
 
