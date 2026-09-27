@@ -24,7 +24,7 @@ import { setMenuItemExtraLists } from "./extras.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { extraListItems } from "./schema/extras.js";
 import { menuDetails } from "./schema/menu.js";
-import { optionLabels } from "./schema/options.js";
+import { optionLabels, optionLists } from "./schema/options.js";
 import { sectionMembers, sections } from "./schema/sections.js";
 import { menuItemExtraItems } from "./schema/extras.js";
 
@@ -487,15 +487,31 @@ describe("applyLiveFields", () => {
 
   describe("the default label served", () => {
     const CRUSHED_ICE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
-    /** The published list is No ice (its default), With ice, Crushed ice, in that order. */
-    const servedDefault = async (unavailable: readonly string[]) => {
+    /**
+     * The published list is No ice, With ice, Crushed ice, in that order; after publishing, Crushed
+     * ice is moved first in the list's current order, which the served default must not follow.
+     */
+    const servedDefault = async (
+      unavailable: readonly string[],
+      publishedDefault: string | null = NO_ICE,
+    ) => {
       const f = await menusFixture(fx.db);
-      await app((tx) =>
-        tx
+      await app(async (tx) => {
+        await tx
           .insert(optionLabels)
-          .values({ id: CRUSHED_ICE, listId: f.iceList, name: "Crushed ice", sort: 2 }),
-      );
+          .values({ id: CRUSHED_ICE, listId: f.iceList, name: "Crushed ice", sort: 2 });
+        await tx
+          .update(optionLists)
+          .set({ defaultLabelId: publishedDefault })
+          .where(eq(optionLists.id, f.iceList));
+      });
       const document = await build(f.lunch);
+      const offer = document.offers[await app((tx) => offerOf(tx, f.lunch, f.lemonade))]!;
+      const published = offer.offeredModifiers[1]!;
+      expect(published.kind === "options" && published.defaultLabelId).toBe(publishedDefault);
+      await app((tx) =>
+        tx.update(optionLabels).set({ sort: -1 }).where(eq(optionLabels.id, CRUSHED_ICE)),
+      );
       if (unavailable.length > 0)
         await app((tx) =>
           tx
@@ -514,16 +530,20 @@ describe("applyLiveFields", () => {
       expect(await servedDefault([WITH_ICE])).toBe(NO_ICE);
     });
 
-    it("is the first available label while the published default is unavailable", async () => {
+    it("is the first available label in the published order while the published default is unavailable", async () => {
       expect(await servedDefault([NO_ICE])).toBe(WITH_ICE);
     });
 
-    it("is the first available label in the list's order, not the first label", async () => {
+    it("skips every unavailable label, not only the published default", async () => {
       expect(await servedDefault([NO_ICE, WITH_ICE])).toBe(CRUSHED_ICE);
     });
 
     it("is null while every label is unavailable", async () => {
       expect(await servedDefault([NO_ICE, WITH_ICE, CRUSHED_ICE])).toBeNull();
+    });
+
+    it("is the first available label while the published version names no default", async () => {
+      expect(await servedDefault([NO_ICE], null)).toBe(WITH_ICE);
     });
   });
 

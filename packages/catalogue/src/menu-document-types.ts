@@ -91,7 +91,11 @@ export type LiveExtraItem = OfferedExtraItem & { image: string | null; available
 export type LiveOptionsList = Omit<OfferedOptionsList, "labels" | "defaultLabelId"> & {
   /** Every label, each with its current availability. */
   labels: OptionLabel[];
-  /** Null unless it names a label that is available now. */
+  /**
+   * An available label, or null only when no label is available now (`effectiveDefaultLabelId`:
+   * `applyLiveFields` applies it to the published default, the till's `withUnavailable` to the
+   * default it loaded).
+   */
   defaultLabelId: string | null;
 };
 

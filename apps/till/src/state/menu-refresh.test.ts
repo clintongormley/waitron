@@ -177,14 +177,18 @@ describe("withUnavailable", () => {
   });
 
   describe("the default label", () => {
-    const steak = offer({
-      id: "offer-steak",
-      productId: "steak",
-      offeredModifiers: [
-        optionsList("list-cooked", [label("rare"), label("medium"), label("well-done")], "rare"),
-      ],
-    });
-    const defaultWith = (unavailable: string[]) => {
+    const defaultWith = (unavailable: string[], loadedDefault: string | null = "rare") => {
+      const steak = offer({
+        id: "offer-steak",
+        productId: "steak",
+        offeredModifiers: [
+          optionsList(
+            "list-cooked",
+            [label("rare"), label("medium"), label("well-done")],
+            loadedDefault,
+          ),
+        ],
+      });
       const [served] = withUnavailable([steak], { ...NOTHING, optionLabels: unavailable });
       const [cooked] = served!.offeredModifiers;
       if (cooked?.kind !== "options") throw new Error("options");
@@ -195,12 +199,20 @@ describe("withUnavailable", () => {
       expect(defaultWith(["medium"])).toBe("rare");
     });
 
-    it("is the first available label in the list's order while the loaded default is not", () => {
+    it("is the first available label while the loaded default is not", () => {
+      expect(defaultWith(["rare"])).toBe("medium");
+    });
+
+    it("skips every unavailable label, not only the loaded default", () => {
       expect(defaultWith(["rare", "medium"])).toBe("well-done");
     });
 
     it("is null while every label is unavailable", () => {
       expect(defaultWith(["rare", "medium", "well-done"])).toBeNull();
+    });
+
+    it("is the first available label while the loaded offer names no default", () => {
+      expect(defaultWith(["rare"], null)).toBe("medium");
     });
   });
 

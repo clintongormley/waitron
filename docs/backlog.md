@@ -2055,10 +2055,13 @@ approved print agents to try it, so a printer the two discovery passes cannot se
 - **Two modifier-picker states, and how far each is actually out of reach** — a fact worth having
   before anyone writes a test claiming to cover them, and one half of it is NOT what the looking
   pass first wrote down. An options label marked unavailable never reaches the picker at all: the
-  published version keeps every label, the served offer and the till's menu-state poll null a
-  `defaultLabelId` that names an unavailable one (`applyLiveFields`,
-  `packages/catalogue/src/menu-document.ts`; `withUnavailable`, `apps/till/src/state/menu-refresh.ts`),
-  and the till filters unavailable labels out before the picker is given them (`sellableModifiers`,
+  published version keeps every label, the served offer and the till's menu-state poll replace a
+  default that is missing or names an unavailable label with the first available label in the
+  published version's order, or with null when none is available (`effectiveDefaultLabelId`,
+  `packages/catalogue/src/option-default.ts`, applied by `applyLiveFields`,
+  `packages/catalogue/src/menu-document.ts`, and `withUnavailable`,
+  `apps/till/src/state/menu-refresh.ts`), and the till filters unavailable labels out before the
+  picker is given them (`sellableModifiers`,
   `apps/till/src/api/client.ts`) — traced through the code, not run. An over-cap count is different. Stepping
   cannot produce one, because `#step` clamps against both the item's own cap and what is left of the
   list's allowance; but a REOPENED line is seeded straight from `initialSelections` with no clamp at
