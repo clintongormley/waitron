@@ -5039,9 +5039,7 @@ prune, which is logged as `stream.prune_failed`. `probeBucket` (`packages/stream
 which the supervisor runs before opening a generation, again while streaming (at most every ten
 minutes after a failed bucket read or while a bucket problem is flagged, otherwise once a day), and
 which the bucket-copy panel's Test and Save both run, deletes one object at a time, so neither can reveal such a provider. Open: having the bucket check
-delete its test object through `deleteMany` would reveal one. The `listedKey` value is the key as
-the bucket named it, so it is the first `backup.stream_*` parameter a bucket supplies: the screens that word
-these codes (Tasks 7 and 8b) must not put it in front of anyone as trusted text. Also left: `@waitron/store` is missing from the
+delete its test object through `deleteMany` would reveal one. Also left: `@waitron/store` is missing from the
 English-only guard's `GENERIC_PACKAGES` (`packages/db/src/english-only.ts`), so it is never scanned
 — I believe this predates #569 (the package dates from #489); and nothing in the package has been
 run against a real provider's bucket — the unit tests drive the real S3 client over a scripted
@@ -5373,13 +5371,14 @@ it. Left open:
   `StreamHost.start`) catch it and log the code alone, and a staged stream restore writes bytes
   downloaded before staging. One case was run: `boot.test.ts`'s "keeps selling when a restore's
   first start fails" boots against a bucket failing with that code and stays up. The recovery
-  page's `server.boot_failed` detail was not tested with it. **Open, not fixed:**
-  `backup.stream_name_invalid`'s `value` for `field: "listedKey"` (the `list` in
-  `packages/stream/src/s3-store.ts`, and `packages/stream/src/generations.ts`) is a key as the
-  bucket's listing named it, so it is bucket text in params too. Whether it reaches a log line or
-  an answer was only read, not run: the wizard's bucket restore lists the bucket
-  (`packages/stream/src/bucket-times.ts`) and its error boundary logs and answers params as they
-  are, which suggests it can. Left by #686 and A57: that a real bucket's 403 to this LISTING reads
+  page's `server.boot_failed` detail was not tested with it. **DONE by lane A's A69:**
+  `backup.stream_name_invalid`'s `value` for `field: "listedKey"` is the fixed word `other`, never
+  the key the bucket listed, at both places it is built (the `list` in
+  `packages/stream/src/s3-store.ts`, and `pruneGenerations` in
+  `packages/stream/src/generations.ts`). The leak was run before the fix: `boot.test.ts`'s "keeps a
+  key the bucket lists outside the folder asked for out of the answer and the log" sends the
+  wizard's bucket restore to a local HTTP bucket whose listing names a key outside the folder, and
+  with the key put back the answer and the log file's warning line both carried it. Left by #686 and A57: that a real bucket's 403 to this LISTING reads
   that code, and the status on each line, were shown by reading `packages/stream/src/s3-store.ts`,
   by the store's scripted HTTP answers and by the supervisor's injected errors, not against a real
   bucket, and A60's `errorName` was shown the same way — its list was checked against Amazon's

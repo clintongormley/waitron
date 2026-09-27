@@ -89,7 +89,8 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { REBUILD_MARKER } from "./rebuild-first-start.js";
 import { unsealNodeState } from "./sealed-state.js";
 import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
-import { encodeRecoveryKit } from "@waitron/stream";
+import { generateNodeKeyPair } from "@waitron/membership";
+import { encodeRecoveryKit, signPointer } from "@waitron/stream";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import { loadTillConfig } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
@@ -3623,6 +3624,110 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           for (const raw of ["ProviderSpecificRefusal", "sk_live_", "script"]) {
             expect(text).not.toContain(raw);
           }
+        }
+      });
+    } finally {
+      await new Promise((resolve) => bucket.close(resolve));
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+      await rm(logDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("keeps a key the bucket lists outside the folder asked for out of the answer and the log", async () => {
+    const venue = await freshVenue();
+    const logDir = await mkdtemp(join(tmpdir(), "waitron-boot-bucket-key-logs-"));
+    const venueId = "c0000000-0000-4000-8000-000000000002";
+    const nodeId = "d0000000-0000-4000-8000-000000000003";
+    const signer = generateNodeKeyPair();
+    const pointer = JSON.stringify(
+      signPointer(
+        {
+          venueId,
+          term: 0,
+          nodeId,
+          generation: `gen-0-${nodeId}-20260923T090000Z`,
+          writtenAt: "2026-09-23T09:00:05.000Z",
+        },
+        signer.privateKey,
+      ),
+    );
+    let stray = "";
+    const bucket = createHttpServer((request, response) => {
+      const url = new URL(request.url ?? "/", "http://bucket");
+      if (url.searchParams.get("list-type") === "2") {
+        response.writeHead(200, { "content-type": "application/xml" });
+        response.end(
+          `<?xml version="1.0" encoding="UTF-8"?><ListBucketResult><IsTruncated>false</IsTruncated><Contents><Key>${stray}</Key><LastModified>2026-09-23T10:00:00.000Z</LastModified></Contents></ListBucketResult>`,
+        );
+      } else if (url.pathname.endsWith("/current.json")) {
+        response.writeHead(200, { "content-type": "application/json", etag: '"p1"' });
+        response.end(pointer);
+      } else {
+        response.writeHead(404, { "content-type": "application/xml" });
+        response.end(
+          `<?xml version="1.0" encoding="UTF-8"?><Error><Code>NoSuchKey</Code><Message>no</Message></Error>`,
+        );
+      }
+    });
+    await new Promise<void>((resolve) => bucket.listen(0, "127.0.0.1", resolve));
+    const endpoint = `http://127.0.0.1:${(bucket.address() as AddressInfo).port}`;
+    const kit = encodeRecoveryKit({
+      version: 1,
+      venueId,
+      bucket: { ...SILENT_BUCKET, endpoint },
+      recoveryKey: "recovery-key-one-strong",
+      pointerSignerPublicKey: signer.publicKey,
+    });
+    const raws = ["StrayProviderFolder", "sk_live_", "script"];
+    try {
+      await withCapturedStdout(async (lines) => {
+        await withSetupBoot(
+          venue.directory,
+          { WAITRON_LOG_DIR: logDir },
+          async ({ post, kills, stateDir }) => {
+            for (const key of [
+              "elsewhere/StrayProviderFolder/a.ltx",
+              "elsewhere/sk_live_0123456789abcdefSECRET",
+              // XML-escaped on the wire; the client decodes it back to the markup.
+              "elsewhere/&lt;script&gt;alert(1)&lt;/script&gt;",
+            ]) {
+              stray = key;
+              const response = await post("/setup-api/restore-bucket", {
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ kit, environment: "preproduction" }),
+              });
+              expect(response.status).toBe(400);
+              const body = await response.text();
+              expect(JSON.parse(body)).toEqual({
+                error: {
+                  code: "backup.stream_name_invalid",
+                  params: { field: "listedKey", value: "other" },
+                },
+              });
+              for (const raw of [...raws, "elsewhere"]) expect(body).not.toContain(raw);
+            }
+            await expect(readFile(join(stateDir, "restore-request.json"))).rejects.toMatchObject({
+              code: "ENOENT",
+            });
+            expect(kills).toEqual([]);
+          },
+        );
+        const logged = [lines.join("\n"), await readFile(join(logDir, "waitron.log"), "utf8")];
+        for (const text of logged) {
+          const refusals = text
+            .split("\n")
+            .filter((line) => line.includes('"event":"backup.stream_name_invalid"'));
+          expect(
+            refusals
+              .map((line) => JSON.parse(line) as { field: string; value: string })
+              .map(({ field, value }) => ({ field, value })),
+          ).toEqual([
+            { field: "listedKey", value: "other" },
+            { field: "listedKey", value: "other" },
+            { field: "listedKey", value: "other" },
+          ]);
+          for (const raw of [...raws, "elsewhere"]) expect(text).not.toContain(raw);
         }
       });
     } finally {

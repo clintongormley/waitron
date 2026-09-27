@@ -18,7 +18,7 @@ import { AppError } from "@waitron/shared";
 import { loggableErrorName, type AnswerRefusal } from "./bucket-error-names.js";
 import "./errors.js";
 import type { BucketOperation } from "./errors.js";
-import { normalisePrefix } from "./names.js";
+import { normalisePrefix, strayListedKey } from "./names.js";
 import type { ListedObject, ObjectStore, PutCondition } from "./object-store.js";
 
 export interface BucketConfig {
@@ -235,12 +235,7 @@ export function createS3ObjectStore(
         for (const object of page.Contents ?? []) {
           if (object.Key === undefined || object.LastModified === undefined)
             throw refuse("IncompleteListing");
-          if (!object.Key.startsWith(wanted)) {
-            throw new AppError("backup.stream_name_invalid", {
-              field: "listedKey",
-              value: object.Key,
-            });
-          }
+          if (!object.Key.startsWith(wanted)) throw strayListedKey();
           found.push({ key: object.Key.slice(root.length), lastModified: object.LastModified });
         }
         token = undefined;

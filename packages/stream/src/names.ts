@@ -19,6 +19,10 @@ function invalid(field: string, value: string): AppError {
   return new AppError("backup.stream_name_invalid", { field, value });
 }
 
+export function strayListedKey(): AppError {
+  return invalid("listedKey", "other");
+}
+
 export function venuePrefix(venueId: string): string {
   if (!isKeySegment(venueId)) throw invalid("venueId", venueId);
   return `venues/${venueId}/`;

@@ -202,7 +202,7 @@ describe("pruneGenerations", () => {
     expect(store.snapshot().size).toBe(before);
   });
 
-  it("refuses a listing that names a key outside this venue, deleting nothing", async () => {
+  it("refuses a listing that names a key outside this venue, without the key, deleting nothing", async () => {
     const inner = createMemoryObjectStore({ now: () => T0 });
     await inner.put(`venues/${VENUE}/${gen(1)}/opened.json`, new Uint8Array([1]));
     const stray = `venues/loc-2/${gen(1)}/0000/a.ltx`;
@@ -217,7 +217,10 @@ describe("pruneGenerations", () => {
       await rejection(
         pruneGenerations(store, VENUE, gen(2), new Date(T0.getTime() + 2 * WINDOW), WINDOW),
       ),
-    ).toEqual({ code: "backup.stream_name_invalid", params: { field: "listedKey", value: stray } });
+    ).toEqual({
+      code: "backup.stream_name_invalid",
+      params: { field: "listedKey", value: "other" },
+    });
     expect(inner.calls.filter((call) => call.operation === "delete")).toEqual([]);
   });
 
