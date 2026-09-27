@@ -2,7 +2,7 @@ import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CREDENTIALS_MIGRATIONS,
   loadKeyRing,
@@ -51,7 +51,6 @@ const generationOf = (view: ReturnType<StreamHost["status"]>): string =>
 
 describe("the live copy's wiring", () => {
   const suite = useVenueDb({
-    resetPerTest: false,
     migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
     timeoutMs: 60_000,
   });
@@ -77,6 +76,10 @@ describe("the live copy's wiring", () => {
   beforeAll(async () => {
     db = suite.db;
     stateDir = await mkdtemp(join(tmpdir(), "waitron-stream-host-"));
+  });
+
+  // useVenueDb empties the migrated tables after each case, so their rows are written per case.
+  beforeEach(async () => {
     await withTransaction(db, (tx) =>
       putCredential(tx, RING, {
         purpose: "membership.node_key",
@@ -157,7 +160,7 @@ describe("the live copy's wiring", () => {
   });
 
   describe("with a bucket stored", () => {
-    beforeAll(async () => {
+    beforeEach(async () => {
       await withTransaction(db, (tx) =>
         putCredential(tx, RING, { purpose: STREAM_PURPOSE, value: SETTINGS }),
       );
@@ -184,16 +187,10 @@ describe("the live copy's wiring", () => {
           value: { ...SETTINGS, endpoint: "https://s3.example", prefix: "copies/" },
         }),
       );
-      try {
-        expect((await readStreamSettings(db, RING))?.bucket).toMatchObject({
-          endpoint: "https://s3.example",
-          prefix: "copies/",
-        });
-      } finally {
-        await withTransaction(db, (tx) =>
-          putCredential(tx, RING, { purpose: STREAM_PURPOSE, value: SETTINGS }),
-        );
-      }
+      expect((await readStreamSettings(db, RING))?.bucket).toMatchObject({
+        endpoint: "https://s3.example",
+        prefix: "copies/",
+      });
     });
 
     it("starts nothing on a node that is not the primary", async () => {
@@ -263,7 +260,7 @@ describe("the live copy's wiring", () => {
     });
 
     describe("and a membership document", () => {
-      beforeAll(async () => {
+      beforeEach(async () => {
         await writeNodeMembership(
           db,
           buildNextMembershipDocument({
