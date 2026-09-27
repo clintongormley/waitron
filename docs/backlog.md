@@ -419,7 +419,7 @@ only an F2, as an R5), but no route calls it: its only callers under `apps/` are
 (`vatBreakdown` in `apps/till/src/state/working-order.ts`) that no screen shows; it uses the rate
 the menu froze for a dish and a variant (`vatRate`, filled in `apps/till/src/api/client.ts`),
 prices a retrieved held line by its class, and leaves out extras picks. Asesor Q26 is still open.
-_2026-09-27, A68 (branch `feat/vat-class-dated-rates`) narrows M7v on the owner's instruction: the
+_2026-09-27, A68 (landed as #726, main `27b54f877`) narrows M7v on the owner's instruction: the
 published version freezes the VAT CLASS only; `working_order_lines.vat_class` replaces `vat_rate`
 (and the net `unit_price` goes); each class's percentage is a dated table in code (`VAT_RATE_TABLE`,
 `packages/catalogue/src/vat-rates.ts`), looked up for the local date of the invoice's issue instant,
@@ -431,8 +431,11 @@ commit): a venue with no order lines migrates cleanly; a venue with ANY order li
 walk-up is enough — fails `migrations.apply_failed`, caused by `NOT NULL constraint failed:
 __new_working_order_lines.vat_class`, and rolls back whole, so it needs `wa-wt reset` (a real box, a
 reset). A menu published before A68 keeps selling (its extra `vatRate` keys are ignored) and shows
-Unpublished changes until it is published again. Owner question: invoice-first issues at placing,
-so it takes the placing day's rate. Asesor Q26 reworded to the rate on the day of issue._
+Unpublished changes until it is published again. Owner rulings at landing (2026-09-27):
+invoice-first issues at placing, so it takes the placing day's rate; a box holding order lines is
+reset rather than given data-migration code; and every invoice path reads its one clock after the
+order's lines, so a request crossing midnight files the new day's date and rates together. Asesor
+Q26 reworded to the rate on the day of issue._
 **Menus Task 8 (home layouts), landed as #722 (2026-09-27): the Home page tab and a layout per device
 profile.** A menu's Home page tab (`/manage/menus/menu/<id>/view/home`) lists its home layouts with the
 default marked, and adds, duplicates, renames and deletes them and makes one the default; its tiles are
