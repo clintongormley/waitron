@@ -2885,7 +2885,7 @@ image constraints under *Detail → Box image*.
 
 ### B9. CI and test infra
 
-- **A main server shard lost the landing listener's chosen port — DONE (lane A's A80).**
+- **A main server shard lost the landing listener's chosen port — DONE (lane A's A80, **PR #740**).**
   Exact-merge CI run 36317643554 at `30d9836028e44180feca9578b87d389ab8cdd786` logged
   `server.listening` on port 40141 and, 2 ms later in the same boot, `landing.listen_failed` with
   `EADDRINUSE` on 40141: the test had drawn its HTTP port and its landing port one after the other,
