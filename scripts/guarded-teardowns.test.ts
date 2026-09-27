@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
+import { blankComments } from "../packages/shared/src/source-comments.js";
 
 /**
  * Every `afterAll`/`afterEach` that closes a resource must guard it. An unguarded closer throws a
@@ -82,17 +83,9 @@ function testFiles(): string[] {
   return cachedFiles;
 }
 
-/**
- * Blanks block comments to whitespace (preserving line numbers) and drops line comments. The
- * `(^|[^:])` guard on the line-comment pattern keeps `"postgres://host/db"; await db.close();` from
- * losing everything after `postgres:`, which would hide the teardown from the scan.
- */
+/** Blanks comments, keeping every line where it was so a finding's line number is the file's. */
 function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, " "))
-    .split("\n")
-    .map((line) => line.replace(/(^|[^:])\/\/.*$/, "$1"))
-    .join("\n");
+  return blankComments(source);
 }
 
 /** The `{ ... }` block following `startIndex`, by brace matching. */
@@ -171,9 +164,9 @@ describe("the scan itself", () => {
   });
 
   it("does not reach this directory, which is what keeps its own fixtures out", () => {
-    // The fixtures below are teardown snippets in template literals, and `stripComments` is
-    // deliberately naive about string literals, so a scan that reached `scripts/` would report
-    // this file as violating the rule it exists to enforce.
+    // The fixtures below are teardown snippets in template literals, and `stripComments` blanks
+    // comments only, leaving a template literal's text in the scan, so a scan that reached
+    // `scripts/` would report this file as violating the rule it exists to enforce.
     expect(files.some((file) => file.startsWith(join(REPO_ROOT, "scripts") + sep))).toBe(false);
   });
 });
@@ -210,6 +203,17 @@ describe("the detector itself", () => {
   it("is not fooled by a URL in a string literal", () => {
     const source = `afterAll(async () => {\n  const uri = "postgres://h/db"; await db.close();\n});`;
     expect(findUnguarded(source)).toHaveLength(1);
+  });
+
+  it("finds a closer after a `/*` inside a line comment or a string", () => {
+    const afterLineComment = `// see a/*b\nafterAll(async () => {\n  await db.close();\n});\n/* c */`;
+    expect(findUnguarded(afterLineComment)).toEqual([
+      { file: "<inline>", line: 3, expression: "db.close()" },
+    ]);
+    const afterString = `afterAll(async () => {\n  const p = "/*";\n  await db.close();\n}); // */`;
+    expect(findUnguarded(afterString)).toEqual([
+      { file: "<inline>", line: 3, expression: "db.close()" },
+    ]);
   });
 
   it("does not accept a guard that covers a different call", () => {

@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, mkdirSyn
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
+import { mapComments } from "../packages/shared/src/source-comments.js";
 
 /**
  * A module's `./dashboard` sub-path is bundled into the admin dashboard, so it must never reach
@@ -162,7 +163,7 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
      * declaration. Comments are stripped first so prose mentioning `import`/`export` is not
      * misread as code. A file with none of these transpiles to empty. */
     function runtimeStatements(src: string): string[] {
-      const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+      const code = mapComments(src, () => "");
       const out: string[] = [];
       // Anchored at column 0 (no leading whitespace): a module's import/export/value statements sit
       // at the top level, while an interface's members are always indented — so a wire field NAMED
@@ -210,6 +211,16 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
       expect(
         runtimeStatements("export interface Foo {\n  class: string;\n  import: number;\n}"),
       ).toEqual([]);
+    });
+
+    it("keeps a statement after a `/*` inside a line comment or a string", () => {
+      expect(runtimeStatements("// see a/*b\nexport const x = 1;\n/* c */")).toEqual([
+        "export const x = 1;",
+      ]);
+      expect(runtimeStatements('import "./a/*b.js";\nexport const x = 1; // */')).toEqual([
+        'import "./a/*b.js";',
+        "export const x = 1;",
+      ]);
     });
   });
 

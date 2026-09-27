@@ -1,3 +1,4 @@
+import { blankComments } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -21,17 +22,12 @@ const sources = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"], {
   eager: true,
 }) as Record<string, string>;
 
-/** Strips comments so a doc comment that mentions `.transaction(` does not trip the guard. Copied
- * from `payments/src/no-provider-vocabulary.test.ts`.
+/** Blanks comments so a doc comment that mentions `.transaction(` does not trip the guard.
  *
- * Blind spot: a STRING LITERAL containing `//` or an unterminated `/*` swallows the rest of its line
- * (or file), so `const x = "//"; await db.transaction(fn);` strips to nothing and would pass. */
+ * Blind spot: `blankComments` guesses from the code before a `/` whether it opens a regular
+ * expression, and a wrong guess can blank real code on a later line as if it were a comment. */
 function stripComments(source: string): string {
-  const blockBlanked = source.replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, " "));
-  return blockBlanked
-    .split("\n")
-    .map((line) => line.replace(/(^|[^:])\/\/.*$/, "$1"))
-    .join("\n");
+  return blankComments(source);
 }
 
 describe("the source glob itself", () => {
@@ -57,6 +53,13 @@ describe("the source glob itself", () => {
     );
     // …and real code still survives the strip, or the guard would be vacuous in the other direction.
     expect(stripComments("await db.transaction(fn);")).toContain("db.transaction(");
+  });
+
+  it("keeps the code after a `/*` inside a line comment or a string", () => {
+    const afterLineComment = "// see a/*b\nawait db.transaction(fn);\n/* c */";
+    expect(stripComments(afterLineComment)).toContain(".transaction(");
+    const afterString = 'const p = "/*"; await db.transaction(fn); // */';
+    expect(stripComments(afterString)).toContain(".transaction(");
   });
 });
 
