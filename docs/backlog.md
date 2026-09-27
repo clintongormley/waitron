@@ -4990,16 +4990,10 @@ measured and did not settle.
   about 50 minutes of wall clock on run 35528428168, which is why nobody has put them on the merge
   path. Either accept the weekly lag and say so where a reader meets the gate, or find a cheaper
   per-pull-request signal.
-- **Three `packages/db` files contribute nothing to the gated score, and the table prints that as
-  `0.00%`.** Run 35528428168's aggregate lists `src/change-feed.ts`, `src/classification.ts` and
-  `src/testing/venue-db.ts` as `0.00%  0/0`. Nothing was killed because nothing was counted: the
-  score's denominator takes only `Killed`, `Timeout`, `Survived` and `NoCoverage`
-  (`scripts/mutation-aggregate.mjs:16-17`), so every mutant in those three files ended in some other
-  status — `Ignored`, a compile error or a run error. Which of the three it is has not been checked,
-  and it matters, because a compile error is a broken measurement while `Ignored` is a deliberate
-  one. Meanwhile `ratio()` returns 0 when the denominator is 0 (`scripts/mutation-aggregate.mjs:89`),
-  so a file nobody measured is displayed exactly like a file whose every mutant survived — the worst
-  reading in the table given to the case that carries no reading at all.
+- **DONE (lane C's A102, PR #787): the db mutation aggregate lists a file with no counted mutants
+  as `not measured` with the statuses its mutants ended in, instead of `0.00%  0/0`.** On run
+  35528428168 the three such files (`change-feed.ts`, `classification.ts`, `testing/venue-db.ts`)
+  were all `Ignored` as static mutants (`ignoreStatic: true` in `packages/db/stryker.config.json`).
 
 **Left behind by raising the `packages/ui` mutation score (#466, 2026-09-20).** Two edges the
 branch found, checked, and consciously did not take.

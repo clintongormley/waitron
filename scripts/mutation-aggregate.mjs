@@ -12,10 +12,11 @@ import { dirname, join } from "node:path";
  */
 const DETECTED = new Set(["Killed", "Timeout"]);
 const UNDETECTED = new Set(["Survived", "NoCoverage"]);
+const ERRORS = new Set(["CompileError", "RuntimeError"]);
 
 /**
  * @param {{files: Record<string, {mutants: {id: string, mutatorName: string, status: string, replacement?: string, location: {start: {line: number, column: number}, end: {line: number, column: number}}}[]}>}[]} reports
- * @returns {{score: number, killed: number, valid: number, files: {path: string, score: number, killed: number, valid: number}[]}}
+ * @returns {{score: number, killed: number, valid: number, files: {path: string, score: number, killed: number, valid: number, uncounted: Record<string, number>}[]}}
  */
 export function aggregate(reports) {
   /** @type {Map<string, Map<string, string>>} one status per file per distinct mutant. */
@@ -37,17 +38,19 @@ export function aggregate(reports) {
         const { start, end } = mutant.location;
         const key = `${mutant.mutatorName}@${start.line}:${start.column}-${end.line}:${end.column}=${mutant.replacement ?? ""}`;
         // A mutant two reports disagree about resolves the same way whichever order the shard
-        // artifacts are listed in: undetected beats detected, and either beats a status outside
-        // the ratio.
+        // artifacts are listed in: undetected beats detected, either beats a status outside the
+        // ratio, an error beats any other status outside the ratio, and a tie is broken by the status
+        // name.
         //
-        // The two steps are there for different reasons, and only the first is a safety property.
-        // Undetected over detected is what stops a merge RAISING the score. Detected over a
-        // status outside the ratio does the opposite — keeping a `Killed` over an `Ignored` adds
-        // 1/1 to the ratio — and it is there because a shard that actually ran the mutant knows
-        // more than one that skipped it.
+        // The first two steps are there for different reasons, and only the first is a safety
+        // property. Undetected over detected is what stops a merge RAISING the score. Detected
+        // over a status outside the ratio does the opposite — keeping a `Killed` over an `Ignored`
+        // adds 1/1 to the ratio — and it is there because a shard that actually ran the mutant
+        // knows more than one that skipped it. An error outranks the other uncounted statuses
+        // because the file prints the one it keeps, and a broken run must not read as a
+        // deliberate skip.
         const seen = mutants.get(key);
-        if (seen !== undefined && weight(seen) >= weight(mutant.status)) continue;
-        mutants.set(key, mutant.status);
+        if (seen === undefined || outranks(mutant.status, seen)) mutants.set(key, mutant.status);
       }
     }
 
@@ -57,23 +60,40 @@ export function aggregate(reports) {
   for (const [path, mutants] of byFile) {
     let fileKilled = 0;
     let fileValid = 0;
+    /** @type {Record<string, number>} */
+    const uncounted = {};
     for (const status of mutants.values()) {
       if (DETECTED.has(status)) fileKilled += 1;
-      else if (!UNDETECTED.has(status)) continue;
+      else if (!UNDETECTED.has(status)) {
+        uncounted[status] = (uncounted[status] ?? 0) + 1;
+        continue;
+      }
       fileValid += 1;
     }
     killed += fileKilled;
     valid += fileValid;
-    files.push({ path, killed: fileKilled, valid: fileValid, score: ratio(fileKilled, fileValid) });
+    files.push({
+      path,
+      killed: fileKilled,
+      valid: fileValid,
+      score: ratio(fileKilled, fileValid),
+      uncounted,
+    });
   }
   files.sort((a, b) => a.score - b.score || a.path.localeCompare(b.path));
   return { score: ratio(killed, valid), killed, valid, files };
 }
 
-/** Which status wins when two reports disagree about one mutant: undetected, then detected. */
+/** Whether `status` replaces `other` when two reports disagree about one mutant. */
+function outranks(status, other) {
+  const difference = weight(status) - weight(other);
+  return difference === 0 ? status < other : difference > 0;
+}
+
 function weight(status) {
-  if (UNDETECTED.has(status)) return 2;
-  if (DETECTED.has(status)) return 1;
+  if (UNDETECTED.has(status)) return 3;
+  if (DETECTED.has(status)) return 2;
+  if (ERRORS.has(status)) return 1;
   return 0;
 }
 
@@ -139,7 +159,14 @@ if (process.argv[1] && process.argv[1].endsWith("mutation-aggregate.mjs")) {
 
   const result = aggregate(paths.map((path) => JSON.parse(readFileSync(path, "utf8"))));
   for (const file of result.files)
-    if (file.score < breakAt)
+    // A file with no counted mutants has no score to compare with the bar, so it is always listed.
+    if (file.valid === 0) {
+      const statuses = Object.entries(file.uncounted)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([status, count]) => `${count} ${status}`)
+        .join(", ");
+      console.log(`   not measured — ${statuses || "no mutants"}  ${file.path}`);
+    } else if (file.score < breakAt)
       console.log(
         `${file.score.toFixed(2).padStart(7)}%  ${String(file.killed).padStart(5)}/${String(file.valid).padEnd(5)}  ${file.path}`,
       );

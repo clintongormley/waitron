@@ -319,6 +319,14 @@ counts shard DIRECTORIES holding a recognisable report, not `*.json` files: a re
 a constructed case that one stray json beside nine real reports made the count ten and hid a shard
 whose job had failed.
 
+A file with no counted mutants — every mutant in a status the score leaves out, or none at all —
+has no score, so the table lists it as `not measured — <count per status>` whatever the `--break`
+bar. On run 35528428168 (commit `3ad257b11`) the three such files, `src/change-feed.ts`,
+`src/classification.ts` and `src/testing/venue-db.ts`, were every mutant `Ignored` as static
+mutants, the deliberate kind from `"ignoreStatic": true` in `packages/db/stryker.config.json`. When
+two shard reports give one mutant two statuses outside the score, a compile or run error is kept
+over the others, so a broken measurement is not listed as a deliberate skip.
+
 Receipt for the `ui` floor (2026-09-20): before the tests that branch added, the package read
 78.62% — 1658 of 2109 valid mutants — and the run exited 1 against the new threshold, which is the
 gate proving itself rather than a floor set under a number. After them, four whole-package runs read
