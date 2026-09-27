@@ -2303,7 +2303,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       nothing reprints on the pass printer: it is not attached to Barra, and nothing is left at
       Cocina to bring it in. With the void skipped, the pass printer reprinted and no problem
       remained. Measured for a HOLD ticket and a fire ticket; the fire-ticket case gave the same
-      result on the base commit `1d524b6e5`, so it predates this branch.
+      result on the base commit `1d524b6e5`, so it predates Task 6.
       Fix: `readPrintProblems` drops a failed ticket whose bill has nothing a Reprint would print on
       that printer for that station.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
