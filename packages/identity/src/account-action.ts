@@ -222,7 +222,10 @@ function statusAcceptsPurpose(
   return purpose === "invitation" ? status === "pending" : status === "active";
 }
 
-/** Validate a bearer action without consuming it or opening a session. Completion repeats these checks. */
+/**
+ * Validate a bearer action without consuming it or opening a session. Completion repeats these
+ * checks.
+ */
 export async function inspectAccountAction(
   tx: Transaction,
   input: {

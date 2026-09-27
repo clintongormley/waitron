@@ -607,7 +607,7 @@ describe("completing an account action whose person changed after it was issued"
   });
 
   it("refuses an invitation for a person who has lost their login email since, leaving them pending", async () => {
-    const personId = await seedManager(suite.db, { email: "invite-no-email@x.com" });
+    const personId = await seedManager(suite.db, { email: "complete-invite-no-email@x.com" });
     await makePending(personId);
     const issued = await run((tx) => issueAccountAction(tx, { personId, purpose: "invitation" }));
     await suite.db.execute(
@@ -625,26 +625,37 @@ describe("completing an account action whose person changed after it was issued"
         ),
       ),
     ).toBe("account_action.invalid");
-    const person = await suite.db.execute<{ status: string; password_hash: string | null }>(
-      sql`select status, password_hash from persons where id = ${personId}`,
+    const person = await suite.db.execute<{
+      status: string;
+      password_hash: string | null;
+      pin_hash: string | null;
+    }>(sql`select status, password_hash, pin_hash from persons where id = ${personId}`);
+    expect(person.rows).toEqual([{ status: "pending", password_hash: null, pin_hash: null }]);
+    const action = await suite.db.execute<{ used_at: string | null }>(
+      sql`select used_at from management_account_actions where id = ${issued.id}`,
     );
-    expect(person.rows).toEqual([{ status: "pending", password_hash: null }]);
+    expect(action.rows).toEqual([{ used_at: null }]);
   });
 
-  it("still completes a password reset for a person who keeps their login email", async () => {
-    const personId = await seedManager(suite.db, { email: "complete-keeps-email@x.com" });
+  it("still replaces the password of a person who keeps their login email", async () => {
+    const email = "complete-keeps-email@x.com";
+    const personId = await seedManager(suite.db, { email });
     const issued = await run((tx) =>
       issueAccountAction(tx, { personId, purpose: "password_reset" }),
     );
+    await run((tx) =>
+      completeAccountAction(tx, {
+        token: issued.token,
+        purpose: "password_reset",
+        password: "a replacement secure password",
+      }),
+    );
     await expect(
-      run((tx) =>
-        completeAccountAction(tx, {
-          token: issued.token,
-          purpose: "password_reset",
-          password: "a replacement secure password",
-        }),
-      ),
-    ).resolves.toEqual({ personId, session: null });
+      run((tx) => loginManager(tx, { email, password: "a replacement secure password" })),
+    ).resolves.toMatchObject({ personId });
+    expect(
+      await codeOf(() => run((tx) => loginManager(tx, { email, password: "correct horse" }))),
+    ).toBe("password.invalid");
   });
 
   it("refuses a claimed proof whose person row does not exist", async () => {
