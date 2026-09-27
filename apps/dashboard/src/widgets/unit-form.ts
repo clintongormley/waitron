@@ -14,21 +14,17 @@ type UnitField = "name" | "precision" | "abbreviation";
 /** `_form` is shown in the summary alone. */
 export type UnitFormErrors = Partial<Record<UnitField | "_form", string>>;
 
-/**
- * A refused unit write, keyed by this form's fields. `content.translation_required` names a language,
- * not which of the two translated maps was empty in it; `createUnit`
- * (`packages/catalogue/src/units.ts`) checks the name before the abbreviation.
- */
-export function unitRefusalErrors(
-  error: unknown,
-  submittedName: Readonly<Record<string, string>>,
-): UnitFormErrors {
+/** A refused unit write, keyed by this form's fields. */
+export function unitRefusalErrors(error: unknown): UnitFormErrors {
   const code = codeOf(error);
   const message = codeMessage(code);
-  const params = (error as { params?: { field?: unknown; language?: unknown } }).params ?? {};
+  const params = (error as { params?: { field?: unknown } }).params ?? {};
   if (code === "unit.precision_invalid") return { precision: message };
-  if (code === "content.translation_required" && typeof params.language === "string")
-    return submittedName[params.language]?.trim() ? { abbreviation: message } : { name: message };
+  if (
+    code === "unit.translation_required" &&
+    (params.field === "name" || params.field === "abbreviation")
+  )
+    return { [params.field]: message };
   if (
     code === "management.request_invalid" &&
     (params.field === "name" || params.field === "abbreviation" || params.field === "precision")
@@ -127,10 +123,10 @@ export class UnitForm extends LitElement {
     const defaultLocale = this.locales[0];
     const precision = Number(this.precision);
     const errors: Partial<Record<UnitField, string>> = {};
-    if (!defaultLocale || this.names[defaultLocale]?.trim() === "") {
+    if (!defaultLocale || (this.names[defaultLocale] ?? "").trim() === "") {
       errors.name = t("units.name_required");
     }
-    if (!defaultLocale || this.abbreviations[defaultLocale]?.trim() === "") {
+    if (!defaultLocale || (this.abbreviations[defaultLocale] ?? "").trim() === "") {
       errors.abbreviation = t("units.abbreviation_required");
     }
     if (

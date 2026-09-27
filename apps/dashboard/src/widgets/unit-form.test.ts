@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
+import { t } from "../i18n/t.js";
 import { unitRefusalErrors, type UnitForm } from "./unit-form.js";
 
 afterEach(cleanupWidgets);
@@ -149,6 +150,54 @@ describe("unit-form", () => {
     ).not.toBe("");
   });
 
+  // The draft is rebuilt on a language change only while it holds no names, so a default language
+  // enabled after the form opened has no key in it at all.
+  it("blocks submit when the default language became one the draft holds no abbreviation for", async () => {
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["es"],
+      value: {
+        id: "u1",
+        name: { es: "caja", en: "box" },
+        abbreviation: { es: "cj" },
+        precision: 0,
+      },
+    });
+    el.locales = ["en", "es"];
+    await el.updateComplete;
+
+    const submit = vi.fn();
+    el.addEventListener("wt-submit", submit);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
+    await el.updateComplete;
+
+    expect(submit).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("[data-test=abbreviation-en]")!.getAttribute("error")).toBe(
+      t("units.abbreviation_required"),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=name-en]")!.getAttribute("error")).toBe("");
+  });
+
+  it("blocks submit when the default language became one the draft holds no name for", async () => {
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["es"],
+      value: { id: "u1", name: { es: "caja" }, abbreviation: { es: "cj", en: "bx" }, precision: 0 },
+    });
+    el.locales = ["en", "es"];
+    await el.updateComplete;
+
+    const submit = vi.fn();
+    el.addEventListener("wt-submit", submit);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
+    await el.updateComplete;
+
+    expect(submit).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("[data-test=name-en]")!.getAttribute("error")).toBe(
+      t("units.name_required"),
+    );
+  });
+
   it("emits the shared cancel event and disables actions while busy", async () => {
     const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
       open: true,
@@ -251,35 +300,32 @@ describe("unitRefusalErrors", () => {
   });
 
   it("puts a refusal beside the unit field it concerns", () => {
-    const named = { es: "caja" };
-    expect(unitRefusalErrors(refusal("unit.precision_invalid", {}), named)).toEqual({
+    expect(unitRefusalErrors(refusal("unit.precision_invalid", {}))).toEqual({
       precision: codeMessage("unit.precision_invalid"),
     });
     for (const field of ["name", "abbreviation", "precision"])
-      expect(unitRefusalErrors(refusal("management.request_invalid", { field }), named)).toEqual({
+      expect(unitRefusalErrors(refusal("management.request_invalid", { field }))).toEqual({
         [field]: codeMessage("management.request_invalid"),
       });
   });
 
-  // The refusal names a language, never which of the two translated maps was empty in it; the server
-  // checks the name first.
-  it("gives a missing translation to the name when the name is empty in that language, else the abbreviation", () => {
-    const missing = refusal("content.translation_required", { language: "es" });
-    const message = codeMessage("content.translation_required");
-    expect(unitRefusalErrors(missing, {})).toEqual({ name: message });
-    expect(unitRefusalErrors(missing, { es: "  " })).toEqual({ name: message });
-    expect(unitRefusalErrors(missing, { en: "box" })).toEqual({ name: message });
-    expect(unitRefusalErrors(missing, { es: "caja" })).toEqual({ abbreviation: message });
+  it("puts a missing translation beside the field the refusal names", () => {
+    const message = codeMessage("unit.translation_required");
+    for (const field of ["name", "abbreviation"])
+      expect(
+        unitRefusalErrors(refusal("unit.translation_required", { field, language: "es" })),
+      ).toEqual({ [field]: message });
   });
 
   it("keeps a refusal that names no field of the form for the summary alone", () => {
     for (const error of [
       refusal("content.translation_invalid", {}),
-      refusal("content.translation_required", {}),
+      refusal("content.translation_required", { language: "es" }),
+      refusal("unit.translation_required", { language: "es" }),
       refusal("management.request_invalid", { field: "productIds" }),
       refusal("management.request_invalid"),
       refusal("server.internal"),
     ])
-      expect(unitRefusalErrors(error, { es: "caja" })).toEqual({ _form: codeMessage(error.code) });
+      expect(unitRefusalErrors(error)).toEqual({ _form: codeMessage(error.code) });
   });
 });

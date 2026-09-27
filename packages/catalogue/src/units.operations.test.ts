@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { stringToThousandths } from "@waitron/shared";
 import {
   catalogues,
@@ -49,12 +49,67 @@ async function product(tx: Transaction, name: string) {
   return row!.id;
 }
 
+/** A refusal's code and params exactly, so a key the refusal should not carry fails the case. */
+async function refusalOf(write: Promise<unknown>): Promise<{ code: unknown; params: unknown }> {
+  const error = (await write.then(
+    () => expect.fail("the write was not refused"),
+    (caught: unknown) => caught,
+  )) as { code: unknown; params: unknown };
+  return { code: error.code, params: error.params };
+}
+
 describe("unit operations", () => {
-  it("requires an abbreviation in the default language", async () => {
-    await withTransaction(suite.db, async (tx) => {
-      await expect(
-        createUnit(tx, { name: { en: "Litre" }, precision: 3, abbreviation: {} }, "en"),
-      ).rejects.toMatchObject({ code: "content.translation_required" });
+  it.each<[string, Record<string, string>]>([
+    ["an empty", { en: "" }],
+    ["a missing", {}],
+  ])("names the abbreviation when %s one in the default language is refused", async (_, abbr) => {
+    expect(
+      await refusalOf(
+        run((tx) =>
+          createUnit(tx, { name: { en: "Litre" }, precision: 3, abbreviation: abbr }, "en"),
+        ),
+      ),
+    ).toEqual({
+      code: "unit.translation_required",
+      params: { field: "abbreviation", language: "en" },
+    });
+  });
+
+  it("names the name when the name is refused, and the name first when both are", async () => {
+    for (const abbreviation of [{ en: "l" }, {}] as Record<string, string>[])
+      expect(
+        await refusalOf(
+          run((tx) => createUnit(tx, { name: { es: "Litro" }, precision: 3, abbreviation }, "en")),
+        ),
+      ).toEqual({ code: "unit.translation_required", params: { field: "name", language: "en" } });
+  });
+
+  it("names the abbreviation when an update supplies only an empty one", async () => {
+    const unit = await run((tx) =>
+      createUnit(tx, { name: { en: "Litre" }, precision: 3, abbreviation: { en: "l" } }, "en"),
+    );
+    expect(
+      await refusalOf(run((tx) => updateUnit(tx, unit.id, { abbreviation: {} }, "en"))),
+    ).toEqual({
+      code: "unit.translation_required",
+      params: { field: "abbreviation", language: "en" },
+    });
+  });
+
+  // The content-language read is the only SELECT a create, or an update that supplies both maps,
+  // issues; the write itself uses `returning`.
+  it("reads the content languages once for a create and once for an update", async () => {
+    await run(async (tx) => {
+      const reads = vi.spyOn(tx, "select");
+      const unit = await createUnit(
+        tx,
+        { name: { en: "Litre" }, precision: 3, abbreviation: { en: "l" } },
+        "en",
+      );
+      expect(reads).toHaveBeenCalledTimes(1);
+      reads.mockClear();
+      await updateUnit(tx, unit.id, { name: { en: "Liter" }, abbreviation: { en: "L" } }, "en");
+      expect(reads).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -81,7 +136,7 @@ describe("unit operations", () => {
       const updated = await updateUnit(tx, unit.id, { abbreviation: { en: "L" } }, "en");
       expect(updated.abbreviation).toEqual({ en: "L" });
       await expect(updateUnit(tx, unit.id, { abbreviation: {} }, "en")).rejects.toMatchObject({
-        code: "content.translation_required",
+        code: "unit.translation_required",
       });
     });
   });
@@ -106,14 +161,14 @@ describe("unit operations", () => {
       await assignProductUnit(tx, productId, unit.id);
       await tx.execute(sql`
         update products set active = false where id = ${productId}`);
-      await expect(deleteUnit(tx, unit.id)).rejects.toMatchObject({
+      expect(await refusalOf(deleteUnit(tx, unit.id))).toEqual({
         code: "unit.in_use",
-        params: { products: [{ id: productId, name: "Soup", available: false }] },
+        params: { products: [{ id: productId, name: "Soup", active: false }] },
       });
     });
   });
 
-  it("lists the products using a unit, with each product's availability", async () => {
+  it("lists the products using a unit, with each product's Active flag", async () => {
     await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const unit = await createUnit(
@@ -134,8 +189,8 @@ describe("unit operations", () => {
       expect(using).toHaveLength(2);
       expect(using).toEqual(
         expect.arrayContaining([
-          { id: soup, name: "Soup", available: true },
-          { id: tea, name: "Tea", available: false },
+          { id: soup, name: "Soup", active: true },
+          { id: tea, name: "Tea", active: false },
         ]),
       );
     });

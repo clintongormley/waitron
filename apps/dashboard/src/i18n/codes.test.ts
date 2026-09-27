@@ -356,3 +356,16 @@ it("words the refusals Remove and Clear share so they fit both actions", () => {
     expect(codeMessage(code, "es")).toMatch(/retirar.*quitar|quitar.*retirar/i);
   }
 });
+
+it("has English and Spanish copy for each unit code", () => {
+  for (const code of [
+    "unit.precision_invalid",
+    "unit.not_found",
+    "unit.in_use",
+    "unit.translation_required",
+  ]) {
+    expect(codeMessage(code, "en"), code).not.toBe(codeMessage("test.unmapped_code", "en"));
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage("test.unmapped_code", "es"));
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
+  }
+});

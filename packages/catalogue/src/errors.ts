@@ -38,6 +38,8 @@ declare module "@waitron/shared" {
     "unit.not_found": { unitId: string };
     /** A unit cannot be deleted while products are assigned to it. */
     "unit.in_use": { products: ProductUsingUnit[] };
+    /** A unit's name or abbreviation has no text in the venue's default content language. */
+    "unit.translation_required": { field: "name" | "abbreviation"; language: string };
     /** Content configuration requires distinct languages and an enabled default. */
     "content.languages_invalid": Record<string, never>;
     /** A translation map contains a non-text value. */

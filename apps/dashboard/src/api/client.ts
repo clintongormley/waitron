@@ -309,7 +309,7 @@ export interface UnitPatch {
 export interface ProductUsingUnit {
   id: string;
   name: string;
-  available: boolean;
+  active: boolean;
 }
 
 // ── Ingredient & product-recipe types ─────────────────────────────────────────────────────────────

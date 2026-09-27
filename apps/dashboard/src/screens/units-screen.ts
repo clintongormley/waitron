@@ -8,7 +8,7 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage } from "../i18n/codes.js";
 import { localizedName } from "../i18n/localized.js";
 import { currentLocale, t } from "../i18n/t.js";
-import "../widgets/unit-form.js";
+import { unitRefusalErrors, type UnitFormErrors } from "../widgets/unit-form.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -104,7 +104,7 @@ export class UnitsScreen extends LitElement {
   @state() private editing: Unit | null = null;
   @state() private busy = false;
   @state() private error: UnitError | null = null;
-  @state() private fieldErrors: { name?: string; precision?: string } = {};
+  @state() private fieldErrors: UnitFormErrors = {};
   @state() private inUseUnitId: string | null = null;
   @state() private inUseProducts: ProductUsingUnit[] = [];
   @state() private inUseSearch = "";
@@ -180,14 +180,7 @@ export class UnitsScreen extends LitElement {
         this.error = error as UnitError;
       }
     } catch (error) {
-      this.error = error as UnitError;
-      const code = this.error.code;
-      this.fieldErrors =
-        code === "unit.precision_invalid"
-          ? { precision: t("units.precision_invalid") }
-          : code === "content.translation_required" || code === "content.translation_invalid"
-            ? { name: codeMessage(code) }
-            : {};
+      this.fieldErrors = unitRefusalErrors(error);
     } finally {
       this.busy = false;
     }
@@ -305,11 +298,11 @@ export class UnitsScreen extends LitElement {
         sortValue: (product) => product.name,
       },
       {
-        key: "availability",
-        label: t("units.availability"),
+        key: "status",
+        label: t("units.status"),
         cell: (product) =>
-          product.available ? t("product.active_badge") : t("product.inactive_badge"),
-        sortValue: (product) => (product.available ? 1 : 0),
+          product.active ? t("product.active_badge") : t("product.inactive_badge"),
+        sortValue: (product) => (product.active ? 1 : 0),
       },
       {
         key: "actions",

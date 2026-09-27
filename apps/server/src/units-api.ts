@@ -30,7 +30,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management.request_invalid": 400,
   "shared.invalid_id": 400,
   "content.translation_invalid": 400,
-  "content.translation_required": 400,
+  "unit.translation_required": 400,
   "unit.precision_invalid": 400,
   "unit.not_found": 404,
   "unit.in_use": 409,

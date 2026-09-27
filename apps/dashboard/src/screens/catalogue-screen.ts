@@ -154,7 +154,6 @@ export class CatalogueScreen extends LitElement {
     },
     dashboardPath,
   );
-  #submittedUnitName: Readonly<Record<string, string>> = {};
   readonly #child = new ProductChildCreate(this, {
     accept: (kind, value) => {
       // A nested form that was EDITING an existing list must not attach it: which lists a product
@@ -504,7 +503,6 @@ export class CatalogueScreen extends LitElement {
 
   #submitUnit(event: CustomEvent<{ value: UnitInput }>): void {
     event.stopPropagation();
-    this.#submittedUnitName = event.detail.value.name;
     void this.#child.submit(async () => {
       const value = await this.api.createUnit(event.detail.value);
       return { id: value.id, name: value.name };
@@ -707,9 +705,7 @@ export class CatalogueScreen extends LitElement {
         .open=${this.#child.kind === "unit"}
         .busy=${this.#child.busy}
         .locales=${locales}
-        .fieldErrors=${
-          unitRefusal === null ? {} : unitRefusalErrors(unitRefusal, this.#submittedUnitName)
-        }
+        .fieldErrors=${unitRefusal === null ? {} : unitRefusalErrors(unitRefusal)}
         @wt-submit=${this.#submitUnit}
         @wt-cancel=${() => this.#cancelChild("unit")}
       ></dashboard-unit-form>

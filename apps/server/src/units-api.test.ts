@@ -149,7 +149,7 @@ describe("unit management routes", () => {
     [{ name: { en: "cup" }, precision: 4, abbreviation: { en: "c" } }, "unit.precision_invalid"],
     [
       { name: { fr: "tasse" }, precision: 0, abbreviation: { en: "c" } },
-      "content.translation_required",
+      "unit.translation_required",
     ],
     [{ name: "cup", precision: 0, abbreviation: { en: "c" } }, "management.request_invalid"],
     [
@@ -161,6 +161,19 @@ describe("unit management routes", () => {
     const response = await send("POST", "/management-api/units", body);
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: { code } });
+  });
+
+  it("names the abbreviation when its default-language text is missing", async () => {
+    const response = await send("POST", "/management-api/units", {
+      name: { en: "cup" },
+      precision: 0,
+      abbreviation: { fr: "t" },
+    });
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as { error: unknown }).error).toEqual({
+      code: "unit.translation_required",
+      params: { field: "abbreviation", language: "en" },
+    });
   });
 
   it("reports the abbreviation field when the abbreviation shape is wrong", async () => {
@@ -228,7 +241,7 @@ describe("unit management routes", () => {
 
     const res = await send("GET", `/management-api/units/${unit.id}/products`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual([{ id: p1, name: "A", available: true }]);
+    expect(await res.json()).toEqual([{ id: p1, name: "A", active: true }]);
   });
 
   it("GET /management-api/units/:id/products 404s an unknown unit", async () => {

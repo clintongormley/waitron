@@ -57,8 +57,8 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
 }
 
 const inUseProducts: ProductUsingUnit[] = [
-  { id: "p1", name: "Café", available: true },
-  { id: "p2", name: "Té", available: false },
+  { id: "p1", name: "Café", active: true },
+  { id: "p2", name: "Té", active: false },
 ];
 
 function inUseApi(products = inUseProducts): DashboardApi {
@@ -243,41 +243,53 @@ describe("units-screen", () => {
     expect(form.open).toBe(false);
   });
 
-  it("retains the editor on a failed write", async () => {
-    const api = stubApi({ createUnit: vi.fn().mockRejectedValue({ code: "server.internal" }) });
-    const el = await mount(api);
+  /** Opens New unit, submits it and lets the stubbed refusal land. */
+  async function refusedCreate(refusal: unknown) {
+    const el = await mount(stubApi({ createUnit: vi.fn().mockRejectedValue(refusal) }));
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
     await el.updateComplete;
     const form = el.shadowRoot!.querySelector("dashboard-unit-form")!;
     form.dispatchEvent(
       new CustomEvent("wt-submit", {
-        detail: { value: { name: { es: "caja" }, precision: 0 } },
+        detail: { value: { name: { es: "caja" }, abbreviation: { es: "cj" }, precision: 2 } },
         bubbles: true,
         composed: true,
       }),
     );
     await flush(el);
+    await form.updateComplete;
+    const summary = form.shadowRoot!.querySelector("wt-form-error-summary")!;
+    await summary.updateComplete;
+    return {
+      el,
+      form,
+      summary: [...summary.shadowRoot!.querySelectorAll("li")].map((li) => li.textContent!.trim()),
+      fieldError: (testId: string) =>
+        form.shadowRoot!.querySelector(`[data-test=${testId}]`)!.getAttribute("error"),
+    };
+  }
+
+  it("retains the editor on a failed write and says why inside it", async () => {
+    const { el, form, summary } = await refusedCreate({ code: "server.internal" });
     expect(form.open).toBe(true);
-    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeTruthy();
+    expect(summary).toEqual([codeMessage("server.internal")]);
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
 
   it("places server validation beside the offending field", async () => {
-    const api = stubApi({
-      createUnit: vi.fn().mockRejectedValue({ code: "unit.precision_invalid" }),
+    const { form, summary } = await refusedCreate({ code: "unit.precision_invalid" });
+    expect(form.fieldErrors).toEqual({ precision: codeMessage("unit.precision_invalid") });
+    expect(summary).toEqual([codeMessage("unit.precision_invalid")]);
+  });
+
+  it("puts a refused abbreviation beside the abbreviation, not the name", async () => {
+    const { summary, fieldError } = await refusedCreate({
+      code: "unit.translation_required",
+      params: { field: "abbreviation", language: "es" },
     });
-    const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
-    await el.updateComplete;
-    const form = el.shadowRoot!.querySelector("dashboard-unit-form")!;
-    form.dispatchEvent(
-      new CustomEvent("wt-submit", {
-        detail: { value: { name: { es: "caja" }, precision: 2 } },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await flush(el);
-    expect(form.fieldErrors.precision).toBeTruthy();
+    expect(fieldError("abbreviation-es")).toBe(codeMessage("unit.translation_required"));
+    expect(fieldError("name-es")).toBe("");
+    expect(summary).toEqual([codeMessage("unit.translation_required")]);
   });
 
   it("keeps the editor closed when refresh fails after a successful write", async () => {
@@ -322,7 +334,7 @@ describe("units-screen", () => {
     expect(api.background.listUnits).toHaveBeenCalled();
   });
 
-  it("opens a modal listing the products with availability when a delete is refused", async () => {
+  it("opens a modal listing the products with their status when a delete is refused", async () => {
     const el = await mount(inUseApi());
     const dialog = await openInUseModal(el);
     expect(dialog.open).toBe(true);
@@ -333,8 +345,15 @@ describe("units-screen", () => {
       "p2",
     ]);
     expect(productTable.shadowRoot!.textContent).toContain("Café");
-    // The availability column reuses the product active/inactive labels (es-ES is the test locale).
-    expect(productTable.shadowRoot!.textContent).toContain("Inactivo");
+    // The Status column reuses the product Active/Inactive labels (es-ES is the test locale).
+    expect(
+      productTable.shadowRoot!.querySelector('[data-sort="status"]')!.textContent!.trim(),
+    ).toBe("Estado");
+    const rowText = (id: string) =>
+      productTable.shadowRoot!.querySelector(`tr[data-row-key="${id}"]`)!.textContent!;
+    expect(rowText("p1")).toContain("Activo");
+    expect(rowText("p1")).not.toContain("Inactivo");
+    expect(rowText("p2")).toContain("Inactivo");
     // Each row's checkbox is the only place a screen reader hears which product it is ticking.
     expect(
       productTable.shadowRoot!.querySelector('[data-test="select-p1"]')!.getAttribute("aria-label"),
@@ -520,9 +539,7 @@ describe("units-screen", () => {
 
   it("opens the delete-unit screen when a unit row is clicked", async () => {
     setLocale("es-ES");
-    const listUnitProducts = vi
-      .fn()
-      .mockResolvedValue([{ id: "p1", name: "Sopa", available: true }]);
+    const listUnitProducts = vi.fn().mockResolvedValue([{ id: "p1", name: "Sopa", active: true }]);
     const el = await mount(stubApi({ listUnitProducts }));
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
@@ -582,9 +599,7 @@ describe("units-screen", () => {
 
   it("offers Each (no unit) as a reassign target and reassigns to it", async () => {
     setLocale("es-ES");
-    const listUnitProducts = vi
-      .fn()
-      .mockResolvedValue([{ id: "p1", name: "Sopa", available: true }]);
+    const listUnitProducts = vi.fn().mockResolvedValue([{ id: "p1", name: "Sopa", active: true }]);
     const reassignProductsUnit = vi.fn().mockResolvedValue([]);
     const el = await mount(stubApi({ listUnitProducts, reassignProductsUnit }));
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
@@ -806,11 +821,11 @@ describe("units-screen", () => {
     expect(reassignProductsUnit).toHaveBeenCalledOnce();
   });
 
-  it("sorts the in-use products by name and by availability", async () => {
+  it("sorts the in-use products by name and by status", async () => {
     const el = await mount(
       inUseApi([
-        { id: "p1", name: "Té", available: true },
-        { id: "p2", name: "Café", available: false },
+        { id: "p1", name: "Té", active: true },
+        { id: "p2", name: "Café", active: false },
       ]),
     );
     const dialog = await openInUseModal(el);
@@ -819,9 +834,9 @@ describe("units-screen", () => {
     expect(keysOf(products)).toEqual(["p1", "p2"]);
     await sortBy(products, "name");
     expect(keysOf(products)).toEqual(["p2", "p1"]);
-    await sortBy(products, "availability");
+    await sortBy(products, "status");
     expect(keysOf(products)).toEqual(["p2", "p1"]);
-    await sortBy(products, "availability");
+    await sortBy(products, "status");
     expect(keysOf(products)).toEqual(["p1", "p2"]);
   });
 
