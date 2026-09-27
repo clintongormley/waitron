@@ -4991,9 +4991,12 @@ branch found, checked, and consciously did not take.
 
 - **DONE (lane C's A100): the two "disabling an open panel" tests in
   `packages/ui/src/components/wt-combobox.test.ts` dispatch their keys at the hidden search box,
-  so each went red in all six runs with its `disabled` guard deleted.** The entry's "never reach" was
-  wrong: a real keystroke pressed just after the panel closes reached the search box in 10 of 12
-  tries (none after two animation frames), so the old tests failed only some runs without a guard.
+  so each went red in all six runs with its `disabled` guard deleted, and check that the search
+  box's key handler cancelled each key, so keys that stop reaching the component fail them.** The
+  old entry's claim that once the panel is hidden "its keystrokes never reach the component at all"
+  was wrong: a real keystroke pressed just after the panel closes reached the search box in 10 of
+  12 tries (none after two animation frames), so the old tests failed only some runs without a
+  guard.
 - **`packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests.** Four mutants, none
   covered. It is test-only plumbing the Vitest config loads — the same class as `src/test-helpers.ts`,
   `src/a11y-helpers.ts` and `src/tokens/token-test-helpers.ts`, which `packages/ui/stryker.config.json`
