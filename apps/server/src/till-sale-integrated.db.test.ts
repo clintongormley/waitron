@@ -19,7 +19,13 @@ import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { drawerOpens, printJobs, withTransaction, workingOrders } from "@waitron/db";
+import {
+  drawerOpens,
+  printJobs,
+  withTransaction,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import {
   decimal,
@@ -467,6 +473,32 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     expect(await paymentsFor(id)).toMatchObject([
       { provider: "simulator", state: "captured", linkedToSale: true },
     ]);
+  });
+
+  it("credits a card walk-up's lines to the operator who rang it", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const app = suite.db;
+    const provider = new SimulatorPaymentProvider(app);
+    const id = randomUUID();
+    const operatorId = "cccccccc-0000-4000-8000-00000000000a";
+    await payWorkingOrderIntegrated(
+      { db: app, backend, clock, provider },
+      cfg,
+      {
+        id,
+        zoneId: cafe.zoneId,
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        simulationOutcome: "captured",
+      },
+      operatorId,
+    );
+
+    expect(
+      await app
+        .select({ creditedTo: workingOrderLines.creditedTo })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id)),
+    ).toEqual([{ creditedTo: operatorId }]);
   });
 
   it("runs a simulated decline through payment handling without filing a sale", async () => {

@@ -92,20 +92,11 @@ export async function submitGroups(
         await requireHeldGroup(tx, visitId, input.joinGroupId);
       }
       let tabId = await visitTab(tx, visitId);
-      let position = await lastPosition(tx, visitId);
       const groupIds: string[] = [];
       for (const group of input.groups) {
         const fire = group.release === "fire";
         const groupId =
-          input.joinGroupId ??
-          (await insertGroup(tx, {
-            visitId,
-            position: ++position,
-            state: fire ? "fired" : "held",
-            firedAt: fire ? nowIso() : null,
-            firedBy: fire ? operatorId : null,
-            submittedBy: operatorId,
-          }));
+          input.joinGroupId ?? (await startGroup(tx, visitId, group.release, operatorId));
         ({ tabId } = await addTabRound(
           tx,
           cfg,
@@ -113,7 +104,7 @@ export async function submitGroups(
           group.lines.map((line) => ({ ...line, hold: !fire, release: fire })),
           { groupId, creditedTo: operatorId },
         ));
-        await recordEvent(tx, {
+        await recordGroupEvent(tx, {
           visitId,
           groupId,
           kind: input.joinGroupId === undefined ? "submitted" : "joined",
@@ -259,7 +250,7 @@ async function releaseGroup(
     .update(orderGroups)
     .set({ state: "fired", firedAt: nowIso(), firedBy: operatorId })
     .where(eq(orderGroups.id, groupId));
-  await recordEvent(tx, { visitId, groupId, kind: "fired", actorId: operatorId, detail });
+  await recordGroupEvent(tx, { visitId, groupId, kind: "fired", actorId: operatorId, detail });
 }
 
 /**
@@ -307,7 +298,7 @@ export async function reorderHeldGroups(
             .where(eq(orderGroups.id, id));
         }
       }
-      await recordEvent(tx, {
+      await recordGroupEvent(tx, {
         visitId,
         groupId: null,
         kind: "reordered",
@@ -382,16 +373,7 @@ export async function moveLinesToGroup(
         }
       }
       const targetId =
-        target === "new"
-          ? await insertGroup(tx, {
-              visitId,
-              position: (await lastPosition(tx, visitId)) + 1,
-              state: "held",
-              firedAt: null,
-              firedBy: null,
-              submittedBy: args.operatorId,
-            })
-          : target.groupId;
+        target === "new" ? await startGroup(tx, visitId, "hold", args.operatorId) : target.groupId;
       const sources = new Set<string>();
       const bills = new Set<string>();
       for (const { lineId, quantity } of moves) {
@@ -420,33 +402,78 @@ export async function moveLinesToGroup(
         }
       }
       await bumpRevision(tx, [...bills]);
-      await recordEvent(tx, {
+      await recordGroupEvent(tx, {
         visitId,
         groupId: targetId,
         kind: "lines_moved",
         actorId: args.operatorId,
         detail: { moves, from: [...sources] },
       });
-      for (const source of sources) {
-        const [left] = await tx
-          .select({ id: workingOrderLines.id })
-          .from(workingOrderLines)
-          .where(eq(workingOrderLines.groupId, source))
-          .limit(1);
-        if (left === undefined) {
-          await tx.update(orderGroups).set({ state: "removed" }).where(eq(orderGroups.id, source));
-          await recordEvent(tx, {
-            visitId,
-            groupId: source,
-            kind: "removed",
-            actorId: args.operatorId,
-            detail: {},
-          });
-        }
-      }
+      await removeEmptiedHeldGroups(tx, visitId, [...sources], args.operatorId);
       return { revision: await currentRevision(tx, visitId) };
     },
   );
+}
+
+/**
+ * A new group at the end of the visit's sequence, fired now or held, submitted by the operator. The
+ * caller puts its lines in it and records its event.
+ */
+export async function startGroup(
+  tx: Transaction,
+  visitId: string,
+  release: GroupRelease,
+  operatorId: string,
+): Promise<string> {
+  const fire = release === "fire";
+  const [group] = await tx
+    .insert(orderGroups)
+    .values({
+      visitId,
+      position: (await lastPosition(tx, visitId)) + 1,
+      state: fire ? "fired" : "held",
+      firedAt: fire ? nowIso() : null,
+      firedBy: fire ? operatorId : null,
+      submittedBy: operatorId,
+    })
+    .returning({ id: orderGroups.id });
+  return group!.id;
+}
+
+/**
+ * Mark `removed`, with a `removed` event naming the operator, each of these groups that is held and
+ * has no line left on any bill. A fired group stays as it is.
+ */
+export async function removeEmptiedHeldGroups(
+  tx: Transaction,
+  visitId: string,
+  groupIds: readonly string[],
+  operatorId: string | undefined,
+): Promise<void> {
+  for (const groupId of new Set(groupIds)) {
+    const [group] = await tx
+      .select({ state: orderGroups.state })
+      .from(orderGroups)
+      .where(eq(orderGroups.id, groupId));
+    if (group?.state !== "held") continue;
+    const [left] = await tx
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.groupId, groupId))
+      .limit(1);
+    if (left !== undefined) continue;
+    const actorId = requireOperator(operatorId);
+    await tx.update(orderGroups).set({ state: "removed" }).where(eq(orderGroups.id, groupId));
+    await recordGroupEvent(tx, { visitId, groupId, kind: "removed", actorId, detail: {} });
+  }
+}
+
+/** The operator a group write names, else `management.request_invalid`: an event needs one. */
+export function requireOperator(operatorId: string | undefined): string {
+  if (operatorId === undefined) {
+    throw new AppError("management.request_invalid", { field: "operatorId" });
+  }
+  return operatorId;
 }
 
 /** The visit's groups in sequence, removed ones left out, with the visit's revision. */
@@ -559,15 +586,7 @@ async function currentRevision(tx: Transaction, visitId: string): Promise<number
   return visit!.revision;
 }
 
-async function insertGroup(
-  tx: Transaction,
-  values: typeof orderGroups.$inferInsert,
-): Promise<string> {
-  const [group] = await tx.insert(orderGroups).values(values).returning({ id: orderGroups.id });
-  return group!.id;
-}
-
-async function recordEvent(
+export async function recordGroupEvent(
   tx: Transaction,
   values: typeof orderGroupEvents.$inferInsert,
 ): Promise<void> {

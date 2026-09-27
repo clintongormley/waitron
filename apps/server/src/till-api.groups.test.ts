@@ -881,6 +881,100 @@ describe("the tab routes that move or release lines, on a visit with groups", ()
   });
 });
 
+describe("the line-editing routes act as the session's operator (R10, R11)", () => {
+  async function tabLines(tabId: string) {
+    const answer = await call("GET", `/api/working-orders/${tabId}/lines`);
+    return answer.json as unknown as {
+      revision: number;
+      lines: { id: string; lineNo: number; groupId: string | null }[];
+    };
+  }
+
+  async function eventsOfGroup(groupId: string) {
+    return inTx(venue, (tx) =>
+      tx
+        .select({ kind: orderGroupEvents.kind, actorId: orderGroupEvents.actorId })
+        .from(orderGroupEvents)
+        .where(eq(orderGroupEvents.groupId, groupId))
+        .orderBy(asc(orderGroupEvents.createdAt)),
+    );
+  }
+
+  it("removes the held group a void empties, naming the operator, and moves the visit on", async () => {
+    const visit = await withGroups();
+    const lineNo = (await tabLines(visit.tabId)).lines.find(
+      (line) => line.groupId === visit.croquetas.id,
+    )!.lineNo;
+    const revision = await revisionOf(visit.visitId);
+
+    const voided = await call("DELETE", `/api/working-orders/${visit.tabId}/lines/${lineNo}`);
+
+    expect(voided.status).toBe(200);
+    expect(await eventsOfGroup(visit.croquetas.id)).toEqual([
+      { kind: "submitted", actorId: venue.operatorId },
+      { kind: "removed", actorId: venue.operatorId },
+    ]);
+    expect(await revisionOf(visit.visitId)).toBe(revision + 1);
+  });
+
+  it("puts a fired line's raised quantity in a new fired group credited to the operator", async () => {
+    const visit = await withGroups();
+    const tab = await tabLines(visit.tabId);
+    const cana = tab.lines.find((line) => line.groupId === visit.fired.id)!;
+
+    const changed = await call("PUT", `/api/working-orders/${visit.tabId}/lines/${cana.lineNo}`, {
+      quantity: "2",
+      revision: tab.revision,
+    });
+
+    expect(changed.status).toBe(200);
+    const added = (await dishLines(visit.tabId)).at(-1)!;
+    expect(added).toMatchObject({ name: "Caña", creditedTo: venue.operatorId });
+    expect(added.groupId).not.toBe(visit.fired.id);
+    expect(await eventsOfGroup(added.groupId!)).toEqual([
+      { kind: "submitted", actorId: venue.operatorId },
+    ]);
+  });
+
+  it("credits a dish a whole-order save adds to the operator, never to one the body names", async () => {
+    const visit = await withGroups();
+    const tab = await tabLines(visit.tabId);
+    const kept = (await dishLines(visit.tabId)).map((line) => ({
+      workingOrderLineId: line.id,
+      menuItemId: venue.offerFor(line.name),
+      quantity: "1",
+    }));
+
+    const saved = await call("PUT", `/api/working-orders/${visit.tabId}`, {
+      lines: [...kept, dish("Pulpo")],
+      revision: tab.revision,
+      operatorId: venue.adminId,
+    });
+
+    expect(saved.status).toBe(200);
+    expect((await dishLines(visit.tabId)).at(-1)).toMatchObject({
+      name: "Pulpo",
+      creditedTo: venue.operatorId,
+    });
+  });
+
+  it("credits a parked order's lines to the operator, never to one the body names", async () => {
+    const id = randomUUID();
+
+    const parked = await call("POST", "/api/working-orders", {
+      id,
+      lines: [dish("Tarta")],
+      zoneId: venue.zoneId,
+      operatorId: venue.adminId,
+    });
+
+    expect(parked.status).toBe(200);
+    expect(await dishLines(id)).toMatchObject([
+      { name: "Tarta", groupId: null, creditedTo: venue.operatorId },
+    ]);
+  });
+});
+
 describe("the group routes without a session", () => {
   it("refuse every route 401 session.required, writing nothing", async () => {
     const visit = await withGroups();

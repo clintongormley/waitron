@@ -205,6 +205,17 @@ export async function checkAndBumpVisit(
 }
 
 /**
+ * Move the visit's revision on without comparing it: for a write that is not a visit command of its
+ * own and carries no revision (D19), such as a line edit or a void, whose bill's revision guards it.
+ */
+export async function bumpVisitRevision(tx: Transaction, visitId: string): Promise<void> {
+  await tx
+    .update(visits)
+    .set({ revision: sql`${visits.revision} + 1` })
+    .where(eq(visits.id, visitId));
+}
+
+/**
  * The visit and every visit merged into it, directly or through a chain of merges. Only an open
  * visit can absorb another and the absorbed one closes, so a chain cannot loop.
  */

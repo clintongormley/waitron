@@ -48,11 +48,13 @@ import {
   joinTable,
   mergeTabs,
   openTab,
+  parkOrder,
   recallLines,
   sendLines,
   splitOffCheck,
   transferLines,
   unjoinTable,
+  updateHeldOrder,
   updateOrderLine,
   voidTabLine,
 } from "./working-order.js";
@@ -2190,5 +2192,368 @@ describe("the course Fire of the station and the pass, on a visit (R4)", () => {
       () => inTx((tx) => fireCourse(tx, v.cfg, s.tabId, missing, ALEX)),
       { code: "course.not_found", params: { courseId: missing } },
     );
+  });
+});
+
+async function billRevisionOf(orderId: string): Promise<number> {
+  const [row] = await db
+    .select({ revision: workingOrders.revision })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  return row!.revision;
+}
+
+/** A whole-order save's lines keeping every dish of the bill as it stands. */
+async function keptLines(v: Venue, orderId: string) {
+  const dishOf = new Map(
+    (Object.keys(v.productId) as Dish[]).map((dish) => [v.productId[dish], dish]),
+  );
+  return (await linesOfBillWithProduct(orderId)).map((row) => ({
+    workingOrderLineId: row.id,
+    menuItemId: v.offer(dishOf.get(row.productId!)!),
+    quantity: String(row.quantity / 1000),
+  }));
+}
+
+async function linesOfBillWithProduct(orderId: string) {
+  return db
+    .select({
+      id: workingOrderLines.id,
+      productId: workingOrderLines.productId,
+      quantity: workingOrderLines.quantity,
+    })
+    .from(workingOrderLines)
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, orderId),
+        sql`${workingOrderLines.parentLineId} is null`,
+      ),
+    )
+    .orderBy(asc(workingOrderLines.lineNo));
+}
+
+async function saveWhole(
+  v: Venue,
+  orderId: string,
+  lines: Awaited<ReturnType<typeof keptLines>> | ReturnType<typeof line>[],
+  operatorId: string | undefined,
+) {
+  return updateHeldOrder({ db }, v.cfg, orderId, {
+    lines,
+    revision: await billRevisionOf(orderId),
+    operatorId,
+  });
+}
+
+async function changeLine(
+  v: Venue,
+  orderId: string,
+  lineNo: number,
+  patch: Parameters<typeof updateOrderLine>[4],
+  operatorId?: string,
+) {
+  const revision = await billRevisionOf(orderId);
+  return inTx((tx) => updateOrderLine(tx, v.cfg, orderId, lineNo, patch, revision, operatorId));
+}
+
+async function groupRow(groupId: string) {
+  const [row] = await db.select().from(orderGroups).where(eq(orderGroups.id, groupId));
+  return row!;
+}
+
+describe("edits inside groups (D19, R7, R10)", () => {
+  it("removes a held group whose only line is voided: gone from the list, its events kept, the visit moved on", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const fishOnly = (await submit(v, s.visitId, [{ release: "hold", lines: [line(v, "fish")] }]))
+      .groups[0]!.id;
+    const [fish] = await linesIn(s.visitId, fishOnly);
+    const revision = await revisionOf(s.visitId);
+
+    await inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, fish!.lineNo, undefined, MIA));
+
+    expect((await groupRow(fishOnly)).state).toBe("removed");
+    expect((await groupsOf(s.visitId)).groups.map((group) => group.id)).not.toContain(fishOnly);
+    const events = (await eventsOf(s.visitId)).filter((event) => event.groupId === fishOnly);
+    expect(events.map((event) => [event.kind, event.actorId])).toEqual([
+      ["submitted", ALEX],
+      ["removed", MIA],
+    ]);
+    expect(await revisionOf(s.visitId)).toBe(revision + 1);
+  });
+
+  it("removes a held group whose only line a whole-order save leaves out, naming the editor", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const fishOnly = (await submit(v, s.visitId, [{ release: "hold", lines: [line(v, "fish")] }]))
+      .groups[0]!.id;
+    const [fish] = await linesIn(s.visitId, fishOnly);
+    const revision = await revisionOf(s.visitId);
+
+    await saveWhole(
+      v,
+      s.tabId,
+      (await keptLines(v, s.tabId)).filter((kept) => kept.workingOrderLineId !== fish!.id),
+      MIA,
+    );
+
+    expect((await groupRow(fishOnly)).state).toBe("removed");
+    expect((await eventsOf(s.visitId)).at(-1)).toMatchObject({
+      groupId: fishOnly,
+      kind: "removed",
+      actorId: MIA,
+    });
+    expect(await revisionOf(s.visitId)).toBe(revision + 1);
+  });
+
+  it("keeps a held group one of whose two lines is voided, writes no event, and moves the visit on", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const [, fish] = await linesIn(s.visitId, s.mains);
+    const revision = await revisionOf(s.visitId);
+    const events = (await eventsOf(s.visitId)).length;
+
+    await inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, fish!.lineNo, undefined, MIA));
+
+    expect((await groupRow(s.mains)).state).toBe("held");
+    expect(await eventsOf(s.visitId)).toHaveLength(events);
+    expect(await revisionOf(s.visitId)).toBe(revision + 1);
+  });
+
+  it("moves the visit on for part of a line voided", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const [steak] = await linesIn(s.visitId, s.mains);
+    const revision = await revisionOf(s.visitId);
+
+    await inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, steak!.lineNo, "1", MIA));
+
+    expect((await linesIn(s.visitId, s.mains))[0]).toMatchObject({ id: steak!.id, quantity: 1000 });
+    expect(await revisionOf(s.visitId)).toBe(revision + 1);
+  });
+
+  it("puts a FIRED line's raised quantity in a new fired group credited to the editor, leaving the line as it was", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const [beer] = await linesIn(s.visitId, s.drinks);
+    const revision = await revisionOf(s.visitId);
+
+    await changeLine(v, s.tabId, beer!.lineNo, { quantity: "3" }, MIA);
+
+    const { groups } = await groupsOf(s.visitId);
+    expect(groups.map((group) => [group.position, group.state])).toEqual([
+      [1, "fired"],
+      [2, "fired"],
+      [3, "held"],
+      [4, "held"],
+      [5, "held"],
+      [6, "fired"],
+    ]);
+    const added = groups[5]!;
+    const [extra] = await linesIn(s.visitId, added.id);
+    expect(added.lineIds).toEqual([extra!.id]);
+    expect(extra).toMatchObject({
+      productId: v.productId.beer,
+      quantity: 1000,
+      creditedTo: MIA,
+      sentAt: expect.any(String),
+    });
+    expect(await firedTicketLineIds(s.visitId)).toContain(extra!.id);
+    expect((await linesIn(s.visitId, s.drinks))[0]).toMatchObject({
+      id: beer!.id,
+      quantity: 2000,
+      groupId: s.drinks,
+      creditedTo: ALEX,
+    });
+    expect((await eventsOf(s.visitId)).at(-1)).toMatchObject({
+      groupId: added.id,
+      kind: "submitted",
+      actorId: MIA,
+    });
+    expect(await groupRow(added.id)).toMatchObject({ submittedBy: MIA, firedBy: MIA });
+    expect(await revisionOf(s.visitId)).toBe(revision + 1);
+  });
+
+  it("changes a HELD line's quantity in place, in its group, and moves the visit on", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const [steak] = await linesIn(s.visitId, s.mains);
+    const revision = await revisionOf(s.visitId);
+    const events = (await eventsOf(s.visitId)).length;
+
+    await changeLine(v, s.tabId, steak!.lineNo, { quantity: "3" }, MIA);
+
+    expect((await linesIn(s.visitId, s.mains))[0]).toMatchObject({
+      id: steak!.id,
+      quantity: 3000,
+      creditedTo: ALEX,
+      sentAt: null,
+    });
+    expect((await groupsOf(s.visitId)).groups).toHaveLength(5);
+    expect(await eventsOf(s.visitId)).toHaveLength(events);
+    expect(await revisionOf(s.visitId)).toBe(revision + 1);
+  });
+
+  it("leaves the visit's revision alone for an edit that changes nothing", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const [steak] = await linesIn(s.visitId, s.mains);
+    const revision = await revisionOf(s.visitId);
+
+    await changeLine(v, s.tabId, steak!.lineNo, { quantity: "2" }, MIA);
+
+    expect(await revisionOf(s.visitId)).toBe(revision);
+  });
+
+  it("puts an extra Mia adds to Alex's held Steak in the Steak's group, credited to Alex", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const held = (await submit(v, s.visitId, [{ release: "hold", lines: [line(v, "steak")] }]))
+      .groups[0]!.id;
+    const [steak] = await linesIn(s.visitId, held);
+
+    await changeLine(
+      v,
+      s.tabId,
+      steak!.lineNo,
+      {
+        extras: [
+          { listId: v.extrasListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] },
+        ],
+      },
+      MIA,
+    );
+
+    const rows = await linesOfBill(s.tabId);
+    expect(rows.map((row) => [row.parentLineId, row.groupId, row.creditedTo])).toEqual([
+      [null, held, ALEX],
+      [steak!.id, held, ALEX],
+    ]);
+    expect((await groupsOf(s.visitId)).groups.map((group) => group.id)).toEqual([held]);
+  });
+
+  it("puts a new dish a save adds, where some line was sent, in a new fired group credited to the editor", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const revision = await revisionOf(s.visitId);
+
+    await saveWhole(v, s.tabId, [...(await keptLines(v, s.tabId)), line(v, "flan")], MIA);
+
+    const { groups } = await groupsOf(s.visitId);
+    expect(groups).toHaveLength(6);
+    expect(groups[5]).toMatchObject({ position: 6, state: "fired", summary: "1 × Flan" });
+    const [flan] = await linesIn(s.visitId, groups[5]!.id);
+    expect(flan).toMatchObject({ creditedTo: MIA, sentAt: expect.any(String) });
+    expect(await firedTicketLineIds(s.visitId)).toContain(flan!.id);
+    expect((await eventsOf(s.visitId)).at(-1)).toMatchObject({
+      groupId: groups[5]!.id,
+      kind: "submitted",
+      actorId: MIA,
+    });
+    expect(await revisionOf(s.visitId)).toBe(revision + 1);
+  });
+
+  it("puts a new dish a save adds, where every line is held, in a new held group at the end", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const first = (
+      await submit(v, s.visitId, [{ release: "hold", lines: [line(v, "steak"), line(v, "fish")] }])
+    ).groups[0]!.id;
+
+    await saveWhole(v, s.tabId, [...(await keptLines(v, s.tabId)), line(v, "flan")], MIA);
+
+    const { groups } = await groupsOf(s.visitId);
+    expect(groups.map((group) => [group.id === first, group.position, group.state])).toEqual([
+      [true, 1, "held"],
+      [false, 2, "held"],
+    ]);
+    const [flan] = await linesIn(s.visitId, groups[1]!.id);
+    expect(flan).toMatchObject({ productId: v.productId.flan, creditedTo: MIA, sentAt: null });
+    expect(await firedTicketLineIds(s.visitId)).toEqual([]);
+    expect(await groupRow(groups[1]!.id)).toMatchObject({ submittedBy: MIA, firedBy: null });
+  });
+
+  it("puts a new dish a save adds to a visit's tab of held no-route lines only in a new held group", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    await submit(v, s.visitId, [{ release: "hold", lines: [line(v, "water")] }]);
+
+    await saveWhole(v, s.tabId, [...(await keptLines(v, s.tabId)), line(v, "steak")], MIA);
+
+    const { groups } = await groupsOf(s.visitId);
+    expect(groups.map((group) => [group.position, group.state, group.summary])).toEqual([
+      [1, "held", "1 × Water btl"],
+      [2, "held", "1 × Steak"],
+    ]);
+    await fire(v, s.visitId, groups[1]!.id);
+    const [steak] = await linesIn(s.visitId, groups[1]!.id);
+    expect(await firedTicketLineIds(s.visitId)).toEqual([steak!.id]);
+  });
+
+  it("puts no line of a counter order in a group, crediting a line a save adds to the editor", async () => {
+    const v = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db }, v.cfg, {
+      id,
+      lines: [line(v, "steak")],
+      zoneId: v.zoneId,
+      operatorId: ALEX,
+    });
+
+    await saveWhole(v, id, [...(await keptLines(v, id)), line(v, "flan")], MIA);
+
+    expect((await linesOfBill(id)).map((row) => [row.groupId, row.creditedTo, row.sentAt])).toEqual(
+      [
+        [null, ALEX, null],
+        [null, MIA, null],
+      ],
+    );
+    expect(await db.select().from(orderGroups)).toEqual([]);
+  });
+
+  it("refuses an edit that must start a group when no operator is named, writing nothing", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const [beer] = await linesIn(s.visitId, s.drinks);
+
+    await expectRefusedWithNothingWritten(
+      v,
+      s.visitId,
+      () => changeLine(v, s.tabId, beer!.lineNo, { quantity: "3" }),
+      { code: "management.request_invalid", params: { field: "operatorId" } },
+    );
+  });
+});
+
+describe("credit (D5, R11)", () => {
+  it("credits the lines a parked counter order is created with to the operator who parked it", async () => {
+    const v = await setupVenue();
+    const id = randomUUID();
+
+    await parkOrder({ db }, v.cfg, {
+      id,
+      lines: [line(v, "steak"), line(v, "flan")],
+      zoneId: v.zoneId,
+      operatorId: MIA,
+    });
+
+    expect((await linesOfBill(id)).map((row) => row.creditedTo)).toEqual([MIA, MIA]);
+  });
+
+  it("credits the lines a tab is opened with to the operator who opened it", async () => {
+    const v = await setupVenue();
+    const { tabId } = await inTx(async (tx) => {
+      const { id: tableId } = await createTable(tx, v.cfg, {
+        label: `O-${randomUUID().slice(0, 6)}`,
+        zoneId: v.zoneId,
+      });
+      return openTab(tx, v.cfg, {
+        tableId,
+        lines: [{ menuItemId: v.offer("flan"), quantity: "1" }],
+        operatorId: MIA,
+      });
+    });
+
+    expect(await linesOfBill(tabId)).toMatchObject([{ groupId: null, creditedTo: MIA }]);
   });
 });

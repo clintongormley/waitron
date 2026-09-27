@@ -1025,8 +1025,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             lines: body.lines,
             label: body.label,
             revision: requireRevision(body.revision),
+            operatorId: personId,
           },
-          { fiscal, operatorId: personId, saleCfg },
+          { fiscal, saleCfg },
         ),
       );
       return c.json({ revision });
@@ -1537,7 +1538,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const quantity = c.req.query("quantity");
       await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
         withTransaction(deps.db, async (tx) => {
-          await voidTabLine(tx, deps.cfg, id, lineNo, quantity);
+          await voidTabLine(tx, deps.cfg, id, lineNo, quantity, personId);
           await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
         }),
       );
@@ -1570,7 +1571,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const copy = requireRevision(revision);
       const saved = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
         withTransaction(deps.db, async (tx) => {
-          const edited = await updateOrderLine(tx, deps.cfg, id, lineNo, patch, copy);
+          const edited = await updateOrderLine(tx, deps.cfg, id, lineNo, patch, copy, personId);
           await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
           return edited;
         }),
