@@ -671,8 +671,9 @@ its part done here when it lands.
 - **A67 (the Options editor, and always a default) — DONE on `feat/options-editor-rows`, pull
   request to follow.** The server now keeps a default whenever an options list has an available
   option: `parseOptionListInput` gives every option without an id one of its own and, where the
-  body names no default or names one that is switched off, stores the first available option
-  instead (a list with nothing available, possible only while it is inactive, keeps none). A row
+  body names no default or names one that is switched off, returns the first available option as
+  the default, which the write stores (a list with nothing available, possible only while it is
+  inactive, has none). A row
   copied in by configuration transfer is not re-parsed, so, as the spec's D8 records, a stored
   empty default is still possible. In the dashboard's Options list editor the list's
   customer-facing and kitchen names fold into a closed section, as in the Extras editor; each
@@ -683,11 +684,21 @@ its part done here when it lands.
   the default is deleted or switched off, and doing the same when a list is opened with no default.
   A refusal naming one option's field shows under its row, in the summary, and beside the field
   when that option is opened; Escape closes only the option window and focus returns to the row's
-  menu. The option wording now says "option" rather than "label" in both languages. Looked at in
+  menu. The editor's wording now says "option" rather than "label" in both languages. Two
+  follow-ups are tracked as open items below this list. Looked at in
   both themes, English and Spanish, at 1280px and 390px (read back from the page as 1280 and 390):
   no sideways scroll at 390px, of the page or the options table. The option window is the standard
   modal at the same size as the list's, so it covers the list entirely; only the darker backdrop
   shows that it is stacked.
+
+**Two small follow-ups A67 left open:**
+
+- **The Modifiers screen's options-list column heading still says "Labels".** The string
+  `options.labels` (`apps/dashboard/src/i18n/strings.ts`) reads "Labels" / "Etiquetas", while the
+  Options editor now says "option". **Next action:** reword it to "Options" / "Opciones".
+- **Nothing takes focus after an option is deleted in the Options list editor.** Focus goes neither
+  to a neighbouring row nor to "Add option" (`apps/dashboard/src/widgets/option-list-form.ts`).
+  **Next action:** move focus to the next row, or to "Add option" when no row is left.
 
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
@@ -1889,7 +1900,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     such check and the screen does not set `dismissible`; its test focuses the dialog's body, not a
     field, before the key. The rest were tried only with a hand-built `KeyboardEvent` dispatched on
     the dialog (`sections-screen`, `modifiers-screen`, `add-to-menus`, `extra-list-form`,
-    `option-list-form`, `variant-form` and `menu-prices-table`, under `apps/dashboard/src`) or not
+    `option-list-form`, `option-label-form`, `variant-form` and `menu-prices-table`, under
+    `apps/dashboard/src`) or not
     at all (`#guardEscape` in `apps/dashboard/src/screens/menus-screen.ts`). Why the reasons screen
     behaved differently has not been established. **Next action:** repeat the reasons-screen case
     recording which element has focus just before the Escape; then press a real Escape during a save

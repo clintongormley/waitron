@@ -504,8 +504,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   // `options.label_required` and `extras.limit_exceeded` are deliberately absent: only the order
   // path's selection validators throw them, never a management route.
   "options.invalid": {
-    en: "Check the options list's names, its labels and which label is preselected.",
-    es: "Revisa los nombres de la lista de opciones, sus etiquetas y cuál está preseleccionada.",
+    en: "Check the options list's names, its options and which one is the default.",
+    es: "Revisa los nombres de la lista de opciones, sus opciones y cuál es la predeterminada.",
   },
   "options.not_found": {
     en: "This options list no longer exists. Refresh the list and try again.",

@@ -23,27 +23,34 @@ you can see what one of it is; a product with no unit reads Each. The list itsel
 it required — and **Maximum choices**, left blank for no limit. Each of these numbers has − and +
 buttons, and you can also type it.
 
-Use **Options** when the diner picks exactly one label, such as a cup or a glass. A label carries
-names and nothing else: no price, no tax treatment and no allergens. Each label has its own
-**Available** switch, and one of the available labels can be the **Default**.
+Use **Options** when the diner picks exactly one option, such as a cup or a glass. An option carries
+names and nothing else: no price, no tax treatment and no allergens. Each option has its own
+**Available** switch, and while any option is available, one of them is always the **Default** once the list is saved (the editor picks the first available
+option when you open a list that has none).
+
+Each option is a row of text in the list: its name, an **Unavailable** marker when it is switched
+off, a **Default** radio button (an unavailable option cannot take it), and a menu with **Edit** and
+**Delete**. Drag a row by the handle at its start to move it. **Edit** opens the option in its own
+window over the list; **Add option**, under the rows, opens an empty one. Saving that window changes the list
+you are editing, not what is stored: nothing is sent until you save the list itself.
 
 ## Name a list and decide whether it is active
 
 Give the list a staff name in plain text — what you and your staff call it. A **Customer-facing
 name**, with one field per content language, and a **Kitchen name** are both optional and fall back
-to the staff name when you leave them blank. On an extras list they sit in a **Customer and kitchen
-names** section that stays folded until you open it; its heading says how many are filled in, and
-it opens by itself when one of them needs correcting. An options label carries the same three names. See
-[content languages](content-and-images.md).
+to the staff name when you leave them blank. They sit in a **Customer and kitchen names** section
+that stays folded until you open it; its heading says how many are filled in, and it opens by
+itself when one of them needs correcting. An option carries the same three names, in the same
+folded section of its own window. See [content languages](content-and-images.md).
 
 Each list has an **Active** switch, and the list's **Status** column reads **Active** or
 **Inactive**. An active list needs something to answer it with, so the form refuses to save an
-active extras list with no products on it, or an active options list with no available label. It
+active extras list with no products on it, or an active options list with no available option. It
 tells you to add or enable one, or to make the list inactive.
 
 A **Default** seeds a new selection once. Changing it does not change an order you already started.
-Making the default label unavailable clears the default. An extras entry is either preselected or
-not — there is no starting quantity to set.
+Switching the default option off, or deleting it, makes the first available option the default
+instead. An extras entry is either preselected or not — there is no starting quantity to set.
 
 ## Attach a list to a product
 
@@ -85,7 +92,7 @@ off, or remove it from that one product's Modifiers section.
 ## Allergens and dietary information
 
 An extras entry declares its allergens and its dietary suitability through the product it names, so
-you maintain those on that product under **Products**, not here. An options label declares neither —
+you maintain those on that product under **Products**, not here. An option declares neither —
 it is wording, not something eaten.
 
 ## What the till does with a list
@@ -93,8 +100,9 @@ it is wording, not something eaten.
 Tapping a dish that carries a list opens the question straight away, one list after another in the
 order you arranged them. An extras list shows its entries at the price you set, with a tick box
 each, or a stepper where you allowed more than one; a list you made required keeps **Add** shut
-until something is picked. An options list shows its labels as a set of radio buttons, exactly one
-to choose, with your default already selected.
+until something is picked. An options list shows its options as a set of radio buttons, exactly one
+to choose, with your default already selected (nothing is selected on a list that has no stored
+default).
 
 The operator reads the staff name throughout. The till is a staff screen: the diner's wording is
 what the receipt prints, and the kitchen's is what the ticket prints.
@@ -105,11 +113,11 @@ nothing and rides along as wording on the dish's line.
 
 An order stores the answers it was given and not a link back to the list they came from, so a parked
 order has to be matched up with the dish's lists again before it can be changed. An options answer
-is stored as wording, all three names of the list and all three of the chosen label, and the till
+is stored as wording, all three names of the list and all three of the chosen option, and the till
 matches on the staff name of each. An extra is stored as the product that was picked, so the till
 finds its list by that product instead.
 
-Change the staff name of a list or a label, or turn a label off, and an options answer no longer
+Change the staff name of a list or an option, or turn an option off, and an options answer no longer
 matches. The till will not guess: it asks the operator to open that line and choose again before the
 order can be sent.
 

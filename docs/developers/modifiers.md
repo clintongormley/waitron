@@ -60,8 +60,12 @@ _Ordering and stored facts_ below.
 
 An **options list** must be answerable while it is active: an active list with no labels at all, or
 whose every label is withdrawn, is refused. `defaultLabelId` names a label of THIS list and is the
-one preselected when the list is asked; naming an unavailable label normalises it to null rather
-than refusing.
+one preselected when the list is asked. `parseOptionListInput` (`option-contract.ts`) keeps a named
+default that is available; where the body names none, or names an unavailable label, it returns the
+first available label as the default instead, and the write stores that. Of what the parser
+returns, only a list with no available label, which only an inactive list may be, has no default.
+Configuration transfer copies rows without going through that parser, so a stored null default is
+still possible, and a reader of `defaultLabelId` has to accept one.
 
 An **extras list** bounds how many picks it takes — `minPicks` 0 makes it optional, 1 or more makes
 it required, `maxPicks` null leaves it uncapped — and each item bounds its own product with

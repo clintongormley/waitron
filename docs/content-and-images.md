@@ -3,7 +3,7 @@
 You can add French text to a Spanish menu without changing the language of the dashboard
 or your receipts. Start by choosing the languages your content supports, then add translations as
 you need them. The image library uses the same choices as your products, sections and
-[modifiers](modifiers.md). An options list, each of its labels, and an extras list all participate
+[modifiers](modifiers.md). An options list, each of its options, and an extras list all participate
 in the default-language translation check. An entry on an extras list does not: it has no name of
 its own, and takes the product's.
 

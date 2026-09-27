@@ -166,7 +166,7 @@ export const en = {
   "modifiers.delete_preview_error": "The delete preview could not be loaded. Try again.",
   "modifiers.affected_products": "Affected products",
   "modifiers.affected_menus": "Affected menu items",
-  // Option lists (reusable label lists), the Options tab and its form. The three names are
+  // Option lists, the Options tab and its form. The three names are
   // deliberately different things: `name` is what staff see, `customer_name` is what the diner is
   // shown, `kitchen_name` is what the ticket prints (CLAUDE.md §3).
   "options.title": "Options",
