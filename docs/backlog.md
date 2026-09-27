@@ -4898,15 +4898,11 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   `#16181d`, and the dark theme's page background is `#101216` — a contrast ratio of 1.06 to 1,
   where 4.5 is the readable minimum. **Next action:** give the lockup a light and a dark variant, or
   paint the wordmark with a token by inlining the SVG instead of loading it as an image.
-- **The Sales and takings screen reads zero between midnight and the venue's business-day cutover,
-  while Overview shows the day's sales** (found 2026-09-16 during #378's run-it
-  verification; it predates that branch, which does not touch either screen). The screen seeds its
-  date range from `today()` (`apps/dashboard/src/date-utils.ts`), which is the UTC calendar day, and
-  hands that date straight to the daily close's `businessDay` parameter. But a sale rung at 01:00
-  still belongs to the PREVIOUS business day until the venue's cutover, and Overview asks the server
-  for the business day it computes itself (`currentBusinessDay`, `apps/server/src/report-api.ts`).
-  So the two screens disagree for those few hours every night. `today()`'s own comment flags the UTC choice. **Next action:** seed the range from the venue's business day, the same value
-  Overview renders, rather than from a UTC date.
+- **Sales and takings business-day range — DONE (C15).** The screen starts its reports with the
+  UTC date, then adopts the venue's business day from the Overview endpoint when it answers. If
+  Overview refuses or has not answered, the initial reports remain available. An operator's edited
+  range stays in place if Overview answers later. Browser regressions supply a different business
+  day at 01:00 and noon UTC, and cover a refusal, a pending read and a late answer.
 - **An imported configuration no longer carries "already offered a passkey"**: a configuration
   transfer strips `passkey_offered_at` on export and refuses a bundle that still carries it.
 - **The login screen's automatic passkey attempt can show "Something went wrong, try again" on load**

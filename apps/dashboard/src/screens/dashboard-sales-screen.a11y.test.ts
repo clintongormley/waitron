@@ -8,6 +8,7 @@ import type {
   DashboardApi,
   SalesPeriodDto,
 } from "../api/client.js";
+import { today } from "../date-utils.js";
 
 const close: DailyCloseDto = {
   businessDay: "2026-08-29",
@@ -133,6 +134,13 @@ const categories: CategorySalesDto = {
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
+    getSalesOverview: vi.fn().mockImplementation(async () => ({
+      businessDay: today(),
+      takings: { tenderTotal: "0.00", tipTotal: "0.00", grossTotal: "0.00" },
+      counts: { sales: 0, corrections: 0, voids: 0 },
+      openTables: { open: 0, total: 0 },
+      topSellers: [],
+    })),
     getDailyClose: vi.fn().mockResolvedValue(close),
     getSalesPeriod: vi.fn().mockResolvedValue(period),
     getCategorySales: vi.fn().mockResolvedValue(categories),

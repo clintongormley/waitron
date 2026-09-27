@@ -250,6 +250,7 @@ export class SalesScreen extends LitElement {
   @state() private printSentTo: string | null = null;
   @state() private printErrorKey: string | null = null;
   @state() private printersErrorKey: string | null = null;
+  #rangeChosen = false;
   /** Bumped on every new category question, so a print sent for an earlier one reports nothing. */
   #categoryGeneration = 0;
 
@@ -257,6 +258,7 @@ export class SalesScreen extends LitElement {
     super.connectedCallback();
     void this.#load();
     void this.#loadCategories();
+    void this.#loadInitialRange();
     void this.#printerQueries
       .watch("getReportPrinters", [], (value) => {
         this.printers = value;
@@ -272,6 +274,25 @@ export class SalesScreen extends LitElement {
 
   #rangeRunsBackwards(): boolean {
     return this.from > this.to;
+  }
+
+  async #loadInitialRange(): Promise<void> {
+    if (this.#rangeChosen) return;
+    try {
+      await this.#queries.watch("getSalesOverview", [], ({ businessDay }) => {
+        if (this.#rangeChosen) return;
+        this.#rangeChosen = true;
+        if (this.from === businessDay && this.to === businessDay) return;
+        this.from = businessDay;
+        this.to = businessDay;
+        void this.#load();
+        void this.#loadCategories();
+      });
+    } catch {
+      // The query's error callback has already recorded the code.
+    } finally {
+      this.#queries.release("getSalesOverview");
+    }
   }
 
   /** Cleared before the request, like `#load`, so a refusal never sits beside an older report. */
@@ -364,6 +385,7 @@ export class SalesScreen extends LitElement {
     // A cleared <input type=date> (value "") builds an Invalid Date → NaN; ignore it rather than
     // reloading with a bogus window.
     if (Number.isNaN(Date.parse(`${value}T00:00:00Z`))) return;
+    this.#rangeChosen = true;
     this[field] = value;
     void this.#load();
     void this.#loadCategories();
