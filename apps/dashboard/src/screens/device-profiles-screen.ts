@@ -574,7 +574,7 @@ export class DeviceProfilesScreen extends LitElement {
       ${
         menu.selectedRemoved
           ? html`<option value=${chosen!} .selected=${live(true)}>
-              ${t("device_profiles.home_removed").replace("{name}", chosen!)}
+              ${t("device_profiles.home_removed")}
             </option>`
           : nothing
       }`;

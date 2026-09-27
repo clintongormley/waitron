@@ -3881,6 +3881,93 @@ describe("home page", () => {
     await vi.waitFor(() => expect(homeEditor(el).busy).toBe(false));
   });
 
+  it("keeps editing the default when another layout is made the default", async () => {
+    const client = api();
+    const el = await mountHome(client);
+    expect(text(homeEditor(el).shadowRoot!.querySelector('[data-test="tiles-heading"]'))).toBe(
+      t("home.tiles_heading").replace("{name}", "Home"),
+    );
+    const [home, counter] = homeLayouts();
+    client.listHomeLayouts.mockResolvedValue([
+      { ...counter!, isDefault: true },
+      { ...home!, isDefault: false },
+    ]);
+    emit(homeEditor(el), "wt-layout-default", { layoutId: "l-counter" });
+    await vi.waitFor(() => expect(homeEditor(el).layouts[0]!.id).toBe("l-counter"));
+    await homeEditor(el).updateComplete;
+    expect(homeEditor(el).selected).toBe("l-home");
+    expect(text(homeEditor(el).shadowRoot!.querySelector('[data-test="tiles-heading"]'))).toBe(
+      t("home.tiles_heading").replace("{name}", "Home"),
+    );
+  });
+
+  it("reads the layouts again, rather than showing a move's answer, when a newer read changed the order while it was out", async () => {
+    const live = new LiveData();
+    const moved = deferred<SectionMember[]>();
+    const client = api({ liveData: live, moveHomeTile: vi.fn(() => moved.promise) });
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-tile-move", { layoutId: "l-home", memberId: "t-chips", to: 0 });
+    await vi.waitFor(() => expect(client.moveHomeTile).toHaveBeenCalled());
+    // Another change lands first: Drinks, Chips, Burger.
+    const newer = homeLayouts();
+    const [burger, drinks, chips] = newer[0]!.tiles;
+    newer[0]!.tiles = [
+      { ...drinks!, position: 0 },
+      { ...chips!, position: 1 },
+      { ...burger!, position: 2 },
+    ];
+    client.listHomeLayouts.mockResolvedValue(newer);
+    live.invalidate([{ type: "section_members" }]);
+    await vi.waitFor(() =>
+      expect(homeEditor(el).layouts[0]!.tiles.map(({ memberId }) => memberId)).toEqual([
+        "t-drinks",
+        "t-chips",
+        "t-burger",
+      ]),
+    );
+    const reads = client.listHomeLayouts.mock.calls.length;
+    moved.resolve([
+      productMember("t-chips", 0, "p-chips"),
+      productMember("t-burger", 1, "p-burger"),
+      sectionMember("t-drinks", 2, "s-drinks"),
+    ]);
+    await vi.waitFor(() => expect(client.listHomeLayouts.mock.calls.length).toBe(reads + 1));
+    expect(homeEditor(el).layouts[0]!.tiles.map(({ memberId }) => memberId)).toEqual([
+      "t-drinks",
+      "t-chips",
+      "t-burger",
+    ]);
+  });
+
+  it("counts a tile add as a write to the same layout as a move, so the move's answer waits for the add's read", async () => {
+    const moved = deferred<SectionMember[]>();
+    const added = deferred<SectionMember>();
+    const client = api({
+      moveHomeTile: vi.fn(() => moved.promise),
+      addHomeTile: vi.fn(() => added.promise),
+    });
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-tile-move", { layoutId: "l-home", memberId: "t-chips", to: 0 });
+    emit(homeEditor(el), "wt-tile-add", {
+      layoutId: "l-home",
+      ref: { kind: "product", productId: "p-lager" },
+    });
+    moved.resolve([
+      productMember("t-chips", 0, "p-chips"),
+      productMember("t-burger", 1, "p-burger"),
+      sectionMember("t-drinks", 2, "s-drinks"),
+    ]);
+    await vi.waitFor(() => expect(client.addHomeTile).toHaveBeenCalled());
+    // The move was not the layout's last write, so its answer is not shown over the add.
+    expect(homeEditor(el).layouts[0]!.tiles.map(({ memberId }) => memberId)).toEqual([
+      "t-burger",
+      "t-drinks",
+      "t-chips",
+    ]);
+    added.resolve(productMember("t-new", 3, "p-lager"));
+    await vi.waitFor(() => expect(client.listHomeLayouts).toHaveBeenCalledTimes(2));
+  });
+
   it("says why a new default was refused", async () => {
     const client = api({
       setDefaultHomeLayout: vi.fn().mockRejectedValue({ code: "menu.layout_not_found" }),

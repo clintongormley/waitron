@@ -1420,7 +1420,7 @@ export const en = {
   "device_profiles.home_error": "The home page layouts could not be loaded.",
   "device_profiles.home_default": "Default ({name})",
   "device_profiles.home_default_plain": "Default",
-  "device_profiles.home_removed": "{name} (removed)",
+  "device_profiles.home_removed": "A deleted layout (removed)",
   "device_profiles.home_removed_note": "The layout this profile chose for {menu} was deleted.",
   "device_profiles.home_reset": "Use the default",
   "device_profiles.home_saved": "Saved the choice for {menu}.",
@@ -3224,7 +3224,7 @@ export const es: Record<StringKey, string> = {
   "device_profiles.home_error": "No se han podido cargar las páginas de inicio.",
   "device_profiles.home_default": "Predeterminada ({name})",
   "device_profiles.home_default_plain": "Predeterminada",
-  "device_profiles.home_removed": "{name} (eliminada)",
+  "device_profiles.home_removed": "Una página de inicio eliminada (ya no existe)",
   "device_profiles.home_removed_note":
     "Se eliminó la página de inicio que este perfil eligió para {menu}.",
   "device_profiles.home_reset": "Usar la predeterminada",

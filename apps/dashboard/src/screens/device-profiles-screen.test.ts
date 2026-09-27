@@ -734,8 +734,10 @@ describe("device-profiles-screen home page layouts", () => {
     expect(options(el, "m-bar")).toEqual([
       ["", t("device_profiles.home_default").replace("{name}", "Bar home"), false],
       ["l-late", "Late", false],
-      ["l-old", t("device_profiles.home_removed").replace("{name}", "l-old"), true],
+      ["l-old", t("device_profiles.home_removed"), true],
     ]);
+    // A deleted layout's id means nothing to a person, so it is never shown.
+    expect(options(el, "m-bar")[2]![1]).not.toContain("l-old");
     expect(inHome(el, "[data-test=home-removed-m-bar]")!.textContent!.trim()).toBe(
       t("device_profiles.home_removed_note").replace("{menu}", "Bar"),
     );

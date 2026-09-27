@@ -1201,12 +1201,13 @@ export class MenusScreen extends LitElement {
     if (this.menuId === menuId && this.view === "home") await this.#watchHome(menuId);
   }
 
-  /** Adds, removes and a new default hold `busy` until the layouts are read again. */
-  #homeWrite(write: () => Promise<unknown>): void {
+  /** Adds, removes and a new default hold `busy` until the layouts are read again. A tile write's
+   * scope is its layout, as a move's is, so a move knows when another write to it waits behind. */
+  #homeWrite(scope: string, write: () => Promise<unknown>): void {
     const menuId = this.menuId!;
     this.homeError = null;
     this.busy = true;
-    this.#writes.run(`home:${menuId}`, async () => {
+    this.#writes.run(scope, async () => {
       try {
         await write();
       } catch (error) {
@@ -1219,19 +1220,37 @@ export class MenusScreen extends LitElement {
     });
   }
 
+  /** The layout's tile ids in the order shown. */
+  #tileOrder(layoutId: string): string[] {
+    const layout = this.homeLayouts?.find(({ id }) => id === layoutId);
+    return (layout?.tiles ?? []).map(({ memberId }) => memberId);
+  }
+
   /** Not `busy`, as for a move in the Structure tab: the keyboard user's focus stays on the row. The
-   * last queued move's answer is shown when it names exactly the tiles on screen. */
+   * last queued write's answer is shown only while the order on screen is the one the move was sent
+   * over, or the answer itself; any other order may be a newer change, so the layouts are read
+   * again. */
   #moveTile(layoutId: string, memberId: string, to: number): void {
     const menuId = this.menuId!;
     this.homeError = null;
+    let sentOver: string[] = [];
     this.#writes.move(
       layoutId,
-      () => this.api.moveHomeTile(layoutId, memberId, to),
+      () => {
+        sentOver = this.#tileOrder(layoutId);
+        return this.api.moveHomeTile(layoutId, memberId, to);
+      },
       async (ordered, last) => {
         if (!last || this.menuId !== menuId || this.homeLayouts === null) return;
         const layout = this.homeLayouts.find(({ id }) => id === layoutId);
         const tiles = new Map(layout?.tiles.map((tile) => [tile.memberId, tile]));
-        if (ordered.length !== tiles.size || ordered.some(({ id }) => !tiles.has(id))) {
+        const shown = this.#tileOrder(layoutId).join(" ");
+        const answer = ordered.map(({ id }) => id);
+        if (
+          ordered.length !== tiles.size ||
+          ordered.some(({ id }) => !tiles.has(id)) ||
+          (shown !== sentOver.join(" ") && shown !== answer.join(" "))
+        ) {
           await this.#rereadHome(menuId);
           return;
         }
@@ -1910,17 +1929,23 @@ export class MenusScreen extends LitElement {
         @wt-layout-default=${(event: CustomEvent<{ layoutId: string }>) => {
           const id = layoutId(event);
           const menuId = this.menuId!;
-          this.#homeWrite(() => this.api.setDefaultHomeLayout(menuId, id));
+          // The editor stays on the layout it shows, which would otherwise be whichever layout
+          // is the default, and so first, after the read.
+          this.homeLayoutId =
+            this.homeLayouts?.find(({ id: shown }) => shown === this.homeLayoutId)?.id ??
+            this.homeLayouts?.[0]?.id ??
+            "";
+          this.#homeWrite(`home:${menuId}`, () => this.api.setDefaultHomeLayout(menuId, id));
         }}
         @wt-tile-add=${(event: CustomEvent<{ layoutId: string; ref: MemberRef }>) => {
           event.stopPropagation();
           const { layoutId: id, ref } = event.detail;
-          this.#homeWrite(() => this.api.addHomeTile(id, ref));
+          this.#homeWrite(id, () => this.api.addHomeTile(id, ref));
         }}
         @wt-tile-remove=${(event: CustomEvent<{ layoutId: string; memberId: string }>) => {
           event.stopPropagation();
           const { layoutId: id, memberId } = event.detail;
-          this.#homeWrite(() => this.api.removeHomeTile(id, memberId));
+          this.#homeWrite(id, () => this.api.removeHomeTile(id, memberId));
         }}
         @wt-tile-move=${(
           event: CustomEvent<{ layoutId: string; memberId: string; to: number }>,
