@@ -29,8 +29,7 @@ export const billPaymentRefundState = enumType(["pending", "completed", "failed"
  * Its state moves only pending → received, pending → failed, and received → declined while no
  * tender names it; nothing else about the row ever changes, and it is never deleted. Those rules are
  * the `bill_payments_guard_update` and `bill_payments_no_delete` triggers
- * (`drizzle/0023_bill_payment_triggers.sql`, the guard replaced by
- * `drizzle/0025_bill_payment_attestation_guard.sql`).
+ * (`drizzle/0023_bill_payment_triggers.sql`).
  *
  * `requested_by` and `attested_by` are plain person ids with no key: `persons` is in
  * @waitron/identity's migration set.
@@ -54,8 +53,9 @@ export const billPayments = table(
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     receivedAt: tsString("received_at"),
     failedAt: tsString("failed_at"),
-    /** A manager who recorded the outcome from the provider's confirmation, with their note; set
-     * only together, and only with the move out of `pending` (the guard trigger). */
+    /** A manager who recorded the outcome from the provider's confirmation, with their note: set
+     * together, with a non-blank note, never on a pending row (`bill_payments_attestation_ck`), and
+     * only with the move out of `pending` (the guard trigger). */
     attestedBy: id("attested_by"),
     attestationNote: label("attestation_note"),
   },
@@ -71,7 +71,6 @@ export const billPayments = table(
       name: "bill_payments_till_fk",
     }),
     unique("bill_payments_submission_key").on(t.workingOrderId, t.submissionId),
-    index("bill_payments_working_order_idx").on(t.workingOrderId),
     check("bill_payments_kind_ck", enumCheck(t.kind)),
     check("bill_payments_method_ck", enumCheck(t.method)),
     check("bill_payments_state_ck", enumCheck(t.state)),
@@ -92,6 +91,10 @@ export const billPayments = table(
       sql`(${t.state} in ('received', 'declined')) = (${t.receivedAt} is not null)`,
     ),
     check("bill_payments_failed_at_ck", sql`(${t.state} = 'failed') = (${t.failedAt} is not null)`),
+    check(
+      "bill_payments_attestation_ck",
+      sql`(${t.attestedBy} is null) = (${t.attestationNote} is null) and (${t.attestedBy} is null or (${t.state} <> 'pending' and coalesce(length(trim(${t.attestationNote})), 0) > 0))`,
+    ),
   ],
 );
 
@@ -132,8 +135,7 @@ export const billPaymentLines = table(
  * one, the provider's refund id once, and the outcome — with an attestation when a manager records
  * it — may be written; after the outcome nothing changes, and a refund is never deleted. Those
  * rules are the `bill_payment_refunds_guard_update` and `bill_payment_refunds_no_delete` triggers
- * (`drizzle/0023_bill_payment_triggers.sql`, the first re-created by
- * `drizzle/0027_bill_payment_refund_guard.sql`).
+ * (`drizzle/0023_bill_payment_triggers.sql`).
  *
  * `authorized_by`, `requested_by` and `attested_by` are plain person ids, as `requested_by` is on
  * `bill_payments`.
@@ -176,7 +178,6 @@ export const billPaymentRefunds = table(
       name: "bill_payment_refunds_till_fk",
     }),
     unique("bill_payment_refunds_submission_key").on(t.billPaymentId, t.submissionId),
-    index("bill_payment_refunds_payment_idx").on(t.billPaymentId),
     check("bill_payment_refunds_state_ck", enumCheck(t.state)),
     check(
       "bill_payment_refunds_amounts_ck",

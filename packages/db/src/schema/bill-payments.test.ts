@@ -294,6 +294,26 @@ describe("bill payments: the three tables, their checks and their triggers", () 
         { state: "pending", failedAt: AT },
         "bill_payments_failed_at_ck",
       ],
+      [
+        "an attestation with no note",
+        { state: "failed", failedAt: AT, attestedBy: MANAGER },
+        "bill_payments_attestation_ck",
+      ],
+      [
+        "a note with no attester",
+        { state: "failed", failedAt: AT, attestationNote: "SumUp dashboard" },
+        "bill_payments_attestation_ck",
+      ],
+      [
+        "an attestation with a blank note",
+        { state: "failed", failedAt: AT, attestedBy: MANAGER, attestationNote: "  " },
+        "bill_payments_attestation_ck",
+      ],
+      [
+        "an attestation on a pending payment",
+        { attestedBy: MANAGER, attestationNote: "SumUp dashboard" },
+        "bill_payments_attestation_ck",
+      ],
     ] as const)("refuses %s", async (_name, overrides, check) => {
       const error = await captureError(() =>
         insertPayment(overrides as unknown as Partial<PaymentValues>),
@@ -309,6 +329,10 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       ["a received payment with its time", { state: "received", receivedAt: AT }],
       ["a declined payment keeps its received time", { state: "declined", receivedAt: AT }],
       ["a failed payment with its time", { state: "failed", failedAt: AT }],
+      [
+        "an attested failure",
+        { state: "failed", failedAt: AT, attestedBy: MANAGER, attestationNote: "SumUp dashboard" },
+      ],
     ] as const)("accepts %s (the control for the checks above)", async (_name, overrides) => {
       await insertPayment(overrides as unknown as Partial<PaymentValues>);
     });
@@ -455,17 +479,6 @@ describe("bill payments: the three tables, their checks and their triggers", () 
         `attested_by = '${MANAGER}', attestation_note = 'n'`,
       ],
       [
-        "with only the person",
-        {},
-        `state = 'failed', failed_at = '${AT}', attested_by = '${MANAGER}'`,
-      ],
-      ["with only the note", {}, `state = 'failed', failed_at = '${AT}', attestation_note = 'n'`],
-      [
-        "with an empty note",
-        {},
-        `state = 'failed', failed_at = '${AT}', attested_by = '${MANAGER}', attestation_note = '  '`,
-      ],
-      [
         "while declining a received payment",
         { state: "received", receivedAt: AT },
         `state = 'declined', attested_by = '${MANAGER}', attestation_note = 'n'`,
@@ -474,6 +487,20 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       const id = await insertPayment(start as Partial<PaymentValues>);
       const error = await captureError(() => updatePayment(id, set));
       expect(triggerRaised(error, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
+    });
+
+    // The guard lets the move out of `pending` through; the table's check refuses the shape.
+    it.each([
+      ["with only the person", `attested_by = '${MANAGER}'`],
+      ["with only the note", `attestation_note = 'n'`],
+      ["with an empty note", `attested_by = '${MANAGER}', attestation_note = '  '`],
+    ] as const)("refuses an attestation %s", async (_name, set) => {
+      const id = await insertPayment();
+      const error = await captureError(() =>
+        updatePayment(id, `state = 'failed', failed_at = '${AT}', ${set}`),
+      );
+      expect(checkFailed(error, "bill_payments_attestation_ck")).toBe(true);
+      expect(await paymentState(id)).toBe("pending");
     });
 
     it("refuses a change to an attestation once recorded", async () => {

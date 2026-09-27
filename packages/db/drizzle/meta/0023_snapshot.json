@@ -1,6 +1,6 @@
 {
-  "id": "2df9b601-0a24-4b9a-8724-dbd2e3325ac6",
-  "prevId": "0583d0bf-fca9-4166-9d26-322718f5c73e",
+  "id": "aa829201-921e-49f1-86e5-40a618d3d5c7",
+  "prevId": "51ebb8b5-f90c-4386-882e-9bb91bcdff37",
   "version": "6",
   "dialect": "sqlite",
   "tables": {
@@ -4278,6 +4278,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "refs_before_send": {
+          "name": "refs_before_send",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "attested_by": {
           "name": "attested_by",
           "type": "text",
@@ -4315,13 +4322,6 @@
         }
       },
       "indexes": {
-        "bill_payment_refunds_payment_idx": {
-          "name": "bill_payment_refunds_payment_idx",
-          "columns": [
-            "bill_payment_id"
-          ],
-          "isUnique": false
-        },
         "bill_payment_refunds_submission_key": {
           "name": "bill_payment_refunds_submission_key",
           "columns": [
@@ -4503,16 +4503,23 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "attested_by": {
+          "name": "attested_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "attestation_note": {
+          "name": "attestation_note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
-        "bill_payments_working_order_idx": {
-          "name": "bill_payments_working_order_idx",
-          "columns": [
-            "working_order_id"
-          ],
-          "isUnique": false
-        },
         "bill_payments_submission_key": {
           "name": "bill_payments_submission_key",
           "columns": [
@@ -4584,6 +4591,10 @@
         "bill_payments_failed_at_ck": {
           "name": "bill_payments_failed_at_ck",
           "value": "(\"bill_payments\".\"state\" = 'failed') = (\"bill_payments\".\"failed_at\" is not null)"
+        },
+        "bill_payments_attestation_ck": {
+          "name": "bill_payments_attestation_ck",
+          "value": "(\"bill_payments\".\"attested_by\" is null) = (\"bill_payments\".\"attestation_note\" is null) and (\"bill_payments\".\"attested_by\" is null or (\"bill_payments\".\"state\" <> 'pending' and coalesce(length(trim(\"bill_payments\".\"attestation_note\")), 0) > 0))"
         }
       }
     },

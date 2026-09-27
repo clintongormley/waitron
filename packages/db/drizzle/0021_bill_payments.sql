@@ -25,6 +25,7 @@ CREATE TABLE `bill_payment_refunds` (
 	`sent_at` text,
 	`send_count` integer DEFAULT 0 NOT NULL,
 	`provider_refund_ref` text,
+	`refs_before_send` text,
 	`attested_by` text,
 	`attestation_note` text,
 	`created_at` text NOT NULL,
@@ -40,7 +41,6 @@ CREATE TABLE `bill_payment_refunds` (
 	CONSTRAINT "bill_payment_refunds_attestation_ck" CHECK(("bill_payment_refunds"."attested_by" is null) = ("bill_payment_refunds"."attestation_note" is null) and ("bill_payment_refunds"."attested_by" is null or "bill_payment_refunds"."state" <> 'pending'))
 );
 --> statement-breakpoint
-CREATE INDEX `bill_payment_refunds_payment_idx` ON `bill_payment_refunds` (`bill_payment_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `bill_payment_refunds_submission_key` ON `bill_payment_refunds` (`bill_payment_id`,`submission_id`);--> statement-breakpoint
 CREATE TABLE `bill_payments` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -59,6 +59,8 @@ CREATE TABLE `bill_payments` (
 	`created_at` text NOT NULL,
 	`received_at` text,
 	`failed_at` text,
+	`attested_by` text,
+	`attestation_note` text,
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`till_id`) REFERENCES `tills`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "bill_payments_kind_ck" CHECK("bill_payments"."kind" in ('items', 'contribution', 'share')),
@@ -68,10 +70,10 @@ CREATE TABLE `bill_payments` (
 	CONSTRAINT "bill_payments_amounts_ck" CHECK("bill_payments"."applied" >= 0 and "bill_payments"."tip" >= 0 and "bill_payments"."applied" + "bill_payments"."tip" > 0),
 	CONSTRAINT "bill_payments_tendered_ck" CHECK(("bill_payments"."method" = 'cash') = ("bill_payments"."tendered" is not null) and ("bill_payments"."tendered" is null or "bill_payments"."tendered" >= "bill_payments"."applied" + "bill_payments"."tip")),
 	CONSTRAINT "bill_payments_received_at_ck" CHECK(("bill_payments"."state" in ('received', 'declined')) = ("bill_payments"."received_at" is not null)),
-	CONSTRAINT "bill_payments_failed_at_ck" CHECK(("bill_payments"."state" = 'failed') = ("bill_payments"."failed_at" is not null))
+	CONSTRAINT "bill_payments_failed_at_ck" CHECK(("bill_payments"."state" = 'failed') = ("bill_payments"."failed_at" is not null)),
+	CONSTRAINT "bill_payments_attestation_ck" CHECK(("bill_payments"."attested_by" is null) = ("bill_payments"."attestation_note" is null) and ("bill_payments"."attested_by" is null or ("bill_payments"."state" <> 'pending' and coalesce(length(trim("bill_payments"."attestation_note")), 0) > 0)))
 );
 --> statement-breakpoint
-CREATE INDEX `bill_payments_working_order_idx` ON `bill_payments` (`working_order_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `bill_payments_submission_key` ON `bill_payments` (`working_order_id`,`submission_id`);--> statement-breakpoint
 ALTER TABLE `drawer_opens` ADD `bill_payment_id` text REFERENCES bill_payments(id);--> statement-breakpoint
 ALTER TABLE `tenders` ADD `bill_payment_id` text REFERENCES bill_payments(id);--> statement-breakpoint

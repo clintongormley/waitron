@@ -1,1 +1,0 @@
-ALTER TABLE `bill_payment_refunds` ADD `refs_before_send` text;

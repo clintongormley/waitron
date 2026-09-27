@@ -9,6 +9,9 @@
 -- A bill payment moves only pending → received, pending → failed, and received → declined while no
 -- tender names it; an update that changes nothing is let through. `received_at` and `failed_at`
 -- follow the state by the table's own checks, so only a move of one already set is refused here.
+-- A manager's attestation may arrive only with the move out of `pending`, and never changes after;
+-- its shape (both columns or neither, a non-blank note, never on a pending row) is the table's
+-- `bill_payments_attestation_ck`.
 CREATE TRIGGER bill_payments_guard_update
 BEFORE UPDATE ON bill_payments
 FOR EACH ROW
@@ -31,10 +34,14 @@ BEGIN
     AND (
       (new.state IS old.state
         AND new.received_at IS old.received_at
-        AND new.failed_at IS old.failed_at)
+        AND new.failed_at IS old.failed_at
+        AND new.attested_by IS old.attested_by
+        AND new.attestation_note IS old.attestation_note)
       OR (old.state = 'pending' AND new.state IN ('received', 'failed'))
       OR (old.state = 'received' AND new.state = 'declined'
         AND new.received_at IS old.received_at
+        AND new.attested_by IS old.attested_by
+        AND new.attestation_note IS old.attestation_note
         AND NOT exists (SELECT 1 FROM tenders WHERE bill_payment_id = old.id))
     )
   );
@@ -47,7 +54,8 @@ BEGIN
   SELECT raise(abort, 'a bill payment is never deleted');
 END;
 --> statement-breakpoint
--- While a refund is pending: `sent_at` may be set once, `send_count` raised by one per send, the
+-- While a refund is pending: `sent_at` may be set once, `refs_before_send` written only while
+-- `sent_at` is unset (with the first send's stamp), `send_count` raised by one per send, the
 -- provider's refund id set once, and the state moved to `completed` or `failed`, with the
 -- attestation the table's check allows only alongside an outcome. After the outcome, an update that
 -- changes nothing is the only one let through.
@@ -73,12 +81,14 @@ BEGIN
         AND new.sent_at IS old.sent_at
         AND new.send_count IS old.send_count
         AND new.provider_refund_ref IS old.provider_refund_ref
+        AND new.refs_before_send IS old.refs_before_send
         AND new.attested_by IS old.attested_by
         AND new.attestation_note IS old.attestation_note
         AND new.completed_at IS old.completed_at
         AND new.failed_at IS old.failed_at)
       OR (old.state = 'pending'
         AND (old.sent_at IS NULL OR new.sent_at IS old.sent_at)
+        AND (old.sent_at IS NULL OR new.refs_before_send IS old.refs_before_send)
         AND new.send_count IN (old.send_count, old.send_count + 1)
         AND (old.provider_refund_ref IS NULL OR new.provider_refund_ref IS old.provider_refund_ref))
     )
