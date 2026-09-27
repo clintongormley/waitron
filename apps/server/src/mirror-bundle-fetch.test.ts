@@ -156,6 +156,86 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
   });
 
+  it.each([
+    ["a number", 42],
+    ["a string", "bundle"],
+    ["an array", [SAMPLE_BUNDLE]],
+    ["a missing required field", { ...SAMPLE_BUNDLE, tenant: undefined }],
+    [
+      "a wrong nested field type",
+      { ...SAMPLE_BUNDLE, designated: { ...SAMPLE_BUNDLE.designated, nodeId: 42 } },
+    ],
+    [
+      "a wrong series entry type",
+      {
+        ...SAMPLE_BUNDLE,
+        reservedIdentity: {
+          ...SAMPLE_BUNDLE.reservedIdentity,
+          series: [{ code: 42, purpose: "standard" }],
+        },
+      },
+    ],
+    ["a wrong module override type", { ...SAMPLE_BUNDLE, moduleOverrides: { media: "yes" } }],
+    ["a numeric CA certificate", { ...SAMPLE_BUNDLE, boxCaPem: 42 }],
+    ["a null account key", { ...SAMPLE_BUNDLE, accountKey: null }],
+    ["an unknown environment", { ...SAMPLE_BUNDLE, environment: "staging" }],
+    ["a numeric optional WireGuard key", { ...SAMPLE_BUNDLE, wireguardPublicKey: 42 }],
+    ["a null designated identity", { ...SAMPLE_BUNDLE, designated: null }],
+    [
+      "a numeric tenant country",
+      { ...SAMPLE_BUNDLE, tenant: { ...SAMPLE_BUNDLE.tenant, country: 42 } },
+    ],
+    ["a null primary node", { ...SAMPLE_BUNDLE, primaryNode: null }],
+    [
+      "a numeric primary node name",
+      { ...SAMPLE_BUNDLE, primaryNode: { ...SAMPLE_BUNDLE.primaryNode, name: 42 } },
+    ],
+    [
+      "a numeric filing module",
+      { ...SAMPLE_BUNDLE, primaryNode: { ...SAMPLE_BUNDLE.primaryNode, filingModule: 42 } },
+    ],
+    [
+      "a numeric tax module",
+      { ...SAMPLE_BUNDLE, primaryNode: { ...SAMPLE_BUNDLE.primaryNode, taxModule: 42 } },
+    ],
+    ["a null reserved identity", { ...SAMPLE_BUNDLE, reservedIdentity: null }],
+    [
+      "an array of module reservations",
+      { ...SAMPLE_BUNDLE, reservedIdentity: { ...SAMPLE_BUNDLE.reservedIdentity, modules: [] } },
+    ],
+    [
+      "a non-array series",
+      { ...SAMPLE_BUNDLE, reservedIdentity: { ...SAMPLE_BUNDLE.reservedIdentity, series: {} } },
+    ],
+    [
+      "a null endorsement",
+      {
+        ...SAMPLE_BUNDLE,
+        reservedIdentity: { ...SAMPLE_BUNDLE.reservedIdentity, endorsement: null },
+      },
+    ],
+    [
+      "a numeric endorsement signature",
+      {
+        ...SAMPLE_BUNDLE,
+        reservedIdentity: {
+          ...SAMPLE_BUNDLE.reservedIdentity,
+          endorsement: { ...SAMPLE_BUNDLE.reservedIdentity.endorsement, signature: 42 },
+        },
+      },
+    ],
+    ["null module overrides", { ...SAMPLE_BUNDLE, moduleOverrides: null }],
+  ])("maps 200 JSON with %s to mirror.bundle_fetch_failed", async (_shape, body) => {
+    const app = new Hono();
+    app.post("/management-api/mirror-bundle", (c: Context) =>
+      c.body(JSON.stringify(body), 200, { "content-type": "application/json" }),
+    );
+    const base = await startServer(app);
+
+    const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
+    expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
+  });
+
   it("maps a network failure (nothing listening) to mirror.bundle_fetch_failed", async () => {
     // A port just closed refuses the connect fast and deterministically.
     const app = new Hono();

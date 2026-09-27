@@ -3952,6 +3952,20 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       tenant: { country: "ES", taxId: "80000001K" },
       primaryNode: { name: "Caja 1", filingModule: "fiscal-verifactu", taxModule: null },
       environment: "preproduction",
+      boxHostname: "waitron.local",
+      boxCaPem: "fixture-ca",
+      relayUrl: "https://relay.example",
+      accountKey: Buffer.alloc(32, 9).toString("base64"),
+      reservedIdentity: {
+        modules: {},
+        series: [],
+        endorsement: {
+          nodeId: "66666666-6666-4666-8666-666666666666",
+          publicKey: "fixture-key",
+          endorsedBy: "44444444-4444-4444-8444-444444444444",
+          signature: "fixture-signature",
+        },
+      },
       moduleOverrides: {},
     };
     const primary = createHttpServer((_req, res) => {
