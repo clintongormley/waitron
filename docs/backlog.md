@@ -3438,14 +3438,15 @@ image constraints under *Detail → Box image*.
     **`fetchPeerMembershipDocument` throws on a 200 whose body is JSON `null`** — DONE (#753): it
     now answers `null`, as it already did for a body that does not parse, so boot carries on
     (`apps/server/src/membership-reconcile.ts`; the case is in `membership-reconcile.test.ts`).
+    **`fetchMirrorBundle` refuses a 200 JSON `null`** — DONE (A89):
+    `apps/server/src/mirror-bundle-fetch.test.ts` sends that response through the real HTTP
+    fetcher and checks for `mirror.bundle_fetch_failed`; the ordinary bundle case still passes.
+    **Still open** (read, not run): the fetcher casts any other parseable JSON value to
+    `MirrorBundle` without checking its shape (`apps/server/src/mirror-bundle-fetch.ts`); the
+    downstream refusal for such a value has not been checked.
     **Still open** (read, not run): the boot-time fetch is given only the URL (item (ii) of **Still
     open after A63** in the #657 item above), and boot never reads the `superseded` that
     `reconcileMembershipOnBoot` returns (`apps/server/src/boot.ts`, where it is called);
-    `fetchMirrorBundle` (`apps/server/src/mirror-bundle-fetch.ts`) has the same shape, found by
-    #753's review — a 200 whose body is JSON `null` is returned as the bundle, and
-    `adoptFromPrimary` (`apps/server/src/adopt.ts`) then fails with a plain `TypeError` when it
-    destructures it, rather than the `mirror.bundle_fetch_failed` that `fetchMirrorBundle`'s doc
-    comment promises for any failure;
     `shouldFenceRestart` (`membership-fence.ts`) has no caller outside its test (`git grep`);
     `device-api.ts`'s ticket-item advance route does not enforce the `act-as-kds` capability, and
     the obstacle its comment gave (null profile ids) no longer exists; `enrol-rate-limit.ts` keeps

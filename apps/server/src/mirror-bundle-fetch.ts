@@ -10,8 +10,9 @@ import "./errors.js";
  * Only the PUBLIC half of the standby's key travels; the private key never leaves the mirror.
  * `standby.contactUrl` may be `""`: a standby that advertises nothing is still a member.
  *
- * Any failure (network, non-2xx, unparseable body) is `mirror.bundle_fetch_failed`; the upstream
- * error is discarded, because its message can embed a URL or connection detail.
+ * A network error, non-2xx response, unparseable body, or JSON null is
+ * `mirror.bundle_fetch_failed`; the refusal carries no upstream detail that could include a URL or
+ * connection information.
  */
 export async function fetchMirrorBundle(
   primaryUrl: string,
@@ -42,9 +43,12 @@ export async function fetchMirrorBundle(
 
   if (!response.ok) throw new AppError("mirror.bundle_fetch_failed", {});
 
+  let bundle: unknown;
   try {
-    return (await response.json()) as MirrorBundle;
+    bundle = await response.json();
   } catch {
     throw new AppError("mirror.bundle_fetch_failed", {});
   }
+  if (bundle === null) throw new AppError("mirror.bundle_fetch_failed", {});
+  return bundle as MirrorBundle;
 }
