@@ -1554,7 +1554,53 @@ it("puts a missing-translation refusal beside the name field for the language it
 
   api.createCategory.mockRejectedValueOnce({ code: "content.translation_required" });
   submitCategory(el, { en: "New" });
-  await vi.waitFor(() => expect(form.fieldErrors).toEqual({ save: message }));
+  await vi.waitFor(() => expect(form.fieldErrors).toEqual({ _form: message }));
+});
+
+// `categoryInput` in apps/server/src/catalogue-api.ts refuses a malformed parent as
+// `management.request_invalid` with `field: "parentId"`.
+it("puts a refused parent beside the parent field and in the form summary", async () => {
+  setLocale("en-GB");
+  const { el, api } = await mount();
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="create-category"]')!.click();
+  await el.updateComplete;
+  const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
+  api.createCategory.mockRejectedValueOnce({
+    code: "management.request_invalid",
+    params: { field: "parentId" },
+  });
+  submitCategory(el, { en: "New" });
+  const combo = form.shadowRoot!.querySelector("wt-combobox[name=category-parent]")!;
+  const besideParent = () => {
+    const errorId = combo.shadowRoot!.querySelector(".trigger")!.getAttribute("aria-describedby");
+    return errorId ? combo.shadowRoot!.getElementById(errorId)?.textContent?.trim() : undefined;
+  };
+  await vi.waitFor(() => expect(besideParent()).toBe("Check the form and try again"));
+  const summary = form.shadowRoot!.querySelector("wt-form-error-summary")!;
+  await summary.updateComplete;
+  expect(
+    [...summary.shadowRoot!.querySelectorAll("li")].map((item) => item.textContent!.trim()),
+  ).toEqual(["Check the form and try again"]);
+  expect(form.open).toBe(true);
+});
+
+it("puts a refused name beside the default language's name field", async () => {
+  setLocale("en-GB");
+  const { el, api } = await mount();
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="create-category"]')!.click();
+  await el.updateComplete;
+  const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
+  api.createCategory.mockRejectedValueOnce({
+    code: "management.request_invalid",
+    params: { field: "name" },
+  });
+  submitCategory(el, { en: "New" });
+  const field = (locale: string) =>
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      `wt-input[name="category-name-${locale}"]`,
+    )!.error;
+  await vi.waitFor(() => expect(field("en")).toBe("Check the form and try again"));
+  expect(field("fr")).toBe("");
 });
 
 it("sends one create when the editor submits twice before the first save settles", async () => {

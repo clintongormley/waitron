@@ -1322,13 +1322,8 @@ What Task 11 left open:
   form.** `#save` in `apps/dashboard/src/screens/units-screen.ts` places every refusal with
   `unitRefusalErrors`, beside its field or in the form's summary, and no longer in the banner behind
   the modal.
-- **The Categories screen maps a refused category save to form fields by hand.** `#save` in
-  `apps/dashboard/src/screens/categories-screen.ts` does by hand, less completely, what
-  `categoryRefusalErrors` (`apps/dashboard/src/widgets/category-form.ts`) does: it does not place a
-  `management.request_invalid` beside the field that refusal names, and it keys a refusal naming no
-  field `save` where the mapper uses `_form` (both show in the form's summary alone). **Next
-  action:** call `categoryRefusalErrors` there; the case expecting `{ save: … }` in
-  `apps/dashboard/src/screens/categories-screen.test.ts` changes with it.
+- **DONE (lane C's C23): the Categories screen places a refused save through
+  `categoryRefusalErrors`.**
 - **`wt-tabs` shares the `wt-change` event name with every control a panel slots in, and five
   screens now carry the same `event.target !== event.currentTarget` guard against it**
   (`alerts-screen.ts`, `printers-screen.ts`, `profile-screen.ts`, `venue-operations-screen.ts`, and

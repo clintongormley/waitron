@@ -24,7 +24,11 @@ import type {
 import { currentLocale, t } from "../i18n/t.js";
 import { codeOf, codeMessage } from "../i18n/codes.js";
 import { dashboardPath } from "../navigation.js";
-import { categoryPath, categoryWithDescendants } from "../widgets/category-form.js";
+import {
+  categoryPath,
+  categoryRefusalErrors,
+  categoryWithDescendants,
+} from "../widgets/category-form.js";
 import { categoryField, labelsText } from "../widgets/classification-fields.js";
 import "./labels-panel.js";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -264,20 +268,7 @@ export class CategoriesScreen extends LitElement {
       else await this.api.createCategory(event.detail.value);
       this.editorOpen = false;
     } catch (error) {
-      this.saveError = this.#error(error);
-      const code = codeOf(error);
-      const language = (error as { params?: { language?: string } } | null)?.params?.language;
-      const field =
-        code === "category.parent_cycle"
-          ? "parent"
-          : code === "category.image_not_found"
-            ? "image"
-            : code === "category.color_invalid"
-              ? "color"
-              : code === "content.translation_required" && language
-                ? `name-${language}`
-                : "save";
-      this.fieldErrors = { [field]: this.saveError };
+      this.fieldErrors = categoryRefusalErrors(error, this.languages.defaultLanguage);
       return;
     } finally {
       this.busy = false;
