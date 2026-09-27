@@ -33,8 +33,9 @@ import {
 import { deriveExtraSelections } from "../state/held-extras.js";
 import { deriveOptionSelections, sameOptionSelections } from "../state/held-options.js";
 import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "../state/order-line.js";
-import { HANDHELD_COLUMNS, TILL_COLUMNS } from "../widgets/menu-browser.js";
+import { HANDHELD_COLUMNS, TILL_COLUMNS } from "@waitron/catalogue/src/home-layout-columns.js";
 import "../widgets/basket.js";
+import "../widgets/menu-browser.js";
 import "../widgets/tender-pay.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-input.js";

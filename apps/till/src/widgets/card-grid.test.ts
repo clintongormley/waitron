@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { WorkingOrderStore } from "../state/working-order.js";
 import type { TabDef } from "../layout.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, servedMenus } from "./test-helpers.js";
 import "./card-grid.js";
 import type { TillCardGrid } from "./card-grid.js";
 import type { TillMenuBrowser } from "./menu-browser.js";
@@ -495,45 +495,24 @@ const steak = dish("steak", "Steak", "lunch", { diet: meaty });
 const wine = dish("wine", "Wine", "drinks", { diet: vegan });
 const beer = dish("beer", "Beer", "drinks", { diet: vegan });
 
-function served(id: string, products: TillProduct[], chosen: string, isDefault = false) {
-  const product = (each: TillProduct) =>
-    ({ kind: "product", menuItemId: each.menuItemId!, productId: each.productId! }) as const;
-  return {
-    id,
-    name: id,
-    isDefault,
-    versionId: `${id}-v1`,
-    // The meat dish sits alone in its own section, so a lens that hides it empties the section.
-    structure: {
-      members: [
-        product(products[0]!),
-        {
-          kind: "section",
-          sectionId: `${id}-mains`,
-          internalName: `${id} mains`,
-          names: { en: `${id} mains` },
-          image: null,
-          color: null,
-          members: [product(products[1]!)],
-        },
-      ],
-    },
-    homeLayouts: [
-      { id: `${id}-default`, name: "Default", tiles: [] },
-      {
-        id: `${id}-bar`,
-        name: "Bar",
-        tiles: products.map((each) => ({ kind: "product", productId: each.productId! }) as const),
-      },
-    ],
-    defaultHomeLayoutId: `${id}-default`,
-    homeLayoutId: chosen,
-    layoutFallback: null,
-  } satisfies TillZoneMenu;
+/** Each menu has a layout of shortcuts to both its dishes; `chosen` picks it over the default. */
+function served(id: string, products: TillProduct[], chosen: boolean, isDefault = false) {
+  // The meat dish sits alone in its own section, so a lens that hides it empties the section.
+  const [first, second] = products.map((each) => ({
+    id: each.menuItemId!,
+    menuId: id,
+    productId: each.productId!,
+  }));
+  const menu = { id, name: id, isDefault, versionId: `${id}-v1` };
+  return servedMenus(
+    [chosen ? { ...menu, homeLayoutId: `${id}-shortcuts` } : menu],
+    [first!, { ...second!, section: `${id} mains` }],
+    { shortcuts: true },
+  )[0]! satisfies TillZoneMenu;
 }
 
-const lunchMenu = served("lunch", [salad, steak], "lunch-bar", true);
-const drinksMenu = served("drinks", [wine, beer], "drinks-default");
+const lunchMenu = served("lunch", [salad, steak], true, true);
+const drinksMenu = served("drinks", [wine, beer], false);
 
 const productCard = (config: Record<string, unknown> = {}): TabDef => ({
   key: "sell",

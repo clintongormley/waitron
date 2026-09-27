@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setContentLanguages } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import type { DocumentMember, DocumentTile } from "@waitron/catalogue/src/menu-document-types.js";
@@ -26,6 +26,7 @@ function product(key: string, name: string, extra: Partial<TillProduct> = {}): T
     available: true,
     name,
     customerName: { es: `${name} carta` },
+    kitchenName: `${name} KDS`,
     unit: EACH,
     unitPrice: "1.50",
     vatClass: "general",
@@ -418,13 +419,23 @@ describe("till-menu-browser", () => {
       expect(icon("Platos principales").height).toBe(icon("Bar").height);
     });
 
-    it("keeps the responsive grid when no column count is given", async () => {
-      const { el } = await mount();
+    it("shows a till's six columns when no column count is given", async () => {
+      const { el, host } = await mount();
+      await widen(host, 1280);
       const grids = [...root(el).querySelectorAll<HTMLElement>(".grid")];
       expect(grids).toHaveLength(2);
-      for (const grid of grids) {
-        expect(grid.style.gridTemplateColumns).toBe("");
-      }
+      for (const grid of grids) expect(tracks(grid)).toBe(6);
+    });
+
+    it("shows a product's staff name, never its customer or kitchen name, on a tile and a search result", async () => {
+      const { el } = await mount();
+      const cafeName = (button: Button) => button.querySelector(".name")!.textContent!.trim();
+      expect(cafeName(entries(el, "shortcuts")[0]!)).toBe("Café");
+      await search(el, "caf");
+      expect(entries(el, "results").map(cafeName)).toEqual(["Café"]);
+      expect(root(el).querySelector('[data-region="results"]')!.textContent).not.toMatch(
+        /carta|KDS/,
+      );
     });
   });
 
@@ -569,6 +580,26 @@ describe("till-menu-browser", () => {
       const { el } = await mount();
       await search(el, "JAMON");
       expect(names(entries(el, "results"))).toEqual(["Jamón"]);
+    });
+
+    it("folds the product names once for a menu's offers, and only the query at each keystroke", async () => {
+      const { el } = await mount();
+      await search(el, "c");
+      const normalize = vi.spyOn(String.prototype, "normalize");
+      try {
+        await search(el, "co");
+        await search(el, "col");
+        expect(normalize).toHaveBeenCalledTimes(2);
+        expect(names(entries(el, "results"))).toEqual(["Cola"]);
+        normalize.mockClear();
+        el.products = PRODUCTS.filter((each) => each !== cola);
+        await el.updateComplete;
+        // The query, then the eight products the menu's structure reaches among the new offers.
+        expect(normalize).toHaveBeenCalledTimes(9);
+        expect(entries(el, "results")).toEqual([]);
+      } finally {
+        normalize.mockRestore();
+      }
     });
 
     it("says so when nothing matches", async () => {

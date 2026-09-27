@@ -14,6 +14,7 @@ function product(key: string, name: string, available = true): TillProduct {
     available,
     name,
     customerName: { es: `${name} carta` },
+    kitchenName: `${name} KDS`,
     pricingUnit: "each",
     unitPrice: "1.50",
     vatClass: "general",
@@ -113,6 +114,9 @@ describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector('[data-region="results"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-region="results"] .name')!.textContent!.trim()).toBe(
+      "Burger",
+    );
     expect(
       el.shadowRoot!.querySelector('[data-region="results"] .sold-out')!.textContent!.trim(),
     ).toBe("Sold out");

@@ -1,5 +1,10 @@
 import { afterEach, describe, it } from "vitest";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  expectNoA11yViolations,
+  mountWidget,
+  servedMenus,
+} from "../widgets/test-helpers.js";
 import "./till-table-order-screen.js";
 import type { TableServiceStatus, TillTableOrderScreen } from "./till-table-order-screen.js";
 import type {
@@ -30,19 +35,10 @@ const products: TillProduct[] = [
   },
 ];
 
-const menus: TillZoneMenu[] = [
-  {
-    id: "menu-carta",
-    name: "Carta",
-    isDefault: true,
-    versionId: "v1",
-    structure: { members: [{ kind: "product", menuItemId: "offer-cafe", productId: "cafe" }] },
-    homeLayouts: [{ id: "home", name: "Home", tiles: [] }],
-    defaultHomeLayoutId: "home",
-    homeLayoutId: "home",
-    layoutFallback: null,
-  },
-];
+const menus: TillZoneMenu[] = servedMenus(
+  [{ id: "menu-carta", name: "Carta", isDefault: true, versionId: "v1" }],
+  [{ id: "offer-cafe", menuId: "menu-carta", productId: "cafe" }],
+);
 
 const lines: TabLine[] = [
   {

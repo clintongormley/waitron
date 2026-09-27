@@ -1,8 +1,9 @@
 import { type DietPredicate, memoVisibleProducts, shownMenu } from "../menu-filter.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { HANDHELD_COLUMNS, TILL_COLUMNS } from "./menu-browser.js";
+import { HANDHELD_COLUMNS, TILL_COLUMNS } from "@waitron/catalogue/src/home-layout-columns.js";
 // Side-effect imports: registering each widget element so the switch below can render its tag.
+import "./menu-browser.js";
 import "./basket.js";
 import "./total.js";
 import "./tender-pay.js";

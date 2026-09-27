@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, servedMenus } from "../widgets/test-helpers.js";
 import { TillCounterScreen } from "./till-counter-screen.js";
 import type { TabDef } from "../layout.js";
 import { WorkingOrderStore } from "../state/working-order.js";
@@ -310,19 +310,10 @@ describe("till-counter-screen", () => {
   });
 
   it("hands the card grid the menus, the selected menu, the diet lens and the form factor", async () => {
-    const menus: TillZoneMenu[] = [
-      {
-        id: "lunch",
-        name: "Lunch",
-        isDefault: true,
-        versionId: "v1",
-        structure: { members: [] },
-        homeLayouts: [{ id: "home", name: "Home", tiles: [] }],
-        defaultHomeLayoutId: "home",
-        homeLayoutId: "home",
-        layoutFallback: null,
-      },
-    ];
+    const menus: TillZoneMenu[] = servedMenus(
+      [{ id: "lunch", name: "Lunch", isDefault: true, versionId: "v1" }],
+      [],
+    );
     const { el } = await mount({
       menus,
       selectedMenuId: "lunch",

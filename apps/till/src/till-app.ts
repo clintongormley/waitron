@@ -1,4 +1,4 @@
-import type { DietPredicate } from "./menu-filter.js";
+import { defaultMenu, type DietPredicate } from "./menu-filter.js";
 import { isTillDestination, type TillDestination, tillPath } from "./navigation.js";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -70,6 +70,11 @@ import { kindOfFormFactor } from "./layout.js";
 import type { CanvasDef, CapabilityFlag, DeviceKind, ReceiptConfig, TabDef } from "./layout.js";
 import { SessionActivity } from "./session-activity.js";
 import { MenuStatePoll } from "./state/menu-state-poll.js";
+import {
+  RemovedLayoutReports,
+  withPolledLayouts,
+  type RemovedLayout,
+} from "./state/home-layout-notices.js";
 import {
   type BasketRefresh,
   type BlockReason,
@@ -307,31 +312,6 @@ function versionsMoved(loaded: readonly TillZoneMenu[], polled: MenuState["menus
       (menu) => loaded.find((own) => own.id === menu.menuId)?.versionId !== menu.versionId,
     )
   );
-}
-
-/** The loaded menus with a poll's layout answers applied: a menu whose layout changed on the version
- * the till holds becomes a new object, which is what the menu browser watches for. A menu the poll
- * names at another version waits for its reload. The same array comes back when nothing changed. */
-function withPolledLayouts(loaded: TillZoneMenu[], polled: MenuState["menus"]): TillZoneMenu[] {
-  let changed = false;
-  const menus = loaded.map((menu) => {
-    const answer = polled.find((each) => each.menuId === menu.id);
-    if (
-      answer === undefined ||
-      answer.versionId !== menu.versionId ||
-      (answer.homeLayoutId === menu.homeLayoutId && answer.layoutFallback === menu.layoutFallback)
-    )
-      return menu;
-    changed = true;
-    return { ...menu, homeLayoutId: answer.homeLayoutId, layoutFallback: answer.layoutFallback };
-  });
-  return changed ? menus : loaded;
-}
-
-/** A menu whose chosen home layout was removed, and that layout's name when the till showed it. */
-interface RemovedLayout {
-  menuName: string;
-  layoutName?: string;
 }
 
 /** The offers a zone sells now: as loaded, or with the latest poll's unavailable set applied. */
@@ -642,10 +622,7 @@ export class TillApp extends LitElement {
   @state() private tableMenus: TillZoneMenu[] = [];
   /** Removed home layouts not yet dismissed. */
   @state() private removedLayouts: RemovedLayout[] = [];
-  /** Per menu, the removed layouts already reported, each once per page load: the server repeats the
-   * reason on every answer until a manager changes the choice. An empty id stands for a removal the
-   * till cannot name because it never showed that layout. */
-  readonly #removedLayoutReported = new Map<string, Set<string>>();
+  readonly #removedLayoutReports = new RemovedLayoutReports();
   /** What {@link products} and {@link tableProducts} are built from, so a poll's unavailable set
    * applies without reloading them. */
   readonly #counterOffers = new ZoneOfferIndex();
@@ -1233,9 +1210,8 @@ export class TillApp extends LitElement {
     return this.stations.find((station) => station.isDefault)?.id;
   }
 
-  /** The zone's default menu, or its first menu when none is marked default. */
   #defaultCatalogueId(menus: TillZoneMenu[] = this.menus): string {
-    return menus.find((menu) => menu.isDefault)?.id ?? menus[0]?.id ?? "";
+    return defaultMenu(menus)?.id ?? "";
   }
 
   /** Menu selection filters the product grid without changing the working order or browser history. */
@@ -1330,25 +1306,8 @@ export class TillApp extends LitElement {
     if (loaded) this.#markRounds(true);
   }
 
-  /** Names a removed layout from `shown`, the menus the till was showing, when it showed that layout. */
   #reportRemovedLayouts(shown: readonly TillZoneMenu[], next: readonly TillZoneMenu[]): void {
-    const found: RemovedLayout[] = [];
-    for (const menu of next) {
-      if (menu.layoutFallback !== "layout_removed") continue;
-      const before = shown.find((each) => each.id === menu.id);
-      const removed =
-        before === undefined || before.homeLayoutId === menu.homeLayoutId
-          ? undefined
-          : before.homeLayouts.find((layout) => layout.id === before.homeLayoutId);
-      const reported = this.#removedLayoutReported.get(menu.id) ?? new Set<string>();
-      // The till can name a removal only when it showed that layout. One it cannot name left the
-      // screen on the default it already showed, so it is said only while nothing has been said
-      // about this menu: on a first load, not on the poll answers that repeat the reason.
-      if (removed === undefined ? reported.size > 0 : reported.has(removed.id)) continue;
-      reported.add(removed?.id ?? "");
-      this.#removedLayoutReported.set(menu.id, reported);
-      found.push({ menuName: menu.name, layoutName: removed?.name });
-    }
+    const found = this.#removedLayoutReports.report(shown, next);
     if (found.length > 0) this.removedLayouts = [...this.removedLayouts, ...found];
   }
 
@@ -1384,7 +1343,9 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * A poll's answer (D11): the unavailable set applies to the loaded offers at once. On the counter's
+   * A poll's answer (D11): the unavailable set applies to the loaded offers at once, and so does each
+   * menu's home layout on the version the till holds ({@link withPolledLayouts}), on both zones, with
+   * a layout the answer says was removed added, once, to the removed-layout notice. On the counter's
    * zone a version other than the one loaded runs the basket refresh — unless a sale, hold or place
    * is in flight or the dialog is already open, when the next poll asks again. On the open table's
    * zone it only reloads that zone's offers.

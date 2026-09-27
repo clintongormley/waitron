@@ -2,7 +2,7 @@ import axe from "axe-core";
 import { commands } from "vitest/browser";
 import { beforeEach, expect } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
-import type { ServedMenu } from "@waitron/catalogue/src/menu-document-types.js";
+import type { DocumentMember, ServedMenu } from "@waitron/catalogue/src/menu-document-types.js";
 
 declare module "vitest/browser" {
   interface BrowserCommands {
@@ -106,28 +106,80 @@ type ServedFields = Pick<
   "structure" | "homeLayouts" | "defaultHomeLayoutId" | "homeLayoutId" | "layoutFallback"
 >;
 
+/** An offer a {@link servedMenus} structure lists; with `section`, inside a section of that name. */
+export interface ServedOffer {
+  id: string;
+  menuId: string;
+  productId: string;
+  section?: string;
+}
+
 /**
  * Gives each menu what a zone-offers body serves beside it: a structure listing that menu's own
- * offers in order, under a default layout with no shortcuts, so a menu browser shows each offer once.
+ * offers in order, a section placed where its first offer falls, under a default layout with no
+ * shortcuts, so a menu browser shows each offer once. With `shortcuts`, each menu also has a layout
+ * `<menu id>-shortcuts` whose tiles are its offers; a menu's own `homeLayoutId` picks the layout the
+ * device shows, the default otherwise.
  */
-export function servedMenus<M extends { id: string }>(
+export function servedMenus<M extends { id: string; homeLayoutId?: string }>(
   menus: readonly M[],
-  offers: readonly { id: string; menuId: string; productId: string }[],
+  offers: readonly ServedOffer[],
+  { shortcuts = false }: { shortcuts?: boolean } = {},
 ): (M & ServedFields)[] {
-  return menus.map((menu) => ({
-    ...menu,
-    structure: {
-      members: offers
-        .filter((offer) => offer.menuId === menu.id)
-        .map((offer) => ({
-          kind: "product" as const,
-          menuItemId: offer.id,
-          productId: offer.productId,
-        })),
-    },
-    homeLayouts: [{ id: `${menu.id}-home`, name: "Home", tiles: [] }],
-    defaultHomeLayoutId: `${menu.id}-home`,
-    homeLayoutId: `${menu.id}-home`,
-    layoutFallback: null,
-  }));
+  return menus.map((menu) => {
+    const own = offers.filter((offer) => offer.menuId === menu.id);
+    const members: DocumentMember[] = [];
+    for (const offer of own) {
+      const placed: DocumentMember = {
+        kind: "product",
+        menuItemId: offer.id,
+        productId: offer.productId,
+      };
+      if (offer.section === undefined) {
+        members.push(placed);
+        continue;
+      }
+      const sectionId = `${menu.id}/${offer.section}`;
+      let section = members.find(
+        (member): member is Extract<DocumentMember, { kind: "section" }> =>
+          member.kind === "section" && member.sectionId === sectionId,
+      );
+      if (section === undefined) {
+        section = {
+          kind: "section",
+          sectionId,
+          internalName: offer.section,
+          names: { en: offer.section },
+          image: null,
+          color: null,
+          members: [],
+        };
+        members.push(section);
+      }
+      section.members.push(placed);
+    }
+    const home = `${menu.id}-home`;
+    return {
+      ...menu,
+      structure: { members },
+      homeLayouts: [
+        { id: home, name: "Home", tiles: [] },
+        ...(shortcuts
+          ? [
+              {
+                id: `${menu.id}-shortcuts`,
+                name: "Shortcuts",
+                tiles: own.map((offer) => ({
+                  kind: "product" as const,
+                  productId: offer.productId,
+                })),
+              },
+            ]
+          : []),
+      ],
+      defaultHomeLayoutId: home,
+      homeLayoutId: menu.homeLayoutId ?? home,
+      layoutFallback: null,
+    };
+  });
 }

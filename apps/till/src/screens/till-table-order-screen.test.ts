@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { formatMoney } from "@waitron/shared";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, servedMenus } from "../widgets/test-helpers.js";
 import { TillTableOrderScreen, type TableServiceStatus } from "./till-table-order-screen.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type {
@@ -91,23 +91,12 @@ function servedMenu(
   isDefault: boolean,
   offered: TillProduct[],
 ): TillZoneMenu {
-  return {
-    id,
-    name,
-    isDefault,
-    versionId: `${id}-v1`,
-    structure: {
-      members: offered.map((product) => ({
-        kind: "product",
-        menuItemId: product.menuItemId!,
-        productId: product.productId ?? product.id,
-      })),
-    },
-    homeLayouts: [{ id: `${id}-home`, name: "Home", tiles: [] }],
-    defaultHomeLayoutId: `${id}-home`,
-    homeLayoutId: `${id}-home`,
-    layoutFallback: null,
-  };
+  const offers = offered.map((product) => ({
+    id: product.menuItemId!,
+    menuId: id,
+    productId: product.productId ?? product.id,
+  }));
+  return servedMenus([{ id, name, isDefault, versionId: `${id}-v1` }], offers)[0]!;
 }
 
 const mount = (over: Partial<TillTableOrderScreen> = {}) =>

@@ -2,7 +2,8 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { ContentLanguageController, baseStyles, registerIcons } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
-import type { DocumentMember } from "@waitron/catalogue/src/menu-document-types.js";
+import { TILL_COLUMNS } from "@waitron/catalogue/src/home-layout-columns.js";
+import type { DocumentMember, DocumentTile } from "@waitron/catalogue/src/menu-document-types.js";
 import "./modifier-picker.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import type { TillProduct, TillZoneMenu } from "../api/client.js";
@@ -17,11 +18,6 @@ registerIcons({
   "menu-section":
     "M1.5 3.5a1 1 0 0 1 1-1H6l1.5 1.5h6a1 1 0 0 1 1 1v7.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1Z",
 });
-
-/** The browser's column count when its card sets none: the dashboard's layout preview shows the
- * same two sizes. */
-export const HANDHELD_COLUMNS = 3;
-export const TILL_COLUMNS = 6;
 
 type SectionNode = Extract<DocumentMember, { kind: "section" }>;
 
@@ -101,16 +97,12 @@ export class TillMenuBrowser extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      .grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(calc(var(--wt-tap-min) * 3), 1fr));
-        gap: var(--wt-space-3);
-      }
-
       /* Up to --columns tracks, and fewer wherever a tile would be narrower than the minimum.
          auto-fill keeps a track's width the same however many tiles there are, so the tiles fill
          the grid row by row, in order, at every count. */
-      .grid.counted {
+      .grid {
+        display: grid;
+        gap: var(--wt-space-3);
         grid-template-columns: repeat(
           auto-fill,
           minmax(
@@ -213,8 +205,8 @@ export class TillMenuBrowser extends LitElement {
 
   @property({ attribute: false }) store!: WorkingOrderStore;
 
-  /** The grids' column count; unset, they fill the width with as many columns as fit. */
-  @property({ type: Number }) columns?: number;
+  /** The most columns a grid shows. */
+  @property({ type: Number }) columns = TILL_COLUMNS;
 
   /** The open section's path of section ids: its first found anywhere in the menu, each next among
    * the previous one's members. Empty is home. */
@@ -229,6 +221,10 @@ export class TillMenuBrowser extends LitElement {
   #indexed?: { menu: TillZoneMenu; products: TillProduct[]; index: MenuIndex };
 
   #trailShown: SectionNode[] = [];
+
+  /** Each indexed product with its name folded for search. Keyed by the index alone because
+   * {@link productName} reads no language. */
+  #searchable?: { index: MenuIndex; names: [TillProduct, string][] };
 
   #index(menu: TillZoneMenu): MenuIndex {
     const cached = this.#indexed;
@@ -292,12 +288,18 @@ export class TillMenuBrowser extends LitElement {
     return descriptionFor(section.names, section.internalName);
   }
 
-  #gridClass(): string {
-    return this.columns === undefined ? "grid" : "grid counted";
+  #grid(content: unknown): TemplateResult {
+    return html`<div class="grid" style=${`--columns: ${this.columns};`}>${content}</div>`;
   }
 
-  #gridStyle(): string | typeof nothing {
-    return this.columns === undefined ? nothing : `--columns: ${this.columns};`;
+  #searchableNames(index: MenuIndex): [TillProduct, string][] {
+    if (this.#searchable?.index === index) return this.#searchable.names;
+    const names = [...index.products.values()].map((product): [TillProduct, string] => [
+      product,
+      folded(productName(product)),
+    ]);
+    this.#searchable = { index, names };
+    return names;
   }
 
   #productButton(product: TillProduct, onTap: () => void): TemplateResult {
@@ -322,20 +324,24 @@ export class TillMenuBrowser extends LitElement {
     </wt-button>`;
   }
 
+  /** The button for a section or product the index holds, else nothing; `path` is where a section
+   * opens beneath. */
+  #tile(ref: DocumentTile, path: string[], index: MenuIndex): TemplateResult | typeof nothing {
+    if (ref.kind === "section") {
+      const section = index.sections.get(ref.sectionId);
+      return section === undefined
+        ? nothing
+        : this.#sectionButton(section, () => this.#open([...path, ref.sectionId]));
+    }
+    const product = index.products.get(ref.productId);
+    return product === undefined
+      ? nothing
+      : this.#productButton(product, () => this.#pick(product));
+  }
+
   /** A list's members as buttons, in order; `path` is where a section member opens beneath. */
   #members(members: DocumentMember[], path: string[], index: MenuIndex): TemplateResult {
-    return html`<div class=${this.#gridClass()} style=${this.#gridStyle()}>
-      ${members.map((member) => {
-        if (member.kind === "section") {
-          if (!index.sections.has(member.sectionId)) return nothing;
-          return this.#sectionButton(member, () => this.#open([...path, member.sectionId]));
-        }
-        const product = index.products.get(member.productId);
-        return product === undefined
-          ? nothing
-          : this.#productButton(product, () => this.#pick(product));
-      })}
-    </div>`;
+    return this.#grid(members.map((member) => this.#tile(member, path, index)));
   }
 
   #home(menu: TillZoneMenu, index: MenuIndex): TemplateResult {
@@ -344,20 +350,7 @@ export class TillMenuBrowser extends LitElement {
     return html`
       <section data-region="shortcuts" aria-labelledby="shortcuts-heading">
         <h2 id="shortcuts-heading">${t("menu.shortcuts")}</h2>
-        <div class=${this.#gridClass()} style=${this.#gridStyle()}>
-          ${(layout?.tiles ?? []).map((tile) => {
-            if (tile.kind === "section") {
-              const section = index.sections.get(tile.sectionId);
-              return section === undefined
-                ? nothing
-                : this.#sectionButton(section, () => this.#open([tile.sectionId]));
-            }
-            const product = index.products.get(tile.productId);
-            return product === undefined
-              ? nothing
-              : this.#productButton(product, () => this.#pick(product));
-          })}
-        </div>
+        ${this.#grid((layout?.tiles ?? []).map((tile) => this.#tile(tile, [], index)))}
       </section>
       <section data-region="structure" aria-labelledby="structure-heading">
         <h2 id="structure-heading">${t("menu.full")}</h2>
@@ -395,17 +388,17 @@ export class TillMenuBrowser extends LitElement {
 
   #results(index: MenuIndex): TemplateResult {
     const wanted = folded(this.query.trim());
-    const found = [...index.products.values()].filter((product) =>
-      folded(productName(product)).includes(wanted),
-    );
+    const found = this.#searchableNames(index)
+      .filter(([, name]) => name.includes(wanted))
+      .map(([product]) => product);
     return html`<section data-region="results" aria-labelledby="results-heading">
       <h2 id="results-heading">${t("menu.results")}</h2>
       ${
         found.length === 0
           ? html`<p class="empty">${t("menu.no_results")}</p>`
-          : html`<div class=${this.#gridClass()} style=${this.#gridStyle()}>
-              ${found.map((product) => this.#productButton(product, () => this.#pick(product)))}
-            </div>`
+          : this.#grid(
+              found.map((product) => this.#productButton(product, () => this.#pick(product))),
+            )
       }
     </section>`;
   }
