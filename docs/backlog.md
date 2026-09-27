@@ -322,7 +322,7 @@ before building, as the PR records. No migration. Left open: if the waiter leave
 itself answers, the bill arrives after they have gone and is not merged back (it stays in Held
 orders); and the counter's Held orders list shows every open order, a table's own tab included
 (seen in the same run, not investigated).
-**Menus Task 7 (tills sell from the published version), on `feat/menus-sell-published`:** a till
+**Menus Task 7 (tills sell from the published version), landed as #719 (2026-09-27):** a till
 is offered, and every new line is charged, what each menu's published version says: the dish, its
 variant, its extras and its options. What is still read from the current rows: whether each product
 and variant is Active and Available, whether each option label is Available, and whether an offer
@@ -374,12 +374,12 @@ with the card provider" files the sale once if the card was charged, marks the p
 unlocks the order if it was not, and refuses if the provider is unreachable or unclear; each
 resolution is recorded in the append-only `payment_resolutions` table. What it leaves open is under
 "What M7b2 left open" in the payments section.
-Next in the lane: 7 (M6c landed as #705), then M7v. The owner lifted the wait: the dependency upgrades are
+Next in the lane: M7v, then 8, 9 and classification Task 3. The owner lifted the wait: the dependency upgrades are
 finished, and the work does not wait for SQLite slice 2. The menus plan's decisions D1–D23 settle
 the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the ones flagged for the
 owner. Menus Task 3 wipes existing venues (it rebuilds `menu_items`); every other migrating task
 adds tables or columns only and measures its own upgrade. Every dev venue then needs
-`wa-wt reset demo <name>`, and the owner's box should be wiped once after menus Task 7 lands.
+`wa-wt reset demo <name>`, and the owner's box should be wiped once now that menus Task 7 has landed (#719).
 Do not upgrade the owner's box mid-plan.
 A note Task 2 leaves for Task 3: the image library links every `section` use of a photo to
 `/manage/sections?section=<id>`, but that use can also be a list a menu owns, which the sections
