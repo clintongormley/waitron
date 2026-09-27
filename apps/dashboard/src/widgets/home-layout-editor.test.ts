@@ -169,12 +169,15 @@ it("offers neither Make default nor Delete on the default, and says why it canno
 it("while busy, disables every layout action and reports nothing", async () => {
   const el = await mount({ busy: true });
   const seen = capture(el, "wt-layout-add");
+  const renames = capture(el, "wt-layout-rename");
   const add = q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="add-layout"]')!;
   expect(add.disabled).toBe(true);
   for (const test of ["edit-l-counter", "rename-l-home", "delete-l-counter"])
     expect(q<HTMLElementTagNameMap["wt-button"]>(el, `[data-test="${test}"]`)!.disabled).toBe(true);
   add.click();
+  q(el, '[data-test="rename-l-home"]')!.click();
   expect(seen).toEqual([]);
+  expect(renames).toEqual([]);
   expect(members(el).busy).toBe(true);
 });
 

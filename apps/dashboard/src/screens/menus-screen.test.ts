@@ -3614,6 +3614,98 @@ describe("home page", () => {
     await vi.waitFor(() => expect(client.listHomeLayouts.mock.calls.length).toBe(reads + 1));
   });
 
+  it("reads the layouts again when a move's answer names tiles the list does not show", async () => {
+    const client = api({
+      moveHomeTile: vi
+        .fn()
+        .mockResolvedValue([
+          productMember("t-other", 0, "p-lager"),
+          productMember("t-burger", 1, "p-burger"),
+        ]),
+    });
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-tile-move", { layoutId: "l-home", memberId: "t-burger", to: 1 });
+    await vi.waitFor(() => expect(client.listHomeLayouts).toHaveBeenCalledTimes(2));
+    expect(homeEditor(el).layouts[0]!.tiles.map(({ memberId }) => memberId)).toEqual([
+      "t-burger",
+      "t-drinks",
+      "t-chips",
+    ]);
+  });
+
+  it("shows only the last of several queued moves' answers", async () => {
+    const first = deferred<SectionMember[]>();
+    const client = api();
+    const answer = client.moveHomeTile.getMockImplementation() as (
+      layoutId: string,
+      memberId: string,
+      to: number,
+    ) => Promise<SectionMember[]>;
+    client.moveHomeTile.mockImplementationOnce(() => first.promise);
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-tile-move", { layoutId: "l-home", memberId: "t-chips", to: 0 });
+    emit(homeEditor(el), "wt-tile-move", { layoutId: "l-home", memberId: "t-drinks", to: 0 });
+    first.resolve(await answer("l-home", "t-chips", 0));
+    await vi.waitFor(() => expect(client.moveHomeTile).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() =>
+      expect(homeEditor(el).layouts[0]!.tiles.map(({ memberId }) => memberId)).toEqual([
+        "t-drinks",
+        "t-burger",
+        "t-chips",
+      ]),
+    );
+  });
+
+  it("drops a refused move quietly once the person has gone to another menu", async () => {
+    const refusal = deferred<SectionMember[]>();
+    const client = api({ moveHomeTile: vi.fn(() => refusal.promise) });
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-tile-move", { layoutId: "l-home", memberId: "t-chips", to: 0 });
+    history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/home");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Dinner Menu"));
+    const lunchReads = () =>
+      client.listHomeLayouts.mock.calls.filter(([id]) => id === "menu-lunch").length;
+    const before = lunchReads();
+    refusal.reject({ code: "menu_section.not_found" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(q(el, '[data-test="home-error"]')).toBeNull();
+    expect(lunchReads()).toBe(before);
+  });
+
+  it("opens no delete window for a layout the list no longer holds", async () => {
+    const el = await mountHome();
+    emit(homeEditor(el), "wt-layout-delete", { layoutId: "l-gone" });
+    await el.updateComplete;
+    expect(modal(el, "layout-delete").open).toBe(false);
+  });
+
+  it("sends one layout save and one delete while each is out", async () => {
+    const created = deferred<{ id: string }>();
+    const deleted = deferred<void>();
+    const client = api({
+      createHomeLayout: vi.fn(() => created.promise),
+      deleteHomeLayout: vi.fn(() => deleted.promise),
+    });
+    const el = await mountHome(client);
+    emit(homeEditor(el), "wt-layout-add", {});
+    await el.updateComplete;
+    await nameLayout(el, "Terrace");
+    inModal(el, "layout-form", '[data-test="layout-save"]').click();
+    inModal(el, "layout-form", '[data-test="layout-save"]').click();
+    expect(client.createHomeLayout).toHaveBeenCalledTimes(1);
+    created.resolve({ id: "l-new" });
+    await vi.waitFor(() => expect(layoutModal(el).open).toBe(false));
+    await vi.waitFor(() => expect(homeEditor(el).busy).toBe(false));
+    emit(homeEditor(el), "wt-layout-delete", { layoutId: "l-counter" });
+    await el.updateComplete;
+    inModal(el, "layout-delete", '[data-test="layout-delete-confirm"]').click();
+    inModal(el, "layout-delete", '[data-test="layout-delete-confirm"]').click();
+    expect(client.deleteHomeLayout).toHaveBeenCalledTimes(1);
+    deleted.resolve();
+    await vi.waitFor(() => expect(modal(el, "layout-delete").open).toBe(false));
+  });
+
   it("marks a tile whose target left the menu, as the layouts read it", async () => {
     const el = await mountHome();
     const editor = homeEditor(el);

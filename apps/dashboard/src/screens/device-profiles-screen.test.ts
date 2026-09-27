@@ -790,6 +790,77 @@ describe("device-profiles-screen home page layouts", () => {
     expect(picker(el, "m-bar")!.getAttribute("aria-invalid")).toBe("false");
   });
 
+  it("clears a menu's refusal when a new choice for it is saved, leaving other menus' alone", async () => {
+    const api = homeApi({
+      setDeviceHomeLayout: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "menu.layout_not_found" })
+        .mockRejectedValueOnce({ code: "catalogue.not_found" })
+        .mockResolvedValue(undefined),
+    });
+    const el = await edit(api);
+    await choose(el, "m-lunch", "l-terrace");
+    await vi.waitFor(() => expect(inHome(el, "#home-error-m-lunch")).not.toBeNull());
+    await choose(el, "m-brunch", "l-kids");
+    await vi.waitFor(() => expect(inHome(el, "#home-error-m-brunch")).not.toBeNull());
+    await choose(el, "m-lunch", "l-counter");
+    await vi.waitFor(() =>
+      expect(inHome(el, "[data-test=home-saved]")?.textContent).toContain("Lunch"),
+    );
+    expect(inHome(el, "#home-error-m-lunch")).toBeNull();
+    expect(inHome(el, "#home-error-m-brunch")).not.toBeNull();
+  });
+
+  it("sends one choice while one is out", async () => {
+    let finish!: () => void;
+    const api = homeApi({
+      setDeviceHomeLayout: vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve;
+          }),
+      ),
+    });
+    const el = await edit(api);
+    await choose(el, "m-lunch", "l-counter");
+    inHome(el, "[data-test=home-reset-m-bar]")!.click();
+    expect(api.setDeviceHomeLayout).toHaveBeenCalledTimes(1);
+    finish();
+    await vi.waitFor(() => expect(picker(el, "m-lunch")!.disabled).toBe(false));
+  });
+
+  it("reads nothing more when a choice is saved after the profile was closed", async () => {
+    let finish!: () => void;
+    const api = homeApi({
+      setDeviceHomeLayout: vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve;
+          }),
+      ),
+    });
+    const el = await edit(api);
+    await choose(el, "m-lunch", "l-counter");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-cancel]")!.click();
+    await flush(el);
+    const reads = api.getDeviceHomeLayouts.mock.calls.length;
+    finish();
+    await flush(el);
+    expect(api.getDeviceHomeLayouts.mock.calls.length).toBe(reads);
+    expect(el.shadowRoot!.querySelector("[data-test=home-saved]")).toBeNull();
+  });
+
+  it("offers a plain Default for a menu with no layout left, whose saved choice was deleted", async () => {
+    const menus = homeMenus();
+    menus[2] = { ...menus[2]!, layouts: [], selectedLayoutId: "l-gone", selectedRemoved: true };
+    const el = await edit(homeApi({ getDeviceHomeLayouts: vi.fn().mockResolvedValue(menus) }));
+    expect(options(el, "m-dinner")[0]).toEqual([
+      "",
+      t("device_profiles.home_default_plain"),
+      false,
+    ]);
+  });
+
   it("a choice that saved but could not then be read back is a load failure, not a refusal", async () => {
     const api = homeApi();
     const el = await edit(api);

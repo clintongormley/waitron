@@ -256,9 +256,12 @@ export class DeviceProfilesScreen extends LitElement {
 
   /** Saved at once, apart from the profile's own Save; null goes back to the menu's default. A
    * choice that saved but could not be read back is a failed load, not a refused choice. */
-  async #chooseHome(menu: DeviceMenuHomeLayouts, layoutId: string | null): Promise<void> {
-    const profileId = this.editingId;
-    if (profileId === null || this.homeSaving !== null) return;
+  async #chooseHome(
+    profileId: string,
+    menu: DeviceMenuHomeLayouts,
+    layoutId: string | null,
+  ): Promise<void> {
+    if (this.homeSaving !== null) return;
     this.homeErrors = Object.fromEntries(
       Object.entries(this.homeErrors).filter(([menuId]) => menuId !== menu.menuId),
     );
@@ -556,7 +559,11 @@ export class DeviceProfilesScreen extends LitElement {
     const named = menu.layouts.filter((layout) => !layout.isDefault || layout.id === chosen);
     const fallback = menu.layouts.find((layout) => layout.isDefault);
     return html`<option value="" .selected=${live(chosen === null)}>
-        ${t("device_profiles.home_default").replace("{name}", fallback?.name ?? "")}
+        ${
+          fallback === undefined
+            ? t("device_profiles.home_default_plain")
+            : t("device_profiles.home_default").replace("{name}", fallback.name)
+        }
       </option>
       ${named.map(
         (layout) =>
@@ -588,7 +595,7 @@ export class DeviceProfilesScreen extends LitElement {
           @change=${(event: Event) => {
             event.stopPropagation();
             const value = (event.target as HTMLSelectElement).value;
-            void this.#chooseHome(menu, value === "" ? null : value);
+            void this.#chooseHome(this.editingId!, menu, value === "" ? null : value);
           }}
         >
           ${this.#renderHomeOptions(menu)}
@@ -605,7 +612,7 @@ export class DeviceProfilesScreen extends LitElement {
                   size="sm"
                   data-test=${`home-reset-${menu.menuId}`}
                   .disabled=${saving}
-                  @click=${() => void this.#chooseHome(menu, null)}
+                  @click=${() => void this.#chooseHome(this.editingId!, menu, null)}
                   >${t("device_profiles.home_reset")}</wt-button
                 >
               </div>`
