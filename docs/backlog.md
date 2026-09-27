@@ -2354,7 +2354,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       result on the base commit `1d524b6e5`, so it predates Task 6.
       Fix: `readPrintProblems` drops a failed ticket whose bill has nothing a Reprint would print on
       that printer for that station.
-  - **Task 7 landed as #PR** (lane B item B7, 2026-09-27, main `MAIN`): the server keeps each
+  - **Task 7 landed as #789** (lane B item B7, 2026-09-28, main `3e4a75e2b`): the server keeps each
     person's unsent order on a seated party, a "draft", so two waiters at one table each have their
     own. Core migration `0031_order_drafts` adds `order_drafts` (one open draft per person and
     party, by the partial unique index `order_drafts_open_owner_uq`), `order_draft_lines` and
