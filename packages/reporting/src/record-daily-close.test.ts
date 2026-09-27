@@ -12,7 +12,16 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
 import type { SaleId, TillId } from "@waitron/shared";
-import { seedSale, seedTender, seedTill, seedVenue, seedVoid } from "../test/fixtures.js";
+import {
+  seedBillPayment,
+  seedBillRefund,
+  seedOpenOrder,
+  seedSale,
+  seedTender,
+  seedTill,
+  seedVenue,
+  seedVoid,
+} from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { computeDailyClose } from "./daily-close.js";
 import { computeCloseEntryHash } from "./daily-close-hash.js";
@@ -250,7 +259,7 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
   it("treats a card-only till as known: not required to be counted, but countable against 0.00 takings", async () => {
     // A till present in the close only through CARD sales carries cashTakings 0.00. It is a KNOWN
     // till (counting it is allowed, its variance then measured against 0.00) but is NOT one the
-    // uncounted-cash-till rule forces (that rule fires only for cashTakings > 0).
+    // uncounted-cash-till rule forces (that rule fires only for a till with a cash line).
     invoiceNo += 1;
     const at = "2026-08-04T10:00:00Z";
     const saleId = await seedSale(
@@ -326,6 +335,153 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
     });
     // The predicate `insertClose` gates on says yes to a REAL refusal of this key.
     expect(isBusinessDayConflict(error)).toBe(true);
+  });
+});
+
+// Bill payments design §8 tests 24, 25 and 27: every till whose drawer moved cash is counted,
+// whatever the day's net, and a till that took only cards is not.
+describe("recordDailyClose — money taken against a bill before its invoice", () => {
+  const day1Noon = "2026-08-04T10:00:00.000Z";
+  const day2Noon = "2026-08-05T10:00:00.000Z";
+  let orderNo = 0;
+
+  async function openBill(): Promise<string> {
+    orderNo += 1;
+    return (await seedOpenOrder(suite.db, venue, orderNo)).orderId;
+  }
+
+  async function expectUncounted(businessDay: string, counts: CashCountInput[], tillId: TillId) {
+    const error = await captureCloseError(() => record(businessDay, counts));
+    expect(error).toMatchObject({
+      code: "close.invalid_cash_input",
+      params: { tillId, reason: "uncounted_cash_till" },
+    });
+  }
+
+  it("counts day 1's cash contribution on its own till, unchanged by the invoice issued on day 2", async () => {
+    const tillA = venue.tillId;
+    const tillB = await seedTill(suite.db, venue.locationId);
+    const bill = await openBill();
+    const cash = await seedBillPayment(
+      suite.db,
+      { workingOrderId: bill, tillId: tillA },
+      { method: "cash", applied: "50.00", state: "received", at: day1Noon },
+    );
+    const card = await seedBillPayment(
+      suite.db,
+      { workingOrderId: bill, tillId: tillB },
+      { method: "card", applied: "70.00", state: "received", at: day2Noon },
+    );
+    invoiceNo += 1;
+    const invoice = await seedSale(
+      suite.db,
+      { ...venue, tillId: tillB },
+      {
+        invoiceNumber: invoiceNo,
+        issuedAt: day2Noon,
+        total: "120.00",
+        lines: [{ vatRate: "10.00", lineTotal: "109.09" }],
+      },
+    );
+    await seedTender(
+      suite.db,
+      { saleId: invoice },
+      { method: "cash", amount: "50.00", settledAt: day1Noon, billPaymentId: cash },
+    );
+    await seedTender(
+      suite.db,
+      { saleId: invoice },
+      { method: "card", amount: "70.00", settledAt: day2Noon, billPaymentId: card },
+    );
+
+    await expectUncounted("2026-08-04", [], tillA);
+    const unknown = await captureCloseError(() =>
+      record("2026-08-04", [
+        { tillId: tillA, openingFloat: "0.00", payouts: "0.00", countedCash: "50.00" },
+        { tillId: tillB, openingFloat: "0.00", payouts: "0.00", countedCash: "0.00" },
+      ]),
+    );
+    expect(unknown).toMatchObject({
+      code: "close.invalid_cash_input",
+      params: { tillId: tillB, reason: "unknown_till" },
+    });
+
+    const rec = await record("2026-08-04", [
+      { tillId: tillA, openingFloat: "100.00", payouts: "0.00", countedCash: "150.00" },
+    ]);
+    expect(rec.snapshot.close.vat.byRate).toEqual([]);
+    expect(rec.snapshot.close.counts.sales).toBe(0);
+    expect(rec.snapshot.close.cash).toEqual({
+      byTill: [
+        {
+          tillId: tillA,
+          byMethod: [{ method: "cash", amount: "50.00", tip: "0.00" }],
+          cashTakings: "50.00",
+        },
+      ],
+      tenderTotal: "50.00",
+      tipTotal: "0.00",
+    });
+    expect(rec.snapshot.cashReconciliation.byTill).toMatchObject([
+      { tillId: tillA, cashTakings: "50.00", cashVariance: "0.00" },
+    ]);
+  });
+
+  it("forces a count for a till that only gave cash back, reconciled against its negative takings", async () => {
+    const tillA = venue.tillId;
+    const tillB = await seedTill(suite.db, venue.locationId);
+    const bill = await openBill();
+    const payment = await seedBillPayment(
+      suite.db,
+      { workingOrderId: bill, tillId: tillA },
+      { method: "cash", applied: "50.00", state: "received", at: day1Noon },
+    );
+    await seedBillRefund(
+      suite.db,
+      { billPaymentId: payment, tillId: tillB },
+      { applied: "20.00", state: "completed", at: day2Noon },
+    );
+
+    await expectUncounted("2026-08-05", [], tillB);
+    // 100.00 float − 20.00 given back = 80.00 in the drawer.
+    const rec = await record("2026-08-05", [
+      { tillId: tillB, openingFloat: "100.00", payouts: "0.00", countedCash: "80.00" },
+    ]);
+    expect(rec.snapshot.cashReconciliation.byTill).toMatchObject([
+      { tillId: tillB, cashTakings: "-20.00", cashVariance: "0.00" },
+    ]);
+  });
+
+  it("forces a count for a till whose cash nets to zero, and not for a till that took only cards", async () => {
+    const tillC = await seedTill(suite.db, venue.locationId);
+    const tillD = await seedTill(suite.db, venue.locationId);
+    const bill = await openBill();
+    const payment = await seedBillPayment(
+      suite.db,
+      { workingOrderId: bill, tillId: tillC },
+      { method: "cash", applied: "50.00", state: "received", at: day1Noon },
+    );
+    await seedBillRefund(
+      suite.db,
+      { billPaymentId: payment, tillId: tillC },
+      { applied: "50.00", state: "completed", at: day1Noon },
+    );
+    await seedBillPayment(
+      suite.db,
+      { workingOrderId: bill, tillId: tillD },
+      { method: "card", applied: "30.00", state: "received", at: day1Noon },
+    );
+
+    await expectUncounted("2026-08-04", [], tillC);
+    const rec = await record("2026-08-04", [
+      { tillId: tillC, openingFloat: "100.00", payouts: "0.00", countedCash: "100.00" },
+    ]);
+    expect(rec.snapshot.cashReconciliation.byTill).toMatchObject([
+      { tillId: tillC, cashTakings: "0.00", cashVariance: "0.00" },
+    ]);
+    expect(rec.snapshot.close.cash.byTill.map((t) => t.tillId).sort()).toEqual(
+      [tillC, tillD].sort(),
+    );
   });
 });
 

@@ -133,15 +133,15 @@ export interface VatSummary {
 
 export interface TenderMethodLine {
   method: TenderMethod;
-  /** Total collected via this method (includes its tip portion). */
+  /** Net money through this method: what was taken, tips included, less what was given back. */
   amount: Decimal;
-  /** Tip portion collected via this method. */
+  /** The tip portion of {@link TenderMethodLine.amount}, net of tips given back. */
   tip: Decimal;
 }
 export interface TillCashUp {
   tillId: TillId;
   byMethod: TenderMethodLine[];
-  /** Σ cash-method amount at this till (cash revenue + cash tips). */
+  /** The cash line's amount (net cash, tips included, possibly negative); 0.00 with no cash line. */
   cashTakings: Decimal;
 }
 export interface CashUp {

@@ -161,8 +161,8 @@ function validateCashCounts(cashCounts: readonly CashCountInput[]): ParsedCount[
  * snapshot. `cashVariance = countedCash − (openingFloat + cashTakings − payouts)`: positive is an
  * overage, negative a shortage. `cashTakings` is copied from `close.cash.byTill[].cashTakings`,
  * never re-derived. Two faults are caught here because they need the computed close:
- * a till whose sales added cash (`cashTakings > 0`) that was left uncounted, and a count for a till
- * with no tender activity in the close at all.
+ * a till whose drawer moved cash (a cash line in the cash-up) that was left uncounted, and a count
+ * for a till with no money movement in the close at all.
  */
 function reconcile(close: DailyClose, counts: readonly ParsedCount[]): DailyCloseSnapshot {
   const takingsByTill = new Map<string, Decimal>(
@@ -170,10 +170,11 @@ function reconcile(close: DailyClose, counts: readonly ParsedCount[]): DailyClos
   );
   const countedTills = new Set<string>(counts.map((c) => c.tillId));
 
-  // Every till whose sales added cash to a drawer must be counted, or the reconciliation is blind to
-  // real money. A card-only till (cashTakings 0.00) is not forced — nothing to reconcile.
+  // Every till whose drawer moved cash must be counted, whatever the net: a till that only gave
+  // cash back, or gave back what it took, still handled real money. A card-only till has no cash
+  // line and is not forced.
   for (const t of close.cash.byTill) {
-    if (compareDecimal(t.cashTakings, ZERO) > 0 && !countedTills.has(t.tillId)) {
+    if (t.byMethod.some((m) => m.method === "cash") && !countedTills.has(t.tillId)) {
       throw new AppError("close.invalid_cash_input", {
         tillId: t.tillId,
         reason: "uncounted_cash_till",

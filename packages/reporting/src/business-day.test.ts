@@ -3,7 +3,6 @@ import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  businessDayClause,
   businessDayOf,
   businessDayRangeWindow,
   businessDayStart,
@@ -79,7 +78,7 @@ describe("businessDayRangeWindow", () => {
       } as PeriodVatInput;
       // A RAW select reaches no column mapping, so a predicate comes back as the engine's 1/0.
       const { rows } = await suite.db.execute<{ eq: 0 | 1; range: 0 | 1 }>(
-        sql`select ${businessDayClause(column, dayInput)} as eq, ${businessDayRangeWindow(rangeInput)(column)} as range`,
+        sql`select ${businessDayWindow(dayInput)(column)} as eq, ${businessDayRangeWindow(rangeInput)(column)} as range`,
       );
       expect(rows[0]!.range).toBe(rows[0]!.eq);
       expect(rows[0]!.range).toBe(expected ? 1 : 0);

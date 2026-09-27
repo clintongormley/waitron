@@ -6,8 +6,8 @@ import type { DailyClose } from "./types.js";
  *
  * `cashVariance = countedCash − (openingFloat + cashTakings − payouts)`: positive is an overage
  * (more cash in the drawer than the takings explain), negative a shortage. `cashTakings` is the
- * cash the day's sales added to the drawer — copied from `close.cash.byTill[].cashTakings`, never a
- * fresh derivation — so the variance measures the physical count against the fiscal record.
+ * net cash the day's payments and refunds moved through the drawer — copied from
+ * `close.cash.byTill[].cashTakings`, never a fresh derivation.
  */
 export interface TillReconciliation {
   tillId: TillId;
@@ -17,7 +17,7 @@ export interface TillReconciliation {
   payouts: Decimal;
   /** Physical drawer count at close (supplied). */
   countedCash: Decimal;
-  /** Cash the day's sales added to the drawer, from `close.cash.byTill[].cashTakings`. */
+  /** Net cash the day moved through the drawer, from `close.cash.byTill[].cashTakings`. */
   cashTakings: Decimal;
   /** `countedCash − (openingFloat + cashTakings − payouts)`. */
   cashVariance: Decimal;
