@@ -1950,10 +1950,17 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   reaches the box while the Add agent dialog is open, the five-line feed before the cut, Bluetooth
   discovery, and the receipt preview against printed paper. #324's slips, duplicates and drawer pulse
   have never produced paper either.
-- **Printer discovery and the Bluetooth model** (owner, 2026-09-11, own spec): move Bluetooth
-  scan-and-pair off the agent's `:9110` page into the dashboard, and surface the host's already-bonded
-  printers through the existing `paired()` seam. Prereq: the box's Bluetooth radio path is
-  hardware-unconfirmed.
+- **Print-agent setup lockdown and Bluetooth pairing — PLANNED 2026-09-27.** The owner-approved
+  [design](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and
+  [implementation plan](superpowers/plans/2026-09-27-print-agent-setup-lockdown.md) split the work
+  into three independently green pull requests: close a joined agent's `:9110` page to the LAN and
+  remember the venue's nodes; add the optional agent-side Bluetooth command channel; then put Pair,
+  Forget pairing and the printers-only list behind `printer.manage` in the dashboard. The box's
+  BlueZ `Trusted`/remove behavior still needs the plan's real-hardware measurement before the
+  Bluetooth command-channel branch starts; it does not block the setup-lockdown branch.
+- **Bluetooth delivery from a paired printer remains separate.** `liveBtDevicePath` still refuses
+  every Bluetooth job because no real per-printer radio path has been established on the box; the
+  pairing plan must not make a paired device claim work or say that it can print.
 - **The virtual PDF printer**, and a `print_jobs` retention sweep — nothing deletes a job today.
 - **Printing A4 invoices on an office printer** (owner, 2026-09-14): a separate design, not started.
   It reverses the 2026-09-09 provisioning design's "raw ESC/POS only" decision and needs an A4
