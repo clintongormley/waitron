@@ -69,6 +69,7 @@ export function createAgent(opts: AgentOptions): Agent {
       router = new Router({
         configuredUrl: config.serverUrl,
         environment: config.environment,
+        initialServers: config.servers,
         probe: client.probeNode,
       });
     }
@@ -177,12 +178,12 @@ export function createAgent(opts: AgentOptions): Agent {
         }
         return false;
       }
-      token = joined.value.token;
-      await host.saveToken(token);
-      approved = false;
       // The only surviving copy, after a restart, of the code the admin must match.
       config = { ...config, pendingVerificationNumber: joined.value.verificationNumber };
       await host.saveConfig(config);
+      token = joined.value.token;
+      await host.saveToken(token);
+      approved = false;
       report({
         phase: "pending",
         serverUrl: config.serverUrl,
@@ -294,6 +295,13 @@ export function createAgent(opts: AgentOptions): Agent {
       return false;
     }
     r.merge(pulled.value.servers);
+    const servers = r.servers().slice(1).map(({ url, nodeId }) =>
+      nodeId === undefined ? { url } : { url, nodeId },
+    );
+    if (JSON.stringify(servers) !== JSON.stringify(config.servers ?? [])) {
+      config = { ...config, servers };
+      await host.saveConfig(config);
+    }
     discoveryUntil = pulled.value.discoveryUntil ?? 0;
     // A remote server's epoch deadline cannot be compared with this host's clock.
     const receivedAt = host.now();

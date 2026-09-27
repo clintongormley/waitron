@@ -1,4 +1,4 @@
-import type { WireJob } from "./client.js";
+import type { ServerEntry, WireJob } from "./client.js";
 import type { PrintTransport, PrinterTarget, Transport, TransportKind } from "./transport.js";
 
 export type { TransportKind } from "./transport.js";
@@ -14,6 +14,8 @@ export interface AgentConfig {
    * (which reloads the token and keeps polling the same request) can still show the code the admin
    * matches. Cleared on approval and on halt. */
   pendingVerificationNumber?: string;
+  /** Other venue nodes learned from the last successful pull. */
+  servers?: ServerEntry[];
 }
 
 export type AgentPhase =

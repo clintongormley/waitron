@@ -24,6 +24,16 @@ function probeFrom(table: Record<string, Partial<NodeProbe> | "down">) {
 }
 
 describe("Router", () => {
+  it("starts with remembered servers after a restart, configured address first", () => {
+    const router = new Router({
+      configuredUrl: A,
+      initialServers: [{ url: B, nodeId: "n2" }],
+      probe: probeFrom({}),
+    });
+    expect(router.servers().map(({ url }) => url)).toEqual([A, B]);
+    expect(router.servers()[1]?.nodeId).toBe("n2");
+  });
+
   it("starts on the configured url and stays there while it accepts sales", async () => {
     const router = new Router({
       configuredUrl: A,

@@ -278,6 +278,54 @@ describe("createAgent — phases", () => {
     expect(host.statuses.at(-1)).toMatchObject({ phase: "pending", verificationCode: "07" });
   });
 
+  it("persists the pending number before the token", async () => {
+    const host = fakeHost({ config: { ...CONFIG, environment: "preproduction" } });
+    const writes: Array<["config", string | undefined] | ["token", string | null]> = [];
+    const saveConfig = host.saveConfig.bind(host);
+    const saveToken = host.saveToken.bind(host);
+    host.saveConfig = async (config) => {
+      writes.push(["config", config.pendingVerificationNumber]);
+      await saveConfig(config);
+    };
+    host.saveToken = async (token) => {
+      writes.push(["token", token]);
+      await saveToken(token);
+    };
+
+    await createAgent({ host, client: client() }).runOnce();
+
+    expect(writes).toEqual([
+      ["config", "07"],
+      ["token", "a1.s"],
+    ]);
+  });
+
+  it("overwrites a stale pending number when a crash left config without a token", async () => {
+    const host = fakeHost({
+      config: {
+        ...CONFIG,
+        environment: "preproduction",
+        pendingVerificationNumber: "99",
+      },
+      token: null,
+    });
+    await createAgent({ host, client: client() }).runOnce();
+    expect(await host.config()).toMatchObject({ pendingVerificationNumber: "07" });
+    expect(await host.token()).toBe("a1.s");
+  });
+
+  it("keeps a token with a pending number in the approval flow after a restart", async () => {
+    const host = fakeHost({
+      config: { ...CONFIG, pendingVerificationNumber: "07" },
+      token: "a1.s",
+    });
+    const c = client({ joinStatus: vi.fn(async () => okR<JoinStatus>("pending")) });
+    await createAgent({ host, client: c }).runOnce();
+    expect(c.joinStatus).toHaveBeenCalledWith(A, "a1.s");
+    expect(c.pullJobs).not.toHaveBeenCalled();
+    expect(host.statuses.at(-1)).toMatchObject({ phase: "pending", verificationCode: "07" });
+  });
+
   it("clears the persisted verification number once approved", async () => {
     const host = fakeHost({ config: CONFIG });
     await createAgent({ host, client: client() }).runOnce(); // join → number persisted
@@ -326,6 +374,55 @@ describe("createAgent — phases", () => {
     expect((c.probeNode as ReturnType<typeof vi.fn>).mock.calls.map((x) => x[0])).toContain(
       "http://b.test",
     );
+  });
+
+  it("persists reply servers and probes them after a restart", async () => {
+    const host = fakeHost({ config: CONFIG, token: "a1.s" });
+    const first = client({
+      pullJobs: vi.fn(async () =>
+        okR<PullReply>({
+          nodeId: "n1",
+          servers: [{ url: "http://b.test", nodeId: "n2" }],
+          jobs: [],
+          discoveryUntil: null,
+        }),
+      ),
+    });
+    await createAgent({ host, client: first }).runOnce();
+    expect(await host.config()).toMatchObject({
+      servers: [{ url: "http://b.test", nodeId: "n2" }],
+    });
+
+    const second = client();
+    await createAgent({ host, client: second }).runOnce();
+    expect((second.probeNode as ReturnType<typeof vi.fn>).mock.calls.map(([url]) => url)).toEqual([
+      A,
+      "http://b.test",
+    ]);
+  });
+
+  it("never sends its token to a remembered server in another environment", async () => {
+    const host = fakeHost({
+      config: {
+        ...CONFIG,
+        environment: "preproduction",
+        servers: [{ url: "http://b.test", nodeId: "n2" }],
+      },
+      token: "a1.s",
+    });
+    const c = client({
+      probeNode: vi.fn(async (url: string) =>
+        okR<NodeProbe>({
+          nodeId: url === A ? "n1" : "n2",
+          term: url === A ? 1 : 2,
+          acceptingSales: url !== A,
+          environment: url === A ? "preproduction" : "production",
+        }),
+      ),
+    });
+    await createAgent({ host, client: c }).runOnce();
+    expect(c.pullJobs).not.toHaveBeenCalledWith("http://b.test", "a1.s", expect.anything());
+    expect(host.statuses.at(-1)?.phase).toBe("unreachable");
   });
 });
 
