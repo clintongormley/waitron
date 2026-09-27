@@ -28,6 +28,12 @@ export function t(key: StringKey, l: string = locale): string {
   return catalogues[l]?.[key] ?? en[key];
 }
 
+/** `one` for a count of one, else `many` with its `{n}` filled in: the catalogues keep a singular as
+ * a key of its own. */
+export function countText(n: number, many: StringKey, one: StringKey): string {
+  return n === 1 ? t(one) : t(many).replace("{n}", String(n));
+}
+
 /** Strips the region subtag ("es-ES" → "es"); a missing language degrades to the English text. */
 export function pickLocale(entry: { en: string; es: string }, l: string = locale): string {
   const lang = l.replace(/-.*$/, "");

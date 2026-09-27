@@ -5,7 +5,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { UrlStateController, baseStyles, registerIcons } from "@waitron/ui";
 import { formatMoney, resolveActiveLocale } from "@waitron/shared";
-import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { countText, currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { diag } from "./diagnostics.js";
 import { LocaleChangeController } from "./state/locale-controller.js";
@@ -335,7 +335,7 @@ function errorText(error: CounterError): string | TemplateResult {
 /** "Fired: 2 groups. Held: 3 groups.", leaving out a clause with nothing in it. */
 function submittedText(tally: { fired: number; held: number; joined: number }): string {
   const count = (n: number, many: StringKey, one: StringKey) =>
-    n === 0 ? [] : [n === 1 ? t(one) : t(many).replace("{n}", String(n))];
+    n === 0 ? [] : [countText(n, many, one)];
   return [
     ...count(tally.fired, "table.submitted_fired", "table.submitted_fired_one"),
     ...count(tally.held, "table.submitted_held", "table.submitted_held_one"),

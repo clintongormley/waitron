@@ -17,7 +17,7 @@ import {
   toScale,
   type Decimal,
 } from "@waitron/shared";
-import { currentLocale, t } from "../i18n/t.js";
+import { countText, currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { selectStyles } from "../select-styles.js";
@@ -1664,8 +1664,6 @@ export class TillTableOrderScreen extends LitElement {
   #previewDialog(): TemplateResult {
     const pending = this.pendingDraft;
     const preview = pending?.preview;
-    const count = (key: StringKey, one: StringKey, n: number) =>
-      n === 1 ? t(one) : t(key).replace("{n}", String(n));
     return html`<wt-dialog
       class="draft-preview"
       data-draft-preview
@@ -1680,24 +1678,24 @@ export class TillTableOrderScreen extends LitElement {
             : html`${
                 preview.fireItems > 0
                   ? html`<p data-preview-fire>
-                      ${count("table.preview_fire", "table.preview_fire_one", preview.fireItems)}
+                      ${countText(preview.fireItems, "table.preview_fire", "table.preview_fire_one")}
                     </p>`
                   : nothing
               }
               ${
                 pending!.join !== undefined
                   ? html`<p data-preview-join>
-                      ${count(
+                      ${countText(
+                        preview.holdItems,
                         "table.preview_join",
                         "table.preview_join_one",
-                        preview.holdItems,
                       ).replace("{group}", () =>
                         heldGroupLabel(pending!.join!.group, pending!.join!.index),
                       )}
                     </p>`
                   : preview.holdGroups > 0
                     ? html`<p data-preview-hold>
-                        ${count("table.preview_hold", "table.preview_hold_one", preview.holdGroups)}
+                        ${countText(preview.holdGroups, "table.preview_hold", "table.preview_hold_one")}
                       </p>`
                     : nothing
               }`
