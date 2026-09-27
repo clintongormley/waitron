@@ -582,7 +582,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // Unauthenticated boot info the till needs before login; it carries no secrets.
   app.get("/api/till", (c) =>
     run(c, log, async () => {
-      // Resolved before the boot transaction because `tryReadDevice` opens its own.
+      // Resolved before the boot transaction: `tryReadDevice` opens one of its own when a sighting
+      // is due.
       const device = await tryReadDevice({ db: deps.db, devMode: deps.devMode }, c);
       const held = await readNodeMembership(deps.db);
       const boot = await withTransaction(deps.db, async (tx) => {

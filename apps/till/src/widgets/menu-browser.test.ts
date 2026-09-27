@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { setContentLanguages } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import type { DocumentMember, DocumentTile } from "@waitron/catalogue/src/menu-document-types.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
@@ -343,6 +344,46 @@ describe("till-menu-browser", () => {
     });
   });
 
+  describe("a product tile's price", () => {
+    it("reads per unit, the weighed product's per kilo", async () => {
+      const { el } = await mount({ menu: lunch({ homeLayoutId: "lay-counter" }) });
+      expect(entry(el, "shortcuts", "Jamón").querySelector(".price")!.textContent).toBe(
+        `${formatMoney("10.00", currentLocale())}/kg`,
+      );
+    });
+
+    it("follows a change of the venue's content languages in its unit, and never in the staff name", async () => {
+      // The pain carries a customer name in both configured languages; the tile still shows the
+      // staff name, while its unit abbreviation is per-language content and re-resolves.
+      setLocale("es-ES");
+      setContentLanguages({ defaultLanguage: "fr", languages: ["fr", "en"] });
+      try {
+        const pain = product("pain", "Pain", {
+          customerName: { fr: "Baguette", en: "Bread" },
+          unit: {
+            id: "unit-each",
+            name: { fr: "pièce", en: "each" },
+            abbreviation: { fr: "pc", en: "ea" },
+            precision: 0,
+            hardwareUnit: null,
+          },
+        });
+        const { el } = await mount({
+          menu: lunch({ structure: { members: [member("pain")] } }),
+          products: [pain],
+        });
+        const tile = () => entry(el, "structure", "Pain");
+        expect(tile().querySelector(".price")!.textContent).toContain("/pc");
+        setContentLanguages({ defaultLanguage: "en", languages: ["en", "fr"] });
+        await el.updateComplete;
+        expect(tile().querySelector(".price")!.textContent).toContain("/ea");
+        expect(tile().querySelector(".name")!.textContent).toBe("Pain");
+      } finally {
+        setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+      }
+    });
+  });
+
   describe("sections", () => {
     it("opens a section tile's section, with a breadcrumb back home", async () => {
       const { el } = await mount();
@@ -470,6 +511,48 @@ describe("till-menu-browser", () => {
       await tap(el, entry(el, "shortcuts", "Jamón"));
       expect(selected).toEqual([jamon]);
       expect(store.lines).toEqual([]);
+    });
+
+    it("a fractional custom unit asks for its quantity without touching the basket", async () => {
+      const portion = product("portion", "Ración", {
+        unit: {
+          id: "custom-portion",
+          name: { en: "portion" },
+          abbreviation: { en: "pt" },
+          precision: 2,
+          hardwareUnit: null,
+        },
+      });
+      const { el, store } = await mount({
+        menu: lunch({ structure: { members: [member("portion")] } }),
+        products: [portion],
+      });
+      const selected: unknown[] = [];
+      store.on("product-selected", (picked) => selected.push(picked));
+      await tap(el, entry(el, "structure", "Ración"));
+      expect(selected).toEqual([portion]);
+      expect(store.lines).toEqual([]);
+    });
+
+    it("does not take a unit merely named kg for a weighed one", async () => {
+      const namedKg = product("named-kg", "Queso", {
+        unit: {
+          id: "custom-kg",
+          name: { en: "kg" },
+          abbreviation: { en: "kg" },
+          precision: 0,
+          hardwareUnit: null,
+        },
+      });
+      const { el, store } = await mount({
+        menu: lunch({ structure: { members: [member("named-kg")] } }),
+        products: [namedKg],
+      });
+      const selected: unknown[] = [];
+      store.on("product-selected", (picked) => selected.push(picked));
+      await tap(el, entry(el, "structure", "Queso"));
+      expect(selected).toEqual([]);
+      expect(store.lines).toEqual([{ product: namedKg, quantity: "1" }]);
     });
 
     it("a product with variants opens the modifier picker, which adds the choice and closes", async () => {

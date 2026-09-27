@@ -2,7 +2,7 @@ import { page } from "vitest/browser";
 import { currentContentLanguages } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatMoney } from "@waitron/shared";
-import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
 import { productUnit } from "./widgets/product-name.js";
 import { TillApp } from "./till-app.js";
 import { ServerRouter } from "./api/server-router.js";
@@ -254,79 +254,91 @@ const defaultStation = {
   active: true,
 };
 
+/** A menu's structure listing one offer, and a layout with no shortcuts. */
+function servedAs(menuItemId: string, productId: string) {
+  return {
+    structure: { members: [{ kind: "product" as const, menuItemId, productId }] },
+    homeLayouts: [{ id: "home", name: "Home", tiles: [] }],
+    defaultHomeLayoutId: "home",
+    homeLayoutId: "home",
+    layoutFallback: null,
+  };
+}
+
 function fixtureOffers(catalogue: ProductCatalogue): ZoneOfferCatalogue {
   const defaultMenuId = catalogue.menus.find((menu) => menu.isDefault)?.id ?? null;
+  const offers = catalogue.products.map((product, index): ZoneOfferCatalogue["offers"][number] => ({
+    id: product.menuItemId ?? `menu-item-${product.id}-${index}`,
+    menuId: product.catalogueId ?? defaultMenuId ?? "menu-fixture",
+    productId: product.productId ?? product.id,
+    grossPrice: product.unitPrice,
+    unitPrice: product.unitPrice,
+    active: true,
+    available: true,
+    image: null,
+    description: null,
+    menuName: product.catalogueName ?? catalogue.menus[0]?.name ?? "Menu",
+    placements: [[]],
+    name: product.name,
+    customerName: product.customerName ?? null,
+    kitchenName: product.kitchenName ?? null,
+    // `productUnit` is the till's own fallback, reused so the fixture cannot drift from it.
+    unit: productUnit(product),
+    vatClass: product.vatClass,
+    category: product.category ?? "Other",
+    allergens: product.allergens,
+    diet: product.diet ?? null,
+    dietDerivation: product.dietDerivation ?? null,
+    dietOverride: product.dietOverride ?? null,
+    // The source `TillProduct` types the declarations looser than the offer's wire shape (plain
+    // `string[]`), so the fixture narrows them — the fixtures only ever supply real labels.
+    dietaryDeclarations: (product.dietaryDeclarations ??
+      []) as ZoneOfferCatalogue["offers"][number]["dietaryDeclarations"],
+    offeredModifiers: (product.offeredModifiers ?? []).map((entry) =>
+      entry.kind === "extras"
+        ? {
+            ...entry,
+            items: entry.items.map((item) => ({
+              ...item,
+              image: null,
+              available: true,
+            })),
+          }
+        : entry,
+    ),
+    variants: (product.variants ?? []).map(
+      (variant): ZoneOfferCatalogue["offers"][number]["variants"][number] => ({
+        id: variant.id,
+        name: variant.name,
+        customerName: variant.customerName ?? null,
+        kitchenName: variant.kitchenName ?? null,
+        image: variant.image ?? null,
+        unitPrice: variant.unitPrice,
+        menuPrice: null,
+        offered: true,
+        available: variant.available,
+        unit: productUnit(product),
+        pricingUnit: productUnit(product).hardwareUnit === null ? "each" : "weight",
+        vatClass: product.vatClass,
+        category: product.category ?? "Other",
+        allergens: product.allergens,
+        diet: product.diet ?? null,
+        dietDerivation: product.dietDerivation ?? null,
+        dietOverride: product.dietOverride ?? null,
+        dietaryDeclarations: (product.dietaryDeclarations ??
+          []) as ZoneOfferCatalogue["offers"][number]["dietaryDeclarations"],
+        courseId: product.courseId ?? null,
+      }),
+    ),
+    courseId: product.courseId ?? null,
+  }));
   return {
     context: { zoneId: "zone-counter", departmentId: "department-default", serviceMode: "prepay" },
     defaultMenuId,
     // No `versionId`: a line added from these offers asserts no version, so the wire bodies the
     // suites pin are the ones a till sends against the live version.
-    menus: catalogue.menus as ZoneOfferCatalogue["menus"],
-    offers: catalogue.products.map((product, index): ZoneOfferCatalogue["offers"][number] => ({
-      id: product.menuItemId ?? `menu-item-${product.id}-${index}`,
-      menuId: product.catalogueId ?? defaultMenuId ?? "menu-fixture",
-      productId: product.productId ?? product.id,
-      grossPrice: product.unitPrice,
-      unitPrice: product.unitPrice,
-      active: true,
-      available: true,
-      image: null,
-      description: null,
-      menuName: product.catalogueName ?? catalogue.menus[0]?.name ?? "Menu",
-      placements: [[]],
-      name: product.name,
-      customerName: product.customerName ?? null,
-      kitchenName: product.kitchenName ?? null,
-      // `productUnit` is the till's own fallback, reused so the fixture cannot drift from it.
-      unit: productUnit(product),
-      vatClass: product.vatClass,
-      category: product.category ?? "Other",
-      allergens: product.allergens,
-      diet: product.diet ?? null,
-      dietDerivation: product.dietDerivation ?? null,
-      dietOverride: product.dietOverride ?? null,
-      // The source `TillProduct` types the declarations looser than the offer's wire shape (plain
-      // `string[]`), so the fixture narrows them — the fixtures only ever supply real labels.
-      dietaryDeclarations: (product.dietaryDeclarations ??
-        []) as ZoneOfferCatalogue["offers"][number]["dietaryDeclarations"],
-      offeredModifiers: (product.offeredModifiers ?? []).map((entry) =>
-        entry.kind === "extras"
-          ? {
-              ...entry,
-              items: entry.items.map((item) => ({
-                ...item,
-                image: null,
-                available: true,
-              })),
-            }
-          : entry,
-      ),
-      variants: (product.variants ?? []).map(
-        (variant): ZoneOfferCatalogue["offers"][number]["variants"][number] => ({
-          id: variant.id,
-          name: variant.name,
-          customerName: variant.customerName ?? null,
-          kitchenName: variant.kitchenName ?? null,
-          image: variant.image ?? null,
-          unitPrice: variant.unitPrice,
-          menuPrice: null,
-          offered: true,
-          available: variant.available,
-          unit: productUnit(product),
-          pricingUnit: productUnit(product).hardwareUnit === null ? "each" : "weight",
-          vatClass: product.vatClass,
-          category: product.category ?? "Other",
-          allergens: product.allergens,
-          diet: product.diet ?? null,
-          dietDerivation: product.dietDerivation ?? null,
-          dietOverride: product.dietOverride ?? null,
-          dietaryDeclarations: (product.dietaryDeclarations ??
-            []) as ZoneOfferCatalogue["offers"][number]["dietaryDeclarations"],
-          courseId: product.courseId ?? null,
-        }),
-      ),
-      courseId: product.courseId ?? null,
-    })),
+    menus: servedMenus(catalogue.menus, offers) as ZoneOfferCatalogue["menus"],
+    offers,
   };
 }
 
@@ -627,8 +639,18 @@ describe("till-app", () => {
       ],
       defaultMenuId: "menu-standard",
       menus: [
-        { id: "menu-standard", name: "Standard", isDefault: true },
-        { id: "menu-happy-hour", name: "Happy hour", isDefault: false },
+        {
+          id: "menu-standard",
+          name: "Standard",
+          isDefault: true,
+          ...servedAs("offer-standard", "product-negroni"),
+        },
+        {
+          id: "menu-happy-hour",
+          name: "Happy hour",
+          isDefault: false,
+          ...servedAs("offer-happy-hour", "product-negroni"),
+        },
       ],
       offers: [
         {
@@ -6807,7 +6829,7 @@ describe("till-app", () => {
     const gridNames = (el: TillApp) =>
       [
         ...counterGrid(el)!
-          .shadowRoot!.querySelector("till-product-grid")!
+          .shadowRoot!.querySelector("till-menu-browser")!
           .shadowRoot!.querySelectorAll(".name"),
       ].map((n) => n.textContent);
 
@@ -7049,9 +7071,11 @@ it("leaves login and pairing actions clear of the language chooser on a narrow s
 });
 
 describe("remembered dietary filters", () => {
+  // Each dish is its own offer, with its own menu-item id, as every served offer is.
   const salad: TillProduct = {
     ...cafe,
     id: "salad",
+    menuItemId: "menu-item-salad",
     name: "Ensalada",
     customerName: { es: "Ensalada para el cliente" },
     diet: { vegan: "yes", vegetarian: "yes", contains: [] },
@@ -7059,6 +7083,7 @@ describe("remembered dietary filters", () => {
   const mixed: TillProduct = {
     ...cafe,
     id: "mixed",
+    menuItemId: "menu-item-mixed",
     name: "Mixto",
     customerName: { es: "Mixto para el cliente" },
     diet: { vegan: "no", vegetarian: "no", contains: ["meat", "fish"] },
@@ -7077,7 +7102,7 @@ describe("remembered dietary filters", () => {
   const names = (el: TillApp) =>
     [
       ...counterGrid(el)!
-        .shadowRoot!.querySelector("till-product-grid")!
+        .shadowRoot!.querySelector("till-menu-browser")!
         .shadowRoot!.querySelectorAll(".name"),
     ].map((n) => n.textContent);
 

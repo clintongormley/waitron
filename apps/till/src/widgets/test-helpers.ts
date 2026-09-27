@@ -2,6 +2,7 @@ import axe from "axe-core";
 import { commands } from "vitest/browser";
 import { beforeEach, expect } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
+import type { ServedMenu } from "@waitron/catalogue/src/menu-document-types.js";
 
 declare module "vitest/browser" {
   interface BrowserCommands {
@@ -98,4 +99,35 @@ export function formatViolations(violations: axe.Result[]): string {
 export async function expectNoA11yViolations(context: Element): Promise<void> {
   const results = await axe.run(context);
   expect(results.violations, formatViolations(results.violations)).toEqual([]);
+}
+
+type ServedFields = Pick<
+  ServedMenu,
+  "structure" | "homeLayouts" | "defaultHomeLayoutId" | "homeLayoutId" | "layoutFallback"
+>;
+
+/**
+ * Gives each menu what a zone-offers body serves beside it: a structure listing that menu's own
+ * offers in order, under a default layout with no shortcuts, so a menu browser shows each offer once.
+ */
+export function servedMenus<M extends { id: string }>(
+  menus: readonly M[],
+  offers: readonly { id: string; menuId: string; productId: string }[],
+): (M & ServedFields)[] {
+  return menus.map((menu) => ({
+    ...menu,
+    structure: {
+      members: offers
+        .filter((offer) => offer.menuId === menu.id)
+        .map((offer) => ({
+          kind: "product" as const,
+          menuItemId: offer.id,
+          productId: offer.productId,
+        })),
+    },
+    homeLayouts: [{ id: `${menu.id}-home`, name: "Home", tiles: [] }],
+    defaultHomeLayoutId: `${menu.id}-home`,
+    homeLayoutId: `${menu.id}-home`,
+    layoutFallback: null,
+  }));
 }

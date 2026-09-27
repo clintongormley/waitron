@@ -53,7 +53,7 @@ const menu: TillZoneMenu = {
   name: "Lunch",
   isDefault: true,
   versionId: "v1",
-  structure: { members: [drinks, member("cafe")] },
+  structure: { members: [drinks, member("cafe"), member("jamon")] },
   homeLayouts: [
     {
       id: "lay-home",
@@ -75,6 +75,8 @@ const products = [
   product("cola", "Cola"),
   product("cana", "Caña"),
   product("burger", "Burger", false),
+  // Sold by weight, so its tile's price reads per kilo.
+  { ...product("jamon", "Jamón"), pricingUnit: "weight" as const },
 ];
 
 async function mount(theme: Theme) {
@@ -96,9 +98,10 @@ function button(el: TillMenuBrowser, name: string): HTMLElement {
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (theme) => {
-  it("home, with a greyed, unavailable tile, has no violations", async () => {
+  it("home, with a greyed, unavailable tile and a weighed product's tile, has no violations", async () => {
     const { el, host } = await mount(theme);
     expect((button(el, "Burger") as HTMLElement & { disabled: boolean }).disabled).toBe(true);
+    expect(button(el, "Jamón").querySelector(".price")!.textContent).toContain("/kg");
     await expectNoA11yViolations(host);
   });
 

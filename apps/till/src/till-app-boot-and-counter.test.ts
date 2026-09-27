@@ -1,7 +1,7 @@
 import { currentContentLanguages } from "@waitron/ui";
 import type { ContentLanguages } from "@waitron/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
 import { productUnit } from "./widgets/product-name.js";
 import { TillApp } from "./till-app.js";
 import { ServerRouter } from "./api/server-router.js";
@@ -101,12 +101,12 @@ function zoneOffers(
   serviceMode: ServiceZoneSummary["serviceMode"] = "prepay",
   defaultMenuId: string | null = catalogue.menus.find((menu) => menu.isDefault)?.id ?? null,
 ): ZoneOfferCatalogue {
-  return {
+  const body: ZoneOfferCatalogue = {
     context: { zoneId, departmentId: "department-default", serviceMode },
     defaultMenuId,
     // No `versionId`: a line added from these offers asserts no version, so the wire bodies the
     // suites pin are the ones a till sends against the live version.
-    menus: catalogue.menus as ZoneOfferCatalogue["menus"],
+    menus: [],
     offers: catalogue.products.map((product, index): ZoneOfferCatalogue["offers"][number] => ({
       id: product.menuItemId ?? `menu-item-${product.id}-${index}`,
       menuId: product.catalogueId ?? "menu-fixture",
@@ -135,6 +135,8 @@ function zoneOffers(
       courseId: null,
     })),
   };
+  body.menus = servedMenus(catalogue.menus, body.offers) as ZoneOfferCatalogue["menus"];
+  return body;
 }
 
 const zone = (id: string, serviceMode: ServiceZoneSummary["serviceMode"]): ServiceZoneSummary => ({

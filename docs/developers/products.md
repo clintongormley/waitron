@@ -276,15 +276,17 @@ read from the current rows, as is whether each product and variant is Active and
 
 ### On the till
 
-Every top-level product on a menu's published version gets a button, whether or not it is marked as
-sold alone. One that cannot be sold now keeps its button, greyed, and a tap on it does nothing
-(`product-grid.ts`), so the buttons around it do not move; the till's menu-state poll greys and
+Every product that a menu's published structure reaches gets a button in the till's menu browser
+(`apps/till/src/widgets/menu-browser.ts`) — in its section, in the search results, and wherever the
+device's home layout places it — whether or not it is marked as sold alone. One that cannot be sold
+now keeps its button, greyed, and a tap on it does nothing (`hasSomethingToSell`,
+`apps/till/src/widgets/product-pick.ts`), so the buttons around it do not move; the till's menu-state poll greys and
 restores it without reloading the offers (`apps/till/src/till-app.ts`). A variant never has a button: it is listed only nested under its
 parent's offer (`LiveOffer.variants`). The till reads its offers from the zone
 (`GET /api/default-service-zone/offers`, `GET /api/service-zones/:zoneId/offers`).
 
 Tapping a parent sold in whole units, and not tied to a scale, opens the picker at once
-(`#pick`, `apps/till/src/widgets/product-grid.ts`). A parent sold by weight or in fractions, or
+(`pickProduct`, `apps/till/src/widgets/product-pick.ts`). A parent sold by weight or in fractions, or
 tied to a scale, asks for its quantity on the keypad first and then opens the same picker (`#addWeight`,
 `apps/till/src/widgets/tender-pay.ts`). The picker lists the variants in the one variant order,
 `products.variant_order`, set by the product editor (`setProductVariants` writes the order the
@@ -292,7 +294,7 @@ variants were sent in). The first available one is chosen to start with; an unav
 listed, drawn disabled; each is labelled with its difference from the parent's price on that menu
 ("+€1.50") where it has one (`till-modifier-picker`, `apps/till/src/widgets/modifier-picker.ts`;
 the difference is worked out in `apps/till/src/api/client.ts`). A product none of whose variants is
-available on that menu keeps its button, greyed (`product-grid.ts`). An extras list does not offer a product
+available on that menu keeps its button, greyed (`hasSomethingToSell`). An extras list does not offer a product
 that has an Active variant (`readExtraProducts`, `packages/catalogue/src/offered-modifiers.ts`),
 since the order path refuses one picked as an extra (below). The catalogue refuses both ways of
 putting one there: an extras list naming such a product (`extras.product_has_variants`), and an

@@ -18,6 +18,11 @@ registerIcons({
     "M1.5 3.5a1 1 0 0 1 1-1H6l1.5 1.5h6a1 1 0 0 1 1 1v7.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1Z",
 });
 
+/** The browser's column count when its card sets none: the dashboard's layout preview shows the
+ * same two sizes. */
+export const HANDHELD_COLUMNS = 3;
+export const TILL_COLUMNS = 6;
+
 type SectionNode = Extract<DocumentMember, { kind: "section" }>;
 
 /** What the widget can show of one menu, given the offers it holds. */
@@ -63,7 +68,7 @@ function folded(text: string): string {
 /**
  * The till's menu home: search, then the device's home layout's shortcuts, then the menu's own
  * structure, with each section opening in place behind a breadcrumb. Tiles coordinate only through
- * the store, as `till-product-grid`'s do.
+ * the store: they never reference the basket or total widgets.
  *
  * When a new `menu` or `products` no longer holds the open section, or any section on the way to
  * it, it says "Not found" and shows home.

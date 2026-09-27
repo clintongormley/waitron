@@ -3,7 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { selectStyles } from "../select-styles.js";
 import { currentLocale, t } from "../i18n/t.js";
-import { type DietPredicate, hasDietData, visibleProducts } from "../menu-filter.js";
+import { type DietPredicate, hasDietData } from "../menu-filter.js";
 import type { TabDef } from "../layout.js";
 import "../widgets/card-grid.js";
 import "../widgets/menu-switcher.js";
@@ -17,8 +17,8 @@ import type {
   StationQueueGroup,
   TillActiveReader,
   TillApi,
-  TillMenu,
   TillProduct,
+  TillZoneMenu,
 } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 import type { CardOutcome, CardProvider } from "../widgets/tender-pay.js";
@@ -94,7 +94,7 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) store!: WorkingOrderStore;
   /** The grid shows the selected menu's offers; the allergen lookup screen keeps the full zone set. */
   @property({ attribute: false }) products: TillProduct[] = [];
-  @property({ attribute: false }) menus: TillMenu[] = [];
+  @property({ attribute: false }) menus: TillZoneMenu[] = [];
   /** Owned by the app; a switcher pick bubbles up as `menu-selected` for it to update. */
   @property() selectedMenuId = "";
   @property({ attribute: false }) serviceZones: ServiceZoneSummary[] = [];
@@ -128,6 +128,8 @@ export class TillCounterScreen extends LitElement {
    * exercised only by this screen's tests.
    */
   @property({ type: Boolean }) embedded = false;
+  /** A handheld form factor, whose menu browser shows fewer columns. */
+  @property({ type: Boolean }) handheld = false;
 
   #logout(): void {
     this.dispatchEvent(new CustomEvent("logout", { bubbles: true, composed: true }));
@@ -187,11 +189,6 @@ export class TillCounterScreen extends LitElement {
     );
   }
 
-  /** The allergen lookup screen keeps the FULL set: allergen lookup must reach every product. */
-  #gridProducts(): TillProduct[] {
-    return visibleProducts(this.products, this.selectedMenuId, this.selectedDiet);
-  }
-
   #hasDietData(): boolean {
     return hasDietData(this.products);
   }
@@ -245,15 +242,19 @@ export class TillCounterScreen extends LitElement {
     `;
   }
 
-  /** The grid is fed `#gridProducts()`, never the raw `products`, so the menu/diet filtering lives here. */
+  /** The card grid narrows the products to the shown menu and diet lens itself; the allergen screen
+   * keeps the FULL set, because allergen lookup must reach every product. */
   #gridBody(): TemplateResult {
     return html`<div class="body grid-body">
       ${this.#menuControls()}
       <till-card-grid
         .tab=${this.counterTab}
         .store=${this.store}
-        .products=${this.#gridProducts()}
+        .products=${this.products}
+        .menus=${this.menus}
+        .selectedMenuId=${this.selectedMenuId}
         .selectedDiet=${this.selectedDiet}
+        .handheld=${this.handheld}
         .heldOrders=${this.heldOrders}
         .stationQueue=${this.stationQueue}
         .defaultStationId=${this.defaultStationId}

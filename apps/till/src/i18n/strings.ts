@@ -401,6 +401,11 @@ export const en = {
   "menu.home": "Home",
   "menu.breadcrumb": "Where you are in the menu",
   "menu.not_found": "Not found",
+  // `{name}` and `{menu}` are substituted at the call site.
+  "home_layout.removed": 'The home layout "{name}" was removed — showing the default',
+  "home_layout.removed_unnamed":
+    "The home layout chosen for the {menu} menu was removed — showing the default",
+  "home_layout.dismiss": "Dismiss",
   "service_zone.label": "Service area",
   "service_zone.refresh": "Refresh menus",
   "service_zone.load_error": "Could not load menus for this service area",
@@ -789,6 +794,11 @@ export const es: Record<StringKey, string> = {
   "menu.home": "Inicio",
   "menu.breadcrumb": "Dónde estás en la carta",
   "menu.not_found": "No encontrado",
+  "home_layout.removed":
+    "Se ha eliminado la página de inicio «{name}»: se muestra la predeterminada",
+  "home_layout.removed_unnamed":
+    "Se ha eliminado la página de inicio elegida para la carta {menu}: se muestra la predeterminada",
+  "home_layout.dismiss": "Cerrar",
   "service_zone.label": "Zona de servicio",
   "service_zone.refresh": "Actualizar menús",
   "service_zone.load_error": "No se pudieron cargar los menús de esta zona",

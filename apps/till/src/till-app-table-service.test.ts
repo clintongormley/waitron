@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
 import { productUnit } from "./widgets/product-name.js";
 import { TillApp } from "./till-app.js";
 import { WorkingOrderStore } from "./state/working-order.js";
@@ -145,12 +145,12 @@ const till = {
 };
 
 function zoneOffers(catalogue: ProductCatalogue, defaultMenuId: string | null): ZoneOfferCatalogue {
-  return {
+  const body: ZoneOfferCatalogue = {
     context: { zoneId: floorZone.id, departmentId: "department-default", serviceMode: "prepay" },
     defaultMenuId,
     // No `versionId`: a line added from these offers asserts no version, so the wire bodies the
     // suites pin are the ones a till sends against the live version.
-    menus: catalogue.menus as ZoneOfferCatalogue["menus"],
+    menus: [],
     offers: catalogue.products.map((product, index): ZoneOfferCatalogue["offers"][number] => ({
       id: product.menuItemId ?? `menu-item-${product.id}-${index}`,
       menuId: product.catalogueId ?? "menu-fixture",
@@ -179,6 +179,8 @@ function zoneOffers(catalogue: ProductCatalogue, defaultMenuId: string | null): 
       courseId: null,
     })),
   };
+  body.menus = servedMenus(catalogue.menus, body.offers) as ZoneOfferCatalogue["menus"];
+  return body;
 }
 
 const counterOffers = zoneOffers(
@@ -309,7 +311,7 @@ describe("till-app table ordering: the table's menus", () => {
     const screen = await toTableOrder(el);
 
     expect(api.listZoneOffers).toHaveBeenCalledWith(floorZone.id);
-    expect(screen.menus).toEqual(diningMenus);
+    expect(screen.menus).toEqual(diningOffers.menus);
     expect(screen.selectedMenuId).toBe("menu-dinner");
   });
 
@@ -412,7 +414,7 @@ describe("till-app table ordering: the table's menus", () => {
 
     expect(banner(el)).toBeNull();
     expect(tableOrder(el)!.orderId).toBe("order-b");
-    expect(tableOrder(el)!.menus).toEqual(diningMenus);
+    expect(tableOrder(el)!.menus).toEqual(diningOffers.menus);
     expect(api.getTabLines).toHaveBeenCalledTimes(1);
     expect(api.getTabLines).toHaveBeenCalledWith("order-b");
   });
@@ -2258,7 +2260,9 @@ describe("till-app table ordering: a menu published while a table is open", () =
     try {
       const republished = {
         ...diningOffers,
-        menus: [{ id: "menu-dinner", name: "Dinner", isDefault: true, versionId: "v2" }],
+        menus: diningOffers.menus
+          .filter((menu) => menu.id === "menu-dinner")
+          .map((menu) => ({ ...menu, versionId: "v2" })),
         offers: diningOffers.offers.filter((offer) => offer.menuId === "menu-dinner"),
       };
       const listZoneOffers = vi
@@ -2268,8 +2272,20 @@ describe("till-app table ordering: a menu published while a table is open", () =
       const menuState = vi.fn(async (zoneId: string) => ({
         menus:
           zoneId === floorZone.id
-            ? [{ menuId: "menu-dinner", versionId: "v2" }]
-            : counterOffers.menus.map((menu) => ({ menuId: menu.id, versionId: menu.versionId })),
+            ? [
+                {
+                  menuId: "menu-dinner",
+                  versionId: "v2",
+                  homeLayoutId: "menu-dinner-home",
+                  layoutFallback: null,
+                },
+              ]
+            : counterOffers.menus.map((menu) => ({
+                menuId: menu.id,
+                versionId: menu.versionId,
+                homeLayoutId: menu.homeLayoutId,
+                layoutFallback: menu.layoutFallback,
+              })),
         unavailable: { products: [], optionLabels: [], extraItems: [] },
       }));
       const { el } = await mountApp({
