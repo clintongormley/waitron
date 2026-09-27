@@ -8,6 +8,7 @@
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import {
   kitchenStations,
+  orderGroups,
   printers,
   stationPrinters,
   ticketItems,
@@ -20,7 +21,7 @@ import { perDishOptionQuantity, thousandthsToDecimal } from "@waitron/shared";
 import { kitchenPresentationName, optionSnapshotLabels } from "@waitron/catalogue";
 import { columnsFor, enqueuePrintJob } from "@waitron/printing";
 import type { CharacterSet, PaperWidth, PrintConfig } from "@waitron/printing";
-import { formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
+import { arrangeTicketItems, formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { KitchenLayout, KitchenTicketItem, KitchenTicketStation } from "./kitchen-ticket.js";
 import type { TillConfig } from "./till-config.js";
@@ -196,6 +197,19 @@ async function buildTicketItems(
   return byLine;
 }
 
+/** The position of the party's group each line is in; a line in no group is absent. */
+async function readGroupPositions(
+  tx: Transaction,
+  lineIds: string[],
+): Promise<Map<string, number>> {
+  const rows = await tx
+    .select({ id: workingOrderLines.id, position: orderGroups.position })
+    .from(workingOrderLines)
+    .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+    .where(inArray(workingOrderLines.id, lineIds));
+  return new Map(rows.map((row) => [row.id, row.position]));
+}
+
 async function readStationNames(
   tx: Transaction,
   stationIds: string[],
@@ -246,6 +260,7 @@ export async function enqueueKitchenTickets(
   cfg: TillConfig,
   orderId: string,
   firedItems: FiredItem[],
+  { reprint = false }: { reprint?: boolean } = {},
 ): Promise<void> {
   if (firedItems.length === 0) return;
 
@@ -258,26 +273,34 @@ export async function enqueueKitchenTickets(
   const lineIds = [...new Set(firedItems.map((f) => f.workingOrderLineId))];
 
   const itemsByLine = await buildTicketItems(tx, cfg, lineIds);
+  const groupByLine = await readGroupPositions(tx, lineIds);
   const stationNames = await readStationNames(tx, stationIds);
   const order = await readOrderHeader(tx, cfg, orderId);
 
   const itemsByStation = new Map<string, { lineNo: number; item: KitchenTicketItem }[]>();
   for (const fired of firedItems) {
     const entry = itemsByLine.get(fired.workingOrderLineId)!;
+    const group = groupByLine.get(fired.workingOrderLineId);
+    const item = atFiredQuantity(entry.item, fired);
     const bucket = itemsByStation.get(fired.stationId) ?? [];
-    bucket.push({ lineNo: entry.lineNo, item: atFiredQuantity(entry.item, fired) });
+    bucket.push({ lineNo: entry.lineNo, item: group === undefined ? item : { ...item, group } });
     itemsByStation.set(fired.stationId, bucket);
   }
 
+  // Group-less items first, then group by group: the ticket heads each group's run of items.
+  const groupOrder = (item: KitchenTicketItem) => item.group ?? 0;
   // Station names are unique per location, so the name alone orders them.
   const stations = [...stationNames.entries()]
     .map(([id, name]) => ({
       id,
       name,
-      items: itemsByStation
-        .get(id)!
-        .sort((a, b) => a.lineNo - b.lineNo)
-        .map((entry) => entry.item),
+      items: arrangeTicketItems(
+        itemsByStation
+          .get(id)!
+          .sort((a, b) => groupOrder(a.item) - groupOrder(b.item) || a.lineNo - b.lineNo)
+          .map((entry) => entry.item),
+        "combined",
+      ),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -313,6 +336,7 @@ export async function enqueueKitchenTickets(
     for (const group of groupByLayout(stationScope)) {
       const stationTicket = formatKitchenTicket(
         {
+          reprint,
           scope: "station",
           stationName: station.name,
           tableLabel,
@@ -331,6 +355,7 @@ export async function enqueueKitchenTickets(
   for (const group of groupByLayout([...groupPrinters.values()])) {
     const consolidated = formatKitchenTicket(
       {
+        reprint,
         scope: "order",
         tableLabel,
         orderNumber,
@@ -558,8 +583,9 @@ export async function enqueueMovedSlips(
 
 /**
  * Reprint an order's kitchen tickets: every fired item across every round (held items excluded), unlike
- * the fire path, which prints only its own round. Each ticket is stamped with the reprint time, not the
- * original fire time. An order with nothing fired is a no-op.
+ * the fire path, which prints only its own round. Each ticket is marked REPRINT and stamped with the
+ * reprint time, not the original fire time. It writes print jobs and nothing else. An order with
+ * nothing fired is a no-op.
  */
 export async function reprintOrderTickets(
   tx: Transaction,
@@ -574,5 +600,5 @@ export async function reprintOrderTickets(
     })
     .from(ticketItems)
     .where(and(eq(ticketItems.workingOrderId, orderId), isNotNull(ticketItems.firedAt)));
-  await enqueueKitchenTickets(tx, cfg, orderId, fired);
+  await enqueueKitchenTickets(tx, cfg, orderId, fired, { reprint: true });
 }

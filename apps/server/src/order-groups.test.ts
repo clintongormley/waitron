@@ -40,6 +40,7 @@ import { createCourse, setProductCourse } from "./kitchen.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { createTable } from "./tables.js";
 import { printedLines } from "./testing/decode-ticket.js";
+import { reprintOrderTickets } from "./kitchen-print.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -3307,4 +3308,107 @@ describe("the kitchen and the pass read a party's groups", () => {
     expect(card!.items.map((item) => "group" in item)).toEqual([false, false]);
     expect("visit" in order).toBe(false);
   });
+});
+
+describe("kitchen tickets for a party's groups (Task 5)", () => {
+  /** A printed ticket's lines, minus the blank line the cut leaves. */
+  const linesOfTicket = (ticket: string) => ticket.split("\n").filter((text) => text !== "");
+
+  // Fails if a group's fire ticket stops naming its group, or names it anywhere but under the header.
+  it("names the group under the header of each group's fire ticket", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const [drinks, cold] = (await printed(v)).map(linesOfTicket);
+    expect(drinks![4]).toBe("GROUP 1");
+    expect(drinks!.slice(5).join("\n")).toContain(DISHES.beer.kitchen);
+    expect(cold![4]).toBe("GROUP 2");
+
+    await fire(v, s.visitId, s.warm);
+
+    const warm = linesOfTicket((await printed(v)).at(-1)!);
+    expect(warm[4]).toBe("GROUP 3");
+    expect(warm.filter((text) => text.startsWith("GROUP"))).toEqual(["GROUP 3"]);
+  });
+
+  // The REPRINT line is what fails first; the rows compared before and after were already left
+  // alone by the reprint before this task (it only enqueues print jobs).
+  it("marks a reprint REPRINT, heads each group, and records no event, ticket item or sent stamp", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    await fire(v, s.visitId, s.warm);
+    const rows = async () => ({
+      events: await eventsOf(s.visitId),
+      tickets: await db
+        .select()
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, s.tabId))
+        .orderBy(ticketItems.id),
+      sent: (await linesOf(s.visitId)).map((row) => [row.id, row.sentAt]),
+    });
+    const before = await rows();
+    const jobsBefore = (await printed(v)).length;
+
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, s.tabId));
+
+    const jobs = await printed(v);
+    expect(jobs).toHaveLength(jobsBefore + 1);
+    const reprint = linesOfTicket(jobs.at(-1)!);
+    expect(reprint[0]).toBe("*** REPRINT ***");
+    const at = (text: string) => reprint.findIndex((row) => row.includes(text));
+    expect(reprint.filter((text) => text.startsWith("GROUP"))).toEqual([
+      "GROUP 1",
+      "GROUP 2",
+      "GROUP 3",
+    ]);
+    expect(at("GROUP 1")).toBeLessThan(at(DISHES.beer.kitchen));
+    expect(at(DISHES.beer.kitchen)).toBeLessThan(at("GROUP 2"));
+    expect(at("GROUP 2")).toBeLessThan(at(DISHES.cold.kitchen));
+    expect(at(DISHES.cold.kitchen)).toBeLessThan(at("GROUP 3"));
+    expect(at("GROUP 3")).toBeLessThan(at(DISHES.warm.kitchen));
+    expect(await rows()).toEqual(before);
+  });
+
+  // Fails if a reprint prints in line order rather than group order: the mains were added after
+  // the warm starters but moved ahead of them.
+  it("prints a reprint's groups in position order, not in the order their lines were added", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    await reorder(s.visitId, [s.mains, s.warm, s.desserts]);
+    await fire(v, s.visitId, s.mains);
+    await fire(v, s.visitId, s.warm);
+
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, s.tabId));
+
+    const reprint = linesOfTicket((await printed(v)).at(-1)!);
+    const at = (text: string) => reprint.findIndex((row) => row.includes(text));
+    expect(reprint.filter((text) => text.startsWith("GROUP"))).toEqual([
+      "GROUP 1",
+      "GROUP 2",
+      "GROUP 3",
+      "GROUP 4",
+    ]);
+    expect(at("GROUP 3")).toBeLessThan(at(DISHES.steak.kitchen));
+    expect(at(DISHES.steak.kitchen)).toBeLessThan(at("GROUP 4"));
+    expect(at("GROUP 4")).toBeLessThan(at(DISHES.warm.kitchen));
+  });
+
+  // Fails if identical lines of one group print as separate entries under the default.
+  it.each(["fire", "hold"] as const)(
+    "prints three separate Steak lines as one 3 x entry by default (%s)",
+    async (release) => {
+      const v = await setupVenue();
+      const s = await seated(v);
+      const { groups } = await submit(v, s.visitId, [
+        { release, lines: [line(v, "steak"), line(v, "steak"), line(v, "steak")] },
+      ]);
+      if (release === "hold") await fire(v, s.visitId, groups[0]!.id);
+
+      const steaks = await linesIn(s.visitId, groups[0]!.id);
+      expect(steaks.map((row) => row.quantity)).toEqual([1000, 1000, 1000]);
+      const ticket = linesOfTicket((await printed(v)).at(-1)!);
+      expect(ticket.filter((text) => text.includes(DISHES.steak.kitchen))).toEqual([
+        expect.stringMatching(/^3\.000 .*x K-STEAK$/),
+      ]);
+    },
+  );
 });

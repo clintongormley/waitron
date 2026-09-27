@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { FEED_BEFORE_CUT } from "@waitron/printing";
-import { formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
-import type { KitchenLayout, KitchenTicket } from "./kitchen-ticket.js";
+import { arrangeTicketItems, formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
+import type { KitchenLayout, KitchenTicket, KitchenTicketItem } from "./kitchen-ticket.js";
 import { decodeTicket, printedLines } from "./testing/decode-ticket.js";
 
 // Decodes the payload as Latin-1 to assert the readable content; the final three bytes are always the
@@ -435,5 +435,195 @@ describe("a note made only of control characters", () => {
         KITCHEN_80,
       );
     expect([...ticket("\r\n\t\u0007")]).toEqual([...ticket()]);
+  });
+});
+
+describe("the reprint mark and a party's group numbers", () => {
+  const at = new Date(2026, 7, 17, 14, 30);
+  const station = (items: KitchenTicketItem[]) =>
+    ({
+      scope: "station",
+      stationName: "Cocina",
+      tableLabel: "Mesa 4",
+      orderNumber: "A-17",
+      firedAt: at,
+      items,
+    }) as const;
+
+  // Fails if a reprint prints as a fresh fire, or the mark moves off the first line.
+  it("opens a reprint with *** REPRINT *** and prints the rest as the ticket would", () => {
+    const items = [{ qty: 2, name: "Steak" }];
+    const plain = printedLines(formatKitchenTicket(station(items), KITCHEN_80));
+    const again = printedLines(
+      formatKitchenTicket({ ...station(items), reprint: true }, KITCHEN_80),
+    );
+    expect(again).toEqual(["*** REPRINT ***", ...plain]);
+  });
+
+  // Fails if a group's fire ticket stops naming its group under the header.
+  it("names the one group a ticket carries under the header", () => {
+    const lines = printedLines(
+      formatKitchenTicket(
+        station([
+          { qty: 2, name: "Steak", group: 2 },
+          { qty: 1, name: "Fish", group: 2 },
+        ]),
+        KITCHEN_80,
+      ),
+    );
+    expect(lines).toEqual([
+      "Cocina",
+      "Mesa 4",
+      "A-17",
+      "14:30",
+      "GROUP 2",
+      "2 x Steak",
+      "1 x Fish",
+      "",
+    ]);
+  });
+
+  // Fails if items of several groups print as one run, or group-less items gain a heading.
+  it("heads each group's items when a ticket spans groups, group-less items first with none", () => {
+    const lines = printedLines(
+      formatKitchenTicket(
+        station([
+          { qty: 1, name: "Bread" },
+          { qty: 2, name: "Beer", group: 1 },
+          { qty: 4, name: "Croquettes", group: 2 },
+          { qty: 1, name: "Olives", group: 2 },
+        ]),
+        KITCHEN_80,
+      ),
+    );
+    expect(lines).toEqual([
+      "Cocina",
+      "Mesa 4",
+      "A-17",
+      "14:30",
+      "1 x Bread",
+      "GROUP 1",
+      "2 x Beer",
+      "GROUP 2",
+      "4 x Croquettes",
+      "1 x Olives",
+      "",
+    ]);
+  });
+
+  it("prints no group line for a ticket with no group, as before", () => {
+    const lines = printedLines(
+      formatKitchenTicket(station([{ qty: 1, name: "Chips" }]), KITCHEN_80),
+    );
+    expect(lines).toEqual(["Cocina", "Mesa 4", "A-17", "14:30", "1 x Chips", ""]);
+  });
+
+  it("names a pass copy's one group once under the header, and heads each group within a station otherwise", () => {
+    const pass = (
+      stations: { stationName: string; items: { qty: number; name: string; group?: number }[] }[],
+    ) =>
+      printedLines(
+        formatKitchenTicket(
+          { scope: "order", tableLabel: "Mesa 4", orderNumber: "A-17", firedAt: at, stations },
+          KITCHEN_80,
+        ),
+      );
+    expect(
+      pass([
+        { stationName: "Barra", items: [{ qty: 2, name: "Beer", group: 3 }] },
+        { stationName: "Cocina", items: [{ qty: 1, name: "Steak", group: 3 }] },
+      ]),
+    ).toEqual([
+      "PASE",
+      "Mesa 4",
+      "A-17",
+      "14:30",
+      "GROUP 3",
+      "Barra",
+      "2 x Beer",
+      "Cocina",
+      "1 x Steak",
+      "",
+    ]);
+    expect(
+      pass([
+        { stationName: "Barra", items: [{ qty: 2, name: "Beer", group: 1 }] },
+        {
+          stationName: "Cocina",
+          items: [
+            { qty: 4, name: "Croquettes", group: 2 },
+            { qty: 1, name: "Steak", group: 4 },
+          ],
+        },
+      ]),
+    ).toEqual([
+      "PASE",
+      "Mesa 4",
+      "A-17",
+      "14:30",
+      "Barra",
+      "GROUP 1",
+      "2 x Beer",
+      "Cocina",
+      "GROUP 2",
+      "4 x Croquettes",
+      "GROUP 4",
+      "1 x Steak",
+      "",
+    ]);
+  });
+});
+
+describe("arrangeTicketItems (D14)", () => {
+  const burger = { qty: "1.000", unit: "ea", name: "Burger", modifiers: ["Cheese"] };
+
+  // Fails if identical entries stop merging, or the quantities are not added.
+  it("combined: merges entries that would print identically into one, adding the quantities", () => {
+    expect(
+      arrangeTicketItems(
+        [burger, { ...burger, qty: "2.000" }, { ...burger, note: "no onion" }, { ...burger }],
+        "combined",
+      ),
+    ).toEqual([
+      { ...burger, qty: "4.000" },
+      { ...burger, note: "no onion" },
+    ]);
+  });
+
+  // Fails if entries that print differently are merged.
+  it("combined: keeps apart entries differing in modifiers, their order, unit, note or group", () => {
+    const items = [
+      burger,
+      { ...burger, modifiers: ["Bacon"] },
+      { ...burger, modifiers: ["Cheese", "Bacon"] },
+      { ...burger, modifiers: ["Bacon", "Cheese"] },
+      { ...burger, unit: "kg" },
+      { ...burger, note: "rare" },
+      { ...burger, group: 2 },
+    ];
+    expect(arrangeTicketItems(items, "combined")).toEqual(items);
+  });
+
+  // Fails if a whole-number quantity is not split, or a weighed one is.
+  it("separate: splits a whole-number quantity into entries of one, never a weighed quantity", () => {
+    expect(
+      arrangeTicketItems(
+        [
+          { ...burger, qty: "3.000" },
+          { ...burger, name: "Hake", qty: "0.350" },
+        ],
+        "separate",
+      ),
+    ).toEqual([
+      { ...burger, qty: "1.000" },
+      { ...burger, qty: "1.000" },
+      { ...burger, qty: "1.000" },
+      { ...burger, name: "Hake", qty: "0.350" },
+    ]);
+  });
+
+  it("separate: never splits a quantity of one-and-a-half, and leaves separate lines separate", () => {
+    const items = [{ ...burger, qty: "1.500" }, burger, burger];
+    expect(arrangeTicketItems(items, "separate")).toEqual(items);
   });
 });

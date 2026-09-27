@@ -7,6 +7,7 @@
  * `esc()` has no bold, so ASCII markers stand in for emphasis.
  */
 import { esc, prepareText, wrapText, type CharacterSet } from "@waitron/printing";
+import { stringToThousandths, thousandthsToDecimal } from "@waitron/shared";
 
 /** The printed header of an `order`-scope ticket. */
 const ORDER_HEADER = "PASE";
@@ -20,6 +21,8 @@ export interface KitchenTicketItem {
   /** The free-text kitchen note, printed as an indented `* <note>` sub-line beneath the dish. */
   note?: string;
   modifiers?: string[];
+  /** The position of the party's group the item fired in; absent for an item in no group. */
+  group?: number;
 }
 
 export interface KitchenTicketStation {
@@ -27,8 +30,8 @@ export interface KitchenTicketStation {
   items: KitchenTicketItem[];
 }
 
-/** `firedAt` prints as local HH:MM. */
-export type KitchenTicket =
+/** `firedAt` prints as local HH:MM. A `reprint` opens with `*** REPRINT ***`. */
+export type KitchenTicket = { reprint?: boolean } & (
   | {
       scope: "station";
       stationName: string;
@@ -43,7 +46,57 @@ export type KitchenTicket =
       orderNumber: string;
       firedAt: Date;
       stations: KitchenTicketStation[];
-    };
+    }
+);
+
+/** D14: `combined` prints identical entries as one `N x`, `separate` prints one entry per unit. */
+export type KitchenTicketGrouping = "combined" | "separate";
+
+/** What must match for two entries to print identically, quantity aside. */
+function sameEntry(a: KitchenTicketItem, b: KitchenTicketItem): boolean {
+  const ma = a.modifiers ?? [];
+  const mb = b.modifiers ?? [];
+  return (
+    a.name === b.name &&
+    a.unit === b.unit &&
+    a.note === b.note &&
+    a.group === b.group &&
+    ma.length === mb.length &&
+    ma.every((modifier, index) => modifier === mb[index])
+  );
+}
+
+/**
+ * One ticket list laid out under D14. `combined` merges entries that would print identically into
+ * the first of them, adding the quantities. `separate` prints a whole-number quantity N as N entries
+ * of 1, and never splits a weighed quantity.
+ */
+export function arrangeTicketItems(
+  items: readonly KitchenTicketItem[],
+  grouping: KitchenTicketGrouping,
+): KitchenTicketItem[] {
+  const count = (item: KitchenTicketItem) => stringToThousandths(String(item.qty));
+  if (grouping === "separate") {
+    return items.flatMap((item) => {
+      const thousandths = count(item);
+      if (thousandths % 1000 !== 0) return [item];
+      return Array.from({ length: thousandths / 1000 }, () => ({
+        ...item,
+        qty: thousandthsToDecimal(1000),
+      }));
+    });
+  }
+  const merged: { item: KitchenTicketItem; thousandths: number }[] = [];
+  for (const item of items) {
+    const same = merged.find((entry) => sameEntry(entry.item, item));
+    if (same === undefined) merged.push({ item, thousandths: count(item) });
+    else same.thousandths += count(item);
+  }
+  return merged.map(({ item, thousandths }) => ({
+    ...item,
+    qty: thousandthsToDecimal(thousandths),
+  }));
+}
 
 /** `qty x name`, e.g. `2 x Steak`. An ASCII "x" so any single-byte printer code page renders it. */
 function itemLine(item: KitchenTicketItem): string {
@@ -90,24 +143,42 @@ function hhmm(at: Date): string {
   return `${h}:${m}`;
 }
 
-/** An empty `items`/`stations` array yields a header-only ticket rather than throwing. */
+/**
+ * An empty `items`/`stations` array yields a header-only ticket rather than throwing. A ticket whose
+ * items all share one group names it once under the header; one spanning groups heads each group's
+ * run of items instead, so callers put group-less items first and the rest in group order.
+ */
 export function formatKitchenTicket(ticket: KitchenTicket, layout: KitchenLayout): Uint8Array {
   const b = esc(layout.charset, layout.characterTable).init();
   const text = (s: string): void => {
     for (const line of wrapText(prepareText(s, layout.charset), layout.columns)) b.line(line);
   };
+  const lists =
+    ticket.scope === "station" ? [ticket.items] : ticket.stations.map((station) => station.items);
+  const groups = new Set(lists.flat().map((item) => item.group));
+  const [onlyGroup] = groups.size === 1 ? groups : [undefined];
+  const emitList = (items: readonly KitchenTicketItem[]): void => {
+    let current: number | undefined = onlyGroup;
+    for (const item of items) {
+      if (item.group !== undefined && item.group !== current) b.line(`GROUP ${item.group}`);
+      current = item.group;
+      emitItem(b, item, layout);
+    }
+  };
 
+  if (ticket.reprint === true) b.line("*** REPRINT ***");
   text(ticket.scope === "station" ? ticket.stationName : ORDER_HEADER);
   text(ticket.tableLabel);
   text(ticket.orderNumber);
   b.line(hhmm(ticket.firedAt));
+  if (onlyGroup !== undefined) b.line(`GROUP ${onlyGroup}`);
 
   if (ticket.scope === "station") {
-    for (const item of ticket.items) emitItem(b, item, layout);
+    emitList(ticket.items);
   } else {
     for (const station of ticket.stations) {
       text(station.stationName);
-      for (const item of station.items) emitItem(b, item, layout);
+      emitList(station.items);
     }
   }
 
