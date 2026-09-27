@@ -1059,6 +1059,28 @@ describe("formatReceipt — printer layout", () => {
   );
 });
 
+/** Cents from a printed amount such as `-1.234,50 €`. */
+function printedCents(line: string): number {
+  const amount = /(-?[\d.]+,\d{2}) €$/.exec(line)?.[1];
+  if (amount === undefined) throw new Error(`no amount on "${line}"`);
+  return Number(amount.replace(/[.,]/g, ""));
+}
+
+/**
+ * A bill-payment ticket's payment rows must come to its TOTAL: money handed over or charged, less
+ * change, tip and refunds (a refund row is already printed negative).
+ */
+function expectPaymentRowsToAddUpToTotal(printed: string[]): void {
+  const start = printed.findIndex((line) => line.startsWith("TOTAL"));
+  const end = printed.indexOf("VERI*FACTU", start);
+  let paid = 0;
+  for (const line of printed.slice(start + 1, end)) {
+    if (/^(Efectivo|Tarjeta|Devolución) /.test(line)) paid += printedCents(line);
+    else if (/^(Cambio|Propina) /.test(line)) paid -= printedCents(line);
+  }
+  expect(paid).toBe(printedCents(printed[start]!));
+}
+
 describe("a bill paid in parts before its invoice", () => {
   // €20.90 paid as €10.00 cash from a €50.00 note, then €10.90 by hand-keyed card with a €1.00
   // tip: each payment prints on its own, with the change it gave when it was taken.
@@ -1107,6 +1129,7 @@ describe("a bill paid in parts before its invoice", () => {
       "Propina 1,00 €",
       "VERI*FACTU",
     ]);
+    expectPaymentRowsToAddUpToTotal(printed);
   });
 
   it("never derives cash from the total and the change, as a single payment's ticket does", () => {
@@ -1152,9 +1175,12 @@ describe("a bill payment partly given back before its invoice", () => {
         .filter((line) => line !== "")
         .slice(0, 4),
     ).toEqual(["Efectivo 50,00 €", "Devolución -6,00 €", "Devolución -4,00 €", "VERI*FACTU"]);
+    expectPaymentRowsToAddUpToTotal(printed);
   });
 
-  it("prints a card payment's refund under the card, the same way", () => {
+  // The card's tender amount is already net of its refunds, so the card row prints the original
+  // charge: €20.00 charged, €5.00 given back, €15.00 invoiced.
+  it("prints a card payment's original charge and its refund under it", () => {
     const printed = printedLines(
       formatReceipt({
         result: {
@@ -1184,6 +1210,7 @@ describe("a bill payment partly given back before its invoice", () => {
         .slice(start + 1)
         .filter((line) => line !== "")
         .slice(0, 4),
-    ).toEqual(["Tarjeta 15,00 €", "Ref. OP-3", "Devolución -5,00 €", "VERI*FACTU"]);
+    ).toEqual(["Tarjeta 20,00 €", "Ref. OP-3", "Devolución -5,00 €", "VERI*FACTU"]);
+    expectPaymentRowsToAddUpToTotal(printed);
   });
 });

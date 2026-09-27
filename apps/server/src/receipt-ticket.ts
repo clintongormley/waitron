@@ -252,7 +252,12 @@ export function formatReceipt({
         row(LABEL.cash, formatMoney(payment.tendered, locale));
         if (payment.change !== "0.00") row(LABEL.change, formatMoney(payment.change, locale));
       } else {
-        row("Tarjeta", formatMoney(payment.amount, locale));
+        // The tender amount is net of refunds, which print below it: show the original charge.
+        const charged = payment.refunds.reduce(
+          (sum, refund) => addDecimal(addDecimal(sum, decimal(refund.amount)), decimal(refund.tip)),
+          decimal(payment.amount),
+        );
+        row("Tarjeta", formatMoney(charged, locale));
         if (payment.reference !== null) text(`Ref. ${payment.reference}`);
       }
       if (payment.tip !== "0.00") row(LABEL.tip, formatMoney(payment.tip, locale));
