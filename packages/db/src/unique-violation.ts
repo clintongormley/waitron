@@ -8,7 +8,9 @@ import { UNIQUE_VIOLATION, type RefusalClass } from "./sql-state.js";
  * refusal came through, so this reads the first result code in the cause chain.
  *
  * It answers WHICH CLASS of refusal this is, and nothing about which key was refused; a write path
- * translating ONE specific refusal wants `./constraint-target.ts`'s `refusalOn`.
+ * translating ONE specific refusal wants `./constraint-target.ts`'s `refusalOn`. A 1811 refusal (an
+ * `ON DELETE RESTRICT` key and a trigger's raise share it) is told apart only by its words:
+ * `restrictRefused` / `triggerRaised` in `./constraint-target.ts`.
  */
 export function isRefusal(error: unknown, refusal: RefusalClass): boolean {
   const code = refusalCode(error);

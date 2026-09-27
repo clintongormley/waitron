@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { refusalError } from "@waitron/db";
+import { FORM_FACTOR_REFUSAL, refusalError } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
 import { translateWriteError } from "./device-profile-store.js";
 
@@ -72,6 +72,29 @@ describe("translateWriteError", () => {
     }
     expect(isAppError(thrown) && thrown.code).toBe("device_profile.in_use");
     expect(isAppError(thrown) && thrown.params).toEqual({});
+  });
+
+  it("translates the form-factor lock's refusal to device_profile.in_use", () => {
+    let thrown: unknown;
+    try {
+      translateWriteError({ cause: refusalError({ trigger: FORM_FACTOR_REFUSAL }) });
+    } catch (e) {
+      thrown = e;
+    }
+    expect(isAppError(thrown) && thrown.code).toBe("device_profile.in_use");
+    expect(isAppError(thrown) && thrown.params).toEqual({});
+  });
+
+  // Same result code as the two refusals above; only the words tell them apart.
+  it("re-throws any other trigger's refusal unchanged", () => {
+    const original = { cause: refusalError({ trigger: "some other guard refused the row" }) };
+    let thrown: unknown;
+    try {
+      translateWriteError(original);
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBe(original);
   });
 
   // Not checked here: that a foreign-key or restrict refusal from some OTHER key re-throws. The

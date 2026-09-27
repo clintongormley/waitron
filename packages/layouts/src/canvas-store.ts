@@ -1,11 +1,10 @@
 import "./errors.js";
 import {
-  RESTRICT_VIOLATION,
   canvases,
   constraintTarget,
-  isRefusal,
   isUniqueViolation,
   nowIso,
+  restrictRefused,
   sameTarget,
 } from "@waitron/db";
 import type { ConstraintTarget, Transaction } from "@waitron/db";
@@ -32,12 +31,12 @@ const CANVAS_NAME: ConstraintTarget = { table: "canvases", columns: ["name"] };
  * `canvas.name_taken`: the name key is the only unique these writes can trip on an author-supplied
  * value. That fallback is why this branch uses `constraintTarget`/`sameTarget`, not `refusalOn`.
  *
- * SQLite names no key in a foreign-key refusal, so the restrict branch asks only the class. That is
- * sound only while each writer's `try` wraps ONE statement on `canvases` and
+ * SQLite names no key in a foreign-key refusal, so the restrict branch cannot tell which key refused.
+ * That is sound only while each writer's `try` wraps ONE statement on `canvases` and
  * `device_profiles.canvas_id` is the only key into `canvases` — the second half is pinned by
  * `has device_profiles.canvas_id as the ONLY key into canvases, and no key out of it`
- * (canvas-store.db.test.ts). Widen a `try` to a second statement and its RESTRICT or trigger
- * refusals (both 1811) would be reported as `canvas.in_use`, with nothing to catch it.
+ * (canvas-store.db.test.ts). Widen a `try` to a second statement and its RESTRICT refusals would be
+ * reported as `canvas.in_use`, with nothing to catch it.
  *
  * Exported for canvas-store.test.ts, not from the package barrel.
  */
@@ -48,7 +47,7 @@ export function translateWriteError(err: unknown): never {
       throw new AppError("canvas.name_taken", {});
     }
   }
-  if (isRefusal(err, RESTRICT_VIOLATION)) {
+  if (restrictRefused(err)) {
     throw new AppError("canvas.in_use", {});
   }
   throw err;

@@ -990,6 +990,21 @@ they were not changed back, and no guard reads for the shape either way. Whether
 callback is now harmless has NOT been established, so the outside-the-call shape is still the one to
 copy — as a habit whose receipt has expired, not as a rule with one.
 
+## A refusal under result code 1811 is identified by its words
+
+SQLite reports a delete refused by an `ON DELETE RESTRICT` key and a trigger's `RAISE(ABORT)` under
+the same result code, 1811; only the message separates them. Measured 2026-09-27 on `node:sqlite`
+(Node v26.7.0): a restricted delete reports 1811 with `FOREIGN KEY constraint failed`, and an insert
+naming no parent reports the same words under 787 (both driven in
+`packages/db/src/constraint-target.sqlite.test.ts`). So `restrictRefused` checks the code and the
+words on one layer, and it would also accept a trigger that raised exactly those words (none does
+today).
+
+The layouts stores (`packages/layouts/src/canvas-store.ts`, `device-profile-store.ts`) had asked for
+1811 alone. They gave the right answer only because one trigger sat on the device-profile path,
+`device_profile_form_factor_locked`, whose meaning matched `device_profile.in_use`. That store now
+matches it by its own words (`FORM_FACTOR_REFUSAL`, `packages/db/src/trigger-refusals.ts`).
+
 ## One process per venue folder
 
 **The rule.** Opening a venue folder (`openVenueStore`, and so `openVenueDatabase`) holds

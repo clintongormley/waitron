@@ -9,6 +9,7 @@ import {
   constraintTarget,
   indexViolated,
   refusalOn,
+  restrictRefused,
   sameTarget,
   triggerRaised,
 } from "./constraint-target.js";
@@ -20,6 +21,7 @@ import {
   TRIGGER_ABORT,
   UNIQUE_VIOLATION,
 } from "./sql-state.js";
+import { engineErrorMessage } from "./testing/errors.js";
 import { isRefusal, isUniqueViolation } from "./unique-violation.js";
 
 /**
@@ -233,6 +235,51 @@ describe("reading a trigger's raise", () => {
 });
 
 /**
+ * A delete an `ON DELETE RESTRICT` key refused — told apart from a trigger's raise, which arrives
+ * under the same result code.
+ */
+describe("reading a restricted delete", () => {
+  it("matches a restricted delete, and declines a trigger's raise carrying the same code", async () => {
+    const db = await open();
+    const restricted = await refusal(db, sql`delete from parent where id = 1`);
+    expect(restrictRefused(restricted)).toBe(true);
+
+    db.run(
+      sql`create trigger parent_guard before delete on parent for each row when old.id = 1
+          begin select raise(abort, 'this suite''s own guard refused the row'); end`,
+    );
+    const raised = await refusal(db, sql`delete from parent where id = 1`);
+    expect(isRefusal(raised, RESTRICT_VIOLATION)).toBe(true);
+    expect(restrictRefused(raised)).toBe(false);
+  });
+
+  it("declines a written value naming no parent, which carries the same words", async () => {
+    const db = await open();
+    const error = await refusal(db, sql`insert into child (id, parent_id) values ('c9', 99)`);
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toBe("FOREIGN KEY constraint failed");
+    expect(restrictRefused(error)).toBe(false);
+  });
+
+  // Crafted for the reason `triggerRaised`'s twin states: no engine produces the result code on
+  // one layer and the wording on another, and that is the shape the same-layer rule rules out.
+  it("does not join a result code on one layer to a message on another", () => {
+    const split = new Error("outer", {
+      cause: Object.assign(new Error("some other refusal"), {
+        errcode: 1811,
+        cause: new Error("FOREIGN KEY constraint failed"),
+      }),
+    });
+    expect(restrictRefused(split)).toBe(false);
+  });
+
+  it("is false for anything that is not a refusal at all", () => {
+    expect(restrictRefused(new Error("FOREIGN KEY constraint failed"))).toBe(false);
+    expect(restrictRefused(undefined)).toBe(false);
+  });
+});
+
+/**
  * WHICH CHECK refused this write — the question a table carrying several of them has to ask.
  *
  * `constraintTarget` returns `undefined` for every CHECK, because a CHECK names no key; what
@@ -345,7 +392,7 @@ describe("reading which INDEX refused a write", () => {
     expect(indexViolated(fk, "expr_lower_uq")).toBe(false);
   });
 
-  // Crafted for the reason the two sibling predicates state: no engine puts the result code on one
+  // Crafted for the reason the sibling predicates state: no engine puts the result code on one
   // layer and the wording on another, and that is the shape the same-layer rule rules out.
   it("does not join a result code on one layer to a message on another", () => {
     const split = new Error("outer", {

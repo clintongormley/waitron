@@ -60,6 +60,18 @@ describe("translateWriteError", () => {
     expect(isAppError(thrown) && thrown.params).toEqual({});
   });
 
+  // Same result code as the restrict refusal above; only the words tell them apart.
+  it("re-throws a trigger's refusal unchanged", () => {
+    const original = { cause: refusalError({ trigger: "some other guard refused the row" }) };
+    let thrown: unknown;
+    try {
+      translateWriteError(original);
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBe(original);
+  });
+
   // Not checked here: that a restrict refusal from some OTHER key re-throws. The engine's message
   // names no key, so every restrict refusal is the same error and no crafted one could tell them
   // apart. The schema holds it instead: `has device_profiles.canvas_id as the ONLY key into

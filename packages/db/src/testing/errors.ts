@@ -6,8 +6,9 @@
  * needs to should not use it.** `node:sqlite` puts the same constant,
  * `"ERR_SQLITE_ERROR"`, on `.code` for every failure alike and the
  * discriminating number on `errcode`, which this function does not read.
- * `refusalOn` / `checkFailed` / `triggerRaised` in `../constraint-target.ts`
- * are what a test asking WHICH refusal this was should call.
+ * `refusalOn` / `indexViolated` / `checkFailed` / `triggerRaised` /
+ * `restrictRefused` in `../constraint-target.ts` are what a test asking WHICH
+ * refusal this was should call.
  *
  * The two shapes it walks: a refusal from `db.run` arrives as drizzle's
  * `DrizzleError`, which has no `.code` of its own and carries the engine's
