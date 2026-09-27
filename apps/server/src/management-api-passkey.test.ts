@@ -348,7 +348,7 @@ describe("Management API passkey routes (mocked ceremony)", () => {
     expect(gated.status).toBe(200);
   });
 
-  it("auth/verify screens a malformed challengeHandle as 400 before it reaches Postgres", async () => {
+  it("auth/verify screens a malformed challengeHandle as 400 before passkey verification", async () => {
     await setupTenant();
     const app = mountApp();
 
@@ -407,7 +407,7 @@ describe("Management API passkey routes (mocked ceremony)", () => {
     expect(await readCredentials()).toHaveLength(0);
   });
 
-  it("auth/verify screens a missing / non-object response as 400 before it reaches Postgres", async () => {
+  it("auth/verify screens a missing / non-object response as 400 before passkey verification", async () => {
     await setupTenant();
     const app = mountApp();
 

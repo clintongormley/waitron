@@ -1,15 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { AppError } from "@waitron/shared";
 import "./errors.js";
-
-/** No product code calls `assertIdentifier`; its removal is listed in `docs/backlog.md`. */
-const IDENTIFIER = /^[a-z][a-z0-9_]{0,62}$/;
-
-export function assertIdentifier(kind: "database", value: string): void {
-  if (!IDENTIFIER.test(value)) {
-    throw new AppError("provisioning.invalid_identifier", { kind, value });
-  }
-}
 
 export function quoteIdent(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;

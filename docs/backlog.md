@@ -4092,23 +4092,18 @@ image constraints under *Detail → Box image*.
   is not comment-only. **Next action:** its own pass, route by route, with the un-screened path
   actually exercised rather than reasoned about.
 
-- **Small renames and dead exports the sweep found and could not make — OPEN (T2, 2026-09-23).**
-  `packages/db/src/constraint-target.sqlite.test.ts` and `migrate.sqlite.test.ts` carry a
-  `.sqlite.` infix that distinguished them from a twin that no longer exists; a `packages/media`
-  test title still says `bytea`; and `assertIdentifier` in `packages/provisioning` has no product caller at all
-  (only its own suite and the barrel re-export), while `generatePassword`'s single caller is
-  `apps/server/src/break-glass.ts`. Each is a rename or a deletion rather than a comment fix.
-  Two more the sweep left, both found by the review wave rather than by the sweep's own keys, and
-  both invisible to a grep over comments because they live in STRINGS and in IDENTIFIERS:
-  `apps/server/src/device-session.test.ts` and `apps/server/src/management-api-passkey.test.ts`
-  still name the engine in test TITLES (`(real Postgres)`, `before it reaches Postgres`) — those
-  strings are what CI prints, so somebody may be grepping them; and the handle a suite binds
-  `useVenueDb` to is still called `pg` (`pg.db`) across a large share of the suites that use it,
-  which is the widest surviving spelling of the old engine among IDENTIFIERS — prose mentions are
-  far more numerous and are not rename candidates. Both are
-  mechanical renames with no behaviour attached. Run
-  `grep -rln 'const pg = useVenueDb\|pg\.db' --include='*.test.ts' packages apps` for the current
-  set rather than trusting a number written here.
+- **Small renames and dead exports the sweep found and could not make — OPEN (T2, 2026-09-23; narrowed by A92).**
+  A92 removed the unused `assertIdentifier` export and its own tests, and changed the seven
+  old-engine test titles in `apps/server/src/device-session.test.ts` and
+  `apps/server/src/management-api-passkey.test.ts`. Still open: the `.sqlite.` infix in
+  `packages/db/src/constraint-target.sqlite.test.ts` and `migrate.sqlite.test.ts`;
+  the `packages/media` title that says `bytea` (the importer still checks that format);
+  and `pg.db` fixture handles across suites. Rename the fixture handles only after checking
+  current users with `rg -l 'const pg = useVenueDb|pg\.db' packages apps -g '*.test.ts'`.
+  `generatePassword` has a caller in `apps/server/src/break-glass.ts` and remains exported.
+  The `provisioning.invalid_identifier` error registry entry remains; the A92 tree search
+  (`rg -n provisioning.invalid_identifier packages apps`) found no product throw site. Retire it
+  with the broader dead-code sweep, checking stored-code consumers first.
 
 - **Two fiscal-package comments that need a probe, not a reword — DONE by #562.**
   #562 deleted the stale "out of scope" and shared-database prose from `chain.test.ts` and

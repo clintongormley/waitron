@@ -472,7 +472,7 @@ describe("device cookie helpers", () => {
   });
 });
 
-describe("requireDevice (real Postgres)", () => {
+describe("requireDevice (venue database)", () => {
   it("authenticates a valid cookie and touches last_seen_at", async () => {
     const { deviceId, token, stationId, deviceProfileId } = await enrolDeviceFixture();
     expect(await lastSeenAt(deviceId)).toBeNull(); // never seen yet
@@ -552,7 +552,7 @@ describe("requireDevice (real Postgres)", () => {
   });
 });
 
-describe("tryReadDevice and assertNotHandheld (real Postgres)", () => {
+describe("tryReadDevice and assertNotHandheld (venue database)", () => {
   it("tryReadDevice returns the binding for a valid cookie and null at every miss", async () => {
     const { deviceId, token, stationId, deviceProfileId } = await enrolDeviceFixture();
     // Success resolves to the same binding `requireDevice` returns.
@@ -601,7 +601,7 @@ describe("tryReadDevice and assertNotHandheld (real Postgres)", () => {
   });
 });
 
-describe("assertDeviceCapability (real Postgres)", () => {
+describe("assertDeviceCapability (venue database)", () => {
   it("refuses a device whose assigned PROFILE LACKS the capability, naming the action", async () => {
     // The handheld's profile carries `capabilities: []` — it lacks BOTH fenced flags.
     const { deviceId, token } = await enrolHandheldWithCanvasFixture();
@@ -704,7 +704,7 @@ async function enrolDevDevices(): Promise<{
   };
 }
 
-describe("dev-override header (real Postgres)", () => {
+describe("dev-override header (venue database)", () => {
   it("is IGNORED when devMode is false (fail-closed) — cookie wins", async () => {
     const { deviceAId, deviceACookie, deviceBId } = await enrolDevDevices();
     const binding = await readWithHeaders(
@@ -746,7 +746,7 @@ describe("dev-override header (real Postgres)", () => {
   });
 });
 
-describe("tryReadDevice dev override resolves a seeded device (real Postgres)", () => {
+describe("tryReadDevice dev override resolves a seeded device (venue database)", () => {
   // Seeded DIRECTLY (not through the enrol path), so the case is self-contained. The dev-override
   // path carries no token and reads the device by id alone.
   async function seedKdsDeviceUnderNewTenant(): Promise<{ deviceId: string }> {
