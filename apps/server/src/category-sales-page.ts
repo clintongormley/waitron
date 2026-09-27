@@ -45,7 +45,7 @@ const STRINGS: Readonly<Record<SupportedLocale, Strings>> = {
     heading: { at_time_of_sale: "Categories at time of sale", current: "Current categories" },
     range: (from, to) => `From ${from} to ${to}`,
     day: (day) => `Business day ${day}`,
-    extrasIntoDish: "Extras counted under their dish",
+    extrasIntoDish: "Extras rolled into their dish",
     gross: "Gross",
     net: "Net",
     uncategorised: "Uncategorised",
@@ -56,7 +56,8 @@ const STRINGS: Readonly<Record<SupportedLocale, Strings>> = {
     incomplete: (n) =>
       `Gross total incomplete: ${n} ${n === 1 ? "line" : "lines"} recorded before classification began`,
     labels: "Labels",
-    overlap: "Label totals overlap: a line counts in every label it carries.",
+    overlap:
+      "Label totals overlap: a line counts in every label it carries, and a label can cut across categories.",
   },
   "es-ES": {
     heading: {
@@ -76,7 +77,8 @@ const STRINGS: Readonly<Record<SupportedLocale, Strings>> = {
     incomplete: (n) =>
       `Total bruto incompleto: ${n} ${n === 1 ? "línea registrada" : "líneas registradas"} antes de que empezara la clasificación`,
     labels: "Etiquetas",
-    overlap: "Los totales por etiqueta se solapan: una línea cuenta en cada etiqueta que lleva.",
+    overlap:
+      "Los totales por etiqueta se solapan: una línea cuenta en cada etiqueta que lleva, y una etiqueta puede abarcar varias categorías.",
   },
 };
 

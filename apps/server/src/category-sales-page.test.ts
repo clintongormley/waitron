@@ -139,8 +139,8 @@ describe("formatCategorySalesPage", () => {
     expect(page({ to: "2026-06-10", locale: "es-ES" })).toContain("Día 2026-06-10");
   });
 
-  it("says when extras are counted under their dish, and says nothing otherwise", () => {
-    expect(page({ extrasIntoDish: true })).toContain("Extras counted under their dish");
+  it("says when extras are rolled into their dish, and says nothing otherwise", () => {
+    expect(page({ extrasIntoDish: true })).toContain("Extras rolled into their dish");
     expect(page({ extrasIntoDish: true, locale: "es-ES" })).toContain(
       "Extras contados con su plato",
     );
@@ -215,14 +215,14 @@ describe("formatCategorySalesPage", () => {
     const labels = lines.indexOf("Labels");
     expect(labels).toBeGreaterThan(lines.indexOf(lineFor(lines, "Total")));
     expect(lines.slice(labels).join(" ")).toContain(
-      "Label totals overlap: a line counts in every label it carries.",
+      "Label totals overlap: a line counts in every label it carries, and a label can cut across categories.",
     );
     expect(lineFor(lines, "Happy hour")).toMatch(/^Happy hour +€3\.30 +€3\.00$/);
     expect(lineFor(lines, "Alcoholic")).toMatch(/^Alcoholic +€2\.20 +€2\.00$/);
     const es = page({ locale: "es-ES" });
     expect(es).toContain("Etiquetas");
     expect(es.join(" ")).toContain(
-      "Los totales por etiqueta se solapan: una línea cuenta en cada etiqueta que lleva.",
+      "Los totales por etiqueta se solapan: una línea cuenta en cada etiqueta que lleva, y una etiqueta puede abarcar varias categorías.",
     );
   });
 

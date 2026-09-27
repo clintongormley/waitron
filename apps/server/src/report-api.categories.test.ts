@@ -552,7 +552,7 @@ describe("POST /management-api/reports/categories/print", () => {
     const job = (await jobsOn(narrowPrinter)).find((j) => j.id === jobId)!;
     const lines = printedLines(new Uint8Array(job.payload));
     expect(lines[0]).toBe("Categories at time of sale");
-    expect(lines.join(" ")).toContain("Extras counted under their dish");
+    expect(lines.join(" ")).toContain("Extras rolled into their dish");
     expect(lines.join(" ")).not.toContain("incomplete");
     for (const line of lines) expect(line.length).toBeLessThanOrEqual(30);
   });

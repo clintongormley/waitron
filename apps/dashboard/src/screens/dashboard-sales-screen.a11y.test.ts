@@ -187,7 +187,7 @@ describe.each(["light", "dark"] as const)("dashboard-sales-screen a11y (%s theme
     await expectNoA11yViolations(host);
   });
 
-  it("renders a refused current report, a refused print and no printers accessibly", async () => {
+  it("renders a refused current report and no printers accessibly", async () => {
     const api = stubApi({
       getCategorySales: vi.fn().mockRejectedValue({ code: "sale_classification.invalid" }),
       getReportPrinters: vi.fn().mockResolvedValue([]),

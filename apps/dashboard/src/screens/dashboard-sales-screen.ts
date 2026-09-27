@@ -109,6 +109,8 @@ export class SalesScreen extends LitElement {
       th.num,
       td.num {
         text-align: right;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
       }
       .counts {
         display: flex;
@@ -179,10 +181,6 @@ export class SalesScreen extends LitElement {
       }
       tr.direct th {
         font-style: italic;
-      }
-      td.num {
-        white-space: nowrap;
-        font-variant-numeric: tabular-nums;
       }
       .warning {
         margin: var(--wt-space-2) 0;
@@ -458,7 +456,7 @@ export class SalesScreen extends LitElement {
       ${
         report.grossComplete
           ? nothing
-          : html`<p class="warning" data-test="gross-incomplete">
+          : html`<p class="warning" id="gross-incomplete" data-test="gross-incomplete">
               ${
                 report.linesWithoutGross === 1
                   ? t("sales.gross_incomplete_one")
@@ -498,7 +496,13 @@ export class SalesScreen extends LitElement {
         <tfoot>
           <tr>
             <th scope="row">${t("sales.total")}</th>
-            <td class="num" data-test="category-total-gross">${report.gross}</td>
+            <td
+              class="num"
+              data-test="category-total-gross"
+              aria-describedby=${report.grossComplete ? nothing : "gross-incomplete"}
+            >
+              ${report.gross}
+            </td>
             <td class="num" data-test="category-total-net">${report.net}</td>
           </tr>
         </tfoot>

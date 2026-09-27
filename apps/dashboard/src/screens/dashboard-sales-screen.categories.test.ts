@@ -408,6 +408,14 @@ describe("dashboard-sales-screen — category report", () => {
     );
   });
 
+  it("ties the incomplete note to the gross total it qualifies", async () => {
+    const el = await mount(stubApi());
+    const total = q(el, "category-total-gross")!;
+    const describedBy = total.getAttribute("aria-describedby");
+    expect(describedBy).not.toBeNull();
+    expect(el.shadowRoot!.getElementById(describedBy!)).toBe(q(el, "gross-incomplete"));
+  });
+
   it("says one line in the singular", async () => {
     const api = stubApi({
       getCategorySales: vi.fn().mockResolvedValue({ ...report, linesWithoutGross: 1 }),
@@ -428,6 +436,7 @@ describe("dashboard-sales-screen — category report", () => {
     const el = await mount(stubApi({ getCategorySales: vi.fn().mockResolvedValue(currentReport) }));
     expect(q(el, "category-table")).not.toBeNull();
     expect(q(el, "gross-incomplete")).toBeNull();
+    expect(q(el, "category-total-gross")!.hasAttribute("aria-describedby")).toBe(false);
   });
 
   it("says so when no sale falls in the range", async () => {
