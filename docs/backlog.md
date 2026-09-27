@@ -2782,6 +2782,12 @@ ongoing overhaul listed at the top of Track A.
   station-kind threshold defaults, an unbumped-since-fire metric; on-screen modifier `×N`, the shared
   `#allergens` render, the KDS-versus-till unreviewed-dish call, post-fire note edit
   (needs a re-fire endpoint), the TS-4 partial-transfer modifier-split guard.
+- **Mark a new dish as urgent** (owner, 2026-09-27). A waiter can already send a new dish straight
+  to the kitchen ("cook this now, don't hold it") under every release setting; the owner would like
+  a way to add urgency to it too, so the kitchen sees it flagged. Nothing like it exists today. Not
+  designed: what the flag looks like on the kitchen screen, the pass and a printed ticket, and who
+  may set it. Releasing an ALREADY-held group stays with whoever the venue's `fire_control` setting
+  names — the waiter asks the kitchen or pass when that is not the waiter.
 - **Handheld live updates** — the app is pull-only, so two waiters on one table see stale data until
   a refetch. A sizable new subsystem; spec it when it matters.
 - **Configurable per-device face-set editor** — persist a face-set per device profile with the
