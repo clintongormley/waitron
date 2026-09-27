@@ -1,16 +1,23 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { formatMoney } from "@waitron/shared";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, servedMenus } from "../widgets/test-helpers.js";
 import { TillTableOrderScreen, type TableServiceStatus } from "./till-table-order-screen.js";
 import { currentLocale, t } from "../i18n/t.js";
-import type { OfferedModifier, TabLine, TableState, TillProduct } from "../api/client.js";
-import type { TillProductGrid } from "../widgets/product-grid.js";
+import type {
+  OfferedModifier,
+  TabLine,
+  TableState,
+  TillProduct,
+  TillZoneMenu,
+} from "../api/client.js";
+import type { TillMenuBrowser } from "../widgets/menu-browser.js";
 import type { TillModifierPicker } from "../widgets/modifier-picker.js";
 import type { TillTenderPay } from "../widgets/tender-pay.js";
 
 const cafe: TillProduct = {
   id: "cafe",
   menuItemId: "menu-item-cafe",
+  catalogueId: "menu-table",
   name: "Café",
   customerName: { es: "Café para el cliente" },
   pricingUnit: "each",
@@ -76,16 +83,33 @@ const servedLine: TabLine = {
 
 const reserved: TableServiceStatus = { id: "s1", label: "Reservada", color: "#cc0000" };
 
+/** A menu listing `offered` in order, with a default layout holding no shortcuts, so the browser's
+ * first tiles are these products. */
+function servedMenu(
+  id: string,
+  name: string,
+  isDefault: boolean,
+  offered: TillProduct[],
+): TillZoneMenu {
+  const offers = offered.map((product) => ({
+    id: product.menuItemId!,
+    menuId: id,
+    productId: product.productId ?? product.id,
+  }));
+  return servedMenus([{ id, name, isDefault, versionId: `${id}-v1` }], offers)[0]!;
+}
+
 const mount = (over: Partial<TillTableOrderScreen> = {}) =>
   mountWidget<TillTableOrderScreen>("till-table-order-screen", {
     products,
+    menus: [servedMenu("menu-table", "Carta", true, over.products ?? products)],
     lines: [],
     statuses: [],
     ...over,
   });
 
 const grid = (el: TillTableOrderScreen) =>
-  el.shadowRoot!.querySelector<TillProductGrid>("till-product-grid")!;
+  el.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
 /** Only present while the drawer is open. */
 const tender = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
@@ -109,7 +133,7 @@ describe("till-table-order-screen", () => {
     expect(basket).not.toBeNull();
     // The grid gets the catalogue, and the grid + the round basket share the SAME store (the current
     // round) — never the tab's lines.
-    expect(productGrid.products).toBe(products);
+    expect(productGrid.products).toEqual(products);
     expect(productGrid.store).toBe(basket.store);
   });
 
@@ -1974,8 +1998,6 @@ describe("till-table-order-screen", () => {
   // Multi-menu: the round grid shows only the SELECTED menu's products, while a tab line's NAME still
   // resolves against the full product set (a tab may span menus). The app owns the selection.
   describe("multi-menu round grid", () => {
-    const foodMenu = { id: "cat-food", name: "Comida", isDefault: true };
-    const drinksMenu = { id: "cat-drinks", name: "Bebidas", isDefault: false };
     const bocadillo: TillProduct = {
       ...cafe,
       id: "bocadillo",
@@ -1996,6 +2018,8 @@ describe("till-table-order-screen", () => {
       catalogueId: "cat-drinks",
       catalogueName: "Bebidas",
     };
+    const foodMenu = servedMenu("cat-food", "Comida", true, [bocadillo]);
+    const drinksMenu = servedMenu("cat-drinks", "Bebidas", false, [cerveza]);
     const bothMenus = { menus: [foodMenu, drinksMenu], products: [bocadillo, cerveza] };
 
     const gridNames = (el: TillTableOrderScreen) =>
@@ -2015,6 +2039,36 @@ describe("till-table-order-screen", () => {
       el.selectedMenuId = "cat-drinks";
       await el.updateComplete;
       expect(gridNames(el)).toEqual(["Cerveza"]);
+    });
+
+    it("hands the browser the selected menu, with that menu's own home layout", async () => {
+      const drinksBar = {
+        ...drinksMenu,
+        homeLayouts: [
+          ...drinksMenu.homeLayouts,
+          { id: "drinks-bar", name: "Bar", tiles: [{ kind: "product", productId: "cerveza" }] },
+        ],
+        homeLayoutId: "drinks-bar",
+      } satisfies TillZoneMenu;
+      const { el } = await mount({ ...bothMenus, menus: [foodMenu, drinksBar] });
+      expect(grid(el).menu).toBe(foodMenu);
+      el.selectedMenuId = "cat-drinks";
+      await el.updateComplete;
+      await grid(el).updateComplete;
+      expect(grid(el).menu).toBe(drinksBar);
+      expect(grid(el).products).toEqual([cerveza]);
+      const shortcuts = grid(el).shadowRoot!.querySelectorAll(
+        '[data-region="shortcuts"] wt-button .name',
+      );
+      expect([...shortcuts].map((name) => name.textContent)).toEqual(["Cerveza"]);
+    });
+
+    it("gives the browser six columns on a till and three on a handheld", async () => {
+      const { el } = await mount(bothMenus);
+      expect(grid(el).columns).toBe(6);
+      el.handheld = true;
+      await el.updateComplete;
+      expect(grid(el).columns).toBe(3);
     });
 
     it("resolves a tab line's NAME from the full product set even when its menu is not the one shown", async () => {

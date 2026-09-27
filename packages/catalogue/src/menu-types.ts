@@ -170,8 +170,7 @@ export interface AvailableProduct {
 }
 
 /** One catalogue (menu) — its id, display name, and whether it is the default. From
- * `GET /api/products` the default is the location's (`locations.catalogue_id`); in a zone-offers body
- * it is the zone's default menu. */
+ * `GET /api/products` the default is the location's (`locations.catalogue_id`). */
 export interface AccessibleCatalogue {
   id: string;
   name: string;

@@ -1,8 +1,9 @@
-import type { DietPredicate } from "../menu-filter.js";
+import { type DietPredicate, memoVisibleProducts, shownMenu } from "../menu-filter.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
+import { HANDHELD_COLUMNS, TILL_COLUMNS } from "@waitron/catalogue/src/home-layout-columns.js";
 // Side-effect imports: registering each widget element so the switch below can render its tag.
-import "./product-grid.js";
+import "./menu-browser.js";
 import "./basket.js";
 import "./total.js";
 import "./tender-pay.js";
@@ -27,8 +28,8 @@ import type {
   TillActiveReader,
   TillApi,
   TillCourse,
-  TillMenu,
   TillProduct,
+  TillZoneMenu,
   VisitBill,
 } from "../api/client.js";
 import type { BumpMode, FireControlMode } from "./station-queue.js";
@@ -93,7 +94,7 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) tabRevision = 0;
   @property({ attribute: false }) editSentLines = true;
   @property({ attribute: false }) cancelOffer: number | null = null;
-  @property({ attribute: false }) menus: TillMenu[] = [];
+  @property({ attribute: false }) menus: TillZoneMenu[] = [];
   @property() selectedMenuId = "";
   @property({ attribute: false }) selectedDiet: DietPredicate | null = null;
   @property({ attribute: false }) statuses: TableServiceStatus[] = [];
@@ -102,6 +103,10 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) visit: TableVisit | null = null;
   @property({ attribute: false }) visitBills: VisitBill[] = [];
   @property({ type: Boolean }) finishRefused = false;
+  /** A handheld form factor, whose menu browser shows fewer columns unless its card sets them. */
+  @property({ type: Boolean }) handheld = false;
+
+  readonly #browserProducts = memoVisibleProducts();
 
   override render(): TemplateResult | typeof nothing {
     const tab = this.tab;
@@ -144,13 +149,20 @@ export class TillCardGrid extends LitElement {
   #element(card: CardInstance): TemplateResult | typeof nothing {
     switch (card.type) {
       case "product-grid": {
-        // A missing or non-number value leaves the widget's responsive auto-fill default.
-        const columns = card.config.columns;
-        return html`<till-product-grid
-          .products=${this.products}
+        const configured = card.config.columns;
+        const menu = shownMenu(this.menus, this.selectedMenuId);
+        return html`<till-menu-browser
+          .menu=${menu}
+          .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedDiet)}
           .store=${this.store}
-          .columns=${typeof columns === "number" ? columns : undefined}
-        ></till-product-grid>`;
+          .columns=${
+            typeof configured === "number"
+              ? configured
+              : this.handheld
+                ? HANDHELD_COLUMNS
+                : TILL_COLUMNS
+          }
+        ></till-menu-browser>`;
       }
       case "basket":
         return html`<till-basket .store=${this.store}></till-basket>`;
@@ -226,6 +238,7 @@ export class TillCardGrid extends LitElement {
           .bills=${this.visitBills}
           .finishRefused=${this.finishRefused}
           .busy=${this.busy}
+          .handheld=${this.handheld}
         ></till-table-order-screen>`;
       case "notifications":
         return nothing;

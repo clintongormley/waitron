@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { filterProductsByDiet, filterProductsByMenu } from "./menu-filter.js";
+import {
+  defaultMenu,
+  filterProductsByDiet,
+  filterProductsByMenu,
+  shownMenu,
+} from "./menu-filter.js";
 import type { DietProfile, TillProduct } from "./api/client.js";
 
 function product(id: string, catalogueId?: string): TillProduct {
@@ -105,5 +110,30 @@ describe("filterProductsByDiet", () => {
     for (const p of ["vegan", "vegetarian", "no-meat", "no-fish"] as const) {
       expect(filterProductsByDiet([noDietProduct], p)).toEqual([]);
     }
+  });
+});
+
+describe("defaultMenu and shownMenu", () => {
+  const breakfast = { id: "breakfast", isDefault: false };
+  const lunch = { id: "lunch", isDefault: true };
+  const dinner = { id: "dinner", isDefault: false };
+
+  it("takes the menu marked default, wherever it sits", () => {
+    expect(defaultMenu([breakfast, lunch, dinner])).toBe(lunch);
+  });
+
+  it("takes the first menu when none is marked default, and nothing from no menus", () => {
+    expect(defaultMenu([breakfast, dinner])).toBe(breakfast);
+    expect(defaultMenu([])).toBeUndefined();
+  });
+
+  it("shows the selected menu over the default", () => {
+    expect(shownMenu([breakfast, lunch, dinner], "dinner")).toBe(dinner);
+  });
+
+  it("shows the default menu when the selection names none of them", () => {
+    expect(shownMenu([breakfast, lunch, dinner], "")).toBe(lunch);
+    expect(shownMenu([breakfast, dinner], "gone")).toBe(breakfast);
+    expect(shownMenu([], "lunch")).toBeUndefined();
   });
 });

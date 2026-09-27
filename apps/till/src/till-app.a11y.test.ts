@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  expectNoA11yViolations,
+  mountWidget,
+  servedMenus,
+} from "./widgets/test-helpers.js";
 import "./till-app.js";
 import type { TillApp } from "./till-app.js";
 import type { TillApi, TillProduct } from "./api/client.js";
@@ -24,6 +29,10 @@ const products: TillProduct[] = [
 
 function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   return {
+    // Without it the boot fails and the till never leaves its lock screen.
+    getContentLanguages: vi
+      .fn()
+      .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
     getTill: vi.fn().mockResolvedValue({
       locale: "es-ES",
       venueName: "Bar Pepe",
@@ -40,7 +49,10 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
         serviceMode: "prepay",
       },
       defaultMenuId: defaultMenu.id,
-      menus: [defaultMenu],
+      menus: servedMenus(
+        [defaultMenu],
+        [{ id: "menu-item-p1", menuId: defaultMenu.id, productId: products[0]!.id }],
+      ),
       offers: [
         {
           id: "menu-item-p1",
@@ -61,6 +73,8 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
           dietDerivation: null,
           dietOverride: null,
           courseId: null,
+          offeredModifiers: [],
+          variants: [],
         },
       ],
     }),
@@ -86,6 +100,22 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     ...overrides,
   } as unknown as TillApi;
 }
+
+const counterCanvas = {
+  formFactor: "till",
+  tabs: [
+    {
+      key: "counter",
+      title: "Counter",
+      columns: 12,
+      cards: [
+        { type: "product-grid", colSpan: 8, rowSpan: 6, config: {} },
+        { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
+        { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
+      ],
+    },
+  ],
+};
 
 async function flush(el: TillApp): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -203,6 +233,39 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
     );
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-refresh-retry]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations while it warns that the device's home layout was removed", async () => {
+    const base = stubApi();
+    const offers = await base.listDefaultZoneOffers();
+    const api = stubApi({
+      getTill: vi.fn().mockResolvedValue({
+        locale: "es-ES",
+        venueName: "Bar Pepe",
+        nif: "B12345678",
+        orderFlow: "prepay",
+        courses: [],
+        capabilities: [],
+        canvas: counterCanvas,
+      }),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue({
+        ...offers,
+        menus: offers.menus.map((menu) => ({ ...menu, layoutFallback: "layout_removed" })),
+      }),
+    });
+    const { el, host } = await mountWidget<TillApp>("till-app", { api }, theme);
+    await flush(el);
+    el.shadowRoot!.querySelector("till-lock-screen")!.dispatchEvent(
+      new CustomEvent("logged-in", {
+        detail: { personId: "p1", displayName: "Ana" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-layout-notice]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 });

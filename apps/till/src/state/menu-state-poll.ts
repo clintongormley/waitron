@@ -17,9 +17,10 @@ export interface MenuStatePollOptions {
 }
 
 /**
- * Reads each zone's live menu versions and what cannot be sold now, every {@link POLL_MS}, between
- * {@link start} and {@link stop}. A `session.required` answer stops it as a sign-out does. It makes
- * no activity of its own: a till's inactivity is counted from pointer and key presses.
+ * Reads each zone's live menu versions, each menu's home layout for this device's profile, and what
+ * cannot be sold now, every {@link POLL_MS}, between {@link start} and {@link stop}. A
+ * `session.required` answer stops it as a sign-out does. It makes no activity of its own: a till's
+ * inactivity is counted from pointer and key presses.
  */
 export class MenuStatePoll {
   readonly #options: MenuStatePollOptions;

@@ -45,3 +45,30 @@ export function visibleProducts(
 export function hasDietData(products: TillProduct[]): boolean {
   return products.some((product) => product.diet != null);
 }
+
+/** The zone's default menu, else its first. */
+export function defaultMenu<M extends { isDefault: boolean }>(menus: readonly M[]): M | undefined {
+  return menus.find((menu) => menu.isDefault) ?? menus[0];
+}
+
+/** The menu to show: the selected one, else {@link defaultMenu}. */
+export function shownMenu<M extends { id: string; isDefault: boolean }>(
+  menus: readonly M[],
+  selectedId: string,
+): M | undefined {
+  return menus.find((menu) => menu.id === selectedId) ?? defaultMenu(menus);
+}
+
+/**
+ * {@link visibleProducts}, answering the same array while it is asked with the same three inputs:
+ * the menu browser re-indexes its menu whenever it is handed a new array.
+ */
+export function memoVisibleProducts(): typeof visibleProducts {
+  let last: { args: Parameters<typeof visibleProducts>; result: TillProduct[] } | undefined;
+  return (...args) => {
+    if (last !== undefined && args.every((arg, index) => arg === last!.args[index]))
+      return last.result;
+    last = { args, result: visibleProducts(...args) };
+    return last.result;
+  };
+}

@@ -11,12 +11,14 @@ import { compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
  * import from a server package would drag its barrel — and through it `@waitron/db` — into the
  * browser bundle. The cost is that a mismatch with the server is not a compile break.
  *
- * The OFFER and MENU shapes are the exception: `TillMenuOffer`, `TillMenu` and `OfferedModifier` are
- * `import type` aliases from catalogue's type-only leaves `@waitron/catalogue/src/menu-types.js` and
- * `menu-document-types.js`, which pull in no runtime, so removing or retyping a field the till reads
- * is a compile break here. `MenuState` and `MenuUnavailable` come from the same leaf, and
- * venue-service builds its `menuState` answer as that `MenuState`, so adding a required field to
- * either, or dropping or retyping one, breaks the server's compile too; an optional one does not.
+ * The OFFER and MENU shapes are the exception: `TillMenuOffer`, `TillMenu`, `TillZoneMenu` and
+ * `OfferedModifier` are `import type` aliases from catalogue's type-only leaves
+ * `@waitron/catalogue/src/menu-types.js` and `menu-document-types.js`, which pull in no runtime, so
+ * removing or retyping a field the till reads is a compile break here. `MenuState` and
+ * `MenuUnavailable` come from the same leaf, and venue-service builds its `menuState` answer as that
+ * `MenuState` and each zone-offers menu as `TillZoneMenu`'s `ServedMenu`, so adding a required field
+ * to any of them, or dropping or retyping one, breaks the server's compile too; an optional one does
+ * not.
  * `TillProduct` stays LOCAL: it is the till's own display model, built by
  * {@link menuOfferToTillProduct} from an offer and by `getHeldOrder` from a retrieved line.
  */
@@ -34,6 +36,7 @@ import type {
   LiveOffer,
   MenuState,
   MenuUnavailable,
+  ServedMenu,
 } from "@waitron/catalogue/src/menu-document-types.js";
 
 /** Re-exported, never re-declared, so a widget imports the offered-list shapes where it imports every
@@ -336,10 +339,7 @@ export function sellingValuesOf(source: TillSellingValues): TillSellingValues {
   };
 }
 
-/**
- * One menu. In a zone-offers body `isDefault` flags the zone's default menu, which the till selects
- * first; in {@link ProductCatalogue.menus} it flags the location's default.
- */
+/** One menu. In {@link ProductCatalogue.menus} `isDefault` flags the location's default. */
 export type TillMenu = AccessibleCatalogue;
 
 /** The `GET /api/products` payload. The app builds its product grid from zone offers, not this route;
@@ -354,8 +354,9 @@ export interface ProductCatalogue {
  * it can be sold now. */
 export type TillMenuOffer = LiveOffer;
 
-/** A menu in a zone-offers body, with the published version its offers come from. */
-export type TillZoneMenu = TillMenu & { versionId: string };
+/** A menu in a zone-offers body: the published version its offers come from, that version's
+ * structure and home layouts, and the layout this device shows. */
+export type TillZoneMenu = ServedMenu;
 
 export interface ZoneOfferCatalogue {
   context: {

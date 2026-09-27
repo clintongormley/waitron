@@ -1,4 +1,4 @@
-import type { DietPredicate } from "./menu-filter.js";
+import { defaultMenu, type DietPredicate } from "./menu-filter.js";
 import { isTillDestination, type TillDestination, tillPath } from "./navigation.js";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -70,6 +70,11 @@ import { kindOfFormFactor } from "./layout.js";
 import type { CanvasDef, CapabilityFlag, DeviceKind, ReceiptConfig, TabDef } from "./layout.js";
 import { SessionActivity } from "./session-activity.js";
 import { MenuStatePoll } from "./state/menu-state-poll.js";
+import {
+  RemovedLayoutReports,
+  withPolledLayouts,
+  type RemovedLayout,
+} from "./state/home-layout-notices.js";
 import {
   type BasketRefresh,
   type BlockReason,
@@ -615,6 +620,9 @@ export class TillApp extends LitElement {
   @state() private menus: TillZoneMenu[] = [];
   @state() private tableProducts: TillProduct[] = [];
   @state() private tableMenus: TillZoneMenu[] = [];
+  /** Removed home layouts not yet dismissed. */
+  @state() private removedLayouts: RemovedLayout[] = [];
+  readonly #removedLayoutReports = new RemovedLayoutReports();
   /** What {@link products} and {@link tableProducts} are built from, so a poll's unavailable set
    * applies without reloading them. */
   readonly #counterOffers = new ZoneOfferIndex();
@@ -1180,13 +1188,30 @@ export class TillApp extends LitElement {
     </div>`;
   }
 
+  #removedLayoutNotice(): TemplateResult {
+    return html`<div class="refresh-notice" data-active data-layout-notice>
+      ${this.removedLayouts.map(
+        ({ menuName, layoutName }) =>
+          html`<p class="refresh-message" role="status">
+            ${
+              layoutName === undefined
+                ? t("home_layout.removed_unnamed").replace("{menu}", () => menuName)
+                : t("home_layout.removed").replace("{name}", () => layoutName)
+            }
+          </p>`,
+      )}
+      <wt-button variant="secondary" data-layout-dismiss @click=${() => (this.removedLayouts = [])}
+        >${t("home_layout.dismiss")}</wt-button
+      >
+    </div>`;
+  }
+
   #defaultStationId(): string | undefined {
     return this.stations.find((station) => station.isDefault)?.id;
   }
 
-  /** The zone's default menu, or its first menu when none is marked default. */
   #defaultCatalogueId(menus: TillZoneMenu[] = this.menus): string {
-    return menus.find((menu) => menu.isDefault)?.id ?? menus[0]?.id ?? "";
+    return defaultMenu(menus)?.id ?? "";
   }
 
   /** Menu selection filters the product grid without changing the working order or browser history. */
@@ -1257,6 +1282,7 @@ export class TillApp extends LitElement {
 
   #loadCounterOffers(catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus">, loaded = true): void {
     this.#counterOffers.load(catalogue, loaded);
+    this.#reportRemovedLayouts(this.menus, catalogue.menus);
     this.menus = catalogue.menus;
     this.#showCounterOffers();
   }
@@ -1274,9 +1300,15 @@ export class TillApp extends LitElement {
   ): void {
     this.#tableZoneId = zoneId;
     this.#tableOffers.load(catalogue, loaded);
+    this.#reportRemovedLayouts(this.tableMenus, catalogue.menus);
     this.tableMenus = catalogue.menus;
     this.tableProducts = this.#tableOffers.products();
     if (loaded) this.#markRounds(true);
+  }
+
+  #reportRemovedLayouts(shown: readonly TillZoneMenu[], next: readonly TillZoneMenu[]): void {
+    const found = this.#removedLayoutReports.report(shown, next);
+    if (found.length > 0) this.removedLayouts = [...this.removedLayouts, ...found];
   }
 
   /** A round refused because a dish in it sold out is marked against the table's offers from now on,
@@ -1311,19 +1343,27 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * A poll's answer (D11): the unavailable set applies to the loaded offers at once. On the counter's
+   * A poll's answer (D11): the unavailable set applies to the loaded offers at once, and so does each
+   * menu's home layout on the version the till holds ({@link withPolledLayouts}), on both zones, with
+   * a layout the answer says was removed added, once, to the removed-layout notice. On the counter's
    * zone a version other than the one loaded runs the basket refresh — unless a sale, hold or place
    * is in flight or the dialog is already open, when the next poll asks again. On the open table's
    * zone it only reloads that zone's offers.
    */
   #onMenuState(zoneId: string, state: MenuState): void {
     if (zoneId === this.counterServiceZoneId) {
+      const menus = withPolledLayouts(this.menus, state.menus);
+      this.#reportRemovedLayouts(this.menus, menus);
+      this.menus = menus;
       if (this.#counterOffers.setUnavailable(state.unavailable)) this.#showCounterOffers();
       const busy = this.submitting || this.parking || this.placing;
       if (versionsMoved(this.menus, state.menus) && !busy && this.basketRefresh === undefined)
         void this.#refreshBasket();
     }
     if (zoneId === this.#tableZoneId) {
+      const menus = withPolledLayouts(this.tableMenus, state.menus);
+      this.#reportRemovedLayouts(this.tableMenus, menus);
+      this.tableMenus = menus;
       if (this.#tableOffers.setUnavailable(state.unavailable)) {
         this.tableProducts = this.#tableOffers.products();
         this.#markRounds();
@@ -2979,6 +3019,7 @@ export class TillApp extends LitElement {
         .cardOutcome=${this.cardOutcome}
         .activeReaders=${this.activeReaders}
         .defaultReaderId=${this.defaultReaderId}
+        .handheld=${this.handheldMode}
       ></till-counter-screen>`;
     }
     return html`<till-card-grid
@@ -3023,6 +3064,7 @@ export class TillApp extends LitElement {
       .visit=${this.orderParty}
       .visitBills=${this.visitBills}
       .finishRefused=${this.finishRefused}
+      .handheld=${this.handheldMode}
     ></till-card-grid>`;
   }
 
@@ -3055,6 +3097,7 @@ export class TillApp extends LitElement {
           .bills=${this.visitBills}
           .finishRefused=${this.finishRefused}
           .busy=${this.submitting}
+          .handheld=${this.handheldMode}
         ></till-table-order-screen>`;
       case "ticket":
         return html`<till-ticket-view
@@ -3221,6 +3264,7 @@ export class TillApp extends LitElement {
               </div>`
             : nothing
         }
+        ${this.#inShell() && this.removedLayouts.length > 0 ? this.#removedLayoutNotice() : nothing}
         <!-- The device FRONT DOOR (device-enrolment §3.1), shown ahead of the shell/lock so it takes
              precedence over whatever screen the boot left set. The chooser is the dev-only device picker
              (its enrolled event is handled INSIDE the chooser — a dev-tab adopt, not the app's re-boot);

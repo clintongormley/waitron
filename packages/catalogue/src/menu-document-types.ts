@@ -185,8 +185,37 @@ export interface MenuUnavailable {
   extraItems: { menuItemId: string; extraListId: string; productId: string }[];
 }
 
-/** `GET /api/menu-state?zoneId=` — each live menu's published version, and what cannot be sold now. */
+/**
+ * Why a device shows its menu's default home layout rather than the one its profile chose (D14):
+ * the chosen layout is gone from the working state as well as the live version, or it is still in
+ * the working state and has never been published.
+ */
+export type LayoutFallback = "layout_removed" | "layout_unpublished";
+
+/** The home layout a device shows for one menu, resolved against the menu's live version (D14). */
+export interface DeviceHomeLayout {
+  homeLayoutId: string;
+  /** Null when the device shows what its profile chose, or the default because it chose nothing. */
+  layoutFallback: LayoutFallback | null;
+}
+
+/** One menu of a zone-offers body: its live version, and that version's structure and layouts. */
+export interface ServedMenu extends DeviceHomeLayout {
+  id: string;
+  name: string;
+  /** Whether this is the zone's default menu, which the till selects first. */
+  isDefault: boolean;
+  versionId: string;
+  /** The live document's `root`. */
+  structure: DocumentList;
+  /** The live document's layouts, the default first. */
+  homeLayouts: DocumentLayout[];
+  defaultHomeLayoutId: string;
+}
+
+/** `GET /api/menu-state?zoneId=` — each live menu's published version and the layout the device
+ * shows for it, and what cannot be sold now. */
 export interface MenuState {
-  menus: { menuId: string; versionId: string }[];
+  menus: ({ menuId: string; versionId: string } & DeviceHomeLayout)[];
   unavailable: MenuUnavailable;
 }

@@ -3,9 +3,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { formatMoney } from "@waitron/shared";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { TillProductGrid } from "./product-grid.js";
+import "./menu-browser.js";
+import type { TillMenuBrowser } from "./menu-browser.js";
 import { TillModifierPicker, type ModifierConfirmDetail } from "./modifier-picker.js";
-import { sellingValuesOf, type OfferedModifier, type TillProduct } from "../api/client.js";
+import {
+  sellingValuesOf,
+  type OfferedModifier,
+  type TillProduct,
+  type TillZoneMenu,
+} from "../api/client.js";
 import { currentLocale } from "../i18n/t.js";
 
 /**
@@ -85,7 +91,10 @@ const breadList: OfferedModifier = {
   items: [offeredItem("p-white", "Blanco", "0.00"), offeredItem("p-rye", "Centeno", "0.50")],
 };
 
+// The browser matches a product to its menu by its offer: every harness mounts one product at a
+// time, so they can share one.
 const base = {
+  menuItemId: "offer-dish",
   pricingUnit: "each" as const,
   vatClass: "general" as const,
   category: null,
@@ -144,12 +153,30 @@ afterEach(async () => {
 });
 
 /** The picker the grid opened, or null when none is mounted. */
-function pickerOf(grid: TillProductGrid): TillModifierPicker | null {
+/** The menu browser offering `product` alone, the way a till mounts it. */
+async function mountBrowser(product: TillProduct, store: WorkingOrderStore) {
+  const menu: TillZoneMenu = {
+    id: "menu",
+    name: "Menu",
+    isDefault: true,
+    versionId: "v1",
+    structure: {
+      members: [{ kind: "product", menuItemId: product.menuItemId!, productId: product.id }],
+    },
+    homeLayouts: [{ id: "home", name: "Home", tiles: [] }],
+    defaultHomeLayoutId: "home",
+    homeLayoutId: "home",
+    layoutFallback: null,
+  };
+  return mountWidget<TillMenuBrowser>("till-menu-browser", { menu, products: [product], store });
+}
+
+function pickerOf(grid: TillMenuBrowser): TillModifierPicker | null {
   return grid.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker");
 }
 
 /** Tap the tile whose accessible text contains `name`. */
-function tapTile(grid: TillProductGrid, name: string): void {
+function tapTile(grid: TillMenuBrowser, name: string): void {
   const tile = [...grid.shadowRoot!.querySelectorAll("wt-button")].find((b) =>
     b.textContent?.includes(name),
   );
@@ -204,10 +231,7 @@ function stepCount(picker: TillModifierPicker, listId: string, productId: string
 
 /** Open the picker over a product via the grid, returning the mounted picker. */
 async function openPicker(product: TillProduct, tile: string, store: WorkingOrderStore) {
-  const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
-    products: [product],
-    store,
-  });
+  const { el } = await mountBrowser(product, store);
   tapTile(el, tile);
   await el.updateComplete;
   const picker = pickerOf(el)!;
@@ -222,10 +246,7 @@ describe("till-modifier-picker", () => {
 
   it("rings up a product that offers nothing straight away, opening no picker", async () => {
     const store = new WorkingOrderStore();
-    const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
-      products: [cafe],
-      store,
-    });
+    const { el } = await mountBrowser(cafe, store);
     tapTile(el, "Café");
     await el.updateComplete;
     expect(store.lines).toEqual([{ product: cafe, quantity: "1" }]);
@@ -236,10 +257,7 @@ describe("till-modifier-picker", () => {
     const store = new WorkingOrderStore();
     const seen: TillProduct[] = [];
     store.on("product-selected", (p) => seen.push(p as TillProduct));
-    const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
-      products: [{ ...jamon, offeredModifiers: [extrasList] }],
-      store,
-    });
+    const { el } = await mountBrowser({ ...jamon, offeredModifiers: [extrasList] }, store);
     tapTile(el, "Jamón");
     await el.updateComplete;
     expect(seen).toHaveLength(1);

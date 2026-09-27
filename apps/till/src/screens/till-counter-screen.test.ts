@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, servedMenus } from "../widgets/test-helpers.js";
 import { TillCounterScreen } from "./till-counter-screen.js";
 import type { TabDef } from "../layout.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, t } from "../i18n/t.js";
-import type { ServiceZoneSummary, TillApi, TillProduct } from "../api/client.js";
+import type { ServiceZoneSummary, TillApi, TillProduct, TillZoneMenu } from "../api/client.js";
 import type { TillAllergenScreen } from "./till-allergen-screen.js";
 
 const cafe: TillProduct = {
@@ -66,6 +66,10 @@ const cardGrid = (el: TillCounterScreen) =>
       tab?: TabDef;
       store: unknown;
       products: TillProduct[];
+      menus: unknown;
+      selectedMenuId: string;
+      selectedDiet: unknown;
+      handheld: boolean;
       heldOrders: unknown;
       stationQueue: unknown;
       defaultStationId?: string;
@@ -172,7 +176,7 @@ describe("till-counter-screen", () => {
     const grid = cardGrid(el)!;
     expect(grid).not.toBeNull();
     await grid.updateComplete;
-    expect(grid.shadowRoot!.querySelector("till-product-grid")).not.toBeNull();
+    expect(grid.shadowRoot!.querySelector("till-menu-browser")).not.toBeNull();
     expect(grid.shadowRoot!.querySelector("till-basket")).not.toBeNull();
     expect(grid.shadowRoot!.querySelector("till-total")).not.toBeNull();
     expect(grid.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
@@ -296,10 +300,30 @@ describe("till-counter-screen", () => {
         .products.map((p) => p.id)
         .sort(),
     ).toEqual(["meat", "vegan"]);
-    // Pick the vegan lens — the grid is handed only the vegan dish.
     filter.shadowRoot!.querySelector<HTMLElement>('[data-test="diet-filter-vegan"]')!.click();
     await el.updateComplete;
-    expect(cardGrid(el)!.products.map((p) => p.id)).toEqual(["vegan"]);
+    await cardGrid(el)!.updateComplete;
+    const browser = cardGrid(el)!.shadowRoot!.querySelector<
+      HTMLElement & { products: TillProduct[] }
+    >("till-menu-browser")!;
+    expect(browser.products.map((p) => p.id)).toEqual(["vegan"]);
+  });
+
+  it("hands the card grid the menus, the selected menu, the diet lens and the form factor", async () => {
+    const menus: TillZoneMenu[] = servedMenus(
+      [{ id: "lunch", name: "Lunch", isDefault: true, versionId: "v1" }],
+      [],
+    );
+    const { el } = await mount({
+      menus,
+      selectedMenuId: "lunch",
+      selectedDiet: "vegan",
+      handheld: true,
+    });
+    expect(cardGrid(el)!.menus).toBe(menus);
+    expect(cardGrid(el)!.selectedMenuId).toBe("lunch");
+    expect(cardGrid(el)!.selectedDiet).toBe("vegan");
+    expect(cardGrid(el)!.handheld).toBe(true);
   });
 
   it("shows the logged-in operator name in the header", async () => {

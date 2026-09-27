@@ -1,10 +1,17 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { WorkingOrderStore } from "../state/working-order.js";
 import type { TabDef } from "../layout.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, servedMenus } from "./test-helpers.js";
 import "./card-grid.js";
 import type { TillCardGrid } from "./card-grid.js";
-import type { HeldOrderSummary, StationQueueGroup } from "../api/client.js";
+import type { TillMenuBrowser } from "./menu-browser.js";
+import type {
+  DietProfile,
+  HeldOrderSummary,
+  StationQueueGroup,
+  TillProduct,
+  TillZoneMenu,
+} from "../api/client.js";
 
 afterEach(cleanupWidgets);
 
@@ -114,9 +121,9 @@ describe("till-card-grid", () => {
     const { el } = await mountWidget<TillCardGrid>("till-card-grid", { tab: counterTab, store });
     const grid = el.shadowRoot!.querySelector<HTMLElement>(".grid")!;
     expect(grid.style.gridTemplateColumns).toBe("repeat(12, 1fr)");
-    expect(el.shadowRoot!.querySelector("till-product-grid")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-menu-browser")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("till-basket")).not.toBeNull();
-    const productCell = el.shadowRoot!.querySelector<HTMLElement>(".cell:has(till-product-grid)")!;
+    const productCell = el.shadowRoot!.querySelector<HTMLElement>(".cell:has(till-menu-browser)")!;
     expect(productCell.style.gridColumn).toBe("span 8");
     expect(productCell.style.gridRow).toBe("span 6");
   });
@@ -125,7 +132,7 @@ describe("till-card-grid", () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillCardGrid>("till-card-grid", { tab: counterTab, store });
     const grid = el.shadowRoot!.querySelector<HTMLElement & { store: unknown }>(
-      "till-product-grid",
+      "till-menu-browser",
     )!;
     const basket = el.shadowRoot!.querySelector<HTMLElement & { store: unknown }>("till-basket")!;
     const pay = el.shadowRoot!.querySelector<HTMLElement & { store: unknown }>("till-tender-pay")!;
@@ -138,7 +145,7 @@ describe("till-card-grid", () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillCardGrid>("till-card-grid", { tab: counterTab, store });
     const grid = el.shadowRoot!.querySelector<HTMLElement & { columns?: number }>(
-      "till-product-grid",
+      "till-menu-browser",
     )!;
     expect(grid.columns).toBe(4);
   });
@@ -225,21 +232,6 @@ describe("till-card-grid", () => {
       stationQueue: [stationGroup],
     });
     expect(el.shadowRoot!.querySelector("till-station-queue")).not.toBeNull();
-  });
-
-  it("leaves product-grid columns undefined when the config carries no numeric columns", async () => {
-    const store = new WorkingOrderStore();
-    const noColsTab: TabDef = {
-      key: "counter",
-      title: "Counter",
-      columns: 12,
-      cards: [{ type: "product-grid", colSpan: 8, rowSpan: 6, config: {} }],
-    };
-    const { el } = await mountWidget<TillCardGrid>("till-card-grid", { tab: noColsTab, store });
-    const grid = el.shadowRoot!.querySelector<HTMLElement & { columns?: number }>(
-      "till-product-grid",
-    )!;
-    expect(grid.columns).toBeUndefined();
   });
 
   it("still skips notifications (later), rendering no cell for it", async () => {
@@ -476,5 +468,138 @@ describe("till-card-grid", () => {
       heldOrders: [],
     });
     expect(el.shadowRoot!.querySelector("till-held-orders")).toBeNull();
+  });
+});
+
+function dish(key: string, name: string, menuId: string, extra: Partial<TillProduct> = {}) {
+  return {
+    id: `p-${key}`,
+    productId: `p-${key}`,
+    menuItemId: `mi-${menuId}-${key}`,
+    catalogueId: menuId,
+    available: true,
+    name,
+    unitPrice: "2.00",
+    vatClass: "general",
+    category: null,
+    allergens: null,
+    ...extra,
+  } satisfies TillProduct;
+}
+
+const vegan: DietProfile = { vegan: "yes", vegetarian: "yes", contains: [] };
+const meaty: DietProfile = { vegan: "no", vegetarian: "no", contains: ["meat"] };
+
+const salad = dish("salad", "Salad", "lunch", { diet: vegan });
+const steak = dish("steak", "Steak", "lunch", { diet: meaty });
+const wine = dish("wine", "Wine", "drinks", { diet: vegan });
+const beer = dish("beer", "Beer", "drinks", { diet: vegan });
+
+/** Each menu has a layout of shortcuts to both its dishes; `chosen` picks it over the default. */
+function served(id: string, products: TillProduct[], chosen: boolean, isDefault = false) {
+  // The meat dish sits alone in its own section, so a lens that hides it empties the section.
+  const [first, second] = products.map((each) => ({
+    id: each.menuItemId!,
+    menuId: id,
+    productId: each.productId!,
+  }));
+  const menu = { id, name: id, isDefault, versionId: `${id}-v1` };
+  return servedMenus(
+    [chosen ? { ...menu, homeLayoutId: `${id}-shortcuts` } : menu],
+    [first!, { ...second!, section: `${id} mains` }],
+    { shortcuts: true },
+  )[0]! satisfies TillZoneMenu;
+}
+
+const lunchMenu = served("lunch", [salad, steak], true, true);
+const drinksMenu = served("drinks", [wine, beer], false);
+
+const productCard = (config: Record<string, unknown> = {}): TabDef => ({
+  key: "sell",
+  title: "Sell",
+  columns: 12,
+  cards: [{ type: "product-grid", colSpan: 12, rowSpan: 6, config }],
+});
+
+async function mountBrowser(props: Partial<TillCardGrid> = {}) {
+  const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+    tab: productCard(),
+    store: new WorkingOrderStore(),
+    menus: [lunchMenu, drinksMenu],
+    products: [salad, steak, wine, beer],
+    selectedMenuId: "lunch",
+    ...props,
+  });
+  const browser = () => el.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
+  await browser().updateComplete;
+  return { el, browser };
+}
+
+function shownNames(browser: TillMenuBrowser, region: string): string[] {
+  return [
+    ...browser.shadowRoot!.querySelectorAll(`[data-region="${region}"] wt-button[data-kind] .name`),
+  ].map((name) => name.textContent!.trim());
+}
+
+describe("till-card-grid's product-grid card: the menu browser", () => {
+  it("shows the selected menu, only that menu's products, and hands it the store", async () => {
+    const store = new WorkingOrderStore();
+    const { browser } = await mountBrowser({ store });
+    expect(browser().menu).toBe(lunchMenu);
+    expect(browser().products).toEqual([salad, steak]);
+    expect(browser().store).toBe(store);
+    expect(shownNames(browser(), "shortcuts")).toEqual(["Salad", "Steak"]);
+  });
+
+  it("switching menus shows the other menu with its own home layout", async () => {
+    const { el, browser } = await mountBrowser();
+    el.selectedMenuId = "drinks";
+    await el.updateComplete;
+    await browser().updateComplete;
+    expect(browser().menu).toBe(drinksMenu);
+    expect(browser().products).toEqual([wine, beer]);
+    // Drinks' device layout is its default, which holds no shortcuts.
+    expect(shownNames(browser(), "shortcuts")).toEqual([]);
+    expect(shownNames(browser(), "structure")).toEqual(["Wine", "drinks mains"]);
+  });
+
+  it("shows the zone's default menu when the selected one is not among the menus", async () => {
+    // Listed second, so the first menu is not mistaken for the default.
+    const { browser } = await mountBrowser({
+      menus: [drinksMenu, lunchMenu],
+      selectedMenuId: "gone",
+    });
+    expect(browser().menu).toBe(lunchMenu);
+    expect(browser().products).toEqual([salad, steak]);
+  });
+
+  it("uses six columns on a till and three on a handheld when the card sets none", async () => {
+    const { el, browser } = await mountBrowser();
+    expect(browser().columns).toBe(6);
+    el.handheld = true;
+    await el.updateComplete;
+    expect(browser().columns).toBe(3);
+  });
+
+  it("lets the card's own column count win on either form factor", async () => {
+    const { el, browser } = await mountBrowser({ tab: productCard({ columns: 4 }) });
+    expect(browser().columns).toBe(4);
+    el.handheld = true;
+    await el.updateComplete;
+    expect(browser().columns).toBe(4);
+  });
+
+  it("hides a product the diet lens rejects, and a section it leaves with nothing", async () => {
+    const { browser } = await mountBrowser({ selectedDiet: "vegan" });
+    expect(browser().products).toEqual([salad]);
+    expect(shownNames(browser(), "structure")).toEqual(["Salad"]);
+  });
+
+  it("hands the browser the same products while nothing it reads changes", async () => {
+    const { el, browser } = await mountBrowser();
+    const first = browser().products;
+    el.busy = true;
+    await el.updateComplete;
+    expect(browser().products).toBe(first);
   });
 });

@@ -21,7 +21,7 @@ import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { selectStyles } from "../select-styles.js";
-import { type DietPredicate, hasDietData, visibleProducts } from "../menu-filter.js";
+import { type DietPredicate, hasDietData, memoVisibleProducts, shownMenu } from "../menu-filter.js";
 import { lineProductName, productName } from "../widgets/product-name.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import {
@@ -33,8 +33,9 @@ import {
 import { deriveExtraSelections } from "../state/held-extras.js";
 import { deriveOptionSelections, sameOptionSelections } from "../state/held-options.js";
 import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "../state/order-line.js";
-import "../widgets/product-grid.js";
+import { HANDHELD_COLUMNS, TILL_COLUMNS } from "@waitron/catalogue/src/home-layout-columns.js";
 import "../widgets/basket.js";
+import "../widgets/menu-browser.js";
 import "../widgets/tender-pay.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -51,8 +52,8 @@ import type {
   TableVisit,
   TabTransfer,
   TillCourse,
-  TillMenu,
   TillProduct,
+  TillZoneMenu,
   VisitBill,
 } from "../api/client.js";
 import type { ConfirmPaymentDetail } from "../widgets/tender-pay.js";
@@ -469,7 +470,7 @@ export class TillTableOrderScreen extends LitElement {
   /** ALL sellable products across the zone's menus: a tab may span several menus, and every line must
    * still render its name whatever menu is shown. */
   @property({ attribute: false }) products: TillProduct[] = [];
-  @property({ attribute: false }) menus: TillMenu[] = [];
+  @property({ attribute: false }) menus: TillZoneMenu[] = [];
   /** Owned by the app; a switcher pick bubbles up as `menu-selected`. */
   @property() selectedMenuId = "";
   @property({ attribute: false }) statuses: TableServiceStatus[] = [];
@@ -492,6 +493,8 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) bills: VisitBill[] = [];
   /** Finish table was refused because a bill is unpaid. */
   @property({ type: Boolean }) finishRefused = false;
+  /** A handheld form factor, whose menu browser shows fewer columns. */
+  @property({ type: Boolean }) handheld = false;
 
   @state() private drawerOpen = false;
 
@@ -1145,14 +1148,24 @@ export class TillTableOrderScreen extends LitElement {
     this.selectedDiet = predicate;
   }
 
-  /** A tab line's name still resolves against the FULL set ({@link #nameFor}), so a filtered grid never
-   * blanks a line. */
-  #gridProducts(): TillProduct[] {
-    return visibleProducts(this.products, this.selectedMenuId, this.selectedDiet);
-  }
+  readonly #browserProducts = memoVisibleProducts();
 
   #hasDietData(): boolean {
     return hasDietData(this.products);
+  }
+
+  /** Only the shown menu's products reach the browser; a tab line's name still resolves against the
+   * FULL set ({@link #nameFor}), so a filtered grid never blanks a line. */
+  #menuBrowser(): TemplateResult {
+    const menu = shownMenu(this.menus, this.selectedMenuId);
+    return html`<till-menu-browser
+      class="round-control"
+      ?inert=${this.#roundStore.sending}
+      .menu=${menu}
+      .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedDiet)}
+      .store=${this.#roundStore}
+      .columns=${this.handheld ? HANDHELD_COLUMNS : TILL_COLUMNS}
+    ></till-menu-browser>`;
   }
 
   /** `stopPropagation` keeps the inner `confirm-payment` from reaching the app's counter
@@ -1229,15 +1242,7 @@ export class TillTableOrderScreen extends LitElement {
                   ></till-diet-filter>`
                 : nothing
             }
-            ${keyed(
-              this.orderId,
-              html`<till-product-grid
-                class="round-control"
-                ?inert=${this.#roundStore.sending}
-                .products=${this.#gridProducts()}
-                .store=${this.#roundStore}
-              ></till-product-grid>`,
-            )}
+            ${keyed(this.orderId, this.#menuBrowser())}
           </div>
           ${this.drawerOpen ? this.#drawer(pending) : nothing}
         </div>

@@ -20,10 +20,11 @@ import {
   moveShortcut,
   removeShortcut,
   renameHomeLayout,
+  resolveDeviceHomeLayouts,
   setDefaultHomeLayout,
   setDeviceHomeLayout,
 } from "./home-layouts.js";
-import { menuStatus, previewMenu, publishMenu } from "./menu-publication.js";
+import { menuStatus, previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
 import {
   deactivateCatalogue,
   deactivateProduct,
@@ -563,5 +564,137 @@ describe("publishing the layouts", () => {
     await publish(f.dinner);
     await app((tx) => moveShortcut(tx, home, soup!.memberId, 0));
     expect((await app((tx) => menuStatus(tx, [f.dinner]))).get(f.dinner)!.state).toBe("current");
+  });
+});
+
+describe("the layout a device shows, resolved against the live version (D14)", () => {
+  async function publish(menuId: string) {
+    const { hash } = await app((tx) => previewMenu(tx, menuId));
+    await app((tx) => publishMenu(tx, menuId, hash, "person-1"));
+  }
+
+  async function resolved(profile: string | null, menuIds: string[]) {
+    return app(async (tx) => {
+      const live = await readLiveDocuments(tx, menuIds);
+      const documents = menuIds.flatMap((menuId) => {
+        const found = live.get(menuId);
+        return found === undefined ? [] : [found.document];
+      });
+      return Object.fromEntries(await resolveDeviceHomeLayouts(tx, profile, documents));
+    });
+  }
+
+  it("shows the default to a device with no profile, and to a profile that chose nothing", async () => {
+    const f = await menusFixture(fx.db);
+    const counter = await app((tx) => createHomeLayout(tx, f.lunch, "Counter"));
+    await publish(f.lunch);
+    const profile = await makeProfile("Handheld");
+    const home = { homeLayoutId: await defaultLayout(f.lunch), layoutFallback: null };
+    expect(await resolved(null, [f.lunch])).toEqual({ [f.lunch]: home });
+    expect(await resolved(profile, [f.lunch])).toEqual({ [f.lunch]: home });
+    expect(counter.id).not.toBe(home.homeLayoutId);
+  });
+
+  it("keeps a chosen layout deleted in the working state until a republish leaves it out", async () => {
+    const f = await menusFixture(fx.db);
+    const profile = await makeProfile("Handheld");
+    const counter = await app((tx) => createHomeLayout(tx, f.lunch, "Counter"));
+    await app((tx) => setDeviceHomeLayout(tx, profile, f.lunch, counter.id));
+    await publish(f.lunch);
+    const chosen = { homeLayoutId: counter.id, layoutFallback: null };
+    expect(await resolved(profile, [f.lunch])).toEqual({ [f.lunch]: chosen });
+
+    await app((tx) => deleteHomeLayout(tx, counter.id));
+    expect(await resolved(profile, [f.lunch])).toEqual({ [f.lunch]: chosen });
+
+    await publish(f.lunch);
+    expect(await resolved(profile, [f.lunch])).toEqual({
+      [f.lunch]: { homeLayoutId: await defaultLayout(f.lunch), layoutFallback: "layout_removed" },
+    });
+  });
+
+  it("shows the default, as unpublished, for a chosen layout the live version never held", async () => {
+    const f = await menusFixture(fx.db);
+    const profile = await makeProfile("Handheld");
+    await publish(f.lunch);
+    const counter = await app((tx) => createHomeLayout(tx, f.lunch, "Counter"));
+    await app((tx) => setDeviceHomeLayout(tx, profile, f.lunch, counter.id));
+    const home = await defaultLayout(f.lunch);
+    expect(await resolved(profile, [f.lunch])).toEqual({
+      [f.lunch]: { homeLayoutId: home, layoutFallback: "layout_unpublished" },
+    });
+    await publish(f.lunch);
+    expect(await resolved(profile, [f.lunch])).toEqual({
+      [f.lunch]: { homeLayoutId: counter.id, layoutFallback: null },
+    });
+  });
+
+  it("shows the default, as removed, for a chosen layout deleted before it was ever published", async () => {
+    const f = await menusFixture(fx.db);
+    const profile = await makeProfile("Handheld");
+    await publish(f.lunch);
+    const counter = await app((tx) => createHomeLayout(tx, f.lunch, "Counter"));
+    await app((tx) => setDeviceHomeLayout(tx, profile, f.lunch, counter.id));
+    const home = await defaultLayout(f.lunch);
+    expect(await resolved(profile, [f.lunch])).toEqual({
+      [f.lunch]: { homeLayoutId: home, layoutFallback: "layout_unpublished" },
+    });
+    await app((tx) => deleteHomeLayout(tx, counter.id));
+    expect(await resolved(profile, [f.lunch])).toEqual({
+      [f.lunch]: { homeLayoutId: home, layoutFallback: "layout_removed" },
+    });
+  });
+
+  it("counts as removed another menu's layout, or a section that is no layout, which only a direct write can choose", async () => {
+    const f = await menusFixture(fx.db);
+    const dinnerOnly = await app((tx) => createHomeLayout(tx, f.dinner, "Dinner only"));
+    await publish(f.lunch);
+    const removed = {
+      [f.lunch]: { homeLayoutId: await defaultLayout(f.lunch), layoutFallback: "layout_removed" },
+    };
+    // Lunch's own root is owned by Lunch, so only its role tells it from an unpublished layout.
+    for (const layoutId of [dinnerOnly.id, f.lunchRoot]) {
+      const profile = await makeProfile(`Handheld ${layoutId}`);
+      await fx.db
+        .insert(deviceProfileHomeLayouts)
+        .values({ deviceProfileId: profile, menuId: f.lunch, layoutId });
+      expect(await resolved(profile, [f.lunch])).toEqual(removed);
+    }
+  });
+
+  it("is unmoved by a rename, before and after the republish", async () => {
+    const f = await menusFixture(fx.db);
+    const profile = await makeProfile("Handheld");
+    const counter = await app((tx) => createHomeLayout(tx, f.lunch, "Counter"));
+    await app((tx) => setDeviceHomeLayout(tx, profile, f.lunch, counter.id));
+    await publish(f.lunch);
+    const chosen = { [f.lunch]: { homeLayoutId: counter.id, layoutFallback: null } };
+    await app((tx) => renameHomeLayout(tx, counter.id, "Front counter"));
+    expect(await resolved(profile, [f.lunch])).toEqual(chosen);
+    await publish(f.lunch);
+    expect(await resolved(profile, [f.lunch])).toEqual(chosen);
+  });
+
+  it("resolves each menu from its own choice, and another profile's choice from its own", async () => {
+    const f = await menusFixture(fx.db);
+    const profile = await makeProfile("Handheld");
+    const other = await makeProfile("Till");
+    const counter = await app((tx) => createHomeLayout(tx, f.lunch, "Counter"));
+    const bar = await app((tx) => createHomeLayout(tx, f.dinner, "Bar"));
+    await app(async (tx) => {
+      await setDeviceHomeLayout(tx, profile, f.lunch, counter.id);
+      await setDeviceHomeLayout(tx, profile, f.dinner, bar.id);
+      await setDeviceHomeLayout(tx, other, f.dinner, await defaultLayout(f.dinner));
+    });
+    await publish(f.lunch);
+    await publish(f.dinner);
+    expect(await resolved(profile, [f.lunch, f.dinner])).toEqual({
+      [f.lunch]: { homeLayoutId: counter.id, layoutFallback: null },
+      [f.dinner]: { homeLayoutId: bar.id, layoutFallback: null },
+    });
+    expect(await resolved(other, [f.lunch, f.dinner])).toEqual({
+      [f.lunch]: { homeLayoutId: await defaultLayout(f.lunch), layoutFallback: null },
+      [f.dinner]: { homeLayoutId: await defaultLayout(f.dinner), layoutFallback: null },
+    });
   });
 });

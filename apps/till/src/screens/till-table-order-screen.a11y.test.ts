@@ -1,5 +1,10 @@
 import { afterEach, describe, it } from "vitest";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  expectNoA11yViolations,
+  mountWidget,
+  servedMenus,
+} from "../widgets/test-helpers.js";
 import "./till-table-order-screen.js";
 import type { TableServiceStatus, TillTableOrderScreen } from "./till-table-order-screen.js";
 import type {
@@ -7,14 +12,17 @@ import type {
   TabLine,
   TableVisit,
   TillProduct,
+  TillZoneMenu,
   VisitBill,
 } from "../api/client.js";
-import type { TillProductGrid } from "../widgets/product-grid.js";
+import type { TillMenuBrowser } from "../widgets/menu-browser.js";
 import type { TillModifierPicker } from "../widgets/modifier-picker.js";
 
 const products: TillProduct[] = [
   {
     id: "cafe",
+    menuItemId: "offer-cafe",
+    catalogueId: "menu-carta",
     name: "Café",
     customerName: { es: "Café para el cliente" },
     pricingUnit: "each",
@@ -26,6 +34,11 @@ const products: TillProduct[] = [
     courseId: "c1",
   },
 ];
+
+const menus: TillZoneMenu[] = servedMenus(
+  [{ id: "menu-carta", name: "Carta", isDefault: true, versionId: "v1" }],
+  [{ id: "offer-cafe", menuId: "menu-carta", productId: "cafe" }],
+);
 
 const lines: TabLine[] = [
   {
@@ -114,11 +127,11 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
   it("has no violations with the round grid, the per-line course picker, the open tab drawer and the waiter-fire actions", async () => {
     const { el, host } = await mountWidget<TillTableOrderScreen>(
       "till-table-order-screen",
-      { products, lines, statuses, courses, fireControl: "waiter", orderId: "wo-1" },
+      { products, menus, lines, statuses, courses, fireControl: "waiter", orderId: "wo-1" },
       theme,
     );
     // Ring a café into the current round so the per-line COURSE PICKER renders and is scanned.
-    el.shadowRoot!.querySelector<TillProductGrid>("till-product-grid")!
+    el.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!
       .shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!
       .click();
     // Open the drawer so the full subtree — the waiter-fire actions, Servido ticks, tab total, the reused

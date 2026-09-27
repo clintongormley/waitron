@@ -204,8 +204,9 @@ async function deviceSaleCfgOf(
 /**
  * Runs a line write that can leave a bill exactly paid, so that the invoice it issues is filed on
  * the requesting device's till. `write` runs first with no till, and again with the device's only
- * when an invoice is due: reading the device runs a scrypt verification, and opens a transaction
- * of its own, which the write queue refuses inside another (`packages/store/src/write-queue.ts`).
+ * when an invoice is due: reading the device may run a scrypt verification, and opens a transaction
+ * of its own whenever a sighting looks due, which the write queue refuses inside another
+ * (`packages/store/src/write-queue.ts`).
  */
 export async function withSaleTillWhenIssuing<T>(
   deps: TillApiDeps,

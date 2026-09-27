@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hashSecret, verifySecret } from "./secret-hash.js";
+import { hashSecret, verifySecret, verifySecretAsync } from "./secret-hash.js";
 
 describe("secret-hash", () => {
   it("accepts the correct secret", () => {
@@ -22,5 +22,25 @@ describe("secret-hash", () => {
   });
   it("rejects a wrong-length derived key without throwing", () => {
     expect(verifySecret("x", "scrypt$abcd$ef01")).toBe(false);
+  });
+});
+
+describe("verifySecretAsync", () => {
+  it("accepts the correct secret and rejects a wrong one", async () => {
+    const stored = hashSecret("hunter2");
+    expect(await verifySecretAsync("hunter2", stored)).toBe(true);
+    expect(await verifySecretAsync("nope", stored)).toBe(false);
+  });
+  it("rejects a malformed value, an unknown algorithm and a wrong-length key without throwing", async () => {
+    for (const stored of ["not-a-valid-hash", "bcrypt$abcd$ef01", "scrypt$abcd$ef01"])
+      expect(await verifySecretAsync("x", stored)).toBe(false);
+  });
+  it("lets the event loop turn while it derives the key", async () => {
+    const stored = hashSecret("hunter2");
+    const order: string[] = [];
+    const verified = verifySecretAsync("hunter2", stored).then(() => order.push("verified"));
+    setImmediate(() => order.push("turned"));
+    await verified;
+    expect(order).toEqual(["turned", "verified"]);
   });
 });
