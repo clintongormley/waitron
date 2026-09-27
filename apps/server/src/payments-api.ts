@@ -5,6 +5,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { AppError, centsToDecimal, isAppError, tillId as brandTillId } from "@waitron/shared";
 import {
+  billPayments,
   devices,
   nowIso,
   tills,
@@ -18,6 +19,7 @@ import {
   cardProviderById,
   cardReaders,
   deviceCardReaders,
+  findPaymentByBillPayment,
   payments,
   type AbandonedAttemptOutcome,
   type CardProviderContribution,
@@ -31,7 +33,7 @@ import {
   validatePayload,
   type KeyRing,
 } from "@waitron/credentials";
-import { authorizeManager, type Permission } from "@waitron/identity";
+import { authorizeManager, verifyPersonCredential, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
@@ -40,6 +42,8 @@ import type { DeploymentEnvironment } from "./config.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
+import { billPaymentIsLive, completeBillPayment, failBillPayment } from "./bill-payments.js";
+import { settleFromProviderRow } from "./bill-payments-loop.js";
 import {
   clearPaymentAttemptMark,
   paymentAttemptIsLive,
@@ -84,6 +88,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "payment.not_stuck": 409,
   "payment.resolve_unsupported": 422,
   "payment.outcome_unknown": 409,
+  "bill.payment_not_found": 404,
+  "pin.invalid": 401,
 };
 
 const run = createErrorBoundary(STATUS, "payments.failed");
@@ -647,6 +653,173 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       }
       /* v8 ignore stop */
       return c.json({ outcome: "filed", invoiceNumber: paid.ticket.invoiceNumber });
+    }),
+  );
+
+  /** A bill payment a manager may resolve: pending, and at no reader in this process. */
+  const requireStuckBillPayment = async (tx: Transaction, id: string) => {
+    const [row] = await tx.select().from(billPayments).where(eq(billPayments.id, id));
+    if (row === undefined) throw new AppError("bill.payment_not_found", { paymentId: id });
+    if (row.state !== "pending" || billPaymentIsLive(deps.db, id)) {
+      throw new AppError("payment.not_stuck", { paymentId: id });
+    }
+    return row;
+  };
+  const fiscal = { db: deps.db, backend: deps.backend, clock: deps.clock, cfg: deps.cfg };
+
+  // Card payments towards a bill that nothing is driving any more (bill payments design §5.4).
+  app.get("/management-api/payments/bill-payments", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const rows = await gated(sessionId, (tx) =>
+        tx
+          .select({
+            billPaymentId: billPayments.id,
+            workingOrderId: billPayments.workingOrderId,
+            orderNumber: workingOrders.orderNumber,
+            label: workingOrders.label,
+            tillId: billPayments.tillId,
+            tillName: tills.name,
+            method: billPayments.method,
+            applied: billPayments.applied,
+            tip: billPayments.tip,
+            startedAt: billPayments.createdAt,
+            provider: payments.provider,
+            providerState: payments.state,
+          })
+          .from(billPayments)
+          .innerJoin(workingOrders, eq(workingOrders.id, billPayments.workingOrderId))
+          .innerJoin(tills, eq(tills.id, billPayments.tillId))
+          .leftJoin(payments, eq(payments.billPaymentId, billPayments.id))
+          .where(eq(billPayments.state, "pending"))
+          .orderBy(billPayments.createdAt),
+      );
+      return c.json(
+        rows
+          .filter((row) => !billPaymentIsLive(deps.db, row.billPaymentId))
+          .map((row) => ({
+            ...row,
+            applied: centsToDecimal(row.applied),
+            tip: centsToDecimal(row.tip),
+          })),
+      );
+    }),
+  );
+
+  // Settles one from its provider's own record: a Stripe attempt through `resolveAbandonedAttempt`,
+  // then the bill's P3 on a capture. Never a whole-order pay, which would invoice the bill from one
+  // payment of it.
+  app.post("/management-api/payments/bill-payments/:id/resolve", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "BillPaymentId");
+      const stuck = await gated(sessionId, async (tx, personId) => {
+        await requireStuckBillPayment(tx, id);
+        const provided = await findPaymentByBillPayment(tx, id);
+        if (provided?.state === "attempting") {
+          await requireConnected(tx, cardProviderById(deps.providers, provided.provider));
+        }
+        return { provided, personId };
+      });
+
+      const fromRow = async () => {
+        const settled = await gated(sessionId, async (tx) => {
+          await requireStuckBillPayment(tx, id);
+          return settleFromProviderRow(tx, fiscal, id, deps.clock.now().instant);
+        });
+        switch (settled.settled) {
+          case "received":
+            return c.json({
+              outcome: "received",
+              ...(settled.invoice === null ? {} : { invoiceNumber: settled.invoice.invoiceNumber }),
+            });
+          case "failed":
+            return c.json({ outcome: "not_charged" });
+          case "mismatched":
+            throw new AppError("payment.outcome_unknown", {
+              paymentId: id,
+              reason: "ambiguous",
+              providerStatus: "captured",
+            });
+          case "left":
+            throw new AppError("payment.outcome_unknown", {
+              paymentId: id,
+              reason: "ambiguous",
+              providerStatus: settled.providerState,
+            });
+        }
+      };
+
+      if (stuck.provided?.state !== "attempting") return fromRow();
+
+      const provider = await deps.pool.get(stuck.provided.provider);
+      if (provider.resolveAbandonedAttempt === undefined) {
+        throw new AppError("payment.resolve_unsupported", { providerId: stuck.provided.provider });
+      }
+      const now = deps.clock.now().instant;
+      let resolved: AbandonedAttemptOutcome;
+      try {
+        resolved = await provider.resolveAbandonedAttempt(stuck.provided.paymentRef, now, {
+          personId: stuck.personId,
+        });
+      } catch (error) {
+        if (isAppError(error) && error.code === "payment.not_found") {
+          throw new AppError("payment.not_stuck", { paymentId: id });
+        }
+        throw error;
+      }
+      if (resolved.outcome === "unknown") {
+        throw new AppError("payment.outcome_unknown", {
+          paymentId: id,
+          reason: resolved.reason,
+          ...(resolved.providerStatus === undefined
+            ? {}
+            : { providerStatus: resolved.providerStatus }),
+        });
+      }
+      if (resolved.outcome === "failed") {
+        // The provider's own record says nothing was charged, so the reservation is released.
+        await gated(sessionId, async (tx) => {
+          await requireStuckBillPayment(tx, id);
+          await failBillPayment(tx, id, now);
+        });
+        return c.json({ outcome: "not_charged" });
+      }
+      return fromRow();
+    }),
+  );
+
+  // A manager records the outcome the provider confirmed when the provider cannot be asked
+  // (Rulings STOP 3 and 4): only with a note, and with their own PIN entered again.
+  app.post("/management-api/payments/bill-payments/:id/attest", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "BillPaymentId");
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const outcome = body.outcome;
+      if (outcome !== "received" && outcome !== "failed") {
+        throw new AppError("management.request_invalid", { field: "outcome" });
+      }
+      const note = typeof body.note === "string" ? body.note.trim() : "";
+      if (note === "") throw new AppError("management.request_invalid", { field: "note" });
+      const pin = body.pin;
+      const answer = await gated(sessionId, async (tx, personId) => {
+        if (typeof pin !== "string") throw new AppError("pin.invalid", {});
+        await verifyPersonCredential(tx, personId, pin);
+        await requireStuckBillPayment(tx, id);
+        const attestation = { attestedBy: personId, note };
+        const now = deps.clock.now().instant;
+        if (outcome === "failed") {
+          await failBillPayment(tx, id, now, attestation);
+          return { outcome: "not_charged" as const };
+        }
+        const done = await completeBillPayment(tx, fiscal, deps.cfg, id, now, attestation);
+        return {
+          outcome: "received" as const,
+          ...(done.invoice === null ? {} : { invoiceNumber: done.invoice.invoiceNumber }),
+        };
+      });
+      return c.json(answer);
     }),
   );
 }

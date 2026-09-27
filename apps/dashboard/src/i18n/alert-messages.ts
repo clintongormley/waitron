@@ -139,6 +139,10 @@ export const ALERT_MESSAGES: Readonly<
     en: "Waitron could not tell what happened to card payment {paymentRef}: the card provider reported {status}, and money may have moved without reaching a sale. Waitron has marked the payment as failed. Check it in the provider's own dashboard.",
     es: "Waitron no ha podido saber qué pasó con el pago con tarjeta {paymentRef}: el proveedor de pagos indicó {status}, y puede que se haya movido dinero sin llegar a una venta. Waitron ha marcado el pago como fallido. Compruébalo en el panel del proveedor.",
   },
+  "payment.bill_capture_mismatch": {
+    en: "The card provider charged {captured} for a payment towards a bill that should have been {expected}. Waitron has not counted it, and the bill cannot be changed or invoiced until a manager records what happened. Check the charge in the card provider's own dashboard.",
+    es: "El proveedor de pagos cobró {captured} por un pago a cuenta de una cuenta que debía ser de {expected}. Waitron no lo ha contado, y la cuenta no se puede modificar ni facturar hasta que un responsable registre lo ocurrido. Comprueba el cobro en el panel del proveedor de pagos.",
+  },
   "payment.reconcile_unsettled": {
     en: `A check found {count} card payments that the card provider had not paid out.${MORE_EN}${NOT_RECHECKED_EN}`,
     es: `Una comprobación encontró {count} pagos con tarjeta que el proveedor de pagos no había liquidado.${MORE_ES}${NOT_RECHECKED_ES}`,

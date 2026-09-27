@@ -7,10 +7,12 @@ import {
   billPaymentLines,
   billPaymentRefunds,
   billPayments,
+  BILL_PAYMENT_CHANGE_REFUSAL,
   captureError,
   diningTables,
   printJobs,
   sales,
+  triggerRaised,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -35,6 +37,9 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import {
+  assertBillInvariant,
+  completeBillPayment,
+  failBillPayment,
   issueIfFullyPaid,
   readBillBalance,
   takeBillPayment,
@@ -307,14 +312,23 @@ describe("the writers with no route of their own", () => {
 
   it("counts a pending card's reservation against the bill's total", async () => {
     const billId = await tabWith("Chuletón", "Tarta");
+    await insertPayment(billId, { applied: 5000 });
+
+    const error = await captureError(() => inTx((tx) => assertBillInvariant(tx, [billId])));
+
+    expect(error).toMatchObject({
+      code: "bill.received_exceeds_total",
+      params: { excess: "7.00" },
+    });
+  });
+
+  it("refuses a void while a card payment of part of the bill is pending, before the invariant", async () => {
+    const billId = await tabWith("Chuletón", "Tarta");
     await insertPayment(billId, { applied: 2000 });
 
     const error = await captureError(() => inTx((tx) => voidTabLine(tx, venue.cfg, billId, 1)));
 
-    expect(error).toMatchObject({
-      code: "bill.received_exceeds_total",
-      params: { excess: "2.00" },
-    });
+    expect(error).toMatchObject({ code: "order.payment_in_flight" });
   });
 
   it("refuses removing a paid line by saving the order without it, and lets an unpaid one go", async () => {
@@ -487,6 +501,30 @@ describe("a bill holding money", () => {
     });
     await abandonHeldOrder({ db: suite.db }, venue.cfg, billId);
     expect(await statusOf(billId)).toBe("abandoned");
+  });
+});
+
+describe("settling a card payment of part of the bill", () => {
+  it("refuses completing a payment that is no longer pending, and failing one received", async () => {
+    const billId = await tabWith("Chuletón", "Tarta");
+    const failed = await insertPayment(billId, {
+      state: "failed",
+      failedAt: "2026-09-27T10:00:00Z",
+    });
+    const received = await insertPayment(billId, {
+      state: "received",
+      receivedAt: "2026-09-27T10:00:00Z",
+    });
+
+    const completing = await captureError(() =>
+      inTx((tx) => completeBillPayment(tx, fiscal(), venue.cfg, failed, new Date())),
+    );
+    const failing = await captureError(() =>
+      inTx((tx) => failBillPayment(tx, received, new Date())),
+    );
+
+    expect(triggerRaised(completing, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
+    expect(triggerRaised(failing, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
   });
 });
 

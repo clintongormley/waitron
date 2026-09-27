@@ -50,6 +50,7 @@ import {
   tills,
   withTransaction,
   workingOrders,
+  billPayments,
   type Database,
   type VenueDatabase,
 } from "@waitron/db";
@@ -2759,6 +2760,61 @@ describe("startServer, against a migrated venue directory", () => {
       }
     } finally {
       await sharedDb.delete(workingOrders).where(eq(workingOrders.id, orderId));
+    }
+  }, 60_000);
+
+  // A previous run died between a card bill payment's P1 and its reader: the payment is pending and
+  // no provider row names it. Nothing in this process drives it, so the first pass fails it.
+  it("fails a card bill payment a previous run left with no provider row, on its first pass", async () => {
+    const port = await freePort();
+    const orderId = randomUUID();
+    await sharedDb.insert(workingOrders).values({
+      id: orderId,
+      tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
+      orderNumber: 990_002,
+    });
+    const [payment] = await sharedDb
+      .insert(billPayments)
+      .values({
+        workingOrderId: orderId,
+        submissionId: randomUUID(),
+        fingerprint: "stranded",
+        kind: "contribution",
+        method: "card",
+        applied: 500,
+        state: "pending",
+        requestedBy: randomUUID(),
+        tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
+      })
+      .returning({ id: billPayments.id });
+
+    try {
+      const server = await withCapturedStdout(async (lines) => {
+        const started = await startServer({
+          ...KEY_ENV,
+          WAITRON_VENUE_DIR: sharedVenueDir,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_ENV: "production",
+        });
+        await waitForEvent(lines, "loop.sleeping");
+        return started;
+      });
+      try {
+        const [row] = await sharedDb
+          .select({ state: billPayments.state })
+          .from(billPayments)
+          .where(eq(billPayments.id, payment!.id));
+        expect(row).toEqual({ state: "failed" });
+      } finally {
+        await server.close();
+      }
+    } finally {
+      // A bill payment is never deleted, so its order cannot be; it is abandoned instead.
+      await sharedDb
+        .update(workingOrders)
+        .set({ status: "abandoned" })
+        .where(eq(workingOrders.id, orderId));
     }
   }, 60_000);
 

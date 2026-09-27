@@ -7,7 +7,7 @@ import {
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import { assertQuantityPrecision } from "@waitron/catalogue";
 import {
   AppError,
@@ -23,6 +23,7 @@ import {
   sumDecimals,
   thousandthsToDecimal,
   toScale,
+  tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
@@ -33,6 +34,7 @@ import {
   findPaymentByBillPayment,
   recordManualCardPayment,
 } from "@waitron/payments";
+import type { PaymentProvider, PaymentResult } from "@waitron/payments";
 import { confirmAllocation, previewAllocation } from "./bill-allocation.js";
 import type {
   AllocationChoice,
@@ -58,7 +60,7 @@ import {
   priceStoredOrder,
   priceStoredOrderForIssuance,
   readInvoiceNumber,
-  refusePaymentInFlight,
+  refuseOrderPaymentMarked,
   toVatBreakdown,
 } from "./working-order.js";
 import type { TillSaleDeps } from "./working-order.js";
@@ -92,10 +94,14 @@ export interface BillPaymentAsk {
 /** A payment request as taken: the ask, the allocation the operator saw, and its retry key. */
 export interface BillPaymentRequest extends BillPaymentAsk {
   submissionId: string;
-  /** A card only; `manual` is a card charged on a terminal the POS does not drive. */
-  entry?: "manual";
+  /** A card only: `manual` is a card charged on a terminal the POS does not drive, `reader` one
+   * the provider drives. */
+  entry?: "manual" | "reader";
   /** A hand-keyed card's terminal operation number. */
   externalRef?: string;
+  /** A reader card only, passed to the provider's `collect`. */
+  allowOffline?: boolean;
+  simulationOutcome?: "captured" | "declined";
   applied: string;
   tip: string;
 }
@@ -134,7 +140,9 @@ export interface BillBalance {
 }
 
 export interface BillPaymentResult {
-  outcome: "received" | "pending" | "failed" | "declined";
+  /** The payment's state; a reader card's own answer is `declined`, `timeout` (still pending) or
+   * `network_unavailable` (failed, nothing charged). A retry answers the state it finds. */
+  outcome: "received" | "pending" | "failed" | "declined" | "timeout" | "network_unavailable";
   payment: BillPaymentView;
   balance: BillBalance;
   /** Present when the bill is invoiced: by this payment, or, on a replay, since. */
@@ -441,6 +449,7 @@ export async function issueIfFullyPaid(
   cfg: TillConfig | null,
   workingOrderId: string,
   operatorId?: string,
+  options: { moneyMoved: boolean } = { moneyMoved: false },
 ): Promise<TillSaleResult | null> {
   const [order] = await tx
     .select({ status: workingOrders.status })
@@ -455,11 +464,15 @@ export async function issueIfFullyPaid(
   if (compareDecimal(fundsOf(workingOrderId, total, held).received, total) !== 0) return null;
   if (cfg === null) throw new SaleTillRequired();
 
+  // A card already captured cannot be undone by refusing its invoice, so a line whose product has
+  // since gone off sale is filed as it stands, as a whole-order card recovery files it.
   const priced = await issuancePass(
     tx,
     cfg,
     workingOrderId,
-    await priceStoredOrderForIssuance(tx, workingOrderId),
+    await priceStoredOrderForIssuance(tx, workingOrderId, {
+      refuseUnsentUnavailable: !options.moneyMoved,
+    }),
   );
   const tendersOfBill: SettleSaleTender[] = received
     .filter(({ netApplied, netTip }) => compareDecimal(addDecimal(netApplied, netTip), ZERO) > 0)
@@ -717,12 +730,98 @@ async function resultOf(
 }
 
 /**
- * Take a cash or hand-keyed card payment against an open bill, in one transaction: it is received
- * at once, and when it leaves the bill fully paid the same transaction issues the invoice.
+ * The start every payment of a bill shares, in the caller's transaction: a retry finds its first
+ * row; otherwise the bill must be open and no payment of the whole order in flight, the allocation
+ * must be the one the operator saw (design §3.6), and the payment and its lines are inserted in
+ * `state`.
  *
  * Keyed by `submissionId` within the bill (design §5.1): the same request again answers the first
- * result and writes nothing; the id with another request, or naming one of the bill's refunds, is
+ * row and writes nothing; the id with another request, or naming one of the bill's refunds, is
  * `submission.id_reused`.
+ */
+async function beginBillPayment(
+  tx: Transaction,
+  cfg: TillConfig,
+  workingOrderId: string,
+  req: BillPaymentRequest,
+  operatorId: string,
+  state: "received" | "pending",
+  now: Date,
+): Promise<{ replay: PaymentRow } | { payment: PaymentRow }> {
+  const print = fingerprint(req as unknown as Record<string, unknown>);
+  const [earlier] = await tx
+    .select()
+    .from(billPayments)
+    .where(
+      and(
+        eq(billPayments.workingOrderId, workingOrderId),
+        eq(billPayments.submissionId, req.submissionId),
+      ),
+    );
+  if (earlier !== undefined) {
+    if (earlier.fingerprint !== print) {
+      throw new AppError("submission.id_reused", { submissionId: req.submissionId });
+    }
+    return { replay: earlier };
+  }
+  const [refund] = await tx
+    .select({ id: billPaymentRefunds.id })
+    .from(billPaymentRefunds)
+    .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
+    .where(
+      and(
+        eq(billPayments.workingOrderId, workingOrderId),
+        eq(billPaymentRefunds.submissionId, req.submissionId),
+      ),
+    );
+  if (refund !== undefined) {
+    throw new AppError("submission.id_reused", { submissionId: req.submissionId });
+  }
+
+  await requireOpenBill(tx, workingOrderId);
+  await refuseOrderPaymentMarked(tx, [workingOrderId]);
+  const { request, items } = await allocationRequestFor(tx, workingOrderId, req);
+  const funds = fundsOf(
+    workingOrderId,
+    await billTotal(tx, workingOrderId),
+    await readPaymentMoney(tx, [workingOrderId]),
+  );
+  const allocation = confirmAllocation(
+    funds,
+    request,
+    { tipsEnabled: cfg.tipsEnabled },
+    { applied: decimal(req.applied), tip: decimal(req.tip) },
+  );
+
+  const [payment] = await tx
+    .insert(billPayments)
+    .values({
+      workingOrderId,
+      submissionId: req.submissionId,
+      fingerprint: print,
+      kind: req.kind,
+      shareOf: req.kind === "share" ? req.shareOf! : null,
+      method: req.method,
+      applied: decimalToCents(allocation.applied),
+      tip: decimalToCents(allocation.tip),
+      tendered: req.method === "cash" ? decimalToCents(decimal(req.tendered!)) : null,
+      state,
+      requestedBy: operatorId,
+      tillId: cfg.tillId,
+      receivedAt: state === "received" ? now.toISOString() : null,
+    })
+    .returning();
+  if (items !== null) {
+    await tx
+      .insert(billPaymentLines)
+      .values(items.rows.map((row) => ({ billPaymentId: payment!.id, ...row })));
+  }
+  return { payment: payment! };
+}
+
+/**
+ * Take a cash or hand-keyed card payment against an open bill, in one transaction: it is received
+ * at once, and when it leaves the bill fully paid the same transaction issues the invoice.
  */
 export async function takeBillPayment(
   deps: TillSaleDeps,
@@ -731,90 +830,192 @@ export async function takeBillPayment(
   req: BillPaymentRequest,
   operatorId: string,
 ): Promise<BillPaymentResult> {
-  const print = fingerprint(req as unknown as Record<string, unknown>);
   return withTransaction(deps.db, async (tx) => {
-    const [earlier] = await tx
-      .select()
-      .from(billPayments)
-      .where(
-        and(
-          eq(billPayments.workingOrderId, workingOrderId),
-          eq(billPayments.submissionId, req.submissionId),
-        ),
-      );
-    if (earlier !== undefined) {
-      if (earlier.fingerprint !== print) {
-        throw new AppError("submission.id_reused", { submissionId: req.submissionId });
-      }
-      return resultOf(tx, deps, cfg, earlier, null);
-    }
-    const [refund] = await tx
-      .select({ id: billPaymentRefunds.id })
-      .from(billPaymentRefunds)
-      .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
-      .where(
-        and(
-          eq(billPayments.workingOrderId, workingOrderId),
-          eq(billPaymentRefunds.submissionId, req.submissionId),
-        ),
-      );
-    if (refund !== undefined) {
-      throw new AppError("submission.id_reused", { submissionId: req.submissionId });
-    }
-
-    await requireOpenBill(tx, workingOrderId);
-    await refusePaymentInFlight(tx, [workingOrderId]);
-    const { request, items } = await allocationRequestFor(tx, workingOrderId, req);
-    const funds = fundsOf(
-      workingOrderId,
-      await billTotal(tx, workingOrderId),
-      await readPaymentMoney(tx, [workingOrderId]),
-    );
-    const allocation = confirmAllocation(
-      funds,
-      request,
-      { tipsEnabled: cfg.tipsEnabled },
-      { applied: decimal(req.applied), tip: decimal(req.tip) },
-    );
-
     const receivedAt = deps.clock.now().instant;
-    const [payment] = await tx
-      .insert(billPayments)
-      .values({
-        workingOrderId,
-        submissionId: req.submissionId,
-        fingerprint: print,
-        kind: req.kind,
-        shareOf: req.kind === "share" ? req.shareOf! : null,
-        method: req.method,
-        applied: decimalToCents(allocation.applied),
-        tip: decimalToCents(allocation.tip),
-        tendered: req.method === "cash" ? decimalToCents(decimal(req.tendered!)) : null,
-        state: "received",
-        requestedBy: operatorId,
-        tillId: cfg.tillId,
-        receivedAt: receivedAt.toISOString(),
-      })
-      .returning();
-    if (items !== null) {
-      await tx
-        .insert(billPaymentLines)
-        .values(items.rows.map((row) => ({ billPaymentId: payment!.id, ...row })));
-    }
+    const begun = await beginBillPayment(
+      tx,
+      cfg,
+      workingOrderId,
+      req,
+      operatorId,
+      "received",
+      receivedAt,
+    );
+    if ("replay" in begun) return resultOf(tx, deps, cfg, begun.replay, null);
+    const { payment } = begun;
     if (req.method === "card") {
       await recordManualCardPayment(tx, {
         workingOrderId,
-        amount: addDecimal(allocation.applied, allocation.tip),
+        amount: centsToDecimal(payment.applied + payment.tip),
         settledAt: receivedAt,
         externalRef: req.externalRef,
-        billPaymentId: payment!.id,
+        billPaymentId: payment.id,
       });
     } else {
-      await enqueueBillPaymentDrawer(tx, cfg, payment!.id, operatorId);
+      await enqueueBillPaymentDrawer(tx, cfg, payment.id, operatorId);
     }
     const invoice = await issueIfFullyPaid(tx, deps, cfg, workingOrderId, operatorId);
-    return resultOf(tx, deps, cfg, payment!, invoice);
+    return resultOf(tx, deps, cfg, payment, invoice);
   });
+}
+
+/** The card bill payments each venue store has at a reader in this process, by id. One process owns
+ * a venue at a time, so a pending payment missing here is one no attempt is still driving. */
+const LIVE_BILL_PAYMENTS = new WeakMap<Database, Set<string>>();
+
+function liveBillPaymentsOf(db: Database): Set<string> {
+  let live = LIVE_BILL_PAYMENTS.get(db);
+  if (live === undefined) {
+    live = new Set();
+    LIVE_BILL_PAYMENTS.set(db, live);
+  }
+  return live;
+}
+
+/** Whether a card for this bill payment is at a reader in this process. */
+export function billPaymentIsLive(db: Database, billPaymentId: string): boolean {
+  return liveBillPaymentsOf(db).has(billPaymentId);
+}
+
+/** {@link takeReaderBillPayment}'s deps: the fiscal ones, and the reader's provider. */
+export type ReaderBillPaymentDeps = TillSaleDeps & {
+  provider: PaymentProvider;
+  /** The chosen reader's vendor reference, passed to `collect`; absent for the simulator. */
+  readerRef?: string;
+};
+
+/**
+ * P3's work for a card bill payment whose charge has gone through (design §5.3, §7): the payment
+ * becomes `received`, dated when the money moved, and the invoice is issued if the bill is now
+ * fully paid. Shared by the live attempt, the loop's recovery and the manager's actions, each of
+ * which has read the payment pending in the same transaction; `bill_payments_guard_update` refuses
+ * the change for one that is not.
+ */
+export async function completeBillPayment(
+  tx: Transaction,
+  deps: TillSaleDeps,
+  cfg: TillConfig,
+  billPaymentId: string,
+  receivedAt: Date,
+  attestation?: { attestedBy: string; note: string },
+): Promise<{ payment: PaymentRow; invoice: TillSaleResult | null }> {
+  const [payment] = await tx
+    .update(billPayments)
+    .set({
+      state: "received",
+      receivedAt: receivedAt.toISOString(),
+      ...(attestation === undefined
+        ? {}
+        : { attestedBy: attestation.attestedBy, attestationNote: attestation.note }),
+    })
+    .where(eq(billPayments.id, billPaymentId))
+    .returning();
+  const invoice = await issueIfFullyPaid(
+    tx,
+    deps,
+    { ...cfg, tillId: brandTillId(payment!.tillId) },
+    payment!.workingOrderId,
+    payment!.requestedBy,
+    { moneyMoved: true },
+  );
+  return { payment: payment!, invoice };
+}
+
+/** A card bill payment that charged nothing becomes `failed`, releasing its reservation. Its callers
+ * have read it pending, as {@link completeBillPayment}'s have. */
+export async function failBillPayment(
+  tx: Transaction,
+  billPaymentId: string,
+  failedAt: Date,
+  attestation?: { attestedBy: string; note: string },
+): Promise<PaymentRow> {
+  const [payment] = await tx
+    .update(billPayments)
+    .set({
+      state: "failed",
+      failedAt: failedAt.toISOString(),
+      ...(attestation === undefined
+        ? {}
+        : { attestedBy: attestation.attestedBy, attestationNote: attestation.note }),
+    })
+    .where(eq(billPayments.id, billPaymentId))
+    .returning();
+  return payment!;
+}
+
+/**
+ * Take a card on a reader against an open bill, in the three phases of design §5.3:
+ *  - P1 (transaction): {@link beginBillPayment} inserts the payment `pending`, which reserves its
+ *    applied amount, and registers it as live in this process;
+ *  - P2 (no transaction): the provider's `collect` for `applied + tip`, naming the bill payment;
+ *  - P3 (transaction): a capture, or an offline acceptance, is {@link completeBillPayment}; a
+ *    decline or a refusal to go offline fails it; a reader that stopped answering leaves it
+ *    pending, for the loop to settle from the provider's row.
+ *
+ * A retry of a payment already taken answers its state and never collects again.
+ */
+export async function takeReaderBillPayment(
+  deps: ReaderBillPaymentDeps,
+  cfg: TillConfig,
+  workingOrderId: string,
+  req: BillPaymentRequest,
+  operatorId: string,
+): Promise<BillPaymentResult> {
+  const live = liveBillPaymentsOf(deps.db);
+  let registered: string | null = null;
+  try {
+    const begun = await withTransaction(deps.db, async (tx) => {
+      const started = await beginBillPayment(
+        tx,
+        cfg,
+        workingOrderId,
+        req,
+        operatorId,
+        "pending",
+        deps.clock.now().instant,
+      );
+      if ("replay" in started) {
+        return {
+          kind: "replay" as const,
+          result: await resultOf(tx, deps, cfg, started.replay, null),
+        };
+      }
+      // Inside the transaction, so no loop pass runs between the insert and its registration.
+      registered = started.payment.id;
+      live.add(registered);
+      return { kind: "collect" as const, payment: started.payment };
+    });
+    if (begun.kind === "replay") return begun.result;
+    const { payment } = begun;
+
+    const result: PaymentResult = await deps.provider.collect({
+      tillId: cfg.tillId,
+      workingOrderId: brandWorkingOrderId(workingOrderId),
+      amount: centsToDecimal(payment.applied + payment.tip),
+      ...(deps.readerRef === undefined ? {} : { readerRef: deps.readerRef }),
+      allowOffline: req.allowOffline,
+      simulationOutcome: req.simulationOutcome,
+      billPaymentId: payment.id,
+    });
+
+    return await withTransaction(deps.db, async (tx) => {
+      if (result.state === "captured" || result.state === "accepted_offline") {
+        // A captured or offline-accepted result carries its time (`PaymentResult`, provider.ts).
+        const done = await completeBillPayment(tx, deps, cfg, payment.id, result.settledAt!);
+        return resultOf(tx, deps, cfg, done.payment, done.invoice);
+      }
+      if (result.state === "attempting") {
+        return { ...(await resultOf(tx, deps, cfg, payment, null)), outcome: "timeout" };
+      }
+      const failed = await failBillPayment(tx, payment.id, deps.clock.now().instant);
+      return {
+        ...(await resultOf(tx, deps, cfg, failed, null)),
+        outcome: result.state === "network_unavailable" ? "network_unavailable" : "declined",
+      };
+    });
+  } finally {
+    if (registered !== null) live.delete(registered);
+  }
 }
 
 /** Reads a bill's balance in its own transaction. */

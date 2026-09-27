@@ -176,7 +176,7 @@ function tillProviderForReader(provider: string): "sumup_cloud" | "stripe_termin
   return undefined;
 }
 
-async function resolvePayReader(
+export async function resolvePayReader(
   deps: TillApiDeps,
   deviceId: string | undefined,
   requestedReaderId: string | undefined,

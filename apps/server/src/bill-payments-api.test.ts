@@ -510,24 +510,41 @@ describe("a contribution (design §8 test 2)", () => {
     expect(opens).toEqual([]);
   });
 
-  it("refuses a card on a reader for now, writing nothing", async () => {
+  it("takes a card on the practice simulator, charging it with the outcome the operator chose", async () => {
     const billId = await bill120();
-
-    const refused = await pay(billId, {
+    const card = {
       kind: "contribution",
       amount: "40.00",
       method: "card",
       entry: "reader",
       applied: "40.00",
       tip: "0.00",
+    } as const;
+
+    const declined = await request("POST", `/api/working-orders/${billId}/payments`, {
+      ...card,
+      submissionId: randomUUID(),
+      simulationOutcome: "declined",
+    });
+    const captured = await request("POST", `/api/working-orders/${billId}/payments`, {
+      ...card,
+      submissionId: randomUUID(),
+      simulationOutcome: "captured",
     });
 
-    expect(refused.status).toBe(400);
-    expect(refused.json).toMatchObject({
-      code: "management.request_invalid",
-      params: { field: "entry" },
+    expect(declined.json).toMatchObject({ outcome: "declined", payment: { state: "failed" } });
+    expect(captured.json).toMatchObject({
+      outcome: "received",
+      balance: { received: "40.00", outstanding: "80.00" },
     });
-    expect(await paymentRows(billId)).toEqual([]);
+    const provided = await inTx((tx) =>
+      tx
+        .select({ state: payments.state, provider: payments.provider })
+        .from(payments)
+        .where(eq(payments.workingOrderId, billId)),
+    );
+    expect(provided.map((row) => row.state).sort()).toEqual(["captured", "failed"]);
+    expect(new Set(provided.map((row) => row.provider))).toEqual(new Set(["simulator"]));
   });
 
   it("refuses a tip with the venue's tips off, showing what can be charged, and writes nothing", async () => {

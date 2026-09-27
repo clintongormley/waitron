@@ -161,6 +161,8 @@ import { seedInstalledDemo } from "./demo-seed.js";
 import { runFiscalDrain } from "./onboarding-policy.js";
 import { resetBeforeFirstDrain } from "./restart-reset.js";
 import { releaseStalePaymentAttempts } from "./till-sale.js";
+import { settlePendingBillPayments } from "./bill-payments-loop.js";
+import type { BillPaymentsPass } from "./bill-payments-loop.js";
 import { adoptFromPrimary } from "./adopt.js";
 import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -386,6 +388,31 @@ export function withStalePaymentRelease(
       if (released > 0) log("info", "payment_attempt.released", { released });
     } catch (error) {
       log("warn", "payment_attempt.release_failed", { error: String(error) });
+    }
+    return report;
+  };
+}
+
+/**
+ * After each pass, settle the pending card bill payments no attempt in this process is driving
+ * (`settlePendingBillPayments`, bill payments design §5.4). Like {@link withStalePaymentRelease} it
+ * is log-only: a failure never changes the inner report.
+ */
+export function withPendingBillPayments(
+  inner: (now: Date) => Promise<PassReport>,
+  settle: () => Promise<BillPaymentsPass>,
+  log: Logger,
+): (now: Date) => Promise<PassReport> {
+  return async (now) => {
+    const report = await inner(now);
+    try {
+      const { errors, ...counts } = await settle();
+      if (counts.received + counts.failed + counts.mismatched > 0) {
+        log("info", "bill_payment.settled", counts);
+      }
+      for (const failure of errors) log("warn", "bill_payment.settle_failed", failure);
+    } catch (error) {
+      log("warn", "bill_payment.settle_failed", { error: String(error) });
     }
     return report;
   };
@@ -1870,48 +1897,52 @@ async function bootServer(
     // a promotion starts them on the next tick; any other node gets an empty pass that still advances
     // `/health`. So on a non-singleton node `/health` reflects only process liveness: a mirror answers
     // healthy whatever its data.
-    pass: withStalePaymentRelease(
-      withPendingSweep(
-        singletonPass(
-          () => holders.singletonRole.current,
-          (at) =>
-            runPass(
-              {
-                drain: (at2) => runFiscalDrain(config, fiscalDrain, at2),
-                // Asked per pass, so a credential provisioned while the host runs is served on the next
-                // pass; without one there is nothing to reconcile.
-                reconcile: async (at2) =>
-                  (await credentialProvisioned(db, "payments.stripe"))
-                    ? runDue(
-                        {
-                          db,
-                          duties: [duty],
-                          horizonDays: config.scheduler.horizonDays,
-                          maxPeriodsPerTick: config.scheduler.maxPeriodsPerTick,
-                          maxAttempts: config.scheduler.maxAttempts,
-                          backoffBaseMs: config.scheduler.backoffBaseMs,
-                          staleAfterMs: config.scheduler.staleAfterMs,
-                          skipRetryMs: config.skipRetryMs,
-                        },
-                        at2,
-                      )
-                    : NOTHING_TO_RECONCILE,
-                awaitingCert: awaitingFiscalCert,
-                monotonicMs: () => performance.now(),
-                log,
-              },
-              at,
-            ),
+    pass: withPendingBillPayments(
+      withStalePaymentRelease(
+        withPendingSweep(
+          singletonPass(
+            () => holders.singletonRole.current,
+            (at) =>
+              runPass(
+                {
+                  drain: (at2) => runFiscalDrain(config, fiscalDrain, at2),
+                  // Asked per pass, so a credential provisioned while the host runs is served on the next
+                  // pass; without one there is nothing to reconcile.
+                  reconcile: async (at2) =>
+                    (await credentialProvisioned(db, "payments.stripe"))
+                      ? runDue(
+                          {
+                            db,
+                            duties: [duty],
+                            horizonDays: config.scheduler.horizonDays,
+                            maxPeriodsPerTick: config.scheduler.maxPeriodsPerTick,
+                            maxAttempts: config.scheduler.maxAttempts,
+                            backoffBaseMs: config.scheduler.backoffBaseMs,
+                            staleAfterMs: config.scheduler.staleAfterMs,
+                            skipRetryMs: config.skipRetryMs,
+                          },
+                          at2,
+                        )
+                      : NOTHING_TO_RECONCILE,
+                  awaitingCert: awaitingFiscalCert,
+                  monotonicMs: () => performance.now(),
+                  log,
+                },
+                at,
+              ),
+          ),
+          connectedCardProviderSweep({
+            db,
+            pool: cardPool,
+            contributions: CARD_PROVIDERS,
+            simulator: cardProvider,
+          }),
+          log,
         ),
-        connectedCardProviderSweep({
-          db,
-          pool: cardPool,
-          contributions: CARD_PROVIDERS,
-          simulator: cardProvider,
-        }),
+        () => releaseStalePaymentAttempts(db),
         log,
       ),
-      () => releaseStalePaymentAttempts(db),
+      () => settlePendingBillPayments({ db, backend: tillBackend, clock: tillClock, cfg: till }),
       log,
     ),
     now,

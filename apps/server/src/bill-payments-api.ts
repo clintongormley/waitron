@@ -7,10 +7,13 @@ import {
   previewBillPayment,
   SaleTillRequired,
   takeBillPayment,
+  takeReaderBillPayment,
 } from "./bill-payments.js";
 import type { BillPaymentAsk, BillPaymentRequest } from "./bill-payments.js";
-import { requireSaleTillId, tryReadDevice } from "./device-session.js";
+import { assertDeviceCapability, requireSaleTillId, tryReadDevice } from "./device-session.js";
+import type { DeviceBinding } from "./device-session.js";
 import type { Logger } from "./logger.js";
+import { resolvePayReader } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
 import { isUuid, requireSession } from "./till-session.js";
@@ -102,17 +105,44 @@ function parseRequest(body: Record<string, unknown>): BillPaymentRequest {
     applied: moneyField(body.applied, "applied"),
     tip: moneyField(body.tip, "tip"),
   };
+  const readerOnly = ["readerId", "allowOffline", "simulationOutcome"] as const;
   if (request.method === "card") {
-    // A card on a reader is taken in three phases, which this route does not run yet.
-    request.entry = oneOf(body.entry, ["manual"] as const, "entry");
+    request.entry = oneOf(body.entry, ["manual", "reader"] as const, "entry");
+  } else if (body.entry !== undefined) {
+    throw invalid("entry");
+  }
+  if (request.entry === "manual") {
     if (body.externalRef !== undefined) {
       if (typeof body.externalRef !== "string") throw invalid("externalRef");
       request.externalRef = body.externalRef;
     }
-  } else if (body.entry !== undefined || body.externalRef !== undefined) {
-    throw invalid(body.entry !== undefined ? "entry" : "externalRef");
+  } else if (body.externalRef !== undefined) {
+    throw invalid("externalRef");
+  }
+  if (request.entry === "reader") {
+    if (body.allowOffline !== undefined) {
+      if (typeof body.allowOffline !== "boolean") throw invalid("allowOffline");
+      request.allowOffline = body.allowOffline;
+    }
+    if (body.simulationOutcome !== undefined) {
+      request.simulationOutcome = oneOf(
+        body.simulationOutcome,
+        ["captured", "declined"] as const,
+        "simulationOutcome",
+      );
+    }
+  } else {
+    const stray = readerOnly.find((field) => body[field] !== undefined);
+    if (stray !== undefined) throw invalid(stray);
   }
   return request;
+}
+
+/** The reader a card is charged on: the one the body names, else the device's own. */
+function parseReaderId(body: Record<string, unknown>): string | undefined {
+  if (body.readerId === undefined) return undefined;
+  if (typeof body.readerId !== "string" || !isUuid(body.readerId)) throw invalid("readerId");
+  return body.readerId;
 }
 
 function requireBillParam(id: string): string {
@@ -122,7 +152,14 @@ function requireBillParam(id: string): string {
 
 /** A sale made during a device's request files on that device's own till. */
 async function deviceSaleCfg(deps: TillApiDeps, c: Context): Promise<TillConfig> {
-  const device = await tryReadDevice(deps, c);
+  return deviceSaleCfgOf(deps, c, await tryReadDevice(deps, c));
+}
+
+async function deviceSaleCfgOf(
+  deps: TillApiDeps,
+  c: Context,
+  device: DeviceBinding | null,
+): Promise<TillConfig> {
   return {
     ...deps.cfg,
     tillId: await requireSaleTillId(deps, c, device),
@@ -177,9 +214,47 @@ export function mountBillPaymentsApi(app: Hono, deps: TillApiDeps, log: Logger, 
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
       const id = requireBillParam(c.req.param("id"));
-      const request = parseRequest(asObject(await readRawJsonBody<unknown>(c)));
-      const saleCfg = await deviceSaleCfg(deps, c);
-      return c.json(await takeBillPayment(fiscal, saleCfg, id, request, personId));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const request = parseRequest(body);
+      if (request.entry !== "reader") {
+        const saleCfg = await deviceSaleCfg(deps, c);
+        return c.json(await takeBillPayment(fiscal, saleCfg, id, request, personId));
+      }
+      // The guards `/api/pay` runs before a reader is asked, in its order. A card outcome is data,
+      // answered 200 even for a decline.
+      const device = await tryReadDevice(deps, c);
+      await assertDeviceCapability(deps, c, "integrated-card-payment", "pay", device);
+      const readerId = parseReaderId(body);
+      if (request.simulationOutcome !== undefined && deps.cardProvider?.provider !== "simulator") {
+        throw invalid("simulationOutcome");
+      }
+      const saleCfg = await deviceSaleCfgOf(deps, c, device);
+      if (deps.cardProvider?.provider === "simulator") {
+        return c.json(
+          await takeReaderBillPayment(
+            { ...fiscal, provider: deps.cardProvider },
+            saleCfg,
+            id,
+            request,
+            personId,
+          ),
+        );
+      }
+      const reader = await resolvePayReader(deps, device?.deviceId, readerId);
+      /* v8 ignore start -- a live boot always supplies the pool */
+      if (deps.pool === undefined)
+        throw new Error("bill payments: card provider pool not configured");
+      /* v8 ignore stop */
+      const provider = await deps.pool.get(reader.provider);
+      return c.json(
+        await takeReaderBillPayment(
+          { ...fiscal, provider, readerRef: reader.providerRef },
+          saleCfg,
+          id,
+          request,
+          personId,
+        ),
+      );
     }),
   );
 }

@@ -378,6 +378,18 @@ declare module "@waitron/shared" {
      * another, placed, or paid in one go by the single-payment routes.
      */
     "bill.payments_received": { workingOrderId: string };
+    /** No bill payment with this id; `paymentId` is the id the caller sent. */
+    "bill.payment_not_found": { paymentId: string };
+    /**
+     * An incident: the provider captured a card bill payment for another amount than its applied
+     * money plus its tip. Nothing was filed and the payment stays pending for a manager.
+     */
+    "payment.bill_capture_mismatch": {
+      billPaymentId: string;
+      workingOrderId: string;
+      captured: string;
+      expected: string;
+    };
     // The four `booking.*` codes are declared in @waitron/bookings/src/errors.ts.
     /**
      * A tab verb found the order it was asked to modify is not an OPEN tab — not `open`, not pointed

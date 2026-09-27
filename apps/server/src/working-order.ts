@@ -62,6 +62,7 @@ import {
 import {
   allocateOrderNumber,
   appendOrderAmendment,
+  billPayments,
   categories,
   diningTables,
   invoiceSeries,
@@ -3318,12 +3319,42 @@ async function requireEditableOrder(
 }
 
 /**
- * Refuse `order.payment_in_flight` when an integrated card payment is between pricing and filing on
- * any of these OPEN orders (plan D22). It reads the order's own mark, never the payments store: the
- * simulator writes no `attempting` row, and Stripe and SumUp write theirs after pricing committed.
- * Only deciding when the mark may be RELEASED reads that store (`till-sale.ts`).
+ * Refuse `order.payment_in_flight` when a card is at the reader for any of these OPEN orders: a
+ * payment of the whole order between pricing and filing (plan D22's mark), or a pending card
+ * payment of part of the bill (bill payments design §5.2). Every line write stops here, because the
+ * capture that completes the bill invoices it from its total.
  */
 export async function refusePaymentInFlight(
+  tx: Transaction,
+  orderIds: readonly string[],
+): Promise<void> {
+  await refuseOrderPaymentMarked(tx, orderIds);
+  const [pending] = await tx
+    .select({ workingOrderId: billPayments.workingOrderId })
+    .from(billPayments)
+    .innerJoin(workingOrders, eq(workingOrders.id, billPayments.workingOrderId))
+    .where(
+      and(
+        inArray(billPayments.workingOrderId, [...orderIds]),
+        eq(billPayments.state, "pending"),
+        eq(workingOrders.status, "open"),
+      ),
+    )
+    .orderBy(billPayments.workingOrderId)
+    .limit(1);
+  if (pending !== undefined) {
+    throw new AppError("order.payment_in_flight", { workingOrderId: pending.workingOrderId });
+  }
+}
+
+/**
+ * Plan D22's half of {@link refusePaymentInFlight}: a payment of the whole order is between pricing
+ * and filing. It reads the order's own mark, never the payments store: the simulator writes no
+ * `attempting` row, and Stripe and SumUp write theirs after pricing committed. Only deciding when
+ * the mark may be RELEASED reads that store (`till-sale.ts`). A payment of part of the bill checks
+ * only this half: cash, or a second card, may be taken while another card is at the reader.
+ */
+export async function refuseOrderPaymentMarked(
   tx: Transaction,
   orderIds: readonly string[],
 ): Promise<void> {
