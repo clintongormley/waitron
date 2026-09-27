@@ -162,6 +162,32 @@ describe("layout canvas store against a real migrated database", () => {
     expect(await rowCount()).toBe(1); // the canvas survived the refused delete (RESTRICT)
   });
 
+  it("passes a trigger's refusal of a delete through untranslated", async () => {
+    await seedTenant(suite.db);
+    const session = await seedSession("manager");
+    const { id } = await inTx((tx) =>
+      createCanvas(tx, {
+        managementSessionId: session,
+        name: "Guarded canvas",
+        definition: phoneCanvas("Guarded"),
+      }),
+    );
+    // A trigger this test creates itself: its refusal carries the restrict refusal's result code.
+    await suite.db.execute(
+      sql`create trigger canvases_test_guard before delete on canvases
+          begin select raise(abort, 'refused by test trigger'); end`,
+    );
+    try {
+      const error = await captureError(() =>
+        inTx((tx) => deleteCanvas(tx, { managementSessionId: session, id })),
+      );
+      expect(isAppError(error)).toBe(false);
+      expect(String(error)).toContain("refused by test trigger");
+    } finally {
+      await suite.db.execute(sql`drop trigger canvases_test_guard`);
+    }
+  });
+
   it("throws canvas.not_found when updating an absent id", async () => {
     await seedTenant(suite.db);
     const session = await seedSession("manager");

@@ -9,6 +9,7 @@ import {
   constraintTarget,
   indexViolated,
   refusalOn,
+  restrictRefused,
   sameTarget,
   triggerRaised,
 } from "./constraint-target.js";
@@ -229,6 +230,52 @@ describe("reading a trigger's raise", () => {
     expect(triggerRaised(new Error(RAISED), RAISED)).toBe(false);
     expect(triggerRaised(undefined, RAISED)).toBe(false);
     expect(triggerRaised(RAISED, RAISED)).toBe(false);
+  });
+});
+
+/**
+ * A delete an `ON DELETE RESTRICT` key refused — told apart from a trigger's raise, which arrives
+ * under the same result code.
+ *
+ * Measured 2026-09-27 on `node:sqlite` (Node v26.7.0): a restricted delete reports errcode 1811 and
+ * the message `FOREIGN KEY constraint failed`; an insert naming no parent reports the same message
+ * under 787.
+ */
+describe("reading a restricted delete", () => {
+  it("matches a restricted delete, and declines a trigger's raise carrying the same code", async () => {
+    const db = await open();
+    const restricted = await refusal(db, sql`delete from parent where id = 1`);
+    expect(restrictRefused(restricted)).toBe(true);
+
+    db.run(
+      sql`create trigger parent_guard before delete on parent for each row when old.id = 1
+          begin select raise(abort, 'this suite''s own guard refused the row'); end`,
+    );
+    const raised = await refusal(db, sql`delete from parent where id = 1`);
+    expect(isRefusal(raised, RESTRICT_VIOLATION)).toBe(true);
+    expect(restrictRefused(raised)).toBe(false);
+  });
+
+  it("declines a written value naming no parent, which carries the same words", async () => {
+    const db = await open();
+    const error = await refusal(db, sql`insert into child (id, parent_id) values ('c9', 99)`);
+    expect(restrictRefused(error)).toBe(false);
+  });
+
+  // No engine can produce this: the result code on one layer and the wording on another.
+  it("does not join a result code on one layer to a message on another", () => {
+    const split = new Error("outer", {
+      cause: Object.assign(new Error("some other refusal"), {
+        errcode: 1811,
+        cause: new Error("FOREIGN KEY constraint failed"),
+      }),
+    });
+    expect(restrictRefused(split)).toBe(false);
+  });
+
+  it("is false for anything that is not a refusal at all", () => {
+    expect(restrictRefused(new Error("FOREIGN KEY constraint failed"))).toBe(false);
+    expect(restrictRefused(undefined)).toBe(false);
   });
 });
 

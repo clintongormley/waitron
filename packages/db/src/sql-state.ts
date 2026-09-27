@@ -26,7 +26,8 @@ export const FOREIGN_KEY_VIOLATION = [787] as const;
 /**
  * A delete refused by an `ON DELETE RESTRICT` foreign key (1811 — SQLite implements RESTRICT with
  * an internal trigger, so it arrives under the TRIGGER reason rather than the
- * FOREIGN KEY one). NOT {@link FOREIGN_KEY_VIOLATION}, which is the other direction.
+ * FOREIGN KEY one). NOT {@link FOREIGN_KEY_VIOLATION}, which is the other direction. The same
+ * number as {@link TRIGGER_ABORT}: `./constraint-target.ts`'s `restrictRefused` reads the words too.
  */
 export const RESTRICT_VIOLATION = [1811] as const;
 

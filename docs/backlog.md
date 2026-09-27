@@ -4152,18 +4152,13 @@ files a venue directory holds is the store's property. Add a file or a sidecar a
 restore silently miss it — and the restore is the cold-recovery path (`CLAUDE.md` §5). **Next
 action:** export the names from `@waitron/store` and read them.
 
-**`RESTRICT_VIOLATION` and `TRIGGER_ABORT` are the same number, and only one has a message-aware
-predicate — OPEN (found 2026-09-23, task F1's review wave).** Both are `[1811]`, because SQLite
-gives a foreign key's `ON DELETE RESTRICT` and every hand-written `RAISE(ABORT)` the same result
-code. `triggerRaised` exists for the trigger direction and matches the exact words. The restrict
-direction has no equivalent, so `isRefusal(err, RESTRICT_VIOLATION)` is true for EVERY trigger
-refusal as well — including the append-only ones. Two callers take it:
-`packages/layouts/src/canvas-store.ts` and `packages/layouts/src/device-profile-store.ts`. Both give
-the right answer TODAY, and only because exactly one trigger sits on each path — the device-profile
-one is `device_profile_form_factor_locked`, whose meaning happens to match `device_profile.in_use`.
-A second refusing trigger on either path would be translated as the first. **Next action:** match by
-the words, using the constants `packages/db/src/trigger-refusals.ts` already declares for exactly
-this reason.
+**`RESTRICT_VIOLATION` and `TRIGGER_ABORT` are the same number — DONE (2026-09-27, found in task
+F1's review wave).** SQLite gives a foreign key's `ON DELETE RESTRICT` and every hand-written
+`RAISE(ABORT)` the same result code, 1811. `restrictRefused` (`packages/db/src/constraint-target.ts`)
+now matches the restrict direction by the engine's words, as `triggerRaised` does for a trigger, and
+`packages/layouts/src/canvas-store.ts` and `device-profile-store.ts` use it; the device-profile store
+matches `device_profile_form_factor_locked` by its own words. A throwaway trigger on either path is
+no longer reported as `canvas.in_use` or `device_profile.in_use`.
 
 **`VenueMigrationOptions.appendOnlyTables` is optional while `MigrationSet.appendOnlyTables` is
 required — OPEN (found 2026-09-23, task F1's review wave).** `applyMigrations` reads it as `?? []`,

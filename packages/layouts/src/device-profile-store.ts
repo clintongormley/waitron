@@ -1,13 +1,15 @@
 import "./errors.js";
 import {
   FOREIGN_KEY_VIOLATION,
-  RESTRICT_VIOLATION,
+  FORM_FACTOR_REFUSAL,
   constraintTarget,
   deviceProfiles,
   isRefusal,
   isUniqueViolation,
   nowIso,
+  restrictRefused,
   sameTarget,
+  triggerRaised,
 } from "@waitron/db";
 import type { ConstraintTarget, Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
@@ -67,19 +69,15 @@ const PROFILE_NAME: ConstraintTarget = { table: "device_profiles", columns: ["na
  * canvas-store.ts's `translateWriteError` gives.
  *
  * SQLite names no key in a foreign-key refusal, only its direction: 787 for a written value naming
- * no parent, 1811 for a delete a RESTRICT key refused. So the two foreign-key branches ask only the
- * class. That is sound only while each writer's `try` wraps ONE statement on `device_profiles`,
+ * no parent, 1811 for a delete a RESTRICT key refused. So the two foreign-key branches cannot tell
+ * which key refused. That is sound only while each writer's `try` wraps ONE statement on `device_profiles`,
  * `canvas_id` is the only key out of it and `devices.device_profile_id` the only key into it that
  * can refuse — the schema half is pinned by `has ONE key out of device_profiles and ONE key into
  * it` (device-profile-store.db.test.ts), which migrates core and identity only. The catalogue's
  * `device_profile_home_layouts.device_profile_id` also keys into it and cascades, so it refuses no
  * delete (the profile-deleted case in `apps/server/src/management-api.device-profiles.test.ts`).
- * Widen a `try` to a second statement and its foreign-key
- * (787) and 1811 refusals would be translated as this table's, with nothing to catch it.
- *
- * 1811 is also every trigger's `RAISE(ABORT)`, so `device_profile_form_factor_locked` refusing an
- * update arrives here as `device_profile.in_use` too (docs/backlog.md: "`RESTRICT_VIOLATION` and
- * `TRIGGER_ABORT` are the same number").
+ * Widen a `try` to a second statement and its foreign-key and RESTRICT refusals would be translated
+ * as this table's, with nothing to catch it.
  *
  * Exported for device-profile-store.test.ts, not from the package barrel.
  */
@@ -93,7 +91,7 @@ export function translateWriteError(err: unknown): never {
   if (isRefusal(err, FOREIGN_KEY_VIOLATION)) {
     throw new AppError("device_profile.invalid", { reason: "bad_canvas_ref" });
   }
-  if (isRefusal(err, RESTRICT_VIOLATION)) {
+  if (restrictRefused(err) || triggerRaised(err, FORM_FACTOR_REFUSAL)) {
     throw new AppError("device_profile.in_use", {});
   }
   throw err;

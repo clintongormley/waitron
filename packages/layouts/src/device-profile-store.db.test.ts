@@ -331,6 +331,86 @@ describe("device-profile store against a real migrated database", () => {
     expect(await rowCount()).toBe(1); // the profile survived the refused delete (RESTRICT)
   });
 
+  it("translates a form-factor change on a profile an active device uses to device_profile.in_use", async () => {
+    await seedTenant(suite.db);
+    const session = await seedSession("manager");
+    const created = await inTx((tx) =>
+      createDeviceProfile(tx, {
+        managementSessionId: session,
+        name: "Locked",
+        formFactor: "till",
+        canvasId: null,
+        capabilities: [],
+      }),
+    );
+    const [location] = await suite.db
+      .insert(locations)
+      .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hostelería" })
+      .returning({ id: locations.id });
+    const [till] = await suite.db
+      .insert(tills)
+      .values({ locationId: location!.id, name: "Register 1" })
+      .returning({ id: tills.id });
+    await suite.db.insert(devices).values({
+      locationId: location!.id,
+      tillId: till!.id,
+      label: "Bound device",
+      tokenHash: "scrypt$00$00",
+      deviceProfileId: created.id,
+    });
+    const code = await codeOf(() =>
+      inTx((tx) =>
+        updateDeviceProfile(tx, {
+          managementSessionId: session,
+          id: created.id,
+          name: "Locked",
+          formFactor: "phone-portrait",
+          canvasId: null,
+          capabilities: [],
+        }),
+      ),
+    );
+    expect(code).toBe("device_profile.in_use");
+    expect((await inTx((tx) => getDeviceProfile(tx, created.id)))?.formFactor).toBe("till");
+  });
+
+  it("passes any other trigger's refusal of an update through untranslated", async () => {
+    await seedTenant(suite.db);
+    const session = await seedSession("manager");
+    const created = await inTx((tx) =>
+      createDeviceProfile(tx, {
+        managementSessionId: session,
+        name: "Guarded",
+        formFactor: "till",
+        canvasId: null,
+        capabilities: [],
+      }),
+    );
+    // A trigger this test creates itself: its refusal carries the restrict refusal's result code.
+    await suite.db.execute(
+      sql`create trigger device_profiles_test_guard before update on device_profiles
+          begin select raise(abort, 'refused by test trigger'); end`,
+    );
+    try {
+      const error = await captureError(() =>
+        inTx((tx) =>
+          updateDeviceProfile(tx, {
+            managementSessionId: session,
+            id: created.id,
+            name: "Renamed",
+            formFactor: "till",
+            canvasId: null,
+            capabilities: [],
+          }),
+        ),
+      );
+      expect(isAppError(error)).toBe(false);
+      expect(String(error)).toContain("refused by test trigger");
+    } finally {
+      await suite.db.execute(sql`drop trigger device_profiles_test_guard`);
+    }
+  });
+
   it("throws device_profile.not_found when updating an absent id", async () => {
     await seedTenant(suite.db);
     const session = await seedSession("manager");

@@ -190,6 +190,7 @@ export {
   constraintTarget,
   indexViolated,
   refusalOn,
+  restrictRefused,
   sameTarget,
   triggerRaised,
   type ConstraintTarget,
