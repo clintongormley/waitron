@@ -8,11 +8,17 @@ import { billPaymentRefunds, incidents, printJobs, withTransaction } from "@wait
 import type { TrustedClock } from "@waitron/fiscal";
 import { startManagementSession } from "@waitron/identity";
 import { loadKeyRing } from "@waitron/credentials";
-import type { RefundAnswer, RefundLookup } from "@waitron/payments";
+import type { PaymentProvider, RefundAnswer, RefundLookup } from "@waitron/payments";
 import type { RefundScript } from "@waitron/payments/src/testing/fake-provider.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
-import { refundFingerprint, refundOutcome } from "./bill-refunds.js";
+import {
+  refundFingerprint,
+  refundOutcome,
+  refundProvidersOf,
+  resumeCardRefund,
+} from "./bill-refunds.js";
+import type { RefundProviderFor } from "./bill-refunds.js";
 import type { Logger } from "./logger.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import {
@@ -1018,6 +1024,13 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
       { field: "note" },
     ],
     [
+      "no note",
+      { outcome: "failed", pin: "1234" },
+      400,
+      "management.request_invalid",
+      { field: "note" },
+    ],
+    [
       "another outcome",
       { outcome: "pending", note: NOTE, pin: "1234" },
       400,
@@ -1140,6 +1153,146 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
         sendCount: 1,
       }),
     );
+  });
+});
+
+describe("the provider a card refund goes back through", () => {
+  it("is the practice simulator by its name, else the pooled provider, else none", async () => {
+    const simulator = { provider: "simulator" } as PaymentProvider;
+    const both = refundProvidersOf({ simulator, pool: venue.pool });
+    const poolOnly = refundProvidersOf({ pool: venue.pool });
+    const neither = refundProvidersOf({});
+
+    expect(await both("simulator")).toBe(simulator);
+    expect(await both("fake")).toBe(venue.card);
+    expect(await both("manual")).toBeUndefined();
+    expect(await poolOnly("simulator")).toBeUndefined();
+    expect(await neither("fake")).toBeUndefined();
+  });
+});
+
+describe("a refund the provider here cannot answer for", () => {
+  const resume = (refundId: string, refundProviderFor?: RefundProviderFor) =>
+    resumeCardRefund(
+      {
+        db: venue.db,
+        clock: systemClock(),
+        ...(refundProviderFor === undefined ? {} : { refundProviderFor }),
+      },
+      refundId,
+      "manager",
+    );
+
+  /** The test provider with only the parts named, so a missing method is missing. */
+  function partial(parts: Partial<PaymentProvider>): RefundProviderFor {
+    const provider = {
+      provider: "fake",
+      refundResendWindowMs: venue.card.refundResendWindowMs,
+      ...parts,
+    } as PaymentProvider;
+    return () => Promise.resolve(provider);
+  }
+
+  it("answers an unknown refund as not found", async () => {
+    const unknown = randomUUID();
+    await expect(resume(unknown)).rejects.toMatchObject({
+      code: "bill.refund_not_found",
+      params: { refundId: unknown },
+    });
+  });
+
+  it("does nothing to a cash refund, which has no provider to ask", async () => {
+    const billId = await bill("Pulpo", "Croquetas");
+    const { id: paymentId } = await pay(billId, "cash", "20.00");
+    expect((await refund(billId, paymentId, { applied: "5.00" })).answer.status).toBe(200);
+    const { id: refundId } = await onlyRefundOf(paymentId);
+
+    const resumed = await resume(refundId, (name) => venue.pool.get(name));
+
+    expect(resumed).toMatchObject({ claimed: false, refund: { id: refundId, state: "completed" } });
+  });
+
+  const providers: [string, () => RefundProviderFor | undefined][] = [
+    ["no provider is served here", () => undefined],
+    ["the provider cannot look refunds up", () => partial({ sendRefund: () => Promise.reject() })],
+    [
+      "the provider's lookup fails",
+      () =>
+        partial({
+          sendRefund: () => Promise.reject(),
+          lookupRefund: () => Promise.reject(new Error("unreachable")),
+        }),
+    ],
+  ];
+  it.each(providers)(
+    "keeps a sent refund pending and sends nothing when %s",
+    async (_name, providerFor) => {
+      const { billId, paymentId, refundId } = await pendingRefund();
+      const sends = callsFor(refundId).length;
+
+      const resumed = await resume(refundId, providerFor());
+
+      expect(resumed).toMatchObject({
+        claimed: true,
+        lookup: { kind: "unreachable" },
+        resent: false,
+        refund: { state: "pending", sendCount: 1 },
+      });
+      expect(callsFor(refundId)).toHaveLength(sends);
+      expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "pending", sendCount: 1 });
+      expect((await pay(billId, "cash", "1.00")).answer.json.code).toBe("bill.refund_in_progress");
+    },
+  );
+
+  it("records the loop's failure to reach a provider against the refund, and carries on", async () => {
+    const { paymentId, refundId } = await pendingRefund();
+
+    const pass = await settlePendingBillPayments({
+      db: venue.db,
+      backend: venue.backend,
+      clock: systemClock(),
+      cfg: venue.cfg,
+      refundProviderFor: () => Promise.reject(new Error("pool down")),
+    });
+
+    expect(pass.errors).toContainEqual({ refundId, error: "Error: pool down" });
+    expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "pending", sendCount: 1 });
+    expect((await runLoop()).errors).not.toContainEqual(expect.objectContaining({ refundId }));
+  });
+
+  it("leaves a refund that never left pending when a retry finds no way to send it", async () => {
+    const billId = await bill("Pulpo", "Croquetas", "Croquetas");
+    const card = await pay(billId, "card", "20.00");
+    const [stranded] = await inTx(venue, (tx) =>
+      tx
+        .insert(billPaymentRefunds)
+        .values({
+          billPaymentId: card.id,
+          submissionId: randomUUID(),
+          fingerprint: "stranded",
+          appliedAmount: 500,
+          reason: "stranded",
+          authorizedBy: venue.adminId,
+          requestedBy: venue.operatorId,
+          tillId: venue.deviceTillId,
+          state: "pending",
+        })
+        .returning(),
+    );
+
+    const resumed = await resumeCardRefund(
+      { db: venue.db, clock: systemClock(), refundProviderFor: partial({}) },
+      stranded!.id,
+      "retry",
+    );
+
+    expect(resumed).toMatchObject({
+      claimed: true,
+      lookup: null,
+      resent: false,
+      refund: { state: "pending", sendCount: 0, sentAt: null },
+    });
+    expect(await onlyRefundOf(card.id)).toMatchObject({ state: "pending", sendCount: 0 });
   });
 });
 

@@ -42,6 +42,7 @@ import {
   failBillPayment,
   issueIfFullyPaid,
   readBillBalance,
+  readReceivedByBill,
   takeBillPayment,
   type BillPaymentRequest,
 } from "./bill-payments.js";
@@ -528,7 +529,102 @@ describe("settling a card payment of part of the bill", () => {
   });
 });
 
+describe("the money a bill has received", () => {
+  it("counts only received payments, net of their refunds", async () => {
+    const billId = await tabWith("Chuletón", "Tarta");
+    const other = await tabWith("Caña");
+    const received = await take(billId, cash("5.00"));
+    await inTx((tx) =>
+      tx.insert(billPaymentRefunds).values({
+        billPaymentId: received.payment.id,
+        submissionId: randomUUID(),
+        fingerprint: "f",
+        appliedAmount: 100,
+        reason: "error",
+        authorizedBy: OPERATOR,
+        requestedBy: OPERATOR,
+        tillId: venue.cfg.tillId,
+        state: "completed",
+        completedAt: new Date().toISOString(),
+      }),
+    );
+    await insertPayment(billId, { applied: 1000 });
+    await insertPayment(billId, {
+      applied: 700,
+      state: "failed",
+      failedAt: new Date().toISOString(),
+    });
+
+    const byBill = await inTx((tx) => readReceivedByBill(tx, [billId, other]));
+
+    expect([...byBill]).toEqual([[billId, "4.00"]]);
+  });
+});
+
 describe("the invoice at full payment", () => {
+  it("files nothing more for a bill already settled", async () => {
+    const billId = await tabWith("Caña");
+    const paid = await take(billId, cash("3.00"));
+    expect(paid.invoice).toBeDefined();
+
+    const again = await inTx((tx) => issueIfFullyPaid(tx, fiscal(), venue.cfg, billId, OPERATOR));
+
+    expect(again).toBeNull();
+    expect(
+      await inTx((tx) => tx.select().from(sales).where(eq(sales.workingOrderId, billId))),
+    ).toHaveLength(1);
+  });
+
+  it("files no invoice for a bill whose lines and money are both gone", async () => {
+    const billId = await tabWith("Caña");
+    const paid = await take(billId, cash("1.00"));
+    await inTx((tx) =>
+      tx.insert(billPaymentRefunds).values({
+        billPaymentId: paid.payment.id,
+        submissionId: randomUUID(),
+        fingerprint: "f",
+        appliedAmount: 100,
+        reason: "error",
+        authorizedBy: OPERATOR,
+        requestedBy: OPERATOR,
+        tillId: venue.cfg.tillId,
+        state: "completed",
+        completedAt: new Date().toISOString(),
+      }),
+    );
+    await inTx((tx) => voidTabLine(tx, venue.cfg, billId, 1));
+
+    const issued = await inTx((tx) => issueIfFullyPaid(tx, fiscal(), venue.cfg, billId, OPERATOR));
+
+    expect(issued).toBeNull();
+    expect(await statusOf(billId)).toBe("open");
+    expect(
+      await inTx((tx) => tx.select().from(sales).where(eq(sales.workingOrderId, billId))),
+    ).toEqual([]);
+  });
+
+  it("files a card payment no provider row stands behind as a card tender, linking nothing", async () => {
+    const billId = await tabWith("Caña");
+    const paymentId = await insertPayment(billId, {
+      applied: 300,
+      state: "received",
+      receivedAt: new Date().toISOString(),
+    });
+
+    const issued = await inTx((tx) => issueIfFullyPaid(tx, fiscal(), venue.cfg, billId, OPERATOR));
+
+    expect(issued).toMatchObject({ total: "3.00" });
+    expect(await statusOf(billId)).toBe("settled");
+    const [tender] = suite.db.all<{ method: string; amount: number; bill_payment_id: string }>(
+      sql`select t.method, t.amount, t.bill_payment_id from tenders t
+          join sales s on s.id = t.sale_id where s.working_order_id = ${billId}`,
+    );
+    expect(tender).toEqual({ method: "card", amount: 300, bill_payment_id: paymentId });
+    expect(
+      await inTx((tx) => tx.select().from(payments).where(eq(payments.workingOrderId, billId))),
+    ).toEqual([]);
+  });
+
   it("pairs each card payment's slip with its own tender", async () => {
     const billId = await tabWith("Chuletón", "Tarta");
     const early = new Date(Date.now() - 60_000).toISOString();

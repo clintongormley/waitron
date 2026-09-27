@@ -40,6 +40,7 @@ import {
   recordFailedRefund,
   recordRefund,
   recordVoid,
+  recordedRefundRefs,
   hasPaymentWithExternalRef,
   settleForwarded,
   settleInitiated,
@@ -1381,6 +1382,49 @@ describe("the link from a provider payment to its bill payment", () => {
       ),
     );
     expect(engineErrorMessage(error)).toBe("FOREIGN KEY constraint failed");
+  });
+
+  it("recordedRefundRefs lists the refund ids recorded against that bill payment's row, oldest first", async () => {
+    const seeded = await seedTenant();
+    const billPaymentId = await billPayment(seeded);
+    const other = await billPayment(seeded);
+    const linked = async (paymentRef: string, link: string | undefined) => {
+      await pg.db.transaction((tx) =>
+        insertCapturedPayment(tx, {
+          workingOrderId: seeded.workingOrderId,
+          provider: "fake",
+          paymentRef,
+          amount: decimal("30.00"),
+          settledAt: SETTLED,
+          billPaymentId: link,
+        }),
+      );
+      return { provider: "fake", paymentRef };
+    };
+    const mine = await linked("mine", billPaymentId);
+    const theirs = await linked("theirs", other);
+    const unlinked = await linked("unlinked", undefined);
+    const refund = (key: { provider: string; paymentRef: string }, ref?: string) =>
+      pg.db.transaction((tx) =>
+        recordRefund(tx, { ...key, amount: decimal("5.00"), providerRefundRef: ref }),
+      );
+    // Written in the opposite order to their dates, so only the ordering by date puts them right.
+    await refund(mine, "re_later");
+    await refund(mine, "re_earlier");
+    await refund(mine);
+    await refund(theirs, "re_theirs");
+    await refund(unlinked, "re_unlinked");
+    await pg.db.execute(
+      sql`update payment_refunds set created_at = '2026-07-22T10:05:00.000Z' where provider_refund_ref = 're_later'`,
+    );
+    await pg.db.execute(
+      sql`update payment_refunds set created_at = '2026-07-22T10:01:00.000Z' where provider_refund_ref = 're_earlier'`,
+    );
+
+    const refs = await pg.db.transaction((tx) => recordedRefundRefs(tx, billPaymentId));
+
+    expect(refs).toEqual(["re_earlier", "re_later"]);
+    expect(await pg.db.transaction((tx) => recordedRefundRefs(tx, other))).toEqual(["re_theirs"]);
   });
 });
 

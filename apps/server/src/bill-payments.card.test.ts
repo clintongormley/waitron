@@ -45,6 +45,7 @@ interface Body {
   addedTip?: string;
   choice?: "full_with_tip" | "use_pool";
   allowOffline?: boolean;
+  readerId?: string;
   applied: string;
   tip: string;
 }
@@ -159,6 +160,26 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
       "reader-2",
       "reader-1",
     ]);
+  });
+
+  it("charges the reader the request names when it names one", async () => {
+    const billId = await tabWithDishes("Tarta");
+    const [other] = venue.db.all<{ id: string }>(
+      sql`select id from card_readers where provider_ref = 'reader-2'`,
+    );
+
+    const paid = await pay(billId, {
+      kind: "contribution",
+      amount: "5.00",
+      method: "card",
+      entry: "reader",
+      readerId: other!.id,
+      applied: "5.00",
+      tip: "0.00",
+    });
+
+    expect(paid.status).toBe(200);
+    expect(venue.card.collectCalls.at(-1)).toMatchObject({ readerRef: "reader-2" });
   });
 
   it("marks a declined card failed and releases its reservation", async () => {
