@@ -51,9 +51,7 @@ const lines: TabLine[] = [
     unitPrecision: 0,
     unitPriceGross: "1.50",
     servedAt: null,
-    // A HELD course (fired_at null) so the waiter-fire section is in the a11y scan under `waiter`. Held
-    // still means the round-send already inserted its ticket item (fireLines does this for every parent
-    // line, fired or held), so `state` is the fresh-insert "queued", not null.
+    // Held (fired_at null) with its ticket item already inserted, so `state` is "queued", not null.
     courseId: "c1",
     sentAt: null,
     firedAt: null,
@@ -129,7 +127,7 @@ const partyBills: VisitBill[] = [
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s theme)", (theme) => {
-  it("has no violations with the round grid, the per-line course picker, the open tab drawer and the waiter-fire actions", async () => {
+  it("has no violations with the round grid, the per-line course picker and the open tab drawer", async () => {
     const { el, host } = await mountWidget<TillTableOrderScreen>(
       "till-table-order-screen",
       { products, menus, lines, statuses, courses, fireControl: "waiter", orderId: "wo-1" },
@@ -139,7 +137,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     el.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!
       .shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!
       .click();
-    // Open the drawer so the full subtree — the waiter-fire actions, Servido ticks, tab total, the reused
+    // Open the drawer so the full subtree — the Servido ticks, tab total, the reused
     // pay widget and the status picker — is included in the scan, not just the grid.
     el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await el.updateComplete;
@@ -361,6 +359,87 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       );
       el.shadowRoot!.querySelector<HTMLElement>('[data-destination="add-to-held"]')!.click();
       await el.updateComplete;
+      await expectNoA11yViolations(host);
+    });
+  });
+
+  describe("the party's groups", () => {
+    const group = (
+      id: string,
+      position: number,
+      state: OrderGroup["state"],
+      lineIds: string[],
+    ): OrderGroup => ({
+      id,
+      position,
+      state,
+      firedAt: state === "fired" ? "2026-08-20T09:59:00.000Z" : null,
+      remindAt: null,
+      lineIds,
+      summary: `${position} × Café`,
+    });
+    const groupLines: TabLine[] = [
+      { ...lines[0]!, groupId: "g2" },
+      {
+        ...lines[1]!,
+        id: "line-3",
+        lineNo: 3,
+        servedAt: null,
+        groupId: "g1",
+        sentAt: "2026-08-20T09:59:00.000Z",
+        firedAt: "2026-08-20T09:59:00.000Z",
+      },
+      { ...lines[1]!, id: "line-4", lineNo: 4, servedAt: null, groupId: "g3" },
+    ];
+    const groups = [
+      group("g1", 1, "fired", ["line-3"]),
+      group("g2", 2, "held", ["line-1"]),
+      group("g3", 3, "held", ["line-4"]),
+    ];
+
+    async function withGroups() {
+      const mounted = await mountWidget<TillTableOrderScreen>(
+        "till-table-order-screen",
+        {
+          products,
+          menus,
+          lines: groupLines,
+          groups,
+          statuses,
+          courses,
+          fireControl: "waiter",
+          orderId: "wo-1",
+        },
+        theme,
+      );
+      mounted.el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+      await mounted.el.updateComplete;
+      return mounted;
+    }
+
+    async function press(el: TillTableOrderScreen, selector: string): Promise<void> {
+      el.shadowRoot!.querySelector<HTMLElement>(selector)!.click();
+      await el.updateComplete;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await el.updateComplete;
+    }
+
+    it("has no violations in the list, a fired group and held ones with every control", async () => {
+      const { el, host } = await withGroups();
+      if (el.shadowRoot!.querySelector("[data-split-group-line]") === null)
+        throw new Error("the scan must include Split quantity");
+      await expectNoA11yViolations(host);
+    });
+
+    it("has no violations in the Move to… picker", async () => {
+      const { el, host } = await withGroups();
+      await press(el, '[data-move-line="line-1"]');
+      await expectNoA11yViolations(host);
+    });
+
+    it("has no violations in the Fire confirmation", async () => {
+      const { el, host } = await withGroups();
+      await press(el, '[data-group-fire="g2"]');
       await expectNoA11yViolations(host);
     });
   });

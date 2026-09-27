@@ -113,6 +113,30 @@ function heldGroupLabel(group: OrderGroup, index: number): string {
         .replace("{summary}", group.summary);
 }
 
+/** `fire-group`: a held group the waiter confirmed firing. */
+export interface FireGroupDetail {
+  groupId: string;
+}
+
+/** `reorder-groups`: every held group of the party, in the order they are to go. */
+export interface ReorderGroupsDetail {
+  heldGroupIds: string[];
+}
+
+/** `move-group-line`: a whole held line into another held group, or a new one at the end. */
+export interface MoveGroupLineDetail {
+  lineId: string;
+  quantity: string;
+  target: { groupId: string } | "new";
+}
+
+/** `split-group-line`: a held line of `quantity` units, to be made one row per unit in its group. */
+export interface SplitGroupLineDetail {
+  lineId: string;
+  groupId: string;
+  quantity: string;
+}
+
 /** `change-line`: one sent line's edit, from the copy of the order read at `revision`. */
 export interface ChangeLineDetail {
   lineNo: number;
@@ -487,10 +511,57 @@ export class TillTableOrderScreen extends LitElement {
         gap: var(--wt-space-2);
       }
 
-      .fire-options {
+      .group-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-3);
+      }
+
+      .group {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        padding-bottom: var(--wt-space-3);
+        border-bottom: 1px solid var(--wt-color-border);
+      }
+
+      .group-head,
+      .group-line {
         display: flex;
         flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
         gap: var(--wt-space-2);
+      }
+
+      .group-name {
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .group[data-group-state="fired"] {
+        color: var(--wt-color-text-muted);
+      }
+
+      .group-state,
+      .group-summary {
+        margin: 0;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+
+      .group-actions,
+      .group-line-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: var(--wt-space-2);
+      }
+
+      .group-line-name {
+        overflow-wrap: anywhere;
       }
 
       .round-bar {
@@ -579,6 +650,11 @@ export class TillTableOrderScreen extends LitElement {
    * void fires only once confirmed. */
   @state() private cancelLine: TabLine | null = null;
 
+  /** The held group whose Fire waits for confirmation. */
+  @state() private fireGroupPending: OrderGroup | null = null;
+  /** The held line whose Move to… picker is open, with the group it is in. */
+  @state() private movePending: { line: TabLine; group: OrderGroup } | null = null;
+
   /** The line open in the Change editor. */
   @state() private changeLine: TabLine | null = null;
   /** Built once when the editor opens, not per render: the picker seeds from these once. */
@@ -617,6 +693,8 @@ export class TillTableOrderScreen extends LitElement {
     const round = this.#roundStore;
     if (this.#watchedRound?.round === round) return;
     this.#watchedRound?.stop();
+    // A round can be emptied while another is shown, when the app takes out what it sent.
+    this.#noteDraftStart(round);
     this.#watchedRound = {
       round,
       stop: round.subscribe(() => {
@@ -697,6 +775,8 @@ export class TillTableOrderScreen extends LitElement {
       this.#closeActions();
       this.#closeChange();
       this.cancelLine = null;
+      this.fireGroupPending = null;
+      this.movePending = null;
       this.pendingDraft = null;
       this.destination = "fire-now";
       this.joinTarget = null;
@@ -909,25 +989,6 @@ export class TillTableOrderScreen extends LitElement {
     this.requestUpdate();
   }
 
-  #heldCourses(): TillCourse[] {
-    const heldIds = new Set(
-      this.lines
-        .filter((line) => line.firedAt === null && line.courseId !== null)
-        .map((line) => line.courseId),
-    );
-    return this.courses.filter((course) => heldIds.has(course.id));
-  }
-
-  #fire(courseId: string): void {
-    this.dispatchEvent(
-      new CustomEvent("fire-course", {
-        detail: { orderId: this.orderId, courseId },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-  }
-
   #serve(lineNo: number): void {
     this.dispatchEvent(
       new CustomEvent("serve-line", { detail: { lineNo }, bubbles: true, composed: true }),
@@ -963,11 +1024,12 @@ export class TillTableOrderScreen extends LitElement {
     return byOffer ?? (productId === null ? undefined : this.#productsById.get(productId));
   }
 
-  /** A no-route line (no ticket item) is changed whatever its `sentAt`; a line with a ticket item only
-   * once it was sent, because a held line never sent keeps Send alone. */
+  /** A no-route line (no ticket item) is changed whatever its `sentAt`; a line with a ticket item once
+   * it was sent, or while its group is held, because a held line outside one keeps Send alone. */
   #canChange(line: TabLine): boolean {
     if (this.#isChild(line) || this.#isStarted(line) || this.#lockedBySetting(line)) return false;
-    if (line.state !== null && line.sentAt === null) return false;
+    if (line.state !== null && line.sentAt === null && !inHeldGroup(line, this.#heldGroupIds!))
+      return false;
     return this.#liveProduct(line) !== undefined;
   }
 
@@ -980,11 +1042,13 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  /** Every sent line with a ticket item, and a fired one: whatever else a line offers, cancelling it
-   * always has a button. A held line never sent keeps Send alone. */
+  /** Every sent line with a ticket item, a fired one, and one in a held group: whatever else a line
+   * offers, cancelling it always has a button. A held line outside a group keeps Send alone. */
   #canCancel(line: TabLine): boolean {
     if (this.#isChild(line)) return false;
-    const queued = line.state === "queued" && (line.firedAt !== null || line.sentAt !== null);
+    const queued =
+      line.state === "queued" &&
+      (line.firedAt !== null || line.sentAt !== null || inHeldGroup(line, this.#heldGroupIds!));
     return this.#isStarted(line) || queued;
   }
 
@@ -1048,13 +1112,6 @@ export class TillTableOrderScreen extends LitElement {
     return actions.length === 0 ? nothing : html`<span class="line-actions">${actions}</span>`;
   }
 
-  /** A held group releases its lines whether or not they have a ticket item: a no-route dish in one has
-   * none, and may have no Fire course button either. */
-  #anyHeld(): boolean {
-    const held = this.#heldGroupIds!;
-    return this.lines.some((line) => sendsAlone(line, held) || inHeldGroup(line, held));
-  }
-
   #sendLine(lineNo: number): void {
     this.dispatchEvent(
       new CustomEvent("send-lines", {
@@ -1062,13 +1119,6 @@ export class TillTableOrderScreen extends LitElement {
         bubbles: true,
         composed: true,
       }),
-    );
-  }
-
-  /** An empty `lineNos` is the server's send-all, so the detail carries `[]`, not the held line numbers. */
-  #sendAll(): void {
-    this.dispatchEvent(
-      new CustomEvent("send-lines", { detail: { lineNos: [] }, bubbles: true, composed: true }),
     );
   }
 
@@ -1432,7 +1482,8 @@ export class TillTableOrderScreen extends LitElement {
             ${this.#draftBar()}
           </div>
         </div>
-        ${this.#previewDialog()} ${this.#cancelDialog()} ${this.#changeEditor()}
+        ${this.#previewDialog()} ${this.#cancelDialog()} ${this.#fireGroupDialog()}
+        ${this.#moveDialog()} ${this.#changeEditor()}
       </section>
     `;
   }
@@ -1661,7 +1712,7 @@ export class TillTableOrderScreen extends LitElement {
   #drawer(pending: TabLine[]): TemplateResult {
     return html`
       <aside class="drawer" data-drawer aria-label=${t("table.open_drawer")}>
-        ${this.#fireSection()} ${this.#pendingSection(pending)} ${this.#servedSection()}
+        ${this.#groupsSection()} ${this.#pendingSection(pending)} ${this.#servedSection()}
         <div class="total-row">
           <span class="label">${t("label.total")}</span>
           <span class="amount" data-tab-total
@@ -1798,19 +1849,6 @@ export class TillTableOrderScreen extends LitElement {
     return html`<section class="pending">
       <h2>${t("table.pending_title")}</h2>
       ${
-        this.#anyHeld()
-          ? html`<wt-button
-              class="send-all"
-              size="sm"
-              variant="primary"
-              data-send-all
-              @click=${() => this.#sendAll()}
-            >
-              ${t("table.send_all")}
-            </wt-button>`
-          : nothing
-      }
-      ${
         pending.length === 0
           ? html`<p class="empty">${t("table.none_pending")}</p>`
           : html`<ul>
@@ -1875,27 +1913,241 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
-  #fireSection(): TemplateResult | typeof nothing {
-    if (this.fireControl !== "waiter") return nothing;
-    const held = this.#heldCourses();
-    if (held.length === 0) return nothing;
-    return html`<section class="fire" data-fire-section>
-      <h2>${t("table.fire_title")}</h2>
-      <div class="fire-options">
-        ${held.map(
-          (course) =>
-            html`<wt-button
-              class="fire-course"
-              data-fire-course=${course.id}
-              variant="primary"
-              size="sm"
-              @click=${() => this.#fire(course.id)}
-            >
-              ${t("table.fire_course")} ${course.name}
-            </wt-button>`,
-        )}
-      </div>
+  /** Every group of the party in position order. A held group can be moved among the held ones,
+   * have its lines moved or split, and be fired where `fireControl` gives the waiter the release. Its
+   * line rows are this bill's: a line on another bill of the party shows only in the summary. */
+  #groupsSection(): TemplateResult | typeof nothing {
+    if (this.groups.length === 0) return nothing;
+    const held = this.#heldGroups();
+    const lineById = new Map(this.lines.map((line) => [line.id, line]));
+    const withExtras = new Set(
+      this.lines.flatMap((line) => (this.#isChild(line) ? [line.parentLineNo] : [])),
+    );
+    const ordered = [...this.groups].sort((a, b) => a.position - b.position);
+    return html`<section class="groups" data-groups>
+      <h2>${t("table.groups_title")}</h2>
+      <ol class="group-list">
+        ${ordered.map((group) => {
+          const lines = group.lineIds.flatMap((id) => {
+            const line = lineById.get(id);
+            return line === undefined || this.#isChild(line) ? [] : [line];
+          });
+          return this.#groupRow(group, held, lines, withExtras);
+        })}
+      </ol>
     </section>`;
+  }
+
+  #groupRow(
+    group: OrderGroup,
+    held: OrderGroup[],
+    lines: TabLine[],
+    withExtras: ReadonlySet<number | null | undefined>,
+  ): TemplateResult {
+    const isHeld = group.state === "held";
+    const name = t("table.group_n").replace("{n}", String(group.position));
+    const label = (key: StringKey) => `${t(key)} · ${name}`;
+    const place = held.indexOf(group);
+    return html`<li class="group" data-group=${group.id} data-group-state=${group.state}>
+      <div class="group-head">
+        <span class="group-name" data-group-position>${name}</span>
+        <span class="group-state">${t(isHeld ? "table.group_held" : "table.group_fired")}</span>
+      </div>
+      <p class="group-summary" data-group-summary>${group.summary}</p>
+      ${
+        isHeld
+          ? html`<div class="group-actions">
+              <wt-button
+                size="sm"
+                variant="secondary"
+                data-group-up=${group.id}
+                aria-label=${label("table.group_up")}
+                ?disabled=${place === 0}
+                @click=${() => this.#reorderHeld(held, place, place - 1)}
+              >
+                <span aria-hidden="true">↑</span>
+              </wt-button>
+              <wt-button
+                size="sm"
+                variant="secondary"
+                data-group-down=${group.id}
+                aria-label=${label("table.group_down")}
+                ?disabled=${place === held.length - 1}
+                @click=${() => this.#reorderHeld(held, place, place + 1)}
+              >
+                <span aria-hidden="true">↓</span>
+              </wt-button>
+              ${
+                this.fireControl === "waiter"
+                  ? html`<wt-button
+                      size="sm"
+                      variant="primary"
+                      data-group-fire=${group.id}
+                      aria-label=${label("table.group_fire")}
+                      @click=${() => (this.fireGroupPending = group)}
+                    >
+                      ${t("table.group_fire")}
+                    </wt-button>`
+                  : nothing
+              }
+            </div>`
+          : nothing
+      }
+      <ul class="group-lines">
+        ${lines.map((line) => this.#groupLine(line, isHeld ? group : null, withExtras))}
+      </ul>
+    </li>`;
+  }
+
+  /** `group` is null for a fired group's line, which offers nothing. Split quantity is offered on a
+   * dish sold by the unit, of more than one, with no extras: the server refuses to split a dish with
+   * extras. */
+  #groupLine(
+    line: TabLine,
+    group: OrderGroup | null,
+    withExtras: ReadonlySet<number | null | undefined>,
+  ): TemplateResult {
+    const name = this.#nameForLine(line);
+    const label = (key: StringKey) => `${t(key)} · ${name}`;
+    const splits = group !== null && this.#cancelsOneAtATime(line) && !withExtras.has(line.lineNo);
+    return html`<li class="group-line" data-group-line=${line.id}>
+      <span class="group-line-name">${name} ×${this.#displayQty(line.quantity)}</span>
+      ${
+        group === null
+          ? nothing
+          : html`<span class="group-line-actions">
+              <wt-button
+                size="sm"
+                variant="secondary"
+                data-move-line=${line.id}
+                aria-label=${label("table.move_line")}
+                @click=${() => (this.movePending = { line, group })}
+              >
+                ${t("table.move_line")}
+              </wt-button>
+              ${
+                splits
+                  ? html`<wt-button
+                      size="sm"
+                      variant="secondary"
+                      data-split-group-line=${line.id}
+                      aria-label=${label("table.split_group_line")}
+                      @click=${() =>
+                        this.#dispatch("split-group-line", {
+                          lineId: line.id,
+                          groupId: group.id,
+                          quantity: line.quantity,
+                        } satisfies SplitGroupLineDetail)}
+                    >
+                      ${t("table.split_group_line")}
+                    </wt-button>`
+                  : nothing
+              }
+            </span>`
+      }
+    </li>`;
+  }
+
+  #reorderHeld(held: OrderGroup[], from: number, to: number): void {
+    const ids = held.map((group) => group.id);
+    [ids[from], ids[to]] = [ids[to]!, ids[from]!];
+    this.#dispatch("reorder-groups", { heldGroupIds: ids } satisfies ReorderGroupsDetail);
+  }
+
+  #moveTo(target: MoveGroupLineDetail["target"]): void {
+    const pending = this.movePending!;
+    this.movePending = null;
+    this.#dispatch("move-group-line", {
+      lineId: pending.line.id,
+      quantity: pending.line.quantity,
+      target,
+    } satisfies MoveGroupLineDetail);
+  }
+
+  /** Always present, driven by {@link movePending}, as the cancel dialog is. */
+  #moveDialog(): TemplateResult {
+    const pending = this.movePending;
+    const targets =
+      pending === null ? [] : this.#heldGroups().filter((group) => group.id !== pending.group.id);
+    return html`<wt-dialog
+      class="move-line-dialog"
+      data-move-dialog
+      .open=${pending !== null}
+      .heading=${t("table.move_line")}
+      @wt-close=${() => (this.movePending = null)}
+    >
+      ${
+        pending === null
+          ? nothing
+          : html`<p class="move-dish">
+                ${this.#nameForLine(pending.line)} ×${this.#displayQty(pending.line.quantity)}
+              </p>
+              <div class="action-options">
+                ${targets.map(
+                  (group) =>
+                    html`<wt-button
+                      variant="secondary"
+                      data-move-target=${group.id}
+                      @click=${() => this.#moveTo({ groupId: group.id })}
+                    >
+                      ${t("table.held_group")
+                        .replace("{n}", String(group.position))
+                        .replace("{summary}", () => group.summary)}
+                    </wt-button>`,
+                )}
+                <wt-button
+                  variant="secondary"
+                  data-move-target="new"
+                  @click=${() => this.#moveTo("new")}
+                >
+                  ${t("table.move_new_group")}
+                </wt-button>
+              </div>`
+      }
+      <div slot="footer" class="cancel-actions">
+        <wt-button variant="secondary" data-move-dismiss @click=${() => (this.movePending = null)}>
+          ${t("table.preview_back")}
+        </wt-button>
+      </div>
+    </wt-dialog>`;
+  }
+
+  #confirmFireGroup(): void {
+    const group = this.fireGroupPending!;
+    this.fireGroupPending = null;
+    this.#dispatch("fire-group", { groupId: group.id } satisfies FireGroupDetail);
+  }
+
+  /** Always present, driven by {@link fireGroupPending}, as the cancel dialog is. */
+  #fireGroupDialog(): TemplateResult {
+    const group = this.fireGroupPending;
+    return html`<wt-dialog
+      class="fire-group-dialog"
+      data-fire-dialog
+      .open=${group !== null}
+      .heading=${t("table.fire_group_title")}
+      @wt-close=${() => (this.fireGroupPending = null)}
+    >
+      ${
+        group === null
+          ? nothing
+          : html`<p data-fire-summary>
+              ${t("table.fire_group_body").replace("{summary}", () => group.summary)}
+            </p>`
+      }
+      <div slot="footer" class="cancel-actions">
+        <wt-button
+          variant="secondary"
+          data-fire-dismiss
+          @click=${() => (this.fireGroupPending = null)}
+        >
+          ${t("table.preview_back")}
+        </wt-button>
+        <wt-button variant="primary" data-fire-confirm @click=${() => this.#confirmFireGroup()}>
+          ${t("table.group_fire")}
+        </wt-button>
+      </div>
+    </wt-dialog>`;
   }
 
   #statusSection(): TemplateResult {

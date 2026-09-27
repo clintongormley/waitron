@@ -24,9 +24,12 @@ import "./screens/till-table-order-screen.js";
 import type {
   ChangeLineDetail,
   Draft,
+  FireGroupDetail,
+  MoveGroupLineDetail,
+  ReorderGroupsDetail,
+  SplitGroupLineDetail,
   SubmitDraftDetail,
 } from "./screens/till-table-order-screen.js";
-import { heldGroupIds, sendsAlone } from "./state/round-groups.js";
 import type { DraftGroup } from "./state/draft-groups.js";
 import "@waitron/ui/src/components/wt-toast.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
@@ -49,6 +52,7 @@ import type {
   OrderFlow,
   ServiceZoneSummary,
   PayOutcome,
+  GroupCommand,
   GroupLine,
   OrderGroup,
   SaleLine,
@@ -263,6 +267,12 @@ const LINE_REFUSALS = new Set([
   "group.line_held",
   "submission.id_reused",
 ]);
+
+/** The group a command named has fired, or is gone, since the screen read the groups. */
+function isGroupGone(error: unknown): boolean {
+  const code = (error as { code?: string } | undefined)?.code;
+  return code === "group.not_held" || code === "group.not_found";
+}
 
 function lineWriteError(error: unknown): CounterError {
   const code = (error as { code?: string } | undefined)?.code;
@@ -2265,9 +2275,9 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** The sent lines' Send all and Fire course release the held groups the read found, and a draft's
-   * Add to held group joins one, so with the groups unread they send nothing: the refusal is said
-   * and the order read again for the next press. */
+  /** A command naming a held group, and a draft's Add to held group, act on the groups the read
+   * found, so with the groups unread they send nothing: the refusal is said and the order read again
+   * for the next press. */
   async #refuseWithGroupsUnread(): Promise<boolean> {
     if (!this.#groupsUnread) return false;
     this.errorKey = "table.error";
@@ -2532,6 +2542,7 @@ export class TillApp extends LitElement {
         await this.#onVisitOutOfDate(error);
         return;
       }
+      if (isGroupGone(error)) await this.#loadTabLines();
       this.errorKey = lineWriteError(error);
       return (error as { code?: string }).code === "product.unavailable"
         ? "mark-sold-out"
@@ -2558,58 +2569,93 @@ export class TillApp extends LitElement {
     return open && !this.tables.some((table) => table.tabId === this.activeTabId);
   }
 
-  /** The party's held groups holding any of `lines`, in the party's order. */
-  #heldGroupsOf(lines: readonly TabLine[]): OrderGroup[] {
-    const ids = new Set(lines.map((line) => line.groupId));
-    return this.tabGroups
-      .filter((group) => group.state === "held" && ids.has(group.id))
-      .sort((a, b) => a.position - b.position);
-  }
-
-  /** Fires the groups in turn, each with the revision the one before it answered. */
-  async #fireGroups(groups: readonly OrderGroup[]): Promise<void> {
-    const party = this.orderParty;
-    if (party === null) return;
-    let revision = party.revision;
-    for (const group of groups) {
-      ({ revision } = await this.api.fireGroup(party.id, group.id, {
-        submissionId: crypto.randomUUID(),
-        expectedVisitRevision: revision,
-      }));
-      this.#noteVisitRevision(party.id, revision);
-    }
-  }
-
-  /** A refused send or fire: a party changed elsewhere is read again and described, anything else is
-   * said and the order read again, since part of it may have gone. */
+  /** A refused send or group command: a party changed elsewhere is read again and described, and never
+   * sent again; anything else reads the order and its groups again, since part of it may have gone,
+   * and then says what was refused. */
   async #onReleaseRefusal(error: unknown): Promise<void> {
     if (isVisitOutOfDate(error)) {
       await this.#onVisitOutOfDate(error);
       return;
     }
-    this.errorKey = lineWriteError(error);
     if (isNetworkFailure(error)) await this.#retakePartyFromFloor();
     await this.#loadTabLines();
+    this.errorKey = lineWriteError(error);
   }
 
-  /** Fires the course's held groups, then sends its lines outside them. */
-  async #onFireCourse(event: Event): Promise<void> {
-    const { courseId } = (event as CustomEvent<{ orderId?: string; courseId: string }>).detail;
-    const tabId = this.activeTabId;
-    if (tabId === undefined) return;
+  /** A command on the party's held groups, sent with the revision the party was shown at; then the
+   * order and its groups are read again. */
+  async #onGroupCommand(send: (party: TableVisit) => Promise<unknown>): Promise<void> {
     this.errorKey = undefined;
     if (await this.#refuseWithGroupsUnread()) return;
-    const ofCourse = this.tabLines.filter((line) => line.courseId === courseId);
-    const held = heldGroupIds(this.tabGroups);
-    const alone = ofCourse.filter((line) => sendsAlone(line, held)).map((line) => line.lineNo);
+    const party = this.orderParty;
+    if (party === null) {
+      this.errorKey = "table.error";
+      return;
+    }
     try {
-      await this.#fireGroups(this.#heldGroupsOf(ofCourse));
-      if (alone.length > 0) await this.api.sendLines(tabId, alone);
+      await send(party);
     } catch (error) {
       await this.#onReleaseRefusal(error);
       return;
     }
     await this.#loadTabLines();
+  }
+
+  /** One request on the party under a submission id of its own, at `revision`. The answer's revision
+   * is noted, so a later command carries it, and returned for a next request in the same command. */
+  async #partyRequest(
+    party: TableVisit,
+    revision: number,
+    request: (command: GroupCommand) => Promise<{ revision: number }>,
+  ): Promise<number> {
+    const answer = await request({
+      submissionId: crypto.randomUUID(),
+      expectedVisitRevision: revision,
+    });
+    this.#noteVisitRevision(party.id, answer.revision);
+    return answer.revision;
+  }
+
+  async #onFireGroup(event: Event): Promise<void> {
+    const { groupId } = (event as CustomEvent<FireGroupDetail>).detail;
+    await this.#onGroupCommand((party) =>
+      this.#partyRequest(party, party.revision, (command) =>
+        this.api.fireGroup(party.id, groupId, command),
+      ),
+    );
+  }
+
+  async #onReorderGroups(event: Event): Promise<void> {
+    const { heldGroupIds } = (event as CustomEvent<ReorderGroupsDetail>).detail;
+    await this.#onGroupCommand((party) =>
+      this.#partyRequest(party, party.revision, (command) =>
+        this.api.reorderGroups(party.id, heldGroupIds, command),
+      ),
+    );
+  }
+
+  async #onMoveGroupLine(event: Event): Promise<void> {
+    const { lineId, quantity, target } = (event as CustomEvent<MoveGroupLineDetail>).detail;
+    await this.#onGroupCommand((party) =>
+      this.#partyRequest(party, party.revision, (command) =>
+        this.api.moveLinesToGroup(party.id, [{ lineId, quantity }], target, command),
+      ),
+    );
+  }
+
+  /** One unit at a time moves off the line into a row of its own in the same group, each request at
+   * the revision the one before answered, until every row holds one. Each request is a command of its
+   * own, so a refusal part-way leaves the rows already split. */
+  async #onSplitGroupLine(event: Event): Promise<void> {
+    const { lineId, groupId, quantity } = (event as CustomEvent<SplitGroupLineDetail>).detail;
+    await this.#onGroupCommand(async (party) => {
+      let revision = party.revision;
+      for (let units = Number.parseInt(quantity, 10); units > 1; units -= 1) {
+        revision = await this.#partyRequest(party, revision, (command) =>
+          this.api.moveLinesToGroup(party.id, [{ lineId, quantity: "1" }], { groupId }, command),
+        );
+      }
+    });
   }
 
   async #onServeLine(event: Event): Promise<void> {
@@ -2640,16 +2686,14 @@ export class TillApp extends LitElement {
     await this.#loadTabLines();
   }
 
-  /** `lineNos: []` is Send all: the order's held groups are fired, then the server sends every held
-   * line outside them. The reload runs on both paths, as in {@link #onRecallLines}. */
+  /** Sends held lines outside any held group, such as a recalled one. The reload runs on both paths,
+   * as in {@link #onRecallLines}. */
   async #onSendLines(event: Event): Promise<void> {
     const { lineNos } = (event as CustomEvent<{ lineNos: number[] }>).detail;
     const tabId = this.activeTabId;
     if (tabId === undefined) return;
     this.errorKey = undefined;
-    if (lineNos.length === 0 && (await this.#refuseWithGroupsUnread())) return;
     try {
-      if (lineNos.length === 0) await this.#fireGroups(this.#heldGroupsOf(this.tabLines));
       await this.api.sendLines(tabId, lineNos);
     } catch (error) {
       await this.#onReleaseRefusal(error);
@@ -3412,7 +3456,10 @@ export class TillApp extends LitElement {
         @floor-refresh=${() => void this.#refreshFloor()}
         @open-table=${(event: Event) => void this.#onOpenTable(event)}
         @submit-draft=${(event: Event) => void this.#onSubmitDraft(event)}
-        @fire-course=${(event: Event) => void this.#onFireCourse(event)}
+        @fire-group=${(event: Event) => void this.#onFireGroup(event)}
+        @reorder-groups=${(event: Event) => void this.#onReorderGroups(event)}
+        @move-group-line=${(event: Event) => void this.#onMoveGroupLine(event)}
+        @split-group-line=${(event: Event) => void this.#onSplitGroupLine(event)}
         @serve-line=${(event: Event) => void this.#onServeLine(event)}
         @set-line-course=${(event: Event) => void this.#onSetLineCourse(event)}
         @send-lines=${(event: Event) => void this.#onSendLines(event)}

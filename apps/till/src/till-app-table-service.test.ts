@@ -468,7 +468,7 @@ describe("till-app table ordering: a handheld's Order tab with no table opened",
     ],
     ["serve-line", { lineNo: 1 }, "markLineServed"],
     ["set-line-course", { lineNo: 1, courseId: null }, "setLineCourse"],
-    ["send-lines", { lineNos: [] }, "sendLines"],
+    ["send-lines", { lineNos: [1] }, "sendLines"],
     ["recall-lines", { lineNos: [1] }, "recallLines"],
     ["void-line", { lineNo: 1 }, "voidLine"],
     [
@@ -516,7 +516,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
       "updateOrderLine",
     ],
     ["serve-line", { lineNo: 1 }, "markLineServed"],
-    ["send-lines", { lineNos: [] }, "sendLines"],
+    ["send-lines", { lineNos: [1] }, "sendLines"],
     ["transfer-lines", { toTabId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferLines"],
   ] as const)(
     "a %s refused because a card payment of the order is running says so",
