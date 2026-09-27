@@ -666,7 +666,8 @@ export interface PrintProblem {
  * dish fired before it, so a later round's ticket printing clears nothing, and another printer's
  * paper says nothing of this one's. "After" is the link row's `rowid`, not `created_at`, which two
  * jobs can share to the millisecond: SQLite gives a new row one more than the table's largest
- * `rowid`, and a link row goes only when its job or its bill is deleted. Oldest first.
+ * `rowid`, and a link row goes only when its job or its bill is deleted, or when
+ * {@link moveKitchenPrintLinks} writes it again. Oldest first.
  */
 async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promise<PrintProblem[]> {
   const troubled = printJobInTrouble(now);
@@ -722,6 +723,61 @@ async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promis
       a.since.localeCompare(b.since) ||
       a.stationName.localeCompare(b.stationName) ||
       a.workingOrderId.localeCompare(b.workingOrderId),
+  );
+}
+
+/**
+ * Carry `fromOrderId`'s kitchen tickets onto `intoOrderId` when its dishes move there whole. A
+ * ticket a printed reprint already covered stays behind with its reprint, since nothing is left
+ * missing. The rest are written again, oldest first, so they come after every reprint `intoOrderId`
+ * made before this move, which never carried these dishes; and none of them counts as a reprint, as
+ * none carried `intoOrderId`'s own dishes.
+ */
+export async function moveKitchenPrintLinks(
+  tx: Transaction,
+  fromOrderId: string,
+  intoOrderId: string,
+): Promise<void> {
+  const rows = await tx
+    .select({
+      id: kitchenPrintJobs.id,
+      printJobId: kitchenPrintJobs.printJobId,
+      stationId: kitchenPrintJobs.stationId,
+      reprint: kitchenPrintJobs.reprint,
+      createdAt: kitchenPrintJobs.createdAt,
+      printerId: printJobs.printerId,
+      status: printJobs.status,
+      queued: sql<number>`${kitchenPrintJobs}.rowid`,
+    })
+    .from(kitchenPrintJobs)
+    .innerJoin(printJobs, eq(printJobs.id, kitchenPrintJobs.printJobId))
+    .where(eq(kitchenPrintJobs.workingOrderId, fromOrderId))
+    .orderBy(sql`${kitchenPrintJobs}.rowid`);
+
+  const printerKey = (row: { stationId: string; printerId: string }) =>
+    `${row.stationId}|${row.printerId}`;
+  const lastReprinted = new Map<string, number>();
+  for (const row of rows) {
+    if (row.reprint && row.status === "done") lastReprinted.set(printerKey(row), row.queued);
+  }
+  const moving = rows.filter((row) => row.queued > (lastReprinted.get(printerKey(row)) ?? 0));
+  if (moving.length === 0) return;
+
+  await tx.delete(kitchenPrintJobs).where(
+    inArray(
+      kitchenPrintJobs.id,
+      moving.map((row) => row.id),
+    ),
+  );
+  await tx.insert(kitchenPrintJobs).values(
+    moving.map((row) => ({
+      id: row.id,
+      printJobId: row.printJobId,
+      workingOrderId: intoOrderId,
+      stationId: row.stationId,
+      reprint: false,
+      createdAt: row.createdAt,
+    })),
   );
 }
 

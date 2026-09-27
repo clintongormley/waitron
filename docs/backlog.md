@@ -2222,6 +2222,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - Transfer, unjoin and split leave a printing problem on the bill the ticket named, and the
       moved dishes' bill shows none; Finish table drops the problem of a bill that transfers
       emptied. Read, not run; only a merge carries a problem to the surviving bill.
+    - After a merge, a reprint of the absorbed bill that was still waiting at the merge clears
+      nothing when it prints, so its warning stays until the merged bill is reprinted once more:
+      one queue order cannot let it clear the absorbed bill's older failures without also
+      clearing the surviving bill's (`moveKitchenPrintLinks`, `apps/server/src/kitchen-print.ts`).
     - Only dishes sold in Each are added together or split; a venue-made unit that counts pieces (a
       "portion") prints line by line, because nothing records a unit's kind (a unit field would
       need a migration).

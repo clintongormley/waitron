@@ -539,6 +539,67 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     expect(await problemsOf(mesa5.visitId)).toEqual([]);
   });
 
+  it("keeps a failure merged in from another bill when the receiving bill was reprinted before the merge", async () => {
+    const v = await setupVenue();
+    const source = await firedTable(v, "Mesa 4");
+    const destination = await firedTable(v, "Mesa 5");
+    await setJob(await jobFor(source.tabId, v.cocinaPrinter), exhausted);
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, destination.tabId));
+    await setJob((await links()).at(-1)!.printJobId, { status: "done" });
+    expect(await problemsOf(source.visitId)).toHaveLength(1);
+
+    await mergeBills(v, source, destination);
+
+    expect(await problemsOf(destination.visitId)).toMatchObject([
+      { workingOrderId: destination.tabId, stationId: v.cocina },
+    ]);
+  });
+
+  it("keeps the receiving bill's own failure when the merged bill's reprint printed before the merge", async () => {
+    const v = await setupVenue();
+    const source = await firedTable(v, "Mesa 4");
+    const destination = await firedTable(v, "Mesa 5");
+    await setJob(await jobFor(destination.tabId, v.cocinaPrinter), exhausted);
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, source.tabId));
+    await setJob((await links()).at(-1)!.printJobId, { status: "done" });
+
+    await mergeBills(v, source, destination);
+
+    expect(await problemsOf(destination.visitId)).toMatchObject([
+      { workingOrderId: destination.tabId, stationId: v.cocina },
+    ]);
+  });
+
+  it("keeps the receiving bill's own failure when the merged bill's reprint, waiting at the merge, prints after it", async () => {
+    const v = await setupVenue();
+    const source = await firedTable(v, "Mesa 4");
+    const destination = await firedTable(v, "Mesa 5");
+    await setJob(await jobFor(destination.tabId, v.cocinaPrinter), exhausted);
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, source.tabId));
+    const waiting = (await links()).at(-1)!.printJobId;
+
+    await mergeBills(v, source, destination);
+    await setJob(waiting, { status: "done" });
+
+    expect(await problemsOf(destination.visitId)).toMatchObject([
+      { workingOrderId: destination.tabId, stationId: v.cocina },
+    ]);
+  });
+
+  it("does not bring back a merged bill's failure that its own reprint had already cleared", async () => {
+    const v = await setupVenue();
+    const source = await firedTable(v, "Mesa 4");
+    const destination = await firedTable(v, "Mesa 5");
+    await setJob(await jobFor(source.tabId, v.cocinaPrinter), exhausted);
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, source.tabId));
+    await setJob((await links()).at(-1)!.printJobId, { status: "done" });
+    expect(await problemsOf(source.visitId)).toEqual([]);
+
+    await mergeBills(v, source, destination);
+
+    expect(await problemsOf(destination.visitId)).toEqual([]);
+  });
+
   it("raises no table problem for a failed job no kitchen ticket links, such as a receipt", async () => {
     const v = await setupVenue();
     const mesa4 = await firedTable(v, "Mesa 4");
@@ -572,6 +633,17 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     });
   });
 });
+
+/** Merge `source`'s bill into `destination`'s, keeping the source's table seated. */
+async function mergeBills(v: Venue, source: Seated, destination: Seated): Promise<void> {
+  const merge = {
+    freeSourceTable: false,
+    expectedVisitRevision: (await command(destination.visitId)).expectedVisitRevision,
+    expectedSourceVisitRevision: (await command(source.visitId)).expectedVisitRevision,
+    operatorId: ALEX,
+  };
+  await inTx((tx) => mergeTabs(tx, v.cfg, destination.tabId, source.tabId, merge));
+}
 
 /** An order-scope (pass) printer attached to both stations. */
 async function passPrinter(v: Venue): Promise<string> {
