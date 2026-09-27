@@ -2270,8 +2270,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         every table load. Folding them into the groups response would change the exact-body
         assertion in `apps/server/src/till-api.groups.test.ts`'s "answers the visit's revision and
         its groups in sequence", so it was left.
-  - **Task 6 (advance HOLD tickets)**, on branch `feat/service-advance-hold-tickets`, not yet
-    landed: with the venue's "Print held groups in advance" setting on, a held group prints a
+  - **Task 6 landed as #761** (lane B item B6, 2026-09-27, main `75ab7c10e`): with the venue's "Print held groups in advance" setting on, a held group prints a
     kitchen ticket marked HOLD; later changes to it print HOLD CHANGED or HOLD CANCELLED slips, each
     also a notice on the station screen; firing it prints its ticket marked FIRE. Core `0030` adds
     `order_groups.hold_printed_at`; venue-service `0007` adds `service_settings.print_held_work` and
