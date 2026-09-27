@@ -1929,6 +1929,23 @@ describe("the device's home layout", () => {
     expect(shortcuts(el)).toEqual(["Lemonade"]);
   });
 
+  it("changes nothing and says nothing when the chosen layout is only renamed (D14)", async () => {
+    const renamed: Layout = { ...COUNTER, name: "Bar counter" };
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi
+        .fn()
+        .mockResolvedValue(laidOut("v1", [HOME, COUNTER], "layout-counter")),
+      listZoneOffers: vi.fn().mockResolvedValue(laidOut("v2", [HOME, renamed], "layout-counter")),
+    });
+    await toCounter(el);
+    api.menuState.mockResolvedValue(layoutState("v2", "layout-counter"));
+    await poll(el);
+    expect(browser(el).menu!.versionId).toBe("v2");
+    expect(browser(el).menu!.homeLayoutId).toBe("layout-counter");
+    expect(shortcuts(el)).toEqual(["Lemonade"]);
+    expect(layoutNotice(el)).toBeNull();
+  });
+
   it("says it in the till's language", async () => {
     const { el } = await mountApp({
       listDefaultZoneOffers: vi

@@ -276,13 +276,15 @@ read from the current rows, as is whether each product and variant is Active and
 
 ### On the till
 
-Every product that a menu's published structure reaches gets a button in the till's menu browser
-(`apps/till/src/widgets/menu-browser.ts`) — in its section, in the search results, and wherever the
-device's home layout places it — whether or not it is marked as sold alone. One that cannot be sold
-now keeps its button, greyed, and a tap on it does nothing (`hasSomethingToSell`,
-`apps/till/src/widgets/product-pick.ts`), so the buttons around it do not move; the till's menu-state poll greys and
-restores it without reloading the offers (`apps/till/src/till-app.ts`). A variant never has a button: it is listed only nested under its
-parent's offer (`LiveOffer.variants`). The till reads its offers from the zone
+Each product placed in a menu's published structure, and offered by it, gets a button in the till's
+menu browser (`apps/till/src/widgets/menu-browser.ts`): where the structure places it, in the search
+results, and wherever the device's home layout places it, whether or not it is marked as sold alone.
+A diet filter that staff turn on hides the dishes it rejects. One that cannot be sold now keeps its
+button, greyed, and a tap on it does nothing (`hasSomethingToSell`,
+`apps/till/src/widgets/product-pick.ts`), so the buttons around it do not move; the till's
+menu-state poll greys and restores it without reloading the offers (`apps/till/src/till-app.ts`). A
+variant never has a button: it is listed only nested under its parent's offer
+(`LiveOffer.variants`). The till reads its offers from the zone
 (`GET /api/default-service-zone/offers`, `GET /api/service-zones/:zoneId/offers`).
 
 Tapping a parent sold in whole units, and not tied to a scale, opens the picker at once

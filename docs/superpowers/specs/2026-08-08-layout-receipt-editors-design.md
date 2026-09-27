@@ -227,6 +227,9 @@ JSON: `layout` (the authored `definition`, or `DEFAULT_LAYOUT`) and `receipt` (a
 - `apps/till/src/widgets/product-grid.ts` — a `@property() columns?: number` that, when set, replaces
   the `grid-template-columns: repeat(auto-fill, minmax(9rem,1fr))` with
   `repeat(${columns}, 1fr)` (via a style binding). This is the ONE widget touched.
+  (2026-09-27: `product-grid.ts` was retired by the menus plan's Task 9; the `product-grid` card now
+  renders `till-menu-browser`, `apps/till/src/widgets/menu-browser.ts`, which takes the same
+  `columns`.)
 
 ---
 

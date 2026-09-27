@@ -278,9 +278,9 @@ marked with whether it can be sold now; nothing in `apps/till` outside its tests
 
 Nothing else on those two payloads describes a modifier. The till's picker walks
 `offeredModifiers` alone (`apps/till/src/widgets/modifier-picker.ts`), and the two surfaces that ADD
-a line — the product grid and tender-pay's weighed quantity — decide whether a dish needs a picker
-from that field or from an available variant (`needsModifierPicker`,
-`apps/till/src/state/order-line.ts`).
+a line — a product tap (`pickProduct`, `apps/till/src/widgets/product-pick.ts`) and tender-pay's
+weighed quantity — decide whether a dish needs a picker from that field or from an available
+variant (`needsModifierPicker`, `apps/till/src/state/order-line.ts`).
 
 Six things it is worth knowing about that payload:
 

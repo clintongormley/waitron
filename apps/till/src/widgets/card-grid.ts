@@ -1,8 +1,8 @@
 import { type DietPredicate, memoVisibleProducts, shownMenu } from "../menu-filter.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
-// Side-effect imports: registering each widget element so the switch below can render its tag.
 import { HANDHELD_COLUMNS, TILL_COLUMNS } from "./menu-browser.js";
+// Side-effect imports: registering each widget element so the switch below can render its tag.
 import "./basket.js";
 import "./total.js";
 import "./tender-pay.js";

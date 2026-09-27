@@ -300,7 +300,6 @@ describe("till-counter-screen", () => {
         .products.map((p) => p.id)
         .sort(),
     ).toEqual(["meat", "vegan"]);
-    // Pick the vegan lens — the grid is handed only the vegan dish.
     filter.shadowRoot!.querySelector<HTMLElement>('[data-test="diet-filter-vegan"]')!.click();
     await el.updateComplete;
     await cardGrid(el)!.updateComplete;

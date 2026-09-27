@@ -2174,8 +2174,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   - **A pick's money column sits right of the dish total it belongs under**, further right than the
     dish row's own remove button, because `.line` and `.option` use different column templates.
   - **Product-grid tiles: a long name starts left of its own card border, and a unit price crosses the
-    card's right border.** Seen in a screenshot, not measured;
-    `git diff main...HEAD -- apps/till/src/widgets/product-grid.ts` changes no CSS.
+    card's right border.** Seen in a screenshot, not measured. That widget was retired on 2026-09-27
+    for `till-menu-browser` (`apps/till/src/widgets/menu-browser.ts`), whose tiles wrap their text
+    inside the card; in the menus Task 9 screenshots opened at 390 and 1280 px no name or price
+    crossed a border. Looked at, not measured: close once someone measures it.
 - **Two modifier-picker states, and how far each is actually out of reach** — a fact worth having
   before anyone writes a test claiming to cover them, and one half of it is NOT what the looking
   pass first wrote down. An options label marked unavailable never reaches the picker at all: the

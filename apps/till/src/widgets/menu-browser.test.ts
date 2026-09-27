@@ -630,6 +630,31 @@ describe("till-menu-browser", () => {
       expect(shown.map((button) => button.disabled)).toEqual([true, true]);
     });
 
+    it("keeps a product with only some variants sold out orderable, beside one with all sold out, greyed", async () => {
+      const size = (id: string, available: boolean) => ({
+        ...sellingValuesOf(cafe),
+        id,
+        name: id,
+        unitPrice: "4.50",
+        unitPriceDifference: null,
+        available,
+      });
+      const mixed = product("tinto", "Tinto", {
+        variants: [size("125", false), size("175", true)],
+      });
+      const allGone = product("cava", "Cava", { variants: [size("copa", false)] });
+      const { el, store } = await mount({
+        menu: lunch({ structure: { members: [member("cafe"), member("tinto"), member("cava")] } }),
+        products: [cafe, mixed, allGone],
+      });
+      const shown = entries(el, "structure");
+      expect(names(shown)).toEqual(["Café", "Tinto", "Cava"]);
+      expect(shown.map((button) => button.disabled)).toEqual([false, false, true]);
+      await tap(el, entry(el, "structure", "Tinto"));
+      expect(root(el).querySelector("till-modifier-picker")!.product).toBe(mixed);
+      expect(store.lines).toEqual([]);
+    });
+
     it("greys a product whose variants are all unavailable", async () => {
       const soldOutWine = {
         ...wine,
