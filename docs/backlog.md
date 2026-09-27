@@ -3303,8 +3303,8 @@ approved.
   are dismissed as "used in tests" with the reason on each: one strips `<style>` blocks from two
   SVGs read from the repository, the other removes the required-field asterisk from a heading the
   test itself rendered; neither sees outside input and neither result is rendered or served.
-- **Code scanning (CodeQL default setup) switched on 2026-09-27 — 34 alerts OPEN, queued as
-  lane A's A104–A106.** Enabled with
+- **Code scanning (CodeQL default setup) switched on 2026-09-27 — the six ReDoS alerts are still
+  OPEN; the other 28 were handled by A104 and A106.** Enabled with
   `gh api -X PATCH repos/clintongormley/waitron/code-scanning/default-setup
   -f state=configured -f query_suite=default`; it analyses `actions`, `javascript-typescript` and
   `python`, weekly and on each PR, as a check the ruleset does not require. Its first run
@@ -3314,9 +3314,11 @@ approved.
   `packages/printing/src/layout.ts`, `packages/stream/src/names.ts`,
   `packages/sync-enrolment/src/migration-tables.ts`), 1 `js/biased-cryptographic-random`
   (`packages/country-es/src/spain.ts`), and 2 sanitization findings in test files
-  (`scripts/trust-page-logo.test.ts`, `apps/dashboard/src/widgets/extra-list-form.test.ts`). None
-  of the other nine is triaged; list them with
-  `gh api "repos/clintongormley/waitron/code-scanning/alerts?state=open"`.
+  (`scripts/trust-page-logo.test.ts`, `apps/dashboard/src/widgets/extra-list-form.test.ts`). The
+  last three are A106's, in the bullet above; the six ReDoS findings are not triaged. List the open
+  ones with `gh api "repos/clintongormley/waitron/code-scanning/alerts?state=open"` — on
+  2026-09-28, after #792 merged, it listed the six ReDoS alerts and alert 34, which closes only when
+  CodeQL analyses `main` with #792 in it; `state=fixed` listed 25.
   **The 25 permission findings are fixed by lane A's A104 (PR #791):** `ci.yml` and
   `stripe-sandbox.yml` now set `permissions: contents: read` at the top, `publish` keeps its own
   `packages: write`, and `scripts/ci-workflow.test.mjs` fails any workflow job left on the
@@ -3331,8 +3333,7 @@ approved.
   files. Whether the alerts close is
   read on `main`'s next CodeQL analysis.
   Next: check each ReDoS pattern against
-  the inputs that reach it, and dismiss a test-file finding on the thread with its reason rather
-  than silently. **Dependabot malware alerts** were switched on by the owner on 2026-09-27 from the
+  the inputs that reach it. **Dependabot malware alerts** were switched on by the owner on 2026-09-27 from the
   repository's Settings → Advanced Security page, by the owner's report, unconfirmed: GitHub's docs
   (`content/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/configure-malware-alerts.md`)
   give only that page's **Enable** button, so the setting was not read back.
