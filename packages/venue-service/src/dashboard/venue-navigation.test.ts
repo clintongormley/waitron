@@ -21,6 +21,7 @@ const model: VenueServiceView = {
   floorZones: [],
   products: [],
   settings: { editSentLines: true },
+  kitchenTicketGrouping: "combined",
 };
 
 beforeEach(() => setLocale("en"));

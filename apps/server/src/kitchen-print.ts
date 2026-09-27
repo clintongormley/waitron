@@ -276,6 +276,7 @@ export async function enqueueKitchenTickets(
   const groupByLine = await readGroupPositions(tx, lineIds);
   const stationNames = await readStationNames(tx, stationIds);
   const order = await readOrderHeader(tx, cfg, orderId);
+  const grouping = await VENUE_SERVICE.readKitchenTicketGrouping(tx);
 
   const itemsByStation = new Map<string, { lineNo: number; item: KitchenTicketItem }[]>();
   for (const fired of firedItems) {
@@ -299,7 +300,7 @@ export async function enqueueKitchenTickets(
           .get(id)!
           .sort((a, b) => groupOrder(a.item) - groupOrder(b.item) || a.lineNo - b.lineNo)
           .map((entry) => entry.item),
-        "combined",
+        grouping,
       ),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));

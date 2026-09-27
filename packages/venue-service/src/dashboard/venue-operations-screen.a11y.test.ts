@@ -75,3 +75,57 @@ describe.each(["light", "dark"] as const)("kitchen changes setting accessibility
     await expectNoA11yViolations(host);
   });
 });
+
+describe.each(["light", "dark"] as const)(
+  "kitchen ticket grouping setting accessibility (%s)",
+  (theme) => {
+    test.each([
+      ["stored", undefined],
+      ["refused", new Error("refused")],
+    ] as const)("the select and its hint, %s", async (_state, refusal) => {
+      setLocale("en");
+      await mountThemed("<div></div>", theme);
+      const el = document.createElement(
+        "dashboard-venue-operations-screen",
+      ) as VenueOperationsScreen;
+      el.api = {
+        load: vi.fn().mockResolvedValue({
+          readiness: [],
+          departments: [],
+          zones: [],
+          routes: [],
+          hours: [],
+          zoneMenus: [],
+          menus: [],
+          categories: [],
+          stations: [],
+          floorZones: [],
+          products: [],
+          settings: { editSentLines: true },
+          kitchenTicketGrouping: "combined",
+        }),
+        saveKitchenTicketGrouping: refusal ? vi.fn().mockRejectedValue(refusal) : vi.fn(),
+      } as unknown as VenueServiceApi;
+      host.append(el);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await el.updateComplete;
+      const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+      tabs.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="routing"]')!.click();
+      await el.updateComplete;
+      const select = el.shadowRoot!.querySelector<HTMLSelectElement>(
+        'select[name="kitchenTicketGrouping"]',
+      )!;
+      expect(select).not.toBeNull();
+      if (refusal) {
+        select.value = "separate";
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await el.updateComplete;
+        expect(
+          el.shadowRoot!.querySelector('[data-field-error="kitchenTicketGrouping"]'),
+        ).not.toBeNull();
+      }
+      await expectNoA11yViolations(host);
+    });
+  },
+);

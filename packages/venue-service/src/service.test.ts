@@ -17,6 +17,7 @@ describe("VENUE_SERVICE", () => {
       "menuState",
       "readClearingWorkflow",
       "readEditSentLines",
+      "readKitchenTicketGrouping",
       "recordKitchenNotices",
       "recordLineContexts",
       "recordOrderContext",

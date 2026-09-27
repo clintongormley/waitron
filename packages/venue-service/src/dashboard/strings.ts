@@ -88,6 +88,10 @@ const en = {
   "venue.edit_sent_lines": "Allow changes to items already sent to the kitchen",
   "venue.edit_sent_lines_hint":
     "When off, staff cannot change or recall an item the kitchen already has; they cancel it instead.",
+  "venue.kitchen_ticket_grouping": "Identical dishes on a kitchen ticket",
+  "venue.kitchen_ticket_grouping.combined": "One line: 3 x Burger",
+  "venue.kitchen_ticket_grouping.separate": "A line each: 1 x Burger, three times",
+  "venue.kitchen_ticket_grouping_hint": "Applies to new kitchen tickets and to reprints.",
 } as const;
 
 const es: Record<keyof typeof en, string> = {
@@ -178,6 +182,11 @@ const es: Record<keyof typeof en, string> = {
   "venue.edit_sent_lines": "Permitir cambios en los artículos ya enviados a cocina",
   "venue.edit_sent_lines_hint":
     "Si está desactivado, el personal no puede cambiar ni retirar un artículo que ya tiene la cocina; tiene que cancelarlo.",
+  "venue.kitchen_ticket_grouping": "Platos iguales en una comanda de cocina",
+  "venue.kitchen_ticket_grouping.combined": "Una línea: 3 x Hamburguesa",
+  "venue.kitchen_ticket_grouping.separate": "Una por plato: 1 x Hamburguesa, tres veces",
+  "venue.kitchen_ticket_grouping_hint":
+    "Se aplica a las comandas de cocina nuevas y a las reimpresiones.",
 };
 
 export const VENUE_SERVICE_STRINGS = { en, es };

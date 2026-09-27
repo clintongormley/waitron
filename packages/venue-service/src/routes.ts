@@ -31,7 +31,13 @@ import {
   updatePreparationRoute,
   type PreparationRouteInput,
 } from "./operations.js";
-import { readEditSentLines, writeEditSentLines } from "./kitchen-notices.js";
+import {
+  readEditSentLines,
+  readKitchenTicketGrouping,
+  writeEditSentLines,
+  writeKitchenTicketGrouping,
+} from "./kitchen-notices.js";
+import { KITCHEN_TICKET_GROUPINGS, type KitchenTicketGrouping } from "./schema/settings.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import "./errors.js";
 
@@ -127,6 +133,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           zoneMenus: await listZoneMenuAssignments(tx, ctx.cfg),
           readiness: await listVenueReadiness(tx, ctx.cfg),
           settings: { editSentLines: await readEditSentLines(tx) },
+          kitchenTicketGrouping: await readKitchenTicketGrouping(tx),
         }));
         return c.json(result);
       }),
@@ -141,6 +148,21 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           throw new AppError("management.request_invalid", { field: "editSentLines" });
         }
         await gated(sessionId, (tx) => writeEditSentLines(tx, editSentLines));
+        return c.body(null, 204);
+      }),
+    );
+
+    app.put("/management-api/venue-service/settings/kitchen-ticket-grouping", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        const grouping = body.kitchenTicketGrouping;
+        if (!KITCHEN_TICKET_GROUPINGS.includes(grouping as KitchenTicketGrouping)) {
+          throw new AppError("management.request_invalid", { field: "kitchenTicketGrouping" });
+        }
+        await gated(sessionId, (tx) =>
+          writeKitchenTicketGrouping(tx, grouping as KitchenTicketGrouping),
+        );
         return c.body(null, 204);
       }),
     );

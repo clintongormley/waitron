@@ -70,10 +70,12 @@ export interface VenueServiceModel {
   zoneMenus: ZoneMenu[];
   readiness: VenueReadinessIssue[];
   settings: VenueServiceSettings;
+  kitchenTicketGrouping: KitchenTicketGrouping;
 }
 export interface VenueServiceSettings {
   editSentLines: boolean;
 }
+export type KitchenTicketGrouping = "combined" | "separate";
 export interface VenueServiceChoices {
   menus: (NamedRow & { active: boolean })[];
   categories: { id: string; name: Record<string, string> }[];
@@ -205,6 +207,12 @@ export class VenueServiceApi {
 
   saveSettings(settings: VenueServiceSettings): Promise<void> {
     return this.request("/management-api/venue-service/settings", "PUT", settings);
+  }
+
+  saveKitchenTicketGrouping(kitchenTicketGrouping: KitchenTicketGrouping): Promise<void> {
+    return this.request("/management-api/venue-service/settings/kitchen-ticket-grouping", "PUT", {
+      kitchenTicketGrouping,
+    });
   }
 
   deleteRoute(routeId: string): Promise<void> {

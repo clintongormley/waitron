@@ -65,6 +65,7 @@ import {
   type TillSaleDeps,
 } from "./working-order.js";
 import { seatTable } from "./visits.js";
+import { writeKitchenTicketGrouping } from "@waitron/venue-service";
 import {
   bumpGroupReady,
   fireGroup,
@@ -3390,6 +3391,50 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
     expect(at("GROUP 3")).toBeLessThan(at(DISHES.steak.kitchen));
     expect(at(DISHES.steak.kitchen)).toBeLessThan(at("GROUP 4"));
     expect(at("GROUP 4")).toBeLessThan(at(DISHES.warm.kitchen));
+  });
+
+  // Fails if the fire ticket or the reprint ignores the venue's grouping setting.
+  it("prints Steak x3 as one 3 x entry under combined and three 1 x entries under separate, leaving the bill alone", async () => {
+    const v = await setupVenue();
+    const steaksOn = (ticket: string) =>
+      linesOfTicket(ticket).filter((text) => text.includes(DISHES.steak.kitchen));
+    const bill = (tabId: string) =>
+      db
+        .select({
+          productId: workingOrderLines.productId,
+          quantity: workingOrderLines.quantity,
+          unitPriceGross: workingOrderLines.unitPriceGross,
+          lineTotal: workingOrderLines.lineTotal,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId))
+        .orderBy(asc(workingOrderLines.lineNo));
+    const three = (qty: string) => expect.stringMatching(new RegExp(`^${qty} .*x K-STEAK$`));
+
+    const first = await seated(v);
+    await submit(v, first.visitId, [{ release: "fire", lines: [line(v, "steak", "3")] }]);
+    expect(steaksOn((await printed(v)).at(-1)!)).toEqual([three("3\\.000")]);
+
+    await inTx((tx) => writeKitchenTicketGrouping(tx, "separate"));
+    const second = await seated(v);
+    await submit(v, second.visitId, [{ release: "fire", lines: [line(v, "steak", "3")] }]);
+    expect(steaksOn((await printed(v)).at(-1)!)).toEqual([
+      three("1\\.000"),
+      three("1\\.000"),
+      three("1\\.000"),
+    ]);
+
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, first.tabId));
+    expect(steaksOn((await printed(v)).at(-1)!)).toEqual([
+      three("1\\.000"),
+      three("1\\.000"),
+      three("1\\.000"),
+    ]);
+
+    const firstBill = await bill(first.tabId);
+    expect(firstBill).toHaveLength(1);
+    expect(firstBill[0]!.quantity).toBe(3000);
+    expect(await bill(second.tabId)).toEqual(firstBill);
   });
 
   // Fails if identical lines of one group print as separate entries under the default.
