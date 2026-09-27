@@ -82,3 +82,19 @@ it("notifies subscribers on setLocale and stops after unsubscribe", () => {
   setLocale("es-ES");
   expect(calls).toBe(1);
 });
+
+it("strips every subtag after the language, and leaves a locale with no dash whole", () => {
+  const entry = { en: "En", es: "Es" };
+  expect(pickLocale(entry, "es-ES-valencia")).toBe("Es");
+  expect(pickLocale(entry, "es")).toBe("Es");
+  expect(t("x.hi", "es-419")).toBe("Hola");
+  expect(t("x.hi", "-es")).toBe("Hi"); // an empty language has no catalogue
+});
+
+it("resolves a crafted 200,000-character locale in linear time", () => {
+  const crafted = `${"-".repeat(200_000)}\n`;
+  const started = performance.now();
+  expect(t("x.hi", crafted)).toBe("Hi");
+  expect(pickLocale({ en: "En", es: "Es" }, crafted)).toBe("En");
+  expect(performance.now() - started).toBeLessThan(1000);
+});

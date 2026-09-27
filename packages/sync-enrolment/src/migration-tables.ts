@@ -18,11 +18,25 @@ const DROP_TABLE =
 const RENAME_TABLE =
   /\balter\s+table\s+["`]?(?:public["`]?\.)?["`]?([a-z0-9_]+)["`]?\s+rename\s+to\s+["`]?([a-z0-9_]+)["`]?/gi;
 
+/** An unclosed `/*` is left as it is, so the SQL after it is still read. */
+function blankBlockComments(source: string): string {
+  let out = "";
+  let from = 0;
+  for (;;) {
+    const open = source.indexOf("/*", from);
+    if (open === -1) break;
+    const close = source.indexOf("*/", open + 2);
+    if (close === -1) break;
+    out += source.slice(from, open) + source.slice(open, close + 2).replace(/[^\n]/g, " ");
+    from = close + 2;
+  }
+  return out + source.slice(from);
+}
+
 /** Blanks comments and string literals, so a CREATE/DROP TABLE mentioned in prose or a literal is
  * ignored. Naive by design. */
 function stripSql(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, " "))
+  return blankBlockComments(source)
     .split("\n")
     .map((line) => line.replace(/--.*$/, ""))
     .join("\n")

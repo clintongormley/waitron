@@ -64,7 +64,11 @@ export function parseGenerationName(
 }
 
 export function normalisePrefix(prefix: string): string {
-  const trimmed = prefix.replace(/^\/+/, "").replace(/\/+$/, "");
+  let start = 0;
+  let end = prefix.length;
+  while (start < end && prefix[start] === "/") start++;
+  while (end > start && prefix[end - 1] === "/") end--;
+  const trimmed = prefix.slice(start, end);
   return trimmed === "" ? "" : `${trimmed}/`;
 }
 

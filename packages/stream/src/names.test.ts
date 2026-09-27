@@ -124,8 +124,17 @@ describe("the configured prefix", () => {
     ["waitron", "waitron/"],
     ["/waitron/", "waitron/"],
     ["//a/b//", "a/b/"],
+    ["a//b", "a//b/"],
+    [" /a/ ", " /a/ /"],
   ])("normalises %j to %j", (prefix, expected) => {
     expect(normalisePrefix(prefix)).toBe(expected);
+  });
+
+  it("normalises a crafted 200,000-character prefix in linear time", () => {
+    const inner = "/".repeat(200_000);
+    const started = performance.now();
+    expect(normalisePrefix(`x${inner}y`)).toBe(`x${inner}y/`);
+    expect(performance.now() - started).toBeLessThan(1000);
   });
 
   it("joins the normalised prefix and a key into the key the bucket holds", () => {
