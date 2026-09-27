@@ -731,11 +731,15 @@ export class TillTableOrderScreen extends LitElement {
   #noteDraftStart(store: WorkingOrderStore): void {
     if (store.lineCount === 0) {
       this.#drafts.delete(store);
-      this.destination = "fire-now";
-      this.joinTarget = null;
+      this.#resetDestination();
     } else {
       this.#draftOf(store);
     }
+  }
+
+  #resetDestination(): void {
+    this.destination = "fire-now";
+    this.joinTarget = null;
   }
 
   override connectedCallback(): void {
@@ -791,8 +795,7 @@ export class TillTableOrderScreen extends LitElement {
       this.fireGroupPending = null;
       this.movePending = null;
       this.pendingDraft = null;
-      this.destination = "fire-now";
-      this.joinTarget = null;
+      this.#resetDestination();
     }
     if (changed.has("groups") || this.#heldGroupIds === undefined) {
       this.#heldGroupIds = heldGroupIds(this.groups);
