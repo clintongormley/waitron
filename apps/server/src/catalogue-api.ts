@@ -898,10 +898,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<{ name?: unknown }>(c);
-      if (typeof body.name !== "string") {
-        throw new AppError("management.request_invalid", { field: "name" });
-      }
-      const { name } = body;
+      const name = requireString(body.name, "name");
+      if (name.trim() === "") throw new AppError("management.request_invalid", { field: "name" });
       const created = await gated(sessionId, (tx) => createCatalogue(tx, { name }));
       return c.json(created, 201);
     }),

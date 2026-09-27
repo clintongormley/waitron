@@ -290,6 +290,22 @@ describe("mountCatalogueApi — catalogues", () => {
     expect(nonString.status).toBe(400);
   });
 
+  it.each(["", "   "])(
+    "POST /management-api/catalogues refuses the blank name %j as the rename does, and creates no menu",
+    async (name) => {
+      const count = async () =>
+        (await suite.db.execute<{ n: number }>(sql`select count(*) as n from catalogues`)).rows[0]!
+          .n;
+      const before = await count();
+      const res = await send(mountApp(), "POST", "/management-api/catalogues", { body: { name } });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "name" } },
+      });
+      expect(await count()).toBe(before);
+    },
+  );
+
   it("POST /management-api/catalogues unauthenticated → 401", async () => {
     const res = await send(mountApp(), "POST", "/management-api/catalogues", {
       body: { name: "No cookie" },
