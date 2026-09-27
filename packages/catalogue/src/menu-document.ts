@@ -5,6 +5,7 @@ import { AppError, FALLBACK_LOCALE, resolveContentText } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { readContentLanguages } from "./content-languages.js";
 import { listMenuOffers } from "./operations.js";
+import { effectiveDefaultLabelId } from "./option-default.js";
 import { menuItemExtraItems } from "./schema/extras.js";
 import { menuDetails } from "./schema/menu.js";
 import { optionLabels } from "./schema/options.js";
@@ -534,11 +535,7 @@ export async function applyLiveFields(
                 return {
                   ...entry,
                   labels: withAvailability,
-                  defaultLabelId: withAvailability.some(
-                    (label) => label.id === entry.defaultLabelId && label.available,
-                  )
-                    ? entry.defaultLabelId
-                    : null,
+                  defaultLabelId: effectiveDefaultLabelId(withAvailability, entry.defaultLabelId),
                 };
               }
               return {

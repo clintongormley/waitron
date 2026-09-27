@@ -1,3 +1,4 @@
+import { effectiveDefaultLabelId } from "@waitron/catalogue/src/option-default.js";
 import { compareDecimal } from "@waitron/shared";
 import { menuOfferToTillProduct, type MenuUnavailable, type TillMenuOffer } from "../api/client.js";
 import { lineProductName } from "../widgets/product-name.js";
@@ -74,11 +75,7 @@ export function withUnavailable(
       return {
         ...entry,
         labels: withLabels,
-        defaultLabelId: withLabels.some(
-          (label) => label.id === entry.defaultLabelId && label.available,
-        )
-          ? entry.defaultLabelId
-          : null,
+        defaultLabelId: effectiveDefaultLabelId(withLabels, entry.defaultLabelId),
       };
     }),
   }));

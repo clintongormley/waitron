@@ -166,8 +166,7 @@ describe("withUnavailable", () => {
       ["rare", false],
       ["medium", true],
     ]);
-    // The default names a label that cannot be chosen now, so there is none.
-    expect(cooked!.kind === "options" && cooked.defaultLabelId).toBeNull();
+    expect(cooked!.kind === "options" && cooked.defaultLabelId).toBe("medium");
     expect(greyWine!.variants.map((v) => [v.id, v.available])).toEqual([
       ["glass", true],
       ["bottle", false],
@@ -175,6 +174,34 @@ describe("withUnavailable", () => {
     // Bacon is switched off on the soup's offer only; the burger's bacon stays.
     const [soupExtras] = soup!.offeredModifiers;
     expect(soupExtras!.kind === "extras" && soupExtras.items[0]!.available).toBe(false);
+  });
+
+  describe("the default label", () => {
+    const steak = offer({
+      id: "offer-steak",
+      productId: "steak",
+      offeredModifiers: [
+        optionsList("list-cooked", [label("rare"), label("medium"), label("well-done")], "rare"),
+      ],
+    });
+    const defaultWith = (unavailable: string[]) => {
+      const [served] = withUnavailable([steak], { ...NOTHING, optionLabels: unavailable });
+      const [cooked] = served!.offeredModifiers;
+      if (cooked?.kind !== "options") throw new Error("options");
+      return cooked.defaultLabelId;
+    };
+
+    it("stays the loaded default while it is available", () => {
+      expect(defaultWith(["medium"])).toBe("rare");
+    });
+
+    it("is the first available label in the list's order while the loaded default is not", () => {
+      expect(defaultWith(["rare", "medium"])).toBe("well-done");
+    });
+
+    it("is null while every label is unavailable", () => {
+      expect(defaultWith(["rare", "medium", "well-done"])).toBeNull();
+    });
   });
 
   it("keeps a variant this menu does not offer unavailable, whatever the set says", () => {

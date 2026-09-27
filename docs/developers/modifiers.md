@@ -291,28 +291,27 @@ Six things it is worth knowing about that payload:
 - **Every price is settled**: the menu's price, then the list item's, then the product's
   `unit_price` — its own, or its parent's where a variant leaves it blank. A till has
   no way to walk that chain itself, because the last rung is not on the list item.
-- **A published version holds the lists that were Active when it was published, and every label
-  of each options list; each label is served marked with whether it is Available now**
+- **A published version holds the lists that were Active when it was published, and every label of
+  each options list; each label is served marked with whether it is Available now**
   (`applyLiveFields`, which reads no list's `active`, so a list switched off after publishing is
   still offered until the menu is published again, and a label deleted since is served marked
-  unavailable). A published default naming a label that is unavailable now is served as no
-  default for as long as the label stays unavailable (`applyLiveFields`, which works it out on every
-  read; clearing: "clears the default label while it is unavailable" in
-  `packages/catalogue/src/menu-document.test.ts`). The till's
-  menu-state poll clears it the same way (`withUnavailable`, `apps/till/src/state/menu-refresh.ts`),
-  working from the offers as it loaded them, so it cannot give back a default those offers were
-  served without. The lists and the labels marked available are the set `validateExtraSelections`
-  (`extra-contract.ts`) and `validateOptionSelections` (`option-contract.ts`) will accept an answer
-  from. That agreement is the reason a till and the
-  order path read the same lists: both take them from the menu's published
-  version, which `listMenuOffers` builds through `readOfferedModifiers` when the menu is published
-  (`buildMenuDocument`, `packages/catalogue/src/menu-document.ts`), with availability put back
-  when it is served (`applyLiveFields`). One exception: an edit of a saved line whose dish the live
+  unavailable). A published default naming a label that is unavailable now is served as the first
+  label, in the list's order, that is available now, or as no default when none is
+  (`effectiveDefaultLabelId`, `packages/catalogue/src/option-default.ts`, which `applyLiveFields`
+  applies on every read). The till's menu-state poll applies the same rule (`withUnavailable`,
+  `apps/till/src/state/menu-refresh.ts`) to the default the offers were served with when it loaded
+  them, not to the published one. The lists and the labels marked available are the set
+  `validateExtraSelections` (`extra-contract.ts`) and `validateOptionSelections`
+  (`option-contract.ts`) will accept an answer from. That agreement is the reason a till and the
+  order path read the same lists: both take them from the menu's published version, which
+  `listMenuOffers` builds through `readOfferedModifiers` when the menu is published
+  (`buildMenuDocument`, `packages/catalogue/src/menu-document.ts`), with availability put back when
+  it is served (`applyLiveFields`). One exception: an edit of a saved line whose dish the live
   version no longer offers checks that line's options answer against the dish's own current lists
   (`productOptionLists`, `apps/server/src/working-order.ts`), because no published list is left to
-  check it against. A required list the picker never drew would refuse the
-  order with `options.label_required` or `extras.limit_exceeded`, and an offered list the server
-  does not know about would be refused as `options.invalid`.
+  check it against. A required list the picker never drew would refuse the order with
+  `options.label_required` or `extras.limit_exceeded`, and an offered list the server does not know
+  about would be refused as `options.invalid`.
 - **An extras list offers only the items whose product is Active and Available**, and
   a pick of any other item in a basket priced afresh is refused as `extras.invalid` (field
   `productId`), the same refusal as a pick the list never offered. That filter is the served
