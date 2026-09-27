@@ -629,6 +629,22 @@ describe("the layout a device shows, resolved against the live version (D14)", (
     });
   });
 
+  it("shows the default, as removed, for a chosen layout deleted before it was ever published", async () => {
+    const f = await menusFixture(fx.db);
+    const profile = await makeProfile("Handheld");
+    await publish(f.lunch);
+    const counter = await app((tx) => createHomeLayout(tx, f.lunch, "Counter"));
+    await app((tx) => setDeviceHomeLayout(tx, profile, f.lunch, counter.id));
+    const home = await defaultLayout(f.lunch);
+    expect(await resolved(profile, [f.lunch])).toEqual({
+      [f.lunch]: { homeLayoutId: home, layoutFallback: "layout_unpublished" },
+    });
+    await app((tx) => deleteHomeLayout(tx, counter.id));
+    expect(await resolved(profile, [f.lunch])).toEqual({
+      [f.lunch]: { homeLayoutId: home, layoutFallback: "layout_removed" },
+    });
+  });
+
   it("counts as removed another menu's layout, or a section that is no layout, which only a direct write can choose", async () => {
     const f = await menusFixture(fx.db);
     const dinnerOnly = await app((tx) => createHomeLayout(tx, f.dinner, "Dinner only"));

@@ -526,8 +526,8 @@ async function zoneLiveDocuments(
  * layouts. A menu with no live version is left out, and an unpublished default gives way to the
  * zone's first published menu. Refused `menu.version_changed` unless every `asserted` version is the
  * live version of one of the zone's menus. With `menuItemIds`, only the offers it names are served;
- * the menus are all listed. Each menu's `homeLayoutId` is the one `deviceProfileId` chose for it, or
- * the menu's default (`resolveDeviceHomeLayouts`).
+ * the menus are all listed. Each menu's `homeLayoutId` is resolved against its live version
+ * (`resolveDeviceHomeLayouts`).
  */
 export async function listZoneOffers(
   tx: Transaction,
@@ -572,7 +572,7 @@ export async function listZoneOffers(
 
 /**
  * Each of the zone's live menus with its version and the home layout `deviceProfileId` shows for
- * it (`resolveDeviceHomeLayouts`), and what those versions hold that cannot be sold now
+ * it, resolved against that version (`resolveDeviceHomeLayouts`), and what those versions hold that cannot be sold now
  * (`readUnavailable`). Does not check the zone: an unknown one holds nothing.
  */
 export async function menuState(

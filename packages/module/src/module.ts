@@ -301,7 +301,8 @@ export interface VenueServiceContribution {
   ): Promise<ReadonlyMap<string, PreparationRoute>>;
   /** Refused `menu.version_changed` unless every `asserted` version is the live version of one of
    *  the zone's menus. With `menuItemIds`, only the offers it names are served. Each menu's home
-   *  layout is the one `deviceProfileId` chose for it, or the menu's default. */
+   *  layout is the one `deviceProfileId` chose for it when the menu's live version holds it, and
+   *  the menu's default otherwise. */
   listZoneOffers(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -313,7 +314,8 @@ export interface VenueServiceContribution {
     },
   ): Promise<ZoneOffers>;
   /** Does not check the zone: an unknown one holds nothing. Each menu's home layout is the one
-   *  `deviceProfileId` chose for it, or the menu's default. */
+   *  `deviceProfileId` chose for it when the menu's live version holds it, and the menu's default
+   *  otherwise. */
   menuState(
     tx: Transaction,
     zoneId: string,
