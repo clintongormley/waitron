@@ -333,7 +333,8 @@ export const en = {
     "Enter a quantity greater than zero and no more than the amount ordered",
   "table.split_options_together": "Dishes with options must be moved in full",
   "table.split_modifier_error": "Dishes with options must be moved in full",
-  "table.split_held_error": "Held items cannot move to another bill until their group is fired",
+  "table.split_held_error":
+    "Send held items to the kitchen, or fire their group, before moving them to another bill",
   "table.check_kept_held":
     "The separate bill could not go back to the table. It is in Held orders on the counter.",
   "table.check_return_unconfirmed":
@@ -768,7 +769,7 @@ export const es: Record<StringKey, string> = {
   "table.split_options_together": "Los platos con opciones deben moverse completos",
   "table.split_modifier_error": "Los platos con opciones deben moverse completos",
   "table.split_held_error":
-    "Los artículos en espera no se pueden pasar a otra cuenta hasta que se marche su grupo",
+    "Envía los artículos en espera a cocina, o marcha su grupo, antes de pasarlos a otra cuenta",
   "table.check_kept_held":
     "La cuenta separada no pudo volver a la mesa. Está en Pedidos aparcados, en el mostrador.",
   "table.check_return_unconfirmed":
