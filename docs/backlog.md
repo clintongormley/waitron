@@ -4394,6 +4394,9 @@ doubles the single quote only, and a backslash stays as itself. Left as it was, 
 `packages/provisioning/src/identifiers.ts` for `quoteLiteral`, which only re-exports it; the function
 lives in `packages/shared/src/sql-literal.ts`.
 
+**Finishing an account action refuses a person who has lost their login email — DONE (2026-09-27,
+#773).**
+
 **The dashboard calls a mistyped email-change code an invalid link — OPEN (found 2026-09-27 by
 reading, on the identity tidy-up branch).**
 `apps/dashboard/src/i18n/codes.ts` maps `account_action.invalid` to "This link is invalid or has
