@@ -791,8 +791,8 @@ of them sit on tables another set owns: `products`, created by core in
 `drizzle/0002_section_image_references.sql` adds four more of the same shape for `sections.image`,
 two of them on catalogue's `sections`. `drizzle/0003_published_image_references.sql` adds three for
 `menu_version_images.filename`: one on catalogue's `menu_version_images`, and two on `media_images`
-whose bodies read catalogue's `menu_version_images` and `menu_publications` — an edge
-`scripts/module-graph-honesty.test.ts` cannot see, because it never reads a trigger's body. A
+whose bodies read catalogue's `menu_version_images` and `menu_publications` — edges
+`scripts/module-graph-honesty.test.ts` now reads from their trigger bodies. A
 catalogue rebuild of either table is the trigger-body shape described below, which fails on an
 upgrade. A rebuild of `menu_version_images` that got past that, by removing media's two body
 triggers first, would also drop the insert trigger ON it with no error — inferred from the
@@ -844,15 +844,14 @@ has sold from a menu. Today this costs
 nothing beyond a reset, while the rule of no data-migration code until production stands. Once a
 venue is live, a rebuild has to carry the child rows across by hand.
 
-`scripts/module-graph-honesty.test.ts` derives both edge kinds from the SQL text, and says so. **Two
+`scripts/module-graph-honesty.test.ts` derives its edge kinds from the SQL text, and says so. **Two
 hedges from its own header belong here, because a failing test can never restore them.** The
 `EXECUTE (FUNCTION|PROCEDURE)` detector was DELETED as dead syntax — SQLite has no functions, so
 `CREATE FUNCTION` and `FOR EACH ROW EXECUTE FUNCTION f()` are both syntax errors on it. And a SQLite
-trigger's BODY is read by nothing: a trigger carries statements between `BEGIN` and `END`, and an
-`INSERT INTO` or a `SELECT … FROM` naming another module's table in there — media's triggers on
-`media_images` read `products` and `category_details` that way — is a real cross-module edge that
-NEITHER remaining detector sees. That edge is uncovered today, and the engine does not catch it
-either. Measured 2026-09-23 on `node:sqlite` (Node v26.7.0): a trigger whose body reads or writes a
+trigger's body is read as text for five statement shapes: `FROM`, `JOIN`, `INSERT INTO`, `UPDATE`
+and `DELETE FROM`. Other SQL syntax can still name a table without being detected; the guard does
+not parse SQL. The engine does not catch a missing body target either. Measured 2026-09-23 on
+`node:sqlite` (Node v26.7.0): a trigger whose body reads or writes a
 table that does not exist is created without complaint, and the insert that fires it fails with
 `no such table: main.<name>`; create the table and the same insert succeeds. The control in the
 other direction: a trigger ON a missing table is refused when it is created. So a missing
