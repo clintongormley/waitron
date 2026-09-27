@@ -1324,12 +1324,8 @@ What Task 11 left open:
   the modal.
 - **DONE (lane C's C23): the Categories screen places a refused save through
   `categoryRefusalErrors`.**
-- **With "No colour" chosen, the colour field's "Custom" square shows black — OPEN (seen
-  2026-09-27 in lane C's C23 screenshots of the category editor, light and dark, 1280 and 390
-  wide; not investigated).** The square is drawn by `apps/dashboard/src/widgets/color-field.ts`,
-  which C23 did not change. It reads as if black were chosen; why it is black was not checked.
-  **Next action:** open the category editor on a category with no colour and decide whether the
-  square should read as empty.
+- **DONE (lane C's C24): with no colour chosen, the colour field's Custom square reads as
+  empty.**
 - **`wt-tabs` shares the `wt-change` event name with every control a panel slots in, and five
   screens now carry the same `event.target !== event.currentTarget` guard against it**
   (`alerts-screen.ts`, `printers-screen.ts`, `profile-screen.ts`, `venue-operations-screen.ts`, and

@@ -1,5 +1,5 @@
 import axe from "axe-core";
-import { commands } from "vitest/browser";
+import { commands, page } from "vitest/browser";
 import { beforeEach, expect } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import type { DocumentMember, FrozenOffer, MenuDocument } from "../api/client.js";
@@ -94,6 +94,48 @@ export async function closeReportsDelivered(): Promise<void> {
   probe.close();
   await reported;
   probe.remove();
+}
+
+/**
+ * The RGBA values Chromium PAINTED at each viewport point, read from a screenshot of `frame`, which
+ * must contain every point. A native control's inner parts cannot be read with `getComputedStyle`.
+ */
+async function paintedPixels(
+  frame: Element,
+  points: { x: number; y: number }[],
+): Promise<number[][]> {
+  const png = await page.screenshot({ element: frame, save: false });
+  const bitmap = await createImageBitmap(
+    await (await fetch(`data:image/png;base64,${png}`)).blob(),
+  );
+  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+  const context = canvas.getContext("2d")!;
+  context.drawImage(bitmap, 0, 0);
+  const box = frame.getBoundingClientRect();
+  const scale = bitmap.width / box.width;
+  return points.map(({ x, y }) => [
+    ...context.getImageData(
+      Math.floor((x - box.left) * scale),
+      Math.floor((y - box.top) * scale),
+      1,
+      1,
+    ).data,
+  ]);
+}
+
+/** What the colour field's Custom square paints at its centre, and beside it on the same row. */
+export async function customSquarePixels(
+  root: ParentNode,
+): Promise<{ inside: number[]; beside: number[] }> {
+  const label = root.querySelector(".custom")!;
+  label.scrollIntoView({ block: "center" });
+  const square = label.querySelector('input[type="color"]')!.getBoundingClientRect();
+  const y = square.top + square.height / 2;
+  const [inside, beside] = await paintedPixels(label, [
+    { x: square.left + square.width / 2, y },
+    { x: square.right + square.width / 2, y },
+  ]);
+  return { inside: inside!, beside: beside! };
 }
 
 export function formatViolations(violations: axe.Result[]): string {

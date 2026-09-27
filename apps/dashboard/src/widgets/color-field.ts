@@ -73,6 +73,14 @@ export const colorFieldStyles = css`
     border-radius: var(--wt-radius-sm);
     cursor: pointer;
   }
+  /* A native colour input always holds a colour (an empty value reads back as #000000), so with
+     none chosen it would paint black; draw the empty box the categories table uses instead. */
+  .custom input[type="color"].empty {
+    background: transparent;
+  }
+  .custom input[type="color"].empty::-webkit-color-swatch {
+    visibility: hidden;
+  }
   .field-error {
     color: var(--wt-color-danger);
   }
@@ -134,6 +142,7 @@ export function colorField(options: ColorFieldOptions): TemplateResult {
       >${t("editor.color_custom")}
       <input
         type="color"
+        class=${color === null ? "empty" : ""}
         name=${name}
         aria-invalid=${error ? "true" : "false"}
         aria-describedby=${errorId}

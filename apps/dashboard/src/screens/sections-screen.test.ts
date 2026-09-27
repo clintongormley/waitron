@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, customSquarePixels, mountWidget } from "../widgets/test-helpers.js";
 import { SectionsScreen } from "./sections-screen.js";
 import type {
   CategorySummary,
@@ -822,6 +822,24 @@ it("sets a custom colour from the colour input", async () => {
   click(el, '[data-test="editor-save"]');
   await vi.waitFor(() => expect(client.updateSection).toHaveBeenCalledOnce());
   expect(client.updateSection.mock.calls[0]![1]).toMatchObject({ color: "#123456" });
+});
+
+it("draws the Custom square empty, not black, for a section with no colour, and saves none", async () => {
+  const client = api();
+  const el = await mount(client);
+  await openEditor(el, "s-beer");
+  const { inside, beside } = await customSquarePixels(modal(el, "editor"));
+  expect(inside).not.toEqual([0, 0, 0, 255]);
+  expect(inside).toEqual(beside);
+  click(el, '[data-test="editor-save"]');
+  await vi.waitFor(() => expect(client.updateSection).toHaveBeenCalledOnce());
+  expect(client.updateSection.mock.calls[0]![1]).toMatchObject({ color: null });
+});
+
+it("paints a section's custom colour in the Custom square", async () => {
+  const el = await mount();
+  await openEditor(el, "s-drinks");
+  expect((await customSquarePixels(modal(el, "editor"))).inside).toEqual([0xaa, 0xbb, 0xcc, 255]);
 });
 
 // ---------------------------------------------------------------------------
