@@ -2101,16 +2101,63 @@ describe("the course Fire of the station and the pass, on a visit (R4)", () => {
     expect((await groupsOf(s.visitId)).groups.find((g) => g.id === warmGroup)!.state).toBe("held");
   });
 
-  it("never fires a later addition by its course: a Steak held after the mains fired stays held", async () => {
+  it("keeps a Steak added held after the mains fired held until the next course Fire, which fires its group", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
-    await inTx(async (tx) => fireCourse(tx, v.cfg, s.tabId, await courseIdOf(v, "steak"), ALEX));
+    const mains = await courseIdOf(v, "steak");
+    await inTx((tx) => fireCourse(tx, v.cfg, s.tabId, mains, ALEX));
 
     const later = await submit(v, s.visitId, [{ release: "hold", lines: [line(v, "steak")] }]);
-
-    const [steak] = await linesIn(s.visitId, later.groups[0]!.id);
+    const laterGroup = later.groups[0]!.id;
+    const [steak] = await linesIn(s.visitId, laterGroup);
     expect(steak!.sentAt).toBeNull();
     expect(await firedTicketLineIds(s.visitId)).not.toContain(steak!.id);
+
+    await inTx((tx) => fireCourse(tx, v.cfg, s.tabId, mains, ALEX));
+
+    expect((await linesIn(s.visitId, laterGroup))[0]!.sentAt).not.toBeNull();
+    expect(await firedTicketLineIds(s.visitId)).toContain(steak!.id);
+    expect((await groupsOf(s.visitId)).groups.find((g) => g.id === laterGroup)!.state).toBe(
+      "fired",
+    );
+  });
+
+  it("fires a held group of the course and sends a recalled line of that course again", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const first = await submit(v, s.visitId, [{ release: "fire", lines: [line(v, "steak")] }]);
+    const held = await submit(v, s.visitId, [{ release: "hold", lines: [line(v, "fish")] }]);
+    const [steak] = await linesIn(s.visitId, first.groups[0]!.id);
+    const [fish] = await linesIn(s.visitId, held.groups[0]!.id);
+    await inTx((tx) => recallLines(tx, v.cfg, s.tabId, [steak!.lineNo]));
+    expect(await firedTicketLineIds(s.visitId)).not.toContain(steak!.id);
+    const jobsBefore = (await printed(v)).length;
+
+    await inTx(async (tx) => fireCourse(tx, v.cfg, s.tabId, await courseIdOf(v, "steak"), ALEX));
+
+    expect(await firedTicketLineIds(s.visitId)).toEqual([steak!.id, fish!.id].sort());
+    expect((await groupsOf(s.visitId)).groups.map((group) => group.state)).toEqual([
+      "fired",
+      "fired",
+    ]);
+    const slips = (await printed(v)).slice(jobsBefore).join("\n");
+    expect(slips).toContain(DISHES.steak.kitchen);
+    expect(slips).toContain(DISHES.fish.kitchen);
+  });
+
+  it("sends a recalled line of the course again when no held group holds the course", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const first = await submit(v, s.visitId, [{ release: "fire", lines: [line(v, "steak")] }]);
+    const [steak] = await linesIn(s.visitId, first.groups[0]!.id);
+    await inTx((tx) => recallLines(tx, v.cfg, s.tabId, [steak!.lineNo]));
+    expect(await firedTicketLineIds(s.visitId)).toEqual([]);
+    const jobsBefore = (await printed(v)).length;
+
+    await inTx(async (tx) => fireCourse(tx, v.cfg, s.tabId, await courseIdOf(v, "steak"), ALEX));
+
+    expect(await firedTicketLineIds(s.visitId)).toEqual([steak!.id]);
+    expect((await printed(v)).slice(jobsBefore).join("\n")).toContain(DISHES.steak.kitchen);
   });
 
   it("refuses a held group holding a sold-out Steak (product.unavailable), firing none of it", async () => {

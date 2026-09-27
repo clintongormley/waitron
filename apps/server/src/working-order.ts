@@ -1350,8 +1350,9 @@ async function isOpenOrder(tx: Transaction, orderId: string): Promise<boolean> {
  * in this venue, including a deactivated course whose food still needs release.
  * Already-fired items retain their timestamps; an empty held set is a no-op.
  *
- * On a visit's order, the held groups holding the course's dishes fire instead, whole
- * ({@link fireHeldGroupsOfCourse}); `operatorId` is who fired them.
+ * On a visit's order, the held groups holding the course's dishes fire whole first
+ * ({@link fireHeldGroupsOfCourse}); `operatorId` is who fired them. The course's lines still held
+ * outside a held group, such as one recalled from a fired group, are then released as before.
  */
 export async function fireCourse(
   tx: Transaction,
@@ -1361,7 +1362,7 @@ export async function fireCourse(
   operatorId: string,
 ): Promise<void> {
   await requireCourse(tx, cfg, courseId);
-  if (await fireHeldGroupsOfCourse(tx, cfg, orderId, courseId, operatorId)) return;
+  await fireHeldGroupsOfCourse(tx, cfg, orderId, courseId, operatorId);
   await releaseHeld(tx, cfg, orderId, eq(ticketItems.courseId, courseId), {
     courseIds: [courseId],
     lineIds: [],
@@ -2867,7 +2868,7 @@ async function carveOffLines(
         courseId: line.courseId,
         note: line.note,
         extraListId: line.extraListId,
-        groupId: line.groupId,
+        groupId: leavesVisit ? null : line.groupId,
         creditedTo: line.creditedTo,
       });
       splitLines.set(line.id, splitLineId);
@@ -2886,10 +2887,10 @@ async function carveOffLines(
     }
   }
   if (leavesVisit) {
-    await clearGroups(tx, [
-      ...wholeLineNos.map((lineNo) => byLineNo.get(lineNo)!.id),
-      ...splitLines.values(),
-    ]);
+    await clearGroups(
+      tx,
+      wholeLineNos.map((lineNo) => byLineNo.get(lineNo)!.id),
+    );
   }
   return { splitFrom, splitLines };
 }

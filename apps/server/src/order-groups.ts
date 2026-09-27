@@ -161,9 +161,9 @@ export async function fireGroup(
 /**
  * The course Fire of the station and pass screens, until they fire groups themselves: on an order of
  * a visit, release every held group of the visit that holds a dish of this course on this order,
- * whole and in position order, as {@link fireGroup} does. It answers false, touching nothing, when
- * the order is on no visit or no held group qualifies. It carries no submission id, so it records
- * no replay: each group's `fired` event names the course and the order.
+ * whole and in position order, as {@link fireGroup} does. It touches nothing when the order is on
+ * no visit or no held group qualifies. It carries no submission id, so it records no replay: each
+ * group's `fired` event names the course and the order.
  */
 export async function fireHeldGroupsOfCourse(
   tx: Transaction,
@@ -171,13 +171,13 @@ export async function fireHeldGroupsOfCourse(
   orderId: string,
   courseId: string,
   operatorId: string,
-): Promise<boolean> {
+): Promise<void> {
   const [order] = await tx
     .select({ visitId: workingOrders.visitId })
     .from(workingOrders)
     .where(eq(workingOrders.id, orderId));
   const visitId = order?.visitId ?? null;
-  if (visitId === null) return false;
+  if (visitId === null) return;
   const groups = await tx
     .selectDistinct({
       id: orderGroups.id,
@@ -196,7 +196,7 @@ export async function fireHeldGroupsOfCourse(
       ),
     )
     .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id));
-  if (groups.length === 0) return false;
+  if (groups.length === 0) return;
   await checkAndBumpVisit(tx, visitId, await currentRevision(tx, visitId), "open");
   for (const group of groups) {
     await releaseGroup(tx, cfg, visitId, group.id, operatorId, {
@@ -204,7 +204,6 @@ export async function fireHeldGroupsOfCourse(
       workingOrderId: orderId,
     });
   }
-  return true;
 }
 
 /**

@@ -10,7 +10,7 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createCourse, setProductCourse } from "./kitchen.js";
+import { createCourse, deactivateCourse, setProductCourse } from "./kitchen.js";
 import { createTable } from "./tables.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import "./errors.js";
@@ -829,45 +829,55 @@ describe("the tab routes that move or release lines, on a visit with groups", ()
   });
 
   it("fires the held group holding a course's dish through the course Fire route, as the signed-in operator", async () => {
+    const [tarta] = await inTx(venue, (tx) =>
+      tx
+        .select({ id: products.id, courseId: products.courseId })
+        .from(products)
+        .where(eq(products.name, "Tarta")),
+    );
     const courseId = await inTx(venue, async (tx) => {
       const course = await createCourse(tx, venue.cfg, {
         name: `Postres-${randomUUID().slice(0, 6)}`,
         displayOrder: 9,
       });
-      const [tarta] = await tx
-        .select({ id: products.id })
-        .from(products)
-        .where(eq(products.name, "Tarta"));
       await setProductCourse(tx, venue.cfg, tarta!.id, course.id);
       return course.id;
     });
-    const visit = await withGroups();
-    const revision = await revisionOf(visit.visitId);
+    try {
+      const visit = await withGroups();
+      const revision = await revisionOf(visit.visitId);
 
-    const fired = await call("POST", `/api/orders/${visit.tabId}/courses/${courseId}/fire`);
+      const fired = await call("POST", `/api/orders/${visit.tabId}/courses/${courseId}/fire`);
 
-    expect(fired.status).toBe(200);
-    expect(await revisionOf(visit.visitId)).toBe(revision + 1);
-    const listed = (await call("GET", `/api/visits/${visit.visitId}/groups`)).json as {
-      groups: { id: string; state: string }[];
-    };
-    expect(listed.groups.map((group) => [group.id, group.state])).toEqual([
-      [visit.fired.id, "fired"],
-      [visit.tarta.id, "fired"],
-      [visit.croquetas.id, "held"],
-    ]);
-    const [event] = await inTx(venue, (tx) =>
-      tx
-        .select({ actorId: orderGroupEvents.actorId, detail: orderGroupEvents.detail })
-        .from(orderGroupEvents)
-        .where(
-          and(eq(orderGroupEvents.groupId, visit.tarta.id), eq(orderGroupEvents.kind, "fired")),
-        ),
-    );
-    expect(event).toEqual({
-      actorId: venue.operatorId,
-      detail: { courseId, workingOrderId: visit.tabId },
-    });
+      expect(fired.status).toBe(200);
+      expect(await revisionOf(visit.visitId)).toBe(revision + 1);
+      const listed = (await call("GET", `/api/visits/${visit.visitId}/groups`)).json as {
+        groups: { id: string; state: string }[];
+      };
+      expect(listed.groups.map((group) => [group.id, group.state])).toEqual([
+        [visit.fired.id, "fired"],
+        [visit.tarta.id, "fired"],
+        [visit.croquetas.id, "held"],
+      ]);
+      const [event] = await inTx(venue, (tx) =>
+        tx
+          .select({ actorId: orderGroupEvents.actorId, detail: orderGroupEvents.detail })
+          .from(orderGroupEvents)
+          .where(
+            and(eq(orderGroupEvents.groupId, visit.tarta.id), eq(orderGroupEvents.kind, "fired")),
+          ),
+      );
+      expect(event).toEqual({
+        actorId: venue.operatorId,
+        detail: { courseId, workingOrderId: visit.tabId },
+      });
+    } finally {
+      // The venue is shared by the whole file.
+      await inTx(venue, async (tx) => {
+        await setProductCourse(tx, venue.cfg, tarta!.id, tarta!.courseId);
+        await deactivateCourse(tx, venue.cfg, courseId);
+      });
+    }
   });
 });
 
