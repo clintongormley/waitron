@@ -133,9 +133,8 @@ export async function submitGroups(
 }
 
 /**
- * Release a held group: every line of it, on whichever of the visit's bills it sits, is fired and
- * stamped sent, and each touched bill's revision moves on. A sold-out line refuses the whole group
- * before anything is released.
+ * Release a held group: its lines are released bill by bill, in the order the bills were opened,
+ * as {@link fireOrderLines} releases them.
  */
 export async function fireGroup(
   tx: Transaction,
@@ -156,10 +155,9 @@ export async function fireGroup(
       const lines = await tx
         .select({ id: workingOrderLines.id, workingOrderId: workingOrderLines.workingOrderId })
         .from(workingOrderLines)
+        .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
         .where(and(eq(workingOrderLines.groupId, groupId), isNull(workingOrderLines.parentLineId)))
-        .orderBy(asc(workingOrderLines.workingOrderId), asc(workingOrderLines.lineNo));
-      // A sold-out line on an open bill refuses inside `fireOrderLines`, and the refusal rolls
-      // back whatever an earlier bill of the group had released.
+        .orderBy(asc(workingOrders.orderNumber), asc(workingOrderLines.lineNo));
       const byOrder = new Map<string, string[]>();
       for (const line of lines) {
         byOrder.set(line.workingOrderId, [...(byOrder.get(line.workingOrderId) ?? []), line.id]);
@@ -273,9 +271,11 @@ export async function moveLinesToGroup(
           quantity: workingOrderLines.quantity,
           groupId: workingOrderLines.groupId,
           groupState: orderGroups.state,
+          billStatus: workingOrders.status,
         })
         .from(workingOrderLines)
         .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+        .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
         .where(
           and(
             inArray(
@@ -294,6 +294,10 @@ export async function moveLinesToGroup(
         if (line === undefined) throw new AppError("group.not_found", { lineId });
         if (line.groupState !== "held") {
           throw new AppError("group.not_held", { groupId: line.groupId! });
+        }
+        // A paid bill may still hold a held line; its lines can no longer be written.
+        if (line.billStatus !== "open") {
+          throw new AppError("working_order.not_open", { workingOrderId: line.workingOrderId });
         }
       }
       const targetId =

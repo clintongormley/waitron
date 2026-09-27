@@ -860,10 +860,6 @@ describe("firing", () => {
   it("refuses a group holding a sold-out Steak, firing none of it, then fires once it is removed", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
-    await db
-      .update(workingOrderLines)
-      .set({ sentAt: null })
-      .where(eq(workingOrderLines.groupId, s.mains));
     await db.run(sql`update products set available = 0 where id = ${v.productId.steak}`);
 
     await expectRefusedWithNothingWritten(v, s.visitId, () => fire(v, s.visitId, s.mains), {
@@ -875,6 +871,32 @@ describe("firing", () => {
     await inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, steak!.lineNo));
     await fire(v, s.visitId, s.mains);
     expect(await firedTicketLineIds(s.visitId)).toContain(fish!.id);
+  });
+
+  it("fires nothing and prints nothing when the sold-out line is on the second of two bills", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const { groups } = await submit(v, s.visitId, [
+      { release: "hold", lines: [line(v, "steak"), line(v, "water")] },
+    ]);
+    const groupId = groups[0]!.id;
+    const [, water] = await linesIn(s.visitId, groupId);
+    const revision = await revisionOf(s.visitId);
+    // The check is opened after the tab, so its line is released second.
+    await inTx((tx) =>
+      splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: water!.lineNo }], {
+        expectedVisitRevision: revision,
+        operatorId: ALEX,
+      }),
+    );
+    await db.run(sql`update products set available = 0 where id = ${v.productId.water}`);
+
+    await expectRefusedWithNothingWritten(v, s.visitId, () => fire(v, s.visitId, groupId), {
+      code: "product.unavailable",
+      params: { productId: v.productId.water },
+    });
+    expect(await firedTicketLineIds(s.visitId)).toEqual([]);
+    expect(await printed(v)).toEqual([]);
   });
 });
 
@@ -1157,6 +1179,16 @@ describe("during a card payment", () => {
     );
   });
 
+  it("refuses to fire a group (order.payment_in_flight), writing nothing", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    await paying(s.tabId);
+    await expectRefusedWithNothingWritten(v, s.visitId, () => fire(v, s.visitId, s.warm), {
+      code: "order.payment_in_flight",
+      params: { workingOrderId: s.tabId },
+    });
+  });
+
   it("refuses a move into a held group (order.payment_in_flight), writing nothing", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
@@ -1246,6 +1278,26 @@ describe("extras lines follow their dish", () => {
       (row) => row.id === dish.id || row.parentLineId === dish.id,
     );
     expect(moved.map((row) => row.groupId)).toEqual([s.mains, s.mains]);
+  });
+
+  it("refuses to move part of a dish that has extras (tab.transfer_modifier_line), writing nothing", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    await submit(v, s.visitId, [
+      { release: "hold", lines: [{ ...steakWithSauce(v), quantity: "2" }] },
+    ]);
+    const target = (await submit(v, s.visitId, [{ release: "hold", lines: [line(v, "flan")] }]))
+      .groups[0]!.id;
+    const dish = (await allLinesOf(s.tabId)).find(
+      (row) => row.parentLineId === null && row.groupId !== target,
+    )!;
+
+    await expectRefusedWithNothingWritten(
+      v,
+      s.visitId,
+      () => move(v, s.visitId, [{ lineId: dish.id, quantity: "1" }], { groupId: target }),
+      { code: "tab.transfer_modifier_line" },
+    );
   });
 
   it("refuses to move an extras line on its own (group.not_found), writing nothing", async () => {
@@ -1404,5 +1456,26 @@ describe("a group's summary", () => {
       .where(eq(workingOrderLines.id, fish!.id));
 
     expect((await groupsOf(s.visitId)).groups[0]!.summary).toBe("1 × Steak Rare, 11.5 × Fish");
+  });
+});
+
+describe("a held line on a paid bill", () => {
+  it("is not moved, whole or in part (working_order.not_open), writing nothing", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const [steak] = await linesIn(s.visitId, s.mains);
+    await db
+      .update(workingOrders)
+      .set({ status: "settled", settledAt: new Date().toISOString() })
+      .where(eq(workingOrders.id, s.tabId));
+
+    for (const quantity of ["2", "1"]) {
+      await expectRefusedWithNothingWritten(
+        v,
+        s.visitId,
+        () => move(v, s.visitId, [{ lineId: steak!.id, quantity }], { groupId: s.desserts }),
+        { code: "working_order.not_open", params: { workingOrderId: s.tabId } },
+      );
+    }
   });
 });
