@@ -351,6 +351,11 @@ it("has a sentence in both languages for each refusal of clearing a server", () 
     expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
     expect(codeMessage(code, "es")).not.toBe(codeMessage(code, "en"));
   }
+  for (const language of ["en", "es"] as const) {
+    expect(codeMessage("membership.cleared_list_full", language)).not.toBe(
+      codeMessage("membership.chart_too_large", language),
+    );
+  }
 });
 
 it("words the refusals Remove and Clear share so they fit both actions", () => {
