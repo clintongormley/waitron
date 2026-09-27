@@ -2443,6 +2443,89 @@ describe("till-app: submitting the draft", () => {
     expect(toast(el)?.open ?? false).toBe(false);
   });
 
+  describe("a partial submission that lands on the party's next bill", () => {
+    const toNextBill = (over: Record<string, unknown> = {}) => ({
+      ...withCourses(),
+      submitGroups: vi.fn().mockResolvedValue({ tabId: "wo-next", revision: 4, groups: [] }),
+      ...over,
+    });
+    const partyOnNextBill = () =>
+      vi
+        .mocked(api.getTablesState)
+        .mockResolvedValue([seated({ tabId: "wo-next" }, { revision: 4 }), mesa7, mesa9]);
+    const courseOf = (order: TillTableOrderScreen, index: number) =>
+      order.shadowRoot!.querySelector<HTMLSelectElement>(`[data-round-course="${index}"]`)!.value;
+
+    it("keeps the rest of the draft, its course choice and its count on the bill it follows", async () => {
+      const { el } = await mountApp(toNextBill());
+      const order = await openMesa(el);
+      await ring(el, order, beer, steak);
+      const steakCourse =
+        order.shadowRoot!.querySelector<HTMLSelectElement>('[data-round-course="1"]')!;
+      steakCourse.value = "desserts";
+      steakCourse.dispatchEvent(new Event("change"));
+      await flush(el);
+      partyOnNextBill();
+
+      await toggle(el, order, "Beer");
+      await act(el, order, "fire-selected");
+
+      expect(tableOrder(el)!.orderId).toBe("wo-next");
+      expect(draftOf(tableOrder(el)!).lines.map((line) => line.product.id)).toEqual(["steak"]);
+      expect(courseOf(tableOrder(el)!, 0)).toBe("desserts");
+
+      await act(el, tableOrder(el)!, "send-all");
+      expect(vi.mocked(api.submitGroups).mock.calls[1]![1].groups).toEqual([
+        {
+          release: "hold",
+          lines: [{ menuItemId: "offer-steak", quantity: "1", courseId: "desserts" }],
+        },
+      ]);
+      expect(toast(el)!.message).toBe("Fired: 1 group. Held: 1 group.");
+    });
+
+    it("keeps the rest of the draft when no answer came and the floor shows the party on its next bill", async () => {
+      const { el } = await mountApp(
+        toNextBill({ submitGroups: vi.fn().mockRejectedValue(new TypeError("offline")) }),
+      );
+      const order = await openMesa(el);
+      await ring(el, order, beer, steak);
+      partyOnNextBill();
+
+      await toggle(el, order, "Beer");
+      await act(el, order, "fire-selected");
+
+      expect(tableOrder(el)!.orderId).toBe("wo-next");
+      expect(draftOf(tableOrder(el)!).lines.map((line) => line.product.id)).toEqual(["steak"]);
+    });
+
+    it("keeps a later addition's rest a later addition", async () => {
+      const prior: OrderGroup = {
+        id: "g-prior",
+        position: 1,
+        state: "fired",
+        firedAt: "2026-09-27T10:00:00Z",
+        remindAt: null,
+        lineIds: [],
+        summary: "1 × Coffee",
+      };
+      const { el } = await mountApp(
+        toNextBill({ listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [prior] }) }),
+      );
+      const order = await openMesa(el);
+      await ring(el, order, beer, steak);
+      partyOnNextBill();
+
+      await toggle(el, order, "Beer");
+      await act(el, order, "submit");
+
+      const next = tableOrder(el)!;
+      expect(next.orderId).toBe("wo-next");
+      expect(draftOf(next).lines.map((line) => line.product.id)).toEqual(["steak"]);
+      expect(next.shadowRoot!.querySelector("[data-destination-choice]")).not.toBeNull();
+    });
+  });
+
   it("counts only this draft's groups when the last one was emptied by hand after a partial submission", async () => {
     const server = groupsServer();
     const { el } = await mountApp({ ...withCourses(), ...server });

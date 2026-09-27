@@ -86,6 +86,8 @@ export interface SubmitDraftDetail {
   round: WorkingOrderStore;
   sent: readonly OrderLine[];
   draft: Draft;
+  /** Keeps what is left of the draft on `orderId`, the bill the same party's submission landed on. */
+  carryTo: (orderId: string) => void;
 }
 
 /** One draft, from its first line until its store is empty again, through its partial submissions.
@@ -689,6 +691,13 @@ export class TillTableOrderScreen extends LitElement {
     return round;
   }
 
+  /** A draft already started on `orderId` is left where it is rather than replaced. */
+  #carryDraft(round: WorkingOrderStore, orderId: string): void {
+    if ((this.#rounds.get(orderId)?.lineCount ?? 0) > 0) return;
+    for (const [from, kept] of this.#rounds) if (kept === round) this.#rounds.delete(from);
+    this.#rounds.set(orderId, round);
+  }
+
   /** The round this screen re-renders on; it follows {@link orderId}. */
   #watchedRound?: { round: WorkingOrderStore; stop: () => void };
 
@@ -946,6 +955,7 @@ export class TillTableOrderScreen extends LitElement {
       round,
       sent,
       draft: this.#draftOf(round),
+      carryTo: (orderId) => this.#carryDraft(round, orderId),
     };
     const held = this.#heldGroups();
     const index = held.findIndex((group) => group.id === submission.joinGroupId);

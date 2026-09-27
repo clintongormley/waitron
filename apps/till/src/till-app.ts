@@ -2411,7 +2411,7 @@ export class TillApp extends LitElement {
    * the screen follows. Once a submission leaves the draft empty, the till goes back to the floor
    * and says what the draft's submissions filed. */
   async #onSubmitDraft(event: Event): Promise<void> {
-    const { lines, groups, joinGroupId, round, sent, draft } = (
+    const { lines, groups, joinGroupId, round, sent, draft, carryTo } = (
       event as CustomEvent<
         Pick<SubmitDraftDetail, "lines" | "groups" | "joinGroupId"> & Partial<SubmitDraftDetail>
       >
@@ -2459,10 +2459,10 @@ export class TillApp extends LitElement {
       // while it still holds the party the screen showed when the draft was sent.
       const now = this.tables.find((row) => row.id === tableId);
       if (now?.tabId !== undefined && now.visit?.id === partyId && onSentTable())
-        this.#followRound(tabId, now.tabId);
+        this.#followRound(tabId, now.tabId, carryTo);
     } else if (typeof followUp === "object" && this.activeTabId === tabId) {
       await this.#reloadTables();
-      this.#followRound(tabId, followUp.landedOn);
+      this.#followRound(tabId, followUp.landedOn, carryTo);
     }
     await this.#loadTabLines();
     if (this.orderParty !== null) await this.#loadVisitBills();
@@ -2560,9 +2560,11 @@ export class TillApp extends LitElement {
   }
 
   /** Moves the screen from the tab a round was sent to onto the tab it went to, only while the
-   * operator is still on the first; the floor has already been read after the send. */
-  #followRound(sentTo: string, landedOn: string): void {
+   * operator is still on the first, and the rest of the draft with it; the floor has already been
+   * read after the send. */
+  #followRound(sentTo: string, landedOn: string, carryTo?: (orderId: string) => void): void {
     if (landedOn === sentTo || this.activeTabId !== sentTo) return;
+    carryTo?.(landedOn);
     this.activeTabId = landedOn;
     this.#rememberOrderParty();
   }

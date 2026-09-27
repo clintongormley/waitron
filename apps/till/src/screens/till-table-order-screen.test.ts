@@ -263,6 +263,44 @@ describe("till-table-order-screen", () => {
     expect(draftAction(el, "fire-all")!.hasAttribute("disabled")).toBe(false);
   });
 
+  it("carries the draft to the order it is told to keep it on, and leaves nothing on the old one", async () => {
+    const { el } = await mount({ orderId: "wo-A" });
+    grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
+    await el.updateComplete;
+    const draft = grid(el).store;
+    const captured = await submitDraft(el, "fire-all");
+
+    captured!.detail.carryTo("wo-B");
+    el.orderId = "wo-B";
+    await el.updateComplete;
+    expect(grid(el).store).toBe(draft);
+
+    el.orderId = "wo-A";
+    await el.updateComplete;
+    expect(grid(el).store.lineCount).toBe(0);
+  });
+
+  it("does not carry a draft over one already started on the order it lands on", async () => {
+    const { el } = await mount({ orderId: "wo-B" });
+    grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
+    await el.updateComplete;
+    const started = grid(el).store;
+    el.orderId = "wo-A";
+    await el.updateComplete;
+    grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
+    await el.updateComplete;
+    const draft = grid(el).store;
+    const captured = await submitDraft(el, "fire-all");
+
+    captured!.detail.carryTo("wo-B");
+    el.orderId = "wo-B";
+    await el.updateComplete;
+    expect(grid(el).store).toBe(started);
+    el.orderId = "wo-A";
+    await el.updateComplete;
+    expect(grid(el).store).toBe(draft);
+  });
+
   it("says a round is being sent, and shuts its controls, until the app has the answer", async () => {
     const { el } = await mount();
     grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
