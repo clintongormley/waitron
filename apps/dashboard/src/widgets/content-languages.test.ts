@@ -1,6 +1,6 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import { ContentLanguageEditor } from "./content-languages.js";
 import { t } from "../i18n/t.js";
 
@@ -119,10 +119,10 @@ describe("content language editor", () => {
     await el.updateComplete;
     expect(el.open).toBe(false);
     expect(closed).toHaveBeenCalled();
+    await closeReportsDelivered();
+    expect(closed).toHaveBeenCalledOnce();
   });
 
-  // Mounted on its own: after a Cancel, the closed dialog's own close event arrives a task later
-  // and announces languages-closed again, which would satisfy these assertions with no Escape.
   it("closes from Escape, announcing languages-closed", async () => {
     const { el, host } = await mountWidget<ContentLanguageEditor>("dashboard-content-languages", {
       open: true,
@@ -181,5 +181,7 @@ describe("content language editor", () => {
     finish();
     await vi.waitFor(() => expect(saved).toHaveBeenCalledOnce());
     expect(saved.mock.calls[0]![0].detail).toEqual({ defaultLanguage: "en", languages: ["en"] });
+    await closeReportsDelivered();
+    expect(closed).not.toHaveBeenCalled();
   });
 });
