@@ -458,6 +458,10 @@ transaction at a time, plan Global Constraints): cash then a card's P1 on the sa
 card is refused `bill.nothing_outstanding`); a card's P1 then cash (cash is refused
 `order.payment_in_flight`); two cards of €30.00 and €40.00 on €70.00, captured in either order (the
 invoice is issued by the second capture's P3, never by the first).
+_(2026-09-27, B14 as landed: cash paying the last €40.00 issues the invoice and closes the working
+order. A card request that arrives afterwards is therefore refused `working_order.not_open`, before
+the provider is called, rather than `bill.nothing_outstanding`; the first race in
+`apps/server/src/bill-payments.card.test.ts` pins the code and the absence of another provider call.)_
 
 ### 5.3 The three phases for one card bill payment
 
@@ -525,7 +529,9 @@ A pending bill payment is resolved from the provider's row, never from its age:
   bill payment with no `payments` row; none of the three reaches the landed action.)_
   _(2026-09-27, finish-branch review: the bill-payment manager routes
   (`/management-api/payments/bill-payments/:id/resolve` and `…/attest`,
-  `apps/server/src/payments-api.ts`) answer with their own codes: `bill.payment_not_stuck` for a
+  `apps/server/src/payments-api.ts`) sit beside M7b2's `/management-api/payments/stuck/:id/resolve`
+  route because they clear a pending `bill_payments` row, while M7b2 clears a `payments` row and its
+  working order's in-flight mark. They answer with their own codes: `bill.payment_not_stuck` for a
   payment that is not pending or is still at a reader in this process, and
   `bill.payment_outcome_unconfirmed`, with a `reason`, when the outcome cannot be settled. The
   attest routes for bill payments and bill refunds refuse `pin.throttled` (HTTP 429) after too many
