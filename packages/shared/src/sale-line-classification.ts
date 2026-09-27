@@ -2,8 +2,8 @@
 export type ClassificationEntry = { id: string; name: string };
 
 /**
- * How a sale line's product was classified when the sale was issued: its main reporting category
- * chain from the root to the leaf (empty when Uncategorised), and its labels sorted by id.
+ * How a line's product was classified: its main reporting category chain from the root to the
+ * leaf (empty when Uncategorised), and its labels sorted by id.
  */
 export type SaleLineClassification = {
   reporting: ClassificationEntry[];
