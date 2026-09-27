@@ -29,6 +29,7 @@ import {
   createCatalogue,
   createCategory,
   createExtraList,
+  createOptionList,
   createProduct,
   units,
   writeProductModifiers,
@@ -3674,7 +3675,70 @@ describe("advance HOLD tickets (Task 6)", () => {
   const lineOf = async (s: Seated, groupId: string, dish: Dish, v: Venue) =>
     (await linesIn(s.visitId, groupId)).find((row) => row.productId === v.productId[dish])!;
 
-  // Green before this task's change (R6): a regression pin, not a failing test.
+  async function noticesWithNotes(v: Venue) {
+    return (await inTx((tx) => listStationNotices(tx, v.cfg, v.stationId))).map((notice) => ({
+      kind: notice.kind,
+      quantity: notice.quantity,
+      direction: notice.direction,
+      note: notice.note,
+    }));
+  }
+
+  /** A held group of two rare Steaks on a fresh party, and the Steak's line. */
+  async function rareSteaks(v: Venue) {
+    const s = await seated(v);
+    const [group] = (
+      await submit(v, s.visitId, [
+        { release: "hold", lines: [{ ...line(v, "steak", "2"), note: "rare" }] },
+      ])
+    ).groups;
+    const [steak] = await linesIn(s.visitId, group!.id);
+    return { s, group: group!.id, steak: steak! };
+  }
+
+  /**
+   * A dish that must be cooked one of two ways, published to the venue's tables. Its three names
+   * differ, as do each way's, so paper reading a staff or customer name shows the wrong text.
+   */
+  async function tunaWithDoneness(v: Venue) {
+    return inTx(async (tx) => {
+      const [steak] = await tx
+        .select({ catalogueId: products.catalogueId, categoryId: products.categoryId })
+        .from(products)
+        .where(eq(products.id, v.productId.steak));
+      const tuna = await createProduct(tx, {
+        ...steak!,
+        name: "Tuna",
+        customerName: { en: "Seared tuna" },
+        kitchenName: "K-TUNA",
+        pricingUnit: "each",
+        unitPrice: "20.00",
+        vatClass: "general",
+      });
+      const list = await createOptionList(
+        tx,
+        {
+          name: "Doneness",
+          customerName: { es: "Punto" },
+          kitchenName: "K-DONE",
+          defaultLabelId: null,
+          active: true,
+          labels: ["Rare", "Well"].map((way) => ({
+            name: `${way} staff`,
+            customerName: { es: `${way} customer` },
+            kitchenName: `K-${way.toUpperCase()}`,
+            available: true,
+          })),
+        },
+        LOCALE,
+      );
+      await writeProductModifiers(tx, tuna.id, [{ kind: "options", id: list.id }]);
+      const offers = await offerProducts(tx, v.cfg, { zone: "tables", productIds: [tuna.id] });
+      const [rare, well] = list.labels.map((label) => ({ listId: list.id, labelId: label.id }));
+      return { offer: offers.offerFor(tuna.id), rare: rare!, well: well! };
+    });
+  }
+
   it("setting off (the default): holding prints nothing, and firing prints the group's current contents, edits included", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
@@ -3881,6 +3945,164 @@ describe("advance HOLD tickets (Task 6)", () => {
 
       expect(await printedSince(v, 7)).toEqual([]);
       expect((await noticesAt(v)).map((notice) => notice.kind)).toEqual(["recalled"]);
+    });
+
+    // R11: an edit that is not a quantity alone takes the dish away as it read and gives it back as
+    // it now reads.
+    it("prints a changed note as -N of the dish as it read, then +N as it now reads", async () => {
+      const v = await setupVenue();
+      await printHeldWork(true);
+      const { s, steak } = await rareSteaks(v);
+      const header = await head(v, s);
+
+      await changeLine(v, s.tabId, steak.lineNo, { note: "no pepper" }, MIA);
+
+      expect(await printedSince(v, 1)).toEqual([
+        [
+          "*** HOLD CHANGED ***",
+          ...header,
+          "GROUP 1",
+          `-2.000 ea x ${DISHES.steak.kitchen}`,
+          "  * rare",
+        ],
+        [
+          "*** HOLD CHANGED ***",
+          ...header,
+          "GROUP 1",
+          `+2.000 ea x ${DISHES.steak.kitchen}`,
+          "  * no pepper",
+        ],
+      ]);
+      expect(await noticesWithNotes(v)).toEqual([
+        { kind: "changed", quantity: "2.000", direction: "removed", note: "rare" },
+        { kind: "changed", quantity: "2.000", direction: "added", note: "no pepper" },
+      ]);
+    });
+
+    it("prints a quantity and a note changed together as the old dish taken away and the new one given", async () => {
+      const v = await setupVenue();
+      await printHeldWork(true);
+      const { s, steak } = await rareSteaks(v);
+      const header = await head(v, s);
+
+      await changeLine(v, s.tabId, steak.lineNo, { quantity: "1", note: "well done" }, MIA);
+
+      expect(await printedSince(v, 1)).toEqual([
+        [
+          "*** HOLD CHANGED ***",
+          ...header,
+          "GROUP 1",
+          `-2.000 ea x ${DISHES.steak.kitchen}`,
+          "  * rare",
+        ],
+        [
+          "*** HOLD CHANGED ***",
+          ...header,
+          "GROUP 1",
+          `+1.000 ea x ${DISHES.steak.kitchen}`,
+          "  * well done",
+        ],
+      ]);
+      expect(await noticesWithNotes(v)).toEqual([
+        { kind: "changed", quantity: "2.000", direction: "removed", note: "rare" },
+        { kind: "changed", quantity: "1.000", direction: "added", note: "well done" },
+      ]);
+    });
+
+    it("prints an added extra as the dish without it taken away and the dish with it given", async () => {
+      const v = await setupVenue();
+      await printHeldWork(true);
+      const { s, steak } = await rareSteaks(v);
+      const header = await head(v, s);
+      const sauce = [
+        { listId: v.extrasListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] },
+      ];
+
+      await changeLine(v, s.tabId, steak.lineNo, { extras: sauce }, MIA);
+
+      expect(await printedSince(v, 1)).toEqual([
+        [
+          "*** HOLD CHANGED ***",
+          ...header,
+          "GROUP 1",
+          `-2.000 ea x ${DISHES.steak.kitchen}`,
+          "  * rare",
+        ],
+        [
+          "*** HOLD CHANGED ***",
+          ...header,
+          "GROUP 1",
+          `+2.000 ea x ${DISHES.steak.kitchen}`,
+          `  + ${DISHES.sauce.staff}`,
+          "  * rare",
+        ],
+      ]);
+      expect(await noticesWithNotes(v)).toEqual([
+        { kind: "changed", quantity: "2.000", direction: "removed", note: "rare" },
+        { kind: "changed", quantity: "2.000", direction: "added", note: "rare" },
+      ]);
+    });
+
+    it("prints a changed options answer as the dish cooked the old way taken away and the new way given", async () => {
+      const v = await setupVenue();
+      await printHeldWork(true);
+      const tuna = await tunaWithDoneness(v);
+      const s = await seated(v);
+      const [group] = (
+        await submit(v, s.visitId, [
+          {
+            release: "hold",
+            lines: [{ menuItemId: tuna.offer, quantity: "1", options: [tuna.rare] }],
+          },
+        ])
+      ).groups;
+      const [dish] = await linesIn(s.visitId, group!.id);
+      const header = await head(v, s);
+
+      await changeLine(v, s.tabId, dish!.lineNo, { options: [tuna.well] }, MIA);
+
+      expect(await printedSince(v, 1)).toEqual([
+        ["*** HOLD CHANGED ***", ...header, "GROUP 1", "-1.000 ea x K-TUNA", "  + K-DONE: K-RARE"],
+        ["*** HOLD CHANGED ***", ...header, "GROUP 1", "+1.000 ea x K-TUNA", "  + K-DONE: K-WELL"],
+      ]);
+      expect((await noticesWithNotes(v)).map((notice) => notice.direction)).toEqual([
+        "removed",
+        "added",
+      ]);
+    });
+
+    it("prints nothing for the same edits on a group whose HOLD ticket never printed", async () => {
+      const v = await setupVenue();
+      const tuna = await tunaWithDoneness(v);
+      const { s, steak } = await rareSteaks(v);
+      const [group] = (
+        await submit(v, s.visitId, [
+          {
+            release: "hold",
+            lines: [{ menuItemId: tuna.offer, quantity: "1", options: [tuna.rare] }],
+          },
+        ])
+      ).groups;
+      const [dish] = await linesIn(s.visitId, group!.id);
+      await printHeldWork(true);
+
+      await changeLine(v, s.tabId, steak.lineNo, { note: "no pepper" }, MIA);
+      await changeLine(v, s.tabId, steak.lineNo, { quantity: "1", note: "well done" }, MIA);
+      await changeLine(
+        v,
+        s.tabId,
+        steak.lineNo,
+        {
+          extras: [
+            { listId: v.extrasListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] },
+          ],
+        },
+        MIA,
+      );
+      await changeLine(v, s.tabId, dish!.lineNo, { options: [tuna.well] }, MIA);
+
+      expect(await printed(v)).toEqual([]);
+      expect(await noticesWithNotes(v)).toEqual([]);
     });
 
     it("prints +1 and -1 for a held Steak's quantity raised and lowered by an edit", async () => {

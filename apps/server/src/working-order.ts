@@ -3831,15 +3831,15 @@ async function assertProductsSellable(
  * - A stored line keeps its gross price, names and the other facts it was added with; only what the
  *   edit adds is priced now — a new line, and an extra added to a line. A note or an options answer
  *   carries no price. A kept extra is matched by list, product and quantity.
- * - A line the kitchen does not have (no ticket item, or one held or recalled) is changed in place.
+ * - A line with no ticket item, or a held or recalled one, is changed in place. A held one whose
+ *   group printed a HOLD ticket also prints HOLD corrections for its change or its removal
+ *   ({@link planHeldCorrections}).
  * - A line the kitchen has, not started: a change recalls the old item with a notice and slip and
  *   fires the changed line as a new item; a quantity rise leaves the item and adds the difference as
  *   a new line; a drop voids the difference, with a notice and slip. Removing it voids it the same
  *   way.
  * - A started line is refused `ticket.already_started`; with changes to sent items switched off, a
  *   line that was sent to a station is refused `ticket.already_fired`.
- * - A held line of a group whose HOLD ticket printed is changed in place, and its quantity change or
- *   its removal is corrected on paper ({@link correctHeldEdits}).
  *
  * New lines are numbered after the order's highest line number, and reach the kitchen as
  * {@link EditableOrder.newWork} says: where work was sent, as a round's line would, a course the
@@ -3936,6 +3936,8 @@ async function applyLineEdits(
     removedChildren: EditableLine[];
     /** Index into `pricing` of the line carrying this line's added extras, if any. */
     addedAt: number | null;
+    /** Whether the note, options answer or extras change, not only the quantity. */
+    modified: boolean;
   }[] = [];
   // Every line priced now, in one offer read: a new dish line, which the kitchen gets as `kitchen`
   // says, the carrier of extras added to a stored line, whose dish row is not kept, or a raised
@@ -4044,6 +4046,7 @@ async function applyLineEdits(
       kept: extras.kept,
       removedChildren: extras.removed,
       addedAt,
+      modified: changed,
     });
   }
 
@@ -4099,6 +4102,7 @@ async function applyLineEdits(
   }
 
   // Before any line changes: a notice and a slip copy the line as it stands.
+  const held = await planHeldCorrections(tx, orderId, changes, plan.removed);
   const recalled = changes
     .filter(({ action }) => action === "change")
     .map(({ parent }) => ({
@@ -4130,6 +4134,8 @@ async function applyLineEdits(
     ],
     "VOID",
   );
+  await correctHoldTickets(tx, cfg, held.cancelled, { kind: "HOLD CANCELLED" });
+  await correctHoldTickets(tx, cfg, held.taken, { kind: "HOLD CHANGED", direction: "removed" });
   for (const { parent, kept, removed } of dropped) {
     await reduceLine(
       tx,
@@ -4209,7 +4215,6 @@ async function applyLineEdits(
         .where(eq(ticketItems.id, parent.ticket.id));
     }
   }
-  await correctHeldEdits(tx, cfg, orderId, changes, plan.removed);
 
   groups.forEach((group, index) => {
     const as = pricedAs[index]!;
@@ -4242,6 +4247,8 @@ async function applyLineEdits(
     await tx.insert(workingOrderLines).values(inserted);
     await VENUE_SERVICE.recordLineContexts(tx, cfg, orderId, insertedContexts, priced.offers);
   }
+  // After the extras a line gains are written: a slip reads the line as it now stands.
+  await correctHoldTickets(tx, cfg, held.given, { kind: "HOLD CHANGED", direction: "added" });
   // Fired while the removed lines' items still stand, so a course they held counts as fired.
   await fireLines(tx, cfg, orderId, fireNow);
   const heldGroup = newGroups.get("hold");
@@ -4274,18 +4281,18 @@ async function applyLineEdits(
 }
 
 /**
- * Correct the HOLD tickets an edit changed, before its removed lines are deleted: a held line of a
- * group whose HOLD ticket printed gets `+N` or `-N` for a quantity raised or lowered, and a removed
- * one a cancellation. Only the quantity is corrected; a changed note, options answer or extra on a
- * held line reaches the kitchen when its group fires.
+ * The HOLD corrections an edit makes to held lines of groups whose HOLD ticket printed: a removed
+ * line is `cancelled`; a line whose quantity alone changes loses (`taken`) or gains (`given`) the
+ * difference; any other change takes the line away as it read, at its old quantity, and gives it
+ * back as it now reads, at its new one. `taken` and `cancelled` print before the line changes and
+ * `given` after, as each slip reads the line as it stands.
  */
-async function correctHeldEdits(
+async function planHeldCorrections(
   tx: Transaction,
-  cfg: TillConfig,
   orderId: string,
-  changes: readonly { parent: EditableParent; quantity: Decimal }[],
+  changes: readonly { parent: EditableParent; quantity: Decimal; modified: boolean }[],
   removed: readonly EditableParent[],
-): Promise<void> {
+): Promise<{ cancelled: HeldChange[]; taken: HeldChange[]; given: HeldChange[] }> {
   const held = (parent: EditableParent) =>
     parent.ticket !== null && parent.ticket.firedAt === null && parent.groupId !== null;
   const heldChanges = changes.filter(({ parent }) => held(parent));
@@ -4296,37 +4303,28 @@ async function correctHeldEdits(
   ]);
   const change = (parent: EditableParent, quantity: number): HeldChange[] => {
     const group = printed.get(parent.groupId!);
-    if (group === undefined || quantity === 0) return [];
+    if (group === undefined || quantity <= 0) return [];
     return [
       {
         workingOrderId: orderId,
         workingOrderLineId: parent.id,
         stationId: parent.ticket!.stationId,
-        quantity: Math.abs(quantity),
+        quantity,
         group,
       },
     ];
   };
-  const delta = ({ parent, quantity }: { parent: EditableParent; quantity: Decimal }) =>
-    decimalToThousandths(quantity) - decimalToThousandths(parent.quantity);
-  await correctHoldTickets(
-    tx,
-    cfg,
-    heldRemoved.flatMap((parent) => change(parent, parent.ticket!.firedQuantity)),
-    { kind: "HOLD CANCELLED" },
-  );
-  await correctHoldTickets(
-    tx,
-    cfg,
-    heldChanges.flatMap((edit) => (delta(edit) < 0 ? change(edit.parent, delta(edit)) : [])),
-    { kind: "HOLD CHANGED", direction: "removed" },
-  );
-  await correctHoldTickets(
-    tx,
-    cfg,
-    heldChanges.flatMap((edit) => (delta(edit) > 0 ? change(edit.parent, delta(edit)) : [])),
-    { kind: "HOLD CHANGED", direction: "added" },
-  );
+  const before = (edit: { parent: EditableParent }) => decimalToThousandths(edit.parent.quantity);
+  const after = (edit: { quantity: Decimal }) => decimalToThousandths(edit.quantity);
+  return {
+    cancelled: heldRemoved.flatMap((parent) => change(parent, parent.ticket!.firedQuantity)),
+    taken: heldChanges.flatMap((edit) =>
+      change(edit.parent, edit.modified ? before(edit) : before(edit) - after(edit)),
+    ),
+    given: heldChanges.flatMap((edit) =>
+      change(edit.parent, edit.modified ? after(edit) : after(edit) - before(edit)),
+    ),
+  };
 }
 
 /** A dish line and its extras, none of which an edit may leave holding a paid quantity. */
