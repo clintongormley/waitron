@@ -5,6 +5,9 @@ Further owner decisions, 2026-09-25, are in §9, §10 and §11; a later section 
 **2026-09-25:** the owner lifted the wait on SQLite slice 2 and the dependency upgrades (the latter
 are finished); the implementation plan is
 [2026-09-25-menus-categories-home-layouts.md](../plans/2026-09-25-menus-categories-home-layouts.md).
+**2026-09-27:** the owner's decision of 2026-09-26 overturns §11.1's VAT bullet and §11.4: a line's
+VAT rate now comes from the published menu it was sold from, not from its product when the invoice
+is issued. The dated notes in §10.4, §10.7, §11.1 and §11.4 say what holds; §11.4's is the full one.
 
 **Related decisions, 2026-09-20:** the [service workflow spec](2026-09-20-service-ordering-and-billing-design.md)
 adds a public/staff-only/not sold separately setting for standalone ordering. Menu membership
@@ -450,7 +453,7 @@ No single "frozen" rule covers everything:
 | --- | --- |
 | Gross price (dish, variant, extras) | Fixed when the line is added (§10.3). |
 | Names on the line (staff, customer, kitchen) | Fixed when the line is added, as they are recorded today. |
-| VAT | **Taken when the invoice record is issued** (§11.4 sharpens the 2026-09-25 "at payment" wording: issuance is at payment on most paths, at placing for invoice-first, and in the pricing pass before the provider is contacted for a card payment), from each product's current VAT class, for every line — walk-up, held order or tab. The customer pays the same gross price either way; only the VAT split, and so what is owed to the tax agency, follows the rate in force when the invoice is issued. Today a held order's lines are filed at the VAT stored when they were added (`priceStoredOrder`, `apps/server/src/working-order.ts`), so this is a change to the filing path. |
+| VAT | *(Superseded 2026-09-27 by the owner's decision of 2026-09-26: the rate comes from the published menu the line was sold from; see the note below the table.)* **Taken when the invoice record is issued** (§11.4 sharpens the 2026-09-25 "at payment" wording: issuance is at payment on most paths, at placing for invoice-first, and in the pricing pass before the provider is contacted for a card payment), from each product's current VAT class, for every line — walk-up, held order or tab. The customer pays the same gross price either way; only the VAT split, and so what is owed to the tax agency, follows the rate in force when the invoice is issued. Today a held order's lines are filed at the VAT stored when they were added (`priceStoredOrder`, `apps/server/src/working-order.ts`), so this is a change to the filing path. |
 | Allergens and diet | *(Superseded 2026-09-25 by §11.1: they are part of the published snapshot, and a line records the published values it was added with.)* ~~Always current wherever they are shown~~. |
 | Availability | Always current, refreshed by the till on its own (§11.1). It governs whether an unsent line can be sent or paid for (§10.3, §11.3). |
 | Preparation destination | Decided by routing and recorded when the line is sent, as today (the ticket item's station). |
@@ -458,9 +461,16 @@ No single "frozen" rule covers everything:
 _2026-09-26: menus plan Task 7a built this rule (`priceStoredOrderForIssuance`,
 `apps/server/src/working-order.ts`), so the VAT row's "Today" sentence describes the code before it._
 
+_2026-09-27: the owner's decision of 2026-09-26 (menus M7v) replaces the VAT row. Each published
+menu version freezes each item's VAT class and rate, and a line takes the rate of the version it
+was sold under when its price is fixed: when it is added to a saved order, or at payment for an
+unsaved basket. Issuing the invoice files that stored rate. A VAT class change flags every menu
+that includes the product. §11.4's note has the detail._
+
 Asesor question Q26 (`docs/compliance/asesor-questions.md`) asks the venue's tax adviser to confirm
 that the rate in force when the invoice is issued is the right one, including across a legal rate
 change while a table is open (§11.4 states the issuance moment per path).
+_2026-09-27: Q26 now asks about the rate in the published menu the line was sold from._
 
 ### 10.5 Kitchen routing becomes ordered rules — a later spec
 
@@ -509,8 +519,12 @@ These add to §7.
    held neither fires the mains nor marks them sent.
 5. **A partial payment:** a tab with one unsent line whose product became unavailable is split. The
    other lines are paid, and the unavailable line must be removed before its part can be paid.
-6. **VAT at payment:** a held order's drink was added at 10%, and its VAT class is corrected to 21%
-   before payment. The invoice files it at 21%, and the customer pays the same gross price.
+6. *(Superseded 2026-09-27 by the owner's decision of 2026-09-26, §11.4's note: the invoice files
+   the drink at 10%, the rate in the published version it was added from, even if the menu is
+   published again with the corrected class before payment; a drink added after that publish is
+   filed at 21%.)* **VAT at payment:** a held order's drink was added at 10%, and its VAT class is
+   corrected to 21% before payment. ~~The invoice files it at 21%~~, and the customer pays the same
+   gross price.
 
 ## 11. Owner decisions after the second outside review, 2026-09-25
 
@@ -541,6 +555,12 @@ measurements, and the plan re-checks the ones it builds on.
   read from it, and a change to either flags no menu. VAT is resolved when the invoice record is
   issued (§11.4) and the classification is recorded at the same moment (the sales classification
   spec §3).
+  _2026-09-27, the owner's decision of 2026-09-26: VAT is now menu content. The published version
+  freezes each dish's, variant's and extras item's VAT class and rate, a till is served those, and
+  a change to a product's VAT class flags every menu that includes it. The reporting
+  classification is still not menu content: it is not frozen, a category change flags no menu, and
+  a line records it from the product's current classification when the line is added. §11.4's note
+  has the detail._
 
 ### 11.2 An unsaved basket follows the live menu; a saved order keeps its facts
 
@@ -604,6 +624,38 @@ asks for confirmation; after it, the sale files €2.50 + €2.50. It never file
     work exists to correct); the two properties are separate.
 
 ### 11.4 VAT and classification are taken when the invoice record is issued
+
+_2026-09-27: this whole section is overturned by the owner's decision of 2026-09-26, built as menus
+M7v. The owner's reason: when a VAT rate officially changes on a date, the venue should publish a
+new menu on that date with the new rate, not pay the new rate early; and for a set-up error, "there
+must be some accounting technique to correct it after the fact" (the product cannot issue that
+correction today; see the backlog). What holds now:_
+
+- _**The published version freezes each item's VAT rate.** Each dish, variant and extras item in a
+  published version carries its VAT class and the rate that class had at publishing, and a till is
+  served those, not the product's current class (`freezeOffer` and `applyLiveFields`,
+  `packages/catalogue/src/menu-document.ts`)._
+- _**A line takes that rate when its price is fixed:** when it is added to a saved order (a held
+  order, a tab, an invoice-first order), or at payment for an unsaved basket, which is priced from
+  the version live at that moment (`priceOrderLines`, `apps/server/src/working-order.ts`). Raising
+  the quantity of an unsent line in place keeps that row's price and rate; a line an edit adds takes
+  the rate of the version live then._
+- _**Issuing the invoice files each line's stored rate and resolves nothing**, on every path in the
+  table below (`priceStoredOrderForIssuance`, same file). Nothing is written back onto the line; the
+  write-back described in this section, and its note below, are gone._
+- _**A VAT change flags the menu.** After a change to a product's VAT class, every menu that
+  includes the product as a dish, variant or extras item differs from its published version, so it
+  shows "Unpublished changes" and its Preview names a VAT change. A change to a class's RATE has no
+  product surface today: the rates are fixed in code (`RATES`, `packages/catalogue/src/pricing.ts`),
+  and a release that changes them reaches tills only when each menu is published again, because
+  the version froze the number._
+- _**The reporting classification is recorded when the line is added**, at the same moment as the
+  rate, from the product's current classification (`working_order_lines.classification`, core
+  migration `0021`); issuance copies it onto the sale line. It is not frozen in the published
+  version, and a category change flags no menu._
+- _**A version published before this change is not served for selling**, because it froze no rate
+  (`readLiveDocuments`, `packages/catalogue/src/menu-publication.ts`): an upgraded box must publish
+  every menu once. The backlog's M7v note has what an upgrade measured._
 
 §10.4 said "at payment". The precise rule is **when the invoice record is issued**, which is the
 pricing pass that produces the filed figures. That pass resolves each line's VAT rate from its

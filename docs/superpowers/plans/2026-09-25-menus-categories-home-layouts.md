@@ -8,6 +8,13 @@ menu again. Handhelds and tills get a home page: search, a shortcut grid chosen 
 full menu below. A line added to a saved order keeps its price from then on; an unsaved basket
 follows the live menu, with staff confirming any change that touches it.
 
+_2026-09-27: the owner's decision of 2026-09-26 overturned Task 7a's rule (VAT resolved when the
+invoice is issued and written back to the line) and D6's "VAT is not menu content". Menus M7v
+built the replacement: the published version freezes each item's VAT rate, a line takes it when
+its price is fixed, issuance files the stored rate, and a VAT change flags the menu; a line also
+records its reporting classification when it is added. The menus spec's §11.4 note has the rule;
+the text below is kept as it was written._
+
 **Architecture:**
 - **One ordered membership table** (`section_members`) holds every menu list: a section's members,
   a menu's top level and each home layout. A member is a product or a section. A menu's top level
@@ -319,7 +326,9 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
     reporting classification and the kitchen route. VAT is resolved when the invoice record is
     issued (Task 7a; spec §11.4; asesor Q26), classification is recorded at the same moment (the
     classification plan), and the route is decided when the line is sent, as today. A change to any
-    of them flags no menu. The served offer still carries `vatClass`, `courseId` and the reporting
+    of them flags no menu. _(2026-09-27: VAT is now in the document and flags the menu, and the
+    classification is recorded when the line is added; see the note under the Goal.)_ The served
+    offer still carries `vatClass`, `courseId` and the reporting
     `category` label read from the current rows, because `recordWorkingLineContexts` and the till's
     held-order view read them off the offer today (`packages/venue-service/src/operations.ts:749`);
     they are informational there, and filing never reads them.
@@ -1525,6 +1534,9 @@ was deleted. The Preview tab also shows the whole menu read-only, in the Structu
 ---
 
 ## Task 7a: VAT is resolved when the invoice record is issued — slug `vat-at-issuance`
+
+_2026-09-27: replaced by menus M7v (the note under the Goal). Issuance no longer resolves a rate,
+nothing is written back, and the test file is now `apps/server/src/vat-rate-at-line-add.test.ts`._
 
 Spec §11.4 (which sharpens §10.4's "at payment") and D6. **Fiscal-adjacent: it changes the VAT rate
 filed for a held order, a tab, an invoice-first order and a card payment. The golden huella and
