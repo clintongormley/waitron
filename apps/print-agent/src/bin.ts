@@ -1,6 +1,6 @@
 import { hostname } from "node:os";
 import { serve } from "@hono/node-server";
-import { createAgent, type AgentStatus } from "@waitron/print-agent";
+import { createAgent } from "@waitron/print-agent";
 import { readEnv } from "./config.js";
 import { createContainerHost } from "./host.js";
 import { createServerTrustingFetch } from "./server-ca.js";
@@ -10,7 +10,6 @@ import { FileState } from "./state.js";
 const env = readEnv(process.env, hostname());
 const state = new FileState(env.stateDir);
 
-let status: AgentStatus = { phase: "unconfigured", serverUrl: null, current: null };
 // The box's self-signed CA on top of Node's public roots, so https://127.0.0.1 verifies and a
 // promoted cloud primary's public cert still does.
 const trustingFetch = await createServerTrustingFetch({
@@ -22,21 +21,19 @@ const host = createContainerHost({
   env,
   state,
   fetch: trustingFetch,
-  onStatus: (next) => {
-    status = next;
-  },
+  onStatus: () => {},
 });
 const agent = createAgent({ host });
 
 const page = createSetupApp({
-  status: () => status,
-  config: () => host.config(),
-  saveConfig: (config) => host.saveConfig(config),
+  snapshot: () => agent.setupSnapshot(),
+  configure: (config) => agent.configure(config),
+  beginNetworkReset: () => agent.beginNetworkReset(),
+  cancelNetworkReset: () => agent.cancelNetworkReset(),
   // A compose-supplied address pins the server; the page then shows it read-only and refuses POST.
   envLocked: env.serverUrl !== undefined,
   defaultName: env.name ?? hostname(),
-  scanBluetooth: () => host.scan(["bluetooth"]),
-  pairBluetooth: (mac) => host.pair(mac),
+  now: () => host.now(),
 });
 
 // Published on the LAN by default (0.0.0.0); a venue wanting loopback changes the compose publish line.
