@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { contentLanguageChoices, type ContentLanguages } from "@waitron/shared";
-import { baseStyles, submitOnEnter } from "@waitron/ui";
+import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -66,7 +66,7 @@ export class ContentLanguageEditor extends LitElement {
   }
 
   #close(): void {
-    if (this.busy) return;
+    if (this.busy || !this.open) return;
     this.open = false;
     this.dispatchEvent(new CustomEvent("languages-closed", { bubbles: true, composed: true }));
   }
@@ -114,10 +114,6 @@ export class ContentLanguageEditor extends LitElement {
       }}
       @keydown=${(event: KeyboardEvent) => {
         if (this.busy && event.key === "Escape") event.preventDefault();
-        submitOnEnter(
-          event,
-          this.shadowRoot!.querySelector<HTMLElement>("[data-test=save-languages]"),
-        );
       }}
     >
       <p>${t("content_languages.help")}</p>

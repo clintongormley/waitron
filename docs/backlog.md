@@ -4280,8 +4280,14 @@ reading unless marked run:
   dialog itself. `apps/dashboard/src/widgets/allergen-picker.ts` avoids the problem by mounting a
   fresh dialog for each open (`keyed`, about lines 215-222). Seen once under coverage load in a test
   (run); we believe a person cannot reopen it that fast; not tested.
-- `content-languages.ts` sends `languages-closed` twice on Cancel (counted in a test run), and its
-  Enter-to-save cannot fire because the dialog holds no text box.
+- Four catalogue forms turn the dialog's late `wt-close` into a Cancel without first checking that
+  they are still open: `unit-form.ts`, `option-list-form.ts`, `extra-list-form.ts` and
+  `variant-form.ts` (all in `apps/dashboard/src/widgets/`). So after a Cancel, once the owner has
+  closed the form, the late close report probably sends `wt-cancel` a second time. The catalogue
+  screen ignores a cancel for a form it has already closed (`#cancelChild`, #741); the Units and
+  Modifiers screens, and the product editor that owns the variant form, would act on it again.
+  `option-label-form.ts` already carries the one-line check, as `content-languages.ts` now does.
+  Found 2026-09-27 in review; by reading, not run.
 - `login-screen.ts` checks an account link's purpose with `=== null`, so a reply with no purpose at
   all would pass; the server always sends one.
 - My Schedule's load-failed banner (`loadFailed` in
