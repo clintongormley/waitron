@@ -296,7 +296,7 @@ export interface CapturedPaymentForOrder {
   cardAuthCode: string | null;
 }
 
-const CAPTURED_FOR_ORDER_COLUMNS = {
+const PAYMENT_WITH_KEY_COLUMNS = {
   ...PAYMENT_COLUMNS,
   paymentRef: payments.paymentRef,
   provider: payments.provider,
@@ -319,7 +319,7 @@ async function selectCapturedForWorkingOrder(
   key: { workingOrderId: string; provider?: string },
 ): Promise<CapturedPaymentForOrder | undefined> {
   const [row] = await tx
-    .select(CAPTURED_FOR_ORDER_COLUMNS)
+    .select(PAYMENT_WITH_KEY_COLUMNS)
     .from(payments)
     .where(
       and(
@@ -347,10 +347,23 @@ export async function findPaymentByBillPayment(
   billPaymentId: string,
 ): Promise<(PaymentRow & Key) | undefined> {
   const [row] = await tx
-    .select(CAPTURED_FOR_ORDER_COLUMNS)
+    .select(PAYMENT_WITH_KEY_COLUMNS)
     .from(payments)
     .where(eq(payments.billPaymentId, billPaymentId));
   return row === undefined ? undefined : withDecimalAmount(row);
+}
+
+/** {@link findPaymentByBillPayment} for several bill payments, by bill payment id. */
+export async function findPaymentsByBillPayments(
+  tx: Transaction,
+  billPaymentIds: readonly string[],
+): Promise<Map<string, PaymentRow & Key>> {
+  if (billPaymentIds.length === 0) return new Map();
+  const rows = await tx
+    .select({ ...PAYMENT_WITH_KEY_COLUMNS, billPaymentId: payments.billPaymentId })
+    .from(payments)
+    .where(inArray(payments.billPaymentId, [...billPaymentIds]));
+  return new Map(rows.map(({ billPaymentId, ...row }) => [billPaymentId!, withDecimalAmount(row)]));
 }
 
 /** The provider refund ids recorded against a bill payment's provider row, oldest first. */

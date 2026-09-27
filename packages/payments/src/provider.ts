@@ -177,6 +177,27 @@ export type RefundLookup =
   | { kind: "unreachable" };
 
 /**
+ * A lookup's verdict over the processor refunds that could be this one: `none` for none,
+ * `ambiguous` for more than one or for one that is `unattributable` (it may be a refund made before
+ * this one), else a `match`.
+ */
+export function refundLookupOf<T>(
+  candidates: readonly T[],
+  matchOf: (candidate: T) => {
+    providerRefundRef: string;
+    outcome: RefundOutcome;
+    providerStatus: string;
+  },
+  unattributable = false,
+): RefundLookup {
+  if (candidates.length === 0) return { kind: "none" };
+  if (candidates.length > 1 || unattributable) {
+    return { kind: "ambiguous", candidates: candidates.length };
+  }
+  return { kind: "match", ...matchOf(candidates[0]!) };
+}
+
+/**
  * No method takes a transaction handle, because a database transaction is never held across a
  * network call. A method returning a `PaymentResult` does its own short-transaction bookkeeping, and
  * the caller passes that result into `recordSale` as data; `sendRefund` records nothing and

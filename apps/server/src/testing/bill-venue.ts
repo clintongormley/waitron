@@ -38,6 +38,7 @@ import { ALL_MODULES } from "../modules.js";
 import { createTable } from "../tables.js";
 import type { TillConfig } from "../till-config.js";
 import { mountTillApi } from "../till-api.js";
+import { systemClock } from "../till-backend.js";
 import { SESSION_COOKIE } from "../till-session.js";
 import { openTab } from "../working-order.js";
 import { enrolDeviceForTest } from "./enrol.js";
@@ -90,25 +91,6 @@ export interface BillVenue {
   adminId: string;
   offerFor(name: string): string;
   zoneId: string;
-}
-
-export function systemClock(): TrustedClock {
-  return {
-    now: () => {
-      const instant = new Date();
-      return {
-        instant,
-        offsetMinutes: -instant.getTimezoneOffset(),
-        confident: true,
-        confidence: "anchored",
-        anchorAgeSeconds: 0,
-      };
-    },
-    anchor: () => {
-      throw new Error("bill-venue: anchor() is not used");
-    },
-    currentAnchor: () => null,
-  };
 }
 
 const quiet: Logger = () => {};

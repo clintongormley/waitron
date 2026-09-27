@@ -12,6 +12,7 @@ import type {
   RefundLookupQuery,
   RefundSend,
 } from "./provider.js";
+import { refundLookupOf } from "./provider.js";
 import type { PaymentRow } from "./store.js";
 import {
   findPaymentByRef,
@@ -49,14 +50,11 @@ export class SimulatorPaymentProvider implements PaymentProvider {
   lookupRefund(query: RefundLookupQuery): Promise<RefundLookup> {
     const found = [...this.refundsByKey.values()].find((r) => r.refundId === query.refundId);
     return Promise.resolve(
-      found === undefined
-        ? { kind: "none" }
-        : {
-            kind: "match",
-            providerRefundRef: found.ref,
-            outcome: "completed",
-            providerStatus: "succeeded",
-          },
+      refundLookupOf(found === undefined ? [] : [found], (refund) => ({
+        providerRefundRef: refund.ref,
+        outcome: "completed",
+        providerStatus: "succeeded",
+      })),
     );
   }
 

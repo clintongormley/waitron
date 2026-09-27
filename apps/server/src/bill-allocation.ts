@@ -2,6 +2,7 @@ import {
   AppError,
   MONEY_SCALE,
   addDecimal,
+  centsToDecimal,
   compareDecimal,
   decimal,
   divideDecimal,
@@ -65,14 +66,19 @@ export interface AllocationConfig {
   tipsEnabled: boolean;
 }
 
-const ZERO = decimal("0.00");
+export const ZERO = decimal("0.00");
 const CENT = decimal("0.01");
 
-function invalid(field: string): AppError {
+export function invalid(field: string): AppError {
   return new AppError("management.request_invalid", { field });
 }
 
-const money = (value: Decimal): Decimal => toScale(value, MONEY_SCALE);
+export const money = (value: Decimal): Decimal => toScale(value, MONEY_SCALE);
+
+/** What a cash payment handed back, from its stored counts of cents. */
+export function cashChange(tendered: number, applied: number, tip: number): Decimal {
+  return centsToDecimal(tendered - applied - tip);
+}
 
 const minDecimal = (left: Decimal, right: Decimal): Decimal =>
   compareDecimal(left, right) <= 0 ? left : right;

@@ -99,7 +99,7 @@ import { listCourses, listStations } from "./kitchen.js";
 import { finishTable, markCleared, readVisitBills, seatTable } from "./visits.js";
 import type { VisitCommand } from "./visits.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
-import { issueBillsFullyPaid } from "./bill-payments.js";
+import { issueIfFullyPaid } from "./bill-payments.js";
 import { mountBillPaymentsApi, withSaleTillWhenIssuing } from "./bill-payments-api.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
 import {
@@ -176,7 +176,7 @@ function tillProviderForReader(provider: string): "sumup_cloud" | "stripe_termin
   return undefined;
 }
 
-export async function resolvePayReader(
+async function resolvePayReader(
   deps: TillApiDeps,
   deviceId: string | undefined,
   requestedReaderId: string | undefined,
@@ -214,6 +214,25 @@ export async function resolvePayReader(
     }
     return reader;
   });
+}
+
+/**
+ * The provider a card on a reader is collected through: in practice mode the local simulator,
+ * stamping no reader; otherwise the pooled provider of the requested reader, or of the device's.
+ */
+export async function resolveCardCollector(
+  deps: TillApiDeps,
+  deviceId: string | undefined,
+  requestedReaderId: string | undefined,
+): Promise<{ provider: PaymentProvider; reader?: { id: string; providerRef: string } }> {
+  if (deps.cardProvider?.provider === "simulator") return { provider: deps.cardProvider };
+  const reader = await resolvePayReader(deps, deviceId, requestedReaderId);
+  /* v8 ignore start -- a live boot always supplies the pool */
+  if (deps.pool === undefined) throw new Error("card provider pool not configured");
+  /* v8 ignore stop */
+  // The provider carries no reader: the chosen one travels per collect as `readerRef`, so one
+  // cached provider serves every reader on the same vendor.
+  return { provider: await deps.pool.get(reader.provider), reader };
 }
 
 /** Every AppError code the till API answers, and its HTTP status; an unlisted code answers 400. */
@@ -822,41 +841,18 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // Resolved after the capability firewall so its refusal keeps its status.
       const saleCfg: TillConfig = { ...deps.cfg, tillId: await requireSaleTillId(deps, c, device) };
 
-      // Practice mode: the local simulator, stamping no reader.
-      if (deps.cardProvider?.provider === "simulator") {
-        const outcome = await payWorkingOrderIntegrated(
-          {
-            db: deps.db,
-            backend: deps.backend,
-            clock: deps.clock,
-            provider: deps.cardProvider,
-            log,
-          },
-          saleCfg,
-          { ...body, zoneId },
-          personId,
-        );
-        return c.json(outcome); // 200 with the discriminated outcome — even a decline.
-      }
-
-      const reader = await resolvePayReader(deps, device?.deviceId, body.readerId);
-      // A live boot always supplies the pool; a missing one is a boot misconfiguration.
-      /* v8 ignore start */
-      if (deps.pool === undefined) {
-        throw new Error("/api/pay: card provider pool not configured");
-      }
-      /* v8 ignore stop */
-      // The provider carries no reader: the chosen one travels per collect as `readerRef`, so one
-      // cached provider serves every reader on the same vendor.
-      const provider = await deps.pool.get(reader.provider);
+      const { provider, reader } = await resolveCardCollector(
+        deps,
+        device?.deviceId,
+        body.readerId,
+      );
       const outcome = await payWorkingOrderIntegrated(
         {
           db: deps.db,
           backend: deps.backend,
           clock: deps.clock,
           provider,
-          readerRef: reader.providerRef,
-          readerId: reader.id,
+          ...(reader === undefined ? {} : { readerRef: reader.providerRef, readerId: reader.id }),
           log,
         },
         saleCfg,
@@ -1402,7 +1398,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
         withTransaction(deps.db, async (tx) => {
           await voidTabLine(tx, deps.cfg, id, lineNo, quantity);
-          await issueBillsFullyPaid(tx, fiscal, saleCfg, [id], personId);
+          await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
         }),
       );
       return c.body(null, 200);
@@ -1435,7 +1431,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const saved = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
         withTransaction(deps.db, async (tx) => {
           const edited = await updateOrderLine(tx, deps.cfg, id, lineNo, patch, copy);
-          await issueBillsFullyPaid(tx, fiscal, saleCfg, [id], personId);
+          await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
           return edited;
         }),
       );
@@ -1645,7 +1641,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
         withTransaction(deps.db, async (tx) => {
           await transferLines(tx, deps.cfg, fromTabId, body.toTabId, body.transfers, command);
-          await issueBillsFullyPaid(tx, fiscal, saleCfg, [fromTabId], personId);
+          await issueIfFullyPaid(tx, fiscal, saleCfg, fromTabId, personId);
         }),
       );
       return c.body(null, 200);
@@ -1674,7 +1670,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const result = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
         withTransaction(deps.db, async (tx) => {
           const split = await splitOffCheck(tx, deps.cfg, fromTabId, body.transfers, command);
-          await issueBillsFullyPaid(tx, fiscal, saleCfg, [fromTabId], personId);
+          await issueIfFullyPaid(tx, fiscal, saleCfg, fromTabId, personId);
           return split;
         }),
       );
@@ -1713,7 +1709,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             body.transfers,
             command,
           );
-          await issueBillsFullyPaid(tx, fiscal, saleCfg, [tabId], personId);
+          await issueIfFullyPaid(tx, fiscal, saleCfg, tabId, personId);
           return unjoined;
         }),
       );

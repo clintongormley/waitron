@@ -2,6 +2,7 @@ import type { billPaymentRefunds } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { recordIncidentOnce } from "@waitron/core";
 import { AppError, centsToDecimal, tillId as brandTillId } from "@waitron/shared";
+import type { Decimal } from "@waitron/shared";
 import "./errors.js";
 
 /** The incidents a card refund of a bill raises (bill payments design §6b), on the till that gave
@@ -9,7 +10,9 @@ import "./errors.js";
 
 type RefundRow = typeof billPaymentRefunds.$inferSelect;
 
-const amountOf = (refund: RefundRow) => centsToDecimal(refund.appliedAmount + refund.tipAmount);
+/** What a refund gives back: its applied money and its tip. */
+export const refundAmountOf = (refund: RefundRow): Decimal =>
+  centsToDecimal(refund.appliedAmount + refund.tipAmount);
 
 export function raiseRefundOutcomeConflict(
   tx: Transaction,
@@ -24,7 +27,7 @@ export function raiseRefundOutcomeConflict(
       refundId: refund.id,
       billPaymentId: refund.billPaymentId,
       workingOrderId,
-      amount: amountOf(refund),
+      amount: refundAmountOf(refund),
       providerRefundRef,
     }),
     severity: "error",
@@ -44,7 +47,7 @@ export function raiseRefundUnresolved(
       refundId: refund.id,
       billPaymentId: refund.billPaymentId,
       workingOrderId,
-      amount: amountOf(refund),
+      amount: refundAmountOf(refund),
       pendingSince: refund.createdAt,
     }),
     severity: "warning",

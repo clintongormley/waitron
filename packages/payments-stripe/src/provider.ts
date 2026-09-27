@@ -24,6 +24,7 @@ import {
   getPaymentByRef,
   insertAttempting,
   recordAttemptResolution,
+  refundLookupOf,
   stampAttemptingRef,
 } from "@waitron/payments";
 import { billPaymentIdempotencyKey, fromMinorUnits, workingOrderIdempotencyKey } from "./client.js";
@@ -431,16 +432,14 @@ export class StripeTerminalProvider implements PaymentProvider {
     } catch {
       return { kind: "unreachable" };
     }
-    const found = refunds.filter((r) => r.metadata[REFUND_ID_METADATA] === query.refundId);
-    if (found.length === 0) return { kind: "none" };
-    if (found.length > 1) return { kind: "ambiguous", candidates: found.length };
-    const [refund] = found;
-    return {
-      kind: "match",
-      providerRefundRef: refund!.id,
-      outcome: refundOutcomeOf(refund!.status),
-      providerStatus: refund!.status,
-    };
+    return refundLookupOf(
+      refunds.filter((r) => r.metadata[REFUND_ID_METADATA] === query.refundId),
+      (refund) => ({
+        providerRefundRef: refund.id,
+        outcome: refundOutcomeOf(refund.status),
+        providerStatus: refund.status,
+      }),
+    );
   }
 
   private reverse(kind: "void" | "refund", ref: string, amount?: Decimal): Promise<PaymentResult> {

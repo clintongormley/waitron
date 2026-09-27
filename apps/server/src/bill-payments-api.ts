@@ -2,6 +2,7 @@ import type { Context, Hono } from "hono";
 import { kindOfFormFactor } from "@waitron/layouts";
 import { AppError } from "@waitron/shared";
 import { readRawJsonBody } from "@waitron/server-kit";
+import { invalid } from "./bill-allocation.js";
 import {
   getBillBalance,
   previewBillPayment,
@@ -15,7 +16,7 @@ import type { BillRefundRequest } from "./bill-refunds.js";
 import { assertDeviceCapability, requireSaleTillId, tryReadDevice } from "./device-session.js";
 import type { DeviceBinding } from "./device-session.js";
 import type { Logger } from "./logger.js";
-import { parseDrawerOverride, resolvePayReader } from "./till-api.js";
+import { parseDrawerOverride, resolveCardCollector } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
 import { isUuid, requireSession } from "./till-session.js";
@@ -24,10 +25,6 @@ import "./errors.js";
 type Run = (c: Context, log: Logger, fn: () => Promise<Response>) => Promise<Response>;
 
 const MONEY = /^\d{1,12}(\.\d{1,2})?$/;
-
-function invalid(field: string): AppError {
-  return new AppError("management.request_invalid", { field });
-}
 
 function moneyField(value: unknown, field: string): string {
   if (typeof value !== "string" || !MONEY.test(value)) throw invalid(field);
@@ -266,26 +263,14 @@ export function mountBillPaymentsApi(app: Hono, deps: TillApiDeps, log: Logger, 
         throw invalid("simulationOutcome");
       }
       const saleCfg = await deviceSaleCfgOf(deps, c, device);
-      if (deps.cardProvider?.provider === "simulator") {
-        return c.json(
-          await takeReaderBillPayment(
-            { ...fiscal, provider: deps.cardProvider },
-            saleCfg,
-            id,
-            request,
-            personId,
-          ),
-        );
-      }
-      const reader = await resolvePayReader(deps, device?.deviceId, readerId);
-      /* v8 ignore start -- a live boot always supplies the pool */
-      if (deps.pool === undefined)
-        throw new Error("bill payments: card provider pool not configured");
-      /* v8 ignore stop */
-      const provider = await deps.pool.get(reader.provider);
+      const { provider, reader } = await resolveCardCollector(deps, device?.deviceId, readerId);
       return c.json(
         await takeReaderBillPayment(
-          { ...fiscal, provider, readerRef: reader.providerRef },
+          {
+            ...fiscal,
+            provider,
+            ...(reader === undefined ? {} : { readerRef: reader.providerRef }),
+          },
           saleCfg,
           id,
           request,

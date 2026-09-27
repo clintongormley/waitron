@@ -26,6 +26,7 @@ import {
   failAttempting,
   findCapturedPaymentForWorkingOrder,
   findPaymentByBillPayment,
+  findPaymentsByBillPayments,
   findPaymentByRef,
   getPaymentByRef,
   insertAcceptedOffline,
@@ -1346,6 +1347,41 @@ describe("the link from a provider payment to its bill payment", () => {
       saleId: null,
     });
     expect(await pg.db.transaction((tx) => findPaymentByBillPayment(tx, other))).toBeUndefined();
+  });
+
+  it("findPaymentsByBillPayments returns each named bill payment's provider row, by its id", async () => {
+    const seeded = await seedTenant();
+    const first = await billPayment(seeded);
+    const second = await billPayment(seeded);
+    const none = await billPayment(seeded);
+    const unnamed = await billPayment(seeded);
+    await capture(seeded, "unlinked");
+    for (const [billPaymentId, paymentRef, amount] of [
+      [first, "first", "12.50"],
+      [second, "second", "7.25"],
+      [unnamed, "unnamed", "3.00"],
+    ] as const) {
+      await pg.db.transaction((tx) =>
+        insertAttempting(tx, {
+          workingOrderId: seeded.workingOrderId,
+          provider: "fake",
+          paymentRef,
+          amount: decimal(amount),
+          billPaymentId,
+        }),
+      );
+    }
+
+    const found = await pg.db.transaction((tx) =>
+      findPaymentsByBillPayments(tx, [first, second, none]),
+    );
+
+    expect([...found.keys()].sort()).toEqual([first, second].sort());
+    expect(found.get(first)).toEqual(
+      await pg.db.transaction((tx) => findPaymentByBillPayment(tx, first)),
+    );
+    expect(found.get(second)).toMatchObject({ paymentRef: "second", amount: "7.25" });
+    expect(await pg.db.transaction((tx) => findPaymentsByBillPayments(tx, []))).toEqual(new Map());
   });
 
   it("refuses a second provider payment for the same bill payment", async () => {

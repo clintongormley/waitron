@@ -145,11 +145,10 @@ import { enqueueOriginalReceipt } from "./receipt-print.js";
 import type { TillSaleResult } from "./till-sale.js";
 import {
   assertBillInvariant,
-  issueBillsFullyPaid,
+  issueIfFullyPaid,
   readPaidQuantities,
   refuseBillHoldingMoney,
   refuseBillWithPayments,
-  refuseLinesPaid,
   refusePaidLines,
 } from "./bill-payments.js";
 
@@ -3677,7 +3676,7 @@ async function applyLineEdits(
     const rise = compareDecimal(requested, parent.quantity);
     if (!changed && rise === 0) continue;
     // Changed in place or replaced, a paid line would no longer be what was paid for.
-    refuseLinesPaid(orderId, paid, paidLineParts(parent));
+    await refusePaidLines(tx, orderId, paidLineParts(parent), paid);
     const fired = await kitchenHas(parent);
     const action: Action = !fired ? "free" : changed ? "change" : rise > 0 ? "raise" : "drop";
 
@@ -3747,7 +3746,7 @@ async function applyLineEdits(
     pricedAs.push({ kind: "check" });
   }
 
-  refuseLinesPaid(orderId, paid, plan.removed.flatMap(paidLineParts));
+  await refusePaidLines(tx, orderId, plan.removed.flatMap(paidLineParts), paid);
   const voided: CorrectionItem[] = [];
   for (const parent of plan.removed) {
     if (await kitchenHas(parent)) {
@@ -4021,7 +4020,7 @@ export async function updateHeldOrder(
     const revision = await countEdit(tx, id, req.revision, changed || relabelled);
     // An edit that lowers the total to what the bill has received issues its invoice (design §7).
     if (issue !== undefined) {
-      await issueBillsFullyPaid(tx, issue.fiscal, issue.saleCfg, [id], issue.operatorId);
+      await issueIfFullyPaid(tx, issue.fiscal, issue.saleCfg, id, issue.operatorId);
     }
     return revision;
   });

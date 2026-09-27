@@ -30,12 +30,12 @@ import {
   registroCount,
   send,
   statusOf,
-  systemClock,
   tabWith,
   tendersOfBill,
   type Answer,
   type BillVenue,
 } from "./testing/bill-venue.js";
+import { systemClock } from "./till-backend.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import "./errors.js";
 

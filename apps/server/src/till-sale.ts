@@ -52,6 +52,8 @@ import {
 } from "./working-order.js";
 import type { LineExtras, PricedOrder, TillSaleDeps } from "./working-order.js";
 import { issuancePass } from "./issuance-pass.js";
+import { cashChange } from "./bill-allocation.js";
+import { perDatabase } from "./live-in-process.js";
 import { refuseBillWithPayments } from "./bill-payments.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptOrder } from "./receipt-order.js";
@@ -294,7 +296,7 @@ export async function readBillTenderLines(
         amount,
         tip,
         tendered,
-        change: centsToDecimal(row.tendered! - row.applied - row.paymentTip),
+        change: cashChange(row.tendered!, row.applied, row.paymentTip),
         refunds,
       };
     }
@@ -919,19 +921,9 @@ async function payIntegrated(
   return { outcome: "captured", ticket };
 }
 
-/** The integrated card attempts each venue store has running in this process: order id to the
- * mark its P1 wrote (plan D22). One process owns a venue at a time, so a mark missing here was left
- * by an attempt that has ended, in this process or in one that died. */
-const LIVE_ATTEMPTS = new WeakMap<Database, Map<string, string>>();
-
-function liveAttemptsOf(db: Database): Map<string, string> {
-  let live = LIVE_ATTEMPTS.get(db);
-  if (live === undefined) {
-    live = new Map();
-    LIVE_ATTEMPTS.set(db, live);
-  }
-  return live;
-}
+/** The integrated card attempts running in this process: order id to the mark its P1 wrote (plan
+ * D22). */
+const liveAttemptsOf = perDatabase(() => new Map<string, string>());
 
 /** Whether an integrated card attempt on this order is running in this process. */
 export function paymentAttemptIsLive(db: Database, workingOrderId: string): boolean {

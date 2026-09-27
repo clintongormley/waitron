@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decimal } from "@waitron/shared";
+import { refundLookupOf } from "./provider.js";
 import type { CardDetails, PaymentResult, PaymentResultState } from "./provider.js";
 
 describe("PaymentResult shape", () => {
@@ -79,5 +80,32 @@ describe("PaymentResult.card", () => {
       settledAt: new Date(),
     };
     expect(result.card).toBeUndefined();
+  });
+});
+
+describe("refundLookupOf", () => {
+  const matchOf = (id: string) => ({
+    providerRefundRef: id,
+    outcome: "completed" as const,
+    providerStatus: "succeeded",
+  });
+
+  it("finds nothing among no candidates, even one called unattributable", () => {
+    expect(refundLookupOf([], matchOf)).toEqual({ kind: "none" });
+    expect(refundLookupOf([], matchOf, true)).toEqual({ kind: "none" });
+  });
+
+  it("matches the one candidate", () => {
+    expect(refundLookupOf(["re_1"], matchOf)).toEqual({
+      kind: "match",
+      providerRefundRef: "re_1",
+      outcome: "completed",
+      providerStatus: "succeeded",
+    });
+  });
+
+  it("is ambiguous over more than one candidate, or over one that is unattributable", () => {
+    expect(refundLookupOf(["re_1", "re_2"], matchOf)).toEqual({ kind: "ambiguous", candidates: 2 });
+    expect(refundLookupOf(["re_1"], matchOf, true)).toEqual({ kind: "ambiguous", candidates: 1 });
   });
 });

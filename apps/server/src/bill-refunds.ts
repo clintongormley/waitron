@@ -17,27 +17,26 @@ import {
   decimal,
   decimalToCents,
   isAppError,
-  MONEY_SCALE,
-  toScale,
 } from "@waitron/shared";
-import type { Decimal } from "@waitron/shared";
-import { raiseRefundOutcomeConflict } from "./bill-refund-alerts.js";
+import { money, ZERO } from "./bill-allocation.js";
+import { raiseRefundOutcomeConflict, refundAmountOf } from "./bill-refund-alerts.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import {
+  attestationColumns,
+  findSubmission,
   readBillBalance,
-  readPaymentMoney,
+  readOnePaymentMoney,
   requireOpenBill,
   toRefundView,
 } from "./bill-payments.js";
-import type { BillBalance, BillRefundView } from "./bill-payments.js";
+import type { Attestation, BillBalance, BillRefundView } from "./bill-payments.js";
+import { claimLive, perDatabase } from "./live-in-process.js";
 import { enqueueBillRefundDrawer } from "./receipt-print.js";
 import type { TillConfig } from "./till-config.js";
 import { fingerprint } from "./visits.js";
 import { refusePaymentInFlight } from "./working-order.js";
 import type { TillSaleDeps } from "./working-order.js";
 import "./errors.js";
-
-const ZERO = decimal("0.00");
 
 export interface BillRefundRequest {
   submissionId: string;
@@ -81,8 +80,6 @@ export function refundProvidersOf(sources: {
 
 type RefundRow = typeof billPaymentRefunds.$inferSelect;
 
-const money = (value: string): Decimal => toScale(decimal(value), MONEY_SCALE);
-
 /** The retry fingerprint of a refund request (design §5.1). The override is left out, so a retry
  * authorised by another manager is the same refund, and no PIN is hashed into a stored value. */
 export function refundFingerprint(
@@ -93,8 +90,8 @@ export function refundFingerprint(
 ): string {
   return fingerprint({
     paymentId,
-    appliedAmount: money(appliedAmount),
-    tipAmount: money(tipAmount),
+    appliedAmount: money(decimal(appliedAmount)),
+    tipAmount: money(decimal(tipAmount)),
     reason,
   });
 }
@@ -146,18 +143,9 @@ function providerRefundRefOf(evidence: RefundEvidence): string | null {
   return null;
 }
 
-/** The card refunds each venue store is driving in this process, by id. One process owns a venue
- * at a time, so a pending refund missing here is one nothing is still sending or looking up. */
-const LIVE_BILL_REFUNDS = new WeakMap<Database, Set<string>>();
-
-function liveRefundsOf(db: Database): Set<string> {
-  let live = LIVE_BILL_REFUNDS.get(db);
-  if (live === undefined) {
-    live = new Set();
-    LIVE_BILL_REFUNDS.set(db, live);
-  }
-  return live;
-}
+/** The card refunds this process is driving, by id: a pending refund missing here is one nothing is
+ * still sending or looking up. */
+const liveRefundsOf = perDatabase(() => new Set<string>());
 
 export function billRefundIsLive(db: Database, refundId: string): boolean {
   return liveRefundsOf(db).has(refundId);
@@ -193,9 +181,6 @@ async function readCardRefund(tx: Transaction, refundId: string): Promise<CardRe
   };
 }
 
-const amountOf = (refund: RefundRow): Decimal =>
-  centsToDecimal(refund.appliedAmount + refund.tipAmount);
-
 /**
  * R3 (design §6b): record what the evidence settles, in its own transaction. `completed` writes the
  * provider's refund record beside the bill's in the same transaction; `failed` releases the bill;
@@ -207,7 +192,7 @@ async function recordRefundOutcome(
   deps: BillRefundDeps,
   refundId: string,
   evidence: RefundEvidence,
-  attestation?: { attestedBy: string; note: string },
+  attestation?: Attestation,
 ): Promise<RefundRow> {
   return withTransaction(deps.db, async (tx) => {
     const target = (await readCardRefund(tx, refundId))!;
@@ -222,10 +207,7 @@ async function recordRefundOutcome(
       return refund;
     }
     if (outcome === "pending") return refund;
-    const attested =
-      attestation === undefined
-        ? {}
-        : { attestedBy: attestation.attestedBy, attestationNote: attestation.note };
+    const attested = attestationColumns(attestation);
     if (outcome === "failed") {
       const [failed] = await tx
         .update(billPaymentRefunds)
@@ -252,7 +234,7 @@ async function recordRefundOutcome(
     await recordRefund(tx, {
       provider: target.provided!.provider,
       paymentRef: target.provided!.paymentRef,
-      amount: amountOf(refund),
+      amount: refundAmountOf(refund),
       authorizedBy: refund.authorizedBy,
       ...(providerRefundRef === null ? {} : { providerRefundRef }),
     });
@@ -299,7 +281,7 @@ async function sendCardRefund(
   try {
     answer = await provider.sendRefund!({
       processorRef: provided!.processorRef,
-      amount: amountOf(refund),
+      amount: refundAmountOf(refund),
       idempotencyKey: `bpr_${refund.id}`,
       refundId: refund.id,
     });
@@ -346,7 +328,7 @@ async function lookUp(
     return await provider.lookupRefund({
       processorRef,
       refundId: refund.id,
-      amount: amountOf(refund),
+      amount: refundAmountOf(refund),
       sentAt: new Date(sentAt),
       excludeRefs: await withTransaction(deps.db, (tx) => attributedRefundRefs(tx, refund)),
       ...(refund.refsBeforeSend === null ? {} : { refsBeforeSend: refund.refsBeforeSend }),
@@ -393,11 +375,10 @@ export async function resumeCardRefund(
   const target = await withTransaction(deps.db, async (tx) => {
     const found = await readCardRefund(tx, refundId);
     if (found === undefined) throw new AppError("bill.refund_not_found", { refundId });
-    if (found.refund.state !== "pending" || live.has(refundId)) return { found, claimed: false };
-    live.add(refundId);
-    return { found, claimed: true };
+    if (found.refund.state !== "pending" || live.has(refundId)) return { found, release: null };
+    return { found, release: claimLive(live, refundId) };
   });
-  if (!target.claimed) return { claimed: false, refund: target.found.refund };
+  if (target.release === null) return { claimed: false, refund: target.found.refund };
   const { refund, provided } = target.found;
   try {
     if (refund.sentAt === null && resolver !== "retry") {
@@ -431,7 +412,7 @@ export async function resumeCardRefund(
     const settled = await recordRefundOutcome(deps, refundId, { kind: "lookup", lookup });
     return { claimed: true, refund: settled, lookup, resent: false };
   } finally {
-    live.delete(refundId);
+    target.release();
   }
 }
 
@@ -444,10 +425,10 @@ export async function attestCardRefund(
   deps: BillRefundDeps,
   refundId: string,
   outcome: "completed" | "failed",
-  attestation: { attestedBy: string; note: string },
+  attestation: Attestation,
 ): Promise<RefundRow> {
   const live = liveRefundsOf(deps.db);
-  await withTransaction(deps.db, async (tx) => {
+  const release = await withTransaction(deps.db, async (tx) => {
     const target = await readCardRefund(tx, refundId);
     if (target === undefined) throw new AppError("bill.refund_not_found", { refundId });
     if (target.refund.state !== "pending" || live.has(refundId)) {
@@ -456,12 +437,12 @@ export async function attestCardRefund(
     if (outcome === "completed" && target.refund.sentAt === null) {
       throw new AppError("bill.attestation_contradicted", { id: refundId, evidence: "never_sent" });
     }
-    live.add(refundId);
+    return claimLive(live, refundId);
   });
   try {
     return await recordRefundOutcome(deps, refundId, { kind: "attested", outcome }, attestation);
   } finally {
-    live.delete(refundId);
+    release();
   }
 }
 
@@ -486,11 +467,10 @@ export async function refundBillPayment(
   req: BillRefundRequest,
   operator: { personId: string; sessionId: string },
 ): Promise<BillRefundResult> {
-  const applied = money(req.appliedAmount);
-  const tip = money(req.tipAmount);
+  const applied = money(decimal(req.appliedAmount));
+  const tip = money(decimal(req.tipAmount));
   const print = refundFingerprint(paymentId, req.appliedAmount, req.tipAmount, req.reason);
-  const live = liveRefundsOf(deps.db);
-  let claimed: string | null = null;
+  let release = (): void => {};
   try {
     const begun = await withTransaction(deps.db, async (tx) => {
       const authorization = await authorize(tx, {
@@ -506,17 +486,8 @@ export async function refundBillPayment(
         );
       if (payment === undefined) throw new AppError("bill.payment_not_found", { paymentId });
 
-      const [earlier] = await tx
-        .select({ refund: billPaymentRefunds })
-        .from(billPaymentRefunds)
-        .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
-        .where(
-          and(
-            eq(billPayments.workingOrderId, workingOrderId),
-            eq(billPaymentRefunds.submissionId, req.submissionId),
-          ),
-        );
-      if (earlier !== undefined) {
+      const earlier = await findSubmission(tx, workingOrderId, req.submissionId);
+      if (earlier.refund !== undefined) {
         if (earlier.refund.fingerprint !== print) {
           throw new AppError("submission.id_reused", { submissionId: req.submissionId });
         }
@@ -528,25 +499,14 @@ export async function refundBillPayment(
           result: await resultOf(tx, earlier.refund, workingOrderId),
         };
       }
-      const [paymentWithId] = await tx
-        .select({ id: billPayments.id })
-        .from(billPayments)
-        .where(
-          and(
-            eq(billPayments.workingOrderId, workingOrderId),
-            eq(billPayments.submissionId, req.submissionId),
-          ),
-        );
-      if (paymentWithId !== undefined) {
+      if (earlier.payment !== undefined) {
         throw new AppError("submission.id_reused", { submissionId: req.submissionId });
       }
 
       await requireOpenBill(tx, workingOrderId);
       await refusePaymentInFlight(tx, [workingOrderId]);
 
-      const held = (await readPaymentMoney(tx, [workingOrderId])).find(
-        ({ row }) => row.id === paymentId,
-      )!;
+      const held = await readOnePaymentMoney(tx, payment);
       const [refundable, refundableTip] =
         payment.state === "received" ? [held.netApplied, held.netTip] : [ZERO, ZERO];
       const whole = compareDecimal(applied, refundable) === 0;
@@ -556,15 +516,15 @@ export async function refundBillPayment(
       ) {
         throw new AppError("bill.refund_exceeds_payment", {
           paymentId,
-          applied: toScale(refundable, MONEY_SCALE),
-          tip: toScale(refundableTip, MONEY_SCALE),
+          applied: money(refundable),
+          tip: money(refundableTip),
         });
       }
       if (payment.kind === "items" && !whole) {
         throw new AppError("bill.refund_not_whole", {
           paymentId,
-          applied: toScale(refundable, MONEY_SCALE),
-          tip: toScale(refundableTip, MONEY_SCALE),
+          applied: money(refundable),
+          tip: money(refundableTip),
         });
       }
 
@@ -611,8 +571,7 @@ export async function refundBillPayment(
         .values({ ...values, state: "pending" })
         .returning();
       // Inside the transaction, so no loop pass runs between the insert and the claim.
-      claimed = refund!.id;
-      live.add(claimed);
+      release = claimLive(liveRefundsOf(deps.db), refund!.id);
       return { kind: "send" as const, refundId: refund!.id, provider };
     });
     if (begun.kind === "done") return begun.result;
@@ -630,6 +589,6 @@ export async function refundBillPayment(
       return resultOf(tx, refund!, workingOrderId);
     });
   } finally {
-    if (claimed !== null) live.delete(claimed);
+    release();
   }
 }

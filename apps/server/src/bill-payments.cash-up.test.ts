@@ -11,12 +11,12 @@ import {
   paymentRows,
   provisionBillVenue,
   send,
-  systemClock,
   tabWith,
   tendersOfBill,
   type Answer,
   type BillVenue,
 } from "./testing/bill-venue.js";
+import { systemClock } from "./till-backend.js";
 import "./errors.js";
 
 // Bill payments design §8 tests 24–27: the cash-up counts money on the day and till it moves,

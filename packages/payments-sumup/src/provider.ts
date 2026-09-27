@@ -22,6 +22,7 @@ import {
   failAttempting,
   insertAttempting,
   listAttempting,
+  refundLookupOf,
   stampAttemptingRef,
   tillsForWorkingOrders,
 } from "@waitron/payments";
@@ -443,20 +444,16 @@ export class SumUpCloudProvider implements PaymentProvider {
         !query.excludeRefs.includes(event.id) &&
         !(query.refsBeforeSend?.includes(event.id) ?? false),
     );
-    if (candidates.length === 0) return { kind: "none" };
-    const unattributable =
+    return refundLookupOf(
+      candidates,
+      (event) => ({
+        providerRefundRef: event.id,
+        outcome: refundOutcomeOf(event.status),
+        providerStatus: event.status,
+      }),
       query.refsBeforeSend === undefined &&
-      candidates.some((event) => Date.parse(event.timestamp) < sentAt);
-    if (candidates.length > 1 || unattributable) {
-      return { kind: "ambiguous", candidates: candidates.length };
-    }
-    const [event] = candidates;
-    return {
-      kind: "match",
-      providerRefundRef: event!.id,
-      outcome: refundOutcomeOf(event!.status),
-      providerStatus: event!.status,
-    };
+        candidates.some((event) => Date.parse(event.timestamp) < sentAt),
+    );
   }
 
   /** void / refund / partialRefund all share one reversal path (`reverseViaSumUp`); a `void` is a
