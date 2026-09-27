@@ -3023,14 +3023,11 @@ image constraints under *Detail → Box image*.
   form, and the short form is not reachable through `dev:setup`, so nothing covers it either.
   **Next action:** either normalise the value where the plan is built, or narrow the documented type
   to `HH:MM:SS` — and add the failing case first.
-- **A database ahead of the box's image gets a raw driver error, not the classified one**
-  (2026-09-14) — **probably closed by #489, read, not run.** `ensureInstance` is gone, and
-  `runEntry` (`apps/server/src/node-entry.ts`) now calls `assertNotAhead`
-  (`provisioning.database_ahead`) before `startServer`, which is what migrates. The
-  `node-entry.test.ts` case "counts a boot that fails BEFORE the server" rejects with
-  `provisioning.database_ahead` but does not assert that `startServer` was never called.
-  **Next action:** add that assertion, prove it by moving the call after
-  `startServer`, then delete this entry.
+- **An ahead database is refused before the server starts — DONE (#489).**
+  `apps/server/src/node-entry.test.ts` asserts `startServer` was never called when the ahead check
+  raises `provisioning.database_ahead`. Verified 2026-09-27: moving `assertNotAhead` after
+  `startServer` made the focused test fail because `startServer` was called once; restoring the
+  call order made it pass.
 
 ### B8. Module framework follow-ons
 
@@ -5183,16 +5180,9 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   presence light.
 - KDS-4 follow-ups: device-mode reprint behind `requireDevice`; the mirrored station-side read (a
   `DashboardApi.listStationPrinters` and a UI line); the reprint timestamp.
-- **A failed HTTP response is assumed to carry our JSON error envelope, in two more clients.**
-  `apps/setup` was fixed on 2026-09-13 after a real failure: a provisioned box answers an unmounted
-  setup route with `404 Not Found` as `text/plain`, so `await res.json()` threw and the throw escaped
-  looking like a network outage — the operator was told to check the power of a machine that was
-  working. `packages/dashboard-kit/src/request.ts` and `apps/till/src/api/client.ts` still do the same
-  unguarded parse, and NEITHER has a `.catch`, so any non-JSON error body throws in both. What caught
-  us in `apps/setup` was a `text/plain` 404; the `null` body is a second way in, found by review
-  rather than in the field, and it defeats a bare `.catch` too because `null` is valid JSON. **Next action:** guard both parses and keep the HTTP status
-  on the rejection, as `apps/setup/src/api/client.ts` now does. Note `null` is valid JSON, so a
-  `.catch` alone is not enough — the parsed value needs checking too.
+- **Failed HTTP responses with non-JSON or `null` bodies — DONE (#355).**
+  `packages/dashboard-kit/src/request.ts` and `apps/till/src/api/client.ts` catch JSON parse
+  failures, check that the parsed error is an object, and retain the HTTP status on refusal.
 - Two QR libraries coexist (`qrcode` in `apps/server`, `qrcode-generator` in `apps/till`) — unify into
   `packages/shared`; hoist the receipt's hand-ported money/date/label formatters there too (the paper
   receipt already drifts from the screen by an NBSP normalisation).

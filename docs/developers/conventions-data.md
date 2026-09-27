@@ -248,8 +248,8 @@ intact), but no engine binds an IDENTIFIER, and this one says so plainly. Measur
 v26.7.0: `db.prepare("delete from ?")` throws `near "?": syntax error`, and `delete from "?"` is a
 query against a table literally called `?` (`no such table: ?`) — both errcode 1. So a table or
 trigger name that has to reach a statement arrives as text or not at all, which leaves the same two
-options as before: **escape** (`quoteIdent`/`quoteLiteral`,
-`packages/provisioning/src/identifiers.ts`) or **validate and throw** (`assertSafeIdentifier`,
+options as before: **escape** (`quoteIdent` in `packages/provisioning/src/identifiers.ts` and
+`quoteLiteral` in `packages/shared/src/sql-literal.ts`) or **validate and throw** (`assertSafeIdentifier`,
 `packages/db/src/testing/identifiers.ts`, which records the same reading at its own head). Neither is
 not acceptable; "the callers only pass safe values" is the §1 defect class.
 
