@@ -216,8 +216,6 @@ describe("priceBasket — grossLineTotals (the working-order draft's customer-fa
   });
 });
 
-// A dish + its selected options price as a PARENT line followed by its CHILD lines, through the
-// same arithmetic core as a plain basket.
 describe("a frozen VAT rate", () => {
   it("prices a product at the rate it carries, not at its class's", () => {
     const priced = priceBasket([
@@ -254,6 +252,8 @@ describe("a frozen VAT rate", () => {
   });
 });
 
+// A dish + its selected options price as a PARENT line followed by its CHILD lines, through the
+// same arithmetic core as a plain basket.
 describe("priceBasketWithOptions — parent + child priced lines", () => {
   const opt = (
     priceDelta: string,
