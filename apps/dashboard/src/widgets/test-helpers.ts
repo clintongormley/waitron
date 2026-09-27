@@ -144,11 +144,19 @@ function rgba(color: string): number[] {
 
 /**
  * What the colour field's Custom square paints at its centre, in the middle of its left border, and
- * beside it on the same row, plus the RGBA of its computed border colour.
+ * beside it on the same row, plus the RGBA of its computed border colour. `row` and `column` are
+ * every pixel from its left and its top edge in to its centre, and `ringColor` the RGBA of the
+ * selected ring's `--wt-color-primary`.
  */
-export async function customSquarePixels(
-  root: ParentNode,
-): Promise<{ inside: number[]; border: number[]; borderColor: number[]; beside: number[] }> {
+export async function customSquarePixels(root: ParentNode): Promise<{
+  inside: number[];
+  border: number[];
+  borderColor: number[];
+  beside: number[];
+  row: number[][];
+  column: number[][];
+  ringColor: number[];
+}> {
   // Vitest shrinks the test frame to fit Playwright's page, so a frame taller than the page is
   // screenshotted below one pixel per CSS pixel and a 1px border blurs. 560 fits under the page's
   // default height; `paintedPixels` refuses a frame that is still shrunk.
@@ -163,16 +171,26 @@ export async function customSquarePixels(
     const square = input.getBoundingClientRect();
     const style = getComputedStyle(input);
     const y = square.top + square.height / 2;
-    const [inside, border, beside] = await paintedPixels(label, [
-      { x: square.left + square.width / 2, y },
+    const x = square.left + square.width / 2;
+    const inward = (length: number) =>
+      Array.from({ length: Math.floor(length / 2) }, (_, i) => i + 0.5);
+    const rowPoints = inward(square.width).map((i) => ({ x: square.left + i, y }));
+    const columnPoints = inward(square.height).map((i) => ({ x, y: square.top + i }));
+    const [inside, border, beside, ...edges] = await paintedPixels(label, [
+      { x, y },
       { x: square.left + parseFloat(style.borderLeftWidth) / 2, y },
       { x: square.right + square.width / 2, y },
+      ...rowPoints,
+      ...columnPoints,
     ]);
     return {
       inside: inside!,
       border: border!,
       borderColor: rgba(style.borderLeftColor),
       beside: beside!,
+      row: edges.slice(0, rowPoints.length),
+      column: edges.slice(rowPoints.length),
+      ringColor: rgba(style.getPropertyValue("--wt-color-primary").trim()),
     };
   } finally {
     await page.viewport(width, height);

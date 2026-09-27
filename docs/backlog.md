@@ -1326,18 +1326,24 @@ What Task 11 left open:
   `categoryRefusalErrors`.**
 - **DONE (lane C's C24): with no colour chosen, the colour field's Custom square reads as
   empty.**
-- **Three more things about the colour field's Custom square — OPEN, queued as lane C's C25
-  (2026-09-27; seen 2026-09-27 in lane C's C24 screenshots; history not checked).** In
-  `apps/dashboard/src/widgets/color-field.ts`: (1) with a custom colour chosen, the square has a
-  light grey rim that stands out in dark theme; (2) with a custom colour chosen, nothing in the
-  field shows as selected — neither "No colour", a palette swatch, nor the Custom square has a
-  selected ring; (3) C24's empty look hides the inner square through `::-webkit-color-swatch`, and
-  was measured in Chromium only, so what other browsers (Firefox, Safari) draw with no colour
-  chosen is unknown. A guess, not tested (the tests set the input's value directly rather than
-  opening the browser's picker): with no colour chosen the input still holds black, so choosing
-  black in the picker from that state may report no change. **Next action:** C25 takes all three
-  (Firefox in (3) only if it can be run there) and checks the guess in Chromium; C25 does not
-  cover Safari, so that part of (3) stays open after it.
+- **DONE (lane C's C25): with a custom colour chosen, the colour field's Custom square is ringed
+  as selected and the colour fills it up to the ring, with no grey rim.** The grey rim was the
+  input's own background (rgb(239, 239, 239) in light theme, rgb(107, 107, 107) in dark, measured
+  in HeadlessChrome 153) showing through the padding around the inner square, plus that square's
+  own grey border. The selection is shown by the painted ring only; the input carries no radio
+  role. C24's empty look now also holds in Firefox, and the new ring and fill cases pass there too
+  (Firefox 151, the Custom-square cases run locally; CI runs Chromium only).
+- **Two things about the colour field's Custom square stay OPEN (2026-09-27, left by lane C's
+  C25).** In `apps/dashboard/src/widgets/color-field.ts`: (1) Safari was not tried, so what it
+  draws with no colour chosen, and whether the ring and the rim-free fill hold there, is unknown;
+  (2) the guess that choosing black in the browser's picker from the no-colour state may not
+  register was not run, because no way was found to drive the browser's own picker from the test
+  tools (a test that sets the value directly is not evidence either way). Also seen and not
+  changed: with a palette colour chosen, the Custom square shows that colour too, beside the ringed
+  swatch; the "fills the Custom square right up to its border while a palette colour is chosen"
+  case in `apps/dashboard/src/widgets/category-form.test.ts` pins this, so a decision to change it
+  changes that case. **Next action:** try (1) in Safari or Playwright's WebKit, and (2) by hand in
+  Chromium.
 - **`wt-tabs` shares the `wt-change` event name with every control a panel slots in, and five
   screens now carry the same `event.target !== event.currentTarget` guard against it**
   (`alerts-screen.ts`, `printers-screen.ts`, `profile-screen.ts`, `venue-operations-screen.ts`, and

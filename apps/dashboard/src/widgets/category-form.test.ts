@@ -11,6 +11,7 @@ import {
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { CategoryInput, CategorySummary } from "../api/client.js";
+import { CATEGORY_PALETTE } from "@waitron/ui";
 afterEach(cleanupWidgets);
 afterEach(() => setLocale("es-ES"));
 const food: CategorySummary = {
@@ -290,6 +291,84 @@ it.each([
   expect((await customSquarePixels(el.shadowRoot!)).inside).toEqual(rgba);
   expect(await savedColor(el)).toBe(color);
 });
+
+it.each(["light", "dark"] as const)(
+  "rings the Custom square as selected while a custom colour is chosen (%s)",
+  async (theme) => {
+    const { el } = await mountWidget<CategoryForm>(
+      "dashboard-category-form",
+      {
+        open: true,
+        languages: { defaultLanguage: "en", languages: ["en"] },
+        value: { ...food, color: "#123456" },
+      },
+      theme,
+    );
+    const { row, column, ringColor } = await customSquarePixels(el.shadowRoot!);
+    expect([row[0], row[1], column[0], column[1]]).toEqual(Array(4).fill(ringColor));
+    expect(el.shadowRoot!.querySelectorAll('[role="radio"][aria-checked="true"]')).toHaveLength(0);
+  },
+);
+
+it.each([
+  ["a palette colour", CATEGORY_PALETTE[0], "light"],
+  ["no colour", null, "light"],
+  ["a palette colour", CATEGORY_PALETTE[0], "dark"],
+  ["no colour", null, "dark"],
+] as const)("does not ring the Custom square while %s is chosen (%s)", async (_, color, theme) => {
+  const { el } = await mountWidget<CategoryForm>(
+    "dashboard-category-form",
+    {
+      open: true,
+      languages: { defaultLanguage: "en", languages: ["en"] },
+      value: { ...food, color },
+    },
+    theme,
+  );
+  const { row, column, borderColor, ringColor } = await customSquarePixels(el.shadowRoot!);
+  expect(borderColor).not.toEqual(ringColor);
+  expect([row[0], column[0]]).toEqual([borderColor, borderColor]);
+  const checked = el.shadowRoot!.querySelectorAll('[role="radio"][aria-checked="true"]');
+  expect([...checked].map((radio) => radio.getAttribute("data-color"))).toEqual([color ?? ""]);
+});
+
+it.each(["light", "dark"] as const)(
+  "fills the Custom square with a chosen custom colour right up to its ring, with no rim (%s)",
+  async (theme) => {
+    const { el } = await mountWidget<CategoryForm>(
+      "dashboard-category-form",
+      {
+        open: true,
+        languages: { defaultLanguage: "en", languages: ["en"] },
+        value: { ...food, color: "#123456" },
+      },
+      theme,
+    );
+    const { row, column } = await customSquarePixels(el.shadowRoot!);
+    const within = [...row.slice(2), ...column.slice(2)];
+    expect(within).toEqual(within.map(() => [0x12, 0x34, 0x56, 255]));
+  },
+);
+
+it.each(["light", "dark"] as const)(
+  "fills the Custom square right up to its border while a palette colour is chosen, with no rim (%s)",
+  async (theme) => {
+    const { el } = await mountWidget<CategoryForm>(
+      "dashboard-category-form",
+      {
+        open: true,
+        languages: { defaultLanguage: "en", languages: ["en"] },
+        value: { ...food, color: CATEGORY_PALETTE[0] },
+      },
+      theme,
+    );
+    const hex = CATEGORY_PALETTE[0];
+    const expected = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).concat(255);
+    const { row, column } = await customSquarePixels(el.shadowRoot!);
+    const within = [...row.slice(1), ...column.slice(1)];
+    expect(within).toEqual(within.map(() => expected));
+  },
+);
 
 it("creates inside a host draft, selects the saved category and leaves the draft intact", async () => {
   const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
