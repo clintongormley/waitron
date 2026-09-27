@@ -126,9 +126,9 @@ describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (
 
   it("the Not found notice has no violations", async () => {
     const { el, host } = await mount(theme);
-    const tile = button(el, "Drinks (EN)");
+    button(el, "Drinks (EN)").click();
+    await el.updateComplete;
     el.menu = { ...menu, structure: { members: [member("cafe")] } };
-    tile.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[role='alert']")!.textContent).toBe("Not found");
     await expectNoA11yViolations(host);

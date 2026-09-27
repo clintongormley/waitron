@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { ContentLanguageController, baseStyles, registerIcons } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
-import type { DocumentMember, DocumentTile } from "@waitron/catalogue/src/menu-document-types.js";
+import type { DocumentMember } from "@waitron/catalogue/src/menu-document-types.js";
 import "./modifier-picker.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import type { TillProduct, TillZoneMenu } from "../api/client.js";
@@ -65,8 +65,8 @@ function folded(text: string): string {
  * structure, with each section opening in place behind a breadcrumb. Tiles coordinate only through
  * the store, as `till-product-grid`'s do.
  *
- * Emits `menu-reload` (`detail: { menuId }`) when a tap finds its target gone from the menu it
- * holds; the widget reloads nothing itself.
+ * When a new `menu` or `products` no longer holds the open section, or any section on the way to
+ * it, it says "Not found" and shows home.
  */
 @customElement("till-menu-browser")
 export class TillMenuBrowser extends LitElement {
@@ -173,8 +173,9 @@ export class TillMenuBrowser extends LitElement {
     `,
   ];
 
-  /** The menu as a zone-offers body serves it: its structure, its layouts and the device's layout. */
-  @property({ attribute: false }) menu!: TillZoneMenu;
+  /** The menu as a zone-offers body serves it: its structure, its layouts and the device's layout.
+   * Nothing renders until it is set. */
+  @property({ attribute: false }) menu?: TillZoneMenu;
 
   /** This menu's offers as till products. */
   @property({ attribute: false }) products: TillProduct[] = [];
@@ -196,13 +197,13 @@ export class TillMenuBrowser extends LitElement {
 
   #indexed?: { menu: TillZoneMenu; products: TillProduct[]; index: MenuIndex };
 
-  /** Built from the properties as they are NOW, so a tap landing before a redraw is judged against
-   * the menu the widget was last given. */
-  #index(): MenuIndex {
+  #trailShown: SectionNode[] = [];
+
+  #index(menu: TillZoneMenu): MenuIndex {
     const cached = this.#indexed;
-    if (cached?.menu === this.menu && cached.products === this.products) return cached.index;
-    const index = indexMenu(this.menu, this.products);
-    this.#indexed = { menu: this.menu, products: this.products, index };
+    if (cached?.menu === menu && cached.products === this.products) return cached.index;
+    const index = indexMenu(menu, this.products);
+    this.#indexed = { menu, products: this.products, index };
     return index;
   }
 
@@ -223,11 +224,18 @@ export class TillMenuBrowser extends LitElement {
     return trail;
   }
 
-  #open(path: string[]): void {
-    if (this.#trail(path, this.#index()) === null) {
-      this.#reportNotFound();
-      return;
+  /** The open section is judged before each render, so a menu that has lost it never draws it. */
+  override willUpdate(): void {
+    if (this.menu === undefined) return;
+    const trail = this.#trail(this.path, this.#index(this.menu));
+    if (trail === null) {
+      this.notFound = true;
+      this.path = [];
     }
+    this.#trailShown = trail ?? [];
+  }
+
+  #open(path: string[]): void {
     this.notFound = false;
     this.path = path;
   }
@@ -237,28 +245,6 @@ export class TillMenuBrowser extends LitElement {
     pickProduct(product, this.store, (picked) => {
       this.pickerProduct = picked;
     });
-  }
-
-  #tapTile(tile: DocumentTile): void {
-    if (tile.kind === "section") {
-      this.#open([tile.sectionId]);
-      return;
-    }
-    const product = this.#index().products.get(tile.productId);
-    if (product === undefined) this.#reportNotFound();
-    else this.#pick(product);
-  }
-
-  #reportNotFound(): void {
-    this.notFound = true;
-    this.path = [];
-    this.dispatchEvent(
-      new CustomEvent("menu-reload", {
-        detail: { menuId: this.menu.id },
-        bubbles: true,
-        composed: true,
-      }),
-    );
   }
 
   #onSearch(event: CustomEvent<{ value: string }>): void {
@@ -322,27 +308,30 @@ export class TillMenuBrowser extends LitElement {
     </div>`;
   }
 
-  #home(index: MenuIndex): TemplateResult {
-    const layouts = this.menu.homeLayouts;
-    const layout = layouts.find(({ id }) => id === this.menu.homeLayoutId) ?? layouts[0];
+  #home(menu: TillZoneMenu, index: MenuIndex): TemplateResult {
+    const layouts = menu.homeLayouts;
+    const layout = layouts.find(({ id }) => id === menu.homeLayoutId) ?? layouts[0];
     return html`
       <section data-region="shortcuts" aria-labelledby="shortcuts-heading">
         <h2 id="shortcuts-heading">${t("menu.shortcuts")}</h2>
         <div class="grid" style=${this.#gridStyle()}>
           ${(layout?.tiles ?? []).map((tile) => {
-            const onTap = () => this.#tapTile(tile);
             if (tile.kind === "section") {
               const section = index.sections.get(tile.sectionId);
-              return section === undefined ? nothing : this.#sectionButton(section, onTap);
+              return section === undefined
+                ? nothing
+                : this.#sectionButton(section, () => this.#open([tile.sectionId]));
             }
             const product = index.products.get(tile.productId);
-            return product === undefined ? nothing : this.#productButton(product, onTap);
+            return product === undefined
+              ? nothing
+              : this.#productButton(product, () => this.#pick(product));
           })}
         </div>
       </section>
       <section data-region="structure" aria-labelledby="structure-heading">
         <h2 id="structure-heading">${t("menu.full")}</h2>
-        ${this.#members(this.menu.structure.members, [], index)}
+        ${this.#members(menu.structure.members, [], index)}
       </section>
     `;
   }
@@ -392,13 +381,14 @@ export class TillMenuBrowser extends LitElement {
   }
 
   override render() {
-    const index = this.#index();
-    // A menu that no longer holds the open section shows home.
-    const trail = this.#trail(this.path, index) ?? [];
+    const menu = this.menu;
+    if (menu === undefined) return nothing;
+    const index = this.#index(menu);
+    const trail = this.#trailShown;
     let view: TemplateResult;
     if (this.query.trim() !== "") view = this.#results(index);
     else if (trail.length > 0) view = this.#sectionView(trail, index);
-    else view = this.#home(index);
+    else view = this.#home(menu, index);
     return html`
       <div data-region="search">
         <wt-input

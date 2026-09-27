@@ -64,8 +64,6 @@ const wine = product("wine", "Vino", {
   ],
 });
 
-const PRODUCTS = [cafe, lemonade, cola, cana, water, tostada, burger, jamon, wine];
-
 function member(key: string): DocumentMember {
   return { kind: "product", menuItemId: `mi-${key}`, productId: `p-${key}` };
 }
@@ -154,6 +152,24 @@ function lunch(overrides: Partial<TillZoneMenu> = {}): TillZoneMenu {
   };
 }
 
+const tarta = product("tarta", "Tarta", { available: false });
+
+const PRODUCTS = [cafe, lemonade, cola, cana, water, tostada, burger, jamon, wine, tarta];
+
+/** Burger is placed under Food and under a section whose every product is sold out. */
+function soldOutMenu(): TillZoneMenu {
+  const soldOut = section("sec-soldout", "soldout-internal", { en: "Sold out (EN)" }, [
+    member("burger"),
+    member("tarta"),
+  ]);
+  return lunch({
+    structure: { members: [food, soldOut, member("water")] },
+    homeLayouts: [
+      { id: "lay-home", name: "Home", tiles: [sectionTile("sec-soldout"), productTile("water")] },
+    ],
+  });
+}
+
 type Button = HTMLElement & { disabled: boolean };
 
 async function mount(
@@ -225,6 +241,18 @@ afterEach(() => {
 describe("till-menu-browser", () => {
   it("registers as a custom element", () => {
     expect(customElements.get("till-menu-browser")).toBe(TillMenuBrowser);
+  });
+
+  it("renders nothing until it is given a menu", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillMenuBrowser>("till-menu-browser", {
+      products: PRODUCTS,
+      store,
+    });
+    expect(root(el).children).toHaveLength(0);
+    el.menu = lunch();
+    await el.updateComplete;
+    expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
   });
 
   describe("layout", () => {
@@ -355,15 +383,6 @@ describe("till-menu-browser", () => {
       await tap(el, entry(el, "structure", "Comida (ES)"));
       expect(breadcrumb(el)).toBe("Home › Comida (ES)");
       expect(names(entries(el, "section"))).toEqual(["Jamón", "Burger", "Vino"]);
-    });
-
-    it("shows home when the menu it is given no longer holds the open section", async () => {
-      const { el } = await mount();
-      await tap(el, entry(el, "structure", "Drinks (EN)"));
-      el.menu = lunch({ structure: { members: [favourites, food] } });
-      await el.updateComplete;
-      expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
-      expect(names(entries(el, "structure"))).toEqual(["Favourites (EN)", "Comida (ES)"]);
     });
   });
 
@@ -502,8 +521,8 @@ describe("till-menu-browser", () => {
       expect(root(el).querySelector("till-modifier-picker")).toBeNull();
     });
 
-    it("in search: listed once, greyed", async () => {
-      const { el } = await mount();
+    it("in search: a sold-out product placed under two sections is listed once, greyed", async () => {
+      const { el } = await mount({ menu: soldOutMenu() });
       await search(el, "burger");
       const results = entries(el, "results");
       expect(names(results)).toEqual(["Burger"]);
@@ -516,6 +535,16 @@ describe("till-menu-browser", () => {
       const shown = entries(el, "section");
       expect(names(shown)).toEqual(["Jamón", "Burger", "Vino"]);
       expect(shown.map((button) => button.disabled)).toEqual([false, true, false]);
+    });
+
+    it("keeps a section whose products are all sold out, in place, with its products greyed", async () => {
+      const { el } = await mount({ menu: soldOutMenu() });
+      expect(names(entries(el, "shortcuts"))).toEqual(["Sold out (EN)", "Agua"]);
+      expect(names(entries(el, "structure"))).toEqual(["Comida (ES)", "Sold out (EN)", "Agua"]);
+      await tap(el, entry(el, "structure", "Sold out (EN)"));
+      const shown = entries(el, "section");
+      expect(names(shown)).toEqual(["Burger", "Tarta"]);
+      expect(shown.map((button) => button.disabled)).toEqual([true, true]);
     });
 
     it("greys a product whose variants are all unavailable", async () => {
@@ -553,66 +582,98 @@ describe("till-menu-browser", () => {
     });
   });
 
-  describe("a shortcut whose target has gone (§9)", () => {
-    function reloads(host: HTMLElement): CustomEvent[] {
-      const seen: CustomEvent[] = [];
-      host.addEventListener("menu-reload", (event) => seen.push(event as CustomEvent));
-      return seen;
-    }
-
-    it("a product tile says Not found, adds nothing, and asks the app to reload the menu", async () => {
-      const { el, host, store } = await mount();
-      const seen = reloads(host);
-      const tile = entry(el, "shortcuts", "Café");
-      // The tap lands before the widget redraws for the menu it was just given.
-      el.menu = lunch({ structure: { members: [drinks, member("water")] } });
-      el.products = PRODUCTS.filter((each) => each !== cafe);
-      await tap(el, tile);
-      expect(store.lines).toEqual([]);
-      expect(notice(el)).toBe("Not found");
-      expect(seen).toHaveLength(1);
-      expect(seen[0]!.detail).toEqual({ menuId: "menu-lunch" });
-      expect(seen[0]!.bubbles).toBe(true);
-      expect(seen[0]!.composed).toBe(true);
-    });
-
-    it("a section tile says Not found and stays home", async () => {
-      const { el, host } = await mount();
-      const seen = reloads(host);
-      const tile = entry(el, "shortcuts", "Drinks (EN)");
+  describe("an open section the menu no longer holds (§9)", () => {
+    it("says Not found and returns home when a new menu drops the open section", async () => {
+      const { el } = await mount();
+      await tap(el, entry(el, "structure", "Drinks (EN)"));
       el.menu = lunch({ structure: { members: [favourites, food] } });
-      await tap(el, tile);
+      await el.updateComplete;
       expect(notice(el)).toBe("Not found");
       expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
-      expect(seen).toHaveLength(1);
+      expect(names(entries(el, "structure"))).toEqual(["Favourites (EN)", "Comida (ES)"]);
     });
 
-    it("a section inside an open section says Not found and returns home", async () => {
-      const { el, host } = await mount();
-      const seen = reloads(host);
+    it("says Not found when the open section's parent no longer holds it", async () => {
+      const { el } = await mount();
       await tap(el, entry(el, "structure", "Drinks (EN)"));
-      const beerEntry = entry(el, "section", "Beer (EN)");
+      await tap(el, entry(el, "section", "Beer (EN)"));
       el.menu = lunch({
         structure: {
           members: [
             section("sec-drinks", "drinks-internal", { en: "Drinks (EN)" }, [member("cola")]),
+            beer,
           ],
         },
       });
-      await tap(el, beerEntry);
+      await el.updateComplete;
       expect(notice(el)).toBe("Not found");
       expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
-      expect(seen).toHaveLength(1);
+    });
+
+    it("says Not found when an ancestor in the breadcrumb is gone, though the section is still elsewhere", async () => {
+      const { el } = await mount();
+      await tap(el, entry(el, "structure", "Drinks (EN)"));
+      await tap(el, entry(el, "section", "Beer (EN)"));
+      el.menu = lunch({ structure: { members: [food, beer] } });
+      await el.updateComplete;
+      expect(notice(el)).toBe("Not found");
+      expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
+    });
+
+    it("says Not found when new products leave the open section with nothing to order", async () => {
+      const { el } = await mount({ menu: lunch({ homeLayoutId: "lay-counter" }) });
+      await tap(el, entry(el, "shortcuts", "Beer (EN)"));
+      el.products = PRODUCTS.filter((each) => each !== cana);
+      await el.updateComplete;
+      expect(notice(el)).toBe("Not found");
+      expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
+    });
+
+    it("stays where it is, with no notice, when a new menu still holds the open section", async () => {
+      const { el } = await mount();
+      await tap(el, entry(el, "structure", "Drinks (EN)"));
+      await tap(el, entry(el, "section", "Beer (EN)"));
+      el.menu = lunch({ versionId: "v2", structure: { members: [drinks] } });
+      await el.updateComplete;
+      expect(notice(el)).toBeNull();
+      expect(breadcrumb(el)).toBe("Home › Drinks (EN) › Beer (EN)");
+    });
+
+    it("drops a shortcut whose target a new menu lacks, with no notice", async () => {
+      const { el } = await mount();
+      el.menu = lunch({ structure: { members: [favourites, food, member("water")] } });
+      await el.updateComplete;
+      expect(names(entries(el, "shortcuts"))).toEqual(["Café", "Burger", "Agua"]);
+      expect(notice(el)).toBeNull();
     });
 
     it("says it in the till's language, and clears it on the next step", async () => {
       setLocale("es-ES");
       const { el } = await mount();
-      const tile = entry(el, "shortcuts", "Bebidas (ES)");
+      await tap(el, entry(el, "structure", "Bebidas (ES)"));
       el.menu = lunch({ structure: { members: [favourites, member("water")] } });
-      await tap(el, tile);
+      await el.updateComplete;
       expect(notice(el)).toBe("No encontrado");
       await tap(el, entry(el, "structure", "Favoritos (ES)"));
+      expect(notice(el)).toBeNull();
+    });
+
+    it("clears it when a product is picked or a search is typed", async () => {
+      const { el, store } = await mount();
+      const dropDrinks = async () => {
+        await tap(el, entry(el, "structure", "Drinks (EN)"));
+        el.menu = lunch({ structure: { members: [favourites, member("water")] } });
+        await el.updateComplete;
+        expect(notice(el)).toBe("Not found");
+      };
+      await dropDrinks();
+      await tap(el, entry(el, "structure", "Agua"));
+      expect(notice(el)).toBeNull();
+      expect(store.lines).toEqual([{ product: water, quantity: "1" }]);
+      el.menu = lunch();
+      await el.updateComplete;
+      await dropDrinks();
+      await search(el, "c");
       expect(notice(el)).toBeNull();
     });
   });
