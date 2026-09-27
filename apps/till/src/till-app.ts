@@ -34,6 +34,7 @@ import type { DraftGroup } from "./state/draft-groups.js";
 import "@waitron/ui/src/components/wt-toast.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import "./screens/till-station-screen.js";
+import { CROSS_ICON_PATH } from "./widgets/station-queue.js";
 import "./screens/till-enrol-screen.js";
 import "./screens/till-device-chooser.js";
 import "./screens/till-expo-screen.js";
@@ -137,9 +138,7 @@ interface RefreshRetry {
 const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
 
 // wt-toast draws a `close` icon its consuming app registers.
-registerIcons({
-  close: "M3 4.4 4.4 3 8 6.6 11.6 3 13 4.4 9.4 8 13 11.6 11.6 13 8 9.4 4.4 13 3 11.6 6.6 8Z",
-});
+registerIcons({ close: CROSS_ICON_PATH });
 
 /**
  * How long a round's send, or a reload of the table's offers, may stay out before it is cancelled.

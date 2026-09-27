@@ -17,10 +17,13 @@ import type {
   TicketState,
 } from "../api/client.js";
 
+/** A diagonal cross: a void notice here, and the till app's `close` icon. */
+export const CROSS_ICON_PATH =
+  "M3 4.4 4.4 3 8 6.6 11.6 3 13 4.4 9.4 8 13 11.6 11.6 13 8 9.4 4.4 13 3 11.6 6.6 8Z";
+
 const NOTICE_ICONS: Record<`notice-${KitchenNoticeKind}`, string> = {
   "notice-recalled": "M6 2 1.5 6 6 10V7h4a2.5 2.5 0 0 1 0 5H6v2h4a4.5 4.5 0 0 0 0-9H6Z",
-  "notice-void":
-    "M3 4.4 4.4 3 8 6.6 11.6 3 13 4.4 9.4 8 13 11.6 11.6 13 8 9.4 4.4 13 3 11.6 6.6 8Z",
+  "notice-void": CROSS_ICON_PATH,
   "notice-changed": "M11.3 1.9 14.1 4.7 5.8 13H3V10.2ZM2 14.5H14V15.5H2Z",
   "notice-moved": "M2 7H10.6L7.3 3.7 8.7 2.3 14.4 8 8.7 13.7 7.3 12.3 10.6 9H2Z",
 };

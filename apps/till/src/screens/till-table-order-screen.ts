@@ -971,9 +971,7 @@ export class TillTableOrderScreen extends LitElement {
     const pending = this.pendingDraft;
     if (pending === null) return;
     this.pendingDraft = null;
-    this.dispatchEvent(
-      new CustomEvent("submit-draft", { detail: pending.detail, bubbles: true, composed: true }),
-    );
+    this.#dispatch("submit-draft", pending.detail);
   }
 
   #dismissPreview(): void {
