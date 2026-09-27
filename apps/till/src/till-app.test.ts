@@ -420,7 +420,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     setLineCourse: vi.fn().mockResolvedValue(undefined),
     sendLines: vi.fn().mockResolvedValue(undefined),
     recallLines: vi.fn().mockResolvedValue(undefined),
-    voidLine: vi.fn().mockResolvedValue(undefined),
+    voidLine: vi.fn().mockResolvedValue({ visit: null }),
     setTableStatus: vi.fn().mockResolvedValue(undefined),
     moveTab: vi.fn().mockResolvedValue(undefined),
     joinTable: vi.fn().mockResolvedValue(undefined),
@@ -4221,7 +4221,7 @@ describe("till-app", () => {
       });
 
       it("void-line cancels the started line then reloads its lines", async () => {
-        const voidLine = vi.fn().mockResolvedValue(undefined);
+        const voidLine = vi.fn().mockResolvedValue({ visit: null });
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),

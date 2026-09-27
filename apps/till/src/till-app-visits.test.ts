@@ -1444,5 +1444,82 @@ describe("till-app: the order's groups (R5)", () => {
       expect(banner(el)!.textContent).toContain(codeMessage("group.not_held"));
       expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
     });
+
+    describe("after a void or a change, which move the party on (R10)", () => {
+      /** The server's side of D19 for a submission: refused unless it carries `current`. */
+      const submitAt = (current: number) =>
+        vi.fn(async (_visitId: string, command: { expectedVisitRevision: number }) => {
+          if (command.expectedVisitRevision !== current)
+            throw { code: "visit.out_of_date", visitId: "v1" };
+          return { tabId: "wo-4", revision: current + 1, groups: [] };
+        });
+
+      it("a round sent after a void carries the revision the void answered", async () => {
+        const { el } = await mountApp(
+          withGroups({
+            voidLine: vi.fn().mockResolvedValue({ visit: { id: "v1", revision: 4 } }),
+            submitGroups: submitAt(4),
+          }),
+        );
+        const order = await openMesa(el);
+
+        emit(order, "void-line", { lineNo: 1 });
+        await flush(el);
+        emit(tableOrder(el)!, "send-round", {
+          lines: roundLines,
+          groups: [{ release: "fire", lineIndexes: [0, 1] }],
+        });
+        await flush(el);
+
+        expect(api.voidLine).toHaveBeenCalledWith("wo-4", 1);
+        expect(vi.mocked(api.submitGroups).mock.calls[0]![1].expectedVisitRevision).toBe(4);
+        expect(banner(el)).toBeNull();
+      });
+
+      it("a Fire course after a saved change carries the revision the change answered", async () => {
+        const { el } = await mountApp(
+          withGroups({
+            updateOrderLine: vi
+              .fn()
+              .mockResolvedValue({ revision: 1, visit: { id: "v1", revision: 4 } }),
+            fireGroup: chainedFire(4),
+          }),
+        );
+        const order = await openMesa(el);
+
+        emit(order, "change-line", {
+          lineNo: 3,
+          lineName: "Vino",
+          patch: { note: "sin hielo" },
+          revision: 0,
+        });
+        await flush(el);
+        emit(tableOrder(el)!, "fire-course", { orderId: "wo-4", courseId: "c1" });
+        await flush(el);
+
+        expect(vi.mocked(api.fireGroup).mock.calls).toEqual([
+          ["v1", "g-early", { submissionId: expect.any(String), expectedVisitRevision: 4 }],
+          ["v1", "g-late", { submissionId: expect.any(String), expectedVisitRevision: 5 }],
+        ]);
+        expect(banner(el)).toBeNull();
+      });
+
+      it.each([
+        ["no party", null],
+        ["another party", { id: "v7", revision: 10 }],
+      ])("a void answering %s leaves the revision the screen showed", async (_name, answered) => {
+        const { el } = await mountApp(
+          withGroups({ voidLine: vi.fn().mockResolvedValue({ visit: answered }) }),
+        );
+        const order = await openMesa(el);
+
+        emit(order, "void-line", { lineNo: 1 });
+        await flush(el);
+        emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
+        await flush(el);
+
+        expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 3 });
+      });
+    });
   });
 });

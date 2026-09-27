@@ -1579,10 +1579,16 @@ describe("TillApi", () => {
     });
   });
 
-  it("voidLine DELETEs the tab line's path (empty 200 body, no request body)", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+  it("voidLine DELETEs the tab line's path (no request body), and resolves the party the server answers", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ visit: { id: "v1", revision: 4 } }), { status: 200 }),
+      );
 
-    await expect(new TillApi("", fetchStub).voidLine("ord-1", 2)).resolves.toBeUndefined();
+    await expect(new TillApi("", fetchStub).voidLine("ord-1", 2)).resolves.toEqual({
+      visit: { id: "v1", revision: 4 },
+    });
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/working-orders/ord-1/lines/2",
@@ -1594,7 +1600,9 @@ describe("TillApi", () => {
   });
 
   it("voidLine with a quantity voids that part only, as a query parameter", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ visit: null }), { status: 200 }));
 
     await new TillApi("", fetchStub).voidLine("ord-1", 2, "1.5");
 
@@ -1605,9 +1613,11 @@ describe("TillApi", () => {
   });
 
   it("updateOrderLine PUTs the changed fields of one line with the revision it was read at, and resolves the one the server answers", async () => {
-    const fetchStub = vi
-      .fn()
-      .mockResolvedValue(new Response(JSON.stringify({ revision: 8 }), { status: 200 }));
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ revision: 8, visit: { id: "v1", revision: 5 } }), {
+        status: 200,
+      }),
+    );
 
     await expect(
       new TillApi("", fetchStub).updateOrderLine(
@@ -1616,7 +1626,7 @@ describe("TillApi", () => {
         { quantity: "2", note: null, extras: [] },
         7,
       ),
-    ).resolves.toEqual({ revision: 8 });
+    ).resolves.toEqual({ revision: 8, visit: { id: "v1", revision: 5 } });
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/working-orders/ord-1/lines/3",

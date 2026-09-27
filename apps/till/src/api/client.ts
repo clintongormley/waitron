@@ -507,6 +507,10 @@ export interface SubmittedGroups {
   groups: OrderGroup[];
 }
 
+/** The party a bill belongs to, at its revision after a void or line edit on the bill; null for a
+ * counter order. */
+export type BillParty = { id: string; revision: number } | null;
+
 /** A cash tender: the full amount the operator keyed in (the server computes the change). */
 export interface CashTender {
   method: "cash";
@@ -1402,15 +1406,15 @@ export class TillApi {
    * Edit ONE dish line of an open order → `PUT /api/working-orders/:orderId/lines/:lineNo`, from the
    * copy read at `revision`. An absent field keeps the line's own. Rejects `working_order.out_of_date`,
    * `order.payment_in_flight`, `ticket.already_started`, `ticket.already_fired` or
-   * `tab.line_not_found`. Resolves the revision the order is at after the edit.
+   * `tab.line_not_found`. Resolves the revision the order is at after the edit, and its party's.
    */
   updateOrderLine(
     orderId: string,
     lineNo: number,
     patch: OrderLinePatch,
     revision: number,
-  ): Promise<{ revision: number }> {
-    return this.#request<{ revision: number }>(
+  ): Promise<{ revision: number; visit: BillParty }> {
+    return this.#request<{ revision: number; visit: BillParty }>(
       `/api/working-orders/${orderId}/lines/${lineNo}`,
       "PUT",
       { ...patch, revision },
@@ -1794,11 +1798,11 @@ export class TillApi {
    * cancel path for a sent line, whether or not the kitchen has started it. NON-FISCAL;
    * the server prints a correction slip. `quantity`, a decimal string, voids that part of the line
    * only; absent voids all of it. Rejects `tab.not_open`, `tab.line_not_found`,
-   * `tab.void_quantity_invalid` or `order.payment_in_flight`.
+   * `tab.void_quantity_invalid` or `order.payment_in_flight`. Resolves the tab's party after the void.
    */
-  async voidLine(orderId: string, lineNo: number, quantity?: string): Promise<void> {
+  voidLine(orderId: string, lineNo: number, quantity?: string): Promise<{ visit: BillParty }> {
     const part = quantity === undefined ? "" : `?quantity=${encodeURIComponent(quantity)}`;
-    await this.#request<void>(`/api/working-orders/${orderId}/lines/${lineNo}${part}`, "DELETE");
+    return this.#request(`/api/working-orders/${orderId}/lines/${lineNo}${part}`, "DELETE");
   }
 
   /**

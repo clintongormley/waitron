@@ -95,7 +95,13 @@ import {
 } from "./working-order.js";
 import type { LineExtras, OrderLinePatch, TicketState } from "./working-order.js";
 import { listCourses, listStations } from "./kitchen.js";
-import { finishTable, markCleared, readVisitBills, seatTable } from "./visits.js";
+import {
+  finishTable,
+  markCleared,
+  readVisitBills,
+  seatTable,
+  visitRevisionOfOrder,
+} from "./visits.js";
 import type { VisitCommand } from "./visits.js";
 import {
   fireGroup,
@@ -1536,13 +1542,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
       // Absent voids the whole line; `voidTabLine` validates a given one.
       const quantity = c.req.query("quantity");
-      await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
+      // The party's revision after the void (R10), for the till's next command on the party.
+      const visit = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
         withTransaction(deps.db, async (tx) => {
           await voidTabLine(tx, deps.cfg, id, lineNo, quantity, personId);
           await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
+          return visitRevisionOfOrder(tx, id);
         }),
       );
-      return c.body(null, 200);
+      return c.json({ visit });
     }),
   );
 
@@ -1571,12 +1579,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const copy = requireRevision(revision);
       const saved = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
         withTransaction(deps.db, async (tx) => {
-          const edited = await updateOrderLine(tx, deps.cfg, id, lineNo, patch, copy, personId);
+          const revision = await updateOrderLine(tx, deps.cfg, id, lineNo, patch, copy, personId);
           await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
-          return edited;
+          return { revision, visit: await visitRevisionOfOrder(tx, id) };
         }),
       );
-      return c.json({ revision: saved });
+      return c.json(saved);
     }),
   );
 

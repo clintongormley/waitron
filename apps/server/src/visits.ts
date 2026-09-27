@@ -111,6 +111,19 @@ export async function visitOfOrder(tx: Transaction, orderId: string): Promise<st
   return order?.visitId ?? null;
 }
 
+/** The visit a bill belongs to, at its revision now; null for a counter order. */
+export async function visitRevisionOfOrder(
+  tx: Transaction,
+  orderId: string,
+): Promise<{ id: string; revision: number } | null> {
+  const [visit] = await tx
+    .select({ id: visits.id, revision: visits.revision })
+    .from(workingOrders)
+    .innerJoin(visits, eq(visits.id, workingOrders.visitId))
+    .where(eq(workingOrders.id, orderId));
+  return visit ?? null;
+}
+
 /** The tables the visit holds now, in the order they joined it. */
 export async function memberTables(tx: Transaction, visitId: string): Promise<string[]> {
   const rows = await tx

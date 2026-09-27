@@ -253,8 +253,8 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     setLineCourse: vi.fn().mockResolvedValue(undefined),
     sendLines: vi.fn().mockResolvedValue(undefined),
     recallLines: vi.fn().mockResolvedValue(undefined),
-    voidLine: vi.fn().mockResolvedValue(undefined),
-    updateOrderLine: vi.fn().mockResolvedValue({ revision: 1 }),
+    voidLine: vi.fn().mockResolvedValue({ visit: null }),
+    updateOrderLine: vi.fn().mockResolvedValue({ revision: 1, visit: null }),
     setTableStatus: vi.fn().mockResolvedValue(undefined),
     moveTab: vi.fn().mockResolvedValue(undefined),
     joinTable: vi.fn().mockResolvedValue(undefined),
@@ -690,7 +690,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       });
     const { el, screen } = await openBurgerTab({
       getTabLines,
-      updateOrderLine: vi.fn().mockResolvedValue({ revision: 8 }),
+      updateOrderLine: vi.fn().mockResolvedValue({ revision: 8, visit: null }),
     });
     screen.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await screen.updateComplete;
@@ -910,7 +910,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     it("says nothing when the change was saved", async () => {
       const { el, settle, reads } = await changeThenOpenTable3();
 
-      settle.resolve({ revision: 8 });
+      settle.resolve({ revision: 8, visit: null });
       await flush(el);
 
       expect(banner(el)).toBeNull();
@@ -1358,7 +1358,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       const readsBack = reads();
 
       saved();
-      settle().resolve({ revision: 8 });
+      settle().resolve({ revision: 8, visit: null });
       await flush(el);
 
       expect(reads()).toBe(readsBack + 1);
@@ -1402,7 +1402,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       const readsBack = reads();
 
       saved();
-      settle().resolve({ revision: 8 });
+      settle().resolve({ revision: 8, visit: null });
       await flush(el);
 
       expect(reads()).toBe(readsBack + 1);
@@ -1437,7 +1437,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       const readsBefore = reads();
 
       saved();
-      settle().resolve({ revision: 8 });
+      settle().resolve({ revision: 8, visit: null });
       await flush(el);
 
       expect(reads()).toBe(readsBefore + 1);
@@ -1454,7 +1454,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       const readsBefore = reads();
 
       saved();
-      settle().resolve({ revision: 8 });
+      settle().resolve({ revision: 8, visit: null });
       await flush(el);
       expect(reads()).toBe(readsBefore + 1);
 
@@ -1510,7 +1510,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     const { el, screen } = await openBurgerTab({
       getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
       getTabLines,
-      updateOrderLine: vi.fn().mockResolvedValue({ revision: 8 }),
+      updateOrderLine: vi.fn().mockResolvedValue({ revision: 8, visit: null }),
     });
 
     emit(screen, "change-line", change);
@@ -1546,7 +1546,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     const { el, screen } = await openBurgerTab({
       getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
       getTabLines,
-      updateOrderLine: vi.fn().mockResolvedValue({ revision: 8 }),
+      updateOrderLine: vi.fn().mockResolvedValue({ revision: 8, visit: null }),
     });
 
     emit(screen, "change-line", change);

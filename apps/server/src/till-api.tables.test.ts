@@ -193,6 +193,14 @@ async function seat(id: string): Promise<{ tabId: string; visitId: string }> {
   return (await seated.json()) as { tabId: string; visitId: string };
 }
 
+/** The visit's current revision, as the groups route reads it. */
+async function visitRevision(visitId: string): Promise<number> {
+  const { revision } = (await (await request(`/api/visits/${visitId}/groups`)).json()) as {
+    revision: number;
+  };
+  return revision;
+}
+
 /** Sends `lines` to the party's tab as one group released now, at the visit's current revision. */
 async function sendRound(visitId: string, lines: unknown[]): Promise<Response> {
   const { revision } = (await (await request(`/api/visits/${visitId}/groups`)).json()) as {
@@ -423,9 +431,12 @@ describe("table + tab routes", () => {
       ],
     });
 
+    const before = await visitRevision(visitId);
     const voided = await request(`/api/working-orders/${tabId}/lines/1`, { method: "DELETE" });
     expect(voided.status).toBe(200);
-    expect(await voided.text()).toBe("");
+    // The void moves the party on (R10), so the answer says where to, for its next command.
+    expect(await voided.json()).toEqual({ visit: { id: visitId, revision: before + 1 } });
+    expect(await visitRevision(visitId)).toBe(before + 1);
 
     const state = (await (await request("/api/tables/state")).json()) as {
       id: string;
@@ -691,18 +702,27 @@ describe("table + tab routes", () => {
   });
 
   it("both edit routes answer the order's revision after the write, the same one when the edit changes nothing", async () => {
-    const { tabId, revision } = await firedTab();
+    const { tabId, visitId, revision } = await firedTab();
     const lineEdit = (body: object) =>
       request(`/api/working-orders/${tabId}/lines/1`, {
         method: "PUT",
         body: JSON.stringify(body),
       });
+    const party = await visitRevision(visitId);
 
+    // The line edit also answers its party's revision, which a change moves on (R10).
     const changed = await lineEdit({ note: "sin gas", revision });
     expect(changed.status).toBe(200);
-    expect(await changed.json()).toEqual({ revision: revision + 1 });
+    expect(await changed.json()).toEqual({
+      revision: revision + 1,
+      visit: { id: visitId, revision: party + 1 },
+    });
     const unchanged = await lineEdit({ note: "sin gas", revision: revision + 1 });
-    expect(await unchanged.json()).toEqual({ revision: revision + 1 });
+    expect(await unchanged.json()).toEqual({
+      revision: revision + 1,
+      visit: { id: visitId, revision: party + 1 },
+    });
+    expect(await visitRevision(visitId)).toBe(party + 1);
 
     const held = (await (await request(`/api/working-orders/${tabId}`)).json()) as {
       lines: { workingOrderLineId: string }[];

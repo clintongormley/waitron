@@ -2017,6 +2017,25 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     });
   });
 
+  it("PUT /:id/lines/:lineNo on a counter order names no party in its answer", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const id = randomUUID();
+    expect(
+      (await park(app, cookie, { id, lines: [{ menuItemId: aguaOfferId, quantity: "1" }] })).status,
+    ).toBe(200);
+
+    const edited = await app.request(`/api/working-orders/${id}/lines/1`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ note: "para llevar", revision: 0 }),
+    });
+
+    expect(edited.status).toBe(200);
+    expect(await edited.json()).toEqual({ revision: 1, visit: null });
+  });
+
   it("GET lists it, GET/:id retrieves its lines, PUT edits it, DELETE abandons it", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));

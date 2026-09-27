@@ -35,6 +35,7 @@ import "./widgets/card-grid.js";
 import type { StringKey } from "./i18n/strings.js";
 import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
 import type {
+  BillParty,
   DeviceStation,
   FloorZone,
   HeldOrderSummary,
@@ -2235,6 +2236,11 @@ export class TillApp extends LitElement {
     if (this.orderParty?.id === visitId) this.orderParty = { ...this.orderParty, revision };
   }
 
+  /** A void or line edit moves its bill's party on (R10) without a revision of its own to send. */
+  #noteBillParty(visit: BillParty): void {
+    if (visit !== null) this.#noteVisitRevision(visit.id, visit.revision);
+  }
+
   /** Takes the order's party from the floor just read, before the order's lines and bills are read
    * after it. A floor that does not list the table, as after a failed read, keeps the party known. */
   #rememberOrderParty(): void {
@@ -2570,9 +2576,10 @@ export class TillApp extends LitElement {
     if (this.activeTabId === undefined) return;
     this.errorKey = undefined;
     try {
-      await (quantity === undefined
+      const { visit } = await (quantity === undefined
         ? this.api.voidLine(this.activeTabId, lineNo)
         : this.api.voidLine(this.activeTabId, lineNo, quantity));
+      this.#noteBillParty(visit);
     } catch (error) {
       this.errorKey = lineWriteError(error);
     }
@@ -2601,13 +2608,14 @@ export class TillApp extends LitElement {
     const tableId = this.activeTableId;
     this.errorKey = undefined;
     this.cancelOffer = null;
-    let outcome: { saved: { revision: number } } | { error: unknown };
+    let outcome: { saved: { revision: number; visit: BillParty } } | { error: unknown };
     try {
       outcome = { saved: await this.api.updateOrderLine(orderId, lineNo, patch, revision) };
     } catch (error) {
       outcome = { error };
     }
     if ("saved" in outcome) {
+      this.#noteBillParty(outcome.saved.visit);
       if (this.activeTabId !== orderId) return;
       this.tabRevision = outcome.saved.revision;
       await this.#loadTabLines();
