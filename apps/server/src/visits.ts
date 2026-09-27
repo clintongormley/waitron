@@ -267,6 +267,12 @@ async function readVisit(
   return visit;
 }
 
+export async function requireOpenVisit(tx: Transaction, visitId: string): Promise<void> {
+  if ((await readVisit(tx, visitId))?.state !== "open") {
+    throw new AppError("visit.not_open", { visitId });
+  }
+}
+
 /** Every bill of the visit's family, in the order they were opened. */
 export async function readVisitBills(tx: Transaction, visitId: string): Promise<VisitBill[]> {
   if ((await readVisit(tx, visitId)) === undefined) {
@@ -492,9 +498,7 @@ export async function runServiceCommand<R>(
     }
     return recorded.result.value as R;
   }
-  if (scope.kind === "visit" && (await readVisit(tx, scope.visitId))?.state !== "open") {
-    throw new AppError("visit.not_open", { visitId: scope.visitId });
-  }
+  if (scope.kind === "visit") await requireOpenVisit(tx, scope.visitId);
   const result = await run();
   await tx.insert(serviceCommands).values({
     scopeKind: scope.kind,

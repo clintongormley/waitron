@@ -114,7 +114,7 @@ import {
 } from "./order-groups.js";
 import type { GroupLine, SubmitGroupsInput, VisitCommandArgs } from "./order-groups.js";
 import { readDrafts, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
-import type { DraftLineInput, SubmitDraftInput } from "./order-drafts.js";
+import type { SubmitDraftInput } from "./order-drafts.js";
 import { invalid } from "./bill-allocation.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
 import { issueIfFullyPaid } from "./bill-payments.js";
@@ -494,6 +494,14 @@ function groupCommand(personId: string, body: Record<string, unknown>): VisitCom
     expectedVisitRevision: requireRevision(body.expectedVisitRevision, "expectedVisitRevision"),
     operatorId: personId,
   };
+}
+
+/** A submission's held group to add to, when it names one. */
+function joinGroupOf(body: Record<string, unknown>): { joinGroupId?: string } {
+  const { joinGroupId } = body;
+  if (joinGroupId === undefined) return {};
+  if (typeof joinGroupId !== "string") throw invalid("joinGroupId");
+  return { joinGroupId };
 }
 
 /**
@@ -1530,11 +1538,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const input: SubmitGroupsInput = {
         ...groupCommand(personId, body),
         groups: parseSubmittedGroups(body.groups),
+        ...joinGroupOf(body),
       };
-      if (body.joinGroupId !== undefined) {
-        if (typeof body.joinGroupId !== "string") throw invalid("joinGroupId");
-        input.joinGroupId = body.joinGroupId;
-      }
       const submitted = await withTransaction(deps.db, (tx) =>
         submitGroups(tx, deps.cfg, visitId, input),
       );
@@ -1623,10 +1628,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = asObject(await readRawJsonBody<unknown>(c));
       const draftId = requireDraftId(body.draftId);
       const revision = requireRevision(body.revision);
-      // `saveDraft` screens every line before it reads or writes anything.
-      const lines = body.lines as DraftLineInput[];
       const draft = await withTransaction(deps.db, (tx) =>
-        saveDraft(tx, deps.cfg, visitId, personId, { draftId, revision, lines }),
+        saveDraft(tx, deps.cfg, visitId, personId, { draftId, revision, lines: body.lines }),
       );
       return c.json(draft);
     }),
@@ -1640,7 +1643,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = asObject(await readRawJsonBody<unknown>(c));
       const revision = requireRevision(body.revision);
       const draft = await withTransaction(deps.db, (tx) =>
-        takeOverDraft(tx, deps.cfg, draftId, personId, revision, visitId),
+        takeOverDraft(tx, deps.cfg, visitId, draftId, personId, revision),
       );
       return c.json(draft);
     }),
@@ -1653,17 +1656,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const draftId = requireDraftParam(c.req.param("did"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const input: SubmitDraftInput = {
-        submissionId: submissionIdOf(body),
+        ...groupCommand(personId, body),
         draftRevision: requireRevision(body.draftRevision, "draftRevision"),
-        expectedVisitRevision: requireRevision(body.expectedVisitRevision, "expectedVisitRevision"),
         groups: parseDraftGroups(body.groups),
+        ...joinGroupOf(body),
       };
-      if (body.joinGroupId !== undefined) {
-        if (typeof body.joinGroupId !== "string") throw invalid("joinGroupId");
-        input.joinGroupId = body.joinGroupId;
-      }
       const submitted = await withTransaction(deps.db, (tx) =>
-        submitDraft(tx, deps.cfg, draftId, personId, input, visitId),
+        submitDraft(tx, deps.cfg, visitId, draftId, input),
       );
       return c.json(submitted);
     }),

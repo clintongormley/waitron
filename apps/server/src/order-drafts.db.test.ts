@@ -276,8 +276,14 @@ async function save(
   );
 }
 
-async function takeOver(v: Venue, draftId: string, operatorId: string, revision: number) {
-  return inTx((tx) => takeOverDraft(tx, v.cfg, draftId, operatorId, revision));
+async function takeOver(
+  v: Venue,
+  visitId: string,
+  draftId: string,
+  operatorId: string,
+  revision: number,
+) {
+  return inTx((tx) => takeOverDraft(tx, v.cfg, visitId, draftId, operatorId, revision));
 }
 
 async function draftsOf(v: Venue, visitId: string): Promise<Draft[]> {
@@ -526,7 +532,10 @@ describe("saving a draft", () => {
 
     const saved = await save(v, visitId, ALEX, up(draft.id), 0, [item(v, "beer")]);
     expect(saved).toMatchObject({ id: draft.id, revision: 1 });
-    expect(await takeOver(v, up(draft.id), SAM, 1)).toMatchObject({ id: draft.id, ownerId: SAM });
+    expect(await takeOver(v, visitId, up(draft.id), SAM, 1)).toMatchObject({
+      id: draft.id,
+      ownerId: SAM,
+    });
   });
 
   it("stores an empty or blank note as no note, so the line adds into one without a note", async () => {
@@ -604,7 +613,7 @@ describe("saving a draft", () => {
       code: "draft.not_found",
       params: { draftId: "draft-1" },
     });
-    await expect(takeOver(v, "draft-1", SAM, 0)).rejects.toMatchObject({
+    await expect(takeOver(v, mesa4.visitId, "draft-1", SAM, 0)).rejects.toMatchObject({
       code: "draft.not_found",
       params: { draftId: "draft-1" },
     });
@@ -995,7 +1004,7 @@ describe("taking over a draft (D5, spec §2)", () => {
     const mesa4 = await seated(v);
     const alex = await save(v, mesa4.visitId, ALEX, null, 0, [item(v, "beer")]);
 
-    const taken = await takeOver(v, alex.id, SAM, 0);
+    const taken = await takeOver(v, mesa4.visitId, alex.id, SAM, 0);
     expect(taken).toMatchObject({ id: alex.id, ownerId: SAM, ownerName: "Sam", revision: 1 });
     expect(taken.lines).toEqual(alex.lines);
 
@@ -1021,7 +1030,7 @@ describe("taking over a draft (D5, spec §2)", () => {
     const { visitId } = await seated(v);
     const first = await save(v, visitId, ALEX, null, 0, [item(v, "beer")]);
     const second = await save(v, visitId, ALEX, first.id, 0, [item(v, "fish")]);
-    await expect(takeOver(v, first.id, SAM, 0)).rejects.toMatchObject({
+    await expect(takeOver(v, visitId, first.id, SAM, 0)).rejects.toMatchObject({
       code: "draft.out_of_date",
       params: { draftId: first.id, revision: 1 },
     });
@@ -1033,18 +1042,18 @@ describe("taking over a draft (D5, spec §2)", () => {
     const v = await setupVenue();
     const { visitId } = await seated(v);
     const unknown = randomUUID();
-    await expect(takeOver(v, unknown, SAM, 0)).rejects.toMatchObject({
+    await expect(takeOver(v, visitId, unknown, SAM, 0)).rejects.toMatchObject({
       code: "draft.not_found",
       params: { draftId: unknown },
     });
     const draft = await save(v, visitId, ALEX, null, 0, [item(v, "beer")]);
     await db.update(orderDrafts).set({ state: "submitted" }).where(eq(orderDrafts.id, draft.id));
-    await expect(takeOver(v, draft.id, SAM, 0)).rejects.toMatchObject({
+    await expect(takeOver(v, visitId, draft.id, SAM, 0)).rejects.toMatchObject({
       code: "draft.already_submitted",
       params: { draftId: draft.id },
     });
     await db.update(orderDrafts).set({ state: "discarded" }).where(eq(orderDrafts.id, draft.id));
-    await expect(takeOver(v, draft.id, SAM, 0)).rejects.toMatchObject({
+    await expect(takeOver(v, visitId, draft.id, SAM, 0)).rejects.toMatchObject({
       code: "draft.not_found",
     });
     expect(await draftRow(draft.id)).toMatchObject({ ownerId: ALEX, revision: 0 });
@@ -1059,7 +1068,7 @@ describe("taking over a draft (D5, spec §2)", () => {
       .update(visits)
       .set({ state: "needs_clearing", closedAt: new Date().toISOString() })
       .where(eq(visits.id, visitId));
-    await expect(takeOver(v, draft.id, SAM, 0)).rejects.toMatchObject({
+    await expect(takeOver(v, visitId, draft.id, SAM, 0)).rejects.toMatchObject({
       code: "visit.not_open",
       params: { visitId },
     });
@@ -1071,8 +1080,8 @@ describe("taking over a draft (D5, spec §2)", () => {
     const { visitId } = await seated(v);
     const first = await save(v, visitId, ALEX, null, 0, [item(v, "beer")]);
     const draft = await save(v, visitId, ALEX, first.id, 0, [item(v, "fish")]);
-    expect(await takeOver(v, draft.id, ALEX, 0)).toEqual(draft);
-    expect(await takeOver(v, draft.id, ALEX, 1)).toEqual(draft);
+    expect(await takeOver(v, visitId, draft.id, ALEX, 0)).toEqual(draft);
+    expect(await takeOver(v, visitId, draft.id, ALEX, 1)).toEqual(draft);
     expect(await draftRow(draft.id)).toMatchObject({ revision: 1, ownerId: ALEX });
     expect(await eventsOf(draft.id)).toHaveLength(1);
   });
@@ -1086,7 +1095,7 @@ describe("taking over a draft (D5, spec §2)", () => {
       item(v, "beer", { quantity: "2" }),
     ]);
 
-    const merged = await takeOver(v, alex.id, SAM, 0);
+    const merged = await takeOver(v, mesa4.visitId, alex.id, SAM, 0);
     expect(merged).toMatchObject({ id: sam.id, ownerId: SAM, ownerName: "Sam", revision: 1 });
     expect(orders(merged)).toEqual([
       { menuItemId: v.offer("fish"), quantity: "1.000", unavailable: false },
@@ -1351,7 +1360,7 @@ describe("navigation sends nothing", () => {
     const alex = await save(v, visitId, ALEX, null, 0, [item(v, "beer"), item(v, "burger")]);
     await save(v, visitId, ALEX, alex.id, 0, [item(v, "beer", { quantity: "3" })]);
     await save(v, visitId, SAM, null, 0, [item(v, "fish")]);
-    await takeOver(v, alex.id, SAM, 1);
+    await takeOver(v, visitId, alex.id, SAM, 1);
 
     expect(await visitRevision(visitId)).toBe(revision);
     expect(await db.select().from(orderGroups).where(eq(orderGroups.visitId, visitId))).toEqual([]);
@@ -1380,7 +1389,8 @@ async function submit(
 ) {
   const expectedVisitRevision = opts.visitRevision ?? (await visitRevision(visitId));
   return inTx((tx) =>
-    submitDraft(tx, v.cfg, draft.id, operatorId, {
+    submitDraft(tx, v.cfg, visitId, draft.id, {
+      operatorId,
       submissionId: opts.submissionId ?? randomUUID(),
       draftRevision: opts.draftRevision ?? draft.revision,
       expectedVisitRevision,
@@ -1441,7 +1451,7 @@ describe("submitting a draft: takeover and credit (D5, spec §2)", () => {
     const v = await setupVenue();
     const { visitId, tabId } = await seated(v);
     const alex = await save(v, visitId, ALEX, null, 0, [item(v, "beer")]);
-    const taken = await takeOver(v, alex.id, SAM, alex.revision);
+    const taken = await takeOver(v, visitId, alex.id, SAM, alex.revision);
     const sams = await save(v, visitId, SAM, taken.id, taken.revision, [
       item(v, "beer"),
       item(v, "beer"),
@@ -1508,7 +1518,7 @@ describe("one submission, in both orders (Review Focus 1)", () => {
     const v = await setupVenue();
     const { visitId } = await seated(v);
     const alex = await save(v, visitId, ALEX, null, 0, [item(v, "beer")]);
-    await takeOver(v, alex.id, SAM, alex.revision);
+    await takeOver(v, visitId, alex.id, SAM, alex.revision);
 
     await refusedWritingNothing(
       () => submit(v, visitId, alex, ALEX, [{ lineIds: lineIds(alex), release: "fire" }]),
@@ -1524,7 +1534,7 @@ describe("one submission, in both orders (Review Focus 1)", () => {
     const submitted = await draftRow(alex.id);
     expect(submitted).toMatchObject({ state: "submitted", ownerId: ALEX, revision: 1 });
 
-    await refusedWritingNothing(() => takeOver(v, alex.id, SAM, submitted.revision), {
+    await refusedWritingNothing(() => takeOver(v, visitId, alex.id, SAM, submitted.revision), {
       code: "draft.already_submitted",
       params: { draftId: alex.id },
     });
@@ -2018,7 +2028,7 @@ describe("which lines a submission names", () => {
     });
     const alex = await save(v, visitId, ALEX, null, 0, [item(v, "beer")]);
     const sams = await save(v, visitId, SAM, null, 0, [item(v, "fish")]);
-    await takeOver(v, alex.id, SAM, alex.revision);
+    await takeOver(v, visitId, alex.id, SAM, alex.revision);
     await refusedWritingNothing(
       () => submit(v, visitId, alex, SAM, [{ lineIds: lineIds(alex), release: "fire" }]),
       { code: "draft.not_found", params: { draftId: alex.id } },
@@ -2277,23 +2287,27 @@ describe("a retried submission of a draft a merge moved or discarded", () => {
     const samOn5 = await save(v, mesa5.visitId, SAM, null, 0, [item(v, "beer"), item(v, "fish")]);
     const submissionId = randomUUID();
     const input = {
+      operatorId: SAM,
       submissionId,
       draftRevision: samOn5.revision,
       expectedVisitRevision: await visitRevision(mesa5.visitId),
       groups: [{ lineIds: [samOn5.lines[0]!.id], release: "fire" as const }],
     };
-    const first = await inTx((tx) => submitDraft(tx, v.cfg, samOn5.id, SAM, input, mesa5.visitId));
+    const first = await inTx((tx) => submitDraft(tx, v.cfg, mesa5.visitId, samOn5.id, input));
     await merge(v, mesa4, mesa5, SAM);
     const before = await everything();
 
-    const again = await inTx((tx) => submitDraft(tx, v.cfg, samOn5.id, SAM, input, mesa5.visitId));
+    const again = await inTx((tx) => submitDraft(tx, v.cfg, mesa5.visitId, samOn5.id, input));
 
     expect(again).toEqual(first);
     expect(await everything()).toEqual(before);
-    await refusedWritingNothing(() => inTx((tx) => submitDraft(tx, v.cfg, samOn5.id, SAM, input)), {
-      code: "draft.out_of_date",
-      params: { draftId: samOn5.id, revision: samOn5.revision + 2 },
-    });
+    await refusedWritingNothing(
+      () => inTx((tx) => submitDraft(tx, v.cfg, mesa4.visitId, samOn5.id, input)),
+      {
+        code: "draft.out_of_date",
+        params: { draftId: samOn5.id, revision: samOn5.revision + 2 },
+      },
+    );
   });
 });
 
@@ -2305,30 +2319,24 @@ describe("a draft named on another party", () => {
     const alex = await save(v, mesa4.visitId, ALEX, null, 0, [item(v, "beer")]);
 
     await refusedWritingNothing(
-      () => inTx((tx) => takeOverDraft(tx, v.cfg, alex.id, SAM, alex.revision, mesa5.visitId)),
+      () => inTx((tx) => takeOverDraft(tx, v.cfg, mesa5.visitId, alex.id, SAM, alex.revision)),
       { code: "draft.not_found", params: { draftId: alex.id } },
     );
     await refusedWritingNothing(
       () =>
         inTx(async (tx) =>
-          submitDraft(
-            tx,
-            v.cfg,
-            alex.id,
-            ALEX,
-            {
-              submissionId: randomUUID(),
-              draftRevision: alex.revision,
-              expectedVisitRevision: await visitRevision(mesa5.visitId),
-              groups: [{ lineIds: lineIds(alex), release: "fire" }],
-            },
-            mesa5.visitId,
-          ),
+          submitDraft(tx, v.cfg, mesa5.visitId, alex.id, {
+            operatorId: ALEX,
+            submissionId: randomUUID(),
+            draftRevision: alex.revision,
+            expectedVisitRevision: await visitRevision(mesa5.visitId),
+            groups: [{ lineIds: lineIds(alex), release: "fire" }],
+          }),
         ),
       { code: "draft.not_found", params: { draftId: alex.id } },
     );
     const taken = await inTx((tx) =>
-      takeOverDraft(tx, v.cfg, alex.id, SAM, alex.revision, mesa4.visitId),
+      takeOverDraft(tx, v.cfg, mesa4.visitId, alex.id, SAM, alex.revision),
     );
     expect(taken.ownerId).toBe(SAM);
   });

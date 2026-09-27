@@ -6,7 +6,6 @@ import {
   orderDraftEvents,
   orderDraftLines,
   orderDrafts,
-  visits,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { readExtraSelections, readOptionSelections } from "@waitron/catalogue";
@@ -17,18 +16,18 @@ import {
   AppError,
   decimal,
   isUuid,
-  normaliseUuid,
   QUANTITY_SCALE,
   stringToThousandths,
   thousandthsToDecimal,
   toScale,
 } from "@waitron/shared";
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
+import { invalid } from "./bill-allocation.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { placeGroups, visitTab } from "./order-groups.js";
-import type { GroupLine, GroupRelease, SubmittedGroups } from "./order-groups.js";
+import type { GroupLine, GroupRelease, SubmittedGroups, VisitCommandArgs } from "./order-groups.js";
 import type { TillConfig } from "./till-config.js";
-import { checkAndBumpVisit, runServiceCommand } from "./visits.js";
+import { checkAndBumpVisit, requireOpenVisit, runServiceCommand } from "./visits.js";
 import { screenNote } from "./working-order.js";
 import "./errors.js";
 
@@ -112,7 +111,8 @@ export interface SaveDraftInput {
   /** Null asks for the operator's new draft on the visit. */
   draftId: string | null;
   revision: number;
-  lines: DraftLineInput[];
+  /** Screened by the save before it reads or writes anything. */
+  lines: unknown;
 }
 
 /** One unsent draft on a party, as the floor shows it: `lineCount` counts rows, not units. */
@@ -150,34 +150,23 @@ export async function saveDraft(
   await requireCourses(tx, cfg, lines);
   let draftId: string;
   if (input.draftId === null) {
-    const [held] = await tx
-      .select({ id: orderDrafts.id, revision: orderDrafts.revision })
-      .from(orderDrafts)
-      .where(
-        and(
-          eq(orderDrafts.visitId, visitId),
-          eq(orderDrafts.ownerId, operatorId),
-          eq(orderDrafts.state, "open"),
-        ),
-      );
+    const [held] = await openDraftsOn(tx, visitId, operatorId);
     if (held !== undefined) {
       throw new AppError("draft.out_of_date", { draftId: held.id, revision: held.revision });
     }
     draftId = newId();
     await tx.insert(orderDrafts).values({ id: draftId, visitId, ownerId: operatorId });
-    await recordDraftEvent(tx, draftId, "created", null, operatorId, operatorId);
+    await recordDraftEvents(tx, {
+      draftId,
+      kind: "created",
+      fromPerson: null,
+      toPerson: operatorId,
+      actorId: operatorId,
+      detail: {},
+    });
   } else {
-    const draft = await requireDraft(tx, draftIdOf(input.draftId), visitId);
-    if (draft.ownerId !== operatorId) {
-      throw new AppError("draft.taken_over", {
-        draftId: draft.id,
-        ownerId: draft.ownerId,
-        ownerName: await personName(tx, draft.ownerId),
-      });
-    }
-    if (draft.revision !== input.revision) {
-      throw new AppError("draft.out_of_date", { draftId: draft.id, revision: draft.revision });
-    }
+    const draft = await requireDraft(tx, foldIfUuid(input.draftId), visitId);
+    await requireOwnDraftAt(tx, draft, operatorId, input.revision);
     draftId = draft.id;
     await tx
       .update(orderDrafts)
@@ -190,41 +179,28 @@ export async function saveDraft(
     draftId,
     normaliseDraftLines(lines.map((line) => ({ ...line, id: newId(), unavailable: false }))),
   );
-  return (await readOpenDrafts(tx, cfg, visitId, draftId))[0]!;
+  return readOpenDraft(tx, cfg, visitId, draftId);
 }
 
 /**
  * Make the operator the owner of another person's open draft. Where the operator already has an
  * open draft on the visit, the taken lines are added to the end of it and the taken draft is
  * discarded, so no one holds two; the operator's draft is returned. Taking over one's own draft
- * changes nothing and returns it as it is. With `visitId`, a draft of another visit is not found.
+ * changes nothing and returns it as it is. A draft of another visit is not found.
  */
 export async function takeOverDraft(
   tx: Transaction,
   cfg: TillConfig,
+  visitId: string,
   draftId: string,
   operatorId: string,
   revision: number,
-  visitId?: string,
 ): Promise<Draft> {
-  const draft = await requireDraft(tx, draftIdOf(draftId), visitId);
-  await requireOpenVisit(tx, draft.visitId);
-  if (draft.ownerId === operatorId) {
-    return (await readOpenDrafts(tx, cfg, draft.visitId, draft.id))[0]!;
-  }
-  if (draft.revision !== revision) {
-    throw new AppError("draft.out_of_date", { draftId: draft.id, revision: draft.revision });
-  }
-  const [own] = await tx
-    .select({ id: orderDrafts.id, revision: orderDrafts.revision })
-    .from(orderDrafts)
-    .where(
-      and(
-        eq(orderDrafts.visitId, draft.visitId),
-        eq(orderDrafts.ownerId, operatorId),
-        eq(orderDrafts.state, "open"),
-      ),
-    );
+  const draft = await requireDraft(tx, foldIfUuid(draftId), visitId);
+  await requireOpenVisit(tx, visitId);
+  if (draft.ownerId === operatorId) return readOpenDraft(tx, cfg, visitId, draft.id);
+  requireDraftRevision(draft, revision);
+  const [own] = await openDraftsOn(tx, visitId, operatorId);
   await tx
     .update(orderDrafts)
     .set({
@@ -234,12 +210,17 @@ export async function takeOverDraft(
       ...(own === undefined ? {} : { state: "discarded" as const }),
     })
     .where(eq(orderDrafts.id, draft.id));
-  await recordDraftEvent(tx, draft.id, "taken_over", draft.ownerId, operatorId, operatorId);
-  if (own === undefined) {
-    return (await readOpenDrafts(tx, cfg, draft.visitId, draft.id))[0]!;
-  }
+  await recordDraftEvents(tx, {
+    draftId: draft.id,
+    kind: "taken_over",
+    fromPerson: draft.ownerId,
+    toPerson: operatorId,
+    actorId: operatorId,
+    detail: {},
+  });
+  if (own === undefined) return readOpenDraft(tx, cfg, visitId, draft.id);
   await addDiscardedDraft(tx, draft.id, own, operatorId, operatorId);
-  return (await readOpenDrafts(tx, cfg, draft.visitId, own.id))[0]!;
+  return readOpenDraft(tx, cfg, visitId, own.id);
 }
 
 /**
@@ -276,17 +257,10 @@ export async function moveDraftsToVisit(
         ),
       );
   }
-  if (absorbed.length > 0) {
-    await tx
-      .update(orderDrafts)
-      .set({ state: "discarded", revision: sql`${orderDrafts.revision} + 1`, updatedAt: nowIso() })
-      .where(
-        inArray(
-          orderDrafts.id,
-          absorbed.map((draft) => draft.id),
-        ),
-      );
-  }
+  await discardDrafts(
+    tx,
+    absorbed.map((draft) => draft.id),
+  );
   for (const draft of absorbed) {
     const actorId = operatorId ?? draft.ownerId;
     await addDiscardedDraft(tx, draft.id, held.get(draft.ownerId)!, draft.ownerId, actorId);
@@ -301,17 +275,13 @@ export async function discardVisitDrafts(
 ): Promise<void> {
   const open = await openDraftsOn(tx, visitId);
   if (open.length === 0) return;
-  await tx
-    .update(orderDrafts)
-    .set({ state: "discarded", revision: sql`${orderDrafts.revision} + 1`, updatedAt: nowIso() })
-    .where(
-      inArray(
-        orderDrafts.id,
-        open.map((draft) => draft.id),
-      ),
-    );
-  await tx.insert(orderDraftEvents).values(
-    open.map((draft) => ({
+  await discardDrafts(
+    tx,
+    open.map((draft) => draft.id),
+  );
+  await recordDraftEvents(
+    tx,
+    ...open.map((draft) => ({
       draftId: draft.id,
       kind: "discarded" as const,
       fromPerson: draft.ownerId,
@@ -322,10 +292,8 @@ export async function discardVisitDrafts(
   );
 }
 
-export interface SubmitDraftInput {
-  submissionId: string;
+export interface SubmitDraftInput extends VisitCommandArgs {
   draftRevision: number;
-  expectedVisitRevision: number;
   /** Lines of the draft's current revision, each named once across the groups. */
   groups: { lineIds: string[]; release: GroupRelease }[];
   /** As `submitGroups` takes it: add the one held group's lines to this held group. */
@@ -339,25 +307,23 @@ export type SubmittedDraft = SubmittedGroups & { draft: Draft | null };
  * Send the named lines of the operator's own draft as groups, through {@link placeGroups}, so each
  * line is credited to the operator and each group submitted by them. The sent lines leave the
  * draft and the rest keep their positions; the draft is `submitted` once it has no line left. A
- * retry under the same submission id answers the first result (D8), from the record of the visit
- * it is asked on: `scope` when given, where a draft of another visit is not found, else the
- * draft's own.
+ * retry under the same submission id answers the first result (D8), from the record of `visitId`,
+ * where a draft of another visit is not found.
  */
 export async function submitDraft(
   tx: Transaction,
   cfg: TillConfig,
+  visitId: string,
   draftId: string,
-  operatorId: string,
   input: SubmitDraftInput,
-  scope?: string,
 ): Promise<SubmittedDraft> {
-  const id = draftIdOf(draftId);
-  const visitId = scope ?? (await draftVisit(tx, id));
+  const { operatorId } = input;
+  const id = foldIfUuid(draftId);
   const groups = input.groups.map(({ lineIds, release }) => ({
-    lineIds: lineIds.map(lineIdOf),
+    lineIds: lineIds.map(foldIfUuid),
     release,
   }));
-  const joinGroupId = input.joinGroupId === undefined ? undefined : groupIdOf(input.joinGroupId);
+  const joinGroupId = input.joinGroupId === undefined ? undefined : foldIfUuid(input.joinGroupId);
   return runServiceCommand(
     tx,
     { kind: "visit", visitId },
@@ -366,16 +332,7 @@ export async function submitDraft(
     { visitId, draftId: id, operatorId, groups, joinGroupId },
     async () => {
       const draft = await requireDraft(tx, id, visitId);
-      if (draft.ownerId !== operatorId) {
-        throw new AppError("draft.taken_over", {
-          draftId: id,
-          ownerId: draft.ownerId,
-          ownerName: await personName(tx, draft.ownerId),
-        });
-      }
-      if (draft.revision !== input.draftRevision) {
-        throw new AppError("draft.out_of_date", { draftId: id, revision: draft.revision });
-      }
+      await requireOwnDraftAt(tx, draft, operatorId, input.draftRevision);
       await checkAndBumpVisit(tx, visitId, input.expectedVisitRevision, "open");
       const lines = (await storedLines(tx, [id])).map(({ line }) => line);
       const known = new Set(lines.map((line) => line.id));
@@ -402,13 +359,15 @@ export async function submitDraft(
           ...(emptied ? { state: "submitted" as const } : {}),
         })
         .where(eq(orderDrafts.id, id));
-      await recordDraftEvent(tx, id, "submitted", operatorId, operatorId, operatorId, {
-        groupIds: placed.groups.map((group) => group.id),
+      await recordDraftEvents(tx, {
+        draftId: id,
+        kind: "submitted",
+        fromPerson: operatorId,
+        toPerson: operatorId,
+        actorId: operatorId,
+        detail: { groupIds: placed.groups.map((group) => group.id) },
       });
-      return {
-        ...placed,
-        draft: emptied ? null : (await readOpenDrafts(tx, cfg, visitId, id))[0]!,
-      };
+      return { ...placed, draft: emptied ? null : await readOpenDraft(tx, cfg, visitId, id) };
     },
   );
 }
@@ -440,10 +399,6 @@ export async function readUnsentDrafts(
 
 const QUANTITY_PATTERN = /^(?:0|[1-9]\d{0,8})(?:\.\d{1,3})?$/;
 
-function invalid(field: string): AppError {
-  return new AppError("management.request_invalid", { field });
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -451,7 +406,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /** A UUID in lower case, the spelling the stored ids and the merge key compare in. */
 function uuid(value: unknown, field: string): string {
   if (typeof value !== "string" || !isUuid(value)) throw invalid(field);
-  return normaliseUuid(value, field);
+  return value.toLowerCase();
 }
 
 /** An id a line may leave out: absent or null is none. */
@@ -460,14 +415,9 @@ function optionalId(value: unknown, field: string): string | null {
   return uuid(value, field);
 }
 
-/** A line id that is no UUID names no line, so it is kept as sent and then refused. */
-function lineIdOf(lineId: string): string {
-  return isUuid(lineId) ? normaliseUuid(lineId, "groups") : lineId;
-}
-
-/** A group id that is no UUID names no group, so it is kept as sent and then not found. */
-function groupIdOf(groupId: string): string {
-  return isUuid(groupId) ? normaliseUuid(groupId, "joinGroupId") : groupId;
+/** An id that is no UUID names nothing, so it is kept as sent and then refused or not found. */
+function foldIfUuid(id: string): string {
+  return isUuid(id) ? id.toLowerCase() : id;
 }
 
 /** A draft line as pricing takes a basket line, with each null field left out. */
@@ -482,11 +432,6 @@ function groupLine(line: DraftLine): GroupLine {
     ...(line.courseId === null ? {} : { courseId: line.courseId }),
     ...(line.note === null ? {} : { note: line.note }),
   };
-}
-
-/** A draft id that is no UUID names no draft, so it is kept as sent and then not found. */
-function draftIdOf(draftId: string): string {
-  return isUuid(draftId) ? normaliseUuid(draftId, "draftId") : draftId;
 }
 
 /**
@@ -553,19 +498,8 @@ async function requireCourses(
   if (missing !== undefined) throw new AppError("course.not_found", { courseId: missing });
 }
 
-async function requireOpenVisit(tx: Transaction, visitId: string): Promise<void> {
-  const [visit] = await tx
-    .select({ state: visits.state })
-    .from(visits)
-    .where(eq(visits.id, visitId));
-  if (visit?.state !== "open") throw new AppError("visit.not_open", { visitId });
-}
-
-/**
- * The draft, open or sent; a discarded one is gone. With `visitId`, a draft of another visit is
- * not found either.
- */
-async function requireDraft(tx: Transaction, draftId: string, visitId?: string) {
+/** The visit's draft, open or sent; a discarded one, or one of another visit, is not found. */
+async function requireDraft(tx: Transaction, draftId: string, visitId: string) {
   const [draft] = await tx
     .select({
       id: orderDrafts.id,
@@ -576,31 +510,57 @@ async function requireDraft(tx: Transaction, draftId: string, visitId?: string) 
     })
     .from(orderDrafts)
     .where(eq(orderDrafts.id, draftId));
-  if (
-    draft === undefined ||
-    draft.state === "discarded" ||
-    (visitId !== undefined && draft.visitId !== visitId)
-  ) {
+  if (draft === undefined || draft.state === "discarded" || draft.visitId !== visitId) {
     throw new AppError("draft.not_found", { draftId });
   }
   if (draft.state === "submitted") throw new AppError("draft.already_submitted", { draftId });
   return draft;
 }
 
-async function draftVisit(tx: Transaction, draftId: string): Promise<string> {
-  const [found] = await tx
-    .select({ visitId: orderDrafts.visitId })
-    .from(orderDrafts)
-    .where(eq(orderDrafts.id, draftId));
-  if (found === undefined) throw new AppError("draft.not_found", { draftId });
-  return found.visitId;
+/** Refuse a draft another person now owns, then one that has moved on since `revision`. */
+async function requireOwnDraftAt(
+  tx: Transaction,
+  draft: { id: string; ownerId: string; revision: number },
+  operatorId: string,
+  revision: number,
+): Promise<void> {
+  if (draft.ownerId !== operatorId) {
+    throw new AppError("draft.taken_over", {
+      draftId: draft.id,
+      ownerId: draft.ownerId,
+      ownerName: await personName(tx, draft.ownerId),
+    });
+  }
+  requireDraftRevision(draft, revision);
 }
 
-async function openDraftsOn(tx: Transaction, visitId: string) {
+function requireDraftRevision(draft: { id: string; revision: number }, revision: number): void {
+  if (draft.revision !== revision) {
+    throw new AppError("draft.out_of_date", { draftId: draft.id, revision: draft.revision });
+  }
+}
+
+/** The visit's open drafts; with `ownerId`, only that person's, of which there is at most one. */
+async function openDraftsOn(tx: Transaction, visitId: string, ownerId?: string) {
   return tx
     .select({ id: orderDrafts.id, ownerId: orderDrafts.ownerId, revision: orderDrafts.revision })
     .from(orderDrafts)
-    .where(and(eq(orderDrafts.visitId, visitId), eq(orderDrafts.state, "open")));
+    .where(
+      and(
+        eq(orderDrafts.visitId, visitId),
+        eq(orderDrafts.state, "open"),
+        ownerId === undefined ? undefined : eq(orderDrafts.ownerId, ownerId),
+      ),
+    );
+}
+
+/** Mark the drafts discarded, each with its revision moved on. */
+async function discardDrafts(tx: Transaction, draftIds: readonly string[]): Promise<void> {
+  if (draftIds.length === 0) return;
+  await tx
+    .update(orderDrafts)
+    .set({ state: "discarded", revision: sql`${orderDrafts.revision} + 1`, updatedAt: nowIso() })
+    .where(inArray(orderDrafts.id, [...draftIds]));
 }
 
 /**
@@ -615,12 +575,18 @@ async function addDiscardedDraft(
   ownerId: string,
   actorId: string,
 ): Promise<void> {
-  await recordDraftEvent(tx, fromDraftId, "discarded", ownerId, ownerId, actorId, {
-    intoDraftId: into.id,
+  await recordDraftEvents(tx, {
+    draftId: fromDraftId,
+    kind: "discarded",
+    fromPerson: ownerId,
+    toPerson: ownerId,
+    actorId,
+    detail: { intoDraftId: into.id },
   });
+  const stored = await storedLines(tx, [into.id, fromDraftId]);
   const combined = [
-    ...(await storedLines(tx, [into.id])),
-    ...(await storedLines(tx, [fromDraftId])),
+    ...stored.filter(({ draftId }) => draftId === into.id),
+    ...stored.filter(({ draftId }) => draftId === fromDraftId),
   ].map(({ line }) => line);
   await replaceLines(tx, [into.id, fromDraftId], into.id, normaliseDraftLines(combined));
   await tx
@@ -637,18 +603,10 @@ async function personName(tx: Transaction, personId: string): Promise<string> {
   return person?.displayName ?? "";
 }
 
-async function recordDraftEvent(
-  tx: Transaction,
-  draftId: string,
-  kind: "created" | "taken_over" | "submitted" | "discarded",
-  fromPerson: string | null,
-  toPerson: string,
-  actorId: string,
-  detail: Record<string, unknown> = {},
-): Promise<void> {
-  await tx
-    .insert(orderDraftEvents)
-    .values({ draftId, kind, fromPerson, toPerson, actorId, detail });
+type DraftEvent = typeof orderDraftEvents.$inferInsert;
+
+async function recordDraftEvents(tx: Transaction, ...events: DraftEvent[]): Promise<void> {
+  await tx.insert(orderDraftEvents).values(events);
 }
 
 /**
@@ -707,6 +665,16 @@ async function replaceLines(
       noMerge: line.noMerge,
     })),
   );
+}
+
+/** One open draft of the visit, which the caller knows is there. */
+async function readOpenDraft(
+  tx: Transaction,
+  cfg: TillConfig,
+  visitId: string,
+  draftId: string,
+): Promise<Draft> {
+  return (await readOpenDrafts(tx, cfg, visitId, draftId))[0]!;
 }
 
 async function readOpenDrafts(
