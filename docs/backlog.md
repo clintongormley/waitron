@@ -3330,8 +3330,10 @@ approved.
   (`gh api repos/clintongormley/waitron/actions/permissions/workflow` printed
   `"default_workflow_permissions":"read"` on 2026-09-28); the change narrows every scope but
   `contents` to none (GitHub always grants `metadata` read access) and puts the setting in the
-  files. Whether the alerts close is
-  read on `main`'s next CodeQL analysis.
+  files. All 25 read `fixed` after `main`'s CodeQL analysis of `6e5fc6a52` (2026-09-28). `main`'s
+  CI run for that commit skipped `publish`, because a root-only push sets `code=false`; the first
+  code push to `main` after it is the first `publish` run under the new file, though that job
+  names its own block.
   Next: check each ReDoS pattern against
   the inputs that reach it. **Dependabot malware alerts** were switched on by the owner on 2026-09-27 from the
   repository's Settings → Advanced Security page, by the owner's report, unconfirmed: GitHub's docs
