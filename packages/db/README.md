@@ -85,8 +85,10 @@ contains a `GRANT`, a role or an `ENABLE ALWAYS`: there is no database role to g
 and file permissions on the venue directory are the access control.
 
 The **append-only** triggers are not in any of these files. They are installed at runtime by
-`installAppendOnlyTriggers` (`@waitron/store`), from the table names each migration set declares,
-which is why every migrating path gets them without having to remember to.
+`installAppendOnlyTriggers` (`@waitron/store`), called by `applyMigrations`, from the
+`appendOnlyTables` each set hands it, which a `migrationOptionsFor(...)` result always carries; a
+plain options array carries none and gets none (`scripts/apply-migrations-callers.test.ts` holds
+every non-test caller to `migrationOptionsFor`).
 
 Keep `out: "./drizzle"` in `drizzle.config.ts` as a **single string**, not an array. One config
 produces one folder and one journal; each package that owns tables has its own config and journal.

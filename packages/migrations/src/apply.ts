@@ -33,9 +33,9 @@ const LOCK_WAIT_MS = 120_000;
  *
  * Every set goes to the VENUE file, and `node.db` stays empty (#548).
  *
- * It also installs the append-only triggers, set by set, from each set's `appendOnlyTables`, so no
- * caller that migrates through here can forget them. A caller that hands over no
- * `appendOnlyTables` gets a migrated database with no triggers on it.
+ * It also installs the append-only triggers, set by set, from each set's `appendOnlyTables`, which a
+ * `migrationOptionsFor(...)` result carries. A caller that hands over no `appendOnlyTables` gets a
+ * migrated database with no triggers on it (`scripts/apply-migrations-callers.test.ts`).
  *
  * It removes the change feed first and does not put it back, because a migration cannot drop a
  * column the feed's update trigger names; `installChangeFeed` in

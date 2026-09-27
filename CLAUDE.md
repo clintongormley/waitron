@@ -212,7 +212,8 @@ hook, or how tests are scheduled:
   `eslint.config.js` is not type-aware. Proven by mutation.
 - **Two TypeScript compilers are installed on purpose, and there is no `tsc` at the ROOT.** A
   package's `tsc` is version 7; the root resolves `typescript` to the version 6 API typescript-eslint
-  and `scripts/comments-only.mjs` still need, and its only binary is `tsc6`. Cost: typescript-eslint
+  and two root scripts, `scripts/comments-only.mjs` and `scripts/apply-migrations-callers.test.ts`,
+  still need, and its only binary is `tsc6`. Cost: typescript-eslint
   refuses version 7 by its major alone, before loading its parser, so raising the root to it makes `pnpm lint` refuse to start with
   no results at all — and version 7 rejected the one typechecked file reaching into another package by
   relative path (`TS6059`). See [ci-and-gates.md](docs/developers/ci-and-gates.md).
@@ -567,8 +568,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **A new table is classified `ledger`, `state` or `local` in its module's `<MODULE>_CLASSIFICATION`
   list, and a table that must never be corrected is declared with `appendOnly()` instead of
   `classify()`** — `applyMigrations` turns those declarations into a `RAISE(ABORT)` trigger pair
-  after each set migrates (`installAppendOnlyTriggers`, `packages/store/src/append-only.ts`), so
-  every migrating path installs them and none can forget. **The CLASS is not the trigger set.**
+  after each set migrates (`installAppendOnlyTriggers`, `packages/store/src/append-only.ts`), from
+  the `appendOnlyTables` a `migrationOptionsFor(...)` result carries; a plain options array carries
+  none, and gets none of those triggers, silently. **The CLASS is not the trigger set.**
   Several `ledger` tables are updated or deleted by ordinary product code — `payments` records a card
   payment's progress, `cadenas` and `workforce_chains` hold chain heads — and `order_amendments` is
   `state` and must still refuse both; deriving the triggers from the class refused a card capture
@@ -580,7 +582,13 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   `scripts/classification-complete.test.ts`, `scripts/append-only-triggers.test.ts` — which migrates
   a real database through `applyMigrations` and then tries a plain `UPDATE` and `DELETE` on every
   declared table, and leaves the other two shapes to `packages/store/src/append-only.test.ts`, where
-  a conflicting key is available.
+  a conflicting key is available. On a new caller: `scripts/apply-migrations-callers.test.ts`, that
+  every non-test `applyMigrations` call under `packages/` and `apps/` passes a
+  `migrationOptionsFor(...)` result — weaker than its name in the ways its header lists, among them:
+  it checks the call's shape and trusts what that function returns, never reading the sets handed
+  to it; a `const` it accepts can be changed after it is declared; a function injected beside it
+  through `??` runs unseen; and a path that migrates without `applyMigrations` (`runMigrations`
+  called directly) is invisible to it.
 - **A streamed `venue.db` holds two tables no migration created, and its folder a directory no
   store opened.** Litestream adds `_litestream_seq` and `_litestream_lock` to the database it
   streams, a restore of the stream carries both, and it keeps `.venue.db-litestream/` beside the

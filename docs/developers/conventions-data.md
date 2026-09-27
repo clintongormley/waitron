@@ -718,6 +718,16 @@ manifest-JSON path that `rejoin-command`, `dev-setup` and `dev-onboard` take to
 by name rather than counting it, so adding or dropping an append-only table costs a deliberate edit.
 Run both after adding any table anywhere.
 
+Neither sees a caller that migrates with a plain options array: `applyMigrations` reads each set's
+`appendOnlyTables` as `?? []`, so such a caller gets a migrated database with none of the
+append-only triggers and no error. Measured 2026-09-27 on `node:sqlite`, Node v26.7.0, by
+migrating the full manifest twice: through `migrationOptionsFor(...)`, `registros_facturacion`,
+`sales` and `time_entries` each carried a `RAISE(ABORT)` trigger; with the same array stripped of
+`appendOnlyTables`, none of them did, and `applyMigrations` returned normally.
+`scripts/apply-migrations-callers.test.ts` holds that every non-test call under `packages/` and
+`apps/` passes a `migrationOptionsFor(...)` result, directly or through a `const` declared once in
+the file; its header lists where it is weaker than its name.
+
 ## A `local` row belongs to one node, so no foreign key may join a `local` table to a `ledger`/`state` one
 
 Every table is in `venue.db`, which a primary streams whole to the owner's bucket once one is set up

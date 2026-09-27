@@ -83,8 +83,8 @@ export async function submitFiscalReadiness(args: {
   // real preproduction sale on a real chain, so it must not share a file with the box's own venue
   // and must survive a restart.
   const directory = join(args.stateDir, `fiscal-readiness-db-${testIdentity}`);
-  // `applyMigrations` is the one place that installs the append-only refusal triggers. It takes the
-  // migration lock and opens its own handle, so it runs BEFORE this one is opened.
+  // `applyMigrations` is the one product path that installs the append-only refusal triggers. It
+  // takes the migration lock and opens its own handle, so it runs BEFORE this one is opened.
   await applyMigrations(
     directory,
     migrationOptionsFor(orderedMigrationSets(args.modules), args.migrationsRoot ?? null),
