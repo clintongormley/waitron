@@ -2192,7 +2192,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       B14b): the Payments screen (`apps/dashboard/src/screens/payments-screen.ts`) lists both kinds,
       can ask the provider to resolve one, and lets a manager record a provider-confirmed outcome
       with a note and their PIN. The screen has English and Spanish text and browser accessibility
-      cases. Task 15 can now build the till flow that creates bill payments.
+      cases. Once B14a lands, Task 15 can build the till flow that creates bill payments.
   - **A keydown guard that cancels Escape while a save runs did not keep one dialog open.** Measured
     on Task 1's reasons screen (`packages/adjustments/src/dashboard/reasons-screen.ts`): a real
     Escape pressed with Vitest's `userEvent` during a save closed the editor, although the screen's
