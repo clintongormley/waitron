@@ -282,7 +282,10 @@ export class ServersScreen extends LitElement {
       heading=${t(keys.title)}
       .open=${target !== null}
       .dismissible=${!this.busy}
-      @wt-close=${() => this.#close()}
+      @wt-close=${() => {
+        // The browser reports a close a task later, by when the other dialog may have opened.
+        if (this.target === null || this.target.action === action) this.#close();
+      }}
     >
       ${
         target === null
