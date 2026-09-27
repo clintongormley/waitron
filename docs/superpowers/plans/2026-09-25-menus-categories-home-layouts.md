@@ -18,6 +18,9 @@ _2026-09-27, later (A68): the owner narrowed M7v: the version freezes the VAT cl
 records its class, and the rate comes from a dated table in code for the day the invoice is issued.
 The menus spec's §11.4 A68 note has it; the M7v notes below describe the rate as it was before._
 
+_2026-09-27: every task below is built; the spec's status lines list the pull requests, and Task 9's
+closing sweep put what it found in `docs/backlog.md`._
+
 **Architecture:**
 - **One ordered membership table** (`section_members`) holds every menu list: a section's members,
   a menu's top level and each home layout. A member is a product or a section. A menu's top level
