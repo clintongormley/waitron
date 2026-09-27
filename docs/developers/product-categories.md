@@ -110,14 +110,14 @@ it was published, so switching one off takes it off the till only once the menu 
 
 `GET /management-api/catalogues/:id/prices` lists the products the structure reaches, one row
 each, for the dashboard's price list, sold-out ones and ones switched off on this menu included and
-Inactive ones left out: `{ menuItemId, productId, name, categoryId, placements, productPrice,
-override, effectivePrice, active, variants }`. `productPrice` is the product's own price,
-`override` the menu's (`grossPrice` above, null when it sets none), and `effectivePrice` the
-menu's price for the product itself: `override`, or else `productPrice`. A product with Active
-variants is sold only as one of them, and a variant with no price on this menu and none of its own
-is charged `effectivePrice`. `categoryId` is the product's reporting category, and each of
-`variants` is `{ variantId, price, offered }` as `GET …/items/:itemId/variants` gives it. An
-unknown menu is `catalogue.not_found` (404).
+Inactive ones left out, or nothing while the menu is inactive: `{ menuItemId, productId, name,
+categoryId, placements, productPrice, override, effectivePrice, active, variants }`.
+`productPrice` is the product's own price, `override` the menu's (`grossPrice` above, null when it
+sets none), and `effectivePrice` the menu's price for the product itself: `override`, or else
+`productPrice`. A product with Active variants is sold only as one of them, and a variant with no
+price on this menu and none of its own is charged `effectivePrice`. `categoryId` is the product's
+reporting category, and each of `variants` is `{ variantId, price, offered }` as
+`GET …/items/:itemId/variants` gives it. An unknown menu is `catalogue.not_found` (404).
 
 `GET /management-api/catalogues/:id/status` → 200 gives a menu's publication state:
 `{ state: "unpublished" }`, or `{ state, version, publishedAt, hash }` for its live version, where

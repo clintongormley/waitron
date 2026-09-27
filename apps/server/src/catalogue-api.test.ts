@@ -235,16 +235,19 @@ async function menuPricesVia(app: Hono, menuId: string): Promise<MenuPriceRow[]>
   return (await res.json()) as MenuPriceRow[];
 }
 
-/** Puts the product on the menu's top level, then sets the menu's price for it when one is given;
- * answers the menu item id. */
+/** The top-level list the menu was created with. */
+async function menuRootVia(app: Hono, menuId: string): Promise<string> {
+  const structure = await send(app, "GET", `/management-api/catalogues/${menuId}/structure`);
+  return ((await structure.json()) as { rootSectionId: string }).rootSectionId;
+}
+
 async function offerVia(
   app: Hono,
   menuId: string,
   productId: string,
   grossPrice: string | null = null,
 ): Promise<string> {
-  const structure = await send(app, "GET", `/management-api/catalogues/${menuId}/structure`);
-  const { rootSectionId } = (await structure.json()) as { rootSectionId: string };
+  const rootSectionId = await menuRootVia(app, menuId);
   const member = await send(app, "POST", `/management-api/sections/${rootSectionId}/members`, {
     body: { ref: { kind: "product", productId } },
   });
@@ -336,7 +339,7 @@ describe("mountCatalogueApi — catalogues", () => {
   });
 
   it.each(["", "   "])(
-    "POST /management-api/catalogues refuses the blank name %j as the rename does, and creates no menu",
+    "POST /management-api/catalogues with a blank name %j → management.request_invalid 400, no menu written",
     async (name) => {
       const count = async () =>
         (await suite.db.execute<{ n: number }>(sql`select count(*) as n from catalogues`)).rows[0]!
@@ -1176,9 +1179,7 @@ describe("mountCatalogueApi — products", () => {
       error: { code: "management.request_invalid", params: { field: "variants.0" } },
     });
     // A variant follows its parent onto the menu; it is never put there on its own.
-    const { rootSectionId } = (await (
-      await send(app, "GET", `/management-api/catalogues/${catalogueId}/structure`)
-    ).json()) as { rootSectionId: string };
+    const rootSectionId = await menuRootVia(app, catalogueId);
     const variantOffer = await send(
       app,
       "POST",
@@ -3577,9 +3578,7 @@ describe("a menu's structure", () => {
     ).toBe(204);
     expect(await offered()).toEqual([{ menuItemId: itemId, override: "2.00", active: false }]);
     // Still on the menu's top level, so adding it again is refused rather than duplicated.
-    const { rootSectionId } = (await (
-      await send(app, "GET", `/management-api/catalogues/${menuId}/structure`)
-    ).json()) as { rootSectionId: string };
+    const rootSectionId = await menuRootVia(app, menuId);
     const again = await send(app, "POST", `/management-api/sections/${rootSectionId}/members`, {
       body: { ref: { kind: "product", productId } },
     });
@@ -4313,15 +4312,6 @@ describe("mountCatalogueApi — sections", () => {
       201,
     );
   }
-  /** The top-level list the menu was created with. */
-  async function menuRoot(menuId: string): Promise<string> {
-    const structure = await send(
-      mountApp(),
-      "GET",
-      `/management-api/catalogues/${menuId}/structure`,
-    );
-    return ((await structure.json()) as { rootSectionId: string }).rootSectionId;
-  }
   const product = (productId: string) => ({ kind: "product", productId });
   const section = (sectionId: string) => ({ kind: "section", sectionId });
 
@@ -4362,7 +4352,7 @@ describe("mountCatalogueApi — sections", () => {
   it("adds, lists, moves, replaces and removes members, and names a section's usages", async () => {
     const app = mountApp();
     const menuId = await createCatalogueVia(app, `Carta ${crypto.randomUUID()}`);
-    const root = await menuRoot(menuId);
+    const root = await menuRootVia(app, menuId);
     const drinks = await createSectionVia(app, `Bebidas ${crypto.randomUUID()}`);
     const beer = await createSectionVia(app, `Cervezas ${crypto.randomUUID()}`);
     const water = await createNamedProductVia(app, "Agua");
@@ -4461,7 +4451,7 @@ describe("mountCatalogueApi — sections", () => {
     const app = mountApp();
     const menuName = `Carta ${crypto.randomUUID()}`;
     const menuId = await createCatalogueVia(app, menuName);
-    const root = await menuRoot(menuId);
+    const root = await menuRootVia(app, menuId);
     const drinks = await createSectionVia(app, `Bebidas ${crypto.randomUUID()}`);
     const beer = await createSectionVia(app, `Cervezas ${crypto.randomUUID()}`);
     const unused = await createSectionVia(app, `Sin uso ${crypto.randomUUID()}`);
@@ -4488,7 +4478,7 @@ describe("mountCatalogueApi — sections", () => {
   it("answers a refused member write with its code and status", async () => {
     const app = mountApp();
     const menuId = await createCatalogueVia(app, `Carta ${crypto.randomUUID()}`);
-    const root = await menuRoot(menuId);
+    const root = await menuRootVia(app, menuId);
     const a = await createSectionVia(app, `A ${crypto.randomUUID()}`);
     const b = await createSectionVia(app, `B ${crypto.randomUUID()}`);
     const water = await createNamedProductVia(app, "Agua");

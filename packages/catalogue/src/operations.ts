@@ -437,14 +437,14 @@ function offerLineValues(row: OfferLineRow, defaultLanguage: string) {
 /**
  * The Active offers on the given menus: the products each menu's structure reaches, menus by name
  * and each in its structure's order (`reachableProducts`), Unavailable (sold-out) ones included. A
- * product switched off on the menu (`menu_items.active`) is left out unless the caller passes
- * `includeSwitchedOff`. Only a top-level product is an offer; each Active variant of it is nested
- * under its offer, an Unavailable one listed as unavailable.
+ * product switched off on the menu (`menu_items.active`) is left out. Only a top-level product is
+ * an offer; each Active variant of it is nested under its offer, an Unavailable one listed as
+ * unavailable.
  */
 export async function listMenuOffers(
   tx: Transaction,
   menuIds: string[],
-  options: OfferOptions = {},
+  options: Omit<OfferOptions, "includeSwitchedOff"> = {},
 ): Promise<MenuOffer[]> {
   if (menuIds.length === 0) return [];
   const roots = await menuRoots(tx, menuIds);
