@@ -720,7 +720,8 @@ export type KitchenNoticeKind = "recalled" | "void" | "changed" | "moved";
 
 /**
  * A correction to work a station was sent, until a cook acknowledges it. `lineName` is the kitchen
- * name, and `orderLabel` and `note` are copied from the order as they stood when it was recorded.
+ * name. `orderLabel` is the order's, and `unitName` and `note` are the line's, each copied as it
+ * stood when the notice was recorded.
  */
 export interface KitchenNotice {
   id: string;
@@ -729,6 +730,8 @@ export interface KitchenNotice {
   orderLabel: string;
   kind: KitchenNoticeKind;
   lineName: string;
+  /** The line's unit snapshot, keyed by locale; null when the line recorded none. */
+  unitName: Record<string, string> | null;
   quantity: string;
   note: string | null;
   wasStarted: boolean;

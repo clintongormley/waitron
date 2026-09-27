@@ -2541,7 +2541,23 @@ describe("KDS-1 station-display operate routes", () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
-    const id = await placeFired(app, cookie, "Mesa 3");
+    const id = randomUUID();
+    await park(app, cookie, {
+      id,
+      lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
+      label: "Mesa 3",
+    });
+    // A unit label its product does not have, so the notice can only carry it by copying the line's.
+    await withTransaction(suite.db, (tx) =>
+      tx.execute(
+        sql`update working_order_lines set unit_name = ${JSON.stringify({ "es-ES": "kg" })}
+            where working_order_id = ${id}`,
+      ),
+    );
+    await app.request(`/api/working-orders/${id}/place`, {
+      method: "POST",
+      headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
+    });
     const cocina = await defaultStation(app, cookie);
     // A notice as a void of that line records it.
     await withTransaction(suite.db, async (tx) => {
@@ -2577,6 +2593,7 @@ describe("KDS-1 station-display operate routes", () => {
       kind: "void",
       wasStarted: true,
       orderLabel: expect.stringContaining("Mesa 3"),
+      unitName: { "es-ES": "kg" },
     });
     const ack = await app.request(`/api/kitchen-notices/${notice!.id}/acknowledge`, {
       method: "POST",

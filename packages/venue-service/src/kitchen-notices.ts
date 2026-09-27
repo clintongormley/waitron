@@ -30,6 +30,7 @@ export interface KitchenNotice {
   orderLabel: string;
   kind: KitchenNoticeKind;
   lineName: string;
+  unitName: Record<string, string> | null;
   quantity: Decimal;
   note: string | null;
   wasStarted: boolean;
@@ -50,11 +51,11 @@ const NOTICE_LIMIT = 50;
 const INSERTION_ORDER = sql`"kitchen_notices"."rowid"`;
 
 /**
- * Records one notice per item, copying the order's label and each line's kitchen name and note as
- * they stand now, so a void calls it BEFORE deleting the line. The order and every station must be
- * at the caller's location (`working_order.not_found`, `station.not_found`) and every quantity
- * positive (`quantity.invalid`). An item whose line is not on the order is the caller's fault and
- * throws a plain `Error`. `movedTo` is for a `moved` notice only.
+ * Records one notice per item, copying the order's label and each line's kitchen name, unit and
+ * note as they stand now, so a void calls it BEFORE deleting the line. The order and every station
+ * must be at the caller's location (`working_order.not_found`, `station.not_found`) and every
+ * quantity positive (`quantity.invalid`). An item whose line is not on the order is the caller's
+ * fault and throws a plain `Error`. `movedTo` is for a `moved` notice only.
  */
 export async function recordKitchenNotices(
   tx: Transaction,
@@ -97,6 +98,7 @@ export async function recordKitchenNotices(
       variantName: workingOrderLines.variantName,
       variantKitchenName: workingOrderLines.variantKitchenName,
       note: workingOrderLines.note,
+      unitName: workingOrderLines.unitName,
     })
     .from(workingOrderLines)
     .where(
@@ -127,6 +129,7 @@ export async function recordKitchenNotices(
         orderLabel,
         kind,
         lineName: kitchenPresentationName(line),
+        unitName: line.unitName,
         quantity: quantities[index]!,
         note: line.note,
         wasStarted: item.wasStarted,
@@ -162,6 +165,7 @@ export async function listStationNotices(
       orderLabel: kitchenNotices.orderLabel,
       kind: kitchenNotices.kind,
       lineName: kitchenNotices.lineName,
+      unitName: kitchenNotices.unitName,
       quantity: kitchenNotices.quantity,
       note: kitchenNotices.note,
       wasStarted: kitchenNotices.wasStarted,

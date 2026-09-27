@@ -252,6 +252,7 @@ const baseNotice: KitchenNotice = {
   orderLabel: "#5 · Mesa 4",
   kind: "void",
   lineName: "Burger",
+  unitName: null,
   quantity: "1.000",
   note: null,
   wasStarted: true,
@@ -260,7 +261,14 @@ const baseNotice: KitchenNotice = {
 };
 const notices: KitchenNotice[] = [
   baseNotice,
-  { ...baseNotice, id: "kn-recalled", kind: "recalled", wasStarted: false, quantity: "0.250" },
+  {
+    ...baseNotice,
+    id: "kn-recalled",
+    kind: "recalled",
+    wasStarted: false,
+    quantity: "0.250",
+    unitName: { "es-ES": "kg" },
+  },
   { ...baseNotice, id: "kn-changed", kind: "changed", wasStarted: false, note: "no onions" },
   { ...baseNotice, id: "kn-moved", kind: "moved", wasStarted: false, movedTo: "Terraza 2" },
 ];

@@ -370,6 +370,7 @@ export interface VenueServiceContribution {
       orderLabel: string;
       kind: "recalled" | "void" | "changed" | "moved";
       lineName: string;
+      unitName: Record<string, string> | null;
       quantity: Decimal;
       note: string | null;
       wasStarted: boolean;

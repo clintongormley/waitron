@@ -104,6 +104,7 @@ const baseNotice: KitchenNotice = {
   orderLabel: "#5 · Mesa 4",
   kind: "void",
   lineName: "Burger",
+  unitName: null,
   quantity: "1.000",
   note: null,
   wasStarted: true,

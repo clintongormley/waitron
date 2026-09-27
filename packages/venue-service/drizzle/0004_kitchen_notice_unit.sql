@@ -1,0 +1,1 @@
+ALTER TABLE `kitchen_notices` ADD `unit_name` text;
