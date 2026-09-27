@@ -5,6 +5,7 @@ import {
   localCalendarDate,
   vatRateOn,
   vatRatesOn,
+  type DatedRate,
   type VatRateTable,
 } from "./vat-rates.js";
 
@@ -38,13 +39,13 @@ describe("vatRateOn", () => {
 
   it("refuses a date that is not a real YYYY-MM-DD calendar day", () => {
     for (const bad of ["2027-1-01", "2027-02-30", "20270101", "", "2027-01-01T00:00"]) {
-      expect(() => vatRateOn("general", bad)).toThrow(/not a calendar date/);
+      expect(() => vatRateOn("general", bad)).toThrow(/^vatRateOn: .*not a calendar date/);
     }
   });
 
   it("refuses a table whose first entry is dated", () => {
     const table = { ...VAT_RATE_TABLE, general: [{ from: "2020-01-01", rate: "21.00" }] };
-    expect(() => vatRateOn("general", "2026-09-27", table)).toThrow(/first entry/);
+    expect(() => vatRateOn("general", "2026-09-27", table)).toThrow(/^vatRateOn: the first entry/);
   });
 
   it("refuses a table with a second undated entry", () => {
@@ -122,7 +123,7 @@ describe("vatRatesOn", () => {
   });
 
   it("refuses a date that is not a real YYYY-MM-DD calendar day", () => {
-    expect(() => vatRatesOn("2027-02-30")).toThrow(/not a calendar date/);
+    expect(() => vatRatesOn("2027-02-30")).toThrow(/^vatRatesOn: .*not a calendar date/);
   });
 
   it("refuses a malformed class even when another class is asked for, and on every call", () => {
@@ -133,9 +134,53 @@ describe("vatRatesOn", () => {
         { from: null, rate: "1.00" },
       ],
     };
+    expect(() => vatRatesOn("2026-09-27", table)).toThrow(/^vatRatesOn: .*oldest first/);
     expect(() => vatRatesOn("2026-09-27", table)).toThrow(/oldest first/);
-    expect(() => vatRatesOn("2026-09-27", table)).toThrow(/oldest first/);
-    expect(() => vatRateOn("general", "2026-09-27", table)).toThrow(/oldest first/);
+    expect(() => vatRateOn("general", "2026-09-27", table)).toThrow(/^vatRateOn: .*oldest first/);
+  });
+});
+
+describe("a table checked once", () => {
+  it("is checked again when it is changed after passing, so a now-malformed table is refused", () => {
+    const table = {
+      ...VAT_RATE_TABLE,
+      general: [
+        { from: null, rate: "21.00" },
+        { from: "2027-01-01", rate: "23.00" },
+      ],
+    };
+    expect(vatRateOn("general", "2028-01-01", table)).toBe(decimal("23.00"));
+    table.general[1]!.from = "2027-00-99";
+    table.general[1]!.rate = "99.00";
+    expect(() => vatRateOn("general", "2028-01-01", table)).toThrow(/not a calendar date/);
+    expect(() => vatRatesOn("2028-01-01", table)).toThrow(/not a calendar date/);
+  });
+
+  it("is checked again when its entries are reordered after passing", () => {
+    const general = [
+      { from: null, rate: "21.00" },
+      { from: "2027-01-01", rate: "23.00" },
+      { from: "2028-01-01", rate: "24.00" },
+    ];
+    const table = { ...VAT_RATE_TABLE, general };
+    expect(vatRatesOn("2028-06-01", table).general).toBe(decimal("24.00"));
+    general.reverse();
+    general.unshift(general.pop()!);
+    expect(() => vatRatesOn("2028-06-01", table)).toThrow(/oldest first/);
+  });
+
+  it("the shipped table cannot be changed at any level", () => {
+    const entry = VAT_RATE_TABLE.general[0] as DatedRate;
+    expect(() => {
+      entry.rate = "99.00";
+    }).toThrow(TypeError);
+    expect(() => {
+      (VAT_RATE_TABLE.general as DatedRate[]).push({ from: "2027-01-01", rate: "99.00" });
+    }).toThrow(TypeError);
+    expect(() => {
+      (VAT_RATE_TABLE as Record<string, unknown>).general = [];
+    }).toThrow(TypeError);
+    expect(vatRateOn("general", "2028-01-01")).toBe(decimal("21.00"));
   });
 });
 

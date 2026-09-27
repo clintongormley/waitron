@@ -19,46 +19,49 @@ export type VatRateTable = Readonly<Record<VatClass, readonly DatedRate[]>>;
 // The standing Spanish VAT set, checked 2026-08-05 against AEAT's page
 // `/Sede/iva/calculo-iva-repercutido-clientes/tipos-impositivos-iva.html`
 // on sede.agenciatributaria.gob.es. A legal change ships as a new dated entry, never an edit.
-export const VAT_RATE_TABLE: VatRateTable = {
-  general: [{ from: null, rate: "21.00" }],
-  reduced: [{ from: null, rate: "10.00" }],
-  super_reduced: [{ from: null, rate: "4.00" }],
-  zero: [{ from: null, rate: "0.00" }],
-};
+export const VAT_RATE_TABLE: VatRateTable = Object.freeze({
+  general: Object.freeze([Object.freeze({ from: null, rate: "21.00" })]),
+  reduced: Object.freeze([Object.freeze({ from: null, rate: "10.00" })]),
+  super_reduced: Object.freeze([Object.freeze({ from: null, rate: "4.00" })]),
+  zero: Object.freeze([Object.freeze({ from: null, rate: "0.00" })]),
+});
+
+type Caller = "vatRateOn" | "vatRatesOn";
 
 const CALENDAR_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-function assertCalendarDate(value: string): void {
+function assertCalendarDate(caller: Caller, value: string): void {
   const parsed = new Date(`${value}T00:00:00.000Z`);
   if (
     !CALENDAR_DATE.test(value) ||
     Number.isNaN(parsed.getTime()) ||
     parsed.toISOString().slice(0, 10) !== value
   ) {
-    throw new Error(`VAT rates: "${value}" is not a calendar date (YYYY-MM-DD)`);
+    throw new Error(`${caller}: "${value}" is not a calendar date (YYYY-MM-DD)`);
   }
 }
 
-// Only a table that passed is remembered, so a malformed one is refused on every lookup.
-const wellFormed = new WeakSet<VatRateTable>();
+// Only the shipped table skips the check once it has passed, because it is frozen at every level
+// above. Any other table may have changed since it last passed, so it is checked on every lookup.
+let shippedTablePassed = false;
 
-function assertWellFormed(table: VatRateTable): void {
-  if (wellFormed.has(table)) return;
+function assertWellFormed(caller: Caller, table: VatRateTable): void {
+  if (table === VAT_RATE_TABLE && shippedTablePassed) return;
   for (const vatClass of VAT_CLASSES) {
     const entries = table[vatClass];
     if (entries[0]?.from !== null) {
-      throw new Error(`VAT rates: the first entry for ${vatClass} must have from: null`);
+      throw new Error(`${caller}: the first entry for ${vatClass} must have from: null`);
     }
     for (let i = 1; i < entries.length; i += 1) {
       const from = entries[i]!.from;
       const previous = entries[i - 1]!.from;
       if (from === null || (previous !== null && from <= previous)) {
-        throw new Error(`VAT rates: the entries for ${vatClass} must be dated oldest first`);
+        throw new Error(`${caller}: the entries for ${vatClass} must be dated oldest first`);
       }
-      assertCalendarDate(from);
+      assertCalendarDate(caller, from);
     }
   }
-  wellFormed.add(table);
+  if (table === VAT_RATE_TABLE) shippedTablePassed = true;
 }
 
 function rateIn(entries: readonly DatedRate[], date: string): Decimal {
@@ -75,8 +78,8 @@ export function vatRateOn(
   date: string,
   table: VatRateTable = VAT_RATE_TABLE,
 ): Decimal {
-  assertCalendarDate(date);
-  assertWellFormed(table);
+  assertCalendarDate("vatRateOn", date);
+  assertWellFormed("vatRateOn", table);
   return rateIn(table[vatClass], date);
 }
 
@@ -85,8 +88,8 @@ export function vatRatesOn(
   date: string,
   table: VatRateTable = VAT_RATE_TABLE,
 ): Readonly<Record<VatClass, Decimal>> {
-  assertCalendarDate(date);
-  assertWellFormed(table);
+  assertCalendarDate("vatRatesOn", date);
+  assertWellFormed("vatRatesOn", table);
   return {
     general: rateIn(table.general, date),
     reduced: rateIn(table.reduced, date),
@@ -100,7 +103,7 @@ export function localCalendarDate(instant: Date, offsetMinutes: number): string 
   return new Date(instant.getTime() + offsetMinutes * 60_000).toISOString().slice(0, 10);
 }
 
-/** This process's local calendar date today, for pricing that files no rate. */
+/** This process's local calendar date today. */
 export function localToday(): string {
   const now = new Date();
   return localCalendarDate(now, -now.getTimezoneOffset());
