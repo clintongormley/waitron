@@ -109,10 +109,10 @@ interface PendingDraft {
 /** A held group as the picker names it: `index` is its place among the party's held groups. */
 function heldGroupLabel(group: OrderGroup, index: number): string {
   return index === 0
-    ? t("table.held_next").replace("{summary}", group.summary)
+    ? t("table.held_next").replace("{summary}", () => group.summary)
     : t("table.held_group")
         .replace("{n}", String(group.position))
-        .replace("{summary}", group.summary);
+        .replace("{summary}", () => group.summary);
 }
 
 /** `fire-group`: a held group the waiter confirmed firing. */
@@ -1685,9 +1685,8 @@ export class TillTableOrderScreen extends LitElement {
                         "table.preview_join",
                         "table.preview_join_one",
                         preview.holdItems,
-                      ).replace(
-                        "{group}",
-                        heldGroupLabel(pending!.join.group, pending!.join.index),
+                      ).replace("{group}", () =>
+                        heldGroupLabel(pending!.join!.group, pending!.join!.index),
                       )}
                     </p>`
                   : preview.holdGroups > 0
@@ -2076,8 +2075,7 @@ export class TillTableOrderScreen extends LitElement {
   /** Always present, driven by {@link movePending}, as the cancel dialog is. */
   #moveDialog(): TemplateResult {
     const pending = this.movePending;
-    const targets =
-      pending === null ? [] : this.#heldGroups().filter((group) => group.id !== pending.group.id);
+    const held = this.#heldGroups();
     return html`<wt-dialog
       class="move-line-dialog"
       data-move-dialog
@@ -2092,17 +2090,16 @@ export class TillTableOrderScreen extends LitElement {
                 ${this.#nameForLine(pending.line)} ×${this.#displayQty(pending.line.quantity)}
               </p>
               <div class="action-options">
-                ${targets.map(
-                  (group) =>
-                    html`<wt-button
-                      variant="secondary"
-                      data-move-target=${group.id}
-                      @click=${() => this.#moveTo({ groupId: group.id })}
-                    >
-                      ${t("table.held_group")
-                        .replace("{n}", String(group.position))
-                        .replace("{summary}", () => group.summary)}
-                    </wt-button>`,
+                ${held.map((group, index) =>
+                  group.id === pending.group.id
+                    ? nothing
+                    : html`<wt-button
+                        variant="secondary"
+                        data-move-target=${group.id}
+                        @click=${() => this.#moveTo({ groupId: group.id })}
+                      >
+                        ${heldGroupLabel(group, index)}
+                      </wt-button>`,
                 )}
                 <wt-button
                   variant="secondary"

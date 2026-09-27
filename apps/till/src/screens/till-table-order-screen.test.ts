@@ -1027,6 +1027,24 @@ describe("till-table-order-screen", () => {
         expect(sent.detail.joinGroupId).toBe("g-desserts");
       });
 
+      it("shows a held group's contents as written, even when they hold $& or $'", async () => {
+        const odd = "1 × Tapa $& $'";
+        const { el } = await mount({
+          courses: serviceCourses,
+          products: menu,
+          groups: [heldGroup("g-first", 2, odd), heldGroup("g-second", 3, odd)],
+        });
+        await ring(el, [croquetas, "1"]);
+        await pickDestination(el, "add-to-held");
+        expect(heldChoices(el).map((choice) => choice.text)).toEqual([
+          `Next: ${odd}`,
+          `Group 3: ${odd}`,
+        ]);
+        expect(await openPreview(el, "submit")).toContain(
+          `Add to held group “Next: ${odd}”: 1 item.`,
+        );
+      });
+
       it("names the first held group in the preview as the picker does, as Next", async () => {
         const { el } = await mount({ courses: serviceCourses, products: menu, groups: held });
         await ring(el, [croquetas, "1"]);
@@ -1315,9 +1333,8 @@ describe("till-table-order-screen", () => {
       expect(text(dialog)).toContain("Steak ×2");
       const targets = [...dialog.querySelectorAll<HTMLElement>("[data-move-target]")];
       expect(targets.map((target) => target.dataset.moveTarget)).toEqual(["g3", "g5", "new"]);
-      expect(text(targets[0]!)).toBe(
-        t("table.held_group").replace("{n}", "3").replace("{summary}", "1 × Croquetas"),
-      );
+      expect(text(targets[0]!)).toBe("Next: 1 × Croquetas");
+      expect(text(targets[1]!)).toBe("Group 5: 1 × Flan");
       expect(text(targets[2]!)).toBe(t("table.move_new_group"));
       targets[1]!.click();
       await el.updateComplete;
@@ -1333,6 +1350,16 @@ describe("till-table-order-screen", () => {
         { lineId: "l-fish", quantity: "1.000", target: "new" },
       ]);
       expect(moves[0]!.bubbles && moves[0]!.composed).toBe(true);
+    });
+
+    it("names a Move to… target's contents as written, even when they hold $& or $'", async () => {
+      const odd = "1 × Tapa $& $'";
+      const { el } = await mountGroups({
+        groups: groups.map((row) => (row.id === "g5" ? { ...row, summary: odd } : row)),
+      });
+      control(el, '[data-move-line="l-steak"]')!.click();
+      await el.updateComplete;
+      expect(text(control(el, '[data-move-target="g5"]')!)).toBe(`Group 5: ${odd}`);
     });
 
     it("sends no move when Move to… is dismissed", async () => {
