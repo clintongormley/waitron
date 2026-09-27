@@ -2744,6 +2744,71 @@ describe("DashboardApi — reporting (sales & takings)", () => {
     );
   });
 
+  it("getCategorySales GETs the categories route with the range, mode and extras flag", async () => {
+    const report = {
+      mode: "current",
+      tree: [
+        {
+          kind: "category",
+          id: "c1",
+          name: "Bebidas del día",
+          depth: 0,
+          gross: "12.10",
+          net: "10.00",
+          direct: { gross: "12.10", net: "10.00", lines: 2 },
+          children: [],
+        },
+      ],
+      labels: [{ id: "l1", name: "Hora feliz", gross: "12.10", net: "10.00" }],
+      gross: "12.10",
+      net: "10.00",
+      grossComplete: false,
+      linesWithoutGross: 3,
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(report));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getCategorySales("2026-08-01", "2026-08-28", "current", true)).toEqual(report);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/management-api/reports/categories?from=2026-08-01&to=2026-08-28&mode=current&extrasIntoDish=true",
+      { method: "GET", credentials: "include" },
+    );
+    await api.getCategorySales("2026-08-02", "2026-08-02", "at_time_of_sale", false);
+    expect(fetchImpl).toHaveBeenLastCalledWith(
+      "/management-api/reports/categories?from=2026-08-02&to=2026-08-02&mode=at_time_of_sale&extrasIntoDish=false",
+      { method: "GET", credentials: "include" },
+    );
+  });
+
+  it("getReportPrinters GETs the report printers route", async () => {
+    const printers = [{ id: "p1", name: "Barra" }];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(printers));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getReportPrinters()).toEqual(printers);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/reports/printers", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("printCategorySales POSTs the range, mode, extras flag and printer, and returns the job id", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ jobId: "job-1" }, true, 202));
+    const api = new DashboardApi("", fetchImpl);
+    const input = {
+      from: "2026-08-01",
+      to: "2026-08-28",
+      mode: "at_time_of_sale" as const,
+      extrasIntoDish: false,
+      printerId: "p1",
+    };
+    expect(await api.printCategorySales(input)).toEqual({ jobId: "job-1" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/reports/categories/print", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  });
+
   it("getOverdueOrders GETs the overdue-orders route and returns the parsed shape", async () => {
     const body = {
       orders: [

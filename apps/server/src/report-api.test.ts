@@ -34,6 +34,7 @@ const noopLog: Logger = () => {};
 
 let tillId: string;
 let nodeId: string;
+let locationId: string;
 let seriesId: string;
 let managerCookie: string;
 let staffCookie: string;
@@ -149,7 +150,7 @@ const suite = useVenueDb({
         operationDescription: "Venta en establecimiento",
       })
       .returning({ id: locations.id });
-    const locationId = loc!.id;
+    locationId = loc!.id;
     const [till] = await db
       .insert(tills)
       .values({ locationId, name: "Caja 1" })
@@ -197,7 +198,7 @@ const suite = useVenueDb({
 
 function mountApp(): Hono {
   const app = new Hono();
-  mountReportApi(app, { db: suite.db, cfg: { nodeId } }, noopLog);
+  mountReportApi(app, { db: suite.db, cfg: { nodeId, locationId }, venueLocale: "es-ES" }, noopLog);
   return app;
 }
 

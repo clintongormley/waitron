@@ -194,7 +194,7 @@ const suite = useVenueDb({
 
 function mountApp(): Hono {
   const app = new Hono();
-  mountReportApi(app, { db: suite.db, cfg: { nodeId } }, noopLog);
+  mountReportApi(app, { db: suite.db, cfg: { nodeId, locationId }, venueLocale: "es-ES" }, noopLog);
   return app;
 }
 
@@ -256,7 +256,11 @@ describe("mountReportApi — /reports/overview", () => {
     // Pointed at `secondNodeId`, a node with NO sales: the overview must still return the sale,
     // because it aggregates the whole venue rather than `cfg.nodeId`.
     const app = new Hono();
-    mountReportApi(app, { db: suite.db, cfg: { nodeId: secondNodeId } }, noopLog);
+    mountReportApi(
+      app,
+      { db: suite.db, cfg: { nodeId: secondNodeId, locationId }, venueLocale: "es-ES" },
+      noopLog,
+    );
 
     const ov = await app.request("/management-api/reports/overview", {
       method: "GET",

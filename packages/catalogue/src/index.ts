@@ -48,6 +48,7 @@ export {
   readLiveDocuments,
 } from "./menu-publication.js";
 export * from "./sale-classification.js";
+export { currentClassifications } from "./current-classifications.js";
 
 export * from "./option-contract.js";
 export * from "./options.js";

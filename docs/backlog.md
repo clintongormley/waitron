@@ -169,11 +169,32 @@ every till filing path records each sale line's product, a variant's parent, its
 and its reporting chain and labels when the record is issued. Since menus Task 7,
 `sale_lines.menu_version_id` is the menu version the line was added from
 (`working_line_contexts.menu_version_id`); a line added before Task 7 recorded none and files null.
-Two follow-ups it leaves: the till shows "try again" when `sale_classification.invalid` refuses a sale (it happens only on corrupt category data, and retrying cannot succeed), so the code wants its own till message on the permanent-refusal list; and a card recovery refused that way leaves a captured payment unlinked until the catalogue is fixed, as recovery's existing below-locked-total refusal already does. The demo seed (`apps/server/scripts/demo-seed/seed-sales.ts`), the other scripts that call `recordSale` directly (`record-one-sale.ts`, `settle-invoice-first.ts`, `daily-close-demo.ts`, `daily-close-z-demo.ts`, `modelo-303-demo.ts`) and `apps/server/src/fiscal-readiness-runner.ts` file sales without the issuance pass, so seeded demo lines carry no product id, classification or gross, and the spec's category reports would show every one as Not recorded — classification Task 3 cannot measure its reports on seeded sales until the seed records them.
+Two follow-ups it leaves: the till shows "try again" when `sale_classification.invalid` refuses a sale (it happens only on corrupt category data, and retrying cannot succeed), so the code wants its own till message on the permanent-refusal list; and a card recovery refused that way leaves a captured payment unlinked until the catalogue is fixed, as recovery's existing below-locked-total refusal already does. The demo seed (`apps/server/scripts/demo-seed/seed-sales.ts`), the other scripts that call `recordSale` directly (`record-one-sale.ts`, `settle-invoice-first.ts`, `daily-close-demo.ts`, `daily-close-z-demo.ts`, `modelo-303-demo.ts`) and `apps/server/src/fiscal-readiness-runner.ts` file sales without the issuance pass, so seeded demo lines carry no product id, classification or gross, and the category report on the Sales screen shows every seeded line under Not recorded, in both modes, until the seed records them.
 _2026-09-27, menus M7v: the reporting chain and labels are now recorded on each line when it is
 added (`working_order_lines.classification`) and issuance copies them, so `sale_classification.invalid`
 refuses adding a line rather than filing a sale, and a card recovery can no longer be refused that
 way. Whether the till's message for that refusal on the add paths is right is not checked._
+**Classification Task 3, landed as #738 (2026-09-27), completes the sales classification
+plan:** a category sales report on the dashboard Sales screen, for THIS node only, in two modes — at
+time of sale (the reporting chain and labels recorded on each sale line) and current (today's
+catalogue) — with an option to count an extra under its dish, totals by category and label, a Not
+recorded row, and a note when some lines recorded no gross. `GET /management-api/reports/categories`
+serves it; "Print category sales" sends it as a document print job, through
+`POST /management-api/reports/categories/print`, to a printer picked from
+`GET /management-api/reports/printers` (this location's active printers). All three need
+`report.view`, which supervisors hold as well as managers. Current mode answers
+`sale_classification.invalid` when today's category data is inconsistent. Left open:
+- The at-time-of-sale report is fetched again whenever the catalogue is edited. The dashboard declares
+  what a live query depends on per query NAME (`apps/dashboard/src/api/live-queries.ts`), and
+  `getCategorySales` serves both modes, so the at-time-of-sale mode, which reads no catalogue table,
+  refetches on every product, category, label or content-language edit. Fix: one query name per mode,
+  each with its own dependency list.
+- `wt-button` disables only its inner `<button>`, so a scripted click on the host element still
+  reaches a click handler. The Sales screen's print handler checks for itself; other screens that rely
+  on `?disabled` alone have not been checked.
+- The spec (§6) wanted the category analysis printable alongside the daily close, but no daily-close
+  print exists; "Print category sales" is its own action for now.
+
 **Menus Task 1 (sections), landed as #651 (2026-09-25):**
 reusable, ordered, nestable sections (`sections`, `section_members`), with section and member
 routes under `/management-api/sections` (add, add several products, move, remove, replace in
@@ -498,14 +519,14 @@ with the card provider" files the sale once if the card was charged, marks the p
 unlocks the order if it was not, and refuses if the provider is unreachable or unclear; each
 resolution is recorded in the append-only `payment_resolutions` table. What it leaves open is under
 "What M7b2 left open" in the payments section.
-Next in the lane: classification Task 3; menus Task 9 landed as #729, so the menus plan is complete. The
+Classification Task 3 has landed and menus Task 9 landed as #729, so both the menus plan and the
+sales classification plan are complete. The
 owner lifted the wait: the dependency upgrades are
 finished, and the work does not wait for SQLite slice 2. The menus plan's decisions D1–D23 settle
 the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the ones flagged for the
 owner. Menus Task 3 wipes existing venues (it rebuilds `menu_items`); every other migrating task
 adds tables or columns only and measures its own upgrade. Every dev venue then needs
 `wa-wt reset demo <name>`, and the owner's box should be wiped once now that menus Task 7 has landed (#719).
-Do not upgrade the owner's box mid-plan.
 A note Task 2 leaves for Task 3: the image library links every `section` use of a photo to
 `/manage/sections?section=<id>`, but that use can also be a list a menu owns, which the sections
 screen does not list and so does nothing for. So when Task 3 lets a menu's list carry a photo, link it to the menu editor or
@@ -5896,7 +5917,7 @@ partial scope; the detail for a live thread is in its track.
 | 5 | Identity | persons/sessions, PIN (+ per-device throttle), `authorize()`, roles/permissions, passkeys, email-first dashboard login, emailed invitations and password resets, encrypted TOTP and recovery codes, user admin (#298, #328); a one-time passkey offer on first password sign-in (#347); identity state replicates to a standby | admin-editable roles; security-change emails; mid-shift-suspension enforce; discount gate; till-refund enforce |
 | 6 | Locations | provision-a-sellable-venue (`waitron-provision venue`); departments, zones and menus (#297) | multiple locations, edit/deactivate; then location-scope the by-id verb family |
 | 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, canvas/receipt editors, receipt/drawer printing, cash-drawer authorization — operable end to end | — |
-| 8 | Reporting | daily close, frozen *cierre Z*, VAT summary, modelo 303 output+input VAT + DR303 file/download, purchase-invoice UI; dashboard sales screen + business-overview home | fiscal filing remainder parked (*Detail → Reporting*) |
+| 8 | Reporting | daily close, frozen *cierre Z*, VAT summary, modelo 303 output+input VAT + DR303 file/download, purchase-invoice UI; dashboard sales screen (with a category sales report, at time of sale or current, printable) + business-overview home | fiscal filing remainder parked (*Detail → Reporting*) |
 | 9 | Deployment | the box as two containers with `waitron.sh` install/reset (#285, #314); guided node onboarding (#296); boot diagnosability (#310); CA-trust onboarding + per-OS certificate walkthrough (#330); till reroute S1–S6; promotion endpoint (#272) | USB installer (B3); cloud standby live link + the Waitron Cloud boundary |
 | 10 | Tabs / table service | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer, till action-flow wiring, TS-5 split-bill (#324) | core COMPLETE; owner-added extensions parked |
 | 11 | Floor plan | FP-1 live floor + FP-2 spatial canvas/editor | — |

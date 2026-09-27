@@ -12,7 +12,7 @@ import {
   stringToCents,
   stringToThousandths,
 } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, SaleLineClassification, SeriesId, TillId } from "@waitron/shared";
 import {
   billPaymentRefunds,
   billPayments,
@@ -147,6 +147,18 @@ export async function seedSale(
       /** The line quantity as a decimal literal, converted at the insert; defaults to "1.000".
        *  May be negative on a rectificativa. */
       quantity?: string;
+      /** A fixed line id, so another line of the same sale can name it as `parentLineId`. */
+      id?: string;
+      /** The dish line an extras pick belongs to. */
+      parentLineId?: string;
+      /** The free-text category; absent means none. */
+      category?: string;
+      /** The product sold; absent means none was recorded, as on a line filed before it was. */
+      productId?: string;
+      /** The VAT-inclusive total as a decimal literal; absent means none was recorded. */
+      lineGross?: string;
+      /** The recorded classification snapshot; absent means none was recorded. */
+      classification?: SaleLineClassification;
     }>;
     correctsSaleId?: SaleId;
     /** Overrides the breakdown derived from `lines`, for a test that needs a specific desglose. */
@@ -192,6 +204,12 @@ export async function seedSale(
       unitPrice: stringToCents(line.lineTotal),
       vatRate: stringToBasisPoints(line.vatRate),
       lineTotal: stringToCents(line.lineTotal),
+      id: line.id,
+      parentLineId: line.parentLineId ?? null,
+      category: line.category ?? null,
+      productId: line.productId ?? null,
+      lineGross: line.lineGross === undefined ? null : stringToCents(line.lineGross),
+      classification: line.classification ?? null,
     })),
   );
   return saleId;

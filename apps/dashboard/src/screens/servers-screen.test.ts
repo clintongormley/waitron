@@ -745,4 +745,19 @@ describe("servers screen clearing", () => {
     expect(clearDialog(el).open).toBe(true);
     expect(clearDialog(el).querySelector("[role=alert]")).toBeNull();
   });
+
+  it("a Remove confirmation's close, reported after Clear has opened, leaves the Clear confirmation open", async () => {
+    const el = await mount(clearApi());
+    await openRemove(el);
+    const removeReported = new Promise((resolve) =>
+      dialog(el).addEventListener("wt-close", resolve, { once: true }),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-remove]")!.click();
+    // The browser reports a dialog's close in a later task, so no report has arrived yet.
+    await el.updateComplete;
+    await openClear(el);
+    await removeReported;
+    await flush(el);
+    expect(clearDialog(el).open).toBe(true);
+  });
 });
