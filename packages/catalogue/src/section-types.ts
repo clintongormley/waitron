@@ -40,8 +40,7 @@ export interface HomeTile {
   ref: MemberRef;
   /** A product's staff name, or a section's internal name. */
   name: string;
-  /** False when the menu's working state no longer offers the product or reaches the section:
-   * publishing leaves such a tile out (D13). */
+  /** Whether the menu's working structure reaches the target, by membership alone. */
   reachable: boolean;
 }
 

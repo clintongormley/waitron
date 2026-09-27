@@ -92,8 +92,8 @@ declare module "@waitron/shared" {
     "menu.layout_not_found": { layoutId: string; menuId?: string };
     /** A menu's default home layout cannot be deleted; another must be made the default first. */
     "menu.default_layout_required": { layoutId: string };
-    /** A home tile names a product the menu does not offer or a section its structure does not
-     * reach (D13). */
+    /** A home tile names a product or section the menu's working structure does not reach
+     * (D13). */
     "menu.shortcut_unreachable": { layoutId: string; ref: MemberRef };
     /** A menu offer operation names no item the menu's structure reaches; menuId is present when
      * the route supplies it. */
