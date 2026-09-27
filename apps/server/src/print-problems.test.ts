@@ -23,6 +23,7 @@ import {
 } from "@waitron/catalogue";
 import {
   createPrinter,
+  deactivatePrinter,
   enqueuePrintJob,
   MAX_DELIVERY_ATTEMPTS,
   updatePrinter,
@@ -35,7 +36,7 @@ import {
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createStation, setProductStation } from "./kitchen.js";
-import { attachPrinterToStation } from "./station-printers.js";
+import { attachPrinterToStation, detachPrinterFromStation } from "./station-printers.js";
 import { createTable } from "./tables.js";
 import { listPrintProblems, ordersWithPrintProblem, reprintOrderTickets } from "./kitchen-print.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
@@ -1335,6 +1336,64 @@ describe("a printing problem a Reprint would print nothing for", () => {
       [v.cocina, v.barra].sort(),
     );
     expect((await stationCard(v.cocina, mesa4.tabId)).printProblem).toBe(true);
+  });
+});
+
+describe("a printing problem on a printer switched off or detached", () => {
+  it("keeps showing a failed ticket while its printer is switched off, and clears it once the printer is back on and a Reprint prints", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4", ["burger", "beer"]);
+    const failed = await jobFor(mesa4.tabId, v.cocinaPrinter);
+    await setJob(failed, exhausted);
+    const printerCfg = { locationId: v.cfg.locationId };
+
+    await inTx((tx) => deactivatePrinter(tx, printerCfg, v.cocinaPrinter));
+
+    const problem = {
+      workingOrderId: mesa4.tabId,
+      stationId: v.cocina,
+      stationName: "Cocina",
+      since: await createdAtOf(failed),
+    };
+    expect(await problemsOf(mesa4.visitId)).toEqual([problem]);
+    expect(await stationSees(v.cocina, mesa4.tabId)).toBe(true);
+
+    // A Reprint prints on switched-on printers only, so it cannot clear the problem yet.
+    let before = (await links()).length;
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa4.tabId));
+    const whileOff = (await links()).slice(before);
+    expect(whileOff.map((row) => [row.printerId, row.stationId])).toEqual([
+      [v.barraPrinter, v.barra],
+    ]);
+    await setJob(whileOff[0]!.printJobId, { status: "done" });
+    expect(await problemsOf(mesa4.visitId)).toEqual([problem]);
+
+    await inTx((tx) => updatePrinter(tx, printerCfg, v.cocinaPrinter, { active: true }));
+    before = (await links()).length;
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa4.tabId));
+    for (const row of (await links()).slice(before)) {
+      await setJob(row.printJobId, { status: "done" });
+    }
+    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await stationSees(v.cocina, mesa4.tabId)).toBe(false);
+  });
+
+  it("drops a failed ticket once its printer is detached from the station", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4", ["burger", "beer"]);
+    await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), exhausted);
+    expect(await problemsOf(mesa4.visitId)).toMatchObject([{ stationId: v.cocina }]);
+
+    await inTx((tx) =>
+      detachPrinterFromStation(
+        tx,
+        { locationId: v.cfg.locationId },
+        { stationId: v.cocina, printerId: v.cocinaPrinter },
+      ),
+    );
+
+    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await stationSees(v.cocina, mesa4.tabId)).toBe(false);
   });
 });
 

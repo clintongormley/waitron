@@ -93,12 +93,14 @@ interface PrinterMapping {
 }
 
 /**
- * The station→printer mappings for `stationIds`, ACTIVE printers only. The fire and correction paths
- * both resolve printers here, so the header's never-block argument covers both.
+ * The station→printer mappings for `stationIds`, ACTIVE printers only unless `switchedOffToo`. The
+ * fire and correction paths both resolve printers here without it, so the header's never-block
+ * argument covers both.
  */
-async function activePrinterMappings(
+async function printerMappings(
   tx: Transaction,
   stationIds: string[],
+  { switchedOffToo = false }: { switchedOffToo?: boolean } = {},
 ): Promise<PrinterMapping[]> {
   return tx
     .select({
@@ -111,7 +113,12 @@ async function activePrinterMappings(
     })
     .from(stationPrinters)
     .innerJoin(printers, eq(stationPrinters.printerId, printers.id))
-    .where(and(inArray(stationPrinters.stationId, stationIds), eq(printers.active, true)));
+    .where(
+      and(
+        inArray(stationPrinters.stationId, stationIds),
+        switchedOffToo ? undefined : eq(printers.active, true),
+      ),
+    );
 }
 
 /** The settings that change a kitchen ticket's bytes. Resolution does not: kitchen paper has no QR. */
@@ -352,9 +359,7 @@ async function planKitchenTickets(
 
   const stationIds = [...new Set(firedItems.map((f) => f.stationId))];
 
-  const mappingRows = await activePrinterMappings(tx, [
-    ...new Set([...stationIds, ...orderScopeAlsoAt]),
-  ]);
+  const mappingRows = await printerMappings(tx, [...new Set([...stationIds, ...orderScopeAlsoAt])]);
 
   if (mappingRows.length === 0) return [];
 
@@ -600,7 +605,7 @@ async function printCorrectionSlips(
   knownHeader?: { orderNumber: string; tableLabel: string | null },
 ): Promise<void> {
   const stationIds = [...new Set(items.map((i) => i.stationId))];
-  const mappingRows = await activePrinterMappings(tx, stationIds);
+  const mappingRows = await printerMappings(tx, stationIds);
   if (mappingRows.length === 0) return;
 
   const lineIds = [...new Set(items.map((i) => i.workingOrderLineId))];
@@ -800,8 +805,8 @@ async function readReprintParts(
 }
 
 /**
- * Each of `orderIds`' `printer|station` pairs a Reprint of it would link a ticket to
- * ({@link readReprintParts}, {@link routeKitchenTickets}).
+ * Each of `orderIds`' `printer|station` pairs a Reprint of it would link a ticket to were every
+ * printer switched on ({@link readReprintParts}, {@link routeKitchenTickets}).
  */
 async function readReprintTargets(
   tx: Transaction,
@@ -812,7 +817,12 @@ async function readReprintTargets(
   for (const parts of partsByOrder.values()) {
     for (const part of parts) for (const item of part.items) stationIds.add(item.stationId);
   }
-  const mappings = stationIds.size === 0 ? [] : await activePrinterMappings(tx, [...stationIds]);
+  // A switched-off printer's failed ticket still names unprinted dishes: once it is back on, a
+  // Reprint prints them there.
+  const mappings =
+    stationIds.size === 0
+      ? []
+      : await printerMappings(tx, [...stationIds], { switchedOffToo: true });
   const targets = new Map<string, Set<string>>();
   for (const [orderId, parts] of partsByOrder) {
     const pairs = new Set<string>();
@@ -889,7 +899,8 @@ export interface PrintProblem {
  * dish still fired on the bill, and the held dishes of each still-held group whose HOLD ticket was
  * queued, so a later round's ticket printing clears nothing, and another printer's paper says
  * nothing of this one's. It is no problem either once a Reprint of the bill would link nothing on
- * that printer to that station ({@link readReprintTargets}), as when its dishes there are voided.
+ * that printer to that station, were the printer switched on ({@link readReprintTargets}), as when
+ * its dishes there are voided or the printer is detached from the station.
  * "After" is the link row's `rowid`, not `created_at`, which two jobs can share to the millisecond:
  * SQLite gives a new row one more than the table's largest `rowid`, and a link row goes only when
  * its job or its bill is deleted, or when {@link writeLinksAfter} writes it again. Oldest first.
