@@ -1097,21 +1097,6 @@ product is now the variant itself. What it left open:
   spacing that replaced them. At 360px, dark theme, it fits with the phone spacing; with the old
   spacing it ran past the dialog's right edge there too. The cause was not investigated. **Next
   action:** find what sets the form's minimum width, and add a 320px case to the library's tests.
-- **Three dashboard tests believe they run at phone width and do not.** The `setViewportSize`
-  browser command (`apps/dashboard/vitest.config.ts`; since #612 its comment says what follows)
-  resizes the outer Playwright page, not the frame a test renders in: measured
-  2026-09-24, `window.innerWidth` read 414 before and after `setViewportSize(390, 800)`, and 390
-  after `page.viewport(390, 800)` from `vitest/browser`. Its callers are two drawer cases in
-  `apps/dashboard/src/dashboard-app.test.ts` (one asking for 400px, one described as a 390px case)
-  and one in `apps/dashboard/src/dashboard-app.a11y.test.ts`, so each runs at 414px. It predates
-  the variants branch: `git log -S setViewportSize` over those files names #172 and #333, and the
-  branch changes none of the three. **Next action:** switch them to
-  `page.viewport`, assert `window.innerWidth` after resizing, and delete the command if nothing else
-  uses it. #612's probe also found the 414px frame already below the drawer's 48rem breakpoint
-  (`matchMedia` matched), so every dashboard browser test runs in the phone layout: the drawer cases
-  called "desktop" are not, restoring 1280 in `finally` does nothing, and the fixed-width drawer
-  test compares the drawer against a "desktop" width measured in that same phone layout, so its
-  equality check proves nothing.
 - **The product list's variant read repeats a grouping.** `listedVariantsOfProducts`
   (`packages/catalogue/src/operations.ts`) groups variants by parent the same way
   `variantsOfProducts` (`packages/catalogue/src/variants.ts`) does. **Next action:** share one

@@ -1,14 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { commands } from "vitest/browser";
+import { page } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./widgets/test-helpers.js";
 import "./dashboard-app.js";
 
-declare module "vitest/browser" {
-  interface BrowserCommands {
-    // Does not resize the test's frame; see vitest.config.ts.
-    setViewportSize: (width: number, height: number) => Promise<void>;
-  }
-}
 import type { DashboardApp } from "./dashboard-app.js";
 import type { AlertsBell } from "./widgets/alerts-bell.js";
 import type { WtToast } from "@waitron/ui";
@@ -199,8 +193,11 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
     await flush(el);
     const sidebar = () => el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
+    const width = window.innerWidth,
+      height = window.innerHeight;
     try {
-      await commands.setViewportSize(400, 800);
+      await page.viewport(400, 800);
+      expect(window.innerWidth).toBe(400);
       for (let i = 0; i < 100 && !sidebar().hasAttribute("inert"); i++) {
         await new Promise((resolve) => setTimeout(resolve, 5));
       }
@@ -211,7 +208,7 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
       expect(sidebar().hasAttribute("inert")).toBe(false);
       await expectNoA11yViolations(host);
     } finally {
-      await commands.setViewportSize(1280, 800);
+      await page.viewport(width, height);
     }
   });
 

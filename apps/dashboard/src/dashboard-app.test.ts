@@ -1,4 +1,4 @@
-import { commands, page } from "vitest/browser";
+import { page } from "vitest/browser";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { html } from "lit";
@@ -2020,29 +2020,34 @@ describe("dashboard-app", () => {
   });
 
   it("keeps the off-canvas drawer a fixed width, unaffected by which nav groups are expanded", async () => {
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
-    });
-    await flush(el);
-    const sidebar = () => el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
-    const desktopWidth = sidebar().getBoundingClientRect().width;
     const width = window.innerWidth,
       height = window.innerHeight;
     try {
-      await commands.setViewportSize(400, 800);
+      await page.viewport(1280, 800);
+      expect(window.innerWidth).toBe(1280);
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+      });
+      await flush(el);
+      const sidebar = () => el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
+      const desktopWidth = sidebar().getBoundingClientRect().width;
+      await page.viewport(400, 800);
+      expect(window.innerWidth).toBe(400);
       for (let i = 0; i < 100 && !sidebar().hasAttribute("inert"); i++) {
         await new Promise((resolve) => setTimeout(resolve, 5));
       }
       const widthBeforeToggle = sidebar().getBoundingClientRect().width;
       expect(widthBeforeToggle).toBeCloseTo(desktopWidth, 0);
       // Fully off-screen when closed, not a hairline sliver left visible.
-      expect(sidebar().getBoundingClientRect().right).toBeLessThanOrEqual(0);
+      await vi.waitFor(() =>
+        expect(sidebar().getBoundingClientRect().right).toBeLessThanOrEqual(0),
+      );
 
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-team"]')!.click();
       await el.updateComplete;
       expect(sidebar().getBoundingClientRect().width).toBeCloseTo(widthBeforeToggle, 0);
     } finally {
-      await commands.setViewportSize(width, height);
+      await page.viewport(width, height);
     }
   });
 
@@ -2055,7 +2060,8 @@ describe("dashboard-app", () => {
     const width = window.innerWidth,
       height = window.innerHeight;
     try {
-      await commands.setViewportSize(390, 800);
+      await page.viewport(390, 800);
+      expect(window.innerWidth).toBe(390);
       const sidebar = el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
       for (let i = 0; i < 100 && !sidebar.hasAttribute("inert"); i++) {
         await new Promise((resolve) => setTimeout(resolve, 5));
@@ -2064,7 +2070,7 @@ describe("dashboard-app", () => {
       expect(rect.width).toBeGreaterThan(20);
       expect(rect.height).toBeLessThan(100);
     } finally {
-      await commands.setViewportSize(width, height);
+      await page.viewport(width, height);
     }
   });
 
@@ -2116,8 +2122,11 @@ describe("dashboard-app", () => {
   });
 
   it("force-closes the drawer (and drops the scrim) when widened from narrow to desktop", async () => {
-    const mq = stubDrawerMatchMedia();
+    const width = window.innerWidth,
+      height = window.innerHeight;
     try {
+      await page.viewport(390, 800);
+      expect(window.innerWidth).toBe(390);
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
       });
@@ -2125,19 +2134,18 @@ describe("dashboard-app", () => {
       const layout = () => el.shadowRoot!.querySelector<HTMLElement>(".layout")!;
       const scrim = () => el.shadowRoot!.querySelector<HTMLElement>(".scrim");
 
-      mq.set(true);
-      await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!.click();
       await el.updateComplete;
       expect(layout().classList.contains("drawer-open")).toBe(true);
       expect(scrim()).not.toBeNull();
 
-      mq.set(false);
+      await page.viewport(1280, 800);
+      expect(window.innerWidth).toBe(1280);
       await el.updateComplete;
       expect(layout().classList.contains("drawer-open")).toBe(false);
       expect(scrim()).toBeNull();
     } finally {
-      mq.restore();
+      await page.viewport(width, height);
     }
   });
 
