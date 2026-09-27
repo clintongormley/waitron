@@ -26,6 +26,8 @@ export const orderGroups = table(
     firedBy: id("fired_by"),
     submittedBy: id("submitted_by").notNull(),
     remindAt: tsString("remind_at"),
+    // When its HOLD ticket printed; this, not the setting, decides corrections and the FIRE slip.
+    holdPrintedAt: tsString("hold_printed_at"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [

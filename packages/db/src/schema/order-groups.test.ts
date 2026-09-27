@@ -99,6 +99,38 @@ describe("order_groups, order_group_events and working_order_lines.group_id", ()
     expect(row).toMatchObject({ state: "fired", firedBy: null, remindAt: null });
   });
 
+  it("records no HOLD-ticket time on a new group, and keeps one written to a held or fired group", async () => {
+    const visitId = await visit();
+    const held = await group({ visitId });
+    const printedAt = new Date().toISOString();
+    const [fresh] = await inTx((tx) =>
+      tx.select().from(orderGroups).where(eq(orderGroups.id, held)),
+    );
+    expect(fresh!.holdPrintedAt).toBeNull();
+    await inTx(async (tx) => {
+      await tx
+        .update(orderGroups)
+        .set({ holdPrintedAt: printedAt })
+        .where(eq(orderGroups.id, held));
+    });
+    const fired = await group({
+      visitId,
+      state: "fired",
+      firedAt: new Date().toISOString(),
+      holdPrintedAt: printedAt,
+    });
+    // Raw SQL, so the stored column is read by its own name rather than through the declaration.
+    const { rows } = suite.db.execute(
+      sql`select id, hold_printed_at from order_groups where visit_id = ${visitId}`,
+    );
+    expect(new Map(rows.map((row) => [row.id, row.hold_printed_at]))).toEqual(
+      new Map([
+        [held, printedAt],
+        [fired, printedAt],
+      ]),
+    );
+  });
+
   it("refuses a held group with a fired time, and accepts one without", async () => {
     const visitId = await visit();
     const error = await captureError(() =>
