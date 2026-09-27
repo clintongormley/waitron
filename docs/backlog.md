@@ -1984,6 +1984,29 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     byte-identical to what was measured. Left open: `service_commands` rows are never pruned; a
     line void does not move the party's revision yet (Task 3 builds that with groups); the four
     items directly below.
+  - **Task 14 is built and reviewed, awaiting the owner's review and landing** (lane B item B14,
+    branch `feat/service-bill-payments`, 2026-09-27). The server lets a bill take several payments
+    before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card
+    on a reader), issues the invoice in the same transaction that leaves the bill fully paid, gives
+    money back before the invoice (a card refund keeps its record through an interrupted call), and
+    the cash-up counts each payment and refund on the day and at the till where the money moved.
+    No till screen calls these routes yet; Task 15 builds them. The questions it raised, and how
+    each was ruled, are in lane B's questions log. Two follow-ups:
+    - **Until lane C's M7v lands, the invoice issued at a bill's last payment files each line at
+      the VAT rate its product has at that moment** (Task 14's Ruling STOP 2):
+      `priceStoredOrderForIssuance` (`apps/server/src/working-order.ts`) resolves each line's rate
+      from its product's current VAT class when the invoice is issued, so a meal paid across a
+      change of VAT class files the rate current at the last payment. M7v changes that one
+      function.
+    - **A dashboard screen for card payments and refunds on a bill that nothing has settled**
+      (Task 14's Ruling STOP 5), needed before or with Task 15. The routes exist:
+      `GET /management-api/payments/bill-payments` and `.../bill-refunds` list them, and each has a
+      `resolve` (ask the card provider) and an `attest` (a manager records the outcome the provider
+      confirmed, with a note and their PIN re-entered). Nothing in the dashboard calls them. Until a
+      screen does, a SumUp payment or refund whose outcome SumUp never shows keeps its bill locked:
+      no line changes and no invoice. **Next action:** extend the Payments screen
+      (`apps/dashboard/src/screens/payments-screen.ts`) with that list and the two actions, with
+      English and Spanish text and an axe test.
   - **A keydown guard that cancels Escape while a save runs did not keep one dialog open.** Measured
     on Task 1's reasons screen (`packages/adjustments/src/dashboard/reasons-screen.ts`): a real
     Escape pressed with Vitest's `userEvent` during a save closed the editor, although the screen's
@@ -3251,8 +3274,7 @@ image constraints under *Detail → Box image*.
     (`src/daily-close-hash.ts`) throws on a `null`, and a key holding `undefined` hashes
     differently from the row the database stores (the column drops the key); its comment now
     states the precondition, and nothing enforces it for callers. Not fixable in a comments-only
-    change: the SQL comment inside `src/cash-up.ts`'s `sql` string (~36) still explains the
-    ordering by a `::text` cast on "a PostgreSQL ENUM"; test titles still say "jsonb"
+    change: test titles still say "jsonb"
     (`verify-daily-close-chain.test.ts:70`), "tenant" (`top-sellers.test.ts:501`,
     `overdue-orders.test.ts:252`, `vat-summary.test.ts:233`, `vat-summary-period.test.ts:128`),
     "design §3" (`overdue-orders.test.ts:194`), "spec §12" (`top-sellers.test.ts:307`) and
