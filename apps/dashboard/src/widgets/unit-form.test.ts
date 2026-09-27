@@ -198,6 +198,51 @@ describe("unit-form", () => {
     );
   });
 
+  const summaryOf = (el: UnitForm): string[] =>
+    [
+      ...el.shadowRoot!.querySelector("wt-form-error-summary")!.shadowRoot!.querySelectorAll("li"),
+    ].map((li) => li.textContent!.trim());
+  const errorOf = (el: UnitForm, testId: string): string | null =>
+    el.shadowRoot!.querySelector(`[data-test=${testId}]`)!.getAttribute("error");
+
+  for (const field of ["name", "abbreviation"])
+    it(`shows a refused ${field} translation beside the language the server named, not the first`, async () => {
+      const message = codeMessage("unit.translation_required");
+      const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+        open: true,
+        locales: ["es", "en"],
+        value: { id: "u1", name: { es: "caja" }, abbreviation: { es: "cj" }, precision: 0 },
+        fieldErrors: unitRefusalErrors({
+          code: "unit.translation_required",
+          params: { field, language: "en" },
+        }),
+      });
+      const summary = el.shadowRoot!.querySelector("wt-form-error-summary")!;
+      await summary.updateComplete;
+
+      expect(errorOf(el, `${field}-en`)).toBe(message);
+      expect(errorOf(el, `${field}-es`)).toBe("");
+      expect(summaryOf(el)).toEqual([message]);
+    });
+
+  it("keeps a refused translation for a language the form does not show in its summary", async () => {
+    const message = codeMessage("unit.translation_required");
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["es", "en"],
+      fieldErrors: unitRefusalErrors({
+        code: "unit.translation_required",
+        params: { field: "name", language: "fr" },
+      }),
+    });
+    const summary = el.shadowRoot!.querySelector("wt-form-error-summary")!;
+    await summary.updateComplete;
+
+    expect(summaryOf(el)).toEqual([message]);
+    for (const testId of ["name-es", "name-en", "abbreviation-es", "abbreviation-en"])
+      expect(errorOf(el, testId)).toBe("");
+  });
+
   it("emits the shared cancel event and disables actions while busy", async () => {
     const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
       open: true,
@@ -309,12 +354,13 @@ describe("unitRefusalErrors", () => {
       });
   });
 
-  it("puts a missing translation beside the field the refusal names", () => {
+  it("puts a missing translation beside the field and language the refusal names", () => {
     const message = codeMessage("unit.translation_required");
     for (const field of ["name", "abbreviation"])
-      expect(
-        unitRefusalErrors(refusal("unit.translation_required", { field, language: "es" })),
-      ).toEqual({ [field]: message });
+      for (const language of ["es", "en"])
+        expect(
+          unitRefusalErrors(refusal("unit.translation_required", { field, language })),
+        ).toEqual({ [`${field}-${language}`]: message });
   });
 
   it("keeps a refusal that names no field of the form for the summary alone", () => {
@@ -322,6 +368,7 @@ describe("unitRefusalErrors", () => {
       refusal("content.translation_invalid", {}),
       refusal("content.translation_required", { language: "es" }),
       refusal("unit.translation_required", { language: "es" }),
+      refusal("unit.translation_required", { field: "name" }),
       refusal("management.request_invalid", { field: "productIds" }),
       refusal("management.request_invalid"),
       refusal("server.internal"),

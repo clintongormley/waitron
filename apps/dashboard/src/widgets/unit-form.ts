@@ -11,20 +11,23 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 
 type UnitField = "name" | "precision" | "abbreviation";
-/** `_form` is shown in the summary alone. */
-export type UnitFormErrors = Partial<Record<UnitField | "_form", string>>;
+type TranslatedField = `${"name" | "abbreviation"}-${string}`;
+/** `name` and `abbreviation` mark the first locale's input; `_form`, and a translated field whose
+ * language the form does not show, are shown in the summary alone. */
+export type UnitFormErrors = Partial<Record<UnitField | TranslatedField | "_form", string>>;
 
 /** A refused unit write, keyed by this form's fields. */
 export function unitRefusalErrors(error: unknown): UnitFormErrors {
   const code = codeOf(error);
   const message = codeMessage(code);
-  const params = (error as { params?: { field?: unknown } }).params ?? {};
+  const params = (error as { params?: { field?: unknown; language?: unknown } }).params ?? {};
   if (code === "unit.precision_invalid") return { precision: message };
   if (
     code === "unit.translation_required" &&
-    (params.field === "name" || params.field === "abbreviation")
+    (params.field === "name" || params.field === "abbreviation") &&
+    typeof params.language === "string"
   )
-    return { [params.field]: message };
+    return { [`${params.field}-${params.language}`]: message };
   if (
     code === "management.request_invalid" &&
     (params.field === "name" || params.field === "abbreviation" || params.field === "precision")
@@ -165,7 +168,7 @@ export class UnitForm extends LitElement {
   }
 
   override render() {
-    const errors = { ...this.fieldErrors, ...this.localErrors };
+    const errors: UnitFormErrors = { ...this.fieldErrors, ...this.localErrors };
     return html`
       <wt-modal
         heading=${this.value ? t("units.edit") : t("units.create")}
@@ -186,7 +189,7 @@ export class UnitForm extends LitElement {
               name=${`name-${locale}`}
               label=${`${t("units.name")} (${locale.toUpperCase()})`}
               ?required=${index === 0}
-              error=${index === 0 ? (errors.name ?? "") : ""}
+              error=${errors[`name-${locale}`] ?? (index === 0 ? (errors.name ?? "") : "")}
               .value=${this.names[locale] ?? ""}
               @wt-change=${(event: CustomEvent<{ value: string }>) => this.#changeName(locale, event)}
             ></wt-input>
@@ -196,7 +199,9 @@ export class UnitForm extends LitElement {
               name=${`abbreviation-${locale}`}
               label=${`${t("units.abbreviation")} (${locale.toUpperCase()})`}
               ?required=${index === 0}
-              error=${index === 0 ? (errors.abbreviation ?? "") : ""}
+              error=${
+                errors[`abbreviation-${locale}`] ?? (index === 0 ? (errors.abbreviation ?? "") : "")
+              }
               .value=${this.abbreviations[locale] ?? ""}
               @wt-change=${(event: CustomEvent<{ value: string }>) =>
                 this.#changeAbbreviation(locale, event)}

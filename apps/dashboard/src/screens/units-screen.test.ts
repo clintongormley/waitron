@@ -292,6 +292,16 @@ describe("units-screen", () => {
     expect(summary).toEqual([codeMessage("unit.translation_required")]);
   });
 
+  it("puts a refused translation beside the language the server named, not the form's first", async () => {
+    const { summary, fieldError } = await refusedCreate({
+      code: "unit.translation_required",
+      params: { field: "name", language: "en" },
+    });
+    expect(fieldError("name-en")).toBe(codeMessage("unit.translation_required"));
+    expect(fieldError("name-es")).toBe("");
+    expect(summary).toEqual([codeMessage("unit.translation_required")]);
+  });
+
   it("keeps the editor closed when refresh fails after a successful write", async () => {
     const background = {
       listUnits: vi.fn().mockRejectedValue({ code: "server.internal" }),

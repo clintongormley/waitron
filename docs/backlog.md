@@ -991,7 +991,8 @@ and Available (sold out for now).** What it left open:
   and Available, its menu, and the menu's switch for the product.
 - **DONE (lane C's C5): the units screen's in-use list heads its column "Status".**
   `productsUsingUnit` (`packages/catalogue/src/units.ts`) now returns the product's Active flag as
-  `active`, in the `unit.in_use` error's details and in `GET /management-api/units/:id/products`.
+  `active`, in the `unit.in_use` error's details, in `GET /management-api/units/:id/products` and
+  in `POST /management-api/units/:id/products/reassign`.
 
 **Task 3 LANDED as #528: variants are stored as products and follow their product onto
 every menu.** What it left open:
@@ -4065,8 +4066,10 @@ fails. Give both a11y cases' `getTill` a canvas and assert `till-counter-screen`
 scan.
 
 **The units screen puts a missing abbreviation's refusal beside the name — DONE (lane C's C5):
-a unit save now answers `unit.translation_required` naming the `field`, the screen places it
-there, and the form's own check counts a missing default-language key as empty. The original
+a unit save now answers `unit.translation_required` naming the `field` and the language, the
+screen places it beside that language's input (or in the form's summary when the form does not
+show that language), and the form's own check counts a missing key for its first language as
+empty. The original
 finding (found 2026-09-23, dashboard coverage, PR #538):** `apps/dashboard/src/screens/units-screen.ts` (about
 line 190) shows every `content.translation_required` refusal beside the unit's NAME field. The server
 checks the name and the abbreviation separately (`packages/catalogue/src/units.ts`) and raises the same
