@@ -173,14 +173,6 @@ it("has a sentence for the allergen declaration codes", () => {
     expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
   }
 });
-it.each(["modifier.invalid", "modifier.not_found", "modifier.in_use"])(
-  "explains %s in both languages",
-  (code) => {
-    for (const locale of ["en", "es"])
-      expect(codeMessage(code, locale)).not.toBe(codeMessage("test.unmapped_code", locale));
-  },
-);
-
 it("has a sentence for each options/extras list code the dashboard can be answered with", () => {
   const GENERIC_ES = codeMessage("test.unmapped_code", "es");
   const GENERIC_EN = codeMessage("test.unmapped_code", "en");

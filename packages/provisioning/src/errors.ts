@@ -43,11 +43,6 @@ declare module "@waitron/shared" {
      * compared trimmed and upper-cased. `provisioning.foreign_tenant` is the refusal raised before
      * `applyVenue` by the callers that read the existing identities first. */
     "provisioning.tenant_identity_mismatch": Record<string, never>;
-    /** DEPRECATED: nothing raises it. `missing` is the ROLE LABEL of the absent parent, never the
-     * uuid. */
-    "provisioning.adopt_incomplete": {
-      missing: "tenant" | "location" | "node" | "till" | "series";
-    };
     /** The `invoice_locales` list must hold one or two entries — the rule the
      * `locations_invoice_locales_len` CHECK enforces (`packages/db/src/schema/tenants.ts`). `count`
      * IS echoed: operator-typed configuration, never a secret. */
@@ -68,9 +63,6 @@ declare module "@waitron/shared" {
      * never the message: a driver message can quote the failing statement. `database` is the venue
      * directory — operator-typed configuration, never a secret. */
     "provisioning.state_unreadable": { database: string; reason: string };
-    /** NOTHING IN THIS REPOSITORY RAISES THIS TODAY. `database` is operator-typed configuration and
-     * `owner` is a role NAME — neither is a secret. */
-    "provisioning.database_not_owned": { database: string; owner: string | null };
     /**
      * This database's journal carries a migration the installed image has no file for — a NEWER or
      * DIFFERENT image migrated it. Checked explicitly because drizzle cannot: it compares a

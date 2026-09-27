@@ -57,14 +57,6 @@ it("degrades the other join refusals to the generic sentence, naming nothing abo
   expect(codeMessage("device.join_full", "en")).toBe("Something went wrong, try again");
 });
 
-it("localizes modifier failures in both languages without exposing identifiers", () => {
-  for (const code of ["modifier.invalid", "modifier.not_found", "modifier.in_use"]) {
-    expect(codeMessage(code, "en")).not.toBe(codeMessage("server.internal", "en"));
-    expect(codeMessage(code, "es")).not.toBe(codeMessage("server.internal", "es"));
-    expect(codeMessage(code, "en")).not.toBe(codeMessage(code, "es"));
-  }
-});
-
 it("tells staff a card payment is running on the order, and that a dish has sold out, in both languages", () => {
   expect(codeMessage("order.payment_in_flight", "en")).toBe(
     "A card payment for this order is in progress. Wait for it to finish before changing the order",

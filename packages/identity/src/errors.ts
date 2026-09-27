@@ -28,8 +28,6 @@ declare module "@waitron/shared" {
     "totp.invalid": Record<string, never>;
     /** The password verified, but this account requires its enrolled authenticator or a recovery code. */
     "totp.required": Record<string, never>;
-    /** A stored authenticator secret cannot be opened by the configured current/previous key ring. */
-    "totp.key_unavailable": { personId: string };
     "google.invalid": Record<string, never>;
     "google.already_linked": Record<string, never>;
     "google.second_factor_required": Record<string, never>;

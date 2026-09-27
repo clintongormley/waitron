@@ -212,8 +212,7 @@ A variant is a `products` row whose `parent_id` names its parent product — "Wi
 "Wine 175" under "Wine by the glass". There is no separate variant table. A variant's parent is a
 top-level product in the same catalogue, is fixed when the variant is created, and a variant has no
 variants of its own (the one-level rule is the core migration `packages/db/drizzle/0004_variant_one_level.sql`). A product
-may have any number of variants, one included; `product.variant_count_invalid` stays
-registered and nothing throws it.
+may have any number of variants, one included.
 
 ### What a variant reads from its parent
 
