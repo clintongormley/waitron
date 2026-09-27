@@ -12,7 +12,6 @@
 // every job) or WAITRON_REQUIRE_STREAM_BINARIES=1, a missing binary FAILS the case instead.
 import { X509Certificate } from "node:crypto";
 import { copyFile, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -61,6 +60,7 @@ import {
   startS3TestServer,
   type S3TestServer,
 } from "./testing/s3-test-server.js";
+import { freePort } from "./testing/free-ports.js";
 
 const INSTALL = "node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs";
 const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_STREAM_BINARIES === "1";
@@ -114,17 +114,6 @@ async function boxDirs(parent: string, name: string): Promise<BoxDirs> {
   const dirs = { root, state: join(root, "state"), venue: join(root, "state", "venue") };
   await mkdir(dirs.venue, { recursive: true });
   return dirs;
-}
-
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once("error", reject);
-    probe.listen(0, "127.0.0.1", () => {
-      const { port } = probe.address() as AddressInfo;
-      probe.close((error) => (error ? reject(error) : resolve(port)));
-    });
-  });
 }
 
 async function waitFor<T>(

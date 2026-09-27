@@ -23,6 +23,7 @@ import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
 import { runCloudWorker } from "./cloud-worker.js";
 import { PENDING_ADOPTION_FILE } from "./finish-adoption.js";
 import { startMdnsResponder } from "./mdns.js";
+import { freePorts } from "./testing/free-ports.js";
 
 /**
  * A start that fails after boot's long-lived open of the venue folder must give the folder back:
@@ -171,18 +172,6 @@ async function stateDir(
   return dir;
 }
 
-/** `WAITRON_HTTP_PORT` refuses "0", so the OS picks a free port first. */
-async function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createNetServer();
-    probe.once("error", reject);
-    probe.listen(0, "127.0.0.1", () => {
-      const { port } = probe.address() as AddressInfo;
-      probe.close((error) => (error ? reject(error) : resolve(port)));
-    });
-  });
-}
-
 /** Resolves once `port` could be bound on boot's default host; rejects `EADDRINUSE` while held. */
 async function bindAndRelease(port: number): Promise<void> {
   const probe = createNetServer();
@@ -234,14 +223,16 @@ function failLandingAfterMdns(
   return stop;
 }
 
-async function tradingEnv(venueDir: string, state: string) {
+/** With `landing`, the landing port is drawn beside the HTTP one, so the two cannot coincide. */
+async function tradingEnv(venueDir: string, state: string, { landing = false } = {}) {
+  const [httpPort, landingPort] = await freePorts(landing ? 2 : 1);
   return {
     WAITRON_VENUE_DIR: venueDir,
     WAITRON_STATE_DIR: state,
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
     WAITRON_ENV: "preproduction",
-    WAITRON_HTTP_PORT: String(await freePort()),
-    WAITRON_HTTP_LANDING_PORT: "0",
+    WAITRON_HTTP_PORT: String(httpPort),
+    WAITRON_HTTP_LANDING_PORT: landing ? String(landingPort) : "0",
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
     ...TILL_ENV,
@@ -348,8 +339,7 @@ describe("a start that fails after the venue folder is opened gives the folder b
     try {
       await expect(
         startServer({
-          ...(await tradingEnv(venueDir, state)),
-          WAITRON_HTTP_LANDING_PORT: String(await freePort()),
+          ...(await tradingEnv(venueDir, state, { landing: true })),
           WAITRON_TUNNEL_RELAY_URL: `tcp://127.0.0.1:${relayPort}`,
           WAITRON_TUNNEL_BOX_ID: "box-failed-start",
           WAITRON_TUNNEL_TOKEN: "tunnel-secret",
@@ -369,8 +359,7 @@ describe("a start that fails after the venue folder is opened gives the folder b
     const venueDir = await seededVenueDir();
     const state = await stateDir(undefined, { leaf: true });
     const env = {
-      ...(await tradingEnv(venueDir, state)),
-      WAITRON_HTTP_LANDING_PORT: String(await freePort()),
+      ...(await tradingEnv(venueDir, state, { landing: true })),
       WAITRON_CLOUD_ORIGIN: "https://cloud.example",
     };
     const failure = new Error("interfaces unreadable");
@@ -403,8 +392,7 @@ describe("a start that fails after the venue folder is opened gives the folder b
     const state = await stateDir(undefined, { leaf: true });
     await writeFile(join(state, PENDING_ADOPTION_FILE), "{}");
     const env = {
-      ...(await tradingEnv(venueDir, state)),
-      WAITRON_HTTP_LANDING_PORT: String(await freePort()),
+      ...(await tradingEnv(venueDir, state, { landing: true })),
     };
     const failure = new Error("interfaces unreadable");
     const mdnsStop = failLandingAfterMdns(failure);
@@ -419,8 +407,7 @@ describe("a start that fails after the venue folder is opened gives the folder b
     const venueDir = await seededVenueDir();
     const state = await stateDir(undefined, { leaf: true });
     const env = {
-      ...(await tradingEnv(venueDir, state)),
-      WAITRON_HTTP_LANDING_PORT: String(await freePort()),
+      ...(await tradingEnv(venueDir, state, { landing: true })),
     };
     const failure = new Error("interfaces unreadable");
     const mdnsStop = failLandingAfterMdns(failure, () => {
@@ -435,7 +422,8 @@ describe("a start that fails after the venue folder is opened gives the folder b
   }, 60_000);
 
   describe("in setup mode", () => {
-    async function setupEnv() {
+    async function setupEnv({ landing = false } = {}) {
+      const [httpPort, landingPort] = await freePorts(landing ? 2 : 1);
       const venueDir = await tempDir("waitron-failed-start-setup-venue-");
       const state = await tempDir("waitron-failed-start-setup-state-");
       return {
@@ -446,8 +434,8 @@ describe("a start that fails after the venue folder is opened gives the folder b
           WAITRON_STATE_DIR: state,
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_ENV: "preproduction",
-          WAITRON_HTTP_PORT: String(await freePort()),
-          WAITRON_HTTP_LANDING_PORT: "0",
+          WAITRON_HTTP_PORT: String(httpPort),
+          WAITRON_HTTP_LANDING_PORT: landing ? String(landingPort) : "0",
         },
       };
     }
@@ -466,13 +454,11 @@ describe("a start that fails after the venue folder is opened gives the folder b
     }, 60_000);
 
     it("when a step after the listener is started throws", async () => {
-      const { venueDir, env } = await setupEnv();
+      const { venueDir, env } = await setupEnv({ landing: true });
       const failure = new Error("interfaces unreadable");
       const mdnsStop = failLandingAfterMdns(failure);
 
-      await expect(
-        startServer({ ...env, WAITRON_HTTP_LANDING_PORT: String(await freePort()) }),
-      ).rejects.toBe(failure);
+      await expect(startServer(env)).rejects.toBe(failure);
       expect(readVenueHolder(venueDir)).toBeNull();
       await expect(bindAndRelease(Number(env.WAITRON_HTTP_PORT))).resolves.toBeUndefined();
       expect(mdnsStop).toHaveBeenCalledOnce();

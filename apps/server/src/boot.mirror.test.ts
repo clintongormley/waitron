@@ -1,5 +1,3 @@
-import { createServer } from "node:net";
-import type { AddressInfo } from "node:net";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -33,6 +31,7 @@ import { seedFiscalRegistro } from "./testing/fiscal-fixtures.js";
 import { ensureMirrorViewer } from "./mirror-session.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { freePort } from "./testing/free-ports.js";
 
 // Mirror-mode server boot. A mirror reads its origin, relay and CA from `mirror_config`. Four venue
 // directories: `mirror` (read-only, refuses writes); `primary`, the same identity booted as primary —
@@ -167,18 +166,6 @@ afterAll(async () => {
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
-
-/** `WAITRON_HTTP_PORT` refuses "0", so the OS picks a free port first. */
-async function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once("error", reject);
-    probe.listen(0, "127.0.0.1", () => {
-      const { port } = probe.address() as AddressInfo;
-      probe.close((error) => (error ? reject(error) : resolve(port)));
-    });
-  });
-}
 
 /** Poll `predicate` up to ~10s for its first defined value. */
 async function poll<T>(predicate: () => T | undefined): Promise<T | undefined> {

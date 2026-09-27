@@ -179,6 +179,20 @@ back with `getMappedPort(9000)`, which is the same shape the failure above took.
 briefly pruned from `CLAUDE.md` §4 on 2026-09-23 on the ground that no PACKAGE fixture binds a port
 — true, and narrower than "the tree" — and restored with that hedge the same day.
 
+## Draw every port a test needs in one `freePorts(n)` call, before binding any of them.
+
+`apps/server`'s suites pick ports by binding port 0, reading the number the system chose, and
+releasing it, because `WAITRON_HTTP_PORT` refuses `"0"`. Drawing two ports that way one after the
+other can return the same number twice on Linux, and did in CI run 36317643554: the boot's HTTPS
+server took port 40141 and its landing listener was then refused `EADDRINUSE` on 40141 in the same
+start. Measured 2026-09-27 in `node:24-slim` (Node v24.21.0, kernel 6.12): 9 repeats in 50,000
+pairs drawn one after the other, 0 with both probes held until both were drawn; macOS (Node
+v26.7.0) repeated 0 times in 20,000 pairs, so local runs did not show it. `freePorts(n)` in
+`apps/server/src/testing/free-ports.ts` holds every probe until the last port is drawn, which rules
+out a repeat within one call. It does not cover a port another worker takes between the release and
+the test's own bind, nor a port drawn to stay unused (an "unreachable peer") that another worker
+later binds. Nothing checks that a new suite uses the helper rather than its own copy.
+
 ## Locate the unfinished package before diagnosing a silent shard as database contention.
 
 Four inspected `test-light-a` hangs left only Bookings' browser files unfinished while Sync and

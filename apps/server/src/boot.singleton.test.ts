@@ -1,5 +1,3 @@
-import { createServer } from "node:net";
-import type { AddressInfo } from "node:net";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -22,6 +20,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
 import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
 import { startServer } from "./boot.js";
+import { freePort } from "./testing/free-ports.js";
 
 /**
  * A sell-only local secondary — `node_roles.mode='primary'` with `singleton_role='secondary'` — is
@@ -168,18 +167,6 @@ afterAll(async () => {
   if (primaryVenueDir !== undefined) await rm(primaryVenueDir, { recursive: true, force: true });
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
-
-/** `WAITRON_HTTP_PORT` refuses "0", so the OS picks a free port first. */
-async function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once("error", reject);
-    probe.listen(0, "127.0.0.1", () => {
-      const { port } = probe.address() as AddressInfo;
-      probe.close((error) => (error ? reject(error) : resolve(port)));
-    });
-  });
-}
 
 /** Poll `predicate` up to ~10s for its first defined value. */
 async function poll<T>(predicate: () => T | undefined): Promise<T | undefined> {

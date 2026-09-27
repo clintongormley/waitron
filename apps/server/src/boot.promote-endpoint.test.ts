@@ -1,5 +1,3 @@
-import { createServer } from "node:net";
-import type { AddressInfo } from "node:net";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -33,6 +31,7 @@ import { startServer } from "./boot.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { ALL_MODULES } from "./modules.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
+import { freePort } from "./testing/free-ports.js";
 
 // `POST /management-api/promote` is mounted on both deployment modes and its path is exempt from
 // the read-only gate, so a mirror and a fenced node both reach the handler: a mirror's
@@ -268,18 +267,6 @@ afterAll(async () => {
   }
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
-
-/** `WAITRON_HTTP_PORT` refuses "0", so the OS picks a free port first. */
-async function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once("error", reject);
-    probe.listen(0, "127.0.0.1", () => {
-      const { port } = probe.address() as AddressInfo;
-      probe.close((error) => (error ? reject(error) : resolve(port)));
-    });
-  });
-}
 
 /** Throws on timeout: every call is a barrier, so a request never goes to a server still booting. */
 async function poll<T>(predicate: () => Promise<T | undefined>): Promise<T> {

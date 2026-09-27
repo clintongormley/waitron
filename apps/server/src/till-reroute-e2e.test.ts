@@ -1,5 +1,3 @@
-import { createServer } from "node:net";
-import type { AddressInfo } from "node:net";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -27,6 +25,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { startServer, type StartedServer } from "./boot.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { freePorts } from "./testing/free-ports.js";
 
 // The till-reroute HEADLINE proof (S6, #265): TWO booted `apps/server` instances
 // (two `startServer` boots, in ONE test process — not two OS processes), each on its OWN venue
@@ -178,19 +177,6 @@ async function seedVenue(db: Database): Promise<void> {
     .onConflictDoNothing({ target: devices.id });
 }
 
-/** An OS-assigned free port, released before use — WAITRON_HTTP_PORT rejects "0", so the host cannot
- * bind an ephemeral port itself. */
-async function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once("error", reject);
-    probe.listen(0, "127.0.0.1", () => {
-      const { port } = probe.address() as AddressInfo;
-      probe.close((error) => (error ? reject(error) : resolve(port)));
-    });
-  });
-}
-
 /** The env for a PRIMARY (selling) boot of `nodeId`/`seriesId` on `venueDir` at `port`. */
 function primaryEnv(
   venueDir: string,
@@ -309,8 +295,7 @@ afterAll(async () => {
 
 describe("till reroute — two instances, one venue", () => {
   it("A primary, B standby; A goes down; B promoted+restarted; the device cookie follows and the venue's tab is inherited", async () => {
-    const portA = await freePort();
-    const portB = await freePort();
+    const [portA, portB] = await freePorts(2);
     const serverA = await startServer(primaryEnv(venueDirA, portA, NODE_A, SERIES_A));
     // B's boot is inside the try so a rejection there still closes A in the finally (no leaked listener).
     let serverB: StartedServer | undefined;

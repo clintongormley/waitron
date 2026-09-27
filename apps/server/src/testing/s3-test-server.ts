@@ -1,11 +1,12 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { mkdir } from "node:fs/promises";
-import { createConnection, createServer, type AddressInfo } from "node:net";
+import { createConnection } from "node:net";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { LITESTREAM_VERSION } from "@waitron/stream";
 import { isUnset } from "../env-value.js";
+import { freePort } from "./free-ports.js";
 
 // versitygw run as a plain child process: the S3-compatible server the stream loop and pause tests
 // stream to, plus the lookup of the litestream binary those tests also need. No package suite may
@@ -218,18 +219,6 @@ function accepts(port: number): Promise<boolean> {
     socket.once("error", () => {
       socket.destroy();
       resolve(false);
-    });
-  });
-}
-
-/** An OS-assigned port, released before use — the same shape as `boot.test.ts`'s `freePort`. */
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once("error", reject);
-    probe.listen(0, "127.0.0.1", () => {
-      const { port } = probe.address() as AddressInfo;
-      probe.close((error) => (error ? reject(error) : resolve(port)));
     });
   });
 }

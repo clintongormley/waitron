@@ -2877,24 +2877,34 @@ image constraints under *Detail → Box image*.
 - **`fiscal-none` left-behinds:** remove the inert `resolveClient`/`skipRetryMs`; regime-agnostic
   provisioning tests.
 - **Test-helper debt:** `provisionTestVenue(db, overrides)` for `apps/server`'s sixty-odd suites; the
-  duplicated `boot.*.test.ts` helpers into `apps/server/src/testing/`; a shared
-  `useFiscalMirrorPair()` for the two-clone fiscal suites.
+  duplicated `boot.*.test.ts` helpers into `apps/server/src/testing/` (`freePort` has moved there,
+  A80; the rest remain); a shared `useFiscalMirrorPair()` for the two-clone fiscal suites.
 - **The tax-model system** — the `tax` slot is an inert label today; the intended shape puts the tax
   MODEL in core with the fiscal module supplying rates and labels. A prerequisite for any non-ES
   venue, so parked.
 
 ### B9. CI and test infra
 
-- **A main server shard lost the landing listener's chosen port — OPEN (2026-09-27, after #736).**
+- **A main server shard lost the landing listener's chosen port — DONE (lane A's A80).**
   Exact-merge CI run 36317643554 at `30d9836028e44180feca9578b87d389ab8cdd786` logged
-  `landing.listen_failed` with `EADDRINUSE` on port 40141; the
-  `apps/server/src/boot.test.ts` case "serves the plain-HTTP landing page beside a trading boot"
-  then failed with `fetch failed` / `UND_ERR_SOCKET` (other side closed). The preceding main run
-  36317491782 passed on `6515a6aa7`, and `git diff --name-only 6515a6aa7..30d983602` lists only
-  dashboard test/configuration files and this backlog. One focused local run of that server case
-  passed; the port collision's cause remains unverified. **Next action:** reproduce with the CI
-  server shard's concurrency, identify who held the chosen port between `freePort()` and the landing
-  listener's bind, then add a failing regression before changing allocation or listener startup.
+  `server.listening` on port 40141 and, 2 ms later in the same boot, `landing.listen_failed` with
+  `EADDRINUSE` on 40141: the test had drawn its HTTP port and its landing port one after the other,
+  releasing the first before drawing the second, and got the same number twice. The plain-HTTP fetch
+  then reached the HTTPS server, which closed the socket (`UND_ERR_SOCKET`). Measured 2026-09-27 in
+  `node:24-slim` (Node v24.21.0, kernel 6.12): drawing two ports that way returned the same port 9
+  times in 50,000 pairs, and 0 times with both probes held until both were drawn; on macOS (Node
+  v26.7.0) the old way repeated 0 times in 20,000 pairs, which is why local runs never showed it.
+  `apps/server/src/testing/free-ports.ts` now replaces the twelve per-file copies and the
+  `s3-test-server.ts` one; `freePorts(n)` holds every probe until the last port is drawn, and the
+  places that drew two ports before binding either (the landing case, the failed-start landing
+  cases, the two-server failover test, two "unreachable peer" ports drawn beside the server's own,
+  and the unreachable primary in `boot.test.ts`'s "refuses to adopt from a primary it cannot reach")
+  now draw them in one call. **Still open:** a port is still released before the server binds
+  it, so another test worker drawing or connecting in that gap can take it; nothing has measured how
+  often. Removing that would need the server to accept port 0 and report the port it bound
+  (`WAITRON_HTTP_PORT` refuses `"0"` today). `bench/sqlite-failover/src/unreachable-store.ts`'s
+  `reservePort` and the inline copy in `apps/server/scripts/cloud-integration-fixture.ts` have the
+  same release-then-use shape and were not changed.
 
 - **`scripts/waitron-sh.test.mjs` failed at random when its temporary folder's name held a word it
   matched — DONE (lane A's A31b, **PR #661**).** The docker stub now drops `compose` and one leading

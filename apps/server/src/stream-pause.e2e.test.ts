@@ -13,7 +13,6 @@
 // CI=true or WAITRON_REQUIRE_STREAM_BINARIES=1 a missing binary FAILS it.
 import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
-import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -65,6 +64,7 @@ import {
   startS3TestServer,
   type S3TestServer,
 } from "./testing/s3-test-server.js";
+import { freePort } from "./testing/free-ports.js";
 
 const INSTALL = "node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs";
 const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_STREAM_BINARIES === "1";
@@ -130,17 +130,6 @@ const versitygw = await resolveVersitygw(process.env);
 const missing = [litestream, versitygw].flatMap((lookup) => (lookup.ok ? [] : [lookup.reason]));
 if (missing.length > 0 && !REQUIRED) {
   console.warn(`stream pause test SKIPPED: ${missing.join("; ")}. Install with: ${INSTALL}`);
-}
-
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once("error", reject);
-    probe.listen(0, "127.0.0.1", () => {
-      const { port } = probe.address() as AddressInfo;
-      probe.close((error) => (error ? reject(error) : resolve(port)));
-    });
-  });
 }
 
 async function waitFor<T>(
