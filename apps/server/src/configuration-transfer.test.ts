@@ -1,6 +1,9 @@
 import {
   addMember,
   createCatalogue,
+  createHomeLayout,
+  deviceHomeLayouts,
+  setDeviceHomeLayout,
   createExtraList,
   addProductToMenu,
   createOptionList,
@@ -30,6 +33,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   catalogues,
   categories,
+  deviceProfiles,
   diningTables,
   printAgents,
   printers,
@@ -859,6 +863,52 @@ it("transfers sections and their members, remapping ids, with a section's image"
     expect((await readSection(tx, root!.id)).members.map((member) => member.ref)).toEqual([
       { kind: "section", sectionId: drinks!.id },
     ]);
+  });
+});
+
+it("carries a device profile's home layout choice, remapped to the imported menu and layout", async () => {
+  const source = await applyVenue(planVenue(venue("B66778899"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const original = await withTransaction(suite.db, async (tx) => {
+    const menu = await createCatalogue(tx, { name: "Layout menu" });
+    const counter = await createHomeLayout(tx, menu.id, "Counter");
+    const [profile] = await tx
+      .insert(deviceProfiles)
+      .values({ name: "Handheld", formFactor: "phone-portrait" })
+      .returning({ id: deviceProfiles.id });
+    await setDeviceHomeLayout(tx, profile!.id, menu.id, counter.id);
+    return { menu: menu.id, counter: counter.id, profile: profile!.id };
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-09-27T12:00:00Z"),
+    versions,
+  );
+  expect(transferred.tables.device_profile_home_layouts).toEqual([
+    { device_profile_id: original.profile, menu_id: original.menu, layout_id: original.counter },
+  ]);
+  await applyVenue(planVenue(venue("B99887766"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  await withTransaction(targetSuite.db, async (tx) => {
+    const [profile] = await tx
+      .select({ id: deviceProfiles.id })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.name, "Handheld"));
+    const menus = await deviceHomeLayouts(tx, profile!.id);
+    const menu = menus.find((entry) => entry.menuName === "Layout menu")!;
+    expect(menu.menuId).not.toBe(original.menu);
+    const counter = menu.layouts.find((layout) => layout.name === "Counter")!;
+    expect(counter.id).not.toBe(original.counter);
+    expect(menu).toMatchObject({ selectedLayoutId: counter.id, selectedRemoved: false });
   });
 });
 

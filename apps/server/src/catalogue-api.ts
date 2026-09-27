@@ -39,6 +39,15 @@ import {
   duplicateSection,
   sectionUsages,
   librarySectionUsages,
+  listHomeLayouts,
+  createHomeLayout,
+  duplicateHomeLayout,
+  renameHomeLayout,
+  deleteHomeLayout,
+  setDefaultHomeLayout,
+  addShortcut,
+  removeShortcut,
+  moveShortcut,
   type MemberRef,
   type SectionInput,
   type SectionPatch,
@@ -258,6 +267,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "menu_section.not_library": 409,
   // The working menu no longer matches the preview the publish was asked from.
   "menu.changed_since_preview": 409,
+  "menu.layout_not_found": 404,
+  "menu.default_layout_required": 409,
+  "menu.shortcut_unreachable": 409,
   // The product editor's kitchen routing: an id that names no LIVE station or course of this venue.
   "station.not_found": 404,
   "course.not_found": 404,
@@ -620,6 +632,109 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
   );
 }
 
+/** A layout body's `name`, shape only: the layout writes trim it and refuse a blank. */
+async function requireLayoutName(c: Context): Promise<string> {
+  const body = await readJsonBody<{ name?: unknown }>(c);
+  if (typeof body.name !== "string")
+    throw new AppError("management.request_invalid", { field: "name" });
+  return body.name;
+}
+
+/** A menu's home layouts and their tiles. A tile is a member of the layout's section, but tiles have
+ * their own routes: the generic member routes refuse every write into a home layout. */
+function mountHomeLayoutRoutes(app: Hono, gated: GatedWork, log: Logger): void {
+  const ofMenu = "/management-api/catalogues/:id/home-layouts";
+  const one = "/management-api/home-layouts/:layoutId";
+  const tiles = `${one}/tiles` as const;
+  const tile = `${tiles}/:memberId` as const;
+  const menuId = (c: Context) => requireUuidParam(c.req.param("id")!, "MenuId");
+  const layoutId = (c: Context) => requireUuidParam(c.req.param("layoutId")!, "HomeLayoutId");
+  const memberId = (c: Context) => requireUuidParam(c.req.param("memberId")!, "SectionMemberId");
+
+  app.get(ofMenu, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const menu = menuId(c);
+      return c.json(await gated(session, (tx) => listHomeLayouts(tx, menu)));
+    }),
+  );
+  app.post(ofMenu, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const menu = menuId(c);
+      const name = await requireLayoutName(c);
+      return c.json(await gated(session, (tx) => createHomeLayout(tx, menu, name)), 201);
+    }),
+  );
+  app.put("/management-api/catalogues/:id/default-home-layout", (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const menu = menuId(c);
+      const body = await readJsonBody<{ layoutId?: unknown }>(c);
+      if (typeof body.layoutId !== "string")
+        throw new AppError("management.request_invalid", { field: "layoutId" });
+      const layout = requireUuidParam(body.layoutId, "HomeLayoutId");
+      await gated(session, (tx) => setDefaultHomeLayout(tx, menu, layout));
+      return c.body(null, 204);
+    }),
+  );
+  app.post(`${one}/duplicate`, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = layoutId(c);
+      const name = await requireLayoutName(c);
+      return c.json(await gated(session, (tx) => duplicateHomeLayout(tx, id, name)), 201);
+    }),
+  );
+  app.patch(one, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = layoutId(c);
+      const name = await requireLayoutName(c);
+      await gated(session, (tx) => renameHomeLayout(tx, id, name));
+      return c.body(null, 204);
+    }),
+  );
+  app.delete(one, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = layoutId(c);
+      await gated(session, (tx) => deleteHomeLayout(tx, id));
+      return c.body(null, 204);
+    }),
+  );
+  app.post(tiles, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = layoutId(c);
+      const body = await readJsonBody<{ ref?: unknown; position?: unknown }>(c);
+      const ref = memberRef(body.ref);
+      const position =
+        body.position === undefined ? undefined : numberField(body.position, "position");
+      return c.json(await gated(session, (tx) => addShortcut(tx, id, ref, position)), 201);
+    }),
+  );
+  app.delete(tile, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = layoutId(c);
+      const held = memberId(c);
+      await gated(session, (tx) => removeShortcut(tx, id, held));
+      return c.body(null, 204);
+    }),
+  );
+  app.put(`${tile}/position`, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = layoutId(c);
+      const held = memberId(c);
+      const body = await readJsonBody<{ to?: unknown }>(c);
+      const to = numberField(body.to, "to");
+      return c.json(await gated(session, (tx) => moveShortcut(tx, id, held, to)));
+    }),
+  );
+}
+
 function replaceTarget(value: unknown): { sectionId: string; memberId: string } {
   if (
     !isPlainObject(value) ||
@@ -735,6 +850,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   });
 
   mountSectionRoutes(app, gated, log, deps.venueLocale ?? FALLBACK_LOCALE);
+  mountHomeLayoutRoutes(app, gated, log);
 
   app.get("/management-api/content-languages", (c) =>
     run(c, log, async () => {

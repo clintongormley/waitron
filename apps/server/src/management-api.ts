@@ -47,6 +47,7 @@ import {
   type TotpKeyRing,
 } from "@waitron/identity";
 import type { IssuedAccountAction } from "@waitron/identity";
+import { deviceHomeLayouts, setDeviceHomeLayout } from "@waitron/catalogue";
 import {
   FORM_FACTORS,
   createCanvas,
@@ -103,7 +104,7 @@ import {
 import type { TillConfig } from "./till-config.js";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
-import { requireBodyUuid, requireEnum } from "@waitron/server-kit";
+import { requireBodyUuid, requireEnum, requireNullableBodyUuid } from "@waitron/server-kit";
 import {
   clearManagementCookie,
   readManagementSessionToken,
@@ -250,6 +251,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device_profile.name_taken": 409,
   "device_profile.in_use": 409,
   "device_profile.invalid": 400,
+  "catalogue.not_found": 404,
+  "menu.layout_not_found": 404,
 };
 
 const run = createErrorBoundary(STATUS, "management.failed");
@@ -296,6 +299,11 @@ function requireCanvasId(id: string): string {
 
 function requireDeviceProfileId(id: string): string {
   if (!isUuid(id)) throw new AppError("device_profile.not_found", {});
+  return id;
+}
+
+function requireMenuId(id: string): string {
+  if (!isUuid(id)) throw new AppError("catalogue.not_found", { catalogueId: id });
   return id;
 }
 
@@ -1215,6 +1223,46 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           managementSessionId: sessionId,
           id,
         });
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  // Which home layout the profile shows for each menu (D14). Reads and writes both need the
+  // profile to exist: the catalogue's write leaves that to its foreign key.
+  app.get("/management-api/device-profiles/:id/home-layouts", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireDeviceProfileId(c.req.param("id"));
+      const menus = await withTransaction(deps.db, async (tx) => {
+        await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "layout.configure",
+        });
+        if ((await getDeviceProfile(tx, id)) === undefined)
+          throw new AppError("device_profile.not_found", {});
+        return deviceHomeLayouts(tx, id);
+      });
+      return c.json({ menus });
+    }),
+  );
+
+  // `layoutId: null` goes back to the menu's default layout.
+  app.put("/management-api/device-profiles/:id/home-layouts/:menuId", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireDeviceProfileId(c.req.param("id"));
+      const menuId = requireMenuId(c.req.param("menuId"));
+      const body = await readJsonBody<{ layoutId?: unknown }>(c);
+      const layoutId = requireNullableBodyUuid(body.layoutId, "layoutId");
+      await withTransaction(deps.db, async (tx) => {
+        await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "layout.configure",
+        });
+        if ((await getDeviceProfile(tx, id)) === undefined)
+          throw new AppError("device_profile.not_found", {});
+        await setDeviceHomeLayout(tx, id, menuId, layoutId);
       });
       return c.body(null, 204);
     }),
