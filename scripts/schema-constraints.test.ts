@@ -374,6 +374,8 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "invoice_series_code_ck",
   "invoice_series_next_number_ck",
   "invoice_series_purpose_ck",
+  "kitchen_notices_direction_ck",
+  "kitchen_notices_direction_kind_ck",
   "kitchen_notices_kind_ck",
   "kitchen_notices_moved_to_ck",
   "kitchen_notices_quantity_ck",

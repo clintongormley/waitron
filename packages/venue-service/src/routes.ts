@@ -34,8 +34,10 @@ import {
 import {
   readEditSentLines,
   readKitchenTicketGrouping,
+  readPrintHeldWork,
   writeEditSentLines,
   writeKitchenTicketGrouping,
+  writePrintHeldWork,
 } from "./kitchen-notices.js";
 import { KITCHEN_TICKET_GROUPINGS, type KitchenTicketGrouping } from "./schema/settings.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
@@ -134,6 +136,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           readiness: await listVenueReadiness(tx, ctx.cfg),
           settings: { editSentLines: await readEditSentLines(tx) },
           kitchenTicketGrouping: await readKitchenTicketGrouping(tx),
+          printHeldWork: await readPrintHeldWork(tx),
         }));
         return c.json(result);
       }),
@@ -163,6 +166,19 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         await gated(sessionId, (tx) =>
           writeKitchenTicketGrouping(tx, grouping as KitchenTicketGrouping),
         );
+        return c.body(null, 204);
+      }),
+    );
+
+    app.put("/management-api/venue-service/settings/print-held-work", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        const printHeldWork = body.printHeldWork;
+        if (typeof printHeldWork !== "boolean") {
+          throw new AppError("management.request_invalid", { field: "printHeldWork" });
+        }
+        await gated(sessionId, (tx) => writePrintHeldWork(tx, printHeldWork));
         return c.body(null, 204);
       }),
     );

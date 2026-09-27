@@ -393,7 +393,8 @@ export interface VenueServiceContribution {
     toWorkingOrderLineId: string,
   ): Promise<void>;
   /** Records one kitchen notice per item, copying each line's kitchen name and note as they stand
-   *  now, so a caller removing a line records its notices first. */
+   *  now, so a caller removing a line records its notices first. `direction` is for a `changed`
+   *  notice only. */
   recordKitchenNotices(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -406,6 +407,7 @@ export interface VenueServiceContribution {
     }[],
     kind: "recalled" | "void" | "changed" | "moved",
     movedTo?: string | null,
+    direction?: "added" | "removed" | null,
   ): Promise<void>;
   /** A station's unacknowledged notices, oldest first: the newest fifty of the business day. */
   listStationNotices(
@@ -425,6 +427,7 @@ export interface VenueServiceContribution {
       note: string | null;
       wasStarted: boolean;
       movedTo: string | null;
+      direction: "added" | "removed" | null;
       createdAt: string;
     }[]
   >;
@@ -441,6 +444,8 @@ export interface VenueServiceContribution {
   readClearingWorkflow(tx: Transaction): Promise<boolean>;
   /** How identical dishes print on a kitchen ticket: one `N x` entry, or N entries of one. */
   readKitchenTicketGrouping(tx: Transaction): Promise<"combined" | "separate">;
+  /** Whether held groups print in advance, marked HOLD. */
+  readPrintHeldWork(tx: Transaction): Promise<boolean>;
 }
 
 /** A reference to non-DB state a module owns, resolved to a path by the composition root. */

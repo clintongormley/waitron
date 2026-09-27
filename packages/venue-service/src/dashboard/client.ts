@@ -71,6 +71,7 @@ export interface VenueServiceModel {
   readiness: VenueReadinessIssue[];
   settings: VenueServiceSettings;
   kitchenTicketGrouping: KitchenTicketGrouping;
+  printHeldWork: boolean;
 }
 export interface VenueServiceSettings {
   editSentLines: boolean;
@@ -212,6 +213,12 @@ export class VenueServiceApi {
   saveKitchenTicketGrouping(kitchenTicketGrouping: KitchenTicketGrouping): Promise<void> {
     return this.request("/management-api/venue-service/settings/kitchen-ticket-grouping", "PUT", {
       kitchenTicketGrouping,
+    });
+  }
+
+  savePrintHeldWork(printHeldWork: boolean): Promise<void> {
+    return this.request("/management-api/venue-service/settings/print-held-work", "PUT", {
+      printHeldWork,
     });
   }
 

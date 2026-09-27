@@ -469,8 +469,8 @@ export class TillStationQueue extends LitElement {
       wt-button.reprint {
         display: block;
       }
-      /* The notices strip: corrections to work already sent, each until a cook acknowledges it. The
-         kind is always text plus an icon; the left border only repeats it. */
+      /* The notices strip: corrections to work a station already has, each until a cook acknowledges
+         it. The kind is always text plus an icon; the left border only repeats it. */
       .notices {
         display: flex;
         flex-direction: column;
@@ -731,7 +731,8 @@ export class TillStationQueue extends LitElement {
 
   #notice(notice: KitchenNotice): TemplateResult {
     const kind = t(`station.notice.${notice.kind}` as const);
-    const line = dishLine(notice.quantity, notice.unitName, notice.lineName);
+    const sign = notice.direction === null ? "" : notice.direction === "added" ? "+" : "\u2212";
+    const line = `${sign}${dishLine(notice.quantity, notice.unitName, notice.lineName)}`;
     const acknowledge = t("station.notice.acknowledge");
     const { movedTo } = notice;
     return html`<li class="notice kind-${notice.kind}" data-notice=${notice.id}>

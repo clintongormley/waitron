@@ -126,12 +126,16 @@ import { issueMoment } from "./issue-moment.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import {
+  correctHoldTickets,
   fireHeldGroupsOfCourse,
   moveGroupsToVisit,
+  printedHeldGroups,
+  printHoldTickets,
   recordGroupEvent,
   removeEmptiedHeldGroups,
   requireOperator,
   startGroup,
+  type HeldChange,
 } from "./order-groups.js";
 import {
   enqueueCorrectionSlips,
@@ -1236,7 +1240,7 @@ export async function fireLines(
     throw error;
   }
 
-  // Held items print only when released. Outbox inserts on the same transaction: no hardware I/O
+  // Only the items fired here print here. Outbox inserts on the same transaction: no hardware I/O
   // blocks the fire.
   const firedItems = inserted
     .filter((row) => row.firedAt !== null)
@@ -1390,18 +1394,23 @@ export async function fireCourse(
 
 /**
  * Release these held dish lines of one order, as {@link fireCourse} releases a course: a line
- * already fired or sent is left as it is.
+ * already fired or sent is left as it is. `mark` heads the ticket printed for them.
  */
 export async function fireOrderLines(
   tx: Transaction,
   cfg: TillConfig,
   orderId: string,
   lineIds: readonly string[],
+  mark?: "FIRE",
 ): Promise<void> {
-  await releaseHeld(tx, cfg, orderId, inArray(ticketItems.workingOrderLineId, [...lineIds]), {
-    courseIds: [],
-    lineIds,
-  });
+  await releaseHeld(
+    tx,
+    cfg,
+    orderId,
+    inArray(ticketItems.workingOrderLineId, [...lineIds]),
+    { courseIds: [], lineIds },
+    mark,
+  );
 }
 
 /**
@@ -1414,6 +1423,7 @@ async function releaseHeld(
   orderId: string,
   ticketScope: SQL,
   noRouteScope: { courseIds: readonly (string | null)[]; lineIds: readonly string[] },
+  mark?: "FIRE",
 ): Promise<void> {
   const firedNow = nowIso();
   const firedItems = await tx
@@ -1436,6 +1446,7 @@ async function releaseHeld(
     noRoute,
     firedNow,
     await isOpenOrder(tx, orderId),
+    mark,
   );
 }
 
@@ -1453,11 +1464,12 @@ async function finishRelease(
   noRoute: readonly string[],
   at: string,
   refuseSoldOut: boolean,
+  mark?: "FIRE",
 ): Promise<void> {
   const released = [...fired.map((item) => item.workingOrderLineId), ...noRoute];
   if (refuseSoldOut) await assertSendable(tx, released);
   await stampSent(tx, orderId, released, at);
-  await enqueueKitchenTickets(tx, cfg, orderId, fired);
+  await enqueueKitchenTickets(tx, cfg, orderId, fired, { mark });
   if (released.length > 0) await bumpRevision(tx, [orderId]);
 }
 
@@ -1614,7 +1626,7 @@ export async function recallLines(
   if (started !== undefined) {
     throw new AppError("ticket.already_started", { ticketItemId: started.ticketItemId });
   }
-  // A held line never printed, so it gets no slip.
+  // A held line stays held, so it gets no slip.
   const recalled = items
     .filter((r) => r.firedAt !== null && r.state === "queued")
     .map((r) => ({
@@ -1885,7 +1897,8 @@ async function assertTabOpenOrPartyCurrent(
  * voids that part only, reducing the line, its extras children (which follow their dish) and its
  * ticket item's fired quantity. A line that had already fired records a VOID kitchen notice for what
  * was removed — marked started when the cook had started it — and gets a VOID correction slip where
- * its station has a printer.
+ * its station has a printer. A held line of a group whose HOLD ticket was queued records a `void`
+ * notice for what was removed and gets a HOLD CANCELLED slip instead.
  *
  * Voiding stays open with changes to sent items switched off: it is then the only correction.
  */
@@ -1938,6 +1951,25 @@ export async function voidTabLine(
       : [];
   // Before the delete or the reduction: the notice and the slip re-read the line.
   await enqueueCorrectionSlips(tx, cfg, tabId, voided, "VOID");
+  if (target.ticketItemId !== null && target.firedAt === null && target.groupId !== null) {
+    const group = (await printedHeldGroups(tx, [target.groupId])).get(target.groupId);
+    if (group !== undefined) {
+      await correctHoldTickets(
+        tx,
+        cfg,
+        [
+          {
+            workingOrderId: tabId,
+            workingOrderLineId: target.id,
+            stationId: target.stationId!,
+            quantity: removed ?? target.firedQuantity,
+            group,
+          },
+        ],
+        { kind: "HOLD CANCELLED" },
+      );
+    }
+  }
   await bumpRevision(tx, [tabId]);
   if (removed === null) {
     // Takes the line's child modifier lines in the same statement: the parent alone would be
@@ -3032,20 +3064,20 @@ async function clearGroups(tx: Transaction, lineIds: readonly string[]): Promise
 
 /**
  * Split `quantity` of each of these top-level lines off into a new row of the same order, which
- * keeps its prices, group, credit and a ticket item of its own for the part; returns the new rows'
- * ids. Each `quantity` must be less than its line's.
+ * keeps its prices, group, credit and a ticket item of its own for the part; returns each new row's
+ * id keyed by the id of the line it split. Each `quantity` must be less than its line's.
  */
 export async function splitLinesWithinOrder(
   tx: Transaction,
   cfg: TillConfig,
   orderId: string,
   splits: { lineNo: number; quantity: string }[],
-): Promise<string[]> {
+): Promise<Map<string, string>> {
   const { splitLines } = await carveOffLines(tx, cfg, orderId, orderId, splits, {
     refuseHeld: false,
     leavesVisit: false,
   });
-  return [...splitLines.values()];
+  return splitLines;
 }
 
 /**
@@ -3799,7 +3831,9 @@ async function assertProductsSellable(
  * - A stored line keeps its gross price, names and the other facts it was added with; only what the
  *   edit adds is priced now — a new line, and an extra added to a line. A note or an options answer
  *   carries no price. A kept extra is matched by list, product and quantity.
- * - A line the kitchen does not have (no ticket item, or one held or recalled) is changed in place.
+ * - A line with no ticket item, or a held or recalled one, is changed in place. A held one whose
+ *   group has a queued HOLD ticket also prints HOLD corrections for its change or its removal
+ *   ({@link planHeldCorrections}).
  * - A line the kitchen has, not started: a change recalls the old item with a notice and slip and
  *   fires the changed line as a new item; a quantity rise leaves the item and adds the difference as
  *   a new line; a drop voids the difference, with a notice and slip. Removing it voids it the same
@@ -3815,7 +3849,8 @@ async function assertProductsSellable(
  *
  * On a visit: an added extra takes its dish's group and credit; a fired line's raised quantity
  * goes in a new fired group, and a new dish in a new group fired or held as `newWork` says, both at
- * the end of the sequence and credited to `operatorId`; a held group the edit empties is removed;
+ * the end of the sequence and credited to `operatorId`, a held one printing its HOLD ticket where the
+ * venue prints held work in advance; a held group the edit empties is removed;
  * the visit's revision moves on.
  */
 async function applyLineEdits(
@@ -3901,6 +3936,8 @@ async function applyLineEdits(
     removedChildren: EditableLine[];
     /** Index into `pricing` of the line carrying this line's added extras, if any. */
     addedAt: number | null;
+    /** Whether the note, options answer or extras change, not only the quantity. */
+    modified: boolean;
   }[] = [];
   // Every line priced now, in one offer read: a new dish line, which the kitchen gets as `kitchen`
   // says, the carrier of extras added to a stored line, whose dish row is not kept, or a raised
@@ -4009,6 +4046,7 @@ async function applyLineEdits(
       kept: extras.kept,
       removedChildren: extras.removed,
       addedAt,
+      modified: changed,
     });
   }
 
@@ -4064,6 +4102,7 @@ async function applyLineEdits(
   }
 
   // Before any line changes: a notice and a slip copy the line as it stands.
+  const held = await planHeldCorrections(tx, orderId, changes, plan.removed);
   const recalled = changes
     .filter(({ action }) => action === "change")
     .map(({ parent }) => ({
@@ -4095,6 +4134,8 @@ async function applyLineEdits(
     ],
     "VOID",
   );
+  await correctHoldTickets(tx, cfg, held.cancelled, { kind: "HOLD CANCELLED" });
+  await correctHoldTickets(tx, cfg, held.taken, { kind: "HOLD CHANGED", direction: "removed" });
   for (const { parent, kept, removed } of dropped) {
     await reduceLine(
       tx,
@@ -4206,8 +4247,12 @@ async function applyLineEdits(
     await tx.insert(workingOrderLines).values(inserted);
     await VENUE_SERVICE.recordLineContexts(tx, cfg, orderId, insertedContexts, priced.offers);
   }
+  // After the extras a line gains are written: a slip reads the line as it now stands.
+  await correctHoldTickets(tx, cfg, held.given, { kind: "HOLD CHANGED", direction: "added" });
   // Fired while the removed lines' items still stand, so a course they held counts as fired.
   await fireLines(tx, cfg, orderId, fireNow);
+  const heldGroup = newGroups.get("hold");
+  if (heldGroup !== undefined) await printHoldTickets(tx, cfg, [heldGroup]);
   if (plan.removed.length > 0) {
     const removedIds = plan.removed.map((parent) => parent.id);
     await tx
@@ -4233,6 +4278,53 @@ async function applyLineEdits(
     );
   }
   return { changed };
+}
+
+/**
+ * The HOLD corrections an edit makes to held lines of groups whose HOLD ticket was queued: a
+ * removed line is `cancelled`; a line whose quantity alone changes loses (`taken`) or gains
+ * (`given`) the difference; any other change takes the line away as it read, at its old quantity,
+ * and gives it back as it now reads, at its new one. `taken` and `cancelled` print before the line
+ * changes and `given` after, as each slip reads the line as it stands.
+ */
+async function planHeldCorrections(
+  tx: Transaction,
+  orderId: string,
+  changes: readonly { parent: EditableParent; quantity: Decimal; modified: boolean }[],
+  removed: readonly EditableParent[],
+): Promise<{ cancelled: HeldChange[]; taken: HeldChange[]; given: HeldChange[] }> {
+  const held = (parent: EditableParent) =>
+    parent.ticket !== null && parent.ticket.firedAt === null && parent.groupId !== null;
+  const heldChanges = changes.filter(({ parent }) => held(parent));
+  const heldRemoved = removed.filter(held);
+  const printed = await printedHeldGroups(tx, [
+    ...heldChanges.map(({ parent }) => parent.groupId!),
+    ...heldRemoved.map((parent) => parent.groupId!),
+  ]);
+  const change = (parent: EditableParent, quantity: number): HeldChange[] => {
+    const group = printed.get(parent.groupId!);
+    if (group === undefined || quantity <= 0) return [];
+    return [
+      {
+        workingOrderId: orderId,
+        workingOrderLineId: parent.id,
+        stationId: parent.ticket!.stationId,
+        quantity,
+        group,
+      },
+    ];
+  };
+  const before = (edit: { parent: EditableParent }) => decimalToThousandths(edit.parent.quantity);
+  const after = (edit: { quantity: Decimal }) => decimalToThousandths(edit.quantity);
+  return {
+    cancelled: heldRemoved.flatMap((parent) => change(parent, parent.ticket!.firedQuantity)),
+    taken: heldChanges.flatMap((edit) =>
+      change(edit.parent, edit.modified ? before(edit) : before(edit) - after(edit)),
+    ),
+    given: heldChanges.flatMap((edit) =>
+      change(edit.parent, edit.modified ? after(edit) : after(edit) - before(edit)),
+    ),
+  };
 }
 
 /** A dish line and its extras, none of which an edit may leave holding a paid quantity. */

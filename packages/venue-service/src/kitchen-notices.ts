@@ -17,11 +17,16 @@ import {
   type Decimal,
 } from "@waitron/shared";
 import type { VenueScope } from "./operations.js";
-import { kitchenNoticeKind, kitchenNotices } from "./schema/kitchen-notices.js";
+import {
+  KITCHEN_NOTICE_DIRECTIONS,
+  kitchenNoticeKind,
+  kitchenNotices,
+} from "./schema/kitchen-notices.js";
 import { serviceSettings, type KitchenTicketGrouping } from "./schema/settings.js";
 import "./errors.js";
 
 export type KitchenNoticeKind = (typeof kitchenNoticeKind.enumValues)[number];
+export type KitchenNoticeDirection = (typeof KITCHEN_NOTICE_DIRECTIONS)[number];
 
 export interface KitchenNotice {
   id: string;
@@ -35,6 +40,8 @@ export interface KitchenNotice {
   note: string | null;
   wasStarted: boolean;
   movedTo: string | null;
+  /** On a `changed` notice, whether the quantity was added to the work or taken from it. */
+  direction: KitchenNoticeDirection | null;
   createdAt: string;
 }
 
@@ -55,7 +62,8 @@ const INSERTION_ORDER = sql`"kitchen_notices"."rowid"`;
  * note as they stand now, so a void calls it BEFORE deleting the line. The order and every station
  * must be at the caller's location (`working_order.not_found`, `station.not_found`) and every
  * quantity positive (`quantity.invalid`). An item whose line is not on the order is the caller's
- * fault and throws a plain `Error`. `movedTo` is for a `moved` notice only.
+ * fault and throws a plain `Error`. `movedTo` is for a `moved` notice only, and `direction` for a
+ * `changed` one only (`kitchen_notice.invalid` otherwise, or for a value outside the two).
  */
 export async function recordKitchenNotices(
   tx: Transaction,
@@ -64,7 +72,14 @@ export async function recordKitchenNotices(
   items: readonly KitchenNoticeItem[],
   kind: KitchenNoticeKind,
   movedTo: string | null = null,
+  direction: KitchenNoticeDirection | null = null,
 ): Promise<void> {
+  if (
+    direction !== null &&
+    (kind !== "changed" || !KITCHEN_NOTICE_DIRECTIONS.includes(direction))
+  ) {
+    throw new AppError("kitchen_notice.invalid", { field: "direction" });
+  }
   if (items.length === 0) return;
   const [order] = await tx
     .select({ orderNumber: workingOrders.orderNumber, label: workingOrders.label })
@@ -134,6 +149,7 @@ export async function recordKitchenNotices(
         note: line.note,
         wasStarted: item.wasStarted,
         movedTo,
+        direction,
         createdAt,
       };
     }),
@@ -170,6 +186,7 @@ export async function listStationNotices(
       note: kitchenNotices.note,
       wasStarted: kitchenNotices.wasStarted,
       movedTo: kitchenNotices.movedTo,
+      direction: kitchenNotices.direction,
       createdAt: kitchenNotices.createdAt,
     })
     .from(kitchenNotices)
@@ -247,6 +264,22 @@ export async function writeClearingWorkflow(tx: Transaction, value: boolean): Pr
     .insert(serviceSettings)
     .values({ id: 1, clearingWorkflow: value })
     .onConflictDoUpdate({ target: serviceSettings.id, set: { clearingWorkflow: value } });
+}
+
+/** Whether held groups print in advance, marked HOLD. A venue with no row reads OFF. */
+export async function readPrintHeldWork(tx: Transaction): Promise<boolean> {
+  const [row] = await tx
+    .select({ printHeldWork: serviceSettings.printHeldWork })
+    .from(serviceSettings)
+    .where(eq(serviceSettings.id, 1));
+  return row?.printHeldWork ?? false;
+}
+
+export async function writePrintHeldWork(tx: Transaction, value: boolean): Promise<void> {
+  await tx
+    .insert(serviceSettings)
+    .values({ id: 1, printHeldWork: value })
+    .onConflictDoUpdate({ target: serviceSettings.id, set: { printHeldWork: value } });
 }
 
 /** How identical dishes print on a kitchen ticket. A venue with no row reads `combined`. */

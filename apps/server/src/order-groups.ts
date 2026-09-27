@@ -12,6 +12,9 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, stringToThousandths, thousandthsToDecimal } from "@waitron/shared";
+import { enqueueHoldCorrections, enqueueKitchenTickets } from "./kitchen-print.js";
+import type { FiredItem, HoldCorrection } from "./kitchen-print.js";
+import { VENUE_SERVICE } from "./modules.js";
 import { trimQuantityForDisplay } from "./receipt-lines.js";
 import type { TillConfig } from "./till-config.js";
 import { checkAndBumpVisit, runServiceCommand, visitRevisionOfOrder } from "./visits.js";
@@ -78,7 +81,9 @@ export interface SubmittedGroups {
 /**
  * Put each submitted group's lines on the visit's tab, released to the kitchen now (`fire`) or held
  * until {@link fireGroup}. Every line is credited to the operator. A group never matches another by
- * course; only `joinGroupId` adds to an existing one.
+ * course; only `joinGroupId` adds to an existing one. A new held group prints its HOLD ticket where
+ * the venue prints held work in advance ({@link printHoldTickets}); lines joining a group whose HOLD
+ * ticket was queued print `+N` for it.
  */
 export async function submitGroups(
   tx: Transaction,
@@ -150,6 +155,16 @@ export async function submitGroups(
             .filter((row) => row.groupId === groupId)
             .map((row) => ({ ...row, hold: !fire, release: fire })),
         );
+        if (input.joinGroupId !== undefined) {
+          await correctJoin(
+            tx,
+            cfg,
+            groupId,
+            inserted.filter((row) => row.parentLineId == null).map((row) => row.id!),
+          );
+        } else if (!fire) {
+          await printHoldTickets(tx, cfg, [groupId]);
+        }
         await bumpRevision(tx, [tabId]);
         await recordGroupEvent(tx, {
           visitId,
@@ -368,8 +383,14 @@ async function releaseGroup(
   for (const line of lines) {
     byOrder.set(line.workingOrderId, [...(byOrder.get(line.workingOrderId) ?? []), line.id]);
   }
+  const [group] = await tx
+    .select({ holdPrintedAt: orderGroups.holdPrintedAt })
+    .from(orderGroups)
+    .where(eq(orderGroups.id, groupId));
+  // The marker, not the setting: a group whose HOLD ticket was queued is fired by a FIRE slip.
+  const mark = group!.holdPrintedAt === null ? undefined : "FIRE";
   for (const [orderId, lineIds] of byOrder) {
-    await fireOrderLines(tx, cfg, orderId, lineIds);
+    await fireOrderLines(tx, cfg, orderId, lineIds, mark);
   }
   await tx
     .update(orderGroups)
@@ -438,7 +459,9 @@ export async function reorderHeldGroups(
 /**
  * Move dish lines, or part of one, from held groups into another held group or a new one at the end
  * of the sequence. A line stays on its bill; a part moved splits the row. A group the move empties
- * is removed.
+ * is removed. What moved prints `-N` for a group it left, and `+N` for one it joined, whose HOLD
+ * ticket was queued; a new group prints its own HOLD ticket where the venue prints held work in
+ * advance ({@link printHoldTickets}).
  */
 export async function moveLinesToGroup(
   tx: Transaction,
@@ -497,6 +520,14 @@ export async function moveLinesToGroup(
           throw new AppError("working_order.not_open", { workingOrderId: line.workingOrderId });
         }
       }
+      const printed = await printedHeldGroups(tx, [
+        ...lines.map((line) => line.groupId!),
+        ...(target === "new" ? [] : [target.groupId]),
+      ]);
+      const heldItems = await heldItemsOf(
+        tx,
+        moves.map((m) => m.lineId),
+      );
       const targetId =
         target === "new" ? await startGroup(tx, visitId, "hold", args.operatorId) : target.groupId;
       const sources = new Set<string>();
@@ -517,14 +548,36 @@ export async function moveLinesToGroup(
           splits.push({ lineNo: line.lineNo, quantity });
         }
       }
+      const splitIds = new Map<string, string>();
       for (const [billId, splits] of splitsByBill) {
         if (splits.length === 0) continue;
-        const splitIds = await splitLinesWithinOrder(tx, cfg, billId, splits);
+        const split = await splitLinesWithinOrder(tx, cfg, billId, splits);
         await tx
           .update(workingOrderLines)
           .set({ groupId: targetId })
-          .where(inArray(workingOrderLines.id, splitIds));
+          .where(inArray(workingOrderLines.id, [...split.values()]));
+        for (const [from, to] of split) splitIds.set(from, to);
       }
+      const taken: HeldChange[] = [];
+      const given: HeldChange[] = [];
+      for (const { lineId, quantity } of moves) {
+        const line = lineById.get(lineId)!;
+        const stationId = heldItems.get(lineId);
+        if (stationId === undefined || line.groupId === targetId) continue;
+        const split = splitIds.get(lineId);
+        // Read after the split, which refused a malformed part.
+        const moved = split === undefined ? line.quantity : stringToThousandths(quantity);
+        const change = { workingOrderId: line.workingOrderId, stationId, quantity: moved };
+        const from = printed.get(line.groupId!);
+        if (from !== undefined) taken.push({ ...change, workingOrderLineId: lineId, group: from });
+        const to = printed.get(targetId);
+        if (to !== undefined) {
+          given.push({ ...change, workingOrderLineId: split ?? lineId, group: to });
+        }
+      }
+      await correctHoldTickets(tx, cfg, taken, { kind: "HOLD CHANGED", direction: "removed" });
+      await correctHoldTickets(tx, cfg, given, { kind: "HOLD CHANGED", direction: "added" });
+      if (target === "new") await printHoldTickets(tx, cfg, [targetId]);
       await bumpRevision(tx, [...splitsByBill.keys()]);
       await recordGroupEvent(tx, {
         visitId,
@@ -698,6 +751,147 @@ async function readGroups(
         .join(", "),
     };
   });
+}
+
+/**
+ * Print a HOLD ticket for each of these held groups, where the venue prints held work in advance:
+ * its held kitchen items, bill by bill in the order the bills were opened, as a fire prints them.
+ * A group records when its ticket was queued for a printer, or nothing when no active printer took
+ * one, so it then fires with an ordinary ticket.
+ */
+export async function printHoldTickets(
+  tx: Transaction,
+  cfg: TillConfig,
+  groupIds: readonly string[],
+): Promise<void> {
+  if (groupIds.length === 0 || !(await VENUE_SERVICE.readPrintHeldWork(tx))) return;
+  for (const groupId of groupIds) {
+    const items = await tx
+      .select({
+        workingOrderId: ticketItems.workingOrderId,
+        workingOrderLineId: ticketItems.workingOrderLineId,
+        stationId: ticketItems.stationId,
+        quantity: ticketItems.quantity,
+      })
+      .from(ticketItems)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+      .where(and(eq(workingOrderLines.groupId, groupId), isNull(ticketItems.firedAt)))
+      .orderBy(asc(workingOrders.orderNumber), asc(workingOrderLines.lineNo));
+    const byBill = new Map<string, FiredItem[]>();
+    for (const { workingOrderId, ...item } of items) {
+      byBill.set(workingOrderId, [...(byBill.get(workingOrderId) ?? []), item]);
+    }
+    let printed = false;
+    for (const [orderId, bill] of byBill) {
+      if (await enqueueKitchenTickets(tx, cfg, orderId, bill, { mark: "HOLD" })) printed = true;
+    }
+    if (printed) {
+      await tx
+        .update(orderGroups)
+        .set({ holdPrintedAt: nowIso() })
+        .where(eq(orderGroups.id, groupId));
+    }
+  }
+}
+
+/** Of these groups, the positions of those still held whose HOLD ticket was queued. */
+export async function printedHeldGroups(
+  tx: Transaction,
+  groupIds: readonly string[],
+): Promise<Map<string, number>> {
+  if (groupIds.length === 0) return new Map();
+  const rows = await tx
+    .select({ id: orderGroups.id, position: orderGroups.position })
+    .from(orderGroups)
+    .where(
+      and(
+        inArray(orderGroups.id, [...new Set(groupIds)]),
+        eq(orderGroups.state, "held"),
+        isNotNull(orderGroups.holdPrintedAt),
+      ),
+    );
+  return new Map(rows.map((row) => [row.id, row.position]));
+}
+
+/** Changed held work on a queued HOLD ticket: the thousandths changed, and the group's position. */
+export interface HeldChange {
+  workingOrderId: string;
+  workingOrderLineId: string;
+  stationId: string;
+  quantity: number;
+  group: number;
+}
+
+/** Record and print a HOLD correction for each change, bill by bill. */
+export async function correctHoldTickets(
+  tx: Transaction,
+  cfg: TillConfig,
+  changes: readonly HeldChange[],
+  correction: HoldCorrection,
+): Promise<void> {
+  const byBill = new Map<string, HeldChange[]>();
+  for (const change of changes) {
+    byBill.set(change.workingOrderId, [...(byBill.get(change.workingOrderId) ?? []), change]);
+  }
+  for (const [orderId, bill] of byBill) {
+    await enqueueHoldCorrections(
+      tx,
+      cfg,
+      orderId,
+      bill.map(({ workingOrderLineId, stationId, quantity, group }) => ({
+        workingOrderLineId,
+        stationId,
+        quantity,
+        wasStarted: false,
+        group,
+      })),
+      correction,
+    );
+  }
+}
+
+/** The station of each of these dish lines that has a held kitchen item. */
+async function heldItemsOf(
+  tx: Transaction,
+  lineIds: readonly string[],
+): Promise<Map<string, string>> {
+  const rows = await tx
+    .select({
+      workingOrderLineId: ticketItems.workingOrderLineId,
+      stationId: ticketItems.stationId,
+    })
+    .from(ticketItems)
+    .where(and(inArray(ticketItems.workingOrderLineId, [...lineIds]), isNull(ticketItems.firedAt)));
+  return new Map(rows.map((row) => [row.workingOrderLineId, row.stationId]));
+}
+
+/** `+N` on the HOLD ticket of the group these dish lines just joined, where one was queued. */
+async function correctJoin(
+  tx: Transaction,
+  cfg: TillConfig,
+  groupId: string,
+  lineIds: readonly string[],
+): Promise<void> {
+  const group = (await printedHeldGroups(tx, [groupId])).get(groupId);
+  if (group === undefined) return;
+  const joined = await tx
+    .select({
+      workingOrderId: ticketItems.workingOrderId,
+      workingOrderLineId: ticketItems.workingOrderLineId,
+      stationId: ticketItems.stationId,
+      quantity: workingOrderLines.quantity,
+    })
+    .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(inArray(ticketItems.workingOrderLineId, [...lineIds]))
+    .orderBy(asc(workingOrderLines.lineNo));
+  await correctHoldTickets(
+    tx,
+    cfg,
+    joined.map((item) => ({ ...item, group })),
+    { kind: "HOLD CHANGED", direction: "added" },
+  );
 }
 
 /** Whether `quantity` is exactly the line's stored quantity; a malformed one is not. */

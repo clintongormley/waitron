@@ -4444,10 +4444,11 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
 });
 
 // Coursing editing — a recall or void of a PREVIOUSLY-FIRED (printed) line tells the paper kitchen
-// what changed via a correction slip (`enqueueCorrectionSlips` → `formatCorrectionSlip`). Only a line
-// whose ticket item had a NON-null `fired_at` produced paper, so ONLY it produces a slip: recalling or
-// voiding a HELD line (never printed) enqueues nothing. `recallLines` emits RECALLED for the items it
-// actually un-fires (fired-and-queued before the update); `voidTabLine` emits VOID for a fired line,
+// what changed via a correction slip (`enqueueCorrectionSlips` → `formatCorrectionSlip`). The held
+// lines in these cases belong to no order group, so no HOLD ticket carries them, and only a line
+// whose ticket item had a NON-null `fired_at` produced paper: recalling or voiding a HELD line
+// enqueues nothing. `recallLines` emits RECALLED for the items it actually un-fires
+// (fired-and-queued before the update); `voidTabLine` emits VOID for a fired line,
 // reading it BEFORE the ON DELETE CASCADE removes the line + its ticket item. Non-fiscal: only
 // `ticket_items`/`working_order_lines`/`print_jobs`. These cases prove the enqueue count + payload
 // in both directions.
@@ -4514,7 +4515,7 @@ describe("correction slips on recall & void (A6)", () => {
     });
   });
 
-  it("(b) recalling a HELD line enqueues NO slip (it never printed)", async () => {
+  it("(b) recalling a HELD line no HOLD ticket carries enqueues NO slip", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await attachedPrinter(tx, cfg, { name: "Cocina", isDefault: true }, "P-Cocina");
@@ -4600,7 +4601,7 @@ describe("correction slips on recall & void (A6)", () => {
     });
   });
 
-  it("(d) voiding a HELD line enqueues NO slip (it never printed)", async () => {
+  it("(d) voiding a HELD line no HOLD ticket carries enqueues NO slip", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await attachedPrinter(tx, cfg, { name: "Cocina", isDefault: true }, "P-Cocina");

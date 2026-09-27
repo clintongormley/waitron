@@ -18,9 +18,12 @@ import {
 
 export const kitchenNoticeKind = enumType(["recalled", "void", "changed", "moved"]);
 
+export const KITCHEN_NOTICE_DIRECTIONS = ["added", "removed"] as const;
+const kitchenNoticeDirection = enumType(KITCHEN_NOTICE_DIRECTIONS);
+
 /**
- * A correction to work already sent to a station, kept until a cook acknowledges it. The line is
- * copied by value because a void deletes the line the notice describes.
+ * A correction to work a station already has on paper or on screen, kept until a cook acknowledges
+ * it. The line is copied by value because a void deletes the line the notice describes.
  */
 export const kitchenNotices = table(
   "kitchen_notices",
@@ -37,6 +40,8 @@ export const kitchenNotices = table(
     wasStarted: flag("was_started").notNull().default(false),
     /** On a `moved` notice, the table the work now belongs to; null where it has none. */
     movedTo: label("moved_to"),
+    /** On a `changed` notice, whether the quantity was added to or taken from the work. */
+    direction: kitchenNoticeDirection("direction"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     acknowledgedAt: tsString("acknowledged_at"),
   },
@@ -57,5 +62,10 @@ export const kitchenNotices = table(
     check("kitchen_notices_kind_ck", enumCheck(t.kind)),
     check("kitchen_notices_quantity_ck", sql`${t.quantity} > 0`),
     check("kitchen_notices_moved_to_ck", sql`${t.kind} = 'moved' or ${t.movedTo} is null`),
+    check("kitchen_notices_direction_ck", enumCheck(t.direction)),
+    check(
+      "kitchen_notices_direction_kind_ck",
+      sql`${t.kind} = 'changed' or ${t.direction} is null`,
+    ),
   ],
 );

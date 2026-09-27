@@ -797,6 +797,8 @@ export interface KitchenNotice {
   wasStarted: boolean;
   /** On a `moved` notice, the table the work now belongs to. */
   movedTo: string | null;
+  /** On a `changed` notice, whether `quantity` was added to the work or taken from it. */
+  direction: "added" | "removed" | null;
   createdAt: string;
 }
 
@@ -1633,8 +1635,9 @@ export class TillApi {
 
   /**
    * Reprint an order's CURRENT kitchen tickets → `POST /api/orders/:id/reprint`. A SESSION verb: there
-   * is no device reprint route. NON-FISCAL and changes no order state; an order with no fired items is a
-   * 200 no-op. A malformed or unknown id rejects `working_order.not_found`.
+   * is no device reprint route. NON-FISCAL and changes no order state; an order with no fired items and
+   * no held group whose HOLD ticket was queued is a 200 no-op. A malformed or unknown id rejects
+   * `working_order.not_found`.
    */
   async reprintOrder(orderId: string): Promise<void> {
     await this.#request<void>(`/api/orders/${orderId}/reprint`, "POST", {});

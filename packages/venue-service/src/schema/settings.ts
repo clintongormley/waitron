@@ -20,6 +20,7 @@ export const serviceSettings = table(
     kitchenTicketGrouping: kitchenTicketGrouping("kitchen_ticket_grouping")
       .notNull()
       .default("combined"),
+    printHeldWork: flag("print_held_work").notNull().default(false),
   },
   (t) => [
     check("service_settings_singleton_ck", sql`${t.id} = 1`),

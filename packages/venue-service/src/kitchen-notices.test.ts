@@ -24,10 +24,12 @@ import {
   readClearingWorkflow,
   readEditSentLines,
   readKitchenTicketGrouping,
+  readPrintHeldWork,
   recordKitchenNotices,
   writeClearingWorkflow,
   writeEditSentLines,
   writeKitchenTicketGrouping,
+  writePrintHeldWork,
   type KitchenNoticeItem,
 } from "./kitchen-notices.js";
 
@@ -206,6 +208,7 @@ describe("recordKitchenNotices", () => {
         note: "no onions",
         wasStarted: true,
         movedTo: null,
+        direction: null,
         createdAt: expect.any(String),
       },
     ]);
@@ -364,6 +367,47 @@ describe("recordKitchenNotices", () => {
       ).rejects.toMatchObject({ code: "quantity.invalid", params: { reason: "positive" } });
     });
 
+    it.each(["recalled", "void", "moved"] as const)(
+      "a direction on a %s notice, which only a changed notice carries",
+      async (kind) => {
+        const v = await venue();
+        const order = await seedOrder(v.locationId, 1, null);
+        await expect(
+          inTx((tx) =>
+            recordKitchenNotices(
+              tx,
+              v.cfg,
+              order.orderId,
+              [item(order.burgerLineId, v.grill)],
+              kind,
+              null,
+              "added",
+            ),
+          ),
+        ).rejects.toMatchObject({ code: "kitchen_notice.invalid", params: { field: "direction" } });
+        expect(await db.select().from(kitchenNotices)).toEqual([]);
+      },
+    );
+
+    it("a direction other than added or removed", async () => {
+      const v = await venue();
+      const order = await seedOrder(v.locationId, 1, null);
+      await expect(
+        inTx((tx) =>
+          recordKitchenNotices(
+            tx,
+            v.cfg,
+            order.orderId,
+            [item(order.burgerLineId, v.grill)],
+            "changed",
+            null,
+            "sideways" as "added",
+          ),
+        ),
+      ).rejects.toMatchObject({ code: "kitchen_notice.invalid", params: { field: "direction" } });
+      expect(await db.select().from(kitchenNotices)).toEqual([]);
+    });
+
     it("a line that is not on the order as a caller fault, with no domain code", async () => {
       const v = await venue();
       const order = await seedOrder(v.locationId, 1, null);
@@ -406,6 +450,60 @@ describe("recordKitchenNotices", () => {
     ]);
   });
 
+  it("records which way a changed notice went, and no direction when none is given or for any other kind", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 6, null);
+    const burger = [
+      {
+        workingOrderLineId: order.burgerLineId,
+        stationId: v.grill,
+        quantity: ONE,
+        wasStarted: false,
+      },
+    ];
+    await inTx(async (tx) => {
+      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed", null, "added");
+      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed", null, "removed");
+      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed");
+      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "void");
+      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "moved", "Mesa 2");
+    });
+    expect(
+      (await db.execute(sql`select kind, direction from kitchen_notices order by rowid`)).rows,
+    ).toEqual([
+      { kind: "changed", direction: "added" },
+      { kind: "changed", direction: "removed" },
+      { kind: "changed", direction: null },
+      { kind: "void", direction: null },
+      { kind: "moved", direction: null },
+    ]);
+  });
+
+  // Fails if the list leaves out which way a changed notice went.
+  it("lists a changed notice with its direction", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 6, null);
+    const burger = [
+      {
+        workingOrderLineId: order.burgerLineId,
+        stationId: v.grill,
+        quantity: ONE,
+        wasStarted: false,
+      },
+    ];
+    await inTx(async (tx) => {
+      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed", null, "removed");
+      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed", null, "added");
+      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "void");
+    });
+    const notices = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+    expect(notices.map((notice) => [notice.kind, notice.direction])).toEqual([
+      ["changed", "removed"],
+      ["changed", "added"],
+      ["void", null],
+    ]);
+  });
+
   it("records a moved notice with the table the work moved to", async () => {
     const v = await venue();
     const order = await seedOrder(v.locationId, 9, null);
@@ -439,6 +537,7 @@ describe("recordKitchenNotices", () => {
         note: "no onions",
         wasStarted: false,
         movedTo: "Mesa 7",
+        direction: null,
         createdAt: expect.any(String),
       },
     ]);
@@ -639,7 +738,13 @@ describe("the edit-sent-lines setting", () => {
     await inTx((tx) => writeEditSentLines(tx, true));
     expect(await inTx((tx) => readEditSentLines(tx))).toBe(true);
     expect(await db.select().from(serviceSettings)).toEqual([
-      { id: 1, editSentLines: true, clearingWorkflow: false, kitchenTicketGrouping: "combined" },
+      {
+        id: 1,
+        editSentLines: true,
+        clearingWorkflow: false,
+        kitchenTicketGrouping: "combined",
+        printHeldWork: false,
+      },
     ]);
     // Raw SQL, so the stored value is read without the column's boolean mapping.
     await db.execute(sql`update service_settings set edit_sent_lines = 0`);
@@ -666,7 +771,13 @@ describe("the clearing-workflow setting", () => {
   it("creates the row with the other setting at its default when only this one is written", async () => {
     await inTx((tx) => writeClearingWorkflow(tx, true));
     expect(await db.select().from(serviceSettings)).toEqual([
-      { id: 1, editSentLines: true, clearingWorkflow: true, kitchenTicketGrouping: "combined" },
+      {
+        id: 1,
+        editSentLines: true,
+        clearingWorkflow: true,
+        kitchenTicketGrouping: "combined",
+        printHeldWork: false,
+      },
     ]);
   });
 });
@@ -691,7 +802,13 @@ describe("the kitchen ticket grouping setting", () => {
   it("creates the row with the other settings at their defaults when only this one is written", async () => {
     await inTx((tx) => writeKitchenTicketGrouping(tx, "separate"));
     expect(await db.select().from(serviceSettings)).toEqual([
-      { id: 1, editSentLines: true, clearingWorkflow: false, kitchenTicketGrouping: "separate" },
+      {
+        id: 1,
+        editSentLines: true,
+        clearingWorkflow: false,
+        kitchenTicketGrouping: "separate",
+        printHeldWork: false,
+      },
     ]);
   });
 
@@ -702,5 +819,38 @@ describe("the kitchen ticket grouping setting", () => {
         db.execute(sql`update service_settings set kitchen_ticket_grouping = 'bogus'`))(),
     ).rejects.toThrow(/CHECK constraint failed: service_settings_kitchen_ticket_grouping_ck/);
     expect(await inTx((tx) => readKitchenTicketGrouping(tx))).toBe("separate");
+  });
+});
+
+describe("the print-held-work setting", () => {
+  it("reads OFF when the venue has no settings row", async () => {
+    expect(await inTx((tx) => readPrintHeldWork(tx))).toBe(false);
+  });
+
+  it("reads what was written, creating the row when it is missing, and leaves the other settings alone", async () => {
+    await inTx((tx) => writeEditSentLines(tx, false));
+    await inTx((tx) => writePrintHeldWork(tx, true));
+    expect(await inTx((tx) => readPrintHeldWork(tx))).toBe(true);
+    expect(await inTx((tx) => readEditSentLines(tx))).toBe(false);
+    expect(await inTx((tx) => readClearingWorkflow(tx))).toBe(false);
+    expect(await inTx((tx) => readKitchenTicketGrouping(tx))).toBe("combined");
+    await inTx((tx) => writePrintHeldWork(tx, false));
+    expect(await inTx((tx) => readPrintHeldWork(tx))).toBe(false);
+    // Raw SQL, so the stored value is read without the column's boolean mapping.
+    await db.execute(sql`update service_settings set print_held_work = 1`);
+    expect(await inTx((tx) => readPrintHeldWork(tx))).toBe(true);
+  });
+
+  it("creates the row with the other settings at their defaults when only this one is written", async () => {
+    await inTx((tx) => writePrintHeldWork(tx, true));
+    expect(await db.select().from(serviceSettings)).toEqual([
+      {
+        id: 1,
+        editSentLines: true,
+        clearingWorkflow: false,
+        kitchenTicketGrouping: "combined",
+        printHeldWork: true,
+      },
+    ]);
   });
 });

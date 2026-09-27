@@ -324,6 +324,8 @@ rows written before it misbehave (a dish sent before the upgrade counts as unsen
 before it blocks a one-line edit) — the PR has the measured table; settle open orders or reset
 before upgrading. Still open: the `changed`
 notice kind is declared but nothing writes it (the kitchen screen renders it since Task 7c).
+(2026-09-27, service plan Task 6: `enqueueHoldCorrections` now writes it, with a direction, for a HOLD CHANGED
+correction slip.)
 **Menus Task 7c landed (#710, 2026-09-26): changing a sent line from the till, and kitchen-screen notices.** The table
 screen offers Change on a sent line the kitchen has not started, a recalled line and a line with no
 kitchen route; it opens the existing option, extras and note editor prefilled from the line and saves
@@ -2226,7 +2228,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - "Ready" and "Fired N min ago" on the table screen are the plan's default, not an owner
       decision.
     - A fired group with nothing for the kitchen (bottled water, say) never reads Ready.
-    - `*** REPRINT ***` and `GROUP n` print in English.
+    - `*** REPRINT ***` and `GROUP n` print in English. _(Task 6, 2026-09-27: so do `*** HOLD ***`,
+      `*** FIRE ***`, `*** HOLD CHANGED ***` and `*** HOLD CANCELLED ***`.)_
     - A resend from the dashboard's Printers screen does not clear a table's printing problem, and
       there is no way to dismiss one: a detached or replaced printer leaves it showing.
     - A failed ticket on a pass printer (one ticket for the whole order) shows on the card of every
@@ -2242,7 +2245,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       "portion") prints line by line, because nothing records a unit's kind (a unit field would
       need a migration).
     - The setting sits under "Changes after sending" on the Preparation routing tab; it may deserve
-      a heading of its own.
+      a heading of its own. _(Task 6, 2026-09-27: so does "Print held groups in advance", which is
+      not about sent work at all.)_
     - `fireHeldGroupsOfCourse` (`apps/server/src/order-groups.ts`), through which a course Fire
       still fires a party's held groups, is to be removed in a follow-up.
     - The setting's upgrade was measured with a throwaway script over the real migration folders
@@ -2266,6 +2270,58 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         every table load. Folding them into the groups response would change the exact-body
         assertion in `apps/server/src/till-api.groups.test.ts`'s "answers the visit's revision and
         its groups in sequence", so it was left.
+  - **Task 6 (advance HOLD tickets)**, on branch `feat/service-advance-hold-tickets`, not yet
+    landed: with the venue's "Print held groups in advance" setting on, a held group prints a
+    kitchen ticket marked HOLD; later changes to it print HOLD CHANGED or HOLD CANCELLED slips, each
+    also a notice on the station screen; firing it prints its ticket marked FIRE. Core `0030` adds
+    `order_groups.hold_printed_at`; venue-service `0007` adds `service_settings.print_held_work` and
+    `kitchen_notices.direction`, and `0008` rebuilds `kitchen_notices` to add checks on `direction`:
+    a value other than `added` or `removed` is refused, and so is a direction on a notice that is not
+    `changed`. The rebuild is safe because no foreign key points at `kitchen_notices` and its only
+    triggers, the change feed's, are removed before migrating and reinstalled at boot. The upgrade
+    was measured with a throwaway probe on a venue migrated to main's head and seeded with groups, a
+    settings row and notices of every kind: after migrating, every row read back equal, the new
+    columns read null or 0, `pragma foreign_key_check` returned nothing, the change feed's triggers
+    came back after `installChangeFeed` and logged updates, and setting `direction = 'added'` on a
+    `void` notice was refused with `CHECK constraint failed: kitchen_notices_direction_kind_ck`.
+    A failed HOLD ticket shows "Printing problem" on the table and the station as a fire ticket
+    does, and Reprint prints the held dishes of each still-held group whose HOLD ticket was queued
+    again, marked REPRINT and HOLD, beside the fired work: one job per printer and station, or per
+    pass printer, carries both.
+    Left open:
+    - A failed HOLD correction slip (HOLD CHANGED or HOLD CANCELLED) raises no "Printing problem",
+      like every correction slip: none is recorded in `kitchen_print_jobs`, which is all the
+      printing problems read.
+    - A printed HOLD ticket goes stale when held groups are reordered or a party is merged into
+      another, since both renumber `GROUP n` and later slips print the new number; and when the
+      party's table moves or is joined, since no MOVED slip goes out for held work (MOVED slips
+      cover fired work only, `readSentWork` in `apps/server/src/kitchen-print.ts`). Only a FIRE
+      ticket or a Reprint, each of which prints the group as it stands, can be relied on.
+    - The route that removes a line, `DELETE /api/working-orders/:id/lines/:lineNo`, takes no
+      revision and no retry id, so a retried removal of part of a held dish removes another part
+      and prints a second HOLD CANCELLED slip. The route predates Task 6.
+    - Whether a group's HOLD ticket was queued is recorded per group, not per station, so a
+      correction can print at a station whose printer never printed that group's HOLD ticket — a
+      dish from another station joined to the group, say, or a printer switched back on after the
+      HOLD ticket went out. Reprint reads the same per-group marker, so it too can print a REPRINT
+      and HOLD section at such a station.
+    - A failed kitchen ticket, fire or HOLD, whose dishes at that station are then all cancelled
+      stays a "Printing problem" on the table and the station, and Reprint prints nothing for that
+      station to clear it (measured on the branch for both, with `voidTabLine`). The fire-ticket case predates Task 6 (the
+      clearing rule landed with #750); Task 6 makes it common, a held dessert the diner declines.
+      The same void can also leave a problem at a station that still has dishes, when the failed
+      ticket was on a pass printer (one ticket for the whole order) not attached to that station.
+      Measured 2026-09-27 with throwaway cases in `apps/server/src/print-problems.test.ts`: a pass
+      printer attached to Cocina only failed a ticket for a burger (Cocina) and a beer (Barra), so
+      the ticket counted against both stations; after the burger was voided with `voidTabLine`,
+      Reprint queued only the Barra station printer's ticket, and once that printed both Barra and
+      Cocina still showed a problem. Barra stays stuck although it still has the beer, because
+      nothing reprints on the pass printer: it is not attached to Barra, and nothing is left at
+      Cocina to bring it in. With the void skipped, the pass printer reprinted and no problem
+      remained. Measured for a HOLD ticket and a fire ticket; the fire-ticket case gave the same
+      result on the base commit `1d524b6e5`, so it predates Task 6.
+      Fix: `readPrintProblems` drops a failed ticket whose bill has nothing a Reprint would print on
+      that printer for that station.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card
