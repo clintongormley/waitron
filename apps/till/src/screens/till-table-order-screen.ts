@@ -1055,13 +1055,13 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  /** Every sent line with a ticket item, a fired one, and one in a held group: whatever else a line
-   * offers, cancelling it always has a button. A held line outside a group keeps Send alone. */
+  /** Every sent line with a ticket item, a fired one, and every dish in a held group, a no-route one
+   * included: whatever else a line offers, cancelling it always has a button. A held line outside a
+   * group keeps Send alone. */
   #canCancel(line: TabLine): boolean {
     if (this.#isChild(line)) return false;
-    const queued =
-      line.state === "queued" &&
-      (line.firedAt !== null || line.sentAt !== null || inHeldGroup(line, this.#heldGroupIds!));
+    if (inHeldGroup(line, this.#heldGroupIds!)) return true;
+    const queued = line.state === "queued" && (line.firedAt !== null || line.sentAt !== null);
     return this.#isStarted(line) || queued;
   }
 

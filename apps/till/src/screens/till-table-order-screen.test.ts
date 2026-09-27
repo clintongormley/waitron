@@ -1466,6 +1466,25 @@ describe("till-table-order-screen", () => {
       expect(voids.map((event) => event.detail)).toEqual([{ lineNo: 3 }]);
     });
 
+    it("offers Cancel on a dish in a held group that goes to no kitchen, saying it comes off the bill", async () => {
+      const water = dishLine("l-water", 7, "Water", "1.000", "g5", { state: null });
+      const { el } = await mountGroups({
+        lines: [...tabLines, water],
+        groups: groups.map((row) =>
+          row.id === "g5" ? { ...row, lineIds: [...row.lineIds, "l-water"] } : row,
+        ),
+      });
+      const voids = capture(el, "void-line");
+
+      control(el, '[data-cancel-line="7"]')!.click();
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector<HTMLElement>(".cancel-confirm")!;
+      expect(text(dialog.querySelector(".cancel-body")!)).toContain(t("table.cancel_sent"));
+      dialog.querySelector<HTMLElement>("[data-cancel-confirm]")!.click();
+
+      expect(voids.map((event) => event.detail)).toEqual([{ lineNo: 7 }]);
+    });
+
     it("opens a held-group dish's Change with the revision the lines were read at", async () => {
       const { el } = await mountGroups({ revision: 7 });
       const changes = capture(el, "change-line");
