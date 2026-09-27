@@ -507,7 +507,7 @@ export interface SubmittedGroups {
 }
 
 /** The party a bill belongs to, at its revision after a void or line edit on the bill; null for a
- * counter order. */
+ * bill with no party. */
 export type BillParty = { id: string; revision: number } | null;
 
 /** A cash tender: the full amount the operator keyed in (the server computes the change). */

@@ -1410,6 +1410,34 @@ describe("till-app: the order's groups (R5)", () => {
     expect(tableOrder(el)!.orderId).toBe("wo-check");
   });
 
+  it("sends a round from a party just seated when the floor could not be read after seating", async () => {
+    const { el } = await mountApp({
+      getTablesState: vi
+        .fn()
+        .mockResolvedValueOnce([mesa4, mesa7, mesa9])
+        .mockRejectedValue(new TypeError("Failed to fetch")),
+      getVisitBills: vi.fn().mockResolvedValue([]),
+      submitGroups: vi.fn().mockResolvedValue({ tabId: "wo-new", revision: 1, groups: [] }),
+    });
+    const screen = await toFloor(el);
+    emit(screen, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-new");
+
+    emit(tableOrder(el)!, "send-round", {
+      lines: roundLines,
+      groups: [{ release: "fire", lineIndexes: [0, 1] }],
+    });
+    await flush(el);
+
+    expect(api.submitGroups).toHaveBeenCalledWith(
+      "v-new",
+      expect.objectContaining({ expectedVisitRevision: 0 }),
+      expect.anything(),
+    );
+    expect(banner(el)).toBeNull();
+  });
+
   it("keeps the higher revision when two answers about the party arrive out of order", async () => {
     const answers: ((value: { visit: { id: string; revision: number } }) => void)[] = [];
     const { el } = await mountApp({
@@ -1723,6 +1751,62 @@ describe("till-app: the order's groups (R5)", () => {
         emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
         await flush(el);
 
+        expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 4 });
+      });
+
+      /** The floor lists the party at revision 3, and cannot be read once `request` has been
+       * answered once: its second call gets no answer and takes the floor offline with it. */
+      function offlineAfterOneAnswer(request: string, answer: unknown) {
+        let offline = false;
+        return {
+          getTablesState: vi.fn(async () => {
+            if (offline) throw new TypeError("offline");
+            return [mesa4, mesa7, mesa9];
+          }),
+          [request]: vi
+            .fn()
+            .mockResolvedValueOnce(answer)
+            .mockImplementation(async () => {
+              offline = true;
+              throw new TypeError("offline");
+            }),
+        };
+      }
+
+      it("a void that got no answer, with the floor unread, keeps the revision an earlier void answered", async () => {
+        const { el } = await mountApp(
+          withGroups(offlineAfterOneAnswer("voidLine", { visit: { id: "v1", revision: 4 } })),
+        );
+        const order = await openMesa(el);
+
+        emit(order, "void-line", { lineNo: 1 });
+        await flush(el);
+        emit(tableOrder(el)!, "void-line", { lineNo: 2 });
+        await flush(el);
+        emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
+        await flush(el);
+
+        expect(api.voidLine).toHaveBeenCalledTimes(2);
+        expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 4 });
+      });
+
+      it("a round that got no answer, with the floor unread, keeps the revision an earlier round answered", async () => {
+        const { el } = await mountApp(
+          withGroups(
+            offlineAfterOneAnswer("submitGroups", { tabId: "wo-4", revision: 4, groups: [] }),
+          ),
+        );
+        const order = await openMesa(el);
+        const round = { lines: roundLines, groups: [{ release: "fire", lineIndexes: [0, 1] }] };
+
+        emit(order, "send-round", round);
+        await flush(el);
+        emit(tableOrder(el)!, "send-round", round);
+        await flush(el);
+        emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
+        await flush(el);
+
+        expect(api.submitGroups).toHaveBeenCalledTimes(2);
         expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 4 });
       });
 

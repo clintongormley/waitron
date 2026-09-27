@@ -111,7 +111,8 @@ export async function visitOfOrder(tx: Transaction, orderId: string): Promise<st
   return order?.visitId ?? null;
 }
 
-/** The visit a bill belongs to, at its revision now; null for a counter order. */
+/** The visit a bill belongs to, at its revision now; null for a bill with no party, or an order that
+ * does not exist. */
 export async function visitRevisionOfOrder(
   tx: Transaction,
   orderId: string,

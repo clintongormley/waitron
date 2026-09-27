@@ -2252,13 +2252,20 @@ export class TillApp extends LitElement {
       this.orderParty = { ...party, revision };
   }
 
-  /** After a command on the party that got no answer: the floor is read again, and the party taken
-   * from it while the open table still holds that party, since the command may have moved it on. */
+  /** After a command on the party that got no answer, which may have moved it on: the floor is read
+   * again, and its party taken while the open table still holds that party and the floor's revision
+   * is not lower than the one held. A failed read leaves the last floor, which can be older. */
   async #retakePartyFromFloor(): Promise<void> {
     const partyId = this.orderParty?.id;
     await this.#refreshFloor();
     const row = this.tables.find((table) => table.id === this.activeTableId);
-    if (partyId !== undefined && row?.visit?.id === partyId && this.orderParty?.id === partyId)
+    const held = this.orderParty;
+    if (
+      partyId !== undefined &&
+      row?.visit?.id === partyId &&
+      held?.id === partyId &&
+      row.visit.revision >= held.revision
+    )
       this.orderParty = row.visit;
   }
 
@@ -2474,7 +2481,7 @@ export class TillApp extends LitElement {
   }
 
   /** A check is an order no table points at, split off a party's tab. Judged only while the floor
-   * lists the open table, so a failed floor read refuses nothing. */
+   * lists the open table, so a floor a failed read emptied refuses nothing. */
   #showsCheck(): boolean {
     const open = this.tables.some((table) => table.id === this.activeTableId);
     return open && !this.tables.some((table) => table.tabId === this.activeTabId);

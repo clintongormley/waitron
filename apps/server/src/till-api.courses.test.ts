@@ -532,7 +532,7 @@ describe("POST /api/working-orders/:id/lines/recall (A4 un-send a not-started li
   it("recalls a fired-not-started line (200) — the queue then shows it held again", async () => {
     const tabId = await tabWithSopaAndFilete();
     const station = await cocinaId();
-    // SOPA (line 1) auto-fired at round-send — the queue shows it fired.
+    // SOPA (line 1) was sent in a group released `fire` — the queue shows it fired.
     expect((await queueItemsByName(tabId, station)).get(SOPA)!.firedAt).not.toBeNull();
 
     const res = await app.request(`/api/working-orders/${tabId}/lines/recall`, {
