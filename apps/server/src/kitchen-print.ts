@@ -760,8 +760,8 @@ export async function reprintOrderTickets(
         isNotNull(orderGroups.holdPrintedAt),
       ),
     );
-  // Pass printers are chosen over both parts: a pass printer's failed ticket can name a station the
-  // printer is not attached to, and only a reprint on that printer linked to that station clears it.
+  // Pass printers are chosen over both parts: a pass printer's failed ticket can name a station it is
+  // not attached to, and no print but a reprint on that printer linked to that station clears it.
   const jobs = await planKitchenTickets(tx, cfg, orderId, fired, {
     reprint: true,
     orderScopeAlsoAt: held.map((item) => item.stationId),

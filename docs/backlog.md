@@ -324,7 +324,7 @@ rows written before it misbehave (a dish sent before the upgrade counts as unsen
 before it blocks a one-line edit) — the PR has the measured table; settle open orders or reset
 before upgrading. Still open: the `changed`
 notice kind is declared but nothing writes it (the kitchen screen renders it since Task 7c).
-(2026-09-27, Task 6: `enqueueHoldCorrections` now writes it, with a direction, for a HOLD CHANGED
+(2026-09-27, service plan Task 6: `enqueueHoldCorrections` now writes it, with a direction, for a HOLD CHANGED
 correction slip.)
 **Menus Task 7c landed (#710, 2026-09-26): changing a sent line from the till, and kitchen-screen notices.** The table
 screen offers Change on a sent line the kitchen has not started, a recalled line and a line with no
@@ -2293,8 +2293,19 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       stays a "Printing problem" on the table and the station, and Reprint prints nothing for that
       station to clear it (measured on the branch for both, with `voidTabLine`). The fire-ticket case predates Task 6 (the
       clearing rule landed with #750); Task 6 makes it common, a held dessert the diner declines.
-      Fix: `readPrintProblems` drops a failed ticket whose bill has nothing left at that station a
-      Reprint would print.
+      The same void can also leave a problem at a station that still has dishes, when the failed
+      ticket was on a pass printer (one ticket for the whole order) not attached to that station.
+      Measured 2026-09-27 with throwaway cases in `apps/server/src/print-problems.test.ts`: a pass
+      printer attached to Cocina only failed a ticket for a burger (Cocina) and a beer (Barra), so
+      the ticket counted against both stations; after the burger was voided with `voidTabLine`,
+      Reprint queued only the Barra station printer's ticket, and once that printed both Barra and
+      Cocina still showed a problem. Barra stays stuck although it still has the beer, because
+      nothing reprints on the pass printer: it is not attached to Barra, and nothing is left at
+      Cocina to bring it in. With the void skipped, the pass printer reprinted and no problem
+      remained. Measured for a HOLD ticket and a fire ticket; the fire-ticket case gave the same
+      result on the base commit `1d524b6e5`, so it predates this branch.
+      Fix: `readPrintProblems` drops a failed ticket whose bill has nothing a Reprint would print on
+      that printer for that station.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card
