@@ -63,6 +63,17 @@ describe("wrapText", () => {
     expect(wrapText("abc ", 3)).toEqual(["abc"]);
   });
 
+  it("drops only spaces at a break, keeping a tab before them", () => {
+    expect(wrapText("a\t  b", 3)).toEqual(["a\t", "b"]);
+  });
+
+  it("wraps a crafted line holding a 200,000-space run within one second", () => {
+    const text = `a${" ".repeat(200_000)}b`;
+    const started = performance.now();
+    expect(wrapText(text, text.length + 10)).toEqual([text]);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
   it("returns one empty line for empty text and terminates when the indent fills the line", () => {
     expect(wrapText("", 30)).toEqual([""]);
     expect(wrapText("aaaa bbbb", 4, 9)).toEqual(["aaaa", "   b", "   b", "   b", "   b"]);

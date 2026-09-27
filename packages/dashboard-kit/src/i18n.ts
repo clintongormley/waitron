@@ -38,13 +38,18 @@ export function registerCatalogue(cat: {
   Object.assign(catalogues.es, cat.es);
 }
 
+function languageOf(l: string): string {
+  const dash = l.indexOf("-");
+  return dash === -1 ? l : l.slice(0, dash);
+}
+
 /**
  * Translate a base key to the given locale (default: the active locale). The region subtag is stripped
  * ("es-ES" → "es"), then the language's catalogue if it has the key, else the English base, else the
  * key itself — so the return is always a string, never undefined.
  */
 export function t(key: string, l: string = locale): string {
-  const lang = l.replace(/-.*$/, "");
+  const lang = languageOf(l);
   return catalogues[lang]?.[key] ?? catalogues.en[key] ?? key;
 }
 
@@ -58,7 +63,7 @@ export function makeT<K extends string>(): (key: K, l?: string) => string {
  * language's text if present, else the English base.
  */
 export function pickLocale(entry: { en: string; es: string }, l: string = locale): string {
-  const lang = l.replace(/-.*$/, "");
+  const lang = languageOf(l);
   return (entry as Record<string, string>)[lang] ?? entry.en;
 }
 

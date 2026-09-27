@@ -3303,8 +3303,8 @@ approved.
   are dismissed as "used in tests" with the reason on each: one strips `<style>` blocks from two
   SVGs read from the repository, the other removes the required-field asterisk from a heading the
   test itself rendered; neither sees outside input and neither result is rendered or served.
-- **Code scanning (CodeQL default setup) switched on 2026-09-27 — the six ReDoS alerts are still
-  OPEN; the other 28 were handled by A104 and A106.** Enabled with
+- **Code scanning (CodeQL default setup) switched on 2026-09-27 — DONE: the six ReDoS alerts by
+  lane C's A105 (**PR #793**, 2026-09-28), the other 28 by A104 and A106.** Enabled with
   `gh api -X PATCH repos/clintongormley/waitron/code-scanning/default-setup
   -f state=configured -f query_suite=default`; it analyses `actions`, `javascript-typescript` and
   `python`, weekly and on each PR, as a check the ruleset does not require. Its first run
@@ -3315,7 +3315,7 @@ approved.
   `packages/sync-enrolment/src/migration-tables.ts`), 1 `js/biased-cryptographic-random`
   (`packages/country-es/src/spain.ts`), and 2 sanitization findings in test files
   (`scripts/trust-page-logo.test.ts`, `apps/dashboard/src/widgets/extra-list-form.test.ts`). The
-  last three are A106's, in the bullet above; the six ReDoS findings are not triaged. List the open
+  last three are A106's, in the bullet above. List the open
   ones with `gh api "repos/clintongormley/waitron/code-scanning/alerts?state=open"` — on
   2026-09-28, after #792 merged, it listed the six ReDoS alerts and alert 34, which closes only when
   CodeQL analyses `main` with #792 in it; `state=fixed` listed 25.
@@ -3334,11 +3334,54 @@ approved.
   CI run for that commit skipped `publish`, because a root-only push sets `code=false`; the first
   code push to `main` after it is the first `publish` run under the new file, though that job
   names its own block.
-  Next: check each ReDoS pattern against
-  the inputs that reach it. **Dependabot malware alerts** were switched on by the owner on 2026-09-27 from the
-  repository's Settings → Advanced Security page, by the owner's report, unconfirmed: GitHub's docs
+  **The six ReDoS findings, fixed by lane C's A105 (PR #793):** each flagged pattern was timed on
+  Node v26.7.0 on the owner's Mac, on the shape CodeQL's alert names plus an ending that makes the
+  match fail (a trailing `@` or line break, a final letter), at 10,000, 50,000 and 100,000 repeats.
+  Every one but `/^\/+/` grew with the square of the input: 29–92 ms, then 0.69–2.30 s, then
+  2.76–9.11 s, the email pattern slowest. Without the failing ending, the email and locale patterns
+  answered in under a millisecond. Each is replaced by plain string code (`indexOf`, `slice`, a
+  loop trimming one character), with a case that a crafted input finishes within one second (red on
+  the old pattern, 9.5–26.5 s) and cases pinning what the old pattern returned. Reachability, per
+  site:
+  `isValidEmail` (`packages/identity/src/email.ts`) is reached from the unauthenticated
+  `POST /management-api/password-reset`; `normalisePrefix` (`packages/stream/src/names.ts`) reads
+  the bucket prefix a person types; the region strip in `packages/dashboard-kit/src/i18n.ts` runs in
+  the browser on the saved or browser locale; `wrapText`'s trailing-space trim
+  (`packages/printing/src/layout.ts`) sees a line no longer than the printer's column count; and
+  `tablesCreatedBy` (`packages/sync-enrolment/src/migration-tables.ts`) is called, outside its own
+  suite, only by three test suites (`git grep -n -w tablesCreatedBy`, 2026-09-28:
+  `packages/db/src/classification.test.ts`, `packages/identity/src/classification.test.ts`,
+  `scripts/classification-complete.test.ts`), over the repository's own migration SQL. On 800,000
+  random strings (4,888 of them accepted) the old pattern and the new code gave the same answer. One
+  behaviour moved, in `packages/dashboard-kit` only: a locale with a line break after its dash now
+  loses everything from its first dash, like any other; the old pattern removed only a dash no line
+  break followed, and everything after it (`"es-\nES"` was left whole, `"es-\n-ES"` became
+  `"es-\n"`), so it fell back to English. The six alerts close when CodeQL analyses `main` with
+  #793 in it.
+  **Dependabot malware alerts** were switched on by the owner on 2026-09-27 from the repository's
+  Settings → Advanced Security page, by the owner's report, unconfirmed: GitHub's docs
   (`content/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/configure-malware-alerts.md`)
   give only that page's **Enable** button, so the setting was not read back.
+- **`stripSql`'s line-comment pattern `/--.*$/` also grows with the square of its input — OPEN.**
+  Found by A105 in `packages/sync-enrolment/src/migration-tables.ts`, beside the block-comment
+  pattern it replaced; CodeQL did not flag it. A line of 100,000 `-` followed by a carriage return
+  took 3.2 s (10,000: 35 ms), because `.` stops at `\r` and `$` then fails at every dash. It reads
+  only the repository's migration SQL, where no `packages/*/drizzle/*.sql` file holds a carriage
+  return (`grep -l $'\r' packages/*/drizzle/*.sql` printed nothing over 71 files on 2026-09-28; the
+  same grep on a file holding `a\r\n` printed its name). Fix the same way (`indexOf("--")` and
+  `slice`), with a timing case and one pinning a `\r` line. The twins this branch left standing,
+  each OPEN: the same two SQL patterns (the block-comment one this branch replaced, and `/--.*$/`)
+  are copied in `scripts/module-graph-honesty.test.ts` (lines 67 and 69), a guard reading the
+  repository's own SQL; `apps/till/src/i18n/t.ts` still strips the region with `/-.*$/` on the
+  till's locale (CodeQL did not flag it); and `/\/+$/` (written `/\/+$/u` in `mailpit-client.ts`) is
+  still used in `apps/server/src/boot.ts` (a peer relay URL from `mirror_config`, owner-written
+  config), `apps/server/src/mailpit-client.ts` (the loopback Mailpit base URL) and
+  `apps/server/src/mirror-bundle-fetch.ts` (a URL already parsed by `assertSafePrimaryUrl`) — none
+  of the three timed; and the email pattern itself is still copied six times in `apps/dashboard`
+  (`login-preference.ts` twice, `screens/login-screen.ts`, `screens/profile-screen.ts`,
+  `widgets/person-edit.ts`, `widgets/person-form.ts`), run in the browser on an address the person
+  typed or the browser saved (CodeQL did not flag them either). See also the OPEN bullet "The two
+  SQL scanners named `stripSql`…": a fix to one touches the other's code.
 - **`apps/server/src/stream-host.test.ts` passes only in file order — DONE (lane A's A88, **PR
   #775**).** Found by #752's review: under Vitest's shuffled order (`--sequence.shuffle`) cases
   expecting no bucket credential, or no membership document, failed when a nested `describe`'s
@@ -4291,11 +4334,12 @@ approved.
 
 - **The two SQL scanners named `stripSql` blank block comments before `--` comments — OPEN (split
   from A95).** `scripts/module-graph-honesty.test.ts` and
-  `packages/sync-enrolment/src/migration-tables.ts` (product code, not a guard) blank `/*…*/`
-  before `--` comments and `'…'` strings, the same ordering the six TypeScript guards had. Read, not
-  run; whether any file they scan has a `/*` inside a `--` comment or a string is not measured. The
+  `packages/sync-enrolment/src/migration-tables.ts` (product code, not a guard) blank `/*…*/` before
+  `--` comments and `'…'` strings, the same ordering the six TypeScript guards had. Read, not run;
+  whether any file they scan has a `/*` inside a `--` comment or a string is not measured. The
   TypeScript reader in `packages/shared/src/source-comments.ts` knows nothing of `--` comments, so
-  it is not a drop-in fix.
+  it is not a drop-in fix. See also the OPEN bullet "`stripSql`'s line-comment pattern `/--.*$/`…":
+  a fix to one touches the other's code.
 
 - **Four more guards handle comments on their own — OPEN (found 2026-09-27 reviewing A95; read, not
   run, except the `write-path-tables` shapes, run on one small input each).** `scripts/spawn-timeout-budget.test.ts` has its own `withoutComments` (line 32), which

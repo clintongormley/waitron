@@ -114,4 +114,19 @@ describe("tablesCreatedBy", () => {
   it("does not treat DROP TABLE of an uncreated table as an error", () => {
     expect(tablesCreatedBy(['DROP TABLE "never_created";'])).toEqual(new Set());
   });
+
+  it("reads past a comment that is never closed, and closes a comment only after its opening", () => {
+    expect(tablesCreatedBy(["CREATE TABLE a (id int); /* CREATE TABLE b (id int);"])).toEqual(
+      new Set(["a", "b"]),
+    );
+    expect(tablesCreatedBy(["/*/ CREATE TABLE c (id int); */ CREATE TABLE d (id int);"])).toEqual(
+      new Set(["d"]),
+    );
+  });
+
+  it("reads a crafted 600,000-character unclosed comment within one second", () => {
+    const started = performance.now();
+    expect(tablesCreatedBy([`/*${"a/*".repeat(200_000)}`])).toEqual(new Set());
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
 });

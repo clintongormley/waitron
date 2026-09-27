@@ -38,7 +38,9 @@ export function wrapText(text: string, columns: number, indent = 0): string[] {
   let line = "";
   const room = (): number => columns - prefix.length;
   const flush = (): void => {
-    lines.push(prefix + line.replace(/ +$/, ""));
+    let end = line.length;
+    while (end > 0 && line[end - 1] === " ") end--;
+    lines.push(prefix + line.slice(0, end));
     prefix = nextPrefix;
     line = "";
   };
