@@ -8,9 +8,10 @@ export interface StripeRefund {
   metadata: Record<string, string>;
 }
 
-/** `httpStatus` is null when the call failed with no HTTP answer at all. */
+/** `httpStatus` is null when the call failed with no HTTP answer at all; it answers the LAST of
+ * the `attempts` HTTP requests the call sent. */
 export type StripeRefundCreate =
-  { ok: true; refund: StripeRefund } | { ok: false; httpStatus: number | null };
+  { ok: true; refund: StripeRefund } | { ok: false; httpStatus: number | null; attempts: number };
 
 export interface StripeClient {
   createPaymentIntent(params: {

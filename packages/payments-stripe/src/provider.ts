@@ -396,10 +396,9 @@ export class StripeTerminalProvider implements PaymentProvider {
     const status = answer.httpStatus;
     if (status === null) return { kind: "uncertain", reason: "network" };
     if (status >= 500) return { kind: "uncertain", reason: "server_error", httpStatus: status };
-    // The refusal answers the last attempt the SDK made; after a closed connection the SDK sends
-    // the same request once more, so an earlier attempt of this send may have made the refund.
-    // What Stripe holds under the refund's id decides, and a refusal stands only when it holds
-    // none.
+    // A refusal answers only the last HTTP attempt of this send (`createRefund`). What Stripe
+    // holds under the refund's id decides; an empty list does not clear an earlier attempt, whose
+    // refund may not show yet, so a refusal stands only when it answered the send's one attempt.
     const held = await this.lookupRefund({
       processorRef: req.processorRef,
       refundId: req.refundId,
@@ -415,7 +414,9 @@ export class StripeTerminalProvider implements PaymentProvider {
         providerStatus: held.providerStatus,
       };
     }
-    if (held.kind !== "none") return { kind: "uncertain", reason: "network", httpStatus: status };
+    if (held.kind !== "none" || answer.attempts !== 1) {
+      return { kind: "uncertain", reason: "network", httpStatus: status };
+    }
     return {
       kind: "refused",
       httpStatus: status,

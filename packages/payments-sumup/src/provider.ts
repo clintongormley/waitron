@@ -57,12 +57,10 @@ export const NOT_FOUND_GRACE_MS = 15 * 60_000;
 const DOCUMENTED_REFUND_REFUSALS = new Set([400, 403, 404, 409, 422]);
 
 /**
- * How far before `sentAt` a REFUND event may be stamped and still be the refund sent then. The
- * event carries SumUp's clock and `sentAt` the box's, stamped before the call, so with both clocks
- * right an event always follows it; a box whose clock runs ahead of SumUp's would put the event
- * before it. Two minutes is reasoned, not measured: a box keeping network time is within seconds,
- * and a window this short keeps an earlier refund of the same amount made outside Waitron from
- * reading as this one. `excludeRefs` keeps out the refunds already recorded against the payment.
+ * How far before `sentAt` SumUp may stamp a REFUND event that is still the refund sent then: the
+ * event carries SumUp's clock and `sentAt` the box's, so a box running ahead puts the event before
+ * it. Reasoned, not measured. A time cannot say which refund an event is; the reading taken before
+ * the send (`refsBeforeSend`) does.
  */
 const CLOCK_ALLOWANCE_MS = 2 * 60_000;
 
@@ -399,8 +397,8 @@ export class SumUpCloudProvider implements PaymentProvider {
     };
   }
 
-  /** SumUp answers an accepted refund `201` with the body `{}` (the OpenAPI example, and what the
-   * 2026-09-11 experiment recorded), so it names no refund and only `lookupRefund` can find it. */
+  /** SumUp answers an accepted refund `201` with the body `{}`, so it names no refund and only
+   * `lookupRefund` can find it. */
   async sendRefund(req: RefundSend): Promise<RefundAnswer> {
     let httpStatus: number;
     try {
@@ -417,8 +415,19 @@ export class SumUpCloudProvider implements PaymentProvider {
     return { kind: "refused", httpStatus, documented: DOCUMENTED_REFUND_REFUSALS.has(httpStatus) };
   }
 
-  /** A `REFUND` event of the transaction for the same amount, stamped after `sentAt` less
-   * {@link CLOCK_ALLOWANCE_MS}, and not one of `excludeRefs`. */
+  /** SumUp's refunds carry none of our ids, so an event can be told from an earlier refund only by
+   * this reading, taken before the send. An answer listing no events cannot say. */
+  async existingRefundRefs(processorRef: string): Promise<string[]> {
+    const t = await this.opts.client.findTransaction({ id: processorRef });
+    if (t === null) return [];
+    if (t.refundEvents === undefined) throw new Error("SumUp listed no events of the transaction");
+    return t.refundEvents.map((event) => event.id);
+  }
+
+  /** A `REFUND` event of the transaction for the same amount, not one of `excludeRefs` nor of
+   * `refsBeforeSend`, stamped after `sentAt` less {@link CLOCK_ALLOWANCE_MS}. Without
+   * `refsBeforeSend`, an event stamped before `sentAt` may be a refund made before the send, so it
+   * is `ambiguous`, never a match. */
   async lookupRefund(query: RefundLookupQuery): Promise<RefundLookup> {
     let t: SumUpTransaction | null;
     try {
@@ -426,15 +435,21 @@ export class SumUpCloudProvider implements PaymentProvider {
     } catch {
       return { kind: "unreachable" };
     }
-    const from = query.sentAt.getTime() - CLOCK_ALLOWANCE_MS;
+    const sentAt = query.sentAt.getTime();
     const candidates = (t?.refundEvents ?? []).filter(
       (event) =>
-        Date.parse(event.timestamp) >= from &&
+        Date.parse(event.timestamp) >= sentAt - CLOCK_ALLOWANCE_MS &&
         compareDecimal(event.amount, query.amount) === 0 &&
-        !query.excludeRefs.includes(event.id),
+        !query.excludeRefs.includes(event.id) &&
+        !(query.refsBeforeSend?.includes(event.id) ?? false),
     );
     if (candidates.length === 0) return { kind: "none" };
-    if (candidates.length > 1) return { kind: "ambiguous", candidates: candidates.length };
+    const unattributable =
+      query.refsBeforeSend === undefined &&
+      candidates.some((event) => Date.parse(event.timestamp) < sentAt);
+    if (candidates.length > 1 || unattributable) {
+      return { kind: "ambiguous", candidates: candidates.length };
+    }
     const [event] = candidates;
     return {
       kind: "match",

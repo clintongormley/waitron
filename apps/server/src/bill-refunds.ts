@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNotNull, ne } from "drizzle-orm";
 import { billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { authorize } from "@waitron/identity";
@@ -16,6 +16,7 @@ import {
   compareDecimal,
   decimal,
   decimalToCents,
+  isAppError,
   MONEY_SCALE,
   toScale,
 } from "@waitron/shared";
@@ -71,8 +72,9 @@ export function refundProvidersOf(sources: {
     if (sources.pool === undefined) return undefined;
     try {
       return await sources.pool.get(providerName);
-    } catch {
-      return undefined;
+    } catch (error) {
+      if (isAppError(error) && error.code === "payment.provider_unknown") return undefined;
+      throw error;
     }
   };
 }
@@ -227,7 +229,12 @@ async function recordRefundOutcome(
     if (outcome === "failed") {
       const [failed] = await tx
         .update(billPaymentRefunds)
-        .set({ state: "failed", failedAt: now.toISOString(), ...attested })
+        .set({
+          state: "failed",
+          failedAt: now.toISOString(),
+          ...(providerRefundRef === null ? {} : { providerRefundRef }),
+          ...attested,
+        })
         .where(eq(billPaymentRefunds.id, refundId))
         .returning();
       return failed!;
@@ -258,6 +265,9 @@ async function recordRefundOutcome(
  * `send_count` are committed before the provider is asked, so a pending refund with no `sent_at`
  * never reached it and `send_count` above one says an earlier send is still unknown. An answer
  * with nothing to read (SumUp's 201) is looked up at once.
+ *
+ * Before the first send only, the provider's existing refunds are read and kept with `sent_at`, for
+ * every later lookup; a reading that fails is not taken, and the lookups then attribute less.
  */
 async function sendCardRefund(
   deps: BillRefundDeps,
@@ -265,6 +275,11 @@ async function sendCardRefund(
   refundId: string,
 ): Promise<RefundRow> {
   // The row is pending: this process claimed it, and every writer of its outcome claims it too.
+  const before = await withTransaction(deps.db, (tx) => readCardRefund(tx, refundId));
+  const refsBeforeSend =
+    before!.refund.sentAt === null && provider.existingRefundRefs !== undefined
+      ? await provider.existingRefundRefs(before!.provided!.processorRef).catch(() => null)
+      : null;
   const stamped = await withTransaction(deps.db, async (tx) => {
     const target = (await readCardRefund(tx, refundId))!;
     const [row] = await tx
@@ -272,6 +287,7 @@ async function sendCardRefund(
       .set({
         sentAt: target.refund.sentAt ?? deps.clock.now().instant.toISOString(),
         sendCount: target.refund.sendCount + 1,
+        ...(refsBeforeSend === null ? {} : { refsBeforeSend }),
       })
       .where(eq(billPaymentRefunds.id, refundId))
       .returning();
@@ -301,6 +317,23 @@ async function sendCardRefund(
   return recordRefundOutcome(deps, refundId, evidence);
 }
 
+/** The provider refund ids already attributed to the payment's other refunds, made or failed:
+ * none of them can be this refund. */
+async function attributedRefundRefs(tx: Transaction, refund: RefundRow): Promise<string[]> {
+  const others = await tx
+    .select({ ref: billPaymentRefunds.providerRefundRef })
+    .from(billPaymentRefunds)
+    .where(
+      and(
+        eq(billPaymentRefunds.billPaymentId, refund.billPaymentId),
+        ne(billPaymentRefunds.id, refund.id),
+        isNotNull(billPaymentRefunds.providerRefundRef),
+      ),
+    );
+  const recorded = await recordedRefundRefs(tx, refund.billPaymentId);
+  return [...new Set([...recorded, ...others.map((other) => other.ref!)])];
+}
+
 async function lookUp(
   deps: BillRefundDeps,
   provider: PaymentProvider,
@@ -315,9 +348,8 @@ async function lookUp(
       refundId: refund.id,
       amount: amountOf(refund),
       sentAt: new Date(sentAt),
-      excludeRefs: await withTransaction(deps.db, (tx) =>
-        recordedRefundRefs(tx, refund.billPaymentId),
-      ),
+      excludeRefs: await withTransaction(deps.db, (tx) => attributedRefundRefs(tx, refund)),
+      ...(refund.refsBeforeSend === null ? {} : { refsBeforeSend: refund.refsBeforeSend }),
     });
   } catch {
     return { kind: "unreachable" };

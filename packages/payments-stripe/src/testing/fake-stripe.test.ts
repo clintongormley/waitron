@@ -224,8 +224,8 @@ describe("FakeStripe refunds with a key and metadata", () => {
     fake.scriptNextCreateRefund({ status: "pending", answer: { httpStatus: null } });
     const lost = await fake.createRefund(create("k3"));
 
-    expect(refused).toEqual({ ok: false, httpStatus: 429 });
-    expect(lost).toEqual({ ok: false, httpStatus: null });
+    expect(refused).toEqual({ ok: false, httpStatus: 429, attempts: 1 });
+    expect(lost).toEqual({ ok: false, httpStatus: null, attempts: 1 });
     expect((await fake.listRefunds("pi_r")).map((r) => r.status)).toEqual(["pending"]);
   });
 

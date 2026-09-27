@@ -6,6 +6,7 @@ import {
   enumType,
   id,
   label,
+  labelList,
   money,
   newId,
   nowIso,
@@ -127,11 +128,12 @@ export const billPaymentLines = table(
  * Money given back from one bill payment before the invoice (design §2.3, §6b). A cash refund is
  * written `completed`; only a card refund is ever `pending`.
  *
- * While pending, only the first send's `sent_at`, a `send_count` raised by one, the provider's
- * refund id once, and the outcome — with an attestation when a manager records it — may be
- * written; after the outcome nothing changes, and a refund is never deleted. Those rules are the
- * `bill_payment_refunds_guard_update` and `bill_payment_refunds_no_delete` triggers
- * (`drizzle/0023_bill_payment_triggers.sql`).
+ * While pending, only the first send's `sent_at` and `refs_before_send`, a `send_count` raised by
+ * one, the provider's refund id once, and the outcome — with an attestation when a manager records
+ * it — may be written; after the outcome nothing changes, and a refund is never deleted. Those
+ * rules are the `bill_payment_refunds_guard_update` and `bill_payment_refunds_no_delete` triggers
+ * (`drizzle/0023_bill_payment_triggers.sql`, the first re-created by
+ * `drizzle/0027_bill_payment_refund_guard.sql`).
  *
  * `authorized_by`, `requested_by` and `attested_by` are plain person ids, as `requested_by` is on
  * `bill_payments`.
@@ -153,6 +155,9 @@ export const billPaymentRefunds = table(
     sentAt: tsString("sent_at"),
     sendCount: count("send_count").notNull().default(0),
     providerRefundRef: label("provider_refund_ref"),
+    /** The provider's refund ids of the payment read just before the first send, for a provider
+     * whose refunds cannot carry our id; null when no reading was taken. */
+    refsBeforeSend: labelList("refs_before_send"),
     attestedBy: id("attested_by"),
     attestationNote: label("attestation_note"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),

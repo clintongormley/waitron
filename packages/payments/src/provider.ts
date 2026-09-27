@@ -164,10 +164,12 @@ export interface RefundLookupQuery {
   sentAt: Date;
   /** Processor refund ids the caller has already recorded against other refunds of this payment. */
   excludeRefs: readonly string[];
+  /** `existingRefundRefs` as read just before the first send; absent when no reading was taken. */
+  refsBeforeSend?: readonly string[];
 }
 
-/** `ambiguous`: more than one processor refund could be this one. `unreachable`: the processor
- * could not be asked. */
+/** `ambiguous`: more than one processor refund could be this one, or one could be this one or a
+ * refund made before it. `unreachable`: the processor could not be asked. */
 export type RefundLookup =
   | { kind: "match"; providerRefundRef: string; outcome: RefundOutcome; providerStatus: string }
   | { kind: "none" }
@@ -175,9 +177,10 @@ export type RefundLookup =
   | { kind: "unreachable" };
 
 /**
- * No method takes a transaction handle: every method makes a network call, and a database
- * transaction is never held across one. Each does its own short-transaction bookkeeping and returns
- * a `PaymentResult`, which the caller passes into `recordSale` as data.
+ * No method takes a transaction handle, because a database transaction is never held across a
+ * network call. A method returning a `PaymentResult` does its own short-transaction bookkeeping, and
+ * the caller passes that result into `recordSale` as data; `sendRefund` records nothing and
+ * `lookupRefund` only reads.
  *
  * Cash needs no provider: it is recorded directly as a settled tender. `reconcile` lives on
  * `PaymentReconciler` (./reconcile.ts) because the audit is per settlement identity, and a hosted
@@ -233,6 +236,12 @@ export interface PaymentProvider {
 
   /** Find a refund `sendRefund` asked for, reading the processor only. */
   lookupRefund?(query: RefundLookupQuery): Promise<RefundLookup>;
+
+  /** The ids of every refund the processor holds against the payment, for the caller to read just
+   * before a refund's first send; rejects when the processor cannot say. Present where a refund
+   * cannot carry `RefundSend.refundId`, so `lookupRefund` needs it to tell an earlier refund from
+   * the one sent. */
+  existingRefundRefs?(processorRef: string): Promise<string[]>;
 
   /** How long after the first send a resend with the same key is still answered with the first
    * request's result rather than refunding again; null when a resend is never safe. Read only where

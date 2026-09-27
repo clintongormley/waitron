@@ -1093,6 +1093,20 @@ describe("StripeTerminalProvider.sendRefund and lookupRefund", () => {
     },
   );
 
+  it.each([400, 401, 404])(
+    "answers a %i as uncertain when the SDK sent the request more than once and Stripe shows no refund yet",
+    async (httpStatus) => {
+      const fake = new FakeStripe();
+      fake.scriptNextCreateRefund({ httpStatus, attempts: 2 });
+
+      expect(await providerFor(fake).sendRefund(request())).toEqual({
+        kind: "uncertain",
+        reason: "network",
+        httpStatus,
+      });
+    },
+  );
+
   it("answers a refusal it cannot check against Stripe's refunds as uncertain", async () => {
     const fake = new FakeStripe();
     fake.scriptNextCreateRefund({ httpStatus: 400 });
@@ -1192,6 +1206,63 @@ describe("StripeTerminalProvider.sendRefund and lookupRefund", () => {
 });
 
 describe("a Stripe refund whose first attempt refunded and whose answer was a refusal", () => {
+  it("stays uncertain when the repeat is refused before the first attempt's refund shows, through the installed SDK against a local Stripe", async () => {
+    const refundId = randomUUID();
+    const refund = {
+      id: "re_local_1",
+      object: "refund",
+      status: "succeeded",
+      metadata: { bill_payment_refund_id: refundId },
+    };
+    const posts: (string | undefined)[] = [];
+    let visible = false;
+    const server = createServer((req, res) => {
+      req.resume();
+      req.on("end", () => {
+        const answer = (status: number, body: unknown) => {
+          res.writeHead(status, { "content-type": "application/json" });
+          res.end(JSON.stringify(body));
+        };
+        if (req.method === "GET") {
+          answer(200, { object: "list", data: visible ? [refund] : [], has_more: false });
+          return;
+        }
+        posts.push(req.headers["idempotency-key"] as string | undefined);
+        // The first attempt refunds and its connection closes before the answer.
+        if (posts.length === 1) req.socket.destroy();
+        else answer(400, { error: { type: "invalid_request_error", message: "invalid" } });
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as AddressInfo;
+    try {
+      const provider = providerFor(
+        stripeClient(new Stripe("sk_test_local", { host: "127.0.0.1", port, protocol: "http" })),
+      );
+
+      const answer = await provider.sendRefund({
+        processorRef: "pi_local",
+        amount: decimal("5.00"),
+        idempotencyKey: `bpr_${refundId}`,
+        refundId,
+      });
+      visible = true;
+      const later = await provider.lookupRefund({
+        processorRef: "pi_local",
+        refundId,
+        amount: decimal("5.00"),
+        sentAt: new Date(),
+        excludeRefs: [],
+      });
+
+      expect(posts).toEqual([`bpr_${refundId}`, `bpr_${refundId}`]);
+      expect(answer).toEqual({ kind: "uncertain", reason: "network", httpStatus: 400 });
+      expect(later).toMatchObject({ kind: "match", outcome: "completed" });
+    } finally {
+      server.close();
+    }
+  });
+
   it("is answered with the refund Stripe holds, through the installed SDK against a local Stripe", async () => {
     const refundId = randomUUID();
     const refund = {

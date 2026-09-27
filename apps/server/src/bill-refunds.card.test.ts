@@ -6,9 +6,12 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { billPaymentRefunds, incidents, printJobs, withTransaction } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
-import { startManagementSession } from "@waitron/identity";
+import { PIN_THROTTLE_FREE_ATTEMPTS, startManagementSession } from "@waitron/identity";
 import { loadKeyRing } from "@waitron/credentials";
 import type { PaymentProvider, RefundAnswer, RefundLookup } from "@waitron/payments";
+import { SumUpCloudProvider } from "@waitron/payments-sumup";
+import type { SumUpClient, SumUpTransaction } from "@waitron/payments-sumup";
+import { AppError, decimal } from "@waitron/shared";
 import type { RefundScript } from "@waitron/payments/src/testing/fake-provider.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
@@ -741,6 +744,230 @@ describe("design §8 test 20: the call's own answer, and which answers settle wh
   });
 });
 
+describe("the provider refunds another refund of the payment already accounts for", () => {
+  it("keeps a failed refund's provider reference, so the payment's next refund is not settled by that failure", async () => {
+    const billId = await bill("Pulpo", "Croquetas", "Croquetas");
+    const card = await pay(billId, "card", "20.00");
+    // SumUp's own lookup over a transaction whose one refund event is the first refund's failure,
+    // stamped when first read, so after that refund's send.
+    let event: NonNullable<SumUpTransaction["refundEvents"]>[number] | undefined;
+    const sumup = new SumUpCloudProvider({
+      db: venue.db,
+      nodeId: venue.cfg.nodeId,
+      incidents: () => Promise.resolve(true),
+      client: {
+        findTransaction: () => {
+          event ??= {
+            id: "sumup-failed-1",
+            status: "FAILED",
+            amount: decimal("4.00"),
+            timestamp: new Date().toISOString(),
+          };
+          return Promise.resolve({
+            id: "t",
+            status: "SUCCESSFUL",
+            amount: decimal("20.00"),
+            refundEvents: [event],
+          });
+        },
+      } as unknown as SumUpClient,
+    });
+    const lookups = vi
+      .spyOn(venue.card, "lookupRefund")
+      .mockImplementation((query) => sumup.lookupRefund(query));
+    venue.card.scriptNextRefund({ made: false, answer: { kind: "accepted" } });
+    venue.card.scriptNextRefund({ made: false, answer: LOST });
+    try {
+      await refund(billId, card.id, { applied: "4.00" });
+      await refund(billId, card.id, { applied: "4.00" });
+      const [, second] = await refundRowsOf(card.id);
+      const resumed = await resumeCardRefund(
+        {
+          db: venue.db,
+          clock: systemClock(),
+          refundProviderFor: () => Promise.resolve(venue.card),
+        },
+        second!.id,
+        "loop",
+      );
+
+      expect(
+        (await refundRowsOf(card.id)).map((row) => [row.state, row.providerRefundRef]),
+      ).toEqual([
+        ["failed", "sumup-failed-1"],
+        ["pending", null],
+      ]);
+      expect(resumed).toMatchObject({ lookup: { kind: "none" } });
+      expect(lookups.mock.calls.map(([query]) => query.excludeRefs)).toEqual([
+        [],
+        ["sumup-failed-1"],
+      ]);
+    } finally {
+      lookups.mockRestore();
+    }
+  });
+
+  it("excludes the references of the payment's completed and failed refunds, not its own or another payment's", async () => {
+    const billId = await bill("Pulpo", "Croquetas", "Croquetas");
+    const card = await pay(billId, "card", "20.00");
+    const other = await pay(billId, "card", "10.00");
+    venue.card.scriptNextRefund({ made: "completed", answer: "made" });
+    await refund(billId, card.id, { applied: "1.00" });
+    venue.card.scriptNextRefund({ made: "failed", answer: "made" });
+    await refund(billId, card.id, { applied: "1.00" });
+    venue.card.scriptNextRefund({ made: "completed", answer: "made" });
+    await refund(billId, other.id, { applied: "1.00" });
+    venue.card.scriptNextRefund({ made: "completed", answer: LOST });
+    await refund(billId, card.id, { applied: "1.00" });
+    const [completed, failed, pending] = await refundRowsOf(card.id);
+    // The provider's id may arrive on a refund still pending; it is this refund's own.
+    venue.db.run(
+      sql`update bill_payment_refunds set provider_refund_ref = 'own-ref' where id = ${pending!.id}`,
+    );
+
+    await withProvider({ lookups: { kind: "none" } }, () =>
+      resumeCardRefund(
+        {
+          db: venue.db,
+          clock: systemClock(),
+          refundProviderFor: () => Promise.resolve(venue.card),
+        },
+        pending!.id,
+        "loop",
+      ),
+    );
+
+    expect([completed!.state, failed!.state, pending!.state]).toEqual([
+      "completed",
+      "failed",
+      "pending",
+    ]);
+    expect(new Set(venue.card.lookupCalls.at(-1)!.excludeRefs)).toEqual(
+      new Set([completed!.providerRefundRef, failed!.providerRefundRef]),
+    );
+    expect(failed!.providerRefundRef).toMatch(/^fake-re-/);
+  });
+});
+
+describe("the provider's refunds read before the first send", () => {
+  /** SumUp's own reading and lookup over a transaction whose refund events the test writes. */
+  function sumupOver(events: NonNullable<SumUpTransaction["refundEvents"]>) {
+    const sumup = new SumUpCloudProvider({
+      db: venue.db,
+      nodeId: venue.cfg.nodeId,
+      incidents: () => Promise.resolve(true),
+      client: {
+        findTransaction: () =>
+          Promise.resolve({
+            id: "t",
+            status: "SUCCESSFUL",
+            amount: decimal("20.00"),
+            refundEvents: [...events],
+          }),
+      } as unknown as SumUpClient,
+    });
+    const reads = vi.fn((processorRef: string) => sumup.existingRefundRefs(processorRef));
+    venue.card.existingRefundRefs = reads;
+    const lookups = vi
+      .spyOn(venue.card, "lookupRefund")
+      .mockImplementation((query) => sumup.lookupRefund(query));
+    return {
+      reads,
+      lookups,
+      restore: () => {
+        lookups.mockRestore();
+        delete venue.card.existingRefundRefs;
+      },
+    };
+  }
+  const refunded = (id: string, msBeforeNow: number) => ({
+    id,
+    status: "REFUNDED",
+    amount: decimal("4.00"),
+    timestamp: new Date(Date.now() - msBeforeNow).toISOString(),
+  });
+
+  it("keeps the reading, and settles a later lookup by it: an earlier refund is never this one, a skewed stamp still is", async () => {
+    const billId = await bill("Pulpo", "Croquetas", "Croquetas");
+    const card = await pay(billId, "card", "20.00");
+    const events = [refunded("made-a-minute-before", 60_000)];
+    const sumup = sumupOver(events);
+    venue.card.scriptNextRefund({ made: false, answer: LOST });
+    try {
+      await refund(billId, card.id, { applied: "4.00" });
+      const [row] = await refundRowsOf(card.id);
+      const unseen = await resumeCardRefund(
+        {
+          db: venue.db,
+          clock: systemClock(),
+          refundProviderFor: () => Promise.resolve(venue.card),
+        },
+        row!.id,
+        "loop",
+      );
+      // SumUp stamps the refund our send made 30 s before our own clock's `sent_at`.
+      events.push(refunded("ours", Date.now() - Date.parse(row!.sentAt!) + 30_000));
+      const seen = await resumeCardRefund(
+        {
+          db: venue.db,
+          clock: systemClock(),
+          refundProviderFor: () => Promise.resolve(venue.card),
+        },
+        row!.id,
+        "loop",
+      );
+
+      expect(row).toMatchObject({ state: "pending", refsBeforeSend: ["made-a-minute-before"] });
+      expect(unseen).toMatchObject({ lookup: { kind: "none" }, refund: { state: "pending" } });
+      expect(seen).toMatchObject({
+        lookup: { kind: "match", providerRefundRef: "ours" },
+        refund: { state: "completed", providerRefundRef: "ours" },
+      });
+      expect(sumup.lookups.mock.calls.map(([query]) => query.refsBeforeSend)).toEqual([
+        ["made-a-minute-before"],
+        ["made-a-minute-before"],
+      ]);
+      expect(sumup.reads).toHaveBeenCalledTimes(1);
+    } finally {
+      sumup.restore();
+    }
+  });
+
+  it("reads once, before the first send, and not again before a resend", async () => {
+    const { paymentId, refundId, asked } = await pendingRefund();
+    const sumup = sumupOver([]);
+    try {
+      await asked.again();
+      expect(sumup.reads).not.toHaveBeenCalled();
+      expect(await onlyRefundOf(paymentId)).toMatchObject({ sendCount: 2, refsBeforeSend: null });
+      expect(callsFor(refundId)).toHaveLength(2);
+    } finally {
+      sumup.restore();
+    }
+  });
+
+  it("sends with no reading when the provider cannot say which refunds exist, and leaves an earlier-stamped one unsettled", async () => {
+    const billId = await bill("Pulpo", "Croquetas", "Croquetas");
+    const card = await pay(billId, "card", "20.00");
+    const sumup = sumupOver([refunded("made-a-minute-before", 60_000)]);
+    sumup.reads.mockRejectedValueOnce(new Error("sumup unreachable"));
+    venue.card.scriptNextRefund({ made: false, answer: { kind: "accepted" } });
+    try {
+      await refund(billId, card.id, { applied: "4.00" });
+      const [row] = await refundRowsOf(card.id);
+
+      expect(row).toMatchObject({ state: "pending", sendCount: 1, refsBeforeSend: null });
+      expect(callsFor(row!.id)).toHaveLength(1);
+      expect(await sumup.lookups.mock.results[0]!.value).toEqual({
+        kind: "ambiguous",
+        candidates: 1,
+      });
+    } finally {
+      sumup.restore();
+    }
+  });
+});
+
 describe("design §8 test 21: never sent, sent but not found, and the key window", () => {
   it("fails a refund a crash left with no sent_at, asking the provider nothing", async () => {
     const billId = await bill("Pulpo", "Croquetas", "Croquetas");
@@ -1047,6 +1274,51 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
     expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "pending", attestedBy: null });
   });
 
+  it("refuses the right PIN once too many wrong ones were entered, and changes nothing", async () => {
+    const { paymentId, refundId } = await pendingRefund();
+    const app = managerApp();
+    const path = `/management-api/payments/bill-refunds/${refundId}/attest`;
+    for (let i = 0; i <= PIN_THROTTLE_FREE_ATTEMPTS; i += 1) {
+      const wrong = await send(app, managerCookie, "POST", path, {
+        outcome: "failed",
+        note: NOTE,
+        pin: "9999",
+      });
+      expect(wrong.json).toEqual({ code: "pin.invalid", params: {} });
+    }
+
+    const refused = await send(app, managerCookie, "POST", path, {
+      outcome: "failed",
+      note: NOTE,
+      pin: "1234",
+    });
+
+    expect(refused.status).toBe(429);
+    expect(refused.json).toEqual({
+      code: "pin.throttled",
+      params: { retryAfterSeconds: expect.any(Number) },
+    });
+    expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "pending", attestedBy: null });
+  });
+
+  it("starts the wrong-PIN count again after the right PIN", async () => {
+    const { refundId } = await pendingRefund();
+    const app = managerApp();
+    const path = `/management-api/payments/bill-refunds/${refundId}/attest`;
+    const wrong = { outcome: "failed", note: NOTE, pin: "9999" };
+    for (let i = 0; i < PIN_THROTTLE_FREE_ATTEMPTS; i += 1) {
+      await send(app, managerCookie, "POST", path, wrong);
+    }
+    const accepted = await send(app, managerCookie, "POST", path, { ...wrong, pin: "1234" });
+
+    const again = await send(app, managerCookie, "POST", path, wrong);
+    const right = await send(app, managerCookie, "POST", path, { ...wrong, pin: "1234" });
+
+    expect(accepted.json).toEqual({ outcome: "failed" });
+    expect(again.json).toEqual({ code: "pin.invalid", params: {} });
+    expect(right.json).toEqual({ code: "bill.refund_not_stuck", params: { refundId } });
+  });
+
   it("refuses to record completed for a refund that never left Waitron, and records its failure", async () => {
     const billId = await bill("Pulpo", "Croquetas");
     const card = await pay(billId, "card", "20.00");
@@ -1168,6 +1440,19 @@ describe("the provider a card refund goes back through", () => {
     expect(await both("manual")).toBeUndefined();
     expect(await poolOnly("simulator")).toBeUndefined();
     expect(await neither("fake")).toBeUndefined();
+  });
+
+  it("is none for a provider no contribution declares, and any other failure to build one surfaces", async () => {
+    const failing = (error: unknown) =>
+      refundProvidersOf({
+        pool: { get: () => Promise.reject(error), evict: () => {} },
+      });
+    const broken = new Error("credential unreadable");
+
+    expect(
+      await failing(new AppError("payment.provider_unknown", { providerId: "redsys" }))("redsys"),
+    ).toBeUndefined();
+    await expect(failing(broken)("sumup")).rejects.toBe(broken);
   });
 });
 

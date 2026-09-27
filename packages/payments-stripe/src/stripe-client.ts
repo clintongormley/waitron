@@ -66,18 +66,29 @@ export function stripeClient(stripe: Stripe): StripeClient {
       return { id: refund.id, status };
     },
     async createRefund({ paymentIntentId, amount, idempotencyKey, metadata }) {
+      // stripe@22.6.2 sends a request once more after its connection closes with ECONNRESET or
+      // EPIPE, whatever `maxNetworkRetries` says (`_shouldRetry`, esm/RequestSender.js:183-187;
+      // the codes, esm/net/HttpClient.js:38), so a refusal may answer a repeat of an attempt
+      // Stripe acted on. Each attempt emits `request` with its key (esm/RequestSender.js:448).
+      // Another call in this process under the same key is counted too, which only raises it.
+      let attempts = 0;
+      const count = (event: { idempotency_key?: string }) => {
+        if (event.idempotency_key === idempotencyKey) attempts += 1;
+      };
+      (stripe.on as (name: "request", handler: typeof count) => void)("request", count);
       try {
         const refund = await stripe.refunds.create(
           { payment_intent: paymentIntentId, amount: toMinorUnits(amount), metadata },
-          // The SDK otherwise sends the request again by itself on a 409 or a 5xx, and the answer
-          // to that later attempt is all that reaches us (RequestSender.js `_shouldRetry`,
-          // stripe@22.6.2). It still sends once more after a closed connection whatever this says,
-          // which `StripeTerminalProvider.sendRefund` allows for.
+          // Otherwise the SDK also repeats it after any connection error, an answer marked
+          // `stripe-should-retry: true`, or a 409 or 5xx not marked `false`
+          // (esm/RequestSender.js:188-216).
           { idempotencyKey, maxNetworkRetries: 0 },
         );
         return { ok: true, refund: refundOf(refund) };
       } catch (error) {
-        return { ok: false, httpStatus: httpStatusOf(error) };
+        return { ok: false, httpStatus: httpStatusOf(error), attempts };
+      } finally {
+        (stripe.off as (name: "request", handler: typeof count) => void)("request", count);
       }
     },
     async listRefunds(paymentIntentId) {

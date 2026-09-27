@@ -91,6 +91,8 @@ export class FakePaymentProvider implements PaymentProvider {
   /** Every `lookupRefund` call, in order. */
   readonly lookupCalls: RefundLookupQuery[] = [];
   refundResendWindowMs: number | null = 24 * 60 * 60 * 1000;
+  /** Absent, as on a processor whose refunds carry the caller's id; a test sets it. */
+  existingRefundRefs?: (processorRef: string) => Promise<string[]>;
   private readonly madeRefunds: MadeRefund[] = [];
   private refundScripts: RefundScript[] = [];
   private lookupScript: RefundLookup | null = null;

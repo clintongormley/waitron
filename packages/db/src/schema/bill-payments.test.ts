@@ -695,6 +695,12 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       });
     });
 
+    it("allows the refunds read before the send to arrive with the first send's stamp", async () => {
+      const id = await insertRefund(await receivedPayment());
+      await updateRefund(id, `sent_at = '${AT}', send_count = 1, refs_before_send = '["101"]'`);
+      expect((await refundState(id)).refsBeforeSend).toEqual(["101"]);
+    });
+
     it("allows the provider's id to arrive while the refund is still pending", async () => {
       const id = await insertRefund(await receivedPayment());
       await updateRefund(id, `sent_at = '${AT}', send_count = 1, provider_refund_ref = 're_1'`);
@@ -768,6 +774,21 @@ describe("bill payments: the three tables, their checks and their triggers", () 
         "a send counted after the outcome",
         { state: "failed", failedAt: AT },
         `sent_at = '${AT}', send_count = 1`,
+      ],
+      [
+        "the refunds read before the send, set on a resend",
+        { sendCount: 1, sentAt: AT },
+        `send_count = 2, refs_before_send = '["101"]'`,
+      ],
+      [
+        "the refunds read before the send, replaced",
+        { sendCount: 1, sentAt: AT, refsBeforeSend: ["101"] },
+        `refs_before_send = '["101","102"]'`,
+      ],
+      [
+        "the refunds read before the send, set after the outcome",
+        { state: "failed", failedAt: AT },
+        `refs_before_send = '[]'`,
       ],
     ] as const)("refuses %s", async (_name, start, set) => {
       const id = await insertRefund(await receivedPayment(), start as Partial<RefundValues>);

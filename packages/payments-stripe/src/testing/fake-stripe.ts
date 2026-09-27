@@ -25,9 +25,10 @@ const CANCELLABLE = new Set([
 type CreateRefundParams = Parameters<StripeClient["createRefund"]>[0];
 
 /** What the next `createRefund` does: refuse with an HTTP status (or none) and make nothing, or
- * make a refund in `status` and answer it, or answer `answer` although it was made. */
-export type CreateRefundScript =
-  { httpStatus: number | null } | { status: string; answer?: { httpStatus: number | null } };
+ * make a refund in `status` and answer it, or answer `answer` although it was made. `attempts` is
+ * how many HTTP requests the refusal reports; unscripted, one. */
+type RefusalScript = { httpStatus: number | null; attempts?: number };
+export type CreateRefundScript = RefusalScript | { status: string; answer?: RefusalScript };
 
 /** A stalled action stays `in_progress` until `cancelReaderAction` flips it to `failed`. */
 export class FakeStripe implements StripeClient {
@@ -184,12 +185,15 @@ export class FakeStripe implements StripeClient {
         refund: this.view(earlier ?? this.make(params, "succeeded")),
       });
     }
-    if (!("status" in script)) return Promise.resolve({ ok: false, httpStatus: script.httpStatus });
+    const refusal = (answer: RefusalScript): StripeRefundCreate => ({
+      ok: false,
+      httpStatus: answer.httpStatus,
+      attempts: answer.attempts ?? 1,
+    });
+    if (!("status" in script)) return Promise.resolve(refusal(script));
     const made = this.make(params, script.status);
     return Promise.resolve(
-      script.answer === undefined
-        ? { ok: true, refund: this.view(made) }
-        : { ok: false, httpStatus: script.answer.httpStatus },
+      script.answer === undefined ? { ok: true, refund: this.view(made) } : refusal(script.answer),
     );
   }
   listRefunds(paymentIntentId: string): Promise<StripeRefund[]> {

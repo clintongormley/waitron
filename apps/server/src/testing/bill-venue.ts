@@ -24,6 +24,7 @@ import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider
 import { createPrinter } from "@waitron/printing";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import {
+  AppError,
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
@@ -250,7 +251,7 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     get: (providerId) =>
       providerId === "fake"
         ? Promise.resolve(card)
-        : Promise.reject(new Error(`bill-venue: no provider ${providerId}`)),
+        : Promise.reject(new AppError("payment.provider_unknown", { providerId })),
     evict: () => {},
   };
   const mount = (tipsEnabled: boolean, at: TrustedClock = clock): Hono => {

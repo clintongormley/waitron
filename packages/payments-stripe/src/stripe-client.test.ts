@@ -61,10 +61,17 @@ describe("stripeClient's refund binding", () => {
         has_more: false,
       },
     };
+    const listeners = new Set<(event: { idempotency_key?: string }) => void>();
     return {
+      on: (_name: string, handler: (event: { idempotency_key?: string }) => void) =>
+        listeners.add(handler),
+      off: (_name: string, handler: (event: { idempotency_key?: string }) => void) =>
+        listeners.delete(handler),
       refunds: {
         create: (...args: unknown[]) => {
           calls.push(["create", ...args]);
+          const { idempotencyKey } = args[1] as { idempotencyKey: string };
+          for (const listener of listeners) listener({ idempotency_key: idempotencyKey });
           return create(args);
         },
         list: (params: { starting_after?: string }) => {
@@ -115,8 +122,8 @@ describe("stripeClient's refund binding", () => {
       metadata: {},
     };
 
-    expect(await refused.createRefund(params)).toEqual({ ok: false, httpStatus: 400 });
-    expect(await lost.createRefund(params)).toEqual({ ok: false, httpStatus: null });
+    expect(await refused.createRefund(params)).toEqual({ ok: false, httpStatus: 400, attempts: 1 });
+    expect(await lost.createRefund(params)).toEqual({ ok: false, httpStatus: null, attempts: 1 });
   });
 
   it("listRefunds reads every page of the payment intent's refunds", async () => {
@@ -167,7 +174,11 @@ describe("stripeClient's refund through the Stripe SDK itself", () => {
       json(res, 503, { error: { type: "api_error", message: "down" } }),
     );
     try {
-      expect(await stripe.client.createRefund(params)).toEqual({ ok: false, httpStatus: 503 });
+      expect(await stripe.client.createRefund(params)).toEqual({
+        ok: false,
+        httpStatus: 503,
+        attempts: 1,
+      });
       expect(stripe.keys).toEqual(["bpr_r1"]);
     } finally {
       stripe.close();
@@ -183,7 +194,11 @@ describe("stripeClient's refund through the Stripe SDK itself", () => {
       json(res, 429, { error: { type: "invalid_request_error", message: "rate limited" } });
     });
     try {
-      expect(await stripe.client.createRefund(params)).toEqual({ ok: false, httpStatus: 429 });
+      expect(await stripe.client.createRefund(params)).toEqual({
+        ok: false,
+        httpStatus: 429,
+        attempts: 2,
+      });
       expect(stripe.keys).toEqual(["bpr_r1", "bpr_r1"]);
     } finally {
       stripe.close();
