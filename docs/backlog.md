@@ -4129,7 +4129,7 @@ approved.
   functions and lines. The `CLAUDE.md` §3 warning is removed.
 
 - **Six other TypeScript-scanning guards strip comments with the same slash-star pattern — DONE
-  (2026-09-27, lane A's A95; found 2026-09-27 reading for A86).** The comment reader A86 wrote now
+  (2026-09-27, lane A's A95, **PR #781**; found 2026-09-27 reading for A86).** The comment reader A86 wrote now
   lives in `packages/shared/src/source-comments.ts`: `mapComments` hands each comment to a
   callback, and `blankComments` turns every character of each comment except its newlines into a
   space. `packages/db/src/english-only.ts` calls `mapComments`. The six guards —
