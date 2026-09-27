@@ -59,6 +59,8 @@ export interface OrderGroup {
    * advance or the pass's Ready); a group with no kitchen item is never ready.
    */
   ready?: true;
+  /** Present only when every fired kitchen item of the group has been sent away from the pass. */
+  away?: true;
   /** The group's dish lines, whichever of the visit's bills they sit on. */
   lineIds: string[];
   /** The dishes by staff name, e.g. "2 × Steak, 1 × Fish". */
@@ -657,6 +659,7 @@ async function readGroups(
       groupId: workingOrderLines.groupId,
       fired: sql<number>`count(*)`,
       ready: sql<number>`sum(${ticketItems.state} = 'ready')`,
+      away: sql<number>`sum(${ticketItems.awayAt} is not null)`,
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
@@ -664,7 +667,10 @@ async function readGroups(
     .where(and(eq(orderGroups.visitId, visitId), isNotNull(ticketItems.firedAt), ...scope))
     .groupBy(workingOrderLines.groupId);
   const readyGroups = new Set(
-    kitchen.filter((row) => row.fired > 0 && row.ready === row.fired).map((row) => row.groupId!),
+    kitchen.filter((row) => row.ready === row.fired).map((row) => row.groupId!),
+  );
+  const awayGroups = new Set(
+    kitchen.filter((row) => row.away === row.fired).map((row) => row.groupId!),
   );
   const linesByGroup = new Map<string, typeof lines>();
   for (const line of lines) {
@@ -682,7 +688,8 @@ async function readGroups(
     return {
       ...group,
       state: group.state as "held" | "fired",
-      ...(group.state === "fired" && readyGroups.has(group.id) ? { ready: true as const } : {}),
+      ...(readyGroups.has(group.id) ? { ready: true as const } : {}),
+      ...(awayGroups.has(group.id) ? { away: true as const } : {}),
       lineIds: own.map((line) => line.id),
       summary: [...counts]
         .map(

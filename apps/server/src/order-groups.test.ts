@@ -3046,6 +3046,30 @@ describe("the pass by group (D1)", () => {
     expect(await readyOf(s.warm)).toBe(false);
   });
 
+  // Fails if a group sent away still reads only "ready", or reads away before every bill's items left.
+  it("reads a group away only once every fired kitchen item of it has left the pass", async () => {
+    const v = await setupVenue();
+    const s = await specExampleOnTwoBills(v);
+    const groupOf = async (groupId: string) =>
+      (await groupsOf(s.visitId)).groups.find((group) => group.id === groupId)!;
+    await ready(v, s.visitId, s.cold);
+    expect((await groupOf(s.cold)).away).toBeUndefined();
+
+    // One of the two bills' items gone is not the whole group.
+    const [first, ...rest] = await groupTickets(s.cold);
+    expect(rest.some((item) => item.workingOrderId !== first!.workingOrderId)).toBe(true);
+    await db
+      .update(ticketItems)
+      .set({ awayAt: new Date().toISOString() })
+      .where(eq(ticketItems.id, first!.id));
+    expect((await groupOf(s.cold)).away).toBeUndefined();
+
+    await away(v, s.visitId, s.cold);
+    expect(await groupOf(s.cold)).toMatchObject({ ready: true, away: true });
+    expect((await groupOf(s.drinks)).away).toBeUndefined();
+    expect((await groupOf(s.warm)).away).toBeUndefined();
+  });
+
   it("never reads ready a fired group with nothing for the kitchen, since nobody recorded it", async () => {
     const v = await setupVenue();
     const s = await seated(v);
@@ -3153,6 +3177,22 @@ describe("pass retries (D8, D19)", () => {
       }
     }
   });
+
+  it("refuses a ready or an away on a removed group (group.not_found), writing nothing", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const fishOnly = (await submit(v, s.visitId, [{ release: "hold", lines: [line(v, "fish")] }]))
+      .groups[0]!.id;
+    const [fish] = await linesIn(s.visitId, fishOnly);
+    await move(v, s.visitId, [{ lineId: fish!.id, quantity: "1" }], { groupId: s.mains });
+
+    for (const step of [ready, away]) {
+      await expectRefusedWithNothingWritten(v, s.visitId, () => step(v, s.visitId, fishOnly), {
+        code: "group.not_found",
+        params: { groupId: fishOnly },
+      });
+    }
+  });
 });
 
 describe("a paper-only station (Review Focus 6, server half)", () => {
@@ -3237,6 +3277,47 @@ describe("the kitchen and the pass read a party's groups", () => {
     ]);
     expect(order.groups[1]!.items[0]!.group).toEqual({ id: s.cold, position: 2, state: "fired" });
     expect(order.groups.every((group) => !group.away)).toBe(true);
+  });
+
+  // Fails if the pass orders groups by course (the rows' own order) rather than by position.
+  it("orders a party's groups on the pass by position, not by course", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    await reorder(s.visitId, [s.desserts, s.mains, s.warm]);
+
+    const order = (await inTx((tx) => listExpoQueue(tx, v.cfg))).find(
+      (row) => row.orderId === s.tabId,
+    )!;
+
+    expect(order.groups.map((group) => [group.groupId, group.position])).toEqual([
+      [s.drinks, 1],
+      [s.cold, 2],
+      [s.desserts, 3],
+      [s.mains, 4],
+      [s.warm, 5],
+    ]);
+  });
+
+  // Fails if two groups at one position fall back to course order instead of the earlier-made first.
+  it("puts the earlier-made of two groups at one position first on the pass", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    await db
+      .update(orderGroups)
+      .set({ position: 4, createdAt: "2000-01-01T00:00:00.000Z" })
+      .where(eq(orderGroups.id, s.desserts));
+
+    const order = (await inTx((tx) => listExpoQueue(tx, v.cfg))).find(
+      (row) => row.orderId === s.tabId,
+    )!;
+
+    expect(order.groups.map((group) => group.groupId)).toEqual([
+      s.drinks,
+      s.cold,
+      s.warm,
+      s.desserts,
+      s.mains,
+    ]);
   });
 
   it("shows a group split across two bills under its own number on each bill, and rolls its away up", async () => {

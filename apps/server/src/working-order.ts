@@ -4797,8 +4797,8 @@ export interface QueueVisit {
   revision: number;
 }
 
-/** The group a queue item's dish was submitted in; absent for a bill of no visit, or a line moved in
- *  from another party. */
+/** The group a queue item's dish was submitted in; absent for a bill of no visit, or a line moved or
+ *  merged in from another party's bill or from a bill with no party. */
 export interface QueueGroup {
   id: string;
   position: number;
@@ -5112,9 +5112,9 @@ export interface ExpoCourse {
   items: ExpoItem[];
 }
 
-/** One group of a seated party's bill on the expo board; the section of lines no group of the visit
- *  holds (moved in from another party) has every group field `null` and sorts first. `fired` and
- *  `away` roll up as {@link ExpoCourse}'s do. */
+/** One group of a seated party's bill on the expo board; the section of lines with no group (moved
+ *  or merged in from another party's bill, or from a bill with no party) has every group field
+ *  `null` and sorts first. `fired` and `away` roll up as {@link ExpoCourse}'s do. */
 export interface ExpoGroup {
   groupId: string | null;
   position: number | null;
@@ -5183,6 +5183,7 @@ export async function listExpoQueue(
       orderNumber: workingOrders.orderNumber,
       openedAt: workingOrders.openedAt,
       ...queueGroupColumns,
+      groupCreatedAt: orderGroups.createdAt,
       // A scalar subquery, not a LEFT JOIN, which would multiply the item rows when several tables
       // match (the tables joined to one tab, or a tab's table and a table the order delivers to).
       // The `order by` makes the label picked deterministic: a table whose `tab_id` is this order
@@ -5231,7 +5232,9 @@ export async function listExpoQueue(
   // Maps keep insertion order, so the SQL order survives the grouping.
   const orders = new Map<string, ExpoOrder>();
   const sectionMaps = new Map<string, Map<string, ExpoCourse | ExpoGroup>>();
+  const groupCreatedAt = new Map<string, string>();
   for (const row of rows) {
+    if (row.groupId !== null) groupCreatedAt.set(row.groupId, row.groupCreatedAt!);
     let order = orders.get(row.orderId);
     if (order === undefined) {
       order = {
@@ -5321,7 +5324,14 @@ export async function listExpoQueue(
     if (row.servedAt === null) order.worstBand = worstBand([order.worstBand, band]);
   }
   for (const order of orders.values()) {
-    order.groups.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    const made = (group: ExpoGroup) =>
+      group.groupId === null ? "" : groupCreatedAt.get(group.groupId)!;
+    order.groups.sort(
+      (a, b) =>
+        (a.position ?? 0) - (b.position ?? 0) ||
+        made(a).localeCompare(made(b)) ||
+        (a.groupId ?? "").localeCompare(b.groupId ?? ""),
+    );
   }
   return [...orders.values()];
 }
