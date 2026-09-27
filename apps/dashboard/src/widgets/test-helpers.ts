@@ -1,6 +1,6 @@
 import axe from "axe-core";
-import { commands } from "vitest/browser";
-import { beforeEach, expect } from "vitest";
+import { commands, page } from "vitest/browser";
+import { beforeEach, expect, vi } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import type { DocumentMember, FrozenOffer, MenuDocument } from "../api/client.js";
 
@@ -94,6 +94,89 @@ export async function closeReportsDelivered(): Promise<void> {
   probe.close();
   await reported;
   probe.remove();
+}
+
+/**
+ * The RGBA values Chromium PAINTED at each viewport point, read from a screenshot of `frame`, which
+ * must contain every point. A colour input's computed `backgroundColor`, and its swatch's, did not
+ * change with the chosen colour, so these tests read the painted pixels instead.
+ */
+async function paintedPixels(
+  frame: Element,
+  points: { x: number; y: number }[],
+): Promise<number[][]> {
+  const tester = window.frameElement;
+  const scale = tester?.parentElement?.getAttribute("data-scale");
+  if (Number(scale) !== 1) {
+    throw new Error(
+      `paintedPixels needs the test frame at one screenshot pixel per CSS pixel, and Vitest has it scaled by ${scale}; make the viewport fit the page.`,
+    );
+  }
+  const png = await page.screenshot({ element: frame, save: false });
+  const bitmap = await createImageBitmap(
+    await (await fetch(`data:image/png;base64,${png}`)).blob(),
+  );
+  const context = new OffscreenCanvas(bitmap.width, bitmap.height).getContext("2d")!;
+  context.drawImage(bitmap, 0, 0);
+  // Playwright crops at the floor of the element's box in the TOP page (`enclosingIntRect`), so a
+  // point's pixel is its own floor there less the crop's, not the floor of its offset in the box.
+  const offset = tester!.getBoundingClientRect();
+  const box = frame.getBoundingClientRect();
+  const left = Math.floor(offset.left + box.left + 1e-3);
+  const top = Math.floor(offset.top + box.top + 1e-3);
+  return points.map(({ x, y }) => [
+    ...context.getImageData(
+      Math.floor(offset.left + x) - left,
+      Math.floor(offset.top + y) - top,
+      1,
+      1,
+    ).data,
+  ]);
+}
+
+/** The RGBA a CSS colour string paints as. */
+function rgba(color: string): number[] {
+  const context = new OffscreenCanvas(1, 1).getContext("2d")!;
+  context.fillStyle = color;
+  context.fillRect(0, 0, 1, 1);
+  return [...context.getImageData(0, 0, 1, 1).data];
+}
+
+/**
+ * What the colour field's Custom square paints at its centre, in the middle of its left border, and
+ * beside it on the same row, plus the RGBA of its computed border colour.
+ */
+export async function customSquarePixels(
+  root: ParentNode,
+): Promise<{ inside: number[]; border: number[]; borderColor: number[]; beside: number[] }> {
+  // Vitest shrinks the test frame to fit Playwright's page, so a frame taller than the page is
+  // screenshotted below one pixel per CSS pixel and a 1px border blurs. 560 fits under the page's
+  // default height; `paintedPixels` refuses a frame that is still shrunk.
+  const [width, height] = [innerWidth, innerHeight];
+  const shorter = Math.min(height, 560);
+  await page.viewport(width, shorter);
+  try {
+    await vi.waitFor(() => expect(innerHeight).toBe(shorter));
+    const label = root.querySelector(".custom")!;
+    label.scrollIntoView({ block: "center" });
+    const input = label.querySelector('input[type="color"]')!;
+    const square = input.getBoundingClientRect();
+    const style = getComputedStyle(input);
+    const y = square.top + square.height / 2;
+    const [inside, border, beside] = await paintedPixels(label, [
+      { x: square.left + square.width / 2, y },
+      { x: square.left + parseFloat(style.borderLeftWidth) / 2, y },
+      { x: square.right + square.width / 2, y },
+    ]);
+    return {
+      inside: inside!,
+      border: border!,
+      borderColor: rgba(style.borderLeftColor),
+      beside: beside!,
+    };
+  } finally {
+    await page.viewport(width, height);
+  }
 }
 
 export function formatViolations(violations: axe.Result[]): string {
