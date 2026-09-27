@@ -179,58 +179,32 @@ describe("draftSubmission", () => {
 });
 
 describe("draftPreview", () => {
+  const preview = (action: DraftAction, selected: ReadonlySet<number>) =>
+    draftPreview(draftSubmission(action, draft, courses, selected), draft);
+
   it("counts the items it fires and the groups it holds", () => {
     const none = new Set<number>();
     // Items: Beer 2 + Steak 2 + Croquetas 4 + one weighed Octopus + Fish 1.
-    expect(draftPreview({ kind: "fire-all" }, draft, courses, none)).toEqual({
+    expect(preview({ kind: "fire-all" }, none)).toEqual({
       fireItems: 10,
       holdGroups: 0,
       holdItems: 0,
     });
-    expect(draftPreview({ kind: "send-all" }, draft, courses, none)).toEqual({
+    expect(preview({ kind: "send-all" }, none)).toEqual({
       fireItems: 0,
       holdGroups: 3,
       holdItems: 10,
     });
     // The weighed Octopus (0.450) is one item; Beer ×2 is two.
-    expect(draftPreview({ kind: "fire-selected" }, draft, courses, new Set([0, 3]))).toEqual({
+    expect(preview({ kind: "fire-selected" }, new Set([0, 3]))).toEqual({
       fireItems: 3,
       holdGroups: 0,
       holdItems: 0,
     });
-    expect(
-      draftPreview({ kind: "add-to-held", groupId: "g-3" }, draft, courses, new Set([2])),
-    ).toEqual({ fireItems: 0, holdGroups: 1, holdItems: 4, joinGroupId: "g-3" });
-  });
-
-  // The pure half of "confirming calls submitGroups with exactly the groups that preview named".
-  it("names exactly the groups and items the submission sends, for every action", () => {
-    const actions: DraftAction[] = [
-      { kind: "send-all" },
-      { kind: "fire-all" },
-      { kind: "send-selected" },
-      { kind: "fire-selected" },
-      { kind: "fire-now" },
-      { kind: "add-to-held", groupId: "g-3" },
-      { kind: "add-as-new" },
-    ];
-    const selections = [new Set<number>(), new Set([2, 3]), new Set([0, 1, 2, 3, 4])];
-    for (const action of actions) {
-      for (const selected of selections) {
-        const { groups, joinGroupId } = draftSubmission(action, draft, courses, selected);
-        const items = (release: string) =>
-          groups
-            .filter((group) => group.release === release)
-            .flatMap((group) => group.lineIndexes)
-            .reduce((sum, index) => sum + itemCount(draft[index]!), 0);
-
-        expect(draftPreview(action, draft, courses, selected), JSON.stringify(action)).toEqual({
-          fireItems: items("fire"),
-          holdGroups: groups.filter((group) => group.release === "hold").length,
-          holdItems: items("hold"),
-          ...(joinGroupId === undefined ? {} : { joinGroupId }),
-        });
-      }
-    }
+    expect(preview({ kind: "add-to-held", groupId: "g-3" }, new Set([2]))).toEqual({
+      fireItems: 0,
+      holdGroups: 1,
+      holdItems: 4,
+    });
   });
 });

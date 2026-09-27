@@ -45,7 +45,6 @@ export interface DraftPreview {
   fireItems: number;
   holdGroups: number;
   holdItems: number;
-  joinGroupId?: string;
 }
 
 /**
@@ -119,14 +118,12 @@ export function draftSubmission(
   return joinGroupId === undefined ? { groups, remaining } : { groups, joinGroupId, remaining };
 }
 
-/** What the confirmation of `action` names: counted from the very groups it submits. */
+/** What the confirmation of `submission` names, counted from the groups it sends. */
 export function draftPreview(
-  action: DraftAction,
+  submission: Pick<DraftSubmission, "groups">,
   entries: readonly DraftEntry[],
-  courses: readonly TillCourse[],
-  selected: ReadonlySet<number>,
 ): DraftPreview {
-  const { groups, joinGroupId } = draftSubmission(action, entries, courses, selected);
+  const { groups } = submission;
   const items = (release: GroupRelease) =>
     groups
       .filter((group) => group.release === release)
@@ -135,10 +132,9 @@ export function draftPreview(
           sum + group.lineIndexes.reduce((count, index) => count + itemCount(entries[index]!), 0),
         0,
       );
-  const preview: DraftPreview = {
+  return {
     fireItems: items("fire"),
     holdGroups: groups.filter((group) => group.release === "hold").length,
     holdItems: items("hold"),
   };
-  return joinGroupId === undefined ? preview : { ...preview, joinGroupId };
 }

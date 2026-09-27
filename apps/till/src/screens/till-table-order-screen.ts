@@ -918,8 +918,8 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /**
-   * The preview and the submission are worked out together, from the same draft, and Confirm sends the
-   * submission kept here, so it is exactly what the preview named. An unoverridden line OMITS
+   * The preview is counted from the submission, and Confirm sends the submission kept here, so it is
+   * exactly what the preview named. An unoverridden line OMITS
    * `courseId`, so the server applies the product's default course. The answers name lists, products
    * and labels by id alone: the server takes every price, VAT class and name from the published offer.
    */
@@ -929,7 +929,7 @@ export class TillTableOrderScreen extends LitElement {
     const entries = this.#draftEntries(lines);
     const selected = this.#selectedIndexes(lines);
     const submission = draftSubmission(action, entries, this.courses, selected);
-    const preview = draftPreview(action, entries, this.courses, selected);
+    const preview = draftPreview(submission, entries);
     const order = submission.groups.flatMap((group) => group.lineIndexes);
     const place = new Map(order.map((index, position) => [index, position]));
     const sent = order.map((index) => lines[index]!);
