@@ -17,8 +17,9 @@ import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import {
   customerPresentationText,
-  resolveVatRate,
+  localCalendarDate,
   toInvoiceLineDescriptions,
+  vatRateOn,
 } from "@waitron/catalogue";
 import type { VatClass } from "@waitron/catalogue";
 import {
@@ -212,6 +213,10 @@ export async function seedSales(
         continue;
       }
 
+      const offsetMinutes = -instant.getTimezoneOffset();
+      // The rate in force on the sale's own day, as a real sale files it.
+      const on = localCalendarDate(instant, offsetMinutes);
+
       // `lineNo` tracks `lines.length` rather than the loop index, because `RecordSaleLine` allows
       // a dish to expand into more than one row.
       const lineCount = randInt(rng, 1, 4);
@@ -219,7 +224,7 @@ export async function seedSales(
       for (let l = 0; l < lineCount; l += 1) {
         const product = products[randInt(rng, 0, products.length - 1)]!;
         const gross = toScale(decimal(product.unitPrice), MONEY_SCALE);
-        const rate = resolveVatRate(product.vatClass);
+        const rate = vatRateOn(product.vatClass, on);
         const base = baseFromGross(gross, rate);
         lines.push({
           lineNo: lines.length + 1,
@@ -250,7 +255,7 @@ export async function seedSales(
       const total = totalOf(vatBreakdown);
       const method = rng() < 0.6 ? "cash" : "card";
 
-      backDating.set(instant, -instant.getTimezoneOffset());
+      backDating.set(instant, offsetMinutes);
 
       const input: RecordSaleInput = {
         tillId,
