@@ -1,9 +1,10 @@
-import { and, asc, eq, inArray, isNull, ne, notExists, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
 import {
   diningTables,
   nowIso,
   orderGroupEvents,
   orderGroups,
+  ticketItems,
   visitTables,
   visits,
   workingOrderLines,
@@ -15,6 +16,7 @@ import { trimQuantityForDisplay } from "./receipt-lines.js";
 import type { TillConfig } from "./till-config.js";
 import { checkAndBumpVisit, runServiceCommand, visitRevisionOfOrder } from "./visits.js";
 import {
+  advanceSet,
   bumpRevision,
   fireLines,
   fireOrderLines,
@@ -52,6 +54,11 @@ export interface OrderGroup {
   state: "held" | "fired";
   firedAt: string | null;
   remindAt: string | null;
+  /**
+   * Present only when a person has recorded every fired kitchen item of the group ready (a station's
+   * advance or the pass's Ready); a group with no kitchen item is never ready.
+   */
+  ready?: true;
   /** The group's dish lines, whichever of the visit's bills they sit on. */
   lineIds: string[];
   /** The dishes by staff name, e.g. "2 × Steak, 1 × Fish". */
@@ -186,6 +193,87 @@ export async function fireGroup(
       return { revision };
     },
   );
+}
+
+/**
+ * The pass's Ready for a group: every fired kitchen item of its dishes, on every bill of the visit,
+ * goes straight to `ready`. A held group's items are unfired, so it changes none, yet the command is
+ * recorded and the visit's revision moves on.
+ */
+export async function bumpGroupReady(
+  tx: Transaction,
+  cfg: TillConfig,
+  visitId: string,
+  groupId: string,
+  args: VisitCommandArgs,
+): Promise<{ revision: number }> {
+  void cfg;
+  return passStep(tx, visitId, groupId, args, "group.ready", async () => {
+    await tx
+      .update(ticketItems)
+      .set(advanceSet("ready"))
+      .where(
+        and(
+          inArray(ticketItems.workingOrderLineId, dishLinesOf(tx, groupId)),
+          ne(ticketItems.state, "ready"),
+          isNotNull(ticketItems.firedAt),
+        ),
+      );
+  });
+}
+
+/** The pass's Away for a group: stamps `away_at` on its ready items not yet away, on every bill. */
+export async function markGroupAway(
+  tx: Transaction,
+  cfg: TillConfig,
+  visitId: string,
+  groupId: string,
+  args: VisitCommandArgs,
+): Promise<{ revision: number }> {
+  void cfg;
+  return passStep(tx, visitId, groupId, args, "group.away", async () => {
+    await tx
+      .update(ticketItems)
+      .set({ awayAt: nowIso() })
+      .where(
+        and(
+          inArray(ticketItems.workingOrderLineId, dishLinesOf(tx, groupId)),
+          eq(ticketItems.state, "ready"),
+          isNull(ticketItems.awayAt),
+        ),
+      );
+  });
+}
+
+async function passStep(
+  tx: Transaction,
+  visitId: string,
+  groupId: string,
+  args: VisitCommandArgs,
+  kind: "group.ready" | "group.away",
+  apply: () => Promise<void>,
+): Promise<{ revision: number }> {
+  return runServiceCommand(
+    tx,
+    { kind: "visit", visitId },
+    args.submissionId,
+    kind,
+    { visitId, groupId, operatorId: args.operatorId },
+    async () => {
+      const revision = await checkAndBumpVisit(tx, visitId, args.expectedVisitRevision, "open");
+      await requireGroup(tx, visitId, groupId);
+      await apply();
+      return { revision };
+    },
+  );
+}
+
+/** The ids of a group's dish lines, as a subquery: an extras line never has a kitchen item. */
+function dishLinesOf(tx: Transaction, groupId: string) {
+  return tx
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .where(and(eq(workingOrderLines.groupId, groupId), isNull(workingOrderLines.parentLineId)));
 }
 
 /**
@@ -564,6 +652,20 @@ async function readGroups(
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(and(eq(orderGroups.visitId, visitId), isNull(workingOrderLines.parentLineId), ...scope))
     .orderBy(asc(workingOrders.orderNumber), asc(workingOrderLines.lineNo));
+  const kitchen = await tx
+    .select({
+      groupId: workingOrderLines.groupId,
+      fired: sql<number>`count(*)`,
+      ready: sql<number>`sum(${ticketItems.state} = 'ready')`,
+    })
+    .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+    .where(and(eq(orderGroups.visitId, visitId), isNotNull(ticketItems.firedAt), ...scope))
+    .groupBy(workingOrderLines.groupId);
+  const readyGroups = new Set(
+    kitchen.filter((row) => row.fired > 0 && row.ready === row.fired).map((row) => row.groupId!),
+  );
   const linesByGroup = new Map<string, typeof lines>();
   for (const line of lines) {
     const own = linesByGroup.get(line.groupId!) ?? [];
@@ -580,6 +682,7 @@ async function readGroups(
     return {
       ...group,
       state: group.state as "held" | "fired",
+      ...(group.state === "fired" && readyGroups.has(group.id) ? { ready: true as const } : {}),
       lineIds: own.map((line) => line.id),
       summary: [...counts]
         .map(
@@ -610,6 +713,17 @@ async function billsOfGroups(tx: Transaction, groupIds: readonly string[]): Prom
 }
 
 async function requireHeldGroup(tx: Transaction, visitId: string, groupId: string): Promise<void> {
+  if ((await requireGroup(tx, visitId, groupId)) !== "held") {
+    throw new AppError("group.not_held", { groupId });
+  }
+}
+
+/** The state of a group of this visit that is not removed, else `group.not_found`. */
+async function requireGroup(
+  tx: Transaction,
+  visitId: string,
+  groupId: string,
+): Promise<"held" | "fired"> {
   const [group] = await tx
     .select({ state: orderGroups.state })
     .from(orderGroups)
@@ -617,7 +731,7 @@ async function requireHeldGroup(tx: Transaction, visitId: string, groupId: strin
   if (group === undefined || group.state === "removed") {
     throw new AppError("group.not_found", { groupId });
   }
-  if (group.state !== "held") throw new AppError("group.not_held", { groupId });
+  return group.state;
 }
 
 /** The tab the visit's tables point at, which may be a paid one the party can still order on. */

@@ -5,6 +5,7 @@ import {
   orderGroupEvents,
   products,
   serviceCommands,
+  ticketItems,
   visits,
   workingOrderLines,
 } from "@waitron/db";
@@ -1025,5 +1026,169 @@ describe("the group routes without a session", () => {
       expect(answer.json).toMatchObject({ code: "session.required" });
     }
     expect(await snapshot(visit)).toEqual(before);
+  });
+});
+
+/** The kitchen's items for a group's dishes. */
+async function groupTickets(groupId: string) {
+  return inTx(venue, (tx) =>
+    tx
+      .select({
+        state: ticketItems.state,
+        firedAt: ticketItems.firedAt,
+        awayAt: ticketItems.awayAt,
+      })
+      .from(ticketItems)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.groupId, groupId))
+      .orderBy(ticketItems.id),
+  );
+}
+
+async function passSnapshot(visit: { visitId: string; tabId: string }, groupId: string) {
+  return { ...(await snapshot(visit)), tickets: await groupTickets(groupId) };
+}
+
+describe.each(["ready", "away"] as const)("POST /api/visits/:id/groups/:gid/%s", (step) => {
+  const path = (visitId: string, groupId: string) =>
+    `/api/visits/${visitId}/groups/${groupId}/${step}`;
+
+  it("answers a repeat with the first answer and writes nothing", async () => {
+    const visit = await withGroups();
+    const body = { submissionId: randomUUID(), expectedVisitRevision: visit.revision + 1 };
+    const first = await call("POST", path(visit.visitId, visit.fired.id), body);
+    const before = await passSnapshot(visit, visit.fired.id);
+
+    const again = await call("POST", path(visit.visitId, visit.fired.id), body);
+
+    expect(first.status).toBe(200);
+    expect(first.json).toEqual({ revision: visit.revision + 2 });
+    expect(again.status).toBe(200);
+    expect(again.json).toEqual(first.json);
+    expect(await passSnapshot(visit, visit.fired.id)).toEqual(before);
+  });
+
+  it("refuses 409 submission.id_reused for an id first used on another group, and 409 visit.out_of_date for a stale revision", async () => {
+    const visit = await withGroups();
+    const submissionId = randomUUID();
+    await call("POST", path(visit.visitId, visit.fired.id), {
+      submissionId,
+      expectedVisitRevision: await revisionOf(visit.visitId),
+    });
+    const before = await passSnapshot(visit, visit.fired.id);
+
+    const reused = await call("POST", path(visit.visitId, visit.tarta.id), {
+      submissionId,
+      expectedVisitRevision: await revisionOf(visit.visitId),
+    });
+    const stale = await call("POST", path(visit.visitId, visit.fired.id), {
+      submissionId: randomUUID(),
+      expectedVisitRevision: visit.revision,
+    });
+
+    expect(reused.status).toBe(409);
+    expect(reused.json).toEqual(refusal("submission.id_reused", { submissionId }));
+    expect(stale.status).toBe(409);
+    expect(stale.json).toEqual(
+      refusal("visit.out_of_date", {
+        visitId: visit.visitId,
+        revision: await revisionOf(visit.visitId),
+      }),
+    );
+    expect(await passSnapshot(visit, visit.fired.id)).toEqual(before);
+  });
+
+  it("refuses 404 group.not_found for an unknown group and for an id that is not one", async () => {
+    const visit = await withGroups();
+    const before = await snapshot(visit);
+
+    for (const groupId of [randomUUID(), "not-a-uuid"]) {
+      const refused = await call("POST", path(visit.visitId, groupId), {
+        submissionId: randomUUID(),
+        expectedVisitRevision: await revisionOf(visit.visitId),
+      });
+
+      expect(refused.status).toBe(404);
+      expect(refused.json).toEqual(refusal("group.not_found", { groupId }));
+    }
+    expect(await snapshot(visit)).toEqual(before);
+  });
+
+  it("refuses 409 visit.not_open for a visit that does not exist", async () => {
+    const visitId = randomUUID();
+
+    const refused = await call("POST", path(visitId, randomUUID()), {
+      submissionId: randomUUID(),
+      expectedVisitRevision: 0,
+    });
+
+    expect(refused.status).toBe(409);
+    expect(refused.json).toEqual(refusal("visit.not_open", { visitId }));
+  });
+
+  it.each([
+    ["body", null],
+    ["submissionId", { expectedVisitRevision: 0 }],
+    ["expectedVisitRevision", { submissionId: "s" }],
+  ] as const)("refuses 400 management.request_invalid naming %s for %j", async (field, body) => {
+    const visit = await withGroups();
+    const before = await snapshot(visit);
+
+    const refused = await call("POST", path(visit.visitId, visit.fired.id), body);
+
+    expect(refused.status).toBe(400);
+    expect(refused.json).toEqual(refusal("management.request_invalid", { field }));
+    expect(await snapshot(visit)).toEqual(before);
+  });
+
+  it("refuses 401 session.required without a session, writing nothing", async () => {
+    const visit = await withGroups();
+    const before = await passSnapshot(visit, visit.fired.id);
+
+    const refused = await send(venue.app, "", "POST", path(visit.visitId, visit.fired.id), {
+      submissionId: randomUUID(),
+      expectedVisitRevision: await revisionOf(visit.visitId),
+    });
+
+    expect(refused.status).toBe(401);
+    expect(refused.json).toMatchObject({ code: "session.required" });
+    expect(await passSnapshot(visit, visit.fired.id)).toEqual(before);
+  });
+});
+
+describe("the pass routes, one after the other", () => {
+  it("bumps the fired Caña ready, then sends it away, each answering the visit's revision", async () => {
+    const visit = await withGroups();
+    const before = await groupTickets(visit.fired.id);
+    expect(before.length).toBeGreaterThan(0);
+    expect(before.every((item) => item.state === "queued" && item.firedAt !== null)).toBe(true);
+
+    const readied = await call(
+      "POST",
+      `/api/visits/${visit.visitId}/groups/${visit.fired.id}/ready`,
+      {
+        submissionId: randomUUID(),
+        expectedVisitRevision: visit.revision + 1,
+      },
+    );
+
+    expect(readied.status).toBe(200);
+    expect(readied.json).toEqual({ revision: visit.revision + 2 });
+    expect((await groupTickets(visit.fired.id)).map((item) => [item.state, item.awayAt])).toEqual(
+      before.map(() => ["ready", null]),
+    );
+    const listed = (await call("GET", `/api/visits/${visit.visitId}/groups`)).json as unknown as {
+      groups: { id: string; ready?: boolean }[];
+    };
+    expect(listed.groups.map((group) => group.ready ?? false)).toEqual([true, false, false]);
+
+    const sent = await call("POST", `/api/visits/${visit.visitId}/groups/${visit.fired.id}/away`, {
+      submissionId: randomUUID(),
+      expectedVisitRevision: visit.revision + 2,
+    });
+
+    expect(sent.status).toBe(200);
+    expect(sent.json).toEqual({ revision: visit.revision + 3 });
+    expect((await groupTickets(visit.fired.id)).every((item) => item.awayAt !== null)).toBe(true);
   });
 });

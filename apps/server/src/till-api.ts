@@ -104,8 +104,10 @@ import {
 } from "./visits.js";
 import type { VisitCommand } from "./visits.js";
 import {
+  bumpGroupReady,
   fireGroup,
   listOrderGroups,
+  markGroupAway,
   moveLinesToGroup,
   reorderHeldGroups,
   submitGroups,
@@ -1499,6 +1501,25 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       return c.json(fired);
     }),
   );
+
+  for (const [step, command] of [
+    ["ready", bumpGroupReady],
+    ["away", markGroupAway],
+  ] as const) {
+    app.post(`/api/visits/:id/groups/:gid/${step}`, (c) =>
+      run(c, log, async () => {
+        const { personId } = await requireSession(deps, c);
+        const visitId = requireVisitParam(c.req.param("id"));
+        const groupId = c.req.param("gid");
+        if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
+        const args = groupCommand(personId, asObject(await readRawJsonBody<unknown>(c)));
+        const answer = await withTransaction(deps.db, (tx) =>
+          command(tx, deps.cfg, visitId, groupId, args),
+        );
+        return c.json(answer);
+      }),
+    );
+  }
 
   app.put("/api/visits/:id/groups/order", (c) =>
     run(c, log, async () => {
