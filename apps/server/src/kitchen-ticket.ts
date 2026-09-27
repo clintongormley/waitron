@@ -32,8 +32,11 @@ export interface KitchenTicketStation {
   items: KitchenTicketItem[];
 }
 
-/** `firedAt` prints as local HH:MM. A `reprint` opens with `*** REPRINT ***`. */
-export type KitchenTicket = { reprint?: boolean } & (
+/**
+ * `firedAt` prints as local HH:MM. A `reprint` opens with `*** REPRINT ***`; a `mark` opens with
+ * `*** HOLD ***` (held work printed in advance) or `*** FIRE ***` (that work released).
+ */
+export type KitchenTicket = { reprint?: boolean; mark?: "HOLD" | "FIRE" } & (
   | {
       scope: "station";
       stationName: string;
@@ -123,15 +126,23 @@ function sanitizeNote(note: string): string {
   return note.replace(/[\x00-\x1f\x7f]+/g, " ").trim();
 }
 
-/** Emit one item's `qty x name` line, then each modifier as `+ <name>` and the note as `* <note>`. */
-function emitItem(b: ReturnType<typeof esc>, item: KitchenTicketItem, layout: KitchenLayout): void {
+/**
+ * Emit one item's `qty x name` line, `sign` before the quantity, then each modifier as `+ <name>` and
+ * the note as `* <note>`.
+ */
+function emitItem(
+  b: ReturnType<typeof esc>,
+  item: KitchenTicketItem,
+  layout: KitchenLayout,
+  sign: "+" | "-" | "" = "",
+): void {
   // Each line wraps to the paper; a continuation starts under the text after its marker.
   const text = (s: string, indent: number): void => {
     for (const line of wrapText(prepareText(s, layout.charset), layout.columns, indent))
       b.line(line);
   };
-  const prefix = `${item.qty}${item.unit ? ` ${item.unit}` : ""} x `;
-  text(itemLine(item), prepareText(prefix, layout.charset).length);
+  const prefix = `${sign}${item.qty}${item.unit ? ` ${item.unit}` : ""} x `;
+  text(`${sign}${itemLine(item)}`, prepareText(prefix, layout.charset).length);
   for (const modifier of item.modifiers ?? []) text(`  + ${modifier}`, 4);
   if (item.note !== undefined && item.note !== "") {
     // A note of nothing but control bytes sanitises to "" and is skipped.
@@ -177,6 +188,7 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: KitchenLayout
   };
 
   if (ticket.reprint === true) b.line("*** REPRINT ***");
+  if (ticket.mark !== undefined) b.line(`*** ${ticket.mark} ***`);
   text(ticket.scope === "station" ? ticket.stationName : ORDER_HEADER);
   text(ticket.tableLabel);
   text(ticket.orderNumber);
@@ -196,9 +208,11 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: KitchenLayout
 }
 
 /**
- * A slip for one already-fired line, telling the cook what changed without reprinting the order:
- * `VOID` (cancelled after firing), `RECALLED` (pulled back to held) or `MOVED` (now belongs to
- * another table, `tableLabel`, where `movedFrom` names the table and order its ticket had).
+ * A slip for one line the kitchen has on paper, telling the cook what changed without reprinting the
+ * order. For fired work: `VOID` (cancelled after firing), `RECALLED` (pulled back to held) or `MOVED`
+ * (now belongs to another table, `tableLabel`, where `movedFrom` names the table and order its ticket
+ * had). For held work on a HOLD ticket: `HOLD CHANGED` (the item's quantity `added` to or `removed`
+ * from its group) or `HOLD CANCELLED` (taken out of the order); these name the item's group.
  */
 export type CorrectionSlip = {
   stationName: string;
@@ -209,6 +223,8 @@ export type CorrectionSlip = {
 } & (
   | { kind: "VOID" | "RECALLED" }
   | { kind: "MOVED"; movedFrom: { tableLabel: string | null; orderNumber: string } }
+  | { kind: "HOLD CHANGED"; direction: "added" | "removed" }
+  | { kind: "HOLD CANCELLED" }
 );
 
 /** Reuses {@link emitItem}, so the item prints exactly as on the original ticket. */
@@ -233,7 +249,9 @@ export function formatCorrectionSlip(slip: CorrectionSlip, layout: KitchenLayout
     text(slip.orderNumber);
   }
   b.line(hhmm(new Date(slip.at)));
-  emitItem(b, slip.item, layout);
+  if (slip.item.group !== undefined) b.line(`GROUP ${slip.item.group}`);
+  const sign = slip.kind !== "HOLD CHANGED" ? "" : slip.direction === "added" ? "+" : "-";
+  emitItem(b, slip.item, layout, sign);
 
   return b.feedAndCut().bytes();
 }

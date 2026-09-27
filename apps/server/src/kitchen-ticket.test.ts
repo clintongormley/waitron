@@ -671,3 +671,129 @@ describe("arrangeTicketItems (D14)", () => {
     expect(arrangeTicketItems(items, "separate")).toEqual(items);
   });
 });
+
+describe("advance HOLD tickets, FIRE slips and HOLD corrections", () => {
+  const at = new Date(2026, 7, 17, 14, 30);
+  const station = (items: KitchenTicketItem[]) =>
+    ({
+      scope: "station",
+      stationName: "Cocina",
+      tableLabel: "Mesa 4",
+      orderNumber: "A-17",
+      firedAt: at,
+      items,
+    }) as const;
+  const slip = {
+    stationName: "Cocina",
+    tableLabel: "Mesa 4",
+    orderNumber: "A-17",
+    at: at.toISOString(),
+  };
+
+  // Fails if a HOLD or FIRE ticket loses its mark, or the mark moves off the first line.
+  it.each(["HOLD", "FIRE"] as const)(
+    "opens a %s ticket with its mark and prints the rest as the fire ticket would",
+    (mark) => {
+      const items = [
+        { qty: 2, name: "Steak", group: 4 },
+        { qty: 1, name: "Fish", group: 4 },
+      ];
+      const plain = printedLines(formatKitchenTicket(station(items), KITCHEN_80));
+      const marked = printedLines(formatKitchenTicket({ ...station(items), mark }, KITCHEN_80));
+      expect(marked).toEqual([`*** ${mark} ***`, ...plain]);
+      expect(plain[4]).toBe("GROUP 4");
+    },
+  );
+
+  it("marks the pass copy too", () => {
+    const lines = printedLines(
+      formatKitchenTicket(
+        {
+          scope: "order",
+          mark: "HOLD",
+          tableLabel: "Mesa 4",
+          orderNumber: "A-17",
+          firedAt: at,
+          stations: [{ stationName: "Cocina", items: [{ qty: 1, name: "Fish", group: 4 }] }],
+        },
+        KITCHEN_80,
+      ),
+    );
+    expect(lines).toEqual([
+      "*** HOLD ***",
+      "PASE",
+      "Mesa 4",
+      "A-17",
+      "14:30",
+      "GROUP 4",
+      "Cocina",
+      "1 x Fish",
+      "",
+    ]);
+  });
+
+  // Fails if a HOLD correction drops its sign or its group, or reads like a plain ticket line.
+  it.each([
+    ["added", "+1 x Steak"],
+    ["removed", "-1 x Steak"],
+  ] as const)("prints a HOLD correction for work %s with its sign and group", (direction, row) => {
+    const lines = printedLines(
+      formatCorrectionSlip(
+        {
+          ...slip,
+          kind: "HOLD CHANGED",
+          direction,
+          item: { qty: 1, name: "Steak", group: 4, modifiers: ["Pepper"], note: "rare" },
+        },
+        KITCHEN_80,
+      ),
+    );
+    expect(lines).toEqual([
+      "*** HOLD CHANGED ***",
+      "Cocina",
+      "Mesa 4",
+      "A-17",
+      "14:30",
+      "GROUP 4",
+      row,
+      "  + Pepper",
+      "  * rare",
+      "",
+    ]);
+  });
+
+  it("prints a HOLD cancellation with its group and no sign", () => {
+    const lines = printedLines(
+      formatCorrectionSlip(
+        { ...slip, kind: "HOLD CANCELLED", item: { qty: 1, name: "Fish", group: 4 } },
+        KITCHEN_80,
+      ),
+    );
+    expect(lines).toEqual([
+      "*** HOLD CANCELLED ***",
+      "Cocina",
+      "Mesa 4",
+      "A-17",
+      "14:30",
+      "GROUP 4",
+      "1 x Fish",
+      "",
+    ]);
+  });
+
+  // A signed line wraps under the text after its marker, as an unsigned one does.
+  it("wraps a signed line under the dish name", () => {
+    const lines = printedLines(
+      formatCorrectionSlip(
+        {
+          ...slip,
+          kind: "HOLD CHANGED",
+          direction: "removed",
+          item: { qty: 1, name: "Steak with a very long kitchen name indeed", group: 4 },
+        },
+        KITCHEN_58,
+      ),
+    );
+    expect(lines.slice(6, 8)).toEqual(["-1 x Steak with a very long", "     kitchen name indeed"]);
+  });
+});
