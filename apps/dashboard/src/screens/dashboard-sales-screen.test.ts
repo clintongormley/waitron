@@ -1,7 +1,7 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import type { DailyCloseDto, DashboardApi, SalesPeriodDto } from "../api/client.js";
+import type { DailyCloseDto, DashboardApi, SalesOverview, SalesPeriodDto } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { today } from "../date-utils.js";
 import { SalesScreen } from "./dashboard-sales-screen.js";
@@ -62,8 +62,19 @@ const period: SalesPeriodDto = {
   ],
 };
 
+function overview(businessDay: string): SalesOverview {
+  return {
+    businessDay,
+    takings: { tenderTotal: "0.00", tipTotal: "0.00", grossTotal: "0.00" },
+    counts: { sales: 0, corrections: 0, voids: 0 },
+    openTables: { open: 0, total: 0 },
+    topSellers: [],
+  };
+}
+
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
+    getSalesOverview: vi.fn().mockResolvedValue(overview(today())),
     getDailyClose: vi.fn().mockResolvedValue(close),
     getSalesPeriod: vi.fn().mockResolvedValue(period),
     getCategorySales: vi.fn().mockResolvedValue({
@@ -91,9 +102,79 @@ function setDate(el: SalesScreen, test: string, value: string): void {
 afterEach(() => {
   cleanupWidgets();
   setLocale("es-ES"); // restore the shipped default (a test switches it)
+  vi.useRealTimers();
 });
 
 describe("dashboard-sales-screen", () => {
+  it("opens on Overview's previous business day before the venue's 04:00 cutover", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-27T01:00:00Z"));
+    const api = stubApi({
+      getSalesOverview: vi.fn().mockResolvedValue(overview("2026-09-26")),
+    });
+    const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
+    await flush(el);
+
+    expect(api.getSalesOverview).toHaveBeenCalledOnce();
+    expect(api.getDailyClose).toHaveBeenCalledWith("2026-09-26");
+    expect(api.getCategorySales).toHaveBeenCalledWith(
+      "2026-09-26",
+      "2026-09-26",
+      "at_time_of_sale",
+      false,
+    );
+    expect(el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=from-picker]")!.value).toBe(
+      "2026-09-26",
+    );
+    expect(el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=to-picker]")!.value).toBe(
+      "2026-09-26",
+    );
+  });
+
+  it("opens on today's business day after the venue's 04:00 cutover", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-27T12:00:00Z"));
+    const api = stubApi({
+      getSalesOverview: vi.fn().mockResolvedValue(overview("2026-09-27")),
+    });
+    const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
+    await flush(el);
+
+    expect(api.getDailyClose).toHaveBeenCalledWith("2026-09-27");
+    expect(el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=from-picker]")!.value).toBe(
+      "2026-09-27",
+    );
+    expect(el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=to-picker]")!.value).toBe(
+      "2026-09-27",
+    );
+  });
+
+  it("keeps an operator's range if Overview answers after the operator changes it", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-27T01:00:00Z"));
+    let answerOverview!: (value: SalesOverview) => void;
+    const pendingOverview = new Promise<SalesOverview>((resolve) => {
+      answerOverview = resolve;
+    });
+    const api = stubApi({ getSalesOverview: vi.fn().mockReturnValue(pendingOverview) });
+    const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
+    await flush(el);
+
+    setDate(el, "to-picker", "2030-06-15");
+    await flush(el);
+    answerOverview(overview("2026-09-26"));
+    await flush(el);
+
+    expect(api.getSalesOverview).toHaveBeenCalledOnce();
+    expect(el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=from-picker]")!.value).toBe(
+      "2026-09-27",
+    );
+    expect(el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=to-picker]")!.value).toBe(
+      "2030-06-15",
+    );
+    expect(api.getSalesPeriod).toHaveBeenLastCalledWith("2026-09-27", "2030-06-15");
+  });
+
   it("defaults to a single-day close for today, calling getDailyClose(today)", async () => {
     const api = stubApi();
     const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
