@@ -407,7 +407,7 @@ only an F2, as an R5), but no route calls it: its only callers under `apps/` are
 (`vatBreakdown` in `apps/till/src/state/working-order.ts`) that no screen shows; it uses the rate
 the menu froze for a dish and a variant (`vatRate`, filled in `apps/till/src/api/client.ts`),
 prices a retrieved held line by its class, and leaves out extras picks. Asesor Q26 is still open.
-**Menus Task 8 (home layouts), (2026-09-27): the Home page tab and a layout per device
+**Menus Task 8 (home layouts), landed as #722 (2026-09-27): the Home page tab and a layout per device
 profile.** A menu's Home page tab (`/manage/menus/menu/<id>/view/home`) lists its home layouts with the
 default marked, and adds, duplicates, renames and deletes them and makes one the default; its tiles are
 edited with the sections editor, offer only products and sections the menu's structure reaches, show
@@ -427,7 +427,9 @@ live menu (D14); a profile's layout choice saves as soon as it is picked, outsid
 Save and Cancel (the section says so); which layout is being edited is not in the page address; the
 tile picker offers active products only, as the Structure tab's does, so an inactive product's tile
 shows no marker and cannot be added again until the product is switched back on; and no accessibility
-scan covers the delete window's error state.
+scan covers the delete window's error state. Open for the owner (#722's description): the picker never
+offers the current default layout by name, so a profile cannot be pinned to today's default so that it
+stays there after the default changes; the server would accept such a choice.
 **M7b2 landed (#702, 2026-09-26): a manager can clear a card payment a crash left running.** The
 Payments screen lists open orders locked by a card payment nothing is finishing any more, and "Check
 with the card provider" files the sale once if the card was charged, marks the payment failed and
