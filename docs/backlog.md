@@ -2051,6 +2051,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   every Bluetooth job because no real per-printer radio path has been established on the box; the
   pairing plan must not make a paired device claim work or say that it can print.
 - **The virtual PDF printer**, and a `print_jobs` retention sweep — nothing deletes a job today.
+  Deleting a print job also deletes its `kitchen_print_jobs` link rows (the key is
+  `ON DELETE CASCADE`), which would silently clear a table's printing problem and change which link
+  counts as later, so a sweep must leave a job with an uncleared printing problem, or its links,
+  alone.
 - **Printing A4 invoices on an office printer** (owner, 2026-09-14): a separate design, not started.
   It reverses the 2026-09-09 provisioning design's "raw ESC/POS only" decision and needs an A4
   invoice layout, a way to send a PDF to the printer over IPP (the standard office printing protocol,
@@ -2177,8 +2181,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     shape.
   - **Task 5 landed as #TBD** (lane B item B5, 2026-09-27, main `TBD`; written on the branch
     `feat/service-groups-kitchen` before its pull request, so landing fills in both): the kitchen,
-    the pass and the table screen work by a seated party's groups, and a kitchen ticket that did
-    not print shows on the table. **Kitchen screen:** a party's card is split into "Group n"
+    the pass and the table screen work by a seated party's groups, and a kitchen ticket that has
+    not printed shows on the table. **Kitchen screen:** a party's card is split into "Group n"
     sections; a held group reads "Held, not released" and, when the venue's who-fires setting
     (`fire_control`) is `kitchen`, has a Fire button (never on an enrolled kitchen display).
     **Pass:** each group has Fire (under `expo` only), "Group ready" or Away, through the new
@@ -2240,6 +2244,18 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - Setting up a venue from an imported configuration deletes every kitchen station, and the new
       table's station key has no delete rule; whether that venue can already hold link rows at that
       point was not tested (read, not run).
+    - The pass's Ready and Away record no `order_group_events` row, so who pressed them is only in
+      the command fingerprint: a new kind changes that append-only table's check, which is a core
+      migration. The course buttons recorded none either.
+    - Questions for the owner:
+      - A party's dishes in no group (moved or merged in from another party's bill, or from a bill
+        with no party) show at the pass in a section of their own with no Ready or Away button, as
+        dishes with no course did before.
+      - The kitchen and pass screens offer Fire on every held group, as the Tab drawer and the
+        course-era screens did, where the plan's text said "the first held group".
+      - The table screen reads its printing problems in a second request beside the groups read on
+        every table load. Folding them into the groups response would change the exact-body
+        assertion at `apps/server/src/till-api.groups.test.ts:717`, so it was left.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card
