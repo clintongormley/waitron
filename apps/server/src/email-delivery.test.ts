@@ -1,9 +1,27 @@
-import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import { seedTenant } from "@waitron/db/testing/seed.js";
+import { isAppError } from "@waitron/shared";
 import { resolveEmailDelivery } from "./email-delivery.js";
+
+// `putCredential` refuses a payload missing a field, so a row sealed under an older field list
+// cannot be written through the vault; the read is replaced instead, for the cases that set this.
+let decryptedOverride: Record<string, string> | null = null;
+vi.mock("@waitron/credentials", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@waitron/credentials")>();
+  return {
+    ...actual,
+    tryGetCredential: (...args: Parameters<typeof actual.tryGetCredential>) =>
+      decryptedOverride === null
+        ? actual.tryGetCredential(...args)
+        : Promise.resolve(decryptedOverride),
+  };
+});
+afterEach(() => {
+  decryptedOverride = null;
+});
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
 const ring = loadKeyRing({
@@ -49,4 +67,21 @@ describe("resolveEmailDelivery", () => {
       mode: "unconfigured",
     });
   });
+
+  it.each(["url", "from"])(
+    "refuses an SMTP credential sealed without %s, naming the field",
+    async (field) => {
+      await seedTenant(suite.db);
+      const payload: Record<string, string> = {
+        url: "smtps://smtp.example.test:465",
+        from: "Venue <venue@example.test>",
+      };
+      delete payload[field];
+      decryptedOverride = payload;
+
+      const error = await captureError(() => resolveEmailDelivery(suite.db, ring, false));
+      expect(isAppError(error) && error.code).toBe("server.credential_unusable");
+      expect(isAppError(error) && error.params).toEqual({ purpose: "email.smtp", field });
+    },
+  );
 });

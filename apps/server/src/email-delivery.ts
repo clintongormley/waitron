@@ -1,5 +1,6 @@
 import { withTransaction, type Database } from "@waitron/db";
 import { tryGetCredential, type KeyRing } from "@waitron/credentials";
+import { credentialField } from "./credentials.js";
 
 export type EmailDelivery =
   | { mode: "smtp" | "local_capture"; smtp: { url: string; from: string } }
@@ -20,7 +21,13 @@ export async function resolveEmailDelivery(
     tryGetCredential(tx, ring, { purpose: "email.smtp" }),
   );
   if (configured !== null) {
-    return { mode: "smtp", smtp: { url: configured.url!, from: configured.from! } };
+    return {
+      mode: "smtp",
+      smtp: {
+        url: credentialField(configured, "email.smtp", "url"),
+        from: credentialField(configured, "email.smtp", "from"),
+      },
+    };
   }
   if (practiceMode) return { mode: "local_capture", smtp: LOCAL_CAPTURE_SMTP };
   return { mode: "unconfigured" };

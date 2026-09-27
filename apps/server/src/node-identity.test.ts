@@ -1,12 +1,35 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, type KeyRing } from "@waitron/credentials";
-import { CORE_MIGRATIONS, locations, readMembershipTrustSet, type Database } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  captureError,
+  locations,
+  readMembershipTrustSet,
+  type Database,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { signBytes, verifyBytes } from "@waitron/membership";
 import { locationId as brandLocationId } from "@waitron/shared";
-import type { NodeId } from "@waitron/shared";
+import { isAppError, type NodeId } from "@waitron/shared";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
+
+// `putCredential` refuses a payload missing a field, so a row sealed under an older field list
+// cannot be written through the vault; the read is replaced instead, for the cases that set this.
+let decryptedOverride: Record<string, string> | null = null;
+vi.mock("@waitron/credentials", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@waitron/credentials")>();
+  return {
+    ...actual,
+    getCredential: (...args: Parameters<typeof actual.getCredential>) =>
+      decryptedOverride === null
+        ? actual.getCredential(...args)
+        : Promise.resolve(decryptedOverride),
+  };
+});
+afterEach(() => {
+  decryptedOverride = null;
+});
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
@@ -53,5 +76,16 @@ describe("node identity establishment", () => {
     // are one keypair.
     const sig = signBytes("membership-slice-4-probe", priv);
     expect(verifyBytes("membership-slice-4-probe", sig, pub)).toBe(true);
+  });
+
+  it("refuses a node key sealed without privateKey, naming the field", async () => {
+    decryptedOverride = {};
+
+    const error = await captureError(() => readNodeIdentityKey(db, RING));
+    expect(isAppError(error) && error.code).toBe("server.credential_unusable");
+    expect(isAppError(error) && error.params).toEqual({
+      purpose: "membership.node_key",
+      field: "privateKey",
+    });
   });
 });
