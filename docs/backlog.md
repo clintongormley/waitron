@@ -4491,6 +4491,12 @@ approved.
 - **Dependency loop removed — LANDED #348.** `scripts/workspace-cycles.test.ts` fails if a loop
   returns. Its one review point is DONE (#790, 2026-09-28): a failure now prints one path round each loop,
   with the manifest field or fields behind every link, above the groups.
+  - **OPEN (found by #790's review, 2026-09-28):** a package that lists ITSELF as a dependency is not
+    reported. `dependencyLoops` keeps only groups of two or more (`if (group.length > 1)`, from
+    72afc6edc4, 2026-09-13), so a one-package loop is dropped. No manifest lists itself today (scanned
+    every `package.json` under the root, `apps/`, `packages/` and `bench/` on 2026-09-28). Whether
+    `pnpm install` warns about a self-dependency was not checked. The fix is to also report a
+    one-package group whose package links to itself; it was left out of #790 as outside that item.
 - **A throwaway script found six comments that described code that was no longer there, and it is
   not a guard yet** (written 2026-09-14 during the tenant-column removal). It flags a comment whose
   subject has gone from the lines beneath it; on that branch it found six real ones that a green
