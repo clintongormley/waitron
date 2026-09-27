@@ -892,8 +892,7 @@ export interface PrintProblem {
  * that printer to that station ({@link readReprintTargets}), as when its dishes there are voided.
  * "After" is the link row's `rowid`, not `created_at`, which two jobs can share to the millisecond:
  * SQLite gives a new row one more than the table's largest `rowid`, and a link row goes only when
- * its job or its bill is deleted, or when {@link moveKitchenPrintLinks} writes it again. Oldest
- * first.
+ * its job or its bill is deleted, or when {@link writeLinksAfter} writes it again. Oldest first.
  */
 async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promise<PrintProblem[]> {
   const troubled = printJobInTrouble(now);
@@ -960,17 +959,10 @@ async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promis
 }
 
 /**
- * Carry `fromOrderId`'s kitchen tickets onto `intoOrderId` when its dishes move there whole. A
- * ticket a printed reprint already covered stays behind with its reprint, since nothing is left
- * missing. The rest are written again, oldest first, so they come after every reprint `intoOrderId`
- * made before this move, which never carried these dishes; and none of them counts as a reprint, as
- * none carried `intoOrderId`'s own dishes.
+ * `orderId`'s link rows that no printed reprint for the same station, on the same printer, queued
+ * after them, has covered: the ones still able to name a missing dish. Oldest first.
  */
-export async function moveKitchenPrintLinks(
-  tx: Transaction,
-  fromOrderId: string,
-  intoOrderId: string,
-): Promise<void> {
+async function readUncoveredLinks(tx: Transaction, orderId: string) {
   const rows = await tx
     .select({
       id: kitchenPrintJobs.id,
@@ -984,7 +976,7 @@ export async function moveKitchenPrintLinks(
     })
     .from(kitchenPrintJobs)
     .innerJoin(printJobs, eq(printJobs.id, kitchenPrintJobs.printJobId))
-    .where(eq(kitchenPrintJobs.workingOrderId, fromOrderId))
+    .where(eq(kitchenPrintJobs.workingOrderId, orderId))
     .orderBy(sql`${kitchenPrintJobs}.rowid`);
 
   const printerKey = (row: { stationId: string; printerId: string }) =>
@@ -993,25 +985,91 @@ export async function moveKitchenPrintLinks(
   for (const row of rows) {
     if (row.reprint && row.status === "done") lastReprinted.set(printerKey(row), row.queued);
   }
-  const moving = rows.filter((row) => row.queued > (lastReprinted.get(printerKey(row)) ?? 0));
-  if (moving.length === 0) return;
+  return rows.filter((row) => row.queued > (lastReprinted.get(printerKey(row)) ?? 0));
+}
 
+/**
+ * Write `rows` onto `orderId` in order, after every link row it already has, replacing its own row
+ * for the same job and station, so none of its earlier reprints, which never carried the dishes
+ * that brought them, covers them. None counts as a reprint, as none carried `orderId`'s own dishes.
+ */
+async function writeLinksAfter(
+  tx: Transaction,
+  orderId: string,
+  rows: readonly { id?: string; printJobId: string; stationId: string; createdAt: string }[],
+): Promise<void> {
+  if (rows.length === 0) return;
+  await tx
+    .delete(kitchenPrintJobs)
+    .where(
+      and(
+        eq(kitchenPrintJobs.workingOrderId, orderId),
+        or(
+          ...rows.map((row) =>
+            and(
+              eq(kitchenPrintJobs.printJobId, row.printJobId),
+              eq(kitchenPrintJobs.stationId, row.stationId),
+            ),
+          ),
+        ),
+      ),
+    );
+  await tx.insert(kitchenPrintJobs).values(
+    rows.map((row) => ({
+      ...(row.id === undefined ? {} : { id: row.id }),
+      printJobId: row.printJobId,
+      workingOrderId: orderId,
+      stationId: row.stationId,
+      reprint: false,
+      createdAt: row.createdAt,
+    })),
+  );
+}
+
+/**
+ * Carry `fromOrderId`'s kitchen tickets onto `intoOrderId` when its dishes move there whole. A
+ * ticket a printed reprint already covered stays behind with its reprint, since nothing is left
+ * missing. The rest are written again ({@link writeLinksAfter}).
+ */
+export async function moveKitchenPrintLinks(
+  tx: Transaction,
+  fromOrderId: string,
+  intoOrderId: string,
+): Promise<void> {
+  const moving = await readUncoveredLinks(tx, fromOrderId);
+  if (moving.length === 0) return;
   await tx.delete(kitchenPrintJobs).where(
     inArray(
       kitchenPrintJobs.id,
       moving.map((row) => row.id),
     ),
   );
-  await tx.insert(kitchenPrintJobs).values(
-    moving.map((row) => ({
-      id: row.id,
-      printJobId: row.printJobId,
-      workingOrderId: intoOrderId,
-      stationId: row.stationId,
-      reprint: false,
-      createdAt: row.createdAt,
-    })),
-  );
+  await writeLinksAfter(tx, intoOrderId, moving);
+}
+
+/**
+ * Give `toOrderId` a link to each of `fromOrderId`'s unprinted kitchen tickets that no printed
+ * reprint has covered, at the stations of the ticket items of `lineIds`, which have just moved there
+ * off `fromOrderId`, some or all of them. Both bills then show the problem, each until its own
+ * Reprint prints, or until a Reprint of it would print nothing there ({@link readPrintProblems}).
+ * The new links are written as {@link writeLinksAfter} writes them.
+ */
+export async function copyKitchenPrintLinks(
+  tx: Transaction,
+  fromOrderId: string,
+  toOrderId: string,
+  lineIds: readonly string[],
+): Promise<void> {
+  if (lineIds.length === 0) return;
+  const moved = await tx
+    .selectDistinct({ stationId: ticketItems.stationId })
+    .from(ticketItems)
+    .where(inArray(ticketItems.workingOrderLineId, [...lineIds]));
+  const stationIds = new Set(moved.map((row) => row.stationId));
+  const copies = (await readUncoveredLinks(tx, fromOrderId))
+    .filter((row) => row.status !== "done" && stationIds.has(row.stationId))
+    .map(({ printJobId, stationId, createdAt }) => ({ printJobId, stationId, createdAt }));
+  await writeLinksAfter(tx, toOrderId, copies);
 }
 
 /**

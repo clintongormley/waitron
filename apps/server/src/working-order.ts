@@ -140,6 +140,7 @@ import {
   type HeldChange,
 } from "./order-groups.js";
 import {
+  copyKitchenPrintLinks,
   enqueueCorrectionSlips,
   enqueueKitchenTickets,
   enqueueMovedSlips,
@@ -2229,16 +2230,20 @@ export async function moveTabLines(
   lineNos?: number[],
 ): Promise<void> {
   const before = await readSentWork(tx, cfg, fromTabId);
-  await moveOrderLines(tx, cfg, fromTabId, toTabId, lineNos, { modesChecked: false });
+  const moved = await moveOrderLines(tx, cfg, fromTabId, toTabId, lineNos, {
+    modesChecked: false,
+  });
+  await copyKitchenPrintLinks(tx, fromTabId, toTabId, moved);
   await bumpRevision(tx, [fromTabId, toTabId]);
   await assertBillInvariant(tx, [fromTabId]);
   await enqueueMovedSlips(tx, cfg, before, toTabId);
 }
 
 /**
- * {@link moveTabLines}' body. `modesChecked: true` skips {@link assertServiceModesMatch}, and only a
- * caller whose two orders are already known to share a service mode — by that check, or by
- * construction as `splitOffCheck`'s `copyOrderContext` does — may pass it.
+ * {@link moveTabLines}' body; returns the ids of the lines it moved. `modesChecked: true` skips
+ * {@link assertServiceModesMatch}, and only a caller whose two orders are already known to share a
+ * service mode — by that check, or by construction as `splitOffCheck`'s `copyOrderContext` does —
+ * may pass it.
  */
 async function moveOrderLines(
   tx: Transaction,
@@ -2247,7 +2252,7 @@ async function moveOrderLines(
   toTabId: string,
   lineNos: number[] | undefined,
   options: { modesChecked: boolean },
-): Promise<void> {
+): Promise<string[]> {
   // A self-transfer would allocate line numbers that collide with the rows being moved.
   if (fromTabId === toTabId) {
     throw new AppError("tab.merge_self", { tabId: fromTabId });
@@ -2319,6 +2324,7 @@ async function moveOrderLines(
         ),
       );
   }
+  return source.map((line) => line.id);
 }
 
 /**
@@ -2992,9 +2998,10 @@ async function carveOffLines(
     })),
   );
 
-  if (wholeLineNos.length > 0) {
-    await moveOrderLines(tx, cfg, fromTabId, toTabId, wholeLineNos, { modesChecked: true });
-  }
+  const movedLineIds =
+    wholeLineNos.length > 0
+      ? await moveOrderLines(tx, cfg, fromTabId, toTabId, wholeLineNos, { modesChecked: true })
+      : [];
 
   const splitFrom = new Map<string, string>();
   const splitLines = new Map<string, string>();
@@ -3063,8 +3070,12 @@ async function carveOffLines(
           quantity,
         );
         splitFrom.set(splitTicketId, line.ticketItemId);
+        movedLineIds.push(line.id);
       }
     }
+  }
+  if (fromTabId !== toTabId) {
+    await copyKitchenPrintLinks(tx, fromTabId, toTabId, movedLineIds);
   }
   if (leavesVisit) {
     await clearGroups(

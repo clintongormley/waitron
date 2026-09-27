@@ -9,6 +9,7 @@ import {
   visits,
   withTransaction,
   workingOrderLines,
+  workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -40,10 +41,14 @@ import { listPrintProblems, ordersWithPrintProblem, reprintOrderTickets } from "
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
+  joinTable,
   listStationQueue,
   mergeTabs,
+  moveTabLines,
   recallLines,
   splitOffCheck,
+  transferLines,
+  unjoinTable,
   voidTabLine,
 } from "./working-order.js";
 import { readVisitBills, seatTable } from "./visits.js";
@@ -1170,12 +1175,6 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
 });
 
 describe("a printing problem a Reprint would print nothing for", () => {
-  /** Whether the station's own read, which its cards use, finds a problem on `orderId`. */
-  const stationSees = (stationId: string, orderId: string) =>
-    inTx(async (tx) =>
-      (await ordersWithPrintProblem(tx, stationId, [orderId], new Date())).has(orderId),
-    );
-
   it("clears a failed fire ticket once every dish it carried for that station is voided", async () => {
     const v = await setupVenue();
     const mesa4 = await firedTable(v, "Mesa 4", ["burger", "beer"]);
@@ -1338,6 +1337,234 @@ describe("a printing problem a Reprint would print nothing for", () => {
     expect((await stationCard(v.cocina, mesa4.tabId)).printProblem).toBe(true);
   });
 });
+
+describe("a printing problem whose dishes move to another bill", () => {
+  async function lineNoOf(orderId: string, dish: Dish): Promise<number> {
+    const [row] = await db
+      .select({ lineNo: workingOrderLines.lineNo })
+      .from(workingOrderLines)
+      .where(
+        and(
+          eq(workingOrderLines.workingOrderId, orderId),
+          eq(workingOrderLines.name, DISHES[dish].staff),
+        ),
+      );
+    return row!.lineNo;
+  }
+
+  async function transferDish(v: Venue, from: Seated, to: Seated, dish: Dish, quantity?: string) {
+    const lineNo = await lineNoOf(from.tabId, dish);
+    const args = {
+      expectedVisitRevision: (await command(to.visitId)).expectedVisitRevision,
+      expectedSourceVisitRevision: (await command(from.visitId)).expectedVisitRevision,
+      operatorId: ALEX,
+    };
+    await inTx((tx) =>
+      transferLines(tx, v.cfg, from.tabId, to.tabId, [{ lineNo, quantity }], args),
+    );
+  }
+
+  /** Reprint `orderId` and mark every job the reprint queued as printed. */
+  async function reprintPrinted(v: Venue, orderId: string): Promise<void> {
+    const before = (await links()).length;
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, orderId));
+    const reprints = (await links()).slice(before);
+    expect(reprints.length).toBeGreaterThan(0);
+    for (const row of reprints) await setJob(row.printJobId, { status: "done" });
+  }
+
+  it("shows a failed ticket on the check its dish was split off to, and clears it by the check's Reprint", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4", ["burger", "beer"]);
+    const failed = await jobFor(mesa4.tabId, v.cocinaPrinter);
+    await setJob(failed, exhausted);
+
+    const lineNo = await lineNoOf(mesa4.tabId, "burger");
+    const { checkId } = await inTx(async (tx) =>
+      splitOffCheck(tx, v.cfg, mesa4.tabId, [{ lineNo }], {
+        expectedVisitRevision: (await command(mesa4.visitId)).expectedVisitRevision,
+        operatorId: ALEX,
+      }),
+    );
+
+    expect(await problemsOf(mesa4.visitId)).toEqual([
+      {
+        workingOrderId: checkId,
+        stationId: v.cocina,
+        stationName: "Cocina",
+        since: await createdAtOf(failed),
+      },
+    ]);
+    expect(await stationSees(v.cocina, checkId)).toBe(true);
+    expect(await stationSees(v.cocina, mesa4.tabId)).toBe(false);
+
+    await reprintPrinted(v, checkId);
+    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await stationSees(v.cocina, checkId)).toBe(false);
+  });
+
+  it("shows a failed ticket on the table its dish was transferred to, and clears it by that bill's Reprint", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4", ["burger", "beer"]);
+    const mesa5 = await firedTable(v, "Mesa 5", ["fish"]);
+    const failed = await jobFor(mesa4.tabId, v.cocinaPrinter);
+    await setJob(failed, exhausted);
+    // Mesa 5's own ticket printed, and so did a Reprint of it before the move, which never
+    // carried the burger.
+    await setJob(await jobFor(mesa5.tabId, v.cocinaPrinter), { status: "done" });
+    await reprintPrinted(v, mesa5.tabId);
+
+    await transferDish(v, mesa4, mesa5, "burger");
+
+    expect(await problemsOf(mesa5.visitId)).toEqual([
+      {
+        workingOrderId: mesa5.tabId,
+        stationId: v.cocina,
+        stationName: "Cocina",
+        since: await createdAtOf(failed),
+      },
+    ]);
+    expect(await stationSees(v.cocina, mesa5.tabId)).toBe(true);
+    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+
+    await reprintPrinted(v, mesa5.tabId);
+    expect(await problemsOf(mesa5.visitId)).toEqual([]);
+    expect(await stationSees(v.cocina, mesa5.tabId)).toBe(false);
+  });
+
+  it("shows a failed ticket on the bill a whole-line move takes its dish to", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4", ["burger", "beer"]);
+    const mesa5 = await seated(v, "Mesa 5");
+    const failed = await jobFor(mesa4.tabId, v.cocinaPrinter);
+    await setJob(failed, exhausted);
+    const lineNo = await lineNoOf(mesa4.tabId, "burger");
+
+    await inTx((tx) => moveTabLines(tx, v.cfg, mesa4.tabId, mesa5.tabId, [lineNo]));
+
+    expect(await problemsOf(mesa5.visitId)).toEqual([
+      {
+        workingOrderId: mesa5.tabId,
+        stationId: v.cocina,
+        stationName: "Cocina",
+        since: await createdAtOf(failed),
+      },
+    ]);
+    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+  });
+
+  it("shows a failed ticket on the bill an unjoined table takes its dish to", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4", ["burger", "beer"]);
+    const failed = await jobFor(mesa4.tabId, v.cocinaPrinter);
+    await setJob(failed, exhausted);
+    const tableId = await inTx(async (tx) => {
+      const { id } = await createTable(tx, v.cfg, { label: "Mesa 6", zoneId: v.zoneId });
+      await joinTable(tx, v.cfg, mesa4.tabId, id, {
+        expectedVisitRevision: (await command(mesa4.visitId)).expectedVisitRevision,
+        operatorId: ALEX,
+      });
+      return id;
+    });
+    const lineNo = await lineNoOf(mesa4.tabId, "burger");
+
+    const { tabId } = await inTx(async (tx) =>
+      unjoinTable(tx, v.cfg, mesa4.tabId, tableId, [{ lineNo }], {
+        expectedVisitRevision: (await command(mesa4.visitId)).expectedVisitRevision,
+        operatorId: ALEX,
+      }),
+    );
+    const [bill] = await db
+      .select({ visitId: workingOrders.visitId })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, tabId!));
+    const mesa6 = { tabId: tabId!, visitId: bill!.visitId! };
+
+    expect(await problemsOf(mesa6.visitId)).toEqual([
+      {
+        workingOrderId: mesa6.tabId,
+        stationId: v.cocina,
+        stationName: "Cocina",
+        since: await createdAtOf(failed),
+      },
+    ]);
+    expect(await stationSees(v.cocina, mesa6.tabId)).toBe(true);
+    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+
+    await reprintPrinted(v, mesa6.tabId);
+    expect(await problemsOf(mesa6.visitId)).toEqual([]);
+  });
+
+  it("keeps the failure on both bills when part of the dish moves, and each bill's Reprint clears only its own", async () => {
+    const v = await setupVenue();
+    const mesa4 = await seated(v, "Mesa 4");
+    await submit(v, mesa4.visitId, [{ release: "fire", lines: [line(v, "burger", "2")] }]);
+    const mesa5 = await seated(v, "Mesa 5");
+    const failed = await jobFor(mesa4.tabId, v.cocinaPrinter);
+    await setJob(failed, exhausted);
+
+    await transferDish(v, mesa4, mesa5, "burger", "1");
+
+    const problem = {
+      stationId: v.cocina,
+      stationName: "Cocina",
+      since: await createdAtOf(failed),
+    };
+    expect(await problemsOf(mesa4.visitId)).toEqual([{ workingOrderId: mesa4.tabId, ...problem }]);
+    expect(await problemsOf(mesa5.visitId)).toEqual([{ workingOrderId: mesa5.tabId, ...problem }]);
+
+    await reprintPrinted(v, mesa5.tabId);
+    expect(await problemsOf(mesa5.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.visitId)).toEqual([{ workingOrderId: mesa4.tabId, ...problem }]);
+    expect(await stationSees(v.cocina, mesa4.tabId)).toBe(true);
+  });
+
+  it("does not show the source bill's failure at a station none of the moved dishes go to", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4", ["burger", "beer"]);
+    const mesa5 = await firedTable(v, "Mesa 5", ["beer"]);
+    await setJob(await jobFor(mesa4.tabId, v.barraPrinter), exhausted);
+    await setJob(await jobFor(mesa5.tabId, v.barraPrinter), { status: "done" });
+
+    await transferDish(v, mesa4, mesa5, "burger");
+
+    expect(await problemsOf(mesa5.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.visitId)).toMatchObject([
+      { workingOrderId: mesa4.tabId, stationId: v.barra },
+    ]);
+  });
+
+  it("merges a bill onto one already carrying its failure, and moves a dish back onto the bill it left", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4", ["burger", "fish"]);
+    const mesa5 = await firedTable(v, "Mesa 5", ["beer"]);
+    const failed = await jobFor(mesa4.tabId, v.cocinaPrinter);
+    await setJob(failed, exhausted);
+    const problem = {
+      stationId: v.cocina,
+      stationName: "Cocina",
+      since: await createdAtOf(failed),
+    };
+
+    await transferDish(v, mesa4, mesa5, "burger");
+    await transferDish(v, mesa5, mesa4, "burger");
+    expect(await problemsOf(mesa4.visitId)).toEqual([{ workingOrderId: mesa4.tabId, ...problem }]);
+
+    await transferDish(v, mesa4, mesa5, "burger");
+    await mergeBills(v, mesa4, mesa5);
+    expect(await problemsOf(mesa5.visitId)).toEqual([{ workingOrderId: mesa5.tabId, ...problem }]);
+
+    await reprintPrinted(v, mesa5.tabId);
+    expect(await problemsOf(mesa5.visitId)).toEqual([]);
+  });
+});
+
+/** Whether the station's own read, which its cards use, finds a problem on `orderId`. */
+function stationSees(stationId: string, orderId: string): Promise<boolean> {
+  return inTx(async (tx) =>
+    (await ordersWithPrintProblem(tx, stationId, [orderId], new Date())).has(orderId),
+  );
+}
 
 /** A venue that prints held groups in advance. */
 async function holdingVenue(): Promise<Venue> {
