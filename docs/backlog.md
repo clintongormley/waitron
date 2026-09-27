@@ -3872,7 +3872,7 @@ approved.
     `record-sale.test.ts:282` ("groups two lines at the same VAT rate into one breakdown entry")
     asserts only the record's total, which is the input passed through, so it passes with no
     grouping; the fake backend stores the breakdown, so it could assert the merged entry —
-    **Done (2026-09-27, lane A's A98):** it now reads the sale's stored breakdown and expects the one
+    **Done (2026-09-27, lane A's A98, #784):** it now reads the sale's stored breakdown and expects the one
     entry (21%, base 8.00, tax 1.68), and a new case, two lines of 1.07 at 21%, expects tax 0.45 from
     the summed base where taxing each line gives 0.44; with `buildVatBreakdown` emitting one entry
     per line both go red, and with it summing each line's rounded tax only the new case does. Still
