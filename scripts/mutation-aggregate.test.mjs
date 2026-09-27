@@ -146,6 +146,24 @@ describe("aggregate", () => {
     expect(result.valid).toBe(0);
     expect(result.score).toBe(0);
   });
+
+  it("counts, per file, the statuses that kept its mutants out of the score", () => {
+    const result = aggregate([
+      report(
+        "src/a.ts",
+        { status: "Ignored" },
+        { status: "CompileError" },
+        { status: "Ignored" },
+        { status: "RuntimeError" },
+        { status: "Killed" },
+      ),
+    ]);
+
+    expect(result.files[0]).toMatchObject({
+      valid: 1,
+      uncounted: { CompileError: 1, Ignored: 2, RuntimeError: 1 },
+    });
+  });
 });
 
 describe("findReports", () => {
@@ -236,6 +254,63 @@ describe("the command", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("src/bad.ts");
     expect(result.stdout).not.toContain("src/good.ts");
+  });
+
+  it("says a file with no counted mutants was not measured, and which statuses it ended in", () => {
+    const root = shardDirectory([
+      report(
+        "src/unmeasured.ts",
+        { status: "Ignored" },
+        { status: "Ignored" },
+        { status: "Ignored" },
+        { status: "CompileError" },
+        { status: "RuntimeError" },
+      ),
+      report("src/good.ts", { status: "Killed" }),
+    ]);
+
+    const result = run(root, "--shards", "2", "--break", "90");
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(
+      "not measured — 1 CompileError, 3 Ignored, 1 RuntimeError  src/unmeasured.ts",
+    );
+    expect(result.stdout).not.toMatch(/0\.00%.*src\/unmeasured\.ts/);
+  });
+
+  it("shows an unmeasured file even when the bar is zero, since it has no score to clear it with", () => {
+    const root = shardDirectory([
+      report("src/unmeasured.ts", { status: "Ignored" }),
+      report("src/good.ts", { status: "Killed" }),
+    ]);
+
+    const result = run(root, "--shards", "2", "--break", "0");
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("not measured — 1 Ignored  src/unmeasured.ts");
+  });
+
+  it("says a file the report lists with no mutants at all was not measured", () => {
+    const root = shardDirectory([
+      report("src/empty.ts"),
+      report("src/good.ts", { status: "Killed" }),
+    ]);
+
+    const result = run(root, "--shards", "2", "--break", "90");
+
+    expect(result.stdout).toContain("not measured — no mutants  src/empty.ts");
+  });
+
+  it("still prints a file whose every mutant survived as 0.00%", () => {
+    const root = shardDirectory([
+      report("src/dead.ts", { status: "Survived" }, { status: "Survived" }),
+      report("src/good.ts", { status: "Killed" }, { status: "Killed" }, { status: "Killed" }),
+    ]);
+
+    const result = run(root, "--shards", "2", "--break", "50");
+
+    expect(result.stdout).toMatch(/ 0\.00%\s+0\/2\s+src\/dead\.ts/);
+    expect(result.stdout).not.toContain("not measured");
   });
 });
 

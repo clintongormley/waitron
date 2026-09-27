@@ -15,7 +15,7 @@ const UNDETECTED = new Set(["Survived", "NoCoverage"]);
 
 /**
  * @param {{files: Record<string, {mutants: {id: string, mutatorName: string, status: string, replacement?: string, location: {start: {line: number, column: number}, end: {line: number, column: number}}}[]}>}[]} reports
- * @returns {{score: number, killed: number, valid: number, files: {path: string, score: number, killed: number, valid: number}[]}}
+ * @returns {{score: number, killed: number, valid: number, files: {path: string, score: number, killed: number, valid: number, uncounted: Record<string, number>}[]}}
  */
 export function aggregate(reports) {
   /** @type {Map<string, Map<string, string>>} one status per file per distinct mutant. */
@@ -57,14 +57,25 @@ export function aggregate(reports) {
   for (const [path, mutants] of byFile) {
     let fileKilled = 0;
     let fileValid = 0;
+    /** @type {Record<string, number>} */
+    const uncounted = {};
     for (const status of mutants.values()) {
       if (DETECTED.has(status)) fileKilled += 1;
-      else if (!UNDETECTED.has(status)) continue;
+      else if (!UNDETECTED.has(status)) {
+        uncounted[status] = (uncounted[status] ?? 0) + 1;
+        continue;
+      }
       fileValid += 1;
     }
     killed += fileKilled;
     valid += fileValid;
-    files.push({ path, killed: fileKilled, valid: fileValid, score: ratio(fileKilled, fileValid) });
+    files.push({
+      path,
+      killed: fileKilled,
+      valid: fileValid,
+      score: ratio(fileKilled, fileValid),
+      uncounted,
+    });
   }
   files.sort((a, b) => a.score - b.score || a.path.localeCompare(b.path));
   return { score: ratio(killed, valid), killed, valid, files };
@@ -139,7 +150,15 @@ if (process.argv[1] && process.argv[1].endsWith("mutation-aggregate.mjs")) {
 
   const result = aggregate(paths.map((path) => JSON.parse(readFileSync(path, "utf8"))));
   for (const file of result.files)
-    if (file.score < breakAt)
+    // A file with no counted mutants has no score, so it is named whatever the bar is, rather
+    // than shown as 0.00% like a file whose every mutant survived.
+    if (file.valid === 0) {
+      const statuses = Object.entries(file.uncounted)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([status, count]) => `${count} ${status}`)
+        .join(", ");
+      console.log(`   not measured — ${statuses || "no mutants"}  ${file.path}`);
+    } else if (file.score < breakAt)
       console.log(
         `${file.score.toFixed(2).padStart(7)}%  ${String(file.killed).padStart(5)}/${String(file.valid).padEnd(5)}  ${file.path}`,
       );

@@ -4979,16 +4979,22 @@ measured and did not settle.
   about 50 minutes of wall clock on run 35528428168, which is why nobody has put them on the merge
   path. Either accept the weekly lag and say so where a reader meets the gate, or find a cheaper
   per-pull-request signal.
-- **Three `packages/db` files contribute nothing to the gated score, and the table prints that as
-  `0.00%`.** Run 35528428168's aggregate lists `src/change-feed.ts`, `src/classification.ts` and
-  `src/testing/venue-db.ts` as `0.00%  0/0`. Nothing was killed because nothing was counted: the
-  score's denominator takes only `Killed`, `Timeout`, `Survived` and `NoCoverage`
-  (`scripts/mutation-aggregate.mjs:16-17`), so every mutant in those three files ended in some other
-  status — `Ignored`, a compile error or a run error. Which of the three it is has not been checked,
-  and it matters, because a compile error is a broken measurement while `Ignored` is a deliberate
-  one. Meanwhile `ratio()` returns 0 when the denominator is 0 (`scripts/mutation-aggregate.mjs:89`),
-  so a file nobody measured is displayed exactly like a file whose every mutant survived — the worst
-  reading in the table given to the case that carries no reading at all.
+- **DONE (lane C's A102): the aggregate names a `packages/db` file with no counted mutants as
+  not measured, with the statuses its mutants ended in, instead of printing `0.00%  0/0` like a
+  file whose every mutant survived.** It prints `   not measured — 122 Ignored  src/classification.ts`
+  (or `no mutants` for a file listed with none), whatever the bar, because such a file has no score
+  to clear it with; each file in `aggregate()`'s result now carries an `uncounted` count per status.
+  The file's `score` stays 0 and `ratio()` still returns 0 for an empty denominator
+  (`scripts/mutation-aggregate.mjs:92`), so the package total is unchanged. The entry's other
+  question — which status the three files' mutants ended in — was answered by downloading the
+  shard reports of run 35528428168 (commit `3ad257b11`, 2026-09-20) with
+  `gh run download 35528428168 -D /tmp/db-mut-a102 -p "mutation-report-db-shard-*"` and counting
+  every mutant's `status` and `statusReason` with `jq` across all ten reports: `src/change-feed.ts`
+  8, `src/classification.ts` 122 and `src/testing/venue-db.ts` 1, every one `Ignored` with the
+  reason `Static mutant (and "ignoreStatic" was enabled)` — no compile or run error.
+  `packages/db/stryker.config.json` sets `"ignoreStatic": true`, so this is the deliberate kind of
+  exclusion. All three files have changed since that run, so this reading holds for that commit
+  only; the next run's aggregate prints the current answer.
 
 **Left behind by raising the `packages/ui` mutation score (#466, 2026-09-20).** Two edges the
 branch found, checked, and consciously did not take.
