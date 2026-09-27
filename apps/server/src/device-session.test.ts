@@ -7,9 +7,10 @@
  */
 import { randomUUID } from "node:crypto";
 import { type Context, Hono } from "hono";
-import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { eq, sql } from "drizzle-orm";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { isAppError } from "@waitron/shared";
+import { hashSecret } from "@waitron/identity";
 import {
   canvases,
   deviceProfiles,
@@ -46,9 +47,34 @@ import {
   requireSaleTillId,
   setDeviceCookie,
   tryReadDevice,
+  VERIFIED_TOKENS_LIMIT,
 } from "./device-session.js";
 import type { DeviceBinding } from "./device-session.js";
 import "./errors.js";
+
+/**
+ * The real token check, counted, with an optional hook that runs after it has decided and before
+ * `tryReadDevice` carries on, so a test can commit a change at exactly that point.
+ */
+const verification = vi.hoisted(() => ({
+  calls: 0,
+  afterVerify: null as null | (() => Promise<void>),
+}));
+vi.mock("@waitron/identity", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@waitron/identity")>();
+  return {
+    ...actual,
+    verifySecretAsync: async (secret: string, stored: string) => {
+      verification.calls += 1;
+      const verified = await actual.verifySecretAsync(secret, stored);
+      if (verification.afterVerify !== null) await verification.afterVerify();
+      return verified;
+    },
+  };
+});
+afterEach(() => {
+  verification.afterVerify = null;
+});
 
 const LOCALE = "es-ES";
 const suite = useVenueDb({
@@ -898,5 +924,148 @@ describe("reading the device beside the write lock", () => {
     });
     expect((await app.request("/probe", { headers: { cookie } })).status).toBe(204);
     expect(order).toEqual(["turned", "resolved"]);
+  });
+
+  it("writes one sighting when several requests find it due at once", async () => {
+    const { deviceId, token } = await enrolDeviceFixture();
+    await setLastSeen(deviceId, new Date(Date.now() - 90_000));
+    await suite.db.execute(sql`create table sighting_writes (n integer)`);
+    await suite.db.execute(sql`
+      create trigger count_sighting_writes after update of last_seen_at on devices
+      begin insert into sighting_writes values (1); end`);
+    try {
+      // Every read finishes checking its token before any of them goes on.
+      const READS = 6;
+      let verified = 0;
+      let releaseAll!: () => void;
+      const allVerified = new Promise<void>((resolve) => {
+        releaseAll = resolve;
+      });
+      verification.afterVerify = async () => {
+        if (++verified === READS) releaseAll();
+        await allVerified;
+      };
+      const reads = await Promise.all(
+        Array.from({ length: READS }, () => probeTry(`${deviceId}.${token}`)),
+      );
+      expect(reads.map((binding) => binding?.deviceId)).toEqual(Array(READS).fill(deviceId));
+      const { rows } = await suite.db.execute<{ writes: number }>(
+        sql`select count(*) as writes from sighting_writes`,
+      );
+      expect(rows[0]!.writes).toBe(1);
+    } finally {
+      await suite.db.execute(sql`drop trigger count_sighting_writes`);
+      await suite.db.execute(sql`drop table sighting_writes`);
+    }
+  });
+});
+
+describe("a change committed while the token is being verified", () => {
+  /** Commits `change` once, after the next token check has decided; `fired` says whether it ran. */
+  function commitDuringVerification(change: () => unknown): { fired: () => boolean } {
+    let fired = false;
+    verification.afterVerify = async () => {
+      verification.afterVerify = null;
+      await change();
+      fired = true;
+    };
+    return { fired: () => fired };
+  }
+
+  it("refuses a device revoked meanwhile", async () => {
+    const { deviceId, token } = await enrolDeviceFixture();
+    const hook = commitDuringVerification(() => revoke(deviceId));
+    expect(await probeTry(`${deviceId}.${token}`)).toBeNull();
+    expect(hook.fired()).toBe(true);
+  });
+
+  it("refuses the old token once its hash has been replaced meanwhile", async () => {
+    const { deviceId, token } = await enrolDeviceFixture();
+    const hook = commitDuringVerification(() =>
+      suite.db.execute(
+        sql`update devices set token_hash = ${hashSecret("replacement")} where id = ${deviceId}`,
+      ),
+    );
+    expect(await probeTry(`${deviceId}.${token}`)).toBeNull();
+    expect(hook.fired()).toBe(true);
+  });
+
+  it("returns the profile the device was moved to meanwhile", async () => {
+    const { deviceId, token } = await enrolDeviceFixture();
+    const movedTo = await seedDeviceProfile("Pantalla nueva", "kds", []);
+    const hook = commitDuringVerification(() =>
+      suite.db.execute(
+        sql`update devices set device_profile_id = ${movedTo} where id = ${deviceId}`,
+      ),
+    );
+    expect((await probeTry(`${deviceId}.${token}`))?.deviceProfileId).toBe(movedTo);
+    expect(hook.fired()).toBe(true);
+  });
+});
+
+describe("a token already verified for its device", () => {
+  it("is not put through scrypt again", async () => {
+    const { deviceId, token } = await enrolDeviceFixture();
+    const before = verification.calls;
+    expect(await probeTry(`${deviceId}.${token}`)).not.toBeNull();
+    expect(await probeTry(`${deviceId}.${token}`)).not.toBeNull();
+    expect(verification.calls - before).toBe(1);
+  });
+
+  it("is verified afresh, and refused, once the device's token hash is replaced", async () => {
+    const { deviceId, token } = await enrolDeviceFixture();
+    expect(await probeTry(`${deviceId}.${token}`)).not.toBeNull();
+    await suite.db.execute(
+      sql`update devices set token_hash = ${hashSecret("replacement")} where id = ${deviceId}`,
+    );
+    const before = verification.calls;
+    expect(await probeTry(`${deviceId}.${token}`)).toBeNull();
+    expect(verification.calls - before).toBe(1);
+    expect(await probeTry(`${deviceId}.replacement`)).not.toBeNull();
+  });
+
+  it("does not let a different token through for the same device", async () => {
+    const { deviceId, token } = await enrolDeviceFixture();
+    expect(await probeTry(`${deviceId}.${token}`)).not.toBeNull();
+    expect(await probeTry(`${deviceId}.not-the-real-token`)).toBeNull();
+  });
+
+  it("is forgotten, oldest first, once more devices than the limit have verified", async () => {
+    const { cfg, deviceId, token, stationId, deviceProfileId } = await enrolDeviceFixture();
+    expect(await probeTry(`${deviceId}.${token}`)).not.toBeNull();
+    // A full memo of other devices sharing its token, each verified after it.
+    const [first] = await suite.db
+      .select({ tokenHash: devices.tokenHash })
+      .from(devices)
+      .where(eq(devices.id, deviceId));
+    const others = await suite.db
+      .insert(devices)
+      .values(
+        Array.from({ length: VERIFIED_TOKENS_LIMIT }, (_, i) => ({
+          locationId: cfg.locationId,
+          stationId,
+          deviceProfileId,
+          label: `Pantalla ${i}`,
+          tokenHash: first!.tokenHash,
+        })),
+      )
+      .returning({ id: devices.id });
+    const readAll = () => Promise.all(others.map(({ id }) => probeTry(`${id}.${token}`)));
+    let before = verification.calls;
+    expect((await readAll()).every((binding) => binding !== null)).toBe(true);
+    expect(verification.calls - before).toBe(VERIFIED_TOKENS_LIMIT);
+
+    before = verification.calls;
+    expect((await readAll()).every((binding) => binding !== null)).toBe(true);
+    expect(verification.calls - before).toBe(0);
+    expect(await probeTry(`${deviceId}.${token}`)).not.toBeNull();
+    expect(verification.calls - before).toBe(1);
+  });
+
+  it("is refused once the device is revoked", async () => {
+    const { deviceId, token } = await enrolDeviceFixture();
+    expect(await probeTry(`${deviceId}.${token}`)).not.toBeNull();
+    await revoke(deviceId);
+    expect(await probeTry(`${deviceId}.${token}`)).toBeNull();
   });
 });

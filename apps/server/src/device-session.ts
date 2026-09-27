@@ -1,4 +1,5 @@
-import { and, eq } from "drizzle-orm";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { and, eq, isNull, lt, or } from "drizzle-orm";
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { AppError, tillId } from "@waitron/shared";
@@ -104,6 +105,34 @@ const deviceBindingColumns = {
 };
 
 /**
+ * Devices whose token has already passed scrypt: the stored hash it passed against and the SHA-256
+ * of that token. Skipping scrypt on a match is safe because the row's CURRENT hash is re-read on
+ * every request and must equal the remembered one, and because the token is `randomBytes(32)`
+ * (`join-requests.ts`), not a password, so a fast digest of it is not open to guessing.
+ */
+const verifiedTokens = new Map<string, { tokenHash: string; tokenDigest: Buffer }>();
+export const VERIFIED_TOKENS_LIMIT = 256;
+
+const digestOf = (token: string): Buffer => createHash("sha256").update(token).digest();
+
+function alreadyVerified(deviceId: string, token: string, tokenHash: string): boolean {
+  const entry = verifiedTokens.get(deviceId);
+  if (entry === undefined) return false;
+  if (entry.tokenHash !== tokenHash) {
+    verifiedTokens.delete(deviceId);
+    return false;
+  }
+  return timingSafeEqual(entry.tokenDigest, digestOf(token));
+}
+
+function rememberVerified(deviceId: string, token: string, tokenHash: string): void {
+  verifiedTokens.delete(deviceId);
+  if (verifiedTokens.size >= VERIFIED_TOKENS_LIMIT)
+    verifiedTokens.delete(verifiedTokens.keys().next().value!);
+  verifiedTokens.set(deviceId, { tokenHash, tokenDigest: digestOf(token) });
+}
+
+/**
  * Carries NO authentication: the caller has already fetched an `active` row and, on the cookie
  * path, verified the token. A `tokenHash` on the passed row is never copied through.
  */
@@ -133,8 +162,8 @@ function toDeviceBinding(
  * successful cookie read writes (the `last_seen_at` sighting); every other path is a pure read.
  *
  * The reads and the token check run outside `withTransaction`, which is the venue's write lock, so
- * the tens of milliseconds scrypt takes never hold up a sale; a read issued while another caller's
- * write is open sees committed rows only (`packages/store/src/connections.ts`).
+ * scrypt never holds up a sale; a read issued while another caller's write is open sees committed
+ * rows only (`packages/store/src/connections.ts`).
  */
 export async function tryReadDevice(
   deps: { db: Database; devMode?: boolean },
@@ -163,30 +192,57 @@ export async function tryReadDevice(
   const token = raw.slice(dot + 1);
   if (!isUuid(deviceId)) return null;
 
-  const [row] = await deps.db
-    .select({
-      tokenHash: devices.tokenHash,
-      lastSeenAt: devices.lastSeenAt,
-      ...deviceBindingColumns,
-    })
-    .from(devices)
-    .innerJoin(deviceProfiles, deviceProfileJoin)
-    // `active = true` is the revocation filter: a revoked device is simply not found.
-    .where(and(eq(devices.id, deviceId), eq(devices.active, true)));
-  if (row === undefined) return null;
-  // Constant-time: the token is never compared with `===`.
-  if (!(await verifySecretAsync(token, row.tokenHash))) return null;
+  const readRow = async () => {
+    const [found] = await deps.db
+      .select({
+        tokenHash: devices.tokenHash,
+        lastSeenAt: devices.lastSeenAt,
+        ...deviceBindingColumns,
+      })
+      .from(devices)
+      .innerJoin(deviceProfiles, deviceProfileJoin)
+      // `active = true` is the revocation filter: a revoked device is simply not found.
+      .where(and(eq(devices.id, deviceId), eq(devices.active, true)));
+    return found;
+  };
+  let row = await readRow();
+  if (row === undefined) {
+    verifiedTokens.delete(deviceId);
+    return null;
+  }
+  if (!alreadyVerified(deviceId, token, row.tokenHash)) {
+    const checkedHash = row.tokenHash;
+    // Constant-time: the token is never compared with `===`.
+    if (!(await verifySecretAsync(token, checkedHash))) return null;
+    // A revocation, a new token or a new binding committed while scrypt ran wins over the row it
+    // checked.
+    row = await readRow();
+    if (row === undefined || row.tokenHash !== checkedHash) return null;
+    rememberVerified(deviceId, token, checkedHash);
+  }
 
   // At most one sighting write a minute: this runs on every authenticated request, and the
   // dashboard shows last-seen only to the minute (`devices-screen.ts`'s `#lastSeen`).
   //
   // `last_seen_at` is text, so `<` on it compares strings, which orders two instants correctly
   // only for the one spelling its writer uses: `toISOString()`, which is what `nowIso` returns.
+  // The check on the row read spares a request the write lock; the same check in the update is
+  // what keeps concurrent requests that all read a stale row to one write.
   const seenAt = nowIso();
   const staleBefore = new Date(Date.parse(seenAt) - SIGHTING_INTERVAL_MS).toISOString();
   if (row.lastSeenAt === null || row.lastSeenAt < staleBefore)
     await withTransaction(deps.db, (tx) =>
-      tx.update(devices).set({ lastSeenAt: seenAt }).where(eq(devices.id, deviceId)),
+      tx
+        .update(devices)
+        .set({ lastSeenAt: seenAt })
+        .where(
+          and(
+            eq(devices.id, deviceId),
+            // A never-seen device has NULL here and `<` is UNKNOWN for NULL, so the first sighting
+            // needs its own alternative or it would never be written.
+            or(isNull(devices.lastSeenAt), lt(devices.lastSeenAt, staleBefore)),
+          ),
+        ),
     );
   return toDeviceBinding(deviceId, row);
 }
