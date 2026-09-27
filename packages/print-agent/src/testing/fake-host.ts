@@ -25,6 +25,8 @@ export function fakeHost(
     markPagePrinters: (devices: DiscoveredDevice[]) => Promise<DiscoveredDevice[]>;
     resolve: (job: WireJob) => Promise<PrinterTarget>;
     pair: (mac: string) => Promise<PairResult>;
+    now: () => number;
+    sleep: (ms: number) => Promise<void>;
   }> = {},
 ): Host & {
   statuses: AgentStatus[];
@@ -58,10 +60,12 @@ export function fakeHost(
       (async () => {
         throw new Error("ECONNREFUSED");
       }),
-    now: () => (clock += 1),
-    sleep: async (ms) => {
-      sleeps.push(ms);
-    },
+    now: overrides.now ?? (() => (clock += 1)),
+    sleep:
+      overrides.sleep ??
+      (async (ms) => {
+        sleeps.push(ms);
+      }),
     log: { info: line("info"), warn: line("warn"), error: line("error") },
     status: (s) => {
       statuses.push(s);

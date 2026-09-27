@@ -1,5 +1,5 @@
 export { POLL_INTERVAL_MS, createAgent } from "./agent.js";
-export type { Agent, AgentOptions } from "./agent.js";
+export type { Agent, AgentOptions, AgentSetupSnapshot } from "./agent.js";
 export type {
   AgentConfig,
   AgentPhase,

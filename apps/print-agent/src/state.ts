@@ -3,6 +3,22 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentConfig } from "@waitron/print-agent";
 
+function rememberedServer(value: unknown): NonNullable<AgentConfig["servers"]>[number] | undefined {
+  if (typeof value !== "object" || value === null || !("url" in value)) return undefined;
+  if (typeof value.url !== "string") return undefined;
+  let url: URL;
+  try {
+    url = new URL(value.url);
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+  if ("nodeId" in value && typeof value.nodeId !== "string") return undefined;
+  return "nodeId" in value
+    ? { url: value.url, nodeId: value.nodeId as string }
+    : { url: value.url };
+}
+
 /** The token is a bearer secret, so it is written 0600 and atomically. */
 export class FileState {
   private readonly configPath: string;
@@ -40,6 +56,11 @@ export class FileState {
           typeof parsed.pendingVerificationNumber === "string"
         ) {
           config.pendingVerificationNumber = parsed.pendingVerificationNumber;
+        }
+        if ("servers" in parsed && Array.isArray(parsed.servers)) {
+          config.servers = parsed.servers
+            .map(rememberedServer)
+            .filter((server): server is NonNullable<typeof server> => server !== undefined);
         }
         return config;
       }

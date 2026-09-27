@@ -51,6 +51,45 @@ describe("FileState", () => {
     });
   });
 
+  it("preserves the remembered server list on a config round-trip", async () => {
+    const state = new FileState(dir);
+    await state.writeConfig({
+      serverUrl: "https://configured.test",
+      name: "kitchen",
+      servers: [{ url: "https://standby.test", nodeId: "n2" }],
+    });
+    expect(await state.readConfig()).toEqual({
+      serverUrl: "https://configured.test",
+      name: "kitchen",
+      servers: [{ url: "https://standby.test", nodeId: "n2" }],
+    });
+  });
+
+  it("drops malformed remembered servers instead of trusting them", async () => {
+    const state = new FileState(dir);
+    await writeFile(
+      join(dir, "config.json"),
+      JSON.stringify({
+        serverUrl: "https://configured.test",
+        name: "kitchen",
+        servers: [
+          { url: "https://standby.test", nodeId: "n2" },
+          { url: "ftp://wrong.test" },
+          { url: "not a url" },
+          { url: "https://missing-node-is-valid.test" },
+          { url: "https://wrong-node.test", nodeId: 2 },
+          null,
+        ],
+      }),
+    );
+    expect(await state.readConfig()).toMatchObject({
+      servers: [
+        { url: "https://standby.test", nodeId: "n2" },
+        { url: "https://missing-node-is-valid.test" },
+      ],
+    });
+  });
+
   it("survives many concurrent config saves without a temp-file race, leaving one valid JSON", async () => {
     const state = new FileState(dir);
     await Promise.all(

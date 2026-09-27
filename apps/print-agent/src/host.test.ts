@@ -77,9 +77,15 @@ describe("createContainerHost — config()", () => {
     expect(await host.config()).toBeNull();
   });
 
-  it("lets env win over the file for the url, keeping the saved name and environment", async () => {
+  it("lets env win over the file for the url, keeping saved join and routing state", async () => {
     const state = new FileState(dir);
-    await state.writeConfig({ serverUrl: "https://old", name: "saved", environment: "production" });
+    await state.writeConfig({
+      serverUrl: "https://old",
+      name: "saved",
+      environment: "production",
+      pendingVerificationNumber: "07",
+      servers: [{ url: "https://standby", nodeId: "n2" }],
+    });
     const host = createContainerHost({
       env: { ...baseEnv, serverUrl: "https://env" },
       state,
@@ -89,6 +95,8 @@ describe("createContainerHost — config()", () => {
       serverUrl: "https://env",
       name: "saved",
       environment: "production",
+      pendingVerificationNumber: "07",
+      servers: [{ url: "https://standby", nodeId: "n2" }],
     });
   });
 

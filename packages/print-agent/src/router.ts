@@ -14,6 +14,7 @@ export interface RouterOptions {
   /** The environment the agent joined against. Unset until the CONFIGURED address's own first
    * successful probe fixes it. */
   environment?: string;
+  initialServers?: ServerEntry[];
   probe: AgentClient["probeNode"];
 }
 
@@ -61,7 +62,7 @@ export class Router {
     this.#current = origin;
     this.#environment = opts.environment;
     this.#probe = opts.probe;
-    this.merge([]);
+    this.merge(opts.initialServers ?? []);
   }
 
   get current(): string {

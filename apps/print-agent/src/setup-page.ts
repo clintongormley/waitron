@@ -1,24 +1,19 @@
-import type {
-  AgentConfig,
-  AgentPhase,
-  AgentStatus,
-  DiscoveredDevice,
-  PairResult,
-} from "@waitron/print-agent";
-import { Hono } from "hono";
+import { getConnInfo } from "@hono/node-server/conninfo";
+import type { AgentPhase, AgentSetupSnapshot, AgentStatus } from "@waitron/print-agent";
+import { Hono, type Context } from "hono";
+import { isIP } from "node:net";
 
 export interface SetupDeps {
-  status: () => AgentStatus;
-  config: () => Promise<AgentConfig | null>;
-  saveConfig: (config: AgentConfig) => Promise<void>;
+  snapshot: () => Promise<AgentSetupSnapshot>;
+  configure: (input: { serverUrl: string; name: string }) => Promise<boolean>;
+  beginNetworkReset: () => Promise<boolean>;
+  cancelNetworkReset: () => Promise<boolean>;
   /** True when `WAITRON_SERVER_URL` pins the address: the form is read-only and POST is refused. */
   envLocked: boolean;
   defaultName: string;
-  scanBluetooth: () => Promise<DiscoveredDevice[]>;
-  pairBluetooth: (mac: string) => Promise<PairResult>;
+  now: () => number;
 }
 
-/** For every untrusted string the page interpolates, such as a server-sent `lastError`. */
 function escapeHtml(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -36,6 +31,28 @@ function normaliseOrigin(raw: string): string | null {
   } catch {
     return null;
   }
+}
+
+function peerAddress(c: Context): string | undefined {
+  try {
+    return getConnInfo(c).remote.address;
+  } catch {
+    return undefined;
+  }
+}
+
+function isLoopback(address: string | undefined): boolean {
+  if (address === undefined) return false;
+  const withoutZone = address.split("%", 1)[0]!;
+  if (withoutZone === "::1") return true;
+  const ipv4 = withoutZone.toLowerCase().startsWith("::ffff:")
+    ? withoutZone.slice("::ffff:".length)
+    : withoutZone;
+  return isIP(ipv4) === 4 && ipv4.split(".")[0] === "127";
+}
+
+function networkRefused(snapshot: AgentSetupSnapshot, c: Context): boolean {
+  return snapshot.joined && !snapshot.outOfTouch && !isLoopback(peerAddress(c));
 }
 
 function card(inner: string): string {
@@ -59,27 +76,12 @@ function layout(body: string): string {
   input { width: 100%; padding: .5rem; font-size: 1rem; box-sizing: border-box; }
   button { margin-top: 1rem; padding: .6rem 1.2rem; font-size: 1rem; cursor: pointer; }
   .error { color: #b00020; margin: 1rem 0; }
-  .ok { color: #0a7d28; margin: 1rem 0; }
   .muted { color: #555; }
-  ul.devices { list-style: none; padding: 0; margin: 1rem 0 0; }
-  ul.devices li { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .5rem 0; border-top: 1px solid #eee; }
-  ul.devices form { margin: 0; }
-  ul.devices button { margin-top: 0; }
   dl { margin: 0; }
   dt { font-weight: 600; margin-top: .75rem; }
 </style>
 </head>
-<body><main>${body}</main>
-<script>
-const scan = document.querySelector('#bluetooth-scan');
-scan?.addEventListener('submit', () => {
-  const button = scan.querySelector('button');
-  button.disabled = true;
-  button.textContent = 'Scanning…';
-  document.querySelector('#bluetooth-progress').hidden = false;
-});
-</script>
-</body>
+<body><main>${body}</main></body>
 </html>`;
 }
 
@@ -106,7 +108,6 @@ function statusCard(status: AgentStatus & { phase: Exclude<AgentPhase, "unconfig
   const server = escapeHtml(status.current ?? status.serverUrl ?? "the server");
   switch (status.phase) {
     case "pending": {
-      // The code survives a restart; only a wiped state directory reaches the fallback.
       const body =
         status.verificationCode !== undefined
           ? `<p>Waiting for approval — verification code <strong>${escapeHtml(status.verificationCode)}</strong></p>
@@ -135,9 +136,8 @@ ${lastError}
 </dl>`;
     }
     case "unauthorized":
-      // Reached both when the admin DENIED the join and when a live token was REVOKED.
       return `<h1>Waitron print agent</h1>
-<p>This agent was denied or revoked — restart it to ask to join again.</p>`;
+<p>This agent was denied or revoked. Save the server address below and approve the new join in the dashboard.</p>`;
     case "unreachable": {
       const detail =
         status.lastError !== undefined
@@ -149,69 +149,64 @@ ${lastError}
   }
 }
 
-/**
- * `scanned === undefined` means "not scanned yet"; an empty array means a scan that found nothing.
- */
-function bluetoothCard(state: {
-  scanned?: DiscoveredDevice[];
-  scanFailed?: boolean;
-  pair?: { mac: string; result: PairResult };
-}): string {
-  let found = "";
-  if (state.scanned !== undefined) {
-    if (state.scanned.length === 0) {
-      found = `<p class="muted">No Bluetooth printers found. Put the printer in pairing mode and scan again.</p>`;
-    } else {
-      const items = state.scanned
-        .map((d) => {
-          const mac = escapeHtml(d.localKey ?? "");
-          const label = escapeHtml(d.name ?? d.localKey ?? "unknown device");
-          return `<li><span>${label} <span class="muted">${mac}</span></span>
-<form method="post" action="/bluetooth/pair"><input type="hidden" name="mac" value="${mac}"><button type="submit">Pair</button></form></li>`;
-        })
-        .join("");
-      found = `<ul class="devices">${items}</ul>`;
-    }
+function connectionCard(status: AgentStatus): string {
+  if (status.phase === "unconfigured") {
+    return `<h1>Waitron print agent</h1><p>Checking the venue connection.</p>`;
   }
-  let outcome = "";
-  if (state.pair !== undefined) {
-    outcome = state.pair.result.ok
-      ? `<p class="ok">Paired ${escapeHtml(state.pair.result.localKey ?? state.pair.mac)}.</p>`
-      : `<p class="error">Could not pair ${escapeHtml(state.pair.mac)}: ${escapeHtml(state.pair.result.error ?? "pairing failed")}</p>`;
+  return statusCard(status as AgentStatus & { phase: Exclude<AgentPhase, "unconfigured"> });
+}
+
+function countdown(resetAt: number, now: number): string {
+  const remainingSeconds = Math.max(0, Math.ceil((resetAt - now) / 1_000));
+  const minutes = Math.floor(remainingSeconds / 60);
+  const seconds = String(remainingSeconds % 60).padStart(2, "0");
+  return `${minutes}:${seconds}`;
+}
+
+function resetCard(snapshot: AgentSetupSnapshot, now: number): string {
+  if (snapshot.resetAt === undefined) {
+    return `<h2>Connect to another venue server</h2>
+<p>This agent cannot reach its venue. Starting a reset gives the current server five minutes to recover before this agent forgets its approval.</p>
+<form method="post" action="/network/reset"><button type="submit">Join a new network</button></form>`;
   }
-  return `<h2>Bluetooth printers</h2>
-<p>Pair a Bluetooth printer to this box, then choose it in the dashboard.</p>
-<form id="bluetooth-scan" method="post" action="/bluetooth/scan"><button type="submit">Scan for printers</button></form>
-<p id="bluetooth-progress" role="status" hidden><progress aria-label="Scanning for Bluetooth printers"></progress> Searching for nearby Bluetooth devices…</p>
-${state.scanFailed ? '<p class="error" role="alert">Could not scan for Bluetooth printers. Check that this print agent has a powered Bluetooth adapter and access to Bluetooth, then try again.</p>' : ""}
-${found}${outcome}`;
+  return `<h2>Network reset pending</h2>
+<p>Resetting in ${countdown(snapshot.resetAt, now)}.</p>
+<form method="post" action="/network/reset/cancel"><button type="submit">Cancel reset</button></form>`;
+}
+
+function renderRoot(deps: SetupDeps, snapshot: AgentSetupSnapshot): string {
+  const sections: string[] = [];
+  if (!snapshot.joined) {
+    if (snapshot.status.phase !== "unconfigured")
+      sections.push(card(connectionCard(snapshot.status)));
+    sections.push(card(formCard(deps, snapshot.config?.serverUrl ?? "")));
+  } else {
+    sections.push(card(connectionCard(snapshot.status)));
+    if (snapshot.outOfTouch) sections.push(card(resetCard(snapshot, deps.now())));
+  }
+  return layout(sections.join(""));
+}
+
+function forbidden(c: Context): Response {
+  return c.text(
+    "This setup page is not available on the network while the print agent is connected.",
+    403,
+  );
 }
 
 export function createSetupApp(deps: SetupDeps): Hono {
   const app = new Hono();
 
-  const mainCard = async (): Promise<string> => {
-    const status = deps.status();
-    if (status.phase === "unconfigured") {
-      const saved = await deps.config();
-      return formCard(deps, saved?.serverUrl ?? "");
-    }
-    // `AgentStatus` is one interface, so the guard above does not narrow it; hence the assertion.
-    const connected = status as AgentStatus & { phase: Exclude<AgentPhase, "unconfigured"> };
-    return statusCard(connected);
-  };
-
-  const renderRoot = async (bt: {
-    scanned?: DiscoveredDevice[];
-    scanFailed?: boolean;
-    pair?: { mac: string; result: PairResult };
-  }): Promise<string> => {
-    return layout(card(await mainCard()) + card(bluetoothCard(bt)));
-  };
-
-  app.get("/", async (c) => c.html(await renderRoot({})));
+  app.get("/", async (c) => {
+    const snapshot = await deps.snapshot();
+    if (networkRefused(snapshot, c)) return forbidden(c);
+    return c.html(renderRoot(deps, snapshot));
+  });
 
   app.post("/setup", async (c) => {
+    const snapshot = await deps.snapshot();
+    if (networkRefused(snapshot, c)) return forbidden(c);
+    if (snapshot.joined) return c.text("The print agent is already joined.", 409);
     if (deps.envLocked) {
       return c.text("The server address is fixed by this agent's container.", 405);
     }
@@ -225,30 +220,43 @@ export function createSetupApp(deps: SetupDeps): Hono {
         400,
       );
     }
-    await deps.saveConfig({ serverUrl: origin, name: rawName === "" ? deps.defaultName : rawName });
+    const configured = await deps.configure({
+      serverUrl: origin,
+      name: rawName === "" ? deps.defaultName : rawName,
+    });
+    if (!configured) return c.text("The print agent setup state changed. Try again.", 409);
     return c.redirect("/", 303);
   });
 
-  app.post("/bluetooth/scan", async (c) => {
-    try {
-      const scanned = await deps.scanBluetooth();
-      return c.html(await renderRoot({ scanned }));
-    } catch {
-      return c.html(await renderRoot({ scanFailed: true }), 503);
+  app.post("/network/reset", async (c) => {
+    const snapshot = await deps.snapshot();
+    if (networkRefused(snapshot, c)) return forbidden(c);
+    if (!snapshot.joined || !snapshot.outOfTouch || snapshot.resetAt !== undefined) {
+      return c.text("A network reset is not available now.", 409);
     }
+    if (!(await deps.beginNetworkReset())) {
+      return c.text("The print agent setup state changed. Try again.", 409);
+    }
+    return c.redirect("/", 303);
   });
 
-  app.post("/bluetooth/pair", async (c) => {
-    const form = await c.req.parseBody();
-    const mac = typeof form.mac === "string" ? form.mac.trim() : "";
-    if (mac === "") {
-      return c.html(await renderRoot({}), 400);
+  app.post("/network/reset/cancel", async (c) => {
+    const snapshot = await deps.snapshot();
+    if (networkRefused(snapshot, c)) return forbidden(c);
+    if (!snapshot.joined || snapshot.resetAt === undefined) {
+      return c.text("There is no network reset to cancel.", 409);
     }
-    const result = await deps.pairBluetooth(mac);
-    return c.html(await renderRoot({ pair: { mac, result } }));
+    if (!(await deps.cancelNetworkReset())) {
+      return c.text("The print agent setup state changed. Try again.", 409);
+    }
+    return c.redirect("/", 303);
   });
 
-  app.get("/status.json", (c) => c.json(deps.status()));
+  app.get("/status.json", async (c) => {
+    const snapshot = await deps.snapshot();
+    if (networkRefused(snapshot, c)) return forbidden(c);
+    return c.json(snapshot.status);
+  });
 
   return app;
 }

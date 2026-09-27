@@ -2325,7 +2325,6 @@ export class PrintersScreen extends LitElement {
       ${this.addedPrinterName ? html`<p role="status" data-test="printer-added">${t("printers.added").replace("{name}", this.addedPrinterName)}</p>` : nothing}
       ${this.#renderFeedback()}
       <p class="hint">${t("printers.discovery_hint")}</p>
-      <p class="hint">${t("printers.bluetooth_pair_note")}</p>
       <details class="probe-panel" data-test="probe-panel">
         <summary>${t("printers.probe_title")}</summary>
         <p class="hint">${t("printers.probe_hint")}</p>

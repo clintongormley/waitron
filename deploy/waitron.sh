@@ -146,7 +146,6 @@ print_links() {
     Till         ${BOX_URL}
     Dashboard    ${BOX_URL}/manage
     Email inbox  ${BOX_URL}/manage/email
-    Print agent  http://waitron.local:9110
 
 EOF
   if command -v qrencode >/dev/null 2>&1; then qrencode -t ANSIUTF8 "http://waitron.local/setup/trust"; echo; fi

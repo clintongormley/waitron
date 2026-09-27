@@ -1,434 +1,550 @@
-import type { AgentConfig, AgentStatus } from "@waitron/print-agent";
-import { runInNewContext } from "node:vm";
+import type { AgentConfig, AgentSetupSnapshot, AgentStatus } from "@waitron/print-agent";
 import { describe, expect, it, vi } from "vitest";
 import { createSetupApp, type SetupDeps } from "./setup-page.js";
 
-function deps(overrides: Partial<SetupDeps> = {}): SetupDeps {
+const UNCONFIGURED: AgentStatus = { phase: "unconfigured", serverUrl: null, current: null };
+
+function snapshot(overrides: Partial<AgentSetupSnapshot> = {}): AgentSetupSnapshot {
   return {
-    status: () => ({ phase: "unconfigured", serverUrl: null, current: null }),
-    config: async () => null,
-    saveConfig: async () => {},
-    envLocked: false,
-    defaultName: "kitchen-pi",
-    scanBluetooth: async () => [],
-    pairBluetooth: async () => ({ ok: false, error: "no fake" }),
+    status: UNCONFIGURED,
+    config: null,
+    joined: false,
+    outOfTouch: false,
     ...overrides,
   };
 }
 
-describe("createSetupApp — GET /", () => {
-  it("disables Scan and reveals its progress indicator on submission", async () => {
-    const html = await (await createSetupApp(deps()).request("/")).text();
-    const script = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1];
-    expect(script).toBeDefined();
-    let submit!: () => void;
-    const button = { disabled: false, textContent: "Scan for printers" };
-    const progress = { hidden: true };
-    const form = {
-      addEventListener: (_: string, handler: () => void) => {
-        submit = handler;
+function deps(overrides: Partial<SetupDeps> = {}): SetupDeps {
+  return {
+    snapshot: async () => snapshot(),
+    configure: async () => true,
+    beginNetworkReset: async () => true,
+    cancelNetworkReset: async () => true,
+    envLocked: false,
+    defaultName: "kitchen-pi",
+    now: () => 1_000,
+    ...overrides,
+  };
+}
+
+function peer(address?: string): never {
+  return {
+    incoming: {
+      socket: {
+        remoteAddress: address,
+        remoteFamily: address?.includes(":") === true ? "IPv6" : "IPv4",
+        remotePort: 12_345,
       },
-      querySelector: () => button,
-    };
-    runInNewContext(script!, {
-      document: {
-        querySelector: (selector: string) => (selector === "#bluetooth-scan" ? form : progress),
-      },
-    });
-    submit();
-    expect(button.disabled).toBe(true);
-    expect(button.textContent).toBe("Scanning…");
-    expect(progress.hidden).toBe(false);
+    },
+  } as never;
+}
+
+function request(
+  app: ReturnType<typeof createSetupApp>,
+  path: string,
+  init?: RequestInit,
+  address?: string,
+): Promise<Response> {
+  return Promise.resolve(app.request(path, init, peer(address)));
+}
+
+const RUNNING: AgentStatus = {
+  phase: "running",
+  serverUrl: "https://box.test",
+  current: "https://box.test",
+};
+const CONFIG: AgentConfig = { serverUrl: "https://box.test", name: "kitchen" };
+
+describe("createSetupApp — access states", () => {
+  it.each([
+    ["unjoined", false, false, "loopback", 200, "serverUrl"],
+    ["unjoined", false, false, "network", 200, "serverUrl"],
+    ["joined running", true, false, "loopback", 200, "Connected and printing"],
+    ["joined running", true, false, "network", 403, "not available on the network"],
+    ["joined before first probe", true, false, "loopback", 200, "Checking the venue connection"],
+    ["joined before first probe", true, false, "network", 403, "not available on the network"],
+    ["joined out of touch", true, true, "loopback", 200, "Join a new network"],
+    ["joined out of touch", true, true, "network", 200, "Join a new network"],
+  ])(
+    "%s (joined=%s, outOfTouch=%s) from %s",
+    async (label, joined, outOfTouch, source, expectedStatus, expectedText) => {
+      const status = label === "joined running" ? RUNNING : UNCONFIGURED;
+      const app = createSetupApp(
+        deps({
+          snapshot: async () =>
+            snapshot({ status, config: joined ? CONFIG : null, joined, outOfTouch }),
+        }),
+      );
+      const response = await request(
+        app,
+        "/",
+        undefined,
+        source === "loopback" ? "127.0.0.1" : "192.168.20.5",
+      );
+      expect(response.status).toBe(expectedStatus);
+      expect(await response.text()).toContain(expectedText);
+    },
+  );
+
+  it.each(["127.0.0.1", "127.2.3.4", "::1", "::ffff:127.2.3.4"])(
+    "recognises %s as loopback",
+    async (address) => {
+      const app = createSetupApp(
+        deps({
+          snapshot: async () =>
+            snapshot({ status: RUNNING, config: CONFIG, joined: true, outOfTouch: false }),
+        }),
+      );
+      expect((await request(app, "/", undefined, address)).status).toBe(200);
+    },
+  );
+
+  it.each(["192.168.20.5", undefined])("fails closed for peer address %s", async (address) => {
+    const app = createSetupApp(
+      deps({
+        snapshot: async () =>
+          snapshot({ status: RUNNING, config: CONFIG, joined: true, outOfTouch: false }),
+      }),
+    );
+    expect((await request(app, "/", undefined, address)).status).toBe(403);
   });
 
-  it("unconfigured renders the server-address form with the default name prefilled", async () => {
+  it("ignores forwarding headers in both directions", async () => {
+    const app = createSetupApp(
+      deps({
+        snapshot: async () =>
+          snapshot({ status: RUNNING, config: CONFIG, joined: true, outOfTouch: false }),
+      }),
+    );
+    expect(
+      (
+        await request(
+          app,
+          "/",
+          { headers: { "x-forwarded-for": "127.0.0.1", forwarded: "for=127.0.0.1" } },
+          "192.168.20.5",
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(
+          app,
+          "/",
+          { headers: { "x-forwarded-for": "192.168.20.5", forwarded: "for=192.168.20.5" } },
+          "127.0.0.1",
+        )
+      ).status,
+    ).toBe(200);
+  });
+
+  it("reads a fresh setup snapshot for every request", async () => {
+    const snapshots = [
+      snapshot(),
+      snapshot({ status: RUNNING, config: CONFIG, joined: true, outOfTouch: false }),
+    ];
+    const read = vi.fn(async () => snapshots.shift()!);
+    const app = createSetupApp(deps({ snapshot: read }));
+    expect((await request(app, "/", undefined, "192.168.20.5")).status).toBe(200);
+    expect((await request(app, "/", undefined, "192.168.20.5")).status).toBe(403);
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it("removes the Bluetooth card and its old routes", async () => {
     const app = createSetupApp(deps());
-    const res = await app.request("/");
-    expect(res.status).toBe(200);
-    const html = await res.text();
+    const html = await (await request(app, "/", undefined, "127.0.0.1")).text();
+    expect(html).not.toContain("Bluetooth printers");
+    expect((await request(app, "/bluetooth/scan", { method: "POST" }, "127.0.0.1")).status).toBe(
+      404,
+    );
+    expect((await request(app, "/bluetooth/pair", { method: "POST" }, "127.0.0.1")).status).toBe(
+      404,
+    );
+  });
+});
+
+describe("createSetupApp — rendering", () => {
+  it("renders the address form with the default name for an unconfigured agent", async () => {
+    const html = await (
+      await request(createSetupApp(deps()), "/", undefined, "192.168.20.5")
+    ).text();
     expect(html).toContain('name="serverUrl"');
     expect(html).toContain('name="name"');
     expect(html).toContain('value="kitchen-pi"');
   });
 
-  it("pending shows the verification code when the agent still holds it", async () => {
-    const status: AgentStatus = {
+  it("renders pending and pairing status beside the unjoined form", async () => {
+    const pending: AgentStatus = {
       phase: "pending",
       serverUrl: "https://box.test",
       current: "https://box.test",
       verificationCode: "42",
     };
-    const app = createSetupApp(deps({ status: () => status }));
-    const html = await (await app.request("/")).text();
-    expect(html).toContain("Waiting for approval");
-    expect(html).toContain("verification code");
-    expect(html).toContain("42");
-  });
+    const pendingHtml = await (
+      await request(
+        createSetupApp(
+          deps({ snapshot: async () => snapshot({ status: pending, config: CONFIG }) }),
+        ),
+        "/",
+        undefined,
+        "192.168.20.5",
+      )
+    ).text();
+    expect(pendingHtml).toContain("verification code");
+    expect(pendingHtml).toContain("42");
+    expect(pendingHtml).toContain('name="serverUrl"');
 
-  it("pending with no code (state wiped) waits truthfully, without the false 'restart for a fresh code' claim", async () => {
-    const status: AgentStatus = { phase: "pending", serverUrl: "https://box.test", current: null };
-    const app = createSetupApp(deps({ status: () => status }));
-    const html = await (await app.request("/")).text();
-    expect(html).toContain("Waiting for approval");
-    expect(html).not.toContain("restart to get a fresh code");
-    expect(html).not.toContain("verification code");
-  });
-
-  it("pairing_closed asks the manager to switch on pairing mode", async () => {
-    const status: AgentStatus = {
+    const closed: AgentStatus = {
       phase: "pairing_closed",
       serverUrl: "https://box.test",
       current: "https://box.test",
     };
-    const app = createSetupApp(deps({ status: () => status }));
-    const html = await (await app.request("/")).text();
-    expect(html).toContain("switch on pairing mode");
-    expect(html).toContain("this agent keeps asking");
+    const closedHtml = await (
+      await request(
+        createSetupApp(
+          deps({ snapshot: async () => snapshot({ status: closed, config: CONFIG }) }),
+        ),
+        "/",
+        undefined,
+        "192.168.20.5",
+      )
+    ).text();
+    expect(closedHtml).toContain("switch on pairing mode");
+    expect(closedHtml).toContain('name="serverUrl"');
   });
 
-  it("running shows the followed server, the last job time and the last error", async () => {
-    const status: AgentStatus = {
-      phase: "running",
+  it("keeps truthful pending and running details", async () => {
+    const pending: AgentStatus = {
+      phase: "pending",
       serverUrl: "https://box.test",
-      current: "https://box.test",
+      current: null,
+    };
+    const pendingHtml = await (
+      await request(
+        createSetupApp(
+          deps({ snapshot: async () => snapshot({ status: pending, config: CONFIG }) }),
+        ),
+        "/",
+        undefined,
+        "127.0.0.1",
+      )
+    ).text();
+    expect(pendingHtml).toContain("Waiting for approval");
+    expect(pendingHtml).not.toContain("restart to get a fresh code");
+    expect(pendingHtml).not.toContain("verification code");
+
+    const running: AgentStatus = {
+      ...RUNNING,
       lastJobAt: Date.parse("2026-09-09T10:00:00Z"),
       lastError: "network_tcp printer p1 timed out",
     };
-    const app = createSetupApp(deps({ status: () => status }));
-    const html = await (await app.request("/")).text();
-    expect(html).toContain("https://box.test");
-    expect(html).toContain("Last job");
-    expect(html).toContain("Last error");
-    expect(html).toContain("network_tcp printer p1 timed out");
+    const runningHtml = await (
+      await request(
+        createSetupApp(
+          deps({
+            snapshot: async () =>
+              snapshot({ status: running, config: CONFIG, joined: true, outOfTouch: false }),
+          }),
+        ),
+        "/",
+        undefined,
+        "127.0.0.1",
+      )
+    ).text();
+    expect(runningHtml).toContain("https://box.test");
+    expect(runningHtml).toContain("Last job");
+    expect(runningHtml).toContain("Last error");
+    expect(runningHtml).toContain("network_tcp printer p1 timed out");
+
+    const noJobsHtml = await (
+      await request(
+        createSetupApp(
+          deps({
+            snapshot: async () =>
+              snapshot({ status: RUNNING, config: CONFIG, joined: true, outOfTouch: false }),
+          }),
+        ),
+        "/",
+        undefined,
+        "127.0.0.1",
+      )
+    ).text();
+    expect(noJobsHtml).toContain("no jobs printed yet");
+    expect(noJobsHtml).not.toContain("Last error");
   });
 
-  it("running with no jobs yet does not claim a last job or a last error", async () => {
-    const status: AgentStatus = {
-      phase: "running",
-      serverUrl: "https://box.test",
-      current: "https://box.test",
-    };
-    const app = createSetupApp(deps({ status: () => status }));
-    const html = await (await app.request("/")).text();
-    expect(html).not.toContain("Last error");
-  });
-
-  it("unauthorized says the agent was denied or revoked and must be restarted", async () => {
-    const status: AgentStatus = {
+  it("tells an unauthorized operator to save and approve again without asking for a restart", async () => {
+    const unauthorized: AgentStatus = {
       phase: "unauthorized",
       serverUrl: "https://box.test",
       current: "https://box.test",
     };
-    const app = createSetupApp(deps({ status: () => status }));
-    const html = await (await app.request("/")).text();
+    const html = await (
+      await request(
+        createSetupApp(
+          deps({ snapshot: async () => snapshot({ status: unauthorized, config: CONFIG }) }),
+        ),
+        "/",
+        undefined,
+        "192.168.20.5",
+      )
+    ).text();
     expect(html).toContain("denied or revoked");
-    expect(html).toContain("restart it to ask to join again");
+    expect(html).toContain("Save the server address");
+    expect(html).toContain("approve the new join");
+    expect(html).not.toContain("restart");
   });
 
-  it("unreachable says it cannot reach the server and shows the error", async () => {
-    const status: AgentStatus = {
-      phase: "unreachable",
-      serverUrl: "https://box.test",
-      current: "https://box.test",
-      lastError: "ECONNREFUSED",
-    };
-    const app = createSetupApp(deps({ status: () => status }));
-    const html = await (await app.request("/")).text();
-    expect(html.toLowerCase()).toContain("reach");
-    expect(html).toContain("ECONNREFUSED");
-  });
-
-  it("unreachable with no error yet still renders, without an error line", async () => {
-    const status: AgentStatus = {
-      phase: "unreachable",
-      serverUrl: "https://box.test",
-      current: "https://box.test",
-    };
-    const app = createSetupApp(deps({ status: () => status }));
-    const html = await (await app.request("/")).text();
-    expect(html.toLowerCase()).toContain("reach");
-    expect(html).not.toContain('class="muted"');
-  });
-
-  it("unreachable names the server it follows, else the saved address, else 'the server'", async () => {
-    const render = async (over: Partial<AgentStatus>): Promise<string> => {
-      const status: AgentStatus = { phase: "unreachable", serverUrl: null, current: null, ...over };
-      return (await createSetupApp(deps({ status: () => status })).request("/")).text();
-    };
+  it("escapes an unreachable error and chooses the current, saved, or generic server label", async () => {
+    const render = async (status: AgentStatus): Promise<string> =>
+      (
+        await request(
+          createSetupApp(deps({ snapshot: async () => snapshot({ status, config: CONFIG }) })),
+          "/",
+          undefined,
+          "127.0.0.1",
+        )
+      ).text();
     expect(
-      await render({ serverUrl: "https://saved.test", current: "https://live.test" }),
+      await render({
+        phase: "unreachable",
+        serverUrl: "https://saved.test",
+        current: "https://live.test",
+        lastError: "<script>alert(1)</script>",
+      }),
     ).toContain("Can't reach https://live.test right now");
-    expect(await render({ serverUrl: "https://saved.test" })).toContain(
-      "Can't reach https://saved.test right now",
-    );
-    expect(await render({})).toContain("Can't reach the server right now");
-  });
-
-  it("escapes a lastError so a server-sent message cannot inject markup", async () => {
-    const status: AgentStatus = {
+    expect(
+      await render({ phase: "unreachable", serverUrl: "https://saved.test", current: null }),
+    ).toContain("Can't reach https://saved.test right now");
+    const generic = await render({ phase: "unreachable", serverUrl: null, current: null });
+    expect(generic).toContain("Can't reach the server right now");
+    expect(generic).not.toContain('class="muted"');
+    const escaped = await render({
       phase: "unreachable",
       serverUrl: "https://box.test",
       current: null,
       lastError: "<script>alert(1)</script>",
-    };
-    const app = createSetupApp(deps({ status: () => status }));
-    const html = await (await app.request("/")).text();
-    expect(html).not.toContain("<script>alert(1)</script>");
-    expect(html).toContain("&lt;script&gt;");
+    });
+    expect(escaped).toContain("&lt;script&gt;");
+    expect(escaped).not.toContain("<script>alert(1)</script>");
   });
 });
 
-describe("createSetupApp — POST /setup", () => {
-  it("saves { serverUrl, name } origin-normalised and redirects to /", async () => {
-    const saveConfig = vi.fn<(c: AgentConfig) => Promise<void>>(async () => {});
-    const app = createSetupApp(deps({ saveConfig }));
-    const res = await app.request("/setup", {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: "serverUrl=https%3A%2F%2Fbox.test%2F&name=Barra",
-    });
-    expect(res.status).toBe(303);
-    expect(res.headers.get("location")).toBe("/");
-    expect(saveConfig).toHaveBeenCalledWith({ serverUrl: "https://box.test", name: "Barra" });
+describe("createSetupApp — mutations", () => {
+  const setupRequest: RequestInit = {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: "serverUrl=https%3A%2F%2Fbox.test%2Fpath&name=Barra",
+  };
+
+  it("normalises and saves setup only while unjoined", async () => {
+    const configure = vi.fn(async () => true);
+    const app = createSetupApp(deps({ configure }));
+    const response = await request(app, "/setup", setupRequest, "192.168.20.5");
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/");
+    expect(configure).toHaveBeenCalledWith({ serverUrl: "https://box.test", name: "Barra" });
   });
 
-  it("falls back to the default name when the form leaves it blank", async () => {
-    const saveConfig = vi.fn<(c: AgentConfig) => Promise<void>>(async () => {});
-    const app = createSetupApp(deps({ saveConfig, defaultName: "kitchen-pi" }));
-    await app.request("/setup", {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: "serverUrl=https%3A%2F%2Fbox.test&name=",
-    });
-    expect(saveConfig).toHaveBeenCalledWith({ serverUrl: "https://box.test", name: "kitchen-pi" });
-  });
-
-  it("re-renders the form with an error and saves nothing on a bad url", async () => {
-    const saveConfig = vi.fn<(c: AgentConfig) => Promise<void>>(async () => {});
-    const app = createSetupApp(deps({ saveConfig }));
-    const res = await app.request("/setup", {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: "serverUrl=not-a-url&name=Barra",
-    });
-    expect(res.status).toBe(400);
-    expect(saveConfig).not.toHaveBeenCalled();
-    expect(await res.text()).toContain('name="serverUrl"');
-  });
-
-  it("refuses an address that parses but is not http(s), and saves nothing", async () => {
-    const saveConfig = vi.fn<(c: AgentConfig) => Promise<void>>(async () => {});
-    const app = createSetupApp(deps({ saveConfig }));
-    const res = await app.request("/setup", {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: "serverUrl=ftp%3A%2F%2Fbox.test&name=Barra",
-    });
-    expect(res.status).toBe(400);
-    expect(await res.text()).toContain("That is not a valid http(s) address: ftp://box.test");
-    expect(saveConfig).not.toHaveBeenCalled();
-  });
-
-  it("treats an uploaded file in place of the address as an empty address, and saves nothing", async () => {
-    const saveConfig = vi.fn<(c: AgentConfig) => Promise<void>>(async () => {});
-    const app = createSetupApp(deps({ saveConfig }));
-    const body = new FormData();
-    body.append("serverUrl", new File(["https://box.test"], "url.txt"));
-    body.append("name", "Barra");
-    const res = await app.request("/setup", { method: "POST", body });
-    expect(res.status).toBe(400);
-    expect(await res.text()).toContain(
-      'name="serverUrl" type="url" placeholder="https://box.local" value=""',
-    );
-    expect(saveConfig).not.toHaveBeenCalled();
-  });
-
-  it("treats an uploaded file in place of the name as no name, and saves the default", async () => {
-    const saveConfig = vi.fn<(c: AgentConfig) => Promise<void>>(async () => {});
-    const app = createSetupApp(deps({ saveConfig, defaultName: "kitchen-pi" }));
-    const body = new FormData();
-    body.append("serverUrl", "https://box.test");
-    body.append("name", new File(["Barra"], "name.txt"));
-    const res = await app.request("/setup", { method: "POST", body });
-    expect(res.status).toBe(303);
-    expect(saveConfig).toHaveBeenCalledWith({ serverUrl: "https://box.test", name: "kitchen-pi" });
-  });
-
-  it("refuses the save (405) when the address is locked by env", async () => {
-    const saveConfig = vi.fn<(c: AgentConfig) => Promise<void>>(async () => {});
-    const app = createSetupApp(deps({ saveConfig, envLocked: true }));
-    const res = await app.request("/setup", {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: "serverUrl=https%3A%2F%2Fevil.test&name=x",
-    });
-    expect(res.status).toBe(405);
-    expect(saveConfig).not.toHaveBeenCalled();
-  });
-
-  it("shows the configured address read-only, without a save button, when env-locked", async () => {
-    const app = createSetupApp(
-      deps({ envLocked: true, config: async () => ({ serverUrl: "https://box.test", name: "n" }) }),
-    );
-    const html = await (await app.request("/")).text();
-    expect(html).toContain("https://box.test");
-    // The Bluetooth card's Scan button is always present, so this targets the Save action.
-    expect(html).not.toContain(">Save</button>");
-  });
-});
-
-describe("createSetupApp — Bluetooth pairing", () => {
-  it("GET / shows the Bluetooth card with a Scan button", async () => {
-    const app = createSetupApp(deps());
-    const html = await (await app.request("/")).text();
-    expect(html).toContain("Bluetooth printers");
-    expect(html).toContain('action="/bluetooth/scan"');
-    expect(html).toContain("Scan for printers");
-  });
-
-  it("POST /bluetooth/scan lists found devices with a Pair button per device", async () => {
-    const scanBluetooth = vi.fn(async () => [
-      { transport: "bluetooth" as const, localKey: "AA:BB:CC:DD:EE:FF", name: "Star TSP100" },
-    ]);
-    const app = createSetupApp(deps({ scanBluetooth }));
-    const res = await app.request("/bluetooth/scan", { method: "POST" });
-    expect(res.status).toBe(200);
-    const html = await res.text();
-    expect(scanBluetooth).toHaveBeenCalledOnce();
-    expect(html).toContain("Star TSP100");
-    expect(html).toContain("AA:BB:CC:DD:EE:FF");
-    expect(html).toContain('action="/bluetooth/pair"');
-    expect(html).toContain('value="AA:BB:CC:DD:EE:FF"');
-  });
-
-  it("POST /bluetooth/scan explains a failed scan and allows another attempt", async () => {
-    const app = createSetupApp(
-      deps({
-        scanBluetooth: async () => {
-          throw new Error("unavailable");
-        },
-      }),
-    );
-    const res = await app.request("/bluetooth/scan", { method: "POST" });
-    expect(res.status).toBe(503);
-    const html = await res.text();
-    expect(html).toContain("Could not scan for Bluetooth printers");
-    expect(html).toContain('action="/bluetooth/scan"');
-    expect(html).not.toContain("No Bluetooth printers found");
-  });
-
-  it("POST /bluetooth/scan with no devices says so", async () => {
-    const app = createSetupApp(deps({ scanBluetooth: async () => [] }));
-    const html = await (await app.request("/bluetooth/scan", { method: "POST" })).text();
-    expect(html).toContain("No Bluetooth printers found");
-  });
-
-  it("POST /bluetooth/pair pairs the MAC and shows success", async () => {
-    const pairBluetooth = vi.fn(async () => ({ ok: true, localKey: "AA:BB:CC:DD:EE:FF" }));
-    const app = createSetupApp(deps({ pairBluetooth }));
-    const res = await app.request("/bluetooth/pair", {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: "mac=AA%3ABB%3ACC%3ADD%3AEE%3AFF",
-    });
-    expect(res.status).toBe(200);
-    expect(pairBluetooth).toHaveBeenCalledWith("AA:BB:CC:DD:EE:FF");
-    expect(await res.text()).toContain("Paired AA:BB:CC:DD:EE:FF");
-  });
-
-  it("POST /bluetooth/pair shows the failure reason when pairing fails", async () => {
-    const app = createSetupApp(
-      deps({ pairBluetooth: async () => ({ ok: false, error: "AuthenticationFailed" }) }),
-    );
-    const res = await app.request("/bluetooth/pair", {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: "mac=AA%3ABB%3ACC%3ADD%3AEE%3AFF",
-    });
-    const html = await res.text();
-    expect(html).toContain("Could not pair AA:BB:CC:DD:EE:FF");
-    expect(html).toContain("AuthenticationFailed");
-  });
-
-  it("POST /bluetooth/pair with no MAC returns 400 and pairs nothing", async () => {
-    const pairBluetooth = vi.fn(async () => ({ ok: true, localKey: "x" }));
-    const app = createSetupApp(deps({ pairBluetooth }));
-    const res = await app.request("/bluetooth/pair", {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: "mac=",
-    });
-    expect(res.status).toBe(400);
-    expect(pairBluetooth).not.toHaveBeenCalled();
-  });
-
-  it("POST /bluetooth/scan labels a found device by its MAC when it has no name, and as an unknown device when it has neither", async () => {
-    const app = createSetupApp(
-      deps({
-        scanBluetooth: async () => [
-          { transport: "bluetooth", localKey: "AA:BB:CC:DD:EE:FF" },
-          { transport: "bluetooth" },
-        ],
-      }),
-    );
-    const html = await (await app.request("/bluetooth/scan", { method: "POST" })).text();
-    expect(html).toContain(
-      '<li><span>AA:BB:CC:DD:EE:FF <span class="muted">AA:BB:CC:DD:EE:FF</span></span>',
-    );
-    expect(html).toContain('<li><span>unknown device <span class="muted"></span></span>');
-    expect(html).toContain('<input type="hidden" name="mac" value="">');
-  });
-
-  it("POST /bluetooth/pair names the MAC it was asked to pair when the host reports no key, and a generic reason when it gives none", async () => {
-    const pair = async (result: { ok: boolean }): Promise<string> => {
-      const app = createSetupApp(deps({ pairBluetooth: async () => result }));
-      const res = await app.request("/bluetooth/pair", {
+  it("uses the default name and refuses invalid or file-valued fields", async () => {
+    const configure = vi.fn(async () => true);
+    const app = createSetupApp(deps({ configure }));
+    await request(
+      app,
+      "/setup",
+      {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: "mac=AA%3ABB%3ACC%3ADD%3AEE%3AFF",
-      });
-      return res.text();
-    };
-    expect(await pair({ ok: true })).toContain("Paired AA:BB:CC:DD:EE:FF.");
-    expect(await pair({ ok: false })).toContain("Could not pair AA:BB:CC:DD:EE:FF: pairing failed");
+        body: "serverUrl=https%3A%2F%2Fbox.test&name=",
+      },
+      "192.168.20.5",
+    );
+    expect(configure).toHaveBeenCalledWith({ serverUrl: "https://box.test", name: "kitchen-pi" });
+
+    const bad = await request(
+      app,
+      "/setup",
+      {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: "serverUrl=ftp%3A%2F%2Fbox.test&name=Barra",
+      },
+      "192.168.20.5",
+    );
+    expect(bad.status).toBe(400);
+    expect(await bad.text()).toContain("That is not a valid http(s) address: ftp://box.test");
+
+    const malformed = await request(
+      app,
+      "/setup",
+      {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: "serverUrl=not-a-url&name=Barra",
+      },
+      "192.168.20.5",
+    );
+    expect(malformed.status).toBe(400);
+
+    const form = new FormData();
+    form.append("serverUrl", new File(["https://box.test"], "url.txt"));
+    form.append("name", "Barra");
+    expect(
+      (await request(app, "/setup", { method: "POST", body: form }, "192.168.20.5")).status,
+    ).toBe(400);
+    expect(configure).toHaveBeenCalledTimes(1);
+
+    const fileName = new FormData();
+    fileName.append("serverUrl", "https://box.test");
+    fileName.append("name", new File(["Barra"], "name.txt"));
+    expect(
+      (await request(app, "/setup", { method: "POST", body: fileName }, "192.168.20.5")).status,
+    ).toBe(303);
+    expect(configure).toHaveBeenLastCalledWith({
+      serverUrl: "https://box.test",
+      name: "kitchen-pi",
+    });
   });
 
-  it("POST /bluetooth/pair with an uploaded file in place of the MAC returns 400 and pairs nothing", async () => {
-    const pairBluetooth = vi.fn(async () => ({ ok: true, localKey: "x" }));
-    const app = createSetupApp(deps({ pairBluetooth }));
-    const body = new FormData();
-    body.append("mac", new File(["AA:BB:CC:DD:EE:FF"], "mac.txt"));
-    const res = await app.request("/bluetooth/pair", { method: "POST", body });
-    expect(res.status).toBe(400);
-    expect(pairBluetooth).not.toHaveBeenCalled();
-  });
-
-  it("escapes a Bluetooth device name so it cannot inject markup", async () => {
+  it("returns 405 for an environment-locked unjoined agent and renders the address read-only", async () => {
+    const configure = vi.fn(async () => true);
     const app = createSetupApp(
       deps({
-        scanBluetooth: async () => [
-          { transport: "bluetooth", localKey: "AA:BB:CC:DD:EE:FF", name: "<script>x</script>" },
-        ],
+        configure,
+        envLocked: true,
+        snapshot: async () => snapshot({ config: CONFIG }),
       }),
     );
-    const html = await (await app.request("/bluetooth/scan", { method: "POST" })).text();
-    expect(html).not.toContain("<script>x</script>");
-    expect(html).toContain("&lt;script&gt;");
+    expect((await request(app, "/setup", setupRequest, "192.168.20.5")).status).toBe(405);
+    expect(configure).not.toHaveBeenCalled();
+    const html = await (await request(app, "/", undefined, "192.168.20.5")).text();
+    expect(html).toContain("https://box.test");
+    expect(html).not.toContain(">Save</button>");
+  });
+
+  it.each([
+    ["127.0.0.1", 409],
+    ["192.168.20.5", 403],
+  ])("refuses joined setup from %s", async (address, expectedStatus) => {
+    const configure = vi.fn(async () => true);
+    const app = createSetupApp(
+      deps({
+        configure,
+        snapshot: async () =>
+          snapshot({ status: RUNNING, config: CONFIG, joined: true, outOfTouch: false }),
+      }),
+    );
+    expect((await request(app, "/setup", setupRequest, address)).status).toBe(expectedStatus);
+    expect(configure).not.toHaveBeenCalled();
+  });
+
+  it("returns 409 when approval wins the race after the setup snapshot", async () => {
+    const configure = vi.fn(async () => false);
+    const app = createSetupApp(deps({ configure }));
+    expect((await request(app, "/setup", setupRequest, "192.168.20.5")).status).toBe(409);
+    expect(configure).toHaveBeenCalledOnce();
+  });
+
+  it("offers reset only while joined and out of touch, then shows a m:ss countdown and cancel", async () => {
+    const beginNetworkReset = vi.fn(async () => true);
+    const state = snapshot({
+      status: { ...RUNNING, phase: "unreachable" },
+      config: CONFIG,
+      joined: true,
+      outOfTouch: true,
+    });
+    const app = createSetupApp(
+      deps({ snapshot: async () => state, beginNetworkReset, now: () => 2_000 }),
+    );
+    const offered = await (await request(app, "/", undefined, "192.168.20.5")).text();
+    expect(offered).toContain('action="/network/reset"');
+    expect(offered).toContain("Join a new network");
+    expect(offered).not.toContain('action="/network/reset/cancel"');
+    expect((await request(app, "/network/reset", { method: "POST" }, "192.168.20.5")).status).toBe(
+      303,
+    );
+    expect(beginNetworkReset).toHaveBeenCalledOnce();
+
+    state.resetAt = 301_000;
+    const countdown = await (await request(app, "/", undefined, "192.168.20.5")).text();
+    expect(countdown).toContain("Resetting in 4:59");
+    expect(countdown).toContain('action="/network/reset/cancel"');
+    expect(countdown).not.toContain('action="/network/reset"');
+  });
+
+  it("refuses reset outside its state and reports a stale serialized precondition", async () => {
+    const beginNetworkReset = vi.fn(async () => true);
+    const unavailable = createSetupApp(deps({ beginNetworkReset }));
+    expect(
+      (await request(unavailable, "/network/reset", { method: "POST" }, "192.168.20.5")).status,
+    ).toBe(409);
+    expect(beginNetworkReset).not.toHaveBeenCalled();
+
+    beginNetworkReset.mockResolvedValueOnce(false);
+    const stale = createSetupApp(
+      deps({
+        beginNetworkReset,
+        snapshot: async () =>
+          snapshot({ status: RUNNING, config: CONFIG, joined: true, outOfTouch: true }),
+      }),
+    );
+    expect(
+      (await request(stale, "/network/reset", { method: "POST" }, "192.168.20.5")).status,
+    ).toBe(409);
+  });
+
+  it("allows cancel only during a countdown and reports a stale serialized precondition", async () => {
+    const cancelNetworkReset = vi.fn(async () => true);
+    const noCountdown = createSetupApp(
+      deps({
+        cancelNetworkReset,
+        snapshot: async () =>
+          snapshot({ status: RUNNING, config: CONFIG, joined: true, outOfTouch: true }),
+      }),
+    );
+    expect(
+      (await request(noCountdown, "/network/reset/cancel", { method: "POST" }, "192.168.20.5"))
+        .status,
+    ).toBe(409);
+    expect(cancelNetworkReset).not.toHaveBeenCalled();
+
+    const active = createSetupApp(
+      deps({
+        cancelNetworkReset,
+        snapshot: async () =>
+          snapshot({
+            status: RUNNING,
+            config: CONFIG,
+            joined: true,
+            outOfTouch: true,
+            resetAt: 301_000,
+          }),
+      }),
+    );
+    expect(
+      (await request(active, "/network/reset/cancel", { method: "POST" }, "192.168.20.5")).status,
+    ).toBe(303);
+
+    cancelNetworkReset.mockResolvedValueOnce(false);
+    expect(
+      (await request(active, "/network/reset/cancel", { method: "POST" }, "192.168.20.5")).status,
+    ).toBe(409);
   });
 });
 
 describe("createSetupApp — GET /status.json", () => {
-  it("returns the status as JSON with no token field", async () => {
-    const status: AgentStatus = {
-      phase: "running",
-      serverUrl: "https://box.test",
-      current: "https://box.test",
-    };
-    const app = createSetupApp(deps({ status: () => status }));
-    const res = await app.request("/status.json");
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as Record<string, unknown>;
-    expect(body).toEqual(status);
+  it("returns status without a token to loopback and refuses joined network callers", async () => {
+    const app = createSetupApp(
+      deps({
+        snapshot: async () =>
+          snapshot({ status: RUNNING, config: CONFIG, joined: true, outOfTouch: false }),
+      }),
+    );
+    const local = await request(app, "/status.json", undefined, "127.0.0.1");
+    expect(local.status).toBe(200);
+    const body = (await local.json()) as Record<string, unknown>;
+    expect(body).toEqual(RUNNING);
     expect(body).not.toHaveProperty("token");
+    expect((await request(app, "/status.json", undefined, "192.168.20.5")).status).toBe(403);
   });
 });
