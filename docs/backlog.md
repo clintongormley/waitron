@@ -2294,9 +2294,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       old failure again. And a link records a job, a bill and a station, not which dishes the
       ticket carried, so the copy also takes a ticket at a moved dish's station that carried only
       dishes that stayed behind: measured, Mesa 4's burger printed on Cocina, a later fish ticket
-      at Cocina failed, the burger moved to Mesa 5, and Mesa 5 then showed a Cocina problem until
-      its own Reprint printed. It errs toward showing a warning. Fixing it needs a record of which
-      dishes each ticket carried, a new table and so a migration; open for the owner.)_
+      at Cocina failed, the burger moved to Mesa 5, and Mesa 5 then showed a Cocina problem (its
+      own Reprint should clear it once printed; not run). It errs toward showing a warning. Fixing
+      it needs a record of which dishes each ticket carried, a new table and so a migration; open
+      for the owner.)_
     - Only dishes sold in Each are added together or split; a venue-made unit that counts pieces (a
       "portion") prints line by line, because nothing records a unit's kind (a unit field would
       need a migration).
