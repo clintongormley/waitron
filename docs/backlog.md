@@ -3197,7 +3197,7 @@ approved.
   together, majors included. That close stored an ignore of `@vitest/browser-playwright` 5.x;
   whether the group's Vitest 5 PR obeys it is untested and GitHub's docs do not say (how to check
   and clear it: workflow-guide → Dependabot pull requests); such a PR also has to re-measure
-  mutation first (Track C, *Left behind by the Stryker upgrade (#447, 2026-09-19)*). OPEN: **Triage
+  mutation first (Track C, *Left behind by the Stryker upgrade (#447, 2026-09-19)*). OPEN, queued as lane A's A107 (2026-09-27): **Triage
   the security alerts.** On 2026-09-27
   `gh api repos/clintongormley/waitron/dependabot/alerts?state=open` listed 15 open alerts across
   six packages, every one a transitive dependency with a patched version published
@@ -3209,7 +3209,8 @@ approved.
   0.18.20 copy `drizzle-kit` pulls in through `@esbuild-kit/esm-loader`: Track C, *Left behind by
   the esbuild upgrade (#439, 2026-09-19)*. Which alerts are reachable in this product is unassessed.
   The `versioning-strategy` question is recorded under #432's loose ends in Track C.
-- **Code scanning (CodeQL default setup) switched on 2026-09-27 — 34 alerts OPEN.** Enabled with
+- **Code scanning (CodeQL default setup) switched on 2026-09-27 — 34 alerts OPEN, queued as
+  lane A's A104–A106.** Enabled with
   `gh api -X PATCH repos/clintongormley/waitron/code-scanning/default-setup
   -f state=configured -f query_suite=default`; it analyses `actions`, `javascript-typescript` and
   `python`, weekly and on each PR, as a check the ruleset does not require. Its first run
