@@ -375,9 +375,12 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **A recorded incident code needs an area claim and English and Spanish alert wording.** Guard:
   `scripts/alert-codes.test.ts`, which reads only double-quoted, one-dot, lowercase-and-underscore literals
   in hand-listed files and counts a code recorded even if production never raises it; more: [conventions-data.md](docs/developers/conventions-data.md).
-- **Spanish domain terms are deliberate, and a module declares its own.** One declaring home per word;
-  a fiscal term never goes in the base list. Guard: `scripts/english-only.test.ts`. `apps/*` is out of
-  scope by a recorded decision, so Spanish identifiers in app UI code are caught only by review.
+- **Spanish domain terms are deliberate, and a module declares its own.** One declaring home per
+  word; a fiscal term never goes in the base list. Guard: `scripts/english-only.test.ts`, weaker
+  than its name — it finds comments without a parser, guessing from the code before a `/` whether it
+  opens a regular expression, and a wrong guess can hide a Spanish word in code on a later line.
+  `apps/*` is out of scope by a recorded decision, so Spanish identifiers in app UI code are caught
+  only by review.
 - **The composition list lives in `@waitron/composition`, and it is the only place that names every
   module.** Generic code reaches the regime through the descriptor's `provisioning` and `fiscal`
   seats. The boundary is the swappable SLOT, not "any module". Guard: `scripts/module-seams.test.ts`
