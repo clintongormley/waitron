@@ -10,6 +10,7 @@ import {
   billPayments,
   deviceProfiles,
   drawerOpens,
+  printJobs,
   products,
   saleLines,
   sales,
@@ -46,6 +47,7 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { createTable } from "./tables.js";
+import { printedLines } from "./testing/decode-ticket.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { TillConfig } from "./till-config.js";
@@ -1557,7 +1559,9 @@ describe("a cash refund before the invoice (design §6)", () => {
     });
     expect(overApplied.status).toBe(422);
     expect(overApplied.json).toMatchObject(exceeds({ applied: "10.00", tip: "2.00" }));
+    expect(tipWithPart.status).toBe(422);
     expect(tipWithPart.json).toMatchObject(exceeds({ applied: "10.00", tip: "2.00" }));
+    expect(partOfTip.status).toBe(422);
     expect(partOfTip.json).toMatchObject(exceeds({ applied: "10.00", tip: "2.00" }));
     expect(await refundRows(paymentId)).toEqual([]);
 
@@ -1565,6 +1569,7 @@ describe("a cash refund before the invoice (design §6)", () => {
       (await refund(billId, paymentId, { appliedAmount: "4.00", tipAmount: "0.00" })).status,
     ).toBe(200);
     const overRest = await refund(billId, paymentId, { appliedAmount: "6.01", tipAmount: "0.00" });
+    expect(overRest.status).toBe(422);
     expect(overRest.json).toMatchObject(exceeds({ applied: "6.00", tip: "2.00" }));
     const rest = await refund(billId, paymentId, { appliedAmount: "6.00", tipAmount: "2.00" });
 
@@ -1574,6 +1579,7 @@ describe("a cash refund before the invoice (design §6)", () => {
       appliedAmount: "0.00",
       tipAmount: "0.01",
     });
+    expect(nothingLeft.status).toBe(422);
     expect(nothingLeft.json).toMatchObject(exceeds({ applied: "0.00", tip: "0.00" }));
   });
 
@@ -1876,6 +1882,15 @@ describe("refund retries (design §8 test 15, §5.1)", () => {
   });
 });
 
+function documentJobs() {
+  return inTx((tx) =>
+    tx
+      .select({ id: printJobs.id, payload: printJobs.payload })
+      .from(printJobs)
+      .where(and(eq(printJobs.printerId, venue.printerId), eq(printJobs.kind, "document"))),
+  );
+}
+
 describe("refund first (design §4.3, §6a)", () => {
   /** €60.00: Botella tinto €30.00, Pulpo €20.00, Croquetas €10.00, with €50.00 contributed. */
   async function sixtyHoldingFifty(): Promise<{ billId: string; paymentId: string }> {
@@ -1929,6 +1944,7 @@ describe("refund first (design §4.3, §6a)", () => {
     expect(
       (await refund(billId, paymentId, { appliedAmount: "10.00", tipAmount: "0.00" })).status,
     ).toBe(200);
+    const jobsBefore = new Set((await documentJobs()).map((job) => job.id));
     const voided = await request("DELETE", `/api/working-orders/${billId}/lines/2`);
 
     expect(voided.status).toBe(200);
@@ -1938,6 +1954,55 @@ describe("refund first (design §4.3, §6a)", () => {
     expect(sale!.total).toBe(4000);
     expect(await tendersOf(sale!.id)).toEqual([
       { method: "cash", amount: 4000, tip: 0, billPaymentId: paymentId },
+    ]);
+    const tickets = (await documentJobs())
+      .filter((job) => !jobsBefore.has(job.id))
+      .map((job) => printedLines(job.payload).map((line) => line.trim().replace(/\s+/g, " ")))
+      .filter((printed) => printed.some((line) => line.startsWith("TOTAL")));
+    expect(tickets).toHaveLength(1);
+    const printed = tickets[0]!;
+    const start = printed.findIndex((line) => line.startsWith("TOTAL"));
+    expect(printed[start]).toBe("TOTAL 40,00 €");
+    expect(
+      printed
+        .slice(start + 1)
+        .filter((line) => line !== "")
+        .slice(0, 3),
+    ).toEqual(["Efectivo 50,00 €", "Devolución -10,00 €", "VERI*FACTU"]);
+  });
+});
+
+describe("the ticket after a refund", () => {
+  it("lists only the money actually given back, not a refund that did not complete", async () => {
+    const billId = await tabWith("Botella tinto", "Pulpo", "Croquetas");
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+    expect(
+      (await refund(billId, paymentId, { appliedAmount: "10.00", tipAmount: "0.00" })).status,
+    ).toBe(200);
+    await inTx((tx) =>
+      tx.insert(billPaymentRefunds).values({
+        billPaymentId: paymentId,
+        submissionId: randomUUID(),
+        fingerprint: "f",
+        appliedAmount: 700,
+        reason: "error",
+        authorizedBy: venue.adminId,
+        requestedBy: venue.adminId,
+        tillId: venue.deviceTillId,
+        state: "failed",
+        failedAt: new Date().toISOString(),
+      }),
+    );
+    const jobsBefore = new Set((await documentJobs()).map((job) => job.id));
+
+    expect((await request("DELETE", `/api/working-orders/${billId}/lines/2`)).status).toBe(200);
+
+    const printed = (await documentJobs())
+      .filter((job) => !jobsBefore.has(job.id))
+      .flatMap((job) => printedLines(job.payload))
+      .map((line) => line.trim().replace(/\s+/g, " "));
+    expect(printed.filter((line) => line.startsWith("Devolución"))).toEqual([
+      "Devolución -10,00 €",
     ]);
   });
 });

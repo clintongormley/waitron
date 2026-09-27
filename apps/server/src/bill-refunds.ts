@@ -26,8 +26,6 @@ import { refusePaymentInFlight } from "./working-order.js";
 import type { TillSaleDeps } from "./working-order.js";
 import "./errors.js";
 
-/** Money given back from one payment of a bill before its invoice exists (bill payments design §6). */
-
 const ZERO = decimal("0.00");
 
 export interface BillRefundRequest {

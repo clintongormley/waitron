@@ -32,7 +32,13 @@ import {
   type Resolution,
 } from "@waitron/printing";
 import { customerOptionSnapshotLabels } from "@waitron/catalogue";
-import { addDecimal, decimal, perDishOptionQuantity, resolveSnapshotText } from "@waitron/shared";
+import {
+  addDecimal,
+  decimal,
+  perDishOptionQuantity,
+  resolveSnapshotText,
+  subtractDecimal,
+} from "@waitron/shared";
 
 import { qrModules } from "./qr-matrix.js";
 import { formatMoney } from "./receipt-money.js";
@@ -92,6 +98,7 @@ const LABEL = {
   change: "Cambio",
   tip: "Propina",
   charged: "Cobrado",
+  refund: "Devolución",
 } as const;
 
 /** The Veri*Factu legend — a FIXED legal string (Orden HAC/1177/2024 art. 20.1.b). Never translated. */
@@ -249,6 +256,10 @@ export function formatReceipt({
         if (payment.reference !== null) text(`Ref. ${payment.reference}`);
       }
       if (payment.tip !== "0.00") row(LABEL.tip, formatMoney(payment.tip, locale));
+      for (const refund of payment.refunds) {
+        const given = addDecimal(decimal(refund.amount), decimal(refund.tip));
+        row(LABEL.refund, formatMoney(subtractDecimal(decimal("0.00"), given), locale));
+      }
     }
   } else if (t.method === "cash") {
     row(LABEL.cash, formatMoney(addDecimal(decimal(result.total), decimal(t.change)), locale));

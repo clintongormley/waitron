@@ -17,6 +17,7 @@ import {
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import {
+  billPaymentRefunds,
   billPayments,
   invoiceSeries,
   isUniqueViolation,
@@ -148,9 +149,16 @@ export type TenderBlock =
  * the bill payment handed back when it was taken, never derived from the tender, whose amount a
  * refund lowers.
  */
-export type BillTenderLine =
+export type BillTenderLine = (
   | { method: "cash"; amount: string; tip: string; tendered: string; change: string }
-  | { method: "card"; amount: string; tip: string; reference: string | null };
+  | { method: "card"; amount: string; tip: string; reference: string | null }
+) & { refunds: BillTenderRefund[] };
+
+/** Money given back from a bill payment before the invoice: a `completed` refund, oldest first. */
+export interface BillTenderRefund {
+  amount: string;
+  tip: string;
+}
 
 export interface TillSaleResult {
   issuer?: { venueName: string; nif: string };
@@ -232,6 +240,7 @@ export async function readBillTenderLines(
 ): Promise<BillTenderLine[]> {
   const rows = await tx
     .select({
+      billPaymentId: billPayments.id,
       method: tenders.method,
       amount: tenders.amount,
       tip: tenders.tipAmount,
@@ -248,9 +257,35 @@ export async function readBillTenderLines(
     )
     .where(eq(tenders.saleId, saleId))
     .orderBy(tenders.settledAt, tenders.id);
+  const refundRows =
+    rows.length === 0
+      ? []
+      : await tx
+          .select({
+            billPaymentId: billPaymentRefunds.billPaymentId,
+            amount: billPaymentRefunds.appliedAmount,
+            tip: billPaymentRefunds.tipAmount,
+          })
+          .from(billPaymentRefunds)
+          .where(
+            and(
+              inArray(
+                billPaymentRefunds.billPaymentId,
+                rows.map((row) => row.billPaymentId),
+              ),
+              eq(billPaymentRefunds.state, "completed"),
+            ),
+          )
+          .orderBy(billPaymentRefunds.completedAt, billPaymentRefunds.id);
   return rows.map((row) => {
     const amount = centsToDecimal(row.amount);
     const tip = centsToDecimal(row.tip);
+    const refunds = refundRows
+      .filter((refund) => refund.billPaymentId === row.billPaymentId)
+      .map((refund) => ({
+        amount: centsToDecimal(refund.amount),
+        tip: centsToDecimal(refund.tip),
+      }));
     if (row.method === "cash") {
       const tendered = centsToDecimal(row.tendered!);
       return {
@@ -259,9 +294,10 @@ export async function readBillTenderLines(
         tip,
         tendered,
         change: centsToDecimal(row.tendered! - row.applied - row.paymentTip),
+        refunds,
       };
     }
-    return { method: "card", amount, tip, reference: row.reference ?? null };
+    return { method: "card", amount, tip, reference: row.reference ?? null, refunds };
   });
 }
 
