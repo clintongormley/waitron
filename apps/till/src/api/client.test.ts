@@ -2511,6 +2511,7 @@ describe("menuOfferToTillProduct", () => {
         unit: litre,
         pricingUnit: "weight",
         vatClass: "reduced",
+        vatRate: "10.00",
         category: "Jarras",
         allergens: { sulphites: { presence: "contains" } },
         diet: { vegan: "yes", vegetarian: "yes", contains: [] },
@@ -2523,6 +2524,7 @@ describe("menuOfferToTillProduct", () => {
     expect(product).toMatchObject({
       unit: parentUnit,
       vatClass: "general",
+      vatRate: "21.00",
       category: "Vinos",
       allergens: null,
       courseId: null,
