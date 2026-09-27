@@ -1665,6 +1665,32 @@ describe("merge (D2)", () => {
     });
   });
 
+  it("refuses merging one party's split check into another party while its tab is open", async () => {
+    const { venue, mesa4, mesa6, t, s, openCheckId } = await parties();
+    const expectedVisitRevision = await revisionOf(t.visitId);
+    const expectedSourceVisitRevision = await revisionOf(s.visitId);
+
+    const error = await captureError(() =>
+      inTx((tx) =>
+        mergeTabs(tx, venue.cfg, t.tabId, openCheckId, {
+          freeSourceTable: false,
+          expectedVisitRevision,
+          expectedSourceVisitRevision,
+          operatorId: OPERATOR,
+        }),
+      ),
+    );
+
+    expect(error).toMatchObject({
+      code: "tab.party_has_other_open_bill",
+      params: { tabId: openCheckId },
+    });
+    expect((await tableRow(mesa4)).tabId).toBe(t.tabId);
+    expect((await tableRow(mesa6)).tabId).toBe(s.tabId);
+    expect(await statusOf(openCheckId)).toBe("open");
+    expect(await visitIdOf(openCheckId)).toBe(s.visitId);
+  });
+
   it("points the absorbed party's tables at T's tab when the merged bill is its check and its tab has settled", async () => {
     const { venue, mesa4, mesa6, t, s, openCheckId } = await parties();
     await pay(venue.cfg, s.tabId, "2.00");
