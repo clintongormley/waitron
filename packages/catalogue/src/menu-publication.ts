@@ -7,6 +7,7 @@ import {
   buildMenuDocuments,
   diffEntries,
   documentImages,
+  MENU_DOCUMENT_FORMAT,
   menuDocumentHash,
   type DiffEntry,
   type OmittedShortcut,
@@ -110,10 +111,11 @@ function deepFreeze<T>(value: T): T {
 }
 
 /**
- * Each published menu's live version and its document. A version's row is never changed once
- * written (`menu_versions` is `appendOnly()`), so each handle keeps the parsed documents it has read,
- * frozen, and reads a document again only when it is not kept or its row's content hash differs from
- * the kept one.
+ * Each published menu's live version and its document. A version in an earlier document format,
+ * which holds no VAT rates, is left out, as a menu with no live version is. A version's row is never
+ * changed once written (`menu_versions` is `appendOnly()`), so each handle keeps the parsed documents
+ * it has read, frozen, and reads a document again only when it is not kept or its row's content hash
+ * differs from the kept one.
  */
 export async function readLiveDocuments(
   tx: Transaction,
@@ -151,8 +153,10 @@ export async function readLiveDocuments(
     cache.delete(versionId);
   }
   const live = new Map<string, { versionId: string; document: MenuDocument }>();
-  for (const [menuId, { versionId }] of versions)
-    live.set(menuId, { versionId, document: found.get(versionId)! });
+  for (const [menuId, { versionId }] of versions) {
+    const document = found.get(versionId)!;
+    if (document.format === MENU_DOCUMENT_FORMAT) live.set(menuId, { versionId, document });
+  }
   return live;
 }
 

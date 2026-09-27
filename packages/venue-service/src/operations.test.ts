@@ -1851,6 +1851,57 @@ describe("zone offers from the published menus", () => {
     });
   });
 
+  it("serves the VAT class and rate the live version froze until the menu is republished", async () => {
+    const venue = await seedTwoMenuVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      await updateProduct(tx, venue.lemonade, { vatClass: "reduced" });
+      await updateProduct(tx, venue.extraLemon, { vatClass: "super_reduced" });
+      const lemonadeOf = async () =>
+        (await listZoneOffers(tx, cfg, venue.diningZone)).offers.find(
+          (offer) => offer.id === venue.lemonadeOffer,
+        )!;
+      const frozen = { vatClass: "general", vatRate: "21.00" };
+      const served = await lemonadeOf();
+      expect(served).toMatchObject(frozen);
+      expect(served.variants[0]).toMatchObject(frozen);
+      const extras = served.offeredModifiers[0]!;
+      expect(extras.kind === "extras" && extras.items[0]).toMatchObject(frozen);
+
+      await publish(tx, venue.dinner);
+      const republished = await lemonadeOf();
+      expect(republished).toMatchObject({ vatClass: "reduced", vatRate: "10.00" });
+      expect(republished.variants[0]).toMatchObject({ vatClass: "reduced", vatRate: "10.00" });
+      const after = republished.offeredModifiers[0]!;
+      expect(after.kind === "extras" && after.items[0]).toMatchObject({
+        vatClass: "super_reduced",
+        vatRate: "4.00",
+      });
+    });
+  });
+
+  it("sells nothing from a live version published before its document froze VAT", async () => {
+    const venue = await seedTwoMenuVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      const earlier = randomUUID();
+      await tx.execute(sql`
+        insert into menu_versions (id, menu_id, number, document, content_hash, published_at, published_by)
+        select ${earlier}, menu_id, number + 1, json_set(document, '$.format', 1), 'earlier',
+          published_at, published_by
+        from menu_versions where id = ${venue.dinnerVersionId}`);
+      await tx.execute(
+        sql`update menu_publications set version_id = ${earlier} where menu_id = ${venue.dinner}`,
+      );
+      const served = await listZoneOffers(tx, cfg, venue.diningZone);
+      expect(served.menus.map((menu) => menu.id)).toEqual([venue.menuId]);
+      expect(served.offers.map((offer) => offer.id)).toEqual([venue.menuItemId]);
+      expect((await menuState(tx, venue.diningZone)).menus).toEqual([
+        { menuId: venue.menuId, versionId: venue.versionId },
+      ]);
+    });
+  });
+
   it("serves an unavailable or inactive product marked, in its place", async () => {
     const venue = await seedTwoMenuVenue();
     const { cfg } = venue;

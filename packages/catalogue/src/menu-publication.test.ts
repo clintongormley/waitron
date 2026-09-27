@@ -387,6 +387,54 @@ describe("assertLiveVersions", () => {
   });
 });
 
+describe("a live version published before its document froze VAT", () => {
+  /** Makes the menu's live version a copy of its current one in the earlier format, VAT left out. */
+  async function liveInEarlierFormat(menuId: string): Promise<string> {
+    const { versionId } = await publish(menuId);
+    const [row] = await fx.db.select().from(menuVersions).where(eq(menuVersions.id, versionId));
+    const document = JSON.parse(
+      JSON.stringify({ ...row!.document, format: 1 }, (key, value: unknown) =>
+        key === "vatClass" || key === "vatRate" ? undefined : value,
+      ),
+    ) as typeof row.document;
+    expect(JSON.stringify(document)).not.toMatch(/vatClass|vatRate/);
+    const [earlier] = await fx.db
+      .insert(menuVersions)
+      .values({
+        menuId,
+        number: row!.number + 1,
+        document,
+        contentHash: menuDocumentHash(document),
+        publishedAt: row!.publishedAt,
+        publishedBy: "person-1",
+      })
+      .returning({ id: menuVersions.id });
+    await fx.db
+      .update(menuPublications)
+      .set({ versionId: earlier!.id })
+      .where(eq(menuPublications.menuId, menuId));
+    return earlier!.id;
+  }
+
+  it("is not served for selling, as if the menu had no live version, and its menu shows changed", async () => {
+    const f = await menusFixture(fx.db);
+    const lunch = await liveInEarlierFormat(f.lunch);
+    const dinner = await publish(f.dinner);
+    const live = await app((tx) => readLiveDocuments(tx, [f.lunch, f.dinner]));
+    expect([...live.keys()]).toEqual([f.dinner]);
+    expect(live.get(f.dinner)!.versionId).toBe(dinner.versionId);
+    await expect(
+      app((tx) =>
+        assertLiveVersions(tx, [f.lunch, f.dinner], [{ menuId: f.lunch, versionId: lunch }]),
+      ),
+    ).rejects.toMatchObject({
+      code: "menu.version_changed",
+      params: { menus: [{ menuId: f.lunch, liveVersionId: null }] },
+    });
+    expect(await states(f)).toEqual({ lunch: "changed", dinner: "current" });
+  });
+});
+
 describe("menusOfVersions", () => {
   it("names the menu of every version, live or not, and leaves out an id that is no version", async () => {
     const f = await menusFixture(fx.db);
@@ -459,12 +507,58 @@ describe("menuStatus", () => {
       expect(status.get(f.dinner)).toMatchObject({ version: 1 });
     });
 
-    it("flags neither for a reporting category or a VAT class", async () => {
+    it("flags neither for a reporting category", async () => {
       const f = await published();
-      await app((tx) =>
-        updateProduct(tx, f.lemonade, { categoryId: f.coldDrinks, vatClass: "general" }),
-      );
+      await app((tx) => updateProduct(tx, f.lemonade, { categoryId: f.coldDrinks }));
       expect(await states(f)).toEqual({ lunch: "current", dinner: "current" });
+    });
+
+    it("flags both for Lemonade's VAT class, each naming the shared product", async () => {
+      const f = await published();
+      await app((tx) => updateProduct(tx, f.lemonade, { vatClass: "general" }));
+      expect(await states(f)).toEqual({ lunch: "changed", dinner: "changed" });
+      for (const [menuId, other] of [
+        [f.lunch, "Dinner Menu"],
+        [f.dinner, "Lunch Menu"],
+      ] as const)
+        expect((await app((tx) => previewMenu(tx, menuId))).changes).toEqual([
+          {
+            kind: "product_changed",
+            productId: f.lemonade,
+            name: "Lemonade",
+            fields: ["vat"],
+            source: "shared_product",
+            alsoOn: [other],
+          },
+        ]);
+    });
+
+    it("flags both for the VAT class of Lemonade's Large variant", async () => {
+      const f = await published();
+      await app((tx) => updateProduct(tx, f.large, { vatClass: "general" }));
+      expect(await states(f)).toEqual({ lunch: "changed", dinner: "changed" });
+    });
+
+    it("flags both for Extra lemon's VAT class, used only as an extra, naming the shared product", async () => {
+      const f = await published();
+      await app((tx) => updateProduct(tx, f.extraLemon, { vatClass: "general" }));
+      expect(await states(f)).toEqual({ lunch: "changed", dinner: "changed" });
+      expect((await app((tx) => previewMenu(tx, f.lunch))).changes).toEqual([
+        {
+          kind: "product_changed",
+          productId: f.extraLemon,
+          name: "Extra lemon",
+          fields: ["vat"],
+          source: "shared_product",
+          alsoOn: ["Dinner Menu"],
+        },
+      ]);
+    });
+
+    it("flags Dinner alone for Burger's VAT class", async () => {
+      const f = await published();
+      await app((tx) => updateProduct(tx, f.burger, { vatClass: "general" }));
+      expect(await states(f)).toEqual({ lunch: "current", dinner: "changed" });
     });
 
     it("flags Dinner alone for Lemonade's price, which Lunch overrides", async () => {
@@ -623,7 +717,7 @@ describe("previewMenu", () => {
         kind: "product_changed",
         productId: f.lemonade,
         name: "Lemonade",
-        fields: ["allergens"],
+        fields: ["allergens", "vat"],
         source: "shared_product",
         alsoOn: ["Dinner Menu"],
       },
@@ -631,7 +725,7 @@ describe("previewMenu", () => {
         kind: "product_changed",
         productId: f.extraLemon,
         name: "Extra lemon",
-        fields: ["allergens"],
+        fields: ["allergens", "vat"],
         source: "shared_product",
         alsoOn: ["Dinner Menu"],
       },

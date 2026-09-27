@@ -111,7 +111,9 @@ export interface ZoneMenuOffer {
     readonly precision: number;
     readonly hardwareUnit: "kg" | "g" | "mg" | null;
   };
+  /** The VAT class and rate (e.g. "10.00") the live version froze. */
   readonly vatClass: string;
+  readonly vatRate: string;
   readonly category: string | null;
   readonly allergens: Readonly<
     Record<string, { readonly presence: "contains" | "may_contain"; readonly source?: string }>
@@ -152,6 +154,7 @@ export type ZoneOfferedModifier =
         /** GROSS, as published. */
         readonly price: string;
         readonly vatClass: string;
+        readonly vatRate: string;
         readonly maxQuantity: number;
         readonly preselected: boolean;
         readonly available: boolean;
@@ -221,6 +224,7 @@ export interface ZoneMenuOfferVariant {
   readonly unit: ZoneMenuOffer["unit"];
   readonly pricingUnit: string;
   readonly vatClass: string;
+  readonly vatRate: string;
   readonly category: string | null;
   readonly courseId: string | null;
   readonly allergens: ZoneMenuOffer["allergens"];
