@@ -1968,7 +1968,6 @@ export class TillTableOrderScreen extends LitElement {
         isHeld
           ? html`<div class="group-actions">
               <wt-button
-                size="sm"
                 variant="secondary"
                 data-group-up=${group.id}
                 aria-label=${label("table.group_up")}
@@ -1978,7 +1977,6 @@ export class TillTableOrderScreen extends LitElement {
                 <span aria-hidden="true">↑</span>
               </wt-button>
               <wt-button
-                size="sm"
                 variant="secondary"
                 data-group-down=${group.id}
                 aria-label=${label("table.group_down")}
@@ -1990,7 +1988,6 @@ export class TillTableOrderScreen extends LitElement {
               ${
                 this.fireControl === "waiter"
                   ? html`<wt-button
-                      size="sm"
                       variant="primary"
                       data-group-fire=${group.id}
                       aria-label=${label("table.group_fire")}
@@ -2028,7 +2025,6 @@ export class TillTableOrderScreen extends LitElement {
           ? nothing
           : html`<span class="group-line-actions">
               <wt-button
-                size="sm"
                 variant="secondary"
                 data-move-line=${line.id}
                 aria-label=${label("table.move_line")}
@@ -2040,7 +2036,6 @@ export class TillTableOrderScreen extends LitElement {
               ${
                 splits
                   ? html`<wt-button
-                      size="sm"
                       variant="secondary"
                       data-split-group-line=${line.id}
                       aria-label=${label("table.split_group_line")}

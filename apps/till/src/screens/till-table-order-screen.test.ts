@@ -161,6 +161,22 @@ async function submitDraft(
   return confirmPreview(el);
 }
 
+/** Each of `controls` whose tap target — a `wt-button`'s inner button, else the control itself —
+ * renders under 44 px on either axis, named by its data attributes and measured size. */
+function underTapSize(controls: Iterable<Element>): string[] {
+  return [...controls].flatMap((control) => {
+    const { width, height } = (
+      control.shadowRoot?.querySelector("button") ?? control
+    ).getBoundingClientRect();
+    if (width >= 44 && height >= 44) return [];
+    const name = [...control.attributes]
+      .filter((attribute) => attribute.name.startsWith("data-"))
+      .map((attribute) => `${attribute.name}=${attribute.value}`)
+      .join(" ");
+    return [`${name} ${width}×${height}`];
+  });
+}
+
 function orderGroup(id: string, state: OrderGroup["state"]): OrderGroup {
   return {
     id,
@@ -1049,6 +1065,24 @@ describe("till-table-order-screen", () => {
         ).toEqual([]);
       });
 
+      it("gives each draft line, destination, held group and action, and the preview's buttons, a tap target of 44 px each way", async () => {
+        const { el } = await mount({ courses: serviceCourses, products: menu, groups: held });
+        await ring(el, [croquetas, "1"], [steak, "1"]);
+        await pickDestination(el, "add-to-held");
+        const controls = el.shadowRoot!.querySelectorAll(
+          "[data-draft-select], [data-destination], [data-held-group], [data-draft-action]",
+        );
+        expect(controls.length).toBe(8);
+        expect(underTapSize(controls)).toEqual([]);
+
+        await openPreview(el, "submit");
+        expect(
+          underTapSize(
+            el.shadowRoot!.querySelectorAll("[data-draft-confirm], [data-draft-dismiss]"),
+          ),
+        ).toEqual([]);
+      });
+
       it("offers no Add to held group when every group of the party has fired", async () => {
         const { el } = await mount({
           courses: serviceCourses,
@@ -1539,6 +1573,27 @@ describe("till-table-order-screen", () => {
       dialog.querySelector<HTMLElement>("[data-cancel-confirm]")!.click();
 
       expect(voids.map((event) => event.detail)).toEqual([{ lineNo: 7 }]);
+    });
+
+    it("gives every held group's control, and its dialogs' buttons, a tap target of 44 px each way", async () => {
+      const { el } = await mountGroups({ fireControl: "waiter" });
+      const listed = el.shadowRoot!.querySelectorAll(
+        "[data-group-up], [data-group-down], [data-group-fire], [data-move-line], [data-split-group-line]",
+      );
+      expect(listed.length).toBe(14);
+      expect(underTapSize(listed)).toEqual([]);
+
+      control(el, '[data-group-fire="g4"]')!.click();
+      await el.updateComplete;
+      expect(
+        underTapSize(el.shadowRoot!.querySelectorAll("[data-fire-confirm], [data-fire-dismiss]")),
+      ).toEqual([]);
+      control(el, "[data-fire-dismiss]")!.click();
+      control(el, '[data-move-line="l-steak"]')!.click();
+      await el.updateComplete;
+      expect(
+        underTapSize(el.shadowRoot!.querySelectorAll("[data-move-target], [data-move-dismiss]")),
+      ).toEqual([]);
     });
 
     it("opens a held-group dish's Change with the revision the lines were read at", async () => {
