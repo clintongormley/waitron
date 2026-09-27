@@ -195,8 +195,8 @@ hook, or how tests are scheduled:
   Cost: a code merge that got NO run at all — no image published, no unfiltered main suite, and
   nothing red anywhere, so check after a merge that its own run exists. The pushes now overlap, so
   publishing asks `scripts/main-tag-guard.sh` before moving `:main`. Guards:
-  `scripts/ci-workflow.test.mjs` (reads ci.yml as TEXT, and sees no other workflow) and
-  `scripts/main-tag-guard.test.mjs`.
+  `scripts/ci-workflow.test.mjs` (whose concurrency cases read ci.yml alone, as TEXT, so another
+  workflow's group is not seen) and `scripts/main-tag-guard.test.mjs`.
 - **A cheap job can still be the critical path.** Sort a run's jobs by duration before calling one
   cheap enough to leave ungated.
 - **The GHA cache is a shared per-repository budget and this repo sits AT it.** Name the entries a new
