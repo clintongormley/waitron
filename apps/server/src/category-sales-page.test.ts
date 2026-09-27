@@ -195,11 +195,18 @@ describe("formatCategorySalesPage", () => {
     const lines = page();
     expect(lineFor(lines, "Uncategorised")).toMatch(/^Uncategorised +€1\.21 +€1\.00$/);
     expect(lineFor(lines, "Not recorded")).toMatch(/^Not recorded +€0\.00 +€7\.00$/);
-    expect(lineFor(lines, "Directly in Not recorded")).toMatch(/^ {2}Directly in Not recorded/);
+    expect(lineFor(lines, "No category recorded")).toMatch(
+      /^ {2}No category recorded +€0\.00 +€4\.00$/,
+    );
+    expect(lines.join("\n")).not.toContain("Directly in Not recorded");
     expect(lineFor(lines, "Cafés")).toMatch(/^ {2}Cafés +€0\.00 +€3\.00$/);
     const es = page({ locale: "es-ES" });
     expect(lineFor(es, "Sin categoría")).toMatch(/^Sin categoría +1,21 € +1,00 €$/);
     expect(lineFor(es, "No registrada")).toMatch(/^No registrada +0,00 € +7,00 €$/);
+    expect(lineFor(es, "Sin categoría registrada")).toMatch(
+      /^ {2}Sin categoría registrada +0,00 € +4,00 €$/,
+    );
+    expect(es.join("\n")).not.toContain("Directamente en No registrada");
   });
 
   it("prints the totals and the labels, saying label totals overlap", () => {

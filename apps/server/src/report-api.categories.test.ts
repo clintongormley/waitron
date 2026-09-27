@@ -44,7 +44,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { CategoryReport, CategoryTotal } from "@waitron/reporting";
 import type { Logger } from "./logger.js";
 import { mountReportApi } from "./report-api.js";
-import { printedLines } from "./testing/decode-ticket.js";
+import { bytesInclude, printedLines } from "./testing/decode-ticket.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
 
@@ -373,7 +373,12 @@ async function personLocale(cookie: string, locale: string | null): Promise<void
 
 async function jobsOn(printerId: string) {
   return suite.db
-    .select({ id: printJobs.id, kind: printJobs.kind, payload: printJobs.payload })
+    .select({
+      id: printJobs.id,
+      kind: printJobs.kind,
+      locationId: printJobs.locationId,
+      payload: printJobs.payload,
+    })
     .from(printJobs)
     .where(eq(printJobs.printerId, printerId));
 }
@@ -518,6 +523,9 @@ describe("POST /management-api/reports/categories/print", () => {
     expect(jobs).toHaveLength(before + 1);
     const job = jobs.find((j) => j.id === body.jobId)!;
     expect(job.kind).toBe("document");
+    expect(job.locationId).toBe(locationId);
+    // CLAUDE.md §5: a document job never carries the drawer kick, ESC p.
+    expect(bytesInclude(new Uint8Array(job.payload), new Uint8Array([0x1b, 0x70]))).toBe(false);
     const lines = printedLines(new Uint8Array(job.payload));
     expect(lines[0]).toBe("Current categories");
     expect(lines).toContain("From 2026-06-10 to 2026-06-11");

@@ -31,6 +31,8 @@ interface Strings {
   net: string;
   uncategorised: string;
   notRecorded: string;
+  /** Not recorded's own part: its lines that carry no free-text category either. */
+  noCategoryRecorded: string;
   directlyIn: (name: string) => string;
   total: string;
   incomplete: (lines: number) => string;
@@ -48,6 +50,7 @@ const STRINGS: Readonly<Record<SupportedLocale, Strings>> = {
     net: "Net",
     uncategorised: "Uncategorised",
     notRecorded: "Not recorded",
+    noCategoryRecorded: "No category recorded",
     directlyIn: (name) => `Directly in ${name}`,
     total: "Total",
     incomplete: (n) =>
@@ -67,6 +70,7 @@ const STRINGS: Readonly<Record<SupportedLocale, Strings>> = {
     net: "Neto",
     uncategorised: "Sin categoría",
     notRecorded: "No registrada",
+    noCategoryRecorded: "Sin categoría registrada",
     directlyIn: (name) => `Directamente en ${name}`,
     total: "Total",
     incomplete: (n) =>
@@ -76,7 +80,6 @@ const STRINGS: Readonly<Record<SupportedLocale, Strings>> = {
   },
 };
 
-/** Two spaces per level of the tree. */
 const INDENT = 2;
 
 /**
@@ -113,7 +116,7 @@ export function formatCategorySalesPage({
     rows.push({ label: nameOf(node), depth: node.depth, gross: node.gross, net: node.net });
     if (node.children.length > 0 && node.direct.lines > 0) {
       rows.push({
-        label: s.directlyIn(nameOf(node)),
+        label: node.kind === "not_recorded" ? s.noCategoryRecorded : s.directlyIn(nameOf(node)),
         depth: node.depth + 1,
         gross: node.direct.gross,
         net: node.direct.net,
