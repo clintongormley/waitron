@@ -53,7 +53,7 @@ function ticketName(text: Record<string, string>, locale: string): string {
   const localised = text[locale];
   if (localised !== undefined) return localised;
   // The map is never empty: `unit_name` freezes a unit's abbreviation, and `createUnit` and
-  // `updateUnit` (`packages/catalogue/src/units.ts`) put it through `validateContentTranslations`.
+  // `updateUnit` (`packages/catalogue/src/units.ts`) put it through `requireTranslations`.
   return Object.values(text)[0]!;
 }
 

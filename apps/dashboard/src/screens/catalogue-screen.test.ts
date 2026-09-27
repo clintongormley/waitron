@@ -565,8 +565,8 @@ describe("catalogue-screen", () => {
         .fn()
         .mockRejectedValueOnce({ code: "unit.precision_invalid", params: {}, status: 400 })
         .mockRejectedValueOnce({
-          code: "content.translation_required",
-          params: { language: "es" },
+          code: "unit.translation_required",
+          params: { field: "abbreviation", language: "es" },
           status: 400,
         }),
     });
@@ -584,15 +584,13 @@ describe("catalogue-screen", () => {
     expect(summaryOf(form)).toEqual([codeMessage("unit.precision_invalid")]);
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
 
-    // The refusal names only a LANGUAGE, and a unit sends two translated maps: the one empty in that
-    // language is the one refused.
     await submitNested(el, form, { name: { es: "ración" }, abbreviation: {}, precision: 2 });
     expect(errorBeside(form, "[data-test=abbreviation-es]")).toBe(
-      codeMessage("content.translation_required"),
+      codeMessage("unit.translation_required"),
     );
     expect(errorBeside(form, "[data-test=name-es]")).toBe("");
     expect(form.shadowRoot!.querySelector("#precision-error")).toBeNull();
-    expect(summaryOf(form)).toEqual([codeMessage("content.translation_required")]);
+    expect(summaryOf(form)).toEqual([codeMessage("unit.translation_required")]);
   });
 
   it("gives a refused nested category create back to the category form, beside the field it concerns", async () => {

@@ -989,10 +989,10 @@ and Available (sold out for now).** What it left open:
   parent product and extras. Neither Task 3 nor Task 5 (#537) took it, so it remains open. **Next
   action:** on a quantity raise, check the line's own product (the variant, since #537) for Active
   and Available, its menu, and the menu's switch for the product.
-- **The units screen's "Availability" column shows the Active flag.** `productsUsingUnit`
-  (`packages/catalogue/src/units.ts`) returns `products.active` under the name `available`, and
-  that name travels in the `unit.in_use` error's details, so renaming it changes an error's shape.
-  **Next action:** rename the field to `active` and head the column "Status", in one change.
+- **DONE (lane C's C5): the units screen's in-use list heads its column "Status".**
+  `productsUsingUnit` (`packages/catalogue/src/units.ts`) now returns the product's Active flag as
+  `active`, in the `unit.in_use` error's details, in `GET /management-api/units/:id/products` and
+  in `POST /management-api/units/:id/products/reassign`.
 
 **Task 3 LANDED as #528: variants are stored as products and follow their product onto
 every menu.** What it left open:
@@ -1285,18 +1285,10 @@ What Task 11 left open:
   the form.**
 - **DONE (#741, lane C's C4): a late second cancel can no longer close another nested catalogue
   form.**
-- **The standalone Units screen says nothing inside its modal for most refused unit saves.**
-  `#save` in `apps/dashboard/src/screens/units-screen.ts` gives the form a field error only for
-  `unit.precision_invalid` and the two `content.translation_*` codes; any other refusal goes to the
-  screen's own banner alone, which sits behind the open modal's backdrop. Seen 2026-09-27 in a
-  throwaway browser screenshot: a create refused with `server.internal` left the New unit form open
-  with no message in it. The case "retains the editor on a failed write" in
-  `apps/dashboard/src/screens/units-screen.test.ts` pins the banner. The same mapping also puts a
-  `content.translation_required` beside the NAME when it was the abbreviation that was empty — read
-  from the code, not run: `createUnit` (`packages/catalogue/src/units.ts`) checks the name, then the
-  abbreviation. **Next action:** use `unitRefusalErrors`, as the catalogue screen's nested unit form
-  does; its precision message is the code's own (`unit.precision_invalid`) rather than
-  `units.precision_invalid`, so the wording on this screen changes too.
+- **DONE (lane C's C5): the standalone Units screen says why a unit save was refused inside its
+  form.** `#save` in `apps/dashboard/src/screens/units-screen.ts` places every refusal with
+  `unitRefusalErrors`, beside its field or in the form's summary, and no longer in the banner behind
+  the modal.
 - **The Categories screen maps a refused category save to form fields by hand.** `#save` in
   `apps/dashboard/src/screens/categories-screen.ts` does by hand, less completely, what
   `categoryRefusalErrors` (`apps/dashboard/src/widgets/category-form.ts`) does: it does not place a
@@ -4073,8 +4065,12 @@ with their own "X succeeded, but…" strings, and what login and retrieve show w
 fails. Give both a11y cases' `getTill` a canvas and assert `till-counter-screen` exists before each
 scan.
 
-**The units screen puts a missing abbreviation's refusal beside the name — OPEN (found
-2026-09-23, dashboard coverage, PR #538).** `apps/dashboard/src/screens/units-screen.ts` (about
+**The units screen puts a missing abbreviation's refusal beside the name — DONE (lane C's C5):
+a unit save now answers `unit.translation_required` naming the `field` and the language, the
+screen places it beside that language's input (or in the form's summary when the form does not
+show that language), and the form's own check counts a missing key for its first language as
+empty. The original
+finding (found 2026-09-23, dashboard coverage, PR #538):** `apps/dashboard/src/screens/units-screen.ts` (about
 line 190) shows every `content.translation_required` refusal beside the unit's NAME field. The server
 checks the name and the abbreviation separately (`packages/catalogue/src/units.ts`) and raises the same
 code, which carries only a language (`packages/catalogue/src/content-languages.ts`), so a refused
@@ -4085,8 +4081,7 @@ refresh reaches the screen (the screen's language list is a live query, `watch("
 in `units-screen.ts`, about line 129): `apps/dashboard/src/widgets/unit-form.ts` rebuilds its draft
 on a language change only when it has no names yet (about lines 59-62), and its check
 `this.abbreviations[defaultLocale]?.trim() === ""` (about line 107) lets a missing abbreviation key
-through. Found by reading; no test pins it. **Next action:** have the
-refusal name the field (or check each field separately), then place it test-first.
+through. Found by reading.
 
 **Dashboard leftovers from the coverage branch — OPEN (found 2026-09-23, PR #538).** Each from
 reading unless marked run:
@@ -4992,12 +4987,10 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
 - **Checking one product's translations re-reads the language configuration once per value**
   (`packages/catalogue/src/content-languages.ts`). `validateContentTranslations` reads the one-row
   configuration on every call (the advisory lock it also took went with the storage switch), and
-  callers call it inside loops: once per variant (`packages/catalogue/src/variants.ts`, inside the
-  normalisation loop) and twice for a single unit create (`packages/catalogue/src/units.ts`). There
-  used to be a third, once per modifier choice, and it went with the old model in Task 13 — the
-  extras and options contracts ask `findContentTranslationGap` ONCE with every map, which is the
-  shape this entry is asking for. That is the shape `CLAUDE.md` §3's "resolve shared
-  catalogue data once before a basket's line loop" rule exists to prevent.
+  `packages/catalogue/src/variants.ts` calls it once per variant, inside the normalisation loop.
+  The extras and options contracts, and a unit save, ask `findContentTranslationGap` ONCE with every
+  map, which is the shape this entry is asking for. That is the shape `CLAUDE.md` §3's "resolve
+  shared catalogue data once before a basket's line loop" rule exists to prevent.
 
 **Payments:**
 

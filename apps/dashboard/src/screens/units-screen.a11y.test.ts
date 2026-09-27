@@ -30,8 +30,8 @@ function api(): DashboardApi {
       code: "unit.in_use",
       params: {
         products: [
-          { id: "p1", name: "Café", available: true },
-          { id: "p2", name: "Té", available: false },
+          { id: "p1", name: "Café", active: true },
+          { id: "p2", name: "Té", active: false },
         ],
       },
     }),

@@ -4,7 +4,7 @@ import type { ProductUsingUnit } from "./unit-types.js";
 
 export type { ProductUsingUnit };
 import { AppError } from "@waitron/shared";
-import { validateContentTranslations } from "./content-languages.js";
+import { findContentTranslationGap } from "./content-languages.js";
 import { productUnits, units } from "./schema/units.js";
 import { validateUnitPrecision } from "./unit-validation.js";
 import { clearedPricingUnit } from "./variant-fallback.js";
@@ -59,13 +59,32 @@ function toSellableUnit(row: {
   return { ...row, hardwareUnit: row.hardwareUnit as SellableUnit["hardwareUnit"] };
 }
 
+/** Checks the supplied maps in one read of the content languages; a gap names its field. */
+async function requireTranslations(
+  tx: Transaction,
+  input: UpdateUnitInput,
+  fallbackLanguage: string,
+): Promise<void> {
+  const fields = (["name", "abbreviation"] as const).filter((field) => input[field] !== undefined);
+  if (fields.length === 0) return;
+  const gap = await findContentTranslationGap(
+    tx,
+    fields.map((field) => input[field]!),
+    fallbackLanguage,
+  );
+  if (gap !== null)
+    throw new AppError("unit.translation_required", {
+      field: fields[gap.index]!,
+      language: gap.language,
+    });
+}
+
 export async function createUnit(
   tx: Transaction,
   input: CreateUnitInput,
   fallbackLanguage: string,
 ): Promise<Unit> {
-  await validateContentTranslations(tx, input.name, fallbackLanguage);
-  await validateContentTranslations(tx, input.abbreviation, fallbackLanguage);
+  await requireTranslations(tx, input, fallbackLanguage);
   validateUnitPrecision(input.precision);
   const [row] = await tx
     .insert(units)
@@ -113,12 +132,7 @@ export async function updateUnit(
   patch: UpdateUnitInput,
   fallbackLanguage: string,
 ): Promise<Unit> {
-  if (patch.name !== undefined) {
-    await validateContentTranslations(tx, patch.name, fallbackLanguage);
-  }
-  if (patch.abbreviation !== undefined) {
-    await validateContentTranslations(tx, patch.abbreviation, fallbackLanguage);
-  }
+  await requireTranslations(tx, patch, fallbackLanguage);
   if (patch.precision !== undefined) validateUnitPrecision(patch.precision);
   if (
     patch.name === undefined &&
@@ -200,7 +214,7 @@ export async function productsUsingUnit(
   unitId: string,
 ): Promise<ProductUsingUnit[]> {
   return tx
-    .select({ id: products.id, name: products.name, available: products.active })
+    .select({ id: products.id, name: products.name, active: products.active })
     .from(productUnits)
     .innerJoin(products, eq(products.id, productUnits.productId))
     .where(eq(productUnits.unitId, unitId))

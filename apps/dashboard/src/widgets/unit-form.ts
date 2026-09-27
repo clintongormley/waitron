@@ -11,24 +11,23 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 
 type UnitField = "name" | "precision" | "abbreviation";
-/** `_form` is shown in the summary alone. */
-export type UnitFormErrors = Partial<Record<UnitField | "_form", string>>;
+type TranslatedField = `${"name" | "abbreviation"}-${string}`;
+/** `name` and `abbreviation` mark the first locale's input; `_form`, and a translated field whose
+ * language the form does not show, are shown in the summary alone. */
+export type UnitFormErrors = Partial<Record<UnitField | TranslatedField | "_form", string>>;
 
-/**
- * A refused unit write, keyed by this form's fields. `content.translation_required` names a language,
- * not which of the two translated maps was empty in it; `createUnit`
- * (`packages/catalogue/src/units.ts`) checks the name before the abbreviation.
- */
-export function unitRefusalErrors(
-  error: unknown,
-  submittedName: Readonly<Record<string, string>>,
-): UnitFormErrors {
+/** A refused unit write, keyed by this form's fields. */
+export function unitRefusalErrors(error: unknown): UnitFormErrors {
   const code = codeOf(error);
   const message = codeMessage(code);
   const params = (error as { params?: { field?: unknown; language?: unknown } }).params ?? {};
   if (code === "unit.precision_invalid") return { precision: message };
-  if (code === "content.translation_required" && typeof params.language === "string")
-    return submittedName[params.language]?.trim() ? { abbreviation: message } : { name: message };
+  if (
+    code === "unit.translation_required" &&
+    (params.field === "name" || params.field === "abbreviation") &&
+    typeof params.language === "string"
+  )
+    return { [`${params.field}-${params.language}`]: message };
   if (
     code === "management.request_invalid" &&
     (params.field === "name" || params.field === "abbreviation" || params.field === "precision")
@@ -127,10 +126,10 @@ export class UnitForm extends LitElement {
     const defaultLocale = this.locales[0];
     const precision = Number(this.precision);
     const errors: Partial<Record<UnitField, string>> = {};
-    if (!defaultLocale || this.names[defaultLocale]?.trim() === "") {
+    if (!defaultLocale || (this.names[defaultLocale] ?? "").trim() === "") {
       errors.name = t("units.name_required");
     }
-    if (!defaultLocale || this.abbreviations[defaultLocale]?.trim() === "") {
+    if (!defaultLocale || (this.abbreviations[defaultLocale] ?? "").trim() === "") {
       errors.abbreviation = t("units.abbreviation_required");
     }
     if (
@@ -169,7 +168,7 @@ export class UnitForm extends LitElement {
   }
 
   override render() {
-    const errors = { ...this.fieldErrors, ...this.localErrors };
+    const errors: UnitFormErrors = { ...this.fieldErrors, ...this.localErrors };
     return html`
       <wt-modal
         heading=${this.value ? t("units.edit") : t("units.create")}
@@ -190,7 +189,7 @@ export class UnitForm extends LitElement {
               name=${`name-${locale}`}
               label=${`${t("units.name")} (${locale.toUpperCase()})`}
               ?required=${index === 0}
-              error=${index === 0 ? (errors.name ?? "") : ""}
+              error=${errors[`name-${locale}`] ?? (index === 0 ? (errors.name ?? "") : "")}
               .value=${this.names[locale] ?? ""}
               @wt-change=${(event: CustomEvent<{ value: string }>) => this.#changeName(locale, event)}
             ></wt-input>
@@ -200,7 +199,9 @@ export class UnitForm extends LitElement {
               name=${`abbreviation-${locale}`}
               label=${`${t("units.abbreviation")} (${locale.toUpperCase()})`}
               ?required=${index === 0}
-              error=${index === 0 ? (errors.abbreviation ?? "") : ""}
+              error=${
+                errors[`abbreviation-${locale}`] ?? (index === 0 ? (errors.abbreviation ?? "") : "")
+              }
               .value=${this.abbreviations[locale] ?? ""}
               @wt-change=${(event: CustomEvent<{ value: string }>) =>
                 this.#changeAbbreviation(locale, event)}
