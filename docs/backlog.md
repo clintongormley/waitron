@@ -3042,6 +3042,13 @@ image constraints under *Detail → Box image*.
 
 ### B9. CI and test infra
 
+- **`apps/server/src/stream-host.test.ts` passes only in file order — OPEN (found by #752's review,
+  2026-09-27).** Codex ran the file under Vitest's shuffled order (`--sequence.shuffle`, seeds 577 and
+  578): seed 578 failed 3 cases, because cases expecting no bucket credential ran after a case that
+  stored one. It failed the same way with #752's three changed source files swapped back to `main`'s
+  versions, so the cause is the suite's shared state, not that change. Next: find which cases share a
+  database without resetting it (`useVenueDb`'s `resetPerTest`, or a credential left behind), make each
+  case set up what it reads, and prove it with the same two seeds.
 - **A main server shard lost the landing listener's chosen port — DONE (lane A's A80, **PR #740**).**
   Exact-merge CI run 36317643554 at `30d9836028e44180feca9578b87d389ab8cdd786` logged
   `server.listening` on port 40141 and, 2 ms later in the same boot, `landing.listen_failed` with
