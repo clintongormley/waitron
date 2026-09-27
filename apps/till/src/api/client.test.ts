@@ -1450,6 +1450,7 @@ describe("TillApi", () => {
         sentAt: "2026-08-06T09:59:00.000Z",
         firedAt: "2026-08-06T09:59:00.000Z",
         state: "queued",
+        groupId: "g1",
       },
       {
         lineNo: 2,
@@ -1466,6 +1467,7 @@ describe("TillApi", () => {
         sentAt: "2026-08-06T09:59:00.000Z",
         firedAt: null,
         state: null,
+        groupId: null,
       },
     ];
     const fetchStub = vi
@@ -2174,6 +2176,186 @@ describe("TillApi: a seated party", () => {
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/visits/v1/bills",
       expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  const groups = [
+    {
+      id: "g1",
+      position: 1,
+      state: "fired",
+      firedAt: "2026-09-27T10:00:00.000Z",
+      remindAt: null,
+      lineIds: ["l1"],
+      summary: "2 × Caña",
+    },
+    {
+      id: "g2",
+      position: 2,
+      state: "held",
+      firedAt: null,
+      remindAt: null,
+      lineIds: ["l2", "l3"],
+      summary: "1 × Tarta, 1 × Flan",
+    },
+  ];
+
+  it("listGroups GETs the party's order groups and the revision they were read at", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ revision: 6, groups }));
+
+    await expect(new TillApi("", fetchStub).listGroups("v1")).resolves.toEqual({
+      revision: 6,
+      groups,
+    });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/visits/v1/groups",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+  });
+
+  it("submitGroups POSTs the submission, the revision read and each group's lines and release, and returns the tab they landed on", async () => {
+    const answer = { tabId: "wo-2", revision: 7, groups };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
+    const body = {
+      submissionId: "sub-1",
+      expectedVisitRevision: 6,
+      groups: [
+        { lines: [{ menuItemId: "mi-cana", quantity: "2" }], release: "fire" as const },
+        {
+          lines: [
+            { menuItemId: "mi-tarta", quantity: "1" },
+            { menuItemId: "mi-flan", quantity: "1", courseId: "c-postres" },
+          ],
+          release: "hold" as const,
+        },
+      ],
+    };
+
+    await expect(new TillApi("", fetchStub).submitGroups("v1", body)).resolves.toEqual(answer);
+
+    expect(fetchStub).toHaveBeenCalledWith("/api/visits/v1/groups", post(body));
+  });
+
+  it("submitGroups sends joinGroupId when adding to a held group", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ tabId: "wo-1", revision: 8, groups }));
+    const body = {
+      submissionId: "sub-2",
+      expectedVisitRevision: 7,
+      groups: [{ lines: [{ menuItemId: "mi-tarta", quantity: "1" }], release: "hold" as const }],
+      joinGroupId: "g2",
+    };
+
+    await new TillApi("", fetchStub).submitGroups("v1", body);
+
+    expect(fetchStub).toHaveBeenCalledWith("/api/visits/v1/groups", post(body));
+  });
+
+  it("submitGroups surfaces a stale revision as { code }", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "visit.out_of_date" } }, 409));
+
+    await expect(
+      new TillApi("", fetchStub).submitGroups("v1", {
+        submissionId: "sub-3",
+        expectedVisitRevision: 1,
+        groups: [{ lines: [{ menuItemId: "mi-tarta", quantity: "1" }], release: "fire" }],
+      }),
+    ).rejects.toMatchObject({ code: "visit.out_of_date", status: 409 });
+  });
+
+  it("fireGroup POSTs the submission and revision to the group's /fire route and returns the party's revision", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ revision: 9 }));
+
+    await expect(
+      new TillApi("", fetchStub).fireGroup("v1", "g2", {
+        submissionId: "sub-4",
+        expectedVisitRevision: 8,
+      }),
+    ).resolves.toEqual({ revision: 9 });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/visits/v1/groups/g2/fire",
+      post({ submissionId: "sub-4", expectedVisitRevision: 8 }),
+    );
+  });
+
+  it("fireGroup surfaces an already-fired group as { code }", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "group.not_held" } }, 409));
+
+    await expect(
+      new TillApi("", fetchStub).fireGroup("v1", "g1", {
+        submissionId: "sub-5",
+        expectedVisitRevision: 8,
+      }),
+    ).rejects.toMatchObject({ code: "group.not_held", status: 409 });
+  });
+
+  it("reorderGroups PUTs the held groups in their new order and returns the party's revision", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ revision: 10 }));
+
+    await expect(
+      new TillApi("", fetchStub).reorderGroups("v1", ["g3", "g2"], {
+        submissionId: "sub-6",
+        expectedVisitRevision: 9,
+      }),
+    ).resolves.toEqual({ revision: 10 });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/visits/v1/groups/order",
+      expect.objectContaining({
+        method: "PUT",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          submissionId: "sub-6",
+          expectedVisitRevision: 9,
+          heldGroupIds: ["g3", "g2"],
+        }),
+      }),
+    );
+  });
+
+  it("moveLinesToGroup POSTs the moves and the target group, or a new one, and returns the party's revision", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ revision: 11 }))
+      .mockResolvedValueOnce(jsonResponse({ revision: 12 }));
+    const api = new TillApi("", fetchStub);
+    const moves = [{ lineId: "l2", quantity: "1" }];
+
+    await expect(
+      api.moveLinesToGroup(
+        "v1",
+        moves,
+        { groupId: "g3" },
+        {
+          submissionId: "sub-7",
+          expectedVisitRevision: 10,
+        },
+      ),
+    ).resolves.toEqual({ revision: 11 });
+    await expect(
+      api.moveLinesToGroup("v1", moves, "new", {
+        submissionId: "sub-8",
+        expectedVisitRevision: 11,
+      }),
+    ).resolves.toEqual({ revision: 12 });
+
+    expect(fetchStub).toHaveBeenNthCalledWith(
+      1,
+      "/api/visits/v1/groups/move",
+      post({ submissionId: "sub-7", expectedVisitRevision: 10, moves, target: { groupId: "g3" } }),
+    );
+    expect(fetchStub).toHaveBeenNthCalledWith(
+      2,
+      "/api/visits/v1/groups/move",
+      post({ submissionId: "sub-8", expectedVisitRevision: 11, moves, target: "new" }),
     );
   });
 

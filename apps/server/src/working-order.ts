@@ -2219,6 +2219,8 @@ export interface TabLine {
   firedAt: string | null;
   /** Null when the line has no ticket item (always, on a child). */
   state: TicketState | null;
+  /** The order group the line belongs to; null on a bill with no visit. */
+  groupId: string | null;
   note: string | null;
   /** The extras list a CHILD row was picked from; null on a dish. */
   listId: string | null;
@@ -2255,6 +2257,7 @@ export async function readTabLines(
       sentAt: workingOrderLines.sentAt,
       firedAt: ticketItems.firedAt,
       state: ticketItems.state,
+      groupId: workingOrderLines.groupId,
       note: workingOrderLines.note,
       listId: workingOrderLines.extraListId,
       productParentId: products.parentId,
@@ -2288,6 +2291,7 @@ export async function readTabLines(
       sentAt: row.sentAt,
       firedAt: row.firedAt,
       state: row.state,
+      groupId: row.groupId,
       note: row.note,
       listId: row.listId,
       menuItemId: menuItemByLine.get(row.id) ?? null,

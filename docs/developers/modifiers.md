@@ -135,8 +135,8 @@ the API call and closes the editor after a successful write.
 A requested line carries two optional fields, `options` and `extras`. Five routes take them,
 each threading them into `priceOrderLines` (`apps/server/src/working-order.ts`): the walk-up sale
 `POST /api/sales`, the park `POST /api/working-orders`, the held-order edit
-`PUT /api/working-orders/:id`, the tab round `POST /api/working-orders/:id/round`, and the
-integrated card pay `POST /api/pay` — the last on its WALK-UP branch only, since a retrieved or
+`PUT /api/working-orders/:id`, a seated party's group submission `POST /api/visits/:id/groups`,
+and the integrated card pay `POST /api/pay` — the last on its WALK-UP branch only, since a retrieved or
 placed order ignores the request's lines and files its own stored ones (`IntegratedPayRequest`,
 `apps/server/src/till-sale.ts`).
 

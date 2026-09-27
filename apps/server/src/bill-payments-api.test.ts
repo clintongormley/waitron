@@ -894,9 +894,25 @@ describe("an item already paid for (design §8 test 5)", () => {
   });
 
   it("takes an item payment for a held line that has not gone to the kitchen", async () => {
-    const billId = await tabWith("Paella");
-    const round = await request("POST", `/api/working-orders/${billId}/round`, {
-      lines: [{ menuItemId: offer("Tarta"), quantity: "1", hold: true }],
+    const table = await inTx((tx) =>
+      createTable(tx, venue.cfg, {
+        label: `M-${randomUUID().slice(0, 8)}`,
+        zoneId: venue.offers.zoneId,
+      }),
+    );
+    const seated = await request("POST", `/api/tables/${table.id}/seat`, {});
+    const {
+      tabId: billId,
+      visitId,
+      revision,
+    } = seated.json as { tabId: string; visitId: string; revision: number };
+    const round = await request("POST", `/api/visits/${visitId}/groups`, {
+      submissionId: randomUUID(),
+      expectedVisitRevision: revision,
+      groups: [
+        { lines: [{ menuItemId: offer("Paella"), quantity: "1" }], release: "fire" },
+        { lines: [{ menuItemId: offer("Tarta"), quantity: "1" }], release: "hold" },
+      ],
     });
     expect(round.status).toBe(200);
     const lines = await request("GET", `/api/working-orders/${billId}/lines`);

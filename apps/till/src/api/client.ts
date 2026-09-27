@@ -473,6 +473,49 @@ export interface RoundLine extends SaleLine {
   hold?: boolean;
 }
 
+/** Whether a submitted group goes to the kitchen now or waits until it is fired. */
+export type GroupRelease = "fire" | "hold";
+
+/** One line of a submitted group. Its group, not its course, decides when it is released. */
+export interface GroupLine extends SaleLine {
+  courseId?: string;
+}
+
+/** A party's group of lines as `GET /api/visits/:id/groups` reads it. `lineIds` are the group's dish
+ * lines, on whichever of the party's bills they sit; `summary` names them by staff name, e.g.
+ * "2 × Steak, 1 × Fish". A removed group is never listed. */
+export interface OrderGroup {
+  id: string;
+  position: number;
+  state: "held" | "fired";
+  firedAt: string | null;
+  remindAt: string | null;
+  lineIds: string[];
+  summary: string;
+}
+
+/** What every group command sends: a submission id the till keeps for a retry, and the party's
+ * revision as last read. */
+export interface GroupCommand {
+  submissionId: string;
+  expectedVisitRevision: number;
+}
+
+/** A group submission: the groups in the order they go in the party's sequence, or one held group
+ * added to the existing held group `joinGroupId`. */
+export interface GroupSubmission extends GroupCommand {
+  groups: { lines: GroupLine[]; release: GroupRelease }[];
+  joinGroupId?: string;
+}
+
+/** The answer to a group submission: the tab the lines landed on, the party's revision after it, and
+ * the groups created or joined. */
+export interface SubmittedGroups {
+  tabId: string;
+  revision: number;
+  groups: OrderGroup[];
+}
+
 /** A cash tender: the full amount the operator keyed in (the server computes the change). */
 export interface CashTender {
   method: "cash";
@@ -1125,6 +1168,9 @@ export interface TabLine {
    * RECALLABLE line has `firedAt` set, `state === "queued"`, and the venue allows changes to sent items
    * (`editSentLines`); "preparing"/"ready" is cancel-only. */
   state: TicketState | null;
+  /** The order group the line belongs to; null on a bill with no party. Absent only on a fixture that
+   * omits it. */
+  groupId?: string | null;
   note: string | null;
   /** The extras list a CHILD row was picked from, which a prefilled pick goes back to; null on a
    * dish. */
@@ -1650,6 +1696,64 @@ export class TillApi {
   /** Every bill of a party, merged parties' included → `GET /api/visits/:visitId/bills`. */
   getVisitBills(visitId: string): Promise<VisitBill[]> {
     return this.#request<VisitBill[]>(`/api/visits/${visitId}/bills`, "GET");
+  }
+
+  /** A party's order groups in sequence, with its revision → `GET /api/visits/:visitId/groups`. */
+  listGroups(visitId: string): Promise<{ revision: number; groups: OrderGroup[] }> {
+    return this.#request(`/api/visits/${visitId}/groups`, "GET");
+  }
+
+  /**
+   * Put groups of lines on a party's tab → `POST /api/visits/:visitId/groups`, each released now or
+   * held. Sent to a paid tab the party still points at, it opens the party's next tab: the answer
+   * names the tab the lines landed on. A repeat with the same submission id answers as the first.
+   * Rejects `visit.out_of_date`, `visit.not_open`, `submission.id_reused`, `group.not_held` and
+   * `group.not_found` as `{ code }`.
+   */
+  submitGroups(
+    visitId: string,
+    submission: GroupSubmission,
+    options: ReadOptions = {},
+  ): Promise<SubmittedGroups> {
+    return this.#request(`/api/visits/${visitId}/groups`, "POST", submission, options.signal);
+  }
+
+  /** Send a held group to the kitchen → `POST /api/visits/:visitId/groups/:groupId/fire`. Rejects
+   * `group.not_held`, `group.not_found`, `product.unavailable` and the command refusals. */
+  fireGroup(
+    visitId: string,
+    groupId: string,
+    command: GroupCommand,
+  ): Promise<{ revision: number }> {
+    return this.#request(`/api/visits/${visitId}/groups/${groupId}/fire`, "POST", command);
+  }
+
+  /** Put a party's held groups in a new order → `PUT /api/visits/:visitId/groups/order`, naming every
+   * held group once. Fired groups keep their places. */
+  reorderGroups(
+    visitId: string,
+    heldGroupIds: string[],
+    command: GroupCommand,
+  ): Promise<{ revision: number }> {
+    return this.#request(`/api/visits/${visitId}/groups/order`, "PUT", {
+      ...command,
+      heldGroupIds,
+    });
+  }
+
+  /** Move lines, or part of one, between held groups, or into a new held group at the end →
+   * `POST /api/visits/:visitId/groups/move`. */
+  moveLinesToGroup(
+    visitId: string,
+    moves: { lineId: string; quantity: string }[],
+    target: { groupId: string } | "new",
+    command: GroupCommand,
+  ): Promise<{ revision: number }> {
+    return this.#request(`/api/visits/${visitId}/groups/move`, "POST", {
+      ...command,
+      moves,
+      target,
+    });
   }
 
   /**

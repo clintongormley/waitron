@@ -30,6 +30,7 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
+import { addTabRound } from "./working-order.js";
 import "./errors.js";
 
 // The HTTP shape of the coursing, fire, station-queue and expo routes: the session guard, the id
@@ -272,17 +273,13 @@ async function tabWithSopaAndFilete(): Promise<string> {
   });
   expect(opened.status).toBe(200);
   const { tabId } = (await opened.json()) as { tabId: string };
-  const round = await app.request(`/api/working-orders/${tabId}/round`, {
-    method: "POST",
-    headers: { "content-type": "application/json", cookie },
-    body: JSON.stringify({
-      lines: [
-        { menuItemId: ids.get(SOPA)!, quantity: "1" },
-        { menuItemId: ids.get(FILETE)!, quantity: "1" },
-      ],
-    }),
-  });
-  expect(round.status).toBe(200);
+  // The round function, not a route: the course rule decides what fires, which no group route does.
+  await withTransaction(suite.db, (tx) =>
+    addTabRound(tx, cfg, tabId, [
+      { menuItemId: ids.get(SOPA)!, quantity: "1" },
+      { menuItemId: ids.get(FILETE)!, quantity: "1" },
+    ]),
+  );
   return tabId;
 }
 
