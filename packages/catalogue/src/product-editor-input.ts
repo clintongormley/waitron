@@ -5,7 +5,7 @@ import { validateDietaryDeclarations } from "./dietary-declarations.js";
 import { nonBlankTranslations } from "./product-presentation.js";
 import { isModifierListKind } from "./product-modifiers.js";
 import type { ProductVariantInput } from "./variants.js";
-import { VAT_CLASSES, type VatClass } from "./pricing.js";
+import { VAT_CLASSES, type VatClass } from "./vat-rates.js";
 import type { ProductEditorInput, ProductModifierRef } from "./product-types.js";
 export type { ProductEditorInput } from "./product-types.js";
 import "./errors.js";

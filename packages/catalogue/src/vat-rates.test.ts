@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { decimal } from "@waitron/shared";
-import { VAT_RATE_TABLE, localCalendarDate, vatRateOn, type VatRateTable } from "./vat-rates.js";
+import {
+  VAT_RATE_TABLE,
+  localCalendarDate,
+  vatRateOn,
+  vatRatesOn,
+  type VatRateTable,
+} from "./vat-rates.js";
 
 // A release that ships a new general rate from 2027-01-01.
 const WITH_CHANGE: VatRateTable = {
@@ -87,6 +93,49 @@ describe("vatRateOn", () => {
   it("refuses a class with no entries", () => {
     const table = { ...VAT_RATE_TABLE, general: [] };
     expect(() => vatRateOn("general", "2026-09-27", table)).toThrow(/first entry/);
+  });
+});
+
+describe("vatRatesOn", () => {
+  it("gives every class's rate on one date", () => {
+    expect(vatRatesOn("2026-12-31", WITH_CHANGE)).toEqual({
+      general: decimal("21.00"),
+      reduced: decimal("10.00"),
+      super_reduced: decimal("4.00"),
+      zero: decimal("0.00"),
+    });
+    expect(vatRatesOn("2027-01-01", WITH_CHANGE)).toEqual({
+      general: decimal("23.00"),
+      reduced: decimal("10.00"),
+      super_reduced: decimal("4.00"),
+      zero: decimal("0.00"),
+    });
+  });
+
+  it("reads the shipped table when none is given", () => {
+    expect(vatRatesOn("2026-09-27")).toEqual({
+      general: decimal("21.00"),
+      reduced: decimal("10.00"),
+      super_reduced: decimal("4.00"),
+      zero: decimal("0.00"),
+    });
+  });
+
+  it("refuses a date that is not a real YYYY-MM-DD calendar day", () => {
+    expect(() => vatRatesOn("2027-02-30")).toThrow(/not a calendar date/);
+  });
+
+  it("refuses a malformed class even when another class is asked for, and on every call", () => {
+    const table = {
+      ...VAT_RATE_TABLE,
+      zero: [
+        { from: null, rate: "0.00" },
+        { from: null, rate: "1.00" },
+      ],
+    };
+    expect(() => vatRatesOn("2026-09-27", table)).toThrow(/oldest first/);
+    expect(() => vatRatesOn("2026-09-27", table)).toThrow(/oldest first/);
+    expect(() => vatRateOn("general", "2026-09-27", table)).toThrow(/oldest first/);
   });
 });
 

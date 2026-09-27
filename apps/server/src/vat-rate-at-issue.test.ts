@@ -46,8 +46,8 @@ vi.mock("@waitron/catalogue/src/vat-rates.js", async (importOriginal) => {
   return {
     ...original,
     VAT_RATE_TABLE: table,
-    vatRateOn: (...[vatClass, date, given]: Parameters<typeof original.vatRateOn>) =>
-      original.vatRateOn(vatClass, date, given ?? table),
+    vatRatesOn: (...[date, given]: Parameters<typeof original.vatRatesOn>) =>
+      original.vatRatesOn(date, given ?? table),
   };
 });
 

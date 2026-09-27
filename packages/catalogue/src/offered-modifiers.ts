@@ -8,7 +8,7 @@ import { readProductModifiers } from "./product-modifiers.js";
 import { expandDietaryDeclarations, validateDietaryDeclarations } from "./dietary-declarations.js";
 import type { OptionList } from "./modifier-list-types.js";
 import type { ProductModifierRef } from "./product-types.js";
-import type { VatClass } from "./pricing.js";
+import type { VatClass } from "./vat-rates.js";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 import type { OfferedExtraItem, OfferedModifier } from "./menu-types.js";
 

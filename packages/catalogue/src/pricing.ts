@@ -12,9 +12,8 @@ import type { Decimal, OptionSnapshot } from "@waitron/shared";
 import type { RecordSaleLine } from "@waitron/core/src/sale-line.js";
 import type { VatBreakdownLine } from "@waitron/fiscal/src/vat-breakdown.js";
 import { assertQuantityPrecision } from "./unit-validation.js";
-import { localToday, vatRateOn, type VatClass } from "./vat-rates.js";
+import { localToday, vatRatesOn, type VatClass } from "./vat-rates.js";
 
-export { VAT_CLASSES, type VatClass } from "./vat-rates.js";
 export type PricingUnit = "each" | "weight";
 
 export interface UnitSnapshot {
@@ -129,17 +128,10 @@ function priceRows(rows: readonly PricingRow[], on: string): PricedLines {
   const grossUnitPrices: Decimal[] = [];
   const groups = new Map<Decimal, { base: Decimal; gross: Decimal }>();
 
-  const rates = new Map<VatClass, Decimal>();
-  const rateOf = (vatClass: VatClass): Decimal => {
-    const known = rates.get(vatClass);
-    if (known !== undefined) return known;
-    const rate = vatRateOn(vatClass, on);
-    rates.set(vatClass, rate);
-    return rate;
-  };
+  const rates = vatRatesOn(on);
 
   rows.forEach((row, i) => {
-    const rate = rateOf(row.vatClass);
+    const rate = rates[row.vatClass];
     const grossUnit = toScale(row.grossUnit, MONEY_SCALE);
     const gross = toScale(multiplyDecimal(row.grossUnit, decimal(row.quantity)), MONEY_SCALE);
     const base = baseFromGross(gross, rate);

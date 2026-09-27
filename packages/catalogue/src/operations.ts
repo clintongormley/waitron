@@ -28,7 +28,8 @@ import {
   type DietOverride,
   type DietProfile,
 } from "./dietary.js";
-import type { PricingUnit, VatClass } from "./pricing.js";
+import type { PricingUnit } from "./pricing.js";
+import type { VatClass } from "./vat-rates.js";
 import { contentLanguages, menuItems } from "./schema/menu.js";
 import { sections } from "./schema/sections.js";
 import {

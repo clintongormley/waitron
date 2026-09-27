@@ -1,12 +1,5 @@
 export * from "./pricing.js";
-export {
-  VAT_RATE_TABLE,
-  localCalendarDate,
-  localToday,
-  vatRateOn,
-  type DatedRate,
-  type VatRateTable,
-} from "./vat-rates.js";
+export * from "./vat-rates.js";
 export * from "./units.js";
 export * from "./operations.js";
 export * from "./content-languages.js";
