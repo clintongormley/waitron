@@ -763,29 +763,37 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     expect(api.getDeviceStation).toHaveBeenCalledOnce();
   });
 
-  it("a failed device reload after a bump leaves the last-known queue in place (degrade gracefully)", async () => {
+  it("a failed device reload after a bump leaves the last-known queue in place, shows the out-of-date banner and re-boots nothing", async () => {
     // The post-bump reload rejects: the display keeps its last-known queue rather than blanking.
-    const getDeviceStation = vi
-      .fn()
-      .mockResolvedValueOnce({ station: boundStation }) // connect
-      .mockRejectedValueOnce({ code: "device.unauthorized" }); // reload after the bump fails
-    const api = deviceApi({ getDeviceStation });
-    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
-      api,
-      deviceMode: true,
-    });
-    await flush(el);
-    queueWidget(el)!.dispatchEvent(
-      new CustomEvent("advance-ticket-item", {
-        detail: { itemId: "ti-1", to: "preparing" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await flush(el);
-    // Bump attempted, reload rejected, last-known queue retained (the widget still renders it).
-    expect(api.deviceAdvance).toHaveBeenCalledWith("ti-1", "preparing");
-    expect(queueWidget(el)!.groups).toEqual(cocinaQueue);
+    const reboot = vi.fn();
+    document.addEventListener("device-unauthorized", reboot);
+    try {
+      const getDeviceStation = vi
+        .fn()
+        .mockResolvedValueOnce({ station: boundStation }) // connect
+        .mockRejectedValueOnce({ code: "device.unauthorized" }); // reload after the bump fails
+      const api = deviceApi({ getDeviceStation });
+      const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+        api,
+        deviceMode: true,
+      });
+      await flush(el);
+      queueWidget(el)!.dispatchEvent(
+        new CustomEvent("advance-ticket-item", {
+          detail: { itemId: "ti-1", to: "preparing" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      // Bump attempted, reload rejected, last-known queue retained (the widget still renders it).
+      expect(api.deviceAdvance).toHaveBeenCalledWith("ti-1", "preparing");
+      expect(queueWidget(el)!.groups).toEqual(cocinaQueue);
+      expect(el.shadowRoot!.querySelector("[data-stale]")).not.toBeNull();
+      expect(reboot).not.toHaveBeenCalled();
+    } finally {
+      document.removeEventListener("device-unauthorized", reboot);
+    }
   });
 
   it("a whole-ticket bump expands to a deviceAdvance for each advanceable item at the bound station", async () => {
@@ -1783,6 +1791,21 @@ describe("till-station-screen out-of-date banner", () => {
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
     await flush(el);
+    expect(banner(el)!.textContent!.trim()).toBe("Not up to date since 10:19");
+  });
+
+  it("a station list that answers 20 seconds late, in the next minute, still dates a failed first read from when the screen opened", async () => {
+    const api = stubApi({
+      listStations: vi.fn(
+        () => new Promise((resolve) => setTimeout(() => resolve(stations), 20_000)),
+      ),
+      getStationQueue: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    await tick(el, 20_000); // 10:20:10: the stations answer, and the first queue read fails
+    expect(api.getStationQueue).toHaveBeenCalledWith("st-1");
+    expect(api.getStationQueue).toHaveBeenCalledOnce();
     expect(banner(el)!.textContent!.trim()).toBe("Not up to date since 10:19");
   });
 

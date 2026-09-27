@@ -128,7 +128,7 @@ export class TillStationScreen extends LitElement {
   @property() deviceMode = false;
   /** The station the app already probed at cold boot, adopted ONCE so the mount does not read it again. */
   @property({ attribute: false }) initialDeviceStation?: DeviceStation;
-  /** Mounted inside a card host, which supplies the header; the view toggle stays. */
+  /** Mounted inside a card host, which supplies the header; the view toggle and the out-of-date banner stay. */
   @property({ type: Boolean }) embedded = false;
 
   @state() private stations: Station[] = [];
@@ -324,7 +324,9 @@ export class TillStationScreen extends LitElement {
 
   async #selectStation(id: string, replace = false): Promise<void> {
     if (this.deviceMode) return;
-    if (this.activeStationId !== id) {
+    // No queue read happens before the first pick (`#reload` returns while no station is picked),
+    // so there is nothing to reset and the clock keeps the creation time.
+    if (this.activeStationId !== undefined && this.activeStationId !== id) {
       this.groups = [];
       this.notices = [];
       // Reads still out are for the station being left.

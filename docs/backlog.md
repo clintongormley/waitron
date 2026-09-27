@@ -327,13 +327,13 @@ in Spanish, as its queue row already did; only a line with no unit at all reads 
 Each on both is the owner's call, not done. **Done since (2026-09-27, lane A's A72):** while the
 kitchen screen's queue reads fail (including a read cancelled at 25 seconds), a banner above the
 list says "Not up to date since 10:20" ("Sin actualizar desde las 10:20"), giving the time of the
-last read it showed, or the time the screen opened or the station was picked if none has
-succeeded; the list stays on screen beneath it and the next good read clears it. A late failure of
-an older read after a newer answer is on screen raises nothing, and neither does an enrolled
-display's 15-second refresh answered `device.unauthorized`, which re-boots the app. A 401 answering
-the reload after a bump does show the banner, and re-boots nothing until the next refresh, as
-before. Still open: when the operator screen's list of stations cannot be read it shows "No
-stations", with no banner.
+last read it showed, or, if none has succeeded, the time the screen opened, or the time the
+operator switched to this station; the list stays on screen beneath it and the next good read
+clears it. A late failure of an older read after a newer answer is on screen raises nothing, and
+neither does an enrolled display's 15-second refresh answered `device.unauthorized`, which
+re-boots the app. A 401 answering the reload after a bump does show the banner, and re-boots
+nothing until the next refresh, as before. Still open: when the operator screen's list of
+stations cannot be read it shows "No stations", with no banner.
 **Menus M7b3 landed (#713, 2026-09-26): an unpaid split bill goes back on its tab.** When the
 waiter leaves a separate bill made with "Split by item" without paying it, the till that made it
 merges it back into the table's tab (`mergeTabs`; the kitchen is told nothing). Every other case
