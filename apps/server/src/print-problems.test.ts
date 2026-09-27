@@ -543,47 +543,68 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     const v = await setupVenue();
     const source = await firedTable(v, "Mesa 4");
     const destination = await firedTable(v, "Mesa 5");
-    await setJob(await jobFor(source.tabId, v.cocinaPrinter), exhausted);
+    const failed = await jobFor(source.tabId, v.cocinaPrinter);
+    await setJob(failed, exhausted);
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, destination.tabId));
     await setJob((await links()).at(-1)!.printJobId, { status: "done" });
     expect(await problemsOf(source.visitId)).toHaveLength(1);
 
     await mergeBills(v, source, destination);
 
-    expect(await problemsOf(destination.visitId)).toMatchObject([
-      { workingOrderId: destination.tabId, stationId: v.cocina },
+    expect(await problemsOf(destination.visitId)).toEqual([
+      {
+        workingOrderId: destination.tabId,
+        stationId: v.cocina,
+        stationName: "Cocina",
+        since: await createdAtOf(failed),
+      },
     ]);
+    expect((await stationCard(v.cocina, destination.tabId)).printProblem).toBe(true);
   });
 
   it("keeps the receiving bill's own failure when the merged bill's reprint printed before the merge", async () => {
     const v = await setupVenue();
     const source = await firedTable(v, "Mesa 4");
     const destination = await firedTable(v, "Mesa 5");
-    await setJob(await jobFor(destination.tabId, v.cocinaPrinter), exhausted);
+    const failed = await jobFor(destination.tabId, v.cocinaPrinter);
+    await setJob(failed, exhausted);
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, source.tabId));
     await setJob((await links()).at(-1)!.printJobId, { status: "done" });
 
     await mergeBills(v, source, destination);
 
-    expect(await problemsOf(destination.visitId)).toMatchObject([
-      { workingOrderId: destination.tabId, stationId: v.cocina },
+    expect(await problemsOf(destination.visitId)).toEqual([
+      {
+        workingOrderId: destination.tabId,
+        stationId: v.cocina,
+        stationName: "Cocina",
+        since: await createdAtOf(failed),
+      },
     ]);
+    expect((await stationCard(v.cocina, destination.tabId)).printProblem).toBe(true);
   });
 
   it("keeps the receiving bill's own failure when the merged bill's reprint, waiting at the merge, prints after it", async () => {
     const v = await setupVenue();
     const source = await firedTable(v, "Mesa 4");
     const destination = await firedTable(v, "Mesa 5");
-    await setJob(await jobFor(destination.tabId, v.cocinaPrinter), exhausted);
+    const failed = await jobFor(destination.tabId, v.cocinaPrinter);
+    await setJob(failed, exhausted);
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, source.tabId));
     const waiting = (await links()).at(-1)!.printJobId;
 
     await mergeBills(v, source, destination);
     await setJob(waiting, { status: "done" });
 
-    expect(await problemsOf(destination.visitId)).toMatchObject([
-      { workingOrderId: destination.tabId, stationId: v.cocina },
+    expect(await problemsOf(destination.visitId)).toEqual([
+      {
+        workingOrderId: destination.tabId,
+        stationId: v.cocina,
+        stationName: "Cocina",
+        since: await createdAtOf(failed),
+      },
     ]);
+    expect((await stationCard(v.cocina, destination.tabId)).printProblem).toBe(true);
   });
 
   it("does not bring back a merged bill's failure that its own reprint had already cleared", async () => {
@@ -598,6 +619,68 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     await mergeBills(v, source, destination);
 
     expect(await problemsOf(destination.visitId)).toEqual([]);
+    expect("printProblem" in (await stationCard(v.cocina, destination.tabId))).toBe(false);
+  });
+
+  it("keeps a merged bill's station-printer failure though its pass printer's reprint printed", async () => {
+    const v = await setupVenue();
+    const pase = await passPrinter(v);
+    const source = await firedTable(v, "Mesa 4", ["burger", "beer"]);
+    const destination = await firedTable(v, "Mesa 5");
+    const paseJobOf = (rows: Awaited<ReturnType<typeof links>>) => {
+      const ids = new Set(
+        rows
+          .filter((row) => row.workingOrderId === source.tabId && row.printerId === pase)
+          .map((row) => row.printJobId),
+      );
+      expect(ids.size).toBe(1);
+      return [...ids][0]!;
+    };
+    const cocinaFailed = await jobFor(source.tabId, v.cocinaPrinter);
+    const paseFailed = paseJobOf(await links());
+    await setJob(cocinaFailed, exhausted);
+    await setJob(await jobFor(source.tabId, v.barraPrinter), { status: "done" });
+    await setJob(paseFailed, exhausted);
+
+    const before = (await links()).length;
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, source.tabId));
+    const reprints = (await links()).slice(before);
+    const paseReprint = paseJobOf(reprints);
+    await setJob(reprints.find((row) => row.printerId === v.cocinaPrinter)!.printJobId, exhausted);
+    await setJob(reprints.find((row) => row.printerId === v.barraPrinter)!.printJobId, {
+      status: "done",
+    });
+    await setJob(paseReprint, { status: "done" });
+    const cocinaProblem = {
+      stationId: v.cocina,
+      stationName: "Cocina",
+      since: await createdAtOf(cocinaFailed),
+    };
+    expect(await problemsOf(source.visitId)).toEqual([
+      { workingOrderId: source.tabId, ...cocinaProblem },
+    ]);
+
+    await mergeBills(v, source, destination);
+
+    expect(await problemsOf(destination.visitId)).toEqual([
+      { workingOrderId: destination.tabId, ...cocinaProblem },
+    ]);
+    expect((await stationCard(v.cocina, destination.tabId)).printProblem).toBe(true);
+    // The pass printer's failed ticket, which its printed reprint covered, stays on the closed bill.
+    expect("printProblem" in (await stationCard(v.barra, destination.tabId))).toBe(false);
+    expect(
+      (await links())
+        .filter((row) => row.printJobId === paseFailed || row.printJobId === paseReprint)
+        .map((row) => [row.printJobId, row.workingOrderId, row.stationId, row.reprint])
+        .sort(),
+    ).toEqual(
+      [
+        [paseFailed, source.tabId, v.cocina, false],
+        [paseFailed, source.tabId, v.barra, false],
+        [paseReprint, source.tabId, v.cocina, true],
+        [paseReprint, source.tabId, v.barra, true],
+      ].sort(),
+    );
   });
 
   it("raises no table problem for a failed job no kitchen ticket links, such as a receipt", async () => {
