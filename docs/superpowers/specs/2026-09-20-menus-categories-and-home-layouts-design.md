@@ -17,7 +17,7 @@ table in code, looked up for the day the invoice is issued. §11.4's A68 note is
 landed as #651, #654, #659, #664, #670 and #677, Task 7a as #683, 7b as #696, 7c as #710, 7 as #719
 and 8 as #722, with the follow-ups #680 (the Prices tab's variants and columns), #702 (M7b2), #705
 (M6c), #713 (M7b3), #720 (M7v) and #726 (A68, which narrowed M7v's VAT rule); Task 9, the till's
-home page, is branch `feat/menus-till-home`, whose PR number is added when it lands. What the
+home page, landed as #729. What the
 closing sweep found missing against §2 and §9, and the choices it leaves for the owner, are open
 entries in [the backlog](../../backlog.md), beside the plan's Track A entry.
 

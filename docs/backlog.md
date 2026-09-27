@@ -460,8 +460,8 @@ shows no marker and cannot be added again until the product is switched back on;
 scan covers the delete window's error state. Open for the owner (#722's description): the picker never
 offers the current default layout by name, so a profile cannot be pinned to today's default so that it
 stays there after the default changes; the server would accept such a choice.
-**Menus Task 9 (the till's home page), branch `feat/menus-till-home`, 2026-09-27; the PR number is
-added when it lands. With it, every task of the menus plan is built.** The till's `product-grid`
+**Menus Task 9 (the till's home page) landed as #729 (main `1cfd2551b`), 2026-09-27. With it, every
+task of the menus plan is built.** The till's `product-grid`
 card, and the table screen's round grid, now show `till-menu-browser`
 (`apps/till/src/widgets/menu-browser.ts`): a search over the whole published menu that lists each
 product once, then the device's home layout's shortcuts, then the menu's structure, where a section
@@ -496,7 +496,7 @@ with the card provider" files the sale once if the card was charged, marks the p
 unlocks the order if it was not, and refuses if the provider is unreachable or unclear; each
 resolution is recorded in the append-only `payment_resolutions` table. What it leaves open is under
 "What M7b2 left open" in the payments section.
-Next in the lane: classification Task 3; once menus Task 9 lands, the menus plan is complete. The
+Next in the lane: classification Task 3; menus Task 9 landed as #729, so the menus plan is complete. The
 owner lifted the wait: the dependency upgrades are
 finished, and the work does not wait for SQLite slice 2. The menus plan's decisions D1–D23 settle
 the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the ones flagged for the
@@ -2172,7 +2172,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     on each form tried only with a hand-built event or not at all, and move the ones that close to
     `dismissible`.
   - **Every other task waits for lane C's menus tasks that change the same order and till code**
-    (M9, the last, is on branch `feat/menus-till-home`; M7b landed as #696, M7b2 as #702, M7c as
+    (M9, the last, landed as #729 on 2026-09-27; M7b landed as #696, M7b2 as #702, M7c as
     #710, M7b3 as #713, and M7v as #720). Building beside them would collide on
     `apps/server/src/working-order.ts`, the till and the core migrations.
   - **Task 17** (unpaid departure) also waits for asesor Q28.
