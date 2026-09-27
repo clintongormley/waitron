@@ -303,10 +303,16 @@ it("has a sentence in both languages for each refusal of a manager's action on a
   const GENERIC_ES = codeMessage("test.unmapped_code", "es");
   for (const code of [
     "bill.payment_not_found",
+    "bill.payment_not_stuck",
+    "bill.payment_outcome_unconfirmed",
     "bill.refund_not_found",
     "bill.refund_not_stuck",
     "bill.refund_outcome_unconfirmed",
     "bill.attestation_contradicted",
+    "pin.invalid",
+    "pin.throttled",
+    "payment.not_refundable",
+    "payment.refund_exceeds_capture",
   ]) {
     expect(codeMessage(code, "en"), code).not.toBe(GENERIC_EN);
     expect(codeMessage(code, "es"), code).not.toBe(GENERIC_ES);

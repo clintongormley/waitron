@@ -14,7 +14,13 @@ import {
 import { listAvailableProducts } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend } from "@waitron/fiscal";
-import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
+import {
+  hashPassword,
+  hashPin,
+  persons,
+  PIN_THROTTLE_FREE_ATTEMPTS,
+  startManagementSession,
+} from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { deleteCredential, loadKeyRing, putCredential, type KeyRing } from "@waitron/credentials";
 import {
@@ -895,7 +901,7 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
   });
 });
 
-// --- bill payments (bill payments design §5.4; Rulings STOP 3 and 4) -------------------------
+// --- bill payments (bill payments design §5.4) ------------------------------------------------
 
 type Provided =
   | { kind: "none" }
@@ -971,6 +977,14 @@ async function billPaymentOf(id: string) {
     .from(billPayments)
     .where(eq(billPayments.id, id));
   return row!;
+}
+
+async function receivedAtOf(id: string): Promise<string | null> {
+  const [row] = await suite.db
+    .select({ receivedAt: billPayments.receivedAt })
+    .from(billPayments)
+    .where(eq(billPayments.id, id));
+  return row!.receivedAt;
 }
 
 async function post(
@@ -1051,7 +1065,10 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
     expect(saleIdsFor(orderId)).toHaveLength(1);
     expect(v.client.lastCreateIntent).toBeUndefined();
     expect(again.status).toBe(409);
-    expect(await errorOf(again)).toEqual({ code: "payment.not_stuck", params: { paymentId: id } });
+    expect(await errorOf(again)).toEqual({
+      code: "bill.payment_not_stuck",
+      params: { paymentId: id },
+    });
   });
 
   it("fails a payment whose PaymentIntent was still waiting for a card, once Stripe cancels it", async () => {
@@ -1070,7 +1087,7 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
     expect(saleIdsFor(orderId)).toEqual([]);
   });
 
-  it("refuses outcome_unknown when Stripe cannot be reached, leaving the payment pending", async () => {
+  it("refuses outcome_unconfirmed when Stripe cannot be reached, leaving the payment pending", async () => {
     const v = await setup();
     const id = await strandBillPayment(v, await openOrder(v), {
       kind: "attempting",
@@ -1082,7 +1099,7 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
 
     expect(res.status).toBe(409);
     expect(await errorOf(res)).toEqual({
-      code: "payment.outcome_unknown",
+      code: "bill.payment_outcome_unconfirmed",
       params: { paymentId: id, reason: "unreachable" },
     });
     expect((await billPaymentOf(id)).state).toBe("pending");
@@ -1111,7 +1128,7 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
     expect((await billPaymentOf(id)).state).toBe("pending");
   });
 
-  it("refuses outcome_unknown for a provider row marked failed: that word is not proof", async () => {
+  it("refuses outcome_unconfirmed for a provider row marked failed: that word is not proof", async () => {
     const v = await setup();
     const id = await strandBillPayment(v, await openOrder(v), { kind: "failed" });
 
@@ -1119,13 +1136,13 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
 
     expect(res.status).toBe(409);
     expect(await errorOf(res)).toEqual({
-      code: "payment.outcome_unknown",
+      code: "bill.payment_outcome_unconfirmed",
       params: { paymentId: id, reason: "ambiguous", providerStatus: "failed" },
     });
     expect((await billPaymentOf(id)).state).toBe("pending");
   });
 
-  it("refuses outcome_unknown for a capture of another amount, filing nothing", async () => {
+  it("refuses outcome_unconfirmed as mismatched for a capture of another amount, filing nothing", async () => {
     const v = await setup();
     const orderId = await openOrder(v);
     const id = await strandBillPayment(v, orderId, { kind: "captured", amount: "1.40" });
@@ -1134,14 +1151,14 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
 
     expect(res.status).toBe(409);
     expect(await errorOf(res)).toEqual({
-      code: "payment.outcome_unknown",
-      params: { paymentId: id, reason: "ambiguous", providerStatus: "captured" },
+      code: "bill.payment_outcome_unconfirmed",
+      params: { paymentId: id, reason: "mismatched" },
     });
     expect((await billPaymentOf(id)).state).toBe("pending");
     expect(saleIdsFor(orderId)).toEqual([]);
   });
 
-  it("refuses outcome_unknown, naming Stripe's status, when Stripe captured another amount", async () => {
+  it("refuses outcome_unconfirmed, naming Stripe's status, when Stripe captured another amount", async () => {
     const v = await setup();
     const id = await strandBillPayment(v, await openOrder(v), {
       kind: "attempting",
@@ -1152,7 +1169,7 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
 
     expect(res.status).toBe(409);
     expect(await errorOf(res)).toEqual({
-      code: "payment.outcome_unknown",
+      code: "bill.payment_outcome_unconfirmed",
       params: { paymentId: id, reason: "ambiguous", providerStatus: "succeeded" },
     });
     expect((await billPaymentOf(id)).state).toBe("pending");
@@ -1181,7 +1198,10 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
     const res = await send(v, "POST", billResolvePath(id));
 
     expect(res.status).toBe(409);
-    expect(await errorOf(res)).toEqual({ code: "payment.not_stuck", params: { paymentId: id } });
+    expect(await errorOf(res)).toEqual({
+      code: "bill.payment_not_stuck",
+      params: { paymentId: id },
+    });
     expect((await billPaymentOf(id)).state).toBe("pending");
   });
 
@@ -1281,10 +1301,14 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
     expect(await listed.json()).toEqual([]);
     expect(res.status).toBe(409);
     expect(await errorOf(res)).toEqual({
-      code: "payment.not_stuck",
+      code: "bill.payment_not_stuck",
       params: { paymentId: live!.id },
     });
     expect(attested.status).toBe(409);
+    expect(await errorOf(attested)).toEqual({
+      code: "bill.payment_not_stuck",
+      params: { paymentId: live!.id },
+    });
     expect((await billPaymentOf(live!.id)).state).toBe("received");
   });
 
@@ -1363,7 +1387,7 @@ describe("POST /management-api/payments/bill-payments/:id/attest", () => {
   });
 
   it.each(["failed", "received"] as const)(
-    "refuses outcome_unknown to record %s while the provider row is still attempting",
+    "refuses outcome_unconfirmed to record %s while the provider row is still attempting",
     async (outcome) => {
       const v = await setup();
       const orderId = await openOrder(v);
@@ -1376,8 +1400,8 @@ describe("POST /management-api/payments/bill-payments/:id/attest", () => {
 
       expect(res.status).toBe(409);
       expect(await errorOf(res)).toEqual({
-        code: "payment.outcome_unknown",
-        params: { paymentId: id, reason: "ambiguous", providerStatus: "attempting" },
+        code: "bill.payment_outcome_unconfirmed",
+        params: { paymentId: id, reason: "attempting" },
       });
       expect(await billPaymentOf(id)).toEqual({
         state: "pending",
@@ -1412,6 +1436,65 @@ describe("POST /management-api/payments/bill-payments/:id/attest", () => {
       state: "received",
       attestedBy: v.managerId,
       attestationNote: NOTE,
+    });
+  });
+
+  it("dates a confirmed receipt at the provider row's settled time", async () => {
+    const v = await setup();
+    const id = await strandBillPayment(v, await openOrder(v), { kind: "captured", amount: "1.20" });
+
+    const res = await post(v, attestPath(id), { outcome: "received", note: NOTE, pin: "1234" });
+
+    expect(res.status).toBe(200);
+    expect(await receivedAtOf(id)).toBe("2026-09-27T10:00:00.000Z");
+  });
+
+  it("dates a confirmed receipt at the attestation when the provider row carries no settled time", async () => {
+    const v = await setup();
+    const id = await strandBillPayment(v, await openOrder(v), { kind: "failed" });
+    const before = Date.now();
+
+    const res = await post(v, attestPath(id), { outcome: "received", note: NOTE, pin: "1234" });
+
+    expect(res.status).toBe(200);
+    const receivedAt = Date.parse((await receivedAtOf(id))!);
+    expect(receivedAt).toBeGreaterThanOrEqual(before);
+    expect(receivedAt).toBeLessThanOrEqual(Date.now());
+  });
+
+  it("refuses the right PIN once too many wrong ones were entered, and changes nothing", async () => {
+    const v = await setup();
+    const id = await strandBillPayment(v, await openOrder(v), { kind: "failed" });
+    const wrong = { outcome: "failed", note: NOTE, pin: "9999" };
+    for (let i = 0; i <= PIN_THROTTLE_FREE_ATTEMPTS; i += 1) {
+      expect((await errorOf(await post(v, attestPath(id), wrong))).code).toBe("pin.invalid");
+    }
+
+    const res = await post(v, attestPath(id), { outcome: "failed", note: NOTE, pin: "1234" });
+
+    expect(res.status).toBe(429);
+    expect(await errorOf(res)).toEqual({
+      code: "pin.throttled",
+      params: { retryAfterSeconds: expect.any(Number) },
+    });
+    expect((await billPaymentOf(id)).state).toBe("pending");
+  });
+
+  it("starts the wrong-PIN count again after the right PIN", async () => {
+    const v = await setup();
+    const id = await strandBillPayment(v, await openOrder(v), { kind: "failed" });
+    const wrong = { outcome: "failed", note: NOTE, pin: "9999" };
+    for (let i = 0; i < PIN_THROTTLE_FREE_ATTEMPTS; i += 1) await post(v, attestPath(id), wrong);
+    const accepted = await post(v, attestPath(id), { outcome: "failed", note: NOTE, pin: "1234" });
+
+    const again = await post(v, attestPath(id), wrong);
+    const right = await post(v, attestPath(id), { outcome: "failed", note: NOTE, pin: "1234" });
+
+    expect(accepted.status).toBe(200);
+    expect((await errorOf(again)).code).toBe("pin.invalid");
+    expect(await errorOf(right)).toEqual({
+      code: "bill.payment_not_stuck",
+      params: { paymentId: id },
     });
   });
 
@@ -1480,7 +1563,10 @@ describe("POST /management-api/payments/bill-payments/:id/attest", () => {
     const res = await post(v, attestPath(id), { outcome: "received", note: NOTE, pin: "1234" });
 
     expect(res.status).toBe(409);
-    expect(await errorOf(res)).toEqual({ code: "payment.not_stuck", params: { paymentId: id } });
+    expect(await errorOf(res)).toEqual({
+      code: "bill.payment_not_stuck",
+      params: { paymentId: id },
+    });
     expect((await billPaymentOf(id)).state).toBe("failed");
   });
 });

@@ -266,9 +266,10 @@ declare module "@waitron/shared" {
      */
     "working_order.out_of_date": { workingOrderId: string; revision: number };
     /**
-     * A write reached an OPEN order an integrated card payment is between pricing and filing
-     * (`working_orders.payment_attempt_at` is set, plan D22): the payment files what it priced, so the
-     * order is not changed under it. The caller waits for the payment to settle or fail.
+     * A write reached an OPEN order a card payment is in flight on: an integrated payment between
+     * pricing and filing (`working_orders.payment_attempt_at` is set), or a pending card payment
+     * towards the bill. The payment settles what it was asked for, so the order is not changed under
+     * it. The caller waits for the payment to settle or fail.
      */
     "order.payment_in_flight": { workingOrderId: string };
     /**
@@ -380,6 +381,21 @@ declare module "@waitron/shared" {
     "bill.payments_received": { workingOrderId: string };
     /** No bill payment with this id; `paymentId` is the id the caller sent. */
     "bill.payment_not_found": { paymentId: string };
+    /** A manager's action was refused: the bill payment is no longer pending, its card is at a
+     * reader in this process, or another resolve settled its provider row first. */
+    "bill.payment_not_stuck": { paymentId: string };
+    /**
+     * What became of a pending card bill payment is not confirmed, so nothing was recorded and the
+     * payment stays pending. `reason`: `unreachable` (the provider could not be asked), `ambiguous`
+     * (the provider's answer, or its row's state named by `providerStatus`, does not settle it),
+     * `mismatched` (the card was captured for another amount; `payment.bill_capture_mismatch` is
+     * raised), `attempting` (the provider row is still attempting, so the card may yet be charged).
+     */
+    "bill.payment_outcome_unconfirmed": {
+      paymentId: string;
+      reason: "unreachable" | "ambiguous" | "mismatched" | "attempting";
+      providerStatus?: string;
+    };
     /**
      * A refund asked for more than the bill payment can still give back. `applied` and `tip` are
      * what it can: a refund may take up to `applied`, and the tip comes back only with the whole of

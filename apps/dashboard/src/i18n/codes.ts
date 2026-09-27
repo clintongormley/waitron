@@ -272,6 +272,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The PIN is too short",
     es: "El PIN es demasiado corto",
   },
+  "pin.invalid": {
+    en: "Incorrect PIN, try again",
+    es: "PIN incorrecto, inténtalo de nuevo",
+  },
+  "pin.throttled": {
+    en: "Too many incorrect PINs. Wait a moment before trying again.",
+    es: "Demasiados PIN incorrectos. Espera un momento antes de volver a intentarlo.",
+  },
   "person.email_invalid": {
     en: "That email address isn't valid",
     es: "Esa dirección de correo no es válida",
@@ -787,6 +795,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That payment towards a bill no longer exists. Refresh the list.",
     es: "Ese pago a cuenta de una cuenta ya no existe. Actualiza la lista.",
   },
+  "bill.payment_not_stuck": {
+    en: "This card payment is no longer waiting, or it is being handled right now. Refresh the list.",
+    es: "Este pago con tarjeta ya no está pendiente, o se está gestionando ahora mismo. Actualiza la lista.",
+  },
+  "bill.payment_outcome_unconfirmed": {
+    en: "Waitron could not confirm what happened to this card payment, so nothing was recorded and the bill stays locked. Ask the card provider about it again from this list; if it still cannot be confirmed, check the payment in the provider's own dashboard and record the outcome it confirms.",
+    es: "Waitron no ha podido confirmar qué pasó con este pago con tarjeta, así que no se ha registrado nada y la cuenta sigue bloqueada. Vuelve a consultarlo con el proveedor de pagos desde esta lista; si sigue sin confirmarse, comprueba el pago en el panel del proveedor y registra el resultado que confirme.",
+  },
   "bill.refund_not_found": {
     en: "That refund no longer exists. Refresh the list.",
     es: "Esa devolución ya no existe. Actualiza la lista.",
@@ -798,6 +814,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "bill.refund_outcome_unconfirmed": {
     en: "The card provider does not show what happened to this refund, so nothing was recorded and the bill stays locked. Check the refund in the provider's own dashboard, then record the outcome it confirms.",
     es: "El proveedor de pagos no muestra qué pasó con esta devolución, así que no se ha registrado nada y la cuenta sigue bloqueada. Comprueba la devolución en el panel del proveedor y registra el resultado que confirme.",
+  },
+  "payment.not_refundable": {
+    en: "This card payment can no longer be given back. Check the refund in the card provider's own dashboard, then refresh the list.",
+    es: "Este pago con tarjeta ya no se puede devolver. Comprueba la devolución en el panel del proveedor de pagos y actualiza la lista.",
+  },
+  "payment.refund_exceeds_capture": {
+    en: "That is more than is left to give back on this card payment. Check the refund in the card provider's own dashboard, then refresh the list.",
+    es: "Es más de lo que queda por devolver de este pago con tarjeta. Comprueba la devolución en el panel del proveedor de pagos y actualiza la lista.",
   },
   "bill.attestation_contradicted": {
     en: "Waitron's own records contradict that outcome, so it was not recorded. Check what the card provider shows again.",
