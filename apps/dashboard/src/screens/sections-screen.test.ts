@@ -828,9 +828,11 @@ it("draws the Custom square empty, not black, for a section with no colour, and 
   const client = api();
   const el = await mount(client);
   await openEditor(el, "s-beer");
-  const { inside, beside } = await customSquarePixels(modal(el, "editor"));
+  const { inside, border, borderColor, beside } = await customSquarePixels(modal(el, "editor"));
   expect(inside).not.toEqual([0, 0, 0, 255]);
   expect(inside).toEqual(beside);
+  expect(border).toEqual(borderColor);
+  expect(border).not.toEqual(beside);
   click(el, '[data-test="editor-save"]');
   await vi.waitFor(() => expect(client.updateSection).toHaveBeenCalledOnce());
   expect(client.updateSection.mock.calls[0]![1]).toMatchObject({ color: null });

@@ -27,6 +27,15 @@ const child: CategorySummary = {
   image: null,
   color: null,
 };
+
+async function savedColor(el: CategoryForm): Promise<string | null> {
+  const saved = new Promise<CustomEvent>((resolve) =>
+    el.addEventListener("wt-submit", (event) => resolve(event as CustomEvent), { once: true }),
+  );
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+  return (await saved).detail.value.color as string | null;
+}
+
 it("renders translated fields and excludes self and descendants from parent choices", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
@@ -244,36 +253,30 @@ it("submits a custom colour picked via the native colour input", async () => {
     languages: { defaultLanguage: "en", languages: ["en"] },
     value: food,
   });
-  const saved = new Promise<CustomEvent>((resolve) =>
-    el.addEventListener("wt-submit", (event) => resolve(event as CustomEvent), { once: true }),
-  );
   const input = el.shadowRoot!.querySelector<HTMLInputElement>('input[type="color"]')!;
   input.value = "#123456";
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   await el.updateComplete;
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
-  expect((await saved).detail.value.color).toBe("#123456");
+  expect((await customSquarePixels(el.shadowRoot!)).inside).toEqual([0x12, 0x34, 0x56, 255]);
+  expect(await savedColor(el)).toBe("#123456");
 });
 
-async function savedColor(el: CategoryForm): Promise<string | null> {
-  const saved = new Promise<CustomEvent>((resolve) =>
-    el.addEventListener("wt-submit", (event) => resolve(event as CustomEvent), { once: true }),
-  );
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
-  return (await saved).detail.value.color as string | null;
-}
-
-it("draws the Custom square empty, not black, while no colour is chosen", async () => {
-  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
-    open: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
-    value: food,
-  });
-  const { inside, beside } = await customSquarePixels(el.shadowRoot!);
-  expect(inside).not.toEqual([0, 0, 0, 255]);
-  expect(inside).toEqual(beside);
-  expect(await savedColor(el)).toBeNull();
-});
+it.each(["light", "dark"] as const)(
+  "draws the Custom square as an empty bordered box, not black, while no colour is chosen (%s)",
+  async (theme) => {
+    const { el } = await mountWidget<CategoryForm>(
+      "dashboard-category-form",
+      { open: true, languages: { defaultLanguage: "en", languages: ["en"] }, value: food },
+      theme,
+    );
+    const { inside, border, borderColor, beside } = await customSquarePixels(el.shadowRoot!);
+    expect(inside).not.toEqual([0, 0, 0, 255]);
+    expect(inside).toEqual(beside);
+    expect(border).toEqual(borderColor);
+    expect(border).not.toEqual(beside);
+    expect(await savedColor(el)).toBeNull();
+  },
+);
 
 it.each([
   ["#123456", [0x12, 0x34, 0x56, 255]],
@@ -286,20 +289,6 @@ it.each([
   });
   expect((await customSquarePixels(el.shadowRoot!)).inside).toEqual(rgba);
   expect(await savedColor(el)).toBe(color);
-});
-
-it("paints a colour picked in the Custom input once nothing was chosen", async () => {
-  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
-    open: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
-    value: food,
-  });
-  const input = el.shadowRoot!.querySelector<HTMLInputElement>('input[type="color"]')!;
-  input.value = "#123456";
-  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  await el.updateComplete;
-  expect((await customSquarePixels(el.shadowRoot!)).inside).toEqual([0x12, 0x34, 0x56, 255]);
-  expect(await savedColor(el)).toBe("#123456");
 });
 
 it("creates inside a host draft, selects the saved category and leaves the draft intact", async () => {
