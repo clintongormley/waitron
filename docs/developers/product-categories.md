@@ -144,9 +144,9 @@ makes the working menu the live version. It rebuilds the menu and refuses with
 already matches its live version answers that version and writes nothing. A missing or non-string
 `expectedHash` is `management.request_invalid` (400). On the three routes that name a menu, an
 unknown menu is `catalogue.not_found` (404) and a malformed id `shared.invalid_id` (400). Tills
-sell from each menu's live version; only availability, VAT class, course and reporting category are
-read from the current rows when it is served (`applyLiveFields`,
-`packages/catalogue/src/menu-document.ts`).
+sell from each menu's live version; only availability, course and reporting category are read from
+the current rows when it is served, and the VAT class and rate are the ones the version froze
+(`applyLiveFields`, `packages/catalogue/src/menu-document.ts`).
 
 ## Moving and deleting
 

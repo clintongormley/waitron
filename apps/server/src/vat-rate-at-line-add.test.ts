@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   diningTables,
@@ -57,14 +57,15 @@ import {
   placeOrder,
   priceStoredOrder,
   priceStoredOrderForIssuance,
+  readOrderRevision,
+  updateHeldOrder,
 } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
-// Spec §11.4: a line's VAT rate is resolved from its product's CURRENT VAT class in the pass that
-// issues the invoice record, on every filing path, and written back onto the stored line while the
-// order is open. Every product starts at `reduced` (10%); a case corrects one to `general` (21%).
-// The gross the customer pays never moves, so each case also pins the filed total.
+// A line takes the VAT rate the zone's published menu version froze, when its price locks, and
+// issuance files that stored rate on every path. Every product is published at `reduced` (10%); a
+// case changes one's class to `general` (21%) with or without publishing again.
 const LOCALE = "es-ES";
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000bb";
 
@@ -84,7 +85,7 @@ beforeAll(() => {
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
     resolveClient: () =>
-      Promise.reject(new Error("vat-at-issuance.test: resolveClient must never be called")),
+      Promise.reject(new Error("vat-rate-at-line-add.test: resolveClient must never be called")),
   });
 });
 
@@ -219,6 +220,11 @@ async function setVat(productId: string, vatClass: VatClass): Promise<void> {
   await withTransaction(suite.db, (tx) => updateProduct(tx, productId, { vatClass }));
 }
 
+/** Publishes the suite's menu again, as it now stands. Counter and tables share it. */
+async function republish(v: Venue): Promise<void> {
+  await withTransaction(suite.db, (tx) => offerProducts(tx, v.cfg));
+}
+
 async function park(v: Venue, lines: Parameters<typeof parkOrder>[2]["lines"]): Promise<string> {
   const id = randomUUID();
   await parkOrder({ db: suite.db }, v.cfg, { id, zoneId: v.counter.zoneId, lines });
@@ -267,9 +273,8 @@ async function stored(workingOrderId: string) {
 const rates = async (workingOrderId: string) =>
   (await filed(workingOrderId)).lines.map((line) => line.vatRate);
 
-// A 2.50 gross split at each rate: base = gross × 100 ÷ (100 + rate), tax the difference.
+// A 2.50 gross split at 10%: base = gross × 100 ÷ 110, tax the difference.
 const CANA_AT_10 = [{ rate: "10.00", base: "2.27", tax: "0.23" }];
-const CANA_AT_21 = [{ rate: "21.00", base: "2.07", tax: "0.43" }];
 
 async function openTableTab(
   v: Venue,
@@ -332,8 +337,8 @@ function cardDeps(provider: PaymentProvider): IntegratedPayDeps {
   return { ...deps(), provider, readerRef: "reader_1" };
 }
 
-describe("the VAT rate is resolved when the invoice record is issued (spec §11.4)", () => {
-  it("walk-up: files the product's current class, as it always has", async () => {
+describe("a product's VAT class changed with no new publish: the sale files the rate its line was added at", () => {
+  it("walk-up: files the published rate", async () => {
     const v = await setupVenue();
     await setVat(v.products.cana, "general");
     const id = randomUUID();
@@ -345,14 +350,15 @@ describe("the VAT rate is resolved when the invoice record is issued (spec §11.
       tender: { method: "cash", amount: "2.50" },
     });
 
-    expect(await filed(id)).toMatchObject({ total: 250, vatBreakdown: CANA_AT_21 });
-    expect(await rates(id)).toEqual([2100]);
+    expect(await filed(id)).toMatchObject({ total: 250, vatBreakdown: CANA_AT_10 });
+    expect(await rates(id)).toEqual([1000]);
   });
 
-  it("held order paid on POST /api/sales: added at 10%, corrected to 21% before payment, files 21% at the same gross (spec §10.7(6))", async () => {
+  it("held order paid on POST /api/sales: files 10% at the same gross, and a reprint and a replay after a further change leave the sale and the stored line as filed", async () => {
     const v = await setupVenue();
     const id = await park(v, one(v, v.products.cana));
-    expect((await stored(id))[0]!.vatRate).toBe(1000);
+    const storedAtAdd = await stored(id);
+    expect(storedAtAdd[0]!.vatRate).toBe(1000);
     await setVat(v.products.cana, "general");
 
     const ticket = await payWorkingOrder(deps(), v.cfg, {
@@ -361,13 +367,33 @@ describe("the VAT rate is resolved when the invoice record is issued (spec §11.
       tender: { method: "cash", amount: "2.50" },
     });
 
-    expect(await filed(id)).toMatchObject({ total: 250, vatBreakdown: CANA_AT_21 });
-    expect(await rates(id)).toEqual([2100]);
-    expect(ticket).toMatchObject({ total: "2.50", vatBreakdown: CANA_AT_21 });
+    const sale = await filed(id);
+    expect(sale).toMatchObject({ total: 250, vatBreakdown: CANA_AT_10 });
+    expect(await rates(id)).toEqual([1000]);
+    expect(ticket).toMatchObject({ total: "2.50", vatBreakdown: CANA_AT_10 });
+    expect(await stored(id)).toEqual(storedAtAdd);
+
+    await setVat(v.products.cana, "super_reduced");
+    await reprintSale(deps(), v.cfg, id);
+    await printSaleReceipt(deps(), v.cfg, id, false);
+    const replay = await payWorkingOrder(deps(), v.cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "2.50" },
+    });
+
+    expect(replay.lines).toEqual(ticket.lines);
+    expect(replay.vatBreakdown).toEqual(ticket.vatBreakdown);
+    const rebuilt = await withTransaction(suite.db, (tx) => priceStoredOrder(tx, id));
+    expect(rebuilt.vatBreakdown).toEqual(CANA_AT_10);
+    expect(await filed(id)).toEqual(sale);
+    expect(await stored(id)).toEqual(storedAtAdd);
   });
 
-  it("a tab: a dish line follows its own product, and an extras line follows the PICKED product's class, not the dish's", async () => {
+  it("a tab: a dish line keeps its published rate, and an extras line keeps the PICKED product's published rate, not the dish's", async () => {
     const v = await setupVenue();
+    await setVat(v.products.queso, "general");
+    await republish(v);
     const tabId = await openTableTab(v, [
       {
         menuItemId: v.tables.offerFor(v.products.burger),
@@ -381,7 +407,7 @@ describe("the VAT rate is resolved when the invoice record is issued (spec §11.
       },
       { menuItemId: v.tables.offerFor(v.products.cana), quantity: "1" },
     ]);
-    await setVat(v.products.queso, "general");
+    await setVat(v.products.queso, "super_reduced");
     await setVat(v.products.cana, "general");
 
     await payWorkingOrder(deps(), v.cfg, {
@@ -394,12 +420,12 @@ describe("the VAT rate is resolved when the invoice record is issued (spec §11.
     expect(sale.lines.map((line) => [line.productId, line.vatRate, line.lineGross])).toEqual([
       [v.products.burger, 1000, 1000],
       [v.products.queso, 2100, 75],
-      [v.products.cana, 2100, 250],
+      [v.products.cana, 1000, 250],
     ]);
     expect(sale.total).toBe(1325);
   });
 
-  it("a variant with no VAT class of its own follows its parent's CURRENT class", async () => {
+  it("a variant with no VAT class of its own keeps the rate its parent was published at", async () => {
     const v = await setupVenue();
     const id = await park(v, [
       {
@@ -418,12 +444,12 @@ describe("the VAT rate is resolved when the invoice record is issued (spec §11.
 
     const sale = await filed(id);
     expect(sale.lines.map((line) => [line.productId, line.vatRate])).toEqual([
-      [v.products.doble, 2100],
+      [v.products.doble, 1000],
     ]);
     expect(sale.total).toBe(220);
   });
 
-  it("card (P1): the rate resolved before the reader is what is filed, even when the class changes during the charge, and the receipt matches the sale", async () => {
+  it("card (P1): files the stored rate, even when the class changes again during the charge, and the receipt and a replay match the sale", async () => {
     const v = await setupVenue();
     const id = await park(v, one(v, v.products.cana));
     await setVat(v.products.cana, "general");
@@ -436,22 +462,21 @@ describe("the VAT rate is resolved when the invoice record is issued (spec §11.
 
     expect(out.outcome).toBe("captured");
     const sale = await filed(id);
-    expect(sale).toMatchObject({ total: 250, vatBreakdown: CANA_AT_21 });
-    expect(sale.lines.map((line) => line.vatRate)).toEqual([2100]);
+    expect(sale).toMatchObject({ total: 250, vatBreakdown: CANA_AT_10 });
+    expect(sale.lines.map((line) => line.vatRate)).toEqual([1000]);
     const ticket = out.outcome === "captured" ? out.ticket : undefined;
     expect(ticket?.vatBreakdown).toEqual(sale.vatBreakdown);
     expect(ticket?.lines.map((line) => line.gross)).toEqual(["2.50"]);
-    // A replay rebuilds its lines from the stored order, so it must agree with the filed sale too.
     const replay = await payWorkingOrderIntegrated(
       cardDeps(stubProvider(() => Promise.reject(new Error("a replay must not charge")))),
       v.cfg,
       { id, lines: [] },
     );
     expect(replay).toEqual(out);
-    expect((await stored(id)).map((line) => line.vatRate)).toEqual([2100]);
+    expect((await stored(id)).map((line) => line.vatRate)).toEqual([1000]);
   });
 
-  it("card recovery: a capture whose sale was never filed files the CURRENT rate, and the gross is the captured amount less the tip", async () => {
+  it("card recovery: a capture whose sale was never filed files the stored rate, and the gross is the captured amount less the tip", async () => {
     const v = await setupVenue();
     const id = randomUUID();
     await withTransaction(suite.db, async (tx) => {
@@ -477,8 +502,8 @@ describe("the VAT rate is resolved when the invoice record is issued (spec §11.
 
     expect(out.outcome).toBe("captured");
     const sale = await filed(id);
-    expect(sale).toMatchObject({ total: 250, vatBreakdown: CANA_AT_21 });
-    expect(sale.lines.map((line) => line.vatRate)).toEqual([2100]);
+    expect(sale).toMatchObject({ total: 250, vatBreakdown: CANA_AT_10 });
+    expect(sale.lines.map((line) => line.vatRate)).toEqual([1000]);
     const [tender] = await suite.db
       .select({ amount: tenders.amount, tip: tenders.tipAmount })
       .from(tenders)
@@ -486,7 +511,7 @@ describe("the VAT rate is resolved when the invoice record is issued (spec §11.
     expect(tender).toEqual({ amount: 300, tip: 50 });
   });
 
-  it("invoice-first: an order placed at 10% keeps 10% when collected after the correction, and collect re-prices nothing; one placed after files 21%", async () => {
+  it("invoice-first: an order placed before the change keeps 10% when collected after it, and collect re-prices nothing; one parked before and placed after files 10% too", async () => {
     const v = await setupVenue("invoice_first");
     const before = await park(v, one(v, v.products.cana));
     const after = await park(v, one(v, v.products.cana));
@@ -515,11 +540,11 @@ describe("the VAT rate is resolved when the invoice record is issued (spec §11.
     expect(ticket.vatBreakdown).toEqual(CANA_AT_10);
     expect(prepared.filter((s) => /"products"/.test(s))).toEqual([]);
     expect(prepared.filter((s) => /^update "working_order_lines"/.test(s))).toEqual([]);
-    expect(await filed(after)).toMatchObject({ total: 250, vatBreakdown: CANA_AT_21 });
-    expect(await rates(after)).toEqual([2100]);
+    expect(await filed(after)).toMatchObject({ total: 250, vatBreakdown: CANA_AT_10 });
+    expect(await rates(after)).toEqual([1000]);
   });
 
-  it("ticket-then-pay: an order placed at 10% and corrected before collect files 21% at collect", async () => {
+  it("ticket-then-pay: an order placed at 10% and changed before collect files 10% at collect, and a replay rebuilds the same receipt", async () => {
     const v = await setupVenue("ticket_then_pay");
     const id = await park(v, one(v, v.products.cana));
     await placeOrder(deps(), v.cfg, id, OPERATOR, v.cfg.tillId);
@@ -531,10 +556,8 @@ describe("the VAT rate is resolved when the invoice record is issued (spec §11.
       tender: { method: "cash", amount: "2.50" },
     });
 
-    expect(await filed(id)).toMatchObject({ total: 250, vatBreakdown: CANA_AT_21 });
-    expect(await rates(id)).toEqual([2100]);
-    // A placed order's lines cannot be written (`working_order_lines_require_open_parent_update`),
-    // so its stored line keeps the add-time rate; the receipt a replay rebuilds still matches.
+    expect(await filed(id)).toMatchObject({ total: 250, vatBreakdown: CANA_AT_10 });
+    expect(await rates(id)).toEqual([1000]);
     expect((await stored(id)).map((line) => line.vatRate)).toEqual([1000]);
     const replay = await collectOrder(deps(), v.cfg, {
       id,
@@ -542,10 +565,10 @@ describe("the VAT rate is resolved when the invoice record is issued (spec §11.
       tender: { method: "cash", amount: "2.50" },
     });
     expect(replay.lines).toEqual(ticket.lines);
-    expect(replay.vatBreakdown).toEqual(CANA_AT_21);
+    expect(replay.vatBreakdown).toEqual(CANA_AT_10);
   });
 
-  it("ticket-then-pay by card: a placed order collected on the reader after the correction files 21%", async () => {
+  it("ticket-then-pay by card: a placed order collected on the reader after the change files 10%", async () => {
     const v = await setupVenue("ticket_then_pay");
     const id = await park(v, one(v, v.products.cana));
     await placeOrder(deps(), v.cfg, id, OPERATOR, v.cfg.tillId);
@@ -558,121 +581,213 @@ describe("the VAT rate is resolved when the invoice record is issued (spec §11.
     );
 
     expect(out.outcome).toBe("captured");
-    expect(await filed(id)).toMatchObject({ total: 250, vatBreakdown: CANA_AT_21 });
-    expect(await rates(id)).toEqual([2100]);
-  });
-});
-
-describe("the resolved rate is written back onto the stored line", () => {
-  it("after filing, the stored line holds the filed rate and net unit and the stored order rebuilds at it; a reprint and a replay after a further change leave the sale and the stored line unchanged, and the replay's lines and VAT breakdown match the original's", async () => {
-    const v = await setupVenue();
-    const id = await park(v, one(v, v.products.cana));
-    const [atAdd] = await stored(id);
-    await setVat(v.products.cana, "general");
-
-    const original = await payWorkingOrder(deps(), v.cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "2.50" },
-    });
-    const sale = await filed(id);
-    const [line] = await stored(id);
-    expect(line).toEqual({
-      productId: v.products.cana,
-      vatRate: sale.lines[0]!.vatRate,
-      unitPrice: sale.lines[0]!.unitPrice,
-      unitPriceGross: atAdd!.unitPriceGross,
-      lineTotal: atAdd!.lineTotal,
-    });
-    expect(line!.vatRate).toBe(2100);
-    expect(line!.unitPrice).not.toBe(atAdd!.unitPrice);
-
-    await setVat(v.products.cana, "super_reduced");
-    const storedAfterFiling = await stored(id);
-    await reprintSale(deps(), v.cfg, id);
-    await printSaleReceipt(deps(), v.cfg, id, false);
-    const replay = await payWorkingOrder(deps(), v.cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "2.50" },
-    });
-
-    expect(replay.lines).toEqual(original.lines);
-    expect(replay.vatBreakdown).toEqual(original.vatBreakdown);
-    const rebuilt = await withTransaction(suite.db, (tx) => priceStoredOrder(tx, id));
-    expect(rebuilt.lines.map((l) => l.vatRate)).toEqual(["21.00"]);
-    expect(rebuilt.vatBreakdown).toEqual(CANA_AT_21);
-    expect(await filed(id)).toEqual(sale);
-    expect(await stored(id)).toEqual(storedAfterFiling);
+    expect(await filed(id)).toMatchObject({ total: 250, vatBreakdown: CANA_AT_10 });
+    expect(await rates(id)).toEqual([1000]);
   });
 
-  it("resolves every line's class in the line read and writes the changed rates in one statement, however many lines the order has", async () => {
+  it("issuing a stored order writes nothing onto its lines", async () => {
     const v = await setupVenue();
-    const single = await park(v, one(v, v.products.cana));
-    const five = await park(v, [
-      ...one(v, v.products.cana),
-      ...one(v, v.products.burger),
-      {
-        menuItemId: v.counter.offerFor(v.products.cafe),
-        variantId: v.products.doble,
-        quantity: "1",
-      },
-      ...one(v, v.products.pan),
-      ...one(v, v.products.cana),
-    ]);
-    for (const product of [v.products.cana, v.products.burger, v.products.cafe, v.products.pan]) {
-      await setVat(product, "general");
-    }
-
-    await withTransaction(suite.db, async (tx) => {
-      const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
-      await priceStoredOrderForIssuance(tx, single);
-      const forOne = prepared.mock.calls.map(([query]) => query.sql);
-      prepared.mockClear();
-      const priced = await priceStoredOrderForIssuance(tx, five);
-      const forFive = prepared.mock.calls.map(([query]) => query.sql);
-
-      expect(forFive).toHaveLength(forOne.length);
-      expect(forFive.filter((s) => /from "products"/.test(s))).toEqual([]);
-      expect(
-        forFive.filter((s) => /from "working_order_lines".*join "products"/.test(s)),
-      ).toHaveLength(1);
-      expect(forFive.filter((s) => /^update "working_order_lines"/.test(s))).toHaveLength(1);
-      expect(priced.priced.lines.map((l) => l.vatRate)).toEqual(Array(5).fill("21.00"));
-    });
-    expect((await stored(five)).map((line) => line.vatRate)).toEqual(Array(5).fill(2100));
-  });
-
-  it("writes nothing when no line's rate changed", async () => {
-    const v = await setupVenue();
-    const id = await park(v, one(v, v.products.cana));
+    const id = await park(v, [...one(v, v.products.cana), ...one(v, v.products.pan)]);
     const before = await stored(id);
+    await setVat(v.products.cana, "general");
+    await setVat(v.products.pan, "general");
 
     await withTransaction(suite.db, async (tx) => {
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
-      await priceStoredOrderForIssuance(tx, id);
+      const priced = await priceStoredOrderForIssuance(tx, id);
 
+      expect(priced.priced.lines.map((l) => l.vatRate)).toEqual(["10.00", "10.00"]);
       expect(
         prepared.mock.calls.filter(([query]) => /^update "working_order_lines"/.test(query.sql)),
       ).toEqual([]);
     });
     expect(await stored(id)).toEqual(before);
   });
+});
 
-  it("keeps the stored rate on a line with no product id", async () => {
+/**
+ * Stands for a release changing a class's rate after the menu was published: the live version is
+ * replaced by a copy whose every frozen `from` rate reads `to`, while each class stays as it was.
+ */
+function freezeRateAs(v: Venue, from: string, to: string): void {
+  const copy = randomUUID();
+  suite.db.run(sql`
+    insert into menu_versions (id, menu_id, number, document, content_hash, published_at, published_by)
+    select ${copy}, v.menu_id, v.number + 1,
+      replace(v.document, ${`"vatRate":"${from}"`}, ${`"vatRate":"${to}"`}), 'rate-copy',
+      v.published_at, v.published_by
+    from menu_versions v join menu_publications p on p.version_id = v.id
+    where p.menu_id = ${v.counter.menuId}`);
+  suite.db.run(
+    sql`update menu_publications set version_id = ${copy} where menu_id = ${v.counter.menuId}`,
+  );
+}
+
+describe("a line takes the rate NUMBER the published version froze", () => {
+  it("prices a dish, a variant and an extras pick at the frozen rate, not their class's rate now, and files it", async () => {
     const v = await setupVenue();
-    const id = await park(v, [...one(v, v.products.cana), ...one(v, v.products.pan)]);
-    await suite.db
-      .update(workingOrderLines)
-      .set({ productId: null })
-      .where(and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.lineNo, 2)));
+    freezeRateAs(v, "10.00", "11.00");
+
+    const id = await park(v, [
+      ...one(v, v.products.cana),
+      {
+        menuItemId: v.counter.offerFor(v.products.cafe),
+        variantId: v.products.doble,
+        quantity: "1",
+      },
+      {
+        menuItemId: v.counter.offerFor(v.products.burger),
+        quantity: "1",
+        extras: [
+          {
+            listId: v.products.extrasListId,
+            picks: [{ productId: v.products.queso, quantity: 1 }],
+          },
+        ],
+      },
+    ]);
+    await payWorkingOrder(deps(), v.cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "15.45" },
+    });
+
+    expect((await stored(id)).map((line) => line.vatRate)).toEqual([1100, 1100, 1100, 1100]);
+    expect(await rates(id)).toEqual([1100, 1100, 1100, 1100]);
+    expect((await filed(id)).total).toBe(1545);
+  });
+});
+
+describe("an edit prices only what it adds", () => {
+  it("an extras pick added to a stored line by an edit takes the rate the published version froze", async () => {
+    const v = await setupVenue();
+    const id = await park(v, one(v, v.products.burger));
+    freezeRateAs(v, "10.00", "11.00");
+    const [dish] = await suite.db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    const revision = await withTransaction(suite.db, (tx) => readOrderRevision(tx, id));
+
+    await updateHeldOrder({ db: suite.db }, v.cfg, id, {
+      lines: [
+        {
+          workingOrderLineId: dish!.id,
+          menuItemId: v.counter.offerFor(v.products.burger),
+          quantity: "1",
+          extras: [
+            {
+              listId: v.products.extrasListId,
+              picks: [{ productId: v.products.queso, quantity: 1 }],
+            },
+          ],
+        },
+      ],
+      revision,
+    });
+    await payWorkingOrder(deps(), v.cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "10.75" },
+    });
+
+    expect((await stored(id)).map((line) => [line.productId, line.vatRate])).toEqual([
+      [v.products.burger, 1000],
+      [v.products.queso, 1100],
+    ]);
+    expect(await rates(id)).toEqual([1000, 1100]);
+  });
+
+  it("raising the quantity of a line the kitchen does not have keeps the rate it locked with its price, after a new publish; a line the same edit adds takes the new rate", async () => {
+    const v = await setupVenue();
+    const id = await park(v, one(v, v.products.cana));
     await setVat(v.products.cana, "general");
-    await setVat(v.products.pan, "general");
+    await republish(v);
+    const [kept] = await suite.db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    const revision = await withTransaction(suite.db, (tx) => readOrderRevision(tx, id));
 
-    const priced = await withTransaction(suite.db, (tx) => priceStoredOrderForIssuance(tx, id));
+    await updateHeldOrder({ db: suite.db }, v.cfg, id, {
+      lines: [
+        {
+          workingOrderLineId: kept!.id,
+          menuItemId: v.counter.offerFor(v.products.cana),
+          quantity: "2",
+        },
+        ...one(v, v.products.cana),
+      ],
+      revision,
+    });
+    await payWorkingOrder(deps(), v.cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "7.50" },
+    });
 
-    expect(priced.priced.lines.map((l) => l.vatRate)).toEqual(["21.00", "10.00"]);
-    expect((await stored(id)).map((line) => line.vatRate)).toEqual([2100, 1000]);
+    const sale = await filed(id);
+    expect(sale.lines.map((line) => [line.vatRate, line.lineGross])).toEqual([
+      [1000, 500],
+      [2100, 250],
+    ]);
+    expect(sale.total).toBe(750);
+  });
+});
+
+describe("a new version published with the new rate", () => {
+  it("a held order: a line added before the publish keeps 10%, and one added after it takes 21%", async () => {
+    const v = await setupVenue();
+    const id = await park(v, one(v, v.products.cana));
+    await setVat(v.products.cana, "general");
+    await republish(v);
+    const [kept] = await suite.db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    const revision = await withTransaction(suite.db, (tx) => readOrderRevision(tx, id));
+
+    await updateHeldOrder({ db: suite.db }, v.cfg, id, {
+      lines: [
+        {
+          workingOrderLineId: kept!.id,
+          menuItemId: v.counter.offerFor(v.products.cana),
+          quantity: "1",
+        },
+        ...one(v, v.products.cana),
+      ],
+      revision,
+    });
+    await payWorkingOrder(deps(), v.cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "5.00" },
+    });
+
+    expect(await rates(id)).toEqual([1000, 2100]);
+    expect((await filed(id)).total).toBe(500);
+  });
+
+  it("a tab: a round rung before the publish keeps 10%, and one rung after it takes 21%", async () => {
+    const v = await setupVenue();
+    const tabId = await openTableTab(v, [
+      { menuItemId: v.tables.offerFor(v.products.cana), quantity: "1" },
+    ]);
+    await setVat(v.products.cana, "general");
+    await republish(v);
+    await withTransaction(suite.db, (tx) =>
+      addTabRound(tx, v.cfg, tabId, [
+        { menuItemId: v.tables.offerFor(v.products.cana), quantity: "1" },
+      ]),
+    );
+
+    await payWorkingOrder(deps(), v.cfg, {
+      id: tabId,
+      lines: [],
+      tender: { method: "cash", amount: "5.00" },
+    });
+
+    expect(await rates(tabId)).toEqual([1000, 2100]);
   });
 });
 

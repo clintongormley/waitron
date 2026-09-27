@@ -5,6 +5,8 @@ second review (§3's timing table and §5's two report details); not built. It s
 [the menus spec](2026-09-20-menus-categories-and-home-layouts-design.md). §10 of that spec
 separates reporting categories, menu sections and labels, and this document specifies the reporting
 side; its §11.4 states the same issuance rule for VAT.
+**2026-09-27:** the owner's decision of 2026-09-26 moves the snapshot to when the line is added;
+see the dated note under §3's timing bullet and §7 example 10.
 
 Facts about the code are from reading `main` on 2026-09-25. They are not measurements. Each fact
 names its file, so it can be re-checked before building.
@@ -113,6 +115,17 @@ From this change on, **every sale line also records:**
     move and asserts the snapshot matches the classification at issuance, not at add time.
   - **Collection and replay of an issued sale retain its recorded facts.** A reprint rebuilds
     receipt lines from the stored order lines (`readSettledTicket`), never from a re-classification.
+  - _2026-09-27, the owner's decision of 2026-09-26 (menus M7v): the snapshot is now recorded
+    when the line is added, at the same moment its price and VAT rate are fixed, from the
+    product's classification at that moment (`working_order_lines.classification`, core migration
+    `0021`, written by `priceOrderLines` in `apps/server/src/working-order.ts`). Issuance copies
+    each line's recorded snapshot onto the sale line and classifies nothing (`issuancePass`,
+    `apps/server/src/issuance-pass.ts`), so the table above no longer decides the moment. A
+    direct walk-up sale has no separate "line added" moment: its lines are added and priced in
+    the same pass that files it, so both happen at payment. The snapshot is still not menu
+    content: it is not frozen in the published version, and a category change flags no menu. A
+    split carries each line's snapshot to the split-off part. A line added before migration
+    `0021` has none recorded and files a null classification._
 - **Storage:** JSON is the first-release storage. Measure the real report queries before adding
   rows indexed by category or a cache.
 - **Extras lines** are classified, in the snapshot, by their OWN product's reporting chain and
@@ -221,7 +234,12 @@ same business day, with an option to print it alongside the close.
    totals, and the report marks label totals as overlapping.
 9. **A parent with direct products:** Water's main category is Drinks itself; Cola's is Softs, a
    child of Drinks. The report shows Drinks = "Directly in Drinks" (Water) + Softs (Cola).
-10. **Classified at issuance on every path:** Cocktails moves from "Alcoholic drinks" to "Spirits"
+10. *(Superseded 2026-09-27 by the owner's decision of 2026-09-26, §3's dated note: each line
+    records the classification it had when it was added. The tab's rounds rung before the move and
+    an invoice-first order parked before it keep Alcoholic drinks, whenever they are paid or
+    placed; a line added after the move records Spirits, and so does a walk-up card sale priced
+    after it, because its lines are added in that pricing pass.)*
+    **Classified at issuance on every path:** Cocktails moves from "Alcoholic drinks" to "Spirits"
     while a tab, an invoice-first order and a card payment are each open. The tab paid afterwards,
     the invoice-first order placed afterwards, and the card sale whose pricing pass ran afterwards
     all record Spirits; an invoice-first order PLACED before the move records Alcoholic drinks

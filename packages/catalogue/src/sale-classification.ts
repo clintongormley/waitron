@@ -25,12 +25,9 @@ export interface LoadedClassification {
   language: string;
   /** The name of every label a loaded product carries. */
   labels: ReadonlyMap<string, string>;
-  /** Each loaded product: a variant's parent, its main category after the variant fallback, and
-   * the ids of the labels it carries (a variant's are its parent's), sorted. */
-  products: ReadonlyMap<
-    string,
-    { parentId: string | null; categoryId: string | null; labelIds: readonly string[] }
-  >;
+  /** Each loaded product: its main category after the variant fallback, and the ids of the labels
+   * it carries (a variant's are its parent's), sorted. */
+  products: ReadonlyMap<string, { categoryId: string | null; labelIds: readonly string[] }>;
 }
 
 /**
@@ -46,7 +43,6 @@ export async function loadClassification(
   const productRows = await tx
     .select({
       id: products.id,
-      parentId: products.parentId,
       categoryId: effectiveProductColumns.categoryId,
       labelIds: labelIdArray,
     })
@@ -70,10 +66,7 @@ export async function loadClassification(
     language: defaultLanguage,
     labels: new Map(labelRows.map((row) => [row.id, row.name])),
     products: new Map(
-      productRows.map((row) => [
-        row.id,
-        { parentId: row.parentId, categoryId: row.categoryId, labelIds: row.labelIds },
-      ]),
+      productRows.map((row) => [row.id, { categoryId: row.categoryId, labelIds: row.labelIds }]),
     ),
   };
 }
@@ -82,11 +75,6 @@ function loadedProduct(c: LoadedClassification, productId: string) {
   const product = c.products.get(productId);
   if (product === undefined) throw new AppError("product.not_found", { productId });
   return product;
-}
-
-/** A variant's parent product, or null for a product in its own right. */
-export function parentProductOf(c: LoadedClassification, productId: string): string | null {
-  return loadedProduct(c, productId).parentId;
 }
 
 /**

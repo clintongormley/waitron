@@ -170,6 +170,10 @@ and its reporting chain and labels when the record is issued. Since menus Task 7
 `sale_lines.menu_version_id` is the menu version the line was added from
 (`working_line_contexts.menu_version_id`); a line added before Task 7 recorded none and files null.
 Two follow-ups it leaves: the till shows "try again" when `sale_classification.invalid` refuses a sale (it happens only on corrupt category data, and retrying cannot succeed), so the code wants its own till message on the permanent-refusal list; and a card recovery refused that way leaves a captured payment unlinked until the catalogue is fixed, as recovery's existing below-locked-total refusal already does. The demo seed (`apps/server/scripts/demo-seed/seed-sales.ts`), the other scripts that call `recordSale` directly (`record-one-sale.ts`, `settle-invoice-first.ts`, `daily-close-demo.ts`, `daily-close-z-demo.ts`, `modelo-303-demo.ts`) and `apps/server/src/fiscal-readiness-runner.ts` file sales without the issuance pass, so seeded demo lines carry no product id, classification or gross, and the spec's category reports would show every one as Not recorded — classification Task 3 cannot measure its reports on seeded sales until the seed records them.
+_2026-09-27, menus M7v: the reporting chain and labels are now recorded on each line when it is
+added (`working_order_lines.classification`) and issuance copies them, so `sale_classification.invalid`
+refuses adding a line rather than filing a sale, and a card recovery can no longer be refused that
+way. Whether the till's message for that refusal on the add paths is right is not checked._
 **Menus Task 1 (sections), landed as #651 (2026-09-25):**
 reusable, ordered, nestable sections (`sections`, `section_members`), with section and member
 routes under `/management-api/sections` (add, add several products, move, remove, replace in
@@ -277,6 +281,10 @@ VAT breakdown comes from the filed record — so this is an owner FYI, not a def
 write would mean loosening that trigger in a core migration. Still open: asesor Q26 (the adviser confirming the rule); the new test
 file `apps/server/src/vat-at-issuance.test.ts` copies about 150 lines of setup from
 `issuance-pass.test.ts`, which a shared helper could absorb.
+_2026-09-27: menus M7v replaced this rule (see its note below): issuance no longer resolves a
+rate, and the write-back is gone, so the placed-order FYI above no longer applies. Asesor Q26 is
+still open, reworded. The test file is now `apps/server/src/vat-rate-at-line-add.test.ts` and still
+copies its setup from `issuance-pass.test.ts`._
 **Menus Task 7b landed (#696, 2026-09-26): editing a saved order — the server rules.** An edit keeps
 each line's locked price and prices only what it adds; every change to work the kitchen has is a
 recall or a void recorded as a kitchen notice; an order carries a revision, so an edit made from an
@@ -331,7 +339,7 @@ line for it is refused `product.unavailable`; an extras item sold out or switche
 refused as a pick the list does not offer), while whether a menu has switched a variant off is read
 from the published version; the VAT class, kitchen course and reporting category the served offer carries,
 and each extras item's VAT class (`applyLiveFields`, `packages/catalogue/src/menu-document.ts`), so
-a VAT change still reaches a new line and a new extra without a publish, which menus M7v changes next; and whether a picked extra has since gained
+a VAT change still reaches a new line and a new extra without a publish, which menus M7v changes next (_2026-09-27: it has; the VAT class and rate are now read from the published version, see M7v's note_); and whether a picked extra has since gained
 an Active variant, which refuses the pick `product.variant_required`.
 Each unsaved line a till sends may name the version it was priced against (`menuVersionId`); a
 request naming one that is no longer live is refused `menu.version_changed` (409), listing each
@@ -368,13 +376,44 @@ Follow-up: a round kept after a refused send survives leaving the table only on 
 the floor and the order side by side, because the table screen holds it; on the till's drill view
 and a handheld's separate order tab, leaving destroys the screen and the round. Keeping rounds on
 the app, one per order, would keep them on every layout.
+**Menus M7v (a line keeps the VAT rate its published menu froze), 2026-09-27:** the owner's
+decision of 2026-09-26 replaces menus Task 7a's rule. Each published menu version now freezes the
+VAT class and rate of each dish, variant and extras item, and a till is served those. A line
+records that rate when its price is fixed — when it is added to a saved order, or at payment for an
+unsaved basket — and issuance files the stored rate on every path and writes nothing back. Raising
+an unsent line's quantity in place keeps its price and rate; a line an edit adds takes the rate live
+then. After a change to a product's VAT class, every menu including it shows Unpublished changes,
+and its Preview names a VAT change (a variant's own reads "VAT, variants"). A line also records its
+reporting classification when it is added, from the product's current classification
+(`working_order_lines.classification`, core migration `0021`), and issuance copies it; a category
+change still flags no menu. A change to a class's RATE has no product surface: the rates are in code
+(`RATES`, `packages/catalogue/src/pricing.ts`), and a release changing them now reaches tills only
+when each menu is published again; a menu published once that release is installed freezes the new
+rate at once, even before the date it takes effect, so the release and the publish have to be timed
+together (a publish cannot be scheduled). **Upgrading** (measured: a database with a published menu, a
+held order and an open tab, written before this change and migrated through `applyMigrations`): the
+migration adds one column and applies cleanly; every menu published before M7v shows Unpublished
+changes and sells nothing until it is published again — its zone is offered none of its dishes,
+the dashboard's readiness list reports `zone.menu_unpublished` for a zone left with no menu, and a
+round added to the open tab from that menu is refused `service_zone.offer_not_allowed`. Open lines
+keep their stored rate and can still be paid, and each line added before the upgrade files a null
+classification. So publish every menu once after upgrading; dev venues need `wa-wt reset demo
+<name>` after menus Task 7 anyway (below). **Left open:** nothing in the product can issue a
+corrective invoice (R5, *factura rectificativa*) for a VAT error on an issued simplified invoice.
+`recordCorrection` exists (`packages/core/src/record-correction.ts`; the Verifactu backend corrects
+only an F2, as an R5), but no route calls it: its only callers under `apps/` are three scripts in
+`apps/server/scripts/` that each correct a sale they filed themselves (`daily-close-demo.ts`,
+`modelo-303-demo.ts`, `settle-invoice-first.ts`) and one test. The till computes a basket VAT split
+(`vatBreakdown` in `apps/till/src/state/working-order.ts`) that no screen shows; it uses the rate
+the menu froze for a dish and a variant (`vatRate`, filled in `apps/till/src/api/client.ts`),
+prices a retrieved held line by its class, and leaves out extras picks. Asesor Q26 is still open.
 **M7b2 landed (#702, 2026-09-26): a manager can clear a card payment a crash left running.** The
 Payments screen lists open orders locked by a card payment nothing is finishing any more, and "Check
 with the card provider" files the sale once if the card was charged, marks the payment failed and
 unlocks the order if it was not, and refuses if the provider is unreachable or unclear; each
 resolution is recorded in the append-only `payment_resolutions` table. What it leaves open is under
 "What M7b2 left open" in the payments section.
-Next in the lane: M7v, then 8, 9 and classification Task 3. The owner lifted the wait: the dependency upgrades are
+Next in the lane: 8, 9 and classification Task 3. The owner lifted the wait: the dependency upgrades are
 finished, and the work does not wait for SQLite slice 2. The menus plan's decisions D1–D23 settle
 the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the ones flagged for the
 owner. Menus Task 3 wipes existing venues (it rebuilds `menu_items`); every other migrating task
@@ -1951,7 +1990,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     on each form tried only with a hand-built event or not at all, and move the ones that close to
     `dismissible`.
   - **Every other task waits for lane C's menus tasks that change the same order and till code**
-    (M7v, M9; M7b landed as #696, M7b2 as #702, M7c as #710, M7b3 as #713). Building beside them would collide on
+    (M9; M7b landed as #696, M7b2 as #702, M7c as #710, M7b3 as #713, and M7v on 2026-09-27). Building beside them would collide on
     `apps/server/src/working-order.ts`, the till and the core migrations.
   - **Task 17** (unpaid departure) also waits for asesor Q28.
   - **Asesor questions to send:**

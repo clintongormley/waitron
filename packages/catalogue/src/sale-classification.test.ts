@@ -10,7 +10,6 @@ import { setProductVariants } from "./variants.js";
 import {
   classifyLine,
   loadClassification,
-  parentProductOf,
   validateSnapshot,
   type LoadedClassification,
 } from "./sale-classification.js";
@@ -123,7 +122,6 @@ describe("classifyLine", () => {
       reporting: chain(f, "en", "drinks", "alcoholic", "cocktails"),
       labels: sortedLabels(f, "happyHour", "alcoholic"),
     });
-    expect(parentProductOf(c, f.products.mojito)).toBeNull();
   });
 
   it("names each category in the default content language it is loaded with", async () => {
@@ -134,7 +132,7 @@ describe("classifyLine", () => {
     );
   });
 
-  it("gives a variant with no main category its parent's chain, its parent's labels and its parent's id", async () => {
+  it("gives a variant with no main category its parent's chain and its parent's labels", async () => {
     const f = await fixture();
     const c = await loaded(f);
 
@@ -142,7 +140,6 @@ describe("classifyLine", () => {
       reporting: chain(f, "en", "drinks", "alcoholic"),
       labels: sortedLabels(f, "alcoholic"),
     });
-    expect(parentProductOf(c, f.products.wine125)).toBe(f.products.wine);
   });
 
   it("gives a variant with a main category of its own that chain, and still its parent's labels", async () => {
@@ -153,7 +150,6 @@ describe("classifyLine", () => {
       reporting: chain(f, "en", "drinks", "alcoholic", "cocktails"),
       labels: sortedLabels(f, "alcoholic"),
     });
-    expect(parentProductOf(c, f.products.wine175)).toBe(f.products.wine);
   });
 
   it("records an Uncategorised product with an empty chain and no labels", async () => {
@@ -181,9 +177,6 @@ describe("classifyLine", () => {
       code: "product.not_found",
       params: { productId: f.products.water },
     });
-    expect(() => parentProductOf(c, f.products.water)).toThrow(
-      expect.objectContaining({ code: "product.not_found" }),
-    );
   });
 
   it("refuses to build a chain through a category that was not loaded", () => {
@@ -191,7 +184,7 @@ describe("classifyLine", () => {
       categories: new Map([["leaf", { name: { en: "Leaf" }, parentId: "gone" }]]),
       language: "en",
       labels: new Map(),
-      products: new Map([["p", { parentId: null, categoryId: "leaf", labelIds: [] }]]),
+      products: new Map([["p", { categoryId: "leaf", labelIds: [] }]]),
     };
 
     expect(() => classifyLine(c, "p")).toThrow(
@@ -210,7 +203,7 @@ describe("classifyLine", () => {
       ]),
       language: "en",
       labels: new Map(),
-      products: new Map([["p", { parentId: null, categoryId: "a", labelIds: [] }]]),
+      products: new Map([["p", { categoryId: "a", labelIds: [] }]]),
     };
 
     expect(() => classifyLine(c, "p")).toThrow(

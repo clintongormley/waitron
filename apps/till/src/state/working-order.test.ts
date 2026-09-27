@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { WorkingOrderStore } from "./working-order.js";
-import { lineGross } from "./order-line.js";
+import { lineGross, productAsVariant } from "./order-line.js";
 import type { OrderLine, SelectedExtra } from "./working-order.js";
-import type { TillProduct } from "../api/client.js";
+import { menuOfferToTillProduct, type TillMenuOffer, type TillProduct } from "../api/client.js";
 
 // A v4 uuid, as `crypto.randomUUID()` mints: 8-4-4-4-12 hex, version nibble 4, variant 8..b.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -613,5 +613,74 @@ describe("WorkingOrderStore", () => {
       expect(s.lines[0]!.notOfferedExtras).toEqual([milk]);
       expect(s.total).toBe("7.50");
     });
+  });
+});
+
+describe("WorkingOrderStore: the VAT rate a published menu froze", () => {
+  const unit = {
+    id: "unit-each",
+    name: { es: "unidad" },
+    abbreviation: { es: "ud" },
+    precision: 0,
+    hardwareUnit: null,
+  };
+  const sellingValues = {
+    unit,
+    // A class that resolves to 10.00, served beside the rate the version froze.
+    vatClass: "reduced" as const,
+    vatRate: "21.00",
+    category: null,
+    allergens: null,
+    diet: null,
+    dietDerivation: null,
+    dietOverride: null,
+    dietaryDeclarations: [],
+    courseId: null,
+  };
+  const offer = {
+    id: "menu-item-cana",
+    productId: "cana",
+    menuId: "lunch",
+    menuName: "Lunch",
+    grossPrice: null,
+    unitPrice: "2.42",
+    active: true,
+    available: true,
+    image: null,
+    description: null,
+    placements: [[]],
+    name: "Caña",
+    customerName: null,
+    kitchenName: null,
+    offeredModifiers: [],
+    variants: [
+      {
+        ...sellingValues,
+        id: "cana-large",
+        name: "Large",
+        customerName: null,
+        kitchenName: null,
+        image: null,
+        unitPrice: "3.63",
+        menuPrice: null,
+        offered: true,
+        available: true,
+        pricingUnit: "each" as const,
+      },
+    ],
+    ...sellingValues,
+  } satisfies TillMenuOffer;
+
+  it("prices a dish at the offer's frozen rate, not its class's", () => {
+    const s = new WorkingOrderStore();
+    s.addProduct(menuOfferToTillProduct(offer, "version-1"), "1");
+    expect(s.vatBreakdown).toEqual([{ rate: "21.00", base: "2.00", tax: "0.42" }]);
+  });
+
+  it("prices a variant at the variant's frozen rate, not its class's", () => {
+    const s = new WorkingOrderStore();
+    const dish = menuOfferToTillProduct({ ...offer, vatRate: "10.00" }, "version-1");
+    s.addProduct(productAsVariant(dish, dish.variants![0]!), "1");
+    expect(s.vatBreakdown).toEqual([{ rate: "21.00", base: "3.00", tax: "0.63" }]);
   });
 });

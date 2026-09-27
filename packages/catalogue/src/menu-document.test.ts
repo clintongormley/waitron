@@ -1,6 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { products, withTransaction, type Transaction } from "@waitron/db";
+import { decimal } from "@waitron/shared";
 import { useCatalogueDb } from "../test/fixtures.js";
 import {
   menusFixture,
@@ -17,6 +18,7 @@ import {
   menuDocumentHash,
   type MenuDocument,
 } from "./menu-document.js";
+import * as pricing from "./pricing.js";
 import { deactivateProduct, renameCatalogue, updateMenuItem, updateProduct } from "./operations.js";
 import { addMember, moveMember, removeMember, updateSection } from "./sections.js";
 import { setMenuVariants, setProductVariants } from "./variants.js";
@@ -29,6 +31,8 @@ import { sectionMembers, sections } from "./schema/sections.js";
 import { menuItemExtraItems } from "./schema/extras.js";
 
 const fx = useCatalogueDb();
+
+afterEach(() => vi.restoreAllMocks());
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const build = async (menuId: string) => (await app((tx) => buildMenuDocument(tx, menuId))).document;
 
@@ -84,7 +88,7 @@ describe("buildMenuDocument", () => {
     const lager = await app((tx) => offerOf(tx, f.lunch, f.lager));
     const soup = await app((tx) => offerOf(tx, f.lunch, f.soup));
     expect(document).toMatchObject({
-      format: 1,
+      format: 2,
       menuId: f.lunch,
       menuName: "Lunch Menu",
       defaultHomeLayoutId: await defaultLayout(f.lunch),
@@ -145,15 +149,31 @@ describe("buildMenuDocument", () => {
     const f = await menusFixture(fx.db);
     const document = await build(f.lunch);
     const offer = document.offers[await app((tx) => offerOf(tx, f.lunch, f.lemonade))]!;
-    for (const field of ["available", "vatClass", "courseId", "category"])
+    for (const field of ["available", "courseId", "category"])
       expect(Object.keys(offer)).not.toContain(field);
-    for (const field of ["available", "vatClass", "courseId", "category"])
+    for (const field of ["available", "courseId", "category"])
       expect(Object.keys(offer.variants[0]!)).not.toContain(field);
     const [extras, options] = offer.offeredModifiers;
     if (extras?.kind !== "extras" || options?.kind !== "options") throw new Error("lists");
-    expect(Object.keys(extras.items[0]!)).not.toContain("vatClass");
     expect(Object.keys(extras.items[0]!)).not.toContain("available");
     for (const label of options.labels) expect(Object.keys(label)).not.toContain("available");
+  });
+
+  it("freezes the VAT class and rate of the dish, each variant and each extras item", async () => {
+    const f = await menusFixture(fx.db);
+    await app(async (tx) => {
+      await updateProduct(tx, f.large, { vatClass: "general" });
+      await updateProduct(tx, f.extraLemon, { vatClass: "super_reduced" });
+    });
+    const document = await build(f.lunch);
+    const offer = document.offers[await app((tx) => offerOf(tx, f.lunch, f.lemonade))]!;
+    expect(offer).toMatchObject({ vatClass: "reduced", vatRate: "10.00" });
+    expect(offer.variants[0]).toMatchObject({ vatClass: "general", vatRate: "21.00" });
+    const extras = offer.offeredModifiers[0]!;
+    expect(extras.kind === "extras" && extras.items[0]).toMatchObject({
+      vatClass: "super_reduced",
+      vatRate: "4.00",
+    });
   });
 
   it("holds an extras item and an option label whatever their availability", async () => {
@@ -294,9 +314,6 @@ describe("menuDocumentHash", () => {
     string,
     (tx: Transaction, f: Awaited<ReturnType<typeof menusFixture>>) => Promise<unknown>,
   ][] = [
-    ["the dish's VAT class", (tx, f) => updateProduct(tx, f.lemonade, { vatClass: "general" })],
-    ["the variant's VAT class", (tx, f) => updateProduct(tx, f.large, { vatClass: "general" })],
-    ["the extra's VAT class", (tx, f) => updateProduct(tx, f.extraLemon, { vatClass: "general" })],
     ["the dish's availability", (tx, f) => updateProduct(tx, f.lemonade, { available: false })],
     ["the variant's availability", (tx, f) => updateProduct(tx, f.large, { available: false })],
     ["the extra's availability", (tx, f) => updateProduct(tx, f.extraLemon, { available: false })],
@@ -346,6 +363,9 @@ describe("menuDocumentHash", () => {
     string,
     (tx: Transaction, f: Awaited<ReturnType<typeof menusFixture>>) => Promise<unknown>,
   ][] = [
+    ["the dish's VAT class", (tx, f) => updateProduct(tx, f.lemonade, { vatClass: "general" })],
+    ["the variant's VAT class", (tx, f) => updateProduct(tx, f.large, { vatClass: "general" })],
+    ["the extra's VAT class", (tx, f) => updateProduct(tx, f.extraLemon, { vatClass: "general" })],
     ["the dish's name", (tx, f) => updateProduct(tx, f.lemonade, { name: "Still lemonade" })],
     ["the dish's price", (tx, f) => updateProduct(tx, f.lemonade, { unitPrice: "3.20" })],
     ["the dish's image", (tx, f) => updateProduct(tx, f.lemonade, { image: "other.jpg" })],
@@ -404,10 +424,19 @@ describe("menuDocumentHash", () => {
     await app((tx) => change(tx, f));
     expect(menuDocumentHash(await build(f.dinner))).not.toBe(before);
   });
+
+  it("moves when the rate of a class the menu uses changes", async () => {
+    const f = await menusFixture(fx.db);
+    const before = menuDocumentHash(await build(f.dinner));
+    vi.spyOn(pricing, "resolveVatRate").mockImplementation((vatClass) =>
+      decimal(vatClass === "reduced" ? "11.00" : "21.00"),
+    );
+    expect(menuDocumentHash(await build(f.dinner))).not.toBe(before);
+  });
 });
 
 describe("applyLiveFields", () => {
-  it("puts availability, VAT, course and category back from the current rows", async () => {
+  it("puts availability, course and category back from the current rows, and not VAT", async () => {
     const f = await menusFixture(fx.db);
     const lunch = await build(f.lunch);
     const dinner = await build(f.dinner);
@@ -439,7 +468,7 @@ describe("applyLiveFields", () => {
     expect(lunchOffers[2]!.category).toBeNull();
     const lemonade = lunchOffers[0]!;
     expect(lemonade).toMatchObject({
-      vatClass: "general",
+      vatClass: "reduced",
       courseId: f.course,
       category: "Cold drinks",
       unitPrice: "2.80",
@@ -449,7 +478,7 @@ describe("applyLiveFields", () => {
     expect(lemonade.variants[0]).toMatchObject({
       id: f.large,
       available: false,
-      vatClass: "general",
+      vatClass: "reduced",
       courseId: f.course,
       category: "Cold drinks",
     });
@@ -466,6 +495,24 @@ describe("applyLiveFields", () => {
     const dinnerLemonade = live.get(f.dinner)!.find((offer) => offer.productId === f.lemonade)!;
     const dinnerExtras = dinnerLemonade.offeredModifiers[0]!;
     expect(dinnerExtras.kind === "extras" && dinnerExtras.items[0]!.available).toBe(false);
+  });
+
+  it("serves the VAT class and rate the version froze, whatever each product's class is now", async () => {
+    const f = await menusFixture(fx.db);
+    const document = await build(f.lunch);
+    await app(async (tx) => {
+      await updateProduct(tx, f.lemonade, { vatClass: "general" });
+      await updateProduct(tx, f.large, { vatClass: "zero" });
+      await updateProduct(tx, f.extraLemon, { vatClass: "general" });
+    });
+    const [lemonade] = (await app((tx) => applyLiveFields(tx, [document]))).get(f.lunch)!;
+    expect(lemonade).toMatchObject({ vatClass: "reduced", vatRate: "10.00" });
+    expect(lemonade!.variants[0]).toMatchObject({ vatClass: "reduced", vatRate: "10.00" });
+    const extras = lemonade!.offeredModifiers[0]!;
+    expect(extras.kind === "extras" && extras.items[0]).toMatchObject({
+      vatClass: "reduced",
+      vatRate: "10.00",
+    });
   });
 
   it("offers a label unavailable when the document was built once it is available again", async () => {
@@ -971,6 +1018,42 @@ describe("diffMenuDocuments", () => {
         productId: f.extraLemon,
         name: "Extra lemon",
         fields: ["allergens", "diet"],
+        source: "shared_product",
+      },
+    ]);
+  });
+
+  it("names a VAT change against the dish, a variant's own as VAT in the variants, and an extra's against the extra", async () => {
+    const f = await menusFixture(fx.db);
+    const live = await build(f.dinner);
+    await app((tx) => updateProduct(tx, f.lemonade, { vatClass: "general" }));
+    const dish = await build(f.dinner);
+    expect(diffMenuDocuments(live, dish)).toEqual([
+      {
+        kind: "product_changed",
+        productId: f.lemonade,
+        name: "Lemonade",
+        fields: ["vat"],
+        source: "shared_product",
+      },
+    ]);
+    await app(async (tx) => {
+      await updateProduct(tx, f.large, { vatClass: "zero" });
+      await updateProduct(tx, f.extraLemon, { vatClass: "general" });
+    });
+    expect(diffMenuDocuments(dish, await build(f.dinner))).toEqual([
+      {
+        kind: "product_changed",
+        productId: f.lemonade,
+        name: "Lemonade",
+        fields: ["vat", "variants"],
+        source: "shared_product",
+      },
+      {
+        kind: "product_changed",
+        productId: f.extraLemon,
+        name: "Extra lemon",
+        fields: ["vat"],
         source: "shared_product",
       },
     ]);

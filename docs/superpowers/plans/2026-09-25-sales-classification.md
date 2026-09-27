@@ -30,6 +30,12 @@ the history starts building. Then the menus plan's tasks run. This plan's Task 3
 below; reads, not measurements). **Revision 2, the same day, after the second outside review:**
 Task 2 names every filing path and takes its snapshot in the issuance pass (spec §3's table), and
 Task 3's contract gains the direct-products subtotal and the completeness indicator (spec §5).
+_2026-09-27: the owner's decision of 2026-09-26 (menus M7v) moved the snapshot to when the line is
+added: `priceOrderLines` records it on `working_order_lines.classification`, and the issuance pass
+copies it onto the sale line and classifies nothing. Task 2's text below is kept as it was
+written. `sale_lines.classification`, which Task 3 reports from, keeps its shape; only the moment
+it is taken moved, and a line added before core migration `0021` files it null (spec §3's dated
+note)._
 
 ## Global Constraints
 

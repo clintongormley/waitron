@@ -4,10 +4,7 @@ import type { OptionList, ResolvedExtraList, VatClass } from "@waitron/catalogue
 import { AppError, compareDecimal, decimal, multiplyDecimal } from "@waitron/shared";
 import type { OptionSnapshot } from "@waitron/shared";
 
-/**
- * A product offered as an extra, read from the `products` row (and, for a variant that leaves its
- * VAT blank, its parent's), never from the `extra_list_items` row that offers it.
- */
+/** A product offered as an extra, as the published offer serves it. */
 export interface ExtraProductFacts {
   id: string;
   /** The plain staff name. */
@@ -16,6 +13,8 @@ export interface ExtraProductFacts {
   descriptions: Record<string, string>;
   kitchenName: string | null;
   vatClass: VatClass;
+  /** The rate the published version froze, e.g. "10.00". */
+  vatRate: string;
 }
 
 /**
@@ -31,8 +30,9 @@ export interface ExtraChild {
   price: string;
   /** The list the pick was taken from, stored on the child line as `extra_list_id`. */
   listId: string;
-  /** The extra PRODUCT's own class, never the dish's. */
+  /** The extra PRODUCT's own class and frozen rate, never the dish's. */
   vatClass: VatClass;
+  vatRate: string;
   /**
    * The picks for ONE dish, NOT multiplied by the dish count: `priceBasketWithOptions`
    * (`packages/catalogue/src/pricing.ts`) does that multiplication.
@@ -91,6 +91,7 @@ export function buildLineExtras(
           price: item.price,
           listId: list.id,
           vatClass: product.vatClass,
+          vatRate: product.vatRate,
           quantity: pick.quantity,
         };
       });
@@ -248,6 +249,7 @@ export function editLineExtras<
         price: item.price,
         listId: list.id,
         vatClass: product.vatClass,
+        vatRate: product.vatRate,
         quantity: pick.quantity,
       });
     }

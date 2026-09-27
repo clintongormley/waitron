@@ -13,7 +13,7 @@ import { sections } from "./schema/sections.js";
 import { loadSectionGraph, type SectionGraph } from "./section-graph.js";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 import type { MenuOffer } from "./menu-types.js";
-import type { VatClass } from "./pricing.js";
+import { resolveVatRate, type VatClass } from "./pricing.js";
 import type { MemberRef } from "./section-types.js";
 import type {
   DocumentLayout,
@@ -34,7 +34,7 @@ import "./errors.js";
 
 export type * from "./menu-document-types.js";
 
-export const MENU_DOCUMENT_FORMAT = 1;
+export const MENU_DOCUMENT_FORMAT = 2;
 
 export interface OmittedShortcut {
   layoutId: string;
@@ -258,25 +258,30 @@ function without<T extends object, K extends keyof T>(value: T, keys: readonly K
   >;
 }
 
+const vatRateOf = (row: { vatClass: VatClass }): string => resolveVatRate(row.vatClass);
+
 function freezeOffer(
   offer: MenuOffer,
   facts: { image: string | null; description: Record<string, string> | null },
   extraImages: ReadonlyMap<string, string | null>,
 ): FrozenOffer {
   return {
-    ...without(offer, ["vatClass", "courseId", "category", "offeredModifiers", "variants"]),
+    ...without(offer, ["courseId", "category", "offeredModifiers", "variants"]),
+    vatRate: vatRateOf(offer),
     image: facts.image,
     description: facts.description,
-    variants: offer.variants.map((variant) =>
-      without(variant, ["available", "vatClass", "courseId", "category"]),
-    ),
+    variants: offer.variants.map((variant) => ({
+      ...without(variant, ["available", "courseId", "category"]),
+      vatRate: vatRateOf(variant),
+    })),
     offeredModifiers: offer.offeredModifiers.map((entry): FrozenOfferedModifier =>
       entry.kind === "options"
         ? { ...entry, labels: entry.labels.map((label) => without(label, ["available"])) }
         : {
             ...entry,
             items: entry.items.map((item) => ({
-              ...without(item, ["vatClass"]),
+              ...item,
+              vatRate: vatRateOf(item),
               image: extraImages.get(item.productId)!,
             })),
           },
@@ -342,7 +347,6 @@ export function documentOffers(document: MenuDocument): FrozenOffer[] {
 interface LiveProductRow {
   active: boolean;
   available: boolean;
-  vatClass: VatClass;
   courseId: string | null;
   category: Record<string, string> | null;
 }
@@ -392,7 +396,6 @@ async function readLiveRows(tx: Transaction, offers: readonly FrozenOffer[]): Pr
         id: products.id,
         active: products.active,
         available: products.available,
-        vatClass: effectiveProductColumns.vatClass,
         courseId: effectiveProductColumns.courseId,
         category: categories.name,
       })
@@ -400,7 +403,7 @@ async function readLiveRows(tx: Transaction, offers: readonly FrozenOffer[]): Pr
       .leftJoin(parentProducts, parentJoin)
       .leftJoin(categories, eq(categories.id, effectiveProductColumns.categoryId))
       .where(inArray(products.id, batch)))
-      productRows.set(row.id, { ...row, vatClass: row.vatClass as VatClass });
+      productRows.set(row.id, row);
   const labels = new Map<string, boolean>();
   for (const batch of batches([...labelIds]))
     for (const row of await tx
@@ -472,7 +475,7 @@ export async function readUnavailable(
 
 /**
  * The documents' offers, per menu and in menu order, with the live fields put back from the current
- * rows: availability, and the VAT class, course and reporting category that are not menu content.
+ * rows: availability, and the course and reporting category that are not menu content.
  * With `menuItemIds`, only the offers it names are read and returned.
  *
  * An item whose product row no longer exists is left out, as is an offer whose product is gone.
@@ -509,7 +512,6 @@ export async function applyLiveFields(
           {
             ...offer,
             available: sellable(dish),
-            vatClass: dish.vatClass,
             courseId: dish.courseId,
             category: categoryOf(dish),
             variants: offer.variants.flatMap((variant) => {
@@ -520,7 +522,6 @@ export async function applyLiveFields(
                     {
                       ...variant,
                       available: sellable(row) && variant.offered,
-                      vatClass: row.vatClass,
                       courseId: row.courseId,
                       category: categoryOf(row),
                     },
@@ -547,7 +548,6 @@ export async function applyLiveFields(
                     : [
                         {
                           ...item,
-                          vatClass: row.vatClass,
                           available:
                             sellable(row) &&
                             !rows.withdrawn.has(itemKey(offer.id, entry.id, item.productId)),
@@ -632,6 +632,7 @@ const PRODUCT_FIELD_ORDER: readonly ProductChangeField[] = [
   "unit",
   "allergens",
   "diet",
+  "vat",
   "variants",
   "extras",
   "options",
@@ -644,6 +645,7 @@ const PRODUCT_FACTS: readonly [ProductChangeField, readonly string[]][] = [
   ["unit", ["unit", "pricingUnit"]],
   ["allergens", ["allergens"]],
   ["diet", ["diet", "dietDerivation", "dietOverride", "dietaryDeclarations"]],
+  ["vat", ["vatClass", "vatRate"]],
 ];
 
 const EXTRA_FACTS: readonly [ProductChangeField, readonly string[]][] = [
@@ -651,6 +653,7 @@ const EXTRA_FACTS: readonly [ProductChangeField, readonly string[]][] = [
   ["image", ["image"]],
   ["allergens", ["addAllergens"]],
   ["diet", ["suitableFor"]],
+  ["vat", ["vatClass", "vatRate"]],
 ];
 
 function changedFacts(
@@ -708,9 +711,11 @@ function productFields(
       keys.every(
         (key) => same(read(variant, key), read(b, key)) && same(read(was, key), read(a, key)),
       );
-    for (const [, keys] of PRODUCT_FACTS)
-      if (keys.some((key) => !same(read(was, key), read(variant, key))) && !inherited(keys))
+    for (const [field, keys] of PRODUCT_FACTS)
+      if (keys.some((key) => !same(read(was, key), read(variant, key))) && !inherited(keys)) {
         shared.add("variants");
+        if (field === "vat") shared.add("vat");
+      }
     if (was.offered !== variant.offered || was.menuPrice !== variant.menuPrice)
       menu.add("variants");
     else if (was.unitPrice !== variant.unitPrice)

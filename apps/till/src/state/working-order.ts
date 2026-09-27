@@ -213,7 +213,7 @@ export class WorkingOrderStore {
   /**
    * DISH-ONLY: `priceBasket` does not see the extras picks, so these bands do not reconcile with
    * {@link total}. A VAT preview over a basket with extras would need `priceBasketWithOptions`, and
-   * each pick's `vatClass`, which {@link SelectedExtra} does not carry.
+   * each pick's VAT rate, which {@link SelectedExtra} does not carry.
    */
   get vatBreakdown(): Priced["vatBreakdown"] {
     return this.#pricedOrder.vatBreakdown;

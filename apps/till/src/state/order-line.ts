@@ -109,8 +109,7 @@ export function toWireProductIdentity(product: {
   };
 }
 
-/** Neither key is sent when empty, never `[]`. No display value travels: the server re-resolves the
- * price, the VAT class and the names. */
+/** Neither key is sent when empty, never `[]`. No price, VAT rate or name travels. */
 export function toWireModifiers(
   line: Pick<OrderLine, "extras" | "options">,
 ): Pick<SaleLine, "extras" | "options"> {

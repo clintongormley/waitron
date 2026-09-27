@@ -59,13 +59,16 @@ import {
   parkOrder,
   placeOrder,
   priceStoredOrderForIssuance,
+  readOrderRevision,
+  splitOffCheck,
+  updateHeldOrder,
 } from "./working-order.js";
 import type { PricedOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
-// Spec §3's table, path by path: each filing path takes the classification snapshot in the pass
-// that issues the record, and nothing after it re-classifies.
+// Path by path: a line records its classification snapshot when it is added to the order, each
+// filing path copies it onto the sale line, and nothing after it re-classifies.
 const LOCALE = "es-ES";
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000bb";
 
@@ -362,7 +365,7 @@ function cardDeps(provider: PaymentProvider): IntegratedPayDeps {
 }
 
 describe("what a filed sale line records about its product", () => {
-  it("records a dish's product, gross, menu and its reporting chain and labels at issuance", async () => {
+  it("records a dish's product, gross, menu and its reporting chain and labels", async () => {
     const v = await setupVenue();
     const id = randomUUID();
     await recordTillSale(deps(), v.cfg, {
@@ -493,51 +496,137 @@ describe("what a filed sale line records about its product", () => {
   });
 });
 
-describe("the snapshot is taken when the record is issued, on every till filing path (spec §7 example 10)", () => {
-  it("a tab rung before the move and paid after it records the chain at payment", async () => {
+describe("the snapshot is taken when the line is added, on every till filing path (spec §7 example 10)", () => {
+  it("a tab: a round rung before the move and paid after it keeps the chain it was rung with; a round rung after records the move", async () => {
     const v = await setupVenue();
     const tabId = await openTableTab(v, [
       { menuItemId: v.tables.offerFor(v.products.negroni), quantity: "1" },
     ]);
     await moveCocktailsToSpirits(v);
+    await withTransaction(suite.db, (tx) =>
+      addTabRound(tx, v.cfg, tabId, [
+        { menuItemId: v.tables.offerFor(v.products.negroni), quantity: "1" },
+      ]),
+    );
 
     await payWorkingOrder(deps(), v.cfg, {
       id: tabId,
       lines: [],
-      tender: { method: "cash", amount: "9.00" },
+      tender: { method: "cash", amount: "18.00" },
     });
 
-    expect(await reportingOf(tabId)).toEqual([underSpirits(v)]);
+    expect(await reportingOf(tabId)).toEqual([underAlcoholic(v), underSpirits(v)]);
     const [line] = await filedLines(tabId);
     expect(line!.menuId).toBe(v.tables.menuId);
   });
 
-  it("invoice-first: an order placed before the move keeps it when collected after; one placed after records the move", async () => {
+  it("a held order: a line added before the move keeps its chain, and a line an edit adds after it records the move", async () => {
+    const v = await setupVenue();
+    const id = randomUUID();
+    const negroni = { menuItemId: v.counter.offerFor(v.products.negroni), quantity: "1" };
+    await parkOrder({ db: suite.db }, v.cfg, { id, zoneId: v.counter.zoneId, lines: [negroni] });
+    await moveCocktailsToSpirits(v);
+    const [kept] = await suite.db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    const revision = await withTransaction(suite.db, (tx) => readOrderRevision(tx, id));
+    await updateHeldOrder({ db: suite.db }, v.cfg, id, {
+      lines: [{ workingOrderLineId: kept!.id, ...negroni }, negroni],
+      revision,
+    });
+
+    await payWorkingOrder(deps(), v.cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "18.00" },
+    });
+
+    expect(await reportingOf(id)).toEqual([underAlcoholic(v), underSpirits(v)]);
+  });
+
+  it("an extras pick keeps its own product's chain from when it was added", async () => {
+    const v = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, v.cfg, {
+      id,
+      zoneId: v.counter.zoneId,
+      lines: [
+        {
+          menuItemId: v.counter.offerFor(v.products.burger),
+          quantity: "1",
+          extras: [
+            { listId: v.extrasListId, picks: [{ productId: v.products.queso, quantity: 1 }] },
+          ],
+        },
+      ],
+    });
+    await withTransaction(suite.db, (tx) =>
+      updateCategory(tx, v.categories.anadidos.id, { parentId: v.categories.comida.id }),
+    );
+
+    await payWorkingOrder(deps(), v.cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "10.75" },
+    });
+
+    expect(await reportingOf(id)).toEqual([
+      [entry(v.categories.comida)],
+      [entry(v.categories.anadidos)],
+    ]);
+  });
+
+  it("a check split off a tab after the move keeps the chain the carved line was rung with", async () => {
+    const v = await setupVenue();
+    const tabId = await openTableTab(v, [
+      { menuItemId: v.tables.offerFor(v.products.negroni), quantity: "2" },
+    ]);
+    await moveCocktailsToSpirits(v);
+    const { checkId } = await withTransaction(suite.db, (tx) =>
+      splitOffCheck(tx, v.cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+    );
+
+    await payWorkingOrder(deps(), v.cfg, {
+      id: checkId,
+      lines: [],
+      tender: { method: "cash", amount: "9.00" },
+    });
+
+    expect(await reportingOf(checkId)).toEqual([underAlcoholic(v)]);
+  });
+
+  it("invoice-first: an order placed before the move keeps it when collected after; one parked before and placed after keeps it too; one parked after records the move", async () => {
     const v = await setupVenue("invoice_first");
     const before = randomUUID();
-    const after = randomUUID();
-    for (const id of [before, after]) {
-      await parkOrder({ db: suite.db }, v.cfg, {
+    const parkedBefore = randomUUID();
+    const parkedAfter = randomUUID();
+    const park = (id: string) =>
+      parkOrder({ db: suite.db }, v.cfg, {
         id,
         zoneId: v.counter.zoneId,
         lines: [{ menuItemId: v.counter.offerFor(v.products.negroni), quantity: "1" }],
       });
-    }
+    await park(before);
+    await park(parkedBefore);
     await placeOrder(deps(), v.cfg, before, OPERATOR, v.cfg.tillId);
     await moveCocktailsToSpirits(v);
+    await park(parkedAfter);
 
     await collectOrder(deps(), v.cfg, {
       id: before,
       lines: [],
       tender: { method: "cash", amount: "9.00" },
     });
-    await placeOrder(deps(), v.cfg, after, OPERATOR, v.cfg.tillId);
+    await placeOrder(deps(), v.cfg, parkedBefore, OPERATOR, v.cfg.tillId);
+    await placeOrder(deps(), v.cfg, parkedAfter, OPERATOR, v.cfg.tillId);
 
     expect(await reportingOf(before)).toEqual([underAlcoholic(v)]);
-    expect(await reportingOf(after)).toEqual([underSpirits(v)]);
+    expect(await reportingOf(parkedBefore)).toEqual([underAlcoholic(v)]);
+    expect(await reportingOf(parkedAfter)).toEqual([underSpirits(v)]);
   });
 
-  it("ticket-then-pay: an order placed before the move and collected after records the chain at collect", async () => {
+  it("ticket-then-pay: an order placed before the move and collected after keeps the chain it was added with", async () => {
     const v = await setupVenue("ticket_then_pay");
     const id = randomUUID();
     await parkOrder({ db: suite.db }, v.cfg, {
@@ -554,7 +643,7 @@ describe("the snapshot is taken when the record is issued, on every till filing 
       tender: { method: "cash", amount: "9.00" },
     });
 
-    expect(await reportingOf(id)).toEqual([underSpirits(v)]);
+    expect(await reportingOf(id)).toEqual([underAlcoholic(v)]);
   });
 
   it("card: the pricing pass before the reader is what is filed, even when the category moves during the charge", async () => {
@@ -579,7 +668,7 @@ describe("the snapshot is taken when the record is issued, on every till filing 
     expect(await reportingOf(pricedAfterMove)).toEqual([underSpirits(v)]);
   });
 
-  it("card recovery: a capture whose sale was never filed records the chain at recovery", async () => {
+  it("card recovery: a capture whose sale was never filed records the chain its line was added with", async () => {
     const v = await setupVenue();
     const id = randomUUID();
     await withTransaction(suite.db, async (tx) => {
@@ -609,7 +698,7 @@ describe("the snapshot is taken when the record is issued, on every till filing 
     );
 
     expect(out.outcome).toBe("captured");
-    expect(await reportingOf(id)).toEqual([underSpirits(v)]);
+    expect(await reportingOf(id)).toEqual([underAlcoholic(v)]);
   });
 
   it("a reprint, a duplicate and a replayed pay change no filed line and read no classification", async () => {
@@ -681,9 +770,8 @@ describe("issuancePass", () => {
     return id;
   }
 
-  it("reads the classification once per sale, however many lines and categories the basket has", async () => {
+  it("reads no classification at issuance, and copies each line's recorded one", async () => {
     const v = await setupVenue();
-    const one = await basketOrder(v, [{ productId: v.products.negroni }]);
     const five = await basketOrder(v, [
       { productId: v.products.negroni },
       { productId: v.products.cana },
@@ -693,18 +781,15 @@ describe("issuancePass", () => {
     ]);
 
     await withTransaction(suite.db, async (tx) => {
-      const pricedOne = await priceStoredOrderForIssuance(tx, one);
       const pricedFive = await priceStoredOrderForIssuance(tx, five);
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
-
-      await issuancePass(tx, v.cfg, one, pricedOne);
-      const forOne = prepared.mock.calls.length;
       prepared.mockClear();
+
       const issued = await issuancePass(tx, v.cfg, five, pricedFive);
 
-      expect(prepared).toHaveBeenCalledTimes(forOne);
-      expect(prepared.mock.calls.filter(([query]) => /from "labels"/.test(query.sql))).toHaveLength(
-        1,
+      expect(prepared.mock.calls.filter(([query]) => /from "labels"/.test(query.sql))).toEqual([]);
+      expect(prepared.mock.calls.filter(([query]) => /from "categories"/.test(query.sql))).toEqual(
+        [],
       );
       expect(new Set(issued.lines.map((l) => l.classification?.reporting.at(-1)?.id))).toEqual(
         new Set([v.categories.cocteles.id, v.categories.alcoholicas.id, v.categories.cafes.id]),
@@ -712,9 +797,48 @@ describe("issuancePass", () => {
     });
   });
 
-  it("records a stored line with no product id as Uncategorised with no product", async () => {
+  it("reads the classification once when lines are added, however many lines and categories the basket has", async () => {
+    const v = await setupVenue();
+    const add = (lines: { productId: string; variantId?: string }[]) =>
+      withTransaction(suite.db, async (tx) => {
+        const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
+        prepared.mockClear();
+        await createOpenOrder(
+          tx,
+          v.cfg,
+          randomUUID(),
+          lines.map((line) => ({
+            menuItemId: v.counter.offerFor(line.productId),
+            quantity: "1",
+            ...(line.variantId ? { variantId: line.variantId } : {}),
+          })),
+          null,
+          { zoneId: v.counter.zoneId },
+        );
+        const statements = prepared.mock.calls.map(([query]) => query.sql);
+        prepared.mockRestore();
+        return statements;
+      });
+
+    // The first add reads the published document, which later adds take from a cache.
+    await add([{ productId: v.products.negroni }]);
+    const forOne = await add([{ productId: v.products.negroni }]);
+    const forFive = await add([
+      { productId: v.products.negroni },
+      { productId: v.products.cana },
+      { productId: v.products.cafe, variantId: v.products.doble },
+      { productId: v.products.negroni },
+      { productId: v.products.cana },
+    ]);
+
+    expect(forFive).toHaveLength(forOne.length);
+    expect(forFive.filter((s) => /from "labels"/.test(s))).toHaveLength(1);
+  });
+
+  it("copies each stored line's recorded classification as it is: a line whose product id is gone keeps its snapshot, and a line with none recorded files none", async () => {
     const v = await setupVenue();
     const id = await basketOrder(v, [
+      { productId: v.products.negroni },
       { productId: v.products.negroni },
       { productId: v.products.pan },
     ]);
@@ -722,18 +846,23 @@ describe("issuancePass", () => {
       .update(workingOrderLines)
       .set({ productId: null })
       .where(and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.lineNo, 2)));
+    await suite.db
+      .update(workingOrderLines)
+      .set({ classification: null })
+      .where(and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.lineNo, 3)));
 
     const issued = await withTransaction(suite.db, async (tx) =>
       issuancePass(tx, v.cfg, id, await priceStoredOrderForIssuance(tx, id)),
     );
 
+    const negroni = {
+      reporting: underAlcoholic(v),
+      labels: labelsOf(v.labels.happyHour, v.labels.alcohol),
+    };
     expect(issued.lines.map((l) => [l.productId, l.parentProductId, l.classification])).toEqual([
-      [
-        v.products.negroni,
-        null,
-        { reporting: underAlcoholic(v), labels: labelsOf(v.labels.happyHour, v.labels.alcohol) },
-      ],
-      [null, null, { reporting: [], labels: [] }],
+      [v.products.negroni, null, negroni],
+      [null, null, negroni],
+      [v.products.pan, null, null],
     ]);
   });
 

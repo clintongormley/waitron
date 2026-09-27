@@ -148,7 +148,7 @@ export function menuDocument(
   };
   walk(members);
   return {
-    format: 1,
+    format: 2,
     menuId: "menu-lunch",
     menuName,
     root: { members },
@@ -181,6 +181,8 @@ function frozenOffer(
       abbreviation: { en: "ea" },
       hardwareUnit: null,
     },
+    vatClass: "reduced",
+    vatRate: "10.00",
     allergens: null,
     diet: null,
     dietDerivation: null,

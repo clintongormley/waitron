@@ -8,6 +8,13 @@ menu again. Handhelds and tills get a home page: search, a shortcut grid chosen 
 full menu below. A line added to a saved order keeps its price from then on; an unsaved basket
 follows the live menu, with staff confirming any change that touches it.
 
+_2026-09-27: the owner's decision of 2026-09-26 overturned Task 7a's rule (VAT resolved when the
+invoice is issued and written back to the line) and D6's "VAT is not menu content". Menus M7v
+built the replacement: the published version freezes each item's VAT rate, a line takes it when
+its price is fixed, issuance files the stored rate, and a VAT change flags the menu; a line also
+records its reporting classification when it is added. The menus spec's §11.4 note has the rule;
+the text below is kept as it was written._
+
 **Architecture:**
 - **One ordered membership table** (`section_members`) holds every menu list: a section's members,
   a menu's top level and each home layout. A member is a product or a section. A menu's top level
@@ -319,10 +326,14 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
     reporting classification and the kitchen route. VAT is resolved when the invoice record is
     issued (Task 7a; spec §11.4; asesor Q26), classification is recorded at the same moment (the
     classification plan), and the route is decided when the line is sent, as today. A change to any
-    of them flags no menu. The served offer still carries `vatClass`, `courseId` and the reporting
+    of them flags no menu. The served
+    offer still carries `vatClass`, `courseId` and the reporting
     `category` label read from the current rows, because `recordWorkingLineContexts` and the till's
     held-order view read them off the offer today (`packages/venue-service/src/operations.ts:749`);
     they are informational there, and filing never reads them.
+    _(2026-09-27: VAT is now in the document and flags the menu, and the served offer carries the
+    VAT class and rate the published version froze, not the current row's; the classification is
+    recorded when the line is added. See the note under the Goal.)_
   - Everything else the till shows or charges is frozen: names, descriptions, images, prices
     (dish, variant and extras item), units, variants offered, extras lists offered with their picks
     rules, option lists offered with their labels' text, allergens, diet, structure, order, and
@@ -737,6 +748,9 @@ test. Each has its test in the named task.
 
 1. **Each fact reaches the till at its own moment: availability at once, allergens at publish, VAT
    at issuance — and only the allergen change flags the menu.**
+   _(2026-09-27: since menus M7v the VAT class and rate are frozen in the published version, a VAT
+   change flags the menu and Preview names it "VAT", and a Lemonade line with its Extra lemon already
+   in a tab files both at the rates the published version froze. See the note under the Goal.)_
    - Publish Lunch, then: mark Lemonade unavailable; add `sulphites` to Lemonade's allergens and to
      the extra "Extra lemon" that its extras list offers; change both VAT classes `reduced` →
      `general`.
@@ -1461,6 +1475,9 @@ sale-path change in one reviewable task.
   - **Review Focus 1's document half:** changing VAT class, availability, course or reporting
     category leaves the hash unchanged, while a name, price, image, **allergens, diet**,
     variant-offered or extras-price change moves it — on the dish, a variant AND an extras item.
+    _(2026-09-27: since menus M7v a VAT class change moves the hash too; the cases are in the
+    `moved` list, and the rate case after it, in `packages/catalogue/src/menu-document.test.ts`.
+    See the note under the Goal.)_
   - **Diff:** Lemonade added under Drinks gives `product_added` with `under: ["Drinks"]` and
     `source: "this_menu"`; Burger €12 → €13 gives `price_changed` with `source: "shared_product"`
     and `alsoOn: ["Dinner Menu"]`; sulphites added to Lemonade gives `product_changed` with
@@ -1525,6 +1542,9 @@ was deleted. The Preview tab also shows the whole menu read-only, in the Structu
 ---
 
 ## Task 7a: VAT is resolved when the invoice record is issued — slug `vat-at-issuance`
+
+_2026-09-27: replaced by menus M7v (the note under the Goal). Issuance no longer resolves a rate,
+nothing is written back, and the test file is now `apps/server/src/vat-rate-at-line-add.test.ts`._
 
 Spec §11.4 (which sharpens §10.4's "at payment") and D6. **Fiscal-adjacent: it changes the VAT rate
 filed for a held order, a tab, an invoice-first order and a card payment. The golden huella and
@@ -1902,6 +1922,8 @@ the golden huella and `inmutabilidad` pass unedited.**
     served offer still carries the PUBLISHED allergens on the dish and the extra; after a republish
     it carries the new ones. The filed VAT is Task 7a's. The golden fingerprint is unaffected because
     its fixture changes nothing.
+    _(2026-09-27: since menus M7v a line files the rate the published version froze when its price
+    was fixed, not Task 7a's. See the note under the Goal.)_
   - **Provenance:** a held line and a tab line record `working_line_contexts.menu_version_id` when
     added. Paying them hours later, after another publish, files `sale_lines.menu_version_id` = the
     version each line came from, not the live one, and their prices are unchanged (D10).

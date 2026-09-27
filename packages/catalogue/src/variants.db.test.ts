@@ -785,6 +785,13 @@ describe("selectMenuVariant resolves the chosen product and its parent's names",
       );
     }
   });
+
+  it("carries the rate a published version froze for the chosen row, the variant's or the offer's own", () => {
+    const frozen = { ...offer, vatRate: "21.00", variants: [{ ...large, vatRate: "10.00" }] };
+
+    expect(selectMenuVariant(frozen, large.id).vatRate).toBe("10.00");
+    expect(selectMenuVariant({ ...frozen, variants: [] }, null).vatRate).toBe("21.00");
+  });
 });
 
 describe("selectMenuVariant refuses a variant it may not sell", () => {

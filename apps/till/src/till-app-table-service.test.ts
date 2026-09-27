@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resolveVatRate } from "@waitron/catalogue/src/pricing.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { productUnit } from "./widgets/product-name.js";
 import { TillApp } from "./till-app.js";
@@ -168,6 +169,7 @@ function zoneOffers(catalogue: ProductCatalogue, defaultMenuId: string | null): 
       kitchenName: null,
       unit: productUnit(product),
       vatClass: product.vatClass,
+      vatRate: resolveVatRate(product.vatClass),
       category: product.category ?? "Other",
       allergens: product.allergens,
       diet: null,

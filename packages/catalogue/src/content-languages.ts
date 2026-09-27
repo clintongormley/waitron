@@ -104,6 +104,13 @@ export async function readContentLanguages(
   tx: Transaction,
   fallbackLanguage: string,
 ): Promise<ContentLanguages> {
+  return contentLanguagesOr(await readSavedContentLanguages(tx), fallbackLanguage);
+}
+
+/** The saved content-language setting, or `undefined` when none is saved. */
+export async function readSavedContentLanguages(
+  tx: Transaction,
+): Promise<ContentLanguages | undefined> {
   const [row] = await tx
     .select({
       defaultLanguage: contentLanguages.defaultLanguage,
@@ -111,7 +118,15 @@ export async function readContentLanguages(
     })
     .from(contentLanguages)
     .where(eq(contentLanguages.id, 1));
-  if (row) return row;
+  return row;
+}
+
+/** `saved`, or, when none is saved, `fallbackLanguage`'s language alone. */
+export function contentLanguagesOr(
+  saved: ContentLanguages | undefined,
+  fallbackLanguage: string,
+): ContentLanguages {
+  if (saved) return saved;
   let defaultLanguage: string;
   try {
     defaultLanguage = contentLanguageCode(fallbackLanguage);
