@@ -163,6 +163,42 @@ describe("aggregate", () => {
       valid: 1,
       uncounted: { CompileError: 1, Ignored: 2, RuntimeError: 1 },
     });
+    expect(result.files[0].uncounted).toEqual({ CompileError: 1, Ignored: 2, RuntimeError: 1 });
+  });
+
+  it("shows a mutant one shard ignored and another could not compile as the error, whichever is read first", () => {
+    const ignored = report("src/a.ts", { status: "Ignored", line: 7 });
+    const compileError = report("src/a.ts", { status: "CompileError", line: 7 });
+
+    expect(aggregate([ignored, compileError]).files[0].uncounted).toEqual({ CompileError: 1 });
+    expect(aggregate([compileError, ignored]).files[0].uncounted).toEqual({ CompileError: 1 });
+  });
+
+  it("shows a mutant one shard ignored and another failed at runtime as the error, whichever is read first", () => {
+    // `Ignored` and `Pending` both sort before `RuntimeError`, so this case fails if the error
+    // wins only by the tie-break rather than by its rank.
+    const runtimeError = report("src/a.ts", { status: "RuntimeError", line: 7 });
+    const ignored = report("src/a.ts", { status: "Ignored", line: 7 });
+    const pending = report("src/a.ts", { status: "Pending", line: 7 });
+
+    expect(aggregate([ignored, runtimeError]).files[0].uncounted).toEqual({ RuntimeError: 1 });
+    expect(aggregate([runtimeError, ignored]).files[0].uncounted).toEqual({ RuntimeError: 1 });
+    expect(aggregate([pending, runtimeError]).files[0].uncounted).toEqual({ RuntimeError: 1 });
+    expect(aggregate([runtimeError, pending]).files[0].uncounted).toEqual({ RuntimeError: 1 });
+  });
+
+  it("settles two uncounted statuses of the same rank the same way whichever is read first", () => {
+    const compileError = report("src/a.ts", { status: "CompileError", line: 7 });
+    const runtimeError = report("src/a.ts", { status: "RuntimeError", line: 7 });
+    const ignored = report("src/a.ts", { status: "Ignored", line: 7 });
+    const pending = report("src/a.ts", { status: "Pending", line: 7 });
+
+    expect(aggregate([compileError, runtimeError]).files[0].uncounted).toEqual(
+      aggregate([runtimeError, compileError]).files[0].uncounted,
+    );
+    expect(aggregate([ignored, pending]).files[0].uncounted).toEqual(
+      aggregate([pending, ignored]).files[0].uncounted,
+    );
   });
 });
 
@@ -298,6 +334,7 @@ describe("the command", () => {
 
     const result = run(root, "--shards", "2", "--break", "90");
 
+    expect(result.status).toBe(0);
     expect(result.stdout).toContain("not measured — no mutants  src/empty.ts");
   });
 
@@ -309,6 +346,7 @@ describe("the command", () => {
 
     const result = run(root, "--shards", "2", "--break", "50");
 
+    expect(result.status).toBe(0);
     expect(result.stdout).toMatch(/ 0\.00%\s+0\/2\s+src\/dead\.ts/);
     expect(result.stdout).not.toContain("not measured");
   });
