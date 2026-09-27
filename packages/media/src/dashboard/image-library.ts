@@ -113,6 +113,7 @@ export class ImageLibrary extends LitElement {
       input[type="file"] {
         font: inherit;
         max-width: 100%;
+        min-width: 0;
         min-height: var(--wt-tap-min);
       }
       a {
