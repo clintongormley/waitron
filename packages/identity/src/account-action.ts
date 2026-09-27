@@ -222,7 +222,7 @@ function statusAcceptsPurpose(
   return purpose === "invitation" ? status === "pending" : status === "active";
 }
 
-/** Validate a bearer action without consuming it or opening a session. Completion checks it again. */
+/** Validate a bearer action without consuming it or opening a session. Completion repeats these checks. */
 export async function inspectAccountAction(
   tx: Transaction,
   input: {
@@ -262,12 +262,13 @@ async function finishClaimedAction(
   nowIso: string,
 ): Promise<AccountActionCompletion> {
   const [person] = await tx
-    .select({ status: persons.status })
+    .select({ email: persons.email, status: persons.status })
     .from(persons)
     .where(eq(persons.id, personId));
   if (
+    person?.email === null ||
     person === undefined ||
-    (input.purpose === "invitation" ? person.status !== "pending" : person.status !== "active")
+    !statusAcceptsPurpose(person.status, input.purpose)
   ) {
     throw new AppError("account_action.invalid", {});
   }

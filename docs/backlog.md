@@ -4394,20 +4394,6 @@ doubles the single quote only, and a backslash stays as itself. Left as it was, 
 `packages/provisioning/src/identifiers.ts` for `quoteLiteral`, which only re-exports it; the function
 lives in `packages/shared/src/sql-literal.ts`.
 
-**Completing an account action does not refuse a person who has lost their login email — OPEN
-(found 2026-09-27, finish-branch's convention review of the identity tidy-up branch).**
-`inspectAccountAction` (`packages/identity/src/account-action.ts`) refuses a live token whose
-person's email is null with `account_action.invalid`, and its doc comment says "Completion checks it
-again", but `completeAccountAction` hands over to `finishClaimedAction`, which checks only that the
-person exists and has the status the purpose needs, not the email. Receipt: on 2026-09-27, a scratch
-copy of the case "refuses a live proof whose person has since lost their login email" in
-`packages/identity/src/account-action.test.ts`, changed to call `completeAccountAction` with purpose
-`password_reset` after nulling `email` and `email_folded`, completed and returned
-`{"personId":…,"session":null}` instead of refusing. Not established: whether any product path
-clears a person's login email while a token is outstanding. **Next action:** decide whether
-completion should refuse the same way inspection does (and add the case), or narrow the "Completion
-checks it again" comment.
-
 **The dashboard calls a mistyped email-change code an invalid link — OPEN (found 2026-09-27 by
 reading, on the identity tidy-up branch).**
 `apps/dashboard/src/i18n/codes.ts` maps `account_action.invalid` to "This link is invalid or has

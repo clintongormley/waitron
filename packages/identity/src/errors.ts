@@ -49,9 +49,9 @@ declare module "@waitron/shared" {
     /** The requested direct status change is not part of the account lifecycle. */
     "person.transition_invalid": Record<string, never>;
     /** The invitation or password-reset token is unknown, expired, used or for the other purpose,
-     * or its person has since left the status that purpose needs or no longer exists; inspecting it
-     * is also refused once its person has lost their login email. `apps/server` also raises it for
-     * a malformed account-action request and for an email-change code it did not accept. */
+     * or its person has since left the status that purpose needs, lost their login email, or no
+     * longer exists. `apps/server` also raises it for a malformed account-action request and for an
+     * email-change code it did not accept. */
     "account_action.invalid": Record<string, never>;
     /** Neither the session's operator nor any supplied override holds the required permission. */
     "authorization.not_permitted": { permission: string };
