@@ -1,4 +1,4 @@
-import { afterEach, describe, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { StationThresholds } from "@waitron/shared";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./till-station-screen.js";
@@ -181,6 +181,33 @@ describe.each(["light", "dark"] as const)("till-station-screen a11y (%s theme)",
       .shadowRoot!.querySelector<HTMLElement>("[data-acknowledge]")!
       .click();
     await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations while the out-of-date banner shows above the list", async () => {
+    const { el, host } = await mountWidget<TillStationScreen>(
+      "till-station-screen",
+      {
+        api: stubApi({
+          getStationQueue: vi
+            .fn()
+            .mockResolvedValueOnce({ items: groups, notices })
+            .mockRejectedValue({ code: "server.internal" }),
+        }),
+      },
+      theme,
+    );
+    await flush(el);
+    // A bump reloads the queue, and that reload fails.
+    el.shadowRoot!.querySelector("till-station-queue")!.dispatchEvent(
+      new CustomEvent("advance-ticket-item", {
+        detail: { itemId: "ti-1", to: "preparing" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-stale]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

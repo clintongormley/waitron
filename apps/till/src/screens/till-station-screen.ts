@@ -2,7 +2,7 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { UrlStateController, baseStyles } from "@waitron/ui";
 import { tillPath } from "../navigation.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "../widgets/station-queue.js";
 import type { BumpMode, FireControlMode } from "../widgets/station-queue.js";
@@ -69,10 +69,8 @@ export class TillStationScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      /* The board/rail view-toggle cluster: a SIBLING of the header (never inside it), so it survives
-         when the standalone header is dropped in an embedded card host (SP-B2.2) — the toggle is station
-         BODY function, not shell chrome. Back lives in the header instead. Mirrors the floor screen's
-         .actions extraction. */
+      /* A sibling of the header, never inside it, so the view toggle and the out-of-date banner survive
+         when an embedded card host drops the header. */
       .actions {
         display: flex;
         flex-wrap: wrap;
@@ -85,6 +83,19 @@ export class TillStationScreen extends LitElement {
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-2);
+      }
+
+      .stale {
+        margin: 0;
+      }
+
+      .stale[data-stale] {
+        flex-basis: 100%;
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-warning);
+        color: var(--wt-color-on-warning);
+        font-weight: var(--wt-font-weight-bold);
       }
 
       .empty {
@@ -131,6 +142,8 @@ export class TillStationScreen extends LitElement {
    */
   @state() private reprintErrorCode?: string;
   @state() private acknowledgeFailed = false;
+  @state() private stale = false;
+  #lastGoodAt = new Date();
   #initialConsumed = false;
   #refreshTimer?: ReturnType<typeof setInterval>;
   readonly #refreshReads = new Set<AbortController>();
@@ -195,7 +208,7 @@ export class TillStationScreen extends LitElement {
   /**
    * Every tick reads afresh, even when the previous tick's read has not answered, so one read that
    * never answers cannot freeze the display; that read is cancelled at {@link READ_LIMIT_MS}, which
-   * the caller sees as a silent failed refresh.
+   * counts as a failed refresh.
    */
   async #refresh(): Promise<void> {
     const read = new AbortController();
@@ -213,6 +226,16 @@ export class TillStationScreen extends LitElement {
     if (request <= this.#appliedRequest) return false;
     this.#appliedRequest = request;
     return true;
+  }
+
+  #readSucceeded(): void {
+    this.#lastGoodAt = new Date();
+    this.stale = false;
+  }
+
+  /** A failure of a read older than the answer on screen says nothing about that answer. */
+  #readFailed(request: number): void {
+    if (request > this.#appliedRequest) this.stale = true;
   }
 
   #adoptNotices(notices: KitchenNotice[]): void {
@@ -253,6 +276,8 @@ export class TillStationScreen extends LitElement {
         this.dispatchEvent(
           new CustomEvent("device-unauthorized", { bubbles: true, composed: true }),
         );
+      } else {
+        this.#readFailed(request);
       }
     }
   }
@@ -267,6 +292,7 @@ export class TillStationScreen extends LitElement {
     this.activeStationId = station.id;
     this.groups = station.queue;
     this.#adoptNotices(station.notices);
+    this.#readSucceeded();
   }
 
   async #reload(signal?: AbortSignal): Promise<void> {
@@ -276,7 +302,7 @@ export class TillStationScreen extends LitElement {
         const answer = await this.#readDeviceStation(signal);
         if (this.#isNewest(request)) this.#adoptDeviceStation(answer);
       } catch {
-        // Non-fatal — leave the last-known queue.
+        this.#readFailed(request);
       }
       return;
     }
@@ -289,9 +315,10 @@ export class TillStationScreen extends LitElement {
       if (this.isConnected && this.#isNewest(request)) {
         this.groups = items;
         this.#adoptNotices(notices);
+        this.#readSucceeded();
       }
     } catch {
-      // Non-fatal — leave the last-known queue; the next reload reconciles.
+      this.#readFailed(request);
     }
   }
 
@@ -302,6 +329,8 @@ export class TillStationScreen extends LitElement {
       this.notices = [];
       // Reads still out are for the station being left.
       this.#appliedRequest = this.#queueRequest;
+      this.#lastGoodAt = new Date();
+      this.stale = false;
     }
     this.activeStationId = id;
     if (this.#ownsStationPath()) this.#url.write({ "till-station": id }, replace);
@@ -466,6 +495,9 @@ export class TillStationScreen extends LitElement {
           >
             ${this.view === "kanban" ? t("station.view_rail") : t("station.view_kanban")}
           </wt-button>
+          <p class="stale" role="status" ?data-stale=${this.stale}>
+            ${this.stale ? this.#staleMessage() : nothing}
+          </p>
         </div>
         ${
           this.reprintErrorCode
@@ -480,6 +512,14 @@ export class TillStationScreen extends LitElement {
         ${opts.body}
       </section>
     `;
+  }
+
+  #staleMessage(): string {
+    const time = new Intl.DateTimeFormat(currentLocale(), {
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(this.#lastGoodAt);
+    return t("station.stale").replace("{time}", () => time);
   }
 
   #noStations(): TemplateResult {
