@@ -174,21 +174,123 @@ function blankBackticks(comment: string): string {
   return comment.replace(/`[^`]*`/g, (match) => match.replace(/[^\n]/g, " "));
 }
 
-/** Blanks backtick citations inside every block comment; the rest of the comment prose, and all
- * code, is left for the scan. */
-function scrubBlockComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, blankBackticks);
+/** Words after which a `/` starts a regular expression rather than a division. */
+const REGEX_AFTER_WORD: ReadonlySet<string> = new Set([
+  "return",
+  "typeof",
+  "instanceof",
+  "case",
+  "do",
+  "else",
+  "in",
+  "of",
+  "new",
+  "delete",
+  "void",
+  "throw",
+  "yield",
+  "await",
+]);
+
+const WORD = /[\w$]+/y;
+
+/** Whether a `/` after `previous` — the last word or punctuation mark of code — opens a regular
+ * expression. After a value (a name, a number, a closing bracket or a literal) it is a division. */
+function opensRegex(previous: string): boolean {
+  return REGEX_AFTER_WORD.has(previous) || !/^[\w$)\]}"'`/]/.test(previous);
 }
 
 /**
- * Keeps a line's code part unchanged and blanks backtick citations in its `//` comment tail. The
- * `[^:]` guard keeps `https://…` in a string literal from being read as a comment.
+ * `source` with backtick citations blanked inside its comments, and nothing else changed.
  *
- * Comment boundaries are matched by regex, not parsed, so a `//` (or, in `scrubBlockComments`, a
- * `/*`) INSIDE a string literal earlier on the same line is misread as a comment start.
+ * Comments are found by walking the source as the language reads it, so a `//` or `/*` inside a
+ * string, a template literal or a regular expression is not a comment, and a `/*` inside a `//`
+ * comment opens nothing. Without a parser, whether a `/` opens a regular expression is judged from
+ * the token before it; a string or regular expression stops at the end of its line, so a misjudged
+ * one reaches no further than that line.
  */
-function scrubLineComment(line: string): string {
-  return line.replace(/(^|[^:])(\/\/.*)$/, (_match, pre, comment) => pre + blankBackticks(comment));
+function scrubComments(source: string): string {
+  let out = "";
+  let i = 0;
+  let previous = "";
+  // One entry per open `${`: how many `{` inside it are still open.
+  const substitutions: number[] = [];
+
+  const copyTo = (end: number): void => {
+    out += source.slice(i, end);
+    i = Math.min(end, source.length);
+  };
+  const blankTo = (end: number): void => {
+    out += blankBackticks(source.slice(i, end));
+    i = end;
+  };
+  /** Copies a template literal's text from `i`, up to its closing backtick or its next `${`. */
+  const copyTemplate = (): void => {
+    let j = i;
+    while (
+      j < source.length &&
+      source[j] !== "`" &&
+      !(source[j] === "$" && source[j + 1] === "{")
+    ) {
+      j += source[j] === "\\" ? 2 : 1;
+    }
+    if (source[j] === "`") j += 1;
+    else if (j < source.length) {
+      j += 2;
+      substitutions.push(0);
+    }
+    copyTo(j);
+    previous = "`";
+  };
+  /** Copies a string or regular expression from its opening character at `i` to its closing
+   * `quote`, or to the end of the line. */
+  const copyLiteral = (quote: string): void => {
+    let j = i + 1;
+    let inClass = false;
+    while (j < source.length && source[j] !== "\n" && (source[j] !== quote || inClass)) {
+      if (source[j] === "\\") j += 1;
+      else if (quote === "/" && source[j] === "[") inClass = true;
+      else if (quote === "/" && source[j] === "]") inClass = false;
+      j += 1;
+    }
+    copyTo(source[j] === quote ? j + 1 : j);
+    previous = quote;
+  };
+
+  while (i < source.length) {
+    const c = source[i]!;
+    const pair = source.slice(i, i + 2);
+    if (pair === "//") {
+      const end = source.indexOf("\n", i);
+      blankTo(end < 0 ? source.length : end);
+    } else if (pair === "/*") {
+      const close = source.indexOf("*/", i + 2);
+      blankTo(close < 0 ? source.length : close + 2);
+    } else if (c === '"' || c === "'" || (c === "/" && opensRegex(previous))) {
+      copyLiteral(c);
+    } else if (c === "`") {
+      copyTo(i + 1);
+      copyTemplate();
+    } else if (/[\w$]/.test(c)) {
+      WORD.lastIndex = i;
+      const word = WORD.exec(source)![0];
+      copyTo(i + word.length);
+      previous = word;
+    } else {
+      copyTo(i + 1);
+      if (/\s/.test(c)) continue;
+      previous = c;
+      const open = substitutions.length - 1;
+      if (open < 0) continue;
+      if (c === "{") substitutions[open]! += 1;
+      else if (c === "}" && substitutions[open]! > 0) substitutions[open]! -= 1;
+      else if (c === "}") {
+        substitutions.pop();
+        copyTemplate();
+      }
+    }
+  }
+  return out;
 }
 
 /**
@@ -221,9 +323,9 @@ function tokenise(line: string): string[] {
 export function findSpanish(source: string, words: ReadonlySet<string>): Violation[] {
   const violations: Violation[] = [];
   const originalLines = source.split("\n");
-  const preparedLines = scrubBlockComments(blankGuillemets(source)).split("\n");
+  const preparedLines = scrubComments(blankGuillemets(source)).split("\n");
   preparedLines.forEach((line, index) => {
-    for (const token of tokenise(scrubLineComment(line))) {
+    for (const token of tokenise(line)) {
       if (words.has(token)) {
         violations.push({ line: index + 1, word: token, text: originalLines[index]!.trim() });
       }

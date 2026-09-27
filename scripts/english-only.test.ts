@@ -386,6 +386,83 @@ describe("findSpanish", () => {
     ]);
   });
 
+  it("does not read a glob path in a line comment as a block comment's opener", () => {
+    const source = [
+      "// reads drizzle/meta/*_snapshot.json",
+      "const query = sql`select from registros_facturacion`;",
+      "/* a real block comment */",
+    ].join("\n");
+    expect(findSpanish(source, FIXTURE).map((v) => `${v.line}: ${v.word}`)).toEqual([
+      "2: registros",
+      "2: facturacion",
+    ]);
+  });
+
+  it("keeps a cited word cited when a glob path in a line comment precedes it", () => {
+    // The false opener used to pair backticks across code and comments, exposing a cited word
+    // lines away from the path that caused it.
+    const source = [
+      "// reads drizzle/meta/*_snapshot.json",
+      'const tick = "`";',
+      "// the `cadena` row is owned by the fiscal module",
+      "/* a real block comment */",
+    ].join("\n");
+    expect(findSpanish(source, FIXTURE)).toEqual([]);
+  });
+
+  it("does not read a comment opener inside a string as a comment", () => {
+    const blockOpener = [
+      'const opener = "/*";',
+      "const query = sql`select from registros`;",
+      'const closer = "*/";',
+    ].join("\n");
+    expect(findSpanish(blockOpener, FIXTURE).map((v) => `${v.line}: ${v.word}`)).toEqual([
+      "2: registros",
+    ]);
+    const lineOpener = "const path = 'a//b'; const query = sql`select from registros`;";
+    expect(findSpanish(lineOpener, FIXTURE).map((v) => v.word)).toEqual(["registros"]);
+  });
+
+  it("does not read a comment opener inside a template literal as a comment", () => {
+    expect(findSpanish("const path = `a//b`; // the `cadena` row", FIXTURE)).toEqual([]);
+    const nested = "const query = `${'/*'}`; const later = sql`select from registros`; // */";
+    expect(findSpanish(nested, FIXTURE).map((v) => v.word)).toEqual(["registros"]);
+    // The template resumes after its `${…}`, so the `//` inside it is still not a comment.
+    expect(findSpanish("const path = `${root}//x`; // the `cadena` row", FIXTURE)).toEqual([]);
+  });
+
+  it("does not read a comment opener inside a regular expression as a comment", () => {
+    const source = [
+      "const opener = /[/*]/;",
+      "const query = sql`select from registros`;",
+      "/* a real block comment */",
+    ].join("\n");
+    expect(findSpanish(source, FIXTURE).map((v) => `${v.line}: ${v.word}`)).toEqual([
+      "2: registros",
+    ]);
+    // A `/` inside a character class does not end the expression.
+    expect(findSpanish("const tick = /[/`]/;\n// the `cadena` row", FIXTURE)).toEqual([]);
+    // After a keyword such as `return`, a `/` opens an expression rather than dividing.
+    expect(findSpanish("return /`/;\n// the `cadena` row", FIXTURE)).toEqual([]);
+  });
+
+  it("skips escaped quotes and braces nested inside a template's substitution", () => {
+    expect(findSpanish('const s = "say \\"`\\""; // the `cadena` row', FIXTURE)).toEqual([]);
+    expect(findSpanish("const t = `a\\`b // c`; // the `cadena` row", FIXTURE)).toEqual([]);
+    const nested = "const t = `${ { a: 1 }.a // the `cadena` field\n}`;";
+    expect(findSpanish(nested, FIXTURE)).toEqual([]);
+  });
+
+  it("ends an unterminated string at its line and an unterminated comment or template at the end", () => {
+    expect(findSpanish('const s = "unclosed\n// the `cadena` row', FIXTURE)).toEqual([]);
+    expect(findSpanish("/* the `cadena` row", FIXTURE)).toEqual([]);
+    expect(findSpanish("const t = `the cadena", FIXTURE).map((v) => v.word)).toEqual(["cadena"]);
+  });
+
+  it("reads a slash after a value as division, not as a regular expression", () => {
+    expect(findSpanish("const half = total / 2; // the `cadena` row", FIXTURE)).toEqual([]);
+  });
+
   it("scans with exactly the set it is handed — the base list alone knows no fiscal term", () => {
     // The parameter is required, with no default, so a caller can never silently narrow to the
     // base list: here the narrowing is deliberate. `mesa` is base vocabulary, `huella` fiscal's.

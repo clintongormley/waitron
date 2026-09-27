@@ -3917,18 +3917,33 @@ image constraints under *Detail → Box image*.
     files in `apps/server`, `packages/catalogue` (none left after #603), `db`, `identity`, `media`,
     `migrations`, `printing` and `store` on 2026-09-24, not each checked (see the `DrizzleQueryError` entry below).
 
-- **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
-  (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
-  pattern that looks for a slash-star opener anywhere in the raw text, so a glob path written
-  inside an ordinary LINE comment opens one as far as the scrubber is concerned. It then blanks
-  everything up to the next real block-comment terminator — measured at about 390 lines in
-  `packages/db/src/schema/sales.test.ts` — and pairs backtick-citation blanking across that whole
-  span, which made it report three pre-existing, untouched Spanish words as fresh violations. The
-  reported lines are not the offender, which is the expensive part: the author looks where the
-  guard points. Worked around on that branch by rewording the path. Fixing it properly needs a
-  scanner that knows a comment opener inside a string or a line comment is not a comment opener,
-  which is the same care `scripts/column-vocabulary.test.ts` already documents for its own
-  comment handling. Until then the hedge is in `CLAUDE.md` §3.
+- **The english-only guard blames the wrong lines when a comment contains a glob path — DONE
+  (A86).** `packages/db/src/english-only.ts` used to find block comments with a pattern that
+  matched a slash-star opener anywhere, a `//` comment or a string included, and then paired
+  backtick citations across everything up to the next real terminator. It now walks the source,
+  stepping over strings, template literals (with their `${…}` parts) and regular expressions, so an
+  opener inside any of them, or inside a `//` comment, opens nothing. Judging whether a `/` opens a
+  regular expression is done from the token before it, without a parser; a misjudged string or
+  expression stops at the end of its line. Experiment: the old and new `findSpanish` compared over
+  every `.ts` file under `packages/` and `apps/` (2577 files, a fixed word set) differed in one
+  file only, `apps/server/src/boot.test.ts`, where a `` `/api/*` `` citation in a line comment at
+  line 2506 had opened a false block comment running to line 3029 and hidden four occurrences of
+  two Spanish words in code there; `apps/` is outside the guard's scope, so nothing newly fails.
+  Ten deletions, one at a time — the regular-expression, string, division, keyword,
+  character-class, line-end, string-escape, template-escape, `${…}`-resume and nested-brace
+  handling — each failed a case in `scripts/english-only.test.ts`. The `CLAUDE.md` §3 warning is
+  removed.
+
+- **Six other TypeScript-scanning guards strip comments with the same slash-star pattern — OPEN
+  (found reading A86, not run).** `packages/fiscal/src/no-regime-vocabulary.test.ts`,
+  `packages/payments/src/no-provider-vocabulary.test.ts`,
+  `packages/payments-stripe/src/tenant-scoping.test.ts`, `packages/shared/src/conventions.test.ts`,
+  `scripts/dashboard-browser-purity.test.ts` and `scripts/guarded-teardowns.test.ts` each remove or
+  blank `/\/\*[\s\S]*?\*\//g` BEFORE they strip `//` comments, so a `/*` inside a `//` comment
+  or a string would remove REAL CODE up to the next terminator and the guard would stop seeing it —
+  the silent direction (`tenant-scoping.test.ts` states the string half of this at its site).
+  Whether any file they scan has that shape today is not measured. The scanner A86 wrote could be
+  shared if it moved somewhere they can all import.
 
 - **No guard holds a MODULE migration set to its declared schema — LANDED for four of them
   (**PR #491**).** `packages/db/src/testing/schema-conformance.ts` is a reusable suite factory that
