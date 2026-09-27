@@ -604,7 +604,7 @@ describe("DashboardApi routes", () => {
     ];
     const fetchImpl = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ menus }))
+      .mockResolvedValueOnce(jsonResponse(menus))
       .mockResolvedValueOnce(emptyResponse())
       .mockResolvedValueOnce(emptyResponse());
     const api = new DashboardApi("", fetchImpl);

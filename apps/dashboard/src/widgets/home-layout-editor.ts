@@ -213,12 +213,14 @@ export class HomeLayoutEditor extends LitElement {
       const heldSections = tiles.flatMap(({ ref, name }) =>
         ref.kind === "section" ? [{ id: ref.sectionId, internalName: name }] : [],
       );
+      const heldProductIds = new Set(heldProducts.map(({ id }) => id));
+      const heldSectionIds = new Set(heldSections.map(({ id }) => id));
       this.#products = [
-        ...this.products.filter(({ id }) => !heldProducts.some((held) => held.id === id)),
+        ...this.products.filter(({ id }) => !heldProductIds.has(id)),
         ...heldProducts,
       ];
       this.#sections = [
-        ...this.sections.filter(({ id }) => !heldSections.some((held) => held.id === id)),
+        ...this.sections.filter(({ id }) => !heldSectionIds.has(id)),
         ...heldSections,
       ];
     }

@@ -98,29 +98,20 @@ function refusal(error: unknown): Record<string, string> {
   return { [fieldOf(error)]: codeMessage(codeOf(error)) };
 }
 
-function reachableProducts(nodes: MenuStructureNode[]): string[] {
-  const found = new Set<string>();
+/** Every product and library section the structure holds, at any depth. */
+function reachable(nodes: MenuStructureNode[]): { products: string[]; sections: Set<string> } {
+  const products = new Set<string>();
+  const sections = new Set<string>();
   const walk = (list: MenuStructureNode[]): void => {
     for (const node of list)
-      if (node.ref.kind === "product") found.add(node.ref.productId);
-      else walk(node.children ?? []);
-  };
-  walk(nodes);
-  return [...found];
-}
-
-/** Every library section the structure holds, at any depth. */
-function reachableSections(nodes: MenuStructureNode[]): Set<string> {
-  const found = new Set<string>();
-  const walk = (list: MenuStructureNode[]): void => {
-    for (const node of list)
-      if (node.ref.kind === "section") {
-        found.add(node.ref.sectionId);
+      if (node.ref.kind === "product") products.add(node.ref.productId);
+      else {
+        sections.add(node.ref.sectionId);
         walk(node.children ?? []);
       }
   };
   walk(nodes);
-  return found;
+  return { products: [...products], sections };
 }
 
 /** The section nodes `path` follows from the menu's top level, as far as the structure still has it. */
@@ -503,6 +494,7 @@ export class MenusScreen extends LitElement {
   #listMembers: SectionMember[] = [];
   #inSection: string[] = [];
   #onMenu: string[] = [];
+  #onMenuSections = new Set<string>();
   #excluded: string[] = [];
   #memberProducts: Product[] = [];
   #addable: Product[] = [];
@@ -547,7 +539,11 @@ export class MenusScreen extends LitElement {
       this.#resolvePath();
       this.#closeLostList();
     }
-    if (changed.has("structure")) this.#onMenu = reachableProducts(this.structure?.nodes ?? []);
+    if (changed.has("structure")) {
+      const reached = reachable(this.structure?.nodes ?? []);
+      this.#onMenu = reached.products;
+      this.#onMenuSections = reached.sections;
+    }
     if (changed.has("structure") || changed.has("path") || changed.has("sections"))
       this.#excluded = this.path.length === 0 ? [] : sectionsHolding(this.#parents, this.#listId!);
     if (changed.has("products") || changed.has("structure") || changed.has("path")) {
@@ -559,7 +555,7 @@ export class MenusScreen extends LitElement {
     if (changed.has("products")) this.#addable = this.products.filter((product) => product.active);
     if (changed.has("structure") || changed.has("products") || changed.has("sections")) {
       const products = new Set(this.#onMenu);
-      const sections = reachableSections(this.structure?.nodes ?? []);
+      const sections = this.#onMenuSections;
       this.#tileProducts = this.products
         .filter((product) => product.active && products.has(product.id))
         .map(({ id, name }) => ({ id, name }));
@@ -1516,6 +1512,7 @@ export class MenusScreen extends LitElement {
     body: unknown;
     save: string;
     saveLabel: string;
+    saveVariant?: "primary" | "danger";
     close: () => void;
     submit: () => void;
   }) {
@@ -1541,7 +1538,7 @@ export class MenusScreen extends LitElement {
           }}
           >${t("action.cancel")}</wt-button
         ><wt-button
-          variant="primary"
+          variant=${options.saveVariant ?? "primary"}
           data-test=${options.save}
           .disabled=${this.busy}
           @click=${options.submit}
@@ -2002,43 +1999,26 @@ export class MenusScreen extends LitElement {
 
   #renderDeleteLayout() {
     const target = this.deletingLayout;
-    return html`<wt-modal
-      data-test="layout-delete"
-      .open=${target !== null}
-      heading=${t("home.delete_heading").replace("{name}", target?.name ?? "")}
-      @keydown=${this.#guardEscape}
-      @wt-close=${(event: Event) => {
-        event.stopPropagation();
-        if (!this.busy) this.deletingLayout = null;
-      }}
-    >
-      ${target !== null ? html`<p>${t("home.delete_note")}</p>` : nothing}
-      ${
-        this.deleteLayoutError
-          ? html`<p class="error" role="alert" data-test="layout-delete-error">
-              ${this.deleteLayoutError}
-            </p>`
-          : nothing
-      }
-      <wt-form-actions slot="footer"
-        ><wt-button
-          slot="cancel"
-          variant="secondary"
-          data-test="layout-delete-cancel"
-          .disabled=${this.busy}
-          @click=${() => {
-            if (!this.busy) this.deletingLayout = null;
-          }}
-          >${t("action.cancel")}</wt-button
-        ><wt-button
-          variant="danger"
-          data-test="layout-delete-confirm"
-          .disabled=${this.busy}
-          @click=${() => void this.#deleteLayout()}
-          >${t("action.delete")}</wt-button
-        ></wt-form-actions
-      >
-    </wt-modal>`;
+    return this.#formModal({
+      test: "layout-delete",
+      open: target !== null,
+      heading: t("home.delete_heading").replace("{name}", target?.name ?? ""),
+      body: html`<p>${t("home.delete_note")}</p>
+        ${
+          this.deleteLayoutError
+            ? html`<p class="error" role="alert" data-test="layout-delete-error">
+                ${this.deleteLayoutError}
+              </p>`
+            : nothing
+        }`,
+      save: "layout-delete-confirm",
+      saveLabel: t("action.delete"),
+      saveVariant: "danger",
+      close: () => {
+        this.deletingLayout = null;
+      },
+      submit: () => void this.#deleteLayout(),
+    });
   }
 
   #renderStatusLine() {

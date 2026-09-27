@@ -632,14 +632,6 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
   );
 }
 
-/** A layout body's `name`, shape only: the layout writes trim it and refuse a blank. */
-async function requireLayoutName(c: Context): Promise<string> {
-  const body = await readJsonBody<{ name?: unknown }>(c);
-  if (typeof body.name !== "string")
-    throw new AppError("management.request_invalid", { field: "name" });
-  return body.name;
-}
-
 /** A menu's home layouts and their tiles. A tile is a member of the layout's section, but tiles have
  * their own routes: the generic member routes refuse every write into a home layout. */
 function mountHomeLayoutRoutes(app: Hono, gated: GatedWork, log: Logger): void {
@@ -662,7 +654,7 @@ function mountHomeLayoutRoutes(app: Hono, gated: GatedWork, log: Logger): void {
     run(c, log, async () => {
       const session = requireManagementSession(c);
       const menu = menuId(c);
-      const name = await requireLayoutName(c);
+      const name = requireString((await readJsonBody<{ name?: unknown }>(c)).name, "name");
       return c.json(await gated(session, (tx) => createHomeLayout(tx, menu, name)), 201);
     }),
   );
@@ -682,7 +674,7 @@ function mountHomeLayoutRoutes(app: Hono, gated: GatedWork, log: Logger): void {
     run(c, log, async () => {
       const session = requireManagementSession(c);
       const id = layoutId(c);
-      const name = await requireLayoutName(c);
+      const name = requireString((await readJsonBody<{ name?: unknown }>(c)).name, "name");
       return c.json(await gated(session, (tx) => duplicateHomeLayout(tx, id, name)), 201);
     }),
   );
@@ -690,7 +682,7 @@ function mountHomeLayoutRoutes(app: Hono, gated: GatedWork, log: Logger): void {
     run(c, log, async () => {
       const session = requireManagementSession(c);
       const id = layoutId(c);
-      const name = await requireLayoutName(c);
+      const name = requireString((await readJsonBody<{ name?: unknown }>(c)).name, "name");
       await gated(session, (tx) => renameHomeLayout(tx, id, name));
       return c.body(null, 204);
     }),

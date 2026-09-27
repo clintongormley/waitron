@@ -2180,10 +2180,10 @@ export class DashboardApi {
 
   /** Every menu with its layouts and the layout this profile chose for it. */
   getDeviceHomeLayouts(id: string): Promise<DeviceMenuHomeLayouts[]> {
-    return this.#request<{ menus: DeviceMenuHomeLayouts[] }>(
+    return this.#request<DeviceMenuHomeLayouts[]>(
       `/management-api/device-profiles/${id}/home-layouts`,
       "GET",
-    ).then((r) => r.menus);
+    );
   }
 
   /** Null goes back to the menu's default layout. */

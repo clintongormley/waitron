@@ -5026,10 +5026,11 @@ describe("mountCatalogueApi — home layouts", () => {
     for (const [method, path, body] of routes) {
       const options = body === undefined ? {} : { body };
       expect((await send(app, method, path, { ...options, cookie: null })).status, path).toBe(401);
-      expect(
-        (await send(app, method, path, { ...options, cookie: staffCookie })).status,
-        path,
-      ).toBe(403);
+      const staff = await send(app, method, path, { ...options, cookie: staffCookie });
+      expect(staff.status, path).toBe(403);
+      expect(await staff.json(), `${method} ${path}`).toMatchObject({
+        error: { code: "authorization.not_permitted", params: { permission: "person.manage" } },
+      });
     }
     expect(await json<Layout[]>(await send(app, "GET", layoutsOf(m.menuId)), 200)).toEqual([
       { id, name: "Home", isDefault: true, tiles: [] },

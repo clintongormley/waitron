@@ -818,7 +818,7 @@ describe("Management API — a device profile's home layouts", () => {
   async function menuEntry(app: Hono, profileId: string, menuId: string) {
     const res = await request(app, "GET", pathOf(profileId));
     expect(res.status).toBe(200);
-    const { menus } = (await res.json()) as { menus: DeviceMenuHomeLayouts[] };
+    const menus = (await res.json()) as DeviceMenuHomeLayouts[];
     return menus.find((menu) => menu.menuId === menuId)!;
   }
 
@@ -945,7 +945,9 @@ describe("Management API — a device profile's home layouts", () => {
       expect(anonymous.status).toBe(401);
       const staff = await request(app, method, path, body, staffCookie);
       expect(staff.status).toBe(403);
-      expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+      expect(await staff.json(), `${method} ${path}`).toMatchObject({
+        error: { code: "authorization.not_permitted", params: { permission: "layout.configure" } },
+      });
     }
     expect(await menuEntry(app, profile, menuId)).toMatchObject({ selectedLayoutId: null });
   });

@@ -329,6 +329,22 @@ function withVenueAuth<T>(
   });
 }
 
+/** Runs `fn` in one transaction after confirming the session holds `layout.configure` and that
+ * device profile `id` exists, which the catalogue's home-layout reads and writes do not check. */
+function withLayoutProfile<T>(
+  deps: ManagementApiDeps,
+  sessionId: string,
+  id: string,
+  fn: (tx: Transaction) => Promise<T>,
+): Promise<T> {
+  return withTransaction(deps.db, async (tx) => {
+    await authorizeManager(tx, { managementSessionId: sessionId, permission: "layout.configure" });
+    if ((await getDeviceProfile(tx, id)) === undefined)
+      throw new AppError("device_profile.not_found", {});
+    return fn(tx);
+  });
+}
+
 /**
  * An absent `displayOrder` stays `undefined`; a present one must be an integer number in int4 range,
  * never coerced, so an explicit `null` is refused rather than stored as 0. The range check is the
@@ -1228,22 +1244,14 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Which home layout the profile shows for each menu (D14). Reads and writes both need the
-  // profile to exist: the catalogue's write leaves that to its foreign key.
+  // Which home layout the profile shows for each menu (D14).
   app.get("/management-api/device-profiles/:id/home-layouts", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireDeviceProfileId(c.req.param("id"));
-      const menus = await withTransaction(deps.db, async (tx) => {
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: "layout.configure",
-        });
-        if ((await getDeviceProfile(tx, id)) === undefined)
-          throw new AppError("device_profile.not_found", {});
-        return deviceHomeLayouts(tx, id);
-      });
-      return c.json({ menus });
+      return c.json(
+        await withLayoutProfile(deps, sessionId, id, (tx) => deviceHomeLayouts(tx, id)),
+      );
     }),
   );
 
@@ -1255,15 +1263,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const menuId = requireMenuId(c.req.param("menuId"));
       const body = await readJsonBody<{ layoutId?: unknown }>(c);
       const layoutId = requireNullableBodyUuid(body.layoutId, "layoutId");
-      await withTransaction(deps.db, async (tx) => {
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: "layout.configure",
-        });
-        if ((await getDeviceProfile(tx, id)) === undefined)
-          throw new AppError("device_profile.not_found", {});
-        await setDeviceHomeLayout(tx, id, menuId, layoutId);
-      });
+      await withLayoutProfile(deps, sessionId, id, (tx) =>
+        setDeviceHomeLayout(tx, id, menuId, layoutId),
+      );
       return c.body(null, 204);
     }),
   );

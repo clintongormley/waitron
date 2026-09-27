@@ -3699,6 +3699,9 @@ describe("home page", () => {
     await vi.waitFor(() => expect(homeEditor(el).busy).toBe(false));
     emit(homeEditor(el), "wt-layout-delete", { layoutId: "l-counter" });
     await el.updateComplete;
+    expect(
+      inModal(el, "layout-delete", '[data-test="layout-delete-confirm"]').getAttribute("variant"),
+    ).toBe("danger");
     inModal(el, "layout-delete", '[data-test="layout-delete-confirm"]').click();
     inModal(el, "layout-delete", '[data-test="layout-delete-confirm"]').click();
     expect(client.deleteHomeLayout).toHaveBeenCalledTimes(1);
