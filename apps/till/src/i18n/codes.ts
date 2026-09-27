@@ -52,8 +52,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta petición no coincide con la que se envió antes. Vuelve a cargar e inténtalo de nuevo",
   },
   "draft.taken_over": {
-    en: "Someone else has taken over this order. Reload the table to see it",
-    es: "Otra persona se ha hecho cargo de este pedido. Vuelve a cargar la mesa para verlo",
+    en: "This order belongs to someone else. Reload the table to see it",
+    es: "Este pedido es de otra persona. Vuelve a cargar la mesa para verlo",
   },
   "draft.already_submitted": {
     en: "This order has already been sent. Reload the table to see it",

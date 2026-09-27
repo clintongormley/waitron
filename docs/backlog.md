@@ -2413,6 +2413,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - A save must carry `draftId` (null for a new draft) and `revision` even for a new draft, whose
       revision is ignored; a detail for Task 8's client. A chosen option whose label id is not a
       UUID is refused `options.invalid` at save, where pricing answers `options.label_required`.
+      An options or extras refusal at save names only the field, as pricing does (`labelId`,
+      `quantity`), not the line (`lines.<n>.…`) as the save's other line refusals do, so with
+      several lines the till cannot tell which line was refused.
     - A merge that names no operator records the draft's owner as the one who discarded it; the one
       product caller, the merge route, always names one.
     - Three rulings made on the branch for the owner to confirm:

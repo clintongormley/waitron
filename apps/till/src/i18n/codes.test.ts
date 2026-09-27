@@ -128,8 +128,8 @@ it("explains each refusal of an unsent order, in both languages", () => {
     ),
   ).toEqual([
     [
-      "Someone else has taken over this order. Reload the table to see it",
-      "Otra persona se ha hecho cargo de este pedido. Vuelve a cargar la mesa para verlo",
+      "This order belongs to someone else. Reload the table to see it",
+      "Este pedido es de otra persona. Vuelve a cargar la mesa para verlo",
     ],
     [
       "This order has already been sent. Reload the table to see it",

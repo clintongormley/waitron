@@ -330,7 +330,7 @@ declare module "@waitron/shared" {
     "submission.id_reused": { submissionId: string };
     /** The draft is owned by someone else; `ownerId` and `ownerName` say who owns it now. */
     "draft.taken_over": { draftId: string; ownerId: string; ownerName: string };
-    /** The draft has been submitted, so it can no longer be saved or taken over. */
+    /** The draft has been submitted, so no command can act on it. */
     "draft.already_submitted": { draftId: string };
     /**
      * A draft command carried a draft revision another write has since moved past, or asked for a

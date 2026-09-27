@@ -2145,7 +2145,7 @@ async function openOwnersOn(visitId: string): Promise<string[]> {
 }
 
 describe("merging visits (D2)", () => {
-  it("moves the source's open drafts onto the target, and adds a person's source draft to the end of their draft there, discarding it with an event", async () => {
+  it("moves the source's open drafts onto the target, and adds a person's source draft into their draft there, as a save adds lines, discarding it with an event", async () => {
     const v = await setupVenue();
     const mesa4 = await seated(v);
     const mesa5 = await seated(v, "Mesa 5");

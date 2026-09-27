@@ -141,15 +141,16 @@ and the integrated card pay `POST /api/pay` — the last on its WALK-UP branch o
 placed order ignores the request's lines and files its own stored ones (`IntegratedPayRequest`,
 `apps/server/src/till-sale.ts`).
 
-Two more routes carry them for a seated party's unsent order (`apps/server/src/order-drafts.ts`).
-The draft save `PUT /api/visits/:id/drafts` stores the answers UNPRICED, so it checks only their
+One more route takes them, for a seated party's unsent order (`apps/server/src/order-drafts.ts`):
+the draft save `PUT /api/visits/:id/drafts`. It stores the answers UNPRICED, so it checks only their
 shape, through `readOptionSelections` and `readExtraSelections` (`packages/catalogue/src/`): each
 refuses what its validator below refuses without consulting a list — a malformed entry, two answers
 to one options list, one extras list answered twice or one product picked twice from it — under the
 same `options.invalid` or `extras.invalid` naming the same field, and also refuses an id that is no
 UUID. What needs the lists (an unanswered list, a withdrawn label, a count a list refuses) is left
-to the draft submission `POST /api/visits/:id/drafts/:did/submit`, which prices the lines through
-`placeGroups` (`apps/server/src/order-groups.ts`) as a group submission does.
+to the draft submission `POST /api/visits/:id/drafts/:did/submit`. Its body carries no answers,
+only groups of the draft's line ids; it prices the answers the save stored, through `placeGroups`
+(`apps/server/src/order-groups.ts`), as a group submission does.
 
 An `options` answer names a list and one of its labels. An `extras` answer names a list and the
 PRODUCTS picked from it, each with how many of that product this dish takes — a pick never names
