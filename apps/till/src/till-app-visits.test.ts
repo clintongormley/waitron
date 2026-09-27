@@ -2456,8 +2456,28 @@ describe("till-app: submitting the draft", () => {
     const courseOf = (order: TillTableOrderScreen, index: number) =>
       order.shadowRoot!.querySelector<HTMLSelectElement>(`[data-round-course="${index}"]`)!.value;
 
-    it("keeps the rest of the draft, its course choice and its count on the bill it follows", async () => {
-      const { el } = await mountApp(toNextBill());
+    const firedGroup = (id: string, summary: string): OrderGroup => ({
+      id,
+      position: 1,
+      state: "fired",
+      firedAt: "2026-09-27T10:00:00Z",
+      remindAt: null,
+      lineIds: [],
+      summary,
+    });
+
+    it("keeps the rest of a first order a first order, with its course choice and its count, on the bill it follows, though the party now has a group", async () => {
+      const { el } = await mountApp(
+        toNextBill({
+          submitGroups: vi.fn(async () => {
+            vi.mocked(api.listGroups).mockResolvedValue({
+              revision: 4,
+              groups: [firedGroup("g1", "1 × Beer")],
+            });
+            return { tabId: "wo-next", revision: 4, groups: [] };
+          }),
+        }),
+      );
       const order = await openMesa(el);
       await ring(el, order, beer, steak);
       const steakCourse =
@@ -2470,9 +2490,12 @@ describe("till-app: submitting the draft", () => {
       await toggle(el, order, "Beer");
       await act(el, order, "fire-selected");
 
-      expect(tableOrder(el)!.orderId).toBe("wo-next");
-      expect(draftOf(tableOrder(el)!).lines.map((line) => line.product.id)).toEqual(["steak"]);
-      expect(courseOf(tableOrder(el)!, 0)).toBe("desserts");
+      const next = tableOrder(el)!;
+      expect(next.orderId).toBe("wo-next");
+      expect(draftOf(next).lines.map((line) => line.product.id)).toEqual(["steak"]);
+      expect(courseOf(next, 0)).toBe("desserts");
+      expect(next.shadowRoot!.querySelector('[data-draft-action="send-all"]')).not.toBeNull();
+      expect(next.shadowRoot!.querySelector("[data-destination-choice]")).toBeNull();
 
       await act(el, tableOrder(el)!, "send-all");
       expect(vi.mocked(api.submitGroups).mock.calls[1]![1].groups).toEqual([
@@ -2500,15 +2523,7 @@ describe("till-app: submitting the draft", () => {
     });
 
     it("keeps a later addition's rest a later addition", async () => {
-      const prior: OrderGroup = {
-        id: "g-prior",
-        position: 1,
-        state: "fired",
-        firedAt: "2026-09-27T10:00:00Z",
-        remindAt: null,
-        lineIds: [],
-        summary: "1 × Coffee",
-      };
+      const prior = firedGroup("g-prior", "1 × Coffee");
       const { el } = await mountApp(
         toNextBill({ listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [prior] }) }),
       );
