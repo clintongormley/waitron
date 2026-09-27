@@ -164,7 +164,11 @@ export class SetupResetScreen extends LitElement {
       <p>
         This removes what the half-finished join left on this server and restarts it at a fresh
         setup. Nothing on the primary server is changed, so the primary may still list this server.
-        If it does, open Servers on the primary's dashboard and choose Remove on this server's row.
+        To take it off that list, open the primary's dashboard, then Settings, then Servers, open
+        this server's row menu and choose Remove, then open the row menu again and choose Clear from
+        list. If its row already says Removed, only Clear from list is needed. Do this before you
+        join this server again: otherwise the new join adds a second row that is hard to tell apart
+        from this one, or is refused if the list is full.
       </p>
       <p>Enter the admin person ID and password you used to connect this server.</p>
       ${this.#field("Admin login (person ID)", "personId")}
