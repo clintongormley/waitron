@@ -672,6 +672,11 @@ describe("bill payments: the three tables, their checks and their triggers", () 
         "bill_payment_refunds_attestation_ck",
       ],
       [
+        "an attestation with a blank note",
+        { state: "failed", failedAt: AT, attestedBy: MANAGER, attestationNote: "  " },
+        "bill_payment_refunds_attestation_ck",
+      ],
+      [
         "an attestation on a pending refund",
         { attestedBy: MANAGER, attestationNote: "SumUp support" },
         "bill_payment_refunds_attestation_ck",

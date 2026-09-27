@@ -197,7 +197,7 @@ export const billPaymentRefunds = table(
     ),
     check(
       "bill_payment_refunds_attestation_ck",
-      sql`(${t.attestedBy} is null) = (${t.attestationNote} is null) and (${t.attestedBy} is null or ${t.state} <> 'pending')`,
+      sql`(${t.attestedBy} is null) = (${t.attestationNote} is null) and (${t.attestedBy} is null or (${t.state} <> 'pending' and coalesce(length(trim(${t.attestationNote})), 0) > 0))`,
     ),
   ],
 );

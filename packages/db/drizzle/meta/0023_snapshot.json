@@ -1,6 +1,6 @@
 {
-  "id": "aa829201-921e-49f1-86e5-40a618d3d5c7",
-  "prevId": "51ebb8b5-f90c-4386-882e-9bb91bcdff37",
+  "id": "5e16f361-c217-43c8-bcd0-e940c7dfea2d",
+  "prevId": "d81d5b2a-9665-4eda-b5f4-0c17b1dc11a6",
   "version": "6",
   "dialect": "sqlite",
   "tables": {
@@ -4384,7 +4384,7 @@
         },
         "bill_payment_refunds_attestation_ck": {
           "name": "bill_payment_refunds_attestation_ck",
-          "value": "(\"bill_payment_refunds\".\"attested_by\" is null) = (\"bill_payment_refunds\".\"attestation_note\" is null) and (\"bill_payment_refunds\".\"attested_by\" is null or \"bill_payment_refunds\".\"state\" <> 'pending')"
+          "value": "(\"bill_payment_refunds\".\"attested_by\" is null) = (\"bill_payment_refunds\".\"attestation_note\" is null) and (\"bill_payment_refunds\".\"attested_by\" is null or (\"bill_payment_refunds\".\"state\" <> 'pending' and coalesce(length(trim(\"bill_payment_refunds\".\"attestation_note\")), 0) > 0))"
         }
       }
     },

@@ -121,9 +121,9 @@ it("explains each refusal a bill paid in parts can give, in both languages, nami
     expect(codeMessage(code, "en")).not.toContain(code);
   }
   expect(codeMessage("bill.payments_received", "en")).toBe(
-    "Money has already been taken on this bill. Take the rest from the bill's payments, or give that money back first",
+    "Money has already been taken on this bill. Take the rest from the bill's payments. To discard or merge the bill, give that money back first",
   );
   expect(codeMessage("bill.payments_received", "es")).toBe(
-    "Ya se ha cobrado dinero en esta cuenta. Cobra el resto desde los pagos de la cuenta, o devuelve primero ese dinero",
+    "Ya se ha cobrado dinero en esta cuenta. Cobra el resto desde los pagos de la cuenta. Para descartar o combinar la cuenta, devuelve primero ese dinero",
   );
 });

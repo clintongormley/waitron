@@ -455,8 +455,8 @@ describe("sumupClient findTransaction refund events", () => {
         }),
       );
 
-  // The field shapes the venue's live account returned on 2026-09-27 (B14 ledger, Step 0 B.2): the
-  // event id a number, the amount a number of euros. The timestamps here are the test's own.
+  // The field shapes the venue's live account returned on 2026-09-27: the event id a number, the
+  // amount a number of euros. The timestamps here are the test's own.
   it("reads the REFUND transaction events, in euros, with their ids as text", async () => {
     const client = sumupClient({
       apiKey: "k",

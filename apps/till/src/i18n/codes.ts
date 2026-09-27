@@ -36,8 +36,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta petición no coincide con la que se envió antes. Vuelve a cargar e inténtalo de nuevo",
   },
   "bill.payments_received": {
-    en: "Money has already been taken on this bill. Take the rest from the bill's payments, or give that money back first",
-    es: "Ya se ha cobrado dinero en esta cuenta. Cobra el resto desde los pagos de la cuenta, o devuelve primero ese dinero",
+    en: "Money has already been taken on this bill. Take the rest from the bill's payments. To discard or merge the bill, give that money back first",
+    es: "Ya se ha cobrado dinero en esta cuenta. Cobra el resto desde los pagos de la cuenta. Para descartar o combinar la cuenta, devuelve primero ese dinero",
   },
   "bill.line_paid": {
     en: "This item has already been paid for, so it cannot be changed, moved or charged again. Refund its payment first",

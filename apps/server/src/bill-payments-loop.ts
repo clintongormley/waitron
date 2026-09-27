@@ -16,6 +16,7 @@ import { raiseRefundUnresolved } from "./bill-refund-alerts.js";
 import { billPaymentIsLive, completeBillPayment, failBillPayment } from "./bill-payments.js";
 import { resumeCardRefund } from "./bill-refunds.js";
 import type { RefundProviderFor } from "./bill-refunds.js";
+import { perDatabase } from "./live-in-process.js";
 import type { TillConfig } from "./till-config.js";
 import type { TillSaleResult } from "./till-sale.js";
 import "./errors.js";
@@ -45,16 +46,7 @@ export function refundLookupGapMs(sentAgeMs: number): number {
 
 /** When the loop last looked each pending refund up, per venue store. Kept in memory: after a
  * restart every pending refund is looked up once on the first pass. */
-const LAST_REFUND_LOOKUP = new WeakMap<Database, Map<string, number>>();
-
-function lastLookupsOf(db: Database): Map<string, number> {
-  let last = LAST_REFUND_LOOKUP.get(db);
-  if (last === undefined) {
-    last = new Map();
-    LAST_REFUND_LOOKUP.set(db, last);
-  }
-  return last;
-}
+const lastLookupsOf = perDatabase(() => new Map<string, number>());
 
 export interface BillPaymentsLoopDeps {
   db: Database;

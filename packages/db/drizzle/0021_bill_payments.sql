@@ -38,7 +38,7 @@ CREATE TABLE `bill_payment_refunds` (
 	CONSTRAINT "bill_payment_refunds_sent_ck" CHECK(("bill_payment_refunds"."send_count" = 0) = ("bill_payment_refunds"."sent_at" is null) and "bill_payment_refunds"."send_count" >= 0),
 	CONSTRAINT "bill_payment_refunds_completed_at_ck" CHECK(("bill_payment_refunds"."state" = 'completed') = ("bill_payment_refunds"."completed_at" is not null)),
 	CONSTRAINT "bill_payment_refunds_failed_at_ck" CHECK(("bill_payment_refunds"."state" = 'failed') = ("bill_payment_refunds"."failed_at" is not null)),
-	CONSTRAINT "bill_payment_refunds_attestation_ck" CHECK(("bill_payment_refunds"."attested_by" is null) = ("bill_payment_refunds"."attestation_note" is null) and ("bill_payment_refunds"."attested_by" is null or "bill_payment_refunds"."state" <> 'pending'))
+	CONSTRAINT "bill_payment_refunds_attestation_ck" CHECK(("bill_payment_refunds"."attested_by" is null) = ("bill_payment_refunds"."attestation_note" is null) and ("bill_payment_refunds"."attested_by" is null or ("bill_payment_refunds"."state" <> 'pending' and coalesce(length(trim("bill_payment_refunds"."attestation_note")), 0) > 0)))
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `bill_payment_refunds_submission_key` ON `bill_payment_refunds` (`bill_payment_id`,`submission_id`);--> statement-breakpoint

@@ -417,8 +417,8 @@ export async function resumeCardRefund(
 }
 
 /**
- * A manager's confirmed outcome of a pending card refund (design §6b, owner 2026-09-26), kept on the
- * row with who recorded it and their note. `completed` for a refund that never reached the provider
+ * A manager's confirmed outcome of a pending card refund (design §6b), kept on the row with who
+ * recorded it and their note. `completed` for a refund that never reached the provider
  * is refused `bill.attestation_contradicted`.
  */
 export async function attestCardRefund(

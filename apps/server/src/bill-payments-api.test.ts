@@ -439,6 +439,22 @@ describe("the balance", () => {
     });
   });
 
+  it("reads a bill with no lines as owing nothing", async () => {
+    const billId = await tabWith();
+
+    const { status, json } = await balance(billId);
+
+    expect(status).toBe(200);
+    expect(json).toMatchObject({
+      total: "0.00",
+      received: "0.00",
+      reserved: "0.00",
+      outstanding: "0.00",
+      payments: [],
+      paidLines: [],
+    });
+  });
+
   it("answers an unknown bill as not found", async () => {
     const { status, json } = await balance(randomUUID());
     expect(status).toBe(404);

@@ -375,8 +375,10 @@ declare module "@waitron/shared" {
      */
     "bill.received_exceeds_total": { workingOrderId: string; excess: string };
     /**
-     * The bill holds money taken before its invoice, so it cannot be abandoned, merged into
-     * another, placed, or paid in one go by the single-payment routes.
+     * Money has been taken on the bill before its invoice. Paying it in one go by the
+     * single-payment routes, and placing it, are refused while it has any pending or received bill
+     * payment, even one given back in full; abandoning it, merging it into another bill, and
+     * finishing its table are refused while it still holds money.
      */
     "bill.payments_received": { workingOrderId: string };
     /** No bill payment with this id; `paymentId` is the id the caller sent. */

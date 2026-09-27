@@ -32,7 +32,7 @@ import {
   findPaymentsByBillPayments,
   recordManualCardPayment,
 } from "@waitron/payments";
-import type { PaymentProvider, PaymentResult } from "@waitron/payments";
+import type { PaymentProvider, PaymentResult, PaymentResultState } from "@waitron/payments";
 import {
   cashChange,
   confirmAllocation,
@@ -1120,14 +1120,22 @@ export async function failBillPayment(
   return payment!;
 }
 
+/** The collect results that establish no money moved; any other non-captured one leaves the payment
+ * pending for the loop or a manager to settle from the provider's row. */
+const NOT_CHARGED: ReadonlySet<PaymentResultState> = new Set([
+  "failed",
+  "declined",
+  "network_unavailable",
+]);
+
 /**
  * Take a card on a reader against an open bill, in the three phases of design §5.3:
  *  - P1 (transaction): {@link beginBillPayment} inserts the payment `pending`, which reserves its
  *    applied amount, and registers it as live in this process;
  *  - P2 (no transaction): the provider's `collect` for `applied + tip`, naming the bill payment;
  *  - P3 (transaction): a capture is {@link completeBillPayment}; a decline or a refusal to go
- *    offline fails it; a reader that stopped answering leaves it pending, for the loop to settle
- *    from the provider's row. `collect` is never allowed to accept the card offline (design §11.9).
+ *    offline fails it; any other answer leaves it pending, for the loop to settle from the
+ *    provider's row. `collect` is never allowed to accept the card offline (design §11.9).
  *
  * A retry of a payment already taken answers its state and never collects again.
  */
@@ -1178,7 +1186,7 @@ export async function takeReaderBillPayment(
         const done = await completeBillPayment(tx, deps, cfg, payment.id, result.settledAt!);
         return resultOf(tx, deps, cfg, done.payment, done.invoice, done.total);
       }
-      if (result.state === "attempting") {
+      if (!NOT_CHARGED.has(result.state)) {
         return { ...(await resultOf(tx, deps, cfg, payment, null)), outcome: "timeout" };
       }
       const failed = await failBillPayment(tx, payment.id, deps.clock.now().instant);

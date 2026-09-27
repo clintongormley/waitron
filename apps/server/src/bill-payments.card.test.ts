@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPaymentPolicy } from "@waitron/payments/test/seed.js";
-import { payments } from "@waitron/payments";
+import { insertAcceptedOffline, payments } from "@waitron/payments";
 import { centsToDecimal } from "@waitron/shared";
 import {
   inTx,
@@ -219,6 +219,31 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
       outcome: "network_unavailable",
       payment: { state: "failed" },
       balance: { reserved: "0.00", outstanding: "35.00" },
+    });
+  });
+
+  it("keeps a card the provider accepted offline pending: money may have moved", async () => {
+    const billId = await tabWithDishes("Paella");
+    vi.spyOn(venue.card, "collect").mockImplementationOnce(async (params) => {
+      const settledAt = new Date();
+      const row = {
+        workingOrderId: params.workingOrderId,
+        provider: venue.card.provider,
+        paymentRef: randomUUID(),
+        amount: params.amount,
+        settledAt,
+        billPaymentId: params.billPaymentId,
+      };
+      await inTx(venue, (tx) => insertAcceptedOffline(tx, row));
+      return { ...row, state: "accepted_offline", offline: true };
+    });
+
+    const paid = await cardContribution(billId, "20.00");
+
+    expect(paid.json).toMatchObject({
+      outcome: "timeout",
+      payment: { state: "pending" },
+      balance: { reserved: "20.00", outstanding: "15.00" },
     });
   });
 
