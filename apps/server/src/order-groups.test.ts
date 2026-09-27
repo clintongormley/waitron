@@ -828,6 +828,37 @@ describe("editing held groups", () => {
     expect(groups[3]).toMatchObject({ id: s.mains, summary: "1 × Steak, 1 × Fish" });
   });
 
+  it("split part of a held line into its own group: two rows in that group, quantities summing to the original", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const [steak] = await linesIn(s.visitId, s.mains);
+    const revision = await revisionOf(s.visitId);
+    const events = (await eventsOf(s.visitId)).length;
+
+    await move(v, s.visitId, [{ lineId: steak!.id, quantity: "1" }], { groupId: s.mains });
+
+    expect((await linesIn(s.visitId, s.mains)).map((row) => [row.productId, row.quantity])).toEqual(
+      [
+        [v.productId.steak, 1000],
+        [v.productId.fish, 1000],
+        [v.productId.steak, 1000],
+      ],
+    );
+    const { groups } = await groupsOf(s.visitId);
+    expect(groups).toHaveLength(5);
+    expect(groups[3]).toMatchObject({
+      id: s.mains,
+      position: 4,
+      state: "held",
+      summary: "2 × Steak, 1 × Fish",
+    });
+    const after = await eventsOf(s.visitId);
+    expect(after.slice(events).map((event) => [event.groupId, event.kind])).toEqual([
+      [s.mains, "lines_moved"],
+    ]);
+    expect(await revisionOf(s.visitId)).toBe(revision + 1);
+  });
+
   it("removes a group a move empties: gone from the list, its events still readable", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
