@@ -2924,9 +2924,9 @@ image constraints under *Detail → Box image*.
     (`membership.chart_too_large` for its machines, `membership.cleared_list_full` for its cleared
     machines), and a receiver refuses a chart signed by a machine its own held
     chart lists removed or cleared (`signer_removed`, `verifyMembershipDocument`).
-    **Done (2026-09-27, lane D's A74):** clearing a machine when the cleared list is full now raises
-    `membership.cleared_list_full`, with its own English and Spanish wording, instead of the same
-    `membership.chart_too_large` code as an over-size machine list.
+    **Done (2026-09-27, lane D's A74, #730):** clearing a machine when the cleared list is full now
+    raises `membership.cleared_list_full`, with its own English and Spanish wording, instead of the
+    same `membership.chart_too_large` code as an over-size machine list.
     **Still open after A63:** (i) a removed trust anchor (a machine whose key sits in the receiver's
     own `nodes` table) can still make up a key for a machine in good standing that is not an anchor,
     vouch for it, and sign as that machine — unless that machine signed the receiver's held chart and
