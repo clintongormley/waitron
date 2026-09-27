@@ -3138,6 +3138,24 @@ image constraints under *Detail → Box image*.
   the 0.18.20 copy `drizzle-kit` pulls in through `@esbuild-kit/esm-loader`: Track C, *Left
   behind by the esbuild upgrade (#439, 2026-09-19)*. Which alerts are reachable in this product is
   unassessed. The `versioning-strategy` question is recorded under #432's loose ends in Track C.
+- **Code scanning (CodeQL default setup) switched on 2026-09-27 — 34 alerts OPEN; malware alerts
+  still OFF.** Enabled with `gh api -X PATCH repos/clintongormley/waitron/code-scanning/default-setup
+  -f state=configured -f query_suite=default`; it analyses `actions`, `javascript-typescript` and
+  `python`, weekly and on each PR, as a check the ruleset does not require. Its first run
+  (36345264936) left 34 open alerts: 25 `actions/missing-workflow-permissions` (24 jobs in
+  `.github/workflows/ci.yml`, one in `stripe-sandbox.yml`), 6 `js/polynomial-redos`
+  (`packages/dashboard-kit/src/i18n.ts` twice, `packages/identity/src/email.ts`,
+  `packages/printing/src/layout.ts`, `packages/stream/src/names.ts`,
+  `packages/sync-enrolment/src/migration-tables.ts`), 1 `js/biased-cryptographic-random`
+  (`packages/country-es/src/spain.ts`), and 2 sanitization findings in test files
+  (`scripts/trust-page-logo.test.ts`, `apps/dashboard/src/widgets/extra-list-form.test.ts`). None
+  is triaged; list them with `gh api "repos/clintongormley/waitron/code-scanning/alerts?state=open"`.
+  Next: give each workflow job the least `permissions:` it needs, check each ReDoS pattern against
+  the inputs that reach it, and dismiss a test-file finding on the thread with its reason rather
+  than silently. **Dependabot malware alerts** have no REST switch (GitHub's docs,
+  `content/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/configure-malware-alerts.md`,
+  give only the Settings → Advanced Security → **Enable** button), so they stay off until the owner
+  clicks it at https://github.com/clintongormley/waitron/settings/security_analysis.
 - **`apps/server/src/stream-host.test.ts` passes only in file order — OPEN (found by #752's review,
   2026-09-27).** Codex ran the file under Vitest's shuffled order (`--sequence.shuffle`, seeds 577 and
   578): seed 578 failed 3 cases, because cases expecting no bucket credential ran after a case that
