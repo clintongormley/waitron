@@ -2838,9 +2838,12 @@ image constraints under *Detail → Box image*.
     **Done for (1) (2026-09-26, lane A's A61, #708):** the dashboard's Servers screen lets an admin
     (`mirror.create`) on the serving primary remove a standby that never finished joining
     (`POST /management-api/servers/:nodeId/remove`), marking it `evicted`. **Done (2026-09-27,
-    lane A's A70):** the standby's reset page now points to Remove and then Clear from list on that
-    screen, and says to do it before joining again (`apps/setup/src/screens/reset-screen.ts`);
-    `deploy/README.md` carries the same pointer. Still open: "never finished joining" is read as
+    lane A's A70, #724):** the standby's reset page now points to Remove and then Clear from list on
+    that screen, and says to do it before joining again (`apps/setup/src/screens/reset-screen.ts`);
+    `deploy/README.md` carries the same pointer. Left for the owner from A70's review: the reset
+    page does not show this server's machine id, so an operator cannot tell which row on the
+    primary is this server's (the page's wording only, not a screen change, was in scope). Still
+    open: "never finished joining" is read as
     `serving-secondary` with no `nodes` row in the primary's database, and a remote standby writes
     that row in its own database, so the check cannot see a remote standby that finished — none can
     today (`finish-adoption.ts`).
