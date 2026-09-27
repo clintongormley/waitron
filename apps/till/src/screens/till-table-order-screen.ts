@@ -59,7 +59,13 @@ import type {
 } from "../api/client.js";
 import type { ConfirmPaymentDetail } from "../widgets/tender-pay.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
-import { groupRound, type RoundGroup } from "../state/round-groups.js";
+import {
+  groupRound,
+  heldGroupIds,
+  inHeldGroup,
+  sendsAlone,
+  type RoundGroup,
+} from "../state/round-groups.js";
 
 export type { TableServiceStatus };
 
@@ -585,6 +591,8 @@ export class TillTableOrderScreen extends LitElement {
   /** Built with {@link products}, so each line's Change lookup is not a scan. */
   #productsByOffer?: Map<string, TillProduct>;
   #productsById = new Map<string, TillProduct>();
+  /** Built with {@link groups}, so each line's Send check is not a scan. */
+  #heldGroupIds?: ReadonlySet<string>;
 
   constructor() {
     super();
@@ -605,6 +613,9 @@ export class TillTableOrderScreen extends LitElement {
       this.#closeActions();
       this.#closeChange();
       this.cancelLine = null;
+    }
+    if (changed.has("groups") || this.#heldGroupIds === undefined) {
+      this.#heldGroupIds = heldGroupIds(this.groups);
     }
     if (changed.has("products") || this.#productsByOffer === undefined) {
       this.#productsByOffer = new Map();
@@ -773,22 +784,6 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  /** The Send-all gate ({@link #anyHeld}), and the Send button's too for a line in no held group. A
-   * ticket-item-less parent (`state === null` — a moved/merged line or an
-   * openTab-initial line) has nothing to send. The child exclusion is stated in its own right although
-   * the server gives a child no ticket item, so `state === null` already refuses it. */
-  #isSendable(line: TabLine): boolean {
-    return !this.#isChild(line) && line.firedAt === null && line.state !== null;
-  }
-
-  /** Its group releases it: the server refuses a held-group line's own Send (`group.line_held`). */
-  #inHeldGroup(line: TabLine): boolean {
-    return (
-      line.groupId !== null &&
-      this.groups.some((group) => group.id === line.groupId && group.state === "held")
-    );
-  }
-
   #isStarted(line: TabLine): boolean {
     return line.state === "preparing" || line.state === "ready";
   }
@@ -838,7 +833,7 @@ export class TillTableOrderScreen extends LitElement {
     const name = this.#nameForLine(line);
     const label = (key: StringKey) => `${t(key)} · ${name}`;
     const actions: TemplateResult[] = [];
-    if (this.#isSendable(line) && !this.#inHeldGroup(line))
+    if (sendsAlone(line, this.#heldGroupIds!))
       actions.push(
         html`<wt-button
           class="line-send"
@@ -893,8 +888,11 @@ export class TillTableOrderScreen extends LitElement {
     return actions.length === 0 ? nothing : html`<span class="line-actions">${actions}</span>`;
   }
 
+  /** A held group releases its lines whether or not they have a ticket item: a no-route dish in one has
+   * none, and may have no Fire course button either. */
   #anyHeld(): boolean {
-    return this.lines.some((line) => this.#isSendable(line));
+    const held = this.#heldGroupIds!;
+    return this.lines.some((line) => sendsAlone(line, held) || inHeldGroup(line, held));
   }
 
   #sendLine(lineNo: number): void {

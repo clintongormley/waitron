@@ -953,6 +953,32 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector("[data-send-all]")).not.toBeNull();
     });
 
+    it("offers Send all for a no-route line with no course in a HELD group, and not once its group has fired", async () => {
+      // A no-route dish in a held group: no ticket item (state null) and never sent. It offers no
+      // per-line Send and no Fire course button, so Send all is its only release.
+      const noRouteHeld: TabLine = {
+        ...heldLine,
+        lineNo: 5,
+        courseId: null,
+        state: null,
+        groupId: "g-held",
+      };
+      const { el } = await mount({
+        lines: [noRouteHeld],
+        groups: [orderGroup("g-held", "held")],
+        courses,
+        fireControl: "waiter",
+      });
+      await openDrawer(el);
+      expect(el.shadowRoot!.querySelector('[data-send-line="5"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-fire-course]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-send-all]")).not.toBeNull();
+
+      el.groups = [orderGroup("g-held", "fired")];
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-send-all]")).toBeNull();
+    });
+
     it("offers Send on a recalled line whose group has fired", async () => {
       const recalled: TabLine = {
         ...heldLine,

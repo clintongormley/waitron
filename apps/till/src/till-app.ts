@@ -22,7 +22,7 @@ import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
 import type { ChangeLineDetail, SendRoundDetail } from "./screens/till-table-order-screen.js";
-import type { RoundGroup } from "./state/round-groups.js";
+import { heldGroupIds, sendsAlone, type RoundGroup } from "./state/round-groups.js";
 import "./screens/till-station-screen.js";
 import "./screens/till-enrol-screen.js";
 import "./screens/till-device-chooser.js";
@@ -163,6 +163,7 @@ const TABLE_REFUSALS = new Set([
   "order.payment_in_flight",
   "table.occupied",
   "table.not_shared",
+  "group.held_leaves_visit",
   "tab.already_open",
   "visit.not_open",
   "visit.bill_outstanding",
@@ -2495,14 +2496,6 @@ export class TillApp extends LitElement {
       .sort((a, b) => a.position - b.position);
   }
 
-  /** A held dish with a ticket item and no held group, such as a recalled line: sent on its own. */
-  #sendsAlone(line: TabLine): boolean {
-    const held = this.#heldGroupsOf([line]).length > 0;
-    return (
-      (line.parentLineNo ?? null) === null && line.firedAt === null && line.state !== null && !held
-    );
-  }
-
   /** Fires the groups in turn, each with the revision the one before it answered. */
   async #fireGroups(groups: readonly OrderGroup[]): Promise<void> {
     const party = this.orderParty;
@@ -2537,7 +2530,8 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     if (await this.#refuseWithGroupsUnread()) return;
     const ofCourse = this.tabLines.filter((line) => line.courseId === courseId);
-    const alone = ofCourse.filter((line) => this.#sendsAlone(line)).map((line) => line.lineNo);
+    const held = heldGroupIds(this.tabGroups);
+    const alone = ofCourse.filter((line) => sendsAlone(line, held)).map((line) => line.lineNo);
     try {
       await this.#fireGroups(this.#heldGroupsOf(ofCourse));
       if (alone.length > 0) await this.api.sendLines(tabId, alone);

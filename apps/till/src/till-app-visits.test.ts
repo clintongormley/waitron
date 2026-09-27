@@ -1094,6 +1094,18 @@ describe("till-app: another device changed the table first", () => {
     ["table.occupied", "move-tab", { toTableId: "t9" }, "moveTab"],
     ["table.occupied", "join-table", { tableId: "t9" }, "joinTable"],
     ["visit.not_open", "split-lines", { transfers: [{ lineNo: 1 }] }, "splitTab"],
+    [
+      "group.held_leaves_visit",
+      "transfer-lines",
+      { toTabId: "wo-7", transfers: [{ lineNo: 1 }] },
+      "transferLines",
+    ],
+    [
+      "group.held_leaves_visit",
+      "merge-tabs",
+      { fromTabId: "wo-7", freeSourceTable: false },
+      "mergeTabs",
+    ],
   ] as const)("shows %s in its own words after %s", async (code, type, detail, method) => {
     const { el } = await mountApp({ [method]: vi.fn().mockRejectedValue({ code }) });
     const order = await openMesa(el);
@@ -1542,6 +1554,28 @@ describe("till-app: the order's groups (R5)", () => {
       expect(vi.mocked(api.sendLines).mock.invocationCallOrder[0]).toBeGreaterThan(
         vi.mocked(api.fireGroup).mock.invocationCallOrder[2]!,
       );
+    });
+
+    it("Send all fires the held group of a no-route line with no course", async () => {
+      const noRoute: TabLine = { ...lineIn(1, "c1", "g-held", true), courseId: null, state: null };
+      const { el } = await mountApp(
+        withGroups({
+          getTabLines: vi
+            .fn()
+            .mockResolvedValue({ lines: [noRoute], revision: 0, editSentLines: true }),
+          listGroups: vi.fn().mockResolvedValue({
+            revision: 3,
+            groups: [groupOf("g-held", 1, "held")],
+          }),
+        }),
+      );
+      const order = await openMesa(el);
+
+      emit(order, "send-lines", { lineNos: [] });
+      await flush(el);
+
+      expect(vi.mocked(api.fireGroup).mock.calls.map((call) => call[1])).toEqual(["g-held"]);
+      expect(banner(el)).toBeNull();
     });
 
     it("a fire refused because another device changed the party reloads the table, says so and fires nothing more", async () => {
