@@ -3295,6 +3295,14 @@ approved.
   0.18.20 copy `drizzle-kit` pulls in through `@esbuild-kit/esm-loader`: Track C, *Left behind by
   the esbuild upgrade (#439, 2026-09-19)*. Which alerts are reachable in this product is unassessed.
   The `versioning-strategy` question is recorded under #432's loose ends in Track C.
+- **CodeQL's three smaller findings — DONE (lane A's A106, run by lane C, 2026-09-28).**
+  `js/biased-cryptographic-random` (alert 34): the demo company tax id in
+  `packages/country-es/src/spain.ts` now draws again when a 32-bit draw lands at or above
+  4,290,000,000 (429 × ten million) instead of reducing it, so every seven-digit number is equally
+  likely; demo data only, never filed. The two sanitization findings in test files (alerts 32, 33)
+  are dismissed as "used in tests" with the reason on each: one strips `<style>` blocks from two
+  SVGs read from the repository, the other removes the required-field asterisk from a heading the
+  test itself rendered; neither sees outside input and neither result is rendered or served.
 - **Code scanning (CodeQL default setup) switched on 2026-09-27 — 34 alerts OPEN, queued as
   lane A's A104–A106.** Enabled with
   `gh api -X PATCH repos/clintongormley/waitron/code-scanning/default-setup
