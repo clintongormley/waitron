@@ -22,6 +22,7 @@ import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
 import type { ChangeLineDetail, SendRoundDetail } from "./screens/till-table-order-screen.js";
+import type { RoundGroup } from "./state/round-groups.js";
 import "./screens/till-station-screen.js";
 import "./screens/till-enrol-screen.js";
 import "./screens/till-device-chooser.js";
@@ -40,7 +41,8 @@ import type {
   OrderFlow,
   ServiceZoneSummary,
   PayOutcome,
-  RoundLine,
+  GroupLine,
+  OrderGroup,
   SaleLine,
   Station,
   StationQueueGroup,
@@ -165,6 +167,10 @@ const TABLE_REFUSALS = new Set([
   "visit.bill_outstanding",
 ]);
 
+function isVisitOutOfDate(error: unknown): boolean {
+  return (error as { code?: string } | undefined)?.code === "visit.out_of_date";
+}
+
 function tableWriteError(error: unknown): CounterError {
   const code = (error as { code?: string } | undefined)?.code;
   return code !== undefined && TABLE_REFUSALS.has(code) ? { code } : "table.error";
@@ -231,13 +237,17 @@ function visitChangeMessage(change: VisitChange): string {
   ].join(" ");
 }
 
-/** Refusals of changing, recalling or cancelling tab lines, shown in their code's own words: each says
- * what the operator can still do. */
+/** Refusals of sending, changing, recalling or cancelling tab lines, shown in their code's own words:
+ * each says what the operator can still do. */
 const LINE_REFUSALS = new Set([
   "product.unavailable",
   "ticket.already_started",
   "ticket.already_fired",
   "tab.void_quantity_invalid",
+  "group.not_held",
+  "group.not_found",
+  "group.line_held",
+  "submission.id_reused",
 ]);
 
 function lineWriteError(error: unknown): CounterError {
@@ -714,6 +724,8 @@ export class TillApp extends LitElement {
   @state() private tabLines: TabLine[] = [];
   /** The revision {@link tabLines} was read at. */
   @state() private tabRevision = 0;
+  /** The order groups of {@link orderParty}, read with {@link tabLines}; empty with no party. */
+  @state() private tabGroups: OrderGroup[] = [];
   /** Every bill of the party at {@link activeTableId}, read when the table opens and after it changes. */
   @state() private visitBills: VisitBill[] = [];
   /** The party of the order on screen as it was read just before that order's lines and bills: what
@@ -2187,8 +2199,10 @@ export class TillApp extends LitElement {
     const read = ++this.#tabLinesRead;
     if (this.activeTabId === undefined) {
       this.tabLines = [];
+      this.tabGroups = [];
       return;
     }
+    const groups = this.#readGroups();
     try {
       const tab = await this.api.getTabLines(this.activeTabId);
       if (read !== this.#tabLinesRead) return;
@@ -2199,6 +2213,26 @@ export class TillApp extends LitElement {
       if (read !== this.#tabLinesRead) return;
       this.tabLines = [];
     }
+    const partyGroups = await groups;
+    if (read === this.#tabLinesRead) this.tabGroups = partyGroups;
+  }
+
+  /** The groups' revision is not kept: a command sends the revision the party was shown at. A failed
+   * read leaves none, which only means the screen offers a held line's own Send for the server to
+   * refuse. */
+  async #readGroups(): Promise<OrderGroup[]> {
+    const party = this.orderParty;
+    if (party === null) return [];
+    try {
+      return (await this.api.listGroups(party.id)).groups;
+    } catch {
+      return [];
+    }
+  }
+
+  /** Keeps the revision a command on the party answered with, while the screen still shows that party. */
+  #noteVisitRevision(visitId: string, revision: number): void {
+    if (this.orderParty?.id === visitId) this.orderParty = { ...this.orderParty, revision };
   }
 
   /** Takes the order's party from the floor just read, before the order's lines and bills are read
@@ -2277,7 +2311,7 @@ export class TillApp extends LitElement {
 
   /** Every command on a party's tables or bills ends here when refused. */
   async #onTableRefusal(error: unknown): Promise<void> {
-    if ((error as { code?: string } | undefined)?.code === "visit.out_of_date") {
+    if (isVisitOutOfDate(error)) {
       await this.#onVisitOutOfDate(error);
       return;
     }
@@ -2287,19 +2321,24 @@ export class TillApp extends LitElement {
   /** A round sent to a seated party's settled or abandoned tab lands on the party's next tab, which
    * the screen follows. */
   async #onSendRound(event: Event): Promise<void> {
-    const { lines, round, sent } = (
-      event as CustomEvent<Pick<SendRoundDetail, "lines"> & Partial<SendRoundDetail>>
+    const { lines, groups, round, sent } = (
+      event as CustomEvent<Pick<SendRoundDetail, "lines" | "groups"> & Partial<SendRoundDetail>>
     ).detail;
     const tabId = this.activeTabId;
     const tableId = this.activeTableId;
-    const partyId = this.orderParty?.id;
+    const party = this.orderParty;
     if (tabId === undefined || round?.sending === true) return;
+    if (party === null) {
+      this.errorKey = "table.error";
+      return;
+    }
+    const partyId = party.id;
     // The round is shut to edits until the answer, so a retry sends what the screen shows and success
     // takes out exactly what was sent.
     if (round !== undefined) round.sending = true;
     let followUp: RoundFollowUp;
     try {
-      followUp = await this.#sendRound(tabId, lines, round, sent ?? [], false);
+      followUp = await this.#sendRound(tabId, party, lines, groups, round, sent ?? [], false);
     } finally {
       if (round !== undefined) round.sending = false;
     }
@@ -2331,11 +2370,14 @@ export class TillApp extends LitElement {
 
   /**
    * A refused round stays on the table screen. One the server may have added — no answer came —
-   * is taken out, because sending it again could put it on the tab twice.
+   * is taken out, because sending it again could put it on the tab twice. Each send is a new
+   * submission: a re-send after a menu refusal carries different lines.
    */
   async #sendRound(
     tabId: string,
-    lines: RoundLine[],
+    party: TableVisit,
+    lines: GroupLine[],
+    groups: readonly RoundGroup[],
     round: WorkingOrderStore | undefined,
     sent: readonly OrderLine[],
     retried: boolean,
@@ -2345,7 +2387,20 @@ export class TillApp extends LitElement {
     const send = new AbortController();
     const limit = setTimeout(() => send.abort(), TABLE_REQUEST_LIMIT_MS);
     try {
-      landedOn = (await this.api.addTabRound(tabId, lines, { signal: send.signal })).tabId;
+      const submitted = await this.api.submitGroups(
+        party.id,
+        {
+          submissionId: crypto.randomUUID(),
+          expectedVisitRevision: party.revision,
+          groups: groups.map((group) => ({
+            release: group.release,
+            lines: group.lineIndexes.map((index) => lines[index]!),
+          })),
+        },
+        { signal: send.signal },
+      );
+      landedOn = submitted.tabId;
+      this.#noteVisitRevision(party.id, submitted.revision);
     } catch (error) {
       if (isVersionRefusal(error) && round !== undefined) {
         const outcome = await this.#refreshRound(round);
@@ -2354,7 +2409,7 @@ export class TillApp extends LitElement {
             const own = sent[index];
             return own === undefined ? line : { ...line, ...toWireProductIdentity(own.product) };
           });
-          return this.#sendRound(tabId, reasserted, round, sent, true);
+          return this.#sendRound(tabId, party, reasserted, groups, round, sent, true);
         }
         if (outcome !== "confirming") this.errorKey = { code: "menu.version_changed" };
         return;
@@ -2363,6 +2418,10 @@ export class TillApp extends LitElement {
         this.errorKey = "table.round_unconfirmed";
         round?.removeLines(sent);
         return "find-tab";
+      }
+      if (isVisitOutOfDate(error)) {
+        await this.#onVisitOutOfDate(error);
+        return;
       }
       this.errorKey = lineWriteError(error);
       return (error as { code?: string }).code === "product.unavailable"
@@ -2383,14 +2442,60 @@ export class TillApp extends LitElement {
     this.#rememberOrderParty();
   }
 
+  /** The party's held groups holding any of `lines`, in the party's order. */
+  #heldGroupsOf(lines: readonly TabLine[]): OrderGroup[] {
+    const ids = new Set(lines.map((line) => line.groupId));
+    return this.tabGroups
+      .filter((group) => group.state === "held" && ids.has(group.id))
+      .sort((a, b) => a.position - b.position);
+  }
+
+  /** A held dish with a ticket item and no held group, such as a recalled line: sent on its own. */
+  #sendsAlone(line: TabLine): boolean {
+    const held = this.#heldGroupsOf([line]).length > 0;
+    return (
+      (line.parentLineNo ?? null) === null && line.firedAt === null && line.state !== null && !held
+    );
+  }
+
+  /** Fires the groups in turn, each with the revision the one before it answered. */
+  async #fireGroups(groups: readonly OrderGroup[]): Promise<void> {
+    const party = this.orderParty;
+    if (party === null) return;
+    let revision = party.revision;
+    for (const group of groups) {
+      ({ revision } = await this.api.fireGroup(party.id, group.id, {
+        submissionId: crypto.randomUUID(),
+        expectedVisitRevision: revision,
+      }));
+      this.#noteVisitRevision(party.id, revision);
+    }
+  }
+
+  /** A refused send or fire: a party changed elsewhere is read again and described, anything else is
+   * said and the order read again, since part of it may have gone. */
+  async #onReleaseRefusal(error: unknown): Promise<void> {
+    if (isVisitOutOfDate(error)) {
+      await this.#onVisitOutOfDate(error);
+      return;
+    }
+    this.errorKey = lineWriteError(error);
+    await this.#loadTabLines();
+  }
+
+  /** Fires the course's held groups, then sends its lines outside them. */
   async #onFireCourse(event: Event): Promise<void> {
     const { courseId } = (event as CustomEvent<{ orderId?: string; courseId: string }>).detail;
-    if (this.activeTabId === undefined) return;
+    const tabId = this.activeTabId;
+    if (tabId === undefined) return;
     this.errorKey = undefined;
+    const ofCourse = this.tabLines.filter((line) => line.courseId === courseId);
+    const alone = ofCourse.filter((line) => this.#sendsAlone(line)).map((line) => line.lineNo);
     try {
-      await this.api.fireCourse(this.activeTabId, courseId);
+      await this.#fireGroups(this.#heldGroupsOf(ofCourse));
+      if (alone.length > 0) await this.api.sendLines(tabId, alone);
     } catch (error) {
-      this.errorKey = tableWriteError(error);
+      await this.#onReleaseRefusal(error);
       return;
     }
     await this.#loadTabLines();
@@ -2424,15 +2529,19 @@ export class TillApp extends LitElement {
     await this.#loadTabLines();
   }
 
-  /** `lineNos: []` sends every held line. The reload runs on both paths, as in {@link #onRecallLines}. */
+  /** `lineNos: []` is Send all: the order's held groups are fired, then the server sends every held
+   * line outside them. The reload runs on both paths, as in {@link #onRecallLines}. */
   async #onSendLines(event: Event): Promise<void> {
     const { lineNos } = (event as CustomEvent<{ lineNos: number[] }>).detail;
-    if (this.activeTabId === undefined) return;
+    const tabId = this.activeTabId;
+    if (tabId === undefined) return;
     this.errorKey = undefined;
     try {
-      await this.api.sendLines(this.activeTabId, lineNos);
+      if (lineNos.length === 0) await this.#fireGroups(this.#heldGroupsOf(this.tabLines));
+      await this.api.sendLines(tabId, lineNos);
     } catch (error) {
-      this.errorKey = tableWriteError(error);
+      await this.#onReleaseRefusal(error);
+      return;
     }
     await this.#loadTabLines();
   }
@@ -2679,6 +2788,7 @@ export class TillApp extends LitElement {
     this.#tabLinesRead++;
     this.#visitBillsRead++;
     this.tabLines = [];
+    this.tabGroups = [];
     this.visitBills = [];
     const floorTab = this.canvas?.tabs.find((tab) => this.#tabNeedsFloorData(tab))?.key;
     if (this.drill?.kind === "table-order" || !this.#inShell() || floorTab === undefined) {
@@ -3057,6 +3167,7 @@ export class TillApp extends LitElement {
       .statuses=${this.statuses}
       .courses=${this.courses}
       .tabLines=${this.tabLines}
+      .tabGroups=${this.tabGroups}
       .tabRevision=${this.tabRevision}
       .editSentLines=${this.editSentLines}
       .cancelOffer=${this.cancelOffer}
@@ -3081,6 +3192,7 @@ export class TillApp extends LitElement {
         return html`<till-table-order-screen
           slot="drill"
           .lines=${this.tabLines}
+          .groups=${this.tabGroups}
           .revision=${this.tabRevision}
           .editSentLines=${this.editSentLines}
           .cancelOffer=${this.cancelOffer}

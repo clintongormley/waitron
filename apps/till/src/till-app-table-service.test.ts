@@ -61,7 +61,23 @@ const openTable: TableState = {
   visit: null,
 };
 
+/** {@link openTable} with a party seated at it: a round goes to the party. */
+const seatedTable: TableState = {
+  ...openTable,
+  visit: {
+    id: "v-2",
+    revision: 3,
+    guestCount: 2,
+    state: "open",
+    outstanding: "12.00",
+    billCount: 1,
+    tableIds: ["t2"],
+  },
+};
+const seatedFloor = () => ({ getTablesState: vi.fn().mockResolvedValue([seatedTable]) });
+
 const tabLine: TabLine = {
+  groupId: null,
   lineNo: 1,
   productId: "cafe",
   quantity: "2.000",
@@ -229,7 +245,9 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listStatuses: vi.fn().mockResolvedValue([]),
     seatTable: vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 }),
     getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0, editSentLines: true }),
-    addTabRound: vi.fn(async (orderId: string) => ({ tabId: orderId })),
+    submitGroups: vi.fn().mockResolvedValue({ tabId: "wo-7", revision: 4, groups: [] }),
+    listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
+    fireGroup: vi.fn().mockResolvedValue({ revision: 4 }),
     fireCourse: vi.fn().mockResolvedValue(undefined),
     markLineServed: vi.fn().mockResolvedValue(undefined),
     setLineCourse: vi.fn().mockResolvedValue(undefined),
@@ -439,8 +457,15 @@ describe("till-app table ordering: a handheld's Order tab with no table opened",
   }
 
   it.each([
-    ["send-round", { lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }] }, "addTabRound"],
-    ["fire-course", { courseId: "c1" }, "fireCourse"],
+    [
+      "send-round",
+      {
+        lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }],
+        groups: [{ release: "fire", lineIndexes: [0] }],
+      },
+      "submitGroups",
+    ],
+    ["fire-course", { courseId: "c1" }, "fireGroup"],
     ["serve-line", { lineNo: 1 }, "markLineServed"],
     ["set-line-course", { lineNo: 1, courseId: null }, "setLineCourse"],
     ["send-lines", { lineNos: [] }, "sendLines"],
@@ -475,7 +500,14 @@ describe("till-app table ordering: a handheld's Order tab with no table opened",
 
 describe("till-app table ordering: refused and failed table actions", () => {
   it.each([
-    ["send-round", { lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }] }, "addTabRound"],
+    [
+      "send-round",
+      {
+        lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }],
+        groups: [{ release: "fire", lineIndexes: [0] }],
+      },
+      "submitGroups",
+    ],
     ["recall-lines", { lineNos: [1] }, "recallLines"],
     ["void-line", { lineNo: 1 }, "voidLine"],
     [
@@ -490,6 +522,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
     "a %s refused because a card payment of the order is running says so",
     async (type, detail, method) => {
       const { el } = await mountApp({
+        ...seatedFloor(),
         [method]: vi.fn().mockRejectedValue({ code: "order.payment_in_flight" }),
       });
       const screen = await toTableOrder(el);
@@ -568,14 +601,17 @@ describe("till-app table ordering: refused and failed table actions", () => {
       .fn()
       .mockResolvedValueOnce({ lines: [tabLine], revision: 0 })
       .mockRejectedValueOnce(new TypeError("Failed to fetch"));
-    const { el } = await mountApp({ getTabLines });
+    const { el } = await mountApp({ ...seatedFloor(), getTabLines });
     const screen = await toTableOrder(el);
     expect(screen.lines).toEqual([tabLine]);
 
-    emit(screen, "send-round", { lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }] });
+    emit(screen, "send-round", {
+      lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }],
+      groups: [{ release: "fire", lineIndexes: [0] }],
+    });
     await flush(el);
 
-    expect(api.addTabRound).toHaveBeenCalledOnce();
+    expect(api.submitGroups).toHaveBeenCalledOnce();
     expect(tableOrder(el)!.lines).toEqual([]);
     expect(banner(el)).toBeNull();
   });
@@ -609,6 +645,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     return offers;
   })();
   const burgerLine: TabLine = {
+    groupId: null,
     lineNo: 5,
     name: "Burger",
     productId: "burger",
@@ -2195,7 +2232,8 @@ describe("till-app table ordering: a split-off bill left unpaid goes back to its
 describe("till-app table ordering: a menu published while a table is open", () => {
   it("reloads the table's offers, sends the round again once, and says why when that is refused too", async () => {
     const { el } = await mountApp({
-      addTabRound: vi.fn().mockRejectedValue({
+      ...seatedFloor(),
+      submitGroups: vi.fn().mockRejectedValue({
         code: "menu.version_changed",
         status: 409,
         menus: [{ menuId: "menu-lunch", liveVersionId: "v2" }],
@@ -2207,13 +2245,14 @@ describe("till-app table ordering: a menu published while a table is open", () =
     const round = new WorkingOrderStore();
     emit(screen, "send-round", {
       lines: [{ menuItemId: "menu-item-sopa-0", quantity: "1" }],
+      groups: [{ release: "fire", lineIndexes: [0] }],
       round,
       sent: [],
     });
     await flush(el);
     await flush(el);
 
-    expect(api.addTabRound).toHaveBeenCalledTimes(2);
+    expect(api.submitGroups).toHaveBeenCalledTimes(2);
     expect(api.listZoneOffers).toHaveBeenCalledTimes(3);
     expect(api.listZoneOffers).toHaveBeenLastCalledWith(floorZone.id, {
       signal: expect.any(AbortSignal),

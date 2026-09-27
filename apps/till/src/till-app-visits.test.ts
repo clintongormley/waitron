@@ -8,12 +8,15 @@ import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { CanvasDef, CapabilityFlag } from "./layout.js";
+import { WorkingOrderStore } from "./state/working-order.js";
 import type {
   FloorZone,
+  OrderGroup,
   TabLine,
   TableState,
   TableVisit,
   TillApi,
+  TillProduct,
   TillSaleResult,
   VisitBill,
   ZoneOfferCatalogue,
@@ -97,6 +100,7 @@ const checkBill: VisitBill = {
 };
 
 const tabLine: TabLine = {
+  groupId: null,
   lineNo: 1,
   productId: "vino",
   quantity: "1.000",
@@ -198,7 +202,10 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     finishTable: vi.fn().mockResolvedValue({ state: "closed" }),
     markCleared: vi.fn().mockResolvedValue(undefined),
     getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0, editSentLines: true }),
-    addTabRound: vi.fn().mockResolvedValue({ tabId: "wo-4" }),
+    listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
+    submitGroups: vi.fn().mockResolvedValue({ tabId: "wo-4", revision: 4, groups: [] }),
+    fireGroup: vi.fn().mockResolvedValue({ revision: 4 }),
+    sendLines: vi.fn().mockResolvedValue(undefined),
     moveTab: vi.fn().mockResolvedValue(undefined),
     joinTable: vi.fn().mockResolvedValue(undefined),
     mergeTabs: vi.fn().mockResolvedValue(undefined),
@@ -714,19 +721,6 @@ describe("till-app: every table move sends the party revision it last read", () 
     expect(api.moveTab).toHaveBeenCalledWith("wo-paid", "t9", { expectedVisitRevision: 3 });
     expect(banner(el)).toBeNull();
   });
-
-  it("follows the round onto the party's next tab after its tab was paid", async () => {
-    const { el } = await mountApp({ addTabRound: vi.fn().mockResolvedValue({ tabId: "wo-next" }) });
-    const order = await openMesa(el);
-    const reads = vi.mocked(api.getTablesState).mock.calls.length;
-
-    emit(order, "send-round", { lines: [{ menuItemId: "flan", quantity: "1" }] });
-    await flush(el);
-
-    expect(tableOrder(el)!.orderId).toBe("wo-next");
-    expect(api.getTabLines).toHaveBeenLastCalledWith("wo-next");
-    expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
-  });
 });
 
 const tablet: CanvasDef = {
@@ -1137,5 +1131,318 @@ describe("till-app: leaving a finished party", () => {
     expect(api.finishTable).toHaveBeenCalledOnce();
     expect(tabletOrderCard(el)!.lines).toEqual([]);
     expect(tabletOrderCard(el)!.bills).toEqual([]);
+  });
+});
+
+describe("till-app: the order's groups (R5)", () => {
+  const cafe: TillProduct = {
+    id: "cafe",
+    menuItemId: "menu-item-cafe",
+    name: "Café",
+    pricingUnit: "each",
+    unitPrice: "1.50",
+    vatClass: "general",
+    category: null,
+    allergens: null,
+  };
+
+  function groupOf(id: string, position: number, state: OrderGroup["state"]): OrderGroup {
+    return {
+      id,
+      position,
+      state,
+      firedAt: state === "fired" ? "2026-09-27T10:00:00.000Z" : null,
+      remindAt: null,
+      lineIds: [],
+      summary: "",
+    };
+  }
+
+  function lineIn(
+    lineNo: number,
+    courseId: string,
+    groupId: string | null,
+    held: boolean,
+  ): TabLine {
+    return {
+      ...tabLine,
+      lineNo,
+      courseId,
+      groupId,
+      state: "queued",
+      sentAt: held ? null : "2026-09-27T10:00:00.000Z",
+      firedAt: held ? null : "2026-09-27T10:00:00.000Z",
+    };
+  }
+
+  /** The server's side of D19 for a fire: refused unless it carries the party's current revision,
+   * which each fire moves on by one. */
+  function chainedFire(start: number) {
+    let current = start;
+    return vi.fn(
+      async (_visitId: string, _groupId: string, command: { expectedVisitRevision: number }) => {
+        if (command.expectedVisitRevision !== current)
+          throw { code: "visit.out_of_date", visitId: "v1" };
+        current += 1;
+        return { revision: current };
+      },
+    );
+  }
+
+  const roundLines = [
+    { menuItemId: "flan", quantity: "1" },
+    { menuItemId: "pan", quantity: "2", courseId: "entrantes" },
+  ];
+
+  it("reads the party's groups with the order's lines and gives them to the screen", async () => {
+    const groups = [groupOf("g1", 1, "held")];
+    const { el } = await mountApp({
+      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups }),
+    });
+    const order = await openMesa(el);
+    expect(api.listGroups).toHaveBeenCalledWith("v1");
+    expect(order.groups).toEqual(groups);
+  });
+
+  it("gives the party's groups to an order shown as a card too", async () => {
+    const groups = [groupOf("g1", 1, "held")];
+    const { el } = await mountApp({
+      ...onTablet(),
+      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups }),
+    });
+    const screen = await toFloor(el);
+    emit(screen, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    expect(tabletOrderCard(el)!.groups).toEqual(groups);
+  });
+
+  it("sends a round to the party as its groups in one submission, with the revision the screen showed", async () => {
+    const { el } = await mountApp({
+      submitGroups: vi.fn().mockResolvedValue({ tabId: "wo-4", revision: 4, groups: [] }),
+    });
+    const order = await openMesa(el);
+    const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
+
+    emit(order, "send-round", {
+      lines: roundLines,
+      groups: [
+        { release: "fire", lineIndexes: [1] },
+        { release: "hold", lineIndexes: [0] },
+      ],
+    });
+    await flush(el);
+
+    expect(api.submitGroups).toHaveBeenCalledOnce();
+    expect(api.submitGroups).toHaveBeenCalledWith(
+      "v1",
+      {
+        submissionId: expect.any(String),
+        expectedVisitRevision: 3,
+        groups: [
+          { release: "fire", lines: [roundLines[1]] },
+          { release: "hold", lines: [roundLines[0]] },
+        ],
+      },
+      { signal: expect.any(AbortSignal) },
+    );
+    expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
+  });
+
+  it("sends each round under a submission id of its own", async () => {
+    const { el } = await mountApp({
+      submitGroups: vi.fn().mockResolvedValue({ tabId: "wo-4", revision: 4, groups: [] }),
+    });
+    const order = await openMesa(el);
+    const round = { lines: roundLines, groups: [{ release: "fire", lineIndexes: [0, 1] }] };
+    emit(order, "send-round", round);
+    await flush(el);
+    emit(order, "send-round", round);
+    await flush(el);
+    const [first, second] = vi
+      .mocked(api.submitGroups)
+      .mock.calls.map((call) => call[1].submissionId);
+    expect(first).not.toBe(second);
+  });
+
+  it("sends the revision the submission answered with on the party's next command", async () => {
+    const { el } = await mountApp({
+      submitGroups: vi.fn().mockResolvedValue({ tabId: "wo-4", revision: 4, groups: [] }),
+    });
+    const order = await openMesa(el);
+    emit(order, "send-round", {
+      lines: roundLines,
+      groups: [{ release: "fire", lineIndexes: [0, 1] }],
+    });
+    await flush(el);
+
+    emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
+    await flush(el);
+    expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 4 });
+  });
+
+  it("follows the round onto the party's next tab after its tab was paid", async () => {
+    const { el } = await mountApp({
+      submitGroups: vi.fn().mockResolvedValue({ tabId: "wo-next", revision: 5, groups: [] }),
+    });
+    const order = await openMesa(el);
+    const reads = vi.mocked(api.getTablesState).mock.calls.length;
+
+    emit(order, "send-round", {
+      lines: [roundLines[0]],
+      groups: [{ release: "fire", lineIndexes: [0] }],
+    });
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-next");
+    expect(api.getTabLines).toHaveBeenLastCalledWith("wo-next");
+    expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
+  });
+
+  it("reloads the table and says so when another device changed the party first, keeping the round", async () => {
+    const { el } = await mountApp({
+      submitGroups: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v1" }),
+    });
+    const order = await openMesa(el);
+    const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
+    const round = new WorkingOrderStore();
+    round.addProduct(cafe, "1");
+
+    emit(order, "send-round", {
+      lines: [{ menuItemId: "menu-item-cafe", quantity: "1" }],
+      groups: [{ release: "fire", lineIndexes: [0] }],
+      round,
+      sent: round.lines,
+    });
+    await flush(el);
+
+    expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
+    expect(banner(el)!.textContent).toContain(t("visit.changed").replace("{table}", "4"));
+    expect(round.lineCount).toBe(1);
+  });
+
+  it("sends nothing, and says so, for an order with no party to put the round on", async () => {
+    const barTab = table({ state: "open-tab", hasOpenTab: true, tabId: "wo-bar" });
+    const { el } = await mountApp({ getTablesState: vi.fn().mockResolvedValue([barTab]) });
+    const order = await openMesa(el);
+    emit(order, "send-round", {
+      lines: roundLines,
+      groups: [{ release: "fire", lineIndexes: [0, 1] }],
+    });
+    await flush(el);
+    expect(api.submitGroups).not.toHaveBeenCalled();
+    expect(banner(el)!.textContent).toContain(t("table.error"));
+  });
+
+  describe("firing", () => {
+    // Lines 1 and 2 are the course in two held groups, listed out of position order; line 3 is
+    // another course's held group; line 4 the course's line in a fired group.
+    const lines = [
+      lineIn(1, "c1", "g-late", true),
+      lineIn(2, "c1", "g-early", true),
+      lineIn(3, "c2", "g-other", true),
+      lineIn(4, "c1", "g-fired", false),
+    ];
+    const groups = [
+      groupOf("g-fired", 1, "fired"),
+      groupOf("g-late", 3, "held"),
+      groupOf("g-early", 2, "held"),
+      groupOf("g-other", 4, "held"),
+    ];
+    const withGroups = (over: Record<string, unknown> = {}) => ({
+      getTabLines: vi.fn().mockResolvedValue({ lines, revision: 0, editSentLines: true }),
+      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups }),
+      fireGroup: chainedFire(3),
+      sendLines: vi.fn().mockResolvedValue(undefined),
+      ...over,
+    });
+
+    it("Fire course fires each held group holding the course, in position order, each with the revision the last answered", async () => {
+      const { el } = await mountApp(withGroups());
+      const order = await openMesa(el);
+      const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
+
+      emit(order, "fire-course", { orderId: "wo-4", courseId: "c1" });
+      await flush(el);
+
+      expect(vi.mocked(api.fireGroup).mock.calls).toEqual([
+        ["v1", "g-early", { submissionId: expect.any(String), expectedVisitRevision: 3 }],
+        ["v1", "g-late", { submissionId: expect.any(String), expectedVisitRevision: 4 }],
+      ]);
+      expect(api.sendLines).not.toHaveBeenCalled();
+      expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
+      expect(banner(el)).toBeNull();
+
+      emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
+      await flush(el);
+      expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 5 });
+    });
+
+    it("Fire course also sends the course's recalled line, whose group has already fired", async () => {
+      const recalled = { ...lineIn(5, "c1", "g-fired", false), firedAt: null };
+      const { el } = await mountApp(
+        withGroups({
+          getTabLines: vi
+            .fn()
+            .mockResolvedValue({ lines: [...lines, recalled], revision: 0, editSentLines: true }),
+        }),
+      );
+      const order = await openMesa(el);
+
+      emit(order, "fire-course", { orderId: "wo-4", courseId: "c1" });
+      await flush(el);
+
+      expect(api.fireGroup).toHaveBeenCalledTimes(2);
+      expect(api.sendLines).toHaveBeenCalledWith("wo-4", [5]);
+    });
+
+    it("Send all fires every held group of the order in position order, then sends the lines outside them", async () => {
+      const { el } = await mountApp(withGroups());
+      const order = await openMesa(el);
+
+      emit(order, "send-lines", { lineNos: [] });
+      await flush(el);
+
+      expect(vi.mocked(api.fireGroup).mock.calls.map((call) => call[1])).toEqual([
+        "g-early",
+        "g-late",
+        "g-other",
+      ]);
+      expect(api.sendLines).toHaveBeenCalledWith("wo-4", []);
+      expect(vi.mocked(api.sendLines).mock.invocationCallOrder[0]).toBeGreaterThan(
+        vi.mocked(api.fireGroup).mock.invocationCallOrder[2]!,
+      );
+    });
+
+    it("a fire refused because another device changed the party reloads the table, says so and fires nothing more", async () => {
+      const { el } = await mountApp(
+        withGroups({
+          fireGroup: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v1" }),
+        }),
+      );
+      const order = await openMesa(el);
+      const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
+
+      emit(order, "send-lines", { lineNos: [] });
+      await flush(el);
+
+      expect(api.fireGroup).toHaveBeenCalledOnce();
+      expect(api.sendLines).not.toHaveBeenCalled();
+      expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
+      expect(banner(el)!.textContent).toContain(t("visit.changed").replace("{table}", "4"));
+    });
+
+    it("a group another device already fired says so in its own words and reloads the order", async () => {
+      const { el } = await mountApp(
+        withGroups({ fireGroup: vi.fn().mockRejectedValue({ code: "group.not_held" }) }),
+      );
+      const order = await openMesa(el);
+      const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
+
+      emit(order, "fire-course", { orderId: "wo-4", courseId: "c1" });
+      await flush(el);
+
+      expect(banner(el)!.textContent).toContain(codeMessage("group.not_held"));
+      expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
+    });
   });
 });

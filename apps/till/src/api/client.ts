@@ -463,20 +463,11 @@ export interface SaleLine {
   note?: string;
 }
 
-/**
- * One round line sent to {@link TillApi.addTabRound}. `courseId` is the waiter's course OVERRIDE; absent,
- * the server uses the product's default course. `hold: true` inserts the line without firing it,
- * whatever its course; an un-held line OMITS the field.
- */
-export interface RoundLine extends SaleLine {
-  courseId?: string;
-  hold?: boolean;
-}
-
 /** Whether a submitted group goes to the kitchen now or waits until it is fired. */
 export type GroupRelease = "fire" | "hold";
 
-/** One line of a submitted group. Its group, not its course, decides when it is released. */
+/** One line of a submitted group. Its group, not its course, decides when it is released. `courseId`
+ * is the waiter's course OVERRIDE; absent, the server uses the product's default course. */
 export interface GroupLine extends SaleLine {
   courseId?: string;
 }
@@ -1169,8 +1160,8 @@ export interface TabLine {
    * (`editSentLines`); "preparing"/"ready" is cancel-only. */
   state: TicketState | null;
   /** The order group the line is released with; null when it is in none, as on a bill with no party
-   * or for a line moved here from another party's bill. Absent only on a fixture that omits it. */
-  groupId?: string | null;
+   * or for a line moved here from another party's bill. */
+  groupId: string | null;
   note: string | null;
   /** The extras list a CHILD row was picked from, which a prefilled pick goes back to; null on a
    * dish. */
@@ -1757,26 +1748,6 @@ export class TillApi {
   }
 
   /**
-   * Append a round to a table's tab → `POST /api/working-orders/:orderId/round`. The new lines are priced
-   * at add-time and the existing lines are NOT re-priced. Sent to the settled or abandoned tab a
-   * seated party's table still points at, it opens the party's next tab: the answer names the tab the
-   * round landed on.
-   * `tab.not_open` and `sale.empty_basket` surface as a rejected `{ code }`.
-   */
-  addTabRound(
-    orderId: string,
-    lines: RoundLine[],
-    options: ReadOptions = {},
-  ): Promise<{ tabId: string }> {
-    return this.#request<{ tabId: string }>(
-      `/api/working-orders/${orderId}/round`,
-      "POST",
-      { lines },
-      options.signal,
-    );
-  }
-
-  /**
    * Read one open tab's lines → `GET /api/working-orders/:orderId/lines`. A non-open or absent tab
    * rejects with `tab.not_open`. `revision` is what an edit of this copy sends back.
    */
@@ -1798,8 +1769,9 @@ export class TillApi {
 
   /**
    * Fire SPECIFIC held lines of an open tab → `POST /api/working-orders/:orderId/lines/send`. An empty
-   * `lineNos` releases every held line of the tab. NON-FISCAL; idempotent — an unknown or already-fired
-   * line matches nothing. Rejects `tab.not_open`.
+   * `lineNos` releases every held line of the tab outside a held group. NON-FISCAL; idempotent — an
+   * unknown or already-fired line matches nothing. Rejects `tab.not_open`, and `group.line_held` for a
+   * named line in a held group, which only firing its group releases.
    */
   async sendLines(orderId: string, lineNos: number[]): Promise<void> {
     await this.#request<void>(`/api/working-orders/${orderId}/lines/send`, "POST", { lineNos });

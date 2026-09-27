@@ -1400,37 +1400,6 @@ describe("TillApi", () => {
     expect(init.headers).toBeUndefined();
   });
 
-  it("addTabRound POSTs the round's lines to the order's /round route and returns the tab they landed on", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ tabId: "ord-2" }));
-    const api = new TillApi("", fetchStub);
-
-    await expect(
-      api.addTabRound("ord-1", [{ menuItemId: "mi-agua", quantity: "1" }]),
-    ).resolves.toEqual({ tabId: "ord-2" });
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/working-orders/ord-1/round",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ lines: [{ menuItemId: "mi-agua", quantity: "1" }] }),
-      }),
-    );
-  });
-
-  it("addTabRound surfaces { code } when the tab is not open", async () => {
-    const fetchStub = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(JSON.stringify({ error: { code: "tab.not_open" } }), { status: 409 }),
-      );
-
-    await expect(
-      new TillApi("", fetchStub).addTabRound("ord-1", [{ menuItemId: "mi-agua", quantity: "1" }]),
-    ).rejects.toMatchObject({ code: "tab.not_open" });
-  });
-
   it("getTabLines GETs the open tab's lines, decoding the locked price + served state per line", async () => {
     // Typed `TabLine[]` so `tsc` checks the client mirror declares every field. The first line was
     // sold as a variant, so it names its parent product; the second is a CHILD extras row with no
