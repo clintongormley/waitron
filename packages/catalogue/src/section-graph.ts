@@ -118,6 +118,19 @@ export function reachableProducts(graph: SectionGraph, rootId: string): string[]
   return [...products];
 }
 
+/** Every section the root reaches through the section tree, the root itself excluded. */
+export function reachableSections(graph: SectionGraph, rootId: string): Set<string> {
+  const reached = new Set<string>();
+  const pending = childSections(graph, rootId);
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    if (reached.has(current)) continue;
+    reached.add(current);
+    pending.push(...childSections(graph, current));
+  }
+  return reached;
+}
+
 /** For every product the root reaches, each path of section ids from the root to a list holding it
  * directly. */
 export function placementsByProduct(graph: SectionGraph, rootId: string): Map<string, string[][]> {

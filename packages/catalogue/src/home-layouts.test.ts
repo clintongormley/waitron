@@ -24,7 +24,12 @@ import {
   setDeviceHomeLayout,
 } from "./home-layouts.js";
 import { menuStatus, previewMenu, publishMenu } from "./menu-publication.js";
-import { listMenuOffers, updateMenuItem } from "./operations.js";
+import {
+  deactivateCatalogue,
+  deactivateProduct,
+  listMenuOffers,
+  updateMenuItem,
+} from "./operations.js";
 import { addMember, removeMember } from "./sections.js";
 import { deviceProfileHomeLayouts } from "./schema/home-layouts.js";
 import { menuDetails, menuItems } from "./schema/menu.js";
@@ -240,7 +245,7 @@ describe("home tiles", () => {
     expect(await tileRefs(home)).toEqual([]);
   });
 
-  it("refuses a product the menu has switched off, as publishing would leave it out", async () => {
+  it("accepts a product the menu has switched off, and publishing leaves it out with a warning", async () => {
     const f = await menusFixture(fx.db);
     const home = await defaultLayout(f.lunch);
     const [offer] = await fx.db
@@ -248,9 +253,44 @@ describe("home tiles", () => {
       .from(menuItems)
       .where(and(eq(menuItems.menuId, f.lunch), eq(menuItems.productId, f.soup)));
     await app((tx) => updateMenuItem(tx, f.lunch, offer!.id, { active: false }));
-    expect(await codeOf(() => app((tx) => addShortcut(tx, home, product(f.soup))))).toBe(
-      "menu.shortcut_unreachable",
-    );
+    const tile = await app((tx) => addShortcut(tx, home, product(f.soup)));
+    expect(tile.ref).toEqual(product(f.soup));
+    const [layout] = await app((tx) => listHomeLayouts(tx, f.lunch));
+    expect(layout!.tiles).toMatchObject([{ ref: product(f.soup), reachable: true }]);
+    const preview = await app((tx) => previewMenu(tx, f.lunch));
+    expect(preview.warnings).toEqual([
+      { kind: "shortcut_omitted", layoutName: "Home", name: "Soup" },
+    ]);
+    expect(preview.document.homeLayouts[0]!.tiles).toEqual([]);
+  });
+
+  it("accepts product tiles on an inactive menu, reached by its structure", async () => {
+    const f = await menusFixture(fx.db);
+    const home = await defaultLayout(f.lunch);
+    await app((tx) => deactivateCatalogue(tx, f.lunch));
+    await app((tx) => addShortcut(tx, home, product(f.soup)));
+    await app((tx) => addShortcut(tx, home, product(f.lager)));
+    const [layout] = await app((tx) => listHomeLayouts(tx, f.lunch));
+    expect(layout!.tiles.map(({ ref, reachable }) => [ref, reachable])).toEqual([
+      [product(f.soup), true],
+      [product(f.lager), true],
+    ]);
+    expect((await app((tx) => previewMenu(tx, f.lunch))).warnings).toEqual([
+      { kind: "shortcut_omitted", layoutName: "Home", name: "Soup" },
+      { kind: "shortcut_omitted", layoutName: "Home", name: "Lager" },
+    ]);
+  });
+
+  it("accepts an inactive product the structure reaches", async () => {
+    const f = await menusFixture(fx.db);
+    const home = await defaultLayout(f.lunch);
+    await app((tx) => deactivateProduct(tx, f.lager));
+    await app((tx) => addShortcut(tx, home, product(f.lager)));
+    const [layout] = await app((tx) => listHomeLayouts(tx, f.lunch));
+    expect(layout!.tiles).toMatchObject([{ ref: product(f.lager), reachable: true }]);
+    expect((await app((tx) => previewMenu(tx, f.lunch))).warnings).toEqual([
+      { kind: "shortcut_omitted", layoutName: "Home", name: "Lager" },
+    ]);
   });
 
   it("refuses a menu-owned section as a tile", async () => {

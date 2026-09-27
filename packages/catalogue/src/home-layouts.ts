@@ -3,12 +3,17 @@ import { catalogues, products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { allTopLevelProducts } from "./categories.js";
-import { buildMenuDocuments } from "./menu-document.js";
 import { requireMenuRoot } from "./menu-structure.js";
 import { deviceProfileHomeLayouts } from "./schema/home-layouts.js";
 import { menuDetails } from "./schema/menu.js";
 import { sectionMembers, sections } from "./schema/sections.js";
-import { loadSectionGraph, toSectionMember, type SectionGraph } from "./section-graph.js";
+import {
+  loadSectionGraph,
+  reachableProducts,
+  reachableSections,
+  toSectionMember,
+  type SectionGraph,
+} from "./section-graph.js";
 import { nextPosition, renumber } from "./section-order.js";
 import type {
   DeviceMenuHomeLayouts,
@@ -70,36 +75,69 @@ async function insertLayout(tx: Transaction, menuId: string, name: string): Prom
   return row!.id;
 }
 
+/** Whether the menu's working structure reaches a tile's target, whatever the menu's, the
+ * product's or the offer's switches (D13). Publishing applies its own, narrower test. */
+function structuralReach(graph: SectionGraph, rootSectionId: string): (ref: MemberRef) => boolean {
+  const reachedProducts = new Set(reachableProducts(graph, rootSectionId));
+  const reachedSections = reachableSections(graph, rootSectionId);
+  return (ref) =>
+    ref.kind === "product"
+      ? reachedProducts.has(ref.productId)
+      : reachedSections.has(ref.sectionId);
+}
+
 /** The menu's working layouts, the default first and then by name, each with every tile in order,
- * the ones publishing would leave out included and marked. */
+ * the ones its structure no longer reaches included and marked. */
 export async function listHomeLayouts(tx: Transaction, menuId: string): Promise<HomeLayout[]> {
-  const { graph, menus, sectionNames } = await buildMenuDocuments(tx, [menuId]);
-  const built = menus.get(menuId);
-  if (built === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
-  const { document, reaches } = built;
-  const members = new Map(document.homeLayouts.map(({ id }) => [id, graph.children(id)]));
-  const productIds = [...members.values()].flatMap((tiles) =>
-    tiles.flatMap(({ ref }) => (ref.kind === "product" ? [ref.productId] : [])),
+  const [details] = await tx
+    .select({
+      rootSectionId: menuDetails.rootSectionId,
+      defaultHomeLayoutId: menuDetails.defaultHomeLayoutId,
+    })
+    .from(menuDetails)
+    .where(eq(menuDetails.menuId, menuId));
+  if (details === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
+  const graph = await loadSectionGraph(tx);
+  const reaches = structuralReach(graph, details.rootSectionId);
+  const layouts = await tx
+    .select({ id: sections.id, name: sections.internalName })
+    .from(sections)
+    .where(and(eq(sections.role, "home_layout"), eq(sections.ownerMenuId, menuId)))
+    .orderBy(asc(sections.internalName), asc(sections.id));
+  const isDefault = (id: string) => id === details.defaultHomeLayoutId;
+  const ordered = [
+    ...layouts.filter((layout) => isDefault(layout.id)),
+    ...layouts.filter((layout) => !isDefault(layout.id)),
+  ];
+  const refs = ordered.flatMap(({ id }) => graph.children(id).map(({ ref }) => ref));
+  const productIds = new Set(
+    refs.flatMap((ref) => (ref.kind === "product" ? [ref.productId] : [])),
   );
-  const productNames = new Map<string, string>();
-  for (const batch of batches([...new Set(productIds)]))
+  const sectionIds = new Set(
+    refs.flatMap((ref) => (ref.kind === "section" ? [ref.sectionId] : [])),
+  );
+  const names = new Map<string, string>();
+  for (const batch of batches([...productIds]))
     for (const row of await tx
       .select({ id: products.id, name: products.name })
       .from(products)
       .where(inArray(products.id, batch)))
-      productNames.set(row.id, row.name);
-  return document.homeLayouts.map(({ id, name }) => ({
+      names.set(row.id, row.name);
+  for (const batch of batches([...sectionIds]))
+    for (const row of await tx
+      .select({ id: sections.id, name: sections.internalName })
+      .from(sections)
+      .where(inArray(sections.id, batch)))
+      names.set(row.id, row.name);
+  return ordered.map(({ id, name }) => ({
     id,
     name,
-    isDefault: id === document.defaultHomeLayoutId,
-    tiles: members.get(id)!.map(({ id: memberId, position, ref }) => ({
+    isDefault: isDefault(id),
+    tiles: graph.children(id).map(({ id: memberId, position, ref }) => ({
       memberId,
       position,
       ref,
-      name:
-        ref.kind === "product"
-          ? productNames.get(ref.productId)!
-          : sectionNames.get(ref.sectionId)!,
+      name: names.get(ref.kind === "product" ? ref.productId : ref.sectionId)!,
       reachable: reaches(ref),
     })),
   }));
@@ -184,8 +222,8 @@ export async function setDefaultHomeLayout(
 
 /**
  * Appends a tile, or puts it at `position` and renumbers the layout. The target must be a product
- * the menu's working document offers or a library section it holds: the test publishing applies
- * (D13), so a tile accepted here is one publishing keeps.
+ * or library section the menu's working structure reaches (D13); a tile for a product the menu
+ * does not offer when it is published is left out of that version.
  */
 export async function addShortcut(
   tx: Transaction,
@@ -209,8 +247,8 @@ export async function addShortcut(
   const tiles = graph.children(layoutId);
   if (tiles.some((tile) => refKey(tile.ref) === refKey(ref)))
     throw new AppError("menu_section.member_duplicate", { sectionId: layoutId });
-  const built = (await buildMenuDocuments(tx, [menuId], graph)).menus.get(menuId)!;
-  if (!built.reaches(ref)) throw new AppError("menu.shortcut_unreachable", { layoutId, ref });
+  const reaches = structuralReach(graph, await requireMenuRoot(tx, menuId));
+  if (!reaches(ref)) throw new AppError("menu.shortcut_unreachable", { layoutId, ref });
   const at =
     position === undefined ? nextPosition(graph, layoutId) : Math.min(position, tiles.length);
   const [row] = await tx

@@ -4,6 +4,7 @@ import {
   menusContaining,
   placementsByProduct,
   reachableProducts,
+  reachableSections,
   wouldCreateCycle,
   type MemberRow,
   type SectionRow,
@@ -74,6 +75,22 @@ describe("wouldCreateCycle", () => {
     // Drinks is already under Lunch; Favourites holding it too is sharing, not a loop.
     expect(wouldCreateCycle(lunch(), "favourites", "drinks")).toBe(false);
     expect(wouldCreateCycle(lunch(), "specials", "drinks")).toBe(false);
+  });
+});
+
+describe("reachableSections", () => {
+  it("names every section below the root once, however many paths lead to it, and not the root", () => {
+    const graph = buildSectionGraph(
+      [root("brunch", "menu-brunch"), library("drinks"), library("beer"), library("specials")],
+      [
+        ...list("brunch", ["s:drinks", "s:beer"]),
+        ...list("drinks", ["s:beer"]),
+        ...list("beer", ["p:lager"]),
+        ...list("specials", ["s:beer"]),
+      ],
+    );
+    expect([...reachableSections(graph, "brunch")].sort()).toEqual(["beer", "drinks"]);
+    expect([...reachableSections(lunch(), "dinner")].sort()).toEqual(["beer", "drinks"]);
   });
 });
 
