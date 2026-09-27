@@ -825,7 +825,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/pay", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      // Resolved once for both device guards: `tryReadDevice` runs a scrypt verification.
+      // Resolved once for both device guards: `tryReadDevice` may run a scrypt verification.
       const device = await tryReadDevice(deps, c);
       // A cookie-less caller passes this guard but is refused `device.unauthorized` by
       // `requireSaleTillId` below.

@@ -482,11 +482,11 @@ section the till has open, it says "Not found" and shows home. `product-grid.ts`
 logic is in `apps/till/src/widgets/product-pick.ts`. A device's token is now checked outside the
 venue's write lock (`tryReadDevice`, `apps/server/src/device-session.ts`, with `verifySecretAsync`).
 No migration. Left open, none blocking: search matches the staff name only, not a customer name or a
-section's name; every `/api/menu-state` read from an enrolled device now runs one scrypt, off the
-lock, and the till reads once per zone it holds at each poll (before this branch a read naming a
-zone, which the till's always does, skipped the device read), a cost nobody has measured; from
-reading only, a device revoked while its token is being checked is treated as unknown from its next
-request (refused wherever a route requires a device), not that one; and no test switches one menu
+section's name; every `/api/menu-state` read from an enrolled device now reads the device, and the
+till reads once per zone it holds at each poll (before this branch a read naming a zone, which the
+till's always does, skipped the device read) — the token's scrypt check (21.1 ms, measured once on a
+Mac) runs off the lock, once per device until its token changes, the server restarts or the device
+falls out of the 256 the server remembers; and no test switches one menu
 between two layouts and compares the structure, search and prices (the browser builds those from the
 offers alone, and a layout switch reloads none). What needs the owner, and what the closing sweep of
 the spec found, are the entries after this block.
@@ -567,8 +567,8 @@ is among the offers it is given (`indexMenu`, `apps/till/src/widgets/menu-browse
 when every product in it is switched off on the menu (Task 9's choice, pinned by the D5 case in
 `apps/till/src/widgets/menu-browser.test.ts`), and while a diet filter is on and every product in it
 fails the filter, because the card grid hands the browser only the products the filter keeps
-(`apps/till/src/widgets/card-grid.ts`; pinned by "hides a product the diet lens rejects, and a
-section it leaves with nothing" in `apps/till/src/widgets/card-grid.test.ts`) — as a dish the
+(`apps/till/src/widgets/card-grid.ts`; pinned for the structure only by "hides a product the diet
+lens rejects, and a section it leaves with nothing" in `apps/till/src/widgets/card-grid.test.ts`) — as a dish the
 filter rejects already disappears. A section whose products are all sold out keeps its place, and its tile is not greyed;
 the products inside it are. Spec §5 wants buttons in predictable positions during service. **Next
 action:** the owner decides whether either kind of empty section should keep its place, for example
