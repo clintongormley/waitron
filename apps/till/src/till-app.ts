@@ -642,9 +642,10 @@ export class TillApp extends LitElement {
   @state() private tableMenus: TillZoneMenu[] = [];
   /** Removed home layouts not yet dismissed. */
   @state() private removedLayouts: RemovedLayout[] = [];
-  /** Menus whose removed layout was already reported: the server repeats the reason on every answer
-   * until a manager changes the choice, and the till says it once per page load. */
-  readonly #removedLayoutReported = new Set<string>();
+  /** Per menu, the removed layouts already reported, each once per page load: the server repeats the
+   * reason on every answer until a manager changes the choice. An empty id stands for a removal the
+   * till cannot name because it never showed that layout. */
+  readonly #removedLayoutReported = new Map<string, Set<string>>();
   /** What {@link products} and {@link tableProducts} are built from, so a poll's unavailable set
    * applies without reloading them. */
   readonly #counterOffers = new ZoneOfferIndex();
@@ -1333,15 +1334,20 @@ export class TillApp extends LitElement {
   #reportRemovedLayouts(shown: readonly TillZoneMenu[], next: readonly TillZoneMenu[]): void {
     const found: RemovedLayout[] = [];
     for (const menu of next) {
-      if (menu.layoutFallback !== "layout_removed" || this.#removedLayoutReported.has(menu.id))
-        continue;
-      this.#removedLayoutReported.add(menu.id);
+      if (menu.layoutFallback !== "layout_removed") continue;
       const before = shown.find((each) => each.id === menu.id);
-      const layoutName =
+      const removed =
         before === undefined || before.homeLayoutId === menu.homeLayoutId
           ? undefined
-          : before.homeLayouts.find((layout) => layout.id === before.homeLayoutId)?.name;
-      found.push({ menuName: menu.name, layoutName });
+          : before.homeLayouts.find((layout) => layout.id === before.homeLayoutId);
+      const reported = this.#removedLayoutReported.get(menu.id) ?? new Set<string>();
+      // The till can name a removal only when it showed that layout. One it cannot name left the
+      // screen on the default it already showed, so it is said only while nothing has been said
+      // about this menu: on a first load, not on the poll answers that repeat the reason.
+      if (removed === undefined ? reported.size > 0 : reported.has(removed.id)) continue;
+      reported.add(removed?.id ?? "");
+      this.#removedLayoutReported.set(menu.id, reported);
+      found.push({ menuName: menu.name, layoutName: removed?.name });
     }
     if (found.length > 0) this.removedLayouts = [...this.removedLayouts, ...found];
   }

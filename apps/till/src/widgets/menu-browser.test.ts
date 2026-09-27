@@ -223,6 +223,27 @@ function breadcrumb(el: TillMenuBrowser): string {
     .join(" › ");
 }
 
+/** Sets the host's width and waits for the layout to follow. */
+async function widen(host: HTMLElement, width: number): Promise<void> {
+  host.style.width = `${width}px`;
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
+/** How many column tracks a grid lays out. */
+function tracks(grid: HTMLElement): number {
+  return getComputedStyle(grid).gridTemplateColumns.split(" ").length;
+}
+
+/** A region's entries in the order a person reads them: row by row, left to right. */
+function readingOrder(el: TillMenuBrowser, region: string): string[] {
+  const placed = entries(el, region).map((button) => ({
+    name: button.querySelector(".name")!.textContent!.trim(),
+    box: button.getBoundingClientRect(),
+  }));
+  placed.sort((a, b) => Math.round(a.box.top - b.box.top) || a.box.left - b.box.left);
+  return placed.map(({ name }) => name);
+}
+
 async function search(el: TillMenuBrowser, text: string): Promise<void> {
   const input = root(el).querySelector("wt-input")!.shadowRoot!.querySelector("input")!;
   input.value = text;
@@ -322,16 +343,79 @@ describe("till-menu-browser", () => {
       expect(names(entries(till.el, "structure"))).toEqual(
         names(entries(handheld.el, "structure")),
       );
-      for (const [{ el }, columns] of [
+      for (const [{ el, host }, columns] of [
         [handheld, 3],
         [till, 6],
       ] as const) {
+        await widen(host, 1280);
         const grids = [...root(el).querySelectorAll<HTMLElement>(".grid")];
         expect(grids).toHaveLength(2);
-        for (const grid of grids) {
-          expect(grid.style.gridTemplateColumns).toBe(`repeat(${columns}, 1fr)`);
+        for (const grid of grids) expect(tracks(grid)).toBe(columns);
+      }
+    });
+
+    it("breaks a word longer than the tile inside the tile, rather than letting it spill out", async () => {
+      const long = product("long", "Supercalifragilisticexpialidocious");
+      const { el, host } = await mount({
+        columns: 3,
+        menu: lunch({ structure: { members: [member("long")] } }),
+        products: [long],
+      });
+      await widen(host, 390);
+      const tile = entry(
+        el,
+        "structure",
+        "Supercalifragilisticexpialidocious",
+      ).getBoundingClientRect();
+      const text = document.createRange();
+      text.selectNodeContents(entries(el, "structure")[0]!.querySelector(".name")!);
+      const name = text.getBoundingClientRect();
+      expect(name.left).toBeGreaterThanOrEqual(tile.left);
+      expect(name.right).toBeLessThanOrEqual(tile.right);
+    });
+
+    it("shows fewer columns where a tile would be too narrow, in the same order", async () => {
+      const { el, host } = await mount({ columns: 6 });
+      await widen(host, 1280);
+      const wide = readingOrder(el, "structure");
+      const shortcuts = readingOrder(el, "shortcuts");
+      await widen(host, 300);
+      const grid = root(el).querySelector<HTMLElement>('[data-region="structure"] .grid')!;
+      expect(tracks(grid)).toBeGreaterThan(0);
+      expect(tracks(grid)).toBeLessThan(6);
+      expect(readingOrder(el, "structure")).toEqual(wide);
+      expect(readingOrder(el, "shortcuts")).toEqual(shortcuts);
+      expect(wide).toEqual(names(entries(el, "structure")));
+    });
+
+    it("wraps a tile's label only between words, the section icon keeping its size", async () => {
+      const long = section("sec-long", "long", { en: "Platos principales" }, [member("cafe")]);
+      const short = section("sec-short", "short", { en: "Bar" }, [member("cola")]);
+      const desserts = section("sec-desserts", "desserts", { en: "Desserts" }, [member("water")]);
+      // A till's six columns at a phone's width.
+      const { el, host } = await mount({
+        columns: 6,
+        menu: lunch({
+          structure: { members: [long, short, desserts, member("lemonade")] },
+          homeLayouts: [{ id: "lay-home", name: "Home", tiles: [] }],
+        }),
+      });
+      await widen(host, 390);
+      for (const tile of entries(el, "structure")) {
+        const text = [...tile.querySelector(".name")!.childNodes].find(
+          (node): node is Text => node instanceof Text && node.data.trim() !== "",
+        )!;
+        for (const match of text.data.matchAll(/\S+/g)) {
+          const word = document.createRange();
+          word.setStart(text, match.index);
+          word.setEnd(text, match.index + match[0].length);
+          expect(word.getClientRects(), `"${match[0]}" split`).toHaveLength(1);
         }
       }
+      const icon = (name: string) =>
+        entry(el, "structure", name).querySelector("wt-icon")!.getBoundingClientRect();
+      expect(icon("Platos principales").width).toBe(icon("Bar").width);
+      expect(icon("Platos principales").height).toBe(icon("Bar").height);
     });
 
     it("keeps the responsive grid when no column count is given", async () => {
@@ -653,6 +737,29 @@ describe("till-menu-browser", () => {
       await tap(el, entry(el, "structure", "Tinto"));
       expect(root(el).querySelector("till-modifier-picker")!.product).toBe(mixed);
       expect(store.lines).toEqual([]);
+    });
+
+    it("says Sold out on a sold-out product in the home grid, a section and search", async () => {
+      const { el } = await mount({ menu: lunch({ homeLayoutId: "lay-four" }) });
+      const soldOut = (button: Button) => button.querySelector(".sold-out")?.textContent?.trim();
+      expect(entries(el, "shortcuts").map(soldOut)).toEqual([
+        undefined,
+        "Sold out",
+        undefined,
+        undefined,
+      ]);
+      await tap(el, entry(el, "structure", "Comida (ES)"));
+      expect(entries(el, "section").map(soldOut)).toEqual([undefined, "Sold out", undefined]);
+      await search(el, "burger");
+      expect(entries(el, "results").map(soldOut)).toEqual(["Sold out"]);
+    });
+
+    it("says it in the till's language", async () => {
+      setLocale("es-ES");
+      const { el } = await mount({ menu: lunch({ homeLayoutId: "lay-four" }) });
+      expect(entry(el, "shortcuts", "Burger").querySelector(".sold-out")!.textContent!.trim()).toBe(
+        "Agotado",
+      );
     });
 
     it("greys a product whose variants are all unavailable", async () => {

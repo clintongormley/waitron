@@ -2312,6 +2312,21 @@ approved print agents to try it, so a printer the two discovery passes cannot se
 - Register/device follow-ups: `WAITRON_TILL_TILL_ID` still seeds a "Caja 1" register while a till
   enrol auto-creates its own; the device-management routes build their `devices ⨝ device_profiles`
   read inline where a `listDevices` store verb belongs.
+- **Seven screen faults seen during menus Task 9's look on 2026-09-27.** Seen on the dev stack
+  while checking the till's home page, not investigated, and not checked against `main`, so any of
+  them may predate that branch:
+  - on the till at 390 px wide, the header makes the page wider than the screen;
+  - on the till's floor map at 390 px wide, tables overlap one another;
+  - in Spanish, the till's tab names "Counter", "Floor" and "Order" stay in English;
+  - on the till at 390 px wide, the floating language button covers "Send round";
+  - on the dashboard, the dialog for a new home page layout is nearly full-screen for a single
+    name field;
+  - on the dashboard, the publish preview says "Home page layout X changed" both for a layout that
+    was added and for one that was deleted;
+  - the till's browser console shows Lit's "scheduled an update … after an update completed"
+    warning.
+
+  **Next action:** check each against `main`, then fix or file it on its own.
 
 ### A5. Incidents and notifications
 

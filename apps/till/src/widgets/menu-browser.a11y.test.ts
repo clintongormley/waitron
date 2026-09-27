@@ -102,6 +102,7 @@ describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (
     const { el, host } = await mount(theme);
     expect((button(el, "Burger") as HTMLElement & { disabled: boolean }).disabled).toBe(true);
     expect(button(el, "Jamón").querySelector(".price")!.textContent).toContain("/kg");
+    expect(button(el, "Burger").querySelector(".sold-out")!.textContent!.trim()).toBe("Sold out");
     await expectNoA11yViolations(host);
   });
 
@@ -112,6 +113,19 @@ describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector('[data-region="results"]')).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector('[data-region="results"] .sold-out')!.textContent!.trim(),
+    ).toBe("Sold out");
+    await expectNoA11yViolations(host);
+  });
+
+  it("a section view holding a sold-out product has no violations", async () => {
+    const { el, host } = await mount(theme);
+    button(el, "Drinks (EN)").click();
+    await el.updateComplete;
+    expect(
+      el.shadowRoot!.querySelector('[data-region="section"] .sold-out')!.textContent!.trim(),
+    ).toBe("Sold out");
     await expectNoA11yViolations(host);
   });
 

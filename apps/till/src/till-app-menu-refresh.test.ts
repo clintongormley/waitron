@@ -1866,6 +1866,38 @@ describe("the device's home layout", () => {
     expect(layoutNotice(el)).toBeNull();
   });
 
+  it("warns again when a second layout chosen on the same menu is removed later", async () => {
+    const BAR: Layout = {
+      id: "layout-bar",
+      name: "Bar",
+      tiles: [{ kind: "product", productId: "Burger" }],
+    };
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi
+        .fn()
+        .mockResolvedValue(laidOut("v1", [HOME, COUNTER, BAR], "layout-counter")),
+      listZoneOffers: vi
+        .fn()
+        .mockResolvedValue(laidOut("v2", [HOME, BAR], "layout-home", "layout_removed")),
+    });
+    await toCounter(el);
+    api.menuState.mockResolvedValue(layoutState("v2", "layout-home", "layout_removed"));
+    await poll(el);
+    expect(layoutNotice(el)).toContain('"Counter" was removed');
+    el.shadowRoot!.querySelector<HTMLElement>("[data-layout-dismiss]")!.click();
+    await flush(el);
+
+    // A manager chooses Bar, then deletes it and publishes again.
+    api.menuState.mockResolvedValue(layoutState("v2", "layout-bar"));
+    await poll(el);
+    expect(shortcuts(el)).toEqual(["Burger"]);
+    api.listZoneOffers.mockResolvedValue(laidOut("v3", [HOME], "layout-home", "layout_removed"));
+    api.menuState.mockResolvedValue(layoutState("v3", "layout-home", "layout_removed"));
+    await poll(el);
+    expect(layoutNotice(el)).toContain('The home layout "Bar" was removed — showing the default');
+    expect(shortcuts(el)).toEqual([]);
+  });
+
   it("switches silently to the default when the chosen layout was never published", async () => {
     const { el } = await mountApp({
       listDefaultZoneOffers: vi
@@ -1978,6 +2010,31 @@ describe("the device's home layout", () => {
     );
     await toTable(el);
     expect(layoutNotice(el)).toContain("The home layout chosen for the Lunch menu was removed");
+  });
+
+  it("warns once when the counter and the open table both lose the layout they showed", async () => {
+    const shown = laidOut("v1", [HOME, COUNTER], "layout-counter");
+    const removed = laidOut("v2", [HOME], "layout-home", "layout_removed");
+    const inDining = (source: ZoneOfferCatalogue) => ({ ...source, context: DINING.context });
+    const { el } = await mountApp(
+      tableStubs(inDining(removed), {
+        listDefaultZoneOffers: vi.fn().mockResolvedValue(shown),
+        listZoneOffers: vi.fn((zoneId: string) =>
+          Promise.resolve(zoneId === "zone-dining" ? inDining(shown) : shown),
+        ),
+      }),
+    );
+    await toTable(el);
+    api.listZoneOffers.mockImplementation((zoneId: string) =>
+      Promise.resolve(zoneId === "zone-dining" ? inDining(removed) : removed),
+    );
+    api.menuState.mockResolvedValue(layoutState("v2", "layout-home", "layout_removed"));
+    await poll(el);
+    expect(api.listZoneOffers).toHaveBeenCalledWith("zone-dining", expect.anything());
+    const lines = el.shadowRoot!.querySelectorAll("[data-layout-notice] [role='status']");
+    expect([...lines].map((line) => line.textContent!.trim())).toEqual([
+      'The home layout "Counter" was removed — showing the default',
+    ]);
   });
 
   it("applies a poll's layout to the open table's menu too", async () => {

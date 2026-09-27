@@ -107,6 +107,22 @@ export class TillMenuBrowser extends LitElement {
         gap: var(--wt-space-3);
       }
 
+      /* Up to --columns tracks, and fewer wherever a tile would be narrower than a two-line word
+         needs. auto-fill keeps a track's width the same however many tiles there are, so the tiles
+         fill the grid row by row, in order, at every count. */
+      .grid.counted {
+        grid-template-columns: repeat(
+          auto-fill,
+          minmax(
+            max(
+              calc(var(--wt-tap-min) * 2 + var(--wt-space-4)),
+              calc((100% - (var(--columns) - 1) * var(--wt-space-3)) / var(--columns))
+            ),
+            1fr
+          )
+        );
+      }
+
       .tile {
         width: 100%;
       }
@@ -117,12 +133,21 @@ export class TillMenuBrowser extends LitElement {
         padding: var(--wt-space-2);
       }
 
+      /* A word breaks only when it is wider than the whole tile; the icon sits above the name, so
+         it never takes the name's width. */
       .label {
         display: flex;
         flex-direction: column;
         align-items: center;
+        min-width: 0;
         text-align: center;
-        overflow-wrap: anywhere;
+        overflow-wrap: break-word;
+      }
+
+      /* A centred column item is as wide as its longest word, so without this a word wider than
+         the tile would spill out of it instead of breaking. */
+      .label > * {
+        max-width: 100%;
       }
 
       .name {
@@ -131,6 +156,7 @@ export class TillMenuBrowser extends LitElement {
 
       .price,
       .kind,
+      .sold-out,
       .empty {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
@@ -266,31 +292,30 @@ export class TillMenuBrowser extends LitElement {
     return descriptionFor(section.names, section.internalName);
   }
 
+  #gridClass(): string {
+    return this.columns === undefined ? "grid" : "grid counted";
+  }
+
   #gridStyle(): string | typeof nothing {
-    return this.columns === undefined
-      ? nothing
-      : `grid-template-columns: repeat(${this.columns}, 1fr);`;
+    return this.columns === undefined ? nothing : `--columns: ${this.columns};`;
   }
 
   #productButton(product: TillProduct, onTap: () => void): TemplateResult {
     const price = `${formatMoney(product.unitPrice, currentLocale())}/${unitName(product)}`;
-    return html`<wt-button
-      class="tile"
-      data-kind="product"
-      ?disabled=${!hasSomethingToSell(product)}
-      @click=${onTap}
-    >
+    const sellable = hasSomethingToSell(product);
+    return html`<wt-button class="tile" data-kind="product" ?disabled=${!sellable} @click=${onTap}>
       <span class="label">
         <span class="name">${productName(product)}</span>
         <span class="price">${price}</span>
+        ${sellable ? nothing : html`<span class="sold-out">${t("menu.sold_out")}</span>`}
       </span>
     </wt-button>`;
   }
 
   #sectionButton(section: SectionNode, onTap: () => void): TemplateResult {
     return html`<wt-button class="tile" data-kind="section" @click=${onTap}>
-      <wt-icon name="menu-section"></wt-icon>
       <span class="label">
+        <wt-icon name="menu-section"></wt-icon>
         <span class="name">${this.#sectionName(section)}</span>
         <span class="kind">${t("menu.section")}</span>
       </span>
@@ -299,7 +324,7 @@ export class TillMenuBrowser extends LitElement {
 
   /** A list's members as buttons, in order; `path` is where a section member opens beneath. */
   #members(members: DocumentMember[], path: string[], index: MenuIndex): TemplateResult {
-    return html`<div class="grid" style=${this.#gridStyle()}>
+    return html`<div class=${this.#gridClass()} style=${this.#gridStyle()}>
       ${members.map((member) => {
         if (member.kind === "section") {
           if (!index.sections.has(member.sectionId)) return nothing;
@@ -319,7 +344,7 @@ export class TillMenuBrowser extends LitElement {
     return html`
       <section data-region="shortcuts" aria-labelledby="shortcuts-heading">
         <h2 id="shortcuts-heading">${t("menu.shortcuts")}</h2>
-        <div class="grid" style=${this.#gridStyle()}>
+        <div class=${this.#gridClass()} style=${this.#gridStyle()}>
           ${(layout?.tiles ?? []).map((tile) => {
             if (tile.kind === "section") {
               const section = index.sections.get(tile.sectionId);
@@ -378,7 +403,7 @@ export class TillMenuBrowser extends LitElement {
       ${
         found.length === 0
           ? html`<p class="empty">${t("menu.no_results")}</p>`
-          : html`<div class="grid" style=${this.#gridStyle()}>
+          : html`<div class=${this.#gridClass()} style=${this.#gridStyle()}>
               ${found.map((product) => this.#productButton(product, () => this.#pick(product)))}
             </div>`
       }

@@ -401,6 +401,7 @@ export const en = {
   "menu.home": "Home",
   "menu.breadcrumb": "Where you are in the menu",
   "menu.not_found": "Not found",
+  "menu.sold_out": "Sold out",
   // `{name}` and `{menu}` are substituted at the call site.
   "home_layout.removed": 'The home layout "{name}" was removed — showing the default',
   "home_layout.removed_unnamed":
@@ -794,6 +795,7 @@ export const es: Record<StringKey, string> = {
   "menu.home": "Inicio",
   "menu.breadcrumb": "Dónde estás en la carta",
   "menu.not_found": "No encontrado",
+  "menu.sold_out": "Agotado",
   "home_layout.removed":
     "Se ha eliminado la página de inicio «{name}»: se muestra la predeterminada",
   "home_layout.removed_unnamed":
