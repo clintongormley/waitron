@@ -7,6 +7,7 @@ import {
   MANUAL_PROVIDER,
   assertReversible,
   findPaymentByBillPayment,
+  recordManualRefund,
   recordRefund,
   recordedRefundRefs,
 } from "@waitron/payments";
@@ -474,13 +475,6 @@ export async function refundBillPayment(
 ): Promise<BillRefundResult> {
   const applied = money(decimal(req.appliedAmount));
   const tip = money(decimal(req.tipAmount));
-  const print = refundFingerprint(
-    paymentId,
-    req.appliedAmount,
-    req.tipAmount,
-    req.reason,
-    req.manualConfirmed,
-  );
   let release = (): void => {};
   try {
     const begun = await withTransaction(deps.db, async (tx) => {
@@ -496,6 +490,15 @@ export async function refundBillPayment(
           and(eq(billPayments.id, paymentId), eq(billPayments.workingOrderId, workingOrderId)),
         );
       if (payment === undefined) throw new AppError("bill.payment_not_found", { paymentId });
+      const provided =
+        payment.method === "card" ? await findPaymentByBillPayment(tx, paymentId) : undefined;
+      const print = refundFingerprint(
+        paymentId,
+        req.appliedAmount,
+        req.tipAmount,
+        req.reason,
+        provided?.provider === MANUAL_PROVIDER && req.manualConfirmed === true,
+      );
 
       const earlier = await findSubmission(tx, workingOrderId, req.submissionId);
       if (earlier.refund !== undefined) {
@@ -564,7 +567,6 @@ export async function refundBillPayment(
         return { kind: "done" as const, result: await resultOf(tx, refund!, workingOrderId) };
       }
 
-      const provided = await findPaymentByBillPayment(tx, paymentId);
       if (provided?.provider === MANUAL_PROVIDER && req.manualConfirmed === true) {
         let confirmedBy = authorization.authorizedBy;
         if (!authorization.viaOverride) {
@@ -590,8 +592,7 @@ export async function refundBillPayment(
             completedAt: createdAt,
           })
           .returning();
-        await recordRefund(tx, {
-          provider: provided.provider,
+        await recordManualRefund(tx, {
           paymentRef: provided.paymentRef,
           amount: centsToDecimal(values.appliedAmount + values.tipAmount),
           authorizedBy: confirmedBy,

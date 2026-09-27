@@ -2275,7 +2275,13 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - **A hand-keyed card payment can be refunded before the invoice** (lane D item B14a,
       owner's choice). Staff first give the money back on the separate terminal, then explicitly
       confirm the completed refund with a manager's PIN. The server records it on the bill and the
-      manual payment in one transaction; Task 15 will supply the till screen for that confirmation.
+      manual payment in one transaction. Task 15 must put the terminal-refund instruction beside
+      the manager-PIN confirmation on the till; the till has no bill-refund action yet.
+    - **Investigate bill receipt tender order under close payment timings.** On B14a, the focused
+      two-file server refund run twice printed the first cash tender before the earlier card tender
+      in `bill-refunds.card.test.ts`'s invoice case, then passed on a later run. The same case passed
+      alone. `readBillTenderLines` orders by settlement timestamp and tender id; capture the
+      timestamps and ids in a failing run before choosing a fix. No receipt assertion was changed.
     - **Dashboard recovery for a bill's unsettled card payment or refund is done** (lane D item
       B14b): the Payments screen (`apps/dashboard/src/screens/payments-screen.ts`) lists both kinds,
       can ask the provider to resolve one, and lets a manager record a provider-confirmed outcome

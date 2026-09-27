@@ -72,6 +72,7 @@ describe("recordManualCardPayment", () => {
 describe("recordManualRefund", () => {
   it("records a refund under the manual provider and advances the payment to refunded", async () => {
     const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const authorizedBy = "11111111-1111-1111-1111-111111111111";
     const paid = await pg.db.transaction((tx) =>
       recordManualCardPayment(tx, {
         workingOrderId: seeded.workingOrderId,
@@ -83,16 +84,25 @@ describe("recordManualRefund", () => {
       recordManualRefund(tx, {
         paymentRef: paid.paymentRef,
         amount: decimal("20.00"),
+        authorizedBy,
       }),
     );
     expect(refunded.state).toBe("refunded");
 
-    const rows = await pg.db.execute<{ provider: string; amount: number }>(sql`
-      select provider, amount from payment_refunds
+    const rows = await pg.db.execute<{
+      provider: string;
+      amount: number;
+      authorized_by: string | null;
+    }>(sql`
+      select provider, amount, authorized_by from payment_refunds
       where payment_ref = ${paid.paymentRef}
     `);
     expect(rows.rows).toHaveLength(1);
-    expect(rows.rows[0]).toMatchObject({ provider: "manual", amount: 2000 });
+    expect(rows.rows[0]).toMatchObject({
+      provider: "manual",
+      amount: 2000,
+      authorized_by: authorizedBy,
+    });
   });
 
   it("exposes the sentinel provider id as MANUAL_PROVIDER", () => {
