@@ -31,11 +31,20 @@ export {
   applyLiveFields,
   buildMenuDocument,
   diffMenuDocuments,
+  documentOffers,
   menuDocumentHash,
+  readUnavailable,
   type OmittedShortcut,
 } from "./menu-document.js";
 export type * from "./menu-document-types.js";
-export { menuStatus, previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
+export {
+  assertLiveVersions,
+  menuStatus,
+  menusOfVersions,
+  previewMenu,
+  publishMenu,
+  readLiveDocuments,
+} from "./menu-publication.js";
 export * from "./sale-classification.js";
 
 export * from "./option-contract.js";

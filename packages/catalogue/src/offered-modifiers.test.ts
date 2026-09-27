@@ -17,7 +17,7 @@ import { createExtraList, setMenuItemExtraLists, updateExtraList } from "./extra
 import { createOptionList, updateOptionList } from "./options.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { setProductVariants } from "./variants.js";
-import { readOfferedModifiers, resolveAttachedModifiers } from "./offered-modifiers.js";
+import { readOfferedModifiers } from "./offered-modifiers.js";
 import * as extraProjection from "./extra-projection.js";
 import * as productModifiers from "./product-modifiers.js";
 import * as optionsModule from "./options.js";
@@ -530,7 +530,7 @@ describe("one shared resolution for a set of dishes", () => {
 
     // Three dishes, the first twice, so a read that moved inside a per-dish loop would count 3.
     await run(async (tx) => {
-      return resolveAttachedModifiers(tx, [
+      return readOfferedModifiers(tx, [
         { productId: ids.burger, menuItemId: null },
         { productId: ids.burger, menuItemId: null },
         { productId: ids.olives, menuItemId: null },
@@ -558,7 +558,7 @@ describe("one shared resolution for a set of dishes", () => {
     const optionLists = vi.spyOn(optionsModule, "readOptionListsByIds");
 
     await run(async (tx) => {
-      return resolveAttachedModifiers(tx, [
+      return readOfferedModifiers(tx, [
         { productId: ids.burger, menuItemId: offerId },
         { productId: ids.burger, menuItemId: offerId },
       ]);

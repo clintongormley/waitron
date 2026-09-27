@@ -2,19 +2,31 @@ import { sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
+  buildMenuDocument,
   createCatalogue,
   createCategory,
+  createExtraList,
+  createOptionList,
   addMember,
   addProductToMenu,
   createProduct,
   createSection,
+  menuDocumentHash,
+  publishMenu,
   readMenuStructure,
+  setMenuItemExtraLists,
   setProductVariants,
+  updateMenuItem,
+  updateOptionList,
+  updateProduct,
   writeContentLanguages,
+  writeProductModifiers,
 } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  captureError,
   deviceProfiles,
+  engineErrorMessage,
   devices,
   floorZones,
   kitchenStations,
@@ -53,10 +65,10 @@ import {
   replaceDepartmentHours,
   resolvePreparationRoutes,
   resolveNewOrderZone,
-  resolveZoneOffer,
   resolveZoneContext,
   retargetOrderServiceContext,
   setDeviceDefaultZone,
+  menuState,
   updatePreparationRoute,
 } from "./operations.js";
 
@@ -113,6 +125,12 @@ async function seedTill(locationId: LocationId, name: string): Promise<string> {
 const sessionOf = (tx: Transaction) =>
   (tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }).session;
 
+/** Publishes the menu's working state, as the dashboard's preview-then-publish does; the version id. */
+async function publish(tx: Transaction, menuId: string): Promise<string> {
+  const { document } = await buildMenuDocument(tx, menuId);
+  return (await publishMenu(tx, menuId, menuDocumentHash(document), "person-1")).versionId;
+}
+
 async function seedUnitTenant(): Promise<{
   eachUnitId: string;
   kgUnitId: string;
@@ -156,6 +174,7 @@ describe("venue service routing", () => {
         menuName: "Terrace menu",
       };
       // Sections alone sell nothing.
+      await publish(tx, menu.id);
       await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([menuEmpty]);
 
       const product = await createProduct(tx, {
@@ -167,6 +186,7 @@ describe("venue service routing", () => {
         vatClass: "general",
       });
       await addMember(tx, soft.id, { kind: "product", productId: product.id });
+      await publish(tx, menu.id);
       await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
         {
           code: "zone.route_missing",
@@ -212,6 +232,10 @@ describe("venue service routing", () => {
         makeDefault: true,
       });
       await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
+        { code: "zone.menu_unpublished", zoneId: zone, zoneName: "Terrace" },
+      ]);
+      await publish(tx, menu.id);
+      await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
         {
           code: "zone.menu_empty",
           zoneId: zone,
@@ -236,6 +260,7 @@ describe("venue service routing", () => {
         productId: product.id,
         grossPrice: "3.00",
       });
+      await publish(tx, menu.id);
       await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
         {
           code: "zone.route_missing",
@@ -262,6 +287,7 @@ describe("venue service routing", () => {
       ]);
       // A blank staff name falls back to the product id.
       await tx.execute(sql`update products set name = '' where id = ${product.id}`);
+      await publish(tx, menu.id);
       await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
         {
           code: "zone.route_missing",
@@ -436,6 +462,8 @@ describe("venue service routing", () => {
       await allowMenuInZone(tx, { locationId }, zone, menu.id, {
         makeDefault: true,
       });
+      const versionId = await publish(tx, menu.id);
+      await publish(tx, hiddenMenu.id);
       await tx.execute(sql`
         update zone_service_policies set is_counter_default = true
         where zone_id = ${zone}`);
@@ -464,9 +492,13 @@ describe("venue service routing", () => {
         lineTotal: 623,
         category: "Cold cuts",
       });
-      await recordWorkingLineContexts(tx, { locationId }, "00000000-0000-4000-8000-000000000001", [
-        { workingOrderLineId: workingLineId, menuItemId: offer.id },
-      ]);
+      await recordWorkingLineContexts(
+        tx,
+        { locationId },
+        "00000000-0000-4000-8000-000000000001",
+        [{ workingOrderLineId: workingLineId, menuItemId: offer.id }],
+        await listZoneOffers(tx, { locationId }, zone),
+      );
       await configureZone(
         tx,
         { locationId },
@@ -489,7 +521,9 @@ describe("venue service routing", () => {
       });
       const visible = await listZoneOffers(tx, { locationId }, zone);
       expect(visible.defaultMenuId).toBe(menu.id);
-      expect(visible.menus).toEqual([{ id: menu.id, name: "Deli takeaway", isDefault: true }]);
+      expect(visible.menus).toEqual([
+        { id: menu.id, name: "Deli takeaway", isDefault: true, versionId },
+      ]);
       await expect(resolveNewOrderZone(tx, { locationId }, {})).resolves.toMatchObject({
         zoneId: zone,
         departmentId: department.id,
@@ -501,13 +535,15 @@ describe("venue service routing", () => {
         productId: ham.id,
         grossPrice: "24.90",
       });
-      await expect(resolveZoneOffer(tx, { locationId }, zone, offer.id)).resolves.toMatchObject({
-        id: offer.id,
-        productId: ham.id,
-        grossPrice: "24.90",
-      });
+      // Published, but on a menu the zone does not sell.
       await expect(
-        resolveZoneOffer(tx, { locationId }, zone, hiddenOffer.id),
+        recordWorkingLineContexts(
+          tx,
+          { locationId },
+          "00000000-0000-4000-8000-000000000001",
+          [{ workingOrderLineId: workingLineId, menuItemId: hiddenOffer.id }],
+          visible,
+        ),
       ).rejects.toMatchObject({ code: "service_zone.offer_not_allowed" });
       await tx.execute(sql`
         update catalogues set name = 'Renamed menu'
@@ -621,6 +657,7 @@ describe("venue service routing", () => {
       await allowMenuInZone(tx, { locationId }, zone, menu.id, {
         makeDefault: true,
       });
+      await publish(tx, menu.id);
       await tx.execute(sql`
         update zone_service_policies set is_counter_default = true
         where zone_id = ${zone}`);
@@ -647,9 +684,13 @@ describe("venue service routing", () => {
       });
 
       await expect(
-        recordWorkingLineContexts(tx, { locationId }, orderId, [
-          { workingOrderLineId: workingLineId, menuItemId: offer.id },
-        ]),
+        recordWorkingLineContexts(
+          tx,
+          { locationId },
+          orderId,
+          [{ workingOrderLineId: workingLineId, menuItemId: offer.id }],
+          await listZoneOffers(tx, { locationId }, zone),
+        ),
       ).resolves.not.toThrow();
 
       const ctx = await tx.execute<{ unit_id: string }>(sql`
@@ -713,9 +754,10 @@ describe("venue service routing", () => {
         },
       );
       await allowMenuInZone(tx, { locationId }, zone, menu.id);
+      const versionId = await publish(tx, menu.id);
       await expect(listZoneOffers(tx, { locationId }, zone)).resolves.toEqual({
         defaultMenuId: null,
-        menus: [{ id: menu.id, name: "Terrace", isDefault: false }],
+        menus: [{ id: menu.id, name: "Terrace", isDefault: false, versionId }],
         offers: [],
       });
       await expect(
@@ -1152,6 +1194,7 @@ describe("resolvePreparationRoutes", () => {
         });
       }
       await allowMenuInZone(tx, cfg, zoneId, menu.id, { makeDefault: true });
+      await publish(tx, menu.id);
       // The second zone is left without a menu so only the first zone's routes are reported.
       await createPreparationRoute(tx, cfg, { productId: ok.id, target: station(grill) });
       await createPreparationRoute(tx, cfg, { productId: inactive.id, target: station(closedBar) });
@@ -1177,9 +1220,9 @@ describe("resolvePreparationRoutes", () => {
     });
   });
 
-  // The till never offers a sold-out (Unavailable) product, but readiness is a setup
-  // check, so a menu whose only product is sold out is not empty and that product still needs a route.
-  it("sells no Unavailable product in a zone while readiness still judges its setup", async () => {
+  // A sold-out (Unavailable) product is served marked, in its place, so a menu whose only product is
+  // sold out is not empty and that product still needs a route.
+  it("serves an Unavailable product marked while readiness still judges its setup", async () => {
     const { cfg, zoneId, otherZoneId } = await seedRoutingVenue();
     await scoped(async (tx) => {
       const menu = await createCatalogue(tx, { name: "Tapas" });
@@ -1198,11 +1241,10 @@ describe("resolvePreparationRoutes", () => {
         grossPrice: "6.00",
       });
       await allowMenuInZone(tx, cfg, zoneId, menu.id, { makeDefault: true });
+      await publish(tx, menu.id);
 
-      expect((await listZoneOffers(tx, cfg, zoneId)).offers).toEqual([]);
-      await expect(resolveZoneOffer(tx, cfg, zoneId, offer.id)).rejects.toMatchObject({
-        code: "service_zone.offer_not_allowed",
-      });
+      const served = (await listZoneOffers(tx, cfg, zoneId)).offers;
+      expect(served.map((row) => [row.id, row.available])).toEqual([[offer.id, false]]);
       await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([
         { code: "zone.menu_missing", zoneId: otherZoneId, zoneName: "Terrace" },
         {
@@ -1215,9 +1257,9 @@ describe("resolvePreparationRoutes", () => {
       ]);
 
       await tx.execute(sql`update products set available = true where id = ${croquetas.id}`);
-      expect((await listZoneOffers(tx, cfg, zoneId)).offers.map((row) => row.id)).toEqual([
-        offer.id,
-      ]);
+      expect(
+        (await listZoneOffers(tx, cfg, zoneId)).offers.map((row) => [row.id, row.available]),
+      ).toEqual([[offer.id, true]]);
     });
   });
 });
@@ -1295,8 +1337,11 @@ async function seedSellingVenue() {
     for (const zoneId of [diningZone, barZone]) {
       await allowMenuInZone(tx, cfg, zoneId, menu.id, { makeDefault: true });
     }
+    const versionId = await publish(tx, menu.id);
     return {
       cfg,
+      menuId: menu.id,
+      versionId,
       diningZone,
       barZone,
       restaurantId: restaurant.id,
@@ -1395,9 +1440,13 @@ describe("order service context", () => {
       const orderId = await openOrder(tx, venue, 1);
       await recordOrderServiceContext(tx, cfg, orderId, venue.diningZone);
       const lineId = await addLine(tx, venue, orderId, 1);
-      await recordWorkingLineContexts(tx, cfg, orderId, [
-        { workingOrderLineId: lineId, menuItemId: venue.menuItemId },
-      ]);
+      await recordWorkingLineContexts(
+        tx,
+        cfg,
+        orderId,
+        [{ workingOrderLineId: lineId, menuItemId: venue.menuItemId }],
+        await listZoneOffers(tx, cfg, venue.diningZone),
+      );
 
       await retargetOrderServiceContext(tx, cfg, orderId, venue.barZone);
 
@@ -1420,15 +1469,22 @@ describe("order service context", () => {
     const { cfg } = venue;
     await scoped(async (tx) => {
       const orderId = await openOrder(tx, venue, 1);
-      await expect(recordWorkingLineContexts(tx, cfg, orderId, [])).resolves.toBeUndefined();
+      const offers = await listZoneOffers(tx, cfg, venue.diningZone);
+      await expect(
+        recordWorkingLineContexts(tx, cfg, orderId, [], offers),
+      ).resolves.toBeUndefined();
 
       // Control: a round with a line on the same order needs the context the order lacks.
       const lineId = await addLine(tx, venue, orderId, 1);
       await expect(
         rejection(
-          recordWorkingLineContexts(tx, cfg, orderId, [
-            { workingOrderLineId: lineId, menuItemId: venue.menuItemId },
-          ]),
+          recordWorkingLineContexts(
+            tx,
+            cfg,
+            orderId,
+            [{ workingOrderLineId: lineId, menuItemId: venue.menuItemId }],
+            offers,
+          ),
         ),
       ).resolves.toEqual({
         code: "order.service_context_missing",
@@ -1453,12 +1509,13 @@ describe("order service context", () => {
         workingOrderLineId,
         menuItemId: venue.menuItemId,
       });
+      const offers = await listZoneOffers(tx, cfg, venue.diningZone);
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
 
-      await recordWorkingLineContexts(tx, cfg, orderId, [line(first!)]);
+      await recordWorkingLineContexts(tx, cfg, orderId, [line(first!)], offers);
       const oneLine = prepared.mock.calls.length;
       prepared.mockClear();
-      await recordWorkingLineContexts(tx, cfg, orderId, [line(second!), line(third!)]);
+      await recordWorkingLineContexts(tx, cfg, orderId, [line(second!), line(third!)], offers);
       expect(prepared).toHaveBeenCalledTimes(oneLine);
 
       const recorded = await listWorkingLineContexts(tx, cfg, orderId);
@@ -1558,6 +1615,514 @@ describe("preparation route writes", () => {
       );
       await expect(listPreparationRoutes(tx, cfg)).resolves.toEqual([
         expect.objectContaining({ id: routeId, zoneId: null, productId: steak.id }),
+      ]);
+    });
+  });
+});
+
+const NO_ICE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const WITH_ICE = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+
+/**
+ * {@link seedSellingVenue}'s dining room with a second published menu, Dinner, after All day:
+ * Lemonade at 3.00 with its Large variant, an extras list offering Extra lemon and Extra mint, and
+ * an options list; and Burger.
+ */
+async function seedTwoMenuVenue() {
+  const venue = await seedSellingVenue();
+  const { cfg } = venue;
+  return scoped(async (tx) => {
+    const dinner = await createCatalogue(tx, { name: "Dinner" });
+    const make = async (name: string, unitPrice: string) =>
+      (
+        await createProduct(tx, {
+          catalogueId: dinner.id,
+          categoryId: null,
+          name,
+          pricingUnit: "each",
+          unitPrice,
+          vatClass: "general",
+          allergens: {},
+        })
+      ).id;
+    const lemonade = await make("Lemonade", "3.00");
+    const [large] = await setProductVariants(
+      tx,
+      lemonade,
+      [
+        {
+          name: "Large",
+          customerName: null,
+          kitchenName: null,
+          image: null,
+          unitPrice: "3.50",
+          available: true,
+        },
+      ],
+      "en",
+    );
+    const burger = await make("Burger", "12.00");
+    const extraLemon = await make("Extra lemon", "0.50");
+    const extraMint = await make("Extra mint", "0.50");
+    const offMenu = await make("Off menu", "1.00");
+    const extrasList = (
+      await createExtraList(
+        tx,
+        {
+          name: "Extras",
+          minPicks: 0,
+          maxPicks: 2,
+          items: [
+            { productId: extraLemon, price: "0.40" },
+            { productId: extraMint, price: "0.40" },
+          ],
+        },
+        "en",
+      )
+    ).id;
+    const iceList = (
+      await createOptionList(
+        tx,
+        {
+          name: "Ice",
+          defaultLabelId: NO_ICE,
+          labels: [
+            { id: NO_ICE, name: "No ice", available: true },
+            { id: WITH_ICE, name: "With ice", available: true },
+          ],
+        },
+        "en",
+      )
+    ).id;
+    await writeProductModifiers(tx, lemonade, [
+      { kind: "extras", id: extrasList },
+      { kind: "options", id: iceList },
+    ]);
+    const lemonadeOffer = (await addProductToMenu(tx, { menuId: dinner.id, productId: lemonade }))
+      .id;
+    await setMenuItemExtraLists(tx, lemonadeOffer, [{ listId: extrasList, items: [] }]);
+    const burgerOffer = (await addProductToMenu(tx, { menuId: dinner.id, productId: burger })).id;
+    await allowMenuInZone(tx, cfg, venue.diningZone, dinner.id, { displayOrder: 1 });
+    return {
+      ...venue,
+      dinner: dinner.id,
+      dinnerVersionId: await publish(tx, dinner.id),
+      lemonade,
+      large: large!.id,
+      burger,
+      extraLemon,
+      extraMint,
+      offMenu,
+      extrasList,
+      iceList,
+      lemonadeOffer,
+      burgerOffer,
+    };
+  });
+}
+
+describe("zone offers from the published menus", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("records a round's line snapshots in as many queries however many distinct offers it holds", async () => {
+    const venue = await seedTwoMenuVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      const orderId = await openOrder(tx, venue, 1);
+      await recordOrderServiceContext(tx, cfg, orderId, venue.diningZone);
+      const lineIds = [];
+      for (const lineNo of [1, 2, 3, 4]) lineIds.push(await addLine(tx, venue, orderId, lineNo));
+      const offers = await listZoneOffers(tx, cfg, venue.diningZone);
+      const round = (lines: { workingOrderLineId: string; menuItemId: string }[]) =>
+        recordWorkingLineContexts(tx, cfg, orderId, lines, offers);
+      const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
+
+      await round([{ workingOrderLineId: lineIds[0]!, menuItemId: venue.menuItemId }]);
+      const oneOffer = prepared.mock.calls.length;
+      prepared.mockClear();
+      // Three different offers, from two menus' versions.
+      await round([
+        { workingOrderLineId: lineIds[1]!, menuItemId: venue.menuItemId },
+        { workingOrderLineId: lineIds[2]!, menuItemId: venue.lemonadeOffer },
+        { workingOrderLineId: lineIds[3]!, menuItemId: venue.burgerOffer },
+      ]);
+      expect(prepared).toHaveBeenCalledTimes(oneOffer);
+    });
+  });
+
+  it("records the version each line's offer was served from, and refuses an offer the snapshot lacks", async () => {
+    const venue = await seedTwoMenuVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      const orderId = await openOrder(tx, venue, 1);
+      await recordOrderServiceContext(tx, cfg, orderId, venue.diningZone);
+      const [allDay, dinner, stranger] = [
+        await addLine(tx, venue, orderId, 1),
+        await addLine(tx, venue, orderId, 2),
+        await addLine(tx, venue, orderId, 3),
+      ];
+      const offers = await listZoneOffers(tx, cfg, venue.diningZone);
+      await recordWorkingLineContexts(
+        tx,
+        cfg,
+        orderId,
+        [
+          { workingOrderLineId: allDay!, menuItemId: venue.menuItemId },
+          { workingOrderLineId: dinner!, menuItemId: venue.burgerOffer },
+        ],
+        offers,
+      );
+      const recorded = await tx.execute<{ working_order_line_id: string; menu_version_id: string }>(
+        sql`select working_order_line_id, menu_version_id from working_line_contexts`,
+      );
+      expect(
+        recorded.rows.map((row) => [row.working_order_line_id, row.menu_version_id]).sort(),
+      ).toEqual(
+        [
+          [allDay, venue.versionId],
+          [dinner, venue.dinnerVersionId],
+        ].sort(),
+      );
+
+      await expect(
+        rejection(
+          recordWorkingLineContexts(
+            tx,
+            cfg,
+            orderId,
+            [{ workingOrderLineId: stranger!, menuItemId: UNKNOWN_ID }],
+            offers,
+          ),
+        ),
+      ).resolves.toEqual({
+        code: "service_zone.offer_not_allowed",
+        params: { zoneId: venue.diningZone, menuItemId: UNKNOWN_ID },
+      });
+
+      await expect(
+        recordWorkingLineContexts(
+          tx,
+          cfg,
+          orderId,
+          [{ workingOrderLineId: stranger!, menuItemId: venue.menuItemId }],
+          { ...offers, menus: [] },
+        ),
+      ).rejects.toThrow(/no live version/);
+
+      const noSuchVersion = await captureError(() =>
+        recordWorkingLineContexts(
+          tx,
+          cfg,
+          orderId,
+          [{ workingOrderLineId: stranger!, menuItemId: venue.menuItemId }],
+          { ...offers, menus: offers.menus.map((menu) => ({ ...menu, versionId: UNKNOWN_ID })) },
+        ),
+      );
+      expect(engineErrorMessage(noSuchVersion)).toContain("FOREIGN KEY constraint failed");
+    });
+  });
+
+  it("serves each menu's live version, not its working state, with the version id", async () => {
+    const venue = await seedTwoMenuVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      await updateMenuItem(tx, venue.dinner, venue.lemonadeOffer, { grossPrice: "2.50" });
+      await updateProduct(tx, venue.lemonade, {
+        allergens: { sulphites: { presence: "contains" } },
+      });
+
+      const served = await listZoneOffers(tx, cfg, venue.diningZone);
+      expect(served.menus).toEqual([
+        { id: venue.menuId, name: "All day", isDefault: true, versionId: venue.versionId },
+        { id: venue.dinner, name: "Dinner", isDefault: false, versionId: venue.dinnerVersionId },
+      ]);
+      const lemonade = served.offers.find((offer) => offer.id === venue.lemonadeOffer)!;
+      expect(lemonade).toMatchObject({ unitPrice: "3.00", allergens: {}, available: true });
+
+      const republished = await publish(tx, venue.dinner);
+      const after = await listZoneOffers(tx, cfg, venue.diningZone);
+      expect(after.menus[1]).toMatchObject({ id: venue.dinner, versionId: republished });
+      expect(after.offers.find((offer) => offer.id === venue.lemonadeOffer)).toMatchObject({
+        unitPrice: "2.50",
+        allergens: { sulphites: { presence: "contains" } },
+      });
+    });
+  });
+
+  it("serves an unavailable or inactive product marked, in its place", async () => {
+    const venue = await seedTwoMenuVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      const before = (await listZoneOffers(tx, cfg, venue.diningZone)).offers.map((o) => o.id);
+      expect(before).toEqual([venue.menuItemId, venue.lemonadeOffer, venue.burgerOffer]);
+      await updateProduct(tx, venue.lemonade, { available: false });
+      await updateProduct(tx, venue.burger, { active: false });
+
+      const served = (await listZoneOffers(tx, cfg, venue.diningZone)).offers;
+      expect(served.map((offer) => [offer.id, offer.available])).toEqual([
+        [venue.menuItemId, true],
+        [venue.lemonadeOffer, false],
+        [venue.burgerOffer, false],
+      ]);
+    });
+  });
+
+  it("leaves a zone's unpublished menus out, and falls back to its first published menu", async () => {
+    const venue = await seedTwoMenuVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      const brunch = await createCatalogue(tx, { name: "Brunch" });
+      await allowMenuInZone(tx, cfg, venue.diningZone, brunch.id, { makeDefault: true });
+      const served = await listZoneOffers(tx, cfg, venue.diningZone);
+      expect(served.defaultMenuId).toBe(venue.menuId);
+      expect(served.menus.map((menu) => [menu.id, menu.isDefault])).toEqual([
+        [venue.menuId, true],
+        [venue.dinner, false],
+      ]);
+
+      // The bar zone sells All day alone; with only an unpublished menu it sells nothing.
+      await allowMenuInZone(tx, cfg, venue.barZone, brunch.id, { makeDefault: true });
+      await tx.execute(
+        sql`delete from zone_menus where zone_id = ${venue.barZone} and menu_id = ${venue.menuId}`,
+      );
+      await expect(listZoneOffers(tx, cfg, venue.barZone)).resolves.toEqual({
+        defaultMenuId: null,
+        menus: [],
+        offers: [],
+      });
+    });
+  });
+
+  it("reports a zone whose menus are all unpublished, and judges emptiness on the live version", async () => {
+    const venue = await seedTwoMenuVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      for (const productId of [venue.productId, venue.lemonade, venue.burger])
+        await createPreparationRoute(tx, cfg, { productId, target: { kind: "no_preparation" } });
+      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([]);
+
+      const brunch = await createCatalogue(tx, { name: "Brunch" });
+      await allowMenuInZone(tx, cfg, venue.barZone, brunch.id, { makeDefault: true });
+      await tx.execute(
+        sql`delete from zone_menus where zone_id = ${venue.barZone} and menu_id = ${venue.menuId}`,
+      );
+      // The dining room's unpublished Brunch is beside published menus, so it is not reported.
+      await allowMenuInZone(tx, cfg, venue.diningZone, brunch.id);
+      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([
+        { code: "zone.menu_unpublished", zoneId: venue.barZone, zoneName: "Bar" },
+      ]);
+
+      await publish(tx, brunch.id);
+      const brunchEmpty = (zoneId: string, zoneName: string) => ({
+        code: "zone.menu_empty",
+        zoneId,
+        zoneName,
+        menuId: brunch.id,
+        menuName: "Brunch",
+      });
+      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([
+        brunchEmpty(venue.barZone, "Bar"),
+        brunchEmpty(venue.diningZone, "Dining room"),
+      ]);
+
+      // Added to the working state only: the live version is still empty.
+      await addProductToMenu(tx, { menuId: brunch.id, productId: venue.burger });
+      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([
+        brunchEmpty(venue.barZone, "Bar"),
+        brunchEmpty(venue.diningZone, "Dining room"),
+      ]);
+      await publish(tx, brunch.id);
+      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([]);
+    });
+  });
+
+  it("lists what the zone's live menus hold that cannot be sold now, one query per table", async () => {
+    const venue = await seedTwoMenuVenue();
+    await scoped(async (tx) => {
+      const menus = [
+        { menuId: venue.menuId, versionId: venue.versionId },
+        { menuId: venue.dinner, versionId: venue.dinnerVersionId },
+      ];
+      await expect(menuState(tx, venue.diningZone)).resolves.toEqual({
+        menus,
+        unavailable: { products: [], optionLabels: [], extraItems: [] },
+      });
+
+      await updateProduct(tx, venue.burger, { available: false });
+      await updateProduct(tx, venue.productId, { active: false });
+      await tx.execute(sql`update products set available = false where id = ${venue.large}`);
+      await updateProduct(tx, venue.extraMint, { available: false });
+      await updateProduct(tx, venue.offMenu, { available: false });
+      await updateOptionList(
+        tx,
+        venue.iceList,
+        {
+          name: "Ice",
+          defaultLabelId: NO_ICE,
+          labels: [
+            { id: NO_ICE, name: "No ice", available: true },
+            { id: WITH_ICE, name: "With ice", available: false },
+          ],
+        },
+        "en",
+      );
+      // Neither is in a live version: a list the offer publishes only in its working state, and a
+      // list no offer carries.
+      const sides = (
+        await createExtraList(
+          tx,
+          { name: "Sides", minPicks: 0, maxPicks: 1, items: [{ productId: venue.burger }] },
+          "en",
+        )
+      ).id;
+      await writeProductModifiers(tx, venue.lemonade, [
+        { kind: "extras", id: venue.extrasList },
+        { kind: "extras", id: sides },
+        { kind: "options", id: venue.iceList },
+      ]);
+      await createOptionList(
+        tx,
+        {
+          name: "Sauce",
+          labels: [
+            { id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", name: "Aioli", available: false },
+            { id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", name: "Ketchup", available: true },
+          ],
+        },
+        "en",
+      );
+      await setMenuItemExtraLists(tx, venue.lemonadeOffer, [
+        {
+          listId: venue.extrasList,
+          items: [{ productId: venue.extraLemon, price: null, available: false }],
+        },
+        { listId: sides, items: [{ productId: venue.burger, price: null, available: false }] },
+      ]);
+
+      const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
+      const { menus: served, unavailable } = await menuState(tx, venue.diningZone);
+      // The zone's menus, their live versions, then products, option labels and extras items.
+      expect(prepared).toHaveBeenCalledTimes(5);
+      expect(served).toEqual(menus);
+      expect({ ...unavailable, products: [...unavailable.products].sort() }).toEqual({
+        products: [venue.productId, venue.burger, venue.large, venue.extraMint].sort(),
+        optionLabels: [WITH_ICE],
+        extraItems: [
+          {
+            menuItemId: venue.lemonadeOffer,
+            productId: venue.extraLemon,
+            extraListId: venue.extrasList,
+          },
+        ],
+      });
+      await expect(menuState(tx, UNKNOWN_ID)).resolves.toEqual({
+        menus: [],
+        unavailable: { products: [], optionLabels: [], extraItems: [] },
+      });
+    });
+  });
+
+  it("lists an option label deleted since publishing, which the served offer marks unavailable", async () => {
+    const venue = await seedTwoMenuVenue();
+    await scoped(async (tx) => {
+      await updateOptionList(
+        tx,
+        venue.iceList,
+        {
+          name: "Ice",
+          defaultLabelId: NO_ICE,
+          labels: [{ id: NO_ICE, name: "No ice", available: true }],
+        },
+        "en",
+      );
+      expect((await menuState(tx, venue.diningZone)).unavailable.optionLabels).toEqual([WITH_ICE]);
+      const lemonade = (await listZoneOffers(tx, venue.cfg, venue.diningZone)).offers.find(
+        (offer) => offer.id === venue.lemonadeOffer,
+      )!;
+      const ice = lemonade.offeredModifiers.find((entry) => entry.kind === "options")!;
+      expect(
+        ice.kind === "options" && ice.labels.map((label) => [label.id, label.available]),
+      ).toEqual([
+        [NO_ICE, true],
+        [WITH_ICE, false],
+      ]);
+    });
+  });
+
+  it("serves only the offers named, as the whole zone serves them, with every menu listed", async () => {
+    const venue = await seedTwoMenuVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      await updateProduct(tx, venue.extraMint, { available: false });
+      const whole = await listZoneOffers(tx, cfg, venue.diningZone);
+      const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
+      const named = await listZoneOffers(tx, cfg, venue.diningZone, {
+        menuItemIds: [venue.lemonadeOffer, UNKNOWN_ID],
+      });
+      expect(named).toEqual({
+        ...whole,
+        offers: whole.offers.filter((offer) => offer.id === venue.lemonadeOffer),
+      });
+      // The live rows are read for the named offer's products alone.
+      const productReads = prepared.mock.calls
+        .map(([query]) => query as unknown as { sql: string; params: unknown[] })
+        .filter((query) => /from "products"/.test(query.sql));
+      expect(productReads).toHaveLength(1);
+      expect(productReads[0]!.params).not.toContain(venue.burger);
+      expect(productReads[0]!.params).toContain(venue.lemonade);
+    });
+  });
+
+  it("reads the live versions once for every zone, however many share a menu", async () => {
+    const venue = await seedTwoMenuVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      for (const productId of [venue.productId, venue.lemonade, venue.burger])
+        await createPreparationRoute(tx, cfg, { productId, target: { kind: "no_preparation" } });
+      await allowMenuInZone(tx, cfg, venue.barZone, venue.dinner);
+      const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
+      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([]);
+      const sqlOf = prepared.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
+      expect(sqlOf.filter((text) => /from "menu_publications"/.test(text))).toHaveLength(1);
+      expect(sqlOf.filter((text) => /from "zone_menus"/.test(text))).toHaveLength(1);
+    });
+  });
+
+  it("names the list of a withdrawn extras item, so the same product in another list stays offered", async () => {
+    const venue = await seedTwoMenuVenue();
+    await scoped(async (tx) => {
+      const garnish = (
+        await createExtraList(
+          tx,
+          { name: "Garnish", minPicks: 0, maxPicks: 1, items: [{ productId: venue.extraLemon }] },
+          "en",
+        )
+      ).id;
+      await writeProductModifiers(tx, venue.lemonade, [
+        { kind: "extras", id: venue.extrasList },
+        { kind: "extras", id: garnish },
+        { kind: "options", id: venue.iceList },
+      ]);
+      await setMenuItemExtraLists(tx, venue.lemonadeOffer, [
+        { listId: venue.extrasList, items: [] },
+        { listId: garnish, items: [] },
+      ]);
+      await publish(tx, venue.dinner);
+      await setMenuItemExtraLists(tx, venue.lemonadeOffer, [
+        {
+          listId: venue.extrasList,
+          items: [{ productId: venue.extraLemon, price: null, available: false }],
+        },
+        { listId: garnish, items: [] },
+      ]);
+      expect((await menuState(tx, venue.diningZone)).unavailable.extraItems).toEqual([
+        {
+          menuItemId: venue.lemonadeOffer,
+          productId: venue.extraLemon,
+          extraListId: venue.extrasList,
+        },
       ]);
     });
   });

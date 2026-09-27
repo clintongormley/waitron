@@ -12,8 +12,8 @@ import {
   recordWorkingLineContexts,
   resolvePreparationRoutes,
   resolveNewOrderZone,
-  resolveZoneOffer,
   resolveZoneContext,
+  menuState,
 } from "./operations.js";
 import {
   acknowledgeKitchenNotice,
@@ -33,8 +33,8 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   resolveZoneContext,
   resolvePreparationRoutes,
   listZoneOffers,
+  menuState,
   resolveNewOrderZone,
-  resolveZoneOffer,
   recordOrderContext: recordOrderServiceContext,
   retargetOrderContext: retargetOrderServiceContext,
   recordLineContexts: recordWorkingLineContexts,

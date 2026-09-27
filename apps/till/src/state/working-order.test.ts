@@ -434,6 +434,94 @@ describe("WorkingOrderStore", () => {
     expect(s.dirty).toBe(false);
   });
 
+  describe("a basket refreshed against a new menu version", () => {
+    it("adoptLines replaces the named lines, re-prices the total, marks dirty and notifies", () => {
+      const s = new WorkingOrderStore();
+      s.addProduct(cafe, "2");
+      s.addProduct(jamon, "0.500");
+      s.markPersisted();
+      let notified = 0;
+      s.subscribe(() => notified++);
+      s.adoptLines(new Map([[0, { product: { ...cafe, unitPrice: "1.20" }, quantity: "2" }]]));
+      expect(s.lines[0]!.product.unitPrice).toBe("1.20");
+      expect(s.lines[1]!.product).toBe(jamon);
+      expect(s.total).toBe("7.40");
+      expect(s.dirty).toBe(true);
+      expect(notified).toBe(1);
+    });
+
+    it("adoptLines keeps each line's identity, so what is keyed on a line survives", () => {
+      const s = new WorkingOrderStore();
+      s.addProduct(cafe, "1");
+      const [line] = s.lines;
+      s.adoptLines(new Map([[0, { product: { ...cafe, unitPrice: "1.20" }, quantity: "1" }]]));
+      expect(s.lines[0]).toBe(line);
+      expect(line!.product.unitPrice).toBe("1.20");
+    });
+
+    it("removeLines takes out exactly the named lines, whatever was added since", () => {
+      const s = new WorkingOrderStore();
+      s.addProduct(cafe, "1");
+      s.addProduct(jamon, "0.500");
+      const sent = s.lines.slice(0, 1);
+      s.addProduct(cafe, "2");
+      let notified = 0;
+      s.subscribe(() => notified++);
+      s.removeLines(sent);
+      expect(s.lines.map((line) => [line.product.id, line.quantity])).toEqual([
+        ["jamon", "0.500"],
+        ["cafe", "2"],
+      ]);
+      expect(notified).toBe(1);
+    });
+
+    it("refuses every staff edit while it is being sent, and takes them again once it is not", () => {
+      const s = new WorkingOrderStore();
+      s.addProduct(cafe, "1", { note: "sin azúcar" });
+      let notified = 0;
+      s.subscribe(() => notified++);
+      s.sending = true;
+      expect(notified).toBe(1);
+      s.addProduct(jamon, "0.500");
+      s.setLineQuantity(0, "2");
+      s.setLineExtras(0, { note: "con hielo" });
+      s.setLineModifiers(0, { options: [{ listId: "l", labelId: "x" }] });
+      s.removeLine(0);
+      expect(s.lines).toEqual([{ product: cafe, quantity: "1", note: "sin azúcar" }]);
+      s.sending = false;
+      s.setLineQuantity(0, "2");
+      expect(s.lines[0]!.quantity).toBe("2");
+    });
+
+    it("setBlocked marks and clears lines, notifying only when a mark changed, never marking dirty", () => {
+      const s = new WorkingOrderStore();
+      s.addProduct(cafe, "1");
+      s.addProduct(jamon, "0.500");
+      s.markPersisted();
+      let notified = 0;
+      s.subscribe(() => notified++);
+      s.setBlocked([undefined, "unavailable"]);
+      expect(s.lines.map((line) => line.blocked)).toEqual([undefined, "unavailable"]);
+      expect(notified).toBe(1);
+      s.setBlocked([undefined, "unavailable"]);
+      expect(notified).toBe(1);
+      s.setBlocked([undefined, undefined]);
+      expect(s.lines[1]).not.toHaveProperty("blocked");
+      expect(notified).toBe(2);
+      expect(s.dirty).toBe(false);
+    });
+
+    it("setBlocked without notify marks the line and tells no listener", () => {
+      const s = new WorkingOrderStore();
+      s.addProduct(cafe, "1");
+      let notified = 0;
+      s.subscribe(() => notified++);
+      s.setBlocked(["unavailable"], false);
+      expect(s.lines[0]!.blocked).toBe("unavailable");
+      expect(notified).toBe(0);
+    });
+  });
+
   describe("extras picked on a basket line", () => {
     // A +0.50 gross pick.
     const oatMilk: SelectedExtra = {

@@ -14,6 +14,8 @@ import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import { StoreChangeController } from "../state/store-controller.js";
 import type { LineSelection, OrderLine, WorkingOrderStore } from "../state/working-order.js";
+import type { BlockReason } from "../state/menu-refresh.js";
+import type { StringKey } from "../i18n/strings.js";
 import { lineProductName, productUnit } from "./product-name.js";
 
 /** The same `×` (U+00D7) the printed receipt and the settled-ticket view use. */
@@ -25,6 +27,19 @@ function pickQuantityBadge(quantity: number): string {
 
 function notOfferedMarker() {
   return html` <span class="not-offered">${t("basket.not_offered")}</span>`;
+}
+
+const BLOCKED_WORDS: Record<BlockReason, StringKey> = {
+  removed: "basket.blocked.removed",
+  variant_removed: "basket.blocked.removed",
+  unavailable: "basket.blocked.unavailable",
+  extra_removed: "basket.blocked.extra",
+  extra_unavailable: "basket.blocked.extra",
+};
+
+/** A line a menu change stops being paid until it is removed or replaced (D9). */
+function blockedMarker(reason: BlockReason) {
+  return html` <span class="not-offered">${t(BLOCKED_WORDS[reason])}</span>`;
 }
 
 /**
@@ -122,6 +137,7 @@ export class TillBasket extends LitElement {
 
       .not-offered {
         display: inline-block;
+        overflow-wrap: normal;
         padding: 0 var(--wt-space-2);
         border-radius: var(--wt-radius-sm);
         background: var(--wt-color-warning);
@@ -305,8 +321,10 @@ export class TillBasket extends LitElement {
       ${lines.map(
         (line, index) => html`
           <div class="line">
-            <span class="name"
-              >${this.#lineName(line)}${line.notOffered ? notOfferedMarker() : nothing}</span
+            <span class="name" part="name"
+              >${this.#lineName(line)}${line.notOffered ? notOfferedMarker() : nothing}${
+                line.blocked === undefined ? nothing : blockedMarker(line.blocked)
+              }</span
             >
             ${this.#quantityCell(line, index)}
             <span class="line-total">${formatMoney(dishGross(line), currentLocale())}</span>

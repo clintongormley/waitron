@@ -137,7 +137,9 @@ export function sameOptionSelections(
 }
 
 /** One pick as a request names it, read leniently: a malformed one is left to the validator. */
-function namedPicks(requested: unknown): { listId: string; productId: string; quantity: number }[] {
+export function namedPicks(
+  requested: unknown,
+): { listId: string; productId: string; quantity: number }[] {
   if (!Array.isArray(requested)) return [];
   return requested.flatMap((entry: unknown) => {
     const { listId, picks } = (entry ?? {}) as { listId?: unknown; picks?: unknown };

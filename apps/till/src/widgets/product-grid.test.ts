@@ -80,7 +80,7 @@ describe("till-product-grid", () => {
   });
 
   // Neither the offer nor the till product carries `sold_alone`, so nothing here can filter on it.
-  it("gives a tile to a product with no variants and to one with an available variant, never to one whose variants are all unavailable", async () => {
+  it("keeps a product whose variants are all unavailable in its place, greyed, beside ones that can be sold", async () => {
     const variant = (id: string, available: boolean) => ({
       ...sellingValuesOf(cafe),
       id,
@@ -102,9 +102,35 @@ describe("till-product-grid", () => {
       ],
       store: new WorkingOrderStore(),
     });
-    expect(
-      [...el.shadowRoot!.querySelectorAll("wt-button .name")].map((name) => name.textContent),
-    ).toEqual(["Café", "Vino"]);
+    const tiles = [
+      ...el.shadowRoot!.querySelectorAll<HTMLElement & { disabled: boolean }>("wt-button"),
+    ];
+    expect(tiles.map((tile) => [tile.querySelector(".name")!.textContent, tile.disabled])).toEqual([
+      ["Café", false],
+      ["Vino", false],
+      ["Cava", true],
+    ]);
+  });
+
+  it("keeps an unavailable product in its place, greyed, and a tap on it adds nothing", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
+      products: [cafe, { ...cafe, id: "burger", name: "Burger", available: false }, jamon],
+      store,
+    });
+    const tiles = [
+      ...el.shadowRoot!.querySelectorAll<HTMLElement & { disabled: boolean }>("wt-button"),
+    ];
+    expect(tiles.map((tile) => tile.querySelector(".name")!.textContent)).toEqual([
+      "Café",
+      "Burger",
+      "Jamón",
+    ]);
+    expect(tiles.map((tile) => tile.disabled)).toEqual([false, true, false]);
+    tiles[1]!.click();
+    await el.updateComplete;
+    expect(store.lines).toEqual([]);
+    expect(el.shadowRoot!.querySelector("till-modifier-picker")).toBeNull();
   });
 
   it("registers as a custom element", () => {

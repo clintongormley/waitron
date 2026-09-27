@@ -41,6 +41,7 @@ import {
   openTab,
 } from "./working-order.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
+import { republishMenus } from "./testing/publish-menu.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
@@ -595,7 +596,10 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
     // intoTab: café at 1.50. Then raise the catalogue price and open fromTab: café at 9.99. A re-price
     // would make both 9.99; the move must keep each line's OWN locked gross.
     const intoTab = await openTabOn(cfg, tInto, [{ productId: cafeId, quantity: "1" }]);
-    await asApp(cfg, (tx) => updateProduct(tx, cafeId, { unitPrice: "9.99" }));
+    await asApp(cfg, async (tx) => {
+      await updateProduct(tx, cafeId, { unitPrice: "9.99" });
+      await republishMenus(tx);
+    });
     const fromTab = await openTabOn(cfg, tFrom, [{ productId: cafeId, quantity: "1" }]);
     // A manual status on the source must clear when it is freed.
     const status = await seedStatus("Needs cleaning");

@@ -831,10 +831,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
       const rows = await gated(sessionId, (tx) =>
-        listMenuOffersWithTopLevel(tx, menuId, {
-          includeUnavailable: true,
-          includeSwitchedOff: true,
-        }),
+        listMenuOffersWithTopLevel(tx, menuId, { includeSwitchedOff: true }),
       );
       return c.json(rows);
     }),

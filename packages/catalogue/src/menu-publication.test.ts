@@ -20,7 +20,14 @@ import * as menuDocument from "./menu-document.js";
 import * as operations from "./operations.js";
 import * as sectionGraph from "./section-graph.js";
 import { menuDocumentHash } from "./menu-document.js";
-import { menuStatus, previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
+import {
+  assertLiveVersions,
+  menuStatus,
+  menusOfVersions,
+  previewMenu,
+  publishMenu,
+  readLiveDocuments,
+} from "./menu-publication.js";
 import {
   createCatalogue,
   createProduct,
@@ -217,6 +224,188 @@ describe("publishMenu", () => {
     await app((tx) => publishMenu(tx, f.lunch, preview.hash, "person-1"));
     const live = await app((tx) => readLiveDocuments(tx, [f.lunch]));
     expect(live.get(f.lunch)!.document.homeLayouts[0]!.tiles).toEqual([product(f.soup)]);
+  });
+});
+
+describe("readLiveDocuments keeps each version's parsed document", () => {
+  /** The SQL of every statement `fn` prepares on the handle. */
+  async function statements<T>(fn: (tx: Transaction) => Promise<T>) {
+    return app(async (tx) => {
+      const session = (
+        tx as unknown as { session: { prepareQuery: (q: { sql: string }) => unknown } }
+      ).session;
+      const prepared = vi.spyOn(session, "prepareQuery");
+      const result = await fn(tx);
+      const sql = prepared.mock.calls.map(([query]) => query.sql);
+      prepared.mockRestore();
+      return { result, sql };
+    });
+  }
+  const documentReads = (sql: readonly string[]) => sql.filter((text) => /"document"/.test(text));
+
+  it("reads a version's document once, and hands it back frozen", async () => {
+    const f = await menusFixture(fx.db);
+    const first = await publish(f.lunch);
+    const cold = await statements((tx) => readLiveDocuments(tx, [f.lunch]));
+    expect(documentReads(cold.sql)).toHaveLength(1);
+    const warm = await statements((tx) => readLiveDocuments(tx, [f.lunch]));
+    expect(documentReads(warm.sql)).toEqual([]);
+    const [row] = await versionRows();
+    expect(warm.result.get(f.lunch)).toEqual({
+      versionId: first.versionId,
+      document: row!.document,
+    });
+
+    const document = warm.result.get(f.lunch)!.document;
+    const offer = Object.values(document.offers)[0]!;
+    expect(() => {
+      (offer as { name: string }).name = "Changed";
+    }).toThrow(TypeError);
+    expect(() => (document.root.members as unknown[]).push(null)).toThrow(TypeError);
+
+    await app((tx) => updateProduct(tx, f.soup, { name: "Broth" }));
+    const second = await publish(f.lunch);
+    const republished = await statements((tx) => readLiveDocuments(tx, [f.lunch]));
+    expect(documentReads(republished.sql)).toHaveLength(1);
+    expect(republished.result.get(f.lunch)!.versionId).toBe(second.versionId);
+  });
+
+  it("reads a document again when its row's content hash is not the kept one", async () => {
+    const f = await menusFixture(fx.db);
+    const { versionId } = await publish(f.lunch);
+    const kept = (await app((tx) => readLiveDocuments(tx, [f.lunch]))).get(f.lunch)!.document;
+    const triggers = fx.db.all<{ sql: string }>(
+      sql`select sql from sqlite_master where type = 'trigger' and name = 'menu_versions_append_only_update'`,
+    );
+    fx.db.run(sql`drop trigger menu_versions_append_only_update`);
+    const rewritten = { ...kept, menuName: "Rewritten" };
+    await fx.db
+      .update(menuVersions)
+      .set({ document: rewritten, contentHash: menuDocumentHash(rewritten) })
+      .where(eq(menuVersions.id, versionId));
+    fx.db.run(sql.raw(triggers[0]!.sql));
+
+    const read = await statements((tx) => readLiveDocuments(tx, [f.lunch]));
+    expect(documentReads(read.sql)).toHaveLength(1);
+    expect(read.result.get(f.lunch)!.document.menuName).toBe("Rewritten");
+  });
+
+  it("keeps at most 32 documents, dropping the least recently read", async () => {
+    const f = await menusFixture(fx.db);
+    const menuIds = [f.lunch];
+    await publish(f.lunch);
+    for (let n = 1; n <= 32; n++) {
+      const menu = await app((tx) => createCatalogue(tx, { name: `Menu ${n}` }));
+      await publish(menu.id);
+      menuIds.push(menu.id);
+    }
+    const reads = async (ids: readonly string[]) =>
+      documentReads((await statements((tx) => readLiveDocuments(tx, ids))).sql).length;
+    // One read holding more documents than are kept still answers every one of them.
+    const all = await app((tx) => readLiveDocuments(tx, menuIds));
+    expect([...all.values()].filter(({ document }) => document !== undefined)).toHaveLength(33);
+
+    for (const menuId of menuIds) await reads([menuId]);
+    // Lunch, read longest ago, is the one dropped; reading the rest leaves the first of them oldest.
+    expect(await reads(menuIds.slice(2))).toBe(0);
+    expect(await reads([f.lunch])).toBe(1);
+    expect(await reads([menuIds[1]!])).toBe(1);
+  });
+});
+
+describe("assertLiveVersions", () => {
+  it("answers each allowed published menu's live version and document, and no unpublished one", async () => {
+    const f = await menusFixture(fx.db);
+    const lunch = await publish(f.lunch);
+    const live = await app((tx) => assertLiveVersions(tx, [f.lunch, f.dinner], []));
+    const [row] = await versionRows();
+    expect([...live.keys()]).toEqual([f.lunch]);
+    expect(live.get(f.lunch)).toEqual({ versionId: lunch.versionId, document: row!.document });
+  });
+
+  it("accepts versions that are live, however many lines assert each", async () => {
+    const f = await menusFixture(fx.db);
+    const lunch = await publish(f.lunch);
+    const dinner = await publish(f.dinner);
+    const live = await app((tx) =>
+      assertLiveVersions(
+        tx,
+        [f.lunch, f.dinner],
+        [
+          { menuId: f.lunch, versionId: lunch.versionId },
+          { menuId: f.dinner, versionId: dinner.versionId },
+          { menuId: f.lunch, versionId: lunch.versionId },
+        ],
+      ),
+    );
+    expect(live.get(f.lunch)!.versionId).toBe(lunch.versionId);
+    expect(live.get(f.dinner)!.versionId).toBe(dinner.versionId);
+  });
+
+  it("refuses a version that is no longer live, naming each such menu once with its live version", async () => {
+    const f = await menusFixture(fx.db);
+    const first = await publish(f.lunch);
+    const dinner = await publish(f.dinner);
+    await app((tx) => updateProduct(tx, f.soup, { name: "Broth" }));
+    const second = await publish(f.lunch);
+    await expect(
+      app((tx) =>
+        assertLiveVersions(
+          tx,
+          [f.lunch, f.dinner],
+          [
+            { menuId: f.lunch, versionId: first.versionId },
+            { menuId: f.dinner, versionId: dinner.versionId },
+            { menuId: f.lunch, versionId: first.versionId },
+          ],
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "menu.version_changed",
+      params: { menus: [{ menuId: f.lunch, liveVersionId: second.versionId }] },
+    });
+  });
+
+  it("refuses a version of a menu with no live version among the allowed ones", async () => {
+    const f = await menusFixture(fx.db);
+    const lunch = await publish(f.lunch);
+    const asserted = [{ menuId: f.lunch, versionId: lunch.versionId }];
+    // Published, but not one of the menus the caller allows.
+    await expect(app((tx) => assertLiveVersions(tx, [f.dinner], asserted))).rejects.toMatchObject({
+      code: "menu.version_changed",
+      params: { menus: [{ menuId: f.lunch, liveVersionId: null }] },
+    });
+    // Allowed, but never published.
+    await expect(
+      app((tx) =>
+        assertLiveVersions(tx, [f.dinner], [{ menuId: f.dinner, versionId: lunch.versionId }]),
+      ),
+    ).rejects.toMatchObject({
+      code: "menu.version_changed",
+      params: { menus: [{ menuId: f.dinner, liveVersionId: null }] },
+    });
+  });
+});
+
+describe("menusOfVersions", () => {
+  it("names the menu of every version, live or not, and leaves out an id that is no version", async () => {
+    const f = await menusFixture(fx.db);
+    const first = await publish(f.lunch);
+    await app((tx) => updateProduct(tx, f.soup, { name: "Broth" }));
+    const second = await publish(f.lunch);
+    const dinner = await publish(f.dinner);
+    const unknown = "00000000-0000-4000-8000-000000000000";
+    const menus = await app((tx) =>
+      menusOfVersions(tx, [first.versionId, second.versionId, dinner.versionId, unknown]),
+    );
+    expect(menus).toEqual(
+      new Map([
+        [first.versionId, f.lunch],
+        [second.versionId, f.lunch],
+        [dinner.versionId, f.dinner],
+      ]),
+    );
+    await expect(app((tx) => menusOfVersions(tx, []))).resolves.toEqual(new Map());
   });
 });
 

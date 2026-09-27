@@ -14,6 +14,7 @@ import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.
 import { sumDecimals } from "@waitron/shared";
 import type { Decimal, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { lineGross } from "./order-line.js";
+import type { BlockReason } from "./menu-refresh.js";
 import type { HeldExtra, TillProduct } from "../api/client.js";
 import { productUnit, toPresentation } from "../widgets/product-name.js";
 
@@ -64,6 +65,8 @@ export interface OrderLine {
   notOfferedExtras?: NotOfferedExtra[];
   /** A retrieved line whose offer is not in the till's live list. Display only. */
   notOffered?: true;
+  /** What stops this unsaved line being paid as it stands; never sent. */
+  blocked?: BlockReason;
   /**
    * One entry per answered list; ABSENT when none. On a RETRIEVED line the ids are re-derived from the
    * frozen wording (`deriveOptionSelections`), so a list whose wording nothing matches is missing here.
@@ -130,6 +133,7 @@ export class WorkingOrderStore {
   #dirty = false;
   /** The server revision the persisted order's copy is at; meaningless until {@link persisted}. */
   #revision = 0;
+  #sending = false;
 
   /** Changes only on {@link clear} and {@link loadFrom}. */
   get id(): string {
@@ -160,6 +164,17 @@ export class WorkingOrderStore {
 
   get dirty(): boolean {
     return this.#dirty;
+  }
+
+  /** Set by the app while this basket is being sent: every staff edit is refused until the answer,
+   * so what the server was sent is what the screen still shows. */
+  get sending(): boolean {
+    return this.#sending;
+  }
+
+  set sending(value: boolean) {
+    this.#sending = value;
+    this.emit("changed");
   }
 
   get revision(): number {
@@ -220,6 +235,7 @@ export class WorkingOrderStore {
   }
 
   addProduct(product: TillProduct, quantity: string, selection?: LineSelection): void {
+    if (this.#sending) return;
     assertQuantityPrecision(quantity, productUnit(product).precision, { positive: true });
     const line: OrderLine = { product, quantity };
     applySelection(line, selection);
@@ -234,6 +250,7 @@ export class WorkingOrderStore {
 
   /** Replaces the line's answers but not its note, which {@link setLineExtras} owns. */
   setLineModifiers(index: number, selection: LineSelection): void {
+    if (this.#sending) return;
     const line = this.#lines[index];
     if (!line) return;
     delete line.extras;
@@ -247,6 +264,7 @@ export class WorkingOrderStore {
 
   /** Never merges lines: stepping one line's count never folds it into an identical sibling. */
   setLineQuantity(index: number, quantity: string): void {
+    if (this.#sending) return;
     if (index < 0 || index >= this.#lines.length) {
       return;
     }
@@ -264,6 +282,7 @@ export class WorkingOrderStore {
    * key. It marks the basket dirty because the note is sent with the line.
    */
   setLineExtras(index: number, extras: { note?: string }): void {
+    if (this.#sending) return;
     if (index < 0 || index >= this.#lines.length) {
       return;
     }
@@ -281,7 +300,19 @@ export class WorkingOrderStore {
     this.emit("changed");
   }
 
+  /** Takes out these line objects, wherever they now are; lines added since stay. */
+  removeLines(lines: readonly OrderLine[]): void {
+    const gone = new Set(lines);
+    const kept = this.#lines.filter((line) => !gone.has(line));
+    this.#lines.length = 0;
+    this.#lines.push(...kept);
+    this.#invalidatePricing();
+    this.#markDirty();
+    this.emit("changed");
+  }
+
   removeLine(index: number): void {
+    if (this.#sending) return;
     if (index < 0 || index >= this.#lines.length) {
       return;
     }
@@ -289,6 +320,34 @@ export class WorkingOrderStore {
     this.#invalidatePricing();
     this.#markDirty();
     this.emit("changed");
+  }
+
+  /** Rewrites each line named by its index, as a basket refresh re-priced it. The line object stays
+   * the same one, so whatever a screen keys on it (a round line's course or hold) is kept. */
+  adoptLines(adopted: ReadonlyMap<number, OrderLine>): void {
+    for (const [index, line] of adopted) {
+      const own = this.#lines[index];
+      if (own === undefined) continue;
+      for (const key of Object.keys(own)) delete own[key as keyof OrderLine];
+      Object.assign(own, line);
+    }
+    this.#invalidatePricing();
+    this.#markDirty();
+    this.emit("changed");
+  }
+
+  /** One entry per line. Display only, so the lines stay as clean as they were. Without `notify`, a
+   * change is left for the notification already under way to carry. */
+  setBlocked(reasons: readonly (BlockReason | undefined)[], notify = true): void {
+    let changed = false;
+    this.#lines.forEach((line, index) => {
+      const reason = reasons[index];
+      if (line.blocked === reason) return;
+      changed = true;
+      if (reason === undefined) delete line.blocked;
+      else line.blocked = reason;
+    });
+    if (changed && notify) this.emit("changed");
   }
 
   /** Mints a FRESH {@link id}: a cleared basket is a new working order, so its next park or pay does

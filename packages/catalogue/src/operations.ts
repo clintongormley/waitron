@@ -446,12 +446,11 @@ function offerLineValues(row: OfferLineRow, defaultLanguage: string) {
 
 /**
  * The Active offers on the given menus: the products each menu's structure reaches, menus by name
- * and each in its structure's order (`reachableProducts`). Unavailable (sold-out) products are left
- * out unless the caller is a management read passing `includeUnavailable`: Available may
- * hide an item from the till, never from the dashboard. A product switched off on the menu
- * (`menu_items.active`) is left out unless the caller passes `includeSwitchedOff`, so the dashboard
- * can switch it back on. Only a top-level product is an offer; each Active variant of it is nested
- * under its offer, an Unavailable one listed as unavailable.
+ * and each in its structure's order (`reachableProducts`), Unavailable (sold-out) ones included. A
+ * product switched off on the menu (`menu_items.active`) is left out unless the caller passes
+ * `includeSwitchedOff`, so the dashboard can switch it back on. Only a top-level product is an
+ * offer; each Active variant of it is nested under its offer, an Unavailable one listed as
+ * unavailable.
  */
 export async function listMenuOffers(
   tx: Transaction,
@@ -488,7 +487,6 @@ export async function listMenuOffersWithTopLevel(
 }
 
 interface OfferOptions {
-  includeUnavailable?: boolean;
   includeSwitchedOff?: boolean;
   /** Every option label, and every extras item whose product is Active and has no Active variant,
    * whatever its availability: what a published document holds. */
@@ -558,7 +556,6 @@ async function offerRowsOn(
             eq(catalogues.active, true),
             isTopLevelProduct,
             eq(products.active, true),
-            options.includeUnavailable === true ? undefined : eq(products.available, true),
           ),
         )),
     );
@@ -649,7 +646,7 @@ export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuP
     tx,
     new Map([[menuId, rootSectionId]]),
     await loadSectionGraph(tx),
-    { includeUnavailable: true, includeSwitchedOff: true },
+    { includeSwitchedOff: true },
   );
   if (rows.length === 0) return [];
   const variantsByItem = await menuVariantsOfItems(

@@ -3,7 +3,6 @@ import {
   TillApi,
   isNetworkFailure,
   menuOfferToTillProduct,
-  type OfferedModifier,
   type FloorZone,
   type MyAbsence,
   type MyShift,
@@ -13,6 +12,7 @@ import {
   type TabLine,
   type TableServiceStatus,
   type TableState,
+  type TillMenuOffer,
 } from "./client.js";
 
 /** A stub `fetch` reply: JSON body at the given status, content-type set like the server's. */
@@ -382,7 +382,7 @@ describe("TillApi", () => {
     expect(r.products[1]!.allergens).toBeNull();
   });
 
-  it("listZoneOffers GETs menu-item identities for the selected service zone", async () => {
+  it("listZoneOffers GETs menu-item identities for the selected service zone, cancellably", async () => {
     const payload = {
       context: { zoneId: "zone-upstairs", departmentId: "restaurant", serviceMode: "table_tab" },
       defaultMenuId: "drinks",
@@ -404,13 +404,37 @@ describe("TillApi", () => {
       ],
     };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(payload));
+    const read = new AbortController();
 
-    await expect(new TillApi("", fetchStub).listZoneOffers("zone-upstairs")).resolves.toEqual(
-      payload,
-    );
+    await expect(
+      new TillApi("", fetchStub).listZoneOffers("zone-upstairs", { signal: read.signal }),
+    ).resolves.toEqual(payload);
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/service-zones/zone-upstairs/offers",
-      expect.objectContaining({ method: "GET", credentials: "include" }),
+      expect.objectContaining({ method: "GET", credentials: "include", signal: read.signal }),
+    );
+  });
+
+  it("menuState GETs the zone's live versions and what they hold that cannot be sold, cancellably", async () => {
+    const payload = {
+      menus: [{ menuId: "lunch", versionId: "version-2" }],
+      unavailable: {
+        products: ["burger"],
+        optionLabels: ["label-rare"],
+        extraItems: [
+          { menuItemId: "offer-burger", extraListId: "list-extras", productId: "bacon" },
+        ],
+      },
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(payload));
+    const read = new AbortController();
+
+    await expect(
+      new TillApi("", fetchStub).menuState("zone upstairs", { signal: read.signal }),
+    ).resolves.toEqual(payload);
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/menu-state?zoneId=zone%20upstairs",
+      expect.objectContaining({ method: "GET", credentials: "include", signal: read.signal }),
     );
   });
 
@@ -2219,11 +2243,13 @@ describe("isNetworkFailure", () => {
   });
 });
 
+type LiveModifier = TillMenuOffer["offeredModifiers"][number];
+
 describe("menuOfferToTillProduct", () => {
   it("carries the offer's ordered lists through, in the order they arrive", () => {
     // The order IS the product's own attachment order. Three different texts per name, so a reader of
     // the wrong one fails.
-    const extras: OfferedModifier = {
+    const extras: LiveModifier = {
       kind: "extras",
       id: "list-extras",
       name: "Extras",
@@ -2243,10 +2269,12 @@ describe("menuOfferToTillProduct", () => {
           preselected: false,
           addAllergens: null,
           suitableFor: [],
+          image: null,
+          available: true,
         },
       ],
     };
-    const options: OfferedModifier = {
+    const options: LiveModifier = {
       kind: "options",
       id: "list-cooked",
       name: "Punto",
@@ -2262,6 +2290,9 @@ describe("menuOfferToTillProduct", () => {
       grossPrice: "8.00",
       unitPrice: "8.00",
       active: true,
+      available: true,
+      image: null,
+      description: null,
       menuName: "Carta",
       placements: [[]],
       name: "Burger",
@@ -2299,6 +2330,9 @@ describe("menuOfferToTillProduct", () => {
       grossPrice: null,
       unitPrice: "7.25",
       active: true,
+      available: true,
+      image: null,
+      description: null,
       menuName: "Carta",
       placements: [[]],
       name: "Burger",
@@ -2334,6 +2368,9 @@ describe("menuOfferToTillProduct", () => {
       grossPrice: null,
       unitPrice: "4.00",
       active: true,
+      available: true,
+      image: null,
+      description: null,
       menuName: "Carta",
       placements: [[]],
       name: "Wine by the glass",
@@ -2412,6 +2449,9 @@ describe("menuOfferToTillProduct", () => {
       grossPrice: null,
       unitPrice: "4.00",
       active: true,
+      available: true,
+      image: null,
+      description: null,
       menuName: "Carta",
       placements: [[]],
       name: "Vino",
@@ -2480,5 +2520,130 @@ describe("menuOfferToTillProduct", () => {
       allergens: null,
       courseId: null,
     });
+  });
+  it("carries whether the offer can be sold now, and the menu version it came from", () => {
+    const offer: TillMenuOffer = {
+      id: "offer-burger",
+      menuId: "menu-1",
+      productId: "burger",
+      grossPrice: null,
+      unitPrice: "8.00",
+      active: true,
+      available: false,
+      image: null,
+      description: null,
+      menuName: "Carta",
+      placements: [[]],
+      name: "Burger",
+      customerName: null,
+      kitchenName: null,
+      unit: {
+        id: "unit-each",
+        name: { es: "unidad" },
+        abbreviation: { es: "ud" },
+        precision: 0,
+        hardwareUnit: null,
+      },
+      vatClass: "general",
+      category: null,
+      allergens: null,
+      diet: null,
+      dietDerivation: null,
+      dietOverride: null,
+      dietaryDeclarations: [],
+      courseId: null,
+      offeredModifiers: [],
+      variants: [],
+    };
+    expect(menuOfferToTillProduct(offer, "version-2")).toMatchObject({
+      available: false,
+      menuVersionId: "version-2",
+    });
+    expect(menuOfferToTillProduct({ ...offer, available: true })).toMatchObject({
+      available: true,
+    });
+    expect(menuOfferToTillProduct(offer)).not.toHaveProperty("menuVersionId");
+  });
+
+  it("offers the picker only the extras items and option labels that can be sold now", () => {
+    const item = (productId: string, available: boolean) => ({
+      productId,
+      name: productId,
+      customerName: null,
+      kitchenName: null,
+      price: "1.00",
+      vatClass: "general" as const,
+      maxQuantity: 1,
+      preselected: false,
+      addAllergens: null,
+      suitableFor: [],
+      image: null,
+      available,
+    });
+    const label = (id: string, available: boolean) => ({
+      id,
+      name: id,
+      customerName: null,
+      kitchenName: null,
+      available,
+    });
+    const product = menuOfferToTillProduct({
+      id: "offer-burger",
+      menuId: "menu-1",
+      productId: "burger",
+      grossPrice: null,
+      unitPrice: "8.00",
+      active: true,
+      available: true,
+      image: null,
+      description: null,
+      menuName: "Carta",
+      placements: [[]],
+      name: "Burger",
+      customerName: null,
+      kitchenName: null,
+      unit: {
+        id: "unit-each",
+        name: { es: "unidad" },
+        abbreviation: { es: "ud" },
+        precision: 0,
+        hardwareUnit: null,
+      },
+      vatClass: "general",
+      category: null,
+      allergens: null,
+      diet: null,
+      dietDerivation: null,
+      dietOverride: null,
+      dietaryDeclarations: [],
+      courseId: null,
+      offeredModifiers: [
+        {
+          kind: "extras",
+          id: "list-extras",
+          name: "Extras",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 0,
+          maxPicks: null,
+          items: [item("bacon", false), item("cheese", true)],
+        },
+        {
+          kind: "options",
+          id: "list-cooked",
+          name: "Punto",
+          customerName: null,
+          kitchenName: null,
+          defaultLabelId: "label-medium",
+          labels: [label("label-rare", false), label("label-medium", true)],
+        },
+      ],
+      variants: [],
+    });
+    const [extras, options] = product.offeredModifiers!;
+    expect(extras!.kind === "extras" && extras!.items.map((i) => i.productId)).toEqual(["cheese"]);
+    expect(options!.kind === "options" && options!.labels.map((l) => l.id)).toEqual([
+      "label-medium",
+    ]);
   });
 });

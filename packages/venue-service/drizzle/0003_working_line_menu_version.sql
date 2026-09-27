@@ -1,0 +1,1 @@
+ALTER TABLE `working_line_contexts` ADD `menu_version_id` text REFERENCES menu_versions(id);

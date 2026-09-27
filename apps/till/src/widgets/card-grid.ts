@@ -66,6 +66,9 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) stationQueue: StationQueueGroup[] = [];
   @property({ attribute: false }) defaultStationId?: string;
   @property({ type: Boolean }) busy = false;
+  /** A line of this card's basket must be resolved first: shuts only its own pay card, never a
+   * table's, whose lines are saved (D10). */
+  @property({ type: Boolean }) payHeld = false;
   @property() orderFlow: OrderFlow = "prepay";
   @property() stage: "order" | "collect" = "order";
   @property() cardProvider: CardProvider = "none";
@@ -156,7 +159,7 @@ export class TillCardGrid extends LitElement {
       case "tender-pay":
         return html`<till-tender-pay
           .store=${this.store}
-          .busy=${this.busy}
+          .busy=${this.busy || this.payHeld}
           .mode=${this.orderFlow}
           .stage=${this.stage}
           .cardProvider=${this.cardProvider}

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   diningTables,
@@ -22,13 +22,17 @@ import {
   createOptionList,
   createProduct,
   listAvailableProducts,
+  menuItems,
+  menuPublications,
   readContentLanguages,
   setMenuVariants,
   setProductVariants,
+  updateExtraList,
   updateProduct,
   writeProductModifiers,
 } from "@waitron/catalogue";
 import type { AvailableProduct } from "@waitron/catalogue";
+import { workingLineContexts } from "@waitron/venue-service";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -57,6 +61,7 @@ import {
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
 import type { ZoneOffers } from "./testing/zone-offers.js";
 
 // Exercise the sale path and the chained fiscal write end to end: provision a venue, seed a
@@ -239,6 +244,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
       values (${randomUUID()}, ${cfg.locationId}, ${bebidas.id},
         (select id from kitchen_stations
          where location_id = ${cfg.locationId} and is_default))`);
+    await publishWorkingMenu(tx, cat.id);
     return {
       available: (await listAvailableProducts(tx, cfg.locationId)).products,
       zoneId: zone.rows[0]!.id,
@@ -362,7 +368,10 @@ describe("recordTillSale", () => {
   // own price (3.80), neither the parent's menu price (2.25) nor the old override (4.80).
   it("sells a variant this menu sets nothing for at the variant's own price", async () => {
     const { cfg, zoneId, waterOfferId, variantIds } = await setupVenue({ variants: true });
-    await withTransaction(suite.db, (tx) => setMenuVariants(tx, waterOfferId, []));
+    await withTransaction(suite.db, async (tx) => {
+      await setMenuVariants(tx, waterOfferId, []);
+      await republishMenus(tx);
+    });
     const result = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
       zoneId,
       lines: [{ menuItemId: waterOfferId, variantId: variantIds!.unavailable, quantity: "1" }],
@@ -376,7 +385,10 @@ describe("recordTillSale", () => {
     const { cfg, zoneId, waterOfferId, waterProductId, variantIds } = await setupVenue({
       variants: true,
     });
-    await withTransaction(suite.db, (tx) => setProductVariants(tx, waterProductId, [], LOCALE));
+    await withTransaction(suite.db, async (tx) => {
+      await setProductVariants(tx, waterProductId, [], LOCALE);
+      await republishMenus(tx);
+    });
     const deps = { db: suite.db, backend, clock };
     await expect(
       recordTillSale(deps, cfg, {
@@ -432,6 +444,7 @@ describe("recordTillSale", () => {
         { variantId: variantIds!.double, price: "4.10", offered: true },
         { variantId: variantIds!.unavailable, price: "4.80", offered: true },
       ]);
+      await republishMenus(tx);
       await createOpenOrder(
         tx,
         cfg,
@@ -548,9 +561,10 @@ describe("recordTillSale", () => {
   // (2.25) and never at nothing.
   it("files a walk-up from a blank menu price at the product's own price", async () => {
     const { cfg, zoneId, waterOfferId } = await setupVenue();
-    await withTransaction(suite.db, (tx) =>
-      tx.execute(sql`update menu_items set gross_price = null where id = ${waterOfferId}`),
-    );
+    await withTransaction(suite.db, async (tx) => {
+      await tx.execute(sql`update menu_items set gross_price = null where id = ${waterOfferId}`);
+      await republishMenus(tx);
+    });
 
     const result = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
       zoneId,
@@ -1976,6 +1990,219 @@ describe("ordering extras and options — parent + child lines", () => {
       code: "options.label_required",
       params: { optionListId: v.salsaListId },
     });
+  });
+
+  it("saves an edit of a held order whose dishes were taken off the menu since, answers and picks kept", async () => {
+    const v = await setupModifierVenue();
+    const id = randomUUID();
+    const menuOffer = v.offerFor(v.menuProductId);
+    const burgerOffer = v.offerFor(v.burgerId);
+    const baconOffer = v.offerFor(v.baconId);
+    const options = [{ listId: v.sizeListId, labelId: v.sizeLabelGrandeId }];
+    const extras = extrasPick(v, [{ productId: v.baconId, quantity: 1 }]);
+    await withTransaction(suite.db, (tx) =>
+      createOpenOrder(
+        tx,
+        v.cfg,
+        id,
+        [
+          { menuItemId: menuOffer, quantity: "1", options },
+          { menuItemId: burgerOffer, quantity: "1", extras },
+          { menuItemId: baconOffer, quantity: "1" },
+        ],
+        null,
+        { zoneId: v.zoneId },
+      ),
+    );
+    // Taken off: a dish answering an options list, one carrying an extra, and one with neither.
+    await withTransaction(suite.db, async (tx) => {
+      await tx
+        .update(menuItems)
+        .set({ active: false })
+        .where(inArray(menuItems.id, [menuOffer, burgerOffer, baconOffer]));
+      await republishMenus(tx);
+    });
+    const dishes = await suite.db
+      .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+      .from(workingOrderLines)
+      .where(and(eq(workingOrderLines.workingOrderId, id), isNull(workingOrderLines.parentLineId)));
+    const lineOf = (productId: string) => dishes.find((line) => line.productId === productId)!.id;
+
+    await updateHeldOrder({ db: suite.db }, v.cfg, id, {
+      revision: await revisionOf(id),
+      lines: [
+        {
+          workingOrderLineId: lineOf(v.menuProductId),
+          menuItemId: menuOffer,
+          quantity: "1",
+          options,
+        },
+        { workingOrderLineId: lineOf(v.burgerId), menuItemId: burgerOffer, quantity: "1", extras },
+        { workingOrderLineId: lineOf(v.baconId), menuItemId: baconOffer, quantity: "1" },
+        { menuItemId: v.offerFor(v.jamonId), quantity: "0.1" },
+      ],
+    });
+    const result = await payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "50.00" },
+    });
+    // What each stored line was added at — Menú 12.00, Hamburguesa 9.00 + Bacon 0.50, Bacon 3.00 —
+    // and the new 0.1 kg of Jamón at 24.90.
+    expect(result.total).toBe("26.99");
+    const filed = await filedLinesOf(id);
+    expect(filed[0]!.optionSnapshots).toEqual([grandeSnapshot(v.defaultLanguage)]);
+  });
+
+  it("charges an extra an edit adds to a held line at its published price", async () => {
+    const v = await setupModifierVenue();
+    const id = randomUUID();
+    await withTransaction(suite.db, (tx) =>
+      createOpenOrder(
+        tx,
+        v.cfg,
+        id,
+        [{ menuItemId: v.offerFor(v.burgerId), quantity: "1" }],
+        null,
+        {
+          zoneId: v.zoneId,
+        },
+      ),
+    );
+    await withTransaction(suite.db, (tx) =>
+      updateExtraList(
+        tx,
+        v.extrasListId,
+        {
+          name: "Extras",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 0,
+          maxPicks: 3,
+          active: true,
+          items: [
+            { productId: v.baconId, maxQuantity: 3, preselected: false, price: "0.90" },
+            { productId: v.quesoId, maxQuantity: 1, preselected: false, price: "0.75" },
+          ],
+        },
+        v.cfg.locale,
+      ),
+    );
+    const [dish] = await suite.db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    await updateHeldOrder({ db: suite.db }, v.cfg, id, {
+      revision: await revisionOf(id),
+      lines: [
+        {
+          workingOrderLineId: dish!.id,
+          menuItemId: v.offerFor(v.burgerId),
+          quantity: "1",
+          extras: extrasPick(v, [{ productId: v.baconId, quantity: 1 }]),
+        },
+      ],
+    });
+    const result = await payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "20.00" },
+    });
+    // 9.00 + Bacon at the published 0.50, not the list's new 0.90.
+    expect(result.total).toBe("9.50");
+  });
+
+  it("files a held line and a tab line with the version each was added from, at the price it was added at", async () => {
+    const v = await setupModifierVenue();
+    const versionOf = async (workingOrderId: string) =>
+      suite.db
+        .select({ menuVersionId: workingLineContexts.menuVersionId })
+        .from(workingLineContexts)
+        .innerJoin(
+          workingOrderLines,
+          eq(workingOrderLines.id, workingLineContexts.workingOrderLineId),
+        )
+        .where(eq(workingOrderLines.workingOrderId, workingOrderId));
+    const liveVersion = async () => {
+      const [row] = await suite.db
+        .select({ versionId: menuPublications.versionId })
+        .from(menuPublications)
+        .innerJoin(menuItems, eq(menuItems.menuId, menuPublications.menuId))
+        .where(eq(menuItems.id, v.offerFor(v.burgerId)));
+      return row!.versionId;
+    };
+    const added = await liveVersion();
+
+    const heldId = randomUUID();
+    const tabId = await withTransaction(suite.db, async (tx) => {
+      await createOpenOrder(
+        tx,
+        v.cfg,
+        heldId,
+        [
+          {
+            menuItemId: v.offerFor(v.burgerId),
+            quantity: "1",
+            extras: extrasPick(v, [{ productId: v.baconId, quantity: 1 }]),
+          },
+        ],
+        null,
+        { zoneId: v.zoneId },
+      );
+      const tableId = randomUUID();
+      await tx.insert(diningTables).values({
+        id: tableId,
+        locationId: v.cfg.locationId,
+        zoneId: v.tablesZoneId,
+        label: "Mesa V",
+        active: true,
+      });
+      const { tabId } = await openTab(tx, v.cfg, { tableId });
+      await addTabRound(tx, v.cfg, tabId, [{ menuItemId: v.offerFor(v.burgerId), quantity: "1" }]);
+      return tabId;
+    });
+    expect(await versionOf(heldId)).toEqual([{ menuVersionId: added }, { menuVersionId: added }]);
+    expect(await versionOf(tabId)).toEqual([{ menuVersionId: added }]);
+
+    const republish = (unitPrice: string) =>
+      withTransaction(suite.db, async (tx) => {
+        await updateProduct(tx, v.burgerId, { unitPrice });
+        await republishMenus(tx);
+      });
+    await republish("11.00");
+    const second = await liveVersion();
+    expect(second).not.toBe(added);
+    // A second round on the same tab, from the second version; then a third version is published.
+    await withTransaction(suite.db, (tx) =>
+      addTabRound(tx, v.cfg, tabId, [{ menuItemId: v.offerFor(v.burgerId), quantity: "1" }]),
+    );
+    await republish("13.00");
+    expect(await liveVersion()).not.toBe(second);
+
+    const deps = { db: suite.db, backend, clock };
+    const tender = { method: "cash" as const, amount: "20.00" };
+    // 9.00 + Bacon 0.50; and 9.00 + 11.00: the prices each line was added at.
+    expect((await payWorkingOrder(deps, v.cfg, { id: heldId, lines: [], tender })).total).toBe(
+      "9.50",
+    );
+    expect((await payWorkingOrder(deps, v.cfg, { id: tabId, lines: [], tender })).total).toBe(
+      "20.00",
+    );
+    const filedVersions = (id: string) =>
+      suite.db
+        .select({ menuVersionId: saleLines.menuVersionId })
+        .from(saleLines)
+        .innerJoin(sales, eq(sales.id, saleLines.saleId))
+        .where(eq(sales.workingOrderId, id))
+        .orderBy(saleLines.lineNo);
+    expect(await filedVersions(heldId)).toEqual([
+      { menuVersionId: added },
+      { menuVersionId: added },
+    ]);
+    expect(await filedVersions(tabId)).toEqual([
+      { menuVersionId: added },
+      { menuVersionId: second },
+    ]);
   });
 });
 

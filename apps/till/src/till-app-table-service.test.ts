@@ -2,8 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { productUnit } from "./widgets/product-name.js";
 import { TillApp } from "./till-app.js";
+import { WorkingOrderStore } from "./state/working-order.js";
 import { ServerRouter } from "./api/server-router.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { codeMessage } from "./i18n/codes.js";
 import { formatMoney } from "@waitron/shared";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
@@ -146,7 +148,9 @@ function zoneOffers(catalogue: ProductCatalogue, defaultMenuId: string | null): 
   return {
     context: { zoneId: floorZone.id, departmentId: "department-default", serviceMode: "prepay" },
     defaultMenuId,
-    menus: catalogue.menus,
+    // No `versionId`: a line added from these offers asserts no version, so the wire bodies the
+    // suites pin are the ones a till sends against the live version.
+    menus: catalogue.menus as ZoneOfferCatalogue["menus"],
     offers: catalogue.products.map((product, index): ZoneOfferCatalogue["offers"][number] => ({
       id: product.menuItemId ?? `menu-item-${product.id}-${index}`,
       menuId: product.catalogueId ?? "menu-fixture",
@@ -154,6 +158,9 @@ function zoneOffers(catalogue: ProductCatalogue, defaultMenuId: string | null): 
       grossPrice: product.unitPrice,
       unitPrice: product.unitPrice,
       active: true,
+      available: true,
+      image: null,
+      description: null,
       menuName: product.catalogueName ?? "Menu",
       placements: [[]],
       name: product.name,
@@ -2180,5 +2187,114 @@ describe("till-app table ordering: a split-off bill left unpaid goes back to its
 
     expect(api.mergeTabs).not.toHaveBeenCalled();
     expect(floor(el)).not.toBeNull();
+  });
+});
+
+describe("till-app table ordering: a menu published while a table is open", () => {
+  it("reloads the table's offers, sends the round again once, and says why when that is refused too", async () => {
+    const { el } = await mountApp({
+      addTabRound: vi.fn().mockRejectedValue({
+        code: "menu.version_changed",
+        status: 409,
+        menus: [{ menuId: "menu-lunch", liveVersionId: "v2" }],
+      }),
+    });
+    const screen = await toTableOrder(el);
+    expect(api.listZoneOffers).toHaveBeenCalledTimes(1);
+
+    const round = new WorkingOrderStore();
+    emit(screen, "send-round", {
+      lines: [{ menuItemId: "menu-item-sopa-0", quantity: "1" }],
+      round,
+      sent: [],
+    });
+    await flush(el);
+    await flush(el);
+
+    expect(api.addTabRound).toHaveBeenCalledTimes(2);
+    expect(api.listZoneOffers).toHaveBeenCalledTimes(3);
+    expect(api.listZoneOffers).toHaveBeenLastCalledWith(floorZone.id, {
+      signal: expect.any(AbortSignal),
+    });
+    expect(banner(el)!.textContent).toContain(codeMessage("menu.version_changed"));
+  });
+
+  it("greys a table's sold-out dish at the next poll of the table's zone, without reloading", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const menuState = vi.fn(async (zoneId: string) => ({
+        menus: (zoneId === floorZone.id ? diningOffers : counterOffers).menus.map((menu) => ({
+          menuId: menu.id,
+          versionId: menu.versionId,
+        })),
+        unavailable: {
+          products: ["cordero"],
+          optionLabels: [],
+          extraItems: [],
+        },
+      }));
+      const { el } = await mountApp({
+        menuState,
+        listDefaultZoneOffers: vi.fn().mockResolvedValue({
+          ...counterOffers,
+          context: { ...counterOffers.context, zoneId: "zone-counter" },
+        }),
+      });
+      await toTableOrder(el);
+      vi.advanceTimersByTime(15_000);
+      await flush(el);
+      await flush(el);
+
+      expect(menuState.mock.calls.map((call) => call[0])).toEqual(["zone-counter", floorZone.id]);
+      const cordero = tableOrder(el)!.products.find((product) => product.id === "cordero")!;
+      expect(cordero.available).toBe(false);
+      expect(api.listZoneOffers).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("reloads a table's offers when the poll names a new version of a menu in the table's zone", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const republished = {
+        ...diningOffers,
+        menus: [{ id: "menu-dinner", name: "Dinner", isDefault: true, versionId: "v2" }],
+        offers: diningOffers.offers.filter((offer) => offer.menuId === "menu-dinner"),
+      };
+      const listZoneOffers = vi
+        .fn()
+        .mockResolvedValueOnce(diningOffers)
+        .mockResolvedValue(republished);
+      const menuState = vi.fn(async (zoneId: string) => ({
+        menus:
+          zoneId === floorZone.id
+            ? [{ menuId: "menu-dinner", versionId: "v2" }]
+            : counterOffers.menus.map((menu) => ({ menuId: menu.id, versionId: menu.versionId })),
+        unavailable: { products: [], optionLabels: [], extraItems: [] },
+      }));
+      const { el } = await mountApp({
+        menuState,
+        listZoneOffers,
+        listDefaultZoneOffers: vi.fn().mockResolvedValue({
+          ...counterOffers,
+          context: { ...counterOffers.context, zoneId: "zone-counter" },
+        }),
+      });
+      const screen = await toTableOrder(el);
+      emit(screen, "menu-selected", { id: "menu-lunch" });
+      await flush(el);
+      vi.advanceTimersByTime(15_000);
+      await flush(el);
+      await flush(el);
+
+      expect(listZoneOffers).toHaveBeenLastCalledWith(floorZone.id, {
+        signal: expect.any(AbortSignal),
+      });
+      expect(tableOrder(el)!.products.map((product) => product.id)).toEqual(["cordero"]);
+      // Lunch is no longer in the zone, so the table falls back to its default menu.
+      expect(tableOrder(el)!.selectedMenuId).toBe("menu-dinner");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

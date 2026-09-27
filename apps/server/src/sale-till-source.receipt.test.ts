@@ -34,6 +34,7 @@ import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
 
 /**
@@ -166,6 +167,7 @@ async function setupVenue(): Promise<{
       update zone_service_policies set default_menu_id = ${cat.id}
       where location_id = ${cfg.locationId}
         and is_counter_default`);
+    await publishWorkingMenu(tx, cat.id);
     // Through the table definition: `preparationRoutes.id`
     // (`packages/venue-service/src/schema/service.ts`) is a `$defaultFn` generator, which a raw
     // statement never reaches.

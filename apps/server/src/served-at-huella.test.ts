@@ -48,6 +48,7 @@ import {
 } from "./working-order.js";
 import { payWorkingOrder } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import { publishWorkingMenu } from "./testing/publish-menu.js";
 import "./errors.js";
 
 // The fiscal firewall (CLAUDE.md §5): our own metadata never enters `computeHuella`. `served_at` is
@@ -224,6 +225,7 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
     // venue's default station.
     const { zoneId } = await offerProducts(tx, cfg, { zone: "tables" });
     await allowMenuInZone(tx, cfg, zoneId, cat.id);
+    await publishWorkingMenu(tx, cat.id);
     const table = await createTable(tx, cfg, { label: "T1", zoneId });
     return {
       aguaId: agua.id,
@@ -590,6 +592,7 @@ async function attachExtra(
     await writeProductModifiers(tx, shop.aguaId, [{ kind: "extras", id: list.id }]);
     // An offer carries only the extras lists published on it.
     await setMenuItemExtraLists(tx, shop.aguaMenuItemId, [{ listId: list.id, items: [] }]);
+    await publishWorkingMenu(tx, shop.menuId);
     return { productId: panecillo.id, listId: list.id };
   });
 }

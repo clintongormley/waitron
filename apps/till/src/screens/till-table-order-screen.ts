@@ -2,6 +2,7 @@ import { optionAnswers } from "../widgets/option-snapshot.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { keyed } from "lit/directives/keyed.js";
 import { baseStyles } from "@waitron/ui";
 import {
   addDecimal,
@@ -32,7 +33,6 @@ import {
 import { deriveExtraSelections } from "../state/held-extras.js";
 import { deriveOptionSelections, sameOptionSelections } from "../state/held-options.js";
 import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "../state/order-line.js";
-import { StoreChangeController } from "../state/store-controller.js";
 import "../widgets/product-grid.js";
 import "../widgets/basket.js";
 import "../widgets/tender-pay.js";
@@ -59,6 +59,17 @@ import type { ConfirmPaymentDetail } from "../widgets/tender-pay.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
 
 export type { TableServiceStatus };
+
+/**
+ * A round to add to the tab. The round stays in `round` until the app has the server's answer: it
+ * takes out the `sent` lines (the ones `lines` was built from, in order) once the round is added, and
+ * a refused round is kept (D9).
+ */
+export interface SendRoundDetail {
+  lines: RoundLine[];
+  round: WorkingOrderStore;
+  sent: readonly OrderLine[];
+}
 
 /** `change-line`: one sent line's edit, from the copy of the order read at `revision`. */
 export interface ChangeLineDetail {
@@ -417,10 +428,29 @@ export class TillTableOrderScreen extends LitElement {
 
       .round-bar {
         display: flex;
+        flex-wrap: wrap;
         align-items: flex-end;
         gap: var(--wt-space-3);
         padding-top: var(--wt-space-3);
         border-top: 1px solid var(--wt-color-border);
+      }
+
+      /* A round being sent takes no edit until the answer comes back; the status line says why. */
+      .round-control[inert] {
+        opacity: var(--wt-opacity-disabled);
+      }
+
+      .round-sending {
+        margin: 0;
+        padding-top: var(--wt-space-3);
+        color: var(--wt-color-text-muted);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      /* A round line's name may wrap inside a word, so on a narrow screen the line's controls and its
+         remove button stay on screen. */
+      .round-bar till-basket::part(name) {
+        overflow-wrap: anywhere;
       }
 
       .round-bar till-basket {
@@ -498,7 +528,40 @@ export class TillTableOrderScreen extends LitElement {
   @state() private splitQuantities = new Map<number, string>();
   @state() private splitAttempted = false;
 
-  readonly #roundStore = new WorkingOrderStore();
+  /** One round per order, kept only as long as this screen is: another order shown here starts its
+   * own round. */
+  readonly #rounds = new Map<string, WorkingOrderStore>();
+
+  get #roundStore(): WorkingOrderStore {
+    const key = this.orderId ?? "";
+    let round = this.#rounds.get(key);
+    if (round === undefined) {
+      round = new WorkingOrderStore();
+      this.#rounds.set(key, round);
+    }
+    return round;
+  }
+
+  /** The round this screen re-renders on; it follows {@link orderId}. */
+  #watchedRound?: { round: WorkingOrderStore; stop: () => void };
+
+  #watchRound(): void {
+    const round = this.#roundStore;
+    if (this.#watchedRound?.round === round) return;
+    this.#watchedRound?.stop();
+    this.#watchedRound = { round, stop: round.subscribe(() => this.requestUpdate()) };
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#watchRound();
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#watchedRound?.stop();
+    this.#watchedRound = undefined;
+  }
   /**
    * Keyed by the round line's object identity: a store line is kept by reference until the round
    * clears, so a `WeakMap` survives re-renders and drops its entries once the round is sent. A line
@@ -518,10 +581,10 @@ export class TillTableOrderScreen extends LitElement {
   constructor() {
     super();
     new ContentLanguageController(this);
-    new StoreChangeController(this, () => this.#roundStore);
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
+    this.#watchRound();
     // The gross map is filled BEFORE `#tabTotal` sums it below.
     if (changed.has("lines") || this.#payStore === undefined) {
       this.#lineGrossByLineNo = new Map(
@@ -623,10 +686,12 @@ export class TillTableOrderScreen extends LitElement {
       }
       return roundLine;
     });
-    this.dispatchEvent(
-      new CustomEvent("send-round", { detail: { lines }, bubbles: true, composed: true }),
-    );
-    this.#roundStore.clear();
+    const detail: SendRoundDetail = {
+      lines,
+      round: this.#roundStore,
+      sent: this.#roundStore.lines,
+    };
+    this.dispatchEvent(new CustomEvent("send-round", { detail, bubbles: true, composed: true }));
   }
 
   #selectedCourseId(line: OrderLine): string {
@@ -1164,26 +1229,40 @@ export class TillTableOrderScreen extends LitElement {
                   ></till-diet-filter>`
                 : nothing
             }
-            <till-product-grid
-              .products=${this.#gridProducts()}
-              .store=${this.#roundStore}
-            ></till-product-grid>
+            ${keyed(
+              this.orderId,
+              html`<till-product-grid
+                class="round-control"
+                ?inert=${this.#roundStore.sending}
+                .products=${this.#gridProducts()}
+                .store=${this.#roundStore}
+              ></till-product-grid>`,
+            )}
           </div>
           ${this.drawerOpen ? this.#drawer(pending) : nothing}
         </div>
-        ${this.#roundCoursesSection()}
-        <div class="round-bar">
-          <till-basket .store=${this.#roundStore}></till-basket>
-          <wt-button
-            class="send-round"
-            data-send-round
-            variant="primary"
-            size="lg"
-            ?disabled=${this.#roundStore.lineCount === 0}
-            @click=${() => this.#sendRound()}
-          >
-            ${t("table.send_round")}
-          </wt-button>
+        ${
+          this.#roundStore.sending
+            ? html`<p class="round-sending" role="status" data-round-sending>
+                ${t("table.round_sending")}
+              </p>`
+            : nothing
+        }
+        <div class="round-control" data-round-controls ?inert=${this.#roundStore.sending}>
+          ${this.#roundCoursesSection()}
+          <div class="round-bar">
+            ${keyed(this.orderId, html`<till-basket .store=${this.#roundStore}></till-basket>`)}
+            <wt-button
+              class="send-round"
+              data-send-round
+              variant="primary"
+              size="lg"
+              ?disabled=${this.#roundStore.lineCount === 0 || this.#roundStore.sending}
+              @click=${() => this.#sendRound()}
+            >
+              ${t("table.send_round")}
+            </wt-button>
+          </div>
         </div>
         ${this.#cancelDialog()} ${this.#changeEditor()}
       </section>

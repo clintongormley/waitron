@@ -40,6 +40,7 @@ import type { TillConfig } from "./till-config.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
 import { createTable, createZone, updateTable } from "./tables.js";
 import {
   addTabRound,
@@ -155,6 +156,7 @@ async function setupVenue(): Promise<Seeded> {
         productId: agua.id,
         grossPrice: "2.00",
       });
+      await publishWorkingMenu(tx, cat.id);
       const offers = await offerProducts(tx, cfg, { zone: "tables" });
       const table = await createTable(tx, cfg, { label: "T1", zoneId: offers.zoneId });
       return {
@@ -339,9 +341,10 @@ describe("addTabRound (append-only, no re-price)", () => {
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
     );
-    await asApp(cfg, (tx) =>
-      tx.execute(sql`update products set unit_price = 999 where id = ${cafeId}`),
-    );
+    await asApp(cfg, async (tx) => {
+      await tx.execute(sql`update products set unit_price = 999 where id = ${cafeId}`);
+      await republishMenus(tx);
+    });
     // Unlike a full-basket replace such as updateHeldOrder, earlier rounds keep their price.
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
@@ -1399,6 +1402,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
       update products
       set kitchen_name = 'Café de cocina', customer_name = ${JSON.stringify({ es: "Café del cliente" })}
       where id = ${cafeId}`);
+    await withTransaction(db, republishMenus);
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
@@ -1774,6 +1778,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
   it("a quantity rise leaves the fired item as it was and sends the difference as a new line", async () => {
     const { cfg, tabId, ticket, cafeId } = await tabWithFiredCafe();
     await db.execute(sql`update products set unit_price = 175 where id = ${cafeId}`);
+    await withTransaction(db, republishMenus);
 
     await asApp(cfg, async (tx) =>
       updateOrderLine(tx, cfg, tabId, 1, { quantity: "2" }, await revisionOf(tabId)),
@@ -1989,6 +1994,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     );
     const ticket = await ticketOfLine(tabId, 1);
     await db.execute(sql`update extra_list_items set price = 80 where list_id = ${listId}`);
+    await withTransaction(db, republishMenus);
 
     await asApp(cfg, async (tx) =>
       updateOrderLine(
@@ -2064,6 +2070,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
       ]),
     );
     await db.execute(sql`update extra_list_items set price = 80 where list_id = ${listId}`);
+    await withTransaction(db, republishMenus);
 
     await asApp(cfg, async (tx) =>
       updateOrderLine(tx, cfg, tabId, 1, { note: "solo" }, await revisionOf(tabId)),

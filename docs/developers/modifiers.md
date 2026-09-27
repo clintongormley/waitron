@@ -194,7 +194,8 @@ plan D10). `updateHeldOrder` rebuilds what a stored line's options answers would
 compares the result with what the line holds, by value; different, the new answers are frozen onto
 the same row, at the line's stored price, because an answer carries no price. Its extras picks are
 paired with the stored child lines by `editLineExtras`: a pick that pairs keeps its child at the
-price it was sold at, a pick that pairs with nothing is new and priced from its list now, and a
+price it was sold at, a pick that pairs with nothing is new and priced from the menu's live
+published version, and a
 child no pick keeps is removed. A line whose quantity rises, while the kitchen does not have it,
 keeps its stored price, but its dish and its picks are priced afresh as a check first, so a dish or
 an extra that is Inactive or Unavailable, or has gained an Active variant, refuses the
@@ -266,9 +267,11 @@ The two sell-side reads — `listAvailableProducts` and `listMenuOffers`
 extras and options lists a dish puts in front of a diner, already resolved. It is built by
 `readOfferedModifiers` (`packages/catalogue/src/offered-modifiers.ts`) and the shapes are declared
 beside the rest of the sell-side wire in `menu-types.ts` (`OfferedModifier`, `OfferedExtrasList`,
-`OfferedOptionsList`, `OfferedExtraItem`). The till app itself reads only `listMenuOffers`, through
-its zone-offer routes; nothing in `apps/till` outside its tests calls `GET /api/products`, the
-route over `listAvailableProducts`.
+`OfferedOptionsList`, `OfferedExtraItem`). The till app reads neither directly: its zone-offer
+routes serve each menu's published version (`listZoneOffers`, `packages/venue-service/src/operations.ts`),
+which `listMenuOffers` built when the menu was published, with each extras item and option label
+marked with whether it can be sold now; nothing in `apps/till` outside its tests calls
+`GET /api/products`, the route over `listAvailableProducts`.
 
 Nothing else on those two payloads describes a modifier. The till's picker walks
 `offeredModifiers` alone (`apps/till/src/widgets/modifier-picker.ts`), and the two surfaces that ADD
@@ -288,30 +291,44 @@ Six things it is worth knowing about that payload:
 - **Every price is settled**: the menu's price, then the list item's, then the product's
   `unit_price` — its own, or its parent's where a variant leaves it blank. A till has
   no way to walk that chain itself, because the last rung is not on the list item.
-- **Only ACTIVE lists are offered, and an options list offers only its AVAILABLE labels** — which
-  is exactly the set `validateExtraSelections` (`extra-contract.ts`) and `validateOptionSelections`
-  (`option-contract.ts`) will accept an answer from. That agreement is the reason the order path
-  and these two reads resolve their lists through ONE body, `walkAttachedModifiers`
-  (`offered-modifiers.ts`), which the order path reaches through `resolveAttachedModifiers` and
-  the two reads through `readOfferedModifiers`: a required list the picker never drew would refuse
-  the order with `options.label_required` or `extras.limit_exceeded`, and an offered list the
-  server does not know about would be refused as `options.invalid`.
+- **A published version holds the lists that were Active when it was published, and every label of
+  each options list; each label is served marked with whether it is Available now**
+  (`applyLiveFields`, which reads no list's `active`, so a list switched off after publishing is
+  still offered until the menu is published again, and a label deleted since is served marked
+  unavailable). A published default is served while it is available; otherwise, including a
+  published version with no default, the first label in the published version's order that is
+  available now is served, and no default only when none is (`effectiveDefaultLabelId`,
+  `packages/catalogue/src/option-default.ts`, which `applyLiveFields` applies on every read). The
+  till's menu-state poll applies the same rule (`withUnavailable`,
+  `apps/till/src/state/menu-refresh.ts`) to the default the offers were served with when it loaded
+  them, not to the published one. The lists and the labels marked available are the set
+  `validateExtraSelections` (`extra-contract.ts`) and `validateOptionSelections`
+  (`option-contract.ts`) will accept an answer from. That agreement is the reason a till and the
+  order path read the same lists: both take them from the menu's published version, which
+  `listMenuOffers` builds through `readOfferedModifiers` when the menu is published
+  (`buildMenuDocument`, `packages/catalogue/src/menu-document.ts`), with availability put back when
+  it is served (`applyLiveFields`). One exception: an edit of a saved line whose dish the live
+  version no longer offers checks that line's options answer against the dish's own current lists
+  (`productOptionLists`, `apps/server/src/working-order.ts`), because no published list is left to
+  check it against. A required list the picker never drew would refuse the order with
+  `options.label_required` or `extras.limit_exceeded`, and an offered list the server does not know
+  about would be refused as `options.invalid`.
 - **An extras list offers only the items whose product is Active and Available**, and
   a pick of any other item in a basket priced afresh is refused as `extras.invalid` (field
-  `productId`), the same refusal as a pick the list never offered. That filter is NOT in
-  `resolveAttachedModifiers`: it sits in the two separate queries that read the items' `products`
-  rows — `readExtraProducts` (`offered-modifiers.ts`) for what the till is offered, and
-  `resolveBasketModifiers` (`apps/server/src/working-order.ts`) for a basket priced afresh, which
-  includes a new line or a new pick in an edit of a saved order. A pick the stored line already
+  `productId`), the same refusal as a pick the list never offered. That filter is the served
+  version's `available` flag on each item (`applyLiveFields`), which the order path drops items by
+  (`offerModifiers`, `apps/server/src/working-order.ts`) for a basket priced afresh, which includes
+  a new line or a new pick in an edit of a saved order. A pick the stored line already
   holds is kept even when its product has since sold out — through an edit of a line the kitchen
   does not have (held or recalled), and a quantity drop of one it has — with two exceptions: a
   CHANGE to a line the kitchen has sends the line again with the picks it keeps, so a sold-out one
   is refused `product.unavailable`; and a line whose quantity rises, the kitchen's or not, is priced
   afresh as a check, so there it is refused like a new pick. All of these are pinned by "keeps an extra whose product sold out on a line the kitchen does not have, and
   refuses to send it again on one it has" in `apps/server/src/tabs.test.ts`. The filter's own tests:
-  "an extra the till cannot sell" in `packages/catalogue/src/offered-modifiers.test.ts`, and
   "refuses an extras pick of an Unavailable or an Inactive product as a pick the list does not
-  offer" in `apps/server/src/till-sale.test.ts`.
+  offer" in `apps/server/src/till-sale.test.ts`, and "puts availability, VAT, course and category
+  back from the current rows" in `packages/catalogue/src/menu-document.test.ts`, which clears an
+  extras item's flag only through the menu withdrawing it, not through its product.
   An extras list also leaves out a product that has an Active variant (it is never sold as
   itself; `readExtraProducts`), and a basket priced afresh refuses a pick of one with a
   different code, `product.variant_required`, in `priceOrderLines`

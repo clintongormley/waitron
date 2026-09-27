@@ -21,13 +21,14 @@ import "./screens/till-ticket-view.js";
 import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
-import type { ChangeLineDetail } from "./screens/till-table-order-screen.js";
+import type { ChangeLineDetail, SendRoundDetail } from "./screens/till-table-order-screen.js";
 import "./screens/till-station-screen.js";
 import "./screens/till-enrol-screen.js";
 import "./screens/till-device-chooser.js";
 import "./screens/till-expo-screen.js";
 import "./screens/till-allergen-screen.js";
 import "./widgets/supervisor-override-dialog.js";
+import "./widgets/basket-refresh-dialog.js";
 import "./widgets/tab-shell.js";
 import "./widgets/card-grid.js";
 import type { StringKey } from "./i18n/strings.js";
@@ -53,17 +54,30 @@ import type {
   TillActiveReader,
   TillCourse,
   TillInfo,
-  TillMenu,
+  MenuState,
+  MenuUnavailable,
+  TillMenuOffer,
   TillProduct,
   TillSaleResult,
   VisitBill,
   VisitRevisions,
+  TillZoneMenu,
+  ZoneOfferCatalogue,
 } from "./api/client.js";
 import { menuOfferToTillProduct } from "./api/client.js";
 import { productUnit } from "./widgets/product-name.js";
 import { kindOfFormFactor } from "./layout.js";
 import type { CanvasDef, CapabilityFlag, DeviceKind, ReceiptConfig, TabDef } from "./layout.js";
 import { SessionActivity } from "./session-activity.js";
+import { MenuStatePoll } from "./state/menu-state-poll.js";
+import {
+  type BasketRefresh,
+  type BlockReason,
+  isStale,
+  lineBlock,
+  refreshBasket,
+  withUnavailable,
+} from "./state/menu-refresh.js";
 import type { ShellAffordance } from "./widgets/tab-shell.js";
 import type { OrderLine } from "./state/working-order.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
@@ -102,6 +116,23 @@ interface RefreshRetry {
 }
 
 const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
+
+/**
+ * How long a round's send, or a reload of the table's offers, may stay out before it is cancelled.
+ * It is above the server watchdog's kill bound (`WATCHDOG_KILL_MS` plus `STACK_CAPTURE_MS`,
+ * `packages/store/src/venue-liveness.ts`), so a server whose main thread had stopped when the request
+ * went out is killed before the till gives up.
+ */
+const TABLE_REQUEST_LIMIT_MS = 150_000;
+
+/**
+ * What a round's send leaves to do once the round is open for edits again. `find-tab`, after a send
+ * that got no answer, moves to the tab the floor now shows for the table the round was sent from,
+ * only while that table still holds the party the screen showed at the send and the operator is
+ * still on it; `landedOn` names the tab the server added the round to, when it is not the one it was
+ * sent to.
+ */
+type RoundFollowUp = "read-tab" | "find-tab" | "mark-sold-out" | { landedOn: string } | undefined;
 
 /** A whole-count unit's three-place server quantity reads "2", not "2.000". */
 function displayQuantity(product: TillProduct, quantity: string): string {
@@ -261,6 +292,77 @@ function errorText(error: CounterError): string | TemplateResult {
   return error.also === undefined
     ? late
     : html`<span class="error-part">${late}</span><span class="error-part">${t(error.also)}</span>`;
+}
+
+/** A request asserting a menu version that is no longer live (D9): nothing was written. */
+function isVersionRefusal(error: unknown): boolean {
+  return (error as { code?: string } | undefined)?.code === "menu.version_changed";
+}
+
+/** Whether a poll names another set of menus, or another version of one, than the till loaded. */
+function versionsMoved(loaded: readonly TillZoneMenu[], polled: MenuState["menus"]): boolean {
+  return (
+    loaded.length !== polled.length ||
+    polled.some(
+      (menu) => loaded.find((own) => own.id === menu.menuId)?.versionId !== menu.versionId,
+    )
+  );
+}
+
+/** The offers a zone sells now: as loaded, or with the latest poll's unavailable set applied. */
+class ZoneOfferIndex {
+  #loaded: TillMenuOffer[] = [];
+  /** The set last applied, as a sorted key, so an unchanged poll answer rebuilds nothing. */
+  #unavailableKey: string | null = null;
+  /** The offers with the latest unavailable set applied, kept rather than rebuilt at each read. */
+  live: TillMenuOffer[] = [];
+  byId = new Map<string, TillMenuOffer>();
+  versions = new Map<string, string>();
+  /** False after a load that failed, when there is nothing to judge a line against. */
+  loaded = false;
+
+  load(catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus">, loaded = true): void {
+    this.#loaded = catalogue.offers;
+    this.#unavailableKey = null;
+    this.#setLive(catalogue.offers);
+    this.versions = new Map(catalogue.menus.map((menu) => [menu.id, menu.versionId]));
+    this.loaded = loaded;
+  }
+
+  /** Whether the set differs from the one last applied; only then is it applied. */
+  setUnavailable(unavailable: MenuUnavailable): boolean {
+    const key = JSON.stringify([
+      [...unavailable.products].sort(),
+      [...unavailable.optionLabels].sort(),
+      unavailable.extraItems
+        .map((item) => `${item.menuItemId} ${item.extraListId} ${item.productId}`)
+        .sort(),
+    ]);
+    if (key === this.#unavailableKey) return false;
+    this.#unavailableKey = key;
+    this.#setLive(withUnavailable(this.#loaded, unavailable));
+    return true;
+  }
+
+  #setLive(live: TillMenuOffer[]): void {
+    this.live = live;
+    this.byId = new Map(live.map((offer) => [offer.id, offer]));
+  }
+
+  products(): TillProduct[] {
+    return this.live.map((offer) => menuOfferToTillProduct(offer, this.versions.get(offer.menuId)));
+  }
+
+  /** Why each line cannot be sold as it stands. A line with no menu version is the server's to price
+   * from the live version, so a missing offer marks only a line that came from a versioned one. */
+  blocks(lines: readonly OrderLine[]): (BlockReason | undefined)[] {
+    return lines.map((line) => {
+      if (!this.loaded || line.workingOrderLineId !== undefined) return undefined;
+      const offer = this.byId.get(line.product.menuItemId ?? "");
+      if (offer === undefined && line.product.menuVersionId === undefined) return undefined;
+      return lineBlock(line, offer)?.reason;
+    });
+  }
 }
 
 function isPermanentSaleRefusal(error: unknown): boolean {
@@ -439,6 +541,7 @@ export class TillApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#menuPoll.stop();
     this.#abandonListRefreshes();
     this.#contentLanguageGeneration++;
     clearTimeout(this.#contentLanguageTimer);
@@ -474,6 +577,9 @@ export class TillApp extends LitElement {
     // Re-renders on a locale switch, so `keyed(currentLocale(), …)` recreates the screens, which read
     // `t()` at render time.
     new LocaleChangeController(this);
+    // Subscribed before any widget, so the marks this sets inside the basket's own notification
+    // reach every later listener in that same notification.
+    this.#store.subscribe(() => this.#evaluateBasket(false));
   }
 
   @state() private screen: Screen = "lock";
@@ -506,9 +612,44 @@ export class TillApp extends LitElement {
    * even when two menus offer the same product. Table ordering keeps its own zone-specific set. */
   @state() private products: TillProduct[] = [];
   /** Menus available in the counter's current service zone, default first. */
-  @state() private menus: TillMenu[] = [];
+  @state() private menus: TillZoneMenu[] = [];
   @state() private tableProducts: TillProduct[] = [];
-  @state() private tableMenus: TillMenu[] = [];
+  @state() private tableMenus: TillZoneMenu[] = [];
+  /** What {@link products} and {@link tableProducts} are built from, so a poll's unavailable set
+   * applies without reloading them. */
+  readonly #counterOffers = new ZoneOfferIndex();
+  readonly #tableOffers = new ZoneOfferIndex();
+  /** The zone {@link tableProducts} came from, polled beside the counter's while it is set. */
+  #tableZoneId?: string;
+  /** The basket-refresh dialog's contents while it is open (D9): the counter's basket or a table's
+   * round, and the lines it would re-price. */
+  @state() private basketRefresh?: BasketRefresh & { store: WorkingOrderStore };
+  /** Whether an unsaved basket line keeps Pay shut: it cannot be sold as it stands, or it was priced
+   * against a menu version staff have not yet reviewed. */
+  @state() private basketHeld = false;
+  /** Whether a line was priced against an earlier version and its change was not confirmed. */
+  @state() private basketStale = false;
+  /** The refresh flow in flight, which a second trigger joins rather than repeats. */
+  #basketRefreshing?: Promise<"adopted" | "confirming" | "failed">;
+  /** Identify the latest poll-started reload of each zone's offers. Kept apart from the staff
+   * actions' counters, so a reload never discards a zone switch's or a table open's answer. */
+  #counterRefreshRequest = 0;
+  #tableRefreshRequest = 0;
+  /** Rounds whose lines carry a mark from a refused send, marked again whenever their table's offers
+   * change, so a dish that can be sold again is not left marked. */
+  #markedRounds = new Set<WorkingOrderStore>();
+  readonly #menuPoll = new MenuStatePoll({
+    read: (zoneId, signal) => this.api.menuState(zoneId, { signal }),
+    // A table's zone only while its order is on screen: each read takes a turn of the write lock.
+    zones: () =>
+      [
+        ...new Set([
+          this.counterServiceZoneId,
+          this.#tableCatalogueActive() ? (this.#tableZoneId ?? "") : "",
+        ]),
+      ].filter((id) => id !== ""),
+    onState: (zoneId, state) => this.#onMenuState(zoneId, state),
+  });
   @state() private tableSelectedCatalogueId = "";
   /** Identifies the latest table-selection offer request so a slower prior selection cannot win. */
   #tableOfferRequest = 0;
@@ -827,9 +968,9 @@ export class TillApp extends LitElement {
     this.#floorLoaded = false;
     let offerLoadFailed = false;
     try {
-      const { menus, offers, zones, context } = await this.api.listDefaultZoneOffers();
-      this.products = offers.map(menuOfferToTillProduct);
-      this.menus = menus;
+      const catalogue = await this.api.listDefaultZoneOffers();
+      const { zones, context } = catalogue;
+      this.#loadCounterOffers(catalogue);
       this.counterServiceZones = zones ?? [];
       this.counterServiceZoneId = context.zoneId;
       this.api.setServiceZone(context.zoneId);
@@ -837,8 +978,7 @@ export class TillApp extends LitElement {
         this.orderFlow = context.serviceMode;
     } catch {
       offerLoadFailed = true;
-      this.products = [];
-      this.menus = [];
+      this.#loadCounterOffers({ offers: [], menus: [] }, false);
       this.counterServiceZones = [];
       this.counterServiceZoneId = "";
     }
@@ -850,6 +990,8 @@ export class TillApp extends LitElement {
     this.canEdit = canConfigureTill;
     this.errorKey = offerLoadFailed ? "service_zone.load_error" : undefined;
     this.#configureSessionActivity();
+    if (!offerLoadFailed) this.#reconcileBasket();
+    this.#menuPoll.start();
     const landingFace = this.handheldMode ? HANDHELD_FACES[1] : "counter";
     if (landingFace === "floor") await this.#loadFloorData();
     // History may change while login data loads and the lock screen still owns the page.
@@ -1043,7 +1185,7 @@ export class TillApp extends LitElement {
   }
 
   /** The zone's default menu, or its first menu when none is marked default. */
-  #defaultCatalogueId(menus: TillMenu[] = this.menus): string {
+  #defaultCatalogueId(menus: TillZoneMenu[] = this.menus): string {
     return menus.find((menu) => menu.isDefault)?.id ?? menus[0]?.id ?? "";
   }
 
@@ -1097,10 +1239,10 @@ export class TillApp extends LitElement {
     if (!this.counterServiceZones.some((zone) => zone.id === zoneId)) return;
     const request = ++this.#counterOfferRequest;
     try {
-      const { menus, offers, defaultMenuId, context } = await this.api.listZoneOffers(zoneId);
+      const catalogue = await this.api.listZoneOffers(zoneId);
+      const { menus, defaultMenuId, context } = catalogue;
       if (request !== this.#counterOfferRequest || this.#store.lines.length > 0) return;
-      this.products = offers.map(menuOfferToTillProduct);
-      this.menus = menus;
+      this.#loadCounterOffers(catalogue);
       this.counterServiceZoneId = context.zoneId;
       this.api.setServiceZone(context.zoneId);
       if (context.serviceMode !== "table_tab") this.orderFlow = context.serviceMode;
@@ -1113,11 +1255,192 @@ export class TillApp extends LitElement {
     }
   }
 
+  #loadCounterOffers(catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus">, loaded = true): void {
+    this.#counterOffers.load(catalogue, loaded);
+    this.menus = catalogue.menus;
+    this.#showCounterOffers();
+  }
+
+  #showCounterOffers(): void {
+    this.products = this.#counterOffers.products();
+    this.#evaluateBasket();
+  }
+
+  /** With `loaded` false (a failed load, or a table with no zone) no remembered round is marked. */
+  #loadTableOffers(
+    zoneId: string | undefined,
+    catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus">,
+    loaded = true,
+  ): void {
+    this.#tableZoneId = zoneId;
+    this.#tableOffers.load(catalogue, loaded);
+    this.tableMenus = catalogue.menus;
+    this.tableProducts = this.#tableOffers.products();
+    if (loaded) this.#markRounds(true);
+  }
+
+  /** A round refused because a dish in it sold out is marked against the table's offers from now on,
+   * and the offers are read again. */
+  async #markSoldOut(round: WorkingOrderStore): Promise<void> {
+    const zoneId = this.#tableZoneId;
+    if (zoneId === undefined) return;
+    this.#markedRounds.add(round);
+    await this.#reloadTableOffers(zoneId);
+  }
+
+  /** Marks each marked round's lines again against the table's offers; with `forget`, a round left
+   * with no mark is dropped. */
+  #markRounds(forget = false): void {
+    for (const round of this.#markedRounds) {
+      round.setBlocked(this.#tableOffers.blocks(round.lines));
+      if (forget && round.lines.every((line) => line.blocked === undefined))
+        this.#markedRounds.delete(round);
+    }
+  }
+
+  /** Marks each unsaved basket line that cannot be sold as it stands against the counter's offers,
+   * and works out whether Pay is held. */
+  #evaluateBasket(notify = true): void {
+    const versions = this.#counterOffers.versions;
+    this.#store.setBlocked(this.#counterOffers.blocks(this.#store.lines), notify);
+    const unsaved = this.#store.lines.filter((line) => line.workingOrderLineId === undefined);
+    this.basketStale = unsaved.some(
+      (line) => line.blocked === undefined && isStale(line, versions),
+    );
+    this.basketHeld = unsaved.some((line) => line.blocked !== undefined || isStale(line, versions));
+  }
+
+  /**
+   * A poll's answer (D11): the unavailable set applies to the loaded offers at once. On the counter's
+   * zone a version other than the one loaded runs the basket refresh — unless a sale, hold or place
+   * is in flight or the dialog is already open, when the next poll asks again. On the open table's
+   * zone it only reloads that zone's offers.
+   */
+  #onMenuState(zoneId: string, state: MenuState): void {
+    if (zoneId === this.counterServiceZoneId) {
+      if (this.#counterOffers.setUnavailable(state.unavailable)) this.#showCounterOffers();
+      const busy = this.submitting || this.parking || this.placing;
+      if (versionsMoved(this.menus, state.menus) && !busy && this.basketRefresh === undefined)
+        void this.#refreshBasket();
+    }
+    if (zoneId === this.#tableZoneId) {
+      if (this.#tableOffers.setUnavailable(state.unavailable)) {
+        this.tableProducts = this.#tableOffers.products();
+        this.#markRounds();
+      }
+      if (versionsMoved(this.tableMenus, state.menus)) void this.#reloadTableOffers(zoneId);
+    }
+  }
+
+  /** Reloads the open table's offers; false when they could not be read or a table open overtook
+   * the read. */
+  async #reloadTableOffers(zoneId: string): Promise<boolean> {
+    const action = this.#tableOfferRequest;
+    const request = ++this.#tableRefreshRequest;
+    const read = new AbortController();
+    const limit = setTimeout(() => read.abort(), TABLE_REQUEST_LIMIT_MS);
+    try {
+      const catalogue = await this.api.listZoneOffers(zoneId, { signal: read.signal });
+      if (
+        request !== this.#tableRefreshRequest ||
+        action !== this.#tableOfferRequest ||
+        zoneId !== this.#tableZoneId
+      )
+        return false;
+      this.#loadTableOffers(zoneId, catalogue);
+      if (!catalogue.menus.some((menu) => menu.id === this.tableSelectedCatalogueId))
+        this.tableSelectedCatalogueId =
+          catalogue.defaultMenuId ?? this.#defaultCatalogueId(catalogue.menus);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(limit);
+    }
+  }
+
+  /**
+   * The refresh flow (D9), not through {@link #onCounterZoneSelected}, which discards an offers
+   * load while the basket has lines: reload the counter zone's offers, then compare the basket.
+   */
+  #refreshBasket(): Promise<"adopted" | "confirming" | "failed"> {
+    this.#basketRefreshing ??= (async () => {
+      const zoneId = this.counterServiceZoneId;
+      const action = this.#counterOfferRequest;
+      const request = ++this.#counterRefreshRequest;
+      try {
+        const catalogue = await this.api.listZoneOffers(zoneId);
+        if (
+          request !== this.#counterRefreshRequest ||
+          action !== this.#counterOfferRequest ||
+          zoneId !== this.counterServiceZoneId
+        )
+          return "failed";
+        this.#loadCounterOffers(catalogue);
+      } catch {
+        return "failed";
+      }
+      return this.#reconcileBasket();
+    })().finally(() => (this.#basketRefreshing = undefined));
+    return this.#basketRefreshing;
+  }
+
+  /** Nothing relevant changed: the lines take the live version silently. Otherwise the dialog. */
+  #reconcileBasket(
+    store: WorkingOrderStore = this.#store,
+    offers: ZoneOfferIndex = this.#counterOffers,
+  ): "adopted" | "confirming" {
+    const outcome = refreshBasket(store.lines, offers.live, offers.versions);
+    if (outcome.changed.length === 0 && outcome.blocked.length === 0) {
+      if (outcome.adopted.size > 0) store.adoptLines(outcome.adopted);
+      return "adopted";
+    }
+    this.basketRefresh = { ...outcome, store };
+    return "confirming";
+  }
+
+  #onBasketRefreshConfirmed(): void {
+    const refresh = this.basketRefresh;
+    this.basketRefresh = undefined;
+    if (refresh === undefined) return;
+    if (refresh.adopted.size > 0) refresh.store.adoptLines(refresh.adopted);
+    // The counter's basket is marked again on every change; a round is marked here.
+    if (refresh.store !== this.#store) this.#markRounds();
+  }
+
+  /**
+   * A round refused `menu.version_changed` gets the counter basket's treatment (D9): the table's
+   * offers are reloaded and the round compared with them. It is never lost: the table screen keeps
+   * it until the app takes out the lines the server added.
+   */
+  async #refreshRound(round: WorkingOrderStore): Promise<"adopted" | "confirming" | "failed"> {
+    const zoneId = this.#tableZoneId;
+    if (zoneId === undefined || !(await this.#reloadTableOffers(zoneId))) return "failed";
+    const outcome = this.#reconcileBasket(round, this.#tableOffers);
+    this.#markedRounds.add(round);
+    this.#markRounds(true);
+    return outcome;
+  }
+
+  /**
+   * After a request refused `menu.version_changed`, which wrote nothing. A silent adoption retries it
+   * once; a second refusal, or a reload that failed, is said in the refusal's own words.
+   */
+  #afterVersionRefusal(
+    outcome: "adopted" | "confirming" | "failed",
+    retried: boolean,
+    retry: () => Promise<void>,
+  ): Promise<void> | void {
+    if (outcome === "confirming") return;
+    if (outcome === "adopted" && !retried) return retry();
+    this.errorKey = { code: "menu.version_changed" };
+  }
+
   /**
    * Settles the basket (prepay). The ticket's lines come from the server result, so a rejection leaves
    * the basket untouched on the counter.
    */
-  async #onConfirmPayment(event: Event): Promise<void> {
+  async #onConfirmPayment(event: Event, retried = false): Promise<void> {
     // Single-flight (see `submitting`): set before the first await.
     if (this.submitting) return;
     this.submitting = true;
@@ -1129,6 +1452,7 @@ export class TillApp extends LitElement {
     const label = this.#store.label;
     this.errorKey = undefined;
     let reachedFiscal = false;
+    let refreshed: "adopted" | "confirming" | "failed" | undefined;
     try {
       // The server pays a retrieved order from its stored lines and ignores `lines`, so an edit made
       // after retrieving must be saved first or it is silently dropped from the charge and the record.
@@ -1142,14 +1466,20 @@ export class TillApp extends LitElement {
       // The basket stays intact. `sale.refused` is permanent, and its message covers refunding a manual
       // terminal charge; `sale.unconfirmed` means the fiscal call was reached, so the sale may have
       // filed; anything else is the free-to-retry `sale.error`.
-      this.errorKey = isPermanentSaleRefusal(error)
-        ? "sale.refused"
-        : reachedFiscal && isNetworkFailure(error)
-          ? "sale.unconfirmed"
-          : counterError(error, "sale.error");
+      if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
+      else
+        this.errorKey = isPermanentSaleRefusal(error)
+          ? "sale.refused"
+          : reachedFiscal && isNetworkFailure(error)
+            ? "sale.unconfirmed"
+            : counterError(error, "sale.error");
     } finally {
       this.submitting = false;
     }
+    if (refreshed !== undefined)
+      await this.#afterVersionRefusal(refreshed, retried, () =>
+        this.#onConfirmPayment(event, true),
+      );
   }
 
   /**
@@ -1157,7 +1487,7 @@ export class TillApp extends LitElement {
    * `network_unavailable` comes back as data, not a throw: nothing was filed, so it is recorded in
    * {@link cardOutcome} and the basket stays, with no error banner.
    */
-  async #onCollectCard(event: Event): Promise<void> {
+  async #onCollectCard(event: Event, retried = false): Promise<void> {
     if (this.submitting) return;
     this.submitting = true;
     const detail = (event as CustomEvent<CollectCardDetail>).detail;
@@ -1167,6 +1497,7 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     this.cardOutcome = undefined;
     let reachedFiscal = false;
+    let refreshed: "adopted" | "confirming" | "failed" | undefined;
     try {
       if (!(await this.#syncIfDirty(id, lines, label))) return;
       reachedFiscal = true;
@@ -1191,14 +1522,18 @@ export class TillApp extends LitElement {
     } catch (error) {
       // The terminal may already have captured before the fiscal record was refused (`finalizeCapture`,
       // `apps/server/src/till-sale.ts`), which is what `sale.refused`'s refund sentence is for.
-      this.errorKey = isPermanentSaleRefusal(error)
-        ? "sale.refused"
-        : reachedFiscal && isNetworkFailure(error)
-          ? "sale.unconfirmed"
-          : counterError(error, "sale.error");
+      if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
+      else
+        this.errorKey = isPermanentSaleRefusal(error)
+          ? "sale.refused"
+          : reachedFiscal && isNetworkFailure(error)
+            ? "sale.unconfirmed"
+            : counterError(error, "sale.error");
     } finally {
       this.submitting = false;
     }
+    if (refreshed !== undefined)
+      await this.#afterVersionRefusal(refreshed, retried, () => this.#onCollectCard(event, true));
   }
 
   /** Never carries a price: the server re-prices. */
@@ -1249,7 +1584,7 @@ export class TillApp extends LitElement {
    * saved only if edited (see {@link #syncIfDirty}); re-parking a retrieved order would replay it
    * server-side and drop the edit. On success the SAME order moves to the `"collect"` stage.
    */
-  async #onPlaceOrder(): Promise<void> {
+  async #onPlaceOrder(retried = false): Promise<void> {
     if (this.placing) return;
     this.placing = true;
     const id = this.#store.id;
@@ -1258,6 +1593,7 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     // A network failure after the fiscal call started is `sale.unconfirmed`; before it, nothing was filed.
     let reachedFiscal = false;
+    let refreshed: "adopted" | "confirming" | "failed" | undefined;
     try {
       if (this.#store.persisted) {
         if (!(await this.#syncIfDirty(id, lines, label))) return;
@@ -1272,14 +1608,18 @@ export class TillApp extends LitElement {
     } catch (error) {
       // `place.refused`, not `sale.refused`: placing takes no tender, so its message says nothing
       // about refunds.
-      this.errorKey = isPermanentSaleRefusal(error)
-        ? "place.refused"
-        : reachedFiscal && isNetworkFailure(error)
-          ? "sale.unconfirmed"
-          : counterError(error, "place.error");
+      if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
+      else
+        this.errorKey = isPermanentSaleRefusal(error)
+          ? "place.refused"
+          : reachedFiscal && isNetworkFailure(error)
+            ? "sale.unconfirmed"
+            : counterError(error, "place.error");
     } finally {
       this.placing = false;
     }
+    if (refreshed !== undefined)
+      await this.#afterVersionRefusal(refreshed, retried, () => this.#onPlaceOrder(true));
   }
 
   /**
@@ -1370,7 +1710,7 @@ export class TillApp extends LitElement {
    * re-parked (see {@link TillApp.#onPlaceOrder}). On success `clear()` re-mints the id, and
    * `cardOutcome` is cleared so a decline never carries over to the next customer.
    */
-  async #onParkOrder(event: Event): Promise<void> {
+  async #onParkOrder(event: Event, retried = false): Promise<void> {
     if (this.parking) return;
     this.parking = true;
     const { label } = (event as CustomEvent<ParkOrderDetail>).detail;
@@ -1379,6 +1719,7 @@ export class TillApp extends LitElement {
     const id = this.#store.id;
     const lines = this.#currentSaleLines();
     this.errorKey = undefined;
+    let refreshed: "adopted" | "confirming" | "failed" | undefined;
     try {
       if (this.#store.persisted) {
         // The Hold field opens blank, so fall back to the stored label rather than wipe it. A typed
@@ -1391,10 +1732,13 @@ export class TillApp extends LitElement {
       this.cardOutcome = undefined;
       await this.#refreshAfterWrite("held", "refresh.held_after_park");
     } catch (error) {
-      this.errorKey = counterError(error, "held.park_error");
+      if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
+      else this.errorKey = counterError(error, "held.park_error");
     } finally {
       this.parking = false;
     }
+    if (refreshed !== undefined)
+      await this.#afterVersionRefusal(refreshed, retried, () => this.#onParkOrder(event, true));
   }
 
   /**
@@ -1736,15 +2080,14 @@ export class TillApp extends LitElement {
     const table = this.tables.find((candidate) => candidate.id === tableId);
     if (table?.zoneId !== null && table?.zoneId !== undefined) {
       try {
-        const { menus, offers, defaultMenuId } = await this.api.listZoneOffers(table.zoneId);
+        const catalogue = await this.api.listZoneOffers(table.zoneId);
+        const { menus, defaultMenuId } = catalogue;
         if (offerRequest !== this.#tableOfferRequest) return;
-        this.tableProducts = offers.map(menuOfferToTillProduct);
-        this.tableMenus = menus;
+        this.#loadTableOffers(table.zoneId, catalogue);
         this.tableSelectedCatalogueId = defaultMenuId ?? this.#defaultCatalogueId(menus);
       } catch {
         if (offerRequest !== this.#tableOfferRequest) return;
-        this.tableProducts = [];
-        this.tableMenus = [];
+        this.#loadTableOffers(undefined, { offers: [], menus: [] }, false);
         this.tableSelectedCatalogueId = "";
         // Both are said: a canvas showing the floor and the order together keeps the previous
         // table's order on screen, so the failed open needs saying even beside a late change.
@@ -1754,8 +2097,7 @@ export class TillApp extends LitElement {
         return;
       }
     } else {
-      this.tableProducts = [];
-      this.tableMenus = [];
+      this.#loadTableOffers(undefined, { offers: [], menus: [] }, false);
       this.tableSelectedCatalogueId = "";
     }
     // `set-status` is keyed by table id, so it is remembered alongside the tab's order id.
@@ -1905,23 +2247,100 @@ export class TillApp extends LitElement {
   /** A round sent to a seated party's settled or abandoned tab lands on the party's next tab, which
    * the screen follows. */
   async #onSendRound(event: Event): Promise<void> {
-    const { lines } = (event as CustomEvent<{ lines: RoundLine[] }>).detail;
-    if (this.activeTabId === undefined) return;
-    this.errorKey = undefined;
-    let landedOn: string;
+    const { lines, round, sent } = (
+      event as CustomEvent<Pick<SendRoundDetail, "lines"> & Partial<SendRoundDetail>>
+    ).detail;
+    const tabId = this.activeTabId;
+    const tableId = this.activeTableId;
+    const partyId = this.orderParty?.id;
+    if (tabId === undefined || round?.sending === true) return;
+    // The round is shut to edits until the answer, so a retry sends what the screen shows and success
+    // takes out exactly what was sent.
+    if (round !== undefined) round.sending = true;
+    let followUp: RoundFollowUp;
     try {
-      landedOn = (await this.api.addTabRound(this.activeTabId, lines)).tabId;
-    } catch (error) {
-      this.errorKey = tableWriteError(error);
+      followUp = await this.#sendRound(tabId, lines, round, sent ?? [], false);
+    } finally {
+      if (round !== undefined) round.sending = false;
+    }
+    if (followUp === undefined) return;
+    if (followUp === "mark-sold-out") {
+      if (round !== undefined) await this.#markSoldOut(round);
       return;
     }
-    if (landedOn !== this.activeTabId) {
-      this.activeTabId = landedOn;
+    const onSentTable = () => this.activeTabId === tabId && this.activeTableId === tableId;
+    if (followUp === "find-tab" && onSentTable()) {
+      await this.#refreshFloor();
+      // The server moves a round only onto its own party's next tab, so the table is followed only
+      // while it still holds the party the screen showed when the round was sent.
+      const now = this.tables.find((row) => row.id === tableId);
+      if (
+        now?.tabId !== undefined &&
+        partyId !== undefined &&
+        now.visit?.id === partyId &&
+        onSentTable()
+      )
+        this.#followRound(tabId, now.tabId);
+    } else if (typeof followUp === "object" && this.activeTabId === tabId) {
       await this.#reloadTables();
-      this.#rememberOrderParty();
+      this.#followRound(tabId, followUp.landedOn);
     }
     await this.#loadTabLines();
     if (this.orderParty !== null) await this.#loadVisitBills();
+  }
+
+  /**
+   * A refused round stays on the table screen. One the server may have added — no answer came —
+   * is taken out, because sending it again could put it on the tab twice.
+   */
+  async #sendRound(
+    tabId: string,
+    lines: RoundLine[],
+    round: WorkingOrderStore | undefined,
+    sent: readonly OrderLine[],
+    retried: boolean,
+  ): Promise<RoundFollowUp> {
+    this.errorKey = undefined;
+    let landedOn: string;
+    const send = new AbortController();
+    const limit = setTimeout(() => send.abort(), TABLE_REQUEST_LIMIT_MS);
+    try {
+      landedOn = (await this.api.addTabRound(tabId, lines, { signal: send.signal })).tabId;
+    } catch (error) {
+      if (isVersionRefusal(error) && round !== undefined) {
+        const outcome = await this.#refreshRound(round);
+        if (outcome === "adopted" && !retried) {
+          const reasserted = lines.map((line, index) => {
+            const own = sent[index];
+            return own === undefined ? line : { ...line, ...toWireProductIdentity(own.product) };
+          });
+          return this.#sendRound(tabId, reasserted, round, sent, true);
+        }
+        if (outcome !== "confirming") this.errorKey = { code: "menu.version_changed" };
+        return;
+      }
+      if (isNetworkFailure(error)) {
+        this.errorKey = "table.round_unconfirmed";
+        round?.removeLines(sent);
+        return "find-tab";
+      }
+      this.errorKey = lineWriteError(error);
+      return (error as { code?: string }).code === "product.unavailable"
+        ? "mark-sold-out"
+        : undefined;
+    } finally {
+      clearTimeout(limit);
+    }
+    round?.removeLines(sent);
+    return landedOn === tabId ? "read-tab" : { landedOn };
+  }
+
+  /** Moves the screen from the tab a round was sent to onto the tab it went to, only while the
+   * operator is still on the first; the floor has already been read after the send. */
+  #followRound(sentTo: string, landedOn: string): void {
+    if (landedOn === sentTo || this.activeTabId !== sentTo) return;
+    this.activeTabId = landedOn;
+    this.#rememberOrderParty();
   }
 
   async #onFireCourse(event: Event): Promise<void> {
@@ -2319,6 +2738,11 @@ export class TillApp extends LitElement {
   /** A merge still in flight is not waited for: its request has no time limit, so one that never
    * answers would hold up every table the next operator opens. */
   #endOperatorSession(): void {
+    this.#menuPoll.stop();
+    this.#tableZoneId = undefined;
+    this.#markedRounds.clear();
+    // The basket stays as it was, as a cancel leaves it; the next sign-in's offers load checks it.
+    this.basketRefresh = undefined;
     this.#operatorSession++;
     this.#splitCheck = undefined;
     this.#checkReturn = undefined;
@@ -2548,6 +2972,7 @@ export class TillApp extends LitElement {
         .orderFlow=${this.orderFlow}
         .stage=${this.stage}
         .busy=${this.submitting || this.placing}
+        .payHeld=${this.basketHeld}
         .counterTab=${tab}
         .cardProvider=${this.cardProvider}
         .tipsEnabled=${this.tipsEnabled}
@@ -2566,6 +2991,7 @@ export class TillApp extends LitElement {
       .stationQueue=${this.stationQueue}
       .defaultStationId=${this.#defaultStationId()}
       .busy=${this.submitting}
+      .payHeld=${this.basketHeld}
       .orderFlow=${this.orderFlow}
       .stage=${this.stage}
       .cardProvider=${this.cardProvider}
@@ -2770,6 +3196,29 @@ export class TillApp extends LitElement {
                 .authorizers=${this.overrideAuthorizers}
                 .error=${this.overrideError}
               ></till-supervisor-override-dialog>`
+            : nothing
+        }
+        ${
+          this.basketRefresh === undefined
+            ? nothing
+            : html`<till-basket-refresh-dialog
+                .changed=${this.basketRefresh.changed}
+                .blocked=${this.basketRefresh.blocked}
+                @wt-basket-refresh-confirmed=${() => this.#onBasketRefreshConfirmed()}
+                @wt-basket-refresh-cancelled=${() => (this.basketRefresh = undefined)}
+              ></till-basket-refresh-dialog>`
+        }
+        ${
+          this.#inShell() && this.basketStale && this.basketRefresh === undefined
+            ? html`<div class="refresh-notice" data-active>
+                <p class="refresh-message" role="status">${t("basket_refresh.pending")}</p>
+                <wt-button
+                  variant="secondary"
+                  data-menu-review
+                  @click=${() => void this.#refreshBasket()}
+                  >${t("basket_refresh.review")}</wt-button
+                >
+              </div>`
             : nothing
         }
         <!-- The device FRONT DOOR (device-enrolment §3.1), shown ahead of the shell/lock so it takes

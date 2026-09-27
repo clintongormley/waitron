@@ -26,7 +26,6 @@ import { createIngredient, setProductRecipe, updateIngredient } from "@waitron/r
 
 const SETS = ["core", "catalogue"];
 
-/** The published column the till sells from. */
 async function readPublished(tx: Transaction, productId: string): Promise<ProductAllergens | null> {
   const [row] = await tx
     .select({ allergens: products.allergens })

@@ -234,6 +234,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "product.variant_required": 400,
   // A line never sent whose product sold out, refused at send and at pay (spec §11.3).
   "product.unavailable": 409,
+  // A basket priced against a menu version that is no longer live: nothing was priced or written.
+  "menu.version_changed": 409,
   "modifier.invalid": 400,
   "sale.unsupported_tender": 400,
   "sale.tender_shortfall": 400,
@@ -720,6 +722,27 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
+  app.get("/api/menu-state", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const named = c.req.query("zoneId");
+      const zoneId = named === undefined ? undefined : requireUuidParam(named, "ServiceZoneId");
+      const device = zoneId === undefined ? await tryReadDevice(deps, c) : null;
+      const state = await withTransaction(deps.db, async (tx) => {
+        const zone =
+          zoneId === undefined
+            ? (
+                await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {
+                  deviceId: device?.deviceId,
+                })
+              ).zoneId
+            : (await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId)).zoneId;
+        return VENUE_SERVICE.menuState(tx, zone);
+      });
+      return c.json(state);
+    }),
+  );
+
   app.post("/api/sales", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
@@ -869,7 +892,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Returns the pricing inputs only, never a stored price: the till re-prices on retrieve.
   app.get("/api/working-orders/:id", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);

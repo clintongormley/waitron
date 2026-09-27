@@ -143,16 +143,17 @@ Where each one surfaces:
 | Till buttons and basket | the staff names | `apps/till/src/widgets/product-name.ts` |
 | A table tab's line list | the staff names, resolved server-side | `readTabLines`, `apps/server/src/working-order.ts` |
 | Till screens showing an options ANSWER | the reader each one names at the call site — kitchen on the rail and the pass, customer on the settled ticket, staff in the basket and the tab drawer | `optionAnswers`, `apps/till/src/widgets/option-snapshot.ts` |
-| Printed allergen sheet | the live product's customer-facing name | `apps/till/src/screens/till-allergen-screen.ts` |
+| Printed allergen sheet | the customer-facing name held in the menu's published version | `apps/till/src/screens/till-allergen-screen.ts` |
 | Top-sellers report | the product's frozen staff name, with each variant's own frozen staff name on a row nested under it | `packages/reporting/src/top-sellers.ts` |
 
 Two of those rows are worth reading twice.
 
 A cook sees the same name whether the order arrives on paper or on a screen: the ticket, the station
 queue and the pass all resolve through `kitchenPresentationName`. Every line is added from a zone's
-menu offer, which carries the product's and the variant's kitchen names (`priceOrderLines`,
-`apps/server/src/working-order.ts`), so a venue that types a short kitchen name sees it on all three
-surfaces, and one that leaves it blank sees the staff name — the variant's, on a variant line. A
+menu offer, which carries the product's and the variant's kitchen names as the menu's published
+version holds them (`priceOrderLines`, `apps/server/src/working-order.ts`), so a short kitchen name
+typed after publishing reaches all three surfaces on lines added once the menu is published again,
+and one left blank shows the staff name — the variant's, on a variant line. A
 venue with no service zone sells nothing: sent lines with no zone, the till's three line-carrying
 routes, `POST /api/sales`, `POST /api/pay` and `POST /api/working-orders`, take the venue's
 counter-default zone, and refuse `service_zone.default_missing` when it has none
@@ -242,17 +243,29 @@ row exists only while it does one of those, keyed by the parent's menu row and t
 
 A variant has the same two states as a product (_One save, one transaction_ below).
 Removing a variant makes it Inactive and keeps its row; a saved variant left out of a product save
-is made Inactive too (`setProductVariants`). An Inactive variant is on no menu offer. An Active one
-is listed under its parent's offer, and marked available only while it is Available and that menu
-has not switched it off (`readOfferVariants` in `listMenuOffers`, `packages/catalogue/src/operations.ts`).
-The offer read the till sells from leaves out a parent that is Inactive or Unavailable, and its
-variants with it.
+is made Inactive too (`setProductVariants`). A variant Inactive when its menu was published is on
+none of that menu's offers, and one made Inactive since is served marked unavailable
+(`applyLiveFields`, `packages/catalogue/src/menu-document.ts`). An Active one
+is listed under its parent's offer with whether that menu offers it, read when the menu is published
+(`readOfferVariants` in `listMenuOffers`, `packages/catalogue/src/operations.ts`). The offers the
+dashboard's menu editor reads are not published ones, and mark a variant available only while it is
+Available and that menu has not switched it off (`listMenuOffersWithTopLevel`).
+The offers a till sells from are each menu's published version, which leaves out a product that was
+Inactive when it was published (`listMenuOffers`, `packages/catalogue/src/operations.ts`). A product
+that is Unavailable, or has become Inactive since, is served in its place marked unavailable
+(`applyLiveFields`, `packages/catalogue/src/menu-document.ts`). As served, whether a menu has
+switched a variant off is read from the published version, so a switch-off made since reaches the
+tills only when the menu is published again; whether an offer has switched an extras item off is
+read from the current rows, as is whether each product and variant is Active and Available
+(`applyLiveFields`).
 
 ### On the till
 
-Every Active, Available, top-level product on a menu gets a button, whether or not it is marked as
-sold alone (`listMenuOffers`). A variant never has a button: it is listed only nested under its
-parent's offer (`MenuOffer.variants`). The till reads its offers from the zone
+Every top-level product on a menu's published version gets a button, whether or not it is marked as
+sold alone. One that cannot be sold now keeps its button, greyed, and a tap on it does nothing
+(`product-grid.ts`), so the buttons around it do not move; the till's menu-state poll greys and
+restores it without reloading the offers (`apps/till/src/till-app.ts`). A variant never has a button: it is listed only nested under its
+parent's offer (`LiveOffer.variants`). The till reads its offers from the zone
 (`GET /api/default-service-zone/offers`, `GET /api/service-zones/:zoneId/offers`).
 
 Tapping a parent sold in whole units, and not tied to a scale, opens the picker at once
@@ -264,7 +277,7 @@ variants were sent in). The first available one is chosen to start with; an unav
 listed, drawn disabled; each is labelled with its difference from the parent's price on that menu
 ("+€1.50") where it has one (`till-modifier-picker`, `apps/till/src/widgets/modifier-picker.ts`;
 the difference is worked out in `apps/till/src/api/client.ts`). A product none of whose variants is
-available on that menu gets no button (`product-grid.ts`). An extras list does not offer a product
+available on that menu keeps its button, greyed (`product-grid.ts`). An extras list does not offer a product
 that has an Active variant (`readExtraProducts`, `packages/catalogue/src/offered-modifiers.ts`),
 since the order path refuses one picked as an extra (below). The catalogue refuses both ways of
 putting one there: an extras list naming such a product (`extras.product_has_variants`), and an
@@ -417,15 +430,15 @@ A product has two states. **Active / Inactive** is whether it exists for the ven
 Delete sends `active: false`, Restore sends `active: true`, and Delete removes no row.
 **Available / Unavailable** is "sold out for now": the editor's Available switch sends `available`,
 and it hides nothing in the dashboard. The till sells a product, or offers it as an extra, only when
-it is both (`listMenuOffers` and `readExtraProducts` in
-`packages/catalogue/src`, and `resolveBasketModifiers` in `apps/server/src/working-order.ts`) —
+it is both (`applyLiveFields` in `packages/catalogue/src/menu-document.ts` marks it on each
+served offer and extras item, and `priceOrderLines` in `apps/server/src/working-order.ts` refuses
+what it marks) —
 except that an edit of a held order may keep a line at or below its quantity although its dish or
 an extra has since become Inactive or Unavailable (a raise is checked in `updateHeldOrder`, and a
 change to the note, options or extras of a line the kitchen already has is refused
 `product.unavailable` too, because the changed line is sent to the kitchen again — `applyLineEdits`),
 and paying bills such a line only once it has been sent; unsent, it is refused `product.unavailable`
 (`priceStoredOrderForIssuance`).
-`listMenuOffers` keeps an Unavailable product's offer only when its caller passes
-`includeUnavailable`, as the menu management route and the venue readiness check do. A variant is
+`listMenuOffers` keeps an Unavailable product's offer, as it does an Available one. A variant is
 listed only under its parent's offer, only while Active, and as available only while Available and
 offered on that menu.

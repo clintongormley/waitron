@@ -259,7 +259,9 @@ function fixtureOffers(catalogue: ProductCatalogue): ZoneOfferCatalogue {
   return {
     context: { zoneId: "zone-counter", departmentId: "department-default", serviceMode: "prepay" },
     defaultMenuId,
-    menus: catalogue.menus,
+    // No `versionId`: a line added from these offers asserts no version, so the wire bodies the
+    // suites pin are the ones a till sends against the live version.
+    menus: catalogue.menus as ZoneOfferCatalogue["menus"],
     offers: catalogue.products.map((product, index): ZoneOfferCatalogue["offers"][number] => ({
       id: product.menuItemId ?? `menu-item-${product.id}-${index}`,
       menuId: product.catalogueId ?? defaultMenuId ?? "menu-fixture",
@@ -267,6 +269,9 @@ function fixtureOffers(catalogue: ProductCatalogue): ZoneOfferCatalogue {
       grossPrice: product.unitPrice,
       unitPrice: product.unitPrice,
       active: true,
+      available: true,
+      image: null,
+      description: null,
       menuName: product.catalogueName ?? catalogue.menus[0]?.name ?? "Menu",
       placements: [[]],
       name: product.name,
@@ -284,7 +289,14 @@ function fixtureOffers(catalogue: ProductCatalogue): ZoneOfferCatalogue {
       // `string[]`), so the fixture narrows them — the fixtures only ever supply real labels.
       dietaryDeclarations: (product.dietaryDeclarations ??
         []) as ZoneOfferCatalogue["offers"][number]["dietaryDeclarations"],
-      offeredModifiers: product.offeredModifiers ?? [],
+      offeredModifiers: (product.offeredModifiers ?? []).map((entry) =>
+        entry.kind === "extras"
+          ? {
+              ...entry,
+              items: entry.items.map((item) => ({ ...item, image: null, available: true })),
+            }
+          : entry,
+      ),
       variants: (product.variants ?? []).map(
         (variant): ZoneOfferCatalogue["offers"][number]["variants"][number] => ({
           id: variant.id,
@@ -633,6 +645,8 @@ describe("till-app", () => {
           dietDerivation: null,
           dietOverride: null,
           courseId: null,
+          available: true,
+          offeredModifiers: [],
           variants: [],
         },
         {
@@ -653,6 +667,8 @@ describe("till-app", () => {
           dietDerivation: null,
           dietOverride: null,
           courseId: null,
+          available: true,
+          offeredModifiers: [],
           variants: [],
         },
       ],
@@ -2123,6 +2139,8 @@ describe("till-app", () => {
         preselected: false,
         addAllergens: null,
         suitableFor: [],
+        image: null,
+        available: true,
       },
     ],
   };
@@ -2933,8 +2951,8 @@ describe("till-app", () => {
       context: { zoneId: "zone-counter", departmentId: "department-bar", serviceMode: "prepay" },
       defaultMenuId: "menu-standard",
       menus: [
-        { id: "menu-standard", name: "Standard", isDefault: true },
-        { id: "menu-happy", name: "Happy hour", isDefault: false },
+        { id: "menu-standard", name: "Standard", isDefault: true, versionId: "version-standard" },
+        { id: "menu-happy", name: "Happy hour", isDefault: false, versionId: "version-happy" },
       ],
       offers: [
         {
@@ -3838,9 +3856,11 @@ describe("till-app", () => {
         await flush(el);
 
         // Appended to the tab's own working order, then re-read so the drawer reflects the new round.
-        expect(addTabRound).toHaveBeenCalledWith("wo-7", [
-          { menuItemId: "menu-item-cafe-0", quantity: "1" },
-        ]);
+        expect(addTabRound).toHaveBeenCalledWith(
+          "wo-7",
+          [{ menuItemId: "menu-item-cafe-0", quantity: "1" }],
+          { signal: expect.any(AbortSignal) },
+        );
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 
@@ -3857,9 +3877,11 @@ describe("till-app", () => {
           lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1", courseId: "postres" }],
         });
         await flush(el);
-        expect(addTabRound).toHaveBeenCalledWith("wo-7", [
-          { menuItemId: "menu-item-cafe-0", quantity: "1", courseId: "postres" },
-        ]);
+        expect(addTabRound).toHaveBeenCalledWith(
+          "wo-7",
+          [{ menuItemId: "menu-item-cafe-0", quantity: "1", courseId: "postres" }],
+          { signal: expect.any(AbortSignal) },
+        );
       });
 
       it("send-round forwards a per-line hold flag verbatim to addTabRound (coursing A3)", async () => {
@@ -3875,9 +3897,11 @@ describe("till-app", () => {
           lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1", hold: true }],
         });
         await flush(el);
-        expect(addTabRound).toHaveBeenCalledWith("wo-7", [
-          { menuItemId: "menu-item-cafe-0", quantity: "1", hold: true },
-        ]);
+        expect(addTabRound).toHaveBeenCalledWith(
+          "wo-7",
+          [{ menuItemId: "menu-item-cafe-0", quantity: "1", hold: true }],
+          { signal: expect.any(AbortSignal) },
+        );
       });
 
       it("boots the venue courses + fire mode and threads them to the table-order screen", async () => {

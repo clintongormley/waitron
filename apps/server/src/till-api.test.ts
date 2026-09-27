@@ -60,6 +60,7 @@ import type { TillApiDeps } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE, requireSession } from "./till-session.js";
@@ -218,6 +219,8 @@ const suite = useVenueDb({
           productId: p.id,
           grossPrice: "0.50",
         });
+        await publishWorkingMenu(tx, cat.id);
+        await publishWorkingMenu(tx, hiddenMenu.id);
 
         return {
           agua: { ...p, catalogueId: cat.id },
@@ -1485,11 +1488,13 @@ describe("GET /api/products (session-guarded catalogue)", () => {
       expect(res.status).toBe(200);
       return ((await res.json()) as { offers: { id: string }[] }).offers.map((offer) => offer.id);
     };
-    // The same write `PATCH /management-api/catalogues/:id/items/:itemId` makes.
+    // The same write `PATCH /management-api/catalogues/:id/items/:itemId` makes, then a publish:
+    // the switch is the menu's, so a till sees it once published.
     const switchTo = (active: boolean) =>
-      withTransaction(suite.db, (tx) =>
-        updateMenuItem(tx, aguaProduct.catalogueId, aguaOfferId, { active }),
-      );
+      withTransaction(suite.db, async (tx) => {
+        await updateMenuItem(tx, aguaProduct.catalogueId, aguaOfferId, { active });
+        await publishWorkingMenu(tx, aguaProduct.catalogueId);
+      });
 
     try {
       await switchTo(false);
@@ -3343,6 +3348,7 @@ async function modifierOfferFixture() {
     await setMenuItemExtraLists(tx, offer.id, [
       { listId: extrasList.id, items: [{ productId: cheese.id, price: "0.35", available: true }] },
     ]);
+    await publishWorkingMenu(tx, aguaProduct.catalogueId);
     return {
       product,
       offer,

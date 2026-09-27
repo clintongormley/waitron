@@ -12,7 +12,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
 import { hashPassword, hashPin } from "@waitron/identity";
-import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalogue";
+import { listAccessibleCatalogues, listAvailableProducts, menuStatus } from "@waitron/catalogue";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { seedDemoRestaurant } from "./seed.js";
 
@@ -212,8 +212,13 @@ describe("seedDemoRestaurant", () => {
         join kitchen_stations s on s.id = r.station_id
         where c.name->>'en' = 'Drinks'
         order by z.name`);
+      const published = await menuStatus(
+        tx,
+        menus.map((menu) => menu.id),
+      );
       return {
         menus,
+        menuStates: [...published.values()].map((status) => status.state),
         products,
         tables: tableRows[0]!.n,
         staff: staffRows[0]!.n,
@@ -246,6 +251,8 @@ describe("seedDemoRestaurant", () => {
       "Deli takeaway",
       "Menú del Día",
     ]);
+    // Every menu is published as seeded, so a till sells it (D17).
+    expect(read.menuStates).toEqual(["current", "current", "current"]);
     expect(read.departments).toEqual([
       {
         name: "Deli",

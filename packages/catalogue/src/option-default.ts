@@ -1,4 +1,4 @@
-// Imports nothing, so the dashboard shows the same default the server will store.
+// Imports nothing, so browser code can import it by path and share it with the server.
 
 export function effectiveDefaultLabelId(
   labels: readonly { id: string; available: boolean }[],

@@ -5,6 +5,7 @@ import { AppError, FALLBACK_LOCALE, resolveContentText } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { readContentLanguages } from "./content-languages.js";
 import { listMenuOffers } from "./operations.js";
+import { effectiveDefaultLabelId } from "./option-default.js";
 import { menuItemExtraItems } from "./schema/extras.js";
 import { menuDetails } from "./schema/menu.js";
 import { optionLabels } from "./schema/options.js";
@@ -25,6 +26,7 @@ import type {
   MenuChange,
   MenuChangeSource,
   MenuDocument,
+  MenuUnavailable,
   ProductChangeField,
   SectionChangeField,
 } from "./menu-document-types.js";
@@ -109,7 +111,7 @@ export async function buildMenuDocuments(
   const offers = await listMenuOffers(
     tx,
     details.map((row) => row.menuId),
-    { includeUnavailable: true, includeEveryModifierItem: true, graph: loaded },
+    { includeEveryModifierItem: true, graph: loaded },
   );
   const dishFacts = await readDishFacts(tx, [...new Set(offers.map((offer) => offer.productId))]);
   const extraImages = await readEffectiveImages(tx, [
@@ -322,7 +324,7 @@ export function documentImages(document: MenuDocument): string[] {
 }
 
 /** The document's offers in menu order: depth first, each product at its first place. */
-function offersInOrder(document: MenuDocument): FrozenOffer[] {
+export function documentOffers(document: MenuDocument): FrozenOffer[] {
   const seen = new Set<string>();
   const ordered: FrozenOffer[] = [];
   const walk = (members: readonly DocumentMember[]): void => {
@@ -345,32 +347,45 @@ interface LiveProductRow {
   category: Record<string, string> | null;
 }
 
-/**
- * The documents' offers, per menu and in menu order, with the live fields put back from the current
- * rows: availability, and the VAT class, course and reporting category that are not menu content.
- *
- * An item whose product row no longer exists is left out, as is an offer whose product is gone.
- */
-export async function applyLiveFields(
-  tx: Transaction,
-  documents: readonly MenuDocument[],
-): Promise<Map<string, LiveOffer[]>> {
-  const live = new Map<string, LiveOffer[]>();
-  if (documents.length === 0) return live;
+/** The current rows behind some published offers. */
+interface LiveRows {
+  /** Each product, variant and extras item's product the offers name, by id; a gone one is absent. */
+  products: Map<string, LiveProductRow>;
+  /** Each option label the offers name that still exists, with its availability. */
+  labels: Map<string, boolean>;
+  /** Every extras item an offer has switched off, by {@link itemKey}. */
+  withdrawn: Set<string>;
+}
+
+const itemKey = (menuItemId: string, listId: string, productId: string) =>
+  `${menuItemId}\u0000${listId}\u0000${productId}`;
+
+/** A product can be sold now. */
+const sellable = (row: LiveProductRow) => row.active && row.available;
+
+/** An option label can be picked now; a label deleted since the version was published cannot. */
+const labelAvailable = (rows: LiveRows, labelId: string) => rows.labels.get(labelId) === true;
+
+/** One read of each table, however many offers, each id list split into {@link batches}. */
+async function readLiveRows(tx: Transaction, offers: readonly FrozenOffer[]): Promise<LiveRows> {
   const productIds = new Set<string>();
   const labelIds = new Set<string>();
-  const menuItemIds: string[] = [];
-  for (const document of documents)
-    for (const offer of Object.values(document.offers)) {
-      menuItemIds.push(offer.id);
-      productIds.add(offer.productId);
-      for (const variant of offer.variants) productIds.add(variant.id);
-      for (const entry of offer.offeredModifiers)
-        if (entry.kind === "extras") for (const item of entry.items) productIds.add(item.productId);
-        else for (const label of entry.labels) labelIds.add(label.id);
-    }
+  const withExtras: string[] = [];
+  for (const offer of offers) {
+    productIds.add(offer.productId);
+    for (const variant of offer.variants) productIds.add(variant.id);
+    let carriesExtras = false;
+    for (const entry of offer.offeredModifiers)
+      if (entry.kind === "extras")
+        for (const item of entry.items) {
+          productIds.add(item.productId);
+          carriesExtras = true;
+        }
+      else for (const label of entry.labels) labelIds.add(label.id);
+    if (carriesExtras) withExtras.push(offer.id);
+  }
 
-  const rows = new Map<string, LiveProductRow>();
+  const productRows = new Map<string, LiveProductRow>();
   for (const batch of batches([...productIds]))
     for (const row of await tx
       .select({
@@ -385,7 +400,7 @@ export async function applyLiveFields(
       .leftJoin(parentProducts, parentJoin)
       .leftJoin(categories, eq(categories.id, effectiveProductColumns.categoryId))
       .where(inArray(products.id, batch)))
-      rows.set(row.id, { ...row, vatClass: row.vatClass as VatClass });
+      productRows.set(row.id, { ...row, vatClass: row.vatClass as VatClass });
   const labels = new Map<string, boolean>();
   for (const batch of batches([...labelIds]))
     for (const row of await tx
@@ -394,9 +409,7 @@ export async function applyLiveFields(
       .where(inArray(optionLabels.id, batch)))
       labels.set(row.id, row.available);
   const withdrawn = new Set<string>();
-  const itemKey = (menuItemId: string, listId: string, productId: string) =>
-    `${menuItemId}\u0000${listId}\u0000${productId}`;
-  for (const batch of batches(menuItemIds))
+  for (const batch of batches(withExtras))
     for (const row of await tx
       .select({
         menuItemId: menuItemExtraItems.menuItemId,
@@ -408,18 +421,89 @@ export async function applyLiveFields(
         and(inArray(menuItemExtraItems.menuItemId, batch), eq(menuItemExtraItems.available, false)),
       ))
       withdrawn.add(itemKey(row.menuItemId, row.listId, row.productId));
+  return { products: productRows, labels, withdrawn };
+}
+
+/**
+ * Each product, variant or extras item's product the documents' offers name that is Inactive or
+ * Unavailable, each option label they name that is unavailable or deleted, and each extras item an
+ * offer has switched off in its list.
+ */
+export async function readUnavailable(
+  tx: Transaction,
+  documents: readonly MenuDocument[],
+): Promise<MenuUnavailable> {
+  const offers = documents.flatMap((document) => Object.values(document.offers));
+  const rows = await readLiveRows(tx, offers);
+  const unsellableProducts = new Set<string>();
+  const labels = new Set<string>();
+  const extraItems = new Map<
+    string,
+    { menuItemId: string; productId: string; extraListId: string }
+  >();
+  const unsellable = (productId: string) => {
+    const row = rows.products.get(productId);
+    if (row !== undefined && !sellable(row)) unsellableProducts.add(productId);
+  };
+  for (const offer of offers) {
+    unsellable(offer.productId);
+    for (const variant of offer.variants) unsellable(variant.id);
+    for (const entry of offer.offeredModifiers)
+      if (entry.kind === "options") {
+        for (const label of entry.labels) if (!labelAvailable(rows, label.id)) labels.add(label.id);
+      } else
+        for (const item of entry.items) {
+          unsellable(item.productId);
+          const key = itemKey(offer.id, entry.id, item.productId);
+          if (rows.withdrawn.has(key))
+            extraItems.set(key, {
+              menuItemId: offer.id,
+              productId: item.productId,
+              extraListId: entry.id,
+            });
+        }
+  }
+  return {
+    products: [...unsellableProducts],
+    optionLabels: [...labels],
+    extraItems: [...extraItems.values()],
+  };
+}
+
+/**
+ * The documents' offers, per menu and in menu order, with the live fields put back from the current
+ * rows: availability, and the VAT class, course and reporting category that are not menu content.
+ * With `menuItemIds`, only the offers it names are read and returned.
+ *
+ * An item whose product row no longer exists is left out, as is an offer whose product is gone.
+ */
+export async function applyLiveFields(
+  tx: Transaction,
+  documents: readonly MenuDocument[],
+  menuItemIds?: ReadonlySet<string>,
+): Promise<Map<string, LiveOffer[]>> {
+  const live = new Map<string, LiveOffer[]>();
+  if (documents.length === 0) return live;
+  const offersOf = new Map(
+    documents.map((document) => [
+      document.menuId,
+      documentOffers(document).filter(
+        (offer) => menuItemIds === undefined || menuItemIds.has(offer.id),
+      ),
+    ]),
+  );
+  const rows = await readLiveRows(tx, [...offersOf.values()].flat());
   const { defaultLanguage } = await readContentLanguages(tx, FALLBACK_LOCALE);
   const categoryOf = (row: LiveProductRow) =>
     row.category === null
       ? null
       : resolveContentText(row.category, defaultLanguage, defaultLanguage);
-  const sellable = (row: LiveProductRow) => row.active && row.available;
 
-  for (const document of documents)
+  for (const [menuId, offers] of offersOf)
     live.set(
-      document.menuId,
-      offersInOrder(document).flatMap((offer): LiveOffer[] => {
-        const dish = rows.get(offer.productId);
+      menuId,
+      offers.flatMap((offer): LiveOffer[] => {
+        const dish = rows.products.get(offer.productId);
         if (dish === undefined) return [];
         return [
           {
@@ -429,7 +513,7 @@ export async function applyLiveFields(
             courseId: dish.courseId,
             category: categoryOf(dish),
             variants: offer.variants.flatMap((variant) => {
-              const row = rows.get(variant.id);
+              const row = rows.products.get(variant.id);
               return row === undefined
                 ? []
                 : [
@@ -446,22 +530,18 @@ export async function applyLiveFields(
               if (entry.kind === "options") {
                 const withAvailability = entry.labels.map((label) => ({
                   ...label,
-                  available: labels.get(label.id) === true,
+                  available: labelAvailable(rows, label.id),
                 }));
                 return {
                   ...entry,
                   labels: withAvailability,
-                  defaultLabelId: withAvailability.some(
-                    (label) => label.id === entry.defaultLabelId && label.available,
-                  )
-                    ? entry.defaultLabelId
-                    : null,
+                  defaultLabelId: effectiveDefaultLabelId(withAvailability, entry.defaultLabelId),
                 };
               }
               return {
                 ...entry,
                 items: entry.items.flatMap((item) => {
-                  const row = rows.get(item.productId);
+                  const row = rows.products.get(item.productId);
                   return row === undefined
                     ? []
                     : [
@@ -470,7 +550,7 @@ export async function applyLiveFields(
                           vatClass: row.vatClass,
                           available:
                             sellable(row) &&
-                            !withdrawn.has(itemKey(offer.id, entry.id, item.productId)),
+                            !rows.withdrawn.has(itemKey(offer.id, entry.id, item.productId)),
                         },
                       ];
                 }),
@@ -518,7 +598,7 @@ function shapeOf(document: MenuDocument): Shape {
     }
   };
   walk(document.root.members, []);
-  const offers = new Map(offersInOrder(document).map((offer) => [offer.productId, offer]));
+  const offers = new Map(documentOffers(document).map((offer) => [offer.productId, offer]));
   const extras = new Map<string, FrozenExtraItemFacts>();
   for (const offer of offers.values())
     for (const entry of offer.offeredModifiers)

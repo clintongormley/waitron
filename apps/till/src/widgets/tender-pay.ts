@@ -153,8 +153,9 @@ export class TillTenderPay extends LitElement {
   /** The order this widget settles. Set before the widget connects (its lifecycle subscribes). */
   @property({ attribute: false }) store!: WorkingOrderStore;
   /**
-   * A sale is in flight. Disabling the controls is only the VISIBLE half of the double-file guard;
-   * the real safety is the app-level single-flight flag (`till-app`'s `submitting`).
+   * A sale is in flight, or a basket line must be resolved first. Disabling the controls is only the
+   * VISIBLE half of the double-file guard; the real safety is the app-level single-flight flag
+   * (`till-app`'s `submitting`).
    */
   @property({ type: Boolean }) busy = false;
   @property() mode: OrderFlow = "prepay";

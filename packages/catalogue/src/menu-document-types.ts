@@ -91,7 +91,11 @@ export type LiveExtraItem = OfferedExtraItem & { image: string | null; available
 export type LiveOptionsList = Omit<OfferedOptionsList, "labels" | "defaultLabelId"> & {
   /** Every label, each with its current availability. */
   labels: OptionLabel[];
-  /** Null unless it names a label that is available now. */
+  /**
+   * An available label, or null only when no label is available now (`effectiveDefaultLabelId`:
+   * `applyLiveFields` applies it to the published default, the till's `withUnavailable` to the
+   * default it loaded).
+   */
   defaultLabelId: string | null;
 };
 
@@ -172,4 +176,20 @@ export interface MenuPreview {
 export interface PublishedMenuVersion {
   versionId: string;
   number: number;
+}
+
+/** What a zone's live menus hold that cannot be sold now — `GET /api/menu-state`'s `unavailable`. */
+export interface MenuUnavailable {
+  /** Every product or variant that is Inactive or Unavailable, extras items' products included. */
+  products: string[];
+  /** Every option label that is unavailable, or deleted since the version was published. */
+  optionLabels: string[];
+  /** Every extras item an offer has switched off, in the list it is switched off in. */
+  extraItems: { menuItemId: string; extraListId: string; productId: string }[];
+}
+
+/** `GET /api/menu-state?zoneId=` — each live menu's published version, and what cannot be sold now. */
+export interface MenuState {
+  menus: { menuId: string; versionId: string }[];
+  unavailable: MenuUnavailable;
 }

@@ -18,6 +18,7 @@ import {
   createExtraList,
   createLabel,
   createProduct,
+  menuPublications,
   setProductLabels,
   setProductVariants,
   updateCategory,
@@ -370,13 +371,17 @@ describe("what a filed sale line records about its product", () => {
       lines: [{ menuItemId: v.counter.offerFor(v.products.negroni), quantity: "2" }],
       tender: { method: "cash", amount: "20.00" },
     });
+    const [published] = await suite.db
+      .select({ versionId: menuPublications.versionId })
+      .from(menuPublications)
+      .where(eq(menuPublications.menuId, v.counter.menuId));
 
     expect(await filedLines(id)).toEqual([
       expect.objectContaining({
         productId: v.products.negroni,
         parentProductId: null,
         menuId: v.counter.menuId,
-        menuVersionId: null,
+        menuVersionId: published!.versionId,
         lineGross: 1800,
         classification: {
           reporting: underAlcoholic(v),

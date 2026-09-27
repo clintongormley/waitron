@@ -328,6 +328,9 @@ export const en = {
     "The separate bill could not go back to the table. It is in Held orders on the counter.",
   "table.check_return_unconfirmed":
     "The server did not answer, so it is not known whether the separate bill went back to the table. If it is not on the table, it is in Held orders on the counter.",
+  "table.round_sending": "Sending the round…",
+  "table.round_unconfirmed":
+    "The server did not answer, so the round may have been added. Check the tab before sending it again.",
   // Errors
   "pin.invalid": "Wrong PIN, try again",
   "person.suspended": "This account is disabled — ask a manager",
@@ -390,6 +393,20 @@ export const en = {
   "service_zone.refresh": "Refresh menus",
   "service_zone.load_error": "Could not load menus for this service area",
   "service_zone.basket_active": "Clear the basket before changing service area",
+  // A basket refreshed against a newly published menu. `{name}` is substituted at the call site;
+  // `t()` does not interpolate.
+  "basket_refresh.title": "The menu has changed",
+  "basket_refresh.changed": "New prices",
+  "basket_refresh.blocked": "Remove or replace before paying",
+  "basket_refresh.removed": "{name} is no longer on this menu",
+  "basket_refresh.unavailable": "{name} is not available",
+  "basket_refresh.extra_removed": "{name} is no longer offered with this dish",
+  "basket_refresh.confirm": "Update the order",
+  "basket_refresh.pending": "The menu has changed. Review the changes before paying.",
+  "basket_refresh.review": "Review changes",
+  "basket.blocked.removed": "No longer on the menu",
+  "basket.blocked.unavailable": "Sold out",
+  "basket.blocked.extra": "An extra or choice has changed",
   // Server status
   "server.on": "On:",
   "server.unknown": "checking",
@@ -695,6 +712,9 @@ export const es: Record<StringKey, string> = {
     "La cuenta separada no pudo volver a la mesa. Está en Pedidos aparcados, en el mostrador.",
   "table.check_return_unconfirmed":
     "El servidor no ha respondido, así que no se sabe si la cuenta separada ha vuelto a la mesa. Si no está en la mesa, está en Pedidos aparcados, en el mostrador.",
+  "table.round_sending": "Enviando la ronda…",
+  "table.round_unconfirmed":
+    "El servidor no respondió, así que la ronda puede haberse añadido. Revisa la cuenta antes de volver a enviarla.",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "person.suspended": "Esta cuenta está desactivada. Avisa a un responsable",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",
@@ -751,6 +771,18 @@ export const es: Record<StringKey, string> = {
   "service_zone.refresh": "Actualizar menús",
   "service_zone.load_error": "No se pudieron cargar los menús de esta zona",
   "service_zone.basket_active": "Vacía la cesta antes de cambiar de zona de servicio",
+  "basket_refresh.title": "La carta ha cambiado",
+  "basket_refresh.changed": "Precios nuevos",
+  "basket_refresh.blocked": "Quita o sustituye antes de cobrar",
+  "basket_refresh.removed": "{name} ya no está en esta carta",
+  "basket_refresh.unavailable": "{name} no está disponible",
+  "basket_refresh.extra_removed": "{name} ya no se ofrece con este plato",
+  "basket_refresh.confirm": "Actualizar el pedido",
+  "basket_refresh.pending": "La carta ha cambiado. Revisa los cambios antes de cobrar.",
+  "basket_refresh.review": "Revisar cambios",
+  "basket.blocked.removed": "Ya no está en la carta",
+  "basket.blocked.unavailable": "Agotado",
+  "basket.blocked.extra": "Ha cambiado un extra u opción",
   "server.on": "Activo:",
   "server.unknown": "comprobando",
   "server.unreachable": "sin conexión",

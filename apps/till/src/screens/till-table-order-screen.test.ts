@@ -148,7 +148,7 @@ describe("till-table-order-screen", () => {
     expect(grid(el).products.map((p) => p.id)).toEqual(["vegan"]);
   });
 
-  it("accumulates a round and emits send-round with the picked lines, then clears the round", async () => {
+  it("accumulates a round and emits send-round with the picked lines, keeping the round for the app to empty once sent", async () => {
     const { el } = await mount();
     // Pick a café into the current round (the grid rings an `each` tile straight into its store).
     grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
@@ -162,8 +162,50 @@ describe("till-table-order-screen", () => {
     expect(captured!.composed).toBe(true);
     expect(captured!.bubbles).toBe(true);
     expect(captured!.detail.lines).toEqual([{ menuItemId: "menu-item-cafe", quantity: "1" }]);
-    // The round bar is the CURRENT round only — it clears once sent, ready for the next round.
+    // The round stays until the app has the server's answer: a refused round must not be lost.
+    expect(captured!.detail.round).toBe(grid(el).store);
+    expect(captured!.detail.sent).toEqual(grid(el).store.lines);
+    expect(grid(el).store.lineCount).toBe(1);
+  });
+
+  it("keeps one round per order: another order starts empty, and the first comes back with its lines", async () => {
+    const { el } = await mount({ orderId: "wo-A" });
+    grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
+    await el.updateComplete;
+    expect(grid(el).store.lineCount).toBe(1);
+
+    el.orderId = "wo-B";
+    await el.updateComplete;
     expect(grid(el).store.lineCount).toBe(0);
+    const basket = el.shadowRoot!.querySelector(".round-bar till-basket")!;
+    expect(basket.shadowRoot!.textContent).toContain(t("basket.empty"));
+    expect(el.shadowRoot!.querySelector("[data-send-round]")!.hasAttribute("disabled")).toBe(true);
+
+    el.orderId = "wo-A";
+    await el.updateComplete;
+    expect(grid(el).store.lineCount).toBe(1);
+    expect(el.shadowRoot!.querySelector("[data-send-round]")!.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("says a round is being sent, and shuts its controls, until the app has the answer", async () => {
+    const { el } = await mount();
+    grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
+    await el.updateComplete;
+    grid(el).store.sending = true;
+    await el.updateComplete;
+
+    const status = el.shadowRoot!.querySelector<HTMLElement>("[data-round-sending]");
+    expect(status?.getAttribute("role")).toBe("status");
+    expect(status!.textContent).toContain(t("table.round_sending"));
+    expect(el.shadowRoot!.querySelector("[data-round-controls]")!.hasAttribute("inert")).toBe(true);
+    expect(el.shadowRoot!.querySelector("[data-send-round]")!.hasAttribute("disabled")).toBe(true);
+
+    grid(el).store.sending = false;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-round-sending]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-round-controls]")!.hasAttribute("inert")).toBe(
+      false,
+    );
   });
 
   it("sends a zone offer by menu-item identity", async () => {

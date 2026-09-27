@@ -125,6 +125,87 @@ export interface ZoneMenuOffer {
    * EFFECTIVE inherited values — its own where set, else its parent's. */
   readonly variants: readonly ZoneMenuOfferVariant[];
   readonly courseId: string | null;
+  /** The product is Active and Available now. An unavailable offer is served in its place, marked. */
+  readonly available: boolean;
+  /** The extras and options lists the published version offers with this dish, in order. */
+  readonly offeredModifiers: readonly ZoneOfferedModifier[];
+}
+
+/**
+ * One list a published offer carries. Every extras item and option label the version holds is
+ * present, each marked with whether it can be picked now.
+ */
+export type ZoneOfferedModifier =
+  | {
+      readonly kind: "extras";
+      readonly id: string;
+      readonly name: string;
+      readonly customerName: Readonly<Record<string, string>> | null;
+      readonly kitchenName: string | null;
+      readonly minPicks: number;
+      readonly maxPicks: number | null;
+      readonly items: readonly {
+        readonly productId: string;
+        readonly name: string;
+        readonly customerName: Readonly<Record<string, string>> | null;
+        readonly kitchenName: string | null;
+        /** GROSS, as published. */
+        readonly price: string;
+        readonly vatClass: string;
+        readonly maxQuantity: number;
+        readonly preselected: boolean;
+        readonly available: boolean;
+      }[];
+    }
+  | {
+      readonly kind: "options";
+      readonly id: string;
+      readonly name: string;
+      readonly customerName: Readonly<Record<string, string>> | null;
+      readonly kitchenName: string | null;
+      readonly defaultLabelId: string | null;
+      readonly labels: readonly {
+        readonly id: string;
+        readonly name: string;
+        readonly customerName: Readonly<Record<string, string>> | null;
+        readonly kitchenName: string | null;
+        readonly available: boolean;
+      }[];
+    };
+
+/** A menu a zone sells from: its live version, and whether it is the zone's default. */
+export interface ZoneMenu {
+  readonly id: string;
+  readonly name: string;
+  readonly isDefault: boolean;
+  readonly versionId: string;
+}
+
+/** What a zone sells: its published menus' live versions, each offer marked with its availability. */
+export interface ZoneOffers {
+  readonly defaultMenuId: string | null;
+  readonly menus: readonly ZoneMenu[];
+  readonly offers: readonly ZoneMenuOffer[];
+}
+
+/** What a zone's live menus hold that cannot be sold now. */
+export interface ZoneUnavailable {
+  /** Every product or variant that is Inactive or Unavailable, extras items' products included. */
+  readonly products: readonly string[];
+  /** Every option label that is unavailable, or deleted since the version was published. */
+  readonly optionLabels: readonly string[];
+  /** Every extras item an offer has switched off, in the list it is switched off in. */
+  readonly extraItems: readonly {
+    readonly menuItemId: string;
+    readonly productId: string;
+    readonly extraListId: string;
+  }[];
+}
+
+/** A zone's live menu versions, and what they hold that cannot be sold now. */
+export interface ZoneMenuState {
+  readonly menus: readonly { readonly menuId: string; readonly versionId: string }[];
+  readonly unavailable: ZoneUnavailable;
 }
 
 export interface ZoneMenuOfferVariant {
@@ -173,26 +254,24 @@ export interface VenueServiceContribution {
     zoneId: string,
     productIds: readonly string[],
   ): Promise<ReadonlyMap<string, PreparationRoute>>;
+  /** Refused `menu.version_changed` unless every `asserted` version is the live version of one of
+   *  the zone's menus. With `menuItemIds`, only the offers it names are served. */
   listZoneOffers(
     tx: Transaction,
     cfg: { locationId: LocationId },
     zoneId: string,
-  ): Promise<{
-    defaultMenuId: string | null;
-    menus: readonly { id: string; name: string; isDefault: boolean }[];
-    offers: readonly ZoneMenuOffer[];
-  }>;
+    options?: {
+      asserted?: readonly { menuId: string; versionId: string }[];
+      menuItemIds?: readonly string[];
+    },
+  ): Promise<ZoneOffers>;
+  /** Does not check the zone: an unknown one holds nothing. */
+  menuState(tx: Transaction, zoneId: string): Promise<ZoneMenuState>;
   resolveNewOrderZone(
     tx: Transaction,
     cfg: { locationId: LocationId },
     input: { zoneId?: string | null; deviceId?: string | null },
   ): Promise<OrderServiceContext>;
-  resolveZoneOffer(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    zoneId: string,
-    menuItemId: string,
-  ): Promise<ZoneMenuOffer>;
   recordOrderContext(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -224,6 +303,7 @@ export interface VenueServiceContribution {
       workingOrderLineId: string;
       menuItemId: string;
       menuId: string;
+      menuVersionId: string | null;
       menuName: string;
       categoryName: string;
       unitId: string;
@@ -237,11 +317,14 @@ export interface VenueServiceContribution {
       dietOverride: unknown;
     }[]
   >;
+  /** Each line's offer is looked up in `offers`, the zone's offers the lines were priced from; one
+   *  it does not hold is refused `service_zone.offer_not_allowed`. */
   recordLineContexts(
     tx: Transaction,
     cfg: { locationId: LocationId },
     workingOrderId: string,
     lines: readonly { workingOrderLineId: string; menuItemId: string }[],
+    offers: ZoneOffers,
   ): Promise<void>;
   copyOrderContext(
     tx: Transaction,

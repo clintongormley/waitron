@@ -166,9 +166,9 @@ should ignore capitals (today "Alcoholic" and "alcoholic" can both exist — a s
 label routes and `?descendants=1` on a category's products have no dashboard caller yet.
 **Classification Task 2 landed as #648 (2026-09-25):**
 every till filing path records each sale line's product, a variant's parent, its menu, its gross
-and its reporting chain and labels when the record is issued. `sale_lines.menu_version_id` stays
-null on every line until the menus plan's Task 7 (sell from the published version) fills it; that
-task wires it, because it lands second.
+and its reporting chain and labels when the record is issued. Since menus Task 7,
+`sale_lines.menu_version_id` is the menu version the line was added from
+(`working_line_contexts.menu_version_id`); a line added before Task 7 recorded none and files null.
 Two follow-ups it leaves: the till shows "try again" when `sale_classification.invalid` refuses a sale (it happens only on corrupt category data, and retrying cannot succeed), so the code wants its own till message on the permanent-refusal list; and a card recovery refused that way leaves a captured payment unlinked until the catalogue is fixed, as recovery's existing below-locked-total refusal already does. The demo seed (`apps/server/scripts/demo-seed/seed-sales.ts`), the other scripts that call `recordSale` directly (`record-one-sale.ts`, `settle-invoice-first.ts`, `daily-close-demo.ts`, `daily-close-z-demo.ts`, `modelo-303-demo.ts`) and `apps/server/src/fiscal-readiness-runner.ts` file sales without the issuance pass, so seeded demo lines carry no product id, classification or gross, and the spec's category reports would show every one as Not recorded — classification Task 3 cannot measure its reports on seeded sales until the seed records them.
 **Menus Task 1 (sections), landed as #651 (2026-09-25):**
 reusable, ordered, nestable sections (`sections`, `section_members`), with section and member
@@ -248,8 +248,8 @@ window is resized while it is open.
 **Menus Task 6 (publishing), landed as #677 (2026-09-26):** a menu can be published: publishing
 freezes the menu's working state as a numbered version in `menu_versions`, which can never be
 changed or deleted, and points `menu_publications` at it; the Menus list shows each menu's status and
-a Preview tab words each change and publishes the one menu. **Tills still
-sell from the working state until menus Task 7.** **M6c** (#705, 2026-09-26): an extras item's photo
+a Preview tab words each change and publishes the one menu. Tills sell from the published version
+since menus Task 7. **M6c** (#705, 2026-09-26): an extras item's photo
 is in the frozen copy, so changing it flags every menu offering it; deleting a product flags its
 menus; and the Preview tab shows the whole proposed menu below the changes. A version published before M6c has no photo on its extras items, so each
 menu with extras shows unpublished changes until it is published again. Left, none blocking: after a
@@ -309,7 +309,8 @@ refresh read that has not answered after 25 seconds is cancelled. No migration. 
 weighed line's notice reads "0.5×" without "kg"; the counter's prep-queue card shows no notices and
 does not refresh; a failed kitchen refresh is silent, so a display that loses the server goes stale
 without a warning; the till's API client has no general request timeout (only the kitchen refresh
-reads are bounded); a refusal that lands after the tab is paid, or after a server switch, shows the
+and menu-state reads are bounded, at 25 seconds, and a table's round sends and offer reloads, at 150
+seconds); a refusal that lands after the tab is paid, or after a server switch, shows the
 ordinary unnamed message; the till's screen-to-app events use plain names, while
 [conventions-ui.md](developers/conventions-ui.md) says every custom event is `wt-*` — the rule or
 the till needs to change.
@@ -321,6 +322,52 @@ before building, as the PR records. No migration. Left open: if the waiter leave
 itself answers, the bill arrives after they have gone and is not merged back (it stays in Held
 orders); and the counter's Held orders list shows every open order, a table's own tab included
 (seen in the same run, not investigated).
+**Menus Task 7 (tills sell from the published version), on `feat/menus-sell-published`:** a till
+is offered, and every new line is charged, what each menu's published version says: the dish, its
+variant, its extras and its options. What is still read from the current rows: whether each product
+and variant is Active and Available, whether each option label is Available, and whether an offer
+has switched an extras item off (a sold-out dish is served in its place marked unavailable, and a
+line for it is refused `product.unavailable`; an extras item sold out or switched off on the offer is
+refused as a pick the list does not offer), while whether a menu has switched a variant off is read
+from the published version; the VAT class, kitchen course and reporting category the served offer carries,
+and each extras item's VAT class (`applyLiveFields`, `packages/catalogue/src/menu-document.ts`), so
+a VAT change still reaches a new line and a new extra without a publish, which menus M7v changes next; and whether a picked extra has since gained
+an Active variant, which refuses the pick `product.variant_required`.
+Each unsaved line a till sends may name the version it was priced against (`menuVersionId`); a
+request naming one that is no longer live is refused `menu.version_changed` (409), listing each
+affected menu's live version, before anything is priced or written. A held or tab line records the
+version it was added from, and its filed sale line carries that version. `GET /api/menu-state?zoneId=`
+answers each live version and what is sold out now. **Upgrading:** a box or dev venue seeded before
+this branch, and a venue imported from a configuration file, arrives with every menu unpublished,
+and a zone sells nothing until a menu it offers is published (an unpublished menu is left out, and
+the zone sells its published ones); the dashboard's readiness list reports a zone with none
+(`zone.menu_unpublished`). Left open: every
+`/api/menu-state` poll waits its turn in the write queue, because the route and `requireSession`
+(`apps/server/src/till-session.ts`) read inside `withTransaction`; reading outside a transaction
+would skip the queue but give `menuState`'s queries no single consistent view, and there is no
+read-only transaction (`packages/db/src/tenancy.ts`); and a till learns of a change only by polling, because the dashboard's
+live-update route accepts the management cookie only — a till-session branch on that route would let
+the server tell tills instead (plan D11), a later refinement. The till polls it every 15 seconds while
+signed in, greys what is sold out in place, and runs the basket refresh flow (D9) for the counter's
+basket and for a table's round refused `menu.version_changed` (the table screen keeps the round
+until the server has added it). Follow-up: the comparison does not notice a publish that adds a
+required options list to a dish in the basket, or lowers a list's picks limit, so the till takes the
+new version silently and the server then refuses the request `options.label_required` (or
+`extras.limit_exceeded`, per `validateExtraSelections`); nothing wrong is filed, but staff see a refusal where the dialog should have asked.
+A table's round is also not marked by the poll's sold-out list, only when a send is refused.
+Follow-up: a round the waiter has built but not yet sent belongs to the order it was built on, so
+when a split moves the table screen to the split-off check, the round is not shown on the check
+(before this branch the screen's one round went with it); when a split answers, move the unsent
+round to the check. Likewise a round built on a tab that is then merged into another tab stays
+under the merged-away tab's order id and can no longer be reached.
+Follow-up: every remembered round (one refused sold out or after a menu change) is marked again
+against the open table's menu, so opening a table in another service zone can mark another table's
+round wrongly or clear its mark. Remember each round's zone and re-mark only that zone's rounds, or
+keep rounds on the app, one per order.
+Follow-up: a round kept after a refused send survives leaving the table only on a canvas that shows
+the floor and the order side by side, because the table screen holds it; on the till's drill view
+and a handheld's separate order tab, leaving destroys the screen and the round. Keeping rounds on
+the app, one per order, would keep them on every layout.
 **M7b2 landed (#702, 2026-09-26): a manager can clear a card payment a crash left running.** The
 Payments screen lists open orders locked by a card payment nothing is finishing any more, and "Check
 with the card provider" files the sale once if the card was charged, marks the payment failed and
@@ -1196,27 +1243,16 @@ What Task 12 deliberately did NOT do, so Task 13 is not surprised by it:
   transfer pickers (`apps/till/src/screens/till-table-order-screen.ts`), so nothing offers it an
   action it cannot take; whether the drawer should also INDENT it is a display question nobody has
   decided. Deliberately left as it is.
-- **The `products` row behind an extra is read by TWO bodies, and that is deliberate.**
-  `readExtraProducts` (`packages/catalogue/src/offered-modifiers.ts`) and `resolveBasketModifiers`
-  (`apps/server/src/working-order.ts`) each issue their own `select … from products where id in (…)`
-  for the products an extras list offers. The review asked for them to be merged; they were left
-  separate because neither result can be derived from the other. The order path resolves customer
-  text under the order's `defaultLanguage`, which no sell-side caller has; the sell-side read expands
-  dietary declarations through `validateDietaryDeclarations`, which THROWS `diet.declaration_invalid`
-  (`packages/catalogue/src/dietary-declarations.ts`), and putting that on the order path would add a
-  refusal it does not have today. Sharing only the `select` would make the order path fetch
-  `allergens` and `dietary_declarations` it discards. The branch's own docblock was narrowed to say
-  this — the LIST maps come from one body, the product facts do not — and the two shapes no longer
-  share the name `ExtraProductFacts`. Revisit if a third caller appears, or if the order path ever
-  needs an extra's allergens.
 - **A published-but-DETACHED extras list is offered by nothing and demanded by the validator, and
   nothing cleans the publication up.** The two sides read different sets on ONE of the three reads
   that build those maps — the MENU-OFFER extras read, which is the read this scenario uses. The
   picker's source (`readOfferedModifiers`) keeps only the lists the product's `product_modifiers`
   attachments name, while `readMenuExtras` (`packages/catalogue/src/extra-projection.ts:131`)
   reads `menu_item_extra_lists` and nothing else, and the order path
-  (`priceOrderLines` and `updateHeldOrder` in `apps/server/src/working-order.ts`) consumes `extrasByHolder`/`optionsByProduct`
-  straight — so the detached list reaches it. **Not true of the other two reads, checked rather
+  (`priceOrderLines` and `updateHeldOrder` in `apps/server/src/working-order.ts`) consumed `extrasByHolder`/`optionsByProduct`
+  straight — so the detached list reached it. (Since menus Task 7 the order path reads the menu's
+  published version instead, which `readOfferedModifiers` builds from the attachments; whether that
+  closes this entry has been read, not run.) **Not true of the other two reads, checked rather
   than generalised:** `optionsByProduct` is BUILT from the attachments
   (`packages/catalogue/src/offered-modifiers.ts:109`), and the PRODUCT-side extras read is handed
   them and keeps only what they carry (`readProductExtras`,
@@ -1280,8 +1316,11 @@ What the order path (the plan's Task 7) left behind:
   nothing: `readMenuExtras` and `readProductExtras` (`packages/catalogue/src/extra-projection.ts`),
   `readOptionListsByIds` (`packages/catalogue/src/options.ts`) and `readProductModifiers`
   (`packages/catalogue/src/product-modifiers.ts`), all four reached from one body,
-  `resolveAttachedModifiers` in `packages/catalogue/src/offered-modifiers.ts`, which the sale path
-  enters through `resolveBasketModifiers` (`apps/server/src/working-order.ts`). Their writers
+  `walkAttachedModifiers` in `packages/catalogue/src/offered-modifiers.ts`. Since menus Task 7 the
+  sale path no longer reaches them: it prices from each menu's published version, read through
+  `listZoneOffers` (`packages/venue-service/src/operations.ts`), except that an edit of a saved line
+  whose dish the live version no longer offers reads the dish's own options lists
+  (`productOptionLists`, `apps/server/src/working-order.ts`). Their writers
   serialise, but no longer by taking a lock, and the two functions this entry used to name are both
   gone: `lockExtraList`'s `for update` is now `assertExtraListForWrite`, a plain existence read
   (`packages/catalogue/src/extras.ts`), and `writeProductModifiers`'s per-list `for key share` is
@@ -2016,9 +2055,14 @@ approved print agents to try it, so a printer the two discovery passes cannot se
 - **Two modifier-picker states, and how far each is actually out of reach** — a fact worth having
   before anyone writes a test claiming to cover them, and one half of it is NOT what the looking
   pass first wrote down. An options label marked unavailable never reaches the picker at all: the
-  sell-side read filters withdrawn labels out and nulls a `defaultLabelId` that names one
-  (`packages/catalogue/src/offered-modifiers.ts`, the `labels` filter and the `defaultLabelId`
-  ternary beside it) — traced through the code, not run. An over-cap count is different. Stepping
+  published version keeps every label, the served offer and the till's menu-state poll replace a
+  default that is missing or names an unavailable label with the first available label in the
+  published version's order, or with null when none is available (`effectiveDefaultLabelId`,
+  `packages/catalogue/src/option-default.ts`, applied by `applyLiveFields`,
+  `packages/catalogue/src/menu-document.ts`, and `withUnavailable`,
+  `apps/till/src/state/menu-refresh.ts`), and the till filters unavailable labels out before the
+  picker is given them (`sellableModifiers`,
+  `apps/till/src/api/client.ts`) — traced through the code, not run. An over-cap count is different. Stepping
   cannot produce one, because `#step` clamps against both the item's own cap and what is left of the
   list's allowance; but a REOPENED line is seeded straight from `initialSelections` with no clamp at
   all, so `#allSatisfied`'s `total <= entry.maxPicks` arm is reachable after all. Run in the till's

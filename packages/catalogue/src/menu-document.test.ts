@@ -1,8 +1,15 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { products, withTransaction, type Transaction } from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
-import { menusFixture, offerOf, product, section, WITH_ICE } from "../test/menus-fixture.js";
+import {
+  menusFixture,
+  NO_ICE,
+  offerOf,
+  product,
+  section,
+  WITH_ICE,
+} from "../test/menus-fixture.js";
 import {
   applyLiveFields,
   buildMenuDocument,
@@ -17,7 +24,7 @@ import { setMenuItemExtraLists } from "./extras.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { extraListItems } from "./schema/extras.js";
 import { menuDetails } from "./schema/menu.js";
-import { optionLabels } from "./schema/options.js";
+import { optionLabels, optionLists } from "./schema/options.js";
 import { sectionMembers, sections } from "./schema/sections.js";
 import { menuItemExtraItems } from "./schema/extras.js";
 
@@ -478,18 +485,66 @@ describe("applyLiveFields", () => {
     ]);
   });
 
-  it("clears the default label while it is unavailable", async () => {
-    const f = await menusFixture(fx.db);
-    const document = await build(f.lunch);
-    await app((tx) =>
-      tx
-        .update(optionLabels)
-        .set({ available: false })
-        .where(sql`${optionLabels.listId} = ${f.iceList} and ${optionLabels.name} = 'No ice'`),
-    );
-    const [lemonade] = (await app((tx) => applyLiveFields(tx, [document]))).get(f.lunch)!;
-    const options = lemonade!.offeredModifiers[1]!;
-    expect(options.kind === "options" && options.defaultLabelId).toBeNull();
+  describe("the default label served", () => {
+    const CRUSHED_ICE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    /**
+     * The published list is No ice, With ice, Crushed ice, in that order; after publishing, Crushed
+     * ice is moved first in the list's current order, which the served default must not follow.
+     */
+    const servedDefault = async (
+      unavailable: readonly string[],
+      publishedDefault: string | null = NO_ICE,
+    ) => {
+      const f = await menusFixture(fx.db);
+      await app(async (tx) => {
+        await tx
+          .insert(optionLabels)
+          .values({ id: CRUSHED_ICE, listId: f.iceList, name: "Crushed ice", sort: 2 });
+        await tx
+          .update(optionLists)
+          .set({ defaultLabelId: publishedDefault })
+          .where(eq(optionLists.id, f.iceList));
+      });
+      const document = await build(f.lunch);
+      const offer = document.offers[await app((tx) => offerOf(tx, f.lunch, f.lemonade))]!;
+      const published = offer.offeredModifiers[1]!;
+      expect(published.kind === "options" && published.defaultLabelId).toBe(publishedDefault);
+      await app((tx) =>
+        tx.update(optionLabels).set({ sort: -1 }).where(eq(optionLabels.id, CRUSHED_ICE)),
+      );
+      if (unavailable.length > 0)
+        await app((tx) =>
+          tx
+            .update(optionLabels)
+            .set({ available: false })
+            .where(inArray(optionLabels.id, [...unavailable])),
+        );
+      const [lemonade] = (await app((tx) => applyLiveFields(tx, [document]))).get(f.lunch)!;
+      const options = lemonade!.offeredModifiers[1]!;
+      if (options.kind !== "options") throw new Error("options");
+      expect(options.labels.map((label) => label.id)).toEqual([NO_ICE, WITH_ICE, CRUSHED_ICE]);
+      return options.defaultLabelId;
+    };
+
+    it("is the published default while it is available", async () => {
+      expect(await servedDefault([WITH_ICE])).toBe(NO_ICE);
+    });
+
+    it("is the first available label in the published order while the published default is unavailable", async () => {
+      expect(await servedDefault([NO_ICE])).toBe(WITH_ICE);
+    });
+
+    it("skips every unavailable label, not only the published default", async () => {
+      expect(await servedDefault([NO_ICE, WITH_ICE])).toBe(CRUSHED_ICE);
+    });
+
+    it("is null while every label is unavailable", async () => {
+      expect(await servedDefault([NO_ICE, WITH_ICE, CRUSHED_ICE])).toBeNull();
+    });
+
+    it("is the first available label while the published version names no default", async () => {
+      expect(await servedDefault([NO_ICE], null)).toBe(WITH_ICE);
+    });
   });
 
   it("leaves out an offer, a variant or an extra whose product row is gone", async () => {

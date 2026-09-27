@@ -90,6 +90,7 @@ import type { PrintConfig } from "@waitron/printing";
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
+import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
@@ -228,6 +229,8 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
         (${zoneId}, ${premium.id}, 1)`);
       await tx.execute(sql`
       update zone_service_policies set default_menu_id = ${cat.id} where zone_id = ${zoneId}`);
+      await publishWorkingMenu(tx, cat.id);
+      await publishWorkingMenu(tx, premium.id);
       return {
         cafeId: cafe.id,
         aguaId: agua.id,
@@ -484,6 +487,7 @@ async function seedVariantOffer(
     { variantId: variants[0]!.id, price: "3.20", offered: true },
     { variantId: variants[1]!.id, price: "2.20", offered: true },
   ]);
+  await publishWorkingMenu(tx, catalogueId);
   return { offerId: offer.id, variantId: variants[0]!.id, productId: product.id };
 }
 
@@ -641,6 +645,7 @@ describe("parkOrder", () => {
         { variantId: variants[0]!.id, price: "3.20", offered: true },
         { variantId: variants[1]!.id, price: "2.20", offered: true },
       ]);
+      await publishWorkingMenu(tx, catalogueId);
       return { offerId: offer.id, large: variants[0]!.id, small: variants[1]!.id };
     });
 
@@ -736,7 +741,6 @@ describe("parkOrder", () => {
   it("loads one zone-offer snapshot for a basket with repeated offers", async () => {
     const { cfg, zoneId, premiumCafeOfferId } = await setupVenue();
     const listOffers = vi.spyOn(VENUE_SERVICE, "listZoneOffers");
-    const resolveOffer = vi.spyOn(VENUE_SERVICE, "resolveZoneOffer");
     try {
       await parkOrder({ db }, cfg, {
         id: randomUUID(),
@@ -747,10 +751,8 @@ describe("parkOrder", () => {
         ],
       });
       expect(listOffers).toHaveBeenCalledTimes(1);
-      expect(resolveOffer).not.toHaveBeenCalled();
     } finally {
       listOffers.mockRestore();
-      resolveOffer.mockRestore();
     }
   });
 
@@ -1338,6 +1340,7 @@ describe("getHeldOrder", () => {
         productId: product.id,
         grossPrice: "12.00",
       });
+      await publishWorkingMenu(tx, catalogueId);
       return { productId: product.id, menuItemId: menuItem.id, unitId };
     });
     const id = randomUUID();
@@ -1406,6 +1409,7 @@ describe("getHeldOrder", () => {
           items: [{ productId: attached.productId, price: "0.75", available: true }],
         },
       ]);
+      await republishMenus(tx);
       return attached;
     });
     const id = randomUUID();
@@ -1454,6 +1458,7 @@ describe("getHeldOrder", () => {
     await db.execute(sql`
       update products set customer_name = ${JSON.stringify({ [LOCALE]: "Café de la casa" })}
       where id = ${cafeId}`);
+    await withTransaction(db, republishMenus);
     await parkOrder({ db }, cfg, {
       id,
       zoneId,
@@ -1506,6 +1511,7 @@ describe("getHeldOrder", () => {
     await db.execute(sql`
       update products set allergens = ${JSON.stringify({ gluten: { presence: "contains" } })}
       where id = ${cafeId}`);
+    await withTransaction(db, republishMenus);
     const id = randomUUID();
     await parkOrder({ db }, cfg, {
       id,
@@ -1620,6 +1626,7 @@ describe("updateHeldOrder", () => {
           items: [{ productId: attached.productId, price: "0.75", available: true }],
         },
       ]);
+      await republishMenus(tx);
       return attached;
     });
     const id = randomUUID();
@@ -1730,6 +1737,7 @@ describe("updateHeldOrder", () => {
           items: [{ productId: attached.productId, price: "0.75", available: true }],
         },
       ]);
+      await republishMenus(tx);
       return attached;
     });
     const id = randomUUID();
@@ -1812,7 +1820,10 @@ describe("updateHeldOrder", () => {
           ],
         });
 
-      await expect(edit("2")).rejects.toMatchObject({ code: "service_zone.offer_not_allowed" });
+      await expect(edit("2")).rejects.toMatchObject({
+        code: "product.unavailable",
+        params: { productId: cafeId },
+      });
       expect(await readLines(id)).toEqual(before);
       await edit("1");
       expect(await readLines(id)).toEqual(before);
@@ -1830,7 +1841,7 @@ describe("updateHeldOrder", () => {
       updateProducts(cfg, id, {
         lines: [{ workingOrderLineId: before[0]!.id, productId: cafeId, quantity: "2" }],
       }),
-    ).rejects.toMatchObject({ code: "service_zone.offer_not_allowed" });
+    ).rejects.toMatchObject({ code: "product.unavailable", params: { productId: cafeId } });
     expect(await readLines(id)).toEqual(before);
   });
 
@@ -2530,24 +2541,10 @@ describe("createOpenOrder's catalogue reads (perf)", () => {
 describe("basket-wide modifier resolution (perf)", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  // CLAUDE.md §3: shared catalogue data is resolved ONCE before the line loop, never per line.
-  // The two THREE-LINE baskets below — the same dish twice, then a second dish — are what can see
-  // that: a resolver moved inside the loop resolves three times instead of once. Behaviour alone
-  // cannot tell the two apart (the same order comes out either way), so the resolver is spied on.
-  // The MIDDLE case is not one of them and does not cover the line loop at all: its basket is a
-  // SINGLE line, so it reads 1 either way. What it pins is a different thing — that a note edit of a
-  // stored line resolves the catalogue once.
-  //
-  // What is spied on is `resolveAttachedModifiers` — the ORDER path's own way into the shared walk,
-  // and the only caller of it in product code (`resolveBasketModifiers`, working-order.ts). It is
-  // NOT what `listMenuOffers` and `listAvailableProducts` call: those reach the shared body,
-  // `walkAttachedModifiers`, through `readOfferedModifiers`, so nothing counted here says anything
-  // about what a till is offered (packages/catalogue/src/offered-modifiers.ts). The readers that
-  // body calls are not reachable from here either: it calls them through its own relative imports,
-  // which are different namespace objects from the `@waitron/catalogue` index these spies replace
-  // bindings on. Which reader each side of a basket reaches, and that the attachments map is handed
-  // on rather than read twice, is covered where the walk lives — "one shared resolution for a set
-  // of dishes" (packages/catalogue/src/offered-modifiers.test.ts).
+  // CLAUDE.md §3: shared catalogue data is resolved ONCE before the line loop, never per line. The
+  // two THREE-LINE baskets below — the same dish twice, then a second dish — are what can see that:
+  // a read moved inside the loop runs three times instead of once. Behaviour alone cannot tell the
+  // two apart, so the reads are spied on.
 
   it("reads each definition once for a basket of offers priced at their products' prices", async () => {
     const { cfg, cafeId, aguaId, catalogueId } = await setupVenue();
@@ -2559,7 +2556,7 @@ describe("basket-wide modifier resolution (perf)", () => {
       return { cafe, agua };
     });
     const offers = await counterOffers(cfg);
-    const resolve = vi.spyOn(catalogue, "resolveAttachedModifiers");
+    const listOffers = vi.spyOn(VENUE_SERVICE, "listZoneOffers");
 
     await parkProducts(cfg, {
       id: randomUUID(),
@@ -2582,13 +2579,8 @@ describe("basket-wide modifier resolution (perf)", () => {
       ],
     });
 
-    expect(resolve).toHaveBeenCalledTimes(1);
-    // One entry per line, each carrying the offer it was ordered through.
-    expect(resolve.mock.calls[0]![1]).toEqual([
-      { productId: cafeId, menuItemId: offers.offerFor(cafeId) },
-      { productId: cafeId, menuItemId: offers.offerFor(cafeId) },
-      { productId: aguaId, menuItemId: offers.offerFor(aguaId) },
-    ]);
+    expect(listOffers).toHaveBeenCalledTimes(1);
+    expect(listOffers.mock.calls[0]![2]).toBe(offers.zoneId);
   });
 
   it("resolves the catalogue once for a note edit of a stored line", async () => {
@@ -2606,9 +2598,9 @@ describe("basket-wide modifier resolution (perf)", () => {
     const held = await getHeldOrder({ db }, cfg, id);
 
     const contentLanguages = vi.spyOn(catalogue, "readContentLanguages");
-    const resolve = vi.spyOn(catalogue, "resolveAttachedModifiers");
+    const listOffers = vi.spyOn(VENUE_SERVICE, "listZoneOffers");
 
-    // A changed note is an edit of the stored line, which prices nothing: the catalogue is resolved
+    // A changed note is an edit of the stored line, which prices nothing: the zone's offers are read
     // once, for the answers the edit is checked against.
     await updateProducts(cfg, id, {
       lines: [
@@ -2623,13 +2615,46 @@ describe("basket-wide modifier resolution (perf)", () => {
     });
 
     expect(contentLanguages).toHaveBeenCalledTimes(1);
-    expect(resolve).toHaveBeenCalledTimes(1);
+    expect(listOffers).toHaveBeenCalledTimes(1);
 
     const stored = await db
       .select({ note: workingOrderLines.note })
       .from(workingOrderLines)
       .where(and(eq(workingOrderLines.workingOrderId, id), isNull(workingOrderLines.parentLineId)));
     expect(stored).toEqual([{ note: "con sal" }]);
+  });
+
+  it("reads the zone's offers once for an edit that re-checks a stored answer and prices a new line", async () => {
+    const { cfg, cafeId, aguaId } = await setupVenue();
+    const punto = await withTransaction(db, (tx) => addOptionList(tx, cafeId, "Punto"));
+    const answer = { listId: punto.listId, labelId: punto.labelIds[0]! };
+    const id = randomUUID();
+    await parkProducts(cfg, {
+      id,
+      lines: [{ productId: cafeId, quantity: "1", options: [answer] }],
+    });
+    const held = await getHeldOrder({ db }, cfg, id);
+    const listOffers = vi.spyOn(VENUE_SERVICE, "listZoneOffers");
+
+    await updateProducts(cfg, id, {
+      lines: [
+        {
+          workingOrderLineId: held.lines[0]!.workingOrderLineId,
+          productId: cafeId,
+          quantity: "1",
+          options: [answer],
+        },
+        { productId: aguaId, quantity: "1" },
+      ],
+    });
+
+    expect(listOffers).toHaveBeenCalledTimes(1);
+    const stored = await db
+      .select({ productId: workingOrderLines.productId })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(stored).toEqual([{ productId: cafeId }, { productId: aguaId }]);
   });
 
   it("reads each MENU-side definition once for an offer basket", async () => {
@@ -2649,9 +2674,10 @@ describe("basket-wide modifier resolution (perf)", () => {
       ]);
       const cafe = await addOptionList(tx, cafeId, "Punto");
       const agua = await addOptionList(tx, aguaId, "Tamano");
+      await republishMenus(tx);
       return { aguaOfferId: aguaOffer.id, cafe, agua };
     });
-    const resolve = vi.spyOn(catalogue, "resolveAttachedModifiers");
+    const listOffers = vi.spyOn(VENUE_SERVICE, "listZoneOffers");
 
     await parkOrder({ db }, cfg, {
       id: randomUUID(),
@@ -2675,14 +2701,8 @@ describe("basket-wide modifier resolution (perf)", () => {
       ],
     });
 
-    expect(resolve).toHaveBeenCalledTimes(1);
-    // One entry per line, every one of them carrying the OFFER it was ordered through, so nothing
-    // the resolver is handed can send it to the product-side read.
-    expect(resolve.mock.calls[0]![1]).toEqual([
-      { productId: cafeId, menuItemId: cafeOfferId },
-      { productId: cafeId, menuItemId: cafeOfferId },
-      { productId: aguaId, menuItemId: seeded.aguaOfferId },
-    ]);
+    expect(listOffers).toHaveBeenCalledTimes(1);
+    expect(listOffers.mock.calls[0]![2]).toBe(zoneId);
   });
 });
 
@@ -2893,6 +2913,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         productId: aguaId,
         grossPrice: "2.00",
       });
+      await republishMenus(tx);
       const table = await tx.execute<{ id: string }>(sql`
         insert into dining_tables (id, location_id, label, zone_id, created_at)
         values (${randomUUID()}, ${cfg.locationId}, 'Two of a kind', ${zoneId}, ${nowIso()})
@@ -5627,7 +5648,9 @@ describe("frozen answers through a fractional quantity edit", () => {
       // test below this one.
       const taza = await withTransaction(db, async (tx) => {
         await catalogue.assignProductUnit(tx, cafeId, kgUnitId);
-        return addOptionList(tx, cafeId, "Taza", ["Grande"]);
+        const list = await addOptionList(tx, cafeId, "Taza", ["Grande"]);
+        await republishMenus(tx);
+        return list;
       });
       const options = [{ listId: taza.listId, labelId: taza.labelIds[0]! }];
       // The product-priced offer carries no price of its own, so it sells at the product's.
@@ -5702,6 +5725,7 @@ describe("frozen answers through a fractional quantity edit", () => {
           items: [{ productId: attached.productId, price: "1.00", available: true }],
         },
       ]);
+      await republishMenus(tx);
       return attached;
     });
     // A child is priced at `dishQuantity × pickQuantity`, so half a kilo of dish carrying one extra
@@ -5739,6 +5763,7 @@ it("does not let an omitted payload waive a required extras list the menu offer 
         items: [{ productId: attached.productId, price: null, available: false }],
       },
     ]);
+    await republishMenus(tx);
     return attached;
   });
   await expect(
@@ -5995,6 +6020,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
     const seeded = await withTransaction(db, async (tx) => {
       const punto = await addOptionList(tx, cafeId, "Punto", ["Solo"]);
       const taza = await addOptionList(tx, cafeId, "Taza", ["Grande"]);
+      await republishMenus(tx);
       return { punto, taza };
     });
     const options = [
@@ -6026,6 +6052,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
     });
     await db.execute(sql`
       update menu_items set gross_price = 9900 where id = ${premiumCafeOfferId}`);
+    await withTransaction(db, republishMenus);
 
     await updateHeldOrder({ db }, cfg, id, {
       revision: await revisionOf(id),
@@ -6319,7 +6346,9 @@ describe("what a held-order edit preserves and what it replaces", () => {
   it("keeps the line and its price when the answer itself changed: an answer carries no price", async () => {
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
     const punto = await withTransaction(db, async (tx) => {
-      return addOptionList(tx, cafeId, "Punto", ["Solo", "Cortado"]);
+      const list = await addOptionList(tx, cafeId, "Punto", ["Solo", "Cortado"]);
+      await republishMenus(tx);
+      return list;
     });
     const id = randomUUID();
     await parkOrder({ db }, cfg, {
@@ -6340,6 +6369,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .orderBy(workingOrderLines.lineNo);
     await db.execute(sql`
       update menu_items set gross_price = 9900 where id = ${premiumCafeOfferId}`);
+    await withTransaction(db, republishMenus);
 
     // Same dish, same quantity, a DIFFERENT label off the same list.
     await updateHeldOrder({ db }, cfg, id, {
@@ -6423,7 +6453,9 @@ describe("what a held-order edit preserves and what it replaces", () => {
   it("keeps the price of a held line whose options list was renamed between the two sends, freezing the new name", async () => {
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
     const punto = await withTransaction(db, async (tx) => {
-      return addOptionList(tx, cafeId, "Punto", ["Solo"]);
+      const list = await addOptionList(tx, cafeId, "Punto", ["Solo"]);
+      await republishMenus(tx);
+      return list;
     });
     const options = [{ listId: punto.listId, labelId: punto.labelIds[0]! }];
     const id = randomUUID();
@@ -6443,6 +6475,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
     );
     await db.execute(sql`
       update menu_items set gross_price = 9900 where id = ${premiumCafeOfferId}`);
+    await withTransaction(db, republishMenus);
 
     await updateHeldOrder({ db }, cfg, id, {
       revision: await revisionOf(id),
@@ -6482,7 +6515,9 @@ describe("what a held-order edit preserves and what it replaces", () => {
   it("refuses a quantity-only edit that names no answer for an active options list", async () => {
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
     const punto = await withTransaction(db, async (tx) => {
-      return addOptionList(tx, cafeId, "Punto", ["Solo"]);
+      const list = await addOptionList(tx, cafeId, "Punto", ["Solo"]);
+      await republishMenus(tx);
+      return list;
     });
     const id = randomUUID();
     await parkOrder({ db }, cfg, {
@@ -6728,9 +6763,11 @@ describe("editing a saved order prices only what the edit adds", () => {
 
   it("changes one line's options answer through the one-line edit, at its stored price, leaving what the patch omits", async () => {
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
-    const punto = await withTransaction(db, (tx) =>
-      addOptionList(tx, cafeId, "Punto", ["Solo", "Cortado"]),
-    );
+    const punto = await withTransaction(db, async (tx) => {
+      const list = await addOptionList(tx, cafeId, "Punto", ["Solo", "Cortado"]);
+      await republishMenus(tx);
+      return list;
+    });
     const id = randomUUID();
     await parkOrder({ db }, cfg, {
       id,
@@ -6748,6 +6785,7 @@ describe("editing a saved order prices only what the edit adds", () => {
     await db.execute(
       sql`update menu_items set gross_price = 9900 where id = ${premiumCafeOfferId}`,
     );
+    await withTransaction(db, republishMenus);
 
     await withTransaction(db, (tx) =>
       updateOrderLine(
@@ -6921,6 +6959,7 @@ async function seedWine(tx: Transaction, cfg: TillConfig, catalogueId: string) {
       dietaryDeclarations: ["halal"],
     })
     .where(eq(products.id, wine175!.id));
+  await publishWorkingMenu(tx, catalogueId);
   return {
     parentId: parent.id,
     offerId: offer.id,
@@ -7037,7 +7076,10 @@ describe("a variant is sold as the product it is", () => {
       params: { productId: wine.parentId },
     });
 
-    await withTransaction(db, (tx) => setProductVariants(tx, wine.parentId, [], LOCALE));
+    await withTransaction(db, async (tx) => {
+      await setProductVariants(tx, wine.parentId, [], LOCALE);
+      await publishWorkingMenu(tx, catalogueId);
+    });
     const id = randomUUID();
     await parkOrder({ db }, cfg, {
       id,
@@ -7307,6 +7349,7 @@ describe("a variant is sold as the product it is", () => {
           ],
         },
       ]);
+      await republishMenus(tx);
       const barra = await createStation(tx, cfg, { name: "Barra", isDefault: true });
       await insertRoute(tx, cfg, { zoneId, productId: cafeId, stationId: barra.id });
       await createOpenOrder(
@@ -7414,6 +7457,7 @@ describe("a variant is sold as the product it is", () => {
         .update(products)
         .set({ customerName: { "fr-FR": "Grand verre" } })
         .where(eq(products.id, seeded.wine175));
+      await publishWorkingMenu(tx, catalogueId);
       return seeded;
     });
     await parkOrder({ db }, twoLocales, {
@@ -7472,6 +7516,7 @@ describe("a variant is sold as the product it is", () => {
       const wine = await seedWine(tx, cfg, catalogueId);
       // The list is attached to the PARENT: a variant offers its parent's lists.
       const options = await addOptionList(tx, wine.parentId, "Temperatura", ["Fría", "Natural"]);
+      await republishMenus(tx);
       return { wine, options };
     });
     const answer = [{ listId: options.listId, labelId: options.labelIds[0]! }];
@@ -7584,6 +7629,7 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
       },
     ]);
     await tx.update(products).set({ active: true }).where(eq(products.parentId, wine.parentId));
+    await republishMenus(tx);
     return list.id;
   }
 
@@ -7809,9 +7855,10 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
       .select({ id: workingOrderLines.id, quantity: workingOrderLines.quantity })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
-    await withTransaction(db, (tx) =>
-      setProductVariants(tx, cafeId, [{ ...doble!, active: true }], LOCALE),
-    );
+    await withTransaction(db, async (tx) => {
+      await setProductVariants(tx, cafeId, [{ ...doble!, active: true }], LOCALE);
+      await republishMenus(tx);
+    });
     const edit = async (quantity: string) =>
       updateHeldOrder({ db }, cfg, id, {
         revision: await revisionOf(id),

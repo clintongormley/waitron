@@ -53,6 +53,7 @@ import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import { publishWorkingMenu } from "./testing/publish-menu.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { DEVICE_COOKIE } from "./device-session.js";
@@ -206,6 +207,7 @@ async function setupVenue(): Promise<{
       update zone_service_policies set default_menu_id = ${cat.id}
       where location_id = ${cfg.locationId}
         and is_counter_default`);
+    await publishWorkingMenu(tx, cat.id);
     // Through the table definition, not raw SQL: `preparation_routes.id` is a `$defaultFn`
     // generator, which a raw insert never runs.
     const defaultStation = sql`(select id from kitchen_stations
@@ -2128,6 +2130,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
       await setMenuItemExtraLists(tx, product.menuItemId, [
         { listId: extras.id, items: [{ productId: queso.id, price: "0.35" }] },
       ]);
+      await publishWorkingMenu(tx, catalogueId);
       return {
         extraListId: extras.id,
         quesoId: queso.id,

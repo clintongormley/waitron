@@ -150,6 +150,9 @@ Each was put to the owner on 2026-09-26; the answer is recorded with it.
 
 - Whether per-menu extras stay at all (D4) — a backlog decision.
 - The till's picker. D8 changes only what is stored; the till already preselects the stored default.
+  _2026-09-27: since PR #719 the till is also served the first available option when the published
+  default is switched off or absent (`effectiveDefaultLabelId` in `applyLiveFields` and
+  `withUnavailable`)._
 - An optional options list (still always required, `docs/backlog.md` → "What branch 1 deliberately
   did NOT build").
 

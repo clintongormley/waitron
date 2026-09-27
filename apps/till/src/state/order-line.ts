@@ -9,7 +9,7 @@ import {
   sumDecimals,
   toScale,
 } from "@waitron/shared";
-import type { SaleLine, TillProduct } from "../api/client.js";
+import { sellingValuesOf, type SaleLine, type TillProduct } from "../api/client.js";
 import type { OrderLine, SelectedExtra } from "./working-order.js";
 import { unitName } from "../widgets/product-name.js";
 
@@ -59,6 +59,27 @@ export function needsModifierPicker(
   return (product.offeredModifiers ?? []).length > 0;
 }
 
+/**
+ * The product as sold as one of its variants: under the variant's price and selling values, with the
+ * variant's three names carried ALONGSIDE the product's, never folded into them. Each surface resolves
+ * the name it shows (`product-presentation.ts`), so the basket can render the staff name while a
+ * receipt renders the customer one.
+ */
+export function productAsVariant(
+  product: TillProduct,
+  variant: NonNullable<TillProduct["variants"]>[number],
+): TillProduct {
+  return {
+    ...product,
+    ...sellingValuesOf(variant),
+    unitPrice: variant.unitPrice,
+    variantId: variant.id,
+    variantName: variant.name,
+    variantCustomerName: variant.customerName ?? null,
+    variantKitchenName: variant.kitchenName ?? null,
+  };
+}
+
 export function quantityLabel(line: OrderLine): string {
   return `${line.quantity} ${unitName(line.product)}`;
 }
@@ -76,13 +97,15 @@ export function toWireProductIdentity(product: {
   id: string;
   menuItemId?: string;
   variantId?: string;
-}): Pick<SaleLine, "menuItemId" | "variantId"> {
+  menuVersionId?: string;
+}): Pick<SaleLine, "menuItemId" | "variantId" | "menuVersionId"> {
   if (product.menuItemId === undefined) {
     throw new Error(`product ${product.id} has no menu item to sell it by`);
   }
   return {
     menuItemId: product.menuItemId,
     ...(product.variantId === undefined ? {} : { variantId: product.variantId }),
+    ...(product.menuVersionId === undefined ? {} : { menuVersionId: product.menuVersionId }),
   };
 }
 

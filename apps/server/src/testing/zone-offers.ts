@@ -24,6 +24,7 @@ import {
   zoneServicePolicies,
 } from "@waitron/venue-service";
 import type { TillConfig } from "../till-config.js";
+import { publishWorkingMenu } from "./publish-menu.js";
 
 export interface ZoneOffers {
   zoneId: string;
@@ -58,7 +59,9 @@ const TABLES_ZONE = "Test tables";
  * Offer products in a service zone from a menu of this helper's own, so a test can sell them on the
  * zoned path. The menu is never one the suite made, so the prices this writes never overwrite the
  * suite's own. Each product sits on the menu's top level with no menu price, so it sells at the
- * product's own price. Idempotent: call it again after adding products or changing stations.
+ * product's own price. The menu is published, so a till sells what the products were when this
+ * ran. Idempotent: call it again after adding products or changing stations, or to publish a change
+ * to a product.
  */
 export async function offerProducts(
   tx: Transaction,
@@ -103,6 +106,7 @@ export async function offerProducts(
   if ((options.routes ?? "mirror-legacy") === "mirror-legacy") {
     await mirrorLegacyRoutes(tx, cfg, productIds);
   }
+  await publishWorkingMenu(tx, menuId);
 
   const offerFor = (productId: string): string => {
     const menuItemId = offerByProduct.get(productId);

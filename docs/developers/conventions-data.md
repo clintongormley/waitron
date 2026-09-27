@@ -317,9 +317,9 @@ would still turn it red. `writeItems`'s own header says the same thing at the si
 The Products review found that each basket line called `resolveZoneOffer`, which reloaded the whole
 zone offer catalogue, then performed separate product-variant and menu-variant reads. Repeated items
 therefore repeated the same sequential database work. `priceOrderLines` now reads one zone snapshot
-before its in-memory line loop; the variants come from the offers it holds (`MenuOffer.variants`).
-The focused `working-order.test.ts` probe spies on both contribution methods: one `listZoneOffers`
-call and no per-line `resolveZoneOffer` calls for a repeated-offer basket. Kitchen routing follows the same
+before its in-memory line loop; the variants come from the offers it holds (`LiveOffer.variants`).
+`working-order.test.ts` spies on `listZoneOffers` and checks that a basket repeating one offer calls
+it once. Kitchen routing follows the same
 rule: `fireLines` makes one `resolvePreparationRoutes` call per fire, which answers for every product
 with at most three reads; `working-order.test.ts` checks the single call and
 `packages/venue-service/src/operations.test.ts` checks the read count for one product and for five.
