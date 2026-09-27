@@ -3546,13 +3546,15 @@ approved.
     version (PostgreSQL 18, `23P01` on the list, `classifyBootFailure` dropping `22P02`, "the two
     share no SQLSTATE table", remedies that are opposites); the two lists are now SQLite result
     codes, `boot-failure.ts`'s codes lead to "retry or restart", and `dev-migration-hint.ts` still
-    names that section as its receipt. Tests, not comments: `boot-failure.test.ts`'s "names every pinned result code
-    as an unreachable database" could not fail when a code was added — **DONE (lane A, A97)**: two
-    new cases pin the list to `[14]` and read a junk `venue.db` (result code 26) as `unknown`; with
-    26 added to `UNREACHABLE_RESULT_CODES` both go red while the old loop case stays green. Still
-    open: two `health.test.ts` cases, "stays 200 when reconcile has failed runs but nothing
-    parked" and "does not flip health for a failed-only run (parked stays 0)", feed a clean pass, so
-    they check less than their titles say. Test titles #624 could not touch: "(T12b)" in
+    names that section as its receipt. Tests, not comments: `boot-failure.test.ts`'s "names every
+    pinned result code as an unreachable database" cannot fail when a code is added, because it
+    loops over the list itself (the review added 26 and the suite passed) —
+    **DONE (lane A's A97)**: two new cases pin the list to `[14]` and read a junk `venue.db` (result
+    code 26) as `unknown`; with 26 added to `UNREACHABLE_RESULT_CODES` both go red while the loop
+    case stays green. Also still open, beside the workflow-guide finding above: two
+    `health.test.ts` cases, "stays 200 when reconcile has failed runs but nothing parked" and "does
+    not flip health for a failed-only run (parked stays 0)", feed a clean pass, so they check less
+    than their titles say. Test titles #624 could not touch: "(T12b)" in
     `boot-pending-sweep.test.ts`, "(prove-by-deletion)" in `boot.reconcile.test.ts`, "(C2)",
     "(pre-merge review)", "(I1)" and "skipped a tenant" in `health.test.ts`, "the new guard" in
     `config.test.ts`.

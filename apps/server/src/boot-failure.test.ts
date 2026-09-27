@@ -51,7 +51,7 @@ describe("classifyBootFailure on the engine the box runs", () => {
   it("leaves a venue file that is not a database unknown", () => {
     const error = realSqliteError((dir) => {
       const file = join(dir, "venue.db");
-      writeFileSync(file, "this is not a database, only junk bytes long enough to fill a header");
+      writeFileSync(file, "these bytes are not a database");
       new DatabaseSync(file).exec("select * from tenants");
     });
     expect(sqliteFailureOf(error)?.errcode).toBe(26);
