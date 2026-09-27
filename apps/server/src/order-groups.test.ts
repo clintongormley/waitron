@@ -8,6 +8,7 @@ import {
   orderGroupEvents,
   orderGroups,
   printJobs,
+  products,
   serviceCommands,
   ticketItems,
   tills,
@@ -26,6 +27,7 @@ import {
   createCategory,
   createExtraList,
   createProduct,
+  units,
   writeProductModifiers,
 } from "@waitron/catalogue";
 import { createPrinter } from "@waitron/printing";
@@ -3516,6 +3518,74 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
     expect(firstBill).toHaveLength(1);
     expect(firstBill[0]!.quantity).toBe(3000);
     expect(await bill(second.tabId)).toEqual(firstBill);
+  });
+
+  // Fails if two portions sold by the gram are added together under combined, or one portion is
+  // split into single grams under separate; count-unit dishes must still merge and split.
+  it("prints each portion sold by weight as sold, under combined and separate alike", async () => {
+    const v = await setupVenue();
+    const sold = await inTx(async (tx) => {
+      const [steak] = await tx
+        .select({ catalogueId: products.catalogueId, categoryId: products.categoryId })
+        .from(products)
+        .where(eq(products.id, v.productId.steak));
+      // As the venue seed makes it (`packages/catalogue/src/provisioning.ts`): whole grams only.
+      const grams = { en: "g", es: "g", ca: "g", gl: "g", eu: "g" };
+      const [gram] = await tx
+        .insert(units)
+        .values({ name: grams, abbreviation: grams, precision: 0, hardwareUnit: "g" })
+        .returning({ id: units.id });
+      const dish = (name: string, kitchenName: string, unit: { unitId: string } | object) =>
+        createProduct(tx, {
+          ...steak!,
+          name,
+          customerName: { en: `${name} of the day` },
+          kitchenName,
+          ...unit,
+          unitPrice: "0.05",
+          vatClass: "general",
+        });
+      const hake = await dish("Hake", "K-HAKE", { unitId: gram!.id });
+      const ham = await dish("Ham", "K-HAM", { pricingUnit: "weight" });
+      const offers = await offerProducts(tx, v.cfg, {
+        zone: "tables",
+        productIds: [hake.id, ham.id],
+      });
+      return { hake: offers.offerFor(hake.id), ham: offers.offerFor(ham.id) };
+    });
+    const hake = (quantity: string): GroupLine => ({ menuItemId: sold.hake, quantity });
+    const ofDish = (ticket: string, kitchenName: string) =>
+      linesOfTicket(ticket).filter((text) => text.endsWith(`x ${kitchenName}`));
+
+    const first = await seated(v);
+    await submit(v, first.visitId, [
+      {
+        release: "fire",
+        lines: [
+          hake("350"),
+          line(v, "steak"),
+          hake("350"),
+          line(v, "steak"),
+          { menuItemId: sold.ham, quantity: "0.375" },
+        ],
+      },
+    ]);
+    const combined = (await printed(v)).at(-1)!;
+    expect(ofDish(combined, "K-HAKE")).toEqual(["350.000 g x K-HAKE", "350.000 g x K-HAKE"]);
+    expect(ofDish(combined, "K-STEAK")).toEqual([expect.stringMatching(/^2\.000 .*x K-STEAK$/)]);
+    expect(ofDish(combined, "K-HAM")).toEqual(["0.375 kg x K-HAM"]);
+
+    await inTx((tx) => writeKitchenTicketGrouping(tx, "separate"));
+    const second = await seated(v);
+    await submit(v, second.visitId, [
+      { release: "fire", lines: [hake("350"), line(v, "steak", "2")] },
+    ]);
+    const separate = (await printed(v)).at(-1)!;
+    expect(ofDish(separate, "K-HAKE")).toEqual(["350.000 g x K-HAKE"]);
+    expect(ofDish(separate, "K-STEAK")).toEqual([
+      expect.stringMatching(/^1\.000 .*x K-STEAK$/),
+      expect.stringMatching(/^1\.000 .*x K-STEAK$/),
+    ]);
   });
 
   // Fails if identical lines of one group print as separate entries under the default.

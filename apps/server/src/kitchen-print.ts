@@ -22,7 +22,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, perDishOptionQuantity, thousandthsToDecimal } from "@waitron/shared";
-import { kitchenPresentationName, optionSnapshotLabels } from "@waitron/catalogue";
+import { EACH_UNIT, kitchenPresentationName, optionSnapshotLabels } from "@waitron/catalogue";
 import { columnsFor, enqueuePrintJob } from "@waitron/printing";
 import type { CharacterSet, PaperWidth, PrintConfig } from "@waitron/printing";
 import { arrangeTicketItems, formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
@@ -63,6 +63,22 @@ function ticketName(text: Record<string, string>, locale: string): string {
   // The map is never empty: `unit_name` freezes a unit's abbreviation, and `createUnit` and
   // `updateUnit` (`packages/catalogue/src/units.ts`) put it through `requireTranslations`.
   return Object.values(text)[0]!;
+}
+
+/**
+ * Whether a line was sold in Each, the one unit known to count pieces. A product with no stored unit
+ * sells in Each and its line freezes Each's abbreviations; every stored unit is either a measure
+ * (the seeded g, kg, mg, ml and l) or one whose kind nothing records. A line older than the unit
+ * snapshot carries none.
+ */
+function soldInEach(unitName: Record<string, string> | null): boolean {
+  if (unitName === null) return true;
+  const each: Record<string, string> = EACH_UNIT.abbreviation;
+  const locales = Object.keys(unitName);
+  return (
+    locales.length === Object.keys(each).length &&
+    locales.every((locale) => unitName[locale] === each[locale])
+  );
 }
 
 /**
@@ -194,6 +210,7 @@ async function buildTicketItems(
         unit: row.unitName == null ? undefined : ticketName(row.unitName, cfg.locale),
         name: kitchenPresentationName(row),
         note: row.note ?? undefined,
+        ...(soldInEach(row.unitName) ? {} : { measured: true }),
         modifiers: [
           ...optionSnapshotLabels(row.optionSnapshots),
           ...(modifiersByParent.get(row.id) ?? []),

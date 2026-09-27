@@ -651,6 +651,21 @@ describe("arrangeTicketItems (D14)", () => {
     ]);
   });
 
+  // Fails if a measured quantity that happens to be whole is merged or split like a count.
+  it("prints a measured entry as it is, under combined and separate alike", () => {
+    const hake = { qty: "350.000", unit: "g", name: "Hake", measured: true };
+    expect(arrangeTicketItems([hake, burger, { ...hake }, burger], "combined")).toEqual([
+      hake,
+      { ...burger, qty: "2.000" },
+      hake,
+    ]);
+    expect(arrangeTicketItems([hake, { ...burger, qty: "2.000" }], "separate")).toEqual([
+      hake,
+      { ...burger, qty: "1.000" },
+      { ...burger, qty: "1.000" },
+    ]);
+  });
+
   it("separate: never splits a quantity of one-and-a-half, and leaves separate lines separate", () => {
     const items = [{ ...burger, qty: "1.500" }, burger, burger];
     expect(arrangeTicketItems(items, "separate")).toEqual(items);

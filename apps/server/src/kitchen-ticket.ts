@@ -23,6 +23,8 @@ export interface KitchenTicketItem {
   modifiers?: string[];
   /** The position of the party's group the item fired in; absent for an item in no group. */
   group?: number;
+  /** Sold by a measure rather than counted: printed as sold, never merged or split. */
+  measured?: boolean;
 }
 
 export interface KitchenTicketStation {
@@ -66,18 +68,20 @@ function entryKey(item: KitchenTicketItem): string {
 /**
  * One ticket list laid out under D14. `combined` merges entries that would print identically into
  * the first of them, adding the quantities. `separate` prints a whole-number quantity N as N entries
- * of 1. A quantity that is not a whole number is never merged and never split: two 0.350 kg portions
- * are two pieces to cook, not one of 0.700 kg.
+ * of 1. A `measured` entry, or a quantity that is not a whole number, is never merged and never
+ * split: two 350 g portions are two pieces to cook, not one of 700 g nor 700 of 1 g.
  */
 export function arrangeTicketItems(
   items: readonly KitchenTicketItem[],
   grouping: KitchenTicketGrouping,
 ): KitchenTicketItem[] {
   const count = (item: KitchenTicketItem) => stringToThousandths(String(item.qty));
+  const countable = (item: KitchenTicketItem, thousandths: number) =>
+    item.measured !== true && thousandths % 1000 === 0;
   if (grouping === "separate") {
     return items.flatMap((item) => {
       const thousandths = count(item);
-      if (thousandths % 1000 !== 0) return [item];
+      if (!countable(item, thousandths)) return [item];
       return Array.from({ length: thousandths / 1000 }, () => ({
         ...item,
         qty: thousandthsToDecimal(1000),
@@ -88,7 +92,7 @@ export function arrangeTicketItems(
   const byKey = new Map<string, { item: KitchenTicketItem; thousandths: number }>();
   for (const item of items) {
     const thousandths = count(item);
-    const key = thousandths % 1000 === 0 ? entryKey(item) : undefined;
+    const key = countable(item, thousandths) ? entryKey(item) : undefined;
     const same = key === undefined ? undefined : byKey.get(key);
     if (same !== undefined) {
       same.thousandths += thousandths;
