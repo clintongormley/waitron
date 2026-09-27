@@ -449,8 +449,9 @@ export class SetupApp extends LitElement {
   }
 
   /**
-   * Clears the routed-back banners assigned below (not `fiscalTestError`), so a stale refusal does
-   * not reappear when the operator later steps back onto its screen. The refusal routing assigns
+   * Clears each screen's `*Error` banner, so a stale refusal or failure does not reappear when the
+   * operator later steps back onto its screen; outcomes that are not errors, such as the
+   * provisioning message the reset screen's Back returns to, are kept. The refusal routing assigns
    * `this.screen` directly, not through `setup-goto`, so a banner is not cleared on its way in.
    */
   #onGoto(event: CustomEvent<{ screen: Screen }>): void {
@@ -469,9 +470,11 @@ export class SetupApp extends LitElement {
     this.bucketLiveUnknown = false;
     this.bucketVenue = undefined;
     this.bucketRequest = undefined;
+    this.cloudRecoveryError = undefined;
     this.cloudLiveSince = undefined;
     this.cloudLiveUnknown = false;
     this.configurationError = undefined;
+    this.fiscalTestError = undefined;
     this.resetCredentialsRejected = false;
     this.resetError = undefined;
     this.screen = event.detail.screen;
