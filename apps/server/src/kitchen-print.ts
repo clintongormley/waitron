@@ -6,7 +6,7 @@
 // read keeps active printers only, and no other write transaction can run between that read and the
 // enqueue, because one write transaction runs on the venue file at a time (`withTransaction`,
 // `packages/db/src/tenancy.ts`). Receipt: `assertExtraListForWrite` in `packages/catalogue/src/extras.ts`.
-import { and, eq, inArray, isNotNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import {
   kitchenPrintJobs,
@@ -269,30 +269,36 @@ async function readOrderHeader(
   return { orderNumber: String(order.orderNumber), tableLabel: order.tableLabel };
 }
 
+/** One kitchen print job: its printer, the stations its paper carries, and its bytes. */
+interface KitchenJob {
+  printerId: string;
+  /** A `station`-scope printer's job names the one station; an `order`-scope printer's is null. */
+  station: string | null;
+  stationIds: string[];
+  bytes: Uint8Array;
+}
+
 /**
- * Enqueue the kitchen tickets for a set of just-fired lines. For each INVOLVED station (one with ≥1 fired line), each attached `station`-scope printer gets a
+ * The kitchen tickets for a set of just-fired lines. For each INVOLVED station (one with ≥1 fired line), each attached `station`-scope printer gets a
  * ticket of that station's own items; every attached `order`-scope (group) printer gets ONE consolidated
  * ticket of the WHOLE event — deduped by printer id, so a group printer attached to N involved stations
- * prints a single ticket carrying all their items, not N. Each job is linked to the bill and to every
- * station its ticket carries (`kitchen_print_jobs`), except a `HOLD` ticket's: only fired work can be
- * reprinted, so a failed HOLD ticket linked there would be a printing problem nothing clears.
- * `firedItems` are then the held items printed in advance. Answers whether any job was enqueued.
+ * prints a single ticket carrying all their items, not N. A `HOLD` ticket's `firedItems` are the held
+ * items printed in advance.
  */
-export async function enqueueKitchenTickets(
+async function planKitchenTickets(
   tx: Transaction,
   cfg: TillConfig,
   orderId: string,
   firedItems: FiredItem[],
-  { reprint = false, mark }: { reprint?: boolean; mark?: "HOLD" | "FIRE" } = {},
-): Promise<boolean> {
-  if (firedItems.length === 0) return false;
+  { reprint, mark }: { reprint: boolean; mark?: "HOLD" | "FIRE" },
+): Promise<KitchenJob[]> {
+  if (firedItems.length === 0) return [];
 
   const stationIds = [...new Set(firedItems.map((f) => f.stationId))];
 
   const mappingRows = await activePrinterMappings(tx, stationIds);
 
-  if (mappingRows.length === 0) return false;
-  const link = mark !== "HOLD";
+  if (mappingRows.length === 0) return [];
 
   const lineIds = [...new Set(firedItems.map((f) => f.workingOrderLineId))];
 
@@ -347,10 +353,10 @@ export async function enqueueKitchenTickets(
     printersByStation.set(mapping.stationId, bucket);
   }
 
-  const printCfg: PrintConfig = { locationId: cfg.locationId };
   const firedAt = new Date();
   const tableLabel = order.tableLabel ?? "";
   const orderNumber = order.orderNumber;
+  const jobs: KitchenJob[] = [];
 
   const groupPrinters = new Map<string, AttachedPrinter>();
   for (const station of stations) {
@@ -374,8 +380,12 @@ export async function enqueueKitchenTickets(
         layoutOf(group[0]!),
       );
       for (const printer of group) {
-        const { jobId } = await enqueuePrintJob(tx, printCfg, printer.printerId, stationTicket);
-        if (link) await linkKitchenJob(tx, jobId, orderId, [station.id], reprint);
+        jobs.push({
+          printerId: printer.printerId,
+          station: station.id,
+          stationIds: [station.id],
+          bytes: stationTicket,
+        });
       }
     }
   }
@@ -397,18 +407,47 @@ export async function enqueueKitchenTickets(
       layoutOf(group[0]!),
     );
     for (const printer of group) {
-      const { jobId } = await enqueuePrintJob(tx, printCfg, printer.printerId, consolidated);
-      if (!link) continue;
-      await linkKitchenJob(
-        tx,
-        jobId,
-        orderId,
-        stations.map((station) => station.id),
-        reprint,
-      );
+      jobs.push({
+        printerId: printer.printerId,
+        station: null,
+        stationIds: stations.map((station) => station.id),
+        bytes: consolidated,
+      });
     }
   }
-  return true;
+  return jobs;
+}
+
+/** Enqueue each job and link it to the bill and to every station its paper carries. */
+async function enqueueKitchenJobs(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  jobs: readonly KitchenJob[],
+  reprint: boolean,
+): Promise<void> {
+  const printCfg: PrintConfig = { locationId: cfg.locationId };
+  for (const job of jobs) {
+    const { jobId } = await enqueuePrintJob(tx, printCfg, job.printerId, job.bytes);
+    await linkKitchenJob(tx, jobId, orderId, job.stationIds, reprint);
+  }
+}
+
+/**
+ * Enqueue the kitchen tickets for a set of just-fired lines ({@link planKitchenTickets}), each job
+ * linked to the bill and to every station its ticket carries (`kitchen_print_jobs`). Answers whether
+ * any job was enqueued.
+ */
+export async function enqueueKitchenTickets(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  firedItems: FiredItem[],
+  { mark }: { mark?: "HOLD" | "FIRE" } = {},
+): Promise<boolean> {
+  const jobs = await planKitchenTickets(tx, cfg, orderId, firedItems, { reprint: false, mark });
+  await enqueueKitchenJobs(tx, cfg, orderId, jobs, false);
+  return jobs.length > 0;
 }
 
 /** Record which bill and stations a kitchen ticket's job carried. */
@@ -669,10 +708,13 @@ export async function enqueueMovedSlips(
 }
 
 /**
- * Reprint an order's kitchen tickets: every fired item across every round (held items excluded), unlike
- * the fire path, which prints only its own round. Each ticket is marked REPRINT and stamped with the
- * reprint time, not the original fire time. It changes no line, ticket item or group event. An order
- * with nothing fired is a no-op.
+ * Reprint an order's kitchen tickets: every fired item across every round, unlike the fire path,
+ * which prints only its own round, and the held items of each still-held group whose HOLD ticket was
+ * queued, on a ticket marked HOLD. Each ticket is marked REPRINT and stamped with the reprint time,
+ * not the original fire time. Both tickets for one printer and station, or for one pass printer, go
+ * as ONE job: two printed reprints linked to the same bill, station and printer would let either
+ * one's printing clear the other's failure ({@link readPrintProblems}). It changes no line, ticket
+ * item or group event. An order with neither is a no-op.
  */
 export async function reprintOrderTickets(
   tx: Transaction,
@@ -687,7 +729,47 @@ export async function reprintOrderTickets(
     })
     .from(ticketItems)
     .where(and(eq(ticketItems.workingOrderId, orderId), isNotNull(ticketItems.firedAt)));
-  await enqueueKitchenTickets(tx, cfg, orderId, fired, { reprint: true });
+  const held = await tx
+    .select({
+      workingOrderLineId: ticketItems.workingOrderLineId,
+      stationId: ticketItems.stationId,
+      quantity: ticketItems.quantity,
+    })
+    .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+    .where(
+      and(
+        eq(ticketItems.workingOrderId, orderId),
+        isNull(ticketItems.firedAt),
+        eq(orderGroups.state, "held"),
+        isNotNull(orderGroups.holdPrintedAt),
+      ),
+    );
+  const jobs = await planKitchenTickets(tx, cfg, orderId, fired, { reprint: true });
+  const holdJobs = await planKitchenTickets(tx, cfg, orderId, held, {
+    reprint: true,
+    mark: "HOLD",
+  });
+  for (const hold of holdJobs) {
+    const same = jobs.find(
+      (job) => job.printerId === hold.printerId && job.station === hold.station,
+    );
+    if (same === undefined) {
+      jobs.push(hold);
+      continue;
+    }
+    same.bytes = concatBytes(same.bytes, hold.bytes);
+    same.stationIds = [...new Set([...same.stationIds, ...hold.stationIds])];
+  }
+  await enqueueKitchenJobs(tx, cfg, orderId, jobs, true);
+}
+
+function concatBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
+  const joined = new Uint8Array(a.length + b.length);
+  joined.set(a);
+  joined.set(b, a.length);
+  return joined;
 }
 
 /** A kitchen ticket for a bill and station not printed after `JOBS_WAITING_MS`, or given up on. */
@@ -703,11 +785,12 @@ export interface PrintProblem {
  * The printing problems among the kitchen tickets `scope` selects, abandoned bills left out. A
  * ticket is a problem while {@link printJobInTrouble} holds for its job, until a reprint for the same
  * bill and station, on the same printer, queued after it has printed: only a reprint carries every
- * dish fired before it, so a later round's ticket printing clears nothing, and another printer's
- * paper says nothing of this one's. "After" is the link row's `rowid`, not `created_at`, which two
- * jobs can share to the millisecond: SQLite gives a new row one more than the table's largest
- * `rowid`, and a link row goes only when its job or its bill is deleted, or when
- * {@link moveKitchenPrintLinks} writes it again. Oldest first.
+ * dish fired before it, and the held dishes of each group whose HOLD ticket was queued, so a later
+ * round's ticket printing clears nothing, and another printer's paper says nothing of this one's.
+ * "After" is the link row's `rowid`, not `created_at`, which two jobs can share to the millisecond:
+ * SQLite gives a new row one more than the table's largest `rowid`, and a link row goes only when
+ * its job or its bill is deleted, or when {@link moveKitchenPrintLinks} writes it again. Oldest
+ * first.
  */
 async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promise<PrintProblem[]> {
   const troubled = printJobInTrouble(now);

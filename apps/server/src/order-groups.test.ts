@@ -3767,7 +3767,7 @@ describe("advance HOLD tickets (Task 6)", () => {
   });
 
   describe("setting on", () => {
-    it("holding the mains prints a ticket headed HOLD listing 2 x Steak and 1 x Fish, which no printing problem can name", async () => {
+    it("holding the mains prints a ticket headed HOLD listing 2 x Steak and 1 x Fish, linked so a printing problem can name it", async () => {
       const v = await setupVenue();
       await printHeldWork(true);
       const s = await specExample(v);
@@ -3789,8 +3789,7 @@ describe("advance HOLD tickets (Task 6)", () => {
         "*** HOLD ***",
       ]);
       expect(jobs[4]!.slice(5)).toEqual(["GROUP 5", `2.000 ea x ${DISHES.flan.kitchen}`]);
-      // Only the two fire tickets are linked, so a HOLD ticket never raises "Printing problem".
-      expect(await linkedJobs()).toEqual((await jobIds(v)).slice(0, 2));
+      expect(await linkedJobs()).toEqual(await jobIds(v));
       expect((await groupRow(s.mains)).holdPrintedAt).not.toBeNull();
       expect((await groupRow(s.drinks)).holdPrintedAt).toBeNull();
       expect((await groupRow(s.cold)).holdPrintedAt).toBeNull();
@@ -3838,9 +3837,9 @@ describe("advance HOLD tickets (Task 6)", () => {
       expect(await printedSince(v, 8)).toEqual([
         ["*** FIRE ***", ...header, "GROUP 4", `1.000 ea x ${DISHES.steak.kitchen}`],
       ]);
-      // The FIRE slip is linked as a fire ticket is; the corrections before it are not.
+      // The FIRE slip is linked as the fire and HOLD tickets are; the corrections are not.
       expect(await linkedJobs()).toEqual([...linkedBefore, (await jobIds(v)).at(-1)]);
-      expect(linkedBefore).toEqual((await jobIds(v)).slice(0, 2));
+      expect(linkedBefore).toEqual((await jobIds(v)).slice(0, 5));
     });
 
     it("prints a FIRE slip through the course Fire too", async () => {
@@ -4210,14 +4209,14 @@ describe("advance HOLD tickets (Task 6)", () => {
       await submit(v, s.visitId, [{ release: "hold", lines: [line(v, "fish")] }]);
 
       const jobs = await db
-        .select({ payload: printJobs.payload })
+        .select({ id: printJobs.id, payload: printJobs.payload })
         .from(printJobs)
         .where(eq(printJobs.printerId, pass));
       const [station, ...rest] = await head(v, s);
       expect(jobs.map((job) => linesOfTicket(printedLines(job.payload).join("\n")))).toEqual([
         ["*** HOLD ***", "PASE", ...rest, "GROUP 1", station, `1.000 ea x ${DISHES.fish.kitchen}`],
       ]);
-      expect(await linkedJobs()).toEqual([]);
+      expect(await linkedJobs()).toEqual([...(await jobIds(v)), jobs[0]!.id]);
     });
 
     it("records no HOLD ticket where no active printer took one, and the group fires as before", async () => {
