@@ -266,10 +266,14 @@ export class OptionListForm extends LitElement {
   }
 
   #removeLabel(id: string): void {
+    const index = this.labels.findIndex((label) => label.id === id);
+    if (index < 0) return;
+    const focusId = this.labels[index + 1]?.id ?? this.labels[index - 1]?.id ?? null;
     this.#edit(() => {
       this.labels = this.labels.filter((label) => label.id !== id);
       this.#keepDefault();
     });
+    void this.#returnFocus(focusId);
   }
 
   /** The labels array order IS the saved order, so a move rewrites the array rather than a rank. */

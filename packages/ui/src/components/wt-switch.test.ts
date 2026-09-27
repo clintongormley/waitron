@@ -145,6 +145,16 @@ test("names the switch for assistive technology with its own label text", async 
   expect(input.getAttribute("aria-label")).toBe("Modo formación");
 });
 
+test("can name its control for one row while keeping the shared column label", async () => {
+  const el = await mount(
+    '<wt-switch label="Disponible" accessible-name="Media" hide-label></wt-switch>',
+  );
+  const input = el.shadowRoot!.querySelector("input")!;
+  expect(el.getAttribute("label")).toBe("Disponible");
+  expect(input.getAttribute("aria-label")).toBe("Media");
+  expect(el.shadowRoot!.querySelector("label")).toBeNull();
+});
+
 test("a switch given no name leaves its native input unnamed", async () => {
   const el = await mount("<wt-switch></wt-switch>");
   expect(el.shadowRoot!.querySelector("input")!.hasAttribute("name")).toBe(false);

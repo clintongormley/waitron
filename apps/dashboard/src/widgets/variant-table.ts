@@ -348,8 +348,9 @@ export class VariantTable extends LitElement {
           name=${`available-${index}`}
           data-test=${`available-${index}`}
           label=${t("editor.available")}
+          .accessibleName=${variant.name}
           hide-label
-          .checked=${row.variant.available}
+          .checked=${variant.available}
           .disabled=${this.busy}
           @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
             // Stop the switch's own event before re-emitting, or the host counts one change twice.

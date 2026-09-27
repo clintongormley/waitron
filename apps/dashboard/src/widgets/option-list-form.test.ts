@@ -836,6 +836,30 @@ it("puts focus back on Add option after a new option is saved", async () => {
   await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(add));
 });
 
+it("focuses the next option's actions after deleting a middle option", async () => {
+  const { el } = await mount({ value: { ...cooked, labels: [...cooked.labels, wellDone] } });
+  const actions = el.shadowRoot!.querySelectorAll("wt-row-actions")[1]!;
+  await userEvent.click(actions.shadowRoot!.querySelector("button")!);
+  await userEvent.click(el.shadowRoot!.querySelector('[data-test="remove-label-1"]')!);
+  await el.updateComplete;
+  const next = el.shadowRoot!.querySelector<HTMLElement>(
+    `tr[data-label="${WELL}"] wt-row-actions`,
+  )!;
+  expect(next).not.toBeNull();
+  await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(next));
+});
+
+it("focuses Add option after deleting the only option", async () => {
+  const { el } = await mount({ value: { ...cooked, labels: [cooked.labels[0]!] } });
+  const actions = el.shadowRoot!.querySelector("wt-row-actions")!;
+  await userEvent.click(actions.shadowRoot!.querySelector("button")!);
+  await userEvent.click(el.shadowRoot!.querySelector('[data-test="remove-label-0"]')!);
+  await el.updateComplete;
+  const add = el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-option"]')!;
+  expect(add).not.toBeNull();
+  await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(add));
+});
+
 it("renders the option editor outside the list's saving wrapper, and passes it the saving state", async () => {
   const { el } = await mount({ value: cooked });
   const form = editor(el);

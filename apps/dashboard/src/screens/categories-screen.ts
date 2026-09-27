@@ -818,7 +818,11 @@ export class CategoriesScreen extends LitElement {
           data-test="add-selected"
           .disabled=${this.busy || this.picked.size === 0}
           @click=${() => this.#confirmAdd()}
-          >${t("categories.add_selected").replace("{count}", String(this.picked.size))}</wt-button
+          >${
+            this.picked.size === 1
+              ? t("categories.add_selected_one")
+              : t("categories.add_selected").replace("{count}", String(this.picked.size))
+          }</wt-button
         ></wt-form-actions
       >`;
   }

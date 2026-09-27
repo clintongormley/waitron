@@ -1679,6 +1679,15 @@ async function pickForFood() {
   return { ...fx, ...mounted, addTable, add };
 }
 
+it.each([
+  ["en-GB", "Add 1 product"],
+  ["es-ES", "Añadir 1 producto"],
+])("words a single selected product as %s: %s", async (locale, label) => {
+  setLocale(locale as "en-GB" | "es-ES");
+  const { add } = await pickForFood();
+  expect(add.textContent!.trim()).toBe(label);
+});
+
 it("explains a refused add and keeps the add list and its picks open", async () => {
   const { el, api, add } = await pickForFood();
   api.addProductsToCategory.mockRejectedValueOnce({ code: "product.not_found" });
