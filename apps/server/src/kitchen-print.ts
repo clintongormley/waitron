@@ -272,22 +272,25 @@ async function readOrderHeader(
  * ticket of that station's own items; every attached `order`-scope (group) printer gets ONE consolidated
  * ticket of the WHOLE event — deduped by printer id, so a group printer attached to N involved stations
  * prints a single ticket carrying all their items, not N. Each job is linked to the bill and to every
- * station its ticket carries (`kitchen_print_jobs`).
+ * station its ticket carries (`kitchen_print_jobs`), except a `HOLD` ticket's: only fired work can be
+ * reprinted, so a failed HOLD ticket linked there would be a printing problem nothing clears.
+ * `firedItems` are then the held items printed in advance. Answers whether any job was enqueued.
  */
 export async function enqueueKitchenTickets(
   tx: Transaction,
   cfg: TillConfig,
   orderId: string,
   firedItems: FiredItem[],
-  { reprint = false }: { reprint?: boolean } = {},
-): Promise<void> {
-  if (firedItems.length === 0) return;
+  { reprint = false, mark }: { reprint?: boolean; mark?: "HOLD" | "FIRE" } = {},
+): Promise<boolean> {
+  if (firedItems.length === 0) return false;
 
   const stationIds = [...new Set(firedItems.map((f) => f.stationId))];
 
   const mappingRows = await activePrinterMappings(tx, stationIds);
 
-  if (mappingRows.length === 0) return;
+  if (mappingRows.length === 0) return false;
+  const link = mark !== "HOLD";
 
   const lineIds = [...new Set(firedItems.map((f) => f.workingOrderLineId))];
 
@@ -358,6 +361,7 @@ export async function enqueueKitchenTickets(
       const stationTicket = formatKitchenTicket(
         {
           reprint,
+          mark,
           scope: "station",
           stationName: station.name,
           tableLabel,
@@ -369,7 +373,7 @@ export async function enqueueKitchenTickets(
       );
       for (const printer of group) {
         const { jobId } = await enqueuePrintJob(tx, printCfg, printer.printerId, stationTicket);
-        await linkKitchenJob(tx, jobId, orderId, [station.id], reprint);
+        if (link) await linkKitchenJob(tx, jobId, orderId, [station.id], reprint);
       }
     }
   }
@@ -378,6 +382,7 @@ export async function enqueueKitchenTickets(
     const consolidated = formatKitchenTicket(
       {
         reprint,
+        mark,
         scope: "order",
         tableLabel,
         orderNumber,
@@ -391,6 +396,7 @@ export async function enqueueKitchenTickets(
     );
     for (const printer of group) {
       const { jobId } = await enqueuePrintJob(tx, printCfg, printer.printerId, consolidated);
+      if (!link) continue;
       await linkKitchenJob(
         tx,
         jobId,
@@ -400,6 +406,7 @@ export async function enqueueKitchenTickets(
       );
     }
   }
+  return true;
 }
 
 /** Record which bill and stations a kitchen ticket's job carried. */
@@ -439,7 +446,19 @@ export interface CorrectionItem {
    *  removed on a partial void. */
   quantity: number;
   wasStarted: boolean;
+  /** On a HOLD correction, the position of the group whose HOLD ticket it corrects. */
+  group?: number;
 }
+
+/** What a correction slip says happened; the slip's header and its sign follow from it. */
+type CorrectionChange =
+  | { kind: "VOID" | "RECALLED" }
+  | { kind: "MOVED"; movedFrom: { tableLabel: string | null; orderNumber: string } }
+  | HoldCorrection;
+
+/** A change to held work a HOLD ticket printed: its quantity `added` or `removed`, or cancelled. */
+export type HoldCorrection =
+  { kind: "HOLD CHANGED"; direction: "added" | "removed" } | { kind: "HOLD CANCELLED" };
 
 /**
  * Record a kitchen notice per item for a RECALL ({@link recallLines}) or VOID ({@link voidTabLine})
@@ -471,6 +490,30 @@ export async function enqueueCorrectionSlips(
   await printCorrectionSlips(tx, cfg, orderId, items, { kind });
 }
 
+/**
+ * Record a kitchen notice per item for a change to held work its HOLD ticket printed — `changed`
+ * with its direction, or `void` for a cancellation — then enqueue a HOLD correction slip per item,
+ * naming its group, as {@link enqueueCorrectionSlips} enqueues a slip.
+ */
+export async function enqueueHoldCorrections(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  items: (CorrectionItem & { group: number })[],
+  change: HoldCorrection,
+): Promise<void> {
+  await VENUE_SERVICE.recordKitchenNotices(
+    tx,
+    cfg,
+    orderId,
+    items.map(toNoticeItem),
+    change.kind === "HOLD CANCELLED" ? "void" : "changed",
+    null,
+    change.kind === "HOLD CANCELLED" ? null : change.direction,
+  );
+  await printCorrectionSlips(tx, cfg, orderId, items, change);
+}
+
 function toNoticeItem(item: CorrectionItem) {
   return {
     workingOrderLineId: item.workingOrderLineId,
@@ -486,9 +529,7 @@ async function printCorrectionSlips(
   cfg: TillConfig,
   orderId: string,
   items: CorrectionItem[],
-  change:
-    | { kind: "VOID" | "RECALLED" }
-    | { kind: "MOVED"; movedFrom: { tableLabel: string | null; orderNumber: string } },
+  change: CorrectionChange,
   knownHeader?: { orderNumber: string; tableLabel: string | null },
 ): Promise<void> {
   const stationIds = [...new Set(items.map((i) => i.stationId))];
@@ -520,6 +561,7 @@ async function printCorrectionSlips(
     // A line whose station has no active printer produced no paper — nothing to correct there.
     if (attachedPrinters === undefined) continue;
     const entry = itemsByLine.get(target.workingOrderLineId)!;
+    const item = atFiredQuantity(entry.item, target);
     for (const group of groupByLayout(attachedPrinters)) {
       const bytes = formatCorrectionSlip(
         {
@@ -528,7 +570,7 @@ async function printCorrectionSlips(
           tableLabel: header.tableLabel,
           orderNumber: header.orderNumber,
           at,
-          item: atFiredQuantity(entry.item, target),
+          item: target.group === undefined ? item : { ...item, group: target.group },
         },
         layoutOf(group[0]!),
       );

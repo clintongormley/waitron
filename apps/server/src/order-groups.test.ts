@@ -4,10 +4,13 @@ import { beforeAll, describe, expect, expectTypeOf, it } from "vitest";
 import {
   devices,
   diningTables,
+  kitchenPrintJobs,
+  kitchenStations,
   locations,
   orderGroupEvents,
   orderGroups,
   printJobs,
+  printers,
   products,
   serviceCommands,
   ticketItems,
@@ -30,7 +33,7 @@ import {
   units,
   writeProductModifiers,
 } from "@waitron/catalogue";
-import { createPrinter } from "@waitron/printing";
+import { createPrinter, updatePrinter } from "@waitron/printing";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -67,7 +70,11 @@ import {
   type TillSaleDeps,
 } from "./working-order.js";
 import { seatTable } from "./visits.js";
-import { writeKitchenTicketGrouping } from "@waitron/venue-service";
+import {
+  listStationNotices,
+  writeKitchenTicketGrouping,
+  writePrintHeldWork,
+} from "@waitron/venue-service";
 import {
   bumpGroupReady,
   fireGroup,
@@ -3607,4 +3614,479 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
       ]);
     },
   );
+});
+
+describe("advance HOLD tickets (Task 6)", () => {
+  /** A printed ticket's lines, minus the blank line the cut leaves. */
+  const linesOfTicket = (ticket: string) => ticket.split("\n").filter((text) => text !== "");
+  const TIME = expect.stringMatching(/^\d\d:\d\d$/);
+  const printHeldWork = (on: boolean) => inTx((tx) => writePrintHeldWork(tx, on));
+
+  /** What every ticket and slip for the party's tab prints under its mark: station, table, bill, time. */
+  async function head(v: Venue, s: Seated): Promise<unknown[]> {
+    const [station] = await db
+      .select({ name: kitchenStations.name })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.id, v.stationId));
+    const [table] = await db
+      .select({ label: diningTables.label })
+      .from(diningTables)
+      .where(eq(diningTables.id, s.tableId));
+    const [bill] = await db
+      .select({ orderNumber: workingOrders.orderNumber })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, s.tabId));
+    return [station!.name, table!.label, String(bill!.orderNumber), TIME];
+  }
+
+  /** The jobs printed since `from`, each as its lines. */
+  async function printedSince(v: Venue, from: number): Promise<string[][]> {
+    return (await printed(v)).slice(from).map(linesOfTicket);
+  }
+
+  async function noticesAt(v: Venue) {
+    return (await inTx((tx) => listStationNotices(tx, v.cfg, v.stationId))).map((notice) => ({
+      kind: notice.kind,
+      lineName: notice.lineName,
+      quantity: notice.quantity,
+      direction: notice.direction,
+    }));
+  }
+
+  /** The print jobs `kitchen_print_jobs` links to a bill: the ones a printing problem can name. */
+  async function linkedJobs(): Promise<string[]> {
+    const rows = await db
+      .select({ printJobId: kitchenPrintJobs.printJobId })
+      .from(kitchenPrintJobs)
+      .orderBy(sql`${kitchenPrintJobs}.rowid`);
+    return rows.map((row) => row.printJobId);
+  }
+
+  async function jobIds(v: Venue): Promise<string[]> {
+    const rows = await db
+      .select({ id: printJobs.id })
+      .from(printJobs)
+      .where(eq(printJobs.printerId, v.printerId))
+      .orderBy(sql`rowid`);
+    return rows.map((row) => row.id);
+  }
+
+  const lineOf = async (s: Seated, groupId: string, dish: Dish, v: Venue) =>
+    (await linesIn(s.visitId, groupId)).find((row) => row.productId === v.productId[dish])!;
+
+  // Green before this task's change (R6): a regression pin, not a failing test.
+  it("setting off (the default): holding prints nothing, and firing prints the group's current contents, edits included", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    expect(await printed(v)).toHaveLength(2);
+    const steak = await lineOf(s, s.mains, "steak", v);
+    const fish = await lineOf(s, s.mains, "fish", v);
+
+    await move(v, s.visitId, [{ lineId: steak.id, quantity: "1" }], { groupId: s.desserts });
+    await changeLine(v, s.tabId, fish.lineNo, { quantity: "2" }, MIA);
+    expect(await printed(v)).toHaveLength(2);
+    expect(await noticesAt(v)).toEqual([]);
+
+    await fire(v, s.visitId, s.mains);
+
+    expect(await printedSince(v, 2)).toEqual([
+      [
+        ...(await head(v, s)),
+        "GROUP 4",
+        `1.000 ea x ${DISHES.steak.kitchen}`,
+        `2.000 ea x ${DISHES.fish.kitchen}`,
+      ],
+    ]);
+    for (const group of [s.warm, s.mains, s.desserts]) {
+      expect((await groupRow(group)).holdPrintedAt).toBeNull();
+    }
+  });
+
+  describe("setting on", () => {
+    it("holding the mains prints a ticket headed HOLD listing 2 x Steak and 1 x Fish, which no printing problem can name", async () => {
+      const v = await setupVenue();
+      await printHeldWork(true);
+      const s = await specExample(v);
+
+      const jobs = await printedSince(v, 0);
+      expect(jobs).toHaveLength(5);
+      expect(jobs[3]).toEqual([
+        "*** HOLD ***",
+        ...(await head(v, s)),
+        "GROUP 4",
+        `2.000 ea x ${DISHES.steak.kitchen}`,
+        `1.000 ea x ${DISHES.fish.kitchen}`,
+      ]);
+      expect(jobs.map((job) => job[0])).toEqual([
+        expect.not.stringContaining("***"),
+        expect.not.stringContaining("***"),
+        "*** HOLD ***",
+        "*** HOLD ***",
+        "*** HOLD ***",
+      ]);
+      expect(jobs[4]!.slice(5)).toEqual(["GROUP 5", `2.000 ea x ${DISHES.flan.kitchen}`]);
+      // Only the two fire tickets are linked, so a HOLD ticket never raises "Printing problem".
+      expect(await linkedJobs()).toEqual((await jobIds(v)).slice(0, 2));
+      expect((await groupRow(s.mains)).holdPrintedAt).not.toBeNull();
+      expect((await groupRow(s.drinks)).holdPrintedAt).toBeNull();
+      expect((await groupRow(s.cold)).holdPrintedAt).toBeNull();
+    });
+
+    it("moves a Steak, removes the Fish and fires the mains: -1/+1 corrections, a HOLD cancellation, then one FIRE slip", async () => {
+      const v = await setupVenue();
+      await printHeldWork(true);
+      const s = await specExample(v);
+      const header = await head(v, s);
+      const steak = await lineOf(s, s.mains, "steak", v);
+      const fish = await lineOf(s, s.mains, "fish", v);
+
+      await move(v, s.visitId, [{ lineId: steak.id, quantity: "1" }], { groupId: s.desserts });
+
+      expect(await printedSince(v, 5)).toEqual([
+        ["*** HOLD CHANGED ***", ...header, "GROUP 4", `-1.000 ea x ${DISHES.steak.kitchen}`],
+        ["*** HOLD CHANGED ***", ...header, "GROUP 5", `+1.000 ea x ${DISHES.steak.kitchen}`],
+      ]);
+      expect(await noticesAt(v)).toEqual([
+        {
+          kind: "changed",
+          lineName: DISHES.steak.kitchen,
+          quantity: "1.000",
+          direction: "removed",
+        },
+        { kind: "changed", lineName: DISHES.steak.kitchen, quantity: "1.000", direction: "added" },
+      ]);
+
+      await inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, fish.lineNo, undefined, MIA));
+
+      expect(await printedSince(v, 7)).toEqual([
+        ["*** HOLD CANCELLED ***", ...header, "GROUP 4", `1.000 ea x ${DISHES.fish.kitchen}`],
+      ]);
+      expect((await noticesAt(v)).at(-1)).toEqual({
+        kind: "void",
+        lineName: DISHES.fish.kitchen,
+        quantity: "1.000",
+        direction: null,
+      });
+      const linkedBefore = await linkedJobs();
+
+      await fire(v, s.visitId, s.mains);
+
+      expect(await printedSince(v, 8)).toEqual([
+        ["*** FIRE ***", ...header, "GROUP 4", `1.000 ea x ${DISHES.steak.kitchen}`],
+      ]);
+      // The FIRE slip is linked as a fire ticket is; the corrections before it are not.
+      expect(await linkedJobs()).toEqual([...linkedBefore, (await jobIds(v)).at(-1)]);
+      expect(linkedBefore).toEqual((await jobIds(v)).slice(0, 2));
+    });
+
+    it("prints a FIRE slip through the course Fire too", async () => {
+      const v = await setupVenue();
+      await printHeldWork(true);
+      const s = await specExample(v);
+      const steak = await lineOf(s, s.mains, "steak", v);
+
+      await inTx((tx) => fireCourse(tx, v.cfg, s.tabId, steak.courseId!, MIA));
+
+      expect(await printedSince(v, 5)).toEqual([
+        [
+          "*** FIRE ***",
+          ...(await head(v, s)),
+          "GROUP 4",
+          `2.000 ea x ${DISHES.steak.kitchen}`,
+          `1.000 ea x ${DISHES.fish.kitchen}`,
+        ],
+      ]);
+    });
+
+    it("prints +1 for a Steak joined to the printed mains, with an added notice", async () => {
+      const v = await setupVenue();
+      await printHeldWork(true);
+      const s = await specExample(v);
+
+      await submit(v, s.visitId, [{ release: "hold", lines: [line(v, "steak")] }], {
+        joinGroupId: s.mains,
+      });
+
+      expect(await printedSince(v, 5)).toEqual([
+        [
+          "*** HOLD CHANGED ***",
+          ...(await head(v, s)),
+          "GROUP 4",
+          `+1.000 ea x ${DISHES.steak.kitchen}`,
+        ],
+      ]);
+      expect(await noticesAt(v)).toEqual([
+        { kind: "changed", lineName: DISHES.steak.kitchen, quantity: "1.000", direction: "added" },
+      ]);
+    });
+
+    it("prints a HOLD ticket for the new group a move makes, and -1 for the printed group it left", async () => {
+      const v = await setupVenue();
+      await printHeldWork(true);
+      const s = await specExample(v);
+      const header = await head(v, s);
+      const steak = await lineOf(s, s.mains, "steak", v);
+
+      await move(v, s.visitId, [{ lineId: steak.id, quantity: "1" }], "new");
+
+      const created = (await groupsOf(s.visitId)).groups.at(-1)!;
+      expect(created.position).toBe(6);
+      expect(await printedSince(v, 5)).toEqual([
+        ["*** HOLD CHANGED ***", ...header, "GROUP 4", `-1.000 ea x ${DISHES.steak.kitchen}`],
+        ["*** HOLD ***", ...header, "GROUP 6", `1.000 ea x ${DISHES.steak.kitchen}`],
+      ]);
+      expect((await groupRow(created.id)).holdPrintedAt).not.toBeNull();
+      expect((await noticesAt(v)).map((notice) => notice.direction)).toEqual(["removed"]);
+    });
+
+    it("prints -1 and +1 for a whole line moved between printed groups", async () => {
+      const v = await setupVenue();
+      await printHeldWork(true);
+      const s = await specExample(v);
+      const header = await head(v, s);
+      const fish = await lineOf(s, s.mains, "fish", v);
+
+      await move(v, s.visitId, [{ lineId: fish.id, quantity: "1" }], { groupId: s.warm });
+
+      expect(await printedSince(v, 5)).toEqual([
+        ["*** HOLD CHANGED ***", ...header, "GROUP 4", `-1.000 ea x ${DISHES.fish.kitchen}`],
+        ["*** HOLD CHANGED ***", ...header, "GROUP 3", `+1.000 ea x ${DISHES.fish.kitchen}`],
+      ]);
+    });
+
+    it("prints nothing for part of a line moved within its own printed group", async () => {
+      const v = await setupVenue();
+      await printHeldWork(true);
+      const s = await specExample(v);
+      const steak = await lineOf(s, s.mains, "steak", v);
+
+      await move(v, s.visitId, [{ lineId: steak.id, quantity: "1" }], { groupId: s.mains });
+
+      expect(await linesIn(s.visitId, s.mains)).toHaveLength(3);
+      expect(await printedSince(v, 5)).toEqual([]);
+      expect(await noticesAt(v)).toEqual([]);
+    });
+
+    // A fired group keeps the time its HOLD ticket printed; its work is corrected as fired work.
+    it("prints no HOLD correction for a line recalled from a fired group whose HOLD ticket printed", async () => {
+      const v = await setupVenue();
+      await printHeldWork(true);
+      const s = await specExample(v);
+      await fire(v, s.visitId, s.mains);
+      const fish = await lineOf(s, s.mains, "fish", v);
+      await inTx((tx) => recallLines(tx, v.cfg, s.tabId, [fish.lineNo]));
+      expect((await printedSince(v, 6)).map((job) => job[0])).toEqual(["*** RECALLED ***"]);
+
+      await inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, fish.lineNo, undefined, MIA));
+
+      expect(await printedSince(v, 7)).toEqual([]);
+      expect((await noticesAt(v)).map((notice) => notice.kind)).toEqual(["recalled"]);
+    });
+
+    it("prints +1 and -1 for a held Steak's quantity raised and lowered by an edit", async () => {
+      const v = await setupVenue();
+      await printHeldWork(true);
+      const s = await specExample(v);
+      const header = await head(v, s);
+      const steak = await lineOf(s, s.mains, "steak", v);
+
+      await changeLine(v, s.tabId, steak.lineNo, { quantity: "3" }, MIA);
+      await changeLine(v, s.tabId, steak.lineNo, { quantity: "1" }, MIA);
+
+      expect(await printedSince(v, 5)).toEqual([
+        ["*** HOLD CHANGED ***", ...header, "GROUP 4", `+1.000 ea x ${DISHES.steak.kitchen}`],
+        ["*** HOLD CHANGED ***", ...header, "GROUP 4", `-2.000 ea x ${DISHES.steak.kitchen}`],
+      ]);
+      expect(await noticesAt(v)).toEqual([
+        { kind: "changed", lineName: DISHES.steak.kitchen, quantity: "1.000", direction: "added" },
+        {
+          kind: "changed",
+          lineName: DISHES.steak.kitchen,
+          quantity: "2.000",
+          direction: "removed",
+        },
+      ]);
+    });
+
+    it("prints a HOLD cancellation for a held line a whole-order save leaves out", async () => {
+      const v = await setupVenue();
+      await printHeldWork(true);
+      const s = await specExample(v);
+      const fish = await lineOf(s, s.mains, "fish", v);
+
+      await saveWhole(
+        v,
+        s.tabId,
+        (await keptLines(v, s.tabId)).filter((kept) => kept.workingOrderLineId !== fish.id),
+        MIA,
+      );
+
+      expect(await printedSince(v, 5)).toEqual([
+        [
+          "*** HOLD CANCELLED ***",
+          ...(await head(v, s)),
+          "GROUP 4",
+          `1.000 ea x ${DISHES.fish.kitchen}`,
+        ],
+      ]);
+      expect(await noticesAt(v)).toEqual([
+        { kind: "void", lineName: DISHES.fish.kitchen, quantity: "1.000", direction: null },
+      ]);
+    });
+
+    it("prints a HOLD cancellation for the part of a held line voided, and for a void that empties its group", async () => {
+      const v = await setupVenue();
+      await printHeldWork(true);
+      const s = await specExample(v);
+      const header = await head(v, s);
+      const steak = await lineOf(s, s.mains, "steak", v);
+      const flan = await lineOf(s, s.desserts, "flan", v);
+
+      await inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, steak.lineNo, "1", MIA));
+      await inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, flan.lineNo, undefined, MIA));
+
+      expect(await printedSince(v, 5)).toEqual([
+        ["*** HOLD CANCELLED ***", ...header, "GROUP 4", `1.000 ea x ${DISHES.steak.kitchen}`],
+        ["*** HOLD CANCELLED ***", ...header, "GROUP 5", `2.000 ea x ${DISHES.flan.kitchen}`],
+      ]);
+      expect((await groupRow(s.desserts)).state).toBe("removed");
+      expect((await noticesAt(v)).map((notice) => notice.kind)).toEqual(["void", "void"]);
+    });
+
+    it("prints a HOLD ticket for the held group an edit makes on a party with nothing sent", async () => {
+      const v = await setupVenue();
+      await printHeldWork(true);
+      const s = await seated(v);
+      await submit(v, s.visitId, [{ release: "hold", lines: [line(v, "steak")] }]);
+      expect(await printed(v)).toHaveLength(1);
+
+      await saveWhole(v, s.tabId, [...(await keptLines(v, s.tabId)), line(v, "fish")], MIA);
+
+      const created = (await groupsOf(s.visitId)).groups.at(-1)!;
+      expect(created.summary).toBe("1 × Fish");
+      expect(await printedSince(v, 1)).toEqual([
+        ["*** HOLD ***", ...(await head(v, s)), "GROUP 2", `1.000 ea x ${DISHES.fish.kitchen}`],
+      ]);
+      expect((await groupRow(created.id)).holdPrintedAt).not.toBeNull();
+    });
+
+    it("sends the HOLD ticket to an order-scope printer too, as its pass copy", async () => {
+      const v = await setupVenue();
+      await printHeldWork(true);
+      const pass = await inTx(async (tx) => {
+        const { id } = await createPrinter(
+          tx,
+          { locationId: v.cfg.locationId },
+          { name: "Pase", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
+        );
+        await updatePrinter(tx, { locationId: v.cfg.locationId }, id, { ticketScope: "order" });
+        await attachPrinterToStation(tx, { stationId: v.stationId, printerId: id });
+        return id;
+      });
+      const s = await seated(v);
+
+      await submit(v, s.visitId, [{ release: "hold", lines: [line(v, "fish")] }]);
+
+      const jobs = await db
+        .select({ payload: printJobs.payload })
+        .from(printJobs)
+        .where(eq(printJobs.printerId, pass));
+      const [station, ...rest] = await head(v, s);
+      expect(jobs.map((job) => linesOfTicket(printedLines(job.payload).join("\n")))).toEqual([
+        ["*** HOLD ***", "PASE", ...rest, "GROUP 1", station, `1.000 ea x ${DISHES.fish.kitchen}`],
+      ]);
+      expect(await linkedJobs()).toEqual([]);
+    });
+
+    it("records no HOLD ticket where no active printer took one, and the group fires as before", async () => {
+      const v = await setupVenue();
+      await printHeldWork(true);
+      await db.update(printers).set({ active: false }).where(eq(printers.id, v.printerId));
+      const s = await seated(v);
+      const [held] = (await submit(v, s.visitId, [{ release: "hold", lines: [line(v, "fish")] }]))
+        .groups;
+      expect((await groupRow(held!.id)).holdPrintedAt).toBeNull();
+      await db.update(printers).set({ active: true }).where(eq(printers.id, v.printerId));
+
+      await fire(v, s.visitId, held!.id);
+
+      expect(await printedSince(v, 0)).toEqual([
+        [...(await head(v, s)), "GROUP 1", `1.000 ea x ${DISHES.fish.kitchen}`],
+      ]);
+    });
+  });
+
+  describe("a group held before the setting was turned on", () => {
+    it("fires with a normal ticket, and its edits print nothing", async () => {
+      const v = await setupVenue();
+      const s = await specExample(v);
+      await printHeldWork(true);
+      const steak = await lineOf(s, s.mains, "steak", v);
+
+      await move(v, s.visitId, [{ lineId: steak.id, quantity: "1" }], { groupId: s.desserts });
+      await changeLine(v, s.tabId, steak.lineNo, { quantity: "2" }, MIA);
+      await submit(v, s.visitId, [{ release: "hold", lines: [line(v, "fish")] }], {
+        joinGroupId: s.mains,
+      });
+      expect(await printed(v)).toHaveLength(2);
+      expect(await noticesAt(v)).toEqual([]);
+
+      await fire(v, s.visitId, s.mains);
+
+      expect(await printedSince(v, 2)).toEqual([
+        [
+          ...(await head(v, s)),
+          "GROUP 4",
+          `2.000 ea x ${DISHES.steak.kitchen}`,
+          `2.000 ea x ${DISHES.fish.kitchen}`,
+        ],
+      ]);
+    });
+
+    it("is the marker, not the setting: a group whose HOLD ticket printed still fires with a FIRE slip once the setting is off", async () => {
+      const v = await setupVenue();
+      await printHeldWork(true);
+      const s = await specExample(v);
+      await printHeldWork(false);
+      const fish = await lineOf(s, s.mains, "fish", v);
+
+      await inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, fish.lineNo, undefined, MIA));
+      await fire(v, s.visitId, s.mains);
+
+      expect((await printedSince(v, 5)).map((job) => job[0])).toEqual([
+        "*** HOLD CANCELLED ***",
+        "*** FIRE ***",
+      ]);
+    });
+  });
+
+  describe("retries (D8) print nothing the second time", () => {
+    it("prints a repeated held submission's HOLD ticket once", async () => {
+      const v = await setupVenue();
+      await printHeldWork(true);
+      const s = await seated(v);
+      const opts = { submissionId: randomUUID(), revision: await revisionOf(s.visitId) };
+      const groups = [{ release: "hold" as const, lines: [line(v, "steak")] }];
+
+      await submit(v, s.visitId, groups, opts);
+      await submit(v, s.visitId, groups, opts);
+
+      expect((await printed(v)).map((job) => linesOfTicket(job)[0])).toEqual(["*** HOLD ***"]);
+    });
+
+    it("prints a repeated move's corrections once", async () => {
+      const v = await setupVenue();
+      await printHeldWork(true);
+      const s = await specExample(v);
+      const steak = await lineOf(s, s.mains, "steak", v);
+      const opts = { submissionId: randomUUID(), revision: await revisionOf(s.visitId) };
+      const moves = [{ lineId: steak.id, quantity: "1" }];
+
+      await move(v, s.visitId, moves, { groupId: s.desserts }, opts);
+      await move(v, s.visitId, moves, { groupId: s.desserts }, opts);
+
+      expect(await printedSince(v, 5)).toHaveLength(2);
+      expect(await noticesAt(v)).toHaveLength(2);
+    });
+  });
 });
