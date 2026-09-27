@@ -51,6 +51,22 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This request could not be matched to what was sent before. Reload and try again",
     es: "Esta petición no coincide con la que se envió antes. Vuelve a cargar e inténtalo de nuevo",
   },
+  "draft.taken_over": {
+    en: "Someone else has taken over this order. Reload the table to see it",
+    es: "Otra persona se ha hecho cargo de este pedido. Vuelve a cargar la mesa para verlo",
+  },
+  "draft.already_submitted": {
+    en: "This order has already been sent. Reload the table to see it",
+    es: "Este pedido ya se ha enviado. Vuelve a cargar la mesa para verlo",
+  },
+  "draft.out_of_date": {
+    en: "This order has changed since you opened it. Reload it and make your change again",
+    es: "Este pedido ha cambiado desde que lo abriste. Vuelve a cargarlo y repite el cambio",
+  },
+  "draft.not_found": {
+    en: "This unsent order is no longer on this table. Reload the table and try again",
+    es: "Este pedido sin enviar ya no está en esta mesa. Vuelve a cargar la mesa e inténtalo de nuevo",
+  },
   "bill.payments_received": {
     en: "Money has already been taken on this bill. Take the rest from the bill's payments. To discard or merge the bill, give that money back first",
     es: "Ya se ha cobrado dinero en esta cuenta. Cobra el resto desde los pagos de la cuenta. Para descartar o combinar la cuenta, devuelve primero ese dinero",
