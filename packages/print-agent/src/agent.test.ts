@@ -18,6 +18,14 @@ const okR = <T>(value: T): Result<T> => ({ ok: true, value });
 // call site restating T — the failure branch carries no value, so `never` is the honest element type.
 const failR = (failure: Failure): Result<never> => ({ ok: false, failure });
 
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 /** A scripted client; each method is a vi.fn you override per test. Defaults walk the happy path:
  * probe → join → approved → empty pull. */
 function client(over: Partial<AgentClient> = {}): AgentClient {
@@ -423,6 +431,274 @@ describe("createAgent — phases", () => {
     await createAgent({ host, client: c }).runOnce();
     expect(c.pullJobs).not.toHaveBeenCalledWith("http://b.test", "a1.s", expect.anything());
     expect(host.statuses.at(-1)?.phase).toBe("unreachable");
+  });
+});
+
+describe("createAgent — setup controls", () => {
+  it("reconfigures a denied agent, wakes its held sleep, and joins again without a restart", async () => {
+    const sleepStarted = deferred();
+    const joinStarted = deferred();
+    const host = fakeHost({
+      config: {
+        ...CONFIG,
+        environment: "preproduction",
+        pendingVerificationNumber: "07",
+        servers: [{ url: "http://b.test", nodeId: "n2" }],
+      },
+      token: "a1.s",
+      sleep: async () => {
+        sleepStarted.resolve();
+        await new Promise(() => {});
+      },
+    });
+    const c = client({
+      joinStatus: vi.fn(async () => okR<JoinStatus>("not_approved")),
+      join: vi.fn(async () => {
+        joinStarted.resolve();
+        return okR({ token: "a2.s", verificationNumber: "42" });
+      }),
+    });
+    const savedConfigs: unknown[] = [];
+    const saveConfig = host.saveConfig.bind(host);
+    host.saveConfig = async (config) => {
+      savedConfigs.push(config);
+      await saveConfig(config);
+    };
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    expect(await host.token()).toBeNull();
+
+    const running = agent.start();
+    await sleepStarted.promise;
+    await expect(
+      agent.configure({ serverUrl: "http://new.test", name: "bar-printer" }),
+    ).resolves.toBe(true);
+    await joinStarted.promise;
+    agent.stop();
+    await running;
+
+    expect(await host.config()).toEqual({
+      serverUrl: "http://new.test",
+      name: "bar-printer",
+      environment: "preproduction",
+      pendingVerificationNumber: "42",
+    });
+    expect(await host.token()).toBe("a2.s");
+    expect(savedConfigs).toContainEqual({ serverUrl: "http://new.test", name: "bar-printer" });
+  });
+
+  it("refuses a queued configure after the in-flight tick approves the token", async () => {
+    const pullStarted = deferred();
+    const pullReply = deferred<Result<PullReply>>();
+    const host = fakeHost({
+      config: { ...CONFIG, pendingVerificationNumber: "07" },
+      token: "a1.s",
+    });
+    const c = client({
+      pullJobs: vi.fn(async () => {
+        pullStarted.resolve();
+        return pullReply.promise;
+      }),
+    });
+    const agent = createAgent({ host, client: c });
+    expect((await agent.setupSnapshot()).joined).toBe(false);
+
+    const tick = agent.runOnce();
+    await pullStarted.promise;
+    const configure = agent.configure({ serverUrl: "http://attacker.test", name: "changed" });
+    pullReply.resolve(
+      okR({ nodeId: "n1", servers: [{ url: "http://b.test" }], jobs: [], discoveryUntil: null }),
+    );
+    await tick;
+    await expect(configure).resolves.toBe(false);
+
+    expect(await host.token()).toBe("a1.s");
+    expect(await host.config()).toEqual({
+      ...CONFIG,
+      environment: "preproduction",
+      servers: [{ url: "http://b.test" }],
+    });
+  });
+
+  it("starts one five-minute reset window only for an approved out-of-touch agent", async () => {
+    let now = 1_000;
+    const host = fakeHost({
+      config: { ...CONFIG, environment: "preproduction" },
+      token: "a1.s",
+      now: () => now,
+    });
+    const c = client({
+      probeNode: vi.fn(async () => failR({ kind: "unreachable", detail: "offline" })),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    expect((await agent.setupSnapshot()).outOfTouch).toBe(true);
+    await expect(agent.beginNetworkReset()).resolves.toBe(true);
+    expect((await agent.setupSnapshot()).resetAt).toBe(301_000);
+    expect(await host.token()).toBe("a1.s");
+
+    now = 2_000;
+    await expect(agent.beginNetworkReset()).resolves.toBe(true);
+    expect((await agent.setupSnapshot()).resetAt).toBe(301_000);
+  });
+
+  it("marks only loss of a primary or an authenticated pull failure as out of touch", async () => {
+    const initial = createAgent({
+      host: fakeHost({ config: CONFIG, token: "a1.s" }),
+      client: client(),
+    });
+    expect((await initial.setupSnapshot()).outOfTouch).toBe(false);
+
+    const noPrimaryHost = fakeHost({ config: CONFIG, token: "a1.s" });
+    const noPrimary = createAgent({
+      host: noPrimaryHost,
+      client: client({
+        probeNode: vi.fn(async () => failR({ kind: "unreachable", detail: "offline" })),
+      }),
+    });
+    await noPrimary.runOnce();
+    expect((await noPrimary.setupSnapshot()).outOfTouch).toBe(true);
+
+    const pullFailure = createAgent({
+      host: fakeHost({ config: CONFIG, token: "a1.s" }),
+      client: client({
+        pullJobs: vi.fn(async () => failR({ kind: "unreachable", detail: "offline" })),
+      }),
+    });
+    await pullFailure.runOnce();
+    expect((await pullFailure.setupSnapshot()).outOfTouch).toBe(true);
+
+    const inventoryFailure = createAgent({
+      host: fakeHost({
+        config: CONFIG,
+        token: "a1.s",
+        visibleDevices: async () => {
+          throw new Error("usb inventory failed");
+        },
+      }),
+      client: client(),
+    });
+    await inventoryFailure.runOnce();
+    expect((await inventoryFailure.setupSnapshot()).outOfTouch).toBe(false);
+
+    const statusFailure = createAgent({
+      host: fakeHost({
+        config: { ...CONFIG, pendingVerificationNumber: "07" },
+        token: "a1.s",
+      }),
+      client: client({
+        joinStatus: vi.fn(async () => failR({ kind: "unreachable", detail: "offline" })),
+      }),
+    });
+    await statusFailure.runOnce();
+    expect((await statusFailure.setupSnapshot()).outOfTouch).toBe(false);
+  });
+
+  it("calls off a pending reset after a successful pull", async () => {
+    let fail = true;
+    let now = 1_000;
+    const host = fakeHost({ config: CONFIG, token: "a1.s", now: () => now });
+    const c = client({
+      pullJobs: vi.fn(async () =>
+        fail
+          ? failR({ kind: "unreachable", detail: "offline" })
+          : okR({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: null }),
+      ),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await agent.beginNetworkReset();
+    expect((await agent.setupSnapshot()).resetAt).toBe(301_000);
+
+    fail = false;
+    now = 2_000;
+    await agent.runOnce();
+    expect(await agent.setupSnapshot()).toMatchObject({ outOfTouch: false });
+    expect((await agent.setupSnapshot()).resetAt).toBeUndefined();
+    expect(await host.token()).toBe("a1.s");
+  });
+
+  it("cancels a reset without changing persisted join state", async () => {
+    const config = { ...CONFIG, environment: "preproduction" };
+    const host = fakeHost({ config, token: "a1.s" });
+    const agent = createAgent({
+      host,
+      client: client({
+        probeNode: vi.fn(async () => failR({ kind: "unreachable", detail: "offline" })),
+      }),
+    });
+    await agent.runOnce();
+    await agent.beginNetworkReset();
+    await expect(agent.cancelNetworkReset()).resolves.toBe(true);
+    expect((await agent.setupSnapshot()).resetAt).toBeUndefined();
+    expect(await host.config()).toEqual(config);
+    expect(await host.token()).toBe("a1.s");
+  });
+
+  it("refuses a queued cancel after a successful pull already called the reset off", async () => {
+    const pullStarted = deferred();
+    const pullReply = deferred<Result<PullReply>>();
+    const host = fakeHost({ config: CONFIG, token: "a1.s" });
+    const c = client({
+      pullJobs: vi
+        .fn()
+        .mockResolvedValueOnce(failR({ kind: "unreachable", detail: "offline" }))
+        .mockImplementationOnce(async () => {
+          pullStarted.resolve();
+          return pullReply.promise;
+        }),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await agent.beginNetworkReset();
+    const tick = agent.runOnce();
+    await pullStarted.promise;
+    const cancel = agent.cancelNetworkReset();
+    pullReply.resolve(okR({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: null }));
+    await tick;
+    await expect(cancel).resolves.toBe(false);
+    expect((await agent.setupSnapshot()).resetAt).toBeUndefined();
+  });
+
+  it("expires the reset, retains the configured identity and environment, then joins again", async () => {
+    let now = 1_000;
+    const host = fakeHost({
+      config: {
+        ...CONFIG,
+        environment: "preproduction",
+        servers: [{ url: "http://b.test", nodeId: "n2" }],
+      },
+      token: "a1.s",
+      now: () => now,
+    });
+    const c = client({
+      pullJobs: vi.fn(async () => failR({ kind: "unreachable", detail: "offline" })),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await agent.beginNetworkReset();
+    now = 301_000;
+    await agent.runOnce();
+    expect(await host.token()).toBeNull();
+    expect(await host.config()).toEqual({
+      ...CONFIG,
+      environment: "preproduction",
+      servers: undefined,
+    });
+    expect(await agent.setupSnapshot()).toMatchObject({ joined: false, outOfTouch: false });
+
+    await agent.runOnce();
+    expect(c.join).toHaveBeenCalledWith(A, "kitchen-pi");
+  });
+
+  it.each([
+    [null, null, false],
+    [CONFIG, null, false],
+    [{ ...CONFIG, pendingVerificationNumber: "07" }, "a1.s", false],
+    [CONFIG, "a1.s", true],
+  ] as const)("derives joined from token and pending state %#", async (config, token, joined) => {
+    const agent = createAgent({ host: fakeHost({ config, token }), client: client() });
+    expect((await agent.setupSnapshot()).joined).toBe(joined);
   });
 });
 

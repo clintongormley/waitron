@@ -10,6 +10,7 @@ import { Router } from "./router.js";
 
 /** A non-empty batch re-polls at once; only an empty pull sleeps. */
 export const POLL_INTERVAL_MS = 2_000;
+const RESET_WINDOW_MS = 5 * 60_000;
 
 export interface AgentOptions {
   host: Host;
@@ -17,10 +18,22 @@ export interface AgentOptions {
   intervalMs?: number;
 }
 
+export interface AgentSetupSnapshot {
+  status: AgentStatus;
+  config: AgentConfig | null;
+  joined: boolean;
+  outOfTouch: boolean;
+  resetAt?: number;
+}
+
 export interface Agent {
   runOnce(): Promise<void>;
   start(): Promise<void>;
   stop(): void;
+  configure(input: { serverUrl: string; name: string }): Promise<boolean>;
+  beginNetworkReset(): Promise<boolean>;
+  cancelNetworkReset(): Promise<boolean>;
+  setupSnapshot(): Promise<AgentSetupSnapshot>;
   readonly status: AgentStatus;
 }
 
@@ -32,8 +45,7 @@ function describe(failure: Failure): string {
  * `runOnce` turns whatever a tick throws into a status the host renders; a throw from that
  * handling itself (the host's logger or `status` callback, or a thrown value that cannot be turned
  * into a string) still escapes. An agent never pulls with an unapproved token (that reads as
- * `unauthorized` and would halt it). Once `halted`, re-joining on our own would put a denied agent
- * straight back into the admin's list, so only a restart asks again.
+ * `unauthorized` and halts it until setup supplies a new configuration).
  */
 export function createAgent(opts: AgentOptions): Agent {
   const host = opts.host;
@@ -43,12 +55,53 @@ export function createAgent(opts: AgentOptions): Agent {
   let approved = false;
   let halted = false;
   let running = false;
+  let outOfTouch = false;
+  let resetAt: number | undefined;
+  let operation = Promise.resolve();
+  let wakePromise: Promise<void>;
+  let wakeResolve: () => void;
   // 0 means no discovery window.
   let discoveryUntil = 0;
   let networkProbes: { target: NetworkProbe; expiresAt: number }[] = [];
   let probeServer: string | undefined;
   let status: AgentStatus = { phase: "unconfigured", serverUrl: null, current: null };
   let lastPhaseLine = "";
+
+  function replaceWakeSignal(): void {
+    wakePromise = new Promise((resolve) => {
+      wakeResolve = resolve;
+    });
+  }
+
+  function wake(): void {
+    wakeResolve();
+  }
+
+  function exclusive<T>(body: () => Promise<T>): Promise<T> {
+    const result = operation.then(body, body);
+    operation = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  function isJoined(config: AgentConfig | null, token: string | null): boolean {
+    return config !== null && token !== null && config.pendingVerificationNumber === undefined;
+  }
+
+  function resetRuntimeState(): void {
+    router = undefined;
+    approved = false;
+    halted = false;
+    outOfTouch = false;
+    resetAt = undefined;
+    discoveryUntil = 0;
+    networkProbes = [];
+    probeServer = undefined;
+  }
+
+  replaceWakeSignal();
 
   function report(next: Partial<AgentStatus> & { phase: AgentStatus["phase"] }): void {
     status = { ...status, ...next };
@@ -79,6 +132,8 @@ export function createAgent(opts: AgentOptions): Agent {
   async function halt(config: AgentConfig, current: string): Promise<void> {
     halted = true;
     approved = false;
+    outOfTouch = false;
+    resetAt = undefined;
     await host.saveToken(null);
     if (config.pendingVerificationNumber !== undefined) {
       await host.saveConfig({ ...config, pendingVerificationNumber: undefined });
@@ -123,6 +178,20 @@ export function createAgent(opts: AgentOptions): Agent {
       report({ phase: "unconfigured", serverUrl: null, current: null });
       return false;
     }
+    if (resetAt !== undefined && outOfTouch && host.now() >= resetAt) {
+      await host.saveToken(null);
+      config = { ...config, servers: undefined };
+      await host.saveConfig(config);
+      resetRuntimeState();
+      report({
+        phase: "unconfigured",
+        serverUrl: config.serverUrl,
+        current: null,
+        verificationCode: undefined,
+        lastError: undefined,
+      });
+      return false;
+    }
     if (halted) {
       report({ phase: "unauthorized", serverUrl: config.serverUrl });
       return false;
@@ -138,6 +207,8 @@ export function createAgent(opts: AgentOptions): Agent {
       if (self.ok) {
         await host.saveToken(self.value.token);
         approved = true;
+        outOfTouch = false;
+        resetAt = undefined;
         report({ phase: "running", serverUrl: config.serverUrl, current: loopback.origin });
         return false;
       }
@@ -153,6 +224,7 @@ export function createAgent(opts: AgentOptions): Agent {
 
     // A server in a DIFFERENT environment must never be sent the token (CLAUDE.md §5).
     if (!round.anyAccepting) {
+      outOfTouch = true;
       report({
         phase: "unreachable",
         serverUrl: config.serverUrl,
@@ -285,6 +357,7 @@ export function createAgent(opts: AgentOptions): Agent {
       if (pulled.failure.kind === "unauthorized") {
         await halt(config, current);
       } else {
+        outOfTouch = true;
         report({
           phase: "unreachable",
           serverUrl: config.serverUrl,
@@ -294,6 +367,8 @@ export function createAgent(opts: AgentOptions): Agent {
       }
       return false;
     }
+    outOfTouch = false;
+    resetAt = undefined;
     r.merge(pulled.value.servers);
     const servers = r.servers().slice(1).map(({ url, nodeId }) =>
       nodeId === undefined ? { url } : { url, nodeId },
@@ -335,23 +410,80 @@ export function createAgent(opts: AgentOptions): Agent {
     }
   }
 
+  const runSerialized = () => exclusive(runOnce);
+
   return {
     get status() {
       return status;
     },
     async runOnce() {
-      await runOnce();
+      await runSerialized();
     },
     async start() {
       running = true;
       while (running) {
-        const busy = await runOnce();
+        const busy = await runSerialized();
         if (!running) break;
-        if (!busy) await host.sleep(intervalMs);
+        if (!busy) {
+          await Promise.race([host.sleep(intervalMs), wakePromise]);
+          replaceWakeSignal();
+        }
       }
     },
     stop() {
       running = false;
+      wake();
+    },
+    configure(input) {
+      return exclusive(async () => {
+        const config = await host.config();
+        const token = await host.token();
+        if (isJoined(config, token)) return false;
+        await host.saveToken(null);
+        await host.saveConfig({ serverUrl: input.serverUrl, name: input.name });
+        resetRuntimeState();
+        report({
+          phase: "unconfigured",
+          serverUrl: input.serverUrl,
+          current: null,
+          verificationCode: undefined,
+          lastError: undefined,
+        });
+        wake();
+        return true;
+      });
+    },
+    beginNetworkReset() {
+      return exclusive(async () => {
+        const config = await host.config();
+        const token = await host.token();
+        if (!isJoined(config, token) || !outOfTouch) return false;
+        resetAt ??= host.now() + RESET_WINDOW_MS;
+        wake();
+        return true;
+      });
+    },
+    cancelNetworkReset() {
+      return exclusive(async () => {
+        const config = await host.config();
+        const token = await host.token();
+        if (!isJoined(config, token) || resetAt === undefined) return false;
+        resetAt = undefined;
+        return true;
+      });
+    },
+    setupSnapshot() {
+      return exclusive(async () => {
+        const config = await host.config();
+        const token = await host.token();
+        return {
+          status: { ...status },
+          config,
+          joined: isJoined(config, token),
+          outOfTouch,
+          ...(resetAt === undefined ? {} : { resetAt }),
+        };
+      });
     },
   };
 }
