@@ -223,6 +223,7 @@ export class SalesScreen extends LitElement {
     this,
     () => this.api,
     (error) => {
+      this.categories = null;
       this.categoryErrorKey = codeOf(error);
     },
   );
@@ -249,6 +250,8 @@ export class SalesScreen extends LitElement {
   @state() private printSentTo: string | null = null;
   @state() private printErrorKey: string | null = null;
   @state() private printersErrorKey: string | null = null;
+  /** Bumped on every new category question, so a print sent for an earlier one reports nothing. */
+  #categoryGeneration = 0;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -273,6 +276,7 @@ export class SalesScreen extends LitElement {
 
   /** Cleared before the request, like `#load`, so a refusal never sits beside an older report. */
   async #loadCategories(): Promise<void> {
+    this.#categoryGeneration += 1;
     this.categories = null;
     this.categoryErrorKey = null;
     this.printSentTo = null;
@@ -314,6 +318,7 @@ export class SalesScreen extends LitElement {
     this.printing = true;
     this.printSentTo = null;
     this.printErrorKey = null;
+    const generation = this.#categoryGeneration;
     try {
       await this.api.printCategorySales({
         from: this.from,
@@ -322,9 +327,9 @@ export class SalesScreen extends LitElement {
         extrasIntoDish: this.extrasIntoDish,
         printerId: printer.id,
       });
-      this.printSentTo = printer.name;
+      if (generation === this.#categoryGeneration) this.printSentTo = printer.name;
     } catch (error) {
-      this.printErrorKey = codeOf(error);
+      if (generation === this.#categoryGeneration) this.printErrorKey = codeOf(error);
     } finally {
       this.printing = false;
     }

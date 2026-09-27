@@ -1355,7 +1355,8 @@ export const en = {
   "sales.printer": "Printer",
   "sales.print_categories": "Print category sales",
   "sales.print_sent": "Category sales sent to {printer}.",
-  "sales.no_printers": "No active printer at this location. Add one under Printers.",
+  "sales.no_printers":
+    "No active printer at this location. Ask a manager to add one under Printers.",
   "canvas_editor.title": "Canvases",
   "canvas_editor.create": "New canvas",
   "canvas_editor.duplicate": "Duplicate",
@@ -3186,7 +3187,8 @@ export const es: Record<StringKey, string> = {
   "sales.printer": "Impresora",
   "sales.print_categories": "Imprimir ventas por categoría",
   "sales.print_sent": "Ventas por categoría enviadas a {printer}.",
-  "sales.no_printers": "No hay ninguna impresora activa en este local. Añade una en Impresoras.",
+  "sales.no_printers":
+    "No hay ninguna impresora activa en este local. Pide a un encargado que añada una en Impresoras.",
   "canvas_editor.title": "Lienzos",
   "canvas_editor.create": "Nuevo lienzo",
   "canvas_editor.duplicate": "Duplicar",

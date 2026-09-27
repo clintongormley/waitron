@@ -505,6 +505,26 @@ describe("dashboard-sales-screen — category report", () => {
     expect(q(el, "categories-error")).toBeNull();
   });
 
+  it("takes the older report off screen when a live refresh is refused, and shows the next report that succeeds", async () => {
+    setLocale("en");
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi(), { liveData });
+    const el = await mount(api);
+    await vi.waitFor(() => expect(rows(el)).toHaveLength(11));
+    vi.mocked(api.getCategorySales).mockRejectedValue({ code: "sale_classification.invalid" });
+    liveData.invalidate([{ type: "categories", id: "edited" }]);
+    await vi.waitFor(() => expect(q(el, "categories-error")).not.toBeNull());
+    expect(q(el, "categories-error")!.textContent!.trim()).toBe(
+      codeMessage("sale_classification.invalid", "en"),
+    );
+    expect(q(el, "category-table")).toBeNull();
+    expect(q(el, "categories-empty")).toBeNull();
+    vi.mocked(api.getCategorySales).mockResolvedValue(currentReport);
+    liveData.invalidate([{ type: "categories", id: "fixed" }]);
+    await vi.waitFor(() => expect(rows(el)).toHaveLength(2));
+    expect(q(el, "categories-error")).toBeNull();
+  });
+
   it("refreshes the category report when a sale lands", async () => {
     const liveData = new LiveData();
     const api = Object.assign(stubApi(), { liveData });
@@ -572,6 +592,46 @@ describe("dashboard-sales-screen — printing the category report", () => {
     expect(button.loading).toBe(false);
   });
 
+  it("shows no answer from a print sent for the report shown before the question changed", async () => {
+    let finish!: (value: { jobId: string }) => void;
+    const api = stubApi({
+      printCategorySales: vi.fn(
+        () => new Promise<{ jobId: string }>((resolve) => (finish = resolve)),
+      ),
+    });
+    const el = await mount(api);
+    const button = q<HTMLElement & { loading: boolean }>(el, "print-categories")!;
+    button.click();
+    await flush(el);
+    pickMode(el, "current");
+    await flush(el);
+    finish({ jobId: "job-1" });
+    await flush(el);
+    expect(q(el, "print-status")).toBeNull();
+    expect(q(el, "print-error")).toBeNull();
+    expect(button.loading).toBe(false);
+  });
+
+  it("shows no refusal of a print sent for the report shown before the question changed", async () => {
+    let refuse!: (reason: unknown) => void;
+    const api = stubApi({
+      printCategorySales: vi.fn(
+        () => new Promise<{ jobId: string }>((_resolve, reject) => (refuse = reject)),
+      ),
+    });
+    const el = await mount(api);
+    const button = q<HTMLElement & { loading: boolean }>(el, "print-categories")!;
+    button.click();
+    await flush(el);
+    q<HTMLInputElement>(el, "extras-into-dish")!.click();
+    await flush(el);
+    refuse({ code: "printer.not_found" });
+    await flush(el);
+    expect(q(el, "print-error")).toBeNull();
+    expect(q(el, "print-status")).toBeNull();
+    expect(button.loading).toBe(false);
+  });
+
   it("shows a refused print by its code's message", async () => {
     setLocale("en");
     const api = stubApi({
@@ -598,7 +658,7 @@ describe("dashboard-sales-screen — printing the category report", () => {
     const el = await mount(api);
     expect(q(el, "print-printer")).toBeNull();
     expect(q(el, "no-printers")!.textContent!.trim()).toBe(
-      "No active printer at this location. Add one under Printers.",
+      "No active printer at this location. Ask a manager to add one under Printers.",
     );
     const button = q<HTMLElement & { disabled: boolean }>(el, "print-categories")!;
     expect(button.disabled).toBe(true);
