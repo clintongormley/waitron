@@ -377,6 +377,28 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     expect(groupTicket).toContain("Barra");
   });
 
+  it("heads no group on the ticket of an order whose lines are in no group", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const { pCocina, pGroup, jobs } = await asApp(cfg, async (tx) => {
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const pCocina = await makePrinter(tx, cfg, "Cocina printer", "station");
+      const pGroup = await makePrinter(tx, cfg, "Pase", "order");
+      await attachPrinterToStation(tx, { stationId: cocina.id, printerId: pCocina });
+      await attachPrinterToStation(tx, { stationId: cocina.id, printerId: pGroup });
+      const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", { stationId: cocina.id });
+
+      await fireNewOrder(tx, cfg, [line(steak)]);
+      return { pCocina, pGroup, jobs: await printJobsFor(tx) };
+    });
+
+    for (const printerId of [pCocina, pGroup]) {
+      const printed = jobs.filter((j) => j.printerId === printerId);
+      expect(printed).toHaveLength(1);
+      expect(decodeTicket(printed[0]!.payload)).toContain("Chuleton");
+      expect(decodeTicket(printed[0]!.payload)).not.toContain("GROUP");
+    }
+  });
+
   it("never opens a socket on fire, queues its jobs, and enqueues nothing to an inactive printer", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const connectSpy = spyOnNoSocketOpened();

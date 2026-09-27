@@ -5,7 +5,11 @@ import { tillPath } from "../navigation.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "../widgets/station-queue.js";
-import type { BumpMode, FireControlMode } from "../widgets/station-queue.js";
+import type {
+  BumpMode,
+  FireControlMode,
+  FireKitchenGroupDetail,
+} from "../widgets/station-queue.js";
 import type {
   DeviceStation,
   KitchenNotice,
@@ -89,7 +93,12 @@ export class TillStationScreen extends LitElement {
         margin: 0;
       }
 
-      .stale[data-stale] {
+      .table-changed {
+        margin: 0;
+      }
+
+      .stale[data-stale],
+      .table-changed {
         flex-basis: 100%;
         padding: var(--wt-space-2) var(--wt-space-3);
         border-radius: var(--wt-radius-md);
@@ -143,6 +152,10 @@ export class TillStationScreen extends LitElement {
   @state() private reprintErrorCode?: string;
   @state() private acknowledgeFailed = false;
   @state() private stale = false;
+  /** The card whose group command was refused because its party changed since the queue was read:
+   * shown by the next successful read, and gone at the one after. */
+  @state() private tableChanged: string | null = null;
+  #tableChangedNext: string | null = null;
   #lastGoodAt = new Date();
   #initialConsumed = false;
   #refreshTimer?: ReturnType<typeof setInterval>;
@@ -231,6 +244,8 @@ export class TillStationScreen extends LitElement {
   #readSucceeded(): void {
     this.#lastGoodAt = new Date();
     this.stale = false;
+    this.tableChanged = this.#tableChangedNext;
+    this.#tableChangedNext = null;
   }
 
   /** A failure of a read older than the answer on screen says nothing about that answer. */
@@ -410,6 +425,45 @@ export class TillStationScreen extends LitElement {
     await this.#advance(() => this.api.fireCourse(orderId, courseId));
   }
 
+  /** Refused `visit.out_of_date`, the queue is read again and the cook decides; nothing is resent. */
+  async #onFireKitchenGroup(event: Event): Promise<void> {
+    event.stopPropagation();
+    if (this.deviceMode) return;
+    const { visitId, groupId, expectedVisitRevision } = (
+      event as CustomEvent<FireKitchenGroupDetail>
+    ).detail;
+    const card = this.#cardOfGroup(visitId, groupId);
+    this.tableChanged = null;
+    this.#tableChangedNext = null;
+    try {
+      await this.api.fireGroup(visitId, groupId, {
+        submissionId: crypto.randomUUID(),
+        expectedVisitRevision,
+      });
+    } catch (error) {
+      if ((error as { code?: string }).code === "visit.out_of_date") this.#tableChangedNext = card;
+    }
+    await this.#reload();
+  }
+
+  #tableChangedMessage(card: string): string {
+    const changed =
+      card === ""
+        ? t("station.table_changed_unnamed")
+        : t("station.table_changed_named").replace("{table}", () => card);
+    return `${changed} ${t("station.table_changed")}`;
+  }
+
+  /** What the card holding the group is called on screen: its label, else its order number. */
+  #cardOfGroup(visitId: string, groupId: string): string {
+    const card =
+      this.groups.find(
+        (group) =>
+          group.visit?.id === visitId && group.items.some((item) => item.group?.id === groupId),
+      ) ?? this.groups.find((group) => group.visit?.id === visitId);
+    return card === undefined ? "" : (card.label ?? `#${card.orderNumber}`);
+  }
+
   async #onReprintOrder(event: Event): Promise<void> {
     event.stopPropagation();
     if (this.deviceMode) return;
@@ -466,6 +520,7 @@ export class TillStationScreen extends LitElement {
         @advance-ticket=${(event: Event) => void this.#onAdvanceTicket(event)}
         @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
         @fire-course=${(event: Event) => void this.#onFireCourse(event)}
+        @fire-kitchen-group=${(event: Event) => void this.#onFireKitchenGroup(event)}
         @reprint-order=${(event: Event) => void this.#onReprintOrder(event)}
         @acknowledge-notice=${(event: Event) => void this.#onAcknowledgeNotice(event)}
       >
@@ -500,6 +555,13 @@ export class TillStationScreen extends LitElement {
           <p class="stale" role="status" ?data-stale=${this.stale}>
             ${this.stale ? this.#staleMessage() : nothing}
           </p>
+          ${
+            this.tableChanged === null
+              ? nothing
+              : html`<p class="table-changed" role="status" data-table-changed>
+                  ${this.#tableChangedMessage(this.tableChanged)}
+                </p>`
+          }
         </div>
         ${
           this.reprintErrorCode

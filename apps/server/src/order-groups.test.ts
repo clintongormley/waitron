@@ -2,11 +2,13 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, expectTypeOf, it } from "vitest";
 import {
+  devices,
   diningTables,
   locations,
   orderGroupEvents,
   orderGroups,
   printJobs,
+  products,
   serviceCommands,
   ticketItems,
   tills,
@@ -25,6 +27,7 @@ import {
   createCategory,
   createExtraList,
   createProduct,
+  units,
   writeProductModifiers,
 } from "@waitron/catalogue";
 import { createPrinter } from "@waitron/printing";
@@ -39,6 +42,7 @@ import { createCourse, setProductCourse } from "./kitchen.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { createTable } from "./tables.js";
 import { printedLines } from "./testing/decode-ticket.js";
+import { reprintOrderTickets } from "./kitchen-print.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -47,6 +51,8 @@ import {
   createOpenOrder,
   fireCourse,
   joinTable,
+  listExpoQueue,
+  listStationQueue,
   mergeTabs,
   openTab,
   parkOrder,
@@ -61,9 +67,12 @@ import {
   type TillSaleDeps,
 } from "./working-order.js";
 import { seatTable } from "./visits.js";
+import { writeKitchenTicketGrouping } from "@waitron/venue-service";
 import {
+  bumpGroupReady,
   fireGroup,
   listOrderGroups,
+  markGroupAway,
   moveLinesToGroup,
   reorderHeldGroups,
   submitGroups,
@@ -119,6 +128,8 @@ interface Venue {
   cfg: TillConfig;
   productId: Record<Dish, string>;
   printerId: string;
+  /** The one kitchen station every routed dish goes to. */
+  stationId: string;
   /** The Steak's extras list, whose one pick is the pepper sauce. */
   extrasListId: string;
   offer(dish: Dish): string;
@@ -202,6 +213,7 @@ async function setupVenue(): Promise<Venue> {
       cfg,
       productId,
       printerId,
+      stationId,
       extrasListId: extras.id,
       zoneId: offers.zoneId,
       offer: (dish: Dish) => offers.offerFor(productId[dish]),
@@ -2902,4 +2914,697 @@ describe("credit (D5)", () => {
 
     expect(await linesOfBill(tabId)).toMatchObject([{ groupId: null, creditedTo: MIA }]);
   });
+});
+
+async function ready(v: Venue, visitId: string, groupId: string, opts: CommandOptions = {}) {
+  const command = await args(visitId, opts);
+  return inTx((tx) => bumpGroupReady(tx, v.cfg, visitId, groupId, command));
+}
+
+async function away(v: Venue, visitId: string, groupId: string, opts: CommandOptions = {}) {
+  const command = await args(visitId, opts);
+  return inTx((tx) => markGroupAway(tx, v.cfg, visitId, groupId, command));
+}
+
+/** The kitchen's items for a group's dishes, whichever bill they sit on. */
+async function groupTickets(groupId: string) {
+  return db
+    .select({
+      id: ticketItems.id,
+      workingOrderId: ticketItems.workingOrderId,
+      state: ticketItems.state,
+      firedAt: ticketItems.firedAt,
+      readyAt: ticketItems.readyAt,
+      awayAt: ticketItems.awayAt,
+    })
+    .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(eq(workingOrderLines.groupId, groupId))
+    .orderBy(ticketItems.id);
+}
+
+async function commandsOf(visitId: string) {
+  return db
+    .select({ kind: serviceCommands.kind, submissionId: serviceCommands.submissionId })
+    .from(serviceCommands)
+    .where(eq(serviceCommands.scopeId, visitId))
+    .orderBy(sql`rowid`);
+}
+
+async function closeVisit(visitId: string): Promise<void> {
+  await db
+    .update(visits)
+    .set({ state: "closed", closedAt: new Date().toISOString(), closedBy: ALEX })
+    .where(eq(visits.id, visitId));
+}
+
+/** The spec's example with one croquette split onto a check: the fired cold starters span two bills. */
+async function specExampleOnTwoBills(v: Venue) {
+  const s = await specExample(v);
+  const [croquettes] = await linesIn(s.visitId, s.cold);
+  const revision = await revisionOf(s.visitId);
+  const { checkId } = await inTx((tx) =>
+    splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: croquettes!.lineNo, quantity: "1" }], {
+      expectedVisitRevision: revision,
+      operatorId: MIA,
+    }),
+  );
+  return { ...s, checkId };
+}
+
+describe("the pass by group (D1)", () => {
+  it("bumps the fired cold starters ready on both bills, then sends them away, leaving every other group as it was", async () => {
+    const v = await setupVenue();
+    const s = await specExampleOnTwoBills(v);
+    const cold = await groupTickets(s.cold);
+    expect(new Set(cold.map((item) => item.workingOrderId))).toEqual(new Set([s.tabId, s.checkId]));
+    expect(cold.every((item) => item.state === "queued" && item.firedAt !== null)).toBe(true);
+    const drinksBefore = await groupTickets(s.drinks);
+    const warmBefore = await groupTickets(s.warm);
+
+    const readied = await ready(v, s.visitId, s.cold);
+
+    expect(readied).toEqual({ revision: await revisionOf(s.visitId) });
+    const coldReady = await groupTickets(s.cold);
+    expect(coldReady.map((item) => [item.state, item.awayAt])).toEqual(
+      cold.map(() => ["ready", null]),
+    );
+    expect(coldReady.every((item) => item.readyAt !== null)).toBe(true);
+    expect(await groupTickets(s.drinks)).toEqual(drinksBefore);
+    expect(await groupTickets(s.warm)).toEqual(warmBefore);
+
+    const sent = await away(v, s.visitId, s.cold);
+
+    expect(sent).toEqual({ revision: await revisionOf(s.visitId) });
+    expect((await groupTickets(s.cold)).every((item) => item.awayAt !== null)).toBe(true);
+    expect(await groupTickets(s.drinks)).toEqual(drinksBefore);
+  });
+
+  it("sends away only what is ready: a group still cooking gets no away stamp", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const before = await groupTickets(s.drinks);
+
+    await away(v, s.visitId, s.drinks);
+
+    expect(await groupTickets(s.drinks)).toEqual(before);
+  });
+
+  it("changes no kitchen item for a held group, yet records the command and moves the visit on", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const before = await groupTickets(s.warm);
+    expect(before.every((item) => item.firedAt === null)).toBe(true);
+    const revision = await revisionOf(s.visitId);
+    const readyId = randomUUID();
+    const awayId = randomUUID();
+
+    await ready(v, s.visitId, s.warm, { submissionId: readyId });
+    await away(v, s.visitId, s.warm, { submissionId: awayId });
+
+    expect(await groupTickets(s.warm)).toEqual(before);
+    expect(await revisionOf(s.visitId)).toBe(revision + 2);
+    expect((await commandsOf(s.visitId)).slice(-2)).toEqual([
+      { kind: "group.ready", submissionId: readyId },
+      { kind: "group.away", submissionId: awayId },
+    ]);
+  });
+
+  it("reads a group ready only once every fired kitchen item of it is ready", async () => {
+    const v = await setupVenue();
+    const s = await specExampleOnTwoBills(v);
+    const readyOf = async (groupId: string) =>
+      (await groupsOf(s.visitId)).groups.find((group) => group.id === groupId)!.ready === true;
+    expect(await readyOf(s.cold)).toBe(false);
+
+    // One of the two bills' items plated by the station is not the whole group.
+    const [first] = await groupTickets(s.cold);
+    await db.update(ticketItems).set({ state: "ready" }).where(eq(ticketItems.id, first!.id));
+    expect(await readyOf(s.cold)).toBe(false);
+
+    await ready(v, s.visitId, s.cold);
+    expect(await readyOf(s.cold)).toBe(true);
+    expect(await readyOf(s.drinks)).toBe(false);
+    expect(await readyOf(s.warm)).toBe(false);
+  });
+
+  // Fails if a group sent away still reads only "ready", or reads away before every bill's items left.
+  it("reads a group away only once every fired kitchen item of it has left the pass", async () => {
+    const v = await setupVenue();
+    const s = await specExampleOnTwoBills(v);
+    const groupOf = async (groupId: string) =>
+      (await groupsOf(s.visitId)).groups.find((group) => group.id === groupId)!;
+    await ready(v, s.visitId, s.cold);
+    expect((await groupOf(s.cold)).away).toBeUndefined();
+
+    // One of the two bills' items gone is not the whole group.
+    const [first, ...rest] = await groupTickets(s.cold);
+    expect(rest.some((item) => item.workingOrderId !== first!.workingOrderId)).toBe(true);
+    await db
+      .update(ticketItems)
+      .set({ awayAt: new Date().toISOString() })
+      .where(eq(ticketItems.id, first!.id));
+    expect((await groupOf(s.cold)).away).toBeUndefined();
+
+    await away(v, s.visitId, s.cold);
+    expect(await groupOf(s.cold)).toMatchObject({ ready: true, away: true });
+    expect((await groupOf(s.drinks)).away).toBeUndefined();
+    expect((await groupOf(s.warm)).away).toBeUndefined();
+  });
+
+  it("never reads ready a fired group with nothing for the kitchen, since nobody recorded it", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const { groups } = await submit(v, s.visitId, [{ release: "fire", lines: [line(v, "water")] }]);
+    expect(await groupTickets(groups[0]!.id)).toEqual([]);
+
+    await ready(v, s.visitId, groups[0]!.id);
+
+    expect((await groupsOf(s.visitId)).groups[0]!.ready).toBeUndefined();
+  });
+});
+
+describe("pass retries (D8, D19)", () => {
+  it("records an away resent with its submission id once, answering the first answer", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    await ready(v, s.visitId, s.cold);
+    const opts = { submissionId: randomUUID(), revision: await revisionOf(s.visitId) };
+
+    const first = await away(v, s.visitId, s.cold, opts);
+    const before = await snapshot(v, s.visitId);
+    const second = await away(v, s.visitId, s.cold, opts);
+
+    expect(second).toEqual(first);
+    expect(await snapshot(v, s.visitId)).toEqual(before);
+  });
+
+  it("records a ready resent with its submission id once", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const opts = { submissionId: randomUUID(), revision: await revisionOf(s.visitId) };
+
+    const first = await ready(v, s.visitId, s.cold, opts);
+    const before = await snapshot(v, s.visitId);
+    const second = await ready(v, s.visitId, s.cold, opts);
+
+    expect(second).toEqual(first);
+    expect(await snapshot(v, s.visitId)).toEqual(before);
+  });
+
+  it("refuses the same id sent for another group (submission.id_reused), writing nothing", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const submissionId = randomUUID();
+    await ready(v, s.visitId, s.cold, { submissionId });
+    await away(v, s.visitId, s.drinks, { submissionId: randomUUID() });
+
+    await expectRefusedWithNothingWritten(
+      v,
+      s.visitId,
+      () => ready(v, s.visitId, s.drinks, { submissionId }),
+      { code: "submission.id_reused", params: { submissionId } },
+    );
+    await expectRefusedWithNothingWritten(
+      v,
+      s.visitId,
+      () => away(v, s.visitId, s.cold, { submissionId }),
+      { code: "submission.id_reused", params: { submissionId } },
+    );
+  });
+
+  it("refuses a ready or an away sent with a stale visit revision (visit.out_of_date), writing nothing", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const stale = await revisionOf(s.visitId);
+    await fire(v, s.visitId, s.warm);
+
+    for (const step of [ready, away]) {
+      await expectRefusedWithNothingWritten(
+        v,
+        s.visitId,
+        () => step(v, s.visitId, s.cold, { revision: stale }),
+        { code: "visit.out_of_date", params: { visitId: s.visitId, revision: stale + 1 } },
+      );
+    }
+  });
+
+  it("refuses a ready or an away on a closed visit (visit.not_open), writing nothing", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    await closeVisit(s.visitId);
+
+    for (const step of [ready, away]) {
+      await expectRefusedWithNothingWritten(v, s.visitId, () => step(v, s.visitId, s.cold), {
+        code: "visit.not_open",
+        params: { visitId: s.visitId },
+      });
+    }
+  });
+
+  it("refuses a group the visit does not have, or another party's (group.not_found), writing nothing", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const other = await seated(v);
+    const theirs = (
+      await submit(v, other.visitId, [{ release: "fire", lines: [line(v, "steak")] }])
+    ).groups[0]!.id;
+
+    for (const step of [ready, away]) {
+      for (const groupId of [randomUUID(), theirs]) {
+        await expectRefusedWithNothingWritten(v, s.visitId, () => step(v, s.visitId, groupId), {
+          code: "group.not_found",
+          params: { groupId },
+        });
+      }
+    }
+  });
+
+  it("refuses a ready or an away on a removed group (group.not_found), writing nothing", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const fishOnly = (await submit(v, s.visitId, [{ release: "hold", lines: [line(v, "fish")] }]))
+      .groups[0]!.id;
+    const [fish] = await linesIn(s.visitId, fishOnly);
+    await move(v, s.visitId, [{ lineId: fish!.id, quantity: "1" }], { groupId: s.mains });
+
+    for (const step of [ready, away]) {
+      await expectRefusedWithNothingWritten(v, s.visitId, () => step(v, s.visitId, fishOnly), {
+        code: "group.not_found",
+        params: { groupId: fishOnly },
+      });
+    }
+  });
+});
+
+describe("a paper-only station (Review Focus 6, server half)", () => {
+  it("leaves every fired item queued and the group not ready, when no kitchen screen is enrolled", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const screens = await db.select().from(devices).where(eq(devices.stationId, v.stationId));
+    expect(screens).toEqual([]);
+
+    await fire(v, s.visitId, s.warm);
+
+    const warm = await groupTickets(s.warm);
+    expect(warm.length).toBeGreaterThan(0);
+    expect(warm.map((item) => [item.state, item.readyAt])).toEqual(
+      warm.map(() => ["queued", null]),
+    );
+    const group = (await groupsOf(s.visitId)).groups.find((row) => row.id === s.warm)!;
+    expect(group).toMatchObject({ state: "fired", firedAt: expect.any(String) });
+    expect(group.ready).toBeUndefined();
+  });
+});
+
+describe("the kitchen and the pass read a party's groups", () => {
+  it("names the visit on each station card and the group of each item", async () => {
+    const v = await setupVenue();
+    const s = await specExampleOnTwoBills(v);
+    const revision = await revisionOf(s.visitId);
+    const positions = new Map([
+      [s.drinks, [1, "fired"]],
+      [s.cold, [2, "fired"]],
+      [s.warm, [3, "held"]],
+      [s.mains, [4, "held"]],
+      [s.desserts, [5, "held"]],
+    ] as const);
+
+    const cards = (await inTx((tx) => listStationQueue(tx, v.stationId))).filter((card) =>
+      [s.tabId, s.checkId].includes(card.orderId),
+    );
+
+    expect(cards.map((card) => card.orderId).sort()).toEqual([s.tabId, s.checkId].sort());
+    for (const card of cards) {
+      expect(card.visit).toEqual({ id: s.visitId, revision });
+    }
+    const lines = await linesOf(s.visitId);
+    const groupOfLine = new Map(lines.map((row) => [row.id, row.groupId]));
+    const items = cards.flatMap((card) => card.items);
+    expect(items.length).toBeGreaterThan(0);
+    for (const item of items) {
+      const groupId = groupOfLine.get(item.workingOrderLineId)!;
+      const [position, state] = positions.get(groupId)!;
+      expect(item.group).toEqual({ id: groupId, position, state });
+    }
+  });
+
+  it("sections a party's order on the pass by group position, held groups unfired, and names no course", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const revision = await revisionOf(s.visitId);
+
+    const order = (await inTx((tx) => listExpoQueue(tx, v.cfg))).find(
+      (row) => row.orderId === s.tabId,
+    )!;
+
+    expect(order.visit).toEqual({ id: s.visitId, revision });
+    expect(order.courses).toEqual([]);
+    expect(
+      order.groups.map((group) => [group.groupId, group.position, group.state, group.fired]),
+    ).toEqual([
+      // The drinks' water needs no preparation, so only the beer is on the pass.
+      [s.drinks, 1, "fired", true],
+      [s.cold, 2, "fired", true],
+      [s.warm, 3, "held", false],
+      [s.mains, 4, "held", false],
+      [s.desserts, 5, "held", false],
+    ]);
+    expect(order.groups.map((group) => group.items.map((item) => item.name))).toEqual([
+      [DISHES.beer.kitchen],
+      [DISHES.cold.kitchen],
+      [DISHES.warm.kitchen],
+      [DISHES.steak.kitchen, DISHES.fish.kitchen],
+      [DISHES.flan.kitchen],
+    ]);
+    expect(order.groups[1]!.items[0]!.group).toEqual({ id: s.cold, position: 2, state: "fired" });
+    expect(order.groups.every((group) => !group.away)).toBe(true);
+  });
+
+  // Fails if the pass orders groups by course (the rows' own order) rather than by position.
+  it("orders a party's groups on the pass by position, not by course", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    await reorder(s.visitId, [s.desserts, s.mains, s.warm]);
+
+    const order = (await inTx((tx) => listExpoQueue(tx, v.cfg))).find(
+      (row) => row.orderId === s.tabId,
+    )!;
+
+    expect(order.groups.map((group) => [group.groupId, group.position])).toEqual([
+      [s.drinks, 1],
+      [s.cold, 2],
+      [s.desserts, 3],
+      [s.mains, 4],
+      [s.warm, 5],
+    ]);
+  });
+
+  // Fails if two groups at one position fall back to course order instead of the earlier-made first.
+  it("puts the earlier-made of two groups at one position first on the pass", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    await db
+      .update(orderGroups)
+      .set({ position: 4, createdAt: "2000-01-01T00:00:00.000Z" })
+      .where(eq(orderGroups.id, s.desserts));
+
+    const order = (await inTx((tx) => listExpoQueue(tx, v.cfg))).find(
+      (row) => row.orderId === s.tabId,
+    )!;
+
+    expect(order.groups.map((group) => group.groupId)).toEqual([
+      s.drinks,
+      s.cold,
+      s.warm,
+      s.desserts,
+      s.mains,
+    ]);
+  });
+
+  it("shows a group split across two bills under its own number on each bill, and rolls its away up", async () => {
+    const v = await setupVenue();
+    const s = await specExampleOnTwoBills(v);
+    await ready(v, s.visitId, s.cold);
+    await away(v, s.visitId, s.cold);
+
+    const board = await inTx((tx) => listExpoQueue(tx, v.cfg));
+    const tab = board.find((row) => row.orderId === s.tabId)!;
+    expect(tab.groups.find((group) => group.groupId === s.cold)).toMatchObject({
+      position: 2,
+      fired: true,
+      away: true,
+    });
+    // The check holds only the away croquette, so it has left the pass.
+    expect(board.find((row) => row.orderId === s.checkId)).toBeUndefined();
+  });
+
+  it("puts a fired line moved in from another party in one section with no group, first", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const other = await seated(v);
+    const { groups } = await submit(v, other.visitId, [
+      { release: "fire", lines: [line(v, "steak")] },
+    ]);
+    const [steak] = await linesIn(other.visitId, groups[0]!.id);
+    await transfer(v, other, s, [{ lineNo: steak!.lineNo }]);
+
+    const order = (await inTx((tx) => listExpoQueue(tx, v.cfg))).find(
+      (row) => row.orderId === s.tabId,
+    )!;
+
+    expect(order.groups[0]).toMatchObject({ groupId: null, position: null, state: null });
+    expect(order.groups[0]!.items.map((item) => [item.name, "group" in item])).toEqual([
+      [DISHES.steak.kitchen, false],
+    ]);
+    expect(order.groups.slice(1).map((group) => group.position)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("keeps a bill of no visit in course sections, with no visit and no groups", async () => {
+    const v = await setupVenue();
+    const tabId = await inTx(async (tx) => {
+      const { id: tableId } = await createTable(tx, v.cfg, {
+        label: `C-${randomUUID().slice(0, 6)}`,
+        zoneId: v.zoneId,
+      });
+      const { tabId } = await openTab(tx, v.cfg, { tableId });
+      await addTabRound(tx, v.cfg, tabId, [
+        { menuItemId: v.offer("beer"), quantity: "1" },
+        { menuItemId: v.offer("steak"), quantity: "1" },
+      ]);
+      return tabId;
+    });
+
+    const order = (await inTx((tx) => listExpoQueue(tx, v.cfg))).find(
+      (row) => row.orderId === tabId,
+    )!;
+    const [card] = (await inTx((tx) => listStationQueue(tx, v.stationId))).filter(
+      (row) => row.orderId === tabId,
+    );
+
+    expect(order.visit).toBeUndefined();
+    expect(order.groups).toEqual([]);
+    expect(order.courses.map((course) => course.courseName)).toEqual([
+      COURSES.drinks,
+      COURSES.mains,
+    ]);
+    expect("visit" in card!).toBe(false);
+    expect(card!.items.map((item) => "group" in item)).toEqual([false, false]);
+    expect("visit" in order).toBe(false);
+  });
+});
+
+describe("kitchen tickets for a party's groups (Task 5)", () => {
+  /** A printed ticket's lines, minus the blank line the cut leaves. */
+  const linesOfTicket = (ticket: string) => ticket.split("\n").filter((text) => text !== "");
+
+  // Fails if a group's fire ticket stops naming its group, or names it anywhere but under the header.
+  it("names the group under the header of each group's fire ticket", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const [drinks, cold] = (await printed(v)).map(linesOfTicket);
+    expect(drinks![4]).toBe("GROUP 1");
+    expect(drinks!.slice(5).join("\n")).toContain(DISHES.beer.kitchen);
+    expect(cold![4]).toBe("GROUP 2");
+
+    await fire(v, s.visitId, s.warm);
+
+    const warm = linesOfTicket((await printed(v)).at(-1)!);
+    expect(warm[4]).toBe("GROUP 3");
+    expect(warm.filter((text) => text.startsWith("GROUP"))).toEqual(["GROUP 3"]);
+  });
+
+  // The REPRINT line is what fails first; the rows compared before and after were already left
+  // alone by the reprint before this task (it only enqueues print jobs).
+  it("marks a reprint REPRINT, heads each group, and records no event, ticket item or sent stamp", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    await fire(v, s.visitId, s.warm);
+    const rows = async () => ({
+      events: await eventsOf(s.visitId),
+      tickets: await db
+        .select()
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, s.tabId))
+        .orderBy(ticketItems.id),
+      sent: (await linesOf(s.visitId)).map((row) => [row.id, row.sentAt]),
+    });
+    const before = await rows();
+    const jobsBefore = (await printed(v)).length;
+
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, s.tabId));
+
+    const jobs = await printed(v);
+    expect(jobs).toHaveLength(jobsBefore + 1);
+    const reprint = linesOfTicket(jobs.at(-1)!);
+    expect(reprint[0]).toBe("*** REPRINT ***");
+    const at = (text: string) => reprint.findIndex((row) => row.includes(text));
+    expect(reprint.filter((text) => text.startsWith("GROUP"))).toEqual([
+      "GROUP 1",
+      "GROUP 2",
+      "GROUP 3",
+    ]);
+    expect(at("GROUP 1")).toBeLessThan(at(DISHES.beer.kitchen));
+    expect(at(DISHES.beer.kitchen)).toBeLessThan(at("GROUP 2"));
+    expect(at("GROUP 2")).toBeLessThan(at(DISHES.cold.kitchen));
+    expect(at(DISHES.cold.kitchen)).toBeLessThan(at("GROUP 3"));
+    expect(at("GROUP 3")).toBeLessThan(at(DISHES.warm.kitchen));
+    expect(await rows()).toEqual(before);
+  });
+
+  // Fails if a reprint prints in line order rather than group order: the mains were added after
+  // the warm starters but moved ahead of them.
+  it("prints a reprint's groups in position order, not in the order their lines were added", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    await reorder(s.visitId, [s.mains, s.warm, s.desserts]);
+    await fire(v, s.visitId, s.mains);
+    await fire(v, s.visitId, s.warm);
+
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, s.tabId));
+
+    const reprint = linesOfTicket((await printed(v)).at(-1)!);
+    const at = (text: string) => reprint.findIndex((row) => row.includes(text));
+    expect(reprint.filter((text) => text.startsWith("GROUP"))).toEqual([
+      "GROUP 1",
+      "GROUP 2",
+      "GROUP 3",
+      "GROUP 4",
+    ]);
+    expect(at("GROUP 3")).toBeLessThan(at(DISHES.steak.kitchen));
+    expect(at(DISHES.steak.kitchen)).toBeLessThan(at("GROUP 4"));
+    expect(at("GROUP 4")).toBeLessThan(at(DISHES.warm.kitchen));
+  });
+
+  // Fails if the fire ticket or the reprint ignores the venue's grouping setting.
+  it("prints Steak x3 as one 3 x entry under combined and three 1 x entries under separate, leaving the bill alone", async () => {
+    const v = await setupVenue();
+    const steaksOn = (ticket: string) =>
+      linesOfTicket(ticket).filter((text) => text.includes(DISHES.steak.kitchen));
+    const bill = (tabId: string) =>
+      db
+        .select({
+          productId: workingOrderLines.productId,
+          quantity: workingOrderLines.quantity,
+          unitPriceGross: workingOrderLines.unitPriceGross,
+          lineTotal: workingOrderLines.lineTotal,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId))
+        .orderBy(asc(workingOrderLines.lineNo));
+    const three = (qty: string) => expect.stringMatching(new RegExp(`^${qty} .*x K-STEAK$`));
+
+    const first = await seated(v);
+    await submit(v, first.visitId, [{ release: "fire", lines: [line(v, "steak", "3")] }]);
+    expect(steaksOn((await printed(v)).at(-1)!)).toEqual([three("3\\.000")]);
+
+    await inTx((tx) => writeKitchenTicketGrouping(tx, "separate"));
+    const second = await seated(v);
+    await submit(v, second.visitId, [{ release: "fire", lines: [line(v, "steak", "3")] }]);
+    expect(steaksOn((await printed(v)).at(-1)!)).toEqual([
+      three("1\\.000"),
+      three("1\\.000"),
+      three("1\\.000"),
+    ]);
+
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, first.tabId));
+    expect(steaksOn((await printed(v)).at(-1)!)).toEqual([
+      three("1\\.000"),
+      three("1\\.000"),
+      three("1\\.000"),
+    ]);
+
+    const firstBill = await bill(first.tabId);
+    expect(firstBill).toHaveLength(1);
+    expect(firstBill[0]!.quantity).toBe(3000);
+    expect(await bill(second.tabId)).toEqual(firstBill);
+  });
+
+  // Fails if two portions sold by the gram are added together under combined, or one portion is
+  // split into single grams under separate; count-unit dishes must still merge and split.
+  it("prints each portion sold by weight as sold, under combined and separate alike", async () => {
+    const v = await setupVenue();
+    const sold = await inTx(async (tx) => {
+      const [steak] = await tx
+        .select({ catalogueId: products.catalogueId, categoryId: products.categoryId })
+        .from(products)
+        .where(eq(products.id, v.productId.steak));
+      // As the venue seed makes it (`packages/catalogue/src/provisioning.ts`): whole grams only.
+      const grams = { en: "g", es: "g", ca: "g", gl: "g", eu: "g" };
+      const [gram] = await tx
+        .insert(units)
+        .values({ name: grams, abbreviation: grams, precision: 0, hardwareUnit: "g" })
+        .returning({ id: units.id });
+      const dish = (name: string, kitchenName: string, unit: { unitId: string } | object) =>
+        createProduct(tx, {
+          ...steak!,
+          name,
+          customerName: { en: `${name} of the day` },
+          kitchenName,
+          ...unit,
+          unitPrice: "0.05",
+          vatClass: "general",
+        });
+      const hake = await dish("Hake", "K-HAKE", { unitId: gram!.id });
+      const ham = await dish("Ham", "K-HAM", { pricingUnit: "weight" });
+      const offers = await offerProducts(tx, v.cfg, {
+        zone: "tables",
+        productIds: [hake.id, ham.id],
+      });
+      return { hake: offers.offerFor(hake.id), ham: offers.offerFor(ham.id) };
+    });
+    const hake = (quantity: string): GroupLine => ({ menuItemId: sold.hake, quantity });
+    const ofDish = (ticket: string, kitchenName: string) =>
+      linesOfTicket(ticket).filter((text) => text.endsWith(`x ${kitchenName}`));
+
+    const first = await seated(v);
+    await submit(v, first.visitId, [
+      {
+        release: "fire",
+        lines: [
+          hake("350"),
+          line(v, "steak"),
+          hake("350"),
+          line(v, "steak"),
+          { menuItemId: sold.ham, quantity: "0.375" },
+        ],
+      },
+    ]);
+    const combined = (await printed(v)).at(-1)!;
+    expect(ofDish(combined, "K-HAKE")).toEqual(["350.000 g x K-HAKE", "350.000 g x K-HAKE"]);
+    expect(ofDish(combined, "K-STEAK")).toEqual([expect.stringMatching(/^2\.000 .*x K-STEAK$/)]);
+    expect(ofDish(combined, "K-HAM")).toEqual(["0.375 kg x K-HAM"]);
+
+    await inTx((tx) => writeKitchenTicketGrouping(tx, "separate"));
+    const second = await seated(v);
+    await submit(v, second.visitId, [
+      { release: "fire", lines: [hake("350"), line(v, "steak", "2")] },
+    ]);
+    const separate = (await printed(v)).at(-1)!;
+    expect(ofDish(separate, "K-HAKE")).toEqual(["350.000 g x K-HAKE"]);
+    expect(ofDish(separate, "K-STEAK")).toEqual([
+      expect.stringMatching(/^1\.000 .*x K-STEAK$/),
+      expect.stringMatching(/^1\.000 .*x K-STEAK$/),
+    ]);
+  });
+
+  // Fails if identical lines of one group print as separate entries under the default.
+  it.each(["fire", "hold"] as const)(
+    "prints three separate Steak lines as one 3 x entry by default (%s)",
+    async (release) => {
+      const v = await setupVenue();
+      const s = await seated(v);
+      const { groups } = await submit(v, s.visitId, [
+        { release, lines: [line(v, "steak"), line(v, "steak"), line(v, "steak")] },
+      ]);
+      if (release === "hold") await fire(v, s.visitId, groups[0]!.id);
+
+      const steaks = await linesIn(s.visitId, groups[0]!.id);
+      expect(steaks.map((row) => row.quantity)).toEqual([1000, 1000, 1000]);
+      const ticket = linesOfTicket((await printed(v)).at(-1)!);
+      expect(ticket.filter((text) => text.includes(DISHES.steak.kitchen))).toEqual([
+        expect.stringMatching(/^3\.000 .*x K-STEAK$/),
+      ]);
+    },
+  );
 });

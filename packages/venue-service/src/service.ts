@@ -20,6 +20,7 @@ import {
   listStationNotices,
   readClearingWorkflow,
   readEditSentLines,
+  readKitchenTicketGrouping,
   recordKitchenNotices,
 } from "./kitchen-notices.js";
 
@@ -44,4 +45,5 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   acknowledgeKitchenNotice,
   readEditSentLines,
   readClearingWorkflow,
+  readKitchenTicketGrouping,
 };

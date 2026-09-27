@@ -139,6 +139,8 @@ import {
   enqueueMovedSlips,
   firedQuantity,
   isStarted,
+  moveKitchenPrintLinks,
+  ordersWithPrintProblem,
   readSentWork,
 } from "./kitchen-print.js";
 import type { CorrectionItem, FiredItem, TicketState } from "./kitchen-print.js";
@@ -2631,6 +2633,9 @@ export async function mergeTabs(
   await refuseHeldLeavingVisit(tx, fromTabId, sourceLineIds);
   const before = await readSentWork(tx, cfg, fromTabId);
   await moveOrderLines(tx, cfg, fromTabId, intoTabId, undefined, { modesChecked: false });
+  // A failed ticket's dishes now sit on `intoTabId`, and the source is abandoned below, which
+  // `listPrintProblems` leaves out.
+  await moveKitchenPrintLinks(tx, fromTabId, intoTabId);
   await clearGroups(tx, sourceLineIds);
   await bumpRevision(tx, [fromTabId, intoTabId]);
 
@@ -4706,7 +4711,7 @@ const TICKET_TRANSITIONS = {
 
 /** A ternary, not a computed key: a computed key would widen the payload to a string index and lose
  *  Drizzle's typing against `ticket_items`. */
-function advanceSet(to: Exclude<TicketState, "queued">) {
+export function advanceSet(to: Exclude<TicketState, "queued">) {
   const at = nowIso();
   return TICKET_TRANSITIONS[to].stampedAt === "preparingAt"
     ? { state: to, preparingAt: at }
@@ -4791,6 +4796,20 @@ export interface QueueModifier {
   suitableFor?: string[] | null;
 }
 
+/** The seated party a queue card's bill belongs to, at the revision a pass command must send. */
+export interface QueueVisit {
+  id: string;
+  revision: number;
+}
+
+/** The group a queue item's dish was submitted in; absent for a bill of no visit, or a line moved
+ *  in from another party's bill, or moved or merged in from a bill with no party. */
+export interface QueueGroup {
+  id: string;
+  position: number;
+  state: "held" | "fired";
+}
+
 export interface StationQueueItem {
   id: string;
   workingOrderLineId: string;
@@ -4806,6 +4825,7 @@ export interface StationQueueItem {
   asServed: { allergens: ProductAllergens; pending: boolean };
   asServedDiet?: DietProfile;
   course: StationQueueCourse | null;
+  group?: QueueGroup;
   /** `null` while the item is HELD. */
   firedAt: string | null;
   /** Snapshotted at fire, so a later draft edit never changes what the kitchen already sees. */
@@ -4823,6 +4843,11 @@ export interface StationQueueGroup {
   queuedAt: string;
   /** The till reads COLLECTABLE off this alone: only a `settled` order awaits the counter handover. */
   status: WorkingOrderStatus;
+  /** Absent for a bill of no visit. */
+  visit?: QueueVisit;
+  /** Present only when one of this bill's tickets for the station was not printed after
+   *  `JOBS_WAITING_MS`, or was given up on (`listPrintProblems`). */
+  printProblem?: true;
   items: StationQueueItem[];
   thresholds: StationThresholds;
 }
@@ -4905,6 +4930,40 @@ async function readQueueSubItems(
   return { modifiersByParent, asServedByParent };
 }
 
+const queueGroupColumns = {
+  visitId: visits.id,
+  visitRevision: visits.revision,
+  groupId: orderGroups.id,
+  groupPosition: orderGroups.position,
+  groupState: orderGroups.state,
+};
+
+function queueVisit(row: {
+  visitId: string | null;
+  visitRevision: number | null;
+}): QueueVisit | undefined {
+  return row.visitId === null ? undefined : { id: row.visitId, revision: row.visitRevision! };
+}
+
+function queueGroup(row: {
+  groupId: string | null;
+  groupPosition: number | null;
+  groupState: string | null;
+}): QueueGroup | undefined {
+  return row.groupId === null
+    ? undefined
+    : {
+        id: row.groupId,
+        position: row.groupPosition!,
+        state: row.groupState as QueueGroup["state"],
+      };
+}
+
+/** `{ [key]: value }`, or nothing when there is no value: a queue leaves an absent visit or group out. */
+function optional<K extends string, V>(key: K, value: V | undefined): { [P in K]?: V } {
+  return (value === undefined ? {} : { [key]: value }) as { [P in K]?: V };
+}
+
 /**
  * The venue's ticket items at one station, grouped by order, oldest first. An abandoned or collected
  * order drops out; items are not filtered by state, so a `ready` line stays until its order collects.
@@ -4939,6 +4998,7 @@ export async function listStationQueue(
       orderNumber: workingOrders.orderNumber,
       label: workingOrders.label,
       status: workingOrders.status,
+      ...queueGroupColumns,
       warmAfterMinutes: kitchenStations.warmAfterMinutes,
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
@@ -4949,6 +5009,8 @@ export async function listStationQueue(
     .innerJoin(kitchenStations, eq(ticketItems.stationId, kitchenStations.id))
     // Not filtered by `active`: a course deactivated after the item was fired still names its header.
     .leftJoin(kitchenCourses, eq(ticketItems.courseId, kitchenCourses.id))
+    .leftJoin(visits, eq(visits.id, workingOrders.visitId))
+    .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .where(
       and(
         eq(ticketItems.stationId, stationId),
@@ -4965,6 +5027,12 @@ export async function listStationQueue(
   );
 
   const nowMs = Date.now();
+  const printProblems = await ordersWithPrintProblem(
+    tx,
+    stationId,
+    [...new Set(rows.map((row) => row.orderId))],
+    new Date(nowMs),
+  );
   // The Map keeps insertion order, so groups come out oldest-first.
   const groups = new Map<string, StationQueueGroup>();
   for (const row of rows) {
@@ -4981,6 +5049,8 @@ export async function listStationQueue(
         label: row.label,
         queuedAt: row.queuedAt,
         status: row.status,
+        ...optional("visit", queueVisit(row)),
+        ...optional("printProblem", printProblems.has(row.orderId) ? true : undefined),
         items: [],
         thresholds,
       };
@@ -5010,6 +5080,7 @@ export async function listStationQueue(
         row.courseId === null
           ? null
           : { id: row.courseId, name: row.courseName!, displayOrder: row.courseDisplayOrder! },
+      ...optional("group", queueGroup(row)),
       firedAt: row.firedAt,
       note: row.note,
       queuedAt: row.queuedAt,
@@ -5038,6 +5109,7 @@ export interface ExpoItem {
   asServed: { allergens: ProductAllergens; pending: boolean };
   asServedDiet?: DietProfile;
   queuedAt: string;
+  group?: QueueGroup;
   /** This item's OWN station's order-timing thresholds — per item, not per order, because one order's
    *  items can span several stations each with different thresholds. */
   thresholds: StationThresholds;
@@ -5055,13 +5127,28 @@ export interface ExpoCourse {
   items: ExpoItem[];
 }
 
-/** One order on the cross-station expo board. `tableLabel` is absent for an unlabelled walk-up. */
+/** One group of a seated party's bill on the expo board; the section of lines with no group (moved
+ *  in from another party's bill, or moved or merged in from a bill with no party) has every group
+ *  field `null` and sorts first. `fired` and `away` roll up as {@link ExpoCourse}'s do. */
+export interface ExpoGroup {
+  groupId: string | null;
+  position: number | null;
+  state: QueueGroup["state"] | null;
+  fired: boolean;
+  away: boolean;
+  items: ExpoItem[];
+}
+
+/** One order on the cross-station expo board. `tableLabel` is absent for an unlabelled walk-up. A
+ *  seated party's bill is sectioned by `groups` and has no `courses`; any other bill the reverse. */
 export interface ExpoOrder {
   orderId: string;
   tableLabel?: string;
   orderNumber: number;
   openedMinutes: number;
+  visit?: QueueVisit;
   courses: ExpoCourse[];
+  groups: ExpoGroup[];
   /** The worst age band over the UNSERVED lines: a served line has reached the guest. */
   worstBand: TimingBand;
 }
@@ -5069,8 +5156,9 @@ export interface ExpoOrder {
 /**
  * The cross-station expo read: every order in the venue that is not abandoned, not collected, and
  * has at least one item not yet away (open, placed and settled orders alike), its items gathered
- * across all stations and grouped by course. A surviving order carries ALL its items, away ones
- * included, so a per-course `away` flag can be rolled up. `locationId` scopes only the table label.
+ * across all stations and sectioned by group in position order for a seated party's bill, by course
+ * for any other. A surviving order carries ALL its items, away ones included, so a per-section `away`
+ * flag can be rolled up. `locationId` scopes only the table label.
  */
 export async function listExpoQueue(
   tx: Transaction,
@@ -5109,6 +5197,8 @@ export async function listExpoQueue(
       orderId: workingOrders.id,
       orderNumber: workingOrders.orderNumber,
       openedAt: workingOrders.openedAt,
+      ...queueGroupColumns,
+      groupCreatedAt: orderGroups.createdAt,
       // A scalar subquery, not a LEFT JOIN, which would multiply the item rows when several tables
       // match (the tables joined to one tab, or a tab's table and a table the order delivers to).
       // The `order by` makes the label picked deterministic: a table whose `tab_id` is this order
@@ -5127,6 +5217,8 @@ export async function listExpoQueue(
     .innerJoin(kitchenStations, eq(ticketItems.stationId, kitchenStations.id))
     // Not filtered by `active`, as in `listStationQueue`.
     .leftJoin(kitchenCourses, eq(ticketItems.courseId, kitchenCourses.id))
+    .leftJoin(visits, eq(visits.id, workingOrders.visitId))
+    .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .where(
       and(
         ne(workingOrders.status, "abandoned"),
@@ -5154,35 +5246,55 @@ export async function listExpoQueue(
   const nowMs = Date.now();
   // Maps keep insertion order, so the SQL order survives the grouping.
   const orders = new Map<string, ExpoOrder>();
-  const courseMaps = new Map<string, Map<string, ExpoCourse>>();
+  const sectionMaps = new Map<string, Map<string, ExpoCourse | ExpoGroup>>();
+  const groupCreatedAt = new Map<string, string>();
   for (const row of rows) {
+    if (row.groupId !== null) groupCreatedAt.set(row.groupId, row.groupCreatedAt!);
     let order = orders.get(row.orderId);
     if (order === undefined) {
       order = {
         orderId: row.orderId,
         orderNumber: row.orderNumber,
         openedMinutes: minutesSince(row.openedAt, nowMs),
+        ...optional("visit", queueVisit(row)),
         courses: [],
+        groups: [],
         ...(row.tableLabel === null ? {} : { tableLabel: row.tableLabel }),
         worstBand: "fresh",
       };
       orders.set(row.orderId, order);
-      courseMaps.set(row.orderId, new Map());
+      sectionMaps.set(row.orderId, new Map());
     }
-    const byCourse = courseMaps.get(row.orderId)!;
-    const courseKey = row.courseId ?? "__none__";
-    let course = byCourse.get(courseKey);
-    if (course === undefined) {
-      course = {
-        courseId: row.courseId,
-        courseName: row.courseId === null ? null : row.courseName!,
-        displayOrder: row.courseId === null ? null : row.courseDisplayOrder!,
-        fired: true,
-        away: true,
-        items: [],
-      };
-      byCourse.set(courseKey, course);
-      order.courses.push(course);
+    const sections = sectionMaps.get(row.orderId)!;
+    const group = queueGroup(row);
+    const byGroup = order.visit !== undefined;
+    const sectionKey = (byGroup ? group?.id : row.courseId) ?? "__none__";
+    let section = sections.get(sectionKey);
+    if (section === undefined) {
+      if (byGroup) {
+        const expoGroup: ExpoGroup = {
+          groupId: group?.id ?? null,
+          position: group?.position ?? null,
+          state: group?.state ?? null,
+          fired: true,
+          away: true,
+          items: [],
+        };
+        order.groups.push(expoGroup);
+        section = expoGroup;
+      } else {
+        const course: ExpoCourse = {
+          courseId: row.courseId,
+          courseName: row.courseId === null ? null : row.courseName!,
+          displayOrder: row.courseId === null ? null : row.courseDisplayOrder!,
+          fired: true,
+          away: true,
+          items: [],
+        };
+        order.courses.push(course);
+        section = course;
+      }
+      sections.set(sectionKey, section);
     }
     const thresholds: StationThresholds = {
       warmAfterMinutes: row.warmAfterMinutes,
@@ -5195,7 +5307,7 @@ export async function listExpoQueue(
       nowMs,
       thresholds,
     );
-    course.items.push({
+    section.items.push({
       id: row.itemId,
       name: kitchenPresentationName(row),
       optionSnapshots: row.optionSnapshots,
@@ -5218,12 +5330,23 @@ export async function listExpoQueue(
         contains: [],
       },
       queuedAt: row.queuedAt,
+      ...optional("group", group),
       thresholds,
       band,
     });
-    if (row.firedAt === null) course.fired = false;
-    if (row.awayAt === null) course.away = false;
+    if (row.firedAt === null) section.fired = false;
+    if (row.awayAt === null) section.away = false;
     if (row.servedAt === null) order.worstBand = worstBand([order.worstBand, band]);
+  }
+  for (const order of orders.values()) {
+    const made = (group: ExpoGroup) =>
+      group.groupId === null ? "" : groupCreatedAt.get(group.groupId)!;
+    order.groups.sort(
+      (a, b) =>
+        (a.position ?? 0) - (b.position ?? 0) ||
+        made(a).localeCompare(made(b)) ||
+        (a.groupId ?? "").localeCompare(b.groupId ?? ""),
+    );
   }
   return [...orders.values()];
 }

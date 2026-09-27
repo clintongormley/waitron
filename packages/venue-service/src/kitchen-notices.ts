@@ -18,7 +18,7 @@ import {
 } from "@waitron/shared";
 import type { VenueScope } from "./operations.js";
 import { kitchenNoticeKind, kitchenNotices } from "./schema/kitchen-notices.js";
-import { serviceSettings } from "./schema/settings.js";
+import { serviceSettings, type KitchenTicketGrouping } from "./schema/settings.js";
 import "./errors.js";
 
 export type KitchenNoticeKind = (typeof kitchenNoticeKind.enumValues)[number];
@@ -247,4 +247,23 @@ export async function writeClearingWorkflow(tx: Transaction, value: boolean): Pr
     .insert(serviceSettings)
     .values({ id: 1, clearingWorkflow: value })
     .onConflictDoUpdate({ target: serviceSettings.id, set: { clearingWorkflow: value } });
+}
+
+/** How identical dishes print on a kitchen ticket. A venue with no row reads `combined`. */
+export async function readKitchenTicketGrouping(tx: Transaction): Promise<KitchenTicketGrouping> {
+  const [row] = await tx
+    .select({ kitchenTicketGrouping: serviceSettings.kitchenTicketGrouping })
+    .from(serviceSettings)
+    .where(eq(serviceSettings.id, 1));
+  return row?.kitchenTicketGrouping ?? "combined";
+}
+
+export async function writeKitchenTicketGrouping(
+  tx: Transaction,
+  value: KitchenTicketGrouping,
+): Promise<void> {
+  await tx
+    .insert(serviceSettings)
+    .values({ id: 1, kitchenTicketGrouping: value })
+    .onConflictDoUpdate({ target: serviceSettings.id, set: { kitchenTicketGrouping: value } });
 }

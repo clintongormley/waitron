@@ -6,7 +6,7 @@ import { codeMessage } from "../i18n/codes.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { TillExpoScreen } from "./till-expo-screen.js";
-import type { ExpoItem, ExpoOrder, TillApi } from "../api/client.js";
+import type { ExpoGroup, ExpoItem, ExpoOrder, TillApi } from "../api/client.js";
 
 const FIRED = "2026-08-17T10:00:00.000Z";
 
@@ -961,4 +961,279 @@ it("shows a dish's frozen options answers in the KITCHEN's wording", async () =>
   };
   const el = await mount({ api: stubApi([order]) });
   expect(el.shadowRoot!.querySelector(".modifier-answer")!.textContent).toBe("PTO: PH");
+});
+
+describe("till-expo-screen — a seated party's groups", () => {
+  function passItem(id: string, name: string, over: Partial<ExpoItem> = {}): ExpoItem {
+    return {
+      id,
+      name,
+      qty: "1.000",
+      stationName: "Cocina",
+      state: "queued",
+      firedAt: FIRED,
+      awayAt: null,
+      queuedAt: FIRED,
+      thresholds: DEFAULT_THRESHOLDS,
+      band: "fresh",
+      ...over,
+    };
+  }
+
+  function section(
+    groupId: string | null,
+    position: number | null,
+    state: "held" | "fired" | null,
+    items: ExpoItem[],
+    away = false,
+  ): ExpoGroup {
+    return { groupId, position, state, fired: state !== "held", away, items };
+  }
+
+  // Listed out of position order, with a course on none of them, so the card must section by group.
+  const partyOrder: ExpoOrder = {
+    orderId: "wo-p",
+    orderNumber: 9,
+    tableLabel: "Mesa 4",
+    openedMinutes: 20,
+    worstBand: "fresh",
+    visit: { id: "v-4", revision: 7 },
+    courses: [],
+    groups: [
+      section("g-4", 4, "held", [passItem("it-steak", "Solomillo", { firedAt: null })]),
+      section("g-2", 2, "fired", [passItem("it-croq", "Croquetas", { state: "preparing" })]),
+      section(
+        "g-1",
+        1,
+        "fired",
+        [passItem("it-beer", "Caña", { state: "ready", awayAt: FIRED })],
+        true,
+      ),
+      section(null, null, null, [passItem("it-moved", "Pan", { state: "ready" })]),
+      section("g-5", 5, "held", [passItem("it-flan", "Flan", { firedAt: null })]),
+      section("g-3", 3, "fired", [passItem("it-salad", "Ensalada", { state: "ready" })]),
+    ],
+  };
+
+  const sections = (el: TillExpoScreen) => [
+    ...orderCard(el, 9)!.querySelectorAll<HTMLElement>("[data-group-section]"),
+  ];
+  const tableChanged = (el: TillExpoScreen) =>
+    el.shadowRoot!.querySelector<HTMLElement>("[data-table-changed]");
+  const groupName = (n: number) => t("table.group_n").replace("{n}", String(n));
+
+  function partyApi(overrides: Record<string, unknown> = {}) {
+    return stubApi([partyOrder], {
+      fireGroup: vi.fn().mockResolvedValue({ revision: 8 }),
+      bumpGroupReady: vi.fn().mockResolvedValue({ revision: 8 }),
+      markGroupAway: vi.fn().mockResolvedValue({ revision: 8 }),
+      ...overrides,
+    });
+  }
+
+  it("shows the lines with no group first, then each group by position; a group already away drops off", async () => {
+    const el = await mount({ api: partyApi(), fireControl: "expo" });
+    expect(sections(el).map((s) => s.dataset.groupSection)).toEqual([
+      "none",
+      "g-2",
+      "g-3",
+      "g-4",
+      "g-5",
+    ]);
+    expect(sections(el)[0]!.querySelector(".course-head")).toBeNull();
+    expect(sections(el)[1]!.querySelector(".course-head")!.textContent).toContain(groupName(2));
+    expect(orderCard(el, 9)!.querySelector("[data-course]")).toBeNull();
+  });
+
+  it("labels each held group held, not released, and no fired one", async () => {
+    const el = await mount({ api: partyApi(), fireControl: "expo" });
+    const held = sections(el).filter((s) => s.querySelector("[data-group-held]") !== null);
+    expect(held.map((s) => s.dataset.groupSection)).toEqual(["g-4", "g-5"]);
+    expect(held[0]!.querySelector("[data-group-held]")!.textContent).toContain(
+      t("station.group_held"),
+    );
+    expect(held[0]!.querySelector('[data-item="it-steak"]')!.classList.contains("held")).toBe(true);
+  });
+
+  it("offers Ready on a fired group not all ready, Away on one all ready, and nothing on the lines with no group", async () => {
+    const el = await mount({ api: partyApi(), fireControl: "expo" });
+    const [none, preparing, plated] = sections(el);
+    expect(none!.querySelector(".lever")).toBeNull();
+    const ready = preparing!.querySelector<HTMLElement>('[data-group-ready="g-2"]')!;
+    expect(ready.textContent).toContain(t("expo.group_ready"));
+    expect(ready.getAttribute("aria-label")).toBe(`${t("expo.group_ready")} ${groupName(2)}`);
+    expect(preparing!.querySelector("[data-group-away]")).toBeNull();
+    const away = plated!.querySelector<HTMLElement>('[data-group-away="g-3"]')!;
+    expect(away.textContent).toContain(t("expo.away"));
+    expect(plated!.querySelector("[data-group-ready]")).toBeNull();
+  });
+
+  it("under fire control expo, offers Fire on each held group", async () => {
+    const el = await mount({ api: partyApi(), fireControl: "expo" });
+    const fires = [...orderCard(el, 9)!.querySelectorAll<HTMLElement>("[data-group-fire]")];
+    expect(fires.map((f) => f.dataset.groupFire)).toEqual(["g-4", "g-5"]);
+    expect(fires[0]!.textContent).toContain(t("expo.fire"));
+  });
+
+  it.each(["waiter", "kitchen"] as const)(
+    "under fire control %s, offers no Fire on a held group but keeps Ready and Away",
+    async (fireControl) => {
+      const el = await mount({ api: partyApi(), fireControl });
+      expect(el.shadowRoot!.querySelector("[data-group-fire]")).toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-group-ready="g-2"]')).not.toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-group-away="g-3"]')).not.toBeNull();
+    },
+  );
+
+  it.each([
+    ["Ready", "data-group-ready", "g-2", "bumpGroupReady"],
+    ["Away", "data-group-away", "g-3", "markGroupAway"],
+    ["Fire", "data-group-fire", "g-4", "fireGroup"],
+  ] as const)(
+    "%s calls the group verb with a fresh submission id per press and the card's revision, then reloads",
+    async (_name, attribute, groupId, verb) => {
+      const api = partyApi();
+      const el = await mount({ api, fireControl: "expo" });
+      el.shadowRoot!.querySelector<HTMLElement>(`[${attribute}="${groupId}"]`)!.click();
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>(`[${attribute}="${groupId}"]`)!.click();
+      await flush(el);
+      const calls = (api as unknown as Record<string, ReturnType<typeof vi.fn>>)[verb]!.mock.calls;
+      expect(calls).toEqual([
+        ["v-4", groupId, { submissionId: expect.any(String), expectedVisitRevision: 7 }],
+        ["v-4", groupId, { submissionId: expect.any(String), expectedVisitRevision: 7 }],
+      ]);
+      expect(calls[0]![2].submissionId).not.toBe(calls[1]![2].submissionId);
+      expect(api.getExpoQueue).toHaveBeenCalledTimes(3);
+      expect(api.bumpCourseReady).not.toHaveBeenCalled();
+      expect(api.markCourseAway).not.toHaveBeenCalled();
+      expect(api.fireCourse).not.toHaveBeenCalled();
+    },
+  );
+
+  it("on visit.out_of_date it reloads and says the table changed, and never sends again on its own", async () => {
+    const api = partyApi({
+      markGroupAway: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v-4" }),
+    });
+    const el = await mount({ api, fireControl: "expo" });
+    expect(tableChanged(el)).toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-group-away="g-3"]')!.click();
+    await flush(el);
+    await flush(el);
+    expect(api.markGroupAway).toHaveBeenCalledOnce();
+    expect(api.getExpoQueue).toHaveBeenCalledTimes(2);
+    expect(tableChanged(el)!.textContent).toContain(t("station.table_changed"));
+    expect(tableChanged(el)!.getAttribute("role")).toBe("status");
+  });
+
+  it("the next press clears the notice, and another refusal does not raise it", async () => {
+    const api = partyApi({
+      bumpGroupReady: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "visit.out_of_date" })
+        .mockRejectedValue({ code: "group.not_found" }),
+    });
+    const el = await mount({ api, fireControl: "expo" });
+    el.shadowRoot!.querySelector<HTMLElement>('[data-group-ready="g-2"]')!.click();
+    await flush(el);
+    expect(tableChanged(el)).not.toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-group-ready="g-2"]')!.click();
+    await flush(el);
+    expect(tableChanged(el)).toBeNull();
+    expect(api.getExpoQueue).toHaveBeenCalledTimes(3);
+  });
+
+  const staleNotice = (label: string) =>
+    `${t("station.table_changed_named").replace("{table}", label)} ${t("station.table_changed")}`;
+
+  it("names the table that changed, and never says where it changed", async () => {
+    const api = partyApi({
+      markGroupAway: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v-4" }),
+    });
+    const el = await mount({ api, fireControl: "expo" });
+    el.shadowRoot!.querySelector<HTMLElement>('[data-group-away="g-3"]')!.click();
+    await flush(el);
+    const text = tableChanged(el)!.textContent!.replace(/\s+/g, " ").trim();
+    expect(text).toBe(staleNotice("Mesa 4"));
+    expect(text).not.toContain("till");
+  });
+
+  it("names a card with no table by its order number", async () => {
+    const unlabelled: ExpoOrder = { ...partyOrder };
+    delete unlabelled.tableLabel;
+    const api = partyApi({
+      markGroupAway: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v-4" }),
+    });
+    (api.getExpoQueue as ReturnType<typeof vi.fn>).mockResolvedValue([unlabelled]);
+    const el = await mount({ api, fireControl: "expo" });
+    el.shadowRoot!.querySelector<HTMLElement>('[data-group-away="g-3"]')!.click();
+    await flush(el);
+    expect(tableChanged(el)!.textContent!.replace(/\s+/g, " ").trim()).toBe(staleNotice("#9"));
+  });
+
+  it("the next successful read after the one that showed it clears the notice", async () => {
+    const api = partyApi({
+      markGroupAway: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v-4" }),
+    });
+    (api.getExpoQueue as ReturnType<typeof vi.fn>).mockResolvedValue([
+      threeCourseOrder,
+      partyOrder,
+    ]);
+    const el = await mount({ api, fireControl: "expo" });
+    el.shadowRoot!.querySelector<HTMLElement>('[data-group-away="g-3"]')!.click();
+    await flush(el);
+    expect(tableChanged(el)).not.toBeNull();
+    const counterAway = () => orderCard(el, 5)!.querySelector<HTMLElement>('[data-away="co-1"]')!;
+    (api.getExpoQueue as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new TypeError("offline"));
+    counterAway().click();
+    await flush(el);
+    expect(tableChanged(el)).not.toBeNull();
+    counterAway().click();
+    await flush(el);
+    expect(tableChanged(el)).toBeNull();
+  });
+
+  it("a counter order beside a party's keeps its course sections and course levers", async () => {
+    const api = partyApi();
+    (api.getExpoQueue as ReturnType<typeof vi.fn>).mockResolvedValue([
+      threeCourseOrder,
+      partyOrder,
+    ]);
+    const el = await mount({ api, fireControl: "expo" });
+    const counter = orderCard(el, 5)!;
+    expect(
+      [...counter.querySelectorAll<HTMLElement>("[data-course]")].map((c) => c.dataset.course),
+    ).toEqual(["none", "co-1", "co-2"]);
+    expect(counter.querySelector("[data-group-section]")).toBeNull();
+    counter.querySelector<HTMLElement>('[data-away="co-1"]')!.click();
+    await flush(el);
+    expect(api.markCourseAway).toHaveBeenCalledWith("wo-1", "co-1");
+    expect(api.markGroupAway).not.toHaveBeenCalled();
+  });
+
+  it("a party's card with no group sections shows its header and nothing to act on", async () => {
+    const bare: ExpoOrder = { ...partyOrder };
+    delete bare.groups;
+    const el = await mount({ api: stubApi([bare]), fireControl: "expo" });
+    expect(orderCard(el, 9)!.textContent).toContain("Mesa 4");
+    expect(orderCard(el, 9)!.querySelector(".lever")).toBeNull();
+  });
+
+  it("ages a party's card by its groups' items", async () => {
+    const forgotten = {
+      ...partyOrder,
+      groups: [
+        section("g-2", 2, "fired", [
+          passItem("it-late", "Croquetas", { queuedAt: "2026-08-17T09:40:00.000Z" }),
+        ]),
+      ],
+    };
+    const el = await mount({
+      api: stubApi([forgotten]),
+      now: Date.parse(FIRED),
+      reducedMotion: true,
+    });
+    expect(orderCard(el, 9)!.classList.contains("age-forgotten")).toBe(true);
+    expect(el.shadowRoot!.querySelector("[data-forgotten]")).not.toBeNull();
+  });
 });

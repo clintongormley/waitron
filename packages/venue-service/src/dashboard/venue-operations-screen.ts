@@ -19,6 +19,7 @@ import type {
   Department,
   FloorZone,
   HoursInterval,
+  KitchenTicketGrouping,
   PreparationRoute,
   ServiceMode,
   VenueReadinessIssue,
@@ -28,6 +29,7 @@ import type {
 import { t } from "./strings.js";
 
 const MODES: ServiceMode[] = ["table_tab", "prepay", "invoice_first", "ticket_then_pay"];
+const GROUPINGS: KitchenTicketGrouping[] = ["combined", "separate"];
 const DAYS = [0, 1, 2, 3, 4, 5, 6] as const;
 const VIEWS = ["status", "departments", "zones", "routing"] as const;
 type View = (typeof VIEWS)[number];
@@ -96,6 +98,9 @@ export class VenueOperationsScreen extends LitElement {
       }
       wt-form-actions {
         width: 100%;
+      }
+      .setting {
+        margin-top: var(--wt-space-4);
       }
       .hint {
         margin: var(--wt-space-1) 0 0;
@@ -224,6 +229,21 @@ export class VenueOperationsScreen extends LitElement {
       await this.#load();
     } catch {
       this.fieldErrors = { editSentLines: t("venue.save_error") };
+    } finally {
+      this.busy = false;
+    }
+  }
+  async #saveKitchenTicketGrouping(kitchenTicketGrouping: KitchenTicketGrouping): Promise<void> {
+    if (this.busy) return;
+    this.busy = true;
+    this.error = undefined;
+    this.fieldErrors = {};
+    try {
+      await this.api.saveKitchenTicketGrouping(kitchenTicketGrouping);
+      this.model = { ...this.model!, kitchenTicketGrouping };
+      await this.#load();
+    } catch {
+      this.fieldErrors = { kitchenTicketGrouping: t("venue.save_error") };
     } finally {
       this.busy = false;
     }
@@ -658,8 +678,41 @@ export class VenueOperationsScreen extends LitElement {
         }}
       ></wt-switch>
       <p class="hint" data-test="edit-sent-lines-hint">${t("venue.edit_sent_lines_hint")}</p>
-      ${this.#fieldError("editSentLines")}
+      ${this.#fieldError("editSentLines")} ${this.#kitchenTicketGrouping()}
     </section>`;
+  }
+  #kitchenTicketGrouping() {
+    const stored = this.model!.kitchenTicketGrouping;
+    const invalid = !!this.fieldErrors.kitchenTicketGrouping;
+    return html`<label class="setting"
+        ><span>${t("venue.kitchen_ticket_grouping")}</span
+        ><select
+          name="kitchenTicketGrouping"
+          ?disabled=${this.busy}
+          aria-invalid=${invalid}
+          aria-describedby=${
+            invalid
+              ? "kitchen-ticket-grouping-hint error-kitchenTicketGrouping"
+              : "kitchen-ticket-grouping-hint"
+          }
+          @change=${(event: Event) => {
+            void this.#saveKitchenTicketGrouping(
+              (event.target as HTMLSelectElement).value as KitchenTicketGrouping,
+            );
+          }}
+        >
+          ${GROUPINGS.map(
+            (choice) =>
+              html`<option value=${choice} .selected=${live(choice === stored)}>
+                ${t(`venue.kitchen_ticket_grouping.${choice}`)}
+              </option>`,
+          )}
+        </select></label
+      >
+      <p class="hint" id="kitchen-ticket-grouping-hint" data-test="kitchen-ticket-grouping-hint">
+        ${t("venue.kitchen_ticket_grouping_hint")}
+      </p>
+      ${this.#fieldError("kitchenTicketGrouping")}`;
   }
   #hours(departmentId: string, omit?: number) {
     return this.model!.hours.filter(

@@ -1,9 +1,9 @@
-import { afterEach, describe, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { StationThresholds } from "@waitron/shared";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./till-expo-screen.js";
 import type { TillExpoScreen } from "./till-expo-screen.js";
-import type { ExpoOrder, TillApi } from "../api/client.js";
+import type { ExpoGroup, ExpoItem, ExpoOrder, TillApi } from "../api/client.js";
 
 const FIRED = "2026-08-17T10:00:00.000Z";
 
@@ -129,6 +129,49 @@ const queue: ExpoOrder[] = [
   },
 ];
 
+function passItem(id: string, name: string, over: Partial<ExpoItem> = {}): ExpoItem {
+  return {
+    id,
+    name,
+    qty: "1.000",
+    stationName: "Cocina",
+    state: "queued",
+    firedAt: FIRED,
+    awayAt: null,
+    queuedAt: FIRED,
+    thresholds: DEFAULT_THRESHOLDS,
+    band: "fresh",
+    ...over,
+  };
+}
+
+function section(
+  groupId: string | null,
+  position: number | null,
+  state: "held" | "fired" | null,
+  items: ExpoItem[],
+): ExpoGroup {
+  return { groupId, position, state, fired: state !== "held", away: false, items };
+}
+
+// A seated party's bill: the lines with no group, a group to mark ready, one to send away, and a held
+// one ("held, not released", with Fire under `expo`).
+const partyOrder: ExpoOrder = {
+  orderId: "wo-p",
+  orderNumber: 9,
+  tableLabel: "Mesa 7",
+  openedMinutes: 20,
+  worstBand: "fresh",
+  visit: { id: "v-7", revision: 3 },
+  courses: [],
+  groups: [
+    section(null, null, null, [passItem("it-moved", "Pan", { state: "ready" })]),
+    section("g-2", 2, "fired", [passItem("it-croq", "Croquetas", { state: "preparing" })]),
+    section("g-3", 3, "fired", [passItem("it-salad", "Ensalada", { state: "ready" })]),
+    section("g-4", 4, "held", [passItem("it-steak", "Solomillo", { firedAt: null })]),
+  ],
+};
+
 function stubApi(): TillApi {
   return {
     getExpoQueue: vi.fn().mockResolvedValue(queue),
@@ -154,6 +197,25 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
       theme,
     );
     await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations on a party's groups with the table-changed notice", async () => {
+    const api = {
+      getExpoQueue: vi.fn().mockResolvedValue([partyOrder]),
+      markGroupAway: vi.fn().mockRejectedValue({ code: "visit.out_of_date" }),
+      reprintOrder: vi.fn().mockResolvedValue(undefined),
+    } as unknown as TillApi;
+    const { el, host } = await mountWidget<TillExpoScreen>(
+      "till-expo-screen",
+      { api, fireControl: "expo" },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-group-away="g-3"]')!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-table-changed]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-group-held]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

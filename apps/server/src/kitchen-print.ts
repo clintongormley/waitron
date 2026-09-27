@@ -5,25 +5,33 @@
 // read keeps active printers only, and no other write transaction can run between that read and the
 // enqueue, because one write transaction runs on the venue file at a time (`withTransaction`,
 // `packages/db/src/tenancy.ts`). Receipt: `assertExtraListForWrite` in `packages/catalogue/src/extras.ts`.
-import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, ne, or, sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 import {
+  kitchenPrintJobs,
   kitchenStations,
+  orderGroups,
+  printJobs,
   printers,
   stationPrinters,
   ticketItems,
   ticketState,
+  visits,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { perDishOptionQuantity, thousandthsToDecimal } from "@waitron/shared";
-import { kitchenPresentationName, optionSnapshotLabels } from "@waitron/catalogue";
+import { AppError, perDishOptionQuantity, thousandthsToDecimal } from "@waitron/shared";
+import { EACH_UNIT, kitchenPresentationName, optionSnapshotLabels } from "@waitron/catalogue";
 import { columnsFor, enqueuePrintJob } from "@waitron/printing";
 import type { CharacterSet, PaperWidth, PrintConfig } from "@waitron/printing";
-import { formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
+import { arrangeTicketItems, formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { printJobInTrouble } from "./print-job-trouble.js";
+import { visitFamily } from "./visits.js";
 import type { KitchenLayout, KitchenTicketItem, KitchenTicketStation } from "./kitchen-ticket.js";
 import type { TillConfig } from "./till-config.js";
+import "./errors.js";
 
 /**
  * One line that fired in THIS round. The caller captures it from its own write's `RETURNING`, never by
@@ -55,6 +63,22 @@ function ticketName(text: Record<string, string>, locale: string): string {
   // The map is never empty: `unit_name` freezes a unit's abbreviation, and `createUnit` and
   // `updateUnit` (`packages/catalogue/src/units.ts`) put it through `requireTranslations`.
   return Object.values(text)[0]!;
+}
+
+/**
+ * Whether a line was sold in Each, the one unit known to count pieces. A product with no stored unit
+ * sells in Each and its line freezes Each's abbreviations; every stored unit is either a measure
+ * (the seeded g, kg, mg, ml and l) or one whose kind nothing records. A line older than the unit
+ * snapshot carries none.
+ */
+function soldInEach(unitName: Record<string, string> | null): boolean {
+  if (unitName === null) return true;
+  const each: Record<string, string> = EACH_UNIT.abbreviation;
+  const locales = Object.keys(unitName);
+  return (
+    locales.length === Object.keys(each).length &&
+    locales.every((locale) => unitName[locale] === each[locale])
+  );
 }
 
 /**
@@ -116,15 +140,16 @@ function groupByLayout<T extends KitchenPrinterLayout>(printers: readonly T[]): 
 }
 
 /**
- * Each line's printed item, keyed by line id and carrying its `line_no`. The fire and correction paths
- * share it, so a correction slip prints a line exactly as the original ticket did. `lineIds` are
- * parent dish lines; a child modifier line prints as sub-text of its parent.
+ * Each line's printed item, keyed by line id and carrying its `line_no` and the position of the
+ * party's group it is in (null in none). The fire and correction paths share it, so a correction
+ * slip prints a line exactly as the original ticket did. `lineIds` are parent dish lines; a child
+ * modifier line prints as sub-text of its parent.
  */
 async function buildTicketItems(
   tx: Transaction,
   cfg: TillConfig,
   lineIds: string[],
-): Promise<Map<string, { lineNo: number; item: KitchenTicketItem }>> {
+): Promise<Map<string, { lineNo: number; group: number | null; item: KitchenTicketItem }>> {
   // The customer-facing `descriptions` is deliberately not read: the cook's name falls back to the
   // staff name (`kitchenPresentationName`), as on the station screen.
   const storedLineRows = await tx
@@ -139,8 +164,10 @@ async function buildTicketItems(
       variantName: workingOrderLines.variantName,
       variantKitchenName: workingOrderLines.variantKitchenName,
       note: workingOrderLines.note,
+      group: orderGroups.position,
     })
     .from(workingOrderLines)
+    .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .where(inArray(workingOrderLines.id, lineIds));
   const lineRows = storedLineRows.map((row) => ({
     ...row,
@@ -177,15 +204,20 @@ async function buildTicketItems(
     modifiersByParent.set(child.parentLineId!, names);
   }
 
-  const byLine = new Map<string, { lineNo: number; item: KitchenTicketItem }>();
+  const byLine = new Map<
+    string,
+    { lineNo: number; group: number | null; item: KitchenTicketItem }
+  >();
   for (const row of lineRows) {
     byLine.set(row.id, {
       lineNo: row.lineNo,
+      group: row.group,
       item: {
         qty: row.quantity,
         unit: row.unitName == null ? undefined : ticketName(row.unitName, cfg.locale),
         name: kitchenPresentationName(row),
         note: row.note ?? undefined,
+        ...(soldInEach(row.unitName) ? {} : { measured: true }),
         modifiers: [
           ...optionSnapshotLabels(row.optionSnapshots),
           ...(modifiersByParent.get(row.id) ?? []),
@@ -239,13 +271,15 @@ async function readOrderHeader(
  * Enqueue the kitchen tickets for a set of just-fired lines. For each INVOLVED station (one with ≥1 fired line), each attached `station`-scope printer gets a
  * ticket of that station's own items; every attached `order`-scope (group) printer gets ONE consolidated
  * ticket of the WHOLE event — deduped by printer id, so a group printer attached to N involved stations
- * prints a single ticket carrying all their items, not N.
+ * prints a single ticket carrying all their items, not N. Each job is linked to the bill and to every
+ * station its ticket carries (`kitchen_print_jobs`).
  */
 export async function enqueueKitchenTickets(
   tx: Transaction,
   cfg: TillConfig,
   orderId: string,
   firedItems: FiredItem[],
+  { reprint = false }: { reprint?: boolean } = {},
 ): Promise<void> {
   if (firedItems.length === 0) return;
 
@@ -260,24 +294,34 @@ export async function enqueueKitchenTickets(
   const itemsByLine = await buildTicketItems(tx, cfg, lineIds);
   const stationNames = await readStationNames(tx, stationIds);
   const order = await readOrderHeader(tx, cfg, orderId);
+  const grouping = await VENUE_SERVICE.readKitchenTicketGrouping(tx);
 
   const itemsByStation = new Map<string, { lineNo: number; item: KitchenTicketItem }[]>();
   for (const fired of firedItems) {
     const entry = itemsByLine.get(fired.workingOrderLineId)!;
+    const item = atFiredQuantity(entry.item, fired);
     const bucket = itemsByStation.get(fired.stationId) ?? [];
-    bucket.push({ lineNo: entry.lineNo, item: atFiredQuantity(entry.item, fired) });
+    bucket.push({
+      lineNo: entry.lineNo,
+      item: entry.group === null ? item : { ...item, group: entry.group },
+    });
     itemsByStation.set(fired.stationId, bucket);
   }
 
+  // Group-less items first, then group by group: the ticket heads each group's run of items.
+  const groupOrder = (item: KitchenTicketItem) => item.group ?? 0;
   // Station names are unique per location, so the name alone orders them.
   const stations = [...stationNames.entries()]
     .map(([id, name]) => ({
       id,
       name,
-      items: itemsByStation
-        .get(id)!
-        .sort((a, b) => a.lineNo - b.lineNo)
-        .map((entry) => entry.item),
+      items: arrangeTicketItems(
+        itemsByStation
+          .get(id)!
+          .sort((a, b) => groupOrder(a.item) - groupOrder(b.item) || a.lineNo - b.lineNo)
+          .map((entry) => entry.item),
+        grouping,
+      ),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -313,6 +357,7 @@ export async function enqueueKitchenTickets(
     for (const group of groupByLayout(stationScope)) {
       const stationTicket = formatKitchenTicket(
         {
+          reprint,
           scope: "station",
           stationName: station.name,
           tableLabel,
@@ -323,7 +368,8 @@ export async function enqueueKitchenTickets(
         layoutOf(group[0]!),
       );
       for (const printer of group) {
-        await enqueuePrintJob(tx, printCfg, printer.printerId, stationTicket);
+        const { jobId } = await enqueuePrintJob(tx, printCfg, printer.printerId, stationTicket);
+        await linkKitchenJob(tx, jobId, orderId, [station.id], reprint);
       }
     }
   }
@@ -331,6 +377,7 @@ export async function enqueueKitchenTickets(
   for (const group of groupByLayout([...groupPrinters.values()])) {
     const consolidated = formatKitchenTicket(
       {
+        reprint,
         scope: "order",
         tableLabel,
         orderNumber,
@@ -343,9 +390,29 @@ export async function enqueueKitchenTickets(
       layoutOf(group[0]!),
     );
     for (const printer of group) {
-      await enqueuePrintJob(tx, printCfg, printer.printerId, consolidated);
+      const { jobId } = await enqueuePrintJob(tx, printCfg, printer.printerId, consolidated);
+      await linkKitchenJob(
+        tx,
+        jobId,
+        orderId,
+        stations.map((station) => station.id),
+        reprint,
+      );
     }
   }
+}
+
+/** Record which bill and stations a kitchen ticket's job carried. */
+async function linkKitchenJob(
+  tx: Transaction,
+  printJobId: string,
+  workingOrderId: string,
+  stationIds: string[],
+  reprint: boolean,
+): Promise<void> {
+  await tx
+    .insert(kitchenPrintJobs)
+    .values(stationIds.map((stationId) => ({ printJobId, workingOrderId, stationId, reprint })));
 }
 
 /** `queued → preparing → ready`. */
@@ -558,8 +625,9 @@ export async function enqueueMovedSlips(
 
 /**
  * Reprint an order's kitchen tickets: every fired item across every round (held items excluded), unlike
- * the fire path, which prints only its own round. Each ticket is stamped with the reprint time, not the
- * original fire time. An order with nothing fired is a no-op.
+ * the fire path, which prints only its own round. Each ticket is marked REPRINT and stamped with the
+ * reprint time, not the original fire time. It changes no line, ticket item or group event. An order
+ * with nothing fired is a no-op.
  */
 export async function reprintOrderTickets(
   tx: Transaction,
@@ -574,5 +642,170 @@ export async function reprintOrderTickets(
     })
     .from(ticketItems)
     .where(and(eq(ticketItems.workingOrderId, orderId), isNotNull(ticketItems.firedAt)));
-  await enqueueKitchenTickets(tx, cfg, orderId, fired);
+  await enqueueKitchenTickets(tx, cfg, orderId, fired, { reprint: true });
+}
+
+/** A kitchen ticket for a bill and station not printed after `JOBS_WAITING_MS`, or given up on. */
+export interface PrintProblem {
+  workingOrderId: string;
+  stationId: string;
+  stationName: string;
+  /** When the oldest such ticket was queued. */
+  since: string;
+}
+
+/**
+ * The printing problems among the kitchen tickets `scope` selects, abandoned bills left out. A
+ * ticket is a problem while {@link printJobInTrouble} holds for its job, until a reprint for the same
+ * bill and station, on the same printer, queued after it has printed: only a reprint carries every
+ * dish fired before it, so a later round's ticket printing clears nothing, and another printer's
+ * paper says nothing of this one's. "After" is the link row's `rowid`, not `created_at`, which two
+ * jobs can share to the millisecond: SQLite gives a new row one more than the table's largest
+ * `rowid`, and a link row goes only when its job or its bill is deleted, or when
+ * {@link moveKitchenPrintLinks} writes it again. Oldest first.
+ */
+async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promise<PrintProblem[]> {
+  const troubled = printJobInTrouble(now);
+  const rows = await tx
+    .select({
+      workingOrderId: kitchenPrintJobs.workingOrderId,
+      stationId: kitchenPrintJobs.stationId,
+      stationName: kitchenStations.name,
+      printerId: printJobs.printerId,
+      createdAt: printJobs.createdAt,
+      queued: sql<number>`${kitchenPrintJobs}.rowid`,
+      troubled: sql<number>`${troubled}`,
+    })
+    .from(kitchenPrintJobs)
+    .innerJoin(printJobs, eq(printJobs.id, kitchenPrintJobs.printJobId))
+    .innerJoin(workingOrders, eq(workingOrders.id, kitchenPrintJobs.workingOrderId))
+    .innerJoin(kitchenStations, eq(kitchenStations.id, kitchenPrintJobs.stationId))
+    .where(
+      and(
+        scope,
+        ne(workingOrders.status, "abandoned"),
+        or(troubled, and(eq(kitchenPrintJobs.reprint, true), eq(printJobs.status, "done"))),
+      ),
+    );
+
+  const key = (row: { workingOrderId: string; stationId: string }) =>
+    `${row.workingOrderId}|${row.stationId}`;
+  const printerKey = (row: { workingOrderId: string; stationId: string; printerId: string }) =>
+    `${key(row)}|${row.printerId}`;
+  const lastReprinted = new Map<string, number>();
+  for (const row of rows) {
+    if (row.troubled) continue;
+    const seen = lastReprinted.get(printerKey(row));
+    if (seen === undefined || row.queued > seen) lastReprinted.set(printerKey(row), row.queued);
+  }
+  const problems = new Map<string, PrintProblem>();
+  for (const row of rows) {
+    if (!row.troubled) continue;
+    const reprinted = lastReprinted.get(printerKey(row));
+    if (reprinted !== undefined && reprinted > row.queued) continue;
+    const known = problems.get(key(row));
+    if (known === undefined || row.createdAt < known.since) {
+      problems.set(key(row), {
+        workingOrderId: row.workingOrderId,
+        stationId: row.stationId,
+        stationName: row.stationName,
+        since: row.createdAt,
+      });
+    }
+  }
+  return [...problems.values()].sort(
+    (a, b) =>
+      a.since.localeCompare(b.since) ||
+      a.stationName.localeCompare(b.stationName) ||
+      a.workingOrderId.localeCompare(b.workingOrderId),
+  );
+}
+
+/**
+ * Carry `fromOrderId`'s kitchen tickets onto `intoOrderId` when its dishes move there whole. A
+ * ticket a printed reprint already covered stays behind with its reprint, since nothing is left
+ * missing. The rest are written again, oldest first, so they come after every reprint `intoOrderId`
+ * made before this move, which never carried these dishes; and none of them counts as a reprint, as
+ * none carried `intoOrderId`'s own dishes.
+ */
+export async function moveKitchenPrintLinks(
+  tx: Transaction,
+  fromOrderId: string,
+  intoOrderId: string,
+): Promise<void> {
+  const rows = await tx
+    .select({
+      id: kitchenPrintJobs.id,
+      printJobId: kitchenPrintJobs.printJobId,
+      stationId: kitchenPrintJobs.stationId,
+      reprint: kitchenPrintJobs.reprint,
+      createdAt: kitchenPrintJobs.createdAt,
+      printerId: printJobs.printerId,
+      status: printJobs.status,
+      queued: sql<number>`${kitchenPrintJobs}.rowid`,
+    })
+    .from(kitchenPrintJobs)
+    .innerJoin(printJobs, eq(printJobs.id, kitchenPrintJobs.printJobId))
+    .where(eq(kitchenPrintJobs.workingOrderId, fromOrderId))
+    .orderBy(sql`${kitchenPrintJobs}.rowid`);
+
+  const printerKey = (row: { stationId: string; printerId: string }) =>
+    `${row.stationId}|${row.printerId}`;
+  const lastReprinted = new Map<string, number>();
+  for (const row of rows) {
+    if (row.reprint && row.status === "done") lastReprinted.set(printerKey(row), row.queued);
+  }
+  const moving = rows.filter((row) => row.queued > (lastReprinted.get(printerKey(row)) ?? 0));
+  if (moving.length === 0) return;
+
+  await tx.delete(kitchenPrintJobs).where(
+    inArray(
+      kitchenPrintJobs.id,
+      moving.map((row) => row.id),
+    ),
+  );
+  await tx.insert(kitchenPrintJobs).values(
+    moving.map((row) => ({
+      id: row.id,
+      printJobId: row.printJobId,
+      workingOrderId: intoOrderId,
+      stationId: row.stationId,
+      reprint: false,
+      createdAt: row.createdAt,
+    })),
+  );
+}
+
+/**
+ * The printing problems on a seated party's bills, the bills of every party merged into it
+ * included. A visit that does not exist is `visit.not_open`, as on the other visit reads.
+ */
+export async function listPrintProblems(
+  tx: Transaction,
+  visitId: string,
+  now: Date = new Date(),
+): Promise<PrintProblem[]> {
+  const [visit] = await tx.select({ id: visits.id }).from(visits).where(eq(visits.id, visitId));
+  if (visit === undefined) throw new AppError("visit.not_open", { visitId });
+  const family = await visitFamily(tx, visitId);
+  return readPrintProblems(tx, inArray(workingOrders.visitId, family), now);
+}
+
+/** Which of `orderIds` have a printing problem at `stationId`. */
+export async function ordersWithPrintProblem(
+  tx: Transaction,
+  stationId: string,
+  orderIds: readonly string[],
+  now: Date,
+): Promise<Set<string>> {
+  if (orderIds.length === 0) return new Set();
+  const problems = await readPrintProblems(
+    tx,
+    and(
+      eq(kitchenPrintJobs.stationId, stationId),
+      inArray(kitchenPrintJobs.workingOrderId, [...orderIds]),
+    )!,
+    now,
+  );
+  return new Set(problems.map((problem) => problem.workingOrderId));
 }

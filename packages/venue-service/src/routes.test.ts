@@ -1006,3 +1006,73 @@ describe("the venue's service settings", () => {
     expect(await stored(fx)).toEqual({ editSentLines: true });
   });
 });
+
+describe("the kitchen ticket grouping setting", () => {
+  const GROUPING = "/management-api/venue-service/settings/kitchen-ticket-grouping";
+  async function stored(fx: Fixture): Promise<unknown> {
+    return (
+      (await (
+        await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+      ).json()) as { kitchenTicketGrouping: unknown }
+    ).kitchenTicketGrouping;
+  }
+
+  it("reads combined until a manager chooses separate, and back", async () => {
+    const fx = await fixture();
+    expect(await stored(fx)).toBe("combined");
+    expect(
+      (await send(fx.app, "PUT", GROUPING, fx.managerCookie, { kitchenTicketGrouping: "separate" }))
+        .status,
+    ).toBe(204);
+    expect(await stored(fx)).toBe("separate");
+    expect(
+      (await send(fx.app, "PUT", GROUPING, fx.managerCookie, { kitchenTicketGrouping: "combined" }))
+        .status,
+    ).toBe(204);
+    expect(await stored(fx)).toBe("combined");
+  });
+
+  it("refuses anything but the two choices, naming the field, and keeps the stored one", async () => {
+    const fx = await fixture();
+    expect(
+      (await send(fx.app, "PUT", GROUPING, fx.managerCookie, { kitchenTicketGrouping: "separate" }))
+        .status,
+    ).toBe(204);
+    for (const body of [
+      {},
+      { kitchenTicketGrouping: "bogus" },
+      { kitchenTicketGrouping: "Combined" },
+      { kitchenTicketGrouping: null },
+      { kitchenTicketGrouping: ["combined"] },
+    ]) {
+      const rejected = await send(fx.app, "PUT", GROUPING, fx.managerCookie, body);
+      expect(rejected.status).toBe(400);
+      expect(await rejected.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "kitchenTicketGrouping" } },
+      });
+    }
+    expect(await stored(fx)).toBe("separate");
+  });
+
+  it("lets only a signed-in manager change it", async () => {
+    const fx = await fixture();
+    const body = { kitchenTicketGrouping: "separate" };
+    expect((await send(fx.app, "PUT", GROUPING, undefined, body)).status).toBe(401);
+    const refused = await send(fx.app, "PUT", GROUPING, fx.staffCookie, body);
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    expect(await stored(fx)).toBe("combined");
+  });
+
+  it("leaves the edit-sent-lines setting's shape alone", async () => {
+    const fx = await fixture();
+    expect(
+      (await send(fx.app, "PUT", GROUPING, fx.managerCookie, { kitchenTicketGrouping: "separate" }))
+        .status,
+    ).toBe(204);
+    const body = (await (
+      await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+    ).json()) as { settings: unknown };
+    expect(body.settings).toEqual({ editSentLines: true });
+  });
+});

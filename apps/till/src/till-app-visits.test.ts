@@ -13,6 +13,7 @@ import { WorkingOrderStore } from "./state/working-order.js";
 import type {
   FloorZone,
   OrderGroup,
+  PrintProblem,
   TabLine,
   TableState,
   TableVisit,
@@ -2740,5 +2741,175 @@ describe("till-app: submitting the draft", () => {
     await act(el, order, "fire-all");
     expect(api.submitGroups).toHaveBeenCalledOnce();
     expect(banner(el)).toBeNull();
+  });
+});
+
+describe("till-app: a party's kitchen tickets that have not printed", () => {
+  const problems: PrintProblem[] = [
+    {
+      workingOrderId: "wo-4",
+      stationId: "st-1",
+      stationName: "Cocina",
+      since: "2026-09-27T10:00:00Z",
+    },
+    {
+      workingOrderId: "wo-4",
+      stationId: "st-2",
+      stationName: "Barra",
+      since: "2026-09-27T10:01:00Z",
+    },
+    {
+      workingOrderId: "wo-check",
+      stationId: "st-1",
+      stationName: "Cocina",
+      since: "2026-09-27T10:02:00Z",
+    },
+  ];
+
+  it("reads them with the order and gives them to the screen", async () => {
+    const { el } = await mountApp({
+      listPrintProblems: vi.fn().mockResolvedValue({ problems }),
+    });
+    const order = await openMesa(el);
+    expect(api.listPrintProblems).toHaveBeenCalledWith("v1");
+    expect(order.printProblems).toEqual(problems);
+  });
+
+  it("gives them to an order shown as a card too", async () => {
+    const { el } = await mountApp({
+      ...onTablet(),
+      listPrintProblems: vi.fn().mockResolvedValue({ problems }),
+    });
+    const screen = await toFloor(el);
+    emit(screen, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    expect(tabletOrderCard(el)!.printProblems).toEqual(problems);
+  });
+
+  it("a failed read shows none, and the order still opens", async () => {
+    const { el } = await mountApp({
+      listPrintProblems: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    const order = await openMesa(el);
+    expect(order.printProblems).toEqual([]);
+    expect(order.orderId).toBe("wo-4");
+  });
+
+  it("Reprint reprints each bill through the kitchen reprint, then reads again, and the notice clears once none is left", async () => {
+    const { el } = await mountApp({
+      listPrintProblems: vi
+        .fn()
+        .mockResolvedValueOnce({ problems })
+        .mockResolvedValue({ problems: [] }),
+      reprintOrder: vi.fn().mockResolvedValue(undefined),
+    });
+    const order = await openMesa(el);
+    expect(order.printProblems).toEqual(problems);
+    emit(order, "reprint-kitchen-tickets", { workingOrderIds: ["wo-4", "wo-check"] });
+    await flush(el);
+    expect(vi.mocked(api.reprintOrder).mock.calls).toEqual([["wo-4"], ["wo-check"]]);
+    expect(api.listPrintProblems).toHaveBeenCalledTimes(2);
+    expect(order.printProblems).toEqual([]);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("a refused Reprint says why and reads again", async () => {
+    const { el } = await mountApp({
+      listPrintProblems: vi.fn().mockResolvedValue({ problems }),
+      reprintOrder: vi.fn().mockRejectedValue({ code: "working_order.not_found" }),
+    });
+    const order = await openMesa(el);
+    emit(order, "reprint-kitchen-tickets", { workingOrderIds: ["wo-4", "wo-check"] });
+    await flush(el);
+    expect(api.reprintOrder).toHaveBeenCalledOnce();
+    expect(banner(el)!.textContent).toContain(codeMessage("working_order.not_found"));
+    expect(api.listPrintProblems).toHaveBeenCalledTimes(2);
+  });
+
+  const reprintButton = (order: TillTableOrderScreen) =>
+    order.shadowRoot!.querySelector("[data-print-problem-reprint]");
+
+  it("a second press while a Reprint runs sends nothing", async () => {
+    let finish!: () => void;
+    const { el } = await mountApp({
+      listPrintProblems: vi.fn().mockResolvedValue({ problems }),
+      reprintOrder: vi.fn(
+        () => new Promise<void>((resolve) => (finish = () => resolve(undefined))),
+      ),
+    });
+    const order = await openMesa(el);
+    emit(order, "reprint-kitchen-tickets", { workingOrderIds: ["wo-4"] });
+    await flush(el);
+    emit(order, "reprint-kitchen-tickets", { workingOrderIds: ["wo-4"] });
+    await flush(el);
+    finish();
+    await flush(el);
+    expect(vi.mocked(api.reprintOrder).mock.calls).toEqual([["wo-4"]]);
+  });
+
+  it("while the server still reports them, the bills sent again show as sent and offer no Reprint", async () => {
+    const { el } = await mountApp({
+      listPrintProblems: vi.fn().mockResolvedValue({ problems }),
+      reprintOrder: vi.fn().mockResolvedValue(undefined),
+    });
+    const order = await openMesa(el);
+    expect(order.reprintSent).toEqual([]);
+    emit(order, "reprint-kitchen-tickets", { workingOrderIds: ["wo-4", "wo-check"] });
+    await flush(el);
+    expect(order.printProblems).toEqual(problems);
+    expect(order.reprintSent).toEqual(["wo-4", "wo-check"]);
+    await order.updateComplete;
+    expect(reprintButton(order)).toBeNull();
+    expect(order.shadowRoot!.querySelector("[data-print-problem]")!.textContent).toContain(
+      t("table.print_problem_sent").replace("{stations}", "Cocina, Barra"),
+    );
+  });
+
+  it("a Reprint refused part way marks only the bills that were sent", async () => {
+    const { el } = await mountApp({
+      listPrintProblems: vi.fn().mockResolvedValue({ problems }),
+      reprintOrder: vi
+        .fn()
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValue({ code: "working_order.not_found" }),
+    });
+    const order = await openMesa(el);
+    emit(order, "reprint-kitchen-tickets", { workingOrderIds: ["wo-4", "wo-check"] });
+    await flush(el);
+    expect(order.reprintSent).toEqual(["wo-4"]);
+    await order.updateComplete;
+    expect(reprintButton(order)).not.toBeNull();
+  });
+
+  it("opening the table again reads the problems afresh and offers Reprint again", async () => {
+    const { el } = await mountApp({
+      listPrintProblems: vi.fn().mockResolvedValue({ problems }),
+      reprintOrder: vi.fn().mockResolvedValue(undefined),
+    });
+    const order = await openMesa(el);
+    emit(order, "reprint-kitchen-tickets", { workingOrderIds: ["wo-4", "wo-check"] });
+    await flush(el);
+    expect(order.reprintSent).toEqual(["wo-4", "wo-check"]);
+    const reads = vi.mocked(api.listPrintProblems).mock.calls.length;
+    emit(order, "back-to-floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    const reopened = tableOrder(el)!;
+    expect(api.listPrintProblems).toHaveBeenCalledTimes(reads + 1);
+    expect(reopened.reprintSent).toEqual([]);
+    await reopened.updateComplete;
+    expect(reprintButton(reopened)).not.toBeNull();
+  });
+
+  it("a Reprint that fails with no code says so in general words", async () => {
+    const { el } = await mountApp({
+      listPrintProblems: vi.fn().mockResolvedValue({ problems }),
+      reprintOrder: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    const order = await openMesa(el);
+    emit(order, "reprint-kitchen-tickets", { workingOrderIds: ["wo-4"] });
+    await flush(el);
+    expect(banner(el)!.textContent).toContain(codeMessage("server.internal"));
   });
 });

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget, servedMenus } from "../widgets/test-helpers.js";
 import { TillTableOrderScreen, type TableServiceStatus } from "./till-table-order-screen.js";
@@ -6,6 +6,7 @@ import { currentLocale, t } from "../i18n/t.js";
 import type {
   OfferedModifier,
   OrderGroup,
+  PrintProblem,
   TabLine,
   TableState,
   TillProduct,
@@ -1640,6 +1641,82 @@ describe("till-table-order-screen", () => {
         { lineNo: 3, lineName: "Croquetas", patch: { note: "no salt" }, revision: 7 },
       ]);
     });
+    describe("the kitchen's progress on a fired group", () => {
+      const firedAt = "2026-09-27T10:00:00.000Z";
+      const minutesLater = (n: number) => Date.parse(firedAt) + n * 60_000;
+      const state = (el: TillTableOrderScreen, id: string) =>
+        text(groupRow(el, id).querySelector("[data-group-kitchen]")!);
+      const withG1 = (over: Partial<OrderGroup>) =>
+        groups.map((row) => (row.id === "g1" ? { ...row, firedAt, ...over } : row));
+
+      it("reads how long ago a fired group went, from when it was fired", async () => {
+        const { el } = await mountGroups({ groups: withG1({}), now: minutesLater(20) });
+        expect(state(el, "g1")).toBe(t("table.group_fired_ago").replace("{n}", "20"));
+        expect(state(el, "g3")).toBe(t("table.group_held"));
+      });
+
+      it("never reads Ready while nobody marked it ready, however long ago it was fired (a station on paper)", async () => {
+        const { el } = await mountGroups({ groups: withG1({}), now: minutesLater(180) });
+        expect(state(el, "g1")).toBe(t("table.group_fired_ago").replace("{n}", "180"));
+        expect(text(groupRow(el, "g1"))).not.toContain(t("table.group_ready"));
+      });
+
+      it("reads Ready once the kitchen marked it ready", async () => {
+        const { el } = await mountGroups({
+          groups: withG1({ ready: true }),
+          now: minutesLater(20),
+        });
+        expect(state(el, "g1")).toBe(t("table.group_ready"));
+      });
+
+      it("reads en route once the pass sent it away, and no longer Ready", async () => {
+        const { el } = await mountGroups({
+          groups: withG1({ ready: true, away: true }),
+          now: minutesLater(20),
+        });
+        expect(state(el, "g1")).toBe(t("table.group_away"));
+      });
+
+      it("a fired group with no fired time reads Fired", async () => {
+        const { el } = await mountGroups({ groups: withG1({ firedAt: null }) });
+        expect(state(el, "g1")).toBe(t("table.group_fired"));
+      });
+
+      it("never counts a group fired after the clock's reading as fired in the future", async () => {
+        const { el } = await mountGroups({ groups: withG1({}), now: minutesLater(-2) });
+        expect(state(el, "g1")).toBe(t("table.group_fired_ago").replace("{n}", "0"));
+      });
+
+      it("runs a clock only while a fired group's age is on screen", async () => {
+        vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+        try {
+          const { el } = await mount({ lines: tabLines, groups: withG1({}), orderId: "wo-4" });
+          expect(vi.getTimerCount()).toBe(0);
+          await openDrawer(el);
+          const ages = el.shadowRoot!.querySelectorAll("till-fired-ago").length;
+          expect(ages).toBeGreaterThan(0);
+          expect(vi.getTimerCount()).toBe(ages);
+          await openDrawer(el);
+          expect(vi.getTimerCount()).toBe(0);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("the age on screen moves on with the clock", async () => {
+        vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+        try {
+          vi.setSystemTime(minutesLater(20));
+          const { el } = await mountGroups({ groups: withG1({}) });
+          expect(state(el, "g1")).toBe(t("table.group_fired_ago").replace("{n}", "20"));
+          vi.advanceTimersByTime(60_000);
+          await groupRow(el, "g1").querySelector("till-fired-ago")!.updateComplete;
+          expect(state(el, "g1")).toBe(t("table.group_fired_ago").replace("{n}", "21"));
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+    });
   });
 
   it("renders an editable course picker for a NOT-yet-fired tab line, bound to its current course", async () => {
@@ -3077,4 +3154,90 @@ it("shows a tab line's frozen options answers in the STAFF wording", async () =>
   expect(
     [...el.shadowRoot!.querySelectorAll(".modifier-answer")].map((answer) => answer.textContent),
   ).toEqual(["Punto personal: Poco personal"]);
+});
+
+describe("till-table-order-screen — printing problems", () => {
+  const problems: PrintProblem[] = [
+    {
+      workingOrderId: "wo-4",
+      stationId: "st-1",
+      stationName: "Cocina",
+      since: "2026-09-27T10:00:00Z",
+    },
+    {
+      workingOrderId: "wo-4",
+      stationId: "st-2",
+      stationName: "Barra",
+      since: "2026-09-27T10:01:00Z",
+    },
+    {
+      workingOrderId: "wo-check",
+      stationId: "st-1",
+      stationName: "Cocina",
+      since: "2026-09-27T10:02:00Z",
+    },
+  ];
+  const notice = (el: TillTableOrderScreen) =>
+    el.shadowRoot!.querySelector<HTMLElement>("[data-print-problem]");
+
+  it("shows the problem and where, without opening the drawer", async () => {
+    const { el } = await mount({ orderId: "wo-4", printProblems: problems });
+    const text = notice(el)!.textContent!.replace(/\s+/g, " ");
+    expect(text).toContain(t("table.print_problem"));
+    expect(text).toContain(t("table.print_problem_detail").replace("{stations}", "Cocina, Barra"));
+  });
+
+  it("shows nothing while every ticket printed", async () => {
+    const { el } = await mount({ orderId: "wo-4", printProblems: [] });
+    expect(notice(el)).toBeNull();
+  });
+
+  it("Reprint asks for each affected bill once", async () => {
+    const { el } = await mount({ orderId: "wo-4", printProblems: problems });
+    const events: CustomEvent[] = [];
+    el.addEventListener("reprint-kitchen-tickets", (e) => events.push(e as CustomEvent));
+    const reprint = notice(el)!.querySelector<HTMLElement>("[data-print-problem-reprint]")!;
+    expect(reprint.textContent).toContain(t("table.print_problem_reprint"));
+    expect(underTapSize([reprint])).toEqual([]);
+    reprint.click();
+    expect(events.map((e) => e.detail)).toEqual([{ workingOrderIds: ["wo-4", "wo-check"] }]);
+    expect(events[0]!.bubbles).toBe(true);
+    expect(events[0]!.composed).toBe(true);
+  });
+
+  it("a bill whose tickets were sent to print again says so and offers no Reprint", async () => {
+    const { el } = await mount({
+      orderId: "wo-4",
+      printProblems: problems,
+      reprintSent: ["wo-4", "wo-check"],
+    });
+    const text = notice(el)!.textContent!.replace(/\s+/g, " ");
+    expect(text).toContain(t("table.print_problem_sent").replace("{stations}", "Cocina, Barra"));
+    expect(text).not.toContain(t("table.print_problem_detail").replace("{stations}", ""));
+    expect(notice(el)!.querySelector("[data-print-problem-reprint]")).toBeNull();
+  });
+
+  it("Reprint asks only for the bills not sent to print again", async () => {
+    const { el } = await mount({
+      orderId: "wo-4",
+      printProblems: problems,
+      reprintSent: ["wo-4"],
+    });
+    const text = notice(el)!.textContent!.replace(/\s+/g, " ");
+    expect(text).toContain(t("table.print_problem_detail").replace("{stations}", "Cocina"));
+    expect(text).toContain(t("table.print_problem_sent").replace("{stations}", "Cocina, Barra"));
+    const events: CustomEvent[] = [];
+    el.addEventListener("reprint-kitchen-tickets", (e) => events.push(e as CustomEvent));
+    notice(el)!.querySelector<HTMLElement>("[data-print-problem-reprint]")!.click();
+    expect(events.map((e) => e.detail)).toEqual([{ workingOrderIds: ["wo-check"] }]);
+  });
+
+  it("never blocks ordering: a round is still sent while the problem shows", async () => {
+    const { el } = await mount({ orderId: "wo-4", printProblems: problems });
+    grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
+    await el.updateComplete;
+    const captured = await submitDraft(el, "fire-all");
+    expect(captured!.detail.lines).toEqual([{ menuItemId: "menu-item-cafe", quantity: "1" }]);
+    expect(notice(el)).not.toBeNull();
+  });
 });

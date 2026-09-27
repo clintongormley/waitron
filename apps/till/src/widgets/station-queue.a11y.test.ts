@@ -273,6 +273,52 @@ const notices: KitchenNotice[] = [
   { ...baseNotice, id: "kn-moved", kind: "moved", wasStarted: false, movedTo: "Terraza 2" },
 ];
 
+// A seated party's bill: a line with no group, a fired group, a held group (its Fire button under
+// `kitchen`), and a ticket that has not printed.
+const partyGroups: StationQueueGroup[] = [
+  {
+    orderId: "wo-p",
+    orderNumber: 9,
+    label: "Mesa 4",
+    queuedAt: "2026-08-17T10:00:00.000Z",
+    status: "open",
+    thresholds: DEFAULT_THRESHOLDS,
+    visit: { id: "v-4", revision: 12 },
+    printProblem: true,
+    items: [
+      {
+        id: "it-moved",
+        workingOrderLineId: "wl-moved",
+        state: "queued",
+        name: "Pan",
+        quantity: "1.000",
+        course: null,
+        firedAt: "2026-08-17T10:00:00.000Z",
+      },
+      {
+        id: "it-salad",
+        workingOrderLineId: "wl-salad",
+        state: "preparing",
+        name: "Ensalada",
+        quantity: "1.000",
+        course: null,
+        group: { id: "g-2", position: 2, state: "fired" },
+        firedAt: "2026-08-17T10:00:00.000Z",
+      },
+      {
+        id: "it-steak",
+        workingOrderLineId: "wl-steak",
+        state: "queued",
+        name: "Solomillo",
+        quantity: "2.000",
+        course: null,
+        group: { id: "g-3", position: 3, state: "held" },
+        firedAt: null,
+      },
+    ],
+  },
+];
+
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", (theme) => {
@@ -365,6 +411,30 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     );
     await expectNoA11yViolations(host);
   });
+  it("a party's card by group (held note, kitchen Fire, printing problem, Reprint) has no violations", async () => {
+    const { host } = await mountWidget<TillStationQueue>(
+      "till-station-queue",
+      {
+        groups: partyGroups,
+        stationId: "st-1",
+        view: "rail",
+        fireControl: "kitchen",
+        showReprint: true,
+      },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("the kanban printing-problem strip has no violations", async () => {
+    const { host } = await mountWidget<TillStationQueue>(
+      "till-station-queue",
+      { groups: partyGroups, stationId: "st-1", view: "kanban" },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it("the notices strip, one of each kind, above the kanban board has no violations", async () => {
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",

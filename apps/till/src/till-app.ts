@@ -56,6 +56,7 @@ import type {
   GroupCommand,
   GroupLine,
   OrderGroup,
+  PrintProblem,
   SaleLine,
   Station,
   StationQueueGroup,
@@ -770,6 +771,13 @@ export class TillApp extends LitElement {
   @state() private tabRevision = 0;
   /** The order groups of {@link orderParty}, read with {@link tabLines}; empty with no party. */
   @state() private tabGroups: OrderGroup[] = [];
+  /** The kitchen tickets of {@link orderParty} that have not printed, read with {@link tabGroups}. */
+  @state() private printProblems: PrintProblem[] = [];
+  /** The bills whose kitchen tickets Reprint sent again since the table was opened. The server
+   * reports a problem until the reprint prints, so the next opening of the table is the read that
+   * shows a problem still there. */
+  @state() private reprintSent: string[] = [];
+  #reprinting = false;
   /** Every bill of the party at {@link activeTableId}, read when the table opens and after it changes. */
   @state() private visitBills: VisitBill[] = [];
   /** The party of the order on screen as it was read just before that order's lines and bills: what
@@ -2202,6 +2210,7 @@ export class TillApp extends LitElement {
     // `set-status` is keyed by table id, so it is remembered alongside the tab's order id.
     this.activeTableId = tableId;
     this.finishRefused = false;
+    this.reprintSent = [];
     if (guestCount === undefined) {
       this.activeTabId = table?.tabId;
       this.orderParty = table?.visit ?? null;
@@ -2247,10 +2256,12 @@ export class TillApp extends LitElement {
     if (this.activeTabId === undefined) {
       this.tabLines = [];
       this.tabGroups = [];
+      this.printProblems = [];
       this.#groupsUnread = false;
       return;
     }
     const groups = this.#readGroups();
+    const problems = this.#readPrintProblems();
     try {
       const tab = await this.api.getTabLines(this.activeTabId);
       if (read !== this.#tabLinesRead) return;
@@ -2262,9 +2273,44 @@ export class TillApp extends LitElement {
       this.tabLines = [];
     }
     const partyGroups = await groups;
+    const partyProblems = await problems;
     if (read !== this.#tabLinesRead) return;
     this.tabGroups = partyGroups ?? [];
     this.#groupsUnread = partyGroups === null;
+    this.printProblems = partyProblems;
+  }
+
+  /** A failed read shows no problem: the notice is advice, and ordering never waits on it. */
+  async #readPrintProblems(): Promise<PrintProblem[]> {
+    const party = this.orderParty;
+    if (party === null) return [];
+    try {
+      return (await this.api.listPrintProblems(party.id)).problems;
+    } catch {
+      return [];
+    }
+  }
+
+  /** Each bill's kitchen tickets are printed again in turn; the first refusal stops the rest and is
+   * said. A press while one runs is ignored. The order is read again either way. */
+  async #onReprintKitchenTickets(event: Event): Promise<void> {
+    if (this.#reprinting) return;
+    this.#reprinting = true;
+    const { workingOrderIds } = (event as CustomEvent<{ workingOrderIds: string[] }>).detail;
+    const sent: string[] = [];
+    this.errorKey = undefined;
+    try {
+      for (const workingOrderId of workingOrderIds) {
+        await this.api.reprintOrder(workingOrderId);
+        sent.push(workingOrderId);
+      }
+    } catch (error) {
+      this.errorKey = { code: (error as { code?: string }).code ?? "server.internal" };
+    } finally {
+      this.#reprinting = false;
+    }
+    this.reprintSent = [...new Set([...this.reprintSent, ...sent])];
+    await this.#loadTabLines();
   }
 
   /** The groups' revision is not kept: a command sends the revision the party was shown at. A failed
@@ -2954,6 +3000,8 @@ export class TillApp extends LitElement {
     this.#visitBillsRead++;
     this.tabLines = [];
     this.tabGroups = [];
+    this.printProblems = [];
+    this.reprintSent = [];
     this.#groupsUnread = false;
     this.visitBills = [];
     this.#returnToFloor();
@@ -3339,6 +3387,8 @@ export class TillApp extends LitElement {
       .courses=${this.courses}
       .tabLines=${this.tabLines}
       .tabGroups=${this.tabGroups}
+      .printProblems=${this.printProblems}
+      .reprintSent=${this.reprintSent}
       .tabRevision=${this.tabRevision}
       .editSentLines=${this.editSentLines}
       .cancelOffer=${this.cancelOffer}
@@ -3365,6 +3415,8 @@ export class TillApp extends LitElement {
           slot="drill"
           .lines=${this.tabLines}
           .groups=${this.tabGroups}
+          .printProblems=${this.printProblems}
+          .reprintSent=${this.reprintSent}
           .revision=${this.tabRevision}
           .editSentLines=${this.editSentLines}
           .cancelOffer=${this.cancelOffer}
@@ -3483,6 +3535,7 @@ export class TillApp extends LitElement {
         @finish-table=${() => void this.#onFinishTable()}
         @take-payment=${(event: Event) => void this.#onTakePayment(event)}
         @reprint-bill=${(event: Event) => void this.#onReprintBill(event)}
+        @reprint-kitchen-tickets=${(event: Event) => void this.#onReprintKitchenTickets(event)}
         @mark-cleared=${(event: Event) => void this.#onMarkCleared(event)}
         @pay-tab=${(event: Event) => void this.#onPayTab(event)}
         @back-to-floor=${() => this.#onBackToFloor()}

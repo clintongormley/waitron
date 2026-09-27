@@ -439,6 +439,8 @@ export interface VenueServiceContribution {
   readEditSentLines(tx: Transaction): Promise<boolean>;
   /** Whether Finish table leaves the party's tables needing clearing. */
   readClearingWorkflow(tx: Transaction): Promise<boolean>;
+  /** How identical dishes print on a kitchen ticket: one `N x` entry, or N entries of one. */
+  readKitchenTicketGrouping(tx: Transaction): Promise<"combined" | "separate">;
 }
 
 /** A reference to non-DB state a module owns, resolved to a path by the composition root. */

@@ -4,6 +4,7 @@ import { LitElement, type PropertyValues, type TemplateResult, css, html, nothin
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { baseStyles } from "@waitron/ui";
+import "../widgets/fired-ago.js";
 import {
   addDecimal,
   compareDecimal,
@@ -47,6 +48,7 @@ import type {
   GroupLine,
   OrderGroup,
   OrderLinePatch,
+  PrintProblem,
   TabLine,
   TableServiceStatus,
   TableState,
@@ -229,6 +231,33 @@ export class TillTableOrderScreen extends LitElement {
         display: flex;
         align-items: center;
         gap: var(--wt-space-2);
+      }
+
+      /* Words first, so the problem never rests on the warning colour. */
+      .print-problem {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2) var(--wt-space-3);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-warning);
+        color: var(--wt-color-on-warning);
+      }
+
+      .print-problem-text {
+        flex: 1 1 auto;
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .print-problem-title,
+      .print-problem-line {
+        display: block;
+      }
+
+      .print-problem-title {
+        font-weight: var(--wt-font-weight-bold);
       }
 
       .badge {
@@ -615,6 +644,13 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) courses: TillCourse[] = [];
   /** The party's order groups, read with {@link lines}. */
   @property({ attribute: false }) groups: OrderGroup[] = [];
+  /** The party's kitchen tickets that have not printed; they never hold up ordering. */
+  @property({ attribute: false }) printProblems: PrintProblem[] = [];
+  /** The bills whose kitchen tickets were sent to print again since the table was opened: their
+   * problems say so and offer no second Reprint. */
+  @property({ attribute: false }) reprintSent: string[] = [];
+  /** Injectable clock for a fired group's age; unset reads the ticking clock. */
+  @property({ attribute: false }) now?: number;
   @property() fireControl: FireControlMode = "waiter";
   @property() orderId?: string;
   /** The visible half of the app's single-flight fiscal guard. */
@@ -1473,6 +1509,7 @@ export class TillTableOrderScreen extends LitElement {
                 </wt-button>`
           }
         </div>
+        ${this.#printProblem()}
         <div class="layout">
           <div class="grid-region">
             <till-menu-switcher
@@ -1512,6 +1549,47 @@ export class TillTableOrderScreen extends LitElement {
         ${this.#moveDialog()} ${this.#changeEditor()}
       </section>
     `;
+  }
+
+  #printProblem(): TemplateResult | typeof nothing {
+    if (this.printProblems.length === 0) return nothing;
+    const sent = this.printProblems.filter((problem) =>
+      this.reprintSent.includes(problem.workingOrderId),
+    );
+    const waiting = this.printProblems.filter((problem) => !sent.includes(problem));
+    const stations = (problems: PrintProblem[]) =>
+      [...new Set(problems.map((problem) => problem.stationName))].join(", ");
+    const bills = [...new Set(waiting.map((problem) => problem.workingOrderId))];
+    return html`<div class="print-problem" role="status" data-print-problem>
+      <p class="print-problem-text">
+        <span class="print-problem-title">${t("table.print_problem")}</span>
+        ${
+          waiting.length === 0
+            ? nothing
+            : html`<span class="print-problem-line">
+                ${t("table.print_problem_detail").replace("{stations}", () => stations(waiting))}
+              </span>`
+        }
+        ${
+          sent.length === 0
+            ? nothing
+            : html`<span class="print-problem-line" data-print-problem-sent>
+                ${t("table.print_problem_sent").replace("{stations}", () => stations(sent))}
+              </span>`
+        }
+      </p>
+      ${
+        waiting.length === 0
+          ? nothing
+          : html`<wt-button
+              variant="secondary"
+              data-print-problem-reprint
+              @click=${() => this.#dispatch("reprint-kitchen-tickets", { workingOrderIds: bills })}
+            >
+              ${t("table.print_problem_reprint")}
+            </wt-button>`
+      }
+    </div>`;
   }
 
   /** One section per course present, in the venue's course order; each line with its selection
@@ -1962,7 +2040,7 @@ export class TillTableOrderScreen extends LitElement {
     return html`<li class="group" data-group=${group.id} data-group-state=${group.state}>
       <div class="group-head">
         <span class="group-name" data-group-position>${name}</span>
-        <span class="group-state">${t(isHeld ? "table.group_held" : "table.group_fired")}</span>
+        <span class="group-state" data-group-kitchen>${this.#groupProgress(group)}</span>
       </div>
       <p class="group-summary" data-group-summary>${group.summary}</p>
       ${
@@ -2006,6 +2084,15 @@ export class TillTableOrderScreen extends LitElement {
         ${lines.map((line) => this.#groupLine(line, isHeld ? group : null))}
       </ul>
     </li>`;
+  }
+
+  /** Only what a person recorded: a group nobody marked ready reads how long ago it was fired. */
+  #groupProgress(group: OrderGroup): string | TemplateResult {
+    if (group.state === "held") return t("table.group_held");
+    if (group.away) return t("table.group_away");
+    if (group.ready) return t("table.group_ready");
+    if (group.firedAt === null) return t("table.group_fired");
+    return html`<till-fired-ago .firedAt=${group.firedAt} .now=${this.now}></till-fired-ago>`;
   }
 
   /** `group` is null for a fired group's line, which offers nothing. Split quantity is offered on a

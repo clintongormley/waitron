@@ -211,6 +211,28 @@ describe.each(["light", "dark"] as const)("till-station-screen a11y (%s theme)",
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations while the table-changed notice shows", async () => {
+    const { el, host } = await mountWidget<TillStationScreen>(
+      "till-station-screen",
+      {
+        api: stubApi({ fireGroup: vi.fn().mockRejectedValue({ code: "visit.out_of_date" }) }),
+        fireControl: "kitchen",
+      },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector("till-station-queue")!.dispatchEvent(
+      new CustomEvent("fire-kitchen-group", {
+        detail: { visitId: "v-4", groupId: "g-3", expectedVisitRevision: 12 },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-table-changed]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations with no stations configured", async () => {
     const { el, host } = await mountWidget<TillStationScreen>(
       "till-station-screen",

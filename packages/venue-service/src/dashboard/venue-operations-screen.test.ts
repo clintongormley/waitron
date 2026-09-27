@@ -80,6 +80,7 @@ const model: VenueServiceView = {
   ],
   products: [{ id: "p1", name: "Negroni" }],
   settings: { editSentLines: true },
+  kitchenTicketGrouping: "combined",
 };
 
 async function mount(api: VenueServiceApi): Promise<VenueOperationsScreen> {
@@ -1137,5 +1138,105 @@ describe("the setting that allows changes to items already sent to the kitchen",
     expect(kitchenSwitch(el).host.shadowRoot!.querySelector("label")!.textContent).toBe(
       "Permitir cambios en los artículos ya enviados a cocina",
     );
+  });
+});
+
+describe("the setting for how identical dishes print on a kitchen ticket", () => {
+  function groupingSelect(el: VenueOperationsScreen) {
+    const select = el.shadowRoot!.querySelector<HTMLSelectElement>(
+      'select[name="kitchenTicketGrouping"]',
+    )!;
+    expect(select).not.toBeNull();
+    return select;
+  }
+  function beside(el: VenueOperationsScreen) {
+    return el
+      .shadowRoot!.querySelector('[data-field-error="kitchenTicketGrouping"]')
+      ?.textContent?.trim();
+  }
+  function stored(kitchenTicketGrouping: "combined" | "separate"): VenueServiceView {
+    return { ...structuredClone(model), kitchenTicketGrouping };
+  }
+  async function choose(el: VenueOperationsScreen, value: string) {
+    const select = groupingSelect(el);
+    select.value = value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await settle(el);
+  }
+
+  // Fails if the select stops reading the stored value, or loses its label, choices or hint.
+  it("shows the stored value on the Preparation routing tab, combined by default", async () => {
+    const combined = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    await selectTab(combined, "routing");
+    const select = groupingSelect(combined);
+    expect(select.closest('[slot="routing"]')).not.toBeNull();
+    expect(select.labels![0]!.textContent).toContain("Identical dishes on a kitchen ticket");
+    expect([...select.options].map((option) => [option.value, option.textContent!.trim()])).toEqual(
+      [
+        ["combined", "One line: 3 x Burger"],
+        ["separate", "A line each: 1 x Burger, three times"],
+      ],
+    );
+    expect(select.value).toBe("combined");
+    expect(
+      combined.shadowRoot!.querySelector('[data-test="kitchen-ticket-grouping-hint"]')!.textContent,
+    ).toContain("reprints");
+    const separate = await mount({
+      load: vi.fn().mockResolvedValue(stored("separate")),
+    } as unknown as VenueServiceApi);
+    expect(groupingSelect(separate).value).toBe("separate");
+  });
+
+  // Fails if the select sends the old value rather than the new one, or stays usable mid-save.
+  it("saves the chosen value straight away and is disabled until the save finishes", async () => {
+    let finish!: () => void;
+    const api = {
+      load: vi.fn().mockResolvedValueOnce(model).mockResolvedValue(stored("separate")),
+      saveKitchenTicketGrouping: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "routing");
+    await choose(el, "separate");
+    expect(api.saveKitchenTicketGrouping).toHaveBeenCalledWith("separate");
+    expect(groupingSelect(el).disabled).toBe(true);
+    finish();
+    await settle(el);
+    expect(api.load).toHaveBeenCalledTimes(2);
+    expect(groupingSelect(el).value).toBe("separate");
+    expect(groupingSelect(el).disabled).toBe(false);
+    expect(summary(el)).toBe("");
+  });
+
+  // Fails if a refused save leaves the select showing the value that was never stored, or says
+  // nothing.
+  it("says a refused save failed, beside the select and in the summary, and shows the stored value again", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      saveKitchenTicketGrouping: vi.fn().mockRejectedValue(new Error("refused")),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "routing");
+    await choose(el, "separate");
+    expect(api.saveKitchenTicketGrouping).toHaveBeenCalledWith("separate");
+    expect(summary(el)).toContain("could not be saved");
+    expect(beside(el)).toContain("could not be saved");
+    expect(groupingSelect(el).value).toBe("combined");
+    expect(groupingSelect(el).getAttribute("aria-invalid")).toBe("true");
+  });
+
+  // Fails if the Spanish catalogue loses the label or a choice.
+  it("reads in Spanish", async () => {
+    setLocale("es");
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const select = groupingSelect(el);
+    expect(select.labels![0]!.textContent).toContain("Platos iguales en una comanda de cocina");
+    expect([...select.options].map((option) => option.textContent!.trim())).toEqual([
+      "Una línea: 3 x Hamburguesa",
+      "Una por plato: 1 x Hamburguesa, tres veces",
+    ]);
   });
 });

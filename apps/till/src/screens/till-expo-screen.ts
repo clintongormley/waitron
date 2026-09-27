@@ -9,18 +9,32 @@ import { codeMessage } from "../i18n/codes.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { dietBadgeStyles, dietBadges, extraNutrition } from "../widgets/diet-badges.js";
 import { snapshotDescriptionFor, trimQuantity } from "../widgets/dish-format.js";
-import type { ExpoCourse, ExpoItem, ExpoOrder, TillApi } from "../api/client.js";
+import type {
+  ExpoCourse,
+  ExpoGroup,
+  ExpoItem,
+  ExpoOrder,
+  GroupCommand,
+  QueueVisit,
+  TillApi,
+} from "../api/client.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
 
 function courseOrder(course: ExpoCourse): number {
   return course.courseId === null ? Number.NEGATIVE_INFINITY : (course.displayOrder ?? 0);
 }
 
+/** The section of lines with no group sorts first. */
+function groupOrder(group: ExpoGroup): number {
+  return group.position ?? Number.NEGATIVE_INFINITY;
+}
+
 /**
- * The TILL EXPO / PASS display: a card per open order, its items grouped BY COURSE across stations.
+ * The TILL EXPO / PASS display: a card per open order, its items grouped BY COURSE across stations,
+ * or by group for a seated party's bill.
  *
- * A fully-away course DROPS OFF the board: the server keeps the order while any item is not away and
- * returns all its items, so the SCREEN filters `course.away`.
+ * A fully-away course or group DROPS OFF the board: the server keeps the order while any item is not
+ * away and returns all its items, so the SCREEN filters `course.away` and `group.away`.
  *
  * AGE. An expo order's items can span several stations, each with its own thresholds, so each item is
  * classified against its OWN `queuedAt`/`thresholds`. The server's `ExpoItem.band`/`ExpoOrder.worstBand`
@@ -195,9 +209,8 @@ export class TillExpoScreen extends LitElement {
       }
 
       /* An item row — the dish, its station, and its kitchen state. A non-interactive box (the pass acts
-         per COURSE, not per item), themed like the station display's line cell. Column layout so the dish
-         row (.item-main) can carry an indented modifiers list beneath it (ordering modifiers, Task 14); a
-         modifier-free item has none, so it renders exactly as the single-row box did before. */
+         per course or group, not per item), themed like the station display's line cell. Column layout so the dish
+         row (.item-main) can carry an indented modifiers list beneath it. */
       .item {
         display: flex;
         flex-direction: column;
@@ -212,15 +225,14 @@ export class TillExpoScreen extends LitElement {
         color: var(--wt-color-text);
       }
 
-      /* The dish row: name, station and state — the SAME row .item rendered as its whole content before
-         Task 14 added the modifiers list beneath it. */
+      /* The dish row: name, station and state. */
       .item-main {
         display: flex;
         align-items: center;
         gap: var(--wt-space-2);
       }
 
-      /* The dish's selected options (ordering modifiers, Task 14), indented beneath it — matching the
+      /* The dish's selected options, indented beneath it — matching the
          kitchen-print ticket's own "+ name" sub-text style (apps/server/src/kitchen-ticket.ts). */
       .item-modifiers {
         display: flex;
@@ -359,6 +371,11 @@ export class TillExpoScreen extends LitElement {
         display: block;
       }
 
+      .held-note {
+        font-weight: var(--wt-font-weight-normal);
+        text-transform: none;
+      }
+
       /* The reprint ERROR banner — the SAME danger-on-surface pairing the app + station screen use
          (a11y-safe in both themes), never behind muted text. Shown when a reprint call rejects, so the
          operator sees the ticket did NOT reprint rather than a silent no-op. */
@@ -370,11 +387,20 @@ export class TillExpoScreen extends LitElement {
         color: var(--wt-color-on-danger);
         font-weight: var(--wt-font-weight-bold);
       }
+
+      .table-changed {
+        margin: 0;
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-warning);
+        color: var(--wt-color-on-warning);
+        font-weight: var(--wt-font-weight-bold);
+      }
     `,
   ];
 
   @property({ attribute: false }) api!: TillApi;
-  /** Decides who FIRES a held course; the ready/away levers are the pass's own regardless. */
+  /** Decides who FIRES a held course or group; the ready/away levers are the pass's own regardless. */
   @property() fireControl: FireControlMode = "waiter";
   /** Injectable clock for age classification; unset falls back to the {@link #clock}'s ticked time. */
   @property({ attribute: false }) now?: number;
@@ -389,6 +415,10 @@ export class TillExpoScreen extends LitElement {
    * reload reconciles nothing and a silent failure would leave the expediter no signal.
    */
   @state() private reprintErrorCode?: string;
+  /** The card whose group lever was refused because its party changed since the board was read:
+   * shown by the next successful read, and gone at the one after. */
+  @state() private tableChanged: string | null = null;
+  #tableChangedNext: string | null = null;
 
   /** Re-renders the idle display so an item's band can climb between refreshes, with no refetch. */
   readonly #clock = new TickingClock(this);
@@ -401,6 +431,8 @@ export class TillExpoScreen extends LitElement {
   async #reload(): Promise<void> {
     try {
       this.orders = await this.api.getExpoQueue();
+      this.tableChanged = this.#tableChangedNext;
+      this.#tableChangedNext = null;
     } catch {
       // Non-fatal — leave the last-known board; the next reload reconciles.
     }
@@ -413,6 +445,24 @@ export class TillExpoScreen extends LitElement {
       await call();
     } catch {
       // Non-fatal — the reload reconciles the board to server truth.
+    }
+    await this.#reload();
+  }
+
+  /** Refused `visit.out_of_date`, the board is read again and the expediter decides; nothing is
+   * resent. Any other refusal is swallowed like a course lever's. */
+  async #groupAct(
+    order: ExpoOrder,
+    visit: QueueVisit,
+    call: (command: GroupCommand) => Promise<{ revision: number }>,
+  ): Promise<void> {
+    this.tableChanged = null;
+    this.#tableChangedNext = null;
+    try {
+      await call({ submissionId: crypto.randomUUID(), expectedVisitRevision: visit.revision });
+    } catch (error) {
+      if ((error as { code?: string }).code === "visit.out_of_date")
+        this.#tableChangedNext = order.tableLabel ?? `#${order.orderNumber}`;
     }
     await this.#reload();
   }
@@ -449,6 +499,14 @@ export class TillExpoScreen extends LitElement {
             ? html`<p class="error" role="alert">${codeMessage(this.reprintErrorCode)}</p>`
             : nothing
         }
+        ${
+          this.tableChanged === null
+            ? nothing
+            : html`<p class="table-changed" role="status" data-table-changed>
+                ${t("station.table_changed_named").replace("{table}", () => this.tableChanged!)}
+                ${t("station.table_changed")}
+              </p>`
+        }
         ${this.orders.length === 0 ? this.#empty() : this.#board()}
       </section>
     `;
@@ -470,7 +528,13 @@ export class TillExpoScreen extends LitElement {
         ${order.tableLabel ? html`<span class="label">${order.tableLabel}</span>` : nothing}
         <span class="age">${order.openedMinutes} ${t("station.min")}</span>
       </div>
-      ${this.#visibleCourses(order).map((course) => this.#courseSection(order, course))}
+      ${
+        order.visit === undefined
+          ? this.#visibleCourses(order).map((course) => this.#courseSection(order, course))
+          : this.#visibleGroups(order).map((group) =>
+              this.#groupSection(order, order.visit!, group),
+            )
+      }
       ${this.#reprintAction(order)}
     </article>`;
   }
@@ -490,6 +554,83 @@ export class TillExpoScreen extends LitElement {
     return order.courses
       .filter((course) => !course.away)
       .sort((a, b) => courseOrder(a) - courseOrder(b));
+  }
+
+  #visibleGroups(order: ExpoOrder): ExpoGroup[] {
+    return (order.groups ?? [])
+      .filter((group) => !group.away)
+      .sort((a, b) => groupOrder(a) - groupOrder(b));
+  }
+
+  #groupSection(order: ExpoOrder, visit: QueueVisit, group: ExpoGroup): TemplateResult {
+    const name =
+      group.position === null ? "" : t("table.group_n").replace("{n}", String(group.position));
+    return html`<div class="course" data-group-section=${group.groupId ?? "none"}>
+      ${
+        group.groupId === null
+          ? nothing
+          : html`<div class="course-head">
+              ${name}${
+                group.state === "held"
+                  ? html` ·
+                      <span class="held-note" data-group-held>${t("station.group_held")}</span>`
+                  : nothing
+              }
+            </div>`
+      }
+      <ul class="items">
+        ${group.items.map((item) => html`<li>${this.#item(item)}</li>`)}
+      </ul>
+      ${group.groupId === null ? nothing : this.#groupLever(order, visit, group, group.groupId, name)}
+    </div>`;
+  }
+
+  /** The course lever's shape, one group at a time, through the group verbs. */
+  #groupLever(
+    order: ExpoOrder,
+    visit: QueueVisit,
+    group: ExpoGroup,
+    groupId: string,
+    name: string,
+  ): TemplateResult | typeof nothing {
+    if (group.state === "held") {
+      if (this.fireControl !== "expo") return nothing;
+      return html`<button
+        class="lever fire"
+        data-group-fire=${groupId}
+        aria-label=${`${t("expo.fire")} ${name}`}
+        @click=${() =>
+          void this.#groupAct(order, visit, (command) =>
+            this.api.fireGroup(visit.id, groupId, command),
+          )}
+      >
+        ${t("expo.fire")}
+      </button>`;
+    }
+    if (group.items.every((item) => item.state === "ready")) {
+      return html`<button
+        class="lever away"
+        data-group-away=${groupId}
+        aria-label=${`${t("expo.away")} ${name}`}
+        @click=${() =>
+          void this.#groupAct(order, visit, (command) =>
+            this.api.markGroupAway(visit.id, groupId, command),
+          )}
+      >
+        ${t("expo.away")}
+      </button>`;
+    }
+    return html`<button
+      class="lever ready"
+      data-group-ready=${groupId}
+      aria-label=${`${t("expo.group_ready")} ${name}`}
+      @click=${() =>
+        void this.#groupAct(order, visit, (command) =>
+          this.api.bumpGroupReady(visit.id, groupId, command),
+        )}
+    >
+      ${t("expo.group_ready")}
+    </button>`;
   }
 
   #courseSection(order: ExpoOrder, course: ExpoCourse): TemplateResult {
@@ -628,10 +769,10 @@ export class TillExpoScreen extends LitElement {
   }
 
   #orderBand(order: ExpoOrder): TimingBand {
+    const sections =
+      order.visit === undefined ? this.#visibleCourses(order) : this.#visibleGroups(order);
     return worstBand(
-      this.#visibleCourses(order).flatMap((course) =>
-        course.items.map((item) => this.#itemBand(item)),
-      ),
+      sections.flatMap((section) => section.items.map((item) => this.#itemBand(item))),
     );
   }
 
