@@ -163,11 +163,11 @@ describe("buildNextMembershipDocument and the revoked list", () => {
     expect(verifyMembershipDocument(build(MAX_NODES), trust).valid).toBe(true);
   });
 
-  it("refuses more than MAX_REVOKED revoked ids, and signs exactly MAX_REVOKED", () => {
+  it("refuses a cleared-machine list past its limit with its own code, and signs exactly MAX_REVOKED", () => {
     const ids = (count: number) => Array.from({ length: count }, (_, i) => `gone-${i}`);
     expect(codeOf(() => heldWith(ids(MAX_REVOKED + 1)))).toEqual({
-      code: "membership.chart_too_large",
-      params: { list: "revoked", count: MAX_REVOKED + 1, limit: MAX_REVOKED },
+      code: "membership.cleared_list_full",
+      params: { count: MAX_REVOKED + 1, limit: MAX_REVOKED },
     });
     expect(verifyMembershipDocument(heldWith(ids(MAX_REVOKED)), trust).valid).toBe(true);
   });

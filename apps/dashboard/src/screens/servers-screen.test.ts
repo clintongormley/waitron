@@ -645,6 +645,7 @@ describe("servers screen clearing", () => {
     "membership.node_is_primary",
     "membership.node_not_removed",
     "membership.chart_too_large",
+    "membership.cleared_list_full",
     "membership.revoked_duplicate",
     "membership.revoked_node_listed",
     "membership.write_contended",

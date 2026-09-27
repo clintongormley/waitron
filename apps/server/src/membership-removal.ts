@@ -287,7 +287,7 @@ export interface ClearanceResult {
 /**
  * Moves a removed (`evicted`) machine from the chart's `nodes` to its `revoked` list in a new chart
  * this node signs, freeing its place, and records the clearance in the same transaction. A full
- * revoked list is refused by the mint (`membership.chart_too_large`) before anything commits.
+ * revoked list is refused by the mint (`membership.cleared_list_full`) before anything commits.
  */
 export async function clearRemovedMachine(
   deps: RemovalDeps,

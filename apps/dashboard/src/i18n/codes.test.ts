@@ -343,12 +343,18 @@ it("has a sentence in both languages for each refusal of clearing a server", () 
   for (const code of [
     "membership.node_not_removed",
     "membership.chart_too_large",
+    "membership.cleared_list_full",
     "membership.revoked_duplicate",
     "membership.revoked_node_listed",
   ]) {
     expect(codeMessage(code, "en")).not.toBe(GENERIC_EN);
     expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
     expect(codeMessage(code, "es")).not.toBe(codeMessage(code, "en"));
+  }
+  for (const language of ["en", "es"] as const) {
+    expect(codeMessage("membership.cleared_list_full", language)).not.toBe(
+      codeMessage("membership.chart_too_large", language),
+    );
   }
 });
 
