@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type Stripe from "stripe";
 import { decimal } from "@waitron/shared";
+import { createServer } from "node:http";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import type { AddressInfo } from "node:net";
+import Stripe from "stripe";
 import { stripeClient } from "./stripe-client.js";
 
 /** Only the two PaymentIntent calls the abandoned-attempt resolver makes. */
@@ -95,7 +98,7 @@ describe("stripeClient's refund binding", () => {
       [
         "create",
         { payment_intent: "pi_1", amount: 1234, metadata: { bill_payment_refund_id: "x" } },
-        { idempotencyKey: "bpr_x" },
+        { idempotencyKey: "bpr_x", maxNetworkRetries: 0 },
       ],
     ]);
   });
@@ -128,5 +131,62 @@ describe("stripeClient's refund binding", () => {
       ["list", { payment_intent: "pi_7", limit: 100 }],
       ["list", { payment_intent: "pi_7", limit: 100, starting_after: "re_1" }],
     ]);
+  });
+});
+
+// The installed SDK (stripe@22.6.2) run against a local server standing in for Stripe: what
+// reaches the server, and what reaches our code, for one `createRefund`.
+describe("stripeClient's refund through the Stripe SDK itself", () => {
+  async function stripeAnswering(
+    answer: (attempt: number, req: IncomingMessage, res: ServerResponse) => void,
+  ) {
+    const keys: (string | undefined)[] = [];
+    const server = createServer((req, res) => {
+      keys.push(req.headers["idempotency-key"] as string | undefined);
+      req.resume();
+      req.on("end", () => answer(keys.length, req, res));
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as AddressInfo;
+    const stripe = new Stripe("sk_test_local", { host: "127.0.0.1", port, protocol: "http" });
+    return { client: stripeClient(stripe), keys, close: () => server.close() };
+  }
+  const json = (res: ServerResponse, status: number, body: unknown) => {
+    res.writeHead(status, { "content-type": "application/json" });
+    res.end(JSON.stringify(body));
+  };
+  const params = {
+    paymentIntentId: "pi_1",
+    amount: decimal("5.00"),
+    idempotencyKey: "bpr_r1",
+    metadata: { bill_payment_refund_id: "r1" },
+  };
+
+  it("does not send a refund again after a server error", async () => {
+    const stripe = await stripeAnswering((_n, _req, res) =>
+      json(res, 503, { error: { type: "api_error", message: "down" } }),
+    );
+    try {
+      expect(await stripe.client.createRefund(params)).toEqual({ ok: false, httpStatus: 503 });
+      expect(stripe.keys).toEqual(["bpr_r1"]);
+    } finally {
+      stripe.close();
+    }
+  });
+
+  it("still sends it again, under the same key, after a closed connection, and hands on that second answer", async () => {
+    const stripe = await stripeAnswering((attempt, req, res) => {
+      if (attempt === 1) {
+        req.socket.destroy();
+        return;
+      }
+      json(res, 429, { error: { type: "invalid_request_error", message: "rate limited" } });
+    });
+    try {
+      expect(await stripe.client.createRefund(params)).toEqual({ ok: false, httpStatus: 429 });
+      expect(stripe.keys).toEqual(["bpr_r1", "bpr_r1"]);
+    } finally {
+      stripe.close();
+    }
   });
 });

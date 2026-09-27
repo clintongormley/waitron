@@ -68,9 +68,12 @@ const REFUND_ID_METADATA = "bill_payment_refund_id";
  * Charge/PaymentIntent has already been refunded, or if an invalid identifier was provided"
  * (https://docs.stripe.com/api/refunds/create), which is the 404. Stripe says MOST 400s, not all.
  * 402, 403, 409 and 424 are left off: the error page says nothing either way of them, and a 409
- * is a same-key request still executing, which may be the earlier send.
+ * is a same-key request still executing, which may be the earlier send. 429 is left off too: it
+ * says only that the attempt it answers ran nothing, and the SDK may have made an earlier attempt
+ * of the same send (`createRefund` in stripe-client.ts), so a rate-limited refund stays pending
+ * and a retry sends it again under its key.
  */
-const DOCUMENTED_REFUND_REFUSALS = new Set([400, 401, 404, 429]);
+const DOCUMENTED_REFUND_REFUSALS = new Set([400, 401, 404]);
 
 /** Stripe's refund statuses ("`pending`, `requires_action`, `succeeded`, `failed`, or
  * `canceled`", https://docs.stripe.com/api/refunds/object); a status it adds later is `pending`,
@@ -393,6 +396,26 @@ export class StripeTerminalProvider implements PaymentProvider {
     const status = answer.httpStatus;
     if (status === null) return { kind: "uncertain", reason: "network" };
     if (status >= 500) return { kind: "uncertain", reason: "server_error", httpStatus: status };
+    // The refusal answers the last attempt the SDK made; after a closed connection the SDK sends
+    // the same request once more, so an earlier attempt of this send may have made the refund.
+    // What Stripe holds under the refund's id decides, and a refusal stands only when it holds
+    // none.
+    const held = await this.lookupRefund({
+      processorRef: req.processorRef,
+      refundId: req.refundId,
+      amount: req.amount,
+      sentAt: new Date(0),
+      excludeRefs: [],
+    });
+    if (held.kind === "match") {
+      return {
+        kind: "outcome",
+        outcome: held.outcome,
+        providerRefundRef: held.providerRefundRef,
+        providerStatus: held.providerStatus,
+      };
+    }
+    if (held.kind !== "none") return { kind: "uncertain", reason: "network", httpStatus: status };
     return {
       kind: "refused",
       httpStatus: status,

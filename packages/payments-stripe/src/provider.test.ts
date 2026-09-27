@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import Stripe from "stripe";
 import { describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
@@ -23,6 +26,7 @@ import type { PaymentRow } from "@waitron/payments";
 import { FakeStripe } from "./testing/fake-stripe.js";
 import { StripeTerminalProvider } from "./provider.js";
 import { reverseViaStripe } from "./reverse.js";
+import { stripeClient } from "./stripe-client.js";
 import type { StripeClient } from "./client.js";
 import {
   billPaymentOfRow,
@@ -1045,8 +1049,8 @@ describe("StripeTerminalProvider.sendRefund and lookupRefund", () => {
     });
   });
 
-  it.each([400, 401, 404, 429])(
-    "answers %i as a refusal Stripe documents as no refund made",
+  it.each([400, 401, 404])(
+    "answers %i as a refusal Stripe documents as no refund made, once Stripe shows no refund of it",
     async (httpStatus) => {
       const fake = new FakeStripe();
       fake.scriptNextCreateRefund({ httpStatus });
@@ -1058,7 +1062,7 @@ describe("StripeTerminalProvider.sendRefund and lookupRefund", () => {
     },
   );
 
-  it.each([402, 403, 409, 424])(
+  it.each([402, 403, 409, 424, 429])(
     "answers %i as a refusal that does not say no refund was made",
     async (httpStatus) => {
       const fake = new FakeStripe();
@@ -1070,6 +1074,36 @@ describe("StripeTerminalProvider.sendRefund and lookupRefund", () => {
       });
     },
   );
+
+  it.each([400, 401, 404, 429])(
+    "answers a %i that followed a refund Stripe made with the refund Stripe shows",
+    async (httpStatus) => {
+      const fake = new FakeStripe();
+      const refundId = randomUUID();
+      fake.scriptNextCreateRefund({ status: "succeeded", answer: { httpStatus } });
+
+      const answer = await providerFor(fake).sendRefund(request(refundId));
+
+      expect(answer).toEqual({
+        kind: "outcome",
+        outcome: "completed",
+        providerRefundRef: expect.stringMatching(/^re_/) as unknown as string,
+        providerStatus: "succeeded",
+      });
+    },
+  );
+
+  it("answers a refusal it cannot check against Stripe's refunds as uncertain", async () => {
+    const fake = new FakeStripe();
+    fake.scriptNextCreateRefund({ httpStatus: 400 });
+    fake.listRefundsUnreachableNext();
+
+    expect(await providerFor(fake).sendRefund(request())).toEqual({
+      kind: "uncertain",
+      reason: "network",
+      httpStatus: 400,
+    });
+  });
 
   it.each([500, 503])("answers %i as uncertain: Stripe's server error", async (httpStatus) => {
     const fake = new FakeStripe();
@@ -1154,5 +1188,59 @@ describe("StripeTerminalProvider.sendRefund and lookupRefund", () => {
 
   it("keeps a resend with the same key safe for 24 hours, the time Stripe keeps a key", () => {
     expect(providerFor(new FakeStripe()).refundResendWindowMs).toBe(24 * 60 * 60 * 1000);
+  });
+});
+
+describe("a Stripe refund whose first attempt refunded and whose answer was a refusal", () => {
+  it("is answered with the refund Stripe holds, through the installed SDK against a local Stripe", async () => {
+    const refundId = randomUUID();
+    const refund = {
+      id: "re_local_1",
+      object: "refund",
+      status: "succeeded",
+      metadata: { bill_payment_refund_id: refundId },
+    };
+    const posts: (string | undefined)[] = [];
+    const server = createServer((req, res) => {
+      req.resume();
+      req.on("end", () => {
+        const answer = (status: number, body: unknown) => {
+          res.writeHead(status, { "content-type": "application/json" });
+          res.end(JSON.stringify(body));
+        };
+        if (req.method === "GET") {
+          answer(200, { object: "list", data: [refund], has_more: false });
+          return;
+        }
+        posts.push(req.headers["idempotency-key"] as string | undefined);
+        // The first attempt refunds and its connection closes before the answer.
+        if (posts.length === 1) req.socket.destroy();
+        else answer(429, { error: { type: "invalid_request_error", message: "rate limited" } });
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as AddressInfo;
+    try {
+      const client = stripeClient(
+        new Stripe("sk_test_local", { host: "127.0.0.1", port, protocol: "http" }),
+      );
+
+      const answer = await providerFor(client).sendRefund({
+        processorRef: "pi_local",
+        amount: decimal("5.00"),
+        idempotencyKey: `bpr_${refundId}`,
+        refundId,
+      });
+
+      expect(posts).toEqual([`bpr_${refundId}`, `bpr_${refundId}`]);
+      expect(answer).toEqual({
+        kind: "outcome",
+        outcome: "completed",
+        providerRefundRef: "re_local_1",
+        providerStatus: "succeeded",
+      });
+    } finally {
+      server.close();
+    }
   });
 });

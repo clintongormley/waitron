@@ -69,7 +69,11 @@ export function stripeClient(stripe: Stripe): StripeClient {
       try {
         const refund = await stripe.refunds.create(
           { payment_intent: paymentIntentId, amount: toMinorUnits(amount), metadata },
-          { idempotencyKey },
+          // The SDK otherwise sends the request again by itself on a 409 or a 5xx, and the answer
+          // to that later attempt is all that reaches us (RequestSender.js `_shouldRetry`,
+          // stripe@22.6.2). It still sends once more after a closed connection whatever this says,
+          // which `StripeTerminalProvider.sendRefund` allows for.
+          { idempotencyKey, maxNetworkRetries: 0 },
         );
         return { ok: true, refund: refundOf(refund) };
       } catch (error) {
