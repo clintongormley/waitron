@@ -795,7 +795,7 @@ export async function printHoldTickets(
   }
 }
 
-/** Of these groups, the positions of those still held whose HOLD ticket printed. */
+/** Of these groups, the positions of those still held whose HOLD ticket was queued. */
 export async function printedHeldGroups(
   tx: Transaction,
   groupIds: readonly string[],
