@@ -155,6 +155,20 @@
       "when": 1790477007826,
       "tag": "0021_line_classification",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1790466107361,
+      "tag": "0024_bill_payment_attestation",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1790466113418,
+      "tag": "0025_bill_payment_attestation_guard",
+      "breakpoints": true
     }
   ]
 }

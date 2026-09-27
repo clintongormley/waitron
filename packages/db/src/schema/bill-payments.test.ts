@@ -413,6 +413,81 @@ describe("bill payments: the three tables, their checks and their triggers", () 
     });
   });
 
+  describe("bill_payments: a manager's attestation of a pending payment's outcome", () => {
+    async function attestation(id: string) {
+      const [row] = await inTx((tx) =>
+        tx
+          .select({
+            state: billPayments.state,
+            attestedBy: billPayments.attestedBy,
+            attestationNote: billPayments.attestationNote,
+          })
+          .from(billPayments)
+          .where(eq(billPayments.id, id)),
+      );
+      return row!;
+    }
+
+    it.each([
+      ["received", `received_at = '${AT}'`],
+      ["failed", `failed_at = '${AT}'`],
+    ] as const)(
+      "keeps who attested and their note with the move from pending to %s",
+      async (state, stamp) => {
+        const id = await insertPayment();
+        await updatePayment(
+          id,
+          `state = '${state}', ${stamp}, attested_by = '${MANAGER}', attestation_note = 'SumUp dashboard shows it'`,
+        );
+        expect(await attestation(id)).toEqual({
+          state,
+          attestedBy: MANAGER,
+          attestationNote: "SumUp dashboard shows it",
+        });
+      },
+    );
+
+    it.each([
+      ["with no outcome", {}, `attested_by = '${MANAGER}', attestation_note = 'n'`],
+      [
+        "after the outcome",
+        { state: "received", receivedAt: AT },
+        `attested_by = '${MANAGER}', attestation_note = 'n'`,
+      ],
+      [
+        "with only the person",
+        {},
+        `state = 'failed', failed_at = '${AT}', attested_by = '${MANAGER}'`,
+      ],
+      ["with only the note", {}, `state = 'failed', failed_at = '${AT}', attestation_note = 'n'`],
+      [
+        "with an empty note",
+        {},
+        `state = 'failed', failed_at = '${AT}', attested_by = '${MANAGER}', attestation_note = '  '`,
+      ],
+      [
+        "while declining a received payment",
+        { state: "received", receivedAt: AT },
+        `state = 'declined', attested_by = '${MANAGER}', attestation_note = 'n'`,
+      ],
+    ] as const)("refuses an attestation %s", async (_name, start, set) => {
+      const id = await insertPayment(start as Partial<PaymentValues>);
+      const error = await captureError(() => updatePayment(id, set));
+      expect(triggerRaised(error, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
+    });
+
+    it("refuses a change to an attestation once recorded", async () => {
+      const id = await insertPayment();
+      await updatePayment(
+        id,
+        `state = 'failed', failed_at = '${AT}', attested_by = '${MANAGER}', attestation_note = 'first'`,
+      );
+      const error = await captureError(() => updatePayment(id, `attestation_note = 'second'`));
+      expect(triggerRaised(error, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
+      expect((await attestation(id)).attestationNote).toBe("first");
+    });
+  });
+
   describe("bill_payment_lines", () => {
     it("records an item payment's line, quantity and amount", async () => {
       const paymentId = await insertPayment({ kind: "items" });

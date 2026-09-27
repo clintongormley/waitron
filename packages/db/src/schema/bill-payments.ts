@@ -28,9 +28,11 @@ export const billPaymentRefundState = enumType(["pending", "completed", "failed"
  * Its state moves only pending → received, pending → failed, and received → declined while no
  * tender names it; nothing else about the row ever changes, and it is never deleted. Those rules are
  * the `bill_payments_guard_update` and `bill_payments_no_delete` triggers
- * (`drizzle/0023_bill_payment_triggers.sql`).
+ * (`drizzle/0023_bill_payment_triggers.sql`, the guard replaced by
+ * `drizzle/0025_bill_payment_attestation_guard.sql`).
  *
- * `requested_by` is a plain person id with no key: `persons` is in @waitron/identity's migration set.
+ * `requested_by` and `attested_by` are plain person ids with no key: `persons` is in
+ * @waitron/identity's migration set.
  */
 export const billPayments = table(
   "bill_payments",
@@ -51,6 +53,10 @@ export const billPayments = table(
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     receivedAt: tsString("received_at"),
     failedAt: tsString("failed_at"),
+    /** A manager who recorded the outcome from the provider's confirmation, with their note; set
+     * only together, and only with the move out of `pending` (the guard trigger). */
+    attestedBy: id("attested_by"),
+    attestationNote: label("attestation_note"),
   },
   (t) => [
     foreignKey({
