@@ -9,7 +9,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import { CARD_PROVIDER_PANELS } from "@waitron/dashboard-modules";
-import { formatMoney } from "@waitron/shared";
+import { centsToDecimal, formatMoney, stringToCents } from "@waitron/shared";
 import {
   registerCatalogue,
   type CardProviderPanel,
@@ -18,12 +18,15 @@ import {
 } from "@waitron/dashboard-kit";
 import type {
   AvailableReader,
+  BillRecoveryOutcome,
   DashboardApi,
   PaymentProviderRow,
   ReaderRow,
   ReaderStatusView,
   StuckPaymentResolution,
   StuckPaymentRow,
+  StuckBillPaymentRow,
+  StuckBillRefundRow,
 } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -53,6 +56,15 @@ function stuckOutcomeText(resolution: StuckPaymentResolution): string | null {
     );
   }
   return null;
+}
+
+type BillTarget =
+  { kind: "payment"; row: StuckBillPaymentRow } | { kind: "refund"; row: StuckBillRefundRow };
+
+function billAmount(target: BillTarget): string {
+  return target.kind === "payment"
+    ? centsToDecimal(stringToCents(target.row.applied) + stringToCents(target.row.tip))
+    : centsToDecimal(stringToCents(target.row.appliedAmount) + stringToCents(target.row.tipAmount));
 }
 
 /** Provider forms come through CARD_PROVIDER_PANELS; this screen never imports a provider package. */
@@ -191,6 +203,22 @@ export class PaymentsScreen extends LitElement {
       .stuck-details dt {
         color: var(--wt-color-text-muted);
       }
+      .bill-outcome {
+        display: grid;
+        gap: var(--wt-space-2);
+        margin-block: var(--wt-space-3);
+      }
+      .bill-outcome select {
+        width: 100%;
+        min-height: var(--wt-tap-min);
+        box-sizing: border-box;
+        padding: var(--wt-space-2);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-sm);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+        font: inherit;
+      }
     `,
   ];
 
@@ -231,6 +259,17 @@ export class PaymentsScreen extends LitElement {
   @state() private confirmingStuck: StuckPaymentRow | null = null;
   @state() private resolvingId: string | null = null;
   @state() private stuckResult: { text: string; refused: boolean } | null = null;
+  @state() private billPayments: StuckBillPaymentRow[] = [];
+  @state() private billRefunds: StuckBillRefundRow[] = [];
+  @state() private billLoadError: string | null = null;
+  @state() private billResult: { text: string; refused: boolean } | null = null;
+  @state() private billAction: { target: BillTarget; mode: "check" | "attest" } | null = null;
+  @state() private billBusy = false;
+  @state() private billOutcome = "";
+  @state() private billNote = "";
+  @state() private billPin = "";
+  @state() private billInvalid = false;
+  @state() private billFormError: string | null = null;
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -250,6 +289,7 @@ export class PaymentsScreen extends LitElement {
         this.stuckLoadError = null;
       })
       .catch(() => undefined);
+    void this.#loadBillRecovery(false);
   }
 
   #simulator(): boolean {
@@ -429,6 +469,323 @@ export class PaymentsScreen extends LitElement {
   #stuckOrder(row: StuckPaymentRow): string {
     const order = t("payments.stuck.order").replace("{number}", String(row.orderNumber));
     return row.label ? `${order} · ${row.label}` : order;
+  }
+
+  #billOrder(row: StuckBillPaymentRow | StuckBillRefundRow): string {
+    const order = t("payments.stuck.order").replace("{number}", String(row.orderNumber));
+    return row.label ? `${order} · ${row.label}` : order;
+  }
+
+  async #loadBillRecovery(background: boolean): Promise<void> {
+    const client = background ? (this.api.background ?? this.api) : this.api;
+    const [payments, refunds] = await Promise.allSettled([
+      client.listStuckBillPayments(),
+      client.listStuckBillRefunds(),
+    ]);
+    const errors: string[] = [];
+    if (payments.status === "fulfilled") this.billPayments = payments.value;
+    else errors.push(codeMessage(codeOf(payments.reason)));
+    if (refunds.status === "fulfilled") this.billRefunds = refunds.value;
+    else errors.push(codeMessage(codeOf(refunds.reason)));
+    this.billLoadError = errors.length ? errors.join(" ") : null;
+  }
+
+  #openBillAction(target: BillTarget, mode: "check" | "attest"): void {
+    if (this.billBusy) return;
+    this.billAction = { target, mode };
+    this.billOutcome = "";
+    this.billNote = "";
+    this.billPin = "";
+    this.billInvalid = false;
+    this.billFormError = null;
+  }
+
+  #billOutcomeText(answer: BillRecoveryOutcome): string | null {
+    switch (answer.outcome) {
+      case "received":
+        return t("payments.bill.received");
+      case "not_charged":
+        return t("payments.bill.not_charged");
+      case "completed":
+        return t("payments.bill.completed");
+      case "failed":
+        return t("payments.bill.failed");
+      default:
+        return null;
+    }
+  }
+
+  async #checkBill(): Promise<void> {
+    const action = this.billAction;
+    if (action === null || this.billBusy) return;
+    this.billAction = null;
+    this.billBusy = true;
+    this.billResult = null;
+    const target = action.target;
+    try {
+      const answer =
+        target.kind === "payment"
+          ? await this.api.resolveStuckBillPayment(target.row.billPaymentId)
+          : await this.api.resolveStuckBillRefund(target.row.refundId);
+      const message = this.#billOutcomeText(answer);
+      this.billResult = {
+        text: `${this.#billOrder(target.row)}: ${message ?? t("payments.bill.check_failed")}`,
+        refused: message === null,
+      };
+    } catch (error) {
+      this.billResult = {
+        text: `${this.#billOrder(target.row)}: ${codeMessage(codeOf(error))}`,
+        refused: true,
+      };
+    }
+    try {
+      await this.#loadBillRecovery(true);
+    } finally {
+      this.billBusy = false;
+    }
+  }
+
+  async #attestBill(): Promise<void> {
+    const action = this.billAction;
+    if (action === null || action.mode !== "attest" || this.billBusy) return;
+    const outcome = this.billOutcome;
+    const note = this.billNote.trim();
+    const pin = this.billPin;
+    if (!outcome || !note || !pin) {
+      this.billInvalid = true;
+      return;
+    }
+    this.billBusy = true;
+    this.billFormError = null;
+    try {
+      const target = action.target;
+      const answer =
+        target.kind === "payment"
+          ? await this.api.attestStuckBillPayment(target.row.billPaymentId, {
+              outcome: outcome as "received" | "failed",
+              note,
+              pin,
+            })
+          : await this.api.attestStuckBillRefund(target.row.refundId, {
+              outcome: outcome as "completed" | "failed",
+              note,
+              pin,
+            });
+      const message = this.#billOutcomeText(answer);
+      this.billResult = {
+        text: `${this.#billOrder(target.row)}: ${message ?? t("payments.bill.check_failed")}`,
+        refused: message === null,
+      };
+      this.billAction = null;
+      await this.#loadBillRecovery(true);
+    } catch (error) {
+      this.billFormError = codeOf(error);
+    } finally {
+      this.billBusy = false;
+    }
+  }
+
+  #renderBillRow(target: BillTarget): TemplateResult {
+    const id = target.kind === "payment" ? target.row.billPaymentId : target.row.refundId;
+    const kind = target.kind === "payment" ? "bill-payment" : "bill-refund";
+    return html`<li class="stuck" data-test=${`${kind}-${id}`}>
+      <div class="stuck-body">
+        <p class="stuck-order">${this.#billOrder(target.row)}</p>
+        <dl class="stuck-details">
+          <dt>${t("payments.stuck.till")}</dt>
+          <dd>${target.row.tillName}</dd>
+          <dt>${t("payments.stuck.provider")}</dt>
+          <dd>
+            ${target.row.provider ? this.#providerName(target.row.provider) : t("payments.bill.provider_unknown")}
+          </dd>
+          <dt>${t("payments.stuck.amount")}</dt>
+          <dd>${formatMoney(billAmount(target), currentLocale())}</dd>
+          <dt>${t("payments.stuck.started")}</dt>
+          <dd>
+            <time
+              datetime=${target.kind === "payment" ? target.row.startedAt : target.row.requestedAt}
+              >${formatAlertTime(target.kind === "payment" ? target.row.startedAt : target.row.requestedAt)}</time
+            >
+          </dd>
+        </dl>
+      </div>
+      <wt-button
+        variant="secondary"
+        data-test=${`check-${kind}-${id}`}
+        aria-label=${`${t("payments.bill.check")}: ${this.#billOrder(target.row)}`}
+        ?disabled=${this.billBusy}
+        @click=${() => this.#openBillAction(target, "check")}
+        >${t("payments.bill.check")}</wt-button
+      >
+      <wt-button
+        variant="secondary"
+        data-test=${`attest-${kind}-${id}`}
+        aria-label=${`${t("payments.bill.attest")}: ${this.#billOrder(target.row)}`}
+        ?disabled=${this.billBusy}
+        @click=${() => this.#openBillAction(target, "attest")}
+        >${t("payments.bill.attest")}</wt-button
+      >
+    </li>`;
+  }
+
+  #renderBillRecovery(): TemplateResult {
+    return html`<section
+      class="stuck-section ${this.billPayments.length || this.billRefunds.length ? "pending" : ""}"
+      data-test="bill-recovery"
+      aria-labelledby="bill-recovery-heading"
+    >
+      <h2 id="bill-recovery-heading">${t("payments.bill.heading")}</h2>
+      <p>${t("payments.bill.intro")}</p>
+      ${this.billResult ? html`<p data-test="bill-action-result" role=${this.billResult.refused ? "alert" : "status"} class=${this.billResult.refused ? "error" : ""}>${this.billResult.text}</p>` : nothing}
+      ${this.billLoadError ? html`<p data-test="bill-load-error" role="alert" class="error">${this.billLoadError}</p>` : nothing}
+      <wt-button
+        variant="secondary"
+        ?disabled=${this.billBusy}
+        @click=${() => void this.#loadBillRecovery(true)}
+        >${t("payments.bill.refresh")}</wt-button
+      >
+      <h3>${t("payments.bill.payments")}</h3>
+      ${
+        this.billPayments.length
+          ? html`<ul class="stuck-list">
+              ${this.billPayments.map((row) => this.#renderBillRow({ kind: "payment", row }))}
+            </ul>`
+          : html`<p>${t("payments.bill.no_payments")}</p>`
+      }
+      <h3>${t("payments.bill.refunds")}</h3>
+      ${
+        this.billRefunds.length
+          ? html`<ul class="stuck-list">
+              ${this.billRefunds.map((row) => this.#renderBillRow({ kind: "refund", row }))}
+            </ul>`
+          : html`<p>${t("payments.bill.no_refunds")}</p>`
+      }
+    </section>`;
+  }
+
+  #renderBillDialog(): TemplateResult | typeof nothing {
+    const action = this.billAction;
+    if (action === null) return nothing;
+    if (action.mode === "check")
+      return html`<wt-dialog
+        data-test="bill-check-dialog"
+        .open=${true}
+        heading=${t("payments.bill.check_heading")}
+        @wt-close=${() => {
+          if (!this.billBusy) this.billAction = null;
+        }}
+      >
+        <p>
+          ${t("payments.bill.check_body").replace("{order}", this.#billOrder(action.target.row))}
+        </p>
+        <wt-form-actions slot="footer">
+          <wt-button
+            slot="cancel"
+            variant="secondary"
+            @click=${() => {
+              this.billAction = null;
+            }}
+            >${t("action.cancel")}</wt-button
+          >
+          <wt-button data-test="confirm-bill-check" @click=${() => void this.#checkBill()}
+            >${t("payments.bill.check")}</wt-button
+          >
+        </wt-form-actions>
+      </wt-dialog>`;
+    const payment = action.target.kind === "payment";
+    const outcomeMissing = this.billInvalid && !this.billOutcome;
+    const noteMissing = this.billInvalid && !this.billNote.trim();
+    const pinMissing = this.billInvalid && !this.billPin;
+    const pinRefused =
+      this.billFormError === "pin.invalid" || this.billFormError === "pin.throttled";
+    return html`<wt-dialog
+      data-test="bill-attest-dialog"
+      .open=${true}
+      ?dismissible=${!this.billBusy}
+      heading=${t("payments.bill.attest_heading")}
+      @wt-close=${() => {
+        if (!this.billBusy) this.billAction = null;
+      }}
+    >
+      <p>
+        ${t("payments.bill.attest_body").replace("{order}", this.#billOrder(action.target.row))}
+      </p>
+      <wt-form-error-summary
+        heading=${t("form.error_heading")}
+        .errors=${[
+          ...(outcomeMissing ? [t("payments.bill.outcome_required")] : []),
+          ...(noteMissing ? [t("payments.bill.note_required")] : []),
+          ...(pinMissing ? [t("payments.bill.pin_required")] : []),
+        ]}
+      ></wt-form-error-summary>
+      ${this.billFormError && !pinRefused ? html`<p role="alert" class="error">${codeMessage(this.billFormError)}</p>` : nothing}
+      <label class="bill-outcome"
+        >${t("payments.bill.outcome")} *
+        <select
+          name="outcome"
+          required
+          data-test="bill-attest-outcome"
+          .value=${this.billOutcome}
+          ?disabled=${this.billBusy}
+          @change=${(event: Event) => {
+            this.billOutcome = (event.target as HTMLSelectElement).value;
+          }}
+        >
+          <option value="">${t("payments.bill.choose_outcome")}</option>
+          <option value=${payment ? "received" : "completed"}>
+            ${t(payment ? "payments.bill.received_option" : "payments.bill.completed_option")}
+          </option>
+          <option value="failed">
+            ${t(payment ? "payments.bill.failed_payment_option" : "payments.bill.failed_refund_option")}
+          </option>
+        </select>
+      </label>
+      ${outcomeMissing ? html`<p class="error" role="alert">${t("payments.bill.outcome_required")}</p>` : nothing}
+      <wt-input
+        name="note"
+        required
+        data-test="bill-attest-note"
+        label=${t("payments.bill.note")}
+        .value=${this.billNote}
+        .error=${noteMissing ? t("payments.bill.note_required") : ""}
+        ?disabled=${this.billBusy}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          this.billNote = event.detail.value;
+        }}
+      ></wt-input>
+      <wt-input
+        name="pin"
+        type="password"
+        autocomplete="current-password"
+        required
+        data-test="bill-attest-pin"
+        label=${t("payments.bill.pin")}
+        .value=${this.billPin}
+        .error=${pinRefused ? codeMessage(this.billFormError!) : pinMissing ? t("payments.bill.pin_required") : ""}
+        ?disabled=${this.billBusy}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          this.billPin = event.detail.value;
+          this.billFormError = null;
+        }}
+      ></wt-input>
+      <wt-form-actions slot="footer">
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          ?disabled=${this.billBusy}
+          @click=${() => {
+            this.billAction = null;
+          }}
+          >${t("action.cancel")}</wt-button
+        >
+        <wt-button
+          data-test="confirm-bill-attest"
+          ?loading=${this.billBusy}
+          @click=${() => void this.#attestBill()}
+          >${t("payments.bill.attest")}</wt-button
+        >
+      </wt-form-actions>
+    </wt-dialog>`;
   }
 
   #openResolve(row: StuckPaymentRow): void {
@@ -935,7 +1292,7 @@ export class PaymentsScreen extends LitElement {
           ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
           : nothing
       }
-      ${this.#renderStuck()}
+      ${this.#renderStuck()} ${this.#renderBillRecovery()}
 
       <h2>${t("payments.providers_heading")}</h2>
       ${
@@ -980,6 +1337,7 @@ export class PaymentsScreen extends LitElement {
         .emptyMessage=${t("payments.readers_empty")}
       ></wt-data-table>
       ${this.#renderDiscovery()} ${this.#renderEditor()} ${this.#renderResolveDialog()}
+      ${this.#renderBillDialog()}
     `;
   }
 }

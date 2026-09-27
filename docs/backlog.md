@@ -2185,18 +2185,14 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     bill locked until SumUp answers (no "failed" after a time limit); a card arriving after cash
     paid the rest is refused `working_order.not_open`, and the resolve routes sit beside M7b2's,
     both accepted and recorded as dated corrections in the design by lane D item A76. Two follow-ups,
-    both queued for lane B before Task 15:
-    - **Refund a hand-keyed card payment on staff's word, with a manager PIN** (lane B item B14a,
+    both assigned to lane D before Task 15:
+    - **Refund a hand-keyed card payment on staff's word, with a manager PIN** (lane D item B14a,
       owner's choice). Task 14 refuses it today.
-    - **A dashboard screen for card payments and refunds on a bill that nothing has settled**
-      (Task 14's Ruling STOP 5; lane B item B14b), needed before Task 15. The routes exist:
-      `GET /management-api/payments/bill-payments` and `.../bill-refunds` list them, and each has a
-      `resolve` (ask the card provider) and an `attest` (a manager records the outcome the provider
-      confirmed, with a note and their PIN re-entered). Nothing in the dashboard calls them. Until a
-      screen does, a SumUp payment or refund whose outcome SumUp never shows keeps its bill locked:
-      no line changes and no invoice. **Next action:** extend the Payments screen
-      (`apps/dashboard/src/screens/payments-screen.ts`) with that list and the two actions, with
-      English and Spanish text and an axe test.
+    - **Dashboard recovery for a bill's unsettled card payment or refund is done** (lane D item
+      B14b): the Payments screen (`apps/dashboard/src/screens/payments-screen.ts`) lists both kinds,
+      can ask the provider to resolve one, and lets a manager record a provider-confirmed outcome
+      with a note and their PIN. The screen has English and Spanish text and browser accessibility
+      cases. Task 15 can now build the till flow that creates bill payments.
   - **A keydown guard that cancels Escape while a save runs did not keep one dialog open.** Measured
     on Task 1's reasons screen (`packages/adjustments/src/dashboard/reasons-screen.ts`): a real
     Escape pressed with Vitest's `userEvent` during a save closed the editor, although the screen's

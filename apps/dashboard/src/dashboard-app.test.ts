@@ -3812,6 +3812,8 @@ describe("dashboard-app: remaining faces and shell controls", () => {
       getEmailInbox: pending(),
       listPaymentProviders: pending(),
       listReaders: pending(),
+      listStuckBillPayments: pending(),
+      listStuckBillRefunds: pending(),
       liveData: new LiveData(),
     });
 

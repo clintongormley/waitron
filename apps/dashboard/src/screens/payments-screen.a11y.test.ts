@@ -84,6 +84,8 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
   return {
     listStuckPayments: vi.fn().mockResolvedValue([]),
     resolveStuckPayment: vi.fn().mockResolvedValue({ outcome: "not_charged", orderUnlocked: true }),
+    listStuckBillPayments: vi.fn().mockResolvedValue([]),
+    listStuckBillRefunds: vi.fn().mockResolvedValue([]),
     listPaymentProviders: vi.fn().mockResolvedValue(PROVIDERS),
     listReaders: vi.fn().mockResolvedValue(READERS),
     readerStatus: vi.fn().mockResolvedValue({ online: true }),
@@ -237,5 +239,40 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
       });
       await expectNoA11yViolations(host);
     });
+  });
+
+  it("renders bill recovery rows and the manager attestation form accessibly", async () => {
+    const { el, host } = await mountWidget<PaymentsScreen>(
+      "dashboard-payments-screen",
+      {
+        api: stubApi({
+          listStuckBillPayments: vi.fn().mockResolvedValue([
+            {
+              billPaymentId: "bp-1",
+              workingOrderId: "wo-1",
+              orderNumber: 12,
+              label: "Terrace 3",
+              tillId: "till-1",
+              tillName: "Bar till",
+              method: "card",
+              applied: "12.50",
+              tip: "0.00",
+              startedAt: "2026-09-26T10:05:00.000Z",
+              provider: "acme",
+              providerState: "failed",
+            },
+          ]),
+          listStuckBillRefunds: vi.fn().mockResolvedValue([]),
+        }),
+        request: vi.fn() as unknown as PaymentsScreen["request"],
+        panels: PANELS,
+      },
+      theme,
+    );
+    await flush(el);
+    await expectNoA11yViolations(host);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=attest-bill-payment-bp-1]")!.click();
+    await flush(el);
+    await expectNoA11yViolations(host);
   });
 });

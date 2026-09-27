@@ -1212,6 +1212,44 @@ export interface StuckPaymentRow {
 export type StuckPaymentResolution =
   { outcome: "filed"; invoiceNumber: string } | { outcome: "not_charged"; orderUnlocked: boolean };
 
+export interface StuckBillPaymentRow {
+  billPaymentId: string;
+  workingOrderId: string;
+  orderNumber: number;
+  label: string | null;
+  tillId: string;
+  tillName: string;
+  method: "card";
+  applied: string;
+  tip: string;
+  startedAt: string;
+  provider: string | null;
+  providerState: string | null;
+}
+
+export interface StuckBillRefundRow {
+  refundId: string;
+  billPaymentId: string;
+  workingOrderId: string;
+  orderNumber: number;
+  label: string | null;
+  tillId: string;
+  tillName: string;
+  appliedAmount: string;
+  tipAmount: string;
+  reason: string;
+  requestedAt: string;
+  sentAt: string | null;
+  sendCount: number;
+  provider: string | null;
+}
+
+export type BillRecoveryOutcome =
+  | { outcome: "received"; invoiceNumber?: string }
+  | { outcome: "not_charged" }
+  | { outcome: "completed" }
+  | { outcome: "failed" };
+
 export interface AddReaderInput {
   providerId: string;
   name: string;
@@ -2886,6 +2924,50 @@ export class DashboardApi {
     return this.#request<StuckPaymentResolution>(
       `/management-api/payments/stuck/${paymentId}/resolve`,
       "POST",
+    );
+  }
+
+  listStuckBillPayments(): Promise<StuckBillPaymentRow[]> {
+    return this.#request<StuckBillPaymentRow[]>("/management-api/payments/bill-payments", "GET");
+  }
+
+  listStuckBillRefunds(): Promise<StuckBillRefundRow[]> {
+    return this.#request<StuckBillRefundRow[]>("/management-api/payments/bill-refunds", "GET");
+  }
+
+  resolveStuckBillPayment(id: string): Promise<BillRecoveryOutcome> {
+    return this.#request<BillRecoveryOutcome>(
+      `/management-api/payments/bill-payments/${id}/resolve`,
+      "POST",
+    );
+  }
+
+  attestStuckBillPayment(
+    id: string,
+    body: { outcome: "received" | "failed"; note: string; pin: string },
+  ): Promise<BillRecoveryOutcome> {
+    return this.#request<BillRecoveryOutcome>(
+      `/management-api/payments/bill-payments/${id}/attest`,
+      "POST",
+      body,
+    );
+  }
+
+  resolveStuckBillRefund(id: string): Promise<BillRecoveryOutcome> {
+    return this.#request<BillRecoveryOutcome>(
+      `/management-api/payments/bill-refunds/${id}/resolve`,
+      "POST",
+    );
+  }
+
+  attestStuckBillRefund(
+    id: string,
+    body: { outcome: "completed" | "failed"; note: string; pin: string },
+  ): Promise<BillRecoveryOutcome> {
+    return this.#request<BillRecoveryOutcome>(
+      `/management-api/payments/bill-refunds/${id}/attest`,
+      "POST",
+      body,
     );
   }
 }
