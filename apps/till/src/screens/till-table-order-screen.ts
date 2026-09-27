@@ -772,6 +772,12 @@ export class TillTableOrderScreen extends LitElement {
   #productsById = new Map<string, TillProduct>();
   /** Built with {@link groups}, so each line's Send check is not a scan. */
   #heldGroupIds?: ReadonlySet<string>;
+  /** Built with {@link groups}: every group, and the held ones, in position order. */
+  #groupsInOrder: OrderGroup[] = [];
+  #heldInOrder: OrderGroup[] = [];
+  /** Built with {@link lines}, for the held-groups list. */
+  #lineById = new Map<string, TabLine>();
+  #dishesWithExtras = new Set<number>();
 
   constructor() {
     super();
@@ -786,6 +792,8 @@ export class TillTableOrderScreen extends LitElement {
         this.lines.map((line) => [line.lineNo, grossOf(line.unitPriceGross, line.quantity)]),
       );
       this.#payStore = new TabPayStore(this.#tabTotal(), this.lines.length);
+      this.#lineById = new Map(this.lines.map((line) => [line.id, line]));
+      this.#dishesWithExtras = new Set(this.lines.flatMap((line) => line.parentLineNo ?? []));
     }
     // A tab switch must not carry a half-open action flow across: its targets belong to the OLD tab.
     if (changed.has("orderId") && changed.get("orderId") !== undefined) {
@@ -799,6 +807,8 @@ export class TillTableOrderScreen extends LitElement {
     }
     if (changed.has("groups") || this.#heldGroupIds === undefined) {
       this.#heldGroupIds = heldGroupIds(this.groups);
+      this.#groupsInOrder = [...this.groups].sort((a, b) => a.position - b.position);
+      this.#heldInOrder = this.#groupsInOrder.filter((group) => group.state === "held");
     }
     if (changed.has("products") || this.#productsByOffer === undefined) {
       this.#productsByOffer = new Map();
@@ -891,21 +901,14 @@ export class TillTableOrderScreen extends LitElement {
     return this.#drafts.get(this.#draftStore)?.laterAddition === true;
   }
 
-  /** The party's held groups in position order: the ones a later addition may join. */
-  #heldGroups(): OrderGroup[] {
-    return this.groups
-      .filter((group) => group.state === "held")
-      .sort((a, b) => a.position - b.position);
-  }
-
   #effectiveDestination(): Destination {
-    return this.destination === "add-to-held" && this.#heldGroups().length === 0
+    return this.destination === "add-to-held" && this.#heldInOrder.length === 0
       ? "fire-now"
       : this.destination;
   }
 
   #joinGroup(): OrderGroup | undefined {
-    const held = this.#heldGroups();
+    const held = this.#heldInOrder;
     return held.find((group) => group.id === this.joinTarget) ?? held[0];
   }
 
@@ -958,7 +961,7 @@ export class TillTableOrderScreen extends LitElement {
       draft: this.#draftOf(store),
       carryTo: (orderId) => this.#carryDraft(store, orderId),
     };
-    const held = this.#heldGroups();
+    const held = this.#heldInOrder;
     const index = held.findIndex((group) => group.id === submission.joinGroupId);
     this.pendingDraft = {
       preview,
@@ -1585,7 +1588,7 @@ export class TillTableOrderScreen extends LitElement {
         </div>
       </div>`;
     }
-    const anySelected = this.#selectedIndexes(store.lines).size > 0;
+    const anySelected = store.lines.some((line) => this.#selected.has(line));
     return html`<div class="draft-bar">
       <div class="draft-actions" role="group" aria-label=${t("table.draft_actions")}>
         ${
@@ -1601,7 +1604,7 @@ export class TillTableOrderScreen extends LitElement {
 
   #destinationChoice(): TemplateResult {
     const chosen = this.#effectiveDestination();
-    const held = this.#heldGroups();
+    const held = this.#heldInOrder;
     const options: [Destination, StringKey][] = [
       ["fire-now", "table.destination_fire_now"],
       ...(held.length === 0
@@ -1925,32 +1928,22 @@ export class TillTableOrderScreen extends LitElement {
    * line rows are this bill's: a line on another bill of the party shows only in the summary. */
   #groupsSection(): TemplateResult | typeof nothing {
     if (this.groups.length === 0) return nothing;
-    const held = this.#heldGroups();
-    const lineById = new Map(this.lines.map((line) => [line.id, line]));
-    const withExtras = new Set(
-      this.lines.flatMap((line) => (this.#isChild(line) ? [line.parentLineNo] : [])),
-    );
-    const ordered = [...this.groups].sort((a, b) => a.position - b.position);
     return html`<section class="groups" data-groups>
       <h2>${t("table.groups_title")}</h2>
       <ol class="group-list">
-        ${ordered.map((group) => {
+        ${this.#groupsInOrder.map((group) => {
           const lines = group.lineIds.flatMap((id) => {
-            const line = lineById.get(id);
+            const line = this.#lineById.get(id);
             return line === undefined || this.#isChild(line) ? [] : [line];
           });
-          return this.#groupRow(group, held, lines, withExtras);
+          return this.#groupRow(group, lines);
         })}
       </ol>
     </section>`;
   }
 
-  #groupRow(
-    group: OrderGroup,
-    held: OrderGroup[],
-    lines: TabLine[],
-    withExtras: ReadonlySet<number | null | undefined>,
-  ): TemplateResult {
+  #groupRow(group: OrderGroup, lines: TabLine[]): TemplateResult {
+    const held = this.#heldInOrder;
     const isHeld = group.state === "held";
     const name = t("table.group_n").replace("{n}", String(group.position));
     const label = (key: StringKey) => `${t(key)} · ${name}`;
@@ -1999,7 +1992,7 @@ export class TillTableOrderScreen extends LitElement {
           : nothing
       }
       <ul class="group-lines">
-        ${lines.map((line) => this.#groupLine(line, isHeld ? group : null, withExtras))}
+        ${lines.map((line) => this.#groupLine(line, isHeld ? group : null))}
       </ul>
     </li>`;
   }
@@ -2007,15 +2000,13 @@ export class TillTableOrderScreen extends LitElement {
   /** `group` is null for a fired group's line, which offers nothing. Split quantity is offered on a
    * dish sold by the unit, of more than one, with no extras: the server refuses to split a dish with
    * extras. */
-  #groupLine(
-    line: TabLine,
-    group: OrderGroup | null,
-    withExtras: ReadonlySet<number | null | undefined>,
-  ): TemplateResult {
+  #groupLine(line: TabLine, group: OrderGroup | null): TemplateResult {
     const name = this.#nameForLine(line);
     const label = (key: StringKey) => `${t(key)} · ${name}`;
     const splits =
-      group !== null && this.#moreThanOneWholeUnit(line) && !withExtras.has(line.lineNo);
+      group !== null &&
+      this.#moreThanOneWholeUnit(line) &&
+      !this.#dishesWithExtras.has(line.lineNo);
     return html`<li class="group-line" data-group-line=${line.id}>
       <span class="group-line-name">${name} ×${this.#displayQty(line.quantity)}</span>
       ${
@@ -2074,7 +2065,7 @@ export class TillTableOrderScreen extends LitElement {
   /** Always present, driven by {@link movePending}, as the cancel dialog is. */
   #moveDialog(): TemplateResult {
     const pending = this.movePending;
-    const held = this.#heldGroups();
+    const held = this.#heldInOrder;
     return html`<wt-dialog
       class="move-line-dialog"
       data-move-dialog
