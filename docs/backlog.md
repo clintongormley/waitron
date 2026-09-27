@@ -3188,29 +3188,29 @@ approved.
 
 ### B9. CI and test infra
 
-- **Dependabot, switched on by #760 (2026-09-27) — two things OPEN.** Config:
+- **Dependabot, switched on by #760 (2026-09-27) — one thing OPEN.** Config:
   `.github/dependabot.yml`; how to land one of its PRs: `docs/developers/workflow-guide.md` →
   Dependabot pull requests. Its first two PRs landed as #764 (mailpit) and #765 (ten npm
-  minor/patch bumps). (1) **Owner decision: #766 is a lone major bump of
-  `@vitest/browser-playwright` to 5.0.1** while every `vitest` and `@vitest/coverage-v8` stays on
-  4.1.11, and its CI failed. Options: close it with `@dependabot ignore this major version`
-  (GitHub's command for a single-dependency PR:
-  `content/code-security/reference/supply-chain-security/dependabot-pull-request-comment-commands.md`
-  in github/docs, line 24, read 2026-09-27), or add a `groups` entry that moves `vitest` and
-  `@vitest/*` together — though a Vitest 5 move still has to re-measure mutation first (Track C,
-  *Left behind by the Stryker upgrade (#447, 2026-09-19)*). (2) **Triage the security alerts.** On
-  2026-09-27 `gh api repos/clintongormley/waitron/dependabot/alerts?state=open` listed 15 open
-  alerts across six packages, every one a transitive dependency with a patched version published
-  (`baseline-browser-mapping`, `brace-expansion`, `browserslist`, `esbuild`, `fast-uri`, `qs`),
-  and no security-fix PR had been opened for any of them. Dependabot's security-update jobs for
-  `qs`, `baseline-browser-mapping`, `browserslist` and `fast-uri` ran twice that day and failed
-  (`qs`: `security_update_not_possible`, newest installable 6.15.1, first fixed 6.16.0); none ran
-  for `esbuild` or `brace-expansion`. The `esbuild` alert (vulnerable up to 0.24.2) can only be
-  the 0.18.20 copy `drizzle-kit` pulls in through `@esbuild-kit/esm-loader`: Track C, *Left
-  behind by the esbuild upgrade (#439, 2026-09-19)*. Which alerts are reachable in this product is
-  unassessed. The `versioning-strategy` question is recorded under #432's loose ends in Track C.
-- **Code scanning (CodeQL default setup) switched on 2026-09-27 — 34 alerts OPEN; malware alerts
-  still OFF.** Enabled with `gh api -X PATCH repos/clintongormley/waitron/code-scanning/default-setup
+  minor/patch bumps). #766, a lone major bump of `@vitest/browser-playwright` to 5.0.1 beside
+  `vitest` 4.1.11 that failed CI, was closed on 2026-09-27 with
+  `@dependabot ignore this major version`, and a `vitest` group now moves `vitest` and `@vitest/*`
+  together, majors included. That close stored an ignore of `@vitest/browser-playwright` 5.x;
+  whether the group's Vitest 5 PR obeys it is untested and GitHub's docs do not say (how to check
+  and clear it: workflow-guide → Dependabot pull requests); such a PR also has to re-measure
+  mutation first (Track C, *Left behind by the Stryker upgrade (#447, 2026-09-19)*). OPEN: **Triage
+  the security alerts.** On 2026-09-27
+  `gh api repos/clintongormley/waitron/dependabot/alerts?state=open` listed 15 open alerts across
+  six packages, every one a transitive dependency with a patched version published
+  (`baseline-browser-mapping`, `brace-expansion`, `browserslist`, `esbuild`, `fast-uri`, `qs`), and
+  no security-fix PR had been opened for any of them. Dependabot's security-update jobs for `qs`,
+  `baseline-browser-mapping`, `browserslist` and `fast-uri` ran twice that day and failed (`qs`:
+  `security_update_not_possible`, newest installable 6.15.1, first fixed 6.16.0); none ran for
+  `esbuild` or `brace-expansion`. The `esbuild` alert (vulnerable up to 0.24.2) can only be the
+  0.18.20 copy `drizzle-kit` pulls in through `@esbuild-kit/esm-loader`: Track C, *Left behind by
+  the esbuild upgrade (#439, 2026-09-19)*. Which alerts are reachable in this product is unassessed.
+  The `versioning-strategy` question is recorded under #432's loose ends in Track C.
+- **Code scanning (CodeQL default setup) switched on 2026-09-27 — 34 alerts OPEN.** Enabled with
+  `gh api -X PATCH repos/clintongormley/waitron/code-scanning/default-setup
   -f state=configured -f query_suite=default`; it analyses `actions`, `javascript-typescript` and
   `python`, weekly and on each PR, as a check the ruleset does not require. Its first run
   (36345264936) left 34 open alerts: 25 `actions/missing-workflow-permissions` (24 jobs in
@@ -3223,10 +3223,10 @@ approved.
   is triaged; list them with `gh api "repos/clintongormley/waitron/code-scanning/alerts?state=open"`.
   Next: give each workflow job the least `permissions:` it needs, check each ReDoS pattern against
   the inputs that reach it, and dismiss a test-file finding on the thread with its reason rather
-  than silently. **Dependabot malware alerts** have no REST switch (GitHub's docs,
-  `content/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/configure-malware-alerts.md`,
-  give only the Settings → Advanced Security → **Enable** button), so they stay off until the owner
-  clicks it at https://github.com/clintongormley/waitron/settings/security_analysis.
+  than silently. **Dependabot malware alerts** were switched on by the owner on 2026-09-27 from the
+  repository's Settings → Advanced Security page, by the owner's report, unconfirmed: GitHub's docs
+  (`content/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/configure-malware-alerts.md`)
+  give only that page's **Enable** button, so the setting was not read back.
 - **`apps/server/src/stream-host.test.ts` passes only in file order — DONE (lane A's A88, **PR
   #775**).** Found by #752's review: under Vitest's shuffled order (`--sequence.shuffle`) cases
   expecting no bucket credential, or no membership document, failed when a nested `describe`'s
@@ -4935,7 +4935,9 @@ branch found, checked, and consciously did not take.
   abandoned because Stryker 9.6.1 kills almost nothing under it: `packages/fiscal` scored 0.00% and
   `packages/shared` 8.14% (stryker-js#6210; fix PR #6214 was open and unreleased). Stryker 10.0.0's
   release notes mention neither issue, and nothing here was run under Vitest 5, so the question is
-  untouched rather than resolved.
+  untouched rather than resolved. A retry must also check whether #766's stored Dependabot ignore of
+  `@vitest/browser-playwright` 5.x holds that package back, and clear it if so
+  (`docs/developers/workflow-guide.md` → Dependabot pull requests).
 
 **Left behind by the dependency refresh (#432, 2026-09-19).** Nineteen dependencies moved to their
 latest minor or patch release; one loose end came with it.
