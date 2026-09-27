@@ -3441,6 +3441,9 @@ image constraints under *Detail → Box image*.
     **`fetchMirrorBundle` refuses a 200 JSON `null`** — DONE (A89):
     `apps/server/src/mirror-bundle-fetch.test.ts` sends that response through the real HTTP
     fetcher and checks for `mirror.bundle_fetch_failed`; the ordinary bundle case still passes.
+    **Still open** (read, not run): the fetcher casts any other parseable JSON value to
+    `MirrorBundle` without checking its shape (`apps/server/src/mirror-bundle-fetch.ts`); the
+    downstream refusal for such a value has not been checked.
     **Still open** (read, not run): the boot-time fetch is given only the URL (item (ii) of **Still
     open after A63** in the #657 item above), and boot never reads the `superseded` that
     `reconcileMembershipOnBoot` returns (`apps/server/src/boot.ts`, where it is called);

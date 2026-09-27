@@ -11,8 +11,8 @@ import "./errors.js";
  * `standby.contactUrl` may be `""`: a standby that advertises nothing is still a member.
  *
  * A network error, non-2xx response, unparseable body, or JSON null is
- * `mirror.bundle_fetch_failed`; the upstream error is discarded because its message can embed a
- * URL or connection detail.
+ * `mirror.bundle_fetch_failed`; the refusal carries no upstream detail that could include a URL or
+ * connection information.
  */
 export async function fetchMirrorBundle(
   primaryUrl: string,
