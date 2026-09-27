@@ -4,8 +4,9 @@ A sales report has to add every sale up exactly once. If a product could sit in 
 categories, a report by category would either count its sales twice or have to pick one of them by
 some rule nobody can see. So Waitron gives each product two separate ways to be classified:
 
-- **One main reporting category**, in a strict tree. The category reports will add sales up by it;
-  no report reads it yet.
+- **One main reporting category**, in a strict tree. The category report on the Sales screen totals
+  sales by it, either as it was recorded at the time of each sale or by today's catalogue
+  ([the two report modes](../superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md#5-the-two-report-modes)).
 - **Any number of labels**, which are flat tags such as "Alcoholic" or "Happy hour drinks". A label
   can cut across categories and overlap other labels.
 
