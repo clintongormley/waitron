@@ -1355,25 +1355,52 @@ export async function fireCourse(
   courseId: string,
 ): Promise<void> {
   await requireCourse(tx, cfg, courseId);
+  await releaseHeld(tx, cfg, orderId, eq(ticketItems.courseId, courseId), {
+    courseIds: [courseId],
+    lineIds: [],
+  });
+}
+
+/**
+ * Release these held dish lines of one order, as {@link fireCourse} releases a course: a line
+ * already fired or sent is left as it is.
+ */
+export async function fireOrderLines(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  lineIds: readonly string[],
+): Promise<void> {
+  await releaseHeld(tx, cfg, orderId, inArray(ticketItems.workingOrderLineId, [...lineIds]), {
+    courseIds: [],
+    lineIds,
+  });
+}
+
+/**
+ * Stamp `fired_at` on the order's held ticket items `ticketScope` selects and release the no-route
+ * lines `noRouteScope` selects, then {@link finishRelease}.
+ */
+async function releaseHeld(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  ticketScope: SQL,
+  noRouteScope: { courseIds: readonly (string | null)[]; lineIds: readonly string[] },
+): Promise<void> {
   const firedNow = nowIso();
   const firedItems = await tx
     .update(ticketItems)
     .set({ firedAt: firedNow })
-    .where(
-      and(
-        eq(ticketItems.workingOrderId, orderId),
-        eq(ticketItems.courseId, courseId),
-        isNull(ticketItems.firedAt),
-      ),
-    )
+    .where(and(eq(ticketItems.workingOrderId, orderId), ticketScope, isNull(ticketItems.firedAt)))
     .returning({
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
       quantity: ticketItems.quantity,
     });
-  const noRoute = await heldNoRouteLines(tx, cfg, orderId, { courseIds: [courseId], lineIds: [] });
+  const noRoute = await heldNoRouteLines(tx, cfg, orderId, noRouteScope);
   // Only an open order's lines can be removed, so only there is a sold-out line refused; a placed
-  // order's held course is committed work.
+  // order's held work is committed.
   await finishRelease(
     tx,
     cfg,
@@ -1615,6 +1642,19 @@ export async function markCourseAway(
 }
 
 /**
+ * One line of a round. `hold` and `release` are {@link fireLines}' flags for the line.
+ */
+export type TabRoundLine = {
+  menuItemId: string;
+  quantity: string;
+  courseId?: string | null;
+  extras?: ExtraSelection[];
+  options?: OptionSelection[];
+  hold?: boolean;
+  release?: boolean;
+} & LineExtras;
+
+/**
  * APPEND a priced round to an OPEN tab, locking each new line's gross unit price at add time, WITHOUT
  * deleting or re-pricing existing lines: a tab does not re-price.
  *
@@ -1625,14 +1665,9 @@ export async function addTabRound(
   tx: Transaction,
   cfg: TillConfig,
   sentTabId: string,
-  lines: ({
-    menuItemId: string;
-    quantity: string;
-    courseId?: string | null;
-    extras?: ExtraSelection[];
-    options?: OptionSelection[];
-    hold?: boolean;
-  } & LineExtras)[],
+  lines: TabRoundLine[],
+  // Written on every row the round inserts, extras children included.
+  stamp: { groupId?: string; creditedTo?: string } = {},
 ): Promise<{ tabId: string }> {
   const tabId =
     lines.length > 0 ? ((await openNextPartyTab(tx, cfg, sentTabId)) ?? sentTabId) : sentTabId;
@@ -1652,7 +1687,12 @@ export async function addTabRound(
     lines,
     context?.zoneId,
   );
-  const appended = lineRows.map((row, i) => ({ ...row, lineNo: maxLineNo + i + 1 }));
+  const appended = lineRows.map((row, i) => ({
+    ...row,
+    lineNo: maxLineNo + i + 1,
+    groupId: stamp.groupId ?? null,
+    creditedTo: stamp.creditedTo ?? null,
+  }));
   const appendedLines = await tx
     .insert(workingOrderLines)
     .values(appended)
@@ -1660,14 +1700,15 @@ export async function addTabRound(
   await VENUE_SERVICE.recordLineContexts(tx, cfg, tabId, lineContexts, offers);
   // The k-th parent row by `line_no` is input line k. Correlated on `line_no`, not on the
   // `RETURNING` array position, so the mapping does not depend on the insert's row order.
-  const holdByParentId = new Map<string, boolean>();
+  const requestByParentId = new Map<string, TabRoundLine | undefined>();
   appendedLines
     .filter((row) => row.parentLineId === null)
     .sort((a, b) => a.lineNo - b.lineNo)
-    .forEach((row, k) => holdByParentId.set(row.id, lines[k]?.hold === true));
+    .forEach((row, k) => requestByParentId.set(row.id, lines[k]));
   const withHold = appendedLines.map((row) => ({
     ...row,
-    hold: row.parentLineId === null ? (holdByParentId.get(row.id) ?? false) : false,
+    hold: requestByParentId.get(row.id)?.hold === true,
+    release: requestByParentId.get(row.id)?.release === true,
   }));
   await fireLines(tx, cfg, tabId, withHold);
   await bumpRevision(tx, [tabId]);
@@ -2581,7 +2622,7 @@ async function carveBetweenTabs(
   // The only mode check on this path: `carveOffLines` makes none, whole lines or split.
   await assertServiceModesMatch(tx, cfg, fromTabId, toTabId);
 
-  const splitFrom = await carveOffLines(tx, cfg, fromTabId, toTabId, transfers, {
+  const { splitFrom } = await carveOffLines(tx, cfg, fromTabId, toTabId, transfers, {
     refuseHeld: false,
   });
   await bumpRevision(tx, [fromTabId, toTabId]);
@@ -2602,7 +2643,7 @@ async function carveOffLines(
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
   opts: { refuseHeld: boolean },
-): Promise<Map<string, string>> {
+): Promise<{ splitFrom: Map<string, string>; splitLines: Map<string, string> }> {
   // Every line, not only the named ones: which dishes carry modifiers needs the whole tab.
   const sourceRows = await tx
     .select({
@@ -2629,6 +2670,8 @@ async function carveOffLines(
       courseId: workingOrderLines.courseId,
       note: workingOrderLines.note,
       extraListId: workingOrderLines.extraListId,
+      groupId: workingOrderLines.groupId,
+      creditedTo: workingOrderLines.creditedTo,
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
     })
@@ -2722,6 +2765,7 @@ async function carveOffLines(
   }
 
   const splitFrom = new Map<string, string>();
+  const splitLines = new Map<string, string>();
   // Split line numbers are allocated after the moves, so they do not collide with moved rows.
   if (partials.length > 0) {
     const [{ maxLineNo }] = await tx
@@ -2772,7 +2816,10 @@ async function carveOffLines(
         courseId: line.courseId,
         note: line.note,
         extraListId: line.extraListId,
+        groupId: line.groupId,
+        creditedTo: line.creditedTo,
       });
+      splitLines.set(line.id, splitLineId);
       await VENUE_SERVICE.copyLineContext(tx, cfg, line.id, splitLineId);
       if (line.ticketItemId !== null) {
         const splitTicketId = await splitTicketItem(
@@ -2787,7 +2834,25 @@ async function carveOffLines(
       }
     }
   }
-  return splitFrom;
+  return { splitFrom, splitLines };
+}
+
+/**
+ * Split `quantity` of a top-level line off into a new row of the same order, which keeps its
+ * prices, group, credit and a ticket item of its own for the part; returns the new row's id.
+ * `quantity` must be less than the line's.
+ */
+export async function splitLineWithinOrder(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  lineNo: number,
+  quantity: string,
+): Promise<string> {
+  const { splitLines } = await carveOffLines(tx, cfg, orderId, orderId, [{ lineNo, quantity }], {
+    refuseHeld: false,
+  });
+  return [...splitLines.values()][0]!;
 }
 
 /**
@@ -3393,7 +3458,7 @@ export async function refuseOrderPaymentMarked(
  * write to an open order's lines ends here, so this is also where a write to an order being paid is
  * refused, rolling back what the write did before it.
  */
-async function bumpRevision(tx: Transaction, orderIds: readonly string[]): Promise<void> {
+export async function bumpRevision(tx: Transaction, orderIds: readonly string[]): Promise<void> {
   await refusePaymentInFlight(tx, orderIds);
   await tx
     .update(workingOrders)

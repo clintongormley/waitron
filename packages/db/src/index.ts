@@ -79,6 +79,12 @@ export {
   visitTables,
   visits,
 } from "./schema/visits.js";
+export {
+  orderGroupEventKind,
+  orderGroupEvents,
+  orderGroupState,
+  orderGroups,
+} from "./schema/order-groups.js";
 export { floorZones } from "./schema/floor-zones.js";
 export { kitchenStations } from "./schema/kitchen-stations.js";
 export { kitchenCourses } from "./schema/kitchen-courses.js";

@@ -31,6 +31,22 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This is the party's only table, so it cannot be separated from its bill",
     es: "Es la única mesa de estos clientes, así que no se puede separar de su cuenta",
   },
+  "group.not_held": {
+    en: "Those items have already gone to the kitchen. Reload the table and try again",
+    es: "Esos artículos ya se han enviado a cocina. Vuelve a cargar la mesa e inténtalo de nuevo",
+  },
+  "group.not_found": {
+    en: "Those items are no longer on this table. Reload the table and try again",
+    es: "Esos artículos ya no están en esta mesa. Vuelve a cargar la mesa e inténtalo de nuevo",
+  },
+  "group.held_leaves_visit": {
+    en: "Items still on hold cannot move to another table. Send them to the kitchen first",
+    es: "Los artículos en espera no se pueden pasar a otra mesa. Envíalos antes a cocina",
+  },
+  "group.line_held": {
+    en: "This item is on hold with others. Fire them together to send it",
+    es: "Este artículo está en espera con otros. Márchalos juntos para enviarlo",
+  },
   "submission.id_reused": {
     en: "This request could not be matched to what was sent before. Reload and try again",
     es: "Esta petición no coincide con la que se envió antes. Vuelve a cargar e inténtalo de nuevo",
