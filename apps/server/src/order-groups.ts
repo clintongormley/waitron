@@ -100,90 +100,104 @@ export async function submitGroups(
     { visitId, operatorId, ...body },
     async () => {
       await checkAndBumpVisit(tx, visitId, expectedVisitRevision, "open");
-      if (input.groups.length === 0) {
-        throw new AppError("management.request_invalid", { field: "groups" });
-      }
-      if (input.joinGroupId !== undefined) {
-        if (input.groups.length !== 1 || input.groups[0]!.release !== "hold") {
-          throw new AppError("management.request_invalid", { field: "joinGroupId" });
-        }
-        await requireHeldGroup(tx, visitId, input.joinGroupId);
-      }
-      const lines = input.groups.flatMap((group) =>
-        group.lines.map((line) => ({
-          ...line,
-          hold: group.release === "hold",
-          release: group.release === "fire",
-        })),
-      );
-      // A first group with no lines prices nothing, as the tab is checked before the empty basket.
-      const round = await priceTabRound(
-        tx,
-        cfg,
-        await visitTab(tx, visitId),
-        input.groups[0]!.lines.length === 0 ? [] : lines,
-      );
-      if (input.groups.some((group) => group.lines.length === 0)) {
-        throw new AppError("sale.empty_basket", {});
-      }
-      const { tabId } = round;
-      const groupIds: string[] = [];
-      for (const group of input.groups) {
-        groupIds.push(
-          input.joinGroupId ?? (await startGroup(tx, visitId, group.release, operatorId)),
-        );
-      }
-      // The k-th parent row is input line k; an extras child goes with its dish.
-      const groupOfLine = input.groups.flatMap((group, i) => group.lines.map(() => groupIds[i]!));
-      const groupOfRow = new Map<string, string>();
-      let parents = 0;
-      const rows = round.rows.map((row) => {
-        const groupId =
-          row.parentLineId == null ? groupOfLine[parents++]! : groupOfRow.get(row.parentLineId)!;
-        groupOfRow.set(row.id!, groupId);
-        return { ...row, groupId, creditedTo: operatorId };
-      });
-      const inserted = await insertTabRound(tx, cfg, round, rows);
-      for (const [i, group] of input.groups.entries()) {
-        const groupId = groupIds[i]!;
-        const fire = group.release === "fire";
-        await fireLines(
-          tx,
-          cfg,
-          tabId,
-          inserted
-            .filter((row) => row.groupId === groupId)
-            .map((row) => ({ ...row, hold: !fire, release: fire })),
-        );
-        if (input.joinGroupId !== undefined) {
-          await correctJoin(
-            tx,
-            cfg,
-            groupId,
-            inserted.filter((row) => row.parentLineId == null).map((row) => row.id!),
-          );
-        } else if (!fire) {
-          await printHoldTickets(tx, cfg, [groupId]);
-        }
-        await bumpRevision(tx, [tabId]);
-        await recordGroupEvent(tx, {
-          visitId,
-          groupId,
-          kind: input.joinGroupId === undefined ? "submitted" : "joined",
-          actorId: operatorId,
-          detail: { workingOrderId: tabId, release: group.release },
-        });
-      }
-      const listed = new Map(
-        (await readGroups(tx, visitId, groupIds)).map((group) => [group.id, group]),
-      );
-      return {
-        tabId,
-        revision: await currentRevision(tx, visitId),
-        groups: groupIds.map((id) => listed.get(id)!),
-      };
+      return placeGroups(tx, cfg, visitId, input);
     },
   );
+}
+
+export type PlaceGroupsInput = Pick<SubmitGroupsInput, "groups" | "joinGroupId" | "operatorId">;
+
+/**
+ * {@link submitGroups} without its replay record or visit revision check, for a command that makes
+ * both itself.
+ */
+export async function placeGroups(
+  tx: Transaction,
+  cfg: TillConfig,
+  visitId: string,
+  input: PlaceGroupsInput,
+): Promise<SubmittedGroups> {
+  const { operatorId } = input;
+  if (input.groups.length === 0) {
+    throw new AppError("management.request_invalid", { field: "groups" });
+  }
+  if (input.joinGroupId !== undefined) {
+    if (input.groups.length !== 1 || input.groups[0]!.release !== "hold") {
+      throw new AppError("management.request_invalid", { field: "joinGroupId" });
+    }
+    await requireHeldGroup(tx, visitId, input.joinGroupId);
+  }
+  const lines = input.groups.flatMap((group) =>
+    group.lines.map((line) => ({
+      ...line,
+      hold: group.release === "hold",
+      release: group.release === "fire",
+    })),
+  );
+  // A first group with no lines prices nothing, as the tab is checked before the empty basket.
+  const round = await priceTabRound(
+    tx,
+    cfg,
+    await visitTab(tx, visitId),
+    input.groups[0]!.lines.length === 0 ? [] : lines,
+  );
+  if (input.groups.some((group) => group.lines.length === 0)) {
+    throw new AppError("sale.empty_basket", {});
+  }
+  const { tabId } = round;
+  const groupIds: string[] = [];
+  for (const group of input.groups) {
+    groupIds.push(input.joinGroupId ?? (await startGroup(tx, visitId, group.release, operatorId)));
+  }
+  // The k-th parent row is input line k; an extras child goes with its dish.
+  const groupOfLine = input.groups.flatMap((group, i) => group.lines.map(() => groupIds[i]!));
+  const groupOfRow = new Map<string, string>();
+  let parents = 0;
+  const rows = round.rows.map((row) => {
+    const groupId =
+      row.parentLineId == null ? groupOfLine[parents++]! : groupOfRow.get(row.parentLineId)!;
+    groupOfRow.set(row.id!, groupId);
+    return { ...row, groupId, creditedTo: operatorId };
+  });
+  const inserted = await insertTabRound(tx, cfg, round, rows);
+  for (const [i, group] of input.groups.entries()) {
+    const groupId = groupIds[i]!;
+    const fire = group.release === "fire";
+    await fireLines(
+      tx,
+      cfg,
+      tabId,
+      inserted
+        .filter((row) => row.groupId === groupId)
+        .map((row) => ({ ...row, hold: !fire, release: fire })),
+    );
+    if (input.joinGroupId !== undefined) {
+      await correctJoin(
+        tx,
+        cfg,
+        groupId,
+        inserted.filter((row) => row.parentLineId == null).map((row) => row.id!),
+      );
+    } else if (!fire) {
+      await printHoldTickets(tx, cfg, [groupId]);
+    }
+    await bumpRevision(tx, [tabId]);
+    await recordGroupEvent(tx, {
+      visitId,
+      groupId,
+      kind: input.joinGroupId === undefined ? "submitted" : "joined",
+      actorId: operatorId,
+      detail: { workingOrderId: tabId, release: group.release },
+    });
+  }
+  const listed = new Map(
+    (await readGroups(tx, visitId, groupIds)).map((group) => [group.id, group]),
+  );
+  return {
+    tabId,
+    revision: await currentRevision(tx, visitId),
+    groups: groupIds.map((id) => listed.get(id)!),
+  };
 }
 
 /**
