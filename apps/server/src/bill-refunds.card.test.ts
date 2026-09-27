@@ -688,7 +688,7 @@ describe("design §8 test 20: the call's own answer, and which answers settle wh
   it.each([
     ["a 401", { kind: "refused", httpStatus: 401, documented: true }],
     ["a 400", { kind: "refused", httpStatus: 400, documented: true }],
-    ["a 429", { kind: "refused", httpStatus: 429, documented: true }],
+    ["a 404", { kind: "refused", httpStatus: 404, documented: true }],
   ] as const)(
     "keeps it pending when %s answers a resend after a lost first send: it answers only that send",
     async (_name, answer) => {
