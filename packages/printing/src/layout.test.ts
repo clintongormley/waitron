@@ -67,7 +67,7 @@ describe("wrapText", () => {
     expect(wrapText("a\t  b", 3)).toEqual(["a\t", "b"]);
   });
 
-  it("wraps a crafted line holding a 200,000-space run in linear time", () => {
+  it("wraps a crafted line holding a 200,000-space run within one second", () => {
     const text = `a${" ".repeat(200_000)}b`;
     const started = performance.now();
     expect(wrapText(text, text.length + 10)).toEqual([text]);

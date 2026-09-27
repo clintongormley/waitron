@@ -130,7 +130,7 @@ describe("the configured prefix", () => {
     expect(normalisePrefix(prefix)).toBe(expected);
   });
 
-  it("normalises a crafted 200,000-character prefix in linear time", () => {
+  it("normalises a crafted 200,000-character prefix within one second", () => {
     const inner = "/".repeat(200_000);
     const started = performance.now();
     expect(normalisePrefix(`x${inner}y`)).toBe(`x${inner}y/`);

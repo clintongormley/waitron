@@ -2,8 +2,9 @@ export function normalizeEmail(raw: string): string {
   return raw.trim().toLowerCase();
 }
 
-// Screens obvious typos only; not RFC-complete. Accepts what /^[^\s@]+@[^\s@]+\.[^\s@]+$/ did, without
-// that pattern's backtracking, which grows with the square of a crafted domain's length.
+// Screens obvious typos only; not RFC-complete. Accepts the strings
+// /^[^\s@]+@[^\s@]+\.[^\s@]+$/ matches after trimming; not written as that pattern, which
+// backtracks quadratically on a crafted domain.
 export function isValidEmail(raw: string): boolean {
   const email = raw.trim();
   if (/\s/.test(email)) return false;

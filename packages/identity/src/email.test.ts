@@ -12,7 +12,7 @@ test("isValidEmail accepts a plain address and rejects malformed", () => {
   expect(isValidEmail("")).toBe(false);
 });
 
-test("isValidEmail accepts and refuses exactly the addresses it did before its linear rewrite", () => {
+test("isValidEmail accepts and refuses these address shapes", () => {
   for (const address of [
     "owner@x.com",
     "a@b.c",
@@ -45,7 +45,7 @@ test("isValidEmail accepts and refuses exactly the addresses it did before its l
     expect(isValidEmail(address), JSON.stringify(address)).toBe(false);
 });
 
-test("isValidEmail refuses a crafted 200,000-character address in linear time", () => {
+test("isValidEmail refuses a crafted 200,000-character address within one second", () => {
   const crafted = `!@!.${"!.".repeat(100_000)}@`;
   const started = performance.now();
   expect(isValidEmail(crafted)).toBe(false);

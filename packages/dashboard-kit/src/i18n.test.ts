@@ -91,7 +91,15 @@ it("strips every subtag after the language, and leaves a locale with no dash who
   expect(t("x.hi", "-es")).toBe("Hi"); // an empty language has no catalogue
 });
 
-it("resolves a crafted 200,000-character locale in linear time", () => {
+it("resolves the language before the first dash even when a line terminator follows it", () => {
+  const entry = { en: "En", es: "Es" };
+  for (const locale of ["es-\nES", "es-\rES", "es-\u2028ES", "es-\u2029ES"]) {
+    expect(t("x.hi", locale)).toBe("Hola");
+    expect(pickLocale(entry, locale)).toBe("Es");
+  }
+});
+
+it("resolves a crafted 200,000-character locale within one second", () => {
   const crafted = `${"-".repeat(200_000)}\n`;
   const started = performance.now();
   expect(t("x.hi", crafted)).toBe("Hi");
