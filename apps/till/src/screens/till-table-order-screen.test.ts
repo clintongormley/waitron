@@ -821,6 +821,19 @@ describe("till-table-order-screen", () => {
         expect(await openPreview(el, "send-selected")).toContain("Hold: 1 group.");
       });
 
+      it("keeps Send selected and Fire selected now inside a phone-width screen", async () => {
+        const { el, host } = await mount({ courses: serviceCourses, products: menu });
+        host.style.width = "390px";
+        await ring(el, [beer, "1"], [steak, "1"]);
+        await toggle(el, "Beer");
+        const edge = el.getBoundingClientRect().right;
+        const actions = [...el.shadowRoot!.querySelectorAll("[data-draft-action]")];
+        expect(actions.length).toBe(2);
+        expect(
+          actions.filter((action) => action.getBoundingClientRect().right > edge + 0.5),
+        ).toEqual([]);
+      });
+
       it("counts a weighed line as one item", async () => {
         const { el } = await mount({ courses: serviceCourses, products: menu });
         await ring(el, [jamon, "0.250"], [beer, "2"]);
@@ -973,6 +986,23 @@ describe("till-table-order-screen", () => {
         expect(sent.detail.lines).toEqual([{ menuItemId: "offer-steak", quantity: "1" }]);
         expect(sent.detail.groups).toEqual([{ release: "hold", lineIndexes: [0] }]);
         expect(sent.detail.joinGroupId).toBeUndefined();
+      });
+
+      it("keeps every destination, held group and action inside a phone-width screen", async () => {
+        const { el, host } = await mount({ courses: serviceCourses, products: menu, groups: held });
+        host.style.width = "390px";
+        await ring(el, [croquetas, "1"]);
+        await pickDestination(el, "add-to-held");
+        const edge = el.getBoundingClientRect().right;
+        const controls = [
+          ...el.shadowRoot!.querySelectorAll(
+            "[data-destination], [data-held-group], [data-draft-action]",
+          ),
+        ];
+        expect(controls.length).toBe(6);
+        expect(
+          controls.filter((control) => control.getBoundingClientRect().right > edge + 0.5),
+        ).toEqual([]);
       });
 
       it("offers no Add to held group when every group of the party has fired", async () => {

@@ -501,7 +501,8 @@ export class TillTableOrderScreen extends LitElement {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-2);
-        flex: 0 0 auto;
+        flex: 0 1 auto;
+        min-width: 0;
       }
 
       .draft-actions,

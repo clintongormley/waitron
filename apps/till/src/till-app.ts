@@ -457,8 +457,13 @@ export class TillApp extends LitElement {
         display: block;
       }
 
-      .submitted-toast[open] {
-        margin: 0 0 var(--wt-space-3);
+      /* Over the page, above the language button: in the flow, its closing would move the floor under a
+         waiter's finger. */
+      .submitted-toast {
+        position: fixed;
+        inset-inline: var(--wt-space-3);
+        bottom: calc(var(--wt-tap-min) + 2 * var(--wt-space-3) + env(safe-area-inset-bottom));
+        z-index: 10;
       }
 
       .error-part + .error-part {

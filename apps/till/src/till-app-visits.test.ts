@@ -2412,6 +2412,21 @@ describe("till-app: submitting the draft", () => {
     ]);
   });
 
+  it("shows the notice over the floor without moving it, so a tap as it closes lands where it was aimed", async () => {
+    const server = groupsServer();
+    const { el } = await mountApp({ ...withCourses(), ...server });
+    const order = await openMesa(el);
+    await ring(el, order, beer, steak);
+    await act(el, order, "fire-all");
+    expect(toast(el)!.open).toBe(true);
+    const withNotice = floor(el)!.getBoundingClientRect().top;
+
+    toast(el)!.shadowRoot!.querySelector<HTMLElement>("button.close")!.click();
+    await flush(el);
+    expect(toast(el)!.open).toBe(false);
+    expect(floor(el)!.getBoundingClientRect().top).toBe(withNotice);
+  });
+
   it("stays on the table after a partial submission, keeping the unchecked lines in the draft", async () => {
     const server = groupsServer();
     const { el } = await mountApp({ ...withCourses(), ...server });
