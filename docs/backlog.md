@@ -2118,7 +2118,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     and moves the party's revision). The till's table screen looks the same and maps Send round,
     Fire course and Send all onto groups _(Task 4, 2026-09-27: replaced by the draft's actions and
     the Tab drawer's held-groups list)_. Counter orders and bills with no party still fire by
-    course, and the station and pass Fire route stays until Task 5. Upgrade: a venue built and
+    course, and the station and pass Fire route stays until Task 5 _(Task 5, 2026-09-27: the
+    kitchen screen and the pass now fire a party's held groups by group; the course routes stay
+    for counter orders and bills with no party)_. Upgrade: a venue built and
     seeded on `main` took the new migration with no row lost and no table rebuilt, with a control
     showing the checks detect a rebuild (the PR has both). Left open, from the PR's "Parked points"
     and review notes: a cross-party merge can leave a settled check's lines naming a group now on
@@ -2146,17 +2148,19 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     gone. Server change: the tab-lines read returns each line's `id`; no migration. Left open, from
     the PR: **Fire all now / Fire selected now are offered under every `fire_control` setting**
     (the plan's test text wanted them hidden under `kitchen`/`expo`; kept because sending straight
-    to the kitchen was never gated and the kitchen can only fire a held group that has a course —
-    one-line gate in `#draftBar` if the owner wants it); whether a draft is a later addition is
-    decided when its first line is rung, so a line rung before the groups are read makes a first
-    order; group summaries come from the server, so a weighed quantity shows a dot decimal in
-    Spanish; the draft shows its lines both in the course sections and in the basket (the draft
-    rebuild is Task 7/8); the held-groups list shows each group's summary and then its lines; group
-    numbers are the server's positions, so the list can read "Group 1, Group 3"; the preview gives
-    counts, not contents; the screen's older small buttons are 32 px tall, under the 44 px tap
-    target (this branch's new ones are 44 px); per-line Send, Change and Cancel have no guard
-    against a second press while the first is running (the group commands do); whether the
-    floating language button covers the new draft bar at 390 px has not been re-checked.
+    to the kitchen was never gated and the kitchen can only fire a held group that has a course
+    _(Task 5, 2026-09-27: no longer so — under `kitchen` the kitchen screen offers Fire on every
+    held group of a party)_ — one-line gate in `#draftBar` if the owner wants it); whether a draft
+    is a later addition is decided when its first line is rung, so a line rung before the groups
+    are read makes a first order; group summaries come from the server, so a weighed quantity
+    shows a dot decimal in Spanish; the draft shows its lines both in the course sections and in
+    the basket (the draft rebuild is Task 7/8); the held-groups list shows each group's summary and
+    then its lines; group numbers are the server's positions, so the list can read "Group 1,
+    Group 3"; the preview gives counts, not contents; the screen's older small buttons are 32 px
+    tall, under the 44 px tap target (this branch's new ones are 44 px); per-line Send, Change and
+    Cancel have no guard against a second press while the first is running (the group commands
+    do); whether the floating language button covers the new draft bar at 390 px has not been
+    re-checked.
   - **Splitting a held line's quantity on the till takes one request per unit** (found on the
     Task 4 branch, 2026-09-27). Splitting a quantity of N sends N−1 move requests, each at the
     revision the one before it answered with (`#onSplitGroupLine`, `apps/till/src/till-app.ts`),
@@ -2171,6 +2175,67 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     line is picked. The draft's line toggle was changed to a plain button on the Task 4 branch; the
     transfer picker was not, and neither was the split picker (`#splitLineRow`), which has the same
     shape.
+  - **Task 5 landed as #TBD** (lane B item B5, 2026-09-27, main `TBD`; written on the branch
+    `feat/service-groups-kitchen` before its pull request, so landing fills in both): the kitchen,
+    the pass and the table screen work by a seated party's groups, and a kitchen ticket that did
+    not print shows on the table. **Kitchen screen:** a party's card is split into "Group n"
+    sections; a held group reads "Held, not released" and, when the venue's who-fires setting
+    (`fire_control`) is `kitchen`, has a Fire button (never on an enrolled kitchen display).
+    **Pass:** each group has Fire (under `expo` only), "Group ready" or Away, through the new
+    `POST /api/visits/:id/groups/:gid/ready` and `.../away`, which answer a resent press from its
+    record without acting twice and refuse a screen read before the table changed
+    (`visit.out_of_date`); the kitchen screen and the pass then read again and say the table
+    changed. A counter order, or a bill with no party, keeps its course sections and course
+    buttons, and the course routes stay, because a counter order's held course has no other
+    release. **Table screen:** a fired group in the Tab drawer
+    reads "Ready" only once someone marked it ready, "En route" once the pass sent it, otherwise
+    "Fired N min ago"; the server never infers ready. **Kitchen tickets:** a reprint opens with
+    `*** REPRINT ***`, a party's ticket names `GROUP n`, and a new venue setting chooses whether
+    identical dishes print as one entry (`3 x Burger`, the default) or one entry each; a dish sold
+    by weight or volume is never added together or split. The setting is
+    `service_settings.kitchen_ticket_grouping`, chosen on the dashboard's Preparation routing tab
+    and saved through its own route,
+    `PUT /management-api/venue-service/settings/kitchen-ticket-grouping`, so the existing settings
+    route is unchanged. Venue-service `0005` adds the column and `0006` rebuilds the table to add
+    a check allowing only the two values: two drizzle generations, because a single one copied the
+    new column out of the old table and failed. The rebuild is
+    safe because nothing points at `service_settings` (no key to it in any migration set, and no
+    other set's SQL names it) and its only triggers, the change feed's three, are removed before
+    migrating and reinstalled at boot. **Printing problems:** core `0029` adds `kitchen_print_jobs`,
+    one row per kitchen print job, bill and station — in core because all three of its keys point
+    at core tables (`print_jobs`, `working_orders`, `kitchen_stations`). A ticket that failed
+    every delivery attempt, or is still waiting after two minutes (the rule the printer alert
+    already used), shows "Printing problem" with Reprint on the table screen, and on the station's
+    card (Reprint there only on a till, not on a kitchen display). Ordering is never blocked. It
+    clears only when a later reprint of that bill prints on the same printer, so the notice stays
+    until the reprint has printed and the screen reads again. Left open, from the branch's ledger:
+    - A party finished while its food is still on the pass keeps its cards there with no group
+      button that works (each is refused `visit.not_open`); a question for the owner.
+    - "Ready" and "Fired N min ago" on the table screen are the plan's default, not an owner
+      decision.
+    - A fired group with nothing for the kitchen (bottled water, say) never reads Ready.
+    - `*** REPRINT ***` and `GROUP n` print in English.
+    - A resend from the dashboard's Printers screen does not clear a table's printing problem, and
+      there is no way to dismiss one: a detached or replaced printer leaves it showing.
+    - A failed ticket on a pass printer (one ticket for the whole order) shows on the card of every
+      station it covered, even where that station's own printer printed.
+    - Transfer, unjoin and split leave a printing problem on the bill the ticket named, and the
+      moved dishes' bill shows none; Finish table drops the problem of a bill that transfers
+      emptied. Read, not run; only a merge carries a problem to the surviving bill.
+    - Only dishes sold in Each are added together or split; a venue-made unit that counts pieces (a
+      "portion") prints line by line, because nothing records a unit's kind (a unit field would
+      need a migration).
+    - The setting sits under "Changes after sending" on the Preparation routing tab; it may deserve
+      a heading of its own.
+    - `fireHeldGroupsOfCourse` (`apps/server/src/order-groups.ts`), through which a course Fire
+      still fires a party's held groups, is to be removed in a follow-up.
+    - The setting's upgrade was measured with a throwaway script over the real migration folders
+      and a database holding one settings row, not on a seeded venue.
+    - Every pass press moves the party's revision, so a waiter's open Tab drawer meets
+      `visit.out_of_date` after it and reads again.
+    - Setting up a venue from an imported configuration deletes every kitchen station, and the new
+      table's station key has no delete rule; whether that venue can already hold link rows at that
+      point was not tested (read, not run).
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card
