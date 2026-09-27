@@ -14,7 +14,9 @@ function rememberedServer(value: unknown): NonNullable<AgentConfig["servers"]>[n
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
   if ("nodeId" in value && typeof value.nodeId !== "string") return undefined;
-  return "nodeId" in value ? { url: value.url, nodeId: value.nodeId as string } : { url: value.url };
+  return "nodeId" in value
+    ? { url: value.url, nodeId: value.nodeId as string }
+    : { url: value.url };
 }
 
 /** The token is a bearer secret, so it is written 0600 and atomically. */
