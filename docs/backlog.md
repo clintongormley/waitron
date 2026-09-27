@@ -2135,6 +2135,28 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     Tab-drawer Send all now, and the table screen offers its per-line Send only on a dish with a
     kitchen ticket item (`sendsAlone`, `apps/till/src/state/held-groups.ts`), so it offers such a
     dish no Send either; whether one can occur is still not established)_.
+  - **Task 4 landed as #748** (lane B item B4, 2026-09-27, main `a9a26cc98`): the till's table
+    screen works with order groups. The draft is shown in sections by course; its bar offers Send
+    all and Fire all now, or Send selected and Fire selected now when lines are ticked, each behind
+    a preview dialog; a draft started after the party already has a group picks Fire now, Add to
+    held group… or Add as new group; after a complete submission the till returns to the floor with
+    a "Fired: N groups. Held: N groups." notice. The Tab drawer lists every group of the party:
+    held ones can be reordered, have a dish moved or split one row per unit, have a dish changed
+    or cancelled, and be fired after a confirmation. Fire course and the tab-level Send all are
+    gone. Server change: the tab-lines read returns each line's `id`; no migration. Left open, from
+    the PR: **Fire all now / Fire selected now are offered under every `fire_control` setting**
+    (the plan's test text wanted them hidden under `kitchen`/`expo`; kept because sending straight
+    to the kitchen was never gated and the kitchen can only fire a held group that has a course —
+    one-line gate in `#draftBar` if the owner wants it); whether a draft is a later addition is
+    decided when its first line is rung, so a line rung before the groups are read makes a first
+    order; group summaries come from the server, so a weighed quantity shows a dot decimal in
+    Spanish; the draft shows its lines both in the course sections and in the basket (the draft
+    rebuild is Task 7/8); the held-groups list shows each group's summary and then its lines; group
+    numbers are the server's positions, so the list can read "Group 1, Group 3"; the preview gives
+    counts, not contents; the screen's older small buttons are 32 px tall, under the 44 px tap
+    target (this branch's new ones are 44 px); per-line Send, Change and Cancel have no guard
+    against a second press while the first is running (the group commands do); whether the
+    floating language button covers the new draft bar at 390 px has not been re-checked.
   - **Splitting a held line's quantity on the till takes one request per unit** (found on the
     Task 4 branch, 2026-09-27). Splitting a quantity of N sends N−1 move requests, each at the
     revision the one before it answered with (`#onSplitGroupLine`, `apps/till/src/till-app.ts`),
