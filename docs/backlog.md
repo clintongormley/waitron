@@ -4902,7 +4902,8 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   UTC date, then adopts the venue's business day from the Overview endpoint when it answers. If
   Overview refuses or has not answered, the initial reports remain available. An operator's edited
   range stays in place if Overview answers later. Browser regressions supply a different business
-  day at 01:00 and noon UTC, and cover a refusal, a pending read and a late answer.
+  day at 01:00 and noon UTC, plus a noon same-day control, and cover a refusal, a pending read and a
+  late answer.
 - **An imported configuration no longer carries "already offered a passkey"**: a configuration
   transfer strips `passkey_offered_at` on export and refuses a bundle that still carries it.
 - **The login screen's automatic passkey attempt can show "Something went wrong, try again" on load**
