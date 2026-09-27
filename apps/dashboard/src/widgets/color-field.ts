@@ -73,12 +73,30 @@ export const colorFieldStyles = css`
     border-radius: var(--wt-radius-sm);
     cursor: pointer;
   }
+  .custom input[type="color"].on {
+    outline: var(--wt-selected-ring);
+    outline-offset: var(--wt-selected-ring-offset);
+  }
+  /* Separate rules, never one selector list: Chromium drops a whole list that names
+     ::-moz-color-swatch. */
+  .custom input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+  .custom input[type="color"]::-webkit-color-swatch {
+    border: none;
+  }
+  .custom input[type="color"]::-moz-color-swatch {
+    border: none;
+  }
   /* A native colour input always holds a colour (an empty value reads back as #000000), so with
      none chosen it would paint black. */
   .custom input[type="color"].empty {
     background: transparent;
   }
   .custom input[type="color"].empty::-webkit-color-swatch {
+    visibility: hidden;
+  }
+  .custom input[type="color"].empty::-moz-color-swatch {
     visibility: hidden;
   }
   .field-error {
@@ -97,7 +115,11 @@ export interface ColorFieldOptions {
   change: (color: string | null) => void;
 }
 
-/** The palette, a "no colour" choice and a custom colour picker, as one radio group. */
+/**
+ * A "no colour" choice and the palette as one radio group, and a custom colour input beside it.
+ * The custom input's selection is shown by its ring alone: a colour input may take no role (ARIA in
+ * HTML, `input type=color`), so it cannot join the radio group.
+ */
 export function colorField(options: ColorFieldOptions): TemplateResult {
   const { color, busy, error, name, errorId, change } = options;
   const swatch = (value: string) =>
@@ -142,7 +164,13 @@ export function colorField(options: ColorFieldOptions): TemplateResult {
       >${t("editor.color_custom")}
       <input
         type="color"
-        class=${color === null ? "empty" : ""}
+        class=${
+          color === null
+            ? "empty"
+            : (CATEGORY_PALETTE as readonly string[]).includes(color)
+              ? ""
+              : "on"
+        }
         name=${name}
         aria-invalid=${error ? "true" : "false"}
         aria-describedby=${errorId}

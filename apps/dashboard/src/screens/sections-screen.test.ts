@@ -844,6 +844,19 @@ it("paints a section's custom colour in the Custom square", async () => {
   expect((await customSquarePixels(modal(el, "editor"))).inside).toEqual([0xaa, 0xbb, 0xcc, 255]);
 });
 
+it("rings the Custom square for a section with a custom colour, and not for one with none", async () => {
+  const el = await mount();
+  await openEditor(el, "s-drinks");
+  const custom = await customSquarePixels(modal(el, "editor"));
+  expect([custom.row[0], custom.row[1]]).toEqual([custom.ringColor, custom.ringColor]);
+  cleanupWidgets();
+  const other = await mount();
+  await openEditor(other, "s-beer");
+  const none = await customSquarePixels(modal(other, "editor"));
+  expect(none.row[0]).toEqual(none.borderColor);
+  expect(none.borderColor).not.toEqual(none.ringColor);
+});
+
 // ---------------------------------------------------------------------------
 // Members
 
