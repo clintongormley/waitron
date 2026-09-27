@@ -610,7 +610,7 @@ ordered attachment list per product. Landed across #412, #436, #445, #449, #452,
   change, coordinated with lane C.
 
 **Extras and Options editors — owner review fixes (2026-09-26), campaign lane A items A64–A67 —
-DONE (A67 on `feat/options-editor-rows`, its pull request to follow).** The owner's review of the Modifiers screen: Active/Inactive in place of "In use", a Used
+LANDED (A67 last, #718).** The owner's review of the Modifiers screen: Active/Inactive in place of "In use", a Used
 by column, an options popup that lists products only, collapsed name sections, steppers for choices
 and quantities, baseline-aligned rows, a bin icon, the product's unit beside each price, a wider
 standard modal everywhere, visible drag feedback, option rows as text with their own editor, and an
@@ -668,8 +668,7 @@ its part done here when it lands.
   and 271px (Spanish) before the A66 rework. Open point for the owner: clearing the Minimum
   choices box saves 0, as it did before A66 (the save format's own default); the plan's Review Focus
   item 3 reads as if a cleared minimum should be refused instead.
-- **A67 (the Options editor, and always a default) — DONE on `feat/options-editor-rows`, pull
-  request to follow.** The server now keeps a default whenever an options list has an available
+- **A67 (the Options editor, and always a default) — LANDED, #718.** The server now keeps a default whenever an options list has an available
   option: `parseOptionListInput` gives every option without an id one of its own and, where the
   body names no default or names one that is switched off, returns the first available option as
   the default, which the write stores (a list with nothing available, possible only while it is
@@ -691,7 +690,7 @@ its part done here when it lands.
   modal at the same size as the list's, so it covers the list entirely; only the darker backdrop
   shows that it is stacked.
 
-**Two small follow-ups A67 left open:**
+**Three small follow-ups A67 left open:**
 
 - **The Modifiers screen's options-list column heading still says "Labels".** The string
   `options.labels` (`apps/dashboard/src/i18n/strings.ts`) reads "Labels" / "Etiquetas", while the
@@ -699,6 +698,11 @@ its part done here when it lands.
 - **Nothing takes focus after an option is deleted in the Options list editor.** Focus goes neither
   to a neighbouring row nor to "Add option" (`apps/dashboard/src/widgets/option-list-form.ts`).
   **Next action:** move focus to the next row, or to "Add option" when no row is left.
+- **The Options list's rows centre their contents rather than lining up by text baseline (D6).**
+  A row is one line of text beside the Default dot and a menu button, so centring reads the same;
+  but when a server refusal adds an error line under an option's name, the dot and menu centre on
+  the name and the error together. Expected from the CSS in `option-list-form.ts`, not yet looked at
+  on screen. **Next action:** screenshot a row carrying an error and decide whether to align by baseline.
 
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
