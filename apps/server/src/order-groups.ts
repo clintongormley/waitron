@@ -935,7 +935,7 @@ async function requireGroup(
 }
 
 /** The tab the visit's tables point at, which may be a paid one the party can still order on. */
-async function visitTab(tx: Transaction, visitId: string): Promise<string> {
+export async function visitTab(tx: Transaction, visitId: string): Promise<string> {
   const [table] = await tx
     .select({ tabId: diningTables.tabId })
     .from(visitTables)

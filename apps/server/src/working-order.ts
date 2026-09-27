@@ -125,6 +125,8 @@ import { issuancePass } from "./issuance-pass.js";
 import { issueMoment } from "./issue-moment.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
+import { readUnsentDrafts } from "./order-drafts.js";
+import type { UnsentDraft } from "./order-drafts.js";
 import {
   correctHoldTickets,
   fireHeldGroupsOfCourse,
@@ -631,7 +633,7 @@ async function priceOrderLines(
  * A line's free-text kitchen note, trimmed, or `null` for none. The body is JSON, so a non-string is
  * screened out before it can reach `.trim()` as a TypeError.
  */
-function screenNote(value: unknown): string | null {
+export function screenNote(value: unknown): string | null {
   const NOTE_LIMIT = 200;
   const screened = value === undefined ? null : requireNullableString(value, "note");
   const trimmed = screened?.trim() ?? "";
@@ -5455,6 +5457,8 @@ export interface TableVisit {
   billCount: number;
   /** Every table the party sits at, in the order they joined it. */
   tableIds: string[];
+  /** Each open draft on the party holding a line, oldest first. */
+  unsentDrafts: UnsentDraft[];
 }
 
 /** One row of the occupancy read-model. */
@@ -5704,6 +5708,7 @@ async function readSeatedParties(
     .orderBy(visitTables.joinedAt, visitTables.id);
   const visitIds = [...new Set(members.map((member) => member.visitId))];
   const bills = await readBillsOfVisits(tx, visitIds);
+  const unsentDrafts = await readUnsentDrafts(tx, visitIds);
   const partyOf = new Map<string, TableVisit>();
   for (const member of members) {
     const known = partyOf.get(member.visitId);
@@ -5720,6 +5725,7 @@ async function readSeatedParties(
       outstanding: toScale(sumDecimals(own.map((bill) => decimal(bill.outstanding))), MONEY_SCALE),
       billCount: own.filter((bill) => bill.status !== "abandoned").length,
       tableIds: [member.tableId],
+      unsentDrafts: unsentDrafts.get(member.visitId)!,
     });
   }
   return new Map(

@@ -74,7 +74,7 @@ export const orderDraftLines = table(
     note: label("note"),
     quantity: quantity("quantity").notNull(),
     courseId: id("course_id"),
-    // `normaliseDraftLines` never adds this row to a matching one.
+    // `normaliseDraftLines` never adds this row to another, nor another to it.
     noMerge: flag("no_merge").notNull().default(false),
   },
   (t) => [

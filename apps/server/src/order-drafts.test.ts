@@ -166,6 +166,7 @@ describe("normaliseDraftLines (D10)", () => {
     expect(normaliseDraftLines(split)).toEqual(split);
     const added = line({ menuItemId: BURGER });
     expect(normaliseDraftLines([...split, added])).toEqual([...split, added]);
+    expect(normaliseDraftLines([added, ...split])).toEqual([added, ...split]);
   });
 
   it.each([
