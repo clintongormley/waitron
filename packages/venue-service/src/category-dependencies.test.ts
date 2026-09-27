@@ -88,25 +88,25 @@ it("an open order keeps its copied category label after the category is deleted"
     // Raw SQL so the stored counts are written literally; `id` is named because only the insert
     // builder generates one.
     await tx.execute(sql`
-      insert into working_order_lines (id, working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total, category) values (${randomUUID()}, ${order!.id}, 1, ${product.id}, 'Bread', '{"en":"Bread"}', 1000,
-         200, 200, 1000, 200, 'Bakery')
+      insert into working_order_lines (id, working_order_id, line_no, product_id, name, descriptions, quantity, unit_price_gross, vat_class, line_total, category) values (${randomUUID()}, ${order!.id}, 1, ${product.id}, 'Bread', '{"en":"Bread"}', 1000,
+         200, 'reduced', 200, 'Bakery')
     `);
 
     await deleteCategory(tx, category.id);
     // The counts are read back because each is at its own scale and the columns refuse none of
-    // the wrong ones: one loaf is 1000 thousandths, 10.00% is 1000 basis points, 2.00 is 200 cents.
+    // the wrong ones: one loaf is 1000 thousandths and 2.00 is 200 cents.
     const snapshot = await tx.execute<{
       category: string | null;
       quantity: string;
-      vat_rate: string;
+      vat_class: string;
       line_total: string;
     }>(sql`
-      select category, cast(quantity as text) as quantity, cast(vat_rate as text) as vat_rate,
+      select category, cast(quantity as text) as quantity, vat_class,
              cast(line_total as text) as line_total
         from working_order_lines where working_order_id = ${order!.id}
     `);
     expect(snapshot.rows).toEqual([
-      { category: "Bakery", quantity: "1000", vat_rate: "1000", line_total: "200" },
+      { category: "Bakery", quantity: "1000", vat_class: "reduced", line_total: "200" },
     ]);
   });
 });

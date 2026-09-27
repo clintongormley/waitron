@@ -64,9 +64,8 @@ describe("working_orders state machine (enforce_transition)", () => {
         name: "Café solo",
         descriptions: DESCRIPTIONS_A,
         quantity: 1000,
-        unitPrice: 100,
         unitPriceGross: 110,
-        vatRate: 1000,
+        vatClass: "reduced",
         lineTotal: 100,
       }),
     );

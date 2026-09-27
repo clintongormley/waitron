@@ -7,7 +7,7 @@ screen:
   rare, medium, well done). It is a kitchen instruction. It owns no price, no VAT class and no
   allergens, and it never becomes a line of its own: the answer freezes onto the dish's own line.
 - an **extras** list — a reusable, named list of PRODUCTS the diner may add ("Sides": chips, salad).
-  Each pick becomes its own child line at its own price and its own VAT rate, so an extra is sold,
+  Each pick becomes its own child line at its own price and its own VAT class, so an extra is sold,
   reported and filed as the product it is.
 
 There is no third kind, and nothing chooses between them at run time: which table a list lives in
@@ -118,8 +118,8 @@ column underneath holds a count of whole cents and the row converts (`stringToCe
 
 The VAT class is never resolved that way — an extra always carries the picked PRODUCT's VAT class,
 because it is sold as that product: the product's own, or its parent's where a variant leaves it
-blank, and never the dish's. It is taxed at the rate the published menu version froze for that
-product.
+blank, and never the dish's — as the published menu version froze it for that product — and it is
+taxed at that class's rate on the day the invoice is issued.
 
 ### The dashboard
 
@@ -172,8 +172,9 @@ the basket resolved, and decides what is stored:
   afterwards cannot rewrite a saved order.
 - Each extras pick becomes its own CHILD line (`parent_line_id` set) carrying the picked PRODUCT,
   that product's three frozen names, the price the offer resolved and the PRODUCT's VAT class (its
-  own, or its parent's where a variant leaves it blank — never the dish's), taxed at the rate the
-  published menu version froze for that product.
+  own, or its parent's where a variant leaves it blank — never the dish's), as the published menu
+  version froze it for that product, and taxed at that class's rate on the day the invoice is
+  issued.
   The child's stored quantity is dish quantity × pick quantity.
 - A list's own counts are enforced per list: too few picks for `minPicks`, too many for `maxPicks`,
   or more of one product than its `maxQuantity` is `extras.limit_exceeded` carrying the list id. A
@@ -394,7 +395,7 @@ through (`packages/fiscal-verifactu/src/backend.ts`), an explicit field of what 
 in. So the same basket restructured into different lines can leave `ImporteTotal` exactly where it
 was while `CuotaTotal` and the huella move. That is a fact about the BACKEND and not about the
 system: every till filing route passes `total: priced.total` (`apps/server/src/till-sale.ts`), and
-`priced.total` is the sum of every per-line gross (`priceRows`,
+`priced.total` is the sum of every per-line gross (`grossRows`,
 `packages/catalogue/src/pricing.ts`), so on a real sale a moved line AMOUNT does move
 `ImporteTotal`. What it cannot see is a restructuring whose amounts still add up to the same
 total.

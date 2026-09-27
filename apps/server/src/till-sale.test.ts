@@ -30,6 +30,7 @@ import {
   updateExtraList,
   updateProduct,
   writeProductModifiers,
+  rateLines,
 } from "@waitron/catalogue";
 import type { AvailableProduct } from "@waitron/catalogue";
 import { workingLineContexts } from "@waitron/venue-service";
@@ -1463,7 +1464,7 @@ describe("ordering extras and options — parent + child lines", () => {
 
     // PARK, keeping the price its lines were built from.
     const preview = await withTransaction(suite.db, async (tx) => {
-      const { priced } = await createOpenOrder(
+      const { gross } = await createOpenOrder(
         tx,
         v.cfg,
         workingOrderId,
@@ -1480,7 +1481,7 @@ describe("ordering extras and options — parent + child lines", () => {
         null,
         { zoneId: v.zoneId },
       );
-      return priced;
+      return rateLines(gross, "2026-09-27");
     });
 
     // RETRIEVE + PAY with no basket, so the children are re-priced from their stored lock.

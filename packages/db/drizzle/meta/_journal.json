@@ -176,6 +176,27 @@
       "when": 1790482037507,
       "tag": "0024_bill_payment_triggers",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1790497895760,
+      "tag": "0025_line_vat_class_column",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1790497907375,
+      "tag": "0026_line_vat_class",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1790497920288,
+      "tag": "0027_line_vat_class_triggers",
+      "breakpoints": true
     }
   ]
 }

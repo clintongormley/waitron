@@ -249,9 +249,8 @@ async function fireContextlessDish(
     name: "Line",
     descriptions: { [LOCALE]: "Line" },
     quantity: 1000,
-    unitPrice: 124,
     unitPriceGross: 150,
-    vatRate: 2100,
+    vatClass: "general",
     lineTotal: 150,
   };
   const [parent] = await tx

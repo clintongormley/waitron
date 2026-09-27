@@ -497,7 +497,8 @@ class was not swept: this file and `CLAUDE.md` §3, which carry the rule.
 Task P6, 2026-09-21. Seven columns followed money out of `numeric`: two quantities
 (`working_order_lines.quantity`, `sale_lines.quantity`) and five rates (`vat_rate` twice,
 `purchase_invoices.deductible_proportion`, `purchase_invoice_vat.rate`,
-`convenio_config.night_premium_pct`).
+`convenio_config.night_premium_pct`). _2026-09-27 (A68): `working_order_lines.vat_rate` was
+replaced by `vat_class`._
 
 **Why they are not cents.** A quantity carries three decimal places and the money scale holds two,
 so one conversion cannot serve both. Five grams — `0.005` kg — is the count 5 at the quantity scale

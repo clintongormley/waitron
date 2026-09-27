@@ -14,6 +14,9 @@ built the replacement: the published version freezes each item's VAT rate, a lin
 its price is fixed, issuance files the stored rate, and a VAT change flags the menu; a line also
 records its reporting classification when it is added. The menus spec's §11.4 note has the rule;
 the text below is kept as it was written._
+_2026-09-27, later (A68): the owner narrowed M7v: the version freezes the VAT class only, a line
+records its class, and the rate comes from a dated table in code for the day the invoice is issued.
+The menus spec's §11.4 A68 note has it; the M7v notes below describe the rate as it was before._
 
 **Architecture:**
 - **One ordered membership table** (`section_members`) holds every menu list: a section's members,
@@ -482,7 +485,7 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
     one-row pattern. When it is off, a sent line can only be voided and re-added (`ticket.already_fired`,
     the existing code).
   - **Line numbering:** re-inserted and new lines are appended after the order's highest `line_no`,
-    as `addTabRound` does (`working-order.ts:1150-1156`). `priceRows` numbering from 1 would collide
+    as `addTabRound` does (`working-order.ts:1150-1156`). `priceRows` (`grossRows` since A68, 2026-09-27) numbering from 1 would collide
     with kept lines on `working_order_lines_line_no_key`.
   - **Out-of-date saves:** `working_orders` gains a `revision` counter. Every write to an order
     increments it, and `PUT /api/working-orders/:id` and the per-line route carry the revision their
@@ -1546,7 +1549,8 @@ was deleted. The Preview tab also shows the whole menu read-only, in the Structu
 ## Task 7a: VAT is resolved when the invoice record is issued — slug `vat-at-issuance`
 
 _2026-09-27: replaced by menus M7v (the note under the Goal). Issuance no longer resolves a rate,
-nothing is written back, and the test file is now `apps/server/src/vat-rate-at-line-add.test.ts`._
+nothing is written back, and the test file is now `apps/server/src/vat-rate-at-line-add.test.ts`
+(renamed `apps/server/src/vat-class-at-line-add.test.ts` by A68, 2026-09-27)._
 
 Spec §11.4 (which sharpens §10.4's "at payment") and D6. **Fiscal-adjacent: it changes the VAT rate
 filed for a held order, a tab, an invoice-first order and a card payment. The golden huella and
@@ -1578,7 +1582,7 @@ and the pricing it feeds, or in the issuance pass, not in the `priceStoredOrder`
   before the record is filed**, so `readSettledTicket`'s reprint (`till-sale.ts:434-436`), which
   re-runs `priceStoredOrder`, prints the rate that was filed. After filing, the order is settled or
   placed, and no path prices it again. `packages/catalogue/src/pricing.ts` (`priceLockedLines`,
-  `:215`) takes the resolved rates.
+  `:215`; replaced by `grossLockedLines` + `rateLines`, A68, 2026-09-27) takes the resolved rates.
   - The stored `unit_price_gross` stays the price.
   - The stored `vat_rate` on `working_order_lines` is what the till displayed before issuance, and
     the issued rate after it. Say so at the column (`packages/db/src/schema/orders.ts`).

@@ -63,7 +63,7 @@ import {
   splitOffCheck,
   updateHeldOrder,
 } from "./working-order.js";
-import type { PricedOrder } from "./working-order.js";
+import type { GrossOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
@@ -880,17 +880,17 @@ describe("issuancePass", () => {
     expect(issued.lines.map((l) => [l.productId, l.menuId])).toEqual([[v.products.negroni, null]]);
   });
 
-  it("refuses priced lines that do not line up with the line identities handed with them", async () => {
+  it("refuses gross lines that do not line up with the line identities handed with them", async () => {
     const v = await setupVenue();
     const id = await basketOrder(v, [{ productId: v.products.negroni }]);
 
     await withTransaction(suite.db, async (tx) => {
-      const { priced, identities }: PricedOrder = await priceStoredOrderForIssuance(tx, id);
-      const doubled = { ...priced, lines: [...priced.lines, ...priced.lines] };
-      await expect(issuancePass(tx, v.cfg, id, { priced: doubled, identities })).rejects.toThrow(
+      const { gross, identities }: GrossOrder = await priceStoredOrderForIssuance(tx, id);
+      const doubled = { ...gross, lines: [...gross.lines, ...gross.lines] };
+      await expect(issuancePass(tx, v.cfg, id, { gross: doubled, identities })).rejects.toThrow(
         /do not line up/,
       );
-      await expect(issuancePass(tx, v.cfg, id, { priced, identities: [] })).rejects.toThrow(
+      await expect(issuancePass(tx, v.cfg, id, { gross, identities: [] })).rejects.toThrow(
         /do not line up/,
       );
     });

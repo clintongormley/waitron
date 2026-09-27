@@ -123,7 +123,10 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
         },
         "en",
       ).product;
-      priced = priceBasket([{ product: { ...ham!, descriptions }, quantity: "0.320" }]);
+      priced = priceBasket(
+        [{ product: { ...ham!, descriptions }, quantity: "0.320" }],
+        "2026-09-27",
+      );
 
       // Checkable by hand: 24.90/kg × 0.320 kg = 7.968 → 7.97 gross; at the reduced 10% rate the
       // gross-inclusive DIFFERENCE method gives base 7.25 and tax 0.72 (7.97 − 7.25), NOT the 0.73

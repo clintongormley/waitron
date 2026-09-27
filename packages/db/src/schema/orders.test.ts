@@ -113,11 +113,9 @@ const LINE = {
   descriptions: { es: "Café solo", ca: "Cafè sol" },
   // One unit, in whole thousandths.
   quantity: 1000,
-  unitPrice: 130,
   // 1.30 net at 10% VAT, gross, in whole cents.
   unitPriceGross: 143,
-  // 10.00%, in whole basis points — the same number as the quantity above meaning something else.
-  vatRate: 1000,
+  vatClass: "reduced",
   lineTotal: 130,
 };
 
@@ -519,9 +517,9 @@ describe("working_order_lines", () => {
     const cols = await rows<{ name: string; type: string }>(
       db,
       sql`select name, lower(type) as type from pragma_table_info('working_order_lines')
-           where name in ('unit_price', 'unit_price_gross', 'line_total')`,
+           where name in ('unit_price_gross', 'line_total')`,
     );
-    expect(cols).toHaveLength(3);
+    expect(cols).toHaveLength(2);
     for (const col of cols) {
       expect(col.type).toBe("integer");
     }
@@ -548,8 +546,8 @@ describe("working_order_lines — the draft line's links", () => {
     const descriptions = opts.descriptions ?? '{"es":"Café solo","ca":"Cafè sol"}';
     return rows<{ id: string }>(
       db,
-      sql`insert into working_order_lines (id, working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total, parent_line_id) values (${randomUUID()}, ${opts.workingOrderId}, ${opts.lineNo}, ${opts.productId}, 'Café solo',
-             ${descriptions}, 1000, 130, 143, 1000, 130,
+      sql`insert into working_order_lines (id, working_order_id, line_no, product_id, name, descriptions, quantity, unit_price_gross, vat_class, line_total, parent_line_id) values (${randomUUID()}, ${opts.workingOrderId}, ${opts.lineNo}, ${opts.productId}, 'Café solo',
+             ${descriptions}, 1000, 143, 'reduced', 130,
              ${opts.parentLineId ?? null}
            ) returning id`,
     );
@@ -568,20 +566,65 @@ describe("working_order_lines — the draft line's links", () => {
       parent_line_id: string;
       product_id: string | null;
       quantity: string;
-      vat_rate: string;
+      vat_class: string;
     }>(
       db,
-      // The counts are read back to pin the raw helper's scales: written as `1` and `10` they
-      // would store a thousandth of a unit at a hundredth of a percent, and no CHECK refuses
-      // either. Cast to text so the assertion does not turn on how the driver renders the integer.
-      sql`select parent_line_id, product_id, cast(quantity as text) as quantity,
-                 cast(vat_rate as text) as vat_rate
+      // The count is read back to pin the raw helper's scale: written as `1` it would store a
+      // thousandth of a unit, and no CHECK refuses that. Cast to text so the assertion does not
+      // turn on how the driver renders the integer.
+      sql`select parent_line_id, product_id, cast(quantity as text) as quantity, vat_class
             from working_order_lines where id = ${child.id}`,
     );
     expect(row.parent_line_id).toBe(parent.id);
     expect(row.product_id).toBe(productA);
     expect(row.quantity).toBe("1000");
-    expect(row.vat_rate).toBe("1000");
+    expect(row.vat_class).toBe("reduced");
+  });
+
+  it("refuses a line whose VAT class is not one of the four, and stores each of the four", async () => {
+    const orderId = await openOrder(db);
+    const error = await captureError(() =>
+      db.insert(workingOrderLines).values({
+        ...LINE,
+        productId: productA,
+        workingOrderId: orderId,
+        vatClass: "luxury",
+      }),
+    );
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toBe(
+      "CHECK constraint failed: working_order_lines_vat_class_ck",
+    );
+
+    const classes = ["general", "reduced", "super_reduced", "zero"];
+    await db.insert(workingOrderLines).values(
+      classes.map((vatClass, i) => ({
+        ...LINE,
+        productId: productA,
+        workingOrderId: orderId,
+        lineNo: i + 1,
+        vatClass,
+      })),
+    );
+    const stored = await db
+      .select({ vatClass: workingOrderLines.vatClass })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, orderId))
+      .orderBy(workingOrderLines.lineNo);
+    expect(stored.map((row) => row.vatClass)).toEqual(classes);
+  });
+
+  it("refuses a line with no VAT class", async () => {
+    const orderId = await openOrder(db);
+    const error = await captureError(() =>
+      rows(
+        db,
+        sql`insert into working_order_lines (id, working_order_id, line_no, product_id, name, descriptions, quantity, unit_price_gross, line_total) values (${randomUUID()}, ${orderId}, 1, ${productA}, 'Café solo', '{"es":"Café solo","ca":"Cafè sol"}', 1000, 143, 130)`,
+      ),
+    );
+    expect(engineErrorMessage(error)).toBe(
+      "NOT NULL constraint failed: working_order_lines.vat_class",
+    );
   });
 
   it("refuses to delete a product an open order's child line names, and allows one nothing names", async () => {

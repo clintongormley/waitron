@@ -435,6 +435,56 @@ describe("a live version published before its document froze VAT", () => {
   });
 });
 
+describe("a live version published while its document froze a VAT rate", () => {
+  /** Makes the menu's live version a copy of its current one that also holds a `vatRate` beside
+   * every `vatClass`, as a version published before the rate left the document does. */
+  async function liveWithFrozenRates(menuId: string): Promise<string> {
+    const { versionId } = await publish(menuId);
+    const [row] = await fx.db.select().from(menuVersions).where(eq(menuVersions.id, versionId));
+    const document = JSON.parse(
+      JSON.stringify({ ...row!.document, format: 2 }, (_key, value: unknown) =>
+        typeof value === "object" && value !== null && "vatClass" in value
+          ? { ...value, vatRate: "10.00" }
+          : value,
+      ),
+    ) as typeof row.document;
+    expect(JSON.stringify(document)).toMatch(/"vatRate":"10.00"/);
+    const [earlier] = await fx.db
+      .insert(menuVersions)
+      .values({
+        menuId,
+        number: row!.number + 1,
+        document,
+        contentHash: menuDocumentHash(document),
+        publishedAt: row!.publishedAt,
+        publishedBy: "person-1",
+      })
+      .returning({ id: menuVersions.id });
+    await fx.db
+      .update(menuPublications)
+      .set({ versionId: earlier!.id })
+      .where(eq(menuPublications.menuId, menuId));
+    return earlier!.id;
+  }
+
+  it("is still served for selling, and its menu shows changed until it is published again", async () => {
+    const f = await menusFixture(fx.db);
+    const lunch = await liveWithFrozenRates(f.lunch);
+    await publish(f.dinner);
+
+    const live = await app((tx) => readLiveDocuments(tx, [f.lunch, f.dinner]));
+
+    expect(live.get(f.lunch)!.versionId).toBe(lunch);
+    // An order naming the version it was priced against is accepted.
+    await app((tx) =>
+      assertLiveVersions(tx, [f.lunch, f.dinner], [{ menuId: f.lunch, versionId: lunch }]),
+    );
+    expect(await states(f)).toEqual({ lunch: "changed", dinner: "current" });
+    await publish(f.lunch);
+    expect(await states(f)).toEqual({ lunch: "current", dinner: "current" });
+  });
+});
+
 describe("menusOfVersions", () => {
   it("names the menu of every version, live or not, and leaves out an id that is no version", async () => {
     const f = await menusFixture(fx.db);

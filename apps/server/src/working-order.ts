@@ -30,13 +30,11 @@ import { and, eq, exists, inArray, isNotNull, isNull, ne, or, sql } from "drizzl
 import type { GetColumnData, SQL } from "drizzle-orm";
 import {
   AppError,
-  basisPointsToDecimal,
   centsToDecimal,
   classifyBand,
   compareDecimal,
   type Decimal,
   decimal,
-  decimalToBasisPoints,
   decimalToCents,
   decimalToThousandths,
   FALLBACK_LOCALE,
@@ -47,8 +45,6 @@ import {
   rawCentsToDecimal,
   type SaleId,
   type StationThresholds,
-  stringToBasisPoints,
-  stringToCents,
   stringToThousandths,
   subtractDecimal,
   sumDecimals,
@@ -89,9 +85,8 @@ import {
   contentLanguagesOr,
   expandDietaryDeclarations,
   loadClassification,
-  priceBasket,
-  priceBasketWithOptions,
-  priceLockedLines,
+  grossBasketWithOptions,
+  grossLockedLines,
   menusOfVersions,
   readOptionListsByIds,
   readProductModifiers,
@@ -114,8 +109,8 @@ import type {
   DietaryLabel,
   DietProfile,
   LockedLine,
+  GrossLines,
   OptionList,
-  PricedLines,
   ProductAllergens,
   ResolvedExtraList,
   VatClass,
@@ -125,6 +120,7 @@ import type { FloorAnnotator, PreparationRoute, ZoneMenuOffer, ZoneOffers } from
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { FloorTableShape } from "./tables.js";
 import { issuancePass } from "./issuance-pass.js";
+import { issueMoment } from "./issue-moment.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import {
@@ -164,10 +160,6 @@ export interface TillSaleDeps {
 }
 
 type WorkingOrderLineInsert = typeof workingOrderLines.$inferInsert;
-
-/** Threaded out so a caller that persists the order and files its sale in one transaction reuses
- * this price rather than pricing the basket twice. */
-type PricedBasket = PricedLines;
 
 /**
  * `note` is a free-text kitchen note on the parent dish line: non-fiscal, never part of a sale.
@@ -237,7 +229,6 @@ function offerModifiers(offer: ZoneMenuOffer, defaultLanguage: string): OfferMod
         ).product,
         kitchenName: item.kitchenName,
         vatClass: item.vatClass as VatClass,
-        vatRate: item.vatRate,
       });
     }
     extras.push({
@@ -327,17 +318,17 @@ async function readBasketOffers(
 
 /**
  * Price requested lines from the order's zone's live menu versions — the dish, variant, extras and
- * options alike, each at the VAT rate the version froze — and classify each line's product as it
- * stands now. Return both the insertable line snapshots and the basket result so a caller filing
- * the same basket can reuse it. The stored gross unit price, rate and classification are what the
- * line files.
+ * options alike, each at the VAT class the version froze — and classify each line's product as it
+ * stands now. Return both the insertable line snapshots and their gross lines, so a caller filing
+ * the same basket rates those rather than pricing it twice. The stored gross unit price, class and
+ * classification are what the line files.
  */
 async function priceOrderLines(
   tx: Transaction,
   cfg: TillConfig,
   workingOrderId: string,
   // `courseId` absent or null = the offer's default course; a string is an override.
-  // Each extras pick becomes a CHILD row taxed at the picked product's frozen rate, never the dish's.
+  // Each extras pick becomes a CHILD row taxed at the picked product's frozen class, never the dish's.
   // An ACTIVE options list must be answered even when `options` is absent.
   // `frozenOptions` and `frozenExtras` stand for answers an edit has already settled: an options
   // answer or an extras pick given that way is not validated or looked up again.
@@ -355,7 +346,7 @@ async function priceOrderLines(
   snapshot?: ZoneOffers,
 ): Promise<{
   lineRows: WorkingOrderLineInsert[];
-  priced: PricedBasket;
+  gross: GrossLines;
   identities: OrderLineIdentity[];
   lineContexts: { workingOrderLineId: string; menuItemId: string }[];
   /** The zone's offers the lines were priced from, for `recordLineContexts`. */
@@ -365,7 +356,7 @@ async function priceOrderLines(
     // A lineless call (splitOffCheck, openTab, unjoin) needs no zone and reads nothing.
     return {
       lineRows: [],
-      priced: priceBasket([]),
+      gross: grossBasketWithOptions([]),
       identities: [],
       lineContexts: [],
       offers: { defaultMenuId: null, menus: [], offers: [] },
@@ -425,8 +416,8 @@ async function priceOrderLines(
     ...new Set(lines.flatMap((line) => picksOf(line).map((pick) => pick.productId))),
   ]);
 
-  // `priceBasketWithOptions` expands each item to a parent row then its child rows in this same
-  // order, so `lineMeta[i]` lines up with `priced.lines[i]` one-for-one.
+  // `grossBasketWithOptions` expands each item to a parent row then its child rows in this same
+  // order, so `lineMeta[i]` lines up with `gross.lines[i]` one-for-one.
   type LineMeta =
     | {
         kind: "parent";
@@ -448,7 +439,6 @@ async function priceOrderLines(
       unit: selection.unit,
       pricingUnit: selection.unit.hardwareUnit === null ? ("each" as const) : ("weight" as const),
       vatClass: selection.vatClass as VatClass,
-      vatRate: selection.vatRate,
       category: selection.category,
       courseId: selection.courseId,
       descriptions: customerText.product,
@@ -502,9 +492,8 @@ async function priceOrderLines(
         kitchenName: child.kitchenName,
         // The GROSS price of ONE of this extra.
         priceDelta: child.price,
-        // Always set, so the dish's rate is never inherited.
+        // Always set, so the dish's class is never inherited.
         vatClass: child.vatClass,
-        vatRate: child.vatRate,
         quantity: child.quantity,
       })),
     });
@@ -540,7 +529,7 @@ async function priceOrderLines(
     await requireLiveCourse(tx, cfg, courseId);
   }
 
-  const priced = priceBasketWithOptions(items);
+  const gross = grossBasketWithOptions(items);
   const classification = await loadClassification(
     tx,
     [...new Set(lineMeta.map((meta) => meta.productId))],
@@ -553,7 +542,7 @@ async function priceOrderLines(
   // New lines snapshot the location's receipt languages; locked and issued lines keep their stored
   // text. A locale a variant's text leaves blank takes the variant's own staff name, never the
   // parent's.
-  for (const line of priced.lines) {
+  for (const line of gross.lines) {
     line.descriptions = toInvoiceLineDescriptions(
       line.descriptions,
       invoiceLocales,
@@ -572,9 +561,9 @@ async function priceOrderLines(
   }
 
   // Pre-generated so a CHILD row's `parent_line_id` can name its parent's id in the same insert.
-  const ids = priced.lines.map(() => randomUUID());
-  const byLineNo = new Map(priced.lines.map((line, i) => [line.lineNo, ids[i]!]));
-  const lineRows = priced.lines.map((line, i) => {
+  const ids = gross.lines.map(() => randomUUID());
+  const byLineNo = new Map(gross.lines.map((line, i) => [line.lineNo, ids[i]!]));
+  const lineRows = gross.lines.map((line, i) => {
     const meta = lineMeta[i]!;
     return {
       id: ids[i]!,
@@ -584,21 +573,20 @@ async function priceOrderLines(
       productId: meta.productId,
       name: line.name,
       descriptions: line.descriptions,
-      // Read off the priced line, so this row and a walk-up's sale filed from the same `priced`
+      // Read off the gross line, so this row and a walk-up's sale filed from the same `gross`
       // result cannot describe different answers.
       optionSnapshots: line.optionSnapshots,
       unitName: line.unitName,
       unitPrecision: line.unitPrecision,
       quantity: stringToThousandths(line.quantity),
-      unitPrice: stringToCents(line.unitPrice),
       // The gross unit price LOCKED at add time: a retrieved order is filed from it without a
       // re-price, so a later catalogue price change never moves the filed total. Never derived as
       // `line_total ÷ quantity`, which drifts for a weighed line.
-      unitPriceGross: decimalToCents(priced.grossUnitPrices[i]!),
-      vatRate: stringToBasisPoints(line.vatRate),
+      unitPriceGross: decimalToCents(line.grossUnitPrice),
+      vatClass: line.vatClass,
       // GROSS, unlike the filed `sale_lines.line_total`'s net base: every total the operator and
       // customer see is gross, so the held-orders list's `sum(line_total)` must be too.
-      lineTotal: decimalToCents(priced.grossLineTotals[i]!),
+      lineTotal: decimalToCents(line.lineGross),
       category: line.category ?? null,
       courseId: meta.kind === "parent" ? meta.courseId : null,
       note: meta.kind === "parent" ? meta.note : null,
@@ -620,7 +608,7 @@ async function priceOrderLines(
     workingOrderLineId: ids[index]!,
     menuItemId: meta.menuItemId,
   }));
-  return { lineRows, priced, identities, lineContexts, offers };
+  return { lineRows, gross, identities, lineContexts, offers };
 }
 
 /**
@@ -650,7 +638,7 @@ const storedLineColumns = {
   parentLineId: workingOrderLines.parentLineId,
   grossUnitPrice: workingOrderLines.unitPriceGross,
   quantity: workingOrderLines.quantity,
-  vatRate: workingOrderLines.vatRate,
+  vatClass: workingOrderLines.vatClass,
   name: workingOrderLines.name,
   descriptions: workingOrderLines.descriptions,
   optionSnapshots: workingOrderLines.optionSnapshots,
@@ -717,7 +705,7 @@ function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
   if (stored.length === 0) {
     throw new AppError("sale.empty_basket", {});
   }
-  // `parentLineNo` is rebuilt in the array-position space `priceRows` renumbers into (`i + 1`), NOT
+  // `parentLineNo` is rebuilt in the array-position space `grossRows` renumbers into (`i + 1`), NOT
   // the stored `line_no` space: a void or a transfer leaves stored numbers with gaps, and keying on
   // them would file a child under the wrong parent in the immutable record.
   const positionById = new Map(stored.map((line, i) => [line.id, i + 1]));
@@ -726,7 +714,7 @@ function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
     locked: {
       grossUnitPrice: centsToDecimal(line.grossUnitPrice),
       quantity: thousandthsToDecimal(line.quantity),
-      vatRate: basisPointsToDecimal(line.vatRate),
+      vatClass: line.vatClass as VatClass,
       name: line.name,
       descriptions: line.descriptions,
       optionSnapshots: line.optionSnapshots,
@@ -757,26 +745,26 @@ export interface OrderLineIdentity {
   classification: SaleLineClassification | null;
 }
 
-/** Priced lines together with, at the same index, the working-order line each was priced from. */
-export interface PricedOrder {
-  priced: PricedLines;
+/** Gross lines together with, at the same index, the working-order line each was priced from. */
+export interface GrossOrder {
+  gross: GrossLines;
   identities: OrderLineIdentity[];
 }
 
-/** Price a persisted order exactly as its lines are stored, rates included, to rebuild a filed
- * ticket's lines. A rebuilt ticket takes its VAT breakdown from the filed record, never from these
- * lines. */
+/** A persisted order's gross lines exactly as they are stored, to rebuild a filed ticket's lines or
+ * total a bill. A rebuilt ticket takes its VAT breakdown from the filed record. */
 export async function priceStoredOrder(
   tx: Transaction,
   workingOrderId: string,
-): Promise<PricedLines> {
-  return priceLockedLines((await readLockedLines(tx, workingOrderId)).map(({ locked }) => locked));
+): Promise<GrossLines> {
+  return grossLockedLines((await readLockedLines(tx, workingOrderId)).map(({ locked }) => locked));
 }
 
 /**
- * Issue a persisted order's price: each line's stored gross unit price at its stored VAT rate,
- * re-resolving nothing. Returns each priced line's working-order identity for `issuancePass`, and
- * refuses a lineless order (see {@link readLockedLines}).
+ * A persisted order's gross lines to issue an invoice from: each line's stored gross unit price and
+ * stored VAT class, which `issueMoment` rates on the day the invoice is issued. Returns each line's
+ * working-order identity for `issuancePass`, and refuses a lineless order (see
+ * {@link readLockedLines}).
  *
  * A line never sent whose product cannot be sold now is refused `product.unavailable` (spec §11.3):
  * staff remove it, or split the rest off, before paying. A sent line pays whatever its product's
@@ -787,14 +775,14 @@ export async function priceStoredOrderForIssuance(
   tx: Transaction,
   workingOrderId: string,
   options: { refuseUnsentUnavailable: boolean } = { refuseUnsentUnavailable: true },
-): Promise<PricedOrder> {
+): Promise<GrossOrder> {
   const stored = await readLockedLinesForIssuance(tx, workingOrderId);
   const unpayable = stored.find((line) => !line.payable);
   if (options.refuseUnsentUnavailable && unpayable !== undefined) {
     throw new AppError("product.unavailable", { productId: unpayable.identity.productId! });
   }
   return {
-    priced: priceLockedLines(stored.map(({ locked }) => locked)),
+    gross: grossLockedLines(stored.map(({ locked }) => locked)),
     identities: stored.map(({ identity }) => identity),
   };
 }
@@ -847,7 +835,7 @@ export interface ParkOrderResult {
 
 /**
  * Persist an OPEN working order and its priced lines on the CALLER's transaction, returning the
- * price its lines were priced from so a walk-up files its sale from the same price. Shared so a
+ * gross lines its rows were built from so a walk-up files its sale from the same lines. Shared so a
  * walk-up order has the same shape as a parked one. The empty-basket refusal stays with each caller.
  */
 export async function createOpenOrder(
@@ -865,7 +853,7 @@ export async function createOpenOrder(
   placement: { deliveryTableId?: string | null; zoneId?: string; visitId?: string | null } = {},
 ): Promise<{
   orderNumber: number;
-  priced: PricedBasket;
+  gross: GrossLines;
   identities: OrderLineIdentity[];
   lineRows: WorkingOrderLineInsert[];
 }> {
@@ -885,7 +873,7 @@ export async function createOpenOrder(
     }
     effectiveZoneId = table.zoneId ?? effectiveZoneId;
   }
-  const { lineRows, priced, identities, lineContexts, offers } = await priceOrderLines(
+  const { lineRows, gross, identities, lineContexts, offers } = await priceOrderLines(
     tx,
     cfg,
     id,
@@ -915,7 +903,7 @@ export async function createOpenOrder(
     await VENUE_SERVICE.recordLineContexts(tx, cfg, id, lineContexts, offers);
   }
 
-  return { orderNumber, priced, identities, lineRows };
+  return { orderNumber, gross, identities, lineRows };
 }
 
 export async function parkOrder(
@@ -2526,7 +2514,7 @@ export async function mergeTabs(
 }
 
 /**
- * The same composition `priceRows` uses for a line's gross total, so a split line's `line_total` is
+ * The same composition `grossRows` uses for a line's gross total, so a split line's `line_total` is
  * identical to an add-time line's.
  */
 function grossLineTotal(grossUnit: string, quantity: string): Decimal {
@@ -2626,9 +2614,8 @@ async function carveOffLines(
       descriptions: workingOrderLines.descriptions,
       optionSnapshots: workingOrderLines.optionSnapshots,
       quantity: workingOrderLines.quantity,
-      unitPrice: workingOrderLines.unitPrice,
       unitPriceGross: workingOrderLines.unitPriceGross,
-      vatRate: workingOrderLines.vatRate,
+      vatClass: workingOrderLines.vatClass,
       category: workingOrderLines.category,
       unitName: workingOrderLines.unitName,
       unitPrecision: workingOrderLines.unitPrecision,
@@ -2652,9 +2639,7 @@ async function carveOffLines(
   const sourceLines = sourceRows.map((l) => ({
     ...l,
     quantity: thousandthsToDecimal(l.quantity),
-    unitPrice: centsToDecimal(l.unitPrice),
     unitPriceGross: centsToDecimal(l.unitPriceGross),
-    vatRate: basisPointsToDecimal(l.vatRate),
   }));
   const byLineNo = new Map(sourceLines.map((l) => [l.lineNo, l]));
   const lineNoById = new Map(sourceLines.map((l) => [l.id, l.lineNo]));
@@ -2771,9 +2756,8 @@ async function carveOffLines(
         descriptions: line.descriptions,
         optionSnapshots: line.optionSnapshots ?? [],
         quantity: stringToThousandths(quantity),
-        unitPrice: decimalToCents(line.unitPrice),
         unitPriceGross: decimalToCents(line.unitPriceGross),
-        vatRate: decimalToBasisPoints(line.vatRate),
+        vatClass: line.vatClass,
         lineTotal: decimalToCents(grossLineTotal(line.unitPriceGross, quantity)),
         category: line.category,
         unitName: line.unitName,
@@ -4149,11 +4133,15 @@ export async function placeOrder(
       .set({ sentAt: nowIso() })
       .where(and(eq(workingOrderLines.workingOrderId, id), isNull(workingOrderLines.sentAt)));
 
-    // Only invoice-first files at placing, from the stored locked lines: never a re-price.
+    // Only invoice-first files at placing, from the stored locked lines at the rates of the day it
+    // is placed: the day its invoice is issued.
     let placeResult: PlaceOrderResult = { id, status: "placed" };
     let issuedOrderLabel: string | null | undefined;
     if (orderFlow === "invoice_first") {
-      const priced = await issuancePass(tx, cfg, id, await priceStoredOrderForIssuance(tx, id));
+      const { priced, clock } = issueMoment(
+        deps.clock,
+        await issuancePass(tx, cfg, id, await priceStoredOrderForIssuance(tx, id)),
+      );
       // The fiscal record's `till_id` is the DEVICE till, while the amendment below records the box's
       // CONFIGURED register. The chain is keyed by the node, not the device.
       const { saleId, fiscal } = await recordSale(tx, deps.backend, {
@@ -4166,7 +4154,7 @@ export async function placeOrder(
         total: priced.total,
         lines: priced.lines,
         vatBreakdown: priced.vatBreakdown,
-        clock: deps.clock,
+        clock,
         operatorId,
         // No tender and no settlement until `collectOrder` settles it.
         settlement: { kind: "deferred" },

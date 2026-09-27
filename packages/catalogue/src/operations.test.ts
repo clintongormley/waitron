@@ -1464,6 +1464,7 @@ describe("catalogue operations", () => {
       // resolved rows feed straight into priceBasket.
       const priced = priceBasket(
         available.map((product) => ({ product: toPriceable(product), quantity: "1" })),
+        "2026-09-27",
       );
       expect(priced.lines.length).toBe(2);
     });

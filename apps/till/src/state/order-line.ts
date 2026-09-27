@@ -17,7 +17,7 @@ type PricedPick = Pick<SelectedExtra, "price" | "quantity">;
 
 /**
  * The dish plus every extras pick. Each component is rounded and then summed, as the server's
- * `priceBasketWithOptions` prices the dish and each pick as separate rows; never one rounding of a
+ * `grossBasketWithOptions` prices the dish and each pick as separate rows; never one rounding of a
  * summed unit price. A not-offered pick counts, because an unedited retrieved order is still billed
  * for it. An options answer has no price.
  */

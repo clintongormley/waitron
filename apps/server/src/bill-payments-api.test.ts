@@ -970,7 +970,6 @@ describe("what an item payment may name", () => {
         lineNo: Math.max(...lineNos.map((line) => line.lineNo)) + 1,
         parentLineId: dish!.id,
         name: "Extra de queso",
-        unitPrice: cents,
         unitPriceGross: cents,
         lineTotal: cents,
       });
@@ -1118,7 +1117,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     expect(await statusOf(billId)).toBe("settled");
   });
 
-  it("files each line at the rate recorded on it, not the rate its product has when the last payment lands", async () => {
+  it("files each line at the rate of the class recorded on it, not the class its product has when the last payment lands", async () => {
     const billId = await tabWith("Ensalada");
     expect((await contribute(billId, "5.00")).status).toBe(200);
     await inTx((tx) =>

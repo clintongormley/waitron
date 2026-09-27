@@ -283,7 +283,7 @@ file `apps/server/src/vat-at-issuance.test.ts` copies about 150 lines of setup f
 `issuance-pass.test.ts`, which a shared helper could absorb.
 _2026-09-27: menus M7v replaced this rule (see its note below): issuance no longer resolves a
 rate, and the write-back is gone, so the placed-order FYI above no longer applies. Asesor Q26 is
-still open, reworded. The test file is now `apps/server/src/vat-rate-at-line-add.test.ts` and still
+still open, reworded. The test file is now `apps/server/src/vat-class-at-line-add.test.ts` and still
 copies its setup from `issuance-pass.test.ts`._
 **Menus Task 7b landed (#696, 2026-09-26): editing a saved order — the server rules.** An edit keeps
 each line's locked price and prices only what it adds; every change to work the kitchen has is a
@@ -419,6 +419,20 @@ only an F2, as an R5), but no route calls it: its only callers under `apps/` are
 (`vatBreakdown` in `apps/till/src/state/working-order.ts`) that no screen shows; it uses the rate
 the menu froze for a dish and a variant (`vatRate`, filled in `apps/till/src/api/client.ts`),
 prices a retrieved held line by its class, and leaves out extras picks. Asesor Q26 is still open.
+_2026-09-27, A68 (branch `feat/vat-class-dated-rates`) narrows M7v on the owner's instruction: the
+published version freezes the VAT CLASS only; `working_order_lines.vat_class` replaces `vat_rate`
+(and the net `unit_price` goes); each class's percentage is a dated table in code (`VAT_RATE_TABLE`,
+`packages/catalogue/src/vat-rates.ts`), looked up for the local date of the invoice's issue instant,
+so an order open across a legal change pays the new rate and a release can ship a future-dated rate
+that changes nothing before its date. The "rate has no product surface" and "a publish freezes the
+new rate early" sentences above no longer hold, and the till preview and the product editor show the
+rate in force today. **Upgrading** (measured through `applyMigrations` on databases built by the base
+commit): a venue with no order lines migrates cleanly; a venue with ANY order line — a settled
+walk-up is enough — fails `migrations.apply_failed`, caused by `NOT NULL constraint failed:
+__new_working_order_lines.vat_class`, and rolls back whole, so it needs `wa-wt reset` (a real box, a
+reset). A menu published before A68 keeps selling (its extra `vatRate` keys are ignored) and shows
+Unpublished changes until it is published again. Owner question: invoice-first issues at placing,
+so it takes the placing day's rate. Asesor Q26 reworded to the rate on the day of issue._
 **Menus Task 8 (home layouts), landed as #722 (2026-09-27): the Home page tab and a layout per device
 profile.** A menu's Home page tab (`/manage/menus/menu/<id>/view/home`) lists its home layouts with the
 default marked, and adds, duplicates, renames and deletes them and makes one the default; its tiles are
@@ -2004,7 +2018,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     No till screen calls these routes yet; Task 15 builds them. The questions it raised, and how
     each was ruled, are in lane B's questions log. With M7v landed (#720), the invoice issued at a
     bill's last payment files each line at the VAT rate recorded on it, however long the payments
-    took. The owner's rulings at landing (2026-09-27): a SumUp payment stuck mid-charge keeps its
+    took. _(2026-09-27, A68: the line records its class, and that invoice takes the rate in force on
+    the day it is issued.)_ The owner's rulings at landing (2026-09-27): a SumUp payment stuck mid-charge keeps its
     bill locked until SumUp answers (no "failed" after a time limit); a card arriving after cash
     paid the rest is refused `working_order.not_open`, and the resolve routes sit beside M7b2's,
     both accepted and to be written into the design (lane A item A76). Two follow-ups, both queued

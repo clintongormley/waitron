@@ -102,7 +102,6 @@ const products = new Map<string, ExtraProductFacts>([
       descriptions: { en: "Wine diner", es: "Vino cliente" },
       kitchenName: "Wine kitchen",
       vatClass: "general",
-      vatRate: "21.00",
     },
   ],
   [
@@ -113,7 +112,6 @@ const products = new Map<string, ExtraProductFacts>([
       descriptions: { en: "Sourdough diner" },
       kitchenName: "Sourdough kitchen",
       vatClass: "reduced",
-      vatRate: "10.00",
     },
   ],
   [
@@ -124,7 +122,6 @@ const products = new Map<string, ExtraProductFacts>([
       descriptions: { en: "Rye diner" },
       kitchenName: "Rye kitchen",
       vatClass: "reduced",
-      vatRate: "10.00",
     },
   ],
 ]);
@@ -164,7 +161,7 @@ describe("buildLineExtras", () => {
     expect(optionSnapshots[0]!.labelName).toEqual({ es: "Medium rare staff" });
   });
 
-  it("turns a pick into a child carrying the product's own three names, VAT class and rate and the resolved price", () => {
+  it("turns a pick into a child carrying the product's own three names, VAT class and the resolved price", () => {
     const { extraChildren } = buildLineExtras(
       { extras: [drinks], options: [] },
       products,
@@ -182,8 +179,6 @@ describe("buildLineExtras", () => {
         listId: "list-drinks",
         // The wine's own 21% class, not the 10% of the dish this is an extra on.
         vatClass: "general",
-        // The rate the published version froze for the wine.
-        vatRate: "21.00",
         // The picks per dish as sent — this function never multiplies by the dish count.
         quantity: 2,
       },

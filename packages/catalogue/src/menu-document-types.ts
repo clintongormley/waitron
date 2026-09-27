@@ -15,13 +15,8 @@ import type { OptionLabel } from "./modifier-list-types.js";
 /** Stripped from the document (D6): availability, and the two fields that are not menu content. */
 export type OverlayOfferField = "available" | "courseId" | "category";
 
-/** The VAT rate `vatClass` resolved to when the version was published, e.g. "10.00". */
-export interface FrozenRate {
-  vatRate: string;
-}
-
 /** `image` is the product's effective photo, which `OfferedExtraItem` does not carry. */
-export type FrozenExtraItem = OfferedExtraItem & FrozenRate & { image: string | null };
+export type FrozenExtraItem = OfferedExtraItem & { image: string | null };
 export type FrozenOptionLabel = Omit<OptionLabel, "available">;
 
 /** Every option label, and every extras item whose product is Active and has no Active variant,
@@ -30,20 +25,19 @@ export type FrozenOfferedModifier =
   | (Omit<OfferedExtrasList, "items"> & { items: FrozenExtraItem[] })
   | (Omit<OfferedOptionsList, "labels"> & { labels: FrozenOptionLabel[] });
 
-export type FrozenOfferVariant = Omit<MenuOfferVariant, OverlayOfferField> & FrozenRate;
+export type FrozenOfferVariant = Omit<MenuOfferVariant, OverlayOfferField>;
 
 export type FrozenOffer = Omit<
   MenuOffer,
   OverlayOfferField | "placements" | "offeredModifiers" | "variants"
-> &
-  FrozenRate & {
-    /** The dish's own photo and description, which `MenuOffer` does not carry. */
-    image: string | null;
-    description: Record<string, string> | null;
-    variants: FrozenOfferVariant[];
-    placements: string[][];
-    offeredModifiers: FrozenOfferedModifier[];
-  };
+> & {
+  /** The dish's own photo and description, which `MenuOffer` does not carry. */
+  image: string | null;
+  description: Record<string, string> | null;
+  variants: FrozenOfferVariant[];
+  placements: string[][];
+  offeredModifiers: FrozenOfferedModifier[];
+};
 
 export type DocumentMember =
   | { kind: "product"; menuItemId: string; productId: string }
@@ -108,8 +102,7 @@ export type LiveOfferedModifier =
  * A published offer with the live fields put back from the current rows. Every variant, extras item
  * and option label the document holds is present, each marked with whether it can be sold now.
  */
-export interface LiveOffer extends MenuOffer, FrozenRate {
-  variants: (MenuOfferVariant & FrozenRate)[];
+export interface LiveOffer extends MenuOffer {
   available: boolean;
   image: string | null;
   description: Record<string, string> | null;

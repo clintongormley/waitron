@@ -8,6 +8,7 @@
  * pulls in nothing at runtime beyond `@waitron/shared` and its own siblings.
  */
 import { type BasketItem, priceBasket } from "@waitron/catalogue/src/pricing.js";
+import { localToday } from "@waitron/catalogue/src/vat-rates.js";
 import { customerPresentationText } from "@waitron/catalogue/src/product-presentation.js";
 import { currentContentLanguages } from "@waitron/ui";
 import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.js";
@@ -194,7 +195,10 @@ export class WorkingOrderStore {
 
   get #pricedOrder(): Priced {
     if (this.#priced === null) {
-      this.#priced = priceBasket(this.#lines.map((line) => toPriceable(line)));
+      this.#priced = priceBasket(
+        this.#lines.map((line) => toPriceable(line)),
+        localToday(),
+      );
     }
     return this.#priced;
   }
@@ -212,8 +216,8 @@ export class WorkingOrderStore {
 
   /**
    * DISH-ONLY: `priceBasket` does not see the extras picks, so these bands do not reconcile with
-   * {@link total}. A VAT preview over a basket with extras would need `priceBasketWithOptions`, and
-   * each pick's VAT rate, which {@link SelectedExtra} does not carry.
+   * {@link total}. A VAT preview over a basket with extras would need `rateLines` over
+   * `grossBasketWithOptions`' result, and each pick's VAT class, which {@link SelectedExtra} does not carry.
    */
   get vatBreakdown(): Priced["vatBreakdown"] {
     return this.#pricedOrder.vatBreakdown;

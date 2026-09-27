@@ -274,7 +274,7 @@ names it so the owner can overturn it at review.
     `working_order_lines.list_unit_price_gross`, so the receipt shows the original price and
     €0.00. The receipt text is presentation; nothing new enters the fiscal fingerprint.
   - **A filed line's amount is its whole-cent unit price × quantity, rounded to the cent**
-    (`priceRows` in `packages/catalogue/src/pricing.ts`: `toScale(grossUnit × quantity, 2)`). So:
+    (`priceRows` (`grossRows` since A68, 2026-09-27) in `packages/catalogue/src/pricing.ts`: `toScale(grossUnit × quantity, 2)`). So:
     - **Discrete lines** (a whole-number quantity): an adjustment to PART of a line (1 of Steak ×2)
       first splits that part into its own row. A reduced line total that does not divide into
       whole-cent units is split into at most two rows; the extra cent goes to the first rows. For
@@ -695,7 +695,8 @@ for, which Task 14 implements. Branch, `commit -s`, fast-forward `main`, push di
      takes a €20.00 comp and now totals €40.00. Decide what happens to the €10.00 received beyond
      the new total: refunded, held as a credit, or the comp refused. It is never a tip.
   7. **The invoice at full payment:** which transaction issues it, and that the VAT per line is the
-     rate M7v recorded, re-resolving nothing.
+     rate M7v recorded, re-resolving nothing. _(2026-09-27, A68: the line now records its VAT
+     class, and the invoice files that class's rate on the day it is issued.)_
   8. **The acceptance tests** Task 14 will write, each with concrete amounts (spec §12 items 7 and
      8, and the owner's split-after-contribution example).
   9. **What waits on asesor Q27**, and what changes if the answer is "issue the invoice at the
@@ -1895,7 +1896,8 @@ themselves:
     - paying €40.00 issues the original bill's invoice for €90.00, with its tenders summing to
       €90.00.
   - **The invoice at full payment (D3):** no fiscal record exists for a bill until its outstanding
-    amount reaches zero. Then exactly one, filing each line's rate as M7v recorded it. The golden
+    amount reaches zero. Then exactly one, filing each line's rate as M7v recorded it (2026-09-27,
+    A68: its recorded class at the rate in force on the day of issue). The golden
     huella test passes unedited.
   - **The bottle:** a whole €30.00 bottle moved to its own bill and paid by three €10.00
     contributions files ONE line of €30.00, never fractional bottle lines.

@@ -497,11 +497,10 @@ describe("venue service routing", () => {
         productId: ham.id,
         name: "Sliced ham",
         descriptions: { "en-GB": "Sliced ham" },
-        // 250 g, counted in whole thousandths, beside a rate in whole basis points.
+        // 250 g, counted in whole thousandths.
         quantity: 250,
-        unitPrice: 2264,
         unitPriceGross: 2490,
-        vatRate: 1000,
+        vatClass: "reduced",
         lineTotal: 623,
         category: "Cold cuts",
       });
@@ -608,9 +607,8 @@ describe("venue service routing", () => {
         descriptions: { "en-GB": "Sliced ham" },
         // 100 g, in thousandths like the line above.
         quantity: 100,
-        unitPrice: 2264,
         unitPriceGross: 2490,
-        vatRate: 1000,
+        vatClass: "reduced",
         lineTotal: 249,
         category: "Cold cuts",
       });
@@ -689,9 +687,8 @@ describe("venue service routing", () => {
         name: "Loose sweets",
         descriptions: { "en-GB": "Loose sweets" },
         quantity: 1000,
-        unitPrice: 109,
         unitPriceGross: 120,
-        vatRate: 1000,
+        vatClass: "reduced",
         lineTotal: 120,
         category: "Uncategorised",
       });
@@ -1387,9 +1384,8 @@ async function addLine(tx: Transaction, venue: SellingVenue, orderId: string, li
     name: "Tortilla",
     descriptions: { "en-GB": "Tortilla" },
     quantity: 1000,
-    unitPrice: 409,
     unitPriceGross: 450,
-    vatRate: 1000,
+    vatClass: "reduced",
     lineTotal: 450,
     category: "Uncategorised",
   });
@@ -1864,7 +1860,7 @@ describe("zone offers from the published menus", () => {
     });
   });
 
-  it("serves the VAT class and rate the live version froze until the menu is republished", async () => {
+  it("serves the VAT class the live version froze, and no rate, until the menu is republished", async () => {
     const venue = await seedTwoMenuVenue();
     const { cfg } = venue;
     await scoped(async (tx) => {
@@ -1874,21 +1870,21 @@ describe("zone offers from the published menus", () => {
         (await listZoneOffers(tx, cfg, venue.diningZone)).offers.find(
           (offer) => offer.id === venue.lemonadeOffer,
         )!;
-      const frozen = { vatClass: "general", vatRate: "21.00" };
+      const frozen = { vatClass: "general" };
       const served = await lemonadeOf();
       expect(served).toMatchObject(frozen);
+      expect(served).not.toHaveProperty("vatRate");
       expect(served.variants[0]).toMatchObject(frozen);
       const extras = served.offeredModifiers[0]!;
       expect(extras.kind === "extras" && extras.items[0]).toMatchObject(frozen);
 
       await publish(tx, venue.dinner);
       const republished = await lemonadeOf();
-      expect(republished).toMatchObject({ vatClass: "reduced", vatRate: "10.00" });
-      expect(republished.variants[0]).toMatchObject({ vatClass: "reduced", vatRate: "10.00" });
+      expect(republished).toMatchObject({ vatClass: "reduced" });
+      expect(republished.variants[0]).toMatchObject({ vatClass: "reduced" });
       const after = republished.offeredModifiers[0]!;
       expect(after.kind === "extras" && after.items[0]).toMatchObject({
         vatClass: "super_reduced",
-        vatRate: "4.00",
       });
     });
   });

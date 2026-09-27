@@ -16,7 +16,7 @@ import { parseProductEditorInput } from "./product-editor-input.js";
 export { parseProductEditorInput, type ProductEditorInput } from "./product-editor-input.js";
 import type { InheritedValues, ProductEditorValue } from "./product-types.js";
 export type { InheritedValues, ProductEditorValue } from "./product-types.js";
-import type { VatClass } from "./pricing.js";
+import type { VatClass } from "./vat-rates.js";
 import "./errors.js";
 
 /** The row as stored: a variant's blanks read blank here, never as its parent's. A variant stores no

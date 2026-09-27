@@ -153,7 +153,7 @@ Spec §3 and §4. **Fiscal-adjacent.**
   - one generated core migration;
   - `packages/core/src/sale-line.ts` and `sale-line-rows.ts` (the row shape), `record-sale.ts` (it
     passes the new fields through; the header and hash are untouched);
-  - `packages/catalogue/src/pricing.ts` (`priceRows` already computes per-line gross; carry it onto
+  - `packages/catalogue/src/pricing.ts` (`priceRows` (`grossRows` since A68, 2026-09-27) already computes per-line gross; carry it onto
     the row).
 - Create: `packages/catalogue/src/sale-classification.ts` + test.
   - `loadClassification(tx)` loads the reporting tree and labels once.

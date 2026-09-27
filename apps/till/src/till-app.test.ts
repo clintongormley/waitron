@@ -1,5 +1,4 @@
 import { page } from "vitest/browser";
-import { resolveVatRate } from "@waitron/catalogue/src/pricing.js";
 import { currentContentLanguages } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatMoney } from "@waitron/shared";
@@ -281,7 +280,6 @@ function fixtureOffers(catalogue: ProductCatalogue): ZoneOfferCatalogue {
       // `productUnit` is the till's own fallback, reused so the fixture cannot drift from it.
       unit: productUnit(product),
       vatClass: product.vatClass,
-      vatRate: resolveVatRate(product.vatClass),
       category: product.category ?? "Other",
       allergens: product.allergens,
       diet: product.diet ?? null,
@@ -297,7 +295,6 @@ function fixtureOffers(catalogue: ProductCatalogue): ZoneOfferCatalogue {
               ...entry,
               items: entry.items.map((item) => ({
                 ...item,
-                vatRate: resolveVatRate(item.vatClass),
                 image: null,
                 available: true,
               })),
@@ -318,7 +315,6 @@ function fixtureOffers(catalogue: ProductCatalogue): ZoneOfferCatalogue {
           unit: productUnit(product),
           pricingUnit: productUnit(product).hardwareUnit === null ? "each" : "weight",
           vatClass: product.vatClass,
-          vatRate: resolveVatRate(product.vatClass),
           category: product.category ?? "Other",
           allergens: product.allergens,
           diet: product.diet ?? null,
@@ -2143,7 +2139,6 @@ describe("till-app", () => {
         kitchenName: "Leche extra KDS",
         price: "0.75",
         vatClass: "general" as const,
-        vatRate: "21.00",
         maxQuantity: 3,
         preselected: false,
         addAllergens: null,

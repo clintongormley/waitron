@@ -94,9 +94,8 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
         name: "Café solo",
         descriptions: DESCRIPTIONS_A,
         quantity: 1000,
-        unitPrice: 100,
         unitPriceGross: 110,
-        vatRate: 1000,
+        vatClass: "reduced",
         lineTotal: 110,
       })
       .returning({ id: workingOrderLines.id });

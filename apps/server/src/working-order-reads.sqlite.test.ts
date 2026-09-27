@@ -68,9 +68,8 @@ beforeAll(async () => {
     name: "Café",
     descriptions: { [LOCALE]: "Café" },
     quantity: 1000,
-    unitPrice: 100,
     unitPriceGross: 121,
-    vatRate: 2100,
+    vatClass: "general",
     lineTotal: 121,
   });
   const queuedAt = new Date(Date.now() - 3 * MINUTE_MS).toISOString();

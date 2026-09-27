@@ -30,7 +30,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { Decimal, SaleId } from "@waitron/shared";
-import type { PricedLines } from "@waitron/catalogue";
+import type { GrossLines } from "@waitron/catalogue";
 import {
   payments,
   associatePaymentWithSale,
@@ -50,8 +50,9 @@ import {
   refusePaymentInFlight,
   toVatBreakdown,
 } from "./working-order.js";
-import type { LineExtras, PricedOrder, TillSaleDeps } from "./working-order.js";
+import type { GrossOrder, LineExtras, TillSaleDeps } from "./working-order.js";
 import { issuancePass } from "./issuance-pass.js";
+import { issueMoment } from "./issue-moment.js";
 import { cashChange } from "./bill-allocation.js";
 import { perDatabase } from "./live-in-process.js";
 import { refuseBillWithPayments } from "./bill-payments.js";
@@ -79,7 +80,7 @@ export interface TillTender {
 
 /**
  * A walk-up sale as the counter till captures it. Deliberately carries NO price — the server prices
- * from the zone's menu offers (`priceBasket`), so a browser cannot influence the filed total.
+ * from the zone's menu offers, so a browser cannot influence the filed total.
  *
  * `workingOrderId` is the pay-idempotency key: held stable across a lost-response retry, a re-sent pay
  * REPLAYS rather than filing a second chained record. Absent, `recordTillSale` mints a fresh one. To
@@ -310,7 +311,7 @@ export async function readBillTenderLines(
  *
  * How `lines` is used depends on the shape:
  *  - WALK-UP (no `working_orders` row for `id`): `lines` is the unpriced basket; the server prices it
- *    (`priceBasket`), creates the order OPEN with those lines, and files that price.
+ *    (`createOpenOrder`), creates the order OPEN with those lines, and files that price.
  *  - RETRIEVED order (the row exists): `lines` is IGNORED. The order files its STORED
  *    `working_order_lines`, whose gross was locked at add-time, so a catalogue price change between
  *    park and pay never moves the filed total.
@@ -448,9 +449,9 @@ export async function payWorkingOrder(
         throw new AppError("sale.unsupported_tender", { method: req.tender.method });
       }
 
-      // A walk-up reuses the price `createOpenOrder` derived to build its line rows; a retrieved
+      // A walk-up files the gross lines `createOpenOrder` built its line rows from; a retrieved
       // order ignores `req.lines` and files its stored locked lines.
-      let order: PricedOrder;
+      let order: GrossOrder;
       let newlyCreatedLines: Awaited<ReturnType<typeof createOpenOrder>>["lineRows"] = [];
       if (locked === undefined) {
         // Walk-up only, because a retrieved order ignores `req.lines`.
@@ -535,8 +536,6 @@ export async function readSettledTicket(
   }
   /* v8 ignore stop */
 
-  // Rebuilt from the stored lock rather than `sale_lines`, which stores the NET base, so recovering
-  // the gross could drift by a cent.
   const ticketLines = ticketLinesFrom(await priceStoredOrder(tx, workingOrderId));
 
   // Reads the already-filed record; never re-files.
@@ -601,7 +600,7 @@ function settlementFor(tender: TillTender, total: string): { settledAmount: stri
 }
 
 /**
- * File an IMMEDIATE cash/card sale from an already-priced basket and settle it on the caller's `tx`,
+ * File an IMMEDIATE cash/card sale from an order's gross lines and settle it on the caller's `tx`,
  * so the sale, its tender/settlement, its chained fiscal record and the → `settled` transition commit
  * as one unit. It does NOT read or guard the order status: the caller resolved it, and one write
  * transaction runs on the venue file at a time, so nothing has moved the row in between.
@@ -615,16 +614,19 @@ async function fileImmediateSale(
   cfg: TillConfig,
   workingOrderId: string,
   tender: TillTender,
-  order: PricedOrder,
+  order: GrossOrder,
   operatorId?: string,
   markCollected = false,
 ): Promise<TillSaleResult> {
-  const priced = await issuancePass(tx, cfg, workingOrderId, order);
+  const { priced, clock } = issueMoment(
+    deps.clock,
+    await issuancePass(tx, cfg, workingOrderId, order),
+  );
   const isCard = tender.method === "card";
   const { settledAmount } = settlementFor(tender, priced.total);
 
-  // One reading, shared by the tender and the order's `settled_at`.
-  const settledAt = deps.clock.now().instant;
+  // The issue reading, shared by the invoice, the tender and the order's `settled_at`.
+  const settledAt = clock.now().instant;
 
   const { saleId, fiscal } = await recordSale(tx, deps.backend, {
     tillId: cfg.tillId,
@@ -637,7 +639,7 @@ async function fileImmediateSale(
     total: priced.total,
     lines: priced.lines,
     vatBreakdown: priced.vatBreakdown,
-    clock: deps.clock,
+    clock,
     operatorId,
     settlement: {
       kind: "immediate",
@@ -838,12 +840,15 @@ async function payIntegrated(
       }
     }
 
-    const order: PricedOrder =
+    const order: GrossOrder =
       locked === undefined
-        ? await createOpenOrder(tx, cfg, req.id, req.lines, null, { zoneId: req.zoneId })
+        ? await createOpenOrder(tx, cfg, req.id, req.lines, null, {
+            zoneId: req.zoneId,
+          })
         : await priceStoredOrderForIssuance(tx, req.id);
-    // The record is issued from THIS pricing, in P3, whatever changes while the reader runs.
-    const priced = await issuancePass(tx, cfg, req.id, order);
+    // P3 files THESE gross lines, whatever changes while the reader runs, at the rates of the day it
+    // issues the invoice.
+    const gross = await issuancePass(tx, cfg, req.id, order);
     // A `placed` order here is a counter collect, so `finalizeCapture` stamps `collected_at`.
     const wasPlaced = locked?.status === "placed";
     // An open order's lines could still change under the reader, so it is marked in flight (plan
@@ -858,7 +863,7 @@ async function payIntegrated(
       // Inside the transaction, so no release pass runs between the mark and its registration.
       onMarked(attemptAt);
     }
-    return { kind: "collect" as const, priced, wasPlaced, attemptAt };
+    return { kind: "collect" as const, gross, wasPlaced, attemptAt };
   });
 
   if (prepared.kind === "replay") {
@@ -877,7 +882,7 @@ async function payIntegrated(
   const tipInput = req.tip ?? "0.00";
   const tip = cfg.tipsEnabled ? decimal(tipInput) : decimal("0.00");
   const baseAmount =
-    prepared.kind === "settle" ? prepared.outstanding.amountDue : prepared.priced.total;
+    prepared.kind === "settle" ? prepared.outstanding.amountDue : prepared.gross.total;
   // Only a collect of an open order marked it; a settle is of a placed order.
   const attemptAt = prepared.kind === "collect" ? prepared.attemptAt : null;
   let result: PaymentResult;
@@ -912,7 +917,7 @@ async function payIntegrated(
     deps,
     cfg,
     req,
-    prepared.priced,
+    prepared.gross,
     tip,
     result,
     operatorId,
@@ -1040,7 +1045,7 @@ async function finalizeCapture(
   deps: IntegratedPayDeps,
   cfg: TillConfig,
   req: IntegratedPayRequest,
-  priced: PricedLines,
+  grossInP1: GrossLines,
   tip: Decimal,
   result: PaymentResult,
   operatorId?: string,
@@ -1057,6 +1062,7 @@ async function finalizeCapture(
   /* v8 ignore stop */
   try {
     return await withTransaction(deps.db, async (tx) => {
+      const { priced, clock } = issueMoment(deps.clock, grossInP1);
       const { saleId, fiscal } = await recordSale(tx, deps.backend, {
         tillId: cfg.tillId,
         nodeId: cfg.nodeId,
@@ -1068,7 +1074,7 @@ async function finalizeCapture(
         total: priced.total,
         lines: priced.lines,
         vatBreakdown: priced.vatBreakdown,
-        clock: deps.clock,
+        clock,
         operatorId,
         settlement: {
           kind: "immediate",
@@ -1166,11 +1172,14 @@ async function finalizeRecovery(
       };
     }
 
-    const priced = await issuancePass(
-      tx,
-      cfg,
-      req.id,
-      await priceStoredOrderForIssuance(tx, req.id, { refuseUnsentUnavailable: false }),
+    const { priced, clock } = issueMoment(
+      deps.clock,
+      await issuancePass(
+        tx,
+        cfg,
+        req.id,
+        await priceStoredOrderForIssuance(tx, req.id, { refuseUnsentUnavailable: false }),
+      ),
     );
     const capturedAmount = decimal(captured.amount);
 
@@ -1203,7 +1212,7 @@ async function finalizeRecovery(
       total: priced.total,
       lines: priced.lines,
       vatBreakdown: priced.vatBreakdown,
-      clock: deps.clock,
+      clock,
       operatorId,
       settlement: {
         kind: "immediate",

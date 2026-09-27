@@ -48,6 +48,7 @@ import type {
   BillFunds,
 } from "./bill-allocation.js";
 import { issuancePass } from "./issuance-pass.js";
+import { issueMoment } from "./issue-moment.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 import { ticketLinesFrom } from "./receipt-lines.js";
@@ -612,13 +613,16 @@ async function issueWhenFullyPaid(
 
   // A card already captured cannot be undone by refusing its invoice, so a line whose product has
   // since gone off sale is filed as it stands, as a whole-order card recovery files it.
-  const priced = await issuancePass(
-    tx,
-    cfg,
-    workingOrderId,
-    await priceStoredOrderForIssuance(tx, workingOrderId, {
-      refuseUnsentUnavailable: options.moneyMoved !== true,
-    }),
+  const { priced, clock } = issueMoment(
+    deps.clock,
+    await issuancePass(
+      tx,
+      cfg,
+      workingOrderId,
+      await priceStoredOrderForIssuance(tx, workingOrderId, {
+        refuseUnsentUnavailable: options.moneyMoved !== true,
+      }),
+    ),
   );
   const tendersOfBill: SettleSaleTender[] = held
     .filter(({ row }) => row.state === "received")
@@ -645,7 +649,7 @@ async function issueWhenFullyPaid(
     total: priced.total,
     lines: priced.lines,
     vatBreakdown: priced.vatBreakdown,
-    clock: deps.clock,
+    clock,
     operatorId,
     settlement: { kind: "deferred" },
   });

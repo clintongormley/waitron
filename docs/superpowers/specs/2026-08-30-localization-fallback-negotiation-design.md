@@ -144,7 +144,7 @@ full-tag `invoice_locales` at the single point content enters a fiscal line**:
 - Applied in **`priceOrderLines`** (`apps/server/src/working-order.ts`), right after `priceBasket`,
   mutating each `priced.lines[i].descriptions` — which propagates to BOTH `working_order_lines` and
   `sale_lines` (the same `priced` is returned and filed). Inherited/locked paths (move/transfer,
-  `priceLockedLines`) already carry full tags and are untouched.
+  `priceLockedLines` (replaced by `grossLockedLines` + `rateLines`, A68, 2026-09-27)) already carry full tags and are untouched.
 - **Reads `locations.invoice_locales` FRESH from the DB** inside `priceOrderLines`, not the env-derived
   `cfg.invoiceLocales` (which can drift from what the trigger checks) — closing that drift **for the line
   descriptions only**. The sale HEADER's locale fields (`sales.locale`/`sales.invoice_locales`) are still

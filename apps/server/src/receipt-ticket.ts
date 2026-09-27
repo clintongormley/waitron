@@ -122,7 +122,7 @@ interface LineGroup {
 
 /**
  * Group the filed lines into dishes with their option lines. Filed lines arrive dish-first
- * (`priceBasketWithOptions`), so one forward scan suffices; nothing is recomputed, so the printed
+ * (`grossBasketWithOptions`), so one forward scan suffices; nothing is recomputed, so the printed
  * lines still reconcile with the filed total. A child with no dish before it becomes its own group
  * rather than being dropped, so no filed line vanishes from a legal receipt.
  */
