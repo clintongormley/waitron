@@ -254,7 +254,6 @@ export class CategoriesScreen extends LitElement {
   #edit(value: CategorySummary | null): void {
     this.edited = value;
     this.fieldErrors = {};
-    this.saveError = "";
     this.editorOpen = true;
   }
   async #save(event: CustomEvent<{ value: CategoryInput }>): Promise<void> {
@@ -262,7 +261,6 @@ export class CategoriesScreen extends LitElement {
     if (this.busy) return;
     this.fieldErrors = {};
     this.busy = true;
-    this.saveError = "";
     try {
       if (this.edited) await this.api.updateCategory(this.edited.id, event.detail.value);
       else await this.api.createCategory(event.detail.value);

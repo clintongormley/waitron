@@ -1586,7 +1586,15 @@ it("puts a refused parent beside the parent field and in the form summary", asyn
 
 it("puts a refused name beside the default language's name field", async () => {
   setLocale("en-GB");
-  const { el, api } = await mount();
+  const fx = apiFixture();
+  fx.api.getContentLanguages.mockResolvedValue({ defaultLanguage: "fr", languages: ["en", "fr"] });
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-data-table")?.rows.length).toBe(2),
+  );
+  const { api } = fx;
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="create-category"]')!.click();
   await el.updateComplete;
   const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
@@ -1594,13 +1602,13 @@ it("puts a refused name beside the default language's name field", async () => {
     code: "management.request_invalid",
     params: { field: "name" },
   });
-  submitCategory(el, { en: "New" });
+  submitCategory(el, { fr: "Nouveau" });
   const field = (locale: string) =>
     form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
       `wt-input[name="category-name-${locale}"]`,
     )!.error;
-  await vi.waitFor(() => expect(field("en")).toBe("Check the form and try again"));
-  expect(field("fr")).toBe("");
+  await vi.waitFor(() => expect(field("fr")).toBe("Check the form and try again"));
+  expect(field("en")).toBe("");
 });
 
 it("sends one create when the editor submits twice before the first save settles", async () => {
