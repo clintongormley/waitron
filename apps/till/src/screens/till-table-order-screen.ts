@@ -582,8 +582,7 @@ export class TillTableOrderScreen extends LitElement {
    * ABSENT here takes its product's default course server-side.
    */
   #roundCourses = new WeakMap<OrderLine, string>();
-  /** Same lifecycle as {@link #roundCourses}. Only ever `true`: {@link #toggleHold} DELETES the entry
-   * rather than storing `false`. */
+  /** Same lifecycle as {@link #roundCourses}. */
   #roundHolds = new WeakMap<OrderLine, boolean>();
   #payStore?: TabPayStore;
   /** Memoised so a render triggered by a round change does not recompute every line's gross. */
@@ -748,7 +747,6 @@ export class TillTableOrderScreen extends LitElement {
     this.requestUpdate();
   }
 
-  /** A course deactivated since it was rung drops off: firing it would be refused `course.not_found`. */
   #heldCourses(): TillCourse[] {
     const heldIds = new Set(
       this.lines

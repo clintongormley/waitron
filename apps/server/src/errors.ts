@@ -544,9 +544,8 @@ declare module "@waitron/shared" {
      */
     "tab.transfer_modifier_line": { tabId: string; lineNo: number };
     /**
-     * A split onto a new check named a line whose kitchen ticket is still held (not fired). A check
-     * cannot be sent, so the held work would never reach the kitchen. `lineNo` is the offending
-     * source line.
+     * A split onto a new check named a line whose kitchen ticket is still held (not fired). `lineNo`
+     * is the offending source line.
      */
     "tab.split_held_line": { tabId: string; lineNo: number };
     /** No service status with this id. */
@@ -596,8 +595,8 @@ declare module "@waitron/shared" {
      */
     "ticket.not_fired": { workingOrderId: string };
     /**
-     * A ticket-item bump was refused because the line is still HELD (`fired_at IS NULL`): its course
-     * has not been fired. Distinct from `ticket.invalid_transition`, an illegal move on a fired line.
+     * A ticket-item bump was refused because the line is still HELD (`fired_at IS NULL`). Distinct
+     * from `ticket.invalid_transition`, an illegal move on a fired line.
      */
     "ticket.item_held": { ticketItemId: string };
     /**

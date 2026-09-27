@@ -487,7 +487,7 @@ function groupCommand(personId: string, body: Record<string, unknown>): VisitCom
 
 /**
  * Submitted groups: each a release and a list of round lines. Only the shape is screened; pricing
- * refuses a line's contents, as it does a round's.
+ * refuses a line's contents.
  */
 function parseSubmittedGroups(value: unknown): SubmitGroupsInput["groups"] {
   if (!Array.isArray(value)) throw invalid("groups");
@@ -1542,7 +1542,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
       // Absent voids the whole line; `voidTabLine` validates a given one.
       const quantity = c.req.query("quantity");
-      // The party's revision after the void (R10), for the till's next command on the party.
+      // The party's revision after the void, for the till's next command on the party.
       const visit = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
         withTransaction(deps.db, async (tx) => {
           await voidTabLine(tx, deps.cfg, id, lineNo, quantity, personId);
@@ -1630,7 +1630,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // An omitted or empty `lineNos` releases every held line of the tab.
+  // An omitted or empty `lineNos` releases every held line of the tab outside a held group.
   app.post("/api/working-orders/:id/lines/send", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);

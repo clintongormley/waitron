@@ -2270,7 +2270,7 @@ export class TillApp extends LitElement {
       this.orderParty = row.visit;
   }
 
-  /** A void or line edit moves its bill's party on (R10) without a revision of its own to send. */
+  /** A void or line edit moves its bill's party on without a revision of its own to send. */
   #noteBillParty(visit: BillParty): void {
     if (visit !== null) this.#noteVisitRevision(visit.id, visit.revision);
   }
@@ -2373,7 +2373,6 @@ export class TillApp extends LitElement {
       return;
     }
     if (this.#showsCheck()) {
-      // What the server answered a round sent to a check, `tab.not_open`, said on this screen.
       this.errorKey = lineWriteError({ code: "tab.not_open" });
       return;
     }

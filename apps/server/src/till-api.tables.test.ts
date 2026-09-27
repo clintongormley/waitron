@@ -434,7 +434,7 @@ describe("table + tab routes", () => {
     const before = await visitRevision(visitId);
     const voided = await request(`/api/working-orders/${tabId}/lines/1`, { method: "DELETE" });
     expect(voided.status).toBe(200);
-    // The void moves the party on (R10), so the answer says where to, for its next command.
+    // The void moves the party on, so the answer says where to, for its next command.
     expect(await voided.json()).toEqual({ visit: { id: visitId, revision: before + 1 } });
     expect(await visitRevision(visitId)).toBe(before + 1);
 
@@ -710,7 +710,7 @@ describe("table + tab routes", () => {
       });
     const party = await visitRevision(visitId);
 
-    // The line edit also answers its party's revision, which a change moves on (R10).
+    // The line edit also answers its party's revision, which a change moves on.
     const changed = await lineEdit({ note: "sin gas", revision });
     expect(changed.status).toBe(200);
     expect(await changed.json()).toEqual({

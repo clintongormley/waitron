@@ -3059,7 +3059,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
     expect(items.map((item) => item.firedAt !== null)).toEqual([true, false]);
   });
 
-  it("places and fires a counter order by its courses, as before groups, putting no line in a group", async () => {
+  it("places and fires a counter order by its courses, putting no line in a group", async () => {
     const { cfg, catalogueId } = await setupVenue("ticket_then_pay");
     const { cafe, postre, desserts } = await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });

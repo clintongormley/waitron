@@ -881,7 +881,7 @@ describe("the tab routes that move or release lines, on a visit with groups", ()
   });
 });
 
-describe("the line-editing routes act as the session's operator (R10, R11)", () => {
+describe("the line-editing routes act as the session's operator", () => {
   async function tabLines(tabId: string) {
     const answer = await call("GET", `/api/working-orders/${tabId}/lines`);
     return answer.json as unknown as {

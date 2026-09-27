@@ -1612,7 +1612,7 @@ async function linesOfBill(tabId: string) {
     .orderBy(asc(workingOrderLines.lineNo));
 }
 
-describe("a line leaving its visit (R9)", () => {
+describe("a line leaving its visit", () => {
   it.each([
     ["whole", undefined],
     ["part", "1"],
@@ -1785,7 +1785,7 @@ describe("a line leaving its visit (R9)", () => {
   });
 });
 
-describe("merging two bills (R9, D2)", () => {
+describe("merging two bills (D2)", () => {
   it("appends the source visit's groups after the target's, in their own order", async () => {
     const v = await setupVenue();
     const into = await seated(v);
@@ -1866,7 +1866,7 @@ describe("merging two bills (R9, D2)", () => {
   });
 });
 
-describe("merging a party's tab into a bill of no visit (R9)", () => {
+describe("merging a party's tab into a bill of no visit", () => {
   async function noVisitTab(v: Venue): Promise<string> {
     return inTx(async (tx) => {
       const { id: tableId } = await createTable(tx, v.cfg, {
@@ -1923,7 +1923,7 @@ describe("merging a party's tab into a bill of no visit (R9)", () => {
   });
 });
 
-describe("a group split across bills of its visit (R8)", () => {
+describe("a group split across bills of its visit", () => {
   /** A held group of a no-route Water ×2 and a Steak, with one Water on a check. */
   async function splitNoRoute(v: Venue) {
     const s = await seated(v);
@@ -2023,7 +2023,7 @@ describe("a group split across bills of its visit (R8)", () => {
   });
 });
 
-describe("sending lines on their own (R6)", () => {
+describe("sending lines on their own", () => {
   it("refuses to send a line of a held group (group.line_held), writing nothing", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
@@ -2115,7 +2115,7 @@ describe("sending lines on their own (R6)", () => {
   });
 });
 
-describe("the course Fire of the station and the pass, on a visit (R4)", () => {
+describe("the course Fire of the station and the pass, on a visit", () => {
   async function courseIdOf(v: Venue, dish: Dish): Promise<string> {
     const [row] = await db
       .select({ courseId: workingOrderLines.courseId })
@@ -2339,7 +2339,7 @@ async function groupRow(groupId: string) {
   return row!;
 }
 
-describe("edits inside groups (D19, R7, R10)", () => {
+describe("edits inside groups (D19)", () => {
   it("removes a held group whose only line is voided: gone from the list, its events kept, the visit moved on", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
@@ -2701,7 +2701,7 @@ describe("the bill a group's first event names", () => {
   });
 });
 
-describe("credit (D5, R11)", () => {
+describe("credit (D5)", () => {
   // The directive is the assertion: typecheck reports an unused `@ts-expect-error` the moment a
   // save that may issue the bill's invoice types without naming who saves. Vitest does not typecheck.
   it("will not type a save that may issue the invoice without naming who saves", () => {

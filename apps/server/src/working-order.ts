@@ -1369,7 +1369,7 @@ async function isOpenOrder(tx: Transaction, orderId: string): Promise<boolean> {
  *
  * On a visit's order, the held groups holding the course's dishes fire whole first
  * ({@link fireHeldGroupsOfCourse}); `operatorId` is who fired them. The course's lines still held
- * outside a held group, such as one recalled from a fired group, are then released as before.
+ * outside a held group, such as one recalled from a fired group, are then released.
  */
 export async function fireCourse(
   tx: Transaction,
@@ -1519,8 +1519,8 @@ export async function sendLines(
       courseId: ticketItems.courseId,
       quantity: ticketItems.quantity,
     });
-  // Sending everything held releases every held no-route line. Sending named lines releases the
-  // named ones, and a course's no-route lines once nothing routed in that course is still held.
+  // Sending everything held releases every held no-route line outside a held group. Sending named
+  // lines releases the named ones, and a course's no-route lines once nothing routed in that course is still held.
   const noRoute = (
     await heldNoRouteLines(
       tx,
@@ -3804,7 +3804,7 @@ async function assertProductsSellable(
  * number with its extras, so each dish is followed by its own extras in line order, as a ticket
  * groups them.
  *
- * On a visit (R7): an added extra takes its dish's group and credit; a fired line's raised quantity
+ * On a visit: an added extra takes its dish's group and credit; a fired line's raised quantity
  * goes in a new fired group, and a new dish in a new group fired or held as `newWork` says, both at
  * the end of the sequence and credited to `operatorId`; a held group the edit empties is removed;
  * the visit's revision moves on.
@@ -4036,7 +4036,7 @@ async function applyLineEdits(
   });
 
   // On a visit, what the edit adds for the kitchen goes in a new group at the end of the sequence:
-  // one fired now, one held, as the lines' `kitchen` says (R7). Its lines are credited to the editor.
+  // one fired now, one held, as the lines' `kitchen` says. Its lines are credited to the editor.
   const newGroups = new Map<string, string>();
   if (order.visitId !== null) {
     for (const as of pricedAs) {

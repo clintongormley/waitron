@@ -1146,7 +1146,7 @@ describe("till-app: leaving a finished party", () => {
   });
 });
 
-describe("till-app: the order's groups (R5)", () => {
+describe("till-app: the order's groups", () => {
   const cafe: TillProduct = {
     id: "cafe",
     menuItemId: "menu-item-cafe",
@@ -1678,7 +1678,7 @@ describe("till-app: the order's groups (R5)", () => {
       expect(banner(el)).toBeNull();
     });
 
-    describe("after a void or a change, which move the party on (R10)", () => {
+    describe("after a void or a change, which move the party on", () => {
       /** The server's side of D19 for a submission: refused unless it carries `current`. */
       const submitAt = (current: number) =>
         vi.fn(async (_visitId: string, command: { expectedVisitRevision: number }) => {

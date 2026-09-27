@@ -1583,8 +1583,9 @@ export class TillApi {
   }
 
   /**
-   * FIRE a HELD course of an order → `POST /api/orders/:id/courses/:courseId/fire`. NON-FISCAL;
-   * idempotent — a course with nothing held is a 200 no-op. A malformed or unknown course id rejects
+   * FIRE a HELD course of an order → `POST /api/orders/:id/courses/:courseId/fire`. On a seated
+   * party's order, each held group holding a dish of that course on that order fires whole; the
+   * course's lines held outside a group are released. NON-FISCAL; idempotent — a course with nothing held is a 200 no-op. A malformed or unknown course id rejects
    * `course.not_found`; a malformed order id `working_order.not_found`.
    */
   async fireCourse(orderId: string, courseId: string): Promise<void> {
