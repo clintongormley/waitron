@@ -536,8 +536,6 @@ export async function readSettledTicket(
   }
   /* v8 ignore stop */
 
-  // Rebuilt from the stored lock rather than `sale_lines`, which stores the NET base, so recovering
-  // the gross could drift by a cent.
   const ticketLines = ticketLinesFrom(await priceStoredOrder(tx, workingOrderId));
 
   // Reads the already-filed record; never re-files.

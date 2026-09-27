@@ -395,7 +395,7 @@ through (`packages/fiscal-verifactu/src/backend.ts`), an explicit field of what 
 in. So the same basket restructured into different lines can leave `ImporteTotal` exactly where it
 was while `CuotaTotal` and the huella move. That is a fact about the BACKEND and not about the
 system: every till filing route passes `total: priced.total` (`apps/server/src/till-sale.ts`), and
-`priced.total` is the sum of every per-line gross (`priceRows`,
+`priced.total` is the sum of every per-line gross (`grossRows`,
 `packages/catalogue/src/pricing.ts`), so on a real sale a moved line AMOUNT does move
 `ImporteTotal`. What it cannot see is a restructuring whose amounts still add up to the same
 total.

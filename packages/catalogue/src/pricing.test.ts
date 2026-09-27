@@ -323,7 +323,7 @@ describe("a VAT class", () => {
 
 // A dish + its selected options price as a PARENT line followed by its CHILD lines, through the
 // same arithmetic core as a plain basket.
-describe("grossBasketWithOptions — parent + child priced lines", () => {
+describe("rateLines over grossBasketWithOptions — parent + child lines", () => {
   const opt = (
     priceDelta: string,
     vatClass: SelectedOption["vatClass"],
@@ -530,7 +530,7 @@ describe("grossBasketWithOptions — parent + child priced lines", () => {
 
 // `grossLockedLines` prices from the STORED gross unit exactly as `priceBasket` prices from the
 // live catalogue.
-describe("grossLockedLines — files a locked line to the walk-up VAT breakdown", () => {
+describe("rateLines over grossLockedLines — a locked line rates as a walk-up does", () => {
   it("prices locked lines to the difference-method VAT breakdown (base 4.55 / tax 0.95), like a walk-up", () => {
     // café×1 (gross 1.50) + agua×2 (gross unit 2.00, qty 2). Group base 4.55, gross 5.50, tax 0.95
     // (NOT round(4.55×21%)=0.96).

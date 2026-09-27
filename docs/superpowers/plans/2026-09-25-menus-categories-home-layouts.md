@@ -485,7 +485,7 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
     one-row pattern. When it is off, a sent line can only be voided and re-added (`ticket.already_fired`,
     the existing code).
   - **Line numbering:** re-inserted and new lines are appended after the order's highest `line_no`,
-    as `addTabRound` does (`working-order.ts:1150-1156`). `priceRows` numbering from 1 would collide
+    as `addTabRound` does (`working-order.ts:1150-1156`). `priceRows` (`grossRows` since A68, 2026-09-27) numbering from 1 would collide
     with kept lines on `working_order_lines_line_no_key`.
   - **Out-of-date saves:** `working_orders` gains a `revision` counter. Every write to an order
     increments it, and `PUT /api/working-orders/:id` and the per-line route carry the revision their
@@ -1582,7 +1582,7 @@ and the pricing it feeds, or in the issuance pass, not in the `priceStoredOrder`
   before the record is filed**, so `readSettledTicket`'s reprint (`till-sale.ts:434-436`), which
   re-runs `priceStoredOrder`, prints the rate that was filed. After filing, the order is settled or
   placed, and no path prices it again. `packages/catalogue/src/pricing.ts` (`priceLockedLines`,
-  `:215`) takes the resolved rates.
+  `:215`; replaced by `grossLockedLines` + `rateLines`, A68, 2026-09-27) takes the resolved rates.
   - The stored `unit_price_gross` stays the price.
   - The stored `vat_rate` on `working_order_lines` is what the till displayed before issuance, and
     the issued rate after it. Say so at the column (`packages/db/src/schema/orders.ts`).

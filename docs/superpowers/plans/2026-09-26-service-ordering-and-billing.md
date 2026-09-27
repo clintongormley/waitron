@@ -274,7 +274,7 @@ names it so the owner can overturn it at review.
     `working_order_lines.list_unit_price_gross`, so the receipt shows the original price and
     €0.00. The receipt text is presentation; nothing new enters the fiscal fingerprint.
   - **A filed line's amount is its whole-cent unit price × quantity, rounded to the cent**
-    (`priceRows` in `packages/catalogue/src/pricing.ts`: `toScale(grossUnit × quantity, 2)`). So:
+    (`priceRows` (`grossRows` since A68, 2026-09-27) in `packages/catalogue/src/pricing.ts`: `toScale(grossUnit × quantity, 2)`). So:
     - **Discrete lines** (a whole-number quantity): an adjustment to PART of a line (1 of Steak ×2)
       first splits that part into its own row. A reduced line total that does not divide into
       whole-cent units is split into at most two rows; the extra cent goes to the first rows. For

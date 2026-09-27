@@ -11,8 +11,8 @@ export interface IssueMoment {
 }
 
 /**
- * Take ONE clock reading and rate `gross` at its local calendar date. Every path that issues an
- * invoice rates its lines here and hands `recordSale` the returned clock.
+ * Take ONE clock reading and rate `gross` at its local calendar date. Every till path that issues an
+ * invoice from an order's lines rates them here and hands `recordSale` the returned clock.
  */
 export function issueMoment(clock: TrustedClock, gross: GrossLines): IssueMoment {
   const reading = clock.now();

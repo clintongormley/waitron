@@ -705,7 +705,7 @@ function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
   if (stored.length === 0) {
     throw new AppError("sale.empty_basket", {});
   }
-  // `parentLineNo` is rebuilt in the array-position space `priceRows` renumbers into (`i + 1`), NOT
+  // `parentLineNo` is rebuilt in the array-position space `grossRows` renumbers into (`i + 1`), NOT
   // the stored `line_no` space: a void or a transfer leaves stored numbers with gaps, and keying on
   // them would file a child under the wrong parent in the immutable record.
   const positionById = new Map(stored.map((line, i) => [line.id, i + 1]));
@@ -2514,7 +2514,7 @@ export async function mergeTabs(
 }
 
 /**
- * The same composition `priceRows` uses for a line's gross total, so a split line's `line_total` is
+ * The same composition `grossRows` uses for a line's gross total, so a split line's `line_total` is
  * identical to an add-time line's.
  */
 function grossLineTotal(grossUnit: string, quantity: string): Decimal {

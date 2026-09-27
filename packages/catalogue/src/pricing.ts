@@ -161,7 +161,8 @@ function grossRows(rows: readonly PricingRow[]): GrossLines {
 
 /**
  * Each line at its class's rate on `on`, a local calendar date `YYYY-MM-DD`: its net base and net
- * unit, and the VAT breakdown. Every other field a gross line carries passes through.
+ * unit, and the VAT breakdown. Every other field a gross line carries passes through,
+ * except `vatClass` and `grossUnitPrice`, which are dropped.
  */
 export function rateLines(gross: GrossLines, on: string): PricedLines {
   const rates = vatRatesOn(on);
@@ -193,7 +194,7 @@ export function rateLines(gross: GrossLines, on: string): PricedLines {
 
 /** Prices a live basket: gross unit from the product's `unitPrice`, rate its `vatClass`'s on `on`, a
  * local calendar date `YYYY-MM-DD`. */
-// The default exists for a test file that must stay unedited; every production caller names its date.
+// Defaulted only for fiscal-verifactu's golden `write-path.e2e.test.ts`, which stays unedited.
 export function priceBasket(items: readonly BasketItem[], on: string = localToday()): PricedLines {
   return rateLines(
     grossRows(

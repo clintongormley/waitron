@@ -75,7 +75,7 @@ From this change on, **every sale line also records:**
 | `product_id` | The product actually sold: the variant on a variant line, the picked product on an extras line. |
 | `parent_product_id` | The variant's parent product; null otherwise. |
 | `menu_id`, `menu_version_id` | Provenance: the menu and published version the line was sold from, once published menus exist (menus plan); null for a line sold without one. It answers "sold from the Happy Hour menu", which classification cannot answer. |
-| `line_gross` | The line's VAT-inclusive total in cents, the per-line gross `priceRows` already computes (`packages/catalogue/src/pricing.ts:141-188`). |
+| `line_gross` | The line's VAT-inclusive total in cents, the per-line gross `priceRows` (`grossRows` since A68, 2026-09-27) already computes (`packages/catalogue/src/pricing.ts:141-188`). |
 | `classification` | A JSON snapshot, below. |
 
 ```json
@@ -193,7 +193,7 @@ Every category report is labelled with its mode.
 - **Amounts:**
   - each report shows gross (`line_gross`) and net (`line_total`);
   - on the till's sale paths, gross totals reconcile exactly to `sales.total`, because there the
-    total is the sum of the per-line gross (`priceRows`). The correction and substitution builders
+    total is the sum of the per-line gross (`priceRows`, `grossRows` since A68, 2026-09-27). The correction and substitution builders
     compute their breakdown separately (`buildVatBreakdown`) and are not checked against their total
     today (`record-correction.ts:159`, `record-substitution.ts:180`), so the correction wiring
     (§4) must keep line gross and total in step;

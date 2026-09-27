@@ -108,7 +108,7 @@ export const workingOrders = table(
 /**
  * Gross prices, VAT classes, descriptions and the reporting classification are snapshotted here
  * when a line is added, never read live from the catalogue, so a later catalogue edit to any of them
- * is a freshness problem, never a correctness one. The filed `sale_lines` carry the gross prices,
+ * is a freshness problem, never a correctness one. The filed `sale_lines` carry the line's gross total,
  * descriptions and classification, and the percentage the class had on the day of issue, naming a
  * product only as a value, never a key.
  *

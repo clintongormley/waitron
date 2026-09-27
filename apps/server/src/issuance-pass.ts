@@ -24,7 +24,7 @@ export async function issuancePass(
   const { gross, identities } = order;
   if (identities.length !== gross.lines.length) {
     throw new Error(
-      `issuancePass: the ${gross.lines.length} priced lines of working order ${workingOrderId} do not line up with its ${identities.length} line identities`,
+      `issuancePass: the ${gross.lines.length} gross lines of working order ${workingOrderId} do not line up with its ${identities.length} line identities`,
     );
   }
 
