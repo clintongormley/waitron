@@ -54,9 +54,9 @@ import { SESSION_COOKIE } from "./till-session.js";
 import { openTab } from "./working-order.js";
 import "./errors.js";
 
-// The bill payment routes (bill payments design §8 tests 2, 4, 5, 6, 8 and 9, and plan D8), driven
-// over HTTP against a provisioned venue that files real Veri*Factu records. Each case opens its own
-// tab, so a count read back is that case's alone.
+// The bill payment routes (bill payments design §8 tests 2, 4, 5, 6, 7, 8, 9, 11, 14 and 15, and plan
+// D8), driven over HTTP against a provisioned venue that files real Veri*Factu records. Each case
+// opens its own tab, so a count read back is that case's alone.
 const LOCALE = "es-ES";
 
 const suite = useVenueDb({
@@ -83,6 +83,10 @@ interface Venue {
   /** The till the enrolled device rings on. */
   deviceTillId: string;
   printerId: string;
+  /** The session's operator, a member of staff, who does not hold `sale.refund`. */
+  staffId: string;
+  /** The provisioned admin, who does. */
+  adminId: string;
 }
 let venue: Venue;
 
@@ -96,6 +100,8 @@ const MENU: { name: string; customer: string; kitchen: string; price: string }[]
   { name: "Tarta", customer: "Tarta de queso", kitchen: "TARTA", price: "18.00" },
   { name: "Caña", customer: "Caña de cerveza", kitchen: "CANA", price: "3.00" },
   { name: "Mariscada", customer: "Mariscada para dos", kitchen: "MARISC", price: "100.01" },
+  { name: "Pulpo", customer: "Pulpo a la gallega", kitchen: "PULPO", price: "20.00" },
+  { name: "Croquetas", customer: "Croquetas de jamón", kitchen: "CROQ", price: "10.00" },
 ];
 
 function systemClock(): TrustedClock {
@@ -227,6 +233,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
   const [deviceRow] = db.all<{ till_id: string }>(
     sql`select till_id from devices where id = ${device.deviceId}`,
   );
+  const [admin] = db.all<{ id: string }>(sql`select id from persons where role = 'admin'`);
   // Every till, so the device's own till prints and opens its drawer whichever one it is.
   db.run(sql`update tills set receipt_printer_id = ${seeded.printerId}`);
   const app = new Hono();
@@ -252,6 +259,8 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     sessionCookie: `${SESSION_COOKIE}=${session.token}`,
     deviceTillId: deviceRow!.till_id,
     printerId: seeded.printerId,
+    staffId: seeded.personId,
+    adminId: admin!.id,
   };
 }
 
@@ -1371,5 +1380,587 @@ describe("the single-payment routes on a bill holding bill payments (design §7)
     });
     expect(await statusOf(checkId)).toBe("open");
     expect(await lineTotals(checkId)).toEqual(["18.00"]);
+  });
+});
+
+interface RefundBody {
+  submissionId?: string;
+  appliedAmount: string;
+  tipAmount: string;
+  reason?: string;
+  override?: { personId: string; pin: string };
+}
+
+/** A refund of the payment, authorised by the admin's PIN unless the body says otherwise. */
+function refund(billId: string, paymentId: string, body: RefundBody) {
+  return request("POST", `/api/working-orders/${billId}/payments/${paymentId}/refunds`, {
+    submissionId: randomUUID(),
+    reason: "El cliente lo pide",
+    override: { personId: venue.adminId, pin: "1234" },
+    ...body,
+  });
+}
+
+function paymentIdOf(paid: { json: Record<string, unknown> }): string {
+  return (paid.json.payment as { id: string }).id;
+}
+
+async function refundRows(paymentId: string) {
+  return inTx((tx) =>
+    tx.select().from(billPaymentRefunds).where(eq(billPaymentRefunds.billPaymentId, paymentId)),
+  );
+}
+
+async function refundDrawerOpens(paymentId: string) {
+  return inTx((tx) =>
+    tx
+      .select()
+      .from(drawerOpens)
+      .where(and(eq(drawerOpens.billPaymentId, paymentId), eq(drawerOpens.reason, "bill_refund"))),
+  );
+}
+
+function drawerJobCount(): number {
+  return suite.db.all<{ n: number }>(
+    sql`select count(*) as n from print_jobs where printer_id = ${venue.printerId} and kind = 'drawer'`,
+  )[0]!.n;
+}
+
+/** A bill payment written straight to the table, for the states and tips no route here can make. */
+async function insertBillPayment(
+  billId: string,
+  row: Partial<typeof billPayments.$inferInsert>,
+): Promise<string> {
+  const [inserted] = await inTx((tx) =>
+    tx
+      .insert(billPayments)
+      .values({
+        workingOrderId: billId,
+        submissionId: randomUUID(),
+        fingerprint: "f",
+        kind: "contribution",
+        method: "cash",
+        applied: 1000,
+        tip: 0,
+        tendered: 1000,
+        state: "received",
+        receivedAt: new Date().toISOString(),
+        requestedBy: venue.staffId,
+        tillId: venue.deviceTillId,
+        ...row,
+      })
+      .returning({ id: billPayments.id }),
+  );
+  return inserted!.id;
+}
+
+describe("a cash refund before the invoice (design §6)", () => {
+  it("gives the money back with a manager's PIN, recording who asked, who authorised it and the till", async () => {
+    const billId = await bill120();
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+
+    const refunded = await refund(billId, paymentId, {
+      appliedAmount: "20.00",
+      tipAmount: "0.00",
+      reason: "Cobrado de más",
+    });
+
+    expect(refunded.status).toBe(200);
+    expect(refunded.json).toMatchObject({
+      refund: {
+        paymentId,
+        appliedAmount: "20.00",
+        tipAmount: "0.00",
+        reason: "Cobrado de más",
+        state: "completed",
+      },
+      balance: { total: "120.00", received: "30.00", outstanding: "90.00" },
+    });
+    expect((refunded.json.balance as { payments: unknown[] }).payments).toMatchObject([
+      { id: paymentId, refunds: [{ appliedAmount: "20.00", state: "completed" }] },
+    ]);
+    expect(await refundRows(paymentId)).toMatchObject([
+      {
+        appliedAmount: 2000,
+        tipAmount: 0,
+        state: "completed",
+        requestedBy: venue.staffId,
+        authorizedBy: venue.adminId,
+        tillId: venue.deviceTillId,
+      },
+    ]);
+    expect(await refundDrawerOpens(paymentId)).toMatchObject([
+      {
+        tillId: venue.deviceTillId,
+        personId: venue.staffId,
+        authorizedBy: venue.adminId,
+        viaOverride: true,
+        saleId: null,
+      },
+    ]);
+    expect(await saleOf(billId)).toEqual([]);
+  });
+
+  it("refuses an operator without the refund permission and no override, writing nothing", async () => {
+    const billId = await bill120();
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+
+    const refused = await refund(billId, paymentId, {
+      appliedAmount: "20.00",
+      tipAmount: "0.00",
+      override: undefined,
+    });
+
+    expect(refused.status).toBe(403);
+    expect(refused.json).toMatchObject({
+      code: "authorization.not_permitted",
+      params: { permission: "sale.refund" },
+    });
+    expect(await refundRows(paymentId)).toEqual([]);
+    expect(await refundDrawerOpens(paymentId)).toEqual([]);
+  });
+
+  it("refuses a wrong manager PIN, writing nothing", async () => {
+    const billId = await bill120();
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+
+    const refused = await refund(billId, paymentId, {
+      appliedAmount: "20.00",
+      tipAmount: "0.00",
+      override: { personId: venue.adminId, pin: "9999" },
+    });
+
+    expect(refused.status).toBe(401);
+    expect(refused.json).toMatchObject({ code: "pin.invalid" });
+    expect(await refundRows(paymentId)).toEqual([]);
+  });
+
+  it("refuses more than the payment can still give back, the applied money and the tip apart", async () => {
+    const billId = await bill120();
+    const paymentId = await insertBillPayment(billId, { applied: 1000, tip: 200, tendered: 1200 });
+    const exceeds = (refundable: { applied: string; tip: string }) => ({
+      code: "bill.refund_exceeds_payment",
+      params: { paymentId, ...refundable },
+    });
+
+    const overApplied = await refund(billId, paymentId, {
+      appliedAmount: "10.01",
+      tipAmount: "0.00",
+    });
+    const tipWithPart = await refund(billId, paymentId, {
+      appliedAmount: "5.00",
+      tipAmount: "2.00",
+    });
+    const partOfTip = await refund(billId, paymentId, {
+      appliedAmount: "10.00",
+      tipAmount: "1.00",
+    });
+    expect(overApplied.status).toBe(422);
+    expect(overApplied.json).toMatchObject(exceeds({ applied: "10.00", tip: "2.00" }));
+    expect(tipWithPart.json).toMatchObject(exceeds({ applied: "10.00", tip: "2.00" }));
+    expect(partOfTip.json).toMatchObject(exceeds({ applied: "10.00", tip: "2.00" }));
+    expect(await refundRows(paymentId)).toEqual([]);
+
+    expect(
+      (await refund(billId, paymentId, { appliedAmount: "4.00", tipAmount: "0.00" })).status,
+    ).toBe(200);
+    const overRest = await refund(billId, paymentId, { appliedAmount: "6.01", tipAmount: "0.00" });
+    expect(overRest.json).toMatchObject(exceeds({ applied: "6.00", tip: "2.00" }));
+    const rest = await refund(billId, paymentId, { appliedAmount: "6.00", tipAmount: "2.00" });
+
+    expect(rest.status).toBe(200);
+    expect(rest.json).toMatchObject({ balance: { received: "0.00", tips: "0.00" } });
+    const nothingLeft = await refund(billId, paymentId, {
+      appliedAmount: "0.00",
+      tipAmount: "0.01",
+    });
+    expect(nothingLeft.json).toMatchObject(exceeds({ applied: "0.00", tip: "0.00" }));
+  });
+
+  it("refuses a refund of a payment that took no money", async () => {
+    const billId = await bill120();
+    const paymentId = await insertBillPayment(billId, {
+      method: "card",
+      tendered: null,
+      state: "failed",
+      receivedAt: null,
+      failedAt: new Date().toISOString(),
+    });
+
+    const refused = await refund(billId, paymentId, { appliedAmount: "1.00", tipAmount: "0.00" });
+
+    expect(refused.status).toBe(422);
+    expect(refused.json).toMatchObject({
+      code: "bill.refund_exceeds_payment",
+      params: { paymentId, applied: "0.00", tip: "0.00" },
+    });
+  });
+
+  it("refunds an item payment only whole, and the refund frees its line to be paid for again", async () => {
+    const billId = await tabWith("Paella", "Chuletón");
+    const paid = await pay(billId, {
+      kind: "items",
+      lines: [{ lineNo: 2 }],
+      method: "cash",
+      tendered: "25.00",
+      applied: "25.00",
+      tip: "0.00",
+    });
+    const paymentId = paymentIdOf(paid);
+
+    const part = await refund(billId, paymentId, { appliedAmount: "10.00", tipAmount: "0.00" });
+    expect(part.status).toBe(400);
+    expect(part.json).toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "appliedAmount" },
+    });
+    expect(await refundRows(paymentId)).toEqual([]);
+
+    const whole = await refund(billId, paymentId, { appliedAmount: "25.00", tipAmount: "0.00" });
+    expect(whole.status).toBe(200);
+    expect(whole.json).toMatchObject({ balance: { paidLines: [] } });
+    const again = await pay(billId, {
+      kind: "items",
+      lines: [{ lineNo: 2 }],
+      method: "cash",
+      tendered: "25.00",
+      applied: "25.00",
+      tip: "0.00",
+    });
+    expect(again.status).toBe(200);
+  });
+
+  it("keeps a line paid by an item payment of only a tip paid until that payment is refunded", async () => {
+    const billId = await tabWith("Paella");
+    const [line] = await inTx((tx) =>
+      tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, billId)),
+    );
+    const paymentId = await insertBillPayment(billId, {
+      kind: "items",
+      applied: 0,
+      tip: 100,
+      tendered: 100,
+    });
+    await inTx((tx) =>
+      tx
+        .insert(billPaymentLines)
+        .values({ billPaymentId: paymentId, lineId: line!.id, quantity: 1000, amount: 0 }),
+    );
+    expect((await balance(billId)).json).toMatchObject({ paidLines: [{ lineNo: 1 }] });
+
+    const refunded = await refund(billId, paymentId, { appliedAmount: "0.00", tipAmount: "1.00" });
+
+    expect(refunded.status).toBe(200);
+    expect(refunded.json).toMatchObject({ balance: { paidLines: [] } });
+  });
+
+  it("lets the line of an item payment refunded whole be voided", async () => {
+    const billId = await tabWith("Paella", "Chuletón");
+    const paymentId = paymentIdOf(
+      await pay(billId, {
+        kind: "items",
+        lines: [{ lineNo: 2 }],
+        method: "cash",
+        tendered: "25.00",
+        applied: "25.00",
+        tip: "0.00",
+      }),
+    );
+    expect(
+      (await refund(billId, paymentId, { appliedAmount: "25.00", tipAmount: "0.00" })).status,
+    ).toBe(200);
+
+    const voided = await request("DELETE", `/api/working-orders/${billId}/lines/2`);
+
+    expect(voided.status).toBe(200);
+    expect(await lineTotals(billId)).toEqual(["35.00"]);
+  });
+
+  it("refuses refunding a card payment, which this route does not give back, writing nothing", async () => {
+    const billId = await bill120();
+    const paymentId = paymentIdOf(
+      await pay(billId, {
+        kind: "contribution",
+        amount: "40.00",
+        method: "card",
+        entry: "manual",
+        applied: "40.00",
+        tip: "0.00",
+      }),
+    );
+
+    const refused = await refund(billId, paymentId, { appliedAmount: "10.00", tipAmount: "0.00" });
+
+    expect(refused.status).toBe(422);
+    expect(refused.json).toMatchObject({
+      code: "bill.refund_unsupported",
+      params: { paymentId },
+    });
+    expect(await refundRows(paymentId)).toEqual([]);
+  });
+
+  it("refuses a refund while a card payment on the bill is at the reader", async () => {
+    const billId = await bill120();
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+    await insertBillPayment(billId, {
+      method: "card",
+      tendered: null,
+      state: "pending",
+      receivedAt: null,
+    });
+
+    const refused = await refund(billId, paymentId, { appliedAmount: "10.00", tipAmount: "0.00" });
+
+    expect(refused.status).toBe(409);
+    expect(refused.json).toMatchObject({
+      code: "order.payment_in_flight",
+      params: { workingOrderId: billId },
+    });
+    expect(await refundRows(paymentId)).toEqual([]);
+  });
+
+  it("refuses a refund once the bill is invoiced", async () => {
+    const billId = await tabWith("Tarta");
+    const paymentId = paymentIdOf(await contribute(billId, "18.00"));
+    expect(await statusOf(billId)).toBe("settled");
+
+    const refused = await refund(billId, paymentId, { appliedAmount: "5.00", tipAmount: "0.00" });
+
+    expect(refused.status).toBe(409);
+    expect(refused.json).toMatchObject({
+      code: "working_order.not_open",
+      params: { workingOrderId: billId },
+    });
+    expect(await refundRows(paymentId)).toEqual([]);
+  });
+
+  it("answers a payment the bill does not have as not found", async () => {
+    const billId = await bill120();
+    const otherBill = await bill120();
+    const othersPayment = paymentIdOf(await contribute(otherBill, "10.00"));
+    const unknown = randomUUID();
+
+    const ofAnother = await refund(billId, othersPayment, {
+      appliedAmount: "1.00",
+      tipAmount: "0.00",
+    });
+    const missing = await refund(billId, unknown, { appliedAmount: "1.00", tipAmount: "0.00" });
+    const malformed = await refund(billId, "nope", { appliedAmount: "1.00", tipAmount: "0.00" });
+
+    expect(ofAnother.status).toBe(404);
+    expect(ofAnother.json).toMatchObject({
+      code: "bill.payment_not_found",
+      params: { paymentId: othersPayment },
+    });
+    expect(missing.json).toMatchObject({
+      code: "bill.payment_not_found",
+      params: { paymentId: unknown },
+    });
+    expect(malformed.json).toMatchObject({ code: "bill.payment_not_found" });
+    expect(await refundRows(othersPayment)).toEqual([]);
+  });
+
+  it("refuses a malformed refund by the field it names", async () => {
+    const billId = await bill120();
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+    const path = `/api/working-orders/${billId}/payments/${paymentId}/refunds`;
+    const good = {
+      submissionId: randomUUID(),
+      appliedAmount: "1.00",
+      tipAmount: "0.00",
+      reason: "Error",
+    };
+
+    const cases: [Record<string, unknown>, string][] = [
+      [{ ...good, submissionId: "" }, "submissionId"],
+      [{ ...good, appliedAmount: "1,00" }, "appliedAmount"],
+      [{ ...good, tipAmount: undefined }, "tipAmount"],
+      [{ ...good, appliedAmount: "0.00", tipAmount: "0.00" }, "appliedAmount"],
+      [{ ...good, reason: "   " }, "reason"],
+      [{ ...good, override: "1234" }, "override"],
+    ];
+    for (const [body, field] of cases) {
+      const refused = await request("POST", path, body);
+      expect(refused.status, field).toBe(400);
+      expect(refused.json, field).toMatchObject({
+        code: "management.request_invalid",
+        params: { field },
+      });
+    }
+    expect(await refundRows(paymentId)).toEqual([]);
+  });
+});
+
+describe("refund retries (design §8 test 15, §5.1)", () => {
+  it("answers the same refund sent twice with one refund row and one drawer job", async () => {
+    const billId = await bill120();
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+    const body = { submissionId: randomUUID(), appliedAmount: "20.00", tipAmount: "0.00" };
+    const jobsBefore = drawerJobCount();
+
+    const first = await refund(billId, paymentId, body);
+    const second = await refund(billId, paymentId, body);
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect((second.json.refund as { id: string }).id).toBe(
+      (first.json.refund as { id: string }).id,
+    );
+    expect(second.json).toMatchObject({ balance: { received: "30.00" } });
+    expect(await refundRows(paymentId)).toHaveLength(1);
+    expect(await refundDrawerOpens(paymentId)).toHaveLength(1);
+    expect(drawerJobCount() - jobsBefore).toBe(1);
+  });
+
+  it("refuses the refund id resent with another amount, writing nothing", async () => {
+    const billId = await bill120();
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+    const submissionId = randomUUID();
+    expect(
+      (await refund(billId, paymentId, { submissionId, appliedAmount: "20.00", tipAmount: "0.00" }))
+        .status,
+    ).toBe(200);
+
+    const refused = await refund(billId, paymentId, {
+      submissionId,
+      appliedAmount: "15.00",
+      tipAmount: "0.00",
+    });
+
+    expect(refused.status).toBe(409);
+    expect(refused.json).toMatchObject({ code: "submission.id_reused", params: { submissionId } });
+    expect(await refundRows(paymentId)).toHaveLength(1);
+  });
+
+  it("refuses a refund reusing the id of a payment, or of a refund of another payment, on the bill", async () => {
+    const billId = await bill120();
+    const paymentSubmission = randomUUID();
+    const first = paymentIdOf(await contribute(billId, "30.00", paymentSubmission));
+    const second = paymentIdOf(await contribute(billId, "20.00"));
+    const refundSubmission = randomUUID();
+    expect(
+      (
+        await refund(billId, first, {
+          submissionId: refundSubmission,
+          appliedAmount: "5.00",
+          tipAmount: "0.00",
+        })
+      ).status,
+    ).toBe(200);
+
+    const reusedPayment = await refund(billId, second, {
+      submissionId: paymentSubmission,
+      appliedAmount: "5.00",
+      tipAmount: "0.00",
+    });
+    const reusedRefund = await refund(billId, second, {
+      submissionId: refundSubmission,
+      appliedAmount: "5.00",
+      tipAmount: "0.00",
+    });
+
+    expect(reusedPayment.status).toBe(409);
+    expect(reusedPayment.json).toMatchObject({
+      code: "submission.id_reused",
+      params: { submissionId: paymentSubmission },
+    });
+    expect(reusedRefund.status).toBe(409);
+    expect(reusedRefund.json).toMatchObject({
+      code: "submission.id_reused",
+      params: { submissionId: refundSubmission },
+    });
+    expect(await refundRows(second)).toEqual([]);
+  });
+});
+
+describe("refund first (design §4.3, §6a)", () => {
+  /** €60.00: Botella tinto €30.00, Pulpo €20.00, Croquetas €10.00, with €50.00 contributed. */
+  async function sixtyHoldingFifty(): Promise<{ billId: string; paymentId: string }> {
+    const billId = await tabWith("Botella tinto", "Pulpo", "Croquetas");
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+    return { billId, paymentId };
+  }
+
+  it("refuses moving €30.00 out by the €20.00 excess, and moves it after a €20.00 refund (design §8 test 7)", async () => {
+    const { billId, paymentId } = await sixtyHoldingFifty();
+
+    const refused = await request("POST", `/api/tabs/${billId}/split`, {
+      transfers: [{ lineNo: 2 }, { lineNo: 3 }],
+    });
+    expect(refused.status).toBe(409);
+    expect(refused.json).toMatchObject({
+      code: "bill.received_exceeds_total",
+      params: { workingOrderId: billId, excess: "20.00" },
+    });
+    expect(await lineTotals(billId)).toEqual(["30.00", "20.00", "10.00"]);
+
+    expect(
+      (await refund(billId, paymentId, { appliedAmount: "20.00", tipAmount: "0.00" })).status,
+    ).toBe(200);
+    const moved = await request("POST", `/api/tabs/${billId}/split`, {
+      transfers: [{ lineNo: 2 }, { lineNo: 3 }],
+    });
+
+    expect(moved.status).toBe(200);
+    expect(await lineTotals(billId)).toEqual(["30.00"]);
+    expect(await statusOf(billId)).toBe("settled");
+    const [sale] = await saleOf(billId);
+    expect(sale!.total).toBe(3000);
+    expect(await tendersOf(sale!.id)).toMatchObject([
+      { method: "cash", amount: 3000, tip: 0, billPaymentId: paymentId },
+    ]);
+  });
+
+  it("refuses a €20.00 void by the €10.00 excess; after a €10.00 refund the void issues the €40.00 invoice with no tip (design §8 test 11)", async () => {
+    const { billId, paymentId } = await sixtyHoldingFifty();
+
+    const refused = await request("DELETE", `/api/working-orders/${billId}/lines/2`);
+    expect(refused.status).toBe(409);
+    expect(refused.json).toMatchObject({
+      code: "bill.received_exceeds_total",
+      params: { workingOrderId: billId, excess: "10.00" },
+    });
+    expect(await lineTotals(billId)).toEqual(["30.00", "20.00", "10.00"]);
+    expect(registroCount(billId)).toBe(0);
+
+    expect(
+      (await refund(billId, paymentId, { appliedAmount: "10.00", tipAmount: "0.00" })).status,
+    ).toBe(200);
+    const voided = await request("DELETE", `/api/working-orders/${billId}/lines/2`);
+
+    expect(voided.status).toBe(200);
+    expect(await statusOf(billId)).toBe("settled");
+    expect(registroCount(billId)).toBe(1);
+    const [sale] = await saleOf(billId);
+    expect(sale!.total).toBe(4000);
+    expect(await tendersOf(sale!.id)).toEqual([
+      { method: "cash", amount: 4000, tip: 0, billPaymentId: paymentId },
+    ]);
+  });
+});
+
+describe("abandoning a bill after a full refund (design §8 test 14, §4.5)", () => {
+  it("refuses abandoning a bill holding a contribution, and abandons it once that is refunded", async () => {
+    const billId = await tabWith("Tarta");
+    const paymentId = paymentIdOf(await contribute(billId, "5.00"));
+
+    const refused = await request("DELETE", `/api/working-orders/${billId}`);
+    expect(refused.status).toBe(409);
+    expect(refused.json).toMatchObject({
+      code: "bill.payments_received",
+      params: { workingOrderId: billId },
+    });
+    expect(await statusOf(billId)).toBe("open");
+
+    expect(
+      (await refund(billId, paymentId, { appliedAmount: "5.00", tipAmount: "0.00" })).status,
+    ).toBe(200);
+    const abandoned = await request("DELETE", `/api/working-orders/${billId}`);
+
+    expect(abandoned.status).toBe(200);
+    expect(await statusOf(billId)).toBe("abandoned");
   });
 });

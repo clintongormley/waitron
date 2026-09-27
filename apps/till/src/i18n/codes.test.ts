@@ -108,6 +108,9 @@ it("explains each refusal a bill paid in parts can give, in both languages, nami
     "bill.nothing_outstanding",
     "bill.tip_not_allowed",
     "bill.allocation_changed",
+    "bill.payment_not_found",
+    "bill.refund_exceeds_payment",
+    "bill.refund_unsupported",
   ]) {
     expect(codeMessage(code, "en")).not.toBe(generic.en);
     expect(codeMessage(code, "es")).not.toBe(generic.es);

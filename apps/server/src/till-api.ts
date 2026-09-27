@@ -311,6 +311,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "bill.line_paid": 409,
   "bill.received_exceeds_total": 409,
   "bill.payments_received": 409,
+  "bill.payment_not_found": 404,
+  "bill.refund_exceeds_payment": 422,
+  "bill.refund_unsupported": 422,
   "status.not_found": 404,
   "status.inactive": 409,
   "drawer.no_printer": 400,
@@ -339,7 +342,7 @@ function requireUuidId(
  * credential gate gives a bad credential: `person.not_found` for a non-UUID id, `pin.invalid` for a
  * non-string PIN.
  */
-function parseDrawerOverride(
+export function parseDrawerOverride(
   raw: { personId?: unknown; pin?: unknown } | undefined | null,
 ): { personId: string; pin: string } | undefined {
   if (raw === undefined || raw === null) return undefined;

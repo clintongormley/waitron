@@ -381,6 +381,14 @@ declare module "@waitron/shared" {
     /** No bill payment with this id; `paymentId` is the id the caller sent. */
     "bill.payment_not_found": { paymentId: string };
     /**
+     * A refund asked for more than the bill payment can still give back. `applied` and `tip` are
+     * what it can: a refund may take up to `applied`, and the tip comes back only with the whole of
+     * what is left of the payment.
+     */
+    "bill.refund_exceeds_payment": { paymentId: string; applied: string; tip: string };
+    /** The bill payment was taken by card, and only a cash payment is given back before the invoice. */
+    "bill.refund_unsupported": { paymentId: string };
+    /**
      * An incident: the provider captured a card bill payment for another amount than its applied
      * money plus its tip. Nothing was filed and the payment stays pending for a manager.
      */

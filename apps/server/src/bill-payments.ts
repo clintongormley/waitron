@@ -106,6 +106,19 @@ export interface BillPaymentRequest extends BillPaymentAsk {
   tip: string;
 }
 
+/** Money given back from one bill payment before the invoice. */
+export interface BillRefundView {
+  id: string;
+  paymentId: string;
+  submissionId: string;
+  appliedAmount: Decimal;
+  tipAmount: Decimal;
+  reason: string;
+  state: "pending" | "completed" | "failed";
+  createdAt: string;
+  completedAt: string | null;
+}
+
 export interface BillPaymentView {
   id: string;
   submissionId: string;
@@ -122,6 +135,7 @@ export interface BillPaymentView {
   receivedAt: string | null;
   /** An item payment's lines; `lineNo` is the line's number on this bill now. */
   lines: { lineId: string; lineNo: number | null; quantity: Decimal; amount: Decimal }[];
+  refunds: BillRefundView[];
 }
 
 export interface BillBalance {
@@ -150,15 +164,18 @@ export interface BillPaymentResult {
 }
 
 type PaymentRow = typeof billPayments.$inferSelect;
+type RefundRow = typeof billPaymentRefunds.$inferSelect;
 
-interface PaymentMoney {
+export interface PaymentMoney {
   row: PaymentRow;
   netApplied: Decimal;
   netTip: Decimal;
+  /** How many completed refunds it has. */
+  refunds: number;
 }
 
 /** Each payment of the bills, with what its completed refunds leave of it. */
-async function readPaymentMoney(
+export async function readPaymentMoney(
   tx: Transaction,
   workingOrderIds: readonly string[],
 ): Promise<PaymentMoney[]> {
@@ -193,6 +210,7 @@ async function readPaymentMoney(
       row,
       netApplied: centsToDecimal(row.applied - refunded((refund) => refund.applied)),
       netTip: centsToDecimal(row.tip - refunded((refund) => refund.tip)),
+      refunds: own.length,
     };
   });
 }
@@ -228,13 +246,20 @@ function fundsOf(
 
 const money = (value: Decimal): Decimal => toScale(value, MONEY_SCALE);
 
-/** Each line's paid quantity, in thousandths: what its pending and received item payments cover. */
+/**
+ * Each line's paid quantity, in thousandths: what its pending and received item payments cover.
+ * An item payment is refunded only whole (design §6), and once it is, its lines are free again.
+ */
 export async function readPaidQuantities(
   tx: Transaction,
   workingOrderId: string,
 ): Promise<ReadonlyMap<string, number>> {
   const rows = await tx
-    .select({ lineId: billPaymentLines.lineId, quantity: billPaymentLines.quantity })
+    .select({
+      billPaymentId: billPaymentLines.billPaymentId,
+      lineId: billPaymentLines.lineId,
+      quantity: billPaymentLines.quantity,
+    })
     .from(billPaymentLines)
     .innerJoin(billPayments, eq(billPayments.id, billPaymentLines.billPaymentId))
     .where(
@@ -244,7 +269,16 @@ export async function readPaidQuantities(
       ),
     );
   const paid = new Map<string, number>();
-  for (const row of rows) paid.set(row.lineId, (paid.get(row.lineId) ?? 0) + row.quantity);
+  if (rows.length === 0) return paid;
+  const released = new Set(
+    (await readPaymentMoney(tx, [workingOrderId]))
+      .filter(({ refunds, netApplied }) => refunds > 0 && compareDecimal(netApplied, ZERO) === 0)
+      .map(({ row }) => row.id),
+  );
+  for (const row of rows) {
+    if (released.has(row.billPaymentId)) continue;
+    paid.set(row.lineId, (paid.get(row.lineId) ?? 0) + row.quantity);
+  }
   return paid;
 }
 
@@ -342,9 +376,24 @@ async function readLineNos(tx: Transaction, workingOrderId: string): Promise<Map
   return new Map(rows.map((row) => [row.id, row.lineNo]));
 }
 
+export function toRefundView(refund: RefundRow): BillRefundView {
+  return {
+    id: refund.id,
+    paymentId: refund.billPaymentId,
+    submissionId: refund.submissionId,
+    appliedAmount: centsToDecimal(refund.appliedAmount),
+    tipAmount: centsToDecimal(refund.tipAmount),
+    reason: refund.reason,
+    state: refund.state,
+    createdAt: refund.createdAt,
+    completedAt: refund.completedAt,
+  };
+}
+
 function toView(
   payment: PaymentRow,
   lines: readonly (typeof billPaymentLines.$inferSelect)[],
+  refunds: readonly RefundRow[],
   lineNos: ReadonlyMap<string, number>,
 ): BillPaymentView {
   const applied = centsToDecimal(payment.applied);
@@ -371,6 +420,7 @@ function toView(
         quantity: thousandthsToDecimal(line.quantity),
         amount: centsToDecimal(line.amount),
       })),
+    refunds: refunds.filter((refund) => refund.billPaymentId === payment.id).map(toRefundView),
   };
 }
 
@@ -388,18 +438,22 @@ export async function readBillBalance(
   }
   const held = await readPaymentMoney(tx, [workingOrderId]);
   const funds = fundsOf(workingOrderId, await billTotal(tx, workingOrderId), held);
+  const heldIds = held.map(({ row }) => row.id);
   const lines =
     held.length === 0
       ? []
       : await tx
           .select()
           .from(billPaymentLines)
-          .where(
-            inArray(
-              billPaymentLines.billPaymentId,
-              held.map(({ row }) => row.id),
-            ),
-          );
+          .where(inArray(billPaymentLines.billPaymentId, heldIds));
+  const refunds =
+    held.length === 0
+      ? []
+      : await tx
+          .select()
+          .from(billPaymentRefunds)
+          .where(inArray(billPaymentRefunds.billPaymentId, heldIds))
+          .orderBy(billPaymentRefunds.createdAt, billPaymentRefunds.id);
   const lineNos = await readLineNos(tx, workingOrderId);
   const paid = await readPaidQuantities(tx, workingOrderId);
   const outstanding = subtractDecimal(subtractDecimal(funds.total, funds.received), funds.reserved);
@@ -413,7 +467,7 @@ export async function readBillBalance(
     tips: money(
       sumDecimals(held.filter(({ row }) => row.state === "received").map(({ netTip }) => netTip)),
     ),
-    payments: held.map(({ row }) => toView(row, lines, lineNos)),
+    payments: held.map(({ row }) => toView(row, lines, refunds, lineNos)),
     paidLines: [...paid]
       .flatMap(([lineId, quantity]) => {
         const lineNo = lineNos.get(lineId);
@@ -675,7 +729,7 @@ async function allocationRequestFor(
 }
 
 /** An open bill, else `working_order.not_found` or `working_order.not_open`. */
-async function requireOpenBill(tx: Transaction, workingOrderId: string): Promise<void> {
+export async function requireOpenBill(tx: Transaction, workingOrderId: string): Promise<void> {
   const [order] = await tx
     .select({ status: workingOrders.status })
     .from(workingOrders)

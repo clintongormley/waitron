@@ -10,10 +10,12 @@ import {
   takeReaderBillPayment,
 } from "./bill-payments.js";
 import type { BillPaymentAsk, BillPaymentRequest } from "./bill-payments.js";
+import { refundBillPayment } from "./bill-refunds.js";
+import type { BillRefundRequest } from "./bill-refunds.js";
 import { assertDeviceCapability, requireSaleTillId, tryReadDevice } from "./device-session.js";
 import type { DeviceBinding } from "./device-session.js";
 import type { Logger } from "./logger.js";
-import { resolvePayReader } from "./till-api.js";
+import { parseDrawerOverride, resolvePayReader } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
 import { isUuid, requireSession } from "./till-session.js";
@@ -91,7 +93,7 @@ function parseAsk(body: Record<string, unknown>): BillPaymentAsk {
   return ask;
 }
 
-function parseRequest(body: Record<string, unknown>): BillPaymentRequest {
+function submissionIdOf(body: Record<string, unknown>): string {
   if (
     typeof body.submissionId !== "string" ||
     body.submissionId.length === 0 ||
@@ -99,9 +101,13 @@ function parseRequest(body: Record<string, unknown>): BillPaymentRequest {
   ) {
     throw invalid("submissionId");
   }
+  return body.submissionId;
+}
+
+function parseRequest(body: Record<string, unknown>): BillPaymentRequest {
   const request: BillPaymentRequest = {
     ...parseAsk(body),
-    submissionId: body.submissionId,
+    submissionId: submissionIdOf(body),
     applied: moneyField(body.applied, "applied"),
     tip: moneyField(body.tip, "tip"),
   };
@@ -136,6 +142,37 @@ function parseRequest(body: Record<string, unknown>): BillPaymentRequest {
     if (stray !== undefined) throw invalid(stray);
   }
   return request;
+}
+
+function parseRefund(body: Record<string, unknown>): BillRefundRequest {
+  const submissionId = submissionIdOf(body);
+  const appliedAmount = moneyField(body.appliedAmount, "appliedAmount");
+  const tipAmount = moneyField(body.tipAmount, "tipAmount");
+  if (!/[1-9]/.test(appliedAmount) && !/[1-9]/.test(tipAmount)) throw invalid("appliedAmount");
+  if (
+    typeof body.reason !== "string" ||
+    body.reason.trim().length === 0 ||
+    body.reason.length > 500
+  ) {
+    throw invalid("reason");
+  }
+  if (
+    body.override !== undefined &&
+    body.override !== null &&
+    (typeof body.override !== "object" || Array.isArray(body.override))
+  ) {
+    throw invalid("override");
+  }
+  const override = parseDrawerOverride(
+    body.override as { personId?: unknown; pin?: unknown } | null | undefined,
+  );
+  return {
+    submissionId,
+    appliedAmount,
+    tipAmount,
+    reason: body.reason.trim(),
+    ...(override === undefined ? {} : { override }),
+  };
 }
 
 /** The reader a card is charged on: the one the body names, else the device's own. */
@@ -187,7 +224,7 @@ export async function withSaleTillWhenIssuing<T>(
 }
 
 /**
- * The bill payment routes (bill payments design §3.6, §5.1, §7), behind the till session. A
+ * The bill payment routes (bill payments design §3.6, §5.1, §6, §7), behind the till session. A
  * payment is taken on the device's own till, which is the till its cash drawer and its invoice use.
  */
 export function mountBillPaymentsApi(app: Hono, deps: TillApiDeps, log: Logger, run: Run): void {
@@ -254,6 +291,20 @@ export function mountBillPaymentsApi(app: Hono, deps: TillApiDeps, log: Logger, 
           request,
           personId,
         ),
+      );
+    }),
+  );
+
+  // The refund is recorded on the device's own till, whose drawer gives the cash back.
+  app.post("/api/working-orders/:id/payments/:paymentId/refunds", (c) =>
+    run(c, log, async () => {
+      const { personId, sessionId } = await requireSession(deps, c);
+      const id = requireBillParam(c.req.param("id"));
+      const paymentId = c.req.param("paymentId");
+      const refund = parseRefund(asObject(await readRawJsonBody<unknown>(c)));
+      const saleCfg = await deviceSaleCfg(deps, c);
+      return c.json(
+        await refundBillPayment(fiscal, saleCfg, id, paymentId, refund, { personId, sessionId }),
       );
     }),
   );

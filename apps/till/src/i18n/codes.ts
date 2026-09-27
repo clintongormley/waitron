@@ -59,6 +59,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The bill changed while you were paying. Check the new amounts and confirm again",
     es: "La cuenta ha cambiado mientras cobrabas. Revisa los nuevos importes y vuelve a confirmar",
   },
+  "bill.payment_not_found": {
+    en: "That payment is no longer on this bill. Reload the bill and try again",
+    es: "Ese pago ya no está en esta cuenta. Vuelve a cargar la cuenta e inténtalo de nuevo",
+  },
+  "bill.refund_exceeds_payment": {
+    en: "That is more than this payment can give back. A tip is given back only with the whole payment",
+    es: "Es más de lo que se puede devolver de este pago. La propina solo se devuelve con el pago entero",
+  },
+  "bill.refund_unsupported": {
+    en: "A card payment cannot be given back here yet. Only cash can be refunded before the bill is paid",
+    es: "Todavía no se puede devolver aquí un pago con tarjeta. Antes de cobrar la cuenta solo se devuelve efectivo",
+  },
   "order.payment_in_flight": {
     en: "A card payment for this order is in progress. Wait for it to finish before changing the order",
     es: "Se está cobrando este pedido con tarjeta. Espera a que termine antes de cambiarlo",
