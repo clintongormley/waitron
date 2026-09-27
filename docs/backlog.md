@@ -3295,8 +3295,8 @@ approved.
   0.18.20 copy `drizzle-kit` pulls in through `@esbuild-kit/esm-loader`: Track C, *Left behind by
   the esbuild upgrade (#439, 2026-09-19)*. Which alerts are reachable in this product is unassessed.
   The `versioning-strategy` question is recorded under #432's loose ends in Track C.
-- **CodeQL's three smaller findings — DONE (lane A's A106, run by lane C, 2026-09-28).**
-  `js/biased-cryptographic-random` (alert 34): the demo company tax id in
+- **CodeQL's three smaller findings — DONE (lane A's A106, run by lane C, **PR #792**,
+  2026-09-28).** `js/biased-cryptographic-random` (alert 34): the demo company tax id in
   `packages/country-es/src/spain.ts` now draws again when a 32-bit draw lands at or above
   4,290,000,000 (429 × ten million) instead of reducing it, so every seven-digit number is equally
   likely; demo data only, never filed. The two sanitization findings in test files (alerts 32, 33)
