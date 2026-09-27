@@ -536,6 +536,20 @@ test("keyboard navigation keeps the active option inside the scrolling list", as
   });
 });
 
+function searchBox(el: WtCombobox): HTMLInputElement {
+  return el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+}
+
+/** Reports, per key, whether a listener cancelled it. */
+function pressAt(target: HTMLElement, ...keys: string[]): boolean[] {
+  return keys.map(
+    (key) =>
+      !target.dispatchEvent(
+        new KeyboardEvent("keydown", { key, bubbles: true, composed: true, cancelable: true }),
+      ),
+  );
+}
+
 test("disabling an open panel closes it, so nothing further can be selected", async () => {
   const { el, trigger, popup } = await mountCombobox(
     '<wt-combobox label="Dietary tags" multiple></wt-combobox>',
@@ -546,8 +560,14 @@ test("disabling an open panel closes it, so nothing further can be selected", as
   el.disabled = true;
   await el.updateComplete;
   expect(popup.matches(":popover-open")).toBe(false);
-  await userEvent.keyboard("{ArrowDown}{Enter}");
+  // A real keystroke can reach the hidden search box only in the moment after the panel closes, so
+  // the keys are dispatched at it, to reach it every time.
+  const changed = vi.fn();
+  el.addEventListener("wt-change", changed);
+  // Only the search box's own key handler cancels these keys, so a cancelled key reached it.
+  expect(pressAt(searchBox(el), "ArrowDown", "Enter")).toEqual([true, true]);
   expect(el.values).toEqual([]);
+  expect(changed).not.toHaveBeenCalled();
 });
 
 test("disabling an open panel also stops the add row announcing a new option", async () => {
@@ -559,11 +579,11 @@ test("disabling an open panel also stops the add row announcing a new option", a
   const added = vi.fn();
   el.addEventListener("wt-combobox-add", added);
   await userEvent.click(trigger);
-  await userEvent.type(el.shadowRoot!.querySelector<HTMLInputElement>(".search")!, "kosher");
+  await userEvent.type(searchBox(el), "kosher");
   el.disabled = true;
   await el.updateComplete;
   expect(popup.matches(":popover-open")).toBe(false);
-  await userEvent.keyboard("{End}{Enter}");
+  expect(pressAt(searchBox(el), "End", "Enter")).toEqual([true, true]);
   expect(added).not.toHaveBeenCalled();
 });
 
