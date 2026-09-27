@@ -536,6 +536,16 @@ test("keyboard navigation keeps the active option inside the scrolling list", as
   });
 });
 
+function searchBox(el: WtCombobox): HTMLInputElement {
+  return el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+}
+
+function pressAt(target: HTMLElement, ...keys: string[]): void {
+  for (const key of keys) {
+    target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, composed: true }));
+  }
+}
+
 test("disabling an open panel closes it, so nothing further can be selected", async () => {
   const { el, trigger, popup } = await mountCombobox(
     '<wt-combobox label="Dietary tags" multiple></wt-combobox>',
@@ -546,8 +556,13 @@ test("disabling an open panel closes it, so nothing further can be selected", as
   el.disabled = true;
   await el.updateComplete;
   expect(popup.matches(":popover-open")).toBe(false);
-  await userEvent.keyboard("{ArrowDown}{Enter}");
+  // A real keystroke reaches the hidden search box only for a moment after it closes, so the keys
+  // are dispatched at it, to reach it every time.
+  const changed = vi.fn();
+  el.addEventListener("wt-change", changed);
+  pressAt(searchBox(el), "ArrowDown", "Enter");
   expect(el.values).toEqual([]);
+  expect(changed).not.toHaveBeenCalled();
 });
 
 test("disabling an open panel also stops the add row announcing a new option", async () => {
@@ -563,7 +578,7 @@ test("disabling an open panel also stops the add row announcing a new option", a
   el.disabled = true;
   await el.updateComplete;
   expect(popup.matches(":popover-open")).toBe(false);
-  await userEvent.keyboard("{End}{Enter}");
+  pressAt(searchBox(el), "End", "Enter");
   expect(added).not.toHaveBeenCalled();
 });
 

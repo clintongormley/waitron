@@ -260,9 +260,8 @@ export class WtCombobox extends LitElement {
     return this.options.find((o) => o.value === this.value)?.label ?? "";
   }
 
-  // Refused while disabled rather than trusting that closing the panel on disable stops a keyboard
-  // change: whether a keystroke can still reach the hidden panel's search box is unsettled (see the
-  // "disabling an open panel" entry in docs/backlog.md).
+  // Refused while disabled because closing the panel on disable is not enough: a keystroke pressed
+  // just after it closes can still reach its search box.
   private commitSelection(optionValue: string, sourceEvent: Event): void {
     if (this.disabled) return;
     if (this.multiple) {
@@ -384,7 +383,7 @@ export class WtCombobox extends LitElement {
   override updated(changed: PropertyValues<this>): void {
     // Disabling only stops the trigger, so a panel already open stays on screen and usable. Closing
     // it here takes the whole interaction away at once; commitSelection and addNew refuse
-    // separately, because hiding the panel leaves keyboard focus behind in it (see their comment).
+    // separately, for the reason stated at commitSelection.
     if (changed.has("disabled") && this.disabled && this.popup?.matches(":popover-open")) {
       this.popup.hidePopover();
     }
