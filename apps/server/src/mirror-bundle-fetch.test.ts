@@ -156,6 +156,37 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
   });
 
+  it.each([
+    ["number", 42],
+    ["string", "bundle"],
+    ["array", [SAMPLE_BUNDLE]],
+    ["missing required field", { ...SAMPLE_BUNDLE, tenant: undefined }],
+    [
+      "wrong nested field type",
+      { ...SAMPLE_BUNDLE, designated: { ...SAMPLE_BUNDLE.designated, nodeId: 42 } },
+    ],
+    [
+      "wrong series entry type",
+      {
+        ...SAMPLE_BUNDLE,
+        reservedIdentity: {
+          ...SAMPLE_BUNDLE.reservedIdentity,
+          series: [{ code: 42, purpose: "standard" }],
+        },
+      },
+    ],
+    ["wrong module override type", { ...SAMPLE_BUNDLE, moduleOverrides: { media: "yes" } }],
+  ])("maps a 200 with a %s to mirror.bundle_fetch_failed", async (_shape, body) => {
+    const app = new Hono();
+    app.post("/management-api/mirror-bundle", (c: Context) =>
+      c.body(JSON.stringify(body), 200, { "content-type": "application/json" }),
+    );
+    const base = await startServer(app);
+
+    const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
+    expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
+  });
+
   it("maps a network failure (nothing listening) to mirror.bundle_fetch_failed", async () => {
     // A port just closed refuses the connect fast and deterministically.
     const app = new Hono();
