@@ -5,6 +5,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { AppError, centsToDecimal, isAppError, tillId as brandTillId } from "@waitron/shared";
 import {
+  billPaymentRefunds,
   billPayments,
   devices,
   nowIso,
@@ -43,7 +44,13 @@ import type { CardProviderPool } from "./card-provider-pool.js";
 import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 import { billPaymentIsLive, completeBillPayment, failBillPayment } from "./bill-payments.js";
-import { settleFromProviderRow } from "./bill-payments-loop.js";
+import { CHARGED, settleFromProviderRow } from "./bill-payments-loop.js";
+import {
+  attestCardRefund,
+  billRefundIsLive,
+  refundProvidersOf,
+  resumeCardRefund,
+} from "./bill-refunds.js";
 import {
   clearPaymentAttemptMark,
   paymentAttemptIsLive,
@@ -63,6 +70,9 @@ export interface PaymentsApiDeps {
   environment: DeploymentEnvironment;
   pool: CardProviderPool;
   providers: readonly CardProviderContribution[];
+  /** The practice simulator, when this installation built one: a bill refund it took is resolved
+   * through it. */
+  simulator?: PaymentProvider;
   fetch?: typeof fetch;
 }
 
@@ -89,6 +99,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "payment.resolve_unsupported": 422,
   "payment.outcome_unknown": 409,
   "bill.payment_not_found": 404,
+  "bill.refund_not_found": 404,
+  "bill.refund_not_stuck": 409,
+  "bill.refund_outcome_unconfirmed": 409,
+  "bill.attestation_contradicted": 409,
+  "payment.not_refundable": 409,
+  "payment.refund_exceeds_capture": 422,
   "pin.invalid": 401,
 };
 
@@ -807,13 +823,18 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         if (typeof pin !== "string") throw new AppError("pin.invalid", {});
         await verifyPersonCredential(tx, personId, pin);
         await requireStuckBillPayment(tx, id);
-        // A provider row still `attempting` can yet be charged, so no outcome is recorded over it.
-        if ((await findPaymentByBillPayment(tx, id))?.state === "attempting") {
+        // A provider row still `attempting` can yet be charged, so no outcome is recorded over it;
+        // one that shows the card charged contradicts a failure.
+        const provided = await findPaymentByBillPayment(tx, id);
+        if (provided?.state === "attempting") {
           throw new AppError("payment.outcome_unknown", {
             paymentId: id,
             reason: "ambiguous",
             providerStatus: "attempting",
           });
+        }
+        if (outcome === "failed" && provided !== undefined && CHARGED.has(provided.state)) {
+          throw new AppError("bill.attestation_contradicted", { id, evidence: "captured" });
         }
         const attestation = { attestedBy: personId, note };
         const now = deps.clock.now().instant;
@@ -828,6 +849,105 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         };
       });
       return c.json(answer);
+    }),
+  );
+
+  const refundDeps = {
+    db: deps.db,
+    clock: deps.clock,
+    refundProviderFor: refundProvidersOf({ simulator: deps.simulator, pool: deps.pool }),
+  };
+
+  // Card refunds of a bill that nothing is driving any more (bill payments design §6b).
+  app.get("/management-api/payments/bill-refunds", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const rows = await gated(sessionId, (tx) =>
+        tx
+          .select({
+            refundId: billPaymentRefunds.id,
+            billPaymentId: billPaymentRefunds.billPaymentId,
+            workingOrderId: billPayments.workingOrderId,
+            orderNumber: workingOrders.orderNumber,
+            label: workingOrders.label,
+            tillId: billPaymentRefunds.tillId,
+            tillName: tills.name,
+            appliedAmount: billPaymentRefunds.appliedAmount,
+            tipAmount: billPaymentRefunds.tipAmount,
+            reason: billPaymentRefunds.reason,
+            requestedAt: billPaymentRefunds.createdAt,
+            sentAt: billPaymentRefunds.sentAt,
+            sendCount: billPaymentRefunds.sendCount,
+            provider: payments.provider,
+          })
+          .from(billPaymentRefunds)
+          .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
+          .innerJoin(workingOrders, eq(workingOrders.id, billPayments.workingOrderId))
+          .innerJoin(tills, eq(tills.id, billPaymentRefunds.tillId))
+          .leftJoin(payments, eq(payments.billPaymentId, billPayments.id))
+          .where(eq(billPaymentRefunds.state, "pending"))
+          .orderBy(billPaymentRefunds.createdAt),
+      );
+      return c.json(
+        rows
+          .filter((row) => !billRefundIsLive(deps.db, row.refundId))
+          .map((row) => ({
+            ...row,
+            appliedAmount: centsToDecimal(row.appliedAmount),
+            tipAmount: centsToDecimal(row.tipAmount),
+          })),
+      );
+    }),
+  );
+
+  // Looks the refund up at its provider and records what that settles; for a provider whose key
+  // is still kept, a refund it has no record of is sent again under the same key. Never records a
+  // failure from an empty lookup.
+  app.post("/management-api/payments/bill-refunds/:id/resolve", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "BillRefundId");
+      await gated(sessionId, () => Promise.resolve());
+      const resumed = await resumeCardRefund(refundDeps, id, "manager");
+      if (!resumed.claimed) throw new AppError("bill.refund_not_stuck", { refundId: id });
+      if (resumed.refund.state !== "pending") return c.json({ outcome: resumed.refund.state });
+      const { lookup } = resumed;
+      throw new AppError("bill.refund_outcome_unconfirmed", {
+        refundId: id,
+        reason:
+          resumed.resent || lookup === null || lookup.kind === "match"
+            ? "pending"
+            : lookup.kind === "none"
+              ? "not_found"
+              : lookup.kind,
+      });
+    }),
+  );
+
+  // A manager records the outcome the provider confirmed (design §6b, owner 2026-09-26): only with
+  // a note, and with their own PIN entered again.
+  app.post("/management-api/payments/bill-refunds/:id/attest", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "BillRefundId");
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const outcome = body.outcome;
+      if (outcome !== "completed" && outcome !== "failed") {
+        throw new AppError("management.request_invalid", { field: "outcome" });
+      }
+      const note = typeof body.note === "string" ? body.note.trim() : "";
+      if (note === "") throw new AppError("management.request_invalid", { field: "note" });
+      const pin = body.pin;
+      const personId = await gated(sessionId, async (tx, authorizedBy) => {
+        if (typeof pin !== "string") throw new AppError("pin.invalid", {});
+        await verifyPersonCredential(tx, authorizedBy, pin);
+        return authorizedBy;
+      });
+      const refund = await attestCardRefund(refundDeps, id, outcome, {
+        attestedBy: personId,
+        note,
+      });
+      return c.json({ outcome: refund.state });
     }),
   );
 }

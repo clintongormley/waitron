@@ -68,8 +68,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Es más de lo que se puede devolver de este pago. La propina solo se devuelve con el pago entero",
   },
   "bill.refund_unsupported": {
-    en: "A card payment cannot be given back here yet. Only cash can be refunded before the bill is paid",
-    es: "Todavía no se puede devolver aquí un pago con tarjeta. Antes de cobrar la cuenta solo se devuelve efectivo",
+    en: "This card payment cannot be given back from here. Refund it on the card terminal it was taken on",
+    es: "Este pago con tarjeta no se puede devolver desde aquí. Devuélvelo en el datáfono en el que se cobró",
+  },
+  "bill.refund_in_progress": {
+    en: "A card refund on this bill is still waiting for the card provider. The bill cannot be changed until it finishes",
+    es: "Una devolución con tarjeta de esta cuenta sigue esperando al proveedor de pagos. No se puede cambiar la cuenta hasta que termine",
   },
   "order.payment_in_flight": {
     en: "A card payment for this order is in progress. Wait for it to finish before changing the order",

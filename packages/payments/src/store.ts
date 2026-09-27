@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import {
   AppError,
   addDecimal,
@@ -351,6 +351,22 @@ export async function findPaymentByBillPayment(
     .from(payments)
     .where(eq(payments.billPaymentId, billPaymentId));
   return row === undefined ? undefined : withDecimalAmount(row);
+}
+
+/** The provider refund ids recorded against a bill payment's provider row, oldest first. */
+export async function recordedRefundRefs(
+  tx: Transaction,
+  billPaymentId: string,
+): Promise<string[]> {
+  const rows = await tx
+    .select({ ref: paymentRefunds.providerRefundRef })
+    .from(paymentRefunds)
+    .innerJoin(payments, eq(payments.id, paymentRefunds.paymentId))
+    .where(
+      and(eq(payments.billPaymentId, billPaymentId), isNotNull(paymentRefunds.providerRefundRef)),
+    )
+    .orderBy(paymentRefunds.createdAt);
+  return rows.map((row) => row.ref!);
 }
 
 export async function findPaymentByRef(

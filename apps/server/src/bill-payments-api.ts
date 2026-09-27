@@ -10,7 +10,7 @@ import {
   takeReaderBillPayment,
 } from "./bill-payments.js";
 import type { BillPaymentAsk, BillPaymentRequest } from "./bill-payments.js";
-import { refundBillPayment } from "./bill-refunds.js";
+import { refundBillPayment, refundProvidersOf } from "./bill-refunds.js";
 import type { BillRefundRequest } from "./bill-refunds.js";
 import { assertDeviceCapability, requireSaleTillId, tryReadDevice } from "./device-session.js";
 import type { DeviceBinding } from "./device-session.js";
@@ -295,7 +295,8 @@ export function mountBillPaymentsApi(app: Hono, deps: TillApiDeps, log: Logger, 
     }),
   );
 
-  // The refund is recorded on the device's own till, whose drawer gives the cash back.
+  // The refund is recorded on the device's own till, whose drawer gives the cash back. A card
+  // refund goes back through the provider its payment was charged by.
   app.post("/api/working-orders/:id/payments/:paymentId/refunds", (c) =>
     run(c, log, async () => {
       const { personId, sessionId } = await requireSession(deps, c);
@@ -304,7 +305,20 @@ export function mountBillPaymentsApi(app: Hono, deps: TillApiDeps, log: Logger, 
       const refund = parseRefund(asObject(await readRawJsonBody<unknown>(c)));
       const saleCfg = await deviceSaleCfg(deps, c);
       return c.json(
-        await refundBillPayment(fiscal, saleCfg, id, paymentId, refund, { personId, sessionId }),
+        await refundBillPayment(
+          {
+            ...fiscal,
+            refundProviderFor: refundProvidersOf({
+              simulator: deps.cardProvider,
+              pool: deps.pool,
+            }),
+          },
+          saleCfg,
+          id,
+          paymentId,
+          refund,
+          { personId, sessionId },
+        ),
       );
     }),
   );

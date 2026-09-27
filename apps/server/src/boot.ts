@@ -163,6 +163,7 @@ import { runFiscalDrain } from "./onboarding-policy.js";
 import { resetBeforeFirstDrain } from "./restart-reset.js";
 import { releaseStalePaymentAttempts } from "./till-sale.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
+import { refundProvidersOf } from "./bill-refunds.js";
 import type { BillPaymentsPass } from "./bill-payments-loop.js";
 import { adoptFromPrimary } from "./adopt.js";
 import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
@@ -412,7 +413,13 @@ export function withPendingBillPayments(
     if (getRole() !== "primary") return report;
     try {
       const { errors, ...counts } = await settle();
-      if (counts.received + counts.failed + counts.mismatched > 0) {
+      const settled =
+        counts.received +
+        counts.failed +
+        counts.mismatched +
+        counts.refundsCompleted +
+        counts.refundsFailed;
+      if (settled > 0) {
         log("info", "bill_payment.settled", counts);
       }
       for (const failure of errors) log("warn", "bill_payment.settle_failed", failure);
@@ -1432,6 +1439,7 @@ async function bootServer(
         environment: config.environment,
         pool: cardPool,
         providers: CARD_PROVIDERS,
+        simulator: cardProvider,
       },
       log,
     );
@@ -1947,7 +1955,14 @@ async function bootServer(
         () => releaseStalePaymentAttempts(db),
         log,
       ),
-      () => settlePendingBillPayments({ db, backend: tillBackend, clock: tillClock, cfg: till }),
+      () =>
+        settlePendingBillPayments({
+          db,
+          backend: tillBackend,
+          clock: tillClock,
+          cfg: till,
+          refundProviderFor: refundProvidersOf({ simulator: cardProvider, pool: cardPool }),
+        }),
       () => holders.singletonRole.current,
       log,
     ),

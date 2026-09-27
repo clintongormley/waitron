@@ -329,7 +329,15 @@ describe("withPendingBillPayments", () => {
       },
       () => {
         order.push("settle");
-        return Promise.resolve({ received: 1, failed: 2, mismatched: 0, errors: [] });
+        return Promise.resolve({
+          received: 1,
+          failed: 2,
+          mismatched: 0,
+          refundsCompleted: 0,
+          refundsFailed: 0,
+          refundsUnresolved: 0,
+          errors: [],
+        });
       },
       primary,
       log,
@@ -338,7 +346,18 @@ describe("withPendingBillPayments", () => {
     expect(await pass(new Date())).toBe(report);
     expect(order).toEqual(["pass", "settle"]);
     expect(lines).toEqual([
-      ["info", "bill_payment.settled", { received: 1, failed: 2, mismatched: 0 }],
+      [
+        "info",
+        "bill_payment.settled",
+        {
+          received: 1,
+          failed: 2,
+          mismatched: 0,
+          refundsCompleted: 0,
+          refundsFailed: 0,
+          refundsUnresolved: 0,
+        },
+      ],
     ]);
   });
 
@@ -358,6 +377,9 @@ describe("withPendingBillPayments", () => {
           received: 0,
           failed: 0,
           mismatched: 0,
+          refundsCompleted: 0,
+          refundsFailed: 0,
+          refundsUnresolved: 3,
           errors: [{ billPaymentId: "bp-1", error: "Error: nope" }],
         }),
       primary,

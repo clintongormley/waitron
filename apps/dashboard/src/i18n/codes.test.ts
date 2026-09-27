@@ -298,6 +298,22 @@ it("has a sentence of its own for each refusal of a stuck card payment's check",
   }
 });
 
+it("has a sentence in both languages for each refusal of a manager's action on a bill payment or refund", () => {
+  const GENERIC_EN = codeMessage("test.unmapped_code", "en");
+  const GENERIC_ES = codeMessage("test.unmapped_code", "es");
+  for (const code of [
+    "bill.payment_not_found",
+    "bill.refund_not_found",
+    "bill.refund_not_stuck",
+    "bill.refund_outcome_unconfirmed",
+    "bill.attestation_contradicted",
+  ]) {
+    expect(codeMessage(code, "en"), code).not.toBe(GENERIC_EN);
+    expect(codeMessage(code, "es"), code).not.toBe(GENERIC_ES);
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
+  }
+});
+
 it("has a sentence in both languages for each refusal of a server's removal", () => {
   const GENERIC_EN = codeMessage("test.unmapped_code", "en");
   const GENERIC_ES = codeMessage("test.unmapped_code", "es");

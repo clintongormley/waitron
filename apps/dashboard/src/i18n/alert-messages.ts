@@ -143,6 +143,14 @@ export const ALERT_MESSAGES: Readonly<
     en: "The card provider charged {captured} for a payment towards a bill that should have been {expected}. Waitron has not counted it, and the bill cannot be changed or invoiced until a manager records what happened. Check the charge in the card provider's own dashboard.",
     es: "El proveedor de pagos cobró {captured} por un pago a cuenta de una cuenta que debía ser de {expected}. Waitron no lo ha contado, y la cuenta no se puede modificar ni facturar hasta que un responsable registre lo ocurrido. Comprueba el cobro en el panel del proveedor de pagos.",
   },
+  "payment.refund_outcome_conflict": {
+    en: "The card provider shows a refund of {amount} as made, which Waitron had already recorded as not made. Waitron has changed nothing: the money went back to the payer, so check the bill's payments against the provider's own dashboard.",
+    es: "El proveedor de pagos muestra como hecha una devolución de {amount} que Waitron ya había registrado como no hecha. Waitron no ha cambiado nada: el dinero se devolvió al cliente, así que revisa los pagos de la cuenta en el panel del proveedor.",
+  },
+  "payment.refund_unresolved": {
+    en: "A card refund of {amount} has been waiting for over an hour for the card provider to show what happened. Its bill cannot be changed or invoiced until then. Check the refund in the provider's own dashboard, and record the outcome it confirms.",
+    es: "Una devolución con tarjeta de {amount} lleva más de una hora esperando a que el proveedor de pagos muestre qué pasó. Hasta entonces, su cuenta no se puede modificar ni facturar. Comprueba la devolución en el panel del proveedor y registra el resultado que confirme.",
+  },
   "payment.reconcile_unsettled": {
     en: `A check found {count} card payments that the card provider had not paid out.${MORE_EN}${NOT_RECHECKED_EN}`,
     es: `Una comprobación encontró {count} pagos con tarjeta que el proveedor de pagos no había liquidado.${MORE_ES}${NOT_RECHECKED_ES}`,

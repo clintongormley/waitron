@@ -783,6 +783,26 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The card provider could not say what happened to this payment; the order stays locked. Try again in a minute.",
     es: "El proveedor de pagos no pudo confirmar qué pasó con este cobro; el pedido sigue bloqueado. Vuelve a intentarlo en un minuto.",
   },
+  "bill.payment_not_found": {
+    en: "That payment towards a bill no longer exists. Refresh the list.",
+    es: "Ese pago a cuenta de una cuenta ya no existe. Actualiza la lista.",
+  },
+  "bill.refund_not_found": {
+    en: "That refund no longer exists. Refresh the list.",
+    es: "Esa devolución ya no existe. Actualiza la lista.",
+  },
+  "bill.refund_not_stuck": {
+    en: "This refund is no longer waiting, or it is being checked right now. Refresh the list.",
+    es: "Esta devolución ya no está pendiente, o se está comprobando ahora mismo. Actualiza la lista.",
+  },
+  "bill.refund_outcome_unconfirmed": {
+    en: "The card provider does not show what happened to this refund, so nothing was recorded and the bill stays locked. Check the refund in the provider's own dashboard, then record the outcome it confirms.",
+    es: "El proveedor de pagos no muestra qué pasó con esta devolución, así que no se ha registrado nada y la cuenta sigue bloqueada. Comprueba la devolución en el panel del proveedor y registra el resultado que confirme.",
+  },
+  "bill.attestation_contradicted": {
+    en: "Waitron's own records contradict that outcome, so it was not recorded. Check what the card provider shows again.",
+    es: "Los registros de Waitron contradicen ese resultado, así que no se ha registrado. Vuelve a comprobar lo que muestra el proveedor de pagos.",
+  },
   "membership.node_not_found": {
     en: "That server is not on this venue's list of servers. Refresh the list.",
     es: "Ese servidor no está en la lista de servidores del local. Actualiza la lista.",

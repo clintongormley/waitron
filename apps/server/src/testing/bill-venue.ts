@@ -57,6 +57,8 @@ const MENU: { name: string; customer: string; kitchen: string; price: string }[]
   { name: "Ensalada", customer: "Ensalada de la casa", kitchen: "ENSAL", price: "12.00" },
   { name: "Tarta", customer: "Tarta de queso", kitchen: "TARTA", price: "18.00" },
   { name: "Caña", customer: "Caña de cerveza", kitchen: "CANA", price: "3.00" },
+  { name: "Croquetas", customer: "Croquetas de jamón", kitchen: "CROQ", price: "10.00" },
+  { name: "Pulpo", customer: "Pulpo a la gallega", kitchen: "PULPO", price: "20.00" },
 ];
 
 export interface BillVenue {
@@ -66,8 +68,12 @@ export interface BillVenue {
   /** The box's configuration, tips off. */
   cfg: TillConfig;
   card: FakePaymentProvider;
+  /** Serves the fake card provider as `fake`. */
+  pool: CardProviderPool;
   /** Tips on. */
   app: Hono;
+  /** The same routes, tips on, on another clock. */
+  appAt(clock: TrustedClock): Hono;
   /** The same routes with the venue's tips off. */
   appTipsOff: Hono;
   /** The first till's session and device. */
@@ -79,6 +85,8 @@ export interface BillVenue {
   deviceTillId: string;
   device2TillId: string;
   operatorId: string;
+  /** The provisioned administrator, PIN 1234. */
+  adminId: string;
   offerFor(name: string): string;
   zoneId: string;
 }
@@ -245,14 +253,14 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
         : Promise.reject(new Error(`bill-venue: no provider ${providerId}`)),
     evict: () => {},
   };
-  const mount = (tipsEnabled: boolean): Hono => {
+  const mount = (tipsEnabled: boolean, at: TrustedClock = clock): Hono => {
     const app = new Hono();
     mountTillApi(
       app,
       {
         db,
         backend,
-        clock,
+        clock: at,
         cfg: { ...cfg, tipsEnabled },
         secureCookies: false,
         venueLocale: LOCALE,
@@ -270,7 +278,9 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     clock,
     cfg,
     card,
+    pool,
     app: mount(true),
+    appAt: (at) => mount(true, at),
     appTipsOff: mount(false),
     cookie: cookieFor(devices[0]!),
     cookie2: cookieFor(devices[1]!),
@@ -278,6 +288,7 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     deviceTillId: devices[0]!.tillId,
     device2TillId: devices[1]!.tillId,
     operatorId: seeded.personId,
+    adminId: db.all<{ id: string }>(sql`select id from persons where role = 'admin'`)[0]!.id,
     offerFor: (name) => seeded.offers.offerFor(seeded.productIds.get(name)!),
     zoneId: seeded.offers.zoneId,
   };

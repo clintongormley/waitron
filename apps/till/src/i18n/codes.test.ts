@@ -111,6 +111,7 @@ it("explains each refusal a bill paid in parts can give, in both languages, nami
     "bill.payment_not_found",
     "bill.refund_exceeds_payment",
     "bill.refund_unsupported",
+    "bill.refund_in_progress",
   ]) {
     expect(codeMessage(code, "en")).not.toBe(generic.en);
     expect(codeMessage(code, "es")).not.toBe(generic.es);

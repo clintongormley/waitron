@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { billPayments, withTransaction } from "@waitron/db";
+import { billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { recordIncidentOnce } from "@waitron/core";
@@ -11,15 +11,23 @@ import {
   decimal,
   tillId as brandTillId,
 } from "@waitron/shared";
+import { raiseRefundUnresolved } from "./bill-refund-alerts.js";
 import { billPaymentIsLive, completeBillPayment, failBillPayment } from "./bill-payments.js";
+import { resumeCardRefund } from "./bill-refunds.js";
+import type { RefundProviderFor } from "./bill-refunds.js";
 import type { TillConfig } from "./till-config.js";
 import type { TillSaleResult } from "./till-sale.js";
 import "./errors.js";
 
 /**
- * The work loop's half of a card bill payment (bill payments design §5.4): each pass settles the
- * pending card payments no attempt in this process is driving, from their provider's row.
+ * The work loop's half of a card bill payment (bill payments design §5.4, §6b): each pass settles
+ * the pending card payments no attempt in this process is driving, from their provider's row, and
+ * looks up the pending card refunds nothing is driving, never sending one.
  */
+
+/** How long a card refund may stay pending before `payment.refund_unresolved` is raised (design
+ * §6b: "an alert fires after an hour"). */
+const REFUND_UNRESOLVED_AFTER_MS = 60 * 60 * 1000;
 
 export interface BillPaymentsLoopDeps {
   db: Database;
@@ -27,6 +35,8 @@ export interface BillPaymentsLoopDeps {
   clock: TrustedClock;
   /** The box's till configuration; an invoice is filed on the bill payment's own till. */
   cfg: TillConfig;
+  /** The card providers pending refunds are looked up at; without it none is looked up. */
+  refundProviderFor?: RefundProviderFor;
 }
 
 export interface BillPaymentsPass {
@@ -34,12 +44,16 @@ export interface BillPaymentsPass {
   failed: number;
   /** Captured for another amount than the payment's, left pending (counted on every pass). */
   mismatched: number;
-  /** A payment this pass could not settle, left for the next. */
-  errors: { billPaymentId: string; error: string }[];
+  refundsCompleted: number;
+  refundsFailed: number;
+  /** Refunds pending over an hour, counted on every pass. */
+  refundsUnresolved: number;
+  /** A payment or refund this pass could not settle, left for the next. */
+  errors: (({ billPaymentId: string } | { refundId: string }) & { error: string })[];
 }
 
 /** The provider row's states that mean the card was charged. */
-const CHARGED = new Set(["captured", "accepted_offline", "settled"]);
+export const CHARGED = new Set(["captured", "accepted_offline", "settled"]);
 
 /** What {@link settleFromProviderRow} did; `left` names the provider row's state, or `pending` for a
  * payment no longer pending or live in this process. */
@@ -118,7 +132,15 @@ export async function settlePendingBillPayments(
       .where(eq(billPayments.state, "pending"))
       .orderBy(billPayments.createdAt),
   );
-  const pass: BillPaymentsPass = { received: 0, failed: 0, mismatched: 0, errors: [] };
+  const pass: BillPaymentsPass = {
+    received: 0,
+    failed: 0,
+    mismatched: 0,
+    refundsCompleted: 0,
+    refundsFailed: 0,
+    refundsUnresolved: 0,
+    errors: [],
+  };
   for (const { id } of pending) {
     try {
       const { settled } = await withTransaction(deps.db, (tx) =>
@@ -129,5 +151,50 @@ export async function settlePendingBillPayments(
       pass.errors.push({ billPaymentId: id, error: String(error) });
     }
   }
+  await settlePendingBillRefunds(deps, pass);
   return pass;
+}
+
+/**
+ * The refund half of a pass (design §6b): each pending card refund nothing in this process drives
+ * is failed when it never reached its provider, else looked up and settled by the evidence table,
+ * never sent again. One still pending an hour after it was asked for raises
+ * `payment.refund_unresolved` on the till that gave it.
+ */
+async function settlePendingBillRefunds(
+  deps: BillPaymentsLoopDeps,
+  pass: BillPaymentsPass,
+): Promise<void> {
+  const pending = await withTransaction(deps.db, (tx) =>
+    tx
+      .select({ id: billPaymentRefunds.id })
+      .from(billPaymentRefunds)
+      .where(eq(billPaymentRefunds.state, "pending"))
+      .orderBy(billPaymentRefunds.createdAt),
+  );
+  for (const { id } of pending) {
+    try {
+      const resumed = await resumeCardRefund(deps, id, "loop");
+      if (!resumed.claimed) continue;
+      const { refund } = resumed;
+      if (refund.state === "completed") pass.refundsCompleted += 1;
+      if (refund.state === "failed") pass.refundsFailed += 1;
+      const now = deps.clock.now().instant;
+      if (
+        refund.state === "pending" &&
+        now.getTime() - Date.parse(refund.createdAt) > REFUND_UNRESOLVED_AFTER_MS
+      ) {
+        pass.refundsUnresolved += 1;
+        await withTransaction(deps.db, async (tx) => {
+          const [payment] = await tx
+            .select({ workingOrderId: billPayments.workingOrderId })
+            .from(billPayments)
+            .where(eq(billPayments.id, refund.billPaymentId));
+          await raiseRefundUnresolved(tx, refund, payment!.workingOrderId, now);
+        });
+      }
+    } catch (error) {
+      pass.errors.push({ refundId: id, error: String(error) });
+    }
+  }
 }

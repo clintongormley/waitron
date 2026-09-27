@@ -386,8 +386,38 @@ declare module "@waitron/shared" {
      * what is left of the payment.
      */
     "bill.refund_exceeds_payment": { paymentId: string; applied: string; tip: string };
-    /** The bill payment was taken by card, and only a cash payment is given back before the invoice. */
+    /**
+     * The bill payment was taken by card on a terminal Waitron does not drive, or through a card
+     * provider that offers no refund Waitron can record before asking, so it is not given back
+     * here.
+     */
     "bill.refund_unsupported": { paymentId: string };
+    /**
+     * A card refund of the bill is still pending: until the card provider shows its outcome, the
+     * bill's payments, lines and invoice stay as they are.
+     */
+    "bill.refund_in_progress": { workingOrderId: string };
+    /** No refund of a bill payment with this id; `refundId` is the id the caller sent. */
+    "bill.refund_not_found": { refundId: string };
+    /** A manager's action was refused: the refund is no longer pending, or its request is still
+     * running in this process. */
+    "bill.refund_not_stuck": { refundId: string };
+    /**
+     * The card provider did not show what became of a pending refund, so nothing was recorded and
+     * the bill stays locked. `reason`: `not_found` (no such refund there), `ambiguous` (more than
+     * one could be it), `unreachable` (the provider could not be asked), `pending` (the provider
+     * has not finished it).
+     */
+    "bill.refund_outcome_unconfirmed": {
+      refundId: string;
+      reason: "not_found" | "ambiguous" | "unreachable" | "pending";
+    };
+    /**
+     * A manager's recorded outcome is contradicted by Waitron's own record, so it was not recorded.
+     * `evidence`: `captured` (the provider's record shows the card charged), `never_sent` (the
+     * refund never reached the provider).
+     */
+    "bill.attestation_contradicted": { id: string; evidence: "captured" | "never_sent" };
     /**
      * An incident: the provider captured a card bill payment for another amount than its applied
      * money plus its tip. Nothing was filed and the payment stays pending for a manager.
@@ -397,6 +427,28 @@ declare module "@waitron/shared" {
       workingOrderId: string;
       captured: string;
       expected: string;
+    };
+    /**
+     * An incident: the card provider shows a bill refund made that Waitron had already recorded as
+     * failed. Nothing was recorded; the money went back to the payer.
+     */
+    "payment.refund_outcome_conflict": {
+      refundId: string;
+      billPaymentId: string;
+      workingOrderId: string;
+      amount: string;
+      providerRefundRef: string | null;
+    };
+    /**
+     * An incident: a card refund of a bill has been pending for more than an hour, so its bill is
+     * locked until the card provider shows the outcome or a manager records a confirmed one.
+     */
+    "payment.refund_unresolved": {
+      refundId: string;
+      billPaymentId: string;
+      workingOrderId: string;
+      amount: string;
+      pendingSince: string;
     };
     // The four `booking.*` codes are declared in @waitron/bookings/src/errors.ts.
     /**

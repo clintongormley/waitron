@@ -62,6 +62,7 @@ import {
 import {
   allocateOrderNumber,
   appendOrderAmendment,
+  billPaymentRefunds,
   billPayments,
   categories,
   diningTables,
@@ -3319,15 +3320,43 @@ async function requireEditableOrder(
 }
 
 /**
- * Refuse `order.payment_in_flight` when a card is at the reader for any of these OPEN orders: a
- * payment of the whole order between pricing and filing (plan D22's mark), or a pending card
- * payment of part of the bill (bill payments design §5.2). Every line write stops here, because the
- * capture that completes the bill invoices it from its total.
+ * Refuse `bill.refund_in_progress` while a card refund of any of these bills is pending (bill
+ * payments design §5.2, §6b): until its outcome is known, the money the bill has received is not
+ * known either.
+ */
+export async function refuseRefundInProgress(
+  tx: Transaction,
+  orderIds: readonly string[],
+): Promise<void> {
+  const [pending] = await tx
+    .select({ workingOrderId: billPayments.workingOrderId })
+    .from(billPaymentRefunds)
+    .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
+    .where(
+      and(
+        inArray(billPayments.workingOrderId, [...orderIds]),
+        eq(billPaymentRefunds.state, "pending"),
+      ),
+    )
+    .orderBy(billPayments.workingOrderId)
+    .limit(1);
+  if (pending !== undefined) {
+    throw new AppError("bill.refund_in_progress", { workingOrderId: pending.workingOrderId });
+  }
+}
+
+/**
+ * Refuse while money on any of these OPEN orders is moving: `bill.refund_in_progress` for a pending
+ * card refund, else `order.payment_in_flight` for a card at the reader — a payment of the whole
+ * order between pricing and filing (plan D22's mark), or a pending card payment of part of the bill
+ * (bill payments design §5.2). Every line write stops here, because the capture that completes the
+ * bill invoices it from its total.
  */
 export async function refusePaymentInFlight(
   tx: Transaction,
   orderIds: readonly string[],
 ): Promise<void> {
+  await refuseRefundInProgress(tx, orderIds);
   await refuseOrderPaymentMarked(tx, orderIds);
   const [pending] = await tx
     .select({ workingOrderId: billPayments.workingOrderId })

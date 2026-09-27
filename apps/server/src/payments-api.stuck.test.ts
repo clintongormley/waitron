@@ -1388,6 +1388,33 @@ describe("POST /management-api/payments/bill-payments/:id/attest", () => {
     },
   );
 
+  it("refuses to record a failure over a provider row that shows the card charged, and records its receipt", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const id = await strandBillPayment(v, orderId, { kind: "captured", amount: "1.20" });
+
+    const failed = await post(v, attestPath(id), { outcome: "failed", note: NOTE, pin: "1234" });
+    const pendingAfter = await billPaymentOf(id);
+    const received = await post(v, attestPath(id), {
+      outcome: "received",
+      note: NOTE,
+      pin: "1234",
+    });
+
+    expect(failed.status).toBe(409);
+    expect(await errorOf(failed)).toEqual({
+      code: "bill.attestation_contradicted",
+      params: { id, evidence: "captured" },
+    });
+    expect(pendingAfter).toEqual({ state: "pending", attestedBy: null, attestationNote: null });
+    expect(received.status).toBe(200);
+    expect(await billPaymentOf(id)).toEqual({
+      state: "received",
+      attestedBy: v.managerId,
+      attestationNote: NOTE,
+    });
+  });
+
   it.each([
     ["a wrong PIN", { outcome: "failed", note: NOTE, pin: "9999" }, 401, "pin.invalid", undefined],
     ["no PIN", { outcome: "failed", note: NOTE }, 401, "pin.invalid", undefined],

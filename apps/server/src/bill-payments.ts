@@ -61,6 +61,7 @@ import {
   priceStoredOrderForIssuance,
   readInvoiceNumber,
   refuseOrderPaymentMarked,
+  refuseRefundInProgress,
   toVatBreakdown,
 } from "./working-order.js";
 import type { TillSaleDeps } from "./working-order.js";
@@ -489,10 +490,24 @@ export class SaleTillRequired extends Error {
   }
 }
 
+/** Whether a card refund of the bill is still pending, which leaves its received money unknown. */
+async function refundPending(tx: Transaction, workingOrderId: string): Promise<boolean> {
+  const [pending] = await tx
+    .select({ id: billPaymentRefunds.id })
+    .from(billPaymentRefunds)
+    .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
+    .where(
+      and(eq(billPayments.workingOrderId, workingOrderId), eq(billPaymentRefunds.state, "pending")),
+    )
+    .limit(1);
+  return pending !== undefined;
+}
+
 /**
  * Issue the bill's invoice when a write has left it fully paid (design §7): it is open, holds no
- * pending payment, has at least one line and one received payment, and the net applied of its
- * received payments equals its total. Answers the ticket, or null when the bill is not fully paid.
+ * pending payment or refund, has at least one line and one received payment, and the net applied
+ * of its received payments equals its total. Answers the ticket, or null when the bill is not
+ * fully paid.
  *
  * One tender per received payment that still holds money, dated when the money moved; every card
  * payment's provider row is linked to the sale, a fully refunded one included.
@@ -513,6 +528,7 @@ export async function issueIfFullyPaid(
   const held = await readPaymentMoney(tx, [workingOrderId]);
   const received = held.filter(({ row }) => row.state === "received");
   if (received.length === 0 || held.some(({ row }) => row.state === "pending")) return null;
+  if (await refundPending(tx, workingOrderId)) return null;
   const total = await billTotal(tx, workingOrderId);
   if (compareDecimal(total, ZERO) === 0) return null;
   if (compareDecimal(fundsOf(workingOrderId, total, held).received, total) !== 0) return null;
@@ -833,6 +849,7 @@ async function beginBillPayment(
   }
 
   await requireOpenBill(tx, workingOrderId);
+  await refuseRefundInProgress(tx, [workingOrderId]);
   await refuseOrderPaymentMarked(tx, [workingOrderId]);
   const { request, items } = await allocationRequestFor(tx, workingOrderId, req);
   const funds = fundsOf(

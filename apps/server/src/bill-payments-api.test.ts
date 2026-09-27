@@ -1685,7 +1685,7 @@ describe("a cash refund before the invoice (design §6)", () => {
     expect(await lineTotals(billId)).toEqual(["35.00"]);
   });
 
-  it("refuses refunding a card payment, which this route does not give back, writing nothing", async () => {
+  it("refuses refunding a card charged on a terminal Waitron does not drive, writing nothing", async () => {
     const billId = await bill120();
     const paymentId = paymentIdOf(
       await pay(billId, {

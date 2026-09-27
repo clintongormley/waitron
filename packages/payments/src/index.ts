@@ -48,6 +48,7 @@ export {
   recordFailedRefund,
   recordRefund,
   recordVoid,
+  recordedRefundRefs,
   settleForwarded,
   settleInitiated,
   stampAttemptingRef,
