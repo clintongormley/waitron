@@ -99,6 +99,7 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEV_DEVICE_HEADER } from "./device-session.js";
 import type { Turns } from "./backup-turns.js";
 import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
+import { freePort, freePorts } from "./testing/free-ports.js";
 
 /**
  * The one test below that provisions a usable `fiscal.aeat` credential needs the AEAT transport to
@@ -311,18 +312,6 @@ async function freshVenue(): Promise<{ directory: string; store: VenueDatabase }
   const directory = await mkdtemp(join(tmpdir(), "waitron-boot-provision-venue-"));
   await applyMigrations(directory, migrationOptionsFor(manifestSets(), null));
   return { directory, store: await openVenueDatabase(directory) };
-}
-
-/** An OS-assigned port, released before use: `WAITRON_HTTP_PORT` rejects `"0"`. */
-async function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once("error", reject);
-    probe.listen(0, "127.0.0.1", () => {
-      const { port } = probe.address() as AddressInfo;
-      probe.close((error) => (error ? reject(error) : resolve(port)));
-    });
-  });
 }
 
 /**
@@ -1290,15 +1279,15 @@ describe("startServer, against a migrated venue directory", () => {
       // refuses both on an unstamped database.
       if (document === "fenced" || asMirror) await stampDeployment(db, "preproduction");
       if (asMirror) await setDeploymentMode(db, TILL_ENV.WAITRON_TILL_NODE_ID, "mirror");
+      const [port, deadPeerPort] = await freePorts(2);
       if (withPeer) {
         await writeMirrorConfig(db, TILL_ENV.WAITRON_TILL_NODE_ID, {
-          relayUrl: `http://127.0.0.1:${await freePort()}`,
+          relayUrl: `http://127.0.0.1:${deadPeerPort}`,
           boxHostname: "waitron.local",
           boxCaPem: "unused",
           originNodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
         });
       }
-      const port = await freePort();
       const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-first-start-damaged-"));
       await writeFile(
         join(stateDir, "modules.json"),
@@ -3346,8 +3335,7 @@ describe("startServer — background listeners and sinks that fail or close", ()
   }, 60_000);
 
   it("serves the plain-HTTP landing page beside a trading boot that holds a minted leaf, and closes it with the server", async () => {
-    const port = await freePort();
-    const landingPort = await freePort();
+    const [port, landingPort] = await freePorts(2);
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-landing-"));
     await writeFile(
       join(stateDir, "modules.json"),
@@ -3432,7 +3420,8 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   }
 
   /** A setup-mode boot over a venue directory, with the restart intercepted and the minted CA
-   * trusted; `use` runs while it serves. */
+   * trusted; `use` runs while it serves. `extraPortCount` more ports are drawn beside the server's own, so none of
+   * them is the server's port. */
   async function withSetupBoot(
     directory: string,
     env: Record<string, string>,
@@ -3440,9 +3429,11 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       post: (path: string, init: RequestInit) => Promise<Response>;
       kills: { pid: number; signal: string | number | undefined }[];
       stateDir: string;
+      extraPorts: number[];
     }) => Promise<void>,
+    { extraPortCount = 0 } = {},
   ): Promise<void> {
-    const port = await freePort();
+    const [port, ...drawn] = await freePorts(1 + extraPortCount);
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-routes-"));
     try {
       await withMockedKill(async (kills) => {
@@ -3462,6 +3453,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
               fetch(`https://127.0.0.1:${port}${path}`, { ...via, method: "POST", ...init }),
             kills,
             stateDir,
+            extraPorts: drawn,
           });
         } finally {
           await close();
@@ -3886,21 +3878,25 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
 
   it("refuses to adopt from a primary it cannot reach", async () => {
     const venue = await freshVenue();
-    const unreachable = await freePort();
     try {
-      await withSetupBoot(venue.directory, {}, async ({ post, kills }) => {
-        const response = await post("/setup-api/adopt", {
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            primaryUrl: `http://127.0.0.1:${unreachable}`,
-            credential: { personId: "33333333-3333-4333-8333-333333333333", password: "x" },
-          }),
-        });
-        const body = (await response.json()) as { error?: { code: string } };
-        expect(response.status).toBe(502);
-        expect(body.error?.code).toBe("mirror.bundle_fetch_failed");
-        expect(kills).toEqual([]);
-      });
+      await withSetupBoot(
+        venue.directory,
+        {},
+        async ({ post, kills, extraPorts: [unreachable] }) => {
+          const response = await post("/setup-api/adopt", {
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              primaryUrl: `http://127.0.0.1:${unreachable}`,
+              credential: { personId: "33333333-3333-4333-8333-333333333333", password: "x" },
+            }),
+          });
+          const body = (await response.json()) as { error?: { code: string } };
+          expect(response.status).toBe(502);
+          expect(body.error?.code).toBe("mirror.bundle_fetch_failed");
+          expect(kills).toEqual([]);
+        },
+        { extraPortCount: 1 },
+      );
     } finally {
       await venue.store.close();
       await rm(venue.directory, { recursive: true, force: true });

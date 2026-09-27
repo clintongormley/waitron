@@ -1,5 +1,4 @@
 import { createServer as createHttpServer, type Server } from "node:http";
-import { createServer as createNetServer } from "node:net";
 import type { AddressInfo } from "node:net";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -32,6 +31,7 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { REBUILD_MARKER } from "./rebuild-first-start.js";
+import { freePort, freePorts } from "./testing/free-ports.js";
 
 // A box that returns after being fenced still names itself serving-primary; if it sold, two nodes
 // would file under one NIF. Pinned at boot: a reachable peer holding a higher-term chart that fences
@@ -194,18 +194,6 @@ afterAll(async () => {
   for (const directory of venueDirs) await rm(directory, { recursive: true, force: true });
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
-
-/** `WAITRON_HTTP_PORT` refuses "0", so the OS picks a free port first. */
-async function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createNetServer();
-    probe.once("error", reject);
-    probe.listen(0, "127.0.0.1", () => {
-      const { port } = probe.address() as AddressInfo;
-      probe.close((error) => (error ? reject(error) : resolve(port)));
-    });
-  });
-}
 
 /** Stands in for the promoted cloud's membership endpoint, ignoring the credential header. */
 async function startPeer(document: unknown): Promise<{ url: string; stop: () => Promise<void> }> {
@@ -414,7 +402,7 @@ describe("returned-box membership reconciliation at boot", () => {
 
   it("an UNREACHABLE peer leaves the returned box PRIMARY — it proceeds and accepts sales (prove-by-deletion)", async () => {
     await seedHeldChart(proceedsDb, 1);
-    const deadPort = await freePort();
+    const [deadPort, port] = await freePorts(2);
     await writeMirrorConfig(proceedsDb, TILL_ENV.WAITRON_TILL_NODE_ID, {
       relayUrl: `http://127.0.0.1:${deadPort}/`,
       boxHostname: "box.local",
@@ -422,7 +410,6 @@ describe("returned-box membership reconciliation at boot", () => {
       originNodeId: PEER_NODE,
     });
 
-    const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
       WAITRON_VENUE_DIR: proceedsVenueDir,

@@ -1,5 +1,4 @@
 import { get as httpGet } from "node:http";
-import { createServer } from "node:net";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { startLandingListener } from "./boot.js";
 import type { ServerConfig } from "./config.js";
 import type { Logger } from "./logger.js";
+import { freePort } from "./testing/free-ports.js";
 
 /**
  * A real boot of the plain-HTTP landing listener on an ephemeral port. What this surface exists for:
@@ -34,18 +34,6 @@ async function stateDirWithLeaf(): Promise<string> {
     "-----BEGIN CERTIFICATE-----\nMII...\n-----END CERTIFICATE-----\n",
   );
   return d;
-}
-
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const s = createServer();
-    s.on("error", reject);
-    s.listen(0, "127.0.0.1", () => {
-      const addr = s.address();
-      const port = typeof addr === "object" && addr !== null ? addr.port : 0;
-      s.close((err) => (err ? reject(err) : resolve(port)));
-    });
-  });
 }
 
 // Only the fields `startLandingListener` reads; the rest of `ServerConfig` is irrelevant to it.

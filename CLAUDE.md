@@ -733,6 +733,11 @@ browser test** — most of these rules exist because a test passed while proving
   `docker inspect`'s `HostConfig.PortBindings` and `NetworkSettings.Ports` before removing the
   container. The live subjects are the two `bench/` rigs that start a container, both of which
   publish a port. See [testing-guide.md](docs/developers/testing-guide.md).
+- **Draw every port a test needs in one `freePorts(n)` call, before binding any of them**
+  (`apps/server/src/testing/free-ports.ts`), never two single draws before either is bound: Linux
+  can hand a just-released port straight back, which put a boot's HTTPS server and its landing
+  listener on one port in CI. Nothing guards it. Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md).
 - **An interrupted run also ORPHANS its vitest workers**, which spin at ~100% CPU until `kill -9`.
   `pnpm reap` sweeps these, scoped by ppid 1 AND one of the two shapes vitest leaves in `ps` — a
   Vitest 3 process TITLE or a Vitest 4 entrypoint PATH — never a bare `vitest` match.

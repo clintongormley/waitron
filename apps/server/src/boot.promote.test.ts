@@ -1,5 +1,3 @@
-import { createServer } from "node:net";
-import type { AddressInfo } from "node:net";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -37,6 +35,7 @@ import { ALL_MODULES } from "./modules.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 import { parseEnvFile } from "./env-file.js";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
+import { freePort } from "./testing/free-ports.js";
 
 // A booted local secondary (mode='primary', singleton_role='secondary') files nothing; an
 // in-process promote flips singleton_role live, and the running fiscal pass starts draining on its
@@ -165,18 +164,6 @@ afterAll(async () => {
   }
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
-
-/** `WAITRON_HTTP_PORT` refuses "0", so the OS picks a free port first. */
-async function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once("error", reject);
-    probe.listen(0, "127.0.0.1", () => {
-      const { port } = probe.address() as AddressInfo;
-      probe.close((error) => (error ? reject(error) : resolve(port)));
-    });
-  });
-}
 
 /** Up to ~10s: the boot loop's wall clock is not injectable, so passes are observed by polling. */
 async function poll<T>(predicate: () => Promise<T | undefined>): Promise<T | undefined> {

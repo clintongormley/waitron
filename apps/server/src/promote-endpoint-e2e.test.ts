@@ -1,5 +1,3 @@
-import { createServer } from "node:net";
-import type { AddressInfo } from "node:net";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -48,6 +46,7 @@ import { parseEnvFile } from "./env-file.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import { freePort } from "./testing/free-ports.js";
 
 // The promote endpoint end to end over HTTP, each boot on its own venue directory: an admin-login
 // promote restarts the mirror as a primary that sells and chains on its own reserved SIF without
@@ -312,18 +311,6 @@ afterAll(async () => {
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
-
-/** An OS-assigned free port, released before use (WAITRON_HTTP_PORT rejects "0"). */
-async function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once("error", reject);
-    probe.listen(0, "127.0.0.1", () => {
-      const { port } = probe.address() as AddressInfo;
-      probe.close((error) => (error ? reject(error) : resolve(port)));
-    });
-  });
-}
 
 /** Throws on timeout, so a caller never proceeds on an unmet condition. */
 async function poll<T>(predicate: () => Promise<T | undefined>): Promise<T> {
