@@ -3304,7 +3304,7 @@ approved.
   SVGs read from the repository, the other removes the required-field asterisk from a heading the
   test itself rendered; neither sees outside input and neither result is rendered or served.
 - **Code scanning (CodeQL default setup) switched on 2026-09-27 — DONE: the six ReDoS alerts by
-  lane C's A105 (PR for `fix/regex-linear-time`), the other 28 by A104 and A106.** Enabled with
+  lane C's A105 (**PR #793**, 2026-09-28), the other 28 by A104 and A106.** Enabled with
   `gh api -X PATCH repos/clintongormley/waitron/code-scanning/default-setup
   -f state=configured -f query_suite=default`; it analyses `actions`, `javascript-typescript` and
   `python`, weekly and on each PR, as a check the ruleset does not require. Its first run
@@ -3334,14 +3334,15 @@ approved.
   CI run for that commit skipped `publish`, because a root-only push sets `code=false`; the first
   code push to `main` after it is the first `publish` run under the new file, though that job
   names its own block.
-  **The six ReDoS findings (A105):** each flagged pattern was timed on Node v26.7.0 on the owner's
-  Mac, on the shape CodeQL's alert names plus an ending that makes the match fail (a trailing `@` or
-  line break, a final letter), at 10,000, 50,000 and 100,000 repeats. Every one but `/^\/+/` grew
-  with the square of the input: 29–92 ms, then 0.69–2.30 s, then 2.76–9.11 s, the email pattern
-  slowest. Without the failing ending, the email and locale patterns answered in under a
-  millisecond. Each is replaced by plain string code (`indexOf`, `slice`, a loop trimming one
-  character), with a case that a crafted input finishes within one second (red on the old pattern,
-  9.5–26.5 s) and cases pinning what the old pattern returned. Reachability, per site:
+  **The six ReDoS findings, fixed by lane C's A105 (PR #793):** each flagged pattern was timed on
+  Node v26.7.0 on the owner's Mac, on the shape CodeQL's alert names plus an ending that makes the
+  match fail (a trailing `@` or line break, a final letter), at 10,000, 50,000 and 100,000 repeats.
+  Every one but `/^\/+/` grew with the square of the input: 29–92 ms, then 0.69–2.30 s, then
+  2.76–9.11 s, the email pattern slowest. Without the failing ending, the email and locale patterns
+  answered in under a millisecond. Each is replaced by plain string code (`indexOf`, `slice`, a
+  loop trimming one character), with a case that a crafted input finishes within one second (red on
+  the old pattern, 9.5–26.5 s) and cases pinning what the old pattern returned. Reachability, per
+  site:
   `isValidEmail` (`packages/identity/src/email.ts`) is reached from the unauthenticated
   `POST /management-api/password-reset`; `normalisePrefix` (`packages/stream/src/names.ts`) reads
   the bucket prefix a person types; the region strip in `packages/dashboard-kit/src/i18n.ts` runs in
@@ -3355,7 +3356,8 @@ approved.
   behaviour moved, in `packages/dashboard-kit` only: a locale with a line break after its dash now
   loses everything from its first dash, like any other; the old pattern removed only a dash no line
   break followed, and everything after it (`"es-\nES"` was left whole, `"es-\n-ES"` became
-  `"es-\n"`), so it fell back to English.
+  `"es-\n"`), so it fell back to English. The six alerts close when CodeQL analyses `main` with
+  #793 in it.
   **Dependabot malware alerts** were switched on by the owner on 2026-09-27 from the repository's
   Settings → Advanced Security page, by the owner's report, unconfirmed: GitHub's docs
   (`content/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/configure-malware-alerts.md`)
