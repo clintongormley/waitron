@@ -2,10 +2,12 @@
 // enqueued on its caller's transaction so it rolls back with it.
 //
 // A printer never blocks a fire (CLAUDE.md §5): `enqueuePrintJob` is an outbox insert that opens no
-// socket. Its one throw, `printer.not_found` for an inactive printer, cannot happen here: the mapping
-// read keeps active printers only, and no other write transaction can run between that read and the
-// enqueue, because one write transaction runs on the venue file at a time (`withTransaction`,
-// `packages/db/src/tenancy.ts`). Receipt: `assertExtraListForWrite` in `packages/catalogue/src/extras.ts`.
+// socket. Its one throw, `printer.not_found` for an inactive printer, cannot happen here: the
+// mapping read the enqueue paths use (`printerMappings` without `switchedOffToo`) keeps active
+// printers only, and no other write transaction can run between that read and the enqueue, because
+// one write transaction runs on the venue file at a time (`withTransaction`,
+// `packages/db/src/tenancy.ts`). Receipt: `assertExtraListForWrite` in
+// `packages/catalogue/src/extras.ts`.
 import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import {
@@ -1057,6 +1059,10 @@ export async function moveKitchenPrintLinks(
  * off `fromOrderId`, some or all of them. Both bills then show the problem, each until its own
  * Reprint prints, or until a Reprint of it would print nothing there ({@link readPrintProblems}).
  * The new links are written as {@link writeLinksAfter} writes them.
+ *
+ * A link records a job, a bill and a station, not which dishes the ticket carried, so the copy takes
+ * every such ticket at a moved dish's station, including one that carried only dishes that stayed
+ * behind: the destination can show a problem that is not its own until its Reprint prints.
  */
 export async function copyKitchenPrintLinks(
   tx: Transaction,

@@ -2277,12 +2277,12 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - _Fixed by lane B item B6a (2026-09-28, branch `feat/service-print-problem-clears`):_
       transfer, unjoin and split left a printing problem on the bill the ticket named, and the
       moved dishes' bill showed none. Transferring lines, splitting off a check, unjoining a table
-      and moving whole lines now copy the source bill's uncleared failed tickets onto the
-      destination bill for the stations whose dishes moved (`copyKitchenPrintLinks`,
-      `apps/server/src/kitchen-print.ts`), so the destination shows the problem and its Reprint
-      clears it; the source keeps its own until its Reprint would print nothing there. Still
-      open: Finish table drops the problem of a bill that transfers emptied (read, not run; not
-      re-checked by B6a).
+      and moving whole lines now copy the source bill's unprinted tickets that no printed reprint
+      has covered onto the destination bill for the stations whose dishes moved
+      (`copyKitchenPrintLinks`, `apps/server/src/kitchen-print.ts`), so the destination shows the
+      problem and its Reprint clears it; the source keeps its own until its Reprint would print
+      nothing there. Still open: Finish table drops the problem of a bill that transfers emptied
+      (read, not run; not re-checked by B6a).
     - After a merge, a reprint of the absorbed bill that was still waiting at the merge clears
       nothing when it prints, so its warning stays until the merged bill is reprinted once more:
       one queue order cannot let it clear the absorbed bill's older failures without also
@@ -2291,7 +2291,12 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       move: a copied ticket never counts as a reprint, so a source-bill reprint still waiting at
       the move clears nothing on the destination when it prints. Also, not tested as a rule: move
       a dish from bill A to bill B, reprint B so it prints, move the dish back, and A shows its
-      old failure again.)_
+      old failure again. And a link records a job, a bill and a station, not which dishes the
+      ticket carried, so the copy also takes a ticket at a moved dish's station that carried only
+      dishes that stayed behind: measured, Mesa 4's burger printed on Cocina, a later fish ticket
+      at Cocina failed, the burger moved to Mesa 5, and Mesa 5 then showed a Cocina problem until
+      its own Reprint printed. It errs toward showing a warning. Fixing it needs a record of which
+      dishes each ticket carried, a new table and so a migration; open for the owner.)_
     - Only dishes sold in Each are added together or split; a venue-made unit that counts pieces (a
       "portion") prints line by line, because nothing records a unit's kind (a unit field would
       need a migration).
@@ -2369,7 +2374,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       ticket still shows, and clears once the printer is switched on and a Reprint prints there;
       a printer detached from the station drops the problem. The venue's printer alert
       (`apps/server/src/alert-sources.ts`) is unchanged and reads switched-on printers only.
-      Dishes moved to another bill now carry their station's failed tickets to it
+      Dishes moved to another bill now carry their station's unprinted tickets to it
       (`copyKitchenPrintLinks`). The later cases for moves and for switched-off and detached
       printers each failed with their fix deleted.
   - **Task 7 landed as #789** (lane B item B7, 2026-09-28, main `3e4a75e2b`): the server keeps each
