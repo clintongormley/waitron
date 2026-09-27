@@ -466,25 +466,30 @@ card, and the table screen's round grid, now show `till-menu-browser`
 (`apps/till/src/widgets/menu-browser.ts`): a search over the whole published menu that lists each
 product once, then the device's home layout's shortcuts, then the menu's structure, where a section
 opens in place behind a breadcrumb and a section's button carries a folder icon and the word
-"Section". A product the menu switched off is left out; an unavailable one keeps its place, greyed;
-a section shows its customer name in the till's language, then the venue's default language, then
-its internal name. The grids use a card's own column count when it sets one, else 3 on a handheld
-and 6 on a till. Both offers routes now also carry each menu's structure and layouts from its live
-version, and they and `GET /api/menu-state` carry the layout the device's profile chose, resolved
-against that version (`resolveDeviceHomeLayouts`, `packages/catalogue/src/home-layouts.ts`): a
-deleted layout keeps showing until the menu is published again, and then the till warns once for
-that menu and shows the default. When a newly loaded version drops the section the till has open, it
-says "Not found" and shows home. `product-grid.ts` is gone; the tap logic is in
-`apps/till/src/widgets/product-pick.ts`. A device's token is now checked outside the venue's write
-lock (`tryReadDevice`, `apps/server/src/device-session.ts`, with `verifySecretAsync`). No migration.
-Left open, none blocking: search matches the staff name only, not a customer name or a section's
-name; a till form factor shown in a narrow window keeps 6 columns, so words break mid-word (a
-handheld's 3 read well); every `/api/menu-state` poll now checks the device's token (one scrypt, off
-the lock), a cost nobody has measured; from reading only, a device revoked while its token is being
-checked is refused from its next request, not that one; and no test switches one menu between two
-layouts and compares the structure, search and prices (the browser builds those from the offers
-alone, and a layout switch reloads none). What needs the owner, and what the closing sweep of the
-spec found, are the entries after this block.
+"Section". A product the menu switched off is left out; an unavailable one keeps its place, greyed
+and marked "Sold out"; a section shows its customer name in the till's language, then the venue's
+default language, then its internal name. The grids use up to a card's own column count when it sets
+one, else up to 3 on a handheld and 6 on a till, and fewer when the window is narrow, and a tile's
+name wraps between words, breaking inside one only when that word is wider than the tile. Both
+offers routes now also carry each menu's structure and layouts from its live version, and they and
+`GET /api/menu-state` carry the layout the device's profile chose, resolved against that version
+(`resolveDeviceHomeLayouts`, `packages/catalogue/src/home-layouts.ts`): a published layout deleted
+since the last publish keeps showing until the menu is published again, and then the till warns and
+shows the default; a chosen layout deleted before it was ever published is warned about at once. The
+till warns once for each removed layout of a menu while its page stays loaded (a removal it cannot
+name, only if nothing has been said about that menu yet). When a newly loaded version drops the
+section the till has open, it says "Not found" and shows home. `product-grid.ts` is gone; the tap
+logic is in `apps/till/src/widgets/product-pick.ts`. A device's token is now checked outside the
+venue's write lock (`tryReadDevice`, `apps/server/src/device-session.ts`, with `verifySecretAsync`).
+No migration. Left open, none blocking: search matches the staff name only, not a customer name or a
+section's name; every `/api/menu-state` read from an enrolled device now runs one scrypt, off the
+lock, and the till reads once per zone it holds at each poll (before this branch a read naming a
+zone, which the till's always does, skipped the device read), a cost nobody has measured; from
+reading only, a device revoked while its token is being checked is treated as unknown from its next
+request (refused wherever a route requires a device), not that one; and no test switches one menu
+between two layouts and compares the structure, search and prices (the browser builds those from the
+offers alone, and a layout switch reloads none). What needs the owner, and what the closing sweep of
+the spec found, are the entries after this block.
 **M7b2 landed (#702, 2026-09-26): a manager can clear a card payment a crash left running.** The
 Payments screen lists open orders locked by a card payment nothing is finishing any more, and "Check
 with the card provider" files the sale once if the card was charged, marks the payment failed and
@@ -521,12 +526,13 @@ be showing say the item was not found and reload the home screen. As built, the 
 only what it can find in the version it holds, and the till puts a newly read version on screen as
 soon as it has read it (pinned by "a device behind the live version (§9)" in
 `apps/till/src/till-app-menu-refresh.test.ts`). Before the till has read a newer version — up to one
-15-second poll, longer on the counter while a sale, hold or place is in flight — a tap acts on the
-version it holds: a product's line names that version, and the basket refresh (D9), run when the
-till reads the new version or when the server refuses the line `menu.version_changed`, lists the
-product as "no longer on this menu". A shortcut whose target a newly read version lacks simply
-disappears, with no notice. **Next action:** the owner confirms this meets §9, or asks for a notice
-when a shortcut disappears.
+15-second poll, longer on the counter while a sale, hold or place is in flight or the review dialog
+is open, and longer again when a reload fails — a tap acts on the version it holds: a product's line
+names that version, and the basket refresh (D9), run on the counter when the till reads the new
+version, and on the counter or a table when the server refuses the line `menu.version_changed`,
+lists the product as "no longer on this menu". A shortcut whose target a newly read version lacks
+simply disappears, with no notice. **Next action:** the owner confirms this meets §9, or asks for a
+notice when a shortcut disappears.
 
 **Other secret checks may still hold the venue's write lock while scrypt runs.** Menus Task 9 moved
 only the device-token check off the lock: `tryReadDevice` (`apps/server/src/device-session.ts`) now
@@ -535,37 +541,35 @@ reads the device row outside `withTransaction` and verifies with `verifySecretAs
 caller of `verifySecret` still derives the key with the synchronous `scryptSync`: the PIN and
 password checks (`packages/identity/src/verify-pin.ts`, `verify-password.ts`), break-glass
 (`apps/server/src/break-glass.ts`), join requests (`apps/server/src/join-requests.ts`) and the print
-agent's token (`packages/printing/src/agent.ts`). Nobody has checked whether any of them runs inside
-`withTransaction`, where every other write waits behind it. **Next action:** follow each caller to
-its routes; move any check that runs inside a transaction off the lock the way `tryReadDevice` was.
+agent's token (`packages/printing/src/agent.ts`). `scryptSync` stops the whole event loop while it
+runs, inside a transaction or not. Two of the callers also run inside `withTransaction`, so every
+other write waits behind them: the print agent's token (`requireAgent` in
+`apps/server/src/print-agent-session.ts` calls `authenticateAgent` inside it) and a join request's
+status (`readJoinStatus`, called inside it in `apps/server/src/device-api.ts`). The PIN check
+(`verifyPersonCredential`, `packages/identity/src/credential.ts`) and the manager login
+(`packages/identity/src/manager-login.ts`) take a transaction too; their routes were not followed.
+**Next action:** switch every caller to `verifySecretAsync`, and move the check out of
+`withTransaction` wherever it sits inside one, the print agent's and join status's first.
 
-**The till's removed-layout warning outlives a sign-out.** When a republish leaves out the home
-layout a device's profile chose, the till shows "The home layout "…" was removed — showing the
-default" until someone presses Dismiss. Signing out does not clear it (`#onLogout` leaves
-`removedLayouts` as it is, `apps/till/src/till-app.ts`), so the next operator to sign in on that
-device sees it. It is shown once per menu while the page stays loaded. **Next action:** clear it in
-`#onLogout`, if the owner agrees the warning belongs to the operator who was signed in.
+**The till's removed-layout warning outlives a sign-out.** When the home layout a device's profile
+chose is removed, the till warns (naming the layout if it had shown it, otherwise the menu) until
+someone presses Dismiss. Signing out does not clear it (`#onLogout` leaves `removedLayouts` as it
+is, `apps/till/src/till-app.ts`), so the next operator to sign in on that device sees it. Each
+removed layout of a menu is warned about once while the page stays loaded (a removal it cannot name,
+only if nothing has been said about that menu yet). **Next action:** clear it in `#onLogout`, if the
+owner agrees the warning belongs to the operator who was signed in.
 
 **A section with nothing to order in it disappears from the till, and the tiles after it move.** The
 menu browser leaves a section out, from the structure and as a shortcut, when no product beneath it
-is among the offers it is given (`indexMenu`, `apps/till/src/widgets/menu-browser.ts`). That
-happens when every product in it is switched off on the menu (Task 9's choice, pinned by the D5 case
-in `apps/till/src/widgets/menu-browser.test.ts`), and, from reading only, while a diet filter is on
-and every product in it fails the filter, because the card grid hands the browser only the products
-the filter keeps (`apps/till/src/widgets/card-grid.ts`) — as a dish the filter rejects already
-disappears. A section whose products are all sold out stays, greyed. Spec §5 wants buttons in
-predictable positions during service. **Next action:** the owner decides whether either kind of
-empty section should keep its place, for example greyed.
-
-**Two of the till's accessibility cases never get past the lock screen.** In
-`apps/till/src/till-app.a11y.test.ts`, "has no violations on the composed counter screen after
-login" and the "Mode I (Place control + station queue together)" case stub `getTill` with no
-`canvas`, and the till enters its shell only when it has one (`#inShell`,
-`apps/till/src/till-app.ts`), so in both themes they scan the lock screen. Menus Task 9 found it: a
-temporary assertion that the counter screen was present failed in both themes. `git blame` dates the
-canvas-less stubs to 2026-08-07 and the shell's canvas check to 2026-09-04, both before that branch,
-and the branch changes neither line; the cases were not re-run on `main`. **Next action:** give both
-stubs a canvas and assert the counter screen is present before the scan.
+is among the offers it is given (`indexMenu`, `apps/till/src/widgets/menu-browser.ts`). That happens
+when every product in it is switched off on the menu (Task 9's choice, pinned by the D5 case in
+`apps/till/src/widgets/menu-browser.test.ts`), and, from reading only, while a diet filter is on and
+every product in it fails the filter, because the card grid hands the browser only the products the
+filter keeps (`apps/till/src/widgets/card-grid.ts`) — as a dish the filter rejects already
+disappears. A section whose products are all sold out keeps its place, and its tile is not greyed;
+the products inside it are. Spec §5 wants buttons in predictable positions during service. **Next
+action:** the owner decides whether either kind of empty section should keep its place, for example
+greyed.
 
 **A joined tab's kitchen slips can name a table its ticket did not print.** Correction and MOVED
 slips name a joined tab's lowest-id table (`readOrderHeader`, `apps/server/src/kitchen-print.ts`),
@@ -4014,15 +4018,18 @@ its screen — OPEN (found 2026-09-25, review of PR #641).**
   All four refresh on both paths, after a success and after a failure. Retrieve differs in that it
   writes nothing, so an "X succeeded, but…" message does not fit it.
 - The two older cases in `apps/till/src/till-app.a11y.test.ts` titled "…on the composed counter
-  screen…" (about lines 100 and 114) may not render the screen their titles name. The shared fake
-  API there has no `getContentLanguages`, which boot has called since #339, and its `getTill`
-  returns no `canvas`, so the till would show `boot.error` or the lock screen. Found by reading; not
-  run.
+  screen…" (about lines 128 and 142) do not render the screen their titles name. Their `getTill`
+  returns no `canvas`, and the till enters its shell only when it has one (`#inShell`,
+  `apps/till/src/till-app.ts`), so in both themes they scan the lock screen: menus Task 9 (branch
+  `feat/menus-till-home`) found it with a temporary assertion that the counter screen was present,
+  which failed in both themes; not re-run on `main`. `git blame` dates the canvas-less stubs to
+  2026-08-07 and the shell's canvas check to 2026-09-04. That branch added the missing
+  `getContentLanguages` to the shared fake API.
 
 **Next action:** decide whether discard, advance and mark-collected go through `#refreshAfterWrite`
 with their own "X succeeded, but…" strings, and what login and retrieve show when their refresh
-fails. Run the two a11y cases with an assertion that `till-counter-screen` exists; if it is
-absent, move the canvas and `getContentLanguages` into the shared fake.
+fails. Give both a11y cases' `getTill` a canvas and assert `till-counter-screen` exists before each
+scan.
 
 **The units screen puts a missing abbreviation's refusal beside the name — OPEN (found
 2026-09-23, dashboard coverage, PR #538).** `apps/dashboard/src/screens/units-screen.ts` (about

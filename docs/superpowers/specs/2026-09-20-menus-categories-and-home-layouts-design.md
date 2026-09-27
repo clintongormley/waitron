@@ -13,13 +13,13 @@ and §11.4 say what holds; §11.4's is the full one.
 **2026-09-27, later (A68):** the owner narrowed that decision the same day. The published menu
 freezes each item's VAT CLASS only; a line records its class, and the PERCENTAGE comes from a dated
 table in code, looked up for the day the invoice is issued. §11.4's A68 note is the full one.
-**2026-09-27:** the [plan](../plans/2026-09-25-menus-categories-home-layouts.md) is built. Tasks
-1–6 landed as #651, #654, #659, #664, #670 and #677, Task 7a as #683, 7b as #696, 7c as #710, 7 as
-#719 and 8 as #722, with the follow-ups #680 (the Prices tab's variants and columns), #702 (M7b2),
-#705 (M6c), #713 (M7b3) and #720 (M7v); Task 9, the till's home page, is branch
-`feat/menus-till-home`, whose PR number is added when it lands. What the closing sweep found missing
-against §7 and §8, and the choices it leaves for the owner, are open entries in
-[the backlog](../../backlog.md), beside the plan's Track A entry.
+**2026-09-27:** the [plan](../plans/2026-09-25-menus-categories-home-layouts.md) is built. Tasks 1–6
+landed as #651, #654, #659, #664, #670 and #677, Task 7a as #683, 7b as #696, 7c as #710, 7 as #719
+and 8 as #722, with the follow-ups #680 (the Prices tab's variants and columns), #702 (M7b2), #705
+(M6c), #713 (M7b3) and #720 (M7v); Task 9, the till's home page, is branch `feat/menus-till-home`,
+whose PR number is added when it lands. What the closing sweep found missing against §2 and §9, and
+the choices it leaves for the owner, are open entries in [the backlog](../../backlog.md), beside the
+plan's Track A entry.
 
 **Related decisions, 2026-09-20:** the [service workflow spec](2026-09-20-service-ordering-and-billing-design.md)
 adds a public/staff-only/not sold separately setting for standalone ordering. Menu membership
