@@ -2429,9 +2429,9 @@ ongoing overhaul listed at the top of Track A.
 - **One original per invoice, structurally.** `POST /api/sales/:id/receipt` has no limit and no
   idempotency; two calls produced three unmarked originals, and art. 14.1 says exactly one. Cheapest
   containment: idempotent per sale, invoice number on the slip.
-- **A per-tender payment slip** when one sale is settled by several cards — needs a multi-tender pay
-  path (`settleSale` takes `tenders[]`; `payWorkingOrder` and `readTenderBlock` assume one). Art. 11.1
-  bounds how long an invoice may sit open.
+- **A payment slip per card: done by bill payments.** Printing the payment slip of a bill paid by
+  several cards prints one slip per card payment (`apps/server/src/payment-slip-print.ts`). The
+  one-payment routes (`payWorkingOrder`) take a single tender.
 - **Bilingual receipts** — `invoice_locales` is configured and snapshotted but rendered by neither
   document.
 - **Tip-collection UI** — the only surface that COLLECTS a tip is the integrated-Stripe idle screen;

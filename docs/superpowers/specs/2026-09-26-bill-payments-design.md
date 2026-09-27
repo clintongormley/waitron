@@ -479,6 +479,11 @@ invoice is issued by the second capture's P3, never by the first).
   `pending`.
 - **Offline acceptance** (`accepted_offline`) counts as received, the rule today's P3 follows (see
   §5.4 for when that can happen).
+  _(2026-09-27, as built, changing the two bullets above: the bill route refuses `allowOffline`
+  (`apps/server/src/bill-payments-api.ts`, per §11.9), so a reader bill payment is never accepted
+  offline. At P3 only `captured` marks it `received`; any answer that does not establish that no
+  money moved, an unexpected `accepted_offline` included, leaves it `pending` for the loop or a
+  manager to settle from the provider's row.)_
 
 ### 5.4 After a crash, and M7b2's manual clear
 
