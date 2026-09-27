@@ -76,6 +76,28 @@ async function seedCanvas(session: string, name: string): Promise<string> {
   return id;
 }
 
+/**
+ * A `till` profile's device must bind a register (the binding-rule trigger), hence `tills`.
+ * Through drizzle, for the `$defaultFn` reason `seedSession` states.
+ */
+async function seedBoundDevice(profileId: string): Promise<void> {
+  const [location] = await suite.db
+    .insert(locations)
+    .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hostelería" })
+    .returning({ id: locations.id });
+  const [till] = await suite.db
+    .insert(tills)
+    .values({ locationId: location!.id, name: "Register 1" })
+    .returning({ id: tills.id });
+  await suite.db.insert(devices).values({
+    locationId: location!.id,
+    tillId: till!.id,
+    label: "Bound device",
+    tokenHash: "scrypt$00$00",
+    deviceProfileId: profileId,
+  });
+}
+
 describe("device-profile store against a real migrated database", () => {
   let managerSession: string;
 
@@ -305,23 +327,7 @@ describe("device-profile store against a real migrated database", () => {
         capabilities: [],
       }),
     );
-    // A `till` profile's device must bind a register (the binding-rule trigger), hence `tills`.
-    // Through drizzle, for the `$defaultFn` reason `seedSession` states.
-    const [location] = await suite.db
-      .insert(locations)
-      .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hostelería" })
-      .returning({ id: locations.id });
-    const [till] = await suite.db
-      .insert(tills)
-      .values({ locationId: location!.id, name: "Register 1" })
-      .returning({ id: tills.id });
-    await suite.db.insert(devices).values({
-      locationId: location!.id,
-      tillId: till!.id,
-      label: "Bound device",
-      tokenHash: "scrypt$00$00",
-      deviceProfileId: created.id,
-    });
+    await seedBoundDevice(created.id);
     const error = await errorOf(() =>
       inTx((tx) => deleteDeviceProfile(tx, { managementSessionId: session, id: created.id })),
     );
@@ -343,21 +349,7 @@ describe("device-profile store against a real migrated database", () => {
         capabilities: [],
       }),
     );
-    const [location] = await suite.db
-      .insert(locations)
-      .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hostelería" })
-      .returning({ id: locations.id });
-    const [till] = await suite.db
-      .insert(tills)
-      .values({ locationId: location!.id, name: "Register 1" })
-      .returning({ id: tills.id });
-    await suite.db.insert(devices).values({
-      locationId: location!.id,
-      tillId: till!.id,
-      label: "Bound device",
-      tokenHash: "scrypt$00$00",
-      deviceProfileId: created.id,
-    });
+    await seedBoundDevice(created.id);
     const code = await codeOf(() =>
       inTx((tx) =>
         updateDeviceProfile(tx, {

@@ -472,6 +472,12 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   itself when refused, so today they confine nothing. **A TEST still catches such a
   refusal OUTSIDE the transaction**, around the whole `withTransaction`, and no guard enforces that.
   Receipt: [conventions-data.md](docs/developers/conventions-data.md).
+- **A refusal under result code 1811 is identified by its words, never by `isRefusal` alone.** An
+  `ON DELETE RESTRICT` key and every trigger's `RAISE(ABORT)` share the code; `restrictRefused` and
+  `triggerRaised` (`packages/db/src/constraint-target.ts`) read the message too. Cost: the two
+  layouts stores asked for the code alone, so a second refusing trigger on either path would have
+  been reported as `canvas.in_use` or `device_profile.in_use`. Nothing guards it. See
+  [conventions-data.md](docs/developers/conventions-data.md).
 - **One process owns a venue folder at a time.** `openVenueStore` holds `venue.lock` (a SQLite
   `begin immediate`, released when the process dies — measured with `SIGKILL`) and refuses a second
   PROCESS at once with `VenueInUseError`, which `@waitron/db`'s `openVenueDatabase` and

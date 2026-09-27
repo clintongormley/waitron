@@ -8,14 +8,13 @@ import {
   CORE_MIGRATIONS,
   captureError,
   constraintTarget,
-  isRefusal,
   isUniqueViolation,
   incidents,
   invoiceSeries,
-  RESTRICT_VIOLATION,
   saleLines,
   saleSubstitutions,
   sales,
+  triggerRaised,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -258,7 +257,7 @@ describe("recordSubstitution — error propagation", () => {
       );
       expect(error).not.toBeInstanceOf(AppError);
       expect(isUniqueViolation(error)).toBe(false);
-      expect(isRefusal(error, RESTRICT_VIOLATION)).toBe(true);
+      expect(triggerRaised(error, "refused")).toBe(true);
     } finally {
       await suite.db.execute(sql`drop trigger tmp_refuse_everything`);
     }

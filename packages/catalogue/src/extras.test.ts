@@ -8,7 +8,7 @@ import {
   isRefusal,
   newId,
   refusalOn,
-  RESTRICT_VIOLATION,
+  restrictRefused,
   UNIQUE_VIOLATION,
   withTransaction,
 } from "@waitron/db";
@@ -671,10 +671,7 @@ describe("what the database refuses under an extras list", () => {
       Promise.resolve(fx.db.execute(sql`delete from products where id = ${breads.rye}`)),
     );
 
-    // `RESTRICT_VIOLATION`, not `FOREIGN_KEY_VIOLATION`: SQLite reports a RESTRICT refusal under
-    // the TRIGGER reason (`packages/db/src/sql-state.ts`). Its message names no key, so the class is
-    // all that separates a RESTRICT key from a NO ACTION one.
-    expect(isRefusal(error, RESTRICT_VIOLATION)).toBe(true);
+    expect(restrictRefused(error)).toBe(true);
   });
 
   it("refuses an item priced below zero", async () => {

@@ -26,10 +26,9 @@ export const FOREIGN_KEY_VIOLATION = [787] as const;
 /**
  * A delete refused by an `ON DELETE RESTRICT` foreign key (1811 — SQLite implements RESTRICT with
  * an internal trigger, so it arrives under the TRIGGER reason rather than the
- * FOREIGN KEY one). NOT {@link FOREIGN_KEY_VIOLATION}, which is the other direction. The same
- * number as {@link TRIGGER_ABORT}: `./constraint-target.ts`'s `restrictRefused` reads the words too.
+ * FOREIGN KEY one). NOT {@link FOREIGN_KEY_VIOLATION}, which is the other direction.
  */
-export const RESTRICT_VIOLATION = [1811] as const;
+export const RESTRICT_VIOLATION: RefusalClass = [1811] as const;
 
 /**
  * A trigger's own `RAISE(ABORT, 'text')` (1811) — how this schema's hand-written guards refuse a
@@ -38,8 +37,8 @@ export const RESTRICT_VIOLATION = [1811] as const;
  * **The same number as {@link RESTRICT_VIOLATION}**, so the result code cannot tell a deliberate
  * raise from a restricted delete. Only the MESSAGE separates them: a raise arrives with its own
  * text verbatim, a RESTRICT refusal with `FOREIGN KEY constraint failed` (both driven in
- * `constraint-target.sqlite.test.ts`). That is why the predicate reading this class
- * (`./constraint-target.ts`'s `triggerRaised`) asks for the text as well.
+ * `constraint-target.sqlite.test.ts`). That is why `./constraint-target.ts`'s `triggerRaised` and
+ * `restrictRefused` ask for the text as well; `isRefusal` reads the number alone.
  */
 export const TRIGGER_ABORT: RefusalClass = [1811] as const;
 

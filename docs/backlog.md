@@ -4157,8 +4157,7 @@ F1's review wave).** SQLite gives a foreign key's `ON DELETE RESTRICT` and every
 `RAISE(ABORT)` the same result code, 1811. `restrictRefused` (`packages/db/src/constraint-target.ts`)
 now matches the restrict direction by the engine's words, as `triggerRaised` does for a trigger, and
 `packages/layouts/src/canvas-store.ts` and `device-profile-store.ts` use it; the device-profile store
-matches `device_profile_form_factor_locked` by its own words. A throwaway trigger on either path is
-no longer reported as `canvas.in_use` or `device_profile.in_use`.
+matches `device_profile_form_factor_locked` by its own words.
 
 **`VenueMigrationOptions.appendOnlyTables` is optional while `MigrationSet.appendOnlyTables` is
 required — OPEN (found 2026-09-23, task F1's review wave).** `applyMigrations` reads it as `?? []`,

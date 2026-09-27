@@ -197,8 +197,8 @@ export function indexViolated(error: unknown, index: string): boolean {
 export function checkFailed(error: unknown, constraint: string): boolean {
   const expected = `CHECK constraint failed: ${constraint}`;
   // Widened from the literal tuple `CHECK_VIOLATION` declares, so `includes` takes any number.
-  // `TRIGGER_ABORT` carries the same annotation at its declaration; this one is local because
-  // `CHECK_VIOLATION[0]` is read as a literal elsewhere in the tree.
+  // `TRIGGER_ABORT` and `RESTRICT_VIOLATION` carry the same annotation at their declarations; this
+  // one is local because `CHECK_VIOLATION[0]` is read as a literal elsewhere in the tree.
   const refusal: RefusalClass = CHECK_VIOLATION;
   for (const layer of causeLayers(error)) {
     if (typeof layer.errcode !== "number" || !refusal.includes(layer.errcode)) continue;
@@ -233,15 +233,15 @@ export function triggerRaised(error: unknown, raised: string): boolean {
  * Did an `ON DELETE RESTRICT` foreign key refuse this delete?
  *
  * The question `isRefusal(error, RESTRICT_VIOLATION)` cannot answer alone: every trigger's
- * `RAISE(ABORT)` arrives under the same result code. The engine's words separate them. It names no
- * key, so this cannot tell WHICH key refused. Matched on ONE layer of the cause chain, for the
- * reason {@link refusalOn} states.
+ * `RAISE(ABORT)` arrives under the same result code. The engine's words separate them, unless a
+ * trigger raises those exact words. It names no key, so this cannot tell WHICH key refused.
+ * Matched on ONE layer of the cause chain, for the reason {@link refusalOn} states.
  */
 export function restrictRefused(error: unknown): boolean {
-  const refusal: RefusalClass = RESTRICT_VIOLATION;
+  const expected = "FOREIGN KEY constraint failed";
   for (const layer of causeLayers(error)) {
-    if (typeof layer.errcode !== "number" || !refusal.includes(layer.errcode)) continue;
-    if (layer.message === "FOREIGN KEY constraint failed") return true;
+    if (typeof layer.errcode !== "number" || !RESTRICT_VIOLATION.includes(layer.errcode)) continue;
+    if (layer.message === expected) return true;
   }
   return false;
 }
