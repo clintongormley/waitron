@@ -622,9 +622,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   puts a `CREATE TRIGGER … ON` one of them, or names one inside a trigger's body — and its
   descriptor's `requires` must name it.** `packages/media/drizzle/0001_image_references.sql` has
   triggers on tables core and catalogue create, and others whose bodies read them. Guard:
-  `scripts/module-graph-honesty.test.ts`, weaker than its name — it reads SQL as TEXT and never reads
-  a trigger's BODY, so a table named only between `BEGIN` and `END`, read or written, is an edge
-  nothing checks. The engine will not catch it either: measured 2026-09-23 on `node:sqlite` (Node
+  `scripts/module-graph-honesty.test.ts`, weaker than its name — it reads SQL as TEXT and recognizes
+  `FROM`, `JOIN`, `INSERT INTO`, `UPDATE` and `DELETE FROM` in a trigger body, not arbitrary SQL
+  syntax or top-level migration writes. The engine will not catch a missing body target either: measured 2026-09-23 on `node:sqlite` (Node
   v26.7.0), a trigger whose body names a missing table is created without complaint and fails only
   when it fires, with `no such table`. Cost: the first `requires` graph was derived from `REFERENCES`
   alone and missed two edges made by triggers ON another module's tables, caught by hand in review. See

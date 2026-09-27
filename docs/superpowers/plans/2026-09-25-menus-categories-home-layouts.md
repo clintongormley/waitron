@@ -1044,6 +1044,7 @@ that plan left them. There are no menu changes yet; menus still use the old per-
     venue through `applyMigrations`.
   - The media migration's triggers go beside `0001`'s. Media already `requires` catalogue, and
     `scripts/module-graph-honesty.test.ts` cannot see a trigger's body (CLAUDE.md §3).
+    **2026-09-27 update (A90):** the guard now checks five table reference shapes inside trigger bodies; see `CLAUDE.md` §3 for its remaining limits.
 
 - [ ] **Step 4: Implement `section-graph.ts`, then `sections.ts`.**
   - Load the graph ONCE per operation and walk it in JavaScript. It is small, it keeps the SQL
@@ -1530,6 +1531,7 @@ sale-path change in one reviewable task.
     names in `image-references.test.ts`, with a refusing case and an accepting control for each.
   - `scripts/module-graph-honesty.test.ts` cannot see a trigger's body (CLAUDE.md §3); media
     already `requires` catalogue.
+    **2026-09-27 update (A90):** the guard now checks five table reference shapes inside trigger bodies; see `CLAUDE.md` §3 for its remaining limits.
 
 - [ ] **Step 3: Run to verify they pass. LOOK at the list and Preview in both themes and at 390px.
   Commit.**

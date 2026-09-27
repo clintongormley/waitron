@@ -4353,15 +4353,19 @@ approved.
   if there is none, say so in the comment and stop calling the case a guard test.
 - *Small:* `test-light` reports success without naming what it ran; `packages/ui` can hang the `test-ui` shard, cause unconfirmed; the classifier's `root=`
   output line is read by no consumer.
-- **A table named inside a trigger's BODY is a cross-module edge no guard sees — OPEN (2026-09-23,
-  from #496).** `scripts/module-graph-honesty.test.ts` reads each `CREATE TRIGGER … ON <table>` but
-  never the statements between `BEGIN` and `END`, and the engine does not catch a missing target
+- **Detect cross-module edges inside trigger bodies — DONE (A90).**
+  `scripts/module-graph-honesty.test.ts` now checks `FROM`, `JOIN`, `INSERT INTO`, `UPDATE` and
+  `DELETE FROM` inside trigger bodies. The engine does not catch a missing target
   either: on `node:sqlite` (Node v26.7.0) a trigger whose body names a table that does not exist is
-  created without complaint and fails only when it first fires. Today's only instance is declared
-  (media's triggers on `media_images` read core's `products` and catalogue's `category_details`, and
-  media's `requires` names both), so nothing is broken. **Next action:** extend the guard to collect
-  table names from trigger bodies (`FROM`, `JOIN`, `INSERT INTO`, `UPDATE`, `DELETE FROM`), with a
-  negative control per statement shape, and prove it by deleting `catalogue` from media's `requires`.
+  created without complaint and fails only when it first fires. The guard pins media's
+  `menu_publications` body edge and has a negative control for each statement shape. It remains a
+  text scanner, not a SQL parser; its syntax limits are stated in `CLAUDE.md`.
+- **A top-level migration write can name another module's table without a declared dependency — OPEN (A90 review).**
+  `scripts/module-graph-honesty.test.ts` scans foreign keys, trigger targets and five table
+  reference shapes inside trigger bodies; its negative controls leave top-level `INSERT INTO`,
+  `UPDATE` and `DELETE FROM` outside that scan. The A90 review found no cross-module top-level
+  write in current migrations. **Next action:** add a red-first cross-module migration fixture and
+  detect top-level write targets without treating a trigger's header or comments as writes.
 - **The topic files still carry PostgreSQL history — OPEN, owner's call (2026-09-23, from #496).**
   #496 took it out of `CLAUDE.md` and fixed every topic-file passage that contradicted the new
   `CLAUDE.md`, but did not sweep `docs/developers/conventions-data.md` or `testing-guide.md`, which

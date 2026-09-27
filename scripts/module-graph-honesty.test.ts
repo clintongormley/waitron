@@ -6,9 +6,8 @@ import { packageDirOf } from "../packages/module/src/module.js";
 
 /**
  * Every module descriptor's `requires` must NAME every cross-module dependency its migrations
- * create in SQL. A module depends on another when its `drizzle/*.sql` either FK-`REFERENCES` a
- * table the other module owns or installs a `CREATE TRIGGER … ON <table>` against one — both edges
- * force a migration-order dependency, because the referenced or triggered table must exist first.
+ * create in SQL. A module depends on another when its `drizzle/*.sql` names a table the other
+ * module owns in an FK, a trigger's ON clause, or a trigger's body.
  *
  * It reads SQL as TEXT, never executing it: it maps every `CREATE TABLE <name>` to its owning
  * module, resolves each edge's target table to its owner, drops same-module targets, and asserts
@@ -21,11 +20,6 @@ import { packageDirOf } from "../packages/module/src/module.js";
  * - `[BRACKET]` QUOTING IS NOT HANDLED, and SQLite accepts it. A hand-written migration spelling an
  *   identifier that way would have its table read as owned by nobody and its FK edge dropped —
  *   silently, because a dropped edge looks exactly like an honest descriptor.
- * - A SQLITE TRIGGER'S BODY IS NOT READ. The detector for PostgreSQL's `EXECUTE FUNCTION <fn>` was
- *   deleted as dead syntax (SQLite has no functions). A SQLite trigger carries statements between
- *   `BEGIN` and `END`, and an `INSERT INTO` or a `SELECT … FROM` naming another module's table in
- *   there is a real cross-module edge that NEITHER remaining detector sees — media's triggers on
- *   `media_images` read core's and catalogue's tables that way. Nothing covers that today.
  * - Append-only enforcement is runtime code (`packages/store/src/append-only.ts`), not SQL, so the
  *   scan cannot see it. The `CREATE CONSTRAINT TRIGGER` spelling the trigger detector also accepts
  *   is PostgreSQL-only.
@@ -38,6 +32,8 @@ import { packageDirOf } from "../packages/module/src/module.js";
  * - The stripping is single-pass and naive: `--` is treated as a comment start even inside a
  *   string literal (line comments are blanked before strings), so a migration mixing the two on one
  *   line could confuse it.
+ * - Body matching counts `CASE`/`END` tokens but does not parse SQL. A table reached through syntax
+ *   outside the five named statement shapes, or from top-level migration DML, is not detected.
  */
 
 const REPO_ROOT = join(import.meta.dirname, "..");
@@ -55,6 +51,9 @@ const REFERENCES = /\breferences\s+["`]?(?:public["`]?\.)?["`]?(\w+)["`]?/gi;
  * because no keyword between it and the trigger name is the word "on". */
 const CREATE_TRIGGER =
   /\bcreate\s+(?:constraint\s+)?trigger\s+\S+\s+.*?\bon\s+["`]?(?:public["`]?\.)?["`]?(\w+)["`]?/gis;
+const TRIGGER_START = /\bcreate\s+(?:constraint\s+)?trigger\s+\S+\s+.*?\bbegin\b/gis;
+const BODY_TABLE =
+  /\b(from|join|insert\s+into|update|delete\s+from)\s+["`]?(?:public["`]?\.)?["`]?(\w+)["`]?/gi;
 
 const EDGE_KINDS = [
   ["FK reference", REFERENCES],
@@ -70,6 +69,24 @@ function stripSql(source: string): string {
     .map((line) => line.replace(/--.*$/, ""))
     .join("\n")
     .replace(/'(?:[^']|'')*'/g, (literal) => literal.replace(/[^\n]/g, " "));
+}
+
+/** A CASE's END may end a statement; only an END outside CASE closes the trigger body. */
+function* triggerBodies(sql: string): Iterable<string> {
+  for (const trigger of sql.matchAll(TRIGGER_START)) {
+    const remaining = sql.slice((trigger.index ?? 0) + trigger[0].length);
+    let caseDepth = 0;
+    for (const token of remaining.matchAll(/\bcase\b|\bend\b/gi)) {
+      if (token[0].toLowerCase() === "case") {
+        caseDepth++;
+      } else if (caseDepth > 0) {
+        caseDepth--;
+      } else if (/^\s*;/.test(remaining.slice((token.index ?? 0) + token[0].length))) {
+        yield remaining.slice(0, token.index);
+        break;
+      }
+    }
+  }
 }
 
 /** Package DIR → module NAME, through `@waitron/module`'s `packageDirOf`; the name comes off the
@@ -124,9 +141,7 @@ interface Edge {
   target: string;
 }
 
-/** The cross-module edges a single SQL file's DDL creates for `moduleName`: every FK reference and
- * trigger whose target table is owned by a DIFFERENT in-scope module. Same-module targets and
- * targets owned by no in-scope package are dropped. */
+/** The cross-module edges a SQL file's DDL creates for `moduleName`. */
 function edgeDetails(rawSql: string, moduleName: string, owner: Map<string, string>): Edge[] {
   const sql = stripSql(rawSql);
   const edges: Edge[] = [];
@@ -136,6 +151,26 @@ function edgeDetails(rawSql: string, moduleName: string, owner: Map<string, stri
       if (target === undefined) continue;
       const dep = owner.get(target);
       if (dep !== undefined && dep !== moduleName) edges.push({ dep, kind, target });
+    }
+  }
+  for (const body of triggerBodies(sql)) {
+    for (const match of body.matchAll(BODY_TABLE)) {
+      const target = match[2]?.toLowerCase();
+      if (target === undefined) continue;
+      // FROM/JOIN can name a table-valued function, which is not a migration dependency.
+      if (
+        /^(?:from|join)$/i.test(match[1] ?? "") &&
+        body
+          .slice((match.index ?? 0) + match[0].length)
+          .trimStart()
+          .startsWith("(")
+      ) {
+        continue;
+      }
+      const dep = owner.get(target);
+      if (dep !== undefined && dep !== moduleName) {
+        edges.push({ dep, kind: `trigger body ${match[1]?.toUpperCase()}`, target });
+      }
     }
   }
   return edges;
@@ -191,6 +226,45 @@ describe("the detector itself", () => {
   it("flags a cross-module trigger in the SQLite spelling", () => {
     const sql =
       "CREATE TRIGGER `gadgets_append_only` BEFORE UPDATE ON `gadgets`\nBEGIN\n  SELECT RAISE(ABORT, 'append-only');\nEND;";
+    expect([...edgesFor(sql, "alpha", OWNER)]).toEqual(["beta"]);
+  });
+
+  it.each([
+    ["FROM", "SELECT 1 FROM `gadgets` WHERE id = new.id"],
+    ["JOIN", "SELECT 1 FROM `widgets` JOIN `gadgets` ON gadgets.id = widgets.id"],
+    ["INSERT INTO", "INSERT INTO `gadgets` (id) VALUES (new.id)"],
+    ["UPDATE", "UPDATE `gadgets` SET id = new.id"],
+    ["DELETE FROM", "DELETE FROM `gadgets` WHERE id = old.id"],
+  ])("flags a cross-module %s inside a trigger body", (_kind, statement) => {
+    const sql = `CREATE TRIGGER t AFTER INSERT ON widgets BEGIN ${statement}; END;`;
+    expect([...edgesFor(sql, "alpha", OWNER)]).toEqual(["beta"]);
+  });
+
+  it.each([
+    ["FROM", "SELECT 1 FROM `gadgets`"],
+    ["JOIN", "SELECT 1 FROM widgets JOIN `gadgets` ON true"],
+    ["INSERT INTO", "INSERT INTO `gadgets` (id) VALUES (1)"],
+    ["UPDATE", "UPDATE `gadgets` SET id = 1"],
+    ["DELETE FROM", "DELETE FROM `gadgets`"],
+  ])("ignores %s outside a trigger body", (_kind, statement) => {
+    expect([...edgesFor(`${statement};`, "alpha", OWNER)]).toEqual([]);
+  });
+
+  it("ignores a commented body reference and a table-valued function", () => {
+    const sql = `CREATE TRIGGER t AFTER INSERT ON widgets BEGIN
+      -- SELECT 1 FROM gadgets;
+      SELECT 1 FROM json_each(new.payload);
+    END;`;
+    const owner = new Map([...OWNER, ["json_each", "beta"]]);
+    expect([...edgesFor(sql, "alpha", owner)]).toEqual([]);
+  });
+
+  it("finds a body table after a CASE expression ends its statement", () => {
+    const sql = `CREATE TRIGGER t AFTER INSERT ON widgets
+      BEGIN
+        SELECT CASE WHEN new.x IS NULL THEN raise(abort, 'x') END;
+        INSERT INTO gadgets (id) VALUES (new.id);
+      END;`;
     expect([...edgesFor(sql, "alpha", OWNER)]).toEqual(["beta"]);
   });
 
@@ -278,6 +352,9 @@ describe("the tree's module graph is honest", () => {
     expect(modules.length).toBeGreaterThanOrEqual(10);
     expect(foundEdgeDetails.has("workforce→identity via FK reference on persons")).toBe(true);
     expect(foundEdgeDetails.has("media→core via trigger on products")).toBe(true);
+    expect(foundEdgeDetails.has("media→catalogue via trigger body JOIN on menu_publications")).toBe(
+      true,
+    );
   });
 
   it("every FK/trigger edge in the SQL is named in the depending descriptor's requires", () => {

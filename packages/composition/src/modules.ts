@@ -82,8 +82,7 @@ import {
  * Each `migrations` object carries the exact `{ name, table, from }` from
  * `packages/migrations/migrations.manifest.json`; `composition.test.ts` pins the two byte-for-byte
  * while both exist. `requires` must name every set whose table this set's SQL `REFERENCES`, puts a
- * trigger `ON`, or names inside a trigger body; the root `module-graph-honesty` guard checks the
- * first two only — it never reads a trigger body. Two modules fill the `fiscal` slot —
+ * trigger `ON`, or names inside a trigger body. Two modules fill the `fiscal` slot —
  * `fiscal-verifactu` and the no-regime `fiscal-none` — so exactly one is enabled per deployment
  * (`fiscalSlot`); provisioning selects it from the venue's territory.
  */
