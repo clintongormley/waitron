@@ -32,6 +32,8 @@ export interface PriceableProduct {
   /** GROSS (VAT-inclusive): per selected unit. */
   unitPrice: string;
   vatClass: VatClass;
+  /** The rate a published menu version froze, e.g. "10.00"; it wins over `vatClass`'s. */
+  vatRate?: string;
   /** Snapshotted analytics label, copied onto the sale line. */
   category: string | null;
   /** The variant's staff-facing name; `null` when no variant is selected. */
@@ -91,6 +93,10 @@ const RATES: Record<VatClass, string> = {
 
 export function resolveVatRate(vatClass: VatClass): Decimal {
   return decimal(RATES[vatClass]);
+}
+
+function rateOf(item: { vatClass: VatClass; vatRate?: string }): Decimal {
+  return item.vatRate === undefined ? resolveVatRate(item.vatClass) : decimal(item.vatRate);
 }
 
 // base = gross ÷ (1 + rate/100) = gross × 100 ÷ (100 + rate). One rounded division.
@@ -188,7 +194,7 @@ function priceRows(rows: readonly PricingRow[]): PricedLines {
   return { lines, grossLineTotals, grossUnitPrices, total, vatBreakdown };
 }
 
-/** Prices a live basket: gross unit from the product's `unitPrice`, rate resolved from its `vatClass`. */
+/** Prices a live basket: gross unit from the product's `unitPrice`, rate its `vatRate` or its `vatClass`'s. */
 export function priceBasket(items: readonly BasketItem[]): PricedLines {
   return priceRows(
     items.map((item) => {
@@ -196,7 +202,7 @@ export function priceBasket(items: readonly BasketItem[]): PricedLines {
       return {
         grossUnit: decimal(item.product.unitPrice),
         quantity: item.quantity,
-        rate: resolveVatRate(item.product.vatClass),
+        rate: rateOf(item.product),
         name: item.product.name,
         descriptions: item.product.descriptions,
         category: item.product.category,
@@ -245,6 +251,9 @@ export interface SelectedOption {
   priceDelta: string;
   /** The option's own VAT class when it OVERRIDES the dish's, or `null` to INHERIT the dish's rate. */
   vatClass: VatClass | null;
+  /** The rate a published menu version froze for the option's own product; it wins over
+   * `vatClass`, and absent it inherits as `vatClass` says. */
+  vatRate?: string;
   /** Absent or null leaves the child without a kitchen name — a child never borrows the dish's,
    * which names a different thing. */
   kitchenName?: string | null;
@@ -277,7 +286,7 @@ export function priceBasketWithOptions(items: readonly BasketItemWithOptions[]):
     rows.push({
       grossUnit: decimal(item.product.unitPrice),
       quantity: item.quantity,
-      rate: resolveVatRate(item.product.vatClass),
+      rate: rateOf(item.product),
       name: item.product.name,
       descriptions: item.product.descriptions,
       category: item.product.category,
@@ -296,9 +305,11 @@ export function priceBasketWithOptions(items: readonly BasketItemWithOptions[]):
         grossUnit: decimal(opt.priceDelta),
         quantity: multiplyDecimal(decimal(item.quantity), decimal(String(opt.quantity ?? 1))),
         rate:
-          opt.vatClass === null
-            ? resolveVatRate(item.product.vatClass)
-            : resolveVatRate(opt.vatClass),
+          opt.vatRate !== undefined
+            ? decimal(opt.vatRate)
+            : opt.vatClass === null
+              ? rateOf(item.product)
+              : resolveVatRate(opt.vatClass),
         name: opt.name,
         descriptions: opt.descriptions,
         category: item.product.category,

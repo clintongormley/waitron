@@ -218,6 +218,42 @@ describe("priceBasket — grossLineTotals (the working-order draft's customer-fa
 
 // A dish + its selected options price as a PARENT line followed by its CHILD lines, through the
 // same arithmetic core as a plain basket.
+describe("a frozen VAT rate", () => {
+  it("prices a product at the rate it carries, not at its class's", () => {
+    const priced = priceBasket([
+      { product: { ...each("11.00", "general"), vatRate: "10.00" }, quantity: "1" },
+    ]);
+    expect(priced.lines[0]!.vatRate).toBe(decimal("10.00"));
+    expect(priced.vatBreakdown).toEqual([
+      { rate: decimal("10.00"), base: decimal("10.00"), tax: decimal("1.00") },
+    ]);
+  });
+
+  it("prices a dish, an inheriting option and an option with its own rate at the rates they carry", () => {
+    const priced = priceBasketWithOptions([
+      {
+        product: { ...each("11.00", "general"), vatRate: "10.00" },
+        quantity: "1",
+        options: [
+          { name: "Hielo", descriptions: { es: "Hielo" }, priceDelta: "1.10", vatClass: null },
+          {
+            name: "Tapa",
+            descriptions: { es: "Tapa" },
+            priceDelta: "1.04",
+            vatClass: "general",
+            vatRate: "4.00",
+          },
+        ],
+      },
+    ]);
+    expect(priced.lines.map((line) => line.vatRate)).toEqual([
+      decimal("10.00"),
+      decimal("10.00"),
+      decimal("4.00"),
+    ]);
+  });
+});
+
 describe("priceBasketWithOptions — parent + child priced lines", () => {
   const opt = (
     priceDelta: string,
