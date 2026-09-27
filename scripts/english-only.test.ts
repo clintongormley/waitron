@@ -279,6 +279,9 @@ describe("each module's vocabulary declaration", () => {
 });
 
 describe("findSpanish", () => {
+  const located = (source: string): string[] =>
+    findSpanish(source, FIXTURE).map((v) => `${v.line}: ${v.word}`);
+
   it("flags a Spanish identifier", () => {
     const found = findSpanish("const ultimaHuella = head.lastHash;", FIXTURE);
     expect(found.map((v) => v.word)).toEqual(["huella"]);
@@ -399,8 +402,6 @@ describe("findSpanish", () => {
   });
 
   it("keeps a cited word cited when a glob path in a line comment precedes it", () => {
-    // The false opener used to pair backticks across code and comments, exposing a cited word
-    // lines away from the path that caused it.
     const source = [
       "// reads drizzle/meta/*_snapshot.json",
       'const tick = "`";',
@@ -444,11 +445,15 @@ describe("findSpanish", () => {
     expect(findSpanish("const tick = /[/`]/;\n// the `cadena` row", FIXTURE)).toEqual([]);
     // After a keyword such as `return`, a `/` opens an expression rather than dividing.
     expect(findSpanish("return /`/;\n// the `cadena` row", FIXTURE)).toEqual([]);
+    expect(findSpanish("return\u00a0/`/;\n// the `cadena` row", FIXTURE)).toEqual([]);
   });
 
-  it("skips escaped quotes and braces nested inside a template's substitution", () => {
+  it("does not end a string or template at an escaped quote or backtick", () => {
     expect(findSpanish('const s = "say \\"`\\""; // the `cadena` row', FIXTURE)).toEqual([]);
     expect(findSpanish("const t = `a\\`b // c`; // the `cadena` row", FIXTURE)).toEqual([]);
+  });
+
+  it("does not end a template's `${…}` part at a brace nested inside it", () => {
     const nested = "const t = `${ { a: 1 }.a // the `cadena` field\n}`;";
     expect(findSpanish(nested, FIXTURE)).toEqual([]);
   });
@@ -461,6 +466,90 @@ describe("findSpanish", () => {
 
   it("reads a slash after a value as division, not as a regular expression", () => {
     expect(findSpanish("const half = total / 2; // the `cadena` row", FIXTURE)).toEqual([]);
+    expect(findSpanish("const half = count(ok) / 2; // the `cadena` row", FIXTURE)).toEqual([]);
+    expect(findSpanish("const half = list[0] / 2; // the `cadena` row", FIXTURE)).toEqual([]);
+    expect(findSpanish("const o = { if: (a) / 2 }; // the `cadena` row", FIXTURE)).toEqual([]);
+    expect(
+      findSpanish("const v = obj.value\nreturn /`/.test(s); // the `cadena` row", FIXTURE),
+    ).toEqual([]);
+    for (const literal of ['"4"', "`4`", "/4/"]) {
+      const source = `const half = ${literal} / 2; // the \`cadena\` row`;
+      expect(findSpanish(source, FIXTURE), literal).toEqual([]);
+    }
+    expect(findSpanish("const cafè = 1;\ncafè / 2; // the `cadena` row", FIXTURE)).toEqual([]);
+  });
+
+  it.each(["if", "while", "for", "with"])(
+    "opens a regular expression after the parenthesised head of `%s`",
+    (head) => {
+      const backtick = [
+        `${head} (ok) /\`/.test(value);`,
+        "const path = `https://${sql`registros`}`;",
+      ].join("\n");
+      expect(located(backtick)).toEqual(["2: registros"]);
+      const opener = [`${head} (check(ok)) /\\/*/.test(value);`, "const q = sql`registros`;"];
+      expect(located(opener.join("\n"))).toEqual(["2: registros"]);
+    },
+  );
+
+  it("opens a regular expression after a closing brace", () => {
+    const source = ["if (ok) {}", "/`/.test(value);", "const path = `https://${sql`registros`}`;"];
+    expect(located(source.join("\n"))).toEqual(["3: registros"]);
+  });
+
+  it("opens a regular expression at the start of a template's `${…}` part", () => {
+    const opener = ['const s = String.raw`${/\\/*/.source}` + "`";', "const q = sql`registros`;"];
+    expect(located(opener.join("\n"))).toEqual(["2: registros"]);
+    const backtick = [
+      "function f() {",
+      "  const s = String.raw`${/`/.source}`;",
+      "}",
+      "const path = `https://${sql`registros`}`;",
+    ];
+    expect(located(backtick.join("\n"))).toEqual(["4: registros"]);
+  });
+
+  it.each(["value!", "value++", "value--", "obj.return", "obj?.return", "x.in"])(
+    "reads a slash after `%s` as division",
+    (value) => {
+      expect(findSpanish(`const half = ${value} / 2; // the \`cadena\` row`, FIXTURE)).toEqual([]);
+    },
+  );
+
+  it("opens a regular expression after a prefix `!` or `+`", () => {
+    expect(findSpanish("!/`/.test(s); // the `cadena` row", FIXTURE)).toEqual([]);
+    expect(findSpanish("return!/`/.test(s); // the `cadena` row", FIXTURE)).toEqual([]);
+    expect(findSpanish("value\n!/`/.test(s); // the `cadena` row", FIXTURE)).toEqual([]);
+    expect(findSpanish("const n = 1 + /`/.source.length; // the `cadena` row", FIXTURE)).toEqual(
+      [],
+    );
+  });
+
+  it.each([
+    ["CR", "\r"],
+    ["U+2028", "\u2028"],
+    ["U+2029", "\u2029"],
+  ])("ends a line comment and a regular expression at line terminator %s", (_name, terminator) => {
+    expect(located(`// note${terminator}const q = sql\`registros\`;`)).toEqual(["1: registros"]);
+    expect(findSpanish(`const r = /abc${terminator}// the \`cadena\` row`, FIXTURE)).toEqual([]);
+  });
+
+  it("ends a string at a carriage return, but not at U+2028, and continues it after an escaped CRLF", () => {
+    expect(findSpanish('const s = "unclosed\r// the `cadena` row', FIXTURE)).toEqual([]);
+    expect(findSpanish('const s = "a\u2028`"; // the `cadena` row', FIXTURE)).toEqual([]);
+    expect(findSpanish('const s = "a\\\r\n`"; // the `cadena` row', FIXTURE)).toEqual([]);
+  });
+
+  it("reports an uncited word at its own line after a glob path in a line comment", () => {
+    const source = [
+      "// drizzle/meta/*_snapshot.json",
+      'const tick = "`";',
+      "const count = 1;",
+      "// the cadena head is per node",
+      "// owned by `registros`",
+      "/* a real block comment */",
+    ].join("\n");
+    expect(located(source)).toEqual(["4: cadena"]);
   });
 
   it("scans with exactly the set it is handed — the base list alone knows no fiscal term", () => {
