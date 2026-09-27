@@ -4115,7 +4115,8 @@ approved.
   not on the scanner's keyword list, such as `export default /x/` — both hid a Spanish word in a
   template on the next line; and a division read as a regular expression after a variable spelled
   like a listed keyword (one called `of`) and after a `!` separated from its value by a space.
-  Experiment: the version before the branch and the branch's final version, compared over all 2577
+  (2026-09-27: the `for await (…)` and `export default` cases are handled since A95; see the entry
+  below.) Experiment: the version before the branch and the branch's final version, compared over all 2577
   `.ts` files under `packages/` and `apps/` (excluding `node_modules` and `dist`) with the guard's
   own assembled word list (135 words, the base list plus every module's declared words, built as
   `scripts/english-only.test.ts` builds it), differ in one file only,
@@ -4127,22 +4128,69 @@ approved.
   `scripts/english-only.test.ts`, and that suite covers the module at 100% of statements, branches,
   functions and lines. The `CLAUDE.md` §3 warning is removed.
 
-- **Six other TypeScript-scanning guards strip comments with the same slash-star pattern — OPEN
-  (found 2026-09-27 reading for A86; read, not run).**
+- **Six other TypeScript-scanning guards strip comments with the same slash-star pattern — DONE
+  (2026-09-27, lane A's A95; found 2026-09-27 reading for A86).** The comment reader A86 wrote now
+  lives in `packages/shared/src/source-comments.ts`: `mapComments` hands each comment to a
+  callback, and `blankComments` turns every character of each comment except its newlines into a
+  space. `packages/db/src/english-only.ts` calls `mapComments`. The six guards —
   `packages/fiscal/src/no-regime-vocabulary.test.ts`,
   `packages/payments/src/no-provider-vocabulary.test.ts`,
   `packages/payments-stripe/src/tenant-scoping.test.ts`, `packages/shared/src/conventions.test.ts`,
-  `scripts/dashboard-browser-purity.test.ts` and `scripts/guarded-teardowns.test.ts` each remove or
-  blank `/\/\*[\s\S]*?\*\//g` BEFORE they strip `//` comments, so a `/*` inside a `//` comment or a
-  string removes real code up to the next terminator — a reviewer ran each of the six expressions
-  and confirmed each removes a sentinel with either opener shape, at the stripping stage only. For
-  the scans that assert something is absent that is the silent direction;
-  `packages/shared/src/conventions.test.ts`'s must-contain assertions would fail instead. Whether
-  any file they scan has that shape today is not measured. The two SQL scanners named `stripSql`, in
-  `scripts/module-graph-honesty.test.ts` and `packages/sync-enrolment/src/migration-tables.ts`
-  (product code, not a guard), have the same ordering: they blank block comments before `--`
-  comments and `'…'` strings. The scanner A86 wrote, `scrubComments`, is not exported; sharing it
-  would need an export and a home they can all import.
+  `scripts/dashboard-browser-purity.test.ts` and `scripts/guarded-teardowns.test.ts` — now use it:
+  five blank comments, and the dashboard guard's type-only check removes them, as it did before.
+  Each inherits the reader's weakness: whether a `/` opens a regular expression is still a guess,
+  and the known wrong guesses are listed on `mapComments` and pinned in its suite. What was run:
+  each guard gained a case with `/*` inside a `//` comment and inside a string, followed by code
+  the guard must see; each case failed against the old strip, passed after the switch, and failed
+  again when the old strip was put back. Over the exact files each guard scans (7 in
+  `packages/fiscal`, 25 in `packages/payments`, 30 in `packages/payments-stripe`, `money-format.ts`,
+  the five catalogue type files, and 1290 test files under `packages/` and `apps/`), the old and new
+  strips give every file the same result. The unstripped source changes the result for the fiscal,
+  payments, payments-stripe and `money-format.ts` checks, so the comparison there could see a
+  difference; for the dashboard type files and the teardown scan it does not, so those two could
+  not have shown one. Ignoring whitespace, the stripped text differs in 29 of the teardown scan's
+  files, over 849 lines. On none of those lines does the new strip blank more than the old one; the
+  first differing line of each file, and the one line the new strip keeps that starts like a
+  comment, were each read and are inside a string, a regular expression or a template the old strip
+  had taken for a comment. The two `scripts/` guards use the shared reader rather than the root's
+  version 6 compiler API (`ts.createSourceFile`, which `scripts/comments-only.mjs` uses) so that all
+  six guards read comments the same way. Review then found two misses, both fixed on the branch: a
+  regular expression after `export default` or after `for await (…)` was read as a division, so a
+  `/*` inside it hid the rest of the file (`default` is now a listed word, and `for await (` is
+  treated like `for (`); and the teardown scan's brace matching ended a hook's block at a `}` inside
+  a string, template or regular expression, which it now avoids by matching braces on
+  `blankCommentsAndLiterals` text, where those contents are blanked too. Before those fixes, a
+  from-scratch Stryker run scored the new module 95.87 and `packages/shared` 94.70 (break 90), and
+  its 14 surviving mutants were read, not run, as unable to change the output. After them, an
+  incremental run (reusing earlier results) scored the module 94.81 and the package 94.34, and the
+  module's suite covers it at 100% of statements, branches, functions and lines. The root project's branch
+  coverage fell from 98.16% to 97.59% (bar 95) because the reader's covered branches left its
+  table; `english-only.ts` stays at 100%. Under Stryker, `packages/shared` now leaves
+  `conventions.test.ts` out; why is in `docs/developers/ci-and-gates.md`.
+
+- **The two SQL scanners named `stripSql` blank block comments before `--` comments — OPEN (split
+  from A95).** `scripts/module-graph-honesty.test.ts` and
+  `packages/sync-enrolment/src/migration-tables.ts` (product code, not a guard) blank `/*…*/`
+  before `--` comments and `'…'` strings, the same ordering the six TypeScript guards had. Read, not
+  run; whether any file they scan has a `/*` inside a `--` comment or a string is not measured. The
+  TypeScript reader in `packages/shared/src/source-comments.ts` knows nothing of `--` comments, so
+  it is not a drop-in fix.
+
+- **Four more guards handle comments on their own — OPEN (found 2026-09-27 reviewing A95; read, not
+  run, except the `write-path-tables` shapes, run on one small input each).** `scripts/spawn-timeout-budget.test.ts` has its own `withoutComments` (line 32), which
+  guesses a regular expression from the one character before the `/` (line 64).
+  `scripts/write-path-tables.test.ts` has its own line-by-line `withoutComments` (line 96), and its
+  header lists three shapes it gets wrong; run 2026-09-27 on one small input each, `blankComments`
+  handled all three and the file's own function got all three wrong.
+  `scripts/errors-reachable.test.ts` and `scripts/module-seams.test.ts` strip no comments on
+  purpose, so an import written inside a comment counts. The reason errors-reachable's header and
+  `docs/developers/testing-guide.md` give — a block stripper mis-parses a `/*` inside a string
+  literal — does not hold for the shared reader: the A95 guards' new cases put a `/*` inside a
+  string, and the reader left it alone. Each of the four could adopt `blankComments`
+  (`packages/shared/src/source-comments.ts`), and each would need a case that fails before the
+  switch and passes after it. `scripts/column-vocabulary.test.ts` also has a `withoutComments`, left
+  out on purpose: it runs only on the text between an import's braces, which its header says holds
+  no string or template literal.
 
 - **No guard holds a MODULE migration set to its declared schema — LANDED for four of them
   (**PR #491**).** `packages/db/src/testing/schema-conformance.ts` is a reusable suite factory that
@@ -4274,8 +4322,10 @@ approved.
   file that outlives the grants; the justification for each entry is a doc comment beside the
   `JSON.parse` instead, which no test reads. The guard's comment reader still has a hole of the shape
   it was rewritten to close — a line inside a template literal whose first characters open a block
-  comment swallows the code below it — narrowed to line-leading openers rather than closed, because
-  closing it needs a parser. And the detector only reads a builder call whose receiver looks like a
+  comment swallows the code below it — narrowed to line-leading openers rather than closed. The
+  shared reader `blankComments` (`packages/shared/src/source-comments.ts`) handles that shape and
+  the header's other two (run 2026-09-27 on one small input each; adoption is the "Four more
+  guards" entry). And the detector only reads a builder call whose receiver looks like a
   database handle, so a write through a handle named something else is invisible; that was the price
   of not reporting `cache.delete(nodes)` on an ordinary `Set`.
 

@@ -85,12 +85,14 @@ function schemaObject(table: string): string {
  * Only a block opener that STARTS its line runs on to the lines below. A `"/*"` in the middle of a
  * line is nearly always a string, so an unclosed one ends its own line and nothing more.
  *
- * WHERE IT IS STILL WRONG, three ways, each needing a parser rather than a reader. A block comment
- * that opens at the END of a line of code and runs on is not followed, so its text is read as code:
- * a write written inside one is reported. A comment marker inside a string on a line of code ends
- * that line here, so a write after it on the same line is lost. And a line inside a template
- * literal whose first characters are `/*` still opens a block and swallows the code below it, so a
- * write can hide under one.
+ * WHERE IT IS STILL WRONG, three ways. On one small input each (2026-09-27), the shared reader
+ * `blankComments` (`packages/shared/src/source-comments.ts`) got all three right; adopting it is
+ * queued in `docs/backlog.md`.
+ * A block comment that opens at the END of a line of code and runs on is not followed, so its text
+ * is read as code: a write written inside one is reported. A comment marker inside a string on a
+ * line of code ends that line here, so a write after it on the same line is lost. And a line
+ * inside a template literal whose first characters are `/*` still opens a block and swallows the
+ * code below it, so a write can hide under one.
  */
 function withoutComments(source: string): string {
   const kept: string[] = [];

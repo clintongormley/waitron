@@ -6,7 +6,13 @@ export default defineConfig({
     clearMocks: false,
     // A crashed Stryker run leaves mutated copies of the source, tests included, in .stryker-tmp,
     // and Vitest would collect them.
-    exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
+    exclude: [
+      ...configDefaults.exclude,
+      "**/.stryker-tmp/**",
+      // Under Stryker `src` holds instrumented copies, which conventions.test.ts would read as this
+      // package's source text and fail on.
+      ...(process.env.STRYKER_MUTATOR_WORKER === undefined ? [] : ["src/conventions.test.ts"]),
+    ],
     // One file at a time in one worker: @vitest/coverage-v8's merge across workers has
     // intermittently under-counted this package's branches, flipping the gate on unchanged code.
     fileParallelism: false,

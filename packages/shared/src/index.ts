@@ -91,6 +91,7 @@ export { isValidGuestCount, MAX_GUEST_COUNT } from "./guest-count.js";
 export { firstCodeInCauseChain, MAX_CAUSE_DEPTH } from "./cause-chain.js";
 export { sqliteFailureOf } from "./engine-failure.js";
 export { quoteLiteral } from "./sql-literal.js";
+export { blankComments, blankCommentsAndLiterals, mapComments } from "./source-comments.js";
 export type { ResourceIdentity, ResourceChange, ChangeSource } from "./live-updates.js";
 
 export type { OptionSelection, OptionSnapshot } from "./option-selection.js";

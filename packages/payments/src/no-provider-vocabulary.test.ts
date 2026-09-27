@@ -1,3 +1,4 @@
+import { blankComments } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -14,7 +15,7 @@ declare global {
 }
 
 // Weaker than the suite's name: it scans the non-test `.ts` files under `src/` only, and never
-// reads a comment.
+// reads a comment. Comments are found by `mapComments`, whose guesses about `/` are listed on it.
 const sources = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"], {
   query: "?raw",
   import: "default",
@@ -31,16 +32,9 @@ describe("the source glob itself", () => {
   });
 });
 
-/**
- * A mention inside a COMMENT must not trip the guard, while the same word in code must. A copy of
- * packages/fiscal/src/no-regime-vocabulary.test.ts's `stripComments`.
- */
+/** A mention inside a COMMENT must not trip the guard, while the same word in code must. */
 function stripComments(source: string): string {
-  const blockBlanked = source.replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, " "));
-  return blockBlanked
-    .split("\n")
-    .map((line) => line.replace(/(^|[^:])\/\/.*$/, "$1"))
-    .join("\n");
+  return blankComments(source);
 }
 
 const strippedSources: Record<string, string> = Object.fromEntries(
@@ -114,5 +108,12 @@ describe("the guard has teeth", () => {
 
     const inlineSource = "/* Stripe adapter lives elsewhere */\nexport const x = 1;";
     expect(mentionsTerm(stripComments(inlineSource), "stripe")).toBe(false);
+  });
+
+  it("keeps the code after a `/*` inside a line comment or a string", () => {
+    const afterLineComment = "// see a/*b\nconst client = stripe();\n/* c */";
+    expect(mentionsTerm(stripComments(afterLineComment), "stripe")).toBe(true);
+    const afterString = 'const p = "/*"; const client = stripe(); // */';
+    expect(mentionsTerm(stripComments(afterString), "stripe")).toBe(true);
   });
 });

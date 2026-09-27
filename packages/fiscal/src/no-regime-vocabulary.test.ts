@@ -1,3 +1,4 @@
+import { blankComments } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 
 /** Types the one `import.meta.glob` form this file calls, rather than adding `vite` as a
@@ -27,16 +28,10 @@ describe("the source glob itself", () => {
   });
 });
 
-/**
- * Blanks block comments (preserving line numbers) and drops `//` line comments, so a comment may
- * cite the regime while the same word used in code still fails the scan.
- */
+/** Blanks comments, so a comment may cite the regime while the same word used in code still fails
+ * the scan. */
 function stripComments(source: string): string {
-  const blockBlanked = source.replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, " "));
-  return blockBlanked
-    .split("\n")
-    .map((line) => line.replace(/(^|[^:])\/\/.*$/, "$1"))
-    .join("\n");
+  return blankComments(source);
 }
 
 const strippedSources: Record<string, string> = Object.fromEntries(
@@ -92,6 +87,20 @@ describe("stripComments", () => {
   it("still catches the same word used as a real identifier, not merely commented", () => {
     const source = 'export const aeatEndpoint = "https://example.com";';
     expect(mentionsTerm(stripComments(source), "aeat")).toBe(true);
+  });
+
+  it("keeps the code after a `/*` inside a line comment or a string", () => {
+    const afterLineComment = "// see a/*b\nconst x = aeat;\n/* c */";
+    expect(mentionsTerm(stripComments(afterLineComment), "aeat")).toBe(true);
+    const afterString = 'const p = "/*"; const x = aeat; // */';
+    expect(mentionsTerm(stripComments(afterString), "aeat")).toBe(true);
+  });
+
+  it("keeps the code after a `/*` inside a regular expression that follows `export default` or `for await (…)`", () => {
+    const afterDefault = "export default /\\/*/;\nconst x = aeat;";
+    expect(mentionsTerm(stripComments(afterDefault), "aeat")).toBe(true);
+    const afterForAwait = "for await (const p of ps) /\\/*/.test(p);\nconst x = aeat;";
+    expect(mentionsTerm(stripComments(afterForAwait), "aeat")).toBe(true);
   });
 
   it("drops a // line comment without mistaking a URL's // for one", () => {

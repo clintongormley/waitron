@@ -3,6 +3,8 @@ import {
   addDecimal,
   AppError,
   assertSupportedLocale,
+  blankComments,
+  blankCommentsAndLiterals,
   BAND_RANK,
   classifyBand,
   compareDecimal,
@@ -21,6 +23,7 @@ import {
   isValidTelephone,
   isZeroDecimal,
   locationId,
+  mapComments,
   MAX_GUEST_COUNT,
   MAX_MONEY_INTEGER_DIGITS,
   MAX_QUANTITY_INTEGER_DIGITS,
@@ -135,5 +138,11 @@ describe("package public surface (./index.js)", () => {
     expect(classifyBand(0, 5 * 60_000, t)).toBe("warm");
     expect(worstBand(["fresh", "overdue", "warm"])).toBe("overdue");
     expect(BAND_RANK.forgotten).toBe(3);
+  });
+
+  it("re-exports the comment scanner", () => {
+    expect(blankComments("a // c")).toBe("a     ");
+    expect(blankCommentsAndLiterals('f("}") // c')).toBe('f(" ")     ');
+    expect(mapComments("a /* c */", () => "")).toBe("a ");
   });
 });

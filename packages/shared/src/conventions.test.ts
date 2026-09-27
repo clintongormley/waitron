@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { blankComments } from "./source-comments.js";
 
 /**
  * Vite supplies `import.meta.glob` at runtime, but its type normally comes from `vite/client`,
@@ -102,10 +103,21 @@ describe("scales.ts crosses into the number type without rounding one", () => {
   });
 });
 
+function stripComments(source: string): string {
+  return blankComments(source);
+}
+
+describe("stripComments", () => {
+  it("keeps the code after a `/*` inside a line comment or a string", () => {
+    const afterLineComment = "// see meta/*_snapshot.json\nconst n = parseFloat(s);\n/* c */";
+    expect(stripComments(afterLineComment)).toContain("parseFloat");
+    const afterString = 'const p = "/*"; const n = parseFloat(s); // */';
+    expect(stripComments(afterString)).toContain("parseFloat");
+  });
+});
+
 describe("money-format.ts crosses into the number type only to hand it to the formatter", () => {
-  const code = sourceOf("money-format.ts")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/\/\/.*$/gm, "");
+  const code = stripComments(sourceOf("money-format.ts"));
 
   it.each([
     ["parseFloat", "parseFloat"],

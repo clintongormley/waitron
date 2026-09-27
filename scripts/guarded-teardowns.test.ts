@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
+import { blankCommentsAndLiterals } from "../packages/shared/src/source-comments.js";
 
 /**
  * Every `afterAll`/`afterEach` that closes a resource must guard it. An unguarded closer throws a
@@ -11,16 +12,16 @@ import { describe, expect, it } from "vitest";
  * suites that use it, so they cannot write a teardown at all. What remains in scope is a suite that
  * legitimately builds its own resource.
  *
- * ## Three limits
+ * ## Four limits
  *
  * 1. **It cannot see a suite with no teardown at all.** It inspects closers INSIDE
  *    `afterAll`/`afterEach`; a suite that creates a resource per test and never closes one is
  *    invisible.
  * 2. **`isGuarded` proves a check exists on the call's line, not that it covers this call.** See
  *    its own doc comment.
- * 3. **The suites in `scripts/` are outside it**, including ones with a real teardown. Adding
- *    `scripts/` as a root makes this file report its own template-literal fixtures, which is what
- *    the assertion in "the scan itself" pins.
+ * 3. **The suites in `scripts/` are outside it**, including ones with a real teardown.
+ * 4. **Comments and literals are found by the shared reader**, whose guesses about `/` are listed
+ *    on `mapComments`.
  *
  * ## Why not an ESLint rule
  *
@@ -33,8 +34,7 @@ const REPO_ROOT = join(import.meta.dirname, "..");
 
 /**
  * **`apps/` is IN scope, unlike `english-only.ts`'s scan**: a masked teardown error wastes the same
- * debugging hour wherever it happens. `scripts/` is NOT a scan root, which keeps the fixtures below
- * out of the scan.
+ * debugging hour wherever it happens.
  */
 const SCAN_ROOTS = ["packages", "apps"] as const;
 
@@ -82,19 +82,6 @@ function testFiles(): string[] {
   return cachedFiles;
 }
 
-/**
- * Blanks block comments to whitespace (preserving line numbers) and drops line comments. The
- * `(^|[^:])` guard on the line-comment pattern keeps `"postgres://host/db"; await db.close();` from
- * losing everything after `postgres:`, which would hide the teardown from the scan.
- */
-function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, " "))
-    .split("\n")
-    .map((line) => line.replace(/(^|[^:])\/\/.*$/, "$1"))
-    .join("\n");
-}
-
 /** The `{ ... }` block following `startIndex`, by brace matching. */
 function blockAfter(source: string, startIndex: number): { body: string; offset: number } | null {
   const open = source.indexOf("{", startIndex);
@@ -134,16 +121,19 @@ interface Finding {
 }
 
 function findUnguarded(source: string, file = "<inline>"): Finding[] {
-  const clean = stripComments(source);
-  const lines = clean.split("\n");
+  // Blanking only turns characters into spaces, so a source without a hook's name cannot gain one.
+  if (!/after(?:All|Each)/.test(source)) return [];
+  // Every line stays where it was, so a finding's line number is the file's.
+  const code = blankCommentsAndLiterals(source);
+  const lines = code.split("\n");
   const findings: Finding[] = [];
 
-  for (const hook of clean.matchAll(TEARDOWN_HOOK)) {
-    const block = blockAfter(clean, hook.index);
+  for (const hook of code.matchAll(TEARDOWN_HOOK)) {
+    const block = blockAfter(code, hook.index);
     if (block === null) continue;
     for (const call of block.body.matchAll(CLOSER_PATTERN)) {
       const [expression, identifier] = call;
-      const line = clean.slice(0, block.offset + call.index).split("\n").length;
+      const line = code.slice(0, block.offset + call.index).split("\n").length;
       if (identifier === undefined || isGuarded(lines[line - 1] ?? "", identifier)) continue;
       findings.push({ file, line, expression });
     }
@@ -170,10 +160,7 @@ describe("the scan itself", () => {
     expect(files.some((file) => file.split(sep).includes("node_modules"))).toBe(false);
   });
 
-  it("does not reach this directory, which is what keeps its own fixtures out", () => {
-    // The fixtures below are teardown snippets in template literals, and `stripComments` is
-    // deliberately naive about string literals, so a scan that reached `scripts/` would report
-    // this file as violating the rule it exists to enforce.
+  it("does not reach scripts/, as limit 3 says", () => {
     expect(files.some((file) => file.startsWith(join(REPO_ROOT, "scripts") + sep))).toBe(false);
   });
 });
@@ -210,6 +197,55 @@ describe("the detector itself", () => {
   it("is not fooled by a URL in a string literal", () => {
     const source = `afterAll(async () => {\n  const uri = "postgres://h/db"; await db.close();\n});`;
     expect(findUnguarded(source)).toHaveLength(1);
+  });
+
+  it("finds a closer after a `/*` inside a line comment or a string", () => {
+    const afterLineComment = `// see a/*b\nafterAll(async () => {\n  await db.close();\n});\n/* c */`;
+    expect(findUnguarded(afterLineComment)).toEqual([
+      { file: "<inline>", line: 3, expression: "db.close()" },
+    ]);
+    const afterString = `afterAll(async () => {\n  const p = "/*";\n  await db.close();\n}); // */`;
+    expect(findUnguarded(afterString)).toEqual([
+      { file: "<inline>", line: 3, expression: "db.close()" },
+    ]);
+  });
+
+  it.each([
+    ["a string holding `//}`", `const marker = "//}";`],
+    ["a string holding `}`", `const marker = "}";`],
+    ["a template's text holding `}`", "const marker = `}`;"],
+    ["a regular expression holding `}`", "const marker = /}/;"],
+  ])("does not end the hook's block at a brace inside %s", (_name, statement) => {
+    const source = `afterAll(async () => {\n  ${statement}\n  await db.close();\n});`;
+    expect(findUnguarded(source)).toEqual([
+      { file: "<inline>", line: 3, expression: "db.close()" },
+    ]);
+  });
+
+  it.each([
+    ["a string", `const note = "afterAll(";`],
+    ["a template's text", "const note = `afterAll(`;"],
+    ["a regular expression", "const note = /afterAll(x)/;"],
+  ])("does not take a hook's name inside %s for a hook", (_name, statement) => {
+    const source = `${statement}\nit("works", async () => {\n  await db.close();\n});`;
+    expect(findUnguarded(source)).toEqual([]);
+  });
+
+  it("does not report a whole teardown held in a template literal", () => {
+    const source = "const fixture = `afterAll(async () => {\n  await db.close();\n});`;";
+    expect(findUnguarded(source)).toEqual([]);
+  });
+
+  it("does not take a closer's name inside a string for a call", () => {
+    const source = `afterAll(async () => {\n  expect(text).toBe("db.close()");\n});`;
+    expect(findUnguarded(source)).toEqual([]);
+  });
+
+  it("finds a hook whose name a comment parts from its bracket", () => {
+    const source = `afterAll /* c */ (async () => {\n  await db.close();\n});`;
+    expect(findUnguarded(source)).toEqual([
+      { file: "<inline>", line: 2, expression: "db.close()" },
+    ]);
   });
 
   it("does not accept a guard that covers a different call", () => {

@@ -285,6 +285,21 @@ receipt is at `scripts/mutation-shard.mjs`'s `NOT_MUTATED`, which holds that one
 holds which bar, is weaker than its name: it reads `mutation.yml` as TEXT for db's bar, so a step
 that reached the same command through a variable would be invisible to it.
 
+`packages/shared`'s score is taken without `src/conventions.test.ts`: its `vitest.config.ts`
+excludes that file whenever `STRYKER_MUTATOR_WORKER` is set, which Stryker 10 sets on the worker
+processes it starts (`child-process-proxy.js` in `@stryker-mutator/core`). Stryker's vitest runner
+runs only the suites vitest finds related to the mutated files (`vitest.related`, default true in
+`@stryker-mutator/vitest-runner` 10.0.0), and in its sandbox each `src` file is the instrumented
+copy, so a suite that reads the package's source as text reads Stryker's code once it imports a
+`src` file.
+Measured 2026-09-27: main's `conventions.test.ts` with one added `import "./sql-literal.js"` failed
+Stryker's first test run on `expected '\nfunction stryNS_9fa48() {…' not to match /[-+*/%]/`;
+unchanged, it was not run at all (that run counted 396 tests, the package's 449 less that file's
+53), and neither was a probe suite whose only input was `?raw` source. Any mutation-tested package
+with a suite that imports a mutated file and reads its package's `src` as text could read Stryker's
+instrumented copies the same way — `packages/fiscal/src/no-hardcoded-margin.test.ts` imports `./clock.js`, which fiscal's
+`mutate` list names, and reads `./*.ts` as raw text. Only `packages/shared` was checked.
+
 ### Reading `packages/db`'s score by hand
 
 The ten shard reports are artifacts of the run, so the number can be read without waiting for the
