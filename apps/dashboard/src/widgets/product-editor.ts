@@ -6,7 +6,7 @@ import { baseStyles, currentContentLanguages, selectStyles, submitOnEnter } from
 import { resolveContentText } from "@waitron/shared";
 import { DIETARY_LABELS } from "@waitron/catalogue/src/dietary-declarations.js";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
-import { VAT_CLASSES, resolveVatRate } from "@waitron/catalogue/src/pricing.js";
+import { VAT_CLASSES, localToday, vatRateOn } from "@waitron/catalogue/src/vat-rates.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
@@ -460,7 +460,11 @@ export class ProductEditor extends LitElement {
   private get taxes() {
     return (
       this.taxChoices ??
-      VAT_CLASSES.map((id) => ({ id, rate: resolveVatRate(id), label: vatClassName(id) }))
+      VAT_CLASSES.map((id) => ({
+        id,
+        rate: vatRateOn(id, localToday()),
+        label: vatClassName(id),
+      }))
     );
   }
   private get language() {

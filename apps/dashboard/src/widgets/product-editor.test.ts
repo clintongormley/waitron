@@ -11,7 +11,7 @@ import {
 import type { EditorVariant, ProductEditorDraft } from "./product-editor-model.js";
 import type { CategorySummary, ExtraList, Label, OptionList } from "../api/client.js";
 import type { InheritedValues } from "@waitron/catalogue/src/product-types.js";
-import { resolveVatRate, priceLockedLines } from "@waitron/catalogue/src/pricing.js";
+import { localToday, vatRateOn } from "@waitron/catalogue/src/vat-rates.js";
 import { setLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/domain.js";
 
@@ -1390,7 +1390,7 @@ it("submits the chosen real unit and marks it selected after load", async () => 
   expect(submit.mock.calls[0]![0].detail.value.unitId).toBe(kg.id);
 });
 
-it("shows the resolver's rates, including a fractional rate supplied by a controlled fixture", async () => {
+it("shows each class's rate in force today, and a fractional rate supplied by a controlled fixture", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     locales: ["en"],
@@ -1400,7 +1400,7 @@ it("shows the resolver's rates, including a fractional rate supplied by a contro
   expect(options()).toHaveLength(4);
   for (const option of options()) {
     expect(option.textContent).toContain(
-      `(${Number(resolveVatRate(option.value as NonNullable<ProductEditorDraft["vatClass"]>))}%)`,
+      `(${Number(vatRateOn(option.value as NonNullable<ProductEditorDraft["vatClass"]>, localToday()))}%)`,
     );
   }
   expect([...options()].find((option) => option.value === "zero")!.textContent).toBe(
@@ -1409,17 +1409,6 @@ it("shows the resolver's rates, including a fractional rate supplied by a contro
   el.taxChoices = [{ id: "reduced", rate: "2.50", label: "Fixture rate" }];
   await el.updateComplete;
   expect(options()[0]!.textContent).toBe("Fixture rate (2.5%)");
-  const priced = priceLockedLines([
-    {
-      grossUnitPrice: "102.50",
-      quantity: "1",
-      vatRate: el.taxChoices[0]!.rate,
-      name: "Fixture dish",
-      descriptions: { en: "Fixture dish for the guest" },
-      category: null,
-    },
-  ]);
-  expect(priced.vatBreakdown).toEqual([{ rate: "2.50", base: "100.00", tax: "2.50" }]);
 });
 
 // Every cell in this table holds ONE line of text or one 44px-tall control, so a row only reads as a

@@ -1,5 +1,4 @@
 import { currentContentLanguages } from "@waitron/ui";
-import { resolveVatRate } from "@waitron/catalogue/src/pricing.js";
 import type { ContentLanguages } from "@waitron/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
@@ -125,7 +124,6 @@ function zoneOffers(
       kitchenName: null,
       unit: productUnit(product),
       vatClass: product.vatClass,
-      vatRate: resolveVatRate(product.vatClass),
       category: product.category ?? "Other",
       allergens: product.allergens,
       diet: null,

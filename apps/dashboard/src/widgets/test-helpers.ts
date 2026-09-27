@@ -182,7 +182,6 @@ function frozenOffer(
       hardwareUnit: null,
     },
     vatClass: "reduced",
-    vatRate: "10.00",
     allergens: null,
     diet: null,
     dietDerivation: null,

@@ -616,7 +616,7 @@ describe("WorkingOrderStore", () => {
   });
 });
 
-describe("WorkingOrderStore: the VAT rate a published menu froze", () => {
+describe("WorkingOrderStore: the VAT preview takes each class's rate today", () => {
   const unit = {
     id: "unit-each",
     name: { es: "unidad" },
@@ -626,9 +626,7 @@ describe("WorkingOrderStore: the VAT rate a published menu froze", () => {
   };
   const sellingValues = {
     unit,
-    // A class that resolves to 10.00, served beside the rate the version froze.
-    vatClass: "reduced" as const,
-    vatRate: "21.00",
+    vatClass: "general" as const,
     category: null,
     allergens: null,
     diet: null,
@@ -671,16 +669,19 @@ describe("WorkingOrderStore: the VAT rate a published menu froze", () => {
     ...sellingValues,
   } satisfies TillMenuOffer;
 
-  it("prices a dish at the offer's frozen rate, not its class's", () => {
+  it("prices a dish at its class's rate", () => {
     const s = new WorkingOrderStore();
     s.addProduct(menuOfferToTillProduct(offer, "version-1"), "1");
     expect(s.vatBreakdown).toEqual([{ rate: "21.00", base: "2.00", tax: "0.42" }]);
   });
 
-  it("prices a variant at the variant's frozen rate, not its class's", () => {
+  it("prices a variant at its own class's rate, not the dish's", () => {
     const s = new WorkingOrderStore();
-    const dish = menuOfferToTillProduct({ ...offer, vatRate: "10.00" }, "version-1");
+    const dish = menuOfferToTillProduct(
+      { ...offer, variants: [{ ...offer.variants[0]!, vatClass: "reduced" }] },
+      "version-1",
+    );
     s.addProduct(productAsVariant(dish, dish.variants![0]!), "1");
-    expect(s.vatBreakdown).toEqual([{ rate: "21.00", base: "3.00", tax: "0.63" }]);
+    expect(s.vatBreakdown).toEqual([{ rate: "10.00", base: "3.30", tax: "0.33" }]);
   });
 });
