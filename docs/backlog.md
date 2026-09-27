@@ -3556,9 +3556,10 @@ image constraints under *Detail → Box image*.
     photo may export a bundle it cannot import.
   - Found by #610 (`apps/dashboard/src/api` + `src/widgets`), not fixable in a comments-only
     change. `reorder.test.ts`'s test names say an out-of-range move "clamps"; `reorder()` ignores
-    it. #616 fixed the till's copies of
-    "a `wt-button` forwards only `disabled`/`aria-label`", and #618 the till's "a runtime shape
-    error a view test catches".
+    it. #616 fixed the till's copies of "a `wt-button` forwards only `disabled`/`aria-label`",
+    and #618 the till's "a runtime shape error a view test catches".
+    `fix/wt-button-aria-forwarding` (2026-09-27) fixed `language-chooser.ts`'s `aria-haspopup`
+    and `aria-expanded`, which now reach the inner button, in `wt-button` itself.
   - Found by #607 (`apps/dashboard/src/screens`), outside the screens folder; #610 fixed the
     dashboard's copies and #614 the till's "never send a personId". Still open, read only, not run: the recipe screen's `#loadRecipe` guard
     compares product ids, so choosing A, then B, then A again lets the first A answer apply and turn

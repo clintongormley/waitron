@@ -118,7 +118,6 @@ export class WtButton extends LitElement {
   // the native accessor would otherwise just read/write) never reaches an icon-only button's
   // accessible name on its own, since the host itself carries no interactive semantics.
   @property({ attribute: "aria-label" }) override ariaLabel: string | null = null;
-  // Forwarded like aria-label, so a menu trigger's popup kind and open state reach the inner <button>.
   @property({ attribute: "aria-haspopup" }) override ariaHasPopup: string | null = null;
   @property({ attribute: "aria-expanded" }) override ariaExpanded: string | null = null;
 

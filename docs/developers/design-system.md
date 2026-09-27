@@ -238,7 +238,7 @@ this floor — removing the `min-width` regresses that guard.
 
 | Element | Properties | Events |
 | --- | --- | --- |
-| `wt-button` | `variant` (`primary`\|`secondary`\|`danger`\|`ghost`), `size` (`sm`\|`md`\|`lg`), `shape` (`default`\|`round`), `disabled`, `loading`, `aria-label`, `aria-haspopup`, `aria-expanded` (each forwarded to the inner `<button>`) | native `click` |
+| `wt-button` | `variant` (`primary`\|`secondary`\|`danger`\|`ghost`), `size` (`sm`\|`md`\|`lg`), `shape` (`default`\|`round`), `disabled`, `loading`, `aria-label`, `aria-haspopup`, `aria-expanded` (these three forwarded to the inner `<button>`) | native `click` |
 | `wt-icon` | `name`, `size` (`sm`\|`md`\|`lg`) | — |
 | `wt-spinner` | `size` (`sm`\|`md`\|`lg`), `label` (the status region's accessible name), `decorative` | — |
 | `wt-card` | `raised`; default slot (body), `header` slot | — |
@@ -1125,7 +1125,8 @@ have caught the defect it's named after.
 pairing actually used by every primitive in the table above, in either theme, across every documented state (`wt-input`
 invalid, `wt-switch` checked/unchecked, `wt-dialog` open, `wt-button` icon-only and every variant,
 disabled and loading states; `wt-spinner` as a status region and decorative — all verified
-2026-09-11; `wt-combobox` closed, closed and named only by a forwarded `aria-label`, open with
+2026-09-11; `wt-button` as a menu trigger, open and closed — verified 2026-09-27 by running
+`packages/ui-core/src/components/wt-button.a11y.test.ts`; `wt-combobox` closed, closed and named only by a forwarded `aria-label`, open with
 results, open with the add row, open with no matches, multi-select with a selection, invalid with an
 error message, disabled and required — verified 2026-09-13 by running
 `packages/ui/src/components/wt-combobox.a11y.test.ts`, which covers those states in both themes;
