@@ -2,14 +2,11 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  kitchenPrintJobs,
   locations,
   orderDraftEvents,
-  orderGroupEvents,
   orderDraftLines,
   orderDrafts,
   orderGroups,
-  printJobs,
   serviceCommands,
   ticketItems,
   tills,
@@ -1329,22 +1326,16 @@ async function tabLines(visitId: string) {
     .orderBy(asc(workingOrders.openedAt), asc(workingOrderLines.lineNo));
 }
 
-/** Every row a draft submission can write, so a refusal can be shown to have written none. */
+/** Every row of every table in the venue database, so a refusal can be shown to write none. */
 async function everything() {
-  return {
-    visits: await db.select().from(visits).orderBy(asc(visits.id)),
-    drafts: await db.select().from(orderDrafts).orderBy(asc(orderDrafts.id)),
-    draftLines: await db.select().from(orderDraftLines).orderBy(asc(orderDraftLines.id)),
-    draftEvents: await db.select().from(orderDraftEvents).orderBy(asc(orderDraftEvents.id)),
-    groups: await db.select().from(orderGroups).orderBy(asc(orderGroups.id)),
-    groupEvents: await db.select().from(orderGroupEvents).orderBy(asc(orderGroupEvents.id)),
-    bills: await db.select().from(workingOrders).orderBy(asc(workingOrders.id)),
-    billLines: await db.select().from(workingOrderLines).orderBy(asc(workingOrderLines.id)),
-    tickets: await db.select().from(ticketItems).orderBy(asc(ticketItems.id)),
-    printJobs: await db.select().from(printJobs).orderBy(asc(printJobs.id)),
-    kitchenPrintJobs: await db.select().from(kitchenPrintJobs).orderBy(asc(kitchenPrintJobs.id)),
-    commands: await db.select().from(serviceCommands).orderBy(asc(serviceCommands.id)),
-  };
+  const tables = await db.all<{ name: string }>(
+    sql`select name from sqlite_master where type = 'table' order by name`,
+  );
+  const rows: Record<string, unknown[]> = {};
+  for (const { name } of tables) {
+    rows[name] = await db.all(sql`select * from ${sql.identifier(name)} order by rowid`);
+  }
+  return rows;
 }
 
 async function refusedWritingNothing(
@@ -1484,7 +1475,7 @@ describe("one submission, in both orders (Review Focus 1)", () => {
     });
     expect(first.draft).toMatchObject({ id: alex.id, revision: 1 });
     const after = await everything();
-    expect(after.tickets).toHaveLength(1);
+    expect(after.ticket_items).toHaveLength(1);
 
     // Both revisions the retry carries are now stale; the replay answers before either is compared.
     const again = await submit(v, visitId, alex, ALEX, drinks, {
