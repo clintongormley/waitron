@@ -3985,20 +3985,28 @@ approved.
     - The frozen `write-path.e2e.test.ts` points at `test/fixtures.ts:249-256` and
       `test/write-path-fixtures.ts:37-44`, which have moved; the receipt they cite is back in
       `test/fixtures.ts`. Correct them only in a change allowed to touch that file.
-  - `apps/setup` code, found by #567 and not changed: `#onGoto` in `setup-app.ts` does not clear
-    `fiscalTestError`, so the routed-back fiscal-test banner survives navigating away and back;
-    `AdoptOutcome`'s `breakGlassSecret` is typed as required, but a replayed adopt answers without
-    it (`apps/server/src/setup-api.ts`); the done screen treats any failed status read as "the box
-    is trading", so a passing 503 could offer the reload early; the mode screen's own text says a
-    live server files real invoices, which a live run on a development box does not;
-    `setup-app.test.ts` has two test titles naming a `SyntaxError` from a non-JSON error body that
-    `apiError` turns into `server.internal`; `events.test.ts` has no case for the restore and
-    fiscal-test dispatchers; the `*.css?inline` declaration in `vite-env.d.ts` is redundant
-    (vite/client declares it); `vitest.config.ts` excludes `.stryker-tmp` in a package with no
-    Stryker config; `paintCanvas` in `widgets/test-helpers.ts` has no accessibility suite that
-    fails without it; `done-screen.ts`'s styles use hex fallbacks and `rem`, and a CSS comment
-    inside its style string is history; and `connection-screen.ts`'s `connection-continue` event is
-    not named `wt-*` and carries no `detail`.
+  - `apps/setup` code, found by #567. **Done (2026-09-28, lane A's A99, #786):** `#onGoto` in
+    `setup-app.ts` now clears `fiscalTestError` and `cloudRecoveryError`, so neither of
+    `fiscalTestError`'s two messages nor the cloud-recovery banner survives navigating away and back
+    (the fiscal-test and cloud-recovery re-navigation cases in `setup-app.test.ts`). Still open:
+    `#onGoto` keeps `fiscalTestStatus`, so a rejected or uncertain fiscal-test banner, and an
+    accepted result, survive leaving that screen and coming back, even after the certificate changes
+    (found by reading, not run; whether that is wanted is undecided); a cloud restore opens the
+    provisioning screen (`#onCloudRestoreAction`) without `#clearProvisionOutcome()`, which the
+    four other ways onto that screen call first, so an earlier attempt's message could show there
+    (found by reading, not run); `AdoptOutcome`'s `breakGlassSecret` is typed as required, but a
+    replayed adopt answers without it
+    (`apps/server/src/setup-api.ts`); the done screen treats any failed status read as "the box is
+    trading", so a passing 503 could offer the reload early; the mode screen's own text says a live
+    server files real invoices, which a live run on a development box does not; `setup-app.test.ts`
+    has two test titles naming a `SyntaxError` from a non-JSON error body that `apiError` turns into
+    `server.internal`; `events.test.ts` has no case for the restore and fiscal-test dispatchers; the
+    `*.css?inline` declaration in `vite-env.d.ts` is redundant (vite/client declares it);
+    `vitest.config.ts` excludes `.stryker-tmp` in a package with no Stryker config; `paintCanvas` in
+    `widgets/test-helpers.ts` has no accessibility suite that fails without it; `done-screen.ts`'s
+    styles use hex fallbacks and `rem`, and a CSS comment inside its style string is history; and
+    `connection-screen.ts`'s `connection-continue` event is not named `wt-*` and carries no
+    `detail`.
   - "Nothing under `apps/` may import a regime package (`scripts/module-seams.test.ts`)", which #567
     deleted from `apps/setup/src/server-fields.ts`, is too wide: with
     `import "@waitron/fiscal-verifactu";` added there, that guard still passed, since its regime

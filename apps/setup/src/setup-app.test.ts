@@ -2060,6 +2060,21 @@ describe("provision refusals that need a fiscal test", () => {
     expect(screen.shadowRoot!.querySelector("[data-test=continue]")).toBeNull();
     expect(screen.shadowRoot!.querySelector("[data-test=run]")).not.toBeNull();
   });
+
+  it("clears the routed fiscal-test banner on a manual re-navigation so it doesn't reappear stale", async () => {
+    const provision = vi.fn().mockRejectedValue({ code: "setup.fiscal_test_required", params: {} });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    expect(await screenText(el, "fiscal-test", "[role=alert]")).toContain(
+      "Run an accepted fiscal test before activating production.",
+    );
+    goto(el, "review");
+    await el.updateComplete;
+    goto(el, "fiscal-test");
+    await el.updateComplete;
+    expect(await screenText(el, "fiscal-test", "[role=alert]")).toBeNull();
+  });
 });
 
 describe("restore, configuration and fiscal-test outcomes", () => {
@@ -2123,6 +2138,23 @@ describe("restore, configuration and fiscal-test outcomes", () => {
       "[data-test=run]",
     )!;
     expect(run.disabled).toBe(false);
+  });
+
+  it("clears a could-not-run banner once the operator leaves the fiscal test and comes back", async () => {
+    const el = await mountSetupApp(
+      stubApi({ runFiscalTest: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")) }),
+    );
+    goto(el, "fiscal-test");
+    fiscalTestRequest(el);
+    await flush(el);
+    expect(await screenText(el, "fiscal-test", "[role=alert]")).toBe(
+      "The fiscal test could not run. Check the connection and try again.",
+    );
+    goto(el, "review");
+    await el.updateComplete;
+    goto(el, "fiscal-test");
+    await el.updateComplete;
+    expect(await screenText(el, "fiscal-test", "[role=alert]")).toBeNull();
   });
 });
 
@@ -2821,6 +2853,22 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
       liveSince: undefined,
       liveUnknown: false,
     });
+  });
+
+  it("clears a cloud-recovery error banner once the owner leaves the screen", async () => {
+    const el = await approvedCloudApp({
+      restoreFromCloud: vi.fn().mockRejectedValue({ code: "server.internal", status: 500 }),
+    });
+    cloudRecoveryAction(el, "restore", pointId, false);
+    await flush(el);
+    expect(await screenText(el, "cloud-restore", "[data-test=server-error]")).toBe(
+      "Cloud recovery is unavailable. Check the connection or request expiry, then try again.",
+    );
+    goto(el, "restore");
+    await flush(el);
+    goto(el, "cloud-restore");
+    await flush(el);
+    expect(await screenText(el, "cloud-restore", "[data-test=server-error]")).toBeNull();
   });
 
   it("writes nothing for an old-server refusal that arrives after the element is detached", async () => {
