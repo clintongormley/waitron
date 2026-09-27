@@ -8,6 +8,11 @@ updates:
     schedule:
       interval: weekly
     groups:
+      # Majors included: @vitest/browser-playwright 5 fails at startup beside vitest 4 (#766).
+      # Must precede npm-minor-and-patch, since a dependency joins the first group it matches.
+      vitest:
+        applies-to: version-updates
+        patterns: [vitest, "@vitest/*"]
       npm-minor-and-patch:
         applies-to: version-updates
         update-types: [minor, patch]
