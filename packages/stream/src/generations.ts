@@ -3,7 +3,7 @@ import { canonicalize } from "@waitron/membership";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 import { putOwnBytes } from "./conditional.js";
-import { parseGenerationName, venuePrefix } from "./names.js";
+import { parseGenerationName, strayListedKey, venuePrefix } from "./names.js";
 import type { ObjectStore } from "./object-store.js";
 
 function parsed(field: string, generation: string): { term: number; nodeId: string } {
@@ -65,9 +65,7 @@ export async function pruneGenerations(
   // null for a folder whose name is not a generation's.
   const folders = new Map<string, Folder | null>();
   for (const object of await store.list(root)) {
-    if (!object.key.startsWith(root)) {
-      throw new AppError("backup.stream_name_invalid", { field: "listedKey", value: object.key });
-    }
+    if (!object.key.startsWith(root)) throw strayListedKey();
     const rest = object.key.slice(root.length);
     const slash = rest.indexOf("/");
     if (slash <= 0) continue;

@@ -336,15 +336,18 @@ describe("list", () => {
     ["another folder under the configured root", "waitron/venues/v2/a"],
     ["a key outside the configured root", "elsewhere/venues/v1/a"],
     ["a key that only shares the prefix's first characters", "waitron/venues/v1"],
+    ["a secret-looking key", "elsewhere/sk_live_0123456789abcdefSECRET"],
+    // XML-escaped on the wire; the client decodes it back to the markup.
+    ["a key carrying markup", "elsewhere/&lt;script&gt;alert(1)&lt;/script&gt;"],
   ])(
-    "refuses a listing that names %s, as a bad name rather than a failed request",
+    "refuses a listing that names %s, as a bad name rather than a failed request, without the key",
     async (_, key) => {
       const { store } = storeOver([
         { status: 200, headers: xml, body: listing(entry("waitron/venues/v1/a") + entry(key)) },
       ]);
       expect(await rejection(store.list("venues/v1/"))).toEqual({
         code: "backup.stream_name_invalid",
-        params: { field: "listedKey", value: key },
+        params: { field: "listedKey", value: "other" },
       });
     },
   );

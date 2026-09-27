@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import type { ObjectStore, PutCondition } from "./object-store.js";
 import { PROBE_PREFIX, probeBucket } from "./probe.js";
+import { strayListedKey } from "./names.js";
 import { createS3ObjectStore } from "./s3-store.js";
 import { createMemoryObjectStore } from "./testing/memory-store.js";
 import { silentBucket } from "./testing/silent-bucket.js";
@@ -309,10 +310,7 @@ describe("probeBucket", () => {
     const stray = createMemoryObjectStore();
     stray.failNext({
       operation: "list",
-      error: new AppError("backup.stream_name_invalid", {
-        field: "listedKey",
-        value: "elsewhere/a",
-      }),
+      error: strayListedKey(),
     });
     await expect(probeBucket(stray, NONCE)).resolves.toEqual({
       ok: false,

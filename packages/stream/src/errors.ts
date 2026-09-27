@@ -32,8 +32,8 @@ declare module "@waitron/shared" {
     /** `current.json` is not a pointer this package wrote; `reason` names the check that failed. */
     "backup.stream_pointer_invalid": { reason: string };
     /** A venue id, node id, term, time or window that cannot form a key or a generation name, or a
-     * listed key outside the prefix asked for (`field: "listedKey"`, `value` the key as the listing
-     * named it). */
+     * listed key outside the prefix asked for (`field: "listedKey"`, `value` "other", never the key: the
+     * key is text the bucket supplied). */
     "backup.stream_name_invalid": { field: string; value: string };
     /** A value bound for Litestream could not be written into its configuration safely
      * (`litestream.ts`). `field` names the value, never its content. */
