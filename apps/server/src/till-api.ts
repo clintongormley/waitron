@@ -783,7 +783,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
                 })
               ).zoneId
             : (await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId)).zoneId;
-        return VENUE_SERVICE.menuState(tx, zone, device?.deviceProfileId);
+        return VENUE_SERVICE.menuState(tx, zone, { deviceProfileId: device?.deviceProfileId });
       });
       return c.json(state);
     }),

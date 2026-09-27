@@ -2338,7 +2338,7 @@ describe("each served menu's structure and home layouts", () => {
           layoutFallback,
         })),
       ).toEqual(expected);
-      const state = await menuState(tx, venue.diningZone, venue.profile);
+      const state = await menuState(tx, venue.diningZone, { deviceProfileId: venue.profile });
       expect(
         state.menus.map(({ menuId, homeLayoutId, layoutFallback }) => ({
           id: menuId,
@@ -2349,7 +2349,9 @@ describe("each served menu's structure and home layouts", () => {
       // A layout chosen after the publish is not in the live version yet.
       const bar = (await createHomeLayout(tx, venue.menuId, "Bar")).id;
       await setDeviceHomeLayout(tx, venue.profile, venue.menuId, bar);
-      expect((await menuState(tx, venue.diningZone, venue.profile)).menus[0]).toMatchObject({
+      expect(
+        (await menuState(tx, venue.diningZone, { deviceProfileId: venue.profile })).menus[0],
+      ).toMatchObject({
         homeLayoutId: venue.allDayHome,
         layoutFallback: "layout_unpublished",
       });

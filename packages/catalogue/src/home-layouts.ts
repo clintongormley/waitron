@@ -290,6 +290,21 @@ export async function setDeviceHomeLayout(
     });
 }
 
+/** The profile's chosen layout for each menu it has chosen one for, keyed by menu id. */
+async function chosenHomeLayouts(
+  tx: Transaction,
+  deviceProfileId: string,
+): Promise<Map<string, string>> {
+  const rows = await tx
+    .select({
+      menuId: deviceProfileHomeLayouts.menuId,
+      layoutId: deviceProfileHomeLayouts.layoutId,
+    })
+    .from(deviceProfileHomeLayouts)
+    .where(eq(deviceProfileHomeLayouts.deviceProfileId, deviceProfileId));
+  return new Map(rows.map((row) => [row.menuId, row.layoutId]));
+}
+
 /** Every menu, by name, with its working layouts and the profile's choice for it. */
 export async function deviceHomeLayouts(
   tx: Transaction,
@@ -309,17 +324,7 @@ export async function deviceHomeLayouts(
     .from(sections)
     .where(eq(sections.role, "home_layout"))
     .orderBy(asc(sections.internalName), asc(sections.id));
-  const chosen = new Map(
-    (
-      await tx
-        .select({
-          menuId: deviceProfileHomeLayouts.menuId,
-          layoutId: deviceProfileHomeLayouts.layoutId,
-        })
-        .from(deviceProfileHomeLayouts)
-        .where(eq(deviceProfileHomeLayouts.deviceProfileId, deviceProfileId))
-    ).map((row) => [row.menuId, row.layoutId]),
-  );
+  const chosen = await chosenHomeLayouts(tx, deviceProfileId);
   const byMenu = new Map<string, { id: string; name: string }[]>();
   for (const { id, name, menuId } of layouts) {
     const list = byMenu.get(menuId!) ?? [];
@@ -354,23 +359,21 @@ export async function resolveDeviceHomeLayouts(
   deviceProfileId: string | null,
   documents: readonly MenuDocument[],
 ): Promise<Map<string, DeviceHomeLayout>> {
-  const chosen = new Map<string, string>();
-  if (deviceProfileId !== null)
-    for (const row of await tx
-      .select({
-        menuId: deviceProfileHomeLayouts.menuId,
-        layoutId: deviceProfileHomeLayouts.layoutId,
-      })
-      .from(deviceProfileHomeLayouts)
-      .where(eq(deviceProfileHomeLayouts.deviceProfileId, deviceProfileId)))
-      chosen.set(row.menuId, row.layoutId);
-  const unpublished = (document: MenuDocument): string | null => {
+  const chosen =
+    deviceProfileId === null
+      ? new Map<string, string>()
+      : await chosenHomeLayouts(tx, deviceProfileId);
+  // Each document with the chosen layout its live version lacks, or null.
+  const resolved = documents.map((document): [MenuDocument, string | null] => {
     const layoutId = chosen.get(document.menuId);
-    return layoutId === undefined || document.homeLayouts.some((layout) => layout.id === layoutId)
-      ? null
-      : layoutId;
-  };
-  const missing = documents.flatMap((document) => unpublished(document) ?? []);
+    return [
+      document,
+      layoutId === undefined || document.homeLayouts.some((layout) => layout.id === layoutId)
+        ? null
+        : layoutId,
+    ];
+  });
+  const missing = resolved.flatMap(([, layoutId]) => layoutId ?? []);
   // A chosen layout the live version lacks: its menu, if the working state still has it.
   const working = new Map<string, string>();
   if (missing.length > 0)
@@ -380,8 +383,7 @@ export async function resolveDeviceHomeLayouts(
       .where(and(inArray(sections.id, missing), eq(sections.role, "home_layout"))))
       working.set(row.id, row.ownerMenuId!);
   return new Map(
-    documents.map((document): [string, DeviceHomeLayout] => {
-      const layoutId = unpublished(document);
+    resolved.map(([document, layoutId]): [string, DeviceHomeLayout] => {
       if (layoutId === null)
         return [
           document.menuId,

@@ -578,11 +578,11 @@ export async function listZoneOffers(
 export async function menuState(
   tx: Transaction,
   zoneId: string,
-  deviceProfileId: string | null = null,
+  options: { deviceProfileId?: string | null } = {},
 ): Promise<ZoneMenuState> {
   const published = await zoneLiveDocuments(tx, zoneId);
   const documents = published.map((menu) => menu.document);
-  const layouts = await resolveDeviceHomeLayouts(tx, deviceProfileId, documents);
+  const layouts = await resolveDeviceHomeLayouts(tx, options.deviceProfileId ?? null, documents);
   // Catalogue's `MenuState` is the type the till reads this answer as.
   const state: MenuState = {
     menus: published.map(({ menuId, versionId }) => ({

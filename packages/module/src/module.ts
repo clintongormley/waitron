@@ -319,7 +319,7 @@ export interface VenueServiceContribution {
   menuState(
     tx: Transaction,
     zoneId: string,
-    deviceProfileId?: string | null,
+    options?: { deviceProfileId?: string | null },
   ): Promise<ZoneMenuState>;
   resolveNewOrderZone(
     tx: Transaction,
