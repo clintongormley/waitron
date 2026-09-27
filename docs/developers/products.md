@@ -98,10 +98,11 @@ Each class's percentage is a dated table in code (`VAT_RATE_TABLE` and `vatRateO
 `packages/catalogue/src/vat-rates.ts`): a legal change ships as a new entry dated from the day it
 takes effect. Issuing the invoice takes one clock reading, prices every line's class at the rate in
 force on that reading's local calendar date, and dates the invoice with the same reading
-(`issueMoment`, `apps/server/src/issue-date.ts`). An order open across a change therefore pays the
+(`issueMoment`, `apps/server/src/issue-moment.ts`). An order open across a change therefore pays the
 new rate, and publishing a menu early cannot bring a rate forward. Invoice-first issues at placing,
-so it takes the placing day's rate; an integrated card payment takes the rate when its record is
-issued after the reader (`repriceOn` in `finalizeCapture`, `apps/server/src/till-sale.ts`). The
+so it takes the placing day's rate; an integrated card payment fixes its gross lines before the
+reader and takes the rate when its record is issued after it (`finalizeCapture`,
+`apps/server/src/till-sale.ts`). The
 filed `sale_lines.vat_rate` is the percentage actually filed. A reprint or a replay rebuilds its
 lines' gross amounts from the stored lines and takes its VAT breakdown from the filed record. The
 line's reporting classification is recorded when the line is added, from the product's

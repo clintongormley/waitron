@@ -9,6 +9,7 @@ import {
   createCatalogue,
   createCategory,
   createProduct,
+  rateLines,
 } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -170,15 +171,15 @@ async function seedSale(
 ): Promise<{ saleId: ReturnType<typeof brandSaleId>; workingOrderId: string }> {
   const workingOrderId = randomUUID();
   const settledAt = new Date();
-  const { priced } = await createOpenOrder(
+  const { gross } = await createOpenOrder(
     tx,
     cfg,
     workingOrderId,
     [{ menuItemId, quantity: "1" }],
-    "2026-09-27",
     null,
     { zoneId },
   );
+  const priced = rateLines(gross, "2026-09-27");
   const { saleId } = await recordSale(tx, backend, {
     tillId: cfg.tillId,
     nodeId: cfg.nodeId,

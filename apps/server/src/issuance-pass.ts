@@ -1,30 +1,30 @@
 import { inArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
-import type { PricedLines } from "@waitron/catalogue";
+import type { GrossLines } from "@waitron/catalogue";
 import { VENUE_SERVICE } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
-import type { PricedOrder } from "./working-order.js";
+import type { GrossOrder } from "./working-order.js";
 
 /**
  * The issuance pass: what each line of the sale about to be filed records about its product — the
  * product sold, a variant's parent, the menu and menu version it was sold from, and the reporting
  * chain and labels the line recorded when it was added, copied as they are. Every till filing path
- * calls it on the priced lines it files, in the pass that issues the record, and a replay or reprint
+ * calls it on the gross lines it files, before `issueMoment` rates them, and a replay or reprint
  * never does.
  *
- * `order.identities[i]` is the working-order line `order.priced.lines[i]` was priced from, as
+ * `order.identities[i]` is the working-order line `order.gross.lines[i]` was priced from, as
  * `priceStoredOrderForIssuance` and `createOpenOrder` both return them.
  */
 export async function issuancePass(
   tx: Transaction,
   cfg: TillConfig,
   workingOrderId: string,
-  order: PricedOrder,
-): Promise<PricedLines> {
-  const { priced, identities } = order;
-  if (identities.length !== priced.lines.length) {
+  order: GrossOrder,
+): Promise<GrossLines> {
+  const { gross, identities } = order;
+  if (identities.length !== gross.lines.length) {
     throw new Error(
-      `issuancePass: the ${priced.lines.length} priced lines of working order ${workingOrderId} do not line up with its ${identities.length} line identities`,
+      `issuancePass: the ${gross.lines.length} priced lines of working order ${workingOrderId} do not line up with its ${identities.length} line identities`,
     );
   }
 
@@ -50,8 +50,8 @@ export async function issuancePass(
   );
 
   return {
-    ...priced,
-    lines: priced.lines.map((line, i) => {
+    ...gross,
+    lines: gross.lines.map((line, i) => {
       const { id, productId, classification } = identities[i]!;
       return {
         ...line,

@@ -20,6 +20,7 @@ import {
   setProductVariants,
   updateProduct,
   writeProductModifiers,
+  rateLines,
   type VatClass,
 } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -384,8 +385,8 @@ describe("a product's VAT class changed with no new publish: the sale files the 
 
     expect(replay.lines).toEqual(ticket.lines);
     expect(replay.vatBreakdown).toEqual(ticket.vatBreakdown);
-    const rebuilt = await withTransaction(suite.db, (tx) => priceStoredOrder(tx, id, "2026-09-27"));
-    expect(rebuilt.vatBreakdown).toEqual(CANA_AT_10);
+    const rebuilt = await withTransaction(suite.db, (tx) => priceStoredOrder(tx, id));
+    expect(rateLines(rebuilt, "2026-09-27").vatBreakdown).toEqual(CANA_AT_10);
     expect(await filed(id)).toEqual(sale);
     expect(await stored(id)).toEqual(storedAtAdd);
   });
@@ -480,7 +481,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     const v = await setupVenue();
     const id = randomUUID();
     await withTransaction(suite.db, async (tx) => {
-      await createOpenOrder(tx, v.cfg, id, one(v, v.products.cana), "2026-09-27", null, {
+      await createOpenOrder(tx, v.cfg, id, one(v, v.products.cana), null, {
         zoneId: v.counter.zoneId,
       });
       await insertCapturedPayment(tx, {
@@ -594,9 +595,12 @@ describe("a product's VAT class changed with no new publish: the sale files the 
 
     await withTransaction(suite.db, async (tx) => {
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
-      const priced = await priceStoredOrderForIssuance(tx, id, "2026-09-27");
+      const { gross } = await priceStoredOrderForIssuance(tx, id);
 
-      expect(priced.priced.lines.map((l) => l.vatRate)).toEqual(["10.00", "10.00"]);
+      expect(rateLines(gross, "2026-09-27").lines.map((l) => l.vatRate)).toEqual([
+        "10.00",
+        "10.00",
+      ]);
       expect(
         prepared.mock.calls.filter(([query]) => /^update "working_order_lines"/.test(query.sql)),
       ).toEqual([]);

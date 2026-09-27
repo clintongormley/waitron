@@ -85,10 +85,8 @@ import {
   contentLanguagesOr,
   expandDietaryDeclarations,
   loadClassification,
-  localToday,
-  priceBasket,
-  priceBasketWithOptions,
-  priceLockedLines,
+  grossBasketWithOptions,
+  grossLockedLines,
   menusOfVersions,
   readOptionListsByIds,
   readProductModifiers,
@@ -111,8 +109,8 @@ import type {
   DietaryLabel,
   DietProfile,
   LockedLine,
+  GrossLines,
   OptionList,
-  PricedLines,
   ProductAllergens,
   ResolvedExtraList,
   VatClass,
@@ -122,7 +120,7 @@ import type { FloorAnnotator, PreparationRoute, ZoneMenuOffer, ZoneOffers } from
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { FloorTableShape } from "./tables.js";
 import { issuancePass } from "./issuance-pass.js";
-import { issueMoment } from "./issue-date.js";
+import { issueMoment } from "./issue-moment.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import {
@@ -162,10 +160,6 @@ export interface TillSaleDeps {
 }
 
 type WorkingOrderLineInsert = typeof workingOrderLines.$inferInsert;
-
-/** Threaded out so a caller that persists the order and files its sale in one transaction reuses
- * this price rather than pricing the basket twice. */
-type PricedBasket = PricedLines;
 
 /**
  * `note` is a free-text kitchen note on the parent dish line: non-fiscal, never part of a sale.
@@ -324,9 +318,9 @@ async function readBasketOffers(
 
 /**
  * Price requested lines from the order's zone's live menu versions — the dish, variant, extras and
- * options alike, each at the VAT class the version froze, its rate taken on `on` — and classify each
- * line's product as it stands now. Return both the insertable line snapshots and the basket result
- * so a caller filing the same basket can reuse it. The stored gross unit price, class and
+ * options alike, each at the VAT class the version froze — and classify each line's product as it
+ * stands now. Return both the insertable line snapshots and their gross lines, so a caller filing
+ * the same basket rates those rather than pricing it twice. The stored gross unit price, class and
  * classification are what the line files.
  */
 async function priceOrderLines(
@@ -347,14 +341,12 @@ async function priceOrderLines(
     frozenOptions?: OptionSnapshot[];
     frozenExtras?: ExtraChild[];
   } & LineExtras)[],
-  /** The local calendar date the returned `priced` takes its rates on. */
-  on: string,
   zoneId?: string,
   /** The zone's offers, when the caller has already read them with {@link readBasketOffers}. */
   snapshot?: ZoneOffers,
 ): Promise<{
   lineRows: WorkingOrderLineInsert[];
-  priced: PricedBasket;
+  gross: GrossLines;
   identities: OrderLineIdentity[];
   lineContexts: { workingOrderLineId: string; menuItemId: string }[];
   /** The zone's offers the lines were priced from, for `recordLineContexts`. */
@@ -364,7 +356,7 @@ async function priceOrderLines(
     // A lineless call (splitOffCheck, openTab, unjoin) needs no zone and reads nothing.
     return {
       lineRows: [],
-      priced: priceBasket([], on),
+      gross: grossBasketWithOptions([]),
       identities: [],
       lineContexts: [],
       offers: { defaultMenuId: null, menus: [], offers: [] },
@@ -424,8 +416,8 @@ async function priceOrderLines(
     ...new Set(lines.flatMap((line) => picksOf(line).map((pick) => pick.productId))),
   ]);
 
-  // `priceBasketWithOptions` expands each item to a parent row then its child rows in this same
-  // order, so `lineMeta[i]` lines up with `priced.lines[i]` one-for-one.
+  // `grossBasketWithOptions` expands each item to a parent row then its child rows in this same
+  // order, so `lineMeta[i]` lines up with `gross.lines[i]` one-for-one.
   type LineMeta =
     | {
         kind: "parent";
@@ -537,7 +529,7 @@ async function priceOrderLines(
     await requireLiveCourse(tx, cfg, courseId);
   }
 
-  const priced = priceBasketWithOptions(items, on);
+  const gross = grossBasketWithOptions(items);
   const classification = await loadClassification(
     tx,
     [...new Set(lineMeta.map((meta) => meta.productId))],
@@ -550,7 +542,7 @@ async function priceOrderLines(
   // New lines snapshot the location's receipt languages; locked and issued lines keep their stored
   // text. A locale a variant's text leaves blank takes the variant's own staff name, never the
   // parent's.
-  for (const line of priced.lines) {
+  for (const line of gross.lines) {
     line.descriptions = toInvoiceLineDescriptions(
       line.descriptions,
       invoiceLocales,
@@ -569,9 +561,9 @@ async function priceOrderLines(
   }
 
   // Pre-generated so a CHILD row's `parent_line_id` can name its parent's id in the same insert.
-  const ids = priced.lines.map(() => randomUUID());
-  const byLineNo = new Map(priced.lines.map((line, i) => [line.lineNo, ids[i]!]));
-  const lineRows = priced.lines.map((line, i) => {
+  const ids = gross.lines.map(() => randomUUID());
+  const byLineNo = new Map(gross.lines.map((line, i) => [line.lineNo, ids[i]!]));
+  const lineRows = gross.lines.map((line, i) => {
     const meta = lineMeta[i]!;
     return {
       id: ids[i]!,
@@ -581,7 +573,7 @@ async function priceOrderLines(
       productId: meta.productId,
       name: line.name,
       descriptions: line.descriptions,
-      // Read off the priced line, so this row and a walk-up's sale filed from the same `priced`
+      // Read off the gross line, so this row and a walk-up's sale filed from the same `gross`
       // result cannot describe different answers.
       optionSnapshots: line.optionSnapshots,
       unitName: line.unitName,
@@ -590,11 +582,11 @@ async function priceOrderLines(
       // The gross unit price LOCKED at add time: a retrieved order is filed from it without a
       // re-price, so a later catalogue price change never moves the filed total. Never derived as
       // `line_total ÷ quantity`, which drifts for a weighed line.
-      unitPriceGross: decimalToCents(priced.grossUnitPrices[i]!),
-      vatClass: priced.vatClasses[i]!,
+      unitPriceGross: decimalToCents(line.grossUnitPrice),
+      vatClass: line.vatClass,
       // GROSS, unlike the filed `sale_lines.line_total`'s net base: every total the operator and
       // customer see is gross, so the held-orders list's `sum(line_total)` must be too.
-      lineTotal: decimalToCents(priced.grossLineTotals[i]!),
+      lineTotal: decimalToCents(line.lineGross),
       category: line.category ?? null,
       courseId: meta.kind === "parent" ? meta.courseId : null,
       note: meta.kind === "parent" ? meta.note : null,
@@ -616,7 +608,7 @@ async function priceOrderLines(
     workingOrderLineId: ids[index]!,
     menuItemId: meta.menuItemId,
   }));
-  return { lineRows, priced, identities, lineContexts, offers };
+  return { lineRows, gross, identities, lineContexts, offers };
 }
 
 /**
@@ -753,30 +745,26 @@ export interface OrderLineIdentity {
   classification: SaleLineClassification | null;
 }
 
-/** Priced lines together with, at the same index, the working-order line each was priced from. */
-export interface PricedOrder {
-  priced: PricedLines;
+/** Gross lines together with, at the same index, the working-order line each was priced from. */
+export interface GrossOrder {
+  gross: GrossLines;
   identities: OrderLineIdentity[];
 }
 
-/** Price a persisted order exactly as its lines are stored, each class at its rate on `on`, to
- * rebuild a filed ticket's lines or total a bill. A rebuilt ticket takes its VAT breakdown from the
- * filed record, never from these lines. */
+/** A persisted order's gross lines exactly as they are stored, to rebuild a filed ticket's lines or
+ * total a bill. A rebuilt ticket takes its VAT breakdown from the filed record. */
 export async function priceStoredOrder(
   tx: Transaction,
   workingOrderId: string,
-  on: string,
-): Promise<PricedLines> {
-  return priceLockedLines(
-    (await readLockedLines(tx, workingOrderId)).map(({ locked }) => locked),
-    on,
-  );
+): Promise<GrossLines> {
+  return grossLockedLines((await readLockedLines(tx, workingOrderId)).map(({ locked }) => locked));
 }
 
 /**
- * Issue a persisted order's price: each line's stored gross unit price, its stored VAT class at the
- * rate in force on `on`, the invoice's issue date. Returns each priced line's working-order
- * identity for `issuancePass`, and refuses a lineless order (see {@link readLockedLines}).
+ * A persisted order's gross lines to issue an invoice from: each line's stored gross unit price and
+ * stored VAT class, which `issueMoment` rates on the day the invoice is issued. Returns each line's
+ * working-order identity for `issuancePass`, and refuses a lineless order (see
+ * {@link readLockedLines}).
  *
  * A line never sent whose product cannot be sold now is refused `product.unavailable` (spec §11.3):
  * staff remove it, or split the rest off, before paying. A sent line pays whatever its product's
@@ -786,19 +774,15 @@ export async function priceStoredOrder(
 export async function priceStoredOrderForIssuance(
   tx: Transaction,
   workingOrderId: string,
-  on: string,
   options: { refuseUnsentUnavailable: boolean } = { refuseUnsentUnavailable: true },
-): Promise<PricedOrder> {
+): Promise<GrossOrder> {
   const stored = await readLockedLinesForIssuance(tx, workingOrderId);
   const unpayable = stored.find((line) => !line.payable);
   if (options.refuseUnsentUnavailable && unpayable !== undefined) {
     throw new AppError("product.unavailable", { productId: unpayable.identity.productId! });
   }
   return {
-    priced: priceLockedLines(
-      stored.map(({ locked }) => locked),
-      on,
-    ),
+    gross: grossLockedLines(stored.map(({ locked }) => locked)),
     identities: stored.map(({ identity }) => identity),
   };
 }
@@ -851,7 +835,7 @@ export interface ParkOrderResult {
 
 /**
  * Persist an OPEN working order and its priced lines on the CALLER's transaction, returning the
- * price its lines were priced from so a walk-up files its sale from the same price. Shared so a
+ * gross lines its rows were built from so a walk-up files its sale from the same lines. Shared so a
  * walk-up order has the same shape as a parked one. The empty-basket refusal stays with each caller.
  */
 export async function createOpenOrder(
@@ -864,14 +848,12 @@ export async function createOpenOrder(
     extras?: ExtraSelection[];
     options?: OptionSelection[];
   } & LineExtras)[],
-  /** The local calendar date the returned `priced` takes its rates on. */
-  on: string,
   label: string | null,
   // A tab's table link is `dining_tables.tab_id`, not `deliveryTableId`, so openTab passes none.
   placement: { deliveryTableId?: string | null; zoneId?: string; visitId?: string | null } = {},
 ): Promise<{
   orderNumber: number;
-  priced: PricedBasket;
+  gross: GrossLines;
   identities: OrderLineIdentity[];
   lineRows: WorkingOrderLineInsert[];
 }> {
@@ -891,12 +873,11 @@ export async function createOpenOrder(
     }
     effectiveZoneId = table.zoneId ?? effectiveZoneId;
   }
-  const { lineRows, priced, identities, lineContexts, offers } = await priceOrderLines(
+  const { lineRows, gross, identities, lineContexts, offers } = await priceOrderLines(
     tx,
     cfg,
     id,
     lines,
-    on,
     effectiveZoneId,
   );
   const orderNumber = await allocateOrderNumber(tx, cfg.nodeId);
@@ -922,7 +903,7 @@ export async function createOpenOrder(
     await VENUE_SERVICE.recordLineContexts(tx, cfg, id, lineContexts, offers);
   }
 
-  return { orderNumber, priced, identities, lineRows };
+  return { orderNumber, gross, identities, lineRows };
 }
 
 export async function parkOrder(
@@ -936,17 +917,9 @@ export async function parkOrder(
 
   try {
     return await withTransaction(deps.db, async (tx) => {
-      const { orderNumber } = await createOpenOrder(
-        tx,
-        cfg,
-        req.id,
-        req.lines,
-        localToday(),
-        req.label ?? null,
-        {
-          zoneId: req.zoneId,
-        },
-      );
+      const { orderNumber } = await createOpenOrder(tx, cfg, req.id, req.lines, req.label ?? null, {
+        zoneId: req.zoneId,
+      });
       return { id: req.id, orderNumber };
     });
   } catch (error) {
@@ -1025,18 +998,10 @@ export async function openTab(
   }
 
   const tabId = randomUUID();
-  const { orderNumber } = await createOpenOrder(
-    tx,
-    cfg,
-    tabId,
-    req.lines ?? [],
-    localToday(),
-    null,
-    {
-      zoneId: table.zoneId ?? undefined,
-      visitId: req.visitId,
-    },
-  );
+  const { orderNumber } = await createOpenOrder(tx, cfg, tabId, req.lines ?? [], null, {
+    zoneId: table.zoneId ?? undefined,
+    visitId: req.visitId,
+  });
   // Also clears any stale manual status as the new tab opens.
   await tx
     .update(diningTables)
@@ -1685,7 +1650,6 @@ export async function addTabRound(
     cfg,
     tabId,
     lines,
-    localToday(),
     context?.zoneId,
   );
   const appended = lineRows.map((row, i) => ({ ...row, lineNo: maxLineNo + i + 1 }));
@@ -1726,7 +1690,7 @@ async function openNextPartyTab(
     return null;
   }
   const nextTabId = randomUUID();
-  await createOpenOrder(tx, cfg, nextTabId, [], localToday(), null, { visitId: party.visitId });
+  await createOpenOrder(tx, cfg, nextTabId, [], null, { visitId: party.visitId });
   await VENUE_SERVICE.copyOrderContext(tx, cfg, tabId, nextTabId);
   await tx
     .update(diningTables)
@@ -2882,7 +2846,7 @@ export async function splitOffCheck(
 
   const { orderLabel } = await readReceiptOrder(tx, cfg, fromTabId);
   const checkId = randomUUID();
-  await createOpenOrder(tx, cfg, checkId, [], localToday(), orderLabel, { visitId });
+  await createOpenOrder(tx, cfg, checkId, [], orderLabel, { visitId });
   // The check takes the origin's service mode (or, like it, has none), so `carveOffLines` needs no
   // mode check on this path.
   await VENUE_SERVICE.copyOrderContext(tx, cfg, fromTabId, checkId);
@@ -2957,7 +2921,7 @@ export async function unjoinTable(
   }
   // Repointed before the move, so `newTabId` is a tab when `carveBetweenTabs` checks it.
   const newTabId = randomUUID();
-  await createOpenOrder(tx, cfg, newTabId, [], localToday(), null, { visitId: newVisitId });
+  await createOpenOrder(tx, cfg, newTabId, [], null, { visitId: newVisitId });
   await VENUE_SERVICE.copyOrderContext(tx, cfg, tabId, newTabId);
   if (table.zoneId !== null && (await VENUE_SERVICE.findOrderContext(tx, cfg, newTabId)) !== null) {
     await VENUE_SERVICE.retargetOrderContext(tx, cfg, newTabId, table.zoneId);
@@ -3780,15 +3744,7 @@ async function applyLineEdits(
   }
 
   // Priced before anything is written, so a refused line leaves the order as it was.
-  const priced = await priceOrderLines(
-    tx,
-    cfg,
-    orderId,
-    pricing,
-    localToday(),
-    context?.zoneId,
-    snapshot,
-  );
+  const priced = await priceOrderLines(tx, cfg, orderId, pricing, context?.zoneId, snapshot);
   const groups: { rows: WorkingOrderLineInsert[]; contexts: typeof priced.lineContexts }[] = [];
   priced.lineRows.forEach((row, index) => {
     if (row.parentLineId === null) groups.push({ rows: [], contexts: [] });
@@ -4182,12 +4138,9 @@ export async function placeOrder(
     let placeResult: PlaceOrderResult = { id, status: "placed" };
     let issuedOrderLabel: string | null | undefined;
     if (orderFlow === "invoice_first") {
-      const issue = issueMoment(deps.clock);
-      const priced = await issuancePass(
-        tx,
-        cfg,
-        id,
-        await priceStoredOrderForIssuance(tx, id, issue.on),
+      const { priced, clock } = issueMoment(
+        deps.clock,
+        await issuancePass(tx, cfg, id, await priceStoredOrderForIssuance(tx, id)),
       );
       // The fiscal record's `till_id` is the DEVICE till, while the amendment below records the box's
       // CONFIGURED register. The chain is keyed by the node, not the device.
@@ -4201,7 +4154,7 @@ export async function placeOrder(
         total: priced.total,
         lines: priced.lines,
         vatBreakdown: priced.vatBreakdown,
-        clock: issue.clock,
+        clock,
         operatorId,
         // No tender and no settlement until `collectOrder` settles it.
         settlement: { kind: "deferred" },

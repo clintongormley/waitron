@@ -692,7 +692,7 @@ of the fourth:_
 - _**A line records its class** (`working_order_lines.vat_class`), taken from the version it was
   sold under when its price is fixed, as M7v's second bullet says for the rate._
 - _**Issuing the invoice looks the rate up for the local calendar date of its issue instant**,
-  from one clock reading that also dates the invoice (`issueMoment`, `apps/server/src/issue-date.ts`).
+  from one clock reading that also dates the invoice (`issueMoment`, `apps/server/src/issue-moment.ts`).
   That is payment on every path except invoice-first, which issues at placing, so there it is the
   placing day's rate. An order open across a legal change pays the new rate; publishing a menu
   before a change's date cannot bring the rate forward. An integrated card payment takes the rate

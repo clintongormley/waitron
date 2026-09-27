@@ -31,7 +31,7 @@ export interface ExtraChild {
   /** The extra PRODUCT's own class, never the dish's. */
   vatClass: VatClass;
   /**
-   * The picks for ONE dish, NOT multiplied by the dish count: `priceBasketWithOptions`
+   * The picks for ONE dish, NOT multiplied by the dish count: `grossBasketWithOptions`
    * (`packages/catalogue/src/pricing.ts`) does that multiplication.
    */
   quantity: number;

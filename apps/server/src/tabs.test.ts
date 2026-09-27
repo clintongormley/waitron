@@ -227,17 +227,9 @@ async function seedFiredDelivery(
 ): Promise<string> {
   const id = randomUUID();
   await asApp(cfg, async (tx) => {
-    await createOpenOrder(
-      tx,
-      cfg,
-      id,
-      [{ menuItemId: cafeOffer, quantity: "1" }],
-      "2026-09-27",
-      null,
-      {
-        deliveryTableId: tableId,
-      },
-    );
+    await createOpenOrder(tx, cfg, id, [{ menuItemId: cafeOffer, quantity: "1" }], null, {
+      deliveryTableId: tableId,
+    });
     const lines = await tx
       .select({
         id: workingOrderLines.id,

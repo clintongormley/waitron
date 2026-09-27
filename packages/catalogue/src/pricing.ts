@@ -81,23 +81,38 @@ function baseFromGross(gross: Decimal, rate: Decimal): Decimal {
   return divideDecimal(multiplyDecimal(gross, hundred), addDecimal(hundred, rate), MONEY_SCALE);
 }
 
-export interface PricedLines {
-  lines: RecordSaleLine[];
+/** A line priced before any VAT rate is taken: nothing on it depends on the date. */
+export interface GrossLine extends Omit<
+  RecordSaleLine,
+  "unitPrice" | "vatRate" | "lineTotal" | "lineGross"
+> {
+  vatClass: VatClass;
   /**
-   * The GROSS `unitPrice × quantity` per line, in `lines` order; their sum equals `total` EXACTLY.
-   * Exposed because `RecordSaleLine.lineTotal` is the NET base, whereas the working-order draft
-   * stores the gross the operator saw.
-   */
-  grossLineTotals: Decimal[];
-  /**
-   * The GROSS price for one selected unit per line, in `lines` order: the figure stored as
-   * `working_order_lines.unit_price_gross` and read back by `priceLockedLines`, so the lock
+   * The GROSS price for one selected unit: the figure stored as
+   * `working_order_lines.unit_price_gross` and read back by `grossLockedLines`, so the lock
    * round-trips exactly.
    */
-  grossUnitPrices: Decimal[];
-  /** The VAT class each line was priced at, in `lines` order, so {@link repriceOn} can take the
-   * rate again on another date. */
-  vatClasses: VatClass[];
+  grossUnitPrice: Decimal;
+  /**
+   * The GROSS `unitPrice × quantity`. `RecordSaleLine.lineTotal` is the NET base, whereas the
+   * working-order draft stores the gross the operator saw.
+   */
+  lineGross: Decimal;
+}
+
+export interface GrossLines {
+  lines: GrossLine[];
+  /** The sum of every line's `lineGross`, exactly. */
+  total: Decimal;
+}
+
+/** A line as it is filed, with its gross always set. */
+export interface PricedLine extends RecordSaleLine {
+  lineGross: Decimal;
+}
+
+export interface PricedLines {
+  lines: PricedLine[];
   total: Decimal;
   vatBreakdown: VatBreakdownLine[];
 }
@@ -120,99 +135,94 @@ interface PricingRow {
   kitchenName?: string | null;
 }
 
-// THE ONE arithmetic core: every entry point funnels through here, so a locked-line filing cannot
-// diverge from a walk-up's to the céntimo. Do not reimplement this arithmetic in a caller.
-function priceRows(rows: readonly PricingRow[], on: string): PricedLines {
-  const lines: RecordSaleLine[] = [];
-  const grossLineTotals: Decimal[] = [];
-  const grossUnitPrices: Decimal[] = [];
-  const groups = new Map<Decimal, { base: Decimal; gross: Decimal }>();
+// Every entry point's gross arithmetic, so a locked-line filing cannot diverge from a walk-up's to
+// the céntimo. Do not reimplement this arithmetic in a caller.
+function grossRows(rows: readonly PricingRow[]): GrossLines {
+  const lines = rows.map((row, i) => ({
+    lineNo: i + 1,
+    name: row.name,
+    descriptions: row.descriptions,
+    optionSnapshots: row.optionSnapshots ?? [],
+    quantity: row.quantity,
+    category: row.category,
+    unitName: row.unitName,
+    unitPrecision: row.unitPrecision,
+    parentLineNo: row.parentLineNo ?? null,
+    variantName: row.variantName ?? null,
+    variantDescriptions: row.variantDescriptions ?? null,
+    variantKitchenName: row.variantKitchenName ?? null,
+    kitchenName: row.kitchenName ?? null,
+    vatClass: row.vatClass,
+    grossUnitPrice: toScale(row.grossUnit, MONEY_SCALE),
+    lineGross: toScale(multiplyDecimal(row.grossUnit, decimal(row.quantity)), MONEY_SCALE),
+  }));
+  return { lines, total: sumDecimals(lines.map((line) => line.lineGross)) };
+}
 
+/**
+ * Each line at its class's rate on `on`, a local calendar date `YYYY-MM-DD`: its net base and net
+ * unit, and the VAT breakdown. Every other field a gross line carries passes through.
+ */
+export function rateLines(gross: GrossLines, on: string): PricedLines {
   const rates = vatRatesOn(on);
-
-  rows.forEach((row, i) => {
-    const rate = rates[row.vatClass];
-    const grossUnit = toScale(row.grossUnit, MONEY_SCALE);
-    const gross = toScale(multiplyDecimal(row.grossUnit, decimal(row.quantity)), MONEY_SCALE);
-    const base = baseFromGross(gross, rate);
-    const netUnit = baseFromGross(grossUnit, rate);
-    lines.push({
-      lineNo: i + 1,
-      name: row.name,
-      descriptions: row.descriptions,
-      optionSnapshots: row.optionSnapshots ?? [],
-      quantity: row.quantity,
-      unitPrice: netUnit, // net, informational
-      vatRate: rate,
-      lineTotal: base,
-      category: row.category,
-      unitName: row.unitName,
-      unitPrecision: row.unitPrecision,
-      parentLineNo: row.parentLineNo ?? null,
-      variantName: row.variantName ?? null,
-      variantDescriptions: row.variantDescriptions ?? null,
-      variantKitchenName: row.variantKitchenName ?? null,
-      kitchenName: row.kitchenName ?? null,
-      lineGross: gross,
-    });
-    grossLineTotals.push(gross);
-    grossUnitPrices.push(grossUnit);
+  const groups = new Map<Decimal, { base: Decimal; gross: Decimal }>();
+  const lines = gross.lines.map(({ vatClass, grossUnitPrice, ...line }) => {
+    const rate = rates[vatClass];
+    const base = baseFromGross(line.lineGross, rate);
     const g = groups.get(rate);
     groups.set(
       rate,
       g === undefined
-        ? { base, gross }
-        : { base: addDecimal(g.base, base), gross: addDecimal(g.gross, gross) },
+        ? { base, gross: line.lineGross }
+        : { base: addDecimal(g.base, base), gross: addDecimal(g.gross, line.lineGross) },
     );
+    return {
+      ...line,
+      unitPrice: baseFromGross(grossUnitPrice, rate), // net, informational
+      vatRate: rate,
+      lineTotal: base,
+    };
   });
-
   const vatBreakdown: VatBreakdownLine[] = [...groups.entries()].map(([rate, g]) => ({
     rate,
     base: g.base,
     tax: subtractDecimal(g.gross, g.base), // DIFFERENCE method: tax = gross − base
   }));
-  const total = sumDecimals([...groups.values()].map((g) => g.gross));
-  return {
-    lines,
-    grossLineTotals,
-    grossUnitPrices,
-    vatClasses: rows.map((row) => row.vatClass),
-    total,
-    vatBreakdown,
-  };
+  return { lines, total: gross.total, vatBreakdown };
 }
 
 /** Prices a live basket: gross unit from the product's `unitPrice`, rate its `vatClass`'s on `on`, a
  * local calendar date `YYYY-MM-DD`. */
-// The default serves previews and callers that keep only gross amounts; a filing path names its date.
+// The default exists for a test file that must stay unedited; every production caller names its date.
 export function priceBasket(items: readonly BasketItem[], on: string = localToday()): PricedLines {
-  return priceRows(
-    items.map((item) => {
-      assertQuantityPrecision(item.quantity, item.product.unit.precision, { positive: true });
-      return {
-        grossUnit: decimal(item.product.unitPrice),
-        quantity: item.quantity,
-        vatClass: item.product.vatClass,
-        name: item.product.name,
-        descriptions: item.product.descriptions,
-        category: item.product.category,
-        // The printed label is the unit's abbreviation, frozen here onto working_order_lines.unit_name.
-        unitName: item.product.unit.abbreviation,
-        unitPrecision: item.product.unit.precision,
-        variantName: item.product.variantName ?? null,
-        variantDescriptions: item.product.variantDescriptions ?? null,
-        variantKitchenName: item.product.variantKitchenName ?? null,
-        kitchenName: item.product.kitchenName ?? null,
-      };
-    }),
+  return rateLines(
+    grossRows(
+      items.map((item) => {
+        assertQuantityPrecision(item.quantity, item.product.unit.precision, { positive: true });
+        return {
+          grossUnit: decimal(item.product.unitPrice),
+          quantity: item.quantity,
+          vatClass: item.product.vatClass,
+          name: item.product.name,
+          descriptions: item.product.descriptions,
+          category: item.product.category,
+          // The printed label is the unit's abbreviation, frozen here onto working_order_lines.unit_name.
+          unitName: item.product.unit.abbreviation,
+          unitPrecision: item.product.unit.precision,
+          variantName: item.product.variantName ?? null,
+          variantDescriptions: item.product.variantDescriptions ?? null,
+          variantKitchenName: item.product.variantKitchenName ?? null,
+          kitchenName: item.product.kitchenName ?? null,
+        };
+      }),
+    ),
     on,
   );
 }
 
-/** Prices stored working-order lines from their stored gross unit prices, each class at its rate on
- * `on`. */
-export function priceLockedLines(lines: readonly LockedLine[], on: string): PricedLines {
-  return priceRows(
+/** Stored working-order lines at their stored gross unit prices. */
+export function grossLockedLines(lines: readonly LockedLine[]): GrossLines {
+  return grossRows(
     lines.map((line) => ({
       grossUnit: decimal(line.grossUnitPrice),
       quantity: line.quantity,
@@ -229,39 +239,7 @@ export function priceLockedLines(lines: readonly LockedLine[], on: string): Pric
       variantKitchenName: line.variantKitchenName ?? null,
       kitchenName: line.kitchenName ?? null,
     })),
-    on,
   );
-}
-
-/**
- * The same lines, each class at its rate on `on`: every gross is kept, and so is any field a caller
- * added to a line.
- */
-export function repriceOn(priced: PricedLines, on: string): PricedLines {
-  const again = priceRows(
-    priced.lines.map((line, i) => ({
-      grossUnit: priced.grossUnitPrices[i]!,
-      quantity: line.quantity,
-      vatClass: priced.vatClasses[i]!,
-      name: line.name,
-      descriptions: line.descriptions,
-      optionSnapshots: line.optionSnapshots,
-      category: line.category ?? null,
-      unitName: line.unitName ?? null,
-      unitPrecision: line.unitPrecision ?? null,
-      parentLineNo: line.parentLineNo,
-      variantName: line.variantName,
-      variantDescriptions: line.variantDescriptions,
-      variantKitchenName: line.variantKitchenName,
-      kitchenName: line.kitchenName,
-    })),
-    on,
-  );
-  return {
-    ...priced,
-    ...again,
-    lines: priced.lines.map((line, i) => ({ ...line, ...again.lines[i]! })),
-  };
 }
 
 /** A modifier chosen on a dish. */
@@ -293,19 +271,16 @@ export interface BasketItemWithOptions {
 }
 
 /**
- * Prices a live basket where each dish may carry selected modifier options: each item expands to a
- * PARENT dish row followed by its CHILD option rows, IN ORDER, so each child's `parentLineNo` names
- * the dish above it. With every item's `options` empty this is line-for-line identical to
- * `priceBasket`.
+ * A live basket's gross lines, where each dish may carry selected modifier options: each item
+ * expands to a PARENT dish row followed by its CHILD option rows, IN ORDER, so each child's
+ * `parentLineNo` names the dish above it. With every item's `options` empty, rated with
+ * `rateLines`, this is line-for-line identical to `priceBasket`.
  */
-export function priceBasketWithOptions(
-  items: readonly BasketItemWithOptions[],
-  on: string,
-): PricedLines {
+export function grossBasketWithOptions(items: readonly BasketItemWithOptions[]): GrossLines {
   const rows: PricingRow[] = [];
   for (const item of items) {
     assertQuantityPrecision(item.quantity, item.product.unit.precision, { positive: true });
-    // `priceRows` assigns `lineNo = i + 1` in push order.
+    // `grossRows` assigns `lineNo = i + 1` in push order.
     const parentLineNo = rows.length + 1;
     rows.push({
       grossUnit: decimal(item.product.unitPrice),
@@ -339,5 +314,5 @@ export function priceBasketWithOptions(
       });
     }
   }
-  return priceRows(rows, on);
+  return grossRows(rows);
 }

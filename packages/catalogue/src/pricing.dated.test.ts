@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { decimal } from "@waitron/shared";
 import {
+  grossBasketWithOptions,
+  grossLockedLines,
   priceBasket,
-  priceBasketWithOptions,
-  priceLockedLines,
-  repriceOn,
+  rateLines,
   type PriceableProduct,
 } from "./pricing.js";
 
@@ -51,7 +51,7 @@ describe("pricing takes each rate on the date it is given", () => {
     ]);
   });
 
-  it("priceBasketWithOptions: a dish, an inheriting option and an option with its own class each take the date's rate", () => {
+  it("rateLines over grossBasketWithOptions: a dish, an inheriting option and an option with its own class each take the date's rate", () => {
     const basket = [
       {
         product: each("12.30", "general"),
@@ -63,8 +63,8 @@ describe("pricing takes each rate on the date it is given", () => {
       },
     ];
     const rates = (on: string) =>
-      priceBasketWithOptions(
-        basket.map((item) => ({ ...item, options: [...item.options] })),
+      rateLines(
+        grossBasketWithOptions(basket.map((item) => ({ ...item, options: [...item.options] }))),
         on,
       ).lines.map((line) => line.vatRate);
 
@@ -72,7 +72,7 @@ describe("pricing takes each rate on the date it is given", () => {
     expect(rates(FROM)).toEqual([decimal("23.00"), decimal("23.00"), decimal("10.00")]);
   });
 
-  it("priceLockedLines: a stored line's class takes the date's rate at the same gross", () => {
+  it("rateLines over grossLockedLines: a stored line's class takes the date's rate at the same gross", () => {
     const line = {
       grossUnitPrice: "12.30",
       quantity: "1",
@@ -82,31 +82,37 @@ describe("pricing takes each rate on the date it is given", () => {
       category: null,
     };
 
-    const before = priceLockedLines([line], BEFORE);
-    const from = priceLockedLines([line], FROM);
+    const before = rateLines(grossLockedLines([line]), BEFORE);
+    const from = rateLines(grossLockedLines([line]), FROM);
 
     expect(before.lines[0]).toMatchObject({ vatRate: "21.00", lineTotal: "10.17" });
     expect(from.lines[0]).toMatchObject({ vatRate: "23.00", lineTotal: "10.00" });
     expect(from.total).toBe(before.total);
   });
 
-  it("repriceOn: re-rates priced lines at another date, keeping every gross and the fields a caller added", () => {
-    const priced = priceBasket([{ product: each("12.30", "general"), quantity: "2" }], BEFORE);
-    const tagged = { ...priced, lines: priced.lines.map((l) => ({ ...l, productId: "p-1" })) };
+  it("rateLines: the same gross lines rated on either date keep every gross and the fields a caller added", () => {
+    const basket = [{ product: each("12.30", "general"), quantity: "2" }];
+    const gross = grossBasketWithOptions(basket.map((item) => ({ ...item, options: [] })));
+    const tagged = { ...gross, lines: gross.lines.map((l) => ({ ...l, productId: "p-1" })) };
 
-    const again = repriceOn(tagged, FROM);
+    const before = rateLines(tagged, BEFORE);
+    const from = rateLines(tagged, FROM);
 
-    expect(again.lines[0]).toMatchObject({
+    expect(from.lines[0]).toMatchObject({
       productId: "p-1",
       vatRate: "23.00",
       lineTotal: "20.00",
       unitPrice: "10.00",
       lineGross: "24.60",
     });
-    expect(again.vatBreakdown).toEqual([{ rate: "23.00", base: "20.00", tax: "4.60" }]);
-    expect(again.total).toBe(priced.total);
-    expect(again.grossLineTotals).toEqual(priced.grossLineTotals);
-    expect(repriceOn(tagged, BEFORE)).toEqual(tagged);
+    expect(from.vatBreakdown).toEqual([{ rate: "23.00", base: "20.00", tax: "4.60" }]);
+    expect(from.total).toBe(before.total);
+    expect(from.lines.map((l) => l.lineGross)).toEqual(before.lines.map((l) => l.lineGross));
+    const walkUp = priceBasket(basket, BEFORE);
+    expect(before).toEqual({
+      ...walkUp,
+      lines: walkUp.lines.map((l) => ({ ...l, productId: "p-1" })),
+    });
   });
 
   it("priceBasket with no date takes this process's local date today", () => {

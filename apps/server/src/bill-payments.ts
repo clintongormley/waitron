@@ -8,7 +8,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { assertQuantityPrecision, localToday } from "@waitron/catalogue";
+import { assertQuantityPrecision } from "@waitron/catalogue";
 import {
   AppError,
   addDecimal,
@@ -48,7 +48,7 @@ import type {
   BillFunds,
 } from "./bill-allocation.js";
 import { issuancePass } from "./issuance-pass.js";
-import { issueMoment } from "./issue-date.js";
+import { issueMoment } from "./issue-moment.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 import { ticketLinesFrom } from "./receipt-lines.js";
@@ -293,9 +293,7 @@ async function billTotal(tx: Transaction, workingOrderId: string): Promise<Decim
     .where(eq(workingOrderLines.workingOrderId, workingOrderId))
     .limit(1);
   // The same pricing the invoice is issued from; a lineless bill totals nothing.
-  return line === undefined
-    ? ZERO
-    : (await priceStoredOrder(tx, workingOrderId, localToday())).total;
+  return line === undefined ? ZERO : (await priceStoredOrder(tx, workingOrderId)).total;
 }
 
 function fundsOf(
@@ -546,10 +544,7 @@ export async function readBillBalance(
   const lineNos = await readLineNos(tx, workingOrderId);
   const funds = fundsOf(
     workingOrderId,
-    total ??
-      (lineNos.size === 0
-        ? ZERO
-        : (await priceStoredOrder(tx, workingOrderId, localToday())).total),
+    total ?? (lineNos.size === 0 ? ZERO : (await priceStoredOrder(tx, workingOrderId)).total),
     held,
   );
   const outstanding = subtractDecimal(subtractDecimal(funds.total, funds.received), funds.reserved);
@@ -618,14 +613,16 @@ async function issueWhenFullyPaid(
 
   // A card already captured cannot be undone by refusing its invoice, so a line whose product has
   // since gone off sale is filed as it stands, as a whole-order card recovery files it.
-  const issue = issueMoment(deps.clock);
-  const priced = await issuancePass(
-    tx,
-    cfg,
-    workingOrderId,
-    await priceStoredOrderForIssuance(tx, workingOrderId, issue.on, {
-      refuseUnsentUnavailable: options.moneyMoved !== true,
-    }),
+  const { priced, clock } = issueMoment(
+    deps.clock,
+    await issuancePass(
+      tx,
+      cfg,
+      workingOrderId,
+      await priceStoredOrderForIssuance(tx, workingOrderId, {
+        refuseUnsentUnavailable: options.moneyMoved !== true,
+      }),
+    ),
   );
   const tendersOfBill: SettleSaleTender[] = held
     .filter(({ row }) => row.state === "received")
@@ -652,7 +649,7 @@ async function issueWhenFullyPaid(
     total: priced.total,
     lines: priced.lines,
     vatBreakdown: priced.vatBreakdown,
-    clock: issue.clock,
+    clock,
     operatorId,
     settlement: { kind: "deferred" },
   });

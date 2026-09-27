@@ -112,8 +112,8 @@ export const workingOrders = table(
  * snapshots, naming a product only as a value, never a key.
  *
  * The line-add snapshot IS the filed gross: a retrieved order is FILED from the locked gross unit
- * price without a re-price, at its class's rate on the day the invoice is issued (priceLockedLines,
- * @waitron/catalogue).
+ * price without a re-price (grossLockedLines, @waitron/catalogue), at its class's rate on the day the
+ * invoice is issued.
  *
  * `descriptions` is a locale→string map holding EXACTLY the venue's configured
  * locales, checked by trigger against locations.invoice_locales.

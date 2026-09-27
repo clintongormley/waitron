@@ -30,6 +30,7 @@ import {
   updateExtraList,
   updateProduct,
   writeProductModifiers,
+  rateLines,
 } from "@waitron/catalogue";
 import type { AvailableProduct } from "@waitron/catalogue";
 import { workingLineContexts } from "@waitron/venue-service";
@@ -453,7 +454,6 @@ describe("recordTillSale", () => {
           { menuItemId: waterOfferId, variantId: variantIds!.double, quantity: "1" },
           { menuItemId: waterOfferId, variantId: variantIds!.unavailable, quantity: "1" },
         ],
-        "2026-09-27",
         null,
         { zoneId },
       );
@@ -1385,7 +1385,6 @@ describe("ordering extras and options — parent + child lines", () => {
             options: [{ listId: v.sizeListId, labelId: v.sizeLabelGrandeId }],
           },
         ],
-        "2026-09-27",
         null,
         { zoneId: v.zoneId },
       );
@@ -1465,7 +1464,7 @@ describe("ordering extras and options — parent + child lines", () => {
 
     // PARK, keeping the price its lines were built from.
     const preview = await withTransaction(suite.db, async (tx) => {
-      const { priced } = await createOpenOrder(
+      const { gross } = await createOpenOrder(
         tx,
         v.cfg,
         workingOrderId,
@@ -1479,11 +1478,10 @@ describe("ordering extras and options — parent + child lines", () => {
             ]),
           },
         ],
-        "2026-09-27",
         null,
         { zoneId: v.zoneId },
       );
-      return priced;
+      return rateLines(gross, "2026-09-27");
     });
 
     // RETRIEVE + PAY with no basket, so the children are re-priced from their stored lock.
@@ -1572,7 +1570,6 @@ describe("ordering extras and options — parent + child lines", () => {
               extras: extrasPick(v, [{ productId: v.baconId, quantity: baconQuantity }]),
             },
           ],
-          "2026-09-27",
           null,
           { zoneId: v.zoneId },
         ),
@@ -1625,7 +1622,6 @@ describe("ordering extras and options — parent + child lines", () => {
           },
           { menuItemId: v.offerFor(v.jamonId), quantity: "0.1" },
         ],
-        "2026-09-27",
         null,
         { zoneId: v.zoneId },
       ),
@@ -2015,7 +2011,6 @@ describe("ordering extras and options — parent + child lines", () => {
           { menuItemId: burgerOffer, quantity: "1", extras },
           { menuItemId: baconOffer, quantity: "1" },
         ],
-        "2026-09-27",
         null,
         { zoneId: v.zoneId },
       ),
@@ -2069,7 +2064,6 @@ describe("ordering extras and options — parent + child lines", () => {
         v.cfg,
         id,
         [{ menuItemId: v.offerFor(v.burgerId), quantity: "1" }],
-        "2026-09-27",
         null,
         {
           zoneId: v.zoneId,
@@ -2153,7 +2147,6 @@ describe("ordering extras and options — parent + child lines", () => {
             extras: extrasPick(v, [{ productId: v.baconId, quantity: 1 }]),
           },
         ],
-        "2026-09-27",
         null,
         { zoneId: v.zoneId },
       );

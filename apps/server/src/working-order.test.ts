@@ -525,7 +525,6 @@ describe("a sold line naming a variant is labelled by the variant's own name", (
         cfg,
         orderId,
         [{ menuItemId: offerId, variantId, quantity: "1" }],
-        "2026-09-27",
         null,
         { zoneId },
       );
@@ -576,7 +575,6 @@ describe("a sold line naming a variant is labelled by the variant's own name", (
         cfg,
         orderId,
         [{ menuItemId: seeded.offerId, variantId: seeded.variantId, quantity: "1" }],
-        "2026-09-27",
         null,
         { zoneId },
       );
@@ -2350,7 +2348,7 @@ async function createOfferedOrder(
   lines: ProductLine[],
 ): ReturnType<typeof createOpenOrder> {
   const offers = await offerProducts(tx, cfg);
-  return createOpenOrder(tx, cfg, id, offers.toOfferLines(lines), "2026-09-27", null, {
+  return createOpenOrder(tx, cfg, id, offers.toOfferLines(lines), null, {
     zoneId: offers.zoneId,
   });
 }
@@ -2395,7 +2393,7 @@ async function fireContextless(
   productIds: string[],
 ): Promise<{ id: string }> {
   const id = randomUUID();
-  await createOpenOrder(tx, cfg, id, [], "2026-09-27", null);
+  await createOpenOrder(tx, cfg, id, [], null);
   await insertContextlessLines(tx, id, productIds);
   await fireLines(tx, cfg, id, await fireableLines(tx, id));
   return { id };
@@ -2494,7 +2492,7 @@ describe("createOpenOrder's catalogue reads (perf)", () => {
     const { cfg } = await setupVenue();
     const spy = vi.spyOn(catalogue, "readInvoiceLocales");
     await withTransaction(db, async (tx) => {
-      await createOpenOrder(tx, cfg, randomUUID(), [], "2026-09-27", null);
+      await createOpenOrder(tx, cfg, randomUUID(), [], null);
     });
     expect(spy).not.toHaveBeenCalled();
   });
@@ -2505,17 +2503,9 @@ describe("createOpenOrder's catalogue reads (perf)", () => {
     const locationRead = vi.spyOn(catalogue, "readInvoiceLocales");
     const productList = vi.spyOn(catalogue, "listAvailableProducts");
     await withTransaction(db, async (tx) => {
-      await createOpenOrder(
-        tx,
-        cfg,
-        randomUUID(),
-        offers.toOfferLines([line(cafeId)]),
-        "2026-09-27",
-        null,
-        {
-          zoneId: offers.zoneId,
-        },
-      );
+      await createOpenOrder(tx, cfg, randomUUID(), offers.toOfferLines([line(cafeId)]), null, {
+        zoneId: offers.zoneId,
+      });
     });
     expect(productList).not.toHaveBeenCalled();
     expect(locationRead).toHaveBeenCalledTimes(1);
@@ -2532,7 +2522,7 @@ describe("createOpenOrder's catalogue reads (perf)", () => {
       .where(eq(locations.id, cfg.locationId));
     const id = randomUUID();
     await withTransaction(db, async (tx) => {
-      await createOpenOrder(tx, cfg, id, offers.toOfferLines([line(cafeId)]), "2026-09-27", null, {
+      await createOpenOrder(tx, cfg, id, offers.toOfferLines([line(cafeId)]), null, {
         zoneId: offers.zoneId,
       });
     });
@@ -5101,7 +5091,7 @@ describe("voidTabLine extras cascade (FIX 2)", () => {
   ): Promise<string> {
     const id = randomUUID();
     const offers = await tableOffers(tx, cfg);
-    await createOpenOrder(tx, cfg, id, offers.toOfferLines(lines), "2026-09-27", null, {
+    await createOpenOrder(tx, cfg, id, offers.toOfferLines(lines), null, {
       zoneId: offers.zoneId,
     });
     await tx.execute(sql`update dining_tables set tab_id = ${id} where id = ${tableId}`);
@@ -6819,7 +6809,7 @@ describe("editing a saved order prices only what the edit adds", () => {
     const { cfg, cafeId } = await setupVenue();
     const id = randomUUID();
     await withTransaction(db, async (tx) => {
-      await createOpenOrder(tx, cfg, id, [], "2026-09-27", null);
+      await createOpenOrder(tx, cfg, id, [], null);
       await insertContextlessLines(tx, id, [cafeId]);
     });
 
@@ -7181,7 +7171,7 @@ describe("a variant is sold as the product it is", () => {
       // An order with no service context, so the station comes from the product and category
       // routes. Its two lines name the two variants, which is what an order line for each carries.
       const orderId = randomUUID();
-      await createOpenOrder(tx, cfg, orderId, [], "2026-09-27", null);
+      await createOpenOrder(tx, cfg, orderId, [], null);
       await insertContextlessLines(tx, orderId, [wine.wine125, wine.wine175]);
       const [first, second] = await fireableLines(tx, orderId);
       await fireLines(tx, cfg, orderId, [first!, second!]);
@@ -7208,7 +7198,7 @@ describe("a variant is sold as the product it is", () => {
       await setCategoryStation(tx, cfg, wine.vinosId, bodega.id);
       await setCategoryStation(tx, cfg, wine.copasId, terraza.id);
       const orderId = randomUUID();
-      await createOpenOrder(tx, cfg, orderId, [], "2026-09-27", null);
+      await createOpenOrder(tx, cfg, orderId, [], null);
       await insertContextlessLines(tx, orderId, [wine.wine125, wine.wine175]);
       const [first, second] = await fireableLines(tx, orderId);
       await fireLines(tx, cfg, orderId, [first!, second!]);
@@ -7244,7 +7234,6 @@ describe("a variant is sold as the product it is", () => {
           { menuItemId: wine.offerId, variantId: wine.wine125, quantity: "1" },
           { menuItemId: wine.offerId, variantId: wine.wine175, quantity: "1" },
         ],
-        "2026-09-27",
         null,
         { zoneId },
       );
@@ -7272,7 +7261,6 @@ describe("a variant is sold as the product it is", () => {
           { menuItemId: wine.offerId, variantId: wine.wine125, quantity: "1" },
           { menuItemId: wine.offerId, variantId: wine.wine175, quantity: "1" },
         ],
-        "2026-09-27",
         null,
         { zoneId },
       );
@@ -7298,7 +7286,6 @@ describe("a variant is sold as the product it is", () => {
           { menuItemId: wine.offerId, variantId: wine.wine125, quantity: "1" },
           { menuItemId: wine.offerId, variantId: wine.wine175, quantity: "1" },
         ],
-        "2026-09-27",
         null,
         { zoneId },
       );
@@ -7381,7 +7368,6 @@ describe("a variant is sold as the product it is", () => {
             ],
           },
         ],
-        "2026-09-27",
         null,
         { zoneId },
       );
@@ -7420,7 +7406,6 @@ describe("a variant is sold as the product it is", () => {
         twoLocales,
         orderId,
         [{ menuItemId: wine.offerId, variantId: wine.wine125, quantity: "1" }],
-        "2026-09-27",
         null,
         { zoneId },
       );
@@ -7437,9 +7422,7 @@ describe("a variant is sold as the product it is", () => {
         expo: (await listExpoQueue(tx, twoLocales))[0]!.courses.flatMap((c) =>
           c.items.map((i) => i.name),
         ),
-        receipt: ticketLinesFrom(await priceStoredOrder(tx, orderId, "2026-09-27")).map(
-          (l) => l.descriptions,
-        ),
+        receipt: ticketLinesFrom(await priceStoredOrder(tx, orderId)).map((l) => l.descriptions),
       };
     });
     expect(seen).toEqual({
@@ -7913,7 +7896,6 @@ describe("pricing a stored order to pay it refuses a line never sent whose produ
         cfg,
         orderId,
         [{ menuItemId: offer.offerId, variantId: offer.variantId, quantity: "1" }],
-        "2026-09-27",
         null,
         { zoneId },
       );
@@ -7927,22 +7909,22 @@ describe("pricing a stored order to pay it refuses a line never sent whose produ
     await db.execute(sql`update products set available = 0 where id = ${productId}`);
 
     await expect(
-      withTransaction(db, (tx) => priceStoredOrderForIssuance(tx, orderId, "2026-09-27")),
+      withTransaction(db, (tx) => priceStoredOrderForIssuance(tx, orderId)),
     ).rejects.toMatchObject({ code: "product.unavailable", params: { productId: variantId } });
   });
 
   it("prices the same line while both are available, and once it was sent", async () => {
     const { orderId, productId } = await variantOrder();
     await expect(
-      withTransaction(db, (tx) => priceStoredOrderForIssuance(tx, orderId, "2026-09-27")),
-    ).resolves.toMatchObject({ priced: { total: "3.20" } });
+      withTransaction(db, (tx) => priceStoredOrderForIssuance(tx, orderId)),
+    ).resolves.toMatchObject({ gross: { total: "3.20" } });
 
     await db.execute(sql`update working_order_lines set sent_at = ${nowIso()}
       where working_order_id = ${orderId}`);
     await db.execute(sql`update products set available = 0 where id = ${productId}`);
     await expect(
-      withTransaction(db, (tx) => priceStoredOrderForIssuance(tx, orderId, "2026-09-27")),
-    ).resolves.toMatchObject({ priced: { total: "3.20" } });
+      withTransaction(db, (tx) => priceStoredOrderForIssuance(tx, orderId)),
+    ).resolves.toMatchObject({ gross: { total: "3.20" } });
   });
 });
 
@@ -7956,7 +7938,7 @@ describe("fireCourse on an order with no service context", () => {
       const soup = await makeProduct(tx, cfg, catalogueId, {});
       const flan = await makeProduct(tx, cfg, catalogueId, {});
       const id = randomUUID();
-      await createOpenOrder(tx, cfg, id, [], "2026-09-27", null);
+      await createOpenOrder(tx, cfg, id, [], null);
       await insertContextlessLines(tx, id, [soup, flan]);
       await tx.execute(sql`
         update working_order_lines
