@@ -2047,14 +2047,17 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   reaches the box while the Add agent dialog is open, the five-line feed before the cut, Bluetooth
   discovery, and the receipt preview against printed paper. #324's slips, duplicates and drawer pulse
   have never produced paper either.
-- **Print-agent setup lockdown and Bluetooth pairing — PLANNED 2026-09-27.** The owner-approved
+- **Print-agent setup lockdown — BUILT 2026-09-27.** A joined agent not known to be out of touch
+  serves its `:9110` page and status only to a loopback socket peer; forwarding headers do not open
+  it to the LAN. An out-of-touch agent exposes a five-minute, cancellable reset on the LAN, calls it
+  off after a successful venue pull, and can join again without a process restart. Join state records
+  the pending verification number before the token, and learned venue nodes survive an agent restart.
+  The old Bluetooth card and routes are gone. The owner-approved
   [design](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and
-  [implementation plan](superpowers/plans/2026-09-27-print-agent-setup-lockdown.md) split the work
-  into three independently green pull requests: close a joined agent's `:9110` page to the LAN and
-  remember the venue's nodes; add the optional agent-side Bluetooth command channel; then put Pair,
-  Forget pairing and the printers-only list behind `printer.manage` in the dashboard. The box's
-  BlueZ `Trusted`/remove behavior still needs the plan's real-hardware measurement before the
-  Bluetooth command-channel branch starts; it does not block the setup-lockdown branch.
+  [implementation plan](superpowers/plans/2026-09-27-print-agent-setup-lockdown.md) leave the
+  optional agent Bluetooth command channel and the manager-only dashboard Pair/Forget controls
+  open as their next two branches. Before either starts, the box's BlueZ pairing, `Trusted`,
+  reconnection and remove behavior still needs the plan's real-radio receipt.
 - **Bluetooth delivery from a paired printer remains separate.** `liveBtDevicePath` still refuses
   every Bluetooth job because no real per-printer radio path has been established on the box; the
   pairing plan must not make a paired device claim work or say that it can print.
