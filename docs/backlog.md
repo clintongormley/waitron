@@ -3549,9 +3549,9 @@ approved.
     names that section as its receipt. Tests, not comments: `boot-failure.test.ts`'s "names every
     pinned result code as an unreachable database" cannot fail when a code is added, because it
     loops over the list itself (the review added 26 and the suite passed) —
-    **DONE (lane A's A97)**: two new cases pin the list to `[14]` and read a junk `venue.db` (result
-    code 26) as `unknown`; with 26 added to `UNREACHABLE_RESULT_CODES` both go red while the loop
-    case stays green. Also still open, beside the workflow-guide finding above: two
+    **Done (2026-09-27, lane A's A97, #782):** two new cases pin the list to `[14]` and read a junk
+    `venue.db` (result code 26) as `unknown`; with 26 added to `UNREACHABLE_RESULT_CODES` both go
+    red while the loop case stays green. Also still open, beside the workflow-guide finding above: two
     `health.test.ts` cases, "stays 200 when reconcile has failed runs but nothing parked" and "does
     not flip health for a failed-only run (parked stays 0)", feed a clean pass, so they check less
     than their titles say. Test titles #624 could not touch: "(T12b)" in
