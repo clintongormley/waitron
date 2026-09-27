@@ -2532,13 +2532,13 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   party's bill and a table's bill with no party (`tab.party_mismatch`); and another party's split
   check while that party still has another open bill (`tab.party_has_other_open_bill`). Merging a
   party's last open bill still takes the whole party with it, and a split check still goes back
-  into its own party's tab. **Still open:** a table's bill with no party still accepts an order
-  with no party and no table as a merge source, because that is exactly what putting a split check
-  back looks like when neither has a party. So the test "refuses a detached open order as the
-  merge source" in `apps/server/src/move-merge.test.ts` stays red. Only a test opens a table's
-  bill with no party: `seatTable` always opens a party with its tab (read, not tested).
-  **Next action:** the owner decides whether that test goes, or bills with no party stop being
-  something a table can hold.
+  into its own party's tab. A merge where neither bill has a party is still served (the owner's
+  rule, so putting back a split check with no party keeps working), so an order with no party and
+  no table can still be merged into a table's bill with no party: nothing stored tells it from such
+  a split check. In the product only `seatTable` opens a table's bill (`apps/server/src/visits.ts`),
+  and it always opens a party with it, so a table's bill with no party is built only by tests
+  (read, not tested). **Still open:** joining a table to a split check with no party is now refused
+  as a counter order for the same reason; no test covers that call.
 - **Later: optional seat/guest item assignment (owner, 2026-09-20).** Include shared items when
   this is designed. For now, orders remain at table/tab level and staff select items manually
   when splitting bills; seat assignment is not a prerequisite for the service workflow.

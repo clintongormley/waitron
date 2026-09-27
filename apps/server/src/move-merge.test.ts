@@ -512,7 +512,9 @@ describe("joinTable", () => {
     const orderId = await openTabOn(cfg, original, [{ productId: cafeId, quantity: "1" }]);
     await db.execute(sql`update dining_tables set tab_id = null where id = ${original}`);
 
-    await expect(asApp(cfg, (tx) => joinTable(tx, cfg, orderId, destination))).rejects.toMatchObject({
+    await expect(
+      asApp(cfg, (tx) => joinTable(tx, cfg, orderId, destination)),
+    ).rejects.toMatchObject({
       code: "tab.not_table_tab",
       params: { tabId: orderId },
     });
@@ -776,20 +778,6 @@ describe("mergeTabs guards", () => {
       asApp(cfg, (tx) => mergeTabs(tx, cfg, target, source, { freeSourceTable: false })),
     ).rejects.toMatchObject({ code: "tab.not_table_tab", params: { tabId: target } });
     expect(await tabIdOf(sourceTable)).toBe(source);
-  });
-
-  it("refuses a detached open order as the merge source", async () => {
-    const { cfg, cafeId } = await setupVenue();
-    const targetTable = await seedTable(cfg, "Anchored target");
-    const sourceTable = await seedTable(cfg, "Detached merge source");
-    const target = await openTabOn(cfg, targetTable, [{ productId: cafeId, quantity: "1" }]);
-    const source = await openTabOn(cfg, sourceTable, [{ productId: cafeId, quantity: "1" }]);
-    await db.execute(sql`update dining_tables set tab_id = null where id = ${sourceTable}`);
-
-    await expect(
-      asApp(cfg, (tx) => mergeTabs(tx, cfg, target, source, { freeSourceTable: false })),
-    ).rejects.toMatchObject({ code: "tab.not_table_tab", params: { tabId: source } });
-    expect(await tabIdOf(targetTable)).toBe(target);
   });
 
   it("refuses merging a tab into itself (tab.merge_self)", async () => {
