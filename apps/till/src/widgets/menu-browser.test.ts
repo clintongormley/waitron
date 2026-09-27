@@ -381,8 +381,8 @@ describe("till-menu-browser", () => {
       const shortcuts = readingOrder(el, "shortcuts");
       await widen(host, 300);
       const grid = root(el).querySelector<HTMLElement>('[data-region="structure"] .grid')!;
-      expect(tracks(grid)).toBeGreaterThan(0);
-      expect(tracks(grid)).toBeLessThan(6);
+      // 300 px holds two 104 px minimums and the 12 px gap between them, not three.
+      expect(tracks(grid)).toBe(2);
       expect(readingOrder(el, "structure")).toEqual(wide);
       expect(readingOrder(el, "shortcuts")).toEqual(shortcuts);
       expect(wide).toEqual(names(entries(el, "structure")));

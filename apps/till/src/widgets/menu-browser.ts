@@ -107,9 +107,9 @@ export class TillMenuBrowser extends LitElement {
         gap: var(--wt-space-3);
       }
 
-      /* Up to --columns tracks, and fewer wherever a tile would be narrower than a two-line word
-         needs. auto-fill keeps a track's width the same however many tiles there are, so the tiles
-         fill the grid row by row, in order, at every count. */
+      /* Up to --columns tracks, and fewer wherever a tile would be narrower than the minimum.
+         auto-fill keeps a track's width the same however many tiles there are, so the tiles fill
+         the grid row by row, in order, at every count. */
       .grid.counted {
         grid-template-columns: repeat(
           auto-fill,
