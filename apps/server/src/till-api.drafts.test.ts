@@ -1,15 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq, inArray } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import {
-  orderDraftEvents,
-  orderDraftLines,
-  orderDrafts,
-  orderGroups,
-  serviceCommands,
-  visits,
-  withTransaction,
-} from "@waitron/db";
+import { visits, withTransaction } from "@waitron/db";
 import { loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -104,39 +96,17 @@ async function submitBody(visitId: string, draft: DraftAnswer, lineIds = draft.l
   };
 }
 
-/** Every row the draft routes can write for the visit, so a refusal can be shown to write none. */
-async function snapshot(visitId: string) {
+/** Every row of every table in the venue database, so a refusal can be shown to write none. */
+async function snapshot() {
   return inTx(venue, async (tx) => {
-    const drafts = await tx
-      .select()
-      .from(orderDrafts)
-      .where(eq(orderDrafts.visitId, visitId))
-      .orderBy(asc(orderDrafts.id));
-    const draftIds = drafts.map((draft) => draft.id);
-    return {
-      visit: await tx.select().from(visits).where(eq(visits.id, visitId)),
-      drafts,
-      lines: await tx
-        .select()
-        .from(orderDraftLines)
-        .where(inArray(orderDraftLines.draftId, draftIds))
-        .orderBy(asc(orderDraftLines.id)),
-      events: await tx
-        .select()
-        .from(orderDraftEvents)
-        .where(inArray(orderDraftEvents.draftId, draftIds))
-        .orderBy(asc(orderDraftEvents.id)),
-      groups: await tx
-        .select()
-        .from(orderGroups)
-        .where(eq(orderGroups.visitId, visitId))
-        .orderBy(asc(orderGroups.id)),
-      commands: await tx
-        .select()
-        .from(serviceCommands)
-        .where(eq(serviceCommands.scopeId, visitId))
-        .orderBy(asc(serviceCommands.id)),
-    };
+    const tables = await tx.all<{ name: string }>(
+      sql`select name from sqlite_master where type = 'table' order by name`,
+    );
+    const rows: Record<string, unknown[]> = {};
+    for (const { name } of tables) {
+      rows[name] = await tx.all(sql`select * from ${sql.identifier(name)} order by rowid`);
+    }
+    return rows;
   });
 }
 
@@ -195,7 +165,7 @@ describe("PUT /api/visits/:id/drafts", () => {
   it("refuses 409 draft.taken_over for a save or a submit by someone other than the owner, writing nothing", async () => {
     const visit = await seated();
     const anas = await newDraft(ana, visit.visitId, [dish("Caña")]);
-    const before = await snapshot(visit.visitId);
+    const before = await snapshot();
     const taken = refusal("draft.taken_over", {
       draftId: anas.id,
       ownerId: venue.operatorId,
@@ -217,7 +187,7 @@ describe("PUT /api/visits/:id/drafts", () => {
     expect(saved.json).toEqual(taken);
     expect(submitted.status).toBe(409);
     expect(submitted.json).toEqual(taken);
-    expect(await snapshot(visit.visitId)).toEqual(before);
+    expect(await snapshot()).toEqual(before);
   });
 });
 
@@ -237,7 +207,7 @@ describe("POST /api/visits/:id/drafts/:did/take-over", () => {
       ownerId: venue.adminId,
       revision: anas.revision + 1,
     });
-    const before = await snapshot(visit.visitId);
+    const before = await snapshot();
     const stale = await ana("POST", `/api/visits/${visit.visitId}/drafts/${anas.id}/take-over`, {
       revision: anas.revision,
     });
@@ -245,7 +215,7 @@ describe("POST /api/visits/:id/drafts/:did/take-over", () => {
     expect(stale.json).toEqual(
       refusal("draft.out_of_date", { draftId: anas.id, revision: admins.revision }),
     );
-    expect(await snapshot(visit.visitId)).toEqual(before);
+    expect(await snapshot()).toEqual(before);
 
     const sent = await admin(
       "POST",
@@ -253,13 +223,13 @@ describe("POST /api/visits/:id/drafts/:did/take-over", () => {
       await submitBody(visit.visitId, admins),
     );
     expect(sent.status).toBe(200);
-    const afterSending = await snapshot(visit.visitId);
+    const afterSending = await snapshot();
     const late = await ana("POST", `/api/visits/${visit.visitId}/drafts/${anas.id}/take-over`, {
       revision: admins.revision + 1,
     });
     expect(late.status).toBe(409);
     expect(late.json).toEqual(refusal("draft.already_submitted", { draftId: anas.id }));
-    expect(await snapshot(visit.visitId)).toEqual(afterSending);
+    expect(await snapshot()).toEqual(afterSending);
   });
 });
 
@@ -278,7 +248,7 @@ describe("POST /api/visits/:id/drafts/:did/submit", () => {
       groups: [{ state: "fired", summary: "1 × Caña" }],
       draft: { id: anas.id, revision: anas.revision + 1, lines: [anas.lines[1]] },
     });
-    const before = await snapshot(visit.visitId);
+    const before = await snapshot();
     // The retry spells both ids in upper case: the path's visit is folded as it is stored.
     const again = await ana(
       "POST",
@@ -287,7 +257,7 @@ describe("POST /api/visits/:id/drafts/:did/submit", () => {
     );
     expect(again.status).toBe(200);
     expect(again.json).toEqual(first.json);
-    expect(await snapshot(visit.visitId)).toEqual(before);
+    expect(await snapshot()).toEqual(before);
   });
 
   it("adds the lines to the held group joinGroupId names", async () => {
@@ -318,7 +288,7 @@ describe("a draft named on another party", () => {
     const mesa4 = await seated();
     const mesa5 = await seated();
     const anas = await newDraft(ana, mesa4.visitId, [dish("Caña")]);
-    const before = await snapshot(mesa4.visitId);
+    const before = await snapshot();
 
     const answers = [
       await ana("PUT", `/api/visits/${mesa5.visitId}/drafts`, {
@@ -345,7 +315,7 @@ describe("a draft named on another party", () => {
     }
     expect(notAnId.status).toBe(404);
     expect(notAnId.json).toEqual(refusal("draft.not_found", { draftId: "draft-1" }));
-    expect(await snapshot(mesa4.visitId)).toEqual(before);
+    expect(await snapshot()).toEqual(before);
   });
 });
 
@@ -367,13 +337,13 @@ describe("a malformed body", () => {
     async (field, body) => {
       const visit = await seated();
       await newDraft(ana, visit.visitId, [dish("Caña")]);
-      const before = await snapshot(visit.visitId);
+      const before = await snapshot();
 
       const refused = await admin("PUT", `/api/visits/${visit.visitId}/drafts`, body);
 
       expect(refused.status).toBe(400);
       expect(refused.json).toEqual(refusal("management.request_invalid", { field }));
-      expect(await snapshot(visit.visitId)).toEqual(before);
+      expect(await snapshot()).toEqual(before);
     },
   );
 
@@ -387,7 +357,7 @@ describe("a malformed body", () => {
     async (field, body) => {
       const visit = await seated();
       const anas = await newDraft(ana, visit.visitId, [dish("Caña")]);
-      const before = await snapshot(visit.visitId);
+      const before = await snapshot();
 
       const refused = await admin(
         "POST",
@@ -397,7 +367,7 @@ describe("a malformed body", () => {
 
       expect(refused.status).toBe(400);
       expect(refused.json).toEqual(refusal("management.request_invalid", { field }));
-      expect(await snapshot(visit.visitId)).toEqual(before);
+      expect(await snapshot()).toEqual(before);
     },
   );
 
@@ -421,7 +391,7 @@ describe("a malformed body", () => {
     async (field, body) => {
       const visit = await seated();
       const anas = await newDraft(ana, visit.visitId, [dish("Caña")]);
-      const before = await snapshot(visit.visitId);
+      const before = await snapshot();
 
       const refused = await ana(
         "POST",
@@ -431,7 +401,7 @@ describe("a malformed body", () => {
 
       expect(refused.status).toBe(400);
       expect(refused.json).toEqual(refusal("management.request_invalid", { field }));
-      expect(await snapshot(visit.visitId)).toEqual(before);
+      expect(await snapshot()).toEqual(before);
     },
   );
 });
