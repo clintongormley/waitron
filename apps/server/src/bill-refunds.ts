@@ -1,7 +1,7 @@
 import { and, eq, isNotNull, ne } from "drizzle-orm";
 import { billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { authorize } from "@waitron/identity";
+import { authorize, roleHasPermission, verifyPersonCredential } from "@waitron/identity";
 import type { Override } from "@waitron/identity";
 import {
   MANUAL_PROVIDER,
@@ -44,7 +44,7 @@ export interface BillRefundRequest {
   appliedAmount: string;
   tipAmount: string;
   reason: string;
-  /** A second person holding `sale.refund`, when the operator does not. */
+  /** A PIN holder with `sale.refund`; required for a confirmed standalone-terminal refund. */
   override?: Override;
   /** Staff confirms the refund has already completed on the standalone card terminal. */
   manualConfirmed?: boolean;
@@ -566,18 +566,35 @@ export async function refundBillPayment(
 
       const provided = await findPaymentByBillPayment(tx, paymentId);
       if (provided?.provider === MANUAL_PROVIDER && req.manualConfirmed === true) {
+        let confirmedBy = authorization.authorizedBy;
         if (!authorization.viaOverride) {
-          throw new AppError("bill.manual_refund_pin_required", { paymentId });
+          if (req.override === undefined) {
+            throw new AppError("bill.manual_refund_pin_required", { paymentId });
+          }
+          const confirmer = await verifyPersonCredential(
+            tx,
+            req.override.personId,
+            req.override.pin,
+          );
+          if (!roleHasPermission(confirmer.role, "sale.refund")) {
+            throw new AppError("authorization.not_permitted", { permission: "sale.refund" });
+          }
+          confirmedBy = req.override.personId;
         }
         const [refund] = await tx
           .insert(billPaymentRefunds)
-          .values({ ...values, state: "completed", completedAt: createdAt })
+          .values({
+            ...values,
+            authorizedBy: confirmedBy,
+            state: "completed",
+            completedAt: createdAt,
+          })
           .returning();
         await recordRefund(tx, {
           provider: provided.provider,
           paymentRef: provided.paymentRef,
           amount: centsToDecimal(values.appliedAmount + values.tipAmount),
-          authorizedBy: authorization.authorizedBy,
+          authorizedBy: confirmedBy,
         });
         return { kind: "done" as const, result: await resultOf(tx, refund!, workingOrderId) };
       }

@@ -2069,6 +2069,39 @@ describe("a cash refund before the invoice (design §6)", () => {
       params: { paymentId },
     });
     expect(await refundRows(paymentId)).toEqual([]);
+
+    const wrongPin = await request(
+      "POST",
+      `/api/working-orders/${billId}/payments/${paymentId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        appliedAmount: "10.00",
+        tipAmount: "0.00",
+        reason: "Devuelto en datáfono",
+        manualConfirmed: true,
+        override: { personId: venue.adminId, pin: "9999" },
+      },
+      adminCookie,
+    );
+    expect(wrongPin.status).toBe(401);
+    expect(wrongPin.json).toMatchObject({ code: "pin.invalid" });
+    expect(await refundRows(paymentId)).toEqual([]);
+
+    const confirmed = await request(
+      "POST",
+      `/api/working-orders/${billId}/payments/${paymentId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        appliedAmount: "10.00",
+        tipAmount: "0.00",
+        reason: "Devuelto en datáfono",
+        manualConfirmed: true,
+        override: { personId: venue.adminId, pin: "1234" },
+      },
+      adminCookie,
+    );
+    expect(confirmed.status).toBe(200);
+    expect(await refundRows(paymentId)).toMatchObject([{ authorizedBy: venue.adminId }]);
   });
 
   it("refuses terminal confirmation by a wrong PIN or a person without refund permission", async () => {

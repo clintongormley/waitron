@@ -404,9 +404,8 @@ declare module "@waitron/shared" {
      */
     "bill.refund_not_whole": { paymentId: string; applied: string; tip: string };
     /**
-     * The bill payment was taken by card on a terminal Waitron does not drive, or through a card
-     * provider that offers no refund Waitron can record before asking, so it is not given back
-     * here.
+     * A standalone-terminal refund lacks explicit confirmation, or the connected provider offers
+     * no refund route Waitron can record before asking.
      */
     "bill.refund_unsupported": { paymentId: string };
     /** A standalone terminal refund requires a manager's PIN on this request. */

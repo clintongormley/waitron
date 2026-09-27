@@ -88,8 +88,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Un pago de artículos concretos solo se puede devolver entero, y así esos artículos se pueden volver a cobrar",
   },
   "bill.refund_unsupported": {
-    en: "Refund this card payment on the separate terminal, then confirm the refund with a manager's PIN",
-    es: "Devuelve este pago con tarjeta en el otro datáfono y confirma después la devolución con el PIN de un responsable",
+    en: "This card payment can't be refunded automatically. If it was taken on a separate terminal, refund it there and record it with a manager's PIN",
+    es: "Este pago con tarjeta no se puede devolver automáticamente. Si se cobró en otro datáfono, devuélvelo allí y regístralo con el PIN de un responsable",
   },
   "bill.manual_refund_pin_required": {
     en: "A manager must enter their PIN to confirm this terminal refund",
