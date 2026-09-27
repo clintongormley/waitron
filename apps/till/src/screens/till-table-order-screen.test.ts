@@ -255,7 +255,7 @@ describe("till-table-order-screen", () => {
     expect(captured!.detail.lines).toEqual([{ menuItemId: "menu-item-cafe", quantity: "1" }]);
     expect(captured!.detail.groups).toEqual([{ release: "fire", lineIndexes: [0] }]);
     // The round stays until the app has the server's answer: a refused round must not be lost.
-    expect(captured!.detail.round).toBe(grid(el).store);
+    expect(captured!.detail.store).toBe(grid(el).store);
     expect(captured!.detail.sent).toEqual(grid(el).store.lines);
     expect(grid(el).store.lineCount).toBe(1);
   });

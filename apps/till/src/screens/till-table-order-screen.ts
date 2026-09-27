@@ -59,7 +59,7 @@ import type {
 } from "../api/client.js";
 import type { ConfirmPaymentDetail } from "../widgets/tender-pay.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
-import { heldGroupIds, inHeldGroup, sendsAlone } from "../state/round-groups.js";
+import { heldGroupIds, inHeldGroup, sendsAlone } from "../state/held-groups.js";
 import {
   draftPreview,
   draftSections,
@@ -75,7 +75,7 @@ export type { TableServiceStatus };
 
 /**
  * `submit-draft`: the groups a confirmed preview named, each naming its lines by their place in
- * `lines`. The draft stays in `round` until the app has the server's answer: it takes out the `sent`
+ * `lines`. The draft stays in `store` until the app has the server's answer: it takes out the `sent`
  * lines (the ones `lines` was built from, in order) once they are added, and a refused submission is
  * kept (D9). `joinGroupId` adds the one held group's lines to that existing group.
  */
@@ -83,7 +83,7 @@ export interface SubmitDraftDetail {
   lines: GroupLine[];
   groups: DraftGroup[];
   joinGroupId?: string;
-  round: WorkingOrderStore;
+  store: WorkingOrderStore;
   sent: readonly OrderLine[];
   draft: Draft;
   /** Keeps what is left of the draft on `orderId`, the bill the same party's submission landed on. */
@@ -172,7 +172,7 @@ class TabPayStore extends WorkingOrderStore {
 }
 
 /**
- * The TILL table-ordering screen: one open table's tab. The round bar holds the CURRENT round only,
+ * The TILL table-ordering screen: one open table's tab. The draft bar holds the CURRENT draft only,
  * never the whole tab.
  *
  * FISCAL FIREWALL. The screen owns NO fiscal path: every write is dispatched upward for the app to
@@ -576,7 +576,7 @@ export class TillTableOrderScreen extends LitElement {
         border-top: 1px solid var(--wt-color-border);
       }
 
-      /* A round being sent takes no edit until the answer comes back; the status line says why. */
+      /* A draft being sent takes no edit until the answer comes back; the status line says why. */
       .round-control[inert] {
         opacity: var(--wt-opacity-disabled);
       }
@@ -588,7 +588,7 @@ export class TillTableOrderScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      /* A round line's name may wrap inside a word, so on a narrow screen the line's controls and its
+      /* A draft line's name may wrap inside a word, so on a narrow screen the line's controls and its
          remove button stay on screen. */
       .round-bar till-basket::part(name) {
         overflow-wrap: anywhere;
@@ -677,40 +677,41 @@ export class TillTableOrderScreen extends LitElement {
   @state() private splitQuantities = new Map<number, string>();
   @state() private splitAttempted = false;
 
-  /** One round per order, kept only as long as this screen is: another order shown here starts its
-   * own round. */
-  readonly #rounds = new Map<string, WorkingOrderStore>();
+  /** One draft per order, kept only as long as this screen is: another order shown here starts its
+   * own draft. */
+  readonly #draftStores = new Map<string, WorkingOrderStore>();
 
-  get #roundStore(): WorkingOrderStore {
+  get #draftStore(): WorkingOrderStore {
     const key = this.orderId ?? "";
-    let round = this.#rounds.get(key);
-    if (round === undefined) {
-      round = new WorkingOrderStore();
-      this.#rounds.set(key, round);
+    let store = this.#draftStores.get(key);
+    if (store === undefined) {
+      store = new WorkingOrderStore();
+      this.#draftStores.set(key, store);
     }
-    return round;
+    return store;
   }
 
   /** A draft already started on `orderId` is left where it is rather than replaced. */
-  #carryDraft(round: WorkingOrderStore, orderId: string): void {
-    if ((this.#rounds.get(orderId)?.lineCount ?? 0) > 0) return;
-    for (const [from, kept] of this.#rounds) if (kept === round) this.#rounds.delete(from);
-    this.#rounds.set(orderId, round);
+  #carryDraft(store: WorkingOrderStore, orderId: string): void {
+    if ((this.#draftStores.get(orderId)?.lineCount ?? 0) > 0) return;
+    for (const [from, kept] of this.#draftStores)
+      if (kept === store) this.#draftStores.delete(from);
+    this.#draftStores.set(orderId, store);
   }
 
-  /** The round this screen re-renders on; it follows {@link orderId}. */
-  #watchedRound?: { round: WorkingOrderStore; stop: () => void };
+  /** The draft this screen re-renders on; it follows {@link orderId}. */
+  #watchedDraft?: { store: WorkingOrderStore; stop: () => void };
 
-  #watchRound(): void {
-    const round = this.#roundStore;
-    if (this.#watchedRound?.round === round) return;
-    this.#watchedRound?.stop();
-    // A round can be emptied while another is shown, when the app takes out what it sent.
-    this.#noteDraftStart(round);
-    this.#watchedRound = {
-      round,
-      stop: round.subscribe(() => {
-        this.#noteDraftStart(round);
+  #watchDraft(): void {
+    const store = this.#draftStore;
+    if (this.#watchedDraft?.store === store) return;
+    this.#watchedDraft?.stop();
+    // A draft can be emptied while another is shown, when the app takes out what it sent.
+    this.#noteDraftStart(store);
+    this.#watchedDraft = {
+      store,
+      stop: store.subscribe(() => {
+        this.#noteDraftStart(store);
         this.requestUpdate();
       }),
     };
@@ -718,49 +719,49 @@ export class TillTableOrderScreen extends LitElement {
 
   readonly #drafts = new WeakMap<WorkingOrderStore, Draft>();
 
-  #draftOf(round: WorkingOrderStore): Draft {
-    let draft = this.#drafts.get(round);
+  #draftOf(store: WorkingOrderStore): Draft {
+    let draft = this.#drafts.get(store);
     if (draft === undefined) {
       draft = { laterAddition: this.groups.length > 0, tally: { fired: 0, held: 0, joined: 0 } };
-      this.#drafts.set(round, draft);
+      this.#drafts.set(store, draft);
     }
     return draft;
   }
 
-  #noteDraftStart(round: WorkingOrderStore): void {
-    if (round.lineCount === 0) {
-      this.#drafts.delete(round);
+  #noteDraftStart(store: WorkingOrderStore): void {
+    if (store.lineCount === 0) {
+      this.#drafts.delete(store);
       this.destination = "fire-now";
       this.joinTarget = null;
     } else {
-      this.#draftOf(round);
+      this.#draftOf(store);
     }
   }
 
   override connectedCallback(): void {
     super.connectedCallback();
-    this.#watchRound();
+    this.#watchDraft();
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
-    this.#watchedRound?.stop();
-    this.#watchedRound = undefined;
+    this.#watchedDraft?.stop();
+    this.#watchedDraft = undefined;
   }
   /**
-   * Keyed by the round line's object identity: a store line is kept by reference until the round
-   * clears, so a `WeakMap` survives re-renders and drops its entries once the round is sent. A line
+   * Keyed by the draft line's object identity: a store line is kept by reference until the draft
+   * clears, so a `WeakMap` survives re-renders and drops its entries once the draft is sent. A line
    * ABSENT here takes its product's default course server-side.
    */
-  #roundCourses = new WeakMap<OrderLine, string>();
-  /** The draft lines the waiter checked; same lifecycle as {@link #roundCourses}. */
+  #draftCourses = new WeakMap<OrderLine, string>();
+  /** The draft lines the waiter checked; same lifecycle as {@link #draftCourses}. */
   #selected = new WeakSet<OrderLine>();
   @state() private destination: Destination = "fire-now";
   /** The held group Add to held group joins; the first held group when unset or gone. */
   @state() private joinTarget: string | null = null;
   @state() private pendingDraft: PendingDraft | null = null;
   #payStore?: TabPayStore;
-  /** Memoised so a render triggered by a round change does not recompute every line's gross. */
+  /** Memoised so a render triggered by a draft change does not recompute every line's gross. */
   #lineGrossByLineNo = new Map<number, Decimal>();
   /** Built with {@link products}, so each line's Change lookup is not a scan. */
   #productsByOffer?: Map<string, TillProduct>;
@@ -774,7 +775,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
-    this.#watchRound();
+    this.#watchDraft();
     // The gross map is filled BEFORE `#tabTotal` sums it below.
     if (changed.has("lines") || this.#payStore === undefined) {
       this.#lineGrossByLineNo = new Map(
@@ -887,7 +888,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #isLaterAddition(): boolean {
-    return this.#drafts.get(this.#roundStore)?.laterAddition === true;
+    return this.#drafts.get(this.#draftStore)?.laterAddition === true;
   }
 
   /** The party's held groups in position order: the ones a later addition may join. */
@@ -926,8 +927,8 @@ export class TillTableOrderScreen extends LitElement {
    * and labels by id alone: the server takes every price, VAT class and name from the published offer.
    */
   #openPreview(action: DraftAction): void {
-    const round = this.#roundStore;
-    const lines = round.lines;
+    const store = this.#draftStore;
+    const lines = store.lines;
     const entries = this.#draftEntries(lines);
     const selected = this.#selectedIndexes(lines);
     const submission = draftSubmission(action, entries, this.courses, selected);
@@ -943,7 +944,7 @@ export class TillTableOrderScreen extends LitElement {
           ...toWireLineExtras(line),
           ...toWireModifiers(line),
         };
-        const courseId = this.#roundCourses.get(line);
+        const courseId = this.#draftCourses.get(line);
         if (courseId !== undefined) wire.courseId = courseId;
         return wire;
       }),
@@ -952,10 +953,10 @@ export class TillTableOrderScreen extends LitElement {
         lineIndexes: group.lineIndexes.map((index) => place.get(index)!),
       })),
       ...(submission.joinGroupId === undefined ? {} : { joinGroupId: submission.joinGroupId }),
-      round,
+      store,
       sent,
-      draft: this.#draftOf(round),
-      carryTo: (orderId) => this.#carryDraft(round, orderId),
+      draft: this.#draftOf(store),
+      carryTo: (orderId) => this.#carryDraft(store, orderId),
     };
     const held = this.#heldGroups();
     const index = held.findIndex((group) => group.id === submission.joinGroupId);
@@ -980,10 +981,10 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #selectedCourseId(line: OrderLine): string {
-    return this.#roundCourses.get(line) ?? line.product.courseId ?? "";
+    return this.#draftCourses.get(line) ?? line.product.courseId ?? "";
   }
 
-  /** The placeholder's meaning is the CALLER's: "use the product default" for a round line (never sent
+  /** The placeholder's meaning is the CALLER's: "use the product default" for a draft line (never sent
    * as a course), "no course" for a tab line (the explicit `null`). */
   #courseOptions(selected: string, placeholder: string): TemplateResult {
     return html`<option value="" .selected=${selected === ""}>${placeholder}</option>
@@ -995,10 +996,10 @@ export class TillTableOrderScreen extends LitElement {
       )}`;
   }
 
-  /** `requestUpdate` because {@link #roundCourses} is a `WeakMap`, not a reactive property. */
+  /** `requestUpdate` because {@link #draftCourses} is a `WeakMap`, not a reactive property. */
   #pickCourse(line: OrderLine, courseId: string): void {
-    if (courseId === "") this.#roundCourses.delete(line);
-    else this.#roundCourses.set(line, courseId);
+    if (courseId === "") this.#draftCourses.delete(line);
+    else this.#draftCourses.set(line, courseId);
     this.requestUpdate();
   }
 
@@ -1395,10 +1396,10 @@ export class TillTableOrderScreen extends LitElement {
     const menu = shownMenu(this.menus, this.selectedMenuId);
     return html`<till-menu-browser
       class="round-control"
-      ?inert=${this.#roundStore.sending}
+      ?inert=${this.#draftStore.sending}
       .menu=${menu}
       .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedDiet)}
-      .store=${this.#roundStore}
+      .store=${this.#draftStore}
       .columns=${this.handheld ? HANDHELD_COLUMNS : TILL_COLUMNS}
     ></till-menu-browser>`;
   }
@@ -1482,16 +1483,16 @@ export class TillTableOrderScreen extends LitElement {
           ${this.drawerOpen ? this.#drawer(pending) : nothing}
         </div>
         ${
-          this.#roundStore.sending
+          this.#draftStore.sending
             ? html`<p class="round-sending" role="status" data-round-sending>
                 ${t("table.round_sending")}
               </p>`
             : nothing
         }
-        <div class="round-control" data-round-controls ?inert=${this.#roundStore.sending}>
+        <div class="round-control" data-round-controls ?inert=${this.#draftStore.sending}>
           ${this.#draftSections()}
           <div class="round-bar">
-            ${keyed(this.orderId, html`<till-basket .store=${this.#roundStore}></till-basket>`)}
+            ${keyed(this.orderId, html`<till-basket .store=${this.#draftStore}></till-basket>`)}
             ${this.#draftBar()}
           </div>
         </div>
@@ -1505,7 +1506,7 @@ export class TillTableOrderScreen extends LitElement {
    * toggle and, when the venue has courses, its course picker, whose `""` placeholder means "use the
    * product default", not "no course" (no such option). */
   #draftSections(): TemplateResult | typeof nothing {
-    const lines = this.#roundStore.lines;
+    const lines = this.#draftStore.lines;
     if (lines.length === 0) return nothing;
     const sections = draftSections(this.#draftEntries(lines), this.courses);
     return html`<div class="draft-sections" data-draft-sections>
@@ -1561,8 +1562,8 @@ export class TillTableOrderScreen extends LitElement {
    * offered under every `fireControl`: releasing at submission was never gated, and the kitchen and
    * the pass cannot fire a held group of lines with no course. */
   #draftBar(): TemplateResult {
-    const round = this.#roundStore;
-    const disabled = round.lineCount === 0 || round.sending;
+    const store = this.#draftStore;
+    const disabled = store.lineCount === 0 || store.sending;
     const button = (
       action: DraftAction,
       key: StringKey,
@@ -1587,7 +1588,7 @@ export class TillTableOrderScreen extends LitElement {
         </div>
       </div>`;
     }
-    const anySelected = this.#selectedIndexes(round.lines).size > 0;
+    const anySelected = this.#selectedIndexes(store.lines).size > 0;
     return html`<div class="draft-bar">
       <div class="draft-actions" role="group" aria-label=${t("table.draft_actions")}>
         ${

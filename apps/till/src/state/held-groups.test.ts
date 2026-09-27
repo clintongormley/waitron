@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { heldGroupIds, inHeldGroup, sendsAlone } from "./round-groups.js";
+import { heldGroupIds, inHeldGroup, sendsAlone } from "./held-groups.js";
 
 describe("sendsAlone", () => {
   const held = heldGroupIds([

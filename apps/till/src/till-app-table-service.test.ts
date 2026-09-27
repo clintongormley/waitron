@@ -2247,7 +2247,7 @@ describe("till-app table ordering: a menu published while a table is open", () =
     emit(screen, "submit-draft", {
       lines: [{ menuItemId: "menu-item-sopa-0", quantity: "1" }],
       groups: [{ release: "fire", lineIndexes: [0] }],
-      round,
+      store: round,
       sent: [],
     });
     await flush(el);

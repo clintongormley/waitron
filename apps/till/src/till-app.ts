@@ -150,13 +150,13 @@ registerIcons({
 const TABLE_REQUEST_LIMIT_MS = 150_000;
 
 /**
- * What a round's send leaves to do once the round is open for edits again. `find-tab`, after a send
- * that got no answer, moves to the tab the floor now shows for the table the round was sent from,
- * only while that table still holds the party the screen showed at the send and the operator is
- * still on it; `landedOn` names the tab the server added the round to, when it is not the one it was
- * sent to.
+ * What a draft's submission leaves to do once the draft is open for edits again. `find-tab`, after a
+ * submission that got no answer, moves to the tab the floor now shows for the table the draft was
+ * sent from, only while that table still holds the party the screen showed at the submission and the
+ * operator is still on it; `landedOn` names the tab the server added the draft to, when it is not the
+ * one it was sent to.
  */
-type RoundFollowUp = "read-tab" | "find-tab" | "mark-sold-out" | { landedOn: string } | undefined;
+type DraftFollowUp = "read-tab" | "find-tab" | "mark-sold-out" | { landedOn: string } | undefined;
 
 /** A whole-count unit's three-place server quantity reads "2", not "2.000". */
 function displayQuantity(product: TillProduct, quantity: string): string {
@@ -2407,7 +2407,7 @@ export class TillApp extends LitElement {
    * the screen follows. Once a submission leaves the draft empty, the till goes back to the floor
    * and says what the draft's submissions filed. */
   async #onSubmitDraft(event: Event): Promise<void> {
-    const { lines, groups, joinGroupId, round, sent, draft, carryTo } = (
+    const { lines, groups, joinGroupId, store, sent, draft, carryTo } = (
       event as CustomEvent<
         Pick<SubmitDraftDetail, "lines" | "groups" | "joinGroupId"> & Partial<SubmitDraftDetail>
       >
@@ -2415,7 +2415,7 @@ export class TillApp extends LitElement {
     const tabId = this.activeTabId;
     const tableId = this.activeTableId;
     const party = this.orderParty;
-    if (tabId === undefined || round?.sending === true) return;
+    if (tabId === undefined || store?.sending === true) return;
     if (party === null) {
       this.errorKey = "table.error";
       return;
@@ -2428,23 +2428,23 @@ export class TillApp extends LitElement {
     const partyId = party.id;
     // The draft is shut to edits until the answer, so a retry sends what the screen shows and success
     // takes out exactly what was sent.
-    if (round !== undefined) round.sending = true;
-    let followUp: RoundFollowUp;
+    if (store !== undefined) store.sending = true;
+    let followUp: DraftFollowUp;
     try {
       followUp = await this.#submitDraft(
         tabId,
         party,
         { lines, groups, joinGroupId },
-        round,
+        store,
         sent ?? [],
         false,
       );
     } finally {
-      if (round !== undefined) round.sending = false;
+      if (store !== undefined) store.sending = false;
     }
     if (followUp === undefined) return;
     if (followUp === "mark-sold-out") {
-      if (round !== undefined) await this.#markSoldOut(round);
+      if (store !== undefined) await this.#markSoldOut(store);
       return;
     }
     const onSentTable = () => this.activeTabId === tabId && this.activeTableId === tableId;
@@ -2455,14 +2455,14 @@ export class TillApp extends LitElement {
       // while it still holds the party the screen showed when the draft was sent.
       const now = this.tables.find((row) => row.id === tableId);
       if (now?.tabId !== undefined && now.visit?.id === partyId && onSentTable())
-        this.#followRound(tabId, now.tabId, carryTo);
+        this.#followDraft(tabId, now.tabId, carryTo);
     } else if (typeof followUp === "object" && this.activeTabId === tabId) {
       await this.#reloadTables();
-      this.#followRound(tabId, followUp.landedOn, carryTo);
+      this.#followDraft(tabId, followUp.landedOn, carryTo);
     }
     await this.#loadTabLines();
     if (this.orderParty !== null) await this.#loadVisitBills();
-    if (round === undefined || round.lineCount > 0 || draft === undefined) return;
+    if (store === undefined || store.lineCount > 0 || draft === undefined) return;
     const { tally } = draft;
     const filed = tally.fired + tally.held + tally.joined > 0;
     if (followUp === "find-tab" || !filed || this.activeTableId !== tableId) return;
@@ -2487,10 +2487,10 @@ export class TillApp extends LitElement {
     tabId: string,
     party: TableVisit,
     submission: { lines: GroupLine[]; groups: readonly DraftGroup[]; joinGroupId?: string },
-    round: WorkingOrderStore | undefined,
+    store: WorkingOrderStore | undefined,
     sent: readonly OrderLine[],
     retried: boolean,
-  ): Promise<RoundFollowUp> {
+  ): Promise<DraftFollowUp> {
     const { lines, groups, joinGroupId } = submission;
     this.errorKey = undefined;
     let landedOn: string;
@@ -2513,8 +2513,8 @@ export class TillApp extends LitElement {
       landedOn = submitted.tabId;
       this.#noteVisitRevision(party.id, submitted.revision);
     } catch (error) {
-      if (isVersionRefusal(error) && round !== undefined) {
-        const outcome = await this.#refreshRound(round);
+      if (isVersionRefusal(error) && store !== undefined) {
+        const outcome = await this.#refreshRound(store);
         if (outcome === "adopted" && !retried) {
           const reasserted = lines.map((line, index) => {
             const own = sent[index];
@@ -2524,7 +2524,7 @@ export class TillApp extends LitElement {
             tabId,
             party,
             { ...submission, lines: reasserted },
-            round,
+            store,
             sent,
             true,
           );
@@ -2534,7 +2534,7 @@ export class TillApp extends LitElement {
       }
       if (isNetworkFailure(error)) {
         this.errorKey = "table.round_unconfirmed";
-        round?.removeLines(sent);
+        store?.removeLines(sent);
         return "find-tab";
       }
       if (isVisitOutOfDate(error)) {
@@ -2549,14 +2549,14 @@ export class TillApp extends LitElement {
     } finally {
       clearTimeout(limit);
     }
-    round?.removeLines(sent);
+    store?.removeLines(sent);
     return landedOn === tabId ? "read-tab" : { landedOn };
   }
 
-  /** Moves the screen from the tab a round was sent to onto the tab it went to, only while the
+  /** Moves the screen from the tab a draft was sent to onto the tab it went to, only while the
    * operator is still on the first, and the rest of the draft with it; the floor has already been
    * read after the send. */
-  #followRound(sentTo: string, landedOn: string, carryTo?: (orderId: string) => void): void {
+  #followDraft(sentTo: string, landedOn: string, carryTo?: (orderId: string) => void): void {
     if (landedOn === sentTo || this.activeTabId !== sentTo) return;
     carryTo?.(landedOn);
     this.activeTabId = landedOn;

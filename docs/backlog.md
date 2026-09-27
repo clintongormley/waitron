@@ -2129,7 +2129,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     the party's revision; a held no-route dish outside any group gets no Send all button (whether
     one can occur on a party's tab is not established) _(Task 4, 2026-09-27: the till has no Send
     all button at all now, and the table screen offers its per-line Send only on a dish with a
-    kitchen ticket item (`sendsAlone`, `apps/till/src/state/round-groups.ts`), so it offers such a
+    kitchen ticket item (`sendsAlone`, `apps/till/src/state/held-groups.ts`), so it offers such a
     dish no Send either; whether one can occur is still not established)_.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments

@@ -1320,7 +1320,7 @@ describe("till-app: the order's groups", () => {
     emit(order, "submit-draft", {
       lines: [{ menuItemId: "menu-item-cafe", quantity: "1" }],
       groups: [{ release: "fire", lineIndexes: [0] }],
-      round,
+      store: round,
       sent: round.lines,
     });
     await flush(el);
@@ -1409,7 +1409,7 @@ describe("till-app: the order's groups", () => {
     emit(tableOrder(el)!, "submit-draft", {
       lines: [{ menuItemId: "menu-item-cafe", quantity: "1" }],
       groups: [{ release: "fire", lineIndexes: [0] }],
-      round,
+      store: round,
       sent: round.lines,
     });
     await flush(el);
@@ -2056,7 +2056,7 @@ describe("till-app: the order's groups", () => {
         lines: [{ menuItemId: "menu-item-cafe", quantity: "1" }],
         groups: [{ release: "hold", lineIndexes: [0] }],
         joinGroupId: "g2",
-        round,
+        store: round,
         sent: round.lines,
       });
       await flush(el);
@@ -2670,7 +2670,7 @@ describe("till-app: submitting the draft", () => {
       lines: [{ menuItemId: "offer-flan", quantity: "1" }],
       groups: [{ release: "hold", lineIndexes: [0] }],
       joinGroupId: "g1",
-      round,
+      store: round,
       sent: round.lines,
     });
     await flush(el);
