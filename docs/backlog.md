@@ -3307,8 +3307,22 @@ approved.
   `packages/sync-enrolment/src/migration-tables.ts`), 1 `js/biased-cryptographic-random`
   (`packages/country-es/src/spain.ts`), and 2 sanitization findings in test files
   (`scripts/trust-page-logo.test.ts`, `apps/dashboard/src/widgets/extra-list-form.test.ts`). None
-  is triaged; list them with `gh api "repos/clintongormley/waitron/code-scanning/alerts?state=open"`.
-  Next: give each workflow job the least `permissions:` it needs, check each ReDoS pattern against
+  of the other nine is triaged; list them with
+  `gh api "repos/clintongormley/waitron/code-scanning/alerts?state=open"`.
+  **The 25 permission findings are fixed by lane A's A104 (PR #791):** `ci.yml` and
+  `stripe-sandbox.yml` now set `permissions: contents: read` at the top, `publish` keeps its own
+  `packages: write`, and `scripts/ci-workflow.test.mjs` fails any workflow job left on the
+  repository's default token permissions — weaker than its name, it reads each file as TEXT by
+  indent: a job is any two-space key after the `jobs:` line and only a `permissions:` key at
+  four-space indent covers it, so a job written in flow style on one line is reported even when it
+  names permissions, and any top-level value, `write-all` included, counts as covering every job.
+  The repository's default read read-only the day after CodeQL raised the 25 alerts
+  (`gh api repos/clintongormley/waitron/actions/permissions/workflow` printed
+  `"default_workflow_permissions":"read"` on 2026-09-28); the change narrows every scope but
+  `contents` to none (GitHub always grants `metadata` read access) and puts the setting in the
+  files. Whether the alerts close is
+  read on `main`'s next CodeQL analysis.
+  Next: check each ReDoS pattern against
   the inputs that reach it, and dismiss a test-file finding on the thread with its reason rather
   than silently. **Dependabot malware alerts** were switched on by the owner on 2026-09-27 from the
   repository's Settings → Advanced Security page, by the owner's report, unconfirmed: GitHub's docs
@@ -3885,13 +3899,12 @@ approved.
     settles it now), "rebuilds every lookup index without the tenant" (`src/migrations.test.ts`).
   - Found by #602 (`scripts/`), each in a file a comments-only change cannot carry.
     `.github/workflows/ci.yml` (about line 283) says the three-shell receipt sits in
-    `.husky/pre-push` beside the same loop; it is not there. `CLAUDE.md` §2 and the entry "The
-    guard sees ci.yml alone" below say `scripts/ci-workflow.test.mjs` reads only `ci.yml`; one of
-    its cases also reads `mutation.yml`. `CLAUDE.md` §3 says `scripts/no-tenant-column.test.ts`
-    exempts the core migration files that historically carried the column, whole; its
-    `HISTORICAL_TENANT_SQL` list is empty. `docs/developers/modifiers.md` (about lines 469-472)
-    calls the `catalogue-engine-neutral` header paragraph "the receipt" for not checking `pgEnum`
-    in the order and sale files; #602 deleted that paragraph because those columns are now
+    `.husky/pre-push` beside the same loop; it is not there. `CLAUDE.md` §3 says
+    `scripts/no-tenant-column.test.ts` exempts the core migration files that historically carried
+    the column, whole; its `HISTORICAL_TENANT_SQL` list is empty.
+    `docs/developers/modifiers.md` (about lines 469-472) calls the `catalogue-engine-neutral`
+    header paragraph "the receipt" for not checking `pgEnum` in the order and sale files;
+    #602 deleted that paragraph because those columns are now
     `enumType` (text plus a check). `docs/developers/testing-guide.md` (about line 294) says
     `scripts/ci-workflow.test.mjs` "had the mechanism right first"; #602's review corrected that
     file's comment to what testing-guide itself measured (the per-test timer does not fire during
@@ -4357,8 +4370,9 @@ approved.
   - **The first publish into a brand-new package will stop**, because GHCR answers `403 Forbidden`
     for a package that does not exist rather than `not found`, and treating a 403 as "no tag yet" is
     exactly the broadening that would publish a backwards tag. It matters only to a fork.
-  - **The guard sees ci.yml alone.** `scripts/ci-workflow.test.mjs` reads that one file as text, so a
-    future push-triggered workflow that groups by ref is seen by nothing.
+  - **The guard's concurrency cases see ci.yml alone.** `scripts/ci-workflow.test.mjs` reads that
+    one file as text for them, so a future push-triggered workflow that groups by ref is seen by
+    nothing.
 
 - **Three unexplained incidents, each seen once or twice; on recurrence retain the log before
   retrying** (standing rule: a flaky test is fixed at the root): eleven UI suites failing to load with

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -17,11 +17,12 @@ import {
 //   * the test shards PARTITION the workspace. A package can fall through every shard's
 //     `pnpm --filter` selection and never be tested, or land in two and be tested twice.
 //
-// EVERYTHING HERE IS EXTRACTED FROM ci.yml, never transcribed: a transcription tests this file's
-// copy of a workflow rather than the workflow. Each extraction carries a guard that it found
-// something, because a silently-empty extraction makes every assertion below pass against nothing.
-// Nor are the SELECTIONS modelled: each shard's filters are handed to the real `pnpm ls` and the
-// answer is read back.
+// EVERYTHING HERE IS EXTRACTED FROM THE WORKFLOWS, never transcribed — from ci.yml, except one
+// case reading mutation.yml and one token-permissions case reading every .yml file in
+// .github/workflows/. A transcription tests this file's copy of a workflow rather than the
+// workflow. Each extraction carries a guard that it found something, because a silently-empty
+// extraction makes every assertion below pass against nothing. Nor are the SELECTIONS modelled:
+// each shard's filters are handed to the real `pnpm ls` and the answer is read back.
 //
 // Line matching rather than a YAML parser, because there is no YAML library in this workspace.
 // Compare the extractions with a real YAML parser's rather than reasoning about the regexes if this
@@ -928,5 +929,86 @@ describe("the server bundle's smoke steps", () => {
     for (const line of runs) {
       expect(line, `this run of the bundle has no timeout: ${line.trim()}`).toMatch(/\btimeout\s/);
     }
+  });
+});
+
+/** The ids of one workflow's jobs that run with the repository's default token permissions. */
+function jobsWithoutPermissions(text) {
+  const workflowLines = text.split("\n");
+  if (workflowLines.some((line) => /^permissions:/.test(line))) return [];
+  const jobsKey = workflowLines.indexOf("jobs:");
+  if (jobsKey === -1) throw new Error("workflow has no top-level `jobs:` key");
+  const uncovered = [];
+  let current;
+  for (const line of workflowLines.slice(jobsKey + 1)) {
+    const id = /^ {2}([^\s#][^:]*):/.exec(line)?.[1];
+    if (id !== undefined) {
+      if (current !== undefined && !current.covered) uncovered.push(current.id);
+      current = { id, covered: false };
+    } else if (current !== undefined && /^ {4}permissions:/.test(line)) {
+      current.covered = true;
+    }
+  }
+  if (current === undefined) throw new Error("workflow has no jobs under `jobs:`");
+  if (!current.covered) uncovered.push(current.id);
+  return uncovered;
+}
+
+/**
+ * Every job runs under a `permissions:` block of its own or its workflow's, never the repository's
+ * default token permissions. It reads each workflow as TEXT, by indent: a job is any two-space key
+ * after the `jobs:` line, and only a `permissions:` key at four-space indent covers it. So a job
+ * written in flow style on one line is reported even when it names permissions, and any top-level
+ * `permissions:` value, `write-all` included, counts as covering every job.
+ */
+describe("the workflows' token permissions", () => {
+  const workflowsDir = join(repoRoot, ".github", "workflows");
+  const workflowFiles = readdirSync(workflowsDir)
+    .filter((name) => /\.ya?ml$/.test(name))
+    .sort();
+
+  it("reads a top-level block as covering every job, and a job's own block as covering it", () => {
+    const shape = (top) =>
+      `name: x\n${top}on: push\njobs:\n  a:\n    permissions:\n      contents: read\n    runs-on: x\n  b:\n    runs-on: x\n    steps:\n      - run: echo permissions:\n`;
+    expect(jobsWithoutPermissions(shape(""))).toEqual(["b"]);
+    expect(jobsWithoutPermissions(shape("permissions:\n  contents: read\n"))).toEqual([]);
+  });
+
+  it.each([
+    ["  b: # comment", "b"],
+    ['  "b":', '"b"'],
+    ["  b: {runs-on: x}", "b"],
+    ["  b: *j", "b"],
+  ])("reads %j after a covered job as a job of its own", (jobLine, id) => {
+    const covered = "  a:\n    permissions:\n      contents: read\n    runs-on: x\n";
+    const text = `on: push\njobs:\n${covered}${jobLine}\n    runs-on: x\n`;
+    expect(jobsWithoutPermissions(text)).toEqual([id]);
+  });
+
+  it("reads a first job whose line carries a comment", () => {
+    const text =
+      "on: push\njobs:\n  b: # comment\n    runs-on: x\n  a:\n    permissions:\n      contents: read\n";
+    expect(jobsWithoutPermissions(text)).toEqual(["b"]);
+  });
+
+  it("reports a one-line flow-style job even when it names permissions", () => {
+    const text = "on: push\njobs:\n  b: {permissions: {contents: read}, runs-on: x}\n";
+    expect(jobsWithoutPermissions(text)).toEqual(["b"]);
+  });
+
+  it("were found", () => {
+    expect(workflowFiles).toContain("ci.yml");
+  });
+
+  it("never leave a job on the repository's default token permissions", () => {
+    const uncovered = workflowFiles.flatMap((name) =>
+      jobsWithoutPermissions(readFileSync(join(workflowsDir, name), "utf8")).map(
+        (job) => `${name}: ${job}`,
+      ),
+    );
+    expect(
+      uncovered,
+      "give the workflow a top-level `permissions:` block (contents: read), or the job its own",
+    ).toEqual([]);
   });
 });

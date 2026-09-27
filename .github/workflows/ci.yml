@@ -61,6 +61,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.run_id || github.ref }}
   cancel-in-progress: ${{ github.event_name != 'push' }}
 
+permissions:
+  contents: read
+
 jobs:
   # Works out what the rest of the workflow needs to do. Everything below gates on its outputs.
   #
