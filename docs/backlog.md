@@ -2619,18 +2619,18 @@ ongoing overhaul listed at the top of Track A.
   `Intl.Collator`; lists in a lifecycle order say so; then migrate the screens, including the filter
   dropdowns `wt-data-table` draws in its toolbar, which are raw `<select>`s too. Fix
   `wt-data-table`'s locale-less `localeCompare` at the same time.
-- **Seven dropdowns still bind `.value` alone over options from a list, but none is known to show
-  the wrong choice today** (2026-09-14; read, not run). Each binds `.value` on a `<select>` whose
-  options come from a `.map(…)` and marks no option `selected` — the shape that showed "Downstairs
-  bar" on the till while it sold from Deli counter, fixed by #365 (CLAUDE.md §3). Found by a text scan, checked by
-  hand: `apps/dashboard/src/screens/my-schedule-screen.ts:351`, `:365`, `:417`,
-  `apps/dashboard/src/screens/units-screen.ts:486`, and
-  `apps/till/src/screens/till-schedule-screen.ts:353`, `:367`, `:420`. By reading, every one opens
-  on its first option — an empty placeholder or the first absence type — which is what that shape
-  shows anyway, so the fault stays hidden until one opens with another value. **Next action:** when
-  one of them is next touched, mark its options `.selected` the way
-  `apps/till/src/screens/till-counter-screen.ts` now does, with a test that opens it on a non-first
-  choice and reads `select.selectedOptions[0]`.
+- **Three dropdowns on the till's schedule screen still bind `.value` alone over options from a
+  list** (found 2026-09-14 by a text scan; re-checked 2026-09-27):
+  `apps/till/src/screens/till-schedule-screen.ts:356`, `:370`, `:423`. Each binds `.value` on a
+  `<select>` whose options come from a `.map(…)` and marks no option `selected` — the shape that
+  showed "Downstairs bar" on the till while it sold from Deli counter, fixed by #365 (CLAUDE.md §3).
+  The dashboard's My Schedule screen had the same three and they were fixed in the C16 branch
+  (2026-09-27, `fix/my-schedule-loading-and-selects`): there, run red first, a chosen shift or
+  colleague showed ANOTHER entry once its list refreshed in a different order, and the absence-type
+  dropdown opened on its first type when the screen's chosen type was another. The till's copies are
+  the same code and we believe (by reading, not run) they fail the same way. Units' list was fixed
+  by #382. **Next action:** mark the till's options `.selected` the way
+  `apps/dashboard/src/screens/my-schedule-screen.ts` now does, with the same two tests.
 - **The counter till may start in a zone its service zone dropdown does not list** (found
   2026-09-14; read, not run). The till's zone list drops `table_tab` zones (`listDefaultZoneOffers`
   in `apps/server/src/till-api.ts`), but its starting zone comes from `resolveNewOrderZone`
@@ -4238,7 +4238,6 @@ reading unless marked run:
   dialog itself. `apps/dashboard/src/widgets/allergen-picker.ts` avoids the problem by mounting a
   fresh dialog for each open (`keyed`, about lines 215-222). Seen once under coverage load in a test
   (run); we believe a person cannot reopen it that fast; not tested.
-- `my-schedule-screen.ts` shows "no swaps" / "no absences" while those lists are still loading.
 - `content-languages.ts` sends `languages-closed` twice on Cancel (counted in a test run), and its
   Enter-to-save cannot fire because the dialog holds no text box.
 - `login-screen.ts` checks an account link's purpose with `=== null`, so a reply with no purpose at

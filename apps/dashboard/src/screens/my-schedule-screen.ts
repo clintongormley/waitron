@@ -297,15 +297,17 @@ export class MyScheduleScreen extends LitElement {
   }
 
   #swapsSection(): TemplateResult {
-    const swaps = this.swaps ?? [];
+    const swaps = this.swaps;
     return html`<section class="swaps" aria-labelledby="swaps-h">
       <h2 id="swaps-h">${t("myschedule.swaps_title")}</h2>
       ${
-        swaps.length === 0
-          ? html`<p class="muted" data-test="swaps-empty">${t("myschedule.swaps_empty")}</p>`
-          : html`<ul>
-              ${swaps.map((swap) => this.#swapRow(swap))}
-            </ul>`
+        swaps === undefined
+          ? html`<p class="muted" data-test="swaps-loading">${t("myschedule.loading")}</p>`
+          : swaps.length === 0
+            ? html`<p class="muted" data-test="swaps-empty">${t("myschedule.swaps_empty")}</p>`
+            : html`<ul>
+                ${swaps.map((swap) => this.#swapRow(swap))}
+              </ul>`
       }
     </section>`;
   }
@@ -351,9 +353,12 @@ export class MyScheduleScreen extends LitElement {
             .value=${this.coverShiftId}
             @change=${(e: Event) => (this.coverShiftId = (e.target as HTMLSelectElement).value)}
           >
-            <option value="">—</option>
+            <option value="" .selected=${this.coverShiftId === ""}>—</option>
             ${shifts.map(
-              (shift) => html`<option value=${shift.id}>${this.#shiftLabel(shift)}</option>`,
+              (shift) =>
+                html`<option value=${shift.id} .selected=${shift.id === this.coverShiftId}>
+                  ${this.#shiftLabel(shift)}
+                </option>`,
             )}
           </select>
         </div>
@@ -365,9 +370,15 @@ export class MyScheduleScreen extends LitElement {
             .value=${this.coverColleagueId}
             @change=${(e: Event) => (this.coverColleagueId = (e.target as HTMLSelectElement).value)}
           >
-            <option value="">—</option>
+            <option value="" .selected=${this.coverColleagueId === ""}>—</option>
             ${colleagues.map(
-              (person) => html`<option value=${person.personId}>${person.displayName}</option>`,
+              (person) =>
+                html`<option
+                  value=${person.personId}
+                  .selected=${person.personId === this.coverColleagueId}
+                >
+                  ${person.displayName}
+                </option>`,
             )}
           </select>
         </div>
@@ -383,24 +394,28 @@ export class MyScheduleScreen extends LitElement {
   }
 
   #absencesSection(): TemplateResult {
-    const absences = this.absences ?? [];
+    const absences = this.absences;
     return html`<section class="absences" aria-labelledby="absences-h">
       <h2 id="absences-h">${t("myschedule.absences_title")}</h2>
       ${
-        absences.length === 0
-          ? html`<p class="muted" data-test="absences-empty">${t("myschedule.absences_empty")}</p>`
-          : html`<ul>
-              ${absences.map(
-                (absence) =>
-                  html`<li data-test=${`absence-${absence.id}`}>
-                    <span
-                      >${absenceKindName(absence.kind)} ·
-                      ${absence.startsOn}–${absence.endsOn}</span
-                    >
-                    <span class="meta">${absenceStatusName(absence.status)}</span>
-                  </li>`,
-              )}
-            </ul>`
+        absences === undefined
+          ? html`<p class="muted" data-test="absences-loading">${t("myschedule.loading")}</p>`
+          : absences.length === 0
+            ? html`<p class="muted" data-test="absences-empty">
+                ${t("myschedule.absences_empty")}
+              </p>`
+            : html`<ul>
+                ${absences.map(
+                  (absence) =>
+                    html`<li data-test=${`absence-${absence.id}`}>
+                      <span
+                        >${absenceKindName(absence.kind)} ·
+                        ${absence.startsOn}–${absence.endsOn}</span
+                      >
+                      <span class="meta">${absenceStatusName(absence.status)}</span>
+                    </li>`,
+                )}
+              </ul>`
       }
     </section>`;
   }
@@ -419,7 +434,10 @@ export class MyScheduleScreen extends LitElement {
               (this.absKind = (e.target as HTMLSelectElement).value as AbsenceKind)}
           >
             ${ABSENCE_KINDS.map(
-              (kind) => html`<option value=${kind}>${absenceKindName(kind)}</option>`,
+              (kind) =>
+                html`<option value=${kind} .selected=${kind === this.absKind}>
+                  ${absenceKindName(kind)}
+                </option>`,
             )}
           </select>
         </div>

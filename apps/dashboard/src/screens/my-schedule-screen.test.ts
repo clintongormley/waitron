@@ -353,3 +353,71 @@ describe("my-schedule-screen — keyboard submit and partial loads", () => {
     ).toHaveLength(0);
   });
 });
+
+describe("my-schedule-screen — lists still loading, and dropdowns that keep their choice", () => {
+  it.each([
+    ["swaps", { listMySwaps: vi.fn().mockReturnValue(new Promise(() => {})) }],
+    ["absences", { listMyAbsences: vi.fn().mockReturnValue(new Promise(() => {})) }],
+  ] as const)(
+    "says the %s list is loading, not that it is empty, while its read is open",
+    async (list, held) => {
+      const { el } = await mount(stubApi({ ...held }));
+      await flush(el);
+      const loading = el.shadowRoot!.querySelector(`[data-test=${list}-loading]`);
+      expect(loading?.textContent ?? "").toContain("Cargando…");
+      expect(el.shadowRoot!.querySelector(`[data-test=${list}-empty]`)).toBeNull();
+    },
+  );
+
+  function chosenText(el: MyScheduleScreen, dataTest: string): string | undefined {
+    const select = el.shadowRoot!.querySelector<HTMLSelectElement>(`[data-test=${dataTest}]`)!;
+    return select.selectedOptions[0]?.textContent?.trim();
+  }
+
+  it("keeps the chosen colleague when the roster refreshes in a different order", async () => {
+    const liveData = new LiveData();
+    const withCol2: RosterEntry[] = [...roster, { personId: "col2", displayName: "Segunda" }];
+    const api = Object.assign(stubApi({ getStaffRoster: vi.fn().mockResolvedValue(withCol2) }), {
+      liveData,
+    });
+    const { el } = await mount(api);
+    await flush(el);
+    selectValue(el, "cover-colleague", "col2");
+    await flush(el);
+    vi.mocked(api.getStaffRoster).mockResolvedValue([...withCol2].reverse());
+    liveData.invalidate([{ type: "persons", id: "col2" }]);
+    await vi.waitFor(() => expect(api.getStaffRoster).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(chosenText(el, "cover-colleague")).toBe("Segunda");
+  });
+
+  it("keeps the chosen shift when my shifts refresh in a different order", async () => {
+    const liveData = new LiveData();
+    const second: MyShift = { ...shifts[0]!, id: "s2", role: "cocina" };
+    const api = Object.assign(
+      stubApi({ listMyShifts: vi.fn().mockResolvedValue([shifts[0]!, second]) }),
+      { liveData },
+    );
+    const { el } = await mount(api);
+    await flush(el);
+    selectValue(el, "cover-shift", "s2");
+    await flush(el);
+    vi.mocked(api.listMyShifts).mockResolvedValue([second, shifts[0]!]);
+    liveData.invalidate([{ type: "shifts", id: "s2" }]);
+    await vi.waitFor(() => expect(api.listMyShifts).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(chosenText(el, "cover-shift")).toContain("cocina");
+  });
+
+  it("opens the absence-kind dropdown on a kind that is not the first", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<MyScheduleScreen>("dashboard-my-schedule-screen", {
+      api,
+      myPersonId: "me",
+      absKind: "sick_leave",
+    } as Partial<MyScheduleScreen>);
+    await flush(el);
+    const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=abs-kind]")!;
+    expect(select.selectedOptions[0]?.value).toBe("sick_leave");
+  });
+});
