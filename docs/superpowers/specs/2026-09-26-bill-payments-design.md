@@ -192,7 +192,7 @@ refund ids that already existed on the payment, read just before the first send,
 whose refunds cannot carry our id (SumUp, §6b). It is written only with the first send's `sent_at`
 and never changed after; it stays null when no reading was taken. A `failed` refund also keeps
 `provider_refund_ref` when the evidence names one; the trigger sets that column once and never
-changes it. `packages/db/drizzle/0023_bill_payment_triggers.sql`.)_
+changes it. `packages/db/drizzle/0024_bill_payment_triggers.sql`.)_
 Only a `completed` refund counts in the sums below. A payment's **net applied** is `applied − sum(applied_amount)` and its **net tip** is
 `tip − sum(tip_amount)`. A refund gives back applied money first; it returns a tip only when the
 whole payment is refunded at the payer's request (§6).

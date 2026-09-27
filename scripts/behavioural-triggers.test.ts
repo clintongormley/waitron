@@ -47,7 +47,7 @@ import {
  * than refuses is `visits_clear_table_status` (`packages/db/drizzle/0020_visit_clears_table_status.sql`):
  * a table's service status comes off when the party's visit leaves `open`, on every table still a
  * member of it. It replaced `working_orders_clear_table_status`, which cleared it when a tab settled.
- * `packages/db/drizzle/0023_bill_payment_triggers.sql` adds the state guards on `bill_payments` and
+ * `packages/db/drizzle/0024_bill_payment_triggers.sql` adds the state guards on `bill_payments` and
  * `bill_payment_refunds`, and a trigger on each refusing every delete — those two refuse by design
  * whatever the row, so they have no accepting control here.
  *
@@ -102,7 +102,7 @@ const IMAGE_REFERENCE_TRIGGERS = [
  * than one event is split and the suffix names the event), the `products_*` names of
  * `0004_variant_one_level.sql`, `visits_clear_table_status` of
  * `0020_visit_clears_table_status.sql`, and the `bill_payment*` names of
- * `0023_bill_payment_triggers.sql`. The `products_*` ones live on `products`, so a later
+ * `0024_bill_payment_triggers.sql`. The `products_*` ones live on `products`, so a later
  * migration that RECREATES that table drops them silently — this list is what notices.
  */
 const EXPECTED_TRIGGERS = [

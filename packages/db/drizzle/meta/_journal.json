@@ -157,31 +157,24 @@
       "breakpoints": true
     },
     {
+      "idx": 22,
+      "version": "6",
+      "when": 1790482036416,
+      "tag": "0022_bill_payments",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1790482036976,
+      "tag": "0023_drawer_opens_bill_reasons",
+      "breakpoints": true
+    },
+    {
       "idx": 24,
       "version": "6",
-      "when": 1790466107361,
-      "tag": "0024_bill_payment_attestation",
-      "breakpoints": true
-    },
-    {
-      "idx": 25,
-      "version": "6",
-      "when": 1790466113418,
-      "tag": "0025_bill_payment_attestation_guard",
-      "breakpoints": true
-    },
-    {
-      "idx": 26,
-      "version": "6",
-      "when": 1790478591181,
-      "tag": "0026_bill_payment_refund_refs_before_send",
-      "breakpoints": true
-    },
-    {
-      "idx": 27,
-      "version": "6",
-      "when": 1790478594194,
-      "tag": "0027_bill_payment_refund_guard",
+      "when": 1790482037507,
+      "tag": "0024_bill_payment_triggers",
       "breakpoints": true
     }
   ]
