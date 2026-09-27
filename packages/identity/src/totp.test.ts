@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { generateSync } from "otplib";
 import { generateTotpSecret, totpAuthUri, verifyTotp } from "./totp.js";
 
@@ -8,7 +8,22 @@ describe("totp", () => {
     expect(verifyTotp(generateSync({ secret }), secret)).toBe(true);
   });
   it("rejects a wrong token", () => {
-    expect(verifyTotp("000000", generateTotpSecret())).toBe(false);
+    // Any fixed code is valid for some secret at some time; at this secret and clock `000000` is.
+    const secret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
+    const now = Date.parse("2027-04-14T12:04:00Z") / 1000;
+    vi.useFakeTimers({ now: now * 1000 });
+    try {
+      expect(verifyTotp("000000", secret)).toBe(true);
+      const accepted = new Set(
+        [-60, -30, 0, 30, 60].map((offset) => generateSync({ secret, epoch: now + offset })),
+      );
+      const wrong = ["000000", "111111", "222222", "333333", "444444", "555555"].find(
+        (code) => !accepted.has(code),
+      )!;
+      expect(verifyTotp(wrong, secret)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
   it("rejects a malformed token without throwing", () => {
     expect(verifyTotp("not-a-code", generateTotpSecret())).toBe(false);

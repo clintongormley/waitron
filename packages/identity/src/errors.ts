@@ -11,7 +11,9 @@ declare module "@waitron/shared" {
     "profile.invalid": { field: string };
     /** No open session for this id — unknown or already ended. */
     "session.not_open": { sessionId: string };
-    /** No live management session for this token — unknown or already ended. */
+    /** No live management session for this token: it is unknown or ended, or its person is
+     * `pending` or no longer exists. `@waitron/server-kit` also raises it for a missing or non-UUID
+     * cookie. */
     "management_session.required": Record<string, never>;
     /** The management session idled past the timeout. */
     "management_session.expired": Record<string, never>;
@@ -46,7 +48,10 @@ declare module "@waitron/shared" {
     "person.last_admin": Record<string, never>;
     /** The requested direct status change is not part of the account lifecycle. */
     "person.transition_invalid": Record<string, never>;
-    /** The invitation or password-reset token is unknown, expired, or already used. */
+    /** The invitation or password-reset token is unknown, expired, used or for the other purpose,
+     * or its person has since left the status that purpose needs or no longer exists; inspecting it
+     * is also refused once its person has lost their login email. `apps/server` also raises it for
+     * a malformed account-action request and for an email-change code it did not accept. */
     "account_action.invalid": Record<string, never>;
     /** Neither the session's operator nor any supplied override holds the required permission. */
     "authorization.not_permitted": { permission: string };
