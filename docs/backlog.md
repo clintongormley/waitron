@@ -3923,18 +3923,45 @@ image constraints under *Detail → Box image*.
     files in `apps/server`, `packages/catalogue` (none left after #603), `db`, `identity`, `media`,
     `migrations`, `printing` and `store` on 2026-09-24, not each checked (see the `DrizzleQueryError` entry below).
 
-- **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
-  (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
-  pattern that looks for a slash-star opener anywhere in the raw text, so a glob path written
-  inside an ordinary LINE comment opens one as far as the scrubber is concerned. It then blanks
-  everything up to the next real block-comment terminator — measured at about 390 lines in
-  `packages/db/src/schema/sales.test.ts` — and pairs backtick-citation blanking across that whole
-  span, which made it report three pre-existing, untouched Spanish words as fresh violations. The
-  reported lines are not the offender, which is the expensive part: the author looks where the
-  guard points. Worked around on that branch by rewording the path. Fixing it properly needs a
-  scanner that knows a comment opener inside a string or a line comment is not a comment opener,
-  which is the same care `scripts/column-vocabulary.test.ts` already documents for its own
-  comment handling. Until then the hedge is in `CLAUDE.md` §3.
+- **The english-only guard blames the wrong lines when a comment contains a glob path — DONE
+  (2026-09-27, lane A's A86; found 2026-09-21, task P6).** `packages/db/src/english-only.ts` now
+  steps over strings, template literals (with their `${…}` parts) and regular expressions, so a
+  comment opener inside any of them, or inside a `//` comment, opens nothing unless a `/` before it
+  was misjudged. There is no parser (a package's TypeScript 7 has no `createSourceFile`), so whether
+  a `/` opens a regular expression is still a guess from the code before it, and a wrong guess in
+  either direction can hide a word in code on a later line. The wrong guesses that remain include,
+  each run: a regular expression read as division after the `)` of `for await (…)` and after a word
+  not on the scanner's keyword list, such as `export default /x/` — both hid a Spanish word in a
+  template on the next line; and a division read as a regular expression after a variable spelled
+  like a listed keyword (one called `of`) and after a `!` separated from its value by a space.
+  Experiment: the version before the branch and the branch's final version, compared over all 2577
+  `.ts` files under `packages/` and `apps/` (excluding `node_modules` and `dist`) with the guard's
+  own assembled word list (135 words, the base list plus every module's declared words, built as
+  `scripts/english-only.test.ts` builds it), differ in one file only,
+  `apps/server/src/boot.test.ts`: newly reported, all in code, `envios` at lines 2621, 2676 and
+  2815, `registro` twice at 2684, and `estado` and `incidencia` at 2704 and 2707; no longer
+  reported, all backtick-cited words in `//` comments, `envios` at 2615, 2620, 2665 and 2857, and
+  `envios` and `entorno` at 2845. `apps/` is outside the guard's scope, so nothing newly fails.
+  Twenty-two deletions of one scanner branch each, taken one at a time, each failed a case in
+  `scripts/english-only.test.ts`, and that suite covers the module at 100% of statements, branches,
+  functions and lines. The `CLAUDE.md` §3 warning is removed.
+
+- **Six other TypeScript-scanning guards strip comments with the same slash-star pattern — OPEN
+  (found 2026-09-27 reading for A86; read, not run).**
+  `packages/fiscal/src/no-regime-vocabulary.test.ts`,
+  `packages/payments/src/no-provider-vocabulary.test.ts`,
+  `packages/payments-stripe/src/tenant-scoping.test.ts`, `packages/shared/src/conventions.test.ts`,
+  `scripts/dashboard-browser-purity.test.ts` and `scripts/guarded-teardowns.test.ts` each remove or
+  blank `/\/\*[\s\S]*?\*\//g` BEFORE they strip `//` comments, so a `/*` inside a `//` comment or a
+  string removes real code up to the next terminator — a reviewer ran each of the six expressions
+  and confirmed each removes a sentinel with either opener shape, at the stripping stage only. For
+  the scans that assert something is absent that is the silent direction;
+  `packages/shared/src/conventions.test.ts`'s must-contain assertions would fail instead. Whether
+  any file they scan has that shape today is not measured. The two SQL scanners named `stripSql`, in
+  `scripts/module-graph-honesty.test.ts` and `packages/sync-enrolment/src/migration-tables.ts`
+  (product code, not a guard), have the same ordering: they blank block comments before `--`
+  comments and `'…'` strings. The scanner A86 wrote, `scrubComments`, is not exported; sharing it
+  would need an export and a home they can all import.
 
 - **No guard holds a MODULE migration set to its declared schema — LANDED for four of them
   (**PR #491**).** `packages/db/src/testing/schema-conformance.ts` is a reusable suite factory that
