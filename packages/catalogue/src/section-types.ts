@@ -32,3 +32,35 @@ export interface SectionInput {
   image?: string | null;
   color?: string | null;
 }
+
+/** One tile of a home layout, as the Home page tab lists it. `ref.kind` says product or section. */
+export interface HomeTile {
+  memberId: string;
+  position: number;
+  ref: MemberRef;
+  /** A product's staff name, or a section's internal name. */
+  name: string;
+  /** False when the menu's working state no longer offers the product or reaches the section:
+   * publishing leaves such a tile out (D13). */
+  reachable: boolean;
+}
+
+/** A menu's working home layout with its tiles in order. */
+export interface HomeLayout {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  tiles: HomeTile[];
+}
+
+/** One menu's layouts, and the one a device profile chose for it. */
+export interface DeviceMenuHomeLayouts {
+  menuId: string;
+  menuName: string;
+  /** The default first, then the others by name. */
+  layouts: { id: string; name: string; isDefault: boolean }[];
+  /** Null means the menu's default layout. */
+  selectedLayoutId: string | null;
+  /** The chosen layout is no longer one of the menu's working layouts (D14). */
+  selectedRemoved: boolean;
+}

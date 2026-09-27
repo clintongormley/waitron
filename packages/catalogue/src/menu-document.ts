@@ -45,6 +45,9 @@ interface BuiltMenu {
   document: MenuDocument;
   omittedShortcuts: OmittedShortcut[];
   rootSectionId: string;
+  /** The document offers the product or holds the section: what a shortcut needs to be published
+   * (D13). */
+  reaches: (ref: MemberRef) => boolean;
 }
 
 /** Several menus' documents built together, and what they were built from. */
@@ -173,6 +176,8 @@ export async function buildMenuDocuments(
         ];
       });
     const root = { members: listOf(row.rootSectionId, [row.rootSectionId]) };
+    const reaches = (ref: MemberRef): boolean =>
+      ref.kind === "product" ? onMenu.has(ref.productId) : reachedSections.has(ref.sectionId);
     const omittedShortcuts: OmittedShortcut[] = [];
     const layouts = layoutsByMenu.get(row.menuId) ?? [];
     const homeLayouts = [
@@ -181,9 +186,7 @@ export async function buildMenuDocuments(
     ].map((layout): DocumentLayout => {
       const tiles: DocumentTile[] = [];
       for (const { ref } of loaded.children(layout.id)) {
-        const onThisMenu =
-          ref.kind === "product" ? onMenu.has(ref.productId) : reachedSections.has(ref.sectionId);
-        if (onThisMenu) tiles.push(ref);
+        if (reaches(ref)) tiles.push(ref);
         else omittedShortcuts.push({ layoutId: layout.id, ref });
       }
       return { id: layout.id, name: layout.internalName, tiles };
@@ -191,6 +194,7 @@ export async function buildMenuDocuments(
     menus.set(row.menuId, {
       rootSectionId: row.rootSectionId,
       omittedShortcuts,
+      reaches,
       document: {
         format: MENU_DOCUMENT_FORMAT,
         menuId: row.menuId,

@@ -12,6 +12,7 @@ import {
   wouldCreateCycle,
   type SectionGraph,
 } from "./section-graph.js";
+import { nextPosition, renumber } from "./section-order.js";
 import { onStructureChanged } from "./section-structure.js";
 import type {
   LibrarySection,
@@ -143,17 +144,6 @@ function refColumns(ref: MemberRef) {
   return ref.kind === "product"
     ? { productId: ref.productId, childSectionId: null }
     : { productId: null, childSectionId: ref.sectionId };
-}
-
-/** Write positions 0..n-1 in the order given, touching only the rows whose position moves. */
-async function renumber(tx: Transaction, ordered: readonly SectionMember[]): Promise<void> {
-  for (const [position, member] of ordered.entries())
-    if (member.position !== position)
-      await tx.update(sectionMembers).set({ position }).where(eq(sectionMembers.id, member.id));
-}
-
-function nextPosition(graph: SectionGraph, sectionId: string): number {
-  return Math.max(-1, ...graph.children(sectionId).map((member) => member.position)) + 1;
 }
 
 /** Library sections only, by internal name; a menu's own lists are not in the library. */

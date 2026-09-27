@@ -2,6 +2,7 @@
 import "@waitron/shared";
 // Type-only, so it adds no runtime edge back to the module that side-effect-imports this file.
 import type { ProductUsingUnit } from "./unit-types.js";
+import type { MemberRef } from "./section-types.js";
 
 /** @waitron/catalogue's contribution to the shared error registry — DOMAIN-CONCEPT prefixes. */
 declare module "@waitron/shared" {
@@ -87,6 +88,13 @@ declare module "@waitron/shared" {
     /** An order line was priced against a menu version that is not live; `liveVersionId` is null
      * when the menu has no live version among the ones the order may sell from. */
     "menu.version_changed": { menus: { menuId: string; liveVersionId: string | null }[] };
+    /** The id names no home layout, or, where `menuId` is given, none of that menu's. */
+    "menu.layout_not_found": { layoutId: string; menuId?: string };
+    /** A menu's default home layout cannot be deleted; another must be made the default first. */
+    "menu.default_layout_required": { layoutId: string };
+    /** A home tile names a product the menu does not offer or a section its structure does not
+     * reach (D13). */
+    "menu.shortcut_unreachable": { layoutId: string; ref: MemberRef };
     /** A menu offer operation names no item the menu's structure reaches; menuId is present when
      * the route supplies it. */
     "menu_item.not_found": { menuId?: string; menuItemId: string };
