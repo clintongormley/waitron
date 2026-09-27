@@ -30,7 +30,6 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
-import { addTabRound } from "./working-order.js";
 import "./errors.js";
 
 // The HTTP shape of the coursing, fire, station-queue and expo routes: the session guard, the id
@@ -255,8 +254,9 @@ async function placeOrder(names: string[]): Promise<string> {
   return id;
 }
 
-/** Open a fresh-table tab and ring SOPA (Entrantes, auto-fires as line 1) + FILETE (Principales, HELD line
- *  2) as one round; returns the tab id. SOPA is fired-not-started (recallable). */
+/** Seat a fresh table and send SOPA (Entrantes) as a fired group and FILETE (Principales) as a held
+ *  group, as the till's Send round does; returns the tab id. SOPA is line 1, fired and not started (so
+ *  recallable); FILETE is line 2, held. */
 async function tabWithSopaAndFilete(): Promise<string> {
   const ids = await offerIdsByName();
   const table = await app.request("/api/tables", {
@@ -272,14 +272,25 @@ async function tabWithSopaAndFilete(): Promise<string> {
     body: JSON.stringify({}),
   });
   expect(opened.status).toBe(200);
-  const { tabId } = (await opened.json()) as { tabId: string };
-  // The round function, not a route: the course rule decides what fires, which no group route does.
-  await withTransaction(suite.db, (tx) =>
-    addTabRound(tx, cfg, tabId, [
-      { menuItemId: ids.get(SOPA)!, quantity: "1" },
-      { menuItemId: ids.get(FILETE)!, quantity: "1" },
-    ]),
-  );
+  const { tabId, visitId, revision } = (await opened.json()) as {
+    tabId: string;
+    visitId: string;
+    revision: number;
+  };
+  const round = await app.request(`/api/visits/${visitId}/groups`, {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie },
+    body: JSON.stringify({
+      submissionId: randomUUID(),
+      expectedVisitRevision: revision,
+      groups: [
+        { lines: [{ menuItemId: ids.get(SOPA)!, quantity: "1" }], release: "fire" },
+        { lines: [{ menuItemId: ids.get(FILETE)!, quantity: "1" }], release: "hold" },
+      ],
+    }),
+  });
+  expect(round.status).toBe(200);
+  expect(((await round.json()) as { tabId: string }).tabId).toBe(tabId);
   return tabId;
 }
 
@@ -451,36 +462,47 @@ describe("PATCH /api/working-orders/:id/lines/:lineNo/course (A1 re-course a hel
   });
 });
 
-describe("POST /api/working-orders/:id/lines/send (A2 fire specific held lines / send-all)", () => {
-  it("sends a NAMED held line (200) — the queue then shows it fired", async () => {
+describe("POST /api/working-orders/:id/lines/send (A2 send recalled lines again)", () => {
+  /** Recalls SOPA (line 1, fired) so it is held again, outside any held group. */
+  async function recallSopa(tabId: string): Promise<void> {
+    const recall = await app.request(`/api/working-orders/${tabId}/lines/recall`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ lineNos: [1] }),
+    });
+    expect(recall.status).toBe(200);
+  }
+
+  it("sends a NAMED recalled line (200) — the queue then shows it fired", async () => {
     const tabId = await tabWithSopaAndFilete();
     const station = await cocinaId();
-    // The Principales line (line 2) is held — no fired_at in the station queue yet.
-    expect((await queueItemsByName(tabId, station)).get(FILETE)!.firedAt).toBeNull();
+    await recallSopa(tabId);
+    expect((await queueItemsByName(tabId, station)).get(SOPA)!.firedAt).toBeNull();
 
     const res = await app.request(`/api/working-orders/${tabId}/lines/send`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ lineNos: [2] }),
+      body: JSON.stringify({ lineNos: [1] }),
     });
     expect(res.status).toBe(200);
-    // Sent → fired_at now set, so the kitchen can start it.
-    expect((await queueItemsByName(tabId, station)).get(FILETE)!.firedAt).not.toBeNull();
+    expect((await queueItemsByName(tabId, station)).get(SOPA)!.firedAt).not.toBeNull();
   });
 
-  it("an OMITTED line list sends all held lines (200) — the send-all default", async () => {
+  it("an OMITTED line list sends every recalled line (200) and leaves the held group's line held", async () => {
     const tabId = await tabWithSopaAndFilete();
     const station = await cocinaId();
-    expect((await queueItemsByName(tabId, station)).get(FILETE)!.firedAt).toBeNull();
+    await recallSopa(tabId);
+    expect((await queueItemsByName(tabId, station)).get(SOPA)!.firedAt).toBeNull();
 
-    // No `lineNos` in the body → `body.lineNos ?? []` → release every held line of the tab.
     const res = await app.request(`/api/working-orders/${tabId}/lines/send`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({}),
     });
     expect(res.status).toBe(200);
-    expect((await queueItemsByName(tabId, station)).get(FILETE)!.firedAt).not.toBeNull();
+    const after = await queueItemsByName(tabId, station);
+    expect(after.get(SOPA)!.firedAt).not.toBeNull();
+    expect(after.get(FILETE)!.firedAt).toBeNull();
   });
 
   it("a malformed tab id is 409 tab.not_open, screened by requireTabParam before any DB touch", async () => {

@@ -485,8 +485,7 @@ export interface OrderGroup {
   summary: string;
 }
 
-/** What every group command sends: a submission id the till keeps for a retry, and the party's
- * revision as last read. */
+/** What every group command sends: its submission id, and the party's revision as last read. */
 export interface GroupCommand {
   submissionId: string;
   expectedVisitRevision: number;

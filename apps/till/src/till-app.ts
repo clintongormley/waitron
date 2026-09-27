@@ -686,6 +686,8 @@ export class TillApp extends LitElement {
   #tabLinesRead = 0;
   /** The same for the party's bills. */
   #visitBillsRead = 0;
+  /** The last read of the party's groups failed, so {@link tabGroups} is empty for want of an answer. */
+  #groupsUnread = false;
   /** The check {@link #onSplitLines} made and the tab it came from, cleared when a tab is paid, the
    * check is left while it is the open order, or the operator's session ends. Held in memory only:
    * after a reload the check stays in Held orders. */
@@ -2201,6 +2203,7 @@ export class TillApp extends LitElement {
     if (this.activeTabId === undefined) {
       this.tabLines = [];
       this.tabGroups = [];
+      this.#groupsUnread = false;
       return;
     }
     const groups = this.#readGroups();
@@ -2215,25 +2218,48 @@ export class TillApp extends LitElement {
       this.tabLines = [];
     }
     const partyGroups = await groups;
-    if (read === this.#tabLinesRead) this.tabGroups = partyGroups;
+    if (read !== this.#tabLinesRead) return;
+    this.tabGroups = partyGroups ?? [];
+    this.#groupsUnread = partyGroups === null;
   }
 
   /** The groups' revision is not kept: a command sends the revision the party was shown at. A failed
-   * read leaves none, which only means the screen offers a held line's own Send for the server to
-   * refuse. */
-  async #readGroups(): Promise<OrderGroup[]> {
+   * read answers null. */
+  async #readGroups(): Promise<OrderGroup[] | null> {
     const party = this.orderParty;
     if (party === null) return [];
     try {
       return (await this.api.listGroups(party.id)).groups;
     } catch {
-      return [];
+      return null;
     }
   }
 
-  /** Keeps the revision a command on the party answered with, while the screen still shows that party. */
+  /** Send all and Fire course release by group, so with the groups unread they send nothing: the
+   * refusal is said and the order read again for the next press. */
+  async #refuseWithGroupsUnread(): Promise<boolean> {
+    if (!this.#groupsUnread) return false;
+    this.errorKey = "table.error";
+    await this.#loadTabLines();
+    return true;
+  }
+
+  /** Keeps the revision a command on the party answered with, while the screen still shows that
+   * party. A later revision already noted stays: answers can arrive out of order. */
   #noteVisitRevision(visitId: string, revision: number): void {
-    if (this.orderParty?.id === visitId) this.orderParty = { ...this.orderParty, revision };
+    const party = this.orderParty;
+    if (party?.id === visitId && revision > party.revision)
+      this.orderParty = { ...party, revision };
+  }
+
+  /** After a command on the party that got no answer: the floor is read again, and the party taken
+   * from it while the open table still holds that party, since the command may have moved it on. */
+  async #retakePartyFromFloor(): Promise<void> {
+    const partyId = this.orderParty?.id;
+    await this.#refreshFloor();
+    const row = this.tables.find((table) => table.id === this.activeTableId);
+    if (partyId !== undefined && row?.visit?.id === partyId && this.orderParty?.id === partyId)
+      this.orderParty = row.visit;
   }
 
   /** A void or line edit moves its bill's party on (R10) without a revision of its own to send. */
@@ -2338,6 +2364,11 @@ export class TillApp extends LitElement {
       this.errorKey = "table.error";
       return;
     }
+    if (this.#showsCheck()) {
+      // What the server answered a round sent to a check, `tab.not_open`, said on this screen.
+      this.errorKey = lineWriteError({ code: "tab.not_open" });
+      return;
+    }
     const partyId = party.id;
     // The round is shut to edits until the answer, so a retry sends what the screen shows and success
     // takes out exactly what was sent.
@@ -2355,16 +2386,11 @@ export class TillApp extends LitElement {
     }
     const onSentTable = () => this.activeTabId === tabId && this.activeTableId === tableId;
     if (followUp === "find-tab" && onSentTable()) {
-      await this.#refreshFloor();
+      await this.#retakePartyFromFloor();
       // The server moves a round only onto its own party's next tab, so the table is followed only
       // while it still holds the party the screen showed when the round was sent.
       const now = this.tables.find((row) => row.id === tableId);
-      if (
-        now?.tabId !== undefined &&
-        partyId !== undefined &&
-        now.visit?.id === partyId &&
-        onSentTable()
-      )
+      if (now?.tabId !== undefined && now.visit?.id === partyId && onSentTable())
         this.#followRound(tabId, now.tabId);
     } else if (typeof followUp === "object" && this.activeTabId === tabId) {
       await this.#reloadTables();
@@ -2376,8 +2402,7 @@ export class TillApp extends LitElement {
 
   /**
    * A refused round stays on the table screen. One the server may have added — no answer came —
-   * is taken out, because sending it again could put it on the tab twice. Each send is a new
-   * submission: a re-send after a menu refusal carries different lines.
+   * is taken out, because sending it again could put it on the tab twice.
    */
   async #sendRound(
     tabId: string,
@@ -2448,6 +2473,13 @@ export class TillApp extends LitElement {
     this.#rememberOrderParty();
   }
 
+  /** A check is an order no table points at, split off a party's tab. Judged only while the floor
+   * lists the open table, so a failed floor read refuses nothing. */
+  #showsCheck(): boolean {
+    const open = this.tables.some((table) => table.id === this.activeTableId);
+    return open && !this.tables.some((table) => table.tabId === this.activeTabId);
+  }
+
   /** The party's held groups holding any of `lines`, in the party's order. */
   #heldGroupsOf(lines: readonly TabLine[]): OrderGroup[] {
     const ids = new Set(lines.map((line) => line.groupId));
@@ -2486,6 +2518,7 @@ export class TillApp extends LitElement {
       return;
     }
     this.errorKey = lineWriteError(error);
+    if (isNetworkFailure(error)) await this.#retakePartyFromFloor();
     await this.#loadTabLines();
   }
 
@@ -2495,6 +2528,7 @@ export class TillApp extends LitElement {
     const tabId = this.activeTabId;
     if (tabId === undefined) return;
     this.errorKey = undefined;
+    if (await this.#refuseWithGroupsUnread()) return;
     const ofCourse = this.tabLines.filter((line) => line.courseId === courseId);
     const alone = ofCourse.filter((line) => this.#sendsAlone(line)).map((line) => line.lineNo);
     try {
@@ -2542,6 +2576,7 @@ export class TillApp extends LitElement {
     const tabId = this.activeTabId;
     if (tabId === undefined) return;
     this.errorKey = undefined;
+    if (lineNos.length === 0 && (await this.#refuseWithGroupsUnread())) return;
     try {
       if (lineNos.length === 0) await this.#fireGroups(this.#heldGroupsOf(this.tabLines));
       await this.api.sendLines(tabId, lineNos);
@@ -2797,6 +2832,7 @@ export class TillApp extends LitElement {
     this.#visitBillsRead++;
     this.tabLines = [];
     this.tabGroups = [];
+    this.#groupsUnread = false;
     this.visitBills = [];
     const floorTab = this.canvas?.tabs.find((tab) => this.#tabNeedsFloorData(tab))?.key;
     if (this.drill?.kind === "table-order" || !this.#inShell() || floorTab === undefined) {

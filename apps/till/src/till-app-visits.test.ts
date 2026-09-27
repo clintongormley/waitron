@@ -1333,6 +1333,109 @@ describe("till-app: the order's groups (R5)", () => {
     expect(banner(el)!.textContent).toContain(t("table.error"));
   });
 
+  it("takes the party's revision from the floor read after a round that got no answer", async () => {
+    let landed = false;
+    const { el } = await mountApp({
+      getTablesState: vi.fn(async () => [
+        landed ? seated({}, { revision: 4 }) : mesa4,
+        mesa7,
+        mesa9,
+      ]),
+      submitGroups: vi.fn(async () => {
+        landed = true;
+        throw new TypeError("offline");
+      }),
+    });
+    const order = await openMesa(el);
+    emit(order, "send-round", {
+      lines: roundLines,
+      groups: [{ release: "fire", lineIndexes: [0, 1] }],
+    });
+    await flush(el);
+
+    emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
+    await flush(el);
+    expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 4 });
+  });
+
+  it("keeps another party's revision when a round's answer arrives after the screen opened its table", async () => {
+    let answer: (value: { tabId: string; revision: number; groups: [] }) => void = () => {};
+    const { el } = await mountApp({
+      submitGroups: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      ),
+    });
+    const order = await openMesa(el);
+    emit(order, "send-round", {
+      lines: roundLines,
+      groups: [{ release: "fire", lineIndexes: [0, 1] }],
+    });
+    await flush(el);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+
+    answer({ tabId: "wo-4", revision: 12, groups: [] });
+    await flush(el);
+    emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
+    await flush(el);
+    expect(api.moveTab).toHaveBeenCalledWith("wo-7", "t9", { expectedVisitRevision: 9 });
+  });
+
+  it("sends no round while a split-off check is the order on screen, and says what a refused round said", async () => {
+    const { el } = await mountApp();
+    const order = await openMesa(el);
+    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+    const round = new WorkingOrderStore();
+    round.addProduct(cafe, "1");
+
+    emit(tableOrder(el)!, "send-round", {
+      lines: [{ menuItemId: "menu-item-cafe", quantity: "1" }],
+      groups: [{ release: "fire", lineIndexes: [0] }],
+      round,
+      sent: round.lines,
+    });
+    await flush(el);
+
+    expect(api.submitGroups).not.toHaveBeenCalled();
+    expect(banner(el)!.textContent).toContain(t("table.error"));
+    expect(round.lineCount).toBe(1);
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+  });
+
+  it("keeps the higher revision when two answers about the party arrive out of order", async () => {
+    const answers: ((value: { visit: { id: string; revision: number } }) => void)[] = [];
+    const { el } = await mountApp({
+      voidLine: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            answers.push(resolve);
+          }),
+      ),
+    });
+    const order = await openMesa(el);
+    emit(order, "void-line", { lineNo: 1 });
+    emit(order, "void-line", { lineNo: 2 });
+    await flush(el);
+    expect(answers).toHaveLength(2);
+
+    answers[1]!({ visit: { id: "v1", revision: 5 } });
+    await flush(el);
+    answers[0]!({ visit: { id: "v1", revision: 4 } });
+    await flush(el);
+
+    emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
+    await flush(el);
+    expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 5 });
+  });
+
   describe("firing", () => {
     // Lines 1 and 2 are the course in two held groups, listed out of position order; line 3 is
     // another course's held group; line 4 the course's line in a fired group.
@@ -1443,6 +1546,74 @@ describe("till-app: the order's groups (R5)", () => {
 
       expect(banner(el)!.textContent).toContain(codeMessage("group.not_held"));
       expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
+    });
+
+    it("takes the party's revision from the floor read after a fire that got no answer", async () => {
+      let landed = false;
+      const { el } = await mountApp(
+        withGroups({
+          getTablesState: vi.fn(async () => [
+            landed ? seated({}, { revision: 4 }) : mesa4,
+            mesa7,
+            mesa9,
+          ]),
+          fireGroup: vi.fn(async () => {
+            landed = true;
+            throw new TypeError("offline");
+          }),
+        }),
+      );
+      const order = await openMesa(el);
+
+      emit(order, "fire-course", { orderId: "wo-4", courseId: "c1" });
+      await flush(el);
+      emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
+      await flush(el);
+
+      expect(api.fireGroup).toHaveBeenCalledOnce();
+      expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 4 });
+    });
+
+    it.each([
+      ["send-lines", { lineNos: [] }],
+      ["fire-course", { orderId: "wo-4", courseId: "c1" }],
+    ])(
+      "%s sends nothing, and says so, when the order's groups could not be read",
+      async (type, detail) => {
+        const { el } = await mountApp(
+          withGroups({ listGroups: vi.fn().mockRejectedValue(new TypeError("offline")) }),
+        );
+        const order = await openMesa(el);
+
+        emit(order, type, detail);
+        await flush(el);
+
+        expect(api.fireGroup).not.toHaveBeenCalled();
+        expect(api.sendLines).not.toHaveBeenCalled();
+        expect(banner(el)!.textContent).toContain(t("table.error"));
+      },
+    );
+
+    it("reads the groups again after refusing Send all, so pressing it again fires them", async () => {
+      const { el } = await mountApp(
+        withGroups({
+          listGroups: vi
+            .fn()
+            .mockRejectedValueOnce(new TypeError("offline"))
+            .mockResolvedValue({ revision: 3, groups }),
+        }),
+      );
+      const order = await openMesa(el);
+      emit(order, "send-lines", { lineNos: [] });
+      await flush(el);
+      expect(api.fireGroup).not.toHaveBeenCalled();
+
+      emit(tableOrder(el)!, "send-lines", { lineNos: [] });
+      await flush(el);
+
+      expect(api.fireGroup).toHaveBeenCalledTimes(3);
+      expect(api.sendLines).toHaveBeenCalledWith("wo-4", []);
+      expect(banner(el)).toBeNull();
     });
 
     describe("after a void or a change, which move the party on (R10)", () => {
