@@ -61,6 +61,18 @@ describe("setup-reset-screen", () => {
     expect(text).toContain("Nothing on the primary server is changed");
   });
 
+  it("says how to take this server off the primary's list", async () => {
+    const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
+    const text = el.shadowRoot!.textContent!.replace(/\s+/g, " ");
+    expect(text).toContain(
+      "To take it off that list, open the primary's dashboard, then Settings, then Servers, open this server's row menu and choose Remove, then open the row menu again and choose Clear from list.",
+    );
+    expect(text).toContain("If its row already says Removed, only Clear from list is needed.");
+    expect(text).toContain(
+      "Do this before you join this server again: otherwise the new join adds a second row that is hard to tell apart from this one, or is refused if the list is full.",
+    );
+  });
+
   it("emits reset-requested with the trimmed person ID and the password as typed", async () => {
     const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
     const events = collect(host);

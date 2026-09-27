@@ -198,7 +198,10 @@ restarts and, before the server opens the database, removes the venue's database
 `reset-request.json`; everything else, including the
 certificate (`tls/`), `secrets.env` and `backup.env`, is kept. It does nothing if the box has meanwhile got a `trading.env` or
 holds a venue. It does not remove this box from the other server's list of machines, nor release
-the installation number reserved for it there.
+the installation number reserved for it there. To take the box off that list, open the other
+server's dashboard, then Settings, then Servers, and in the box's row menu choose Remove and then
+Clear from list (only Clear from list if the row already says Removed), before joining the box
+again.
 
 ## The operator CLIs — two different invocation forms
 
