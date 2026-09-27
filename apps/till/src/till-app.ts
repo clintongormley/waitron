@@ -2624,30 +2624,31 @@ export class TillApp extends LitElement {
     return answer.revision;
   }
 
+  /** A group command of one request, at the revision the party was shown at. */
+  async #onGroupRequest(
+    request: (party: TableVisit, command: GroupCommand) => Promise<{ revision: number }>,
+  ): Promise<void> {
+    await this.#onGroupCommand((party) =>
+      this.#partyRequest(party, party.revision, (command) => request(party, command)),
+    );
+  }
+
   async #onFireGroup(event: Event): Promise<void> {
     const { groupId } = (event as CustomEvent<FireGroupDetail>).detail;
-    await this.#onGroupCommand((party) =>
-      this.#partyRequest(party, party.revision, (command) =>
-        this.api.fireGroup(party.id, groupId, command),
-      ),
-    );
+    await this.#onGroupRequest((party, command) => this.api.fireGroup(party.id, groupId, command));
   }
 
   async #onReorderGroups(event: Event): Promise<void> {
     const { heldGroupIds } = (event as CustomEvent<ReorderGroupsDetail>).detail;
-    await this.#onGroupCommand((party) =>
-      this.#partyRequest(party, party.revision, (command) =>
-        this.api.reorderGroups(party.id, heldGroupIds, command),
-      ),
+    await this.#onGroupRequest((party, command) =>
+      this.api.reorderGroups(party.id, heldGroupIds, command),
     );
   }
 
   async #onMoveGroupLine(event: Event): Promise<void> {
     const { lineId, quantity, target } = (event as CustomEvent<MoveGroupLineDetail>).detail;
-    await this.#onGroupCommand((party) =>
-      this.#partyRequest(party, party.revision, (command) =>
-        this.api.moveLinesToGroup(party.id, [{ lineId, quantity }], target, command),
-      ),
+    await this.#onGroupRequest((party, command) =>
+      this.api.moveLinesToGroup(party.id, [{ lineId, quantity }], target, command),
     );
   }
 
