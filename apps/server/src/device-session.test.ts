@@ -798,3 +798,105 @@ describe("requireSaleTillId reading the device cookie itself", () => {
     });
   });
 });
+
+describe("reading the device beside the write lock", () => {
+  const setLastSeen = (deviceId: string, at: Date) =>
+    suite.db.execute(
+      sql`update devices set last_seen_at = ${at.toISOString()} where id = ${deviceId}`,
+    );
+
+  /** Holds the venue's write lock open until the returned `release` is called. */
+  function holdWriteLock(): { release: () => void; done: Promise<void> } {
+    let release!: () => void;
+    const opened = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return { release: () => release(), done: withTransaction(suite.db, () => opened) };
+  }
+
+  /** The read's device id, or "still waiting" if it has not resolved within two seconds. */
+  const within = (read: Promise<DeviceBinding | null>) =>
+    Promise.race([
+      read.then((binding) => binding?.deviceId ?? null),
+      new Promise((resolve) => setTimeout(() => resolve("still waiting"), 2_000)),
+    ]);
+
+  it("records a sighting at most once a minute", async () => {
+    const { deviceId, token } = await enrolDeviceFixture();
+    const recent = new Date(Date.now() - 30_000);
+    await setLastSeen(deviceId, recent);
+    expect(await probeTry(`${deviceId}.${token}`)).not.toBeNull();
+    expect(await lastSeenAt(deviceId)).toBe(recent.toISOString());
+
+    const stale = new Date(Date.now() - 90_000);
+    await setLastSeen(deviceId, stale);
+    expect(await probeTry(`${deviceId}.${token}`)).not.toBeNull();
+    expect(Date.parse((await lastSeenAt(deviceId))!)).toBeGreaterThan(Date.now() - 10_000);
+  });
+
+  it("verifies a cookie while another caller holds the write lock, when no sighting is due", async () => {
+    const { deviceId, token } = await enrolDeviceFixture();
+    await setLastSeen(deviceId, new Date());
+    const lock = holdWriteLock();
+    const read = probeTry(`${deviceId}.${token}`);
+    try {
+      expect(await within(read)).toBe(deviceId);
+    } finally {
+      lock.release();
+      await lock.done;
+      await read;
+    }
+  });
+
+  it("refuses a revoked device and a wrong token while the write lock is held", async () => {
+    const { deviceId, token } = await enrolDeviceFixture();
+    await setLastSeen(deviceId, new Date());
+    const lock = holdWriteLock();
+    try {
+      expect(await within(probeTry(`${deviceId}.not-the-real-token`))).toBeNull();
+    } finally {
+      lock.release();
+      await lock.done;
+    }
+    await revoke(deviceId);
+    const again = holdWriteLock();
+    try {
+      expect(await within(probeTry(`${deviceId}.${token}`))).toBeNull();
+    } finally {
+      again.release();
+      await again.done;
+    }
+  });
+
+  it("resolves a dev-override device while another caller holds the write lock", async () => {
+    const { deviceACookie, deviceBId } = await enrolDevDevices();
+    const lock = holdWriteLock();
+    const read = readWithHeaders(
+      { db: suite.db, devMode: true },
+      { cookie: `${DEVICE_COOKIE}=${deviceACookie}`, [DEV_DEVICE_HEADER]: deviceBId },
+    );
+    try {
+      expect(await within(read)).toBe(deviceBId);
+    } finally {
+      lock.release();
+      await lock.done;
+      await read;
+    }
+  });
+
+  it("lets the event loop turn while it verifies the token", async () => {
+    const { deviceId, token } = await enrolDeviceFixture();
+    await setLastSeen(deviceId, new Date());
+    const cookie = `${DEVICE_COOKIE}=${deviceId}.${token}`;
+    const app = new Hono();
+    const order: string[] = [];
+    app.get("/probe", async (c) => {
+      const read = tryReadDevice({ db: suite.db }, c).then(() => order.push("resolved"));
+      setImmediate(() => order.push("turned"));
+      await read;
+      return c.body(null, 204);
+    });
+    expect((await app.request("/probe", { headers: { cookie } })).status).toBe(204);
+    expect(order).toEqual(["turned", "resolved"]);
+  });
+});

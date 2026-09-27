@@ -1,4 +1,4 @@
-import { and, eq, isNull, lt, or } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { AppError, tillId } from "@waitron/shared";
@@ -7,7 +7,7 @@ import { deviceProfiles, devices, nowIso, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { kindOfFormFactor } from "@waitron/layouts";
 import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
-import { verifySecret } from "@waitron/identity";
+import { verifySecretAsync } from "@waitron/identity";
 // Side-effect only: keeps `device.unauthorized` (errors.ts) reachable from the file that throws it.
 import "./errors.js";
 import { isUuid } from "./till-session.js";
@@ -131,6 +131,10 @@ function toDeviceBinding(
  * `requireDevice`'s `device.unauthorized` confirms neither a device's existence nor its revocation
  * state. The id selects the row because scrypt is per-row-salted; the token validates it. Only a
  * successful cookie read writes (the `last_seen_at` sighting); every other path is a pure read.
+ *
+ * The reads and the token check run outside `withTransaction`, which is the venue's write lock, so
+ * the tens of milliseconds scrypt takes never hold up a sale; a read issued while another caller's
+ * write is open sees committed rows only (`packages/store/src/connections.ts`).
  */
 export async function tryReadDevice(
   deps: { db: Database; devMode?: boolean },
@@ -142,15 +146,12 @@ export async function tryReadDevice(
     const override = c.req.header(DEV_DEVICE_HEADER);
     if (override !== undefined) {
       if (!isUuid(override)) return null;
-      return withTransaction(deps.db, async (tx) => {
-        const [row] = await tx
-          .select(deviceBindingColumns)
-          .from(devices)
-          .innerJoin(deviceProfiles, deviceProfileJoin)
-          .where(and(eq(devices.id, override), eq(devices.active, true)));
-        if (row === undefined) return null;
-        return toDeviceBinding(override, row);
-      });
+      const [row] = await deps.db
+        .select(deviceBindingColumns)
+        .from(devices)
+        .innerJoin(deviceProfiles, deviceProfileJoin)
+        .where(and(eq(devices.id, override), eq(devices.active, true)));
+      return row === undefined ? null : toDeviceBinding(override, row);
     }
   }
 
@@ -162,39 +163,32 @@ export async function tryReadDevice(
   const token = raw.slice(dot + 1);
   if (!isUuid(deviceId)) return null;
 
-  return withTransaction(deps.db, async (tx) => {
-    const [row] = await tx
-      .select({ tokenHash: devices.tokenHash, ...deviceBindingColumns })
-      .from(devices)
-      .innerJoin(deviceProfiles, deviceProfileJoin)
-      // `active = true` is the revocation filter: a revoked device is simply not found.
-      .where(and(eq(devices.id, deviceId), eq(devices.active, true)));
-    if (row === undefined) return null;
-    // Constant-time: the token is never compared with `===`.
-    if (!verifySecret(token, row.tokenHash)) return null;
+  const [row] = await deps.db
+    .select({
+      tokenHash: devices.tokenHash,
+      lastSeenAt: devices.lastSeenAt,
+      ...deviceBindingColumns,
+    })
+    .from(devices)
+    .innerJoin(deviceProfiles, deviceProfileJoin)
+    // `active = true` is the revocation filter: a revoked device is simply not found.
+    .where(and(eq(devices.id, deviceId), eq(devices.active, true)));
+  if (row === undefined) return null;
+  // Constant-time: the token is never compared with `===`.
+  if (!(await verifySecretAsync(token, row.tokenHash))) return null;
 
-    // At most one sighting write a minute: this runs on every authenticated request, and the
-    // dashboard shows last-seen only to the minute (`devices-screen.ts`'s `#lastSeen`).
-    //
-    // `last_seen_at` is a text column, so `<` on it is a STRING comparison, which orders two
-    // instants correctly only for the one spelling its writer uses: `toISOString()`, which is what
-    // `nowIso` returns. The clock is read once so the stamp written and the staleness cutoff are
-    // the same moment.
-    const seenAt = nowIso();
-    const staleBefore = new Date(Date.parse(seenAt) - SIGHTING_INTERVAL_MS).toISOString();
-    await tx
-      .update(devices)
-      .set({ lastSeenAt: seenAt })
-      .where(
-        and(
-          eq(devices.id, deviceId),
-          // A never-seen device has NULL here and `<` is UNKNOWN for NULL, so the first sighting
-          // needs its own alternative or it would never be written.
-          or(isNull(devices.lastSeenAt), lt(devices.lastSeenAt, staleBefore)),
-        ),
-      );
-    return toDeviceBinding(deviceId, row);
-  });
+  // At most one sighting write a minute: this runs on every authenticated request, and the
+  // dashboard shows last-seen only to the minute (`devices-screen.ts`'s `#lastSeen`).
+  //
+  // `last_seen_at` is text, so `<` on it compares strings, which orders two instants correctly
+  // only for the one spelling its writer uses: `toISOString()`, which is what `nowIso` returns.
+  const seenAt = nowIso();
+  const staleBefore = new Date(Date.parse(seenAt) - SIGHTING_INTERVAL_MS).toISOString();
+  if (row.lastSeenAt === null || row.lastSeenAt < staleBefore)
+    await withTransaction(deps.db, (tx) =>
+      tx.update(devices).set({ lastSeenAt: seenAt }).where(eq(devices.id, deviceId)),
+    );
+  return toDeviceBinding(deviceId, row);
 }
 
 /** Throwing wrapper over {@link tryReadDevice}: every miss becomes the SAME
