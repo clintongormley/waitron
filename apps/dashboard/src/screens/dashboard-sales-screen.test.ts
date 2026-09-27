@@ -106,7 +106,7 @@ afterEach(() => {
 });
 
 describe("dashboard-sales-screen", () => {
-  it("opens on Overview's previous business day before the venue's 04:00 cutover", async () => {
+  it("opens on Overview's business day when it differs from the UTC date", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-09-27T01:00:00Z"));
     const api = stubApi({
@@ -131,22 +131,53 @@ describe("dashboard-sales-screen", () => {
     );
   });
 
-  it("opens on today's business day after the venue's 04:00 cutover", async () => {
+  it("uses Overview's business day at noon rather than assuming the UTC date", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-09-27T12:00:00Z"));
     const api = stubApi({
-      getSalesOverview: vi.fn().mockResolvedValue(overview("2026-09-27")),
+      getSalesOverview: vi.fn().mockResolvedValue(overview("2026-09-26")),
     });
     const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
     await flush(el);
 
-    expect(api.getDailyClose).toHaveBeenCalledWith("2026-09-27");
+    expect(api.getDailyClose).toHaveBeenCalledWith("2026-09-26");
     expect(el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=from-picker]")!.value).toBe(
-      "2026-09-27",
+      "2026-09-26",
     );
     expect(el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=to-picker]")!.value).toBe(
-      "2026-09-27",
+      "2026-09-26",
     );
+  });
+
+  it("keeps the daily close available when Overview refuses", async () => {
+    const api = stubApi({ getSalesOverview: vi.fn().mockRejectedValue({ code: "server.internal" }) });
+    const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
+    await flush(el);
+
+    expect(api.getDailyClose).toHaveBeenCalledWith(today());
+    expect(api.getCategorySales).toHaveBeenCalledWith(
+      today(),
+      today(),
+      "at_time_of_sale",
+      false,
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=tender-table]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=error]")).not.toBeNull();
+  });
+
+  it("keeps reports available while Overview has not answered", async () => {
+    const api = stubApi({ getSalesOverview: vi.fn().mockReturnValue(new Promise(() => {})) });
+    const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
+    await flush(el);
+
+    expect(api.getDailyClose).toHaveBeenCalledWith(today());
+    expect(api.getCategorySales).toHaveBeenCalledWith(
+      today(),
+      today(),
+      "at_time_of_sale",
+      false,
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=tender-table]")).not.toBeNull();
   });
 
   it("keeps an operator's range if Overview answers after the operator changes it", async () => {

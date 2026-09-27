@@ -256,6 +256,8 @@ export class SalesScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    void this.#load();
+    void this.#loadCategories();
     void this.#loadInitialRange();
     void this.#printerQueries
       .watch("getReportPrinters", [], (value) => {
@@ -275,15 +277,12 @@ export class SalesScreen extends LitElement {
   }
 
   async #loadInitialRange(): Promise<void> {
-    if (this.#rangeChosen) {
-      void this.#load();
-      void this.#loadCategories();
-      return;
-    }
+    if (this.#rangeChosen) return;
     try {
       await this.#queries.watch("getSalesOverview", [], ({ businessDay }) => {
         if (this.#rangeChosen) return;
         this.#rangeChosen = true;
+        if (this.from === businessDay && this.to === businessDay) return;
         this.from = businessDay;
         this.to = businessDay;
         void this.#load();
