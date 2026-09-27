@@ -3656,7 +3656,7 @@ approved.
     The pinning row in `apps/setup/src/setup-app.test.ts` failed on the old wording and passes on
     the new. The code, its 502 and the server's refusal are unchanged, so a primary that refuses
     for another reason (a full membership, for one) still shows this advice rather than its own
-    reason — item (vi) of the #657 entry above.
+    reason — item (vi) of **Still open after A63** in the #657 item above.
     **Still open** (read, not run): the boot-time fetch is given only the URL (item (ii) of **Still
     open after A63** in the #657 item above), and boot never reads the `superseded` that
     `reconcileMembershipOnBoot` returns (`apps/server/src/boot.ts`, where it is called);
