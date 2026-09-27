@@ -14,6 +14,7 @@ const REGEX_AFTER_WORD: ReadonlySet<string> = new Set([
   "throw",
   "yield",
   "await",
+  "default",
 ]);
 
 /** Keywords whose parenthesised head is followed by a statement, so a `/` after its `)` opens a
@@ -41,7 +42,11 @@ const BRACE_OPEN = 0x7b;
 const BRACE_CLOSE = 0x7d;
 
 function isSpace(code: number): boolean {
-  return /\s/.test(String.fromCharCode(code));
+  return (
+    code === 0x20 ||
+    (code >= 0x09 && code <= 0x0d) ||
+    (code > 0x7f && /\s/.test(String.fromCharCode(code)))
+  );
 }
 
 /** A character of a name or number. Any non-ASCII character that is not a space counts, as an
@@ -69,41 +74,58 @@ function isLineTerminator(code: number): boolean {
  * Comments are found by walking the source, guessing as described below, so a `//` or `/*` inside
  * a string, a template literal or a regular expression is not a comment, and a `/*` inside a `//`
  * comment opens nothing. Without a parser, whether a `/` opens a regular expression is guessed from
- * what precedes it, and known wrong guesses include: a regular expression after the `)` of
- * `for await (…)`, or after a word `REGEX_AFTER_WORD` does not list (`export default /x/`), is read
- * as a division; a division after a name spelled like a listed word (a variable called `of`), or
- * after a `!` parted from its value by a space, is read as a regular expression. A wrong guess is
- * not confined to its line: a quote, backtick or `/*` in the misread text can open a string,
- * template or comment the source does not have, and either direction can then hand `replace` code
- * on a later line as if it were a comment, or leave a comment there in place as if it were code.
+ * what precedes it, and known wrong guesses include: a regular expression after a word
+ * `REGEX_AFTER_WORD` does not list (`class P extends /x/.constructor {}`) is read as a division; a
+ * division after a name spelled like a listed word (a variable called `of`), or after a `!` parted
+ * from its value by a space, is read as a regular expression. A wrong guess is not confined to its
+ * line: a quote, backtick or `/*` in the misread text can open a string, template or comment the
+ * source does not have, and either direction can then hand `replace` code on a later line as if it
+ * were a comment, or leave a comment there in place as if it were code.
  */
 export function mapComments(source: string, replace: (comment: string) => string): string {
+  return mapSource(source, replace, undefined);
+}
+
+/** `mapComments`, also replacing the text of each string, template literal and regular expression
+ * with what `replaceLiteral` returns for it when one is given. */
+function mapSource(
+  source: string,
+  replaceComment: (comment: string) => string,
+  replaceLiteral: ((text: string) => string) | undefined,
+): string {
   const parts: string[] = [];
   let copiedFrom = 0;
   let i = 0;
   let regexAllowed = true;
   let afterDot = false;
-  // The word just read, while no other token has followed it; "" for a property name.
+  // The word just read, while no other token has followed it; "" for a property name, and `for`
+  // after `for await`.
   let lastWord = "";
   // One entry per open `(`: whether a statement follows its `)`.
   const parens: boolean[] = [];
   // One entry per open `${`: how many `{` inside it are still open.
   const substitutions: number[] = [];
 
-  const blank = (start: number, end: number): void => {
+  const replaceSpan = (start: number, end: number, replace: (text: string) => string): void => {
     parts.push(source.slice(copiedFrom, start), replace(source.slice(start, end)));
     copiedFrom = end;
   };
+  const literalText = (start: number, end: number): void => {
+    if (replaceLiteral !== undefined) replaceSpan(start, end, replaceLiteral);
+  };
   /** Skips a template literal's text from `i` to past its closing backtick or its next `${`. */
   const skipTemplate = (): void => {
+    const start = i;
     while (i < source.length) {
       const code = source.charCodeAt(i);
       if (code === BACKTICK) {
+        literalText(start, i);
         i += 1;
         regexAllowed = false;
         return;
       }
       if (code === DOLLAR && source.charCodeAt(i + 1) === BRACE_OPEN) {
+        literalText(start, i);
         i += 2;
         substitutions.push(0);
         regexAllowed = true;
@@ -111,29 +133,35 @@ export function mapComments(source: string, replace: (comment: string) => string
       }
       i += code === BACKSLASH ? 2 : 1;
     }
+    literalText(start, i);
   };
   /** Skips a string from its opening quote at `i` to past its closing quote, or to an LF or CR. */
   const skipString = (quote: number): void => {
     i += 1;
+    const start = i;
     while (i < source.length) {
       const code = source.charCodeAt(i);
       if (code === quote) {
+        literalText(start, i);
         i += 1;
         return;
       }
-      if (code === LF || code === CR) return;
+      if (code === LF || code === CR) break;
       i += code !== BACKSLASH ? 1 : source.startsWith("\r\n", i + 1) ? 3 : 2;
     }
+    literalText(start, i);
   };
   /** Skips a regular expression from its opening `/` at `i` to past its closing `/`, or to its
    * line's end. */
   const skipRegex = (): void => {
     let inClass = false;
     i += 1;
+    const start = i;
     while (i < source.length) {
       const code = source.charCodeAt(i);
-      if (isLineTerminator(code)) return;
+      if (isLineTerminator(code)) break;
       if (code === SLASH && !inClass) {
+        literalText(start, i);
         i += 1;
         return;
       }
@@ -142,6 +170,7 @@ export function mapComments(source: string, replace: (comment: string) => string
       else if (code === BRACKET_CLOSE) inClass = false;
       i += 1;
     }
+    literalText(start, i);
   };
 
   while (i < source.length) {
@@ -150,14 +179,14 @@ export function mapComments(source: string, replace: (comment: string) => string
       const start = i;
       i += 2;
       while (i < source.length && !isLineTerminator(source.charCodeAt(i))) i += 1;
-      blank(start, i);
+      replaceSpan(start, i, replaceComment);
       continue;
     }
     if (code === SLASH && source.charCodeAt(i + 1) === STAR) {
       const close = source.indexOf("*/", i + 2);
       const start = i;
       i = close < 0 ? source.length : close + 2;
-      blank(start, i);
+      replaceSpan(start, i, replaceComment);
       continue;
     }
     if (isSpace(code)) {
@@ -170,8 +199,10 @@ export function mapComments(source: string, replace: (comment: string) => string
       while (i < source.length && isWordPart(source.charCodeAt(i)));
       // A name after a `.`, but not after a spread's `...`, is a property, so a value even when it
       // is spelled like a keyword.
-      lastWord = afterDot ? "" : source.slice(start, i);
-      regexAllowed = REGEX_AFTER_WORD.has(lastWord);
+      const word = afterDot ? "" : source.slice(start, i);
+      regexAllowed = REGEX_AFTER_WORD.has(word);
+      // `for await (` heads a statement as `for (` does.
+      if (word !== "await" || lastWord !== "for") lastWord = word;
       afterDot = false;
       continue;
     }
@@ -221,5 +252,17 @@ export function mapComments(source: string, replace: (comment: string) => string
  * line of code stays on the line it was on. Finds comments as `mapComments` does, wrong guesses
  * included. */
 export function blankComments(source: string): string {
-  return mapComments(source, (comment) => comment.replace(/[^\n]/g, " "));
+  return mapComments(source, blank);
+}
+
+/** `source` with each comment blanked as `blankComments` does, and the text of each string,
+ * template literal and regular expression blanked the same way, keeping its quotes, backticks,
+ * slashes and flags and the code in a template's `${…}` parts. Finds them as `mapComments` does,
+ * wrong guesses included. */
+export function blankCommentsAndLiterals(source: string): string {
+  return mapSource(source, blank, blank);
+}
+
+function blank(text: string): string {
+  return text.includes("\n") ? text.replace(/[^\n]/g, " ") : " ".repeat(text.length);
 }

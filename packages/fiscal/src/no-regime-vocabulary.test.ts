@@ -96,6 +96,13 @@ describe("stripComments", () => {
     expect(mentionsTerm(stripComments(afterString), "aeat")).toBe(true);
   });
 
+  it("keeps the code after a `/*` inside a regular expression that follows `export default` or `for await (…)`", () => {
+    const afterDefault = "export default /\\/*/;\nconst x = aeat;";
+    expect(mentionsTerm(stripComments(afterDefault), "aeat")).toBe(true);
+    const afterForAwait = "for await (const p of ps) /\\/*/.test(p);\nconst x = aeat;";
+    expect(mentionsTerm(stripComments(afterForAwait), "aeat")).toBe(true);
+  });
+
   it("drops a // line comment without mistaking a URL's // for one", () => {
     const source = 'const url = "https://example.com"; // see AEAT\'s published guidance';
     const stripped = stripComments(source);

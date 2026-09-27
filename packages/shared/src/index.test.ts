@@ -4,6 +4,7 @@ import {
   AppError,
   assertSupportedLocale,
   blankComments,
+  blankCommentsAndLiterals,
   BAND_RANK,
   classifyBand,
   compareDecimal,
@@ -141,6 +142,7 @@ describe("package public surface (./index.js)", () => {
 
   it("re-exports the comment scanner", () => {
     expect(blankComments("a // c")).toBe("a     ");
+    expect(blankCommentsAndLiterals('f("}") // c')).toBe('f(" ")     ');
     expect(mapComments("a /* c */", () => "")).toBe("a ");
   });
 });

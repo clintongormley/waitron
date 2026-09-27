@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blankComments, mapComments } from "./source-comments.js";
+import { blankComments, blankCommentsAndLiterals, mapComments } from "./source-comments.js";
 
 /** Every word after which a `/` opens a regular expression. */
 const KEYWORDS_BEFORE_A_REGEX = [
@@ -17,6 +17,7 @@ const KEYWORDS_BEFORE_A_REGEX = [
   "throw",
   "yield",
   "await",
+  "default",
 ];
 
 /** Every span `mapComments` hands to its callback, in order. */
@@ -157,7 +158,9 @@ describe("mapComments", () => {
       "obj.return",
       "obj?.return",
       "x.in",
+      "x.default",
       "(a)",
+      "await (p)",
     ]) {
       expect(spans(`const h = ${value} / 2; // c`), value).toEqual(["// c"]);
     }
@@ -176,6 +179,17 @@ describe("mapComments", () => {
       expect(spans(`${head} (check(ok)) /\\/*/.test(v);\n// c`)).toEqual(["// c"]);
     },
   );
+
+  it("opens a regular expression after the parenthesised head of `for await`", () => {
+    expect(spans("for await (x of y) /\\/*/.test(s);\n// c")).toEqual(["// c"]);
+    expect(spans("for /* a */ await\n(x of y) /\\/*/.test(s);\n// c")).toEqual(["/* a */", "// c"]);
+  });
+
+  it("reads a slash after `export default` and a value as division, and after `default:` as a regular expression", () => {
+    expect(spans("export default total / 2; // c")).toEqual(["// c"]);
+    expect(spans("export default (a) / 2; // c")).toEqual(["// c"]);
+    expect(spans("switch (k) { default: /\\/*/.test(s); } // c")).toEqual(["// c"]);
+  });
 
   it("reads a slash after the parenthesised call of any other name as division", () => {
     expect(spans("iff (ok) / 2; // c")).toEqual(["// c"]);
@@ -256,12 +270,10 @@ describe("mapComments", () => {
 
 describe("mapComments' known wrong guesses", () => {
   // Each is named in the doc comment on `mapComments`; a case failing here means that text is stale.
-  it("reads a regular expression after the `)` of `for await (…)` as a division", () => {
-    expect(spans("for await (x of y) /\\/*/.test(s);\n// c")).toEqual(["/*/.test(s);\n// c"]);
-  });
-
   it("reads a regular expression after a word it does not list as a division", () => {
-    expect(spans("export default /\\/*/;\n// c")).toEqual(["/*/;\n// c"]);
+    expect(spans("class P extends /\\/*/.constructor {}\n// c")).toEqual([
+      "/*/.constructor {}\n// c",
+    ]);
   });
 
   it("reads a division after a name spelled like a listed word as a regular expression", () => {
@@ -294,5 +306,39 @@ describe("blankComments", () => {
     expect(blankComments('const s = "/*"; const x = aeat; // */')).toBe(
       'const s = "/*"; const x = aeat;      ',
     );
+  });
+});
+
+describe("blankCommentsAndLiterals", () => {
+  it("blanks comments and the text of strings, keeping the quotes", () => {
+    expect(blankCommentsAndLiterals("f(\"a}b\", '{c'); // d")).toBe("f(\"   \", '  ');     ");
+    expect(blankCommentsAndLiterals('const s = "";')).toBe('const s = "";');
+  });
+
+  it("blanks a template's text but keeps its backticks and the code in its `${…}` parts", () => {
+    expect(blankCommentsAndLiterals("`a}${x /* c */}b{`;")).toBe("`  ${x        }  `;");
+    expect(blankCommentsAndLiterals("`${`in}${y}`}{`")).toBe("`${`   ${y}`} `");
+  });
+
+  it("blanks a regular expression's text but keeps its slashes and flags", () => {
+    expect(blankCommentsAndLiterals("const r = /}[/]/g;")).toBe("const r = /    /g;");
+  });
+
+  it("blanks an unterminated string or regular expression to its line's end, and a template to the end", () => {
+    expect(blankCommentsAndLiterals('f("a}\ng();')).toBe('f("  \ng();');
+    expect(blankCommentsAndLiterals("const r = /a}\ng();")).toBe("const r = /  \ng();");
+    expect(blankCommentsAndLiterals("const t = `a}\ng();")).toBe("const t = `  \n    ");
+    expect(blankCommentsAndLiterals("const t = `a\\")).toBe("const t = `  ");
+  });
+
+  it("keeps every line where it was, including a string's escaped line end", () => {
+    const source = 'const s = "a\\\n}";\nconst t = `\n{`;\ng(); // c';
+    const blanked = blankCommentsAndLiterals(source);
+    expect(blanked).toBe('const s = "  \n ";\nconst t = `\n `;\ng();     ');
+  });
+
+  it("leaves code outside comments and literals alone", () => {
+    const source = "function f(a) { return { b: a / 2 }; }";
+    expect(blankCommentsAndLiterals(source)).toBe(source);
   });
 });
