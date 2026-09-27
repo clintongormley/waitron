@@ -463,15 +463,52 @@ export interface SaleLine {
   note?: string;
 }
 
-/**
- * One round line sent to {@link TillApi.addTabRound}. `courseId` is the waiter's course OVERRIDE; absent,
- * the server uses the product's default course. `hold: true` inserts the line without firing it,
- * whatever its course; an un-held line OMITS the field.
- */
-export interface RoundLine extends SaleLine {
+/** Whether a submitted group goes to the kitchen now or waits until it is fired. */
+export type GroupRelease = "fire" | "hold";
+
+/** One line of a submitted group. Its group, not its course, decides when it is released. `courseId`
+ * is the waiter's course OVERRIDE; absent, the server uses the product's default course. */
+export interface GroupLine extends SaleLine {
   courseId?: string;
-  hold?: boolean;
 }
+
+/** A party's group of lines as `GET /api/visits/:id/groups` reads it. `lineIds` are the group's dish
+ * lines, on whichever of the party's bills they sit; `summary` names them by staff name, e.g.
+ * "2 × Steak, 1 × Fish". A removed group is never listed. */
+export interface OrderGroup {
+  id: string;
+  position: number;
+  state: "held" | "fired";
+  firedAt: string | null;
+  remindAt: string | null;
+  lineIds: string[];
+  summary: string;
+}
+
+/** What every group command sends: its submission id, and the party's revision as last read. */
+export interface GroupCommand {
+  submissionId: string;
+  expectedVisitRevision: number;
+}
+
+/** A group submission: the groups in the order they go in the party's sequence, or one held group
+ * added to the existing held group `joinGroupId`. */
+export interface GroupSubmission extends GroupCommand {
+  groups: { lines: GroupLine[]; release: GroupRelease }[];
+  joinGroupId?: string;
+}
+
+/** The answer to a group submission: the tab the lines landed on, the party's revision after it, and
+ * the groups created or joined. */
+export interface SubmittedGroups {
+  tabId: string;
+  revision: number;
+  groups: OrderGroup[];
+}
+
+/** The party a bill belongs to, at its revision after a void or line edit on the bill; null for a
+ * bill with no party. */
+export type BillParty = { id: string; revision: number } | null;
 
 /** A cash tender: the full amount the operator keyed in (the server computes the change). */
 export interface CashTender {
@@ -1125,6 +1162,9 @@ export interface TabLine {
    * RECALLABLE line has `firedAt` set, `state === "queued"`, and the venue allows changes to sent items
    * (`editSentLines`); "preparing"/"ready" is cancel-only. */
   state: TicketState | null;
+  /** The order group the line is released with; null when it is in none, as on a bill with no party
+   * or for a line moved here from another party's bill. */
+  groupId: string | null;
   note: string | null;
   /** The extras list a CHILD row was picked from, which a prefilled pick goes back to; null on a
    * dish. */
@@ -1365,15 +1405,15 @@ export class TillApi {
    * Edit ONE dish line of an open order → `PUT /api/working-orders/:orderId/lines/:lineNo`, from the
    * copy read at `revision`. An absent field keeps the line's own. Rejects `working_order.out_of_date`,
    * `order.payment_in_flight`, `ticket.already_started`, `ticket.already_fired` or
-   * `tab.line_not_found`. Resolves the revision the order is at after the edit.
+   * `tab.line_not_found`. Resolves the revision the order is at after the edit, and its party's.
    */
   updateOrderLine(
     orderId: string,
     lineNo: number,
     patch: OrderLinePatch,
     revision: number,
-  ): Promise<{ revision: number }> {
-    return this.#request<{ revision: number }>(
+  ): Promise<{ revision: number; visit: BillParty }> {
+    return this.#request<{ revision: number; visit: BillParty }>(
       `/api/working-orders/${orderId}/lines/${lineNo}`,
       "PUT",
       { ...patch, revision },
@@ -1543,8 +1583,9 @@ export class TillApi {
   }
 
   /**
-   * FIRE a HELD course of an order → `POST /api/orders/:id/courses/:courseId/fire`. NON-FISCAL;
-   * idempotent — a course with nothing held is a 200 no-op. A malformed or unknown course id rejects
+   * FIRE a HELD course of an order → `POST /api/orders/:id/courses/:courseId/fire`. On a seated
+   * party's order, each held group holding a dish of that course on that order fires whole; the
+   * course's lines held outside a group are released. NON-FISCAL; idempotent — a course with nothing held is a 200 no-op. A malformed or unknown course id rejects
    * `course.not_found`; a malformed order id `working_order.not_found`.
    */
   async fireCourse(orderId: string, courseId: string): Promise<void> {
@@ -1652,24 +1693,62 @@ export class TillApi {
     return this.#request<VisitBill[]>(`/api/visits/${visitId}/bills`, "GET");
   }
 
+  /** A party's order groups in sequence, with its revision → `GET /api/visits/:visitId/groups`. */
+  listGroups(visitId: string): Promise<{ revision: number; groups: OrderGroup[] }> {
+    return this.#request(`/api/visits/${visitId}/groups`, "GET");
+  }
+
   /**
-   * Append a round to a table's tab → `POST /api/working-orders/:orderId/round`. The new lines are priced
-   * at add-time and the existing lines are NOT re-priced. Sent to the settled or abandoned tab a
-   * seated party's table still points at, it opens the party's next tab: the answer names the tab the
-   * round landed on.
-   * `tab.not_open` and `sale.empty_basket` surface as a rejected `{ code }`.
+   * Put groups of lines on a party's tab → `POST /api/visits/:visitId/groups`, each released now or
+   * held. Sent to a paid tab the party still points at, it opens the party's next tab: the answer
+   * names the tab the lines landed on. A repeat with the same submission id answers as the first.
+   * Rejects `visit.out_of_date`, `visit.not_open`, `submission.id_reused`, `group.not_held` and
+   * `group.not_found` as `{ code }`.
    */
-  addTabRound(
-    orderId: string,
-    lines: RoundLine[],
+  submitGroups(
+    visitId: string,
+    submission: GroupSubmission,
     options: ReadOptions = {},
-  ): Promise<{ tabId: string }> {
-    return this.#request<{ tabId: string }>(
-      `/api/working-orders/${orderId}/round`,
-      "POST",
-      { lines },
-      options.signal,
-    );
+  ): Promise<SubmittedGroups> {
+    return this.#request(`/api/visits/${visitId}/groups`, "POST", submission, options.signal);
+  }
+
+  /** Send a held group to the kitchen → `POST /api/visits/:visitId/groups/:groupId/fire`. Rejects
+   * `group.not_held`, `group.not_found`, `product.unavailable` and the command refusals. */
+  fireGroup(
+    visitId: string,
+    groupId: string,
+    command: GroupCommand,
+  ): Promise<{ revision: number }> {
+    return this.#request(`/api/visits/${visitId}/groups/${groupId}/fire`, "POST", command);
+  }
+
+  /** Put a party's held groups in a new order → `PUT /api/visits/:visitId/groups/order`, naming every
+   * held group once. Fired groups keep their places. */
+  reorderGroups(
+    visitId: string,
+    heldGroupIds: string[],
+    command: GroupCommand,
+  ): Promise<{ revision: number }> {
+    return this.#request(`/api/visits/${visitId}/groups/order`, "PUT", {
+      ...command,
+      heldGroupIds,
+    });
+  }
+
+  /** Move lines, or part of one, between held groups, or into a new held group at the end →
+   * `POST /api/visits/:visitId/groups/move`. */
+  moveLinesToGroup(
+    visitId: string,
+    moves: { lineId: string; quantity: string }[],
+    target: { groupId: string } | "new",
+    command: GroupCommand,
+  ): Promise<{ revision: number }> {
+    return this.#request(`/api/visits/${visitId}/groups/move`, "POST", {
+      ...command,
+      moves,
+      target,
+    });
   }
 
   /**
@@ -1694,8 +1773,9 @@ export class TillApi {
 
   /**
    * Fire SPECIFIC held lines of an open tab → `POST /api/working-orders/:orderId/lines/send`. An empty
-   * `lineNos` releases every held line of the tab. NON-FISCAL; idempotent — an unknown or already-fired
-   * line matches nothing. Rejects `tab.not_open`.
+   * `lineNos` releases every held line of the tab outside a held group. NON-FISCAL; idempotent — an
+   * unknown or already-fired line matches nothing. Rejects `tab.not_open`, and `group.line_held` for a
+   * named line in a held group, which only firing its group releases.
    */
   async sendLines(orderId: string, lineNos: number[]): Promise<void> {
     await this.#request<void>(`/api/working-orders/${orderId}/lines/send`, "POST", { lineNos });
@@ -1718,11 +1798,11 @@ export class TillApi {
    * cancel path for a sent line, whether or not the kitchen has started it. NON-FISCAL;
    * the server prints a correction slip. `quantity`, a decimal string, voids that part of the line
    * only; absent voids all of it. Rejects `tab.not_open`, `tab.line_not_found`,
-   * `tab.void_quantity_invalid` or `order.payment_in_flight`.
+   * `tab.void_quantity_invalid` or `order.payment_in_flight`. Resolves the tab's party after the void.
    */
-  async voidLine(orderId: string, lineNo: number, quantity?: string): Promise<void> {
+  voidLine(orderId: string, lineNo: number, quantity?: string): Promise<{ visit: BillParty }> {
     const part = quantity === undefined ? "" : `?quantity=${encodeURIComponent(quantity)}`;
-    await this.#request<void>(`/api/working-orders/${orderId}/lines/${lineNo}${part}`, "DELETE");
+    return this.#request(`/api/working-orders/${orderId}/lines/${lineNo}${part}`, "DELETE");
   }
 
   /**

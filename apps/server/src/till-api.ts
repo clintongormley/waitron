@@ -61,7 +61,6 @@ import {
 } from "./tables.js";
 import {
   abandonHeldOrder,
-  addTabRound,
   advanceTicket,
   advanceTicketItem,
   bumpCourseReady,
@@ -96,11 +95,31 @@ import {
 } from "./working-order.js";
 import type { LineExtras, OrderLinePatch, TicketState } from "./working-order.js";
 import { listCourses, listStations } from "./kitchen.js";
-import { finishTable, markCleared, readVisitBills, seatTable } from "./visits.js";
+import {
+  finishTable,
+  markCleared,
+  readVisitBills,
+  seatTable,
+  visitRevisionOfOrder,
+} from "./visits.js";
 import type { VisitCommand } from "./visits.js";
+import {
+  fireGroup,
+  listOrderGroups,
+  moveLinesToGroup,
+  reorderHeldGroups,
+  submitGroups,
+} from "./order-groups.js";
+import type { GroupLine, SubmitGroupsInput, VisitCommandArgs } from "./order-groups.js";
+import { invalid } from "./bill-allocation.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
 import { issueIfFullyPaid } from "./bill-payments.js";
-import { mountBillPaymentsApi, withSaleTillWhenIssuing } from "./bill-payments-api.js";
+import {
+  asObject,
+  mountBillPaymentsApi,
+  submissionIdOf,
+  withSaleTillWhenIssuing,
+} from "./bill-payments-api.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
 import {
   canonicaliseUuid,
@@ -324,6 +343,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "visit.out_of_date": 409,
   "visit.bill_outstanding": 409,
   "submission.id_reused": 409,
+  "group.not_held": 409,
+  "group.not_found": 404,
+  "group.held_leaves_visit": 409,
+  "group.line_held": 409,
   "bill.nothing_outstanding": 409,
   "bill.tip_not_allowed": 422,
   "bill.allocation_changed": 409,
@@ -453,6 +476,61 @@ function visitCommand(
   return command;
 }
 
+/** What every group command carries: its submission id, the visit revision read, and who acts. */
+function groupCommand(personId: string, body: Record<string, unknown>): VisitCommandArgs {
+  return {
+    submissionId: submissionIdOf(body),
+    expectedVisitRevision: requireRevision(body.expectedVisitRevision, "expectedVisitRevision"),
+    operatorId: personId,
+  };
+}
+
+/**
+ * Submitted groups: each a release and a list of round lines. Only the shape is screened; pricing
+ * refuses a line's contents.
+ */
+function parseSubmittedGroups(value: unknown): SubmitGroupsInput["groups"] {
+  if (!Array.isArray(value)) throw invalid("groups");
+  return value.map((entry: unknown) => {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+      throw invalid("groups");
+    }
+    const { lines, release } = entry as Record<string, unknown>;
+    if (
+      !Array.isArray(lines) ||
+      !lines.every((line) => typeof line === "object" && line !== null && !Array.isArray(line))
+    ) {
+      throw invalid("lines");
+    }
+    if (release !== "fire" && release !== "hold") throw invalid("release");
+    return { lines: lines as GroupLine[], release };
+  });
+}
+
+function parseGroupMoves(value: unknown): { lineId: string; quantity: string }[] {
+  if (!Array.isArray(value)) throw invalid("moves");
+  return value.map((entry: unknown) => {
+    const move =
+      typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : null;
+    if (move === null || typeof move.lineId !== "string" || typeof move.quantity !== "string") {
+      throw invalid("moves");
+    }
+    return { lineId: move.lineId, quantity: move.quantity };
+  });
+}
+
+function parseMoveTarget(value: unknown): { groupId: string } | "new" {
+  if (value === "new") return value;
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { groupId?: unknown }).groupId === "string"
+  ) {
+    return { groupId: (value as { groupId: string }).groupId };
+  }
+  throw invalid("target");
+}
+
 /** A value that cannot be a line number gets the absent line's `tab.line_not_found`. */
 function requireLineNo(tabId: string, raw: string): number {
   const lineNo = Number(raw);
@@ -471,16 +549,22 @@ function mountCourseVerb(
   deps: TillApiDeps,
   log: Logger,
   suffix: string,
-  verb: (tx: Transaction, cfg: TillConfig, orderId: string, courseId: string) => Promise<void>,
+  verb: (
+    tx: Transaction,
+    cfg: TillConfig,
+    orderId: string,
+    courseId: string,
+    operatorId: string,
+  ) => Promise<void>,
 ): void {
   app.post(`/api/orders/:id/courses/:courseId/${suffix}`, (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const { personId } = await requireSession(deps, c);
       const orderId = requireUuidId(c.req.param("id"), "working_order.not_found");
       const courseId = c.req.param("courseId");
       if (!isUuid(courseId)) throw new AppError("course.not_found", { courseId });
       await withTransaction(deps.db, async (tx) => {
-        await verb(tx, deps.cfg, orderId, courseId);
+        await verb(tx, deps.cfg, orderId, courseId, personId);
       });
       return c.body(null, 200);
     }),
@@ -947,8 +1031,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             lines: body.lines,
             label: body.label,
             revision: requireRevision(body.revision),
+            operatorId: personId,
           },
-          { fiscal, operatorId: personId, saleCfg },
+          { fiscal, saleCfg },
         ),
       );
       return c.json({ revision });
@@ -1374,25 +1459,78 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  app.post("/api/working-orders/:id/round", (c) =>
+  app.get("/api/visits/:id/groups", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const id = c.req.param("id");
-      if (!isUuid(id)) throw new AppError("tab.not_open", { tabId: id });
-      const body = await readJsonBody<{
-        lines: ({
-          menuItemId: string;
-          quantity: string;
-          courseId?: string | null;
-          extras?: ExtraSelection[];
-          options?: OptionSelection[];
-          hold?: boolean;
-        } & LineExtras)[];
-      }>(c);
-      const result = await withTransaction(deps.db, async (tx) => {
-        return addTabRound(tx, deps.cfg, id, body.lines);
-      });
-      return c.json(result);
+      const visitId = requireVisitParam(c.req.param("id"));
+      const groups = await withTransaction(deps.db, (tx) => listOrderGroups(tx, visitId));
+      return c.json(groups);
+    }),
+  );
+
+  app.post("/api/visits/:id/groups", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const visitId = requireVisitParam(c.req.param("id"));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const input: SubmitGroupsInput = {
+        ...groupCommand(personId, body),
+        groups: parseSubmittedGroups(body.groups),
+      };
+      if (body.joinGroupId !== undefined) {
+        if (typeof body.joinGroupId !== "string") throw invalid("joinGroupId");
+        input.joinGroupId = body.joinGroupId;
+      }
+      const submitted = await withTransaction(deps.db, (tx) =>
+        submitGroups(tx, deps.cfg, visitId, input),
+      );
+      return c.json(submitted);
+    }),
+  );
+
+  app.post("/api/visits/:id/groups/:gid/fire", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const visitId = requireVisitParam(c.req.param("id"));
+      const groupId = c.req.param("gid");
+      if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
+      const command = groupCommand(personId, asObject(await readRawJsonBody<unknown>(c)));
+      const fired = await withTransaction(deps.db, (tx) =>
+        fireGroup(tx, deps.cfg, visitId, groupId, command),
+      );
+      return c.json(fired);
+    }),
+  );
+
+  app.put("/api/visits/:id/groups/order", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const visitId = requireVisitParam(c.req.param("id"));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const command = groupCommand(personId, body);
+      const { heldGroupIds } = body;
+      if (!Array.isArray(heldGroupIds) || !heldGroupIds.every((id) => typeof id === "string")) {
+        throw invalid("heldGroupIds");
+      }
+      const reordered = await withTransaction(deps.db, (tx) =>
+        reorderHeldGroups(tx, visitId, heldGroupIds as string[], command),
+      );
+      return c.json(reordered);
+    }),
+  );
+
+  app.post("/api/visits/:id/groups/move", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const visitId = requireVisitParam(c.req.param("id"));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const command = groupCommand(personId, body);
+      const moves = parseGroupMoves(body.moves);
+      const target = parseMoveTarget(body.target);
+      const moved = await withTransaction(deps.db, (tx) =>
+        moveLinesToGroup(tx, deps.cfg, visitId, moves, target, command),
+      );
+      return c.json(moved);
     }),
   );
 
@@ -1404,13 +1542,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
       // Absent voids the whole line; `voidTabLine` validates a given one.
       const quantity = c.req.query("quantity");
-      await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
+      // The party's revision after the void, for the till's next command on the party.
+      const visit = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
         withTransaction(deps.db, async (tx) => {
-          await voidTabLine(tx, deps.cfg, id, lineNo, quantity);
+          await voidTabLine(tx, deps.cfg, id, lineNo, quantity, personId);
           await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
+          return visitRevisionOfOrder(tx, id);
         }),
       );
-      return c.body(null, 200);
+      return c.json({ visit });
     }),
   );
 
@@ -1439,12 +1579,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const copy = requireRevision(revision);
       const saved = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
         withTransaction(deps.db, async (tx) => {
-          const edited = await updateOrderLine(tx, deps.cfg, id, lineNo, patch, copy);
+          const revision = await updateOrderLine(tx, deps.cfg, id, lineNo, patch, copy, personId);
           await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
-          return edited;
+          return { revision, visit: await visitRevisionOfOrder(tx, id) };
         }),
       );
-      return c.json({ revision: saved });
+      return c.json(saved);
     }),
   );
 
@@ -1490,7 +1630,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // An omitted or empty `lineNos` releases every held line of the tab.
+  // An omitted or empty `lineNos` releases every held line of the tab outside a held group.
   app.post("/api/working-orders/:id/lines/send", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);

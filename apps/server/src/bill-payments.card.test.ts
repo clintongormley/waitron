@@ -17,6 +17,7 @@ import {
   tendersOfBill,
   type BillVenue,
 } from "./testing/bill-venue.js";
+import { addTabRound } from "./working-order.js";
 import "./errors.js";
 
 // A card on a reader against a bill (bill payments design §5, §8 tests 1, 3, 10 and 12): three
@@ -293,16 +294,11 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
 
   it("files the invoice a capture completes even when a line never sent has since sold out", async () => {
     const billId = await tabWithDishes("Paella");
-    const round = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${billId}/round`,
-      {
-        lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1", hold: true }],
-      },
+    await inTx(venue, (tx) =>
+      addTabRound(tx, venue.cfg, billId, [
+        { menuItemId: venue.offerFor("Caña"), quantity: "1", hold: true },
+      ]),
     );
-    expect(round.status).toBe(200);
     const card = await heldCard(billId, "38.00");
     venue.db.run(sql`update products set available = 0 where name = 'Caña'`);
     try {
@@ -892,15 +888,10 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
       "DELETE",
       `/api/working-orders/${billId}/lines/2`,
     );
-    const round = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${billId}/round`,
-      {
-        lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
-      },
-    );
+    // The bill has no visit, so the round is the function a group submission calls.
+    const round = await inTx(venue, (tx) =>
+      addTabRound(tx, venue.cfg, billId, [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }]),
+    ).catch((error: unknown) => error);
     const abandoned = await send(
       venue.app,
       venue.cookie,
@@ -923,10 +914,11 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
     card.release();
     await card.answer;
 
-    for (const refused of [voided, round, abandoned]) {
+    for (const refused of [voided, abandoned]) {
       expect(refused.status).toBe(409);
       expect(refused.json).toMatchObject({ code: "order.payment_in_flight" });
     }
+    expect(round).toMatchObject({ code: "order.payment_in_flight" });
     expect(otherNote.status).toBe(200);
     expect(await statusOf(venue, billId)).toBe("open");
     expect((await balance(billId)).json).toMatchObject({ total: "53.00", received: "10.00" });

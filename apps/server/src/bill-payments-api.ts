@@ -40,7 +40,7 @@ function oneOf<T extends string>(value: unknown, allowed: readonly T[], field: s
   return value as T;
 }
 
-function asObject(raw: unknown): Record<string, unknown> {
+export function asObject(raw: unknown): Record<string, unknown> {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw invalid("body");
   return raw as Record<string, unknown>;
 }
@@ -90,7 +90,7 @@ function parseAsk(body: Record<string, unknown>): BillPaymentAsk {
   return ask;
 }
 
-function submissionIdOf(body: Record<string, unknown>): string {
+export function submissionIdOf(body: Record<string, unknown>): string {
   if (
     typeof body.submissionId !== "string" ||
     body.submissionId.length === 0 ||

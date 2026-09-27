@@ -20,6 +20,7 @@ import { products } from "./catalogue.js";
 import { diningTables } from "./dining-tables.js";
 import { kitchenCourses } from "./kitchen-courses.js";
 import { nodes } from "./nodes.js";
+import { orderGroups } from "./order-groups.js";
 import { tills } from "./tenants.js";
 import { visits } from "./visits.js";
 
@@ -173,6 +174,12 @@ export const workingOrderLines = table(
     // The product's reporting chain and labels when the line was added; issuance copies it onto
     // `sale_lines.classification`.
     classification: json<SaleLineClassification>("classification"),
+    // The visit's group the line is released with; an extras child carries its dish's. Null on a
+    // bill with no visit.
+    groupId: id("group_id"),
+    // Whose sale the line counts as. A plain person id with no key: `persons` is in
+    // @waitron/identity's migration set, not the core one.
+    creditedTo: id("credited_to"),
   },
   (t) => [
     foreignKey({
@@ -180,6 +187,12 @@ export const workingOrderLines = table(
       foreignColumns: [workingOrders.id],
       name: "working_order_lines_order_fk",
     }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.groupId],
+      foreignColumns: [orderGroups.id],
+      name: "working_order_lines_group_fk",
+    }),
+    index("working_order_lines_group_idx").on(t.groupId),
     foreignKey({
       columns: [t.productId],
       foreignColumns: [products.id],

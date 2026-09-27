@@ -69,6 +69,8 @@ import {
 import { finishTable, seatTable } from "./visits.js";
 import "./errors.js";
 
+const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
+
 const LOCALE = "es-ES";
 // The whole manifest: the tables here belong to several modules.
 const suite = useVenueDb({
@@ -1175,7 +1177,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
     );
     expect((await sentState(tabId)).map((line) => line.sentAt)).toEqual([null, null]);
 
-    await asApp(cfg, (tx) => fireCourse(tx, cfg, tabId, course.id));
+    await asApp(cfg, (tx) => fireCourse(tx, cfg, tabId, course.id, OPERATOR));
 
     const fired = await sentState(tabId);
     expect(fired.map((line) => line.sentAt !== null)).toEqual([true, true]);
@@ -1677,7 +1679,9 @@ describe("a line with no fired ticket whose product sold out cannot be sent", ()
     );
     await db.execute(sql`update products set available = 0 where id = ${aguaId}`);
 
-    await expect(asApp(cfg, (tx) => fireCourse(tx, cfg, tabId, course.id))).rejects.toMatchObject({
+    await expect(
+      asApp(cfg, (tx) => fireCourse(tx, cfg, tabId, course.id, OPERATOR)),
+    ).rejects.toMatchObject({
       code: "product.unavailable",
       params: { productId: aguaId },
     });
@@ -2231,7 +2235,7 @@ async function tabWithFiredMains() {
     [1, true],
     [2, false],
   ]);
-  await asApp(cfg, (tx) => fireCourse(tx, cfg, tabId, mains.id));
+  await asApp(cfg, (tx) => fireCourse(tx, cfg, tabId, mains.id, OPERATOR));
   const [water, cafe] = await db
     .select({ id: workingOrderLines.id })
     .from(workingOrderLines)
@@ -2368,7 +2372,7 @@ describe("every write to an open order's lines counts on its revision (plan D10)
     ["a void", (tx, t) => voidTabLine(tx, t.cfg, t.tabId, 1, "1"), ["tab"]],
     ["a recall", (tx, t) => recallLines(tx, t.cfg, t.tabId, [1]), ["tab"]],
     ["a send", (tx, t) => sendLines(tx, t.cfg, t.tabId, [2]), ["tab"]],
-    ["a course fired", (tx, t) => fireCourse(tx, t.cfg, t.tabId, t.courseId), ["tab"]],
+    ["a course fired", (tx, t) => fireCourse(tx, t.cfg, t.tabId, t.courseId, OPERATOR), ["tab"]],
     ["a course change", (tx, t) => setLineCourse(tx, t.cfg, t.tabId, 2, null), ["tab"]],
     ["a served mark", (tx, t) => markLineServed(tx, t.cfg, t.tabId, 1), ["tab"]],
     ["a served mark cleared", (tx, t) => unmarkLineServed(tx, t.cfg, t.tabId, 1), ["tab"]],
@@ -2511,7 +2515,7 @@ describe("a line write on an order whose card payment is in flight is refused (p
     ["a part void", (tx, t) => voidTabLine(tx, t.cfg, t.tabId, 1, "1"), ["tab"]],
     ["a recall", (tx, t) => recallLines(tx, t.cfg, t.tabId, [1]), ["tab"]],
     ["a send", (tx, t) => sendLines(tx, t.cfg, t.tabId, [2]), ["tab"]],
-    ["a course fired", (tx, t) => fireCourse(tx, t.cfg, t.tabId, t.courseId), ["tab"]],
+    ["a course fired", (tx, t) => fireCourse(tx, t.cfg, t.tabId, t.courseId, OPERATOR), ["tab"]],
     ["a course change", (tx, t) => setLineCourse(tx, t.cfg, t.tabId, 2, null), ["tab"]],
     ["a served mark", (tx, t) => markLineServed(tx, t.cfg, t.tabId, 1), ["tab"]],
     [

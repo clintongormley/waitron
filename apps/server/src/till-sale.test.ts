@@ -814,6 +814,30 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
     });
     expect(lines[0]!.descriptions).toEqual({ "es-ES": "Café", "ca-ES": "Cafè" });
   });
+
+  it("credits a walk-up's lines to the operator who rang it, in no group", async () => {
+    const { cfg, zoneId, menuItemId } = await setupBareVenue(["es-ES"], { es: "Café" });
+    const workingOrderId = randomUUID();
+    const operatorId = "cccccccc-0000-4000-8000-00000000000a";
+
+    await payWorkingOrder(
+      { db: suite.db, backend, clock },
+      cfg,
+      {
+        id: workingOrderId,
+        zoneId,
+        lines: [{ menuItemId, quantity: "2" }],
+        tender: { method: "cash", amount: "3.00" },
+      },
+      operatorId,
+    );
+
+    const lines = await suite.db
+      .select({ creditedTo: workingOrderLines.creditedTo, groupId: workingOrderLines.groupId })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, workingOrderId));
+    expect(lines).toEqual([{ creditedTo: operatorId, groupId: null }]);
+  });
 });
 
 /**

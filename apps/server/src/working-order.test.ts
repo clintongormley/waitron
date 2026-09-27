@@ -6,6 +6,8 @@ import {
   isUniqueViolation,
   locations,
   nowIso,
+  orderGroupEvents,
+  orderGroups,
   printJobs,
   products,
   ticketItems,
@@ -3057,6 +3059,44 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
     expect(items.map((item) => item.firedAt !== null)).toEqual([true, false]);
   });
 
+  it("places and fires a counter order by its courses, putting no line in a group", async () => {
+    const { cfg, catalogueId } = await setupVenue("ticket_then_pay");
+    const { cafe, postre, desserts } = await withTransaction(db, async (tx) => {
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const starters = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 1 });
+      const desserts = await createCourse(tx, cfg, { name: "Postres", displayOrder: 3 });
+      const cafe = await makeProduct(tx, cfg, catalogueId, {});
+      const postre = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, cafe, starters.id);
+      await setProductCourse(tx, cfg, postre, desserts.id);
+      return { cafe, postre, desserts };
+    });
+    const id = randomUUID();
+    await parkProducts(cfg, { id, lines: [line(cafe), line(postre)] });
+    const fired = async () =>
+      (
+        await db
+          .select({ firedAt: ticketItems.firedAt })
+          .from(ticketItems)
+          .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+          .where(eq(ticketItems.workingOrderId, id))
+          .orderBy(workingOrderLines.lineNo)
+      ).map((item) => item.firedAt !== null);
+
+    await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR, cfg.tillId);
+    expect(await fired()).toEqual([true, false]);
+    await withTransaction(db, (tx) => fireCourse(tx, cfg, id, desserts.id, OPERATOR));
+
+    expect(await fired()).toEqual([true, true]);
+    const lines = await db
+      .select({ groupId: workingOrderLines.groupId })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    expect(lines).toEqual([{ groupId: null }, { groupId: null }]);
+    expect(await db.select().from(orderGroups)).toEqual([]);
+    expect(await db.select().from(orderGroupEvents)).toEqual([]);
+  });
+
   it("releases a placed order's held course whose product has since sold out: its lines can no longer be removed", async () => {
     const { cfg, catalogueId } = await setupVenue("ticket_then_pay");
     const { cafe, postre, desserts } = await withTransaction(db, async (tx) => {
@@ -3082,7 +3122,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
       )[0]!.revision;
     const placedAt = await revision();
 
-    await withTransaction(db, (tx) => fireCourse(tx, cfg, id, desserts.id));
+    await withTransaction(db, (tx) => fireCourse(tx, cfg, id, desserts.id, OPERATOR));
 
     // Only an open order's revision counts writes: a placed order's lines cannot be edited.
     expect(await revision()).toBe(placedAt);
@@ -3758,7 +3798,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
         advanceTicketItem(tx, cfg, byLine(items, steak).id, "preparing"),
       ).rejects.toMatchObject({ code: "ticket.item_held" });
 
-      await fireCourse(tx, cfg, orderId, pri.id);
+      await fireCourse(tx, cfg, orderId, pri.id, OPERATOR);
       const afterFire = await courseItemsFor(tx, orderId);
       expect(byLine(afterFire, steak).firedAt).not.toBeNull();
 
@@ -3810,14 +3850,14 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
       // The earliest course (Entrantes) auto-fired; re-firing it must NOT restamp — its WHERE
       // (`fired_at IS NULL`) matches nothing already-fired.
       const beforeEnt = byLine(await courseItemsFor(tx, orderId), starter).firedAt;
-      await fireCourse(tx, cfg, orderId, ent.id);
+      await fireCourse(tx, cfg, orderId, ent.id, OPERATOR);
       expect(byLine(await courseItemsFor(tx, orderId), starter).firedAt).toBe(beforeEnt);
 
       // Fire the held course, capture its stamp, then fire it AGAIN — the second call is a no-op.
-      await fireCourse(tx, cfg, orderId, pri.id);
+      await fireCourse(tx, cfg, orderId, pri.id, OPERATOR);
       const firstStamp = byLine(await courseItemsFor(tx, orderId), main).firedAt;
       expect(firstStamp).not.toBeNull();
-      await fireCourse(tx, cfg, orderId, pri.id);
+      await fireCourse(tx, cfg, orderId, pri.id, OPERATOR);
       expect(byLine(await courseItemsFor(tx, orderId), main).firedAt).toBe(firstStamp);
     });
   });
@@ -3858,7 +3898,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
       expect(byLine(items, dessert).firedAt).toBeNull();
 
       // Release Principales explicitly — now fired for the order though it is not the earliest course.
-      await fireCourse(tx, cfg, tabId, pri.id);
+      await fireCourse(tx, cfg, tabId, pri.id, OPERATOR);
       expect(byLine(await courseItemsFor(tx, tabId), main).firedAt).not.toBeNull();
 
       // Round 3: another main. Principales is already fired for this order, so this new item joins the
@@ -3920,7 +3960,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
       expect(byLine(await courseItemsFor(tx, orderId), main).firedAt).toBeNull(); // Principales held
 
       await deactivateCourse(tx, cfg, pri.id);
-      await fireCourse(tx, cfg, orderId, pri.id);
+      await fireCourse(tx, cfg, orderId, pri.id, OPERATOR);
       expect(byLine(await courseItemsFor(tx, orderId), main).firedAt).not.toBeNull(); // released
     });
   });
@@ -3933,7 +3973,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
       const { id: orderId } = await placeOrderWith(tx, cfg, [line(cafe)]);
 
       const missing = randomUUID();
-      await expect(fireCourse(tx, cfg, orderId, missing)).rejects.toMatchObject({
+      await expect(fireCourse(tx, cfg, orderId, missing, OPERATOR)).rejects.toMatchObject({
         code: "course.not_found",
         params: { courseId: missing },
       });
@@ -4764,7 +4804,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
 
       // Fire the held course, and mark the earliest course AWAY (KDS-3's dispatch marker). The per-course
       // roll-ups follow: Entrantes now `away`, Principales now `fired`; the order stays (main not away).
-      await fireCourse(tx, cfg, orderId, pri.id);
+      await fireCourse(tx, cfg, orderId, pri.id, OPERATOR);
       const items = await courseItemsFor(tx, orderId);
       const entItem = items.find((i) => i.courseId === ent.id)!;
       await tx.update(ticketItems).set({ awayAt: nowIso() }).where(eq(ticketItems.id, entItem.id));
@@ -5000,7 +5040,7 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
 
       // Now the ready-only guard: fire Principales (so its main is fired, still `queued`) and dispatch it.
       // The main is fired but NOT ready, so it does NOT go away.
-      await fireCourse(tx, cfg, orderId, pri.id);
+      await fireCourse(tx, cfg, orderId, pri.id, OPERATOR);
       await markCourseAway(tx, cfg, orderId, pri.id);
       items = await courseItemsFor(tx, orderId);
       expect(byLine(items, main).state).toBe("queued"); // fired but not plated
@@ -7945,7 +7985,7 @@ describe("fireCourse on an order with no service context", () => {
         set course_id = case line_no when 1 then ${starters.id} else ${desserts.id} end
         where working_order_id = ${id}`);
       await fireLines(tx, cfg, id, await fireableLines(tx, id));
-      await fireCourse(tx, cfg, id, desserts.id);
+      await fireCourse(tx, cfg, id, desserts.id, OPERATOR);
       return { id };
     });
 

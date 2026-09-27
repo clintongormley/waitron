@@ -111,6 +111,20 @@ export async function visitOfOrder(tx: Transaction, orderId: string): Promise<st
   return order?.visitId ?? null;
 }
 
+/** The visit a bill belongs to, at its revision now; null for a bill with no party, or an order that
+ * does not exist. */
+export async function visitRevisionOfOrder(
+  tx: Transaction,
+  orderId: string,
+): Promise<{ id: string; revision: number } | null> {
+  const [visit] = await tx
+    .select({ id: visits.id, revision: visits.revision })
+    .from(workingOrders)
+    .innerJoin(visits, eq(visits.id, workingOrders.visitId))
+    .where(eq(workingOrders.id, orderId));
+  return visit ?? null;
+}
+
 /** The tables the visit holds now, in the order they joined it. */
 export async function memberTables(tx: Transaction, visitId: string): Promise<string[]> {
   const rows = await tx
@@ -202,6 +216,17 @@ export async function checkAndBumpVisit(
   const revision = visit.revision + 1;
   await tx.update(visits).set({ revision }).where(eq(visits.id, visitId));
   return revision;
+}
+
+/**
+ * Move the visit's revision on without comparing it: for a write that is not a visit command of its
+ * own and carries no revision (D19), such as a line edit or a void, whose bill's revision guards it.
+ */
+export async function bumpVisitRevision(tx: Transaction, visitId: string): Promise<void> {
+  await tx
+    .update(visits)
+    .set({ revision: sql`${visits.revision} + 1` })
+    .where(eq(visits.id, visitId));
 }
 
 /**

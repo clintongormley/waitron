@@ -894,16 +894,38 @@ describe("an item already paid for (design §8 test 5)", () => {
   });
 
   it("takes an item payment for a held line that has not gone to the kitchen", async () => {
-    const billId = await tabWith("Paella");
-    const round = await request("POST", `/api/working-orders/${billId}/round`, {
-      lines: [{ menuItemId: offer("Tarta"), quantity: "1", hold: true }],
+    const table = await inTx((tx) =>
+      createTable(tx, venue.cfg, {
+        label: `M-${randomUUID().slice(0, 8)}`,
+        zoneId: venue.offers.zoneId,
+      }),
+    );
+    const seated = await request("POST", `/api/tables/${table.id}/seat`, {});
+    const {
+      tabId: billId,
+      visitId,
+      revision,
+    } = seated.json as { tabId: string; visitId: string; revision: number };
+    const round = await request("POST", `/api/visits/${visitId}/groups`, {
+      submissionId: randomUUID(),
+      expectedVisitRevision: revision,
+      groups: [
+        { lines: [{ menuItemId: offer("Paella"), quantity: "1" }], release: "fire" },
+        { lines: [{ menuItemId: offer("Tarta"), quantity: "1" }], release: "hold" },
+      ],
     });
     expect(round.status).toBe(200);
     const lines = await request("GET", `/api/working-orders/${billId}/lines`);
-    const held = (
-      lines.json.lines as { lineNo: number; firedAt: string | null; name: string }[]
-    ).find((line) => line.name === "Tarta")!;
+    const tabLines = lines.json.lines as {
+      lineNo: number;
+      firedAt: string | null;
+      sentAt: string | null;
+      name: string;
+    }[];
+    const held = tabLines.find((line) => line.name === "Tarta")!;
     expect(held.firedAt).toBeNull();
+    expect(held.sentAt).toBeNull();
+    expect(tabLines.find((line) => line.name === "Paella")!.sentAt).not.toBeNull();
 
     const paid = await pay(billId, {
       kind: "items",
@@ -918,6 +940,16 @@ describe("an item already paid for (design §8 test 5)", () => {
     expect((await balance(billId)).json).toMatchObject({
       paidLines: [{ lineNo: held.lineNo, paidQuantity: "1.000" }],
     });
+    const groups = await request("GET", `/api/visits/${visitId}/groups`);
+    expect(
+      (groups.json.groups as { state: string; summary: string }[]).map(({ state, summary }) => ({
+        state,
+        summary,
+      })),
+    ).toEqual([
+      { state: "fired", summary: "1 × Paella" },
+      { state: "held", summary: "1 × Tarta" },
+    ]);
   });
 
   it("refuses an item payment naming a line the bill does not have", async () => {

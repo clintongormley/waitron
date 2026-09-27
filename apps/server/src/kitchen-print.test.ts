@@ -55,6 +55,8 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
+const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
+
 // Pins print-on-fire's order-scope dedupe, round independence and never-block (no socket opened).
 // `station_printers`' keys are pinned in packages/db's station-printers.test.ts and the outbox shape in
 // packages/printing's outbox.test.ts. `node:sqlite` opens no socket of its own, so a spy on
@@ -424,10 +426,10 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       const orderId = await fireNewOrder(tx, cfg, [line(soup), line(steak)]);
       const afterRound1 = await printJobsFor(tx);
       // Round 2: fireCourse releases the held course.
-      await fireCourse(tx, cfg, orderId, pri.id);
+      await fireCourse(tx, cfg, orderId, pri.id, OPERATOR);
       const afterRound2 = await printJobsFor(tx);
       // Re-firing the already-fired course matches zero rows.
-      await fireCourse(tx, cfg, orderId, pri.id);
+      await fireCourse(tx, cfg, orderId, pri.id, OPERATOR);
       const afterRefire = await printJobsFor(tx);
       return { printerId, afterRound1, afterRound2, afterRefire };
     });
@@ -989,7 +991,7 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
 
       // Two rounds: round 1 fires the soup and holds the steak, round 2 releases the steak.
       const orderId = await fireNewOrder(tx, cfg, [line(soup), line(steak)]);
-      await fireCourse(tx, cfg, orderId, pri.id);
+      await fireCourse(tx, cfg, orderId, pri.id, OPERATOR);
       const beforeReprint = await printJobsFor(tx);
 
       await reprintOrderTickets(tx, cfg, orderId);
@@ -1043,7 +1045,7 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
       await tx.execute(sql`
         update working_order_lines set quantity = 1000 where working_order_id = ${orderId}`);
       const beforeRelease = new Set((await printJobsFor(tx)).map((job) => job.id));
-      await fireCourse(tx, cfg, orderId, pri.id);
+      await fireCourse(tx, cfg, orderId, pri.id, OPERATOR);
       const released = (await printJobsFor(tx)).filter((job) => !beforeRelease.has(job.id));
       const beforeReprint = new Set((await printJobsFor(tx)).map((job) => job.id));
       await reprintOrderTickets(tx, cfg, orderId);

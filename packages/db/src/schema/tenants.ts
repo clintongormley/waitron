@@ -32,8 +32,7 @@ export const bumpMode = enumType(["line", "ticket"]);
 /**
  * The per-venue FIRE CONTROL mode: which surface offers the fire action per held course — the
  * tab-ordering screen (`waiter`, default), the station display (`kitchen`), or the expediter/pass
- * display (`expo`). Governs ONLY which UI shows the affordance — `fireCourse` is the same verb
- * either way.
+ * display (`expo`). Governs ONLY which UI shows the affordance.
  */
 export const fireControlMode = enumType(["waiter", "kitchen", "expo"]);
 

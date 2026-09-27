@@ -5,6 +5,7 @@ import { TillTableOrderScreen, type TableServiceStatus } from "./till-table-orde
 import { currentLocale, t } from "../i18n/t.js";
 import type {
   OfferedModifier,
+  OrderGroup,
   TabLine,
   TableState,
   TillProduct,
@@ -49,6 +50,7 @@ const courses = [
 // Two café lines locked at add-time (1.50 each): line 1 still to serve, line 2 already served. Both have
 // a null course fired immediately, so they surface no waiter-fire action by default.
 const pendingLine: TabLine = {
+  groupId: null,
   lineNo: 1,
   productId: "cafe",
   quantity: "2.000",
@@ -65,6 +67,7 @@ const pendingLine: TabLine = {
   parentProductId: null,
 };
 const servedLine: TabLine = {
+  groupId: null,
   lineNo: 2,
   productId: "cafe",
   quantity: "1.000",
@@ -119,6 +122,18 @@ async function openDrawer(el: TillTableOrderScreen): Promise<void> {
 }
 
 afterEach(cleanupWidgets);
+
+function orderGroup(id: string, state: OrderGroup["state"]): OrderGroup {
+  return {
+    id,
+    position: 1,
+    state,
+    firedAt: state === "fired" ? "2026-08-20T09:59:00.000Z" : null,
+    remindAt: null,
+    lineIds: [],
+    summary: "",
+  };
+}
 
 describe("till-table-order-screen", () => {
   it("registers as a custom element", () => {
@@ -186,6 +201,7 @@ describe("till-table-order-screen", () => {
     expect(captured!.composed).toBe(true);
     expect(captured!.bubbles).toBe(true);
     expect(captured!.detail.lines).toEqual([{ menuItemId: "menu-item-cafe", quantity: "1" }]);
+    expect(captured!.detail.groups).toEqual([{ release: "fire", lineIndexes: [0] }]);
     // The round stays until the app has the server's answer: a refused round must not be lost.
     expect(captured!.detail.round).toBe(grid(el).store);
     expect(captured!.detail.sent).toEqual(grid(el).store.lines);
@@ -607,46 +623,103 @@ describe("till-table-order-screen", () => {
     expect((hold as HTMLElement & { checked: boolean }).checked).toBe(false);
   });
 
-  it("send-round OMITS hold for an un-held line (the default — the line fires on send)", async () => {
+  it("send-round sends an un-held line in a group released now (the default — the line fires on send)", async () => {
     const { el } = await mount({ courses });
     await ringAndHolds(el);
     let captured: CustomEvent | undefined;
     el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
     el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
-    // Hold off ⇒ the line carries no `hold` (never `hold: false`); the server fires it by its course rule.
     expect(captured!.detail.lines).toEqual([{ menuItemId: "menu-item-cafe", quantity: "1" }]);
+    expect(captured!.detail.groups).toEqual([{ release: "fire", lineIndexes: [0] }]);
   });
 
-  it("send-round threads hold: true for a line the waiter held", async () => {
+  it("send-round sends a line the waiter held in a held group", async () => {
     const { el } = await mount({ courses });
     const [hold] = await ringAndHolds(el);
-    // Hold the café line — inserted but not fired.
     await toggleHold(el, hold!);
     let captured: CustomEvent | undefined;
     el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
     el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
-    // The course is untouched (no override), so only `hold: true` rides alongside menuItemId + quantity.
-    expect(captured!.detail.lines).toEqual([
-      { menuItemId: "menu-item-cafe", quantity: "1", hold: true },
-    ]);
+    // The group, not the line, carries the hold.
+    expect(captured!.detail.lines).toEqual([{ menuItemId: "menu-item-cafe", quantity: "1" }]);
+    expect(captured!.detail.groups).toEqual([{ release: "hold", lineIndexes: [0] }]);
   });
 
-  it("toggling hold off again clears it back to firing on send (omitted)", async () => {
+  it("toggling hold off again sends the line in a group released now", async () => {
     const { el } = await mount({ courses });
     const [hold] = await ringAndHolds(el);
-    // On, then off — back to the default, so the line carries no `hold` (the WeakMap entry is deleted).
     await toggleHold(el, hold!);
     await toggleHold(el, hold!);
     let captured: CustomEvent | undefined;
     el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
     el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
-    expect(captured!.detail.lines).toEqual([{ menuItemId: "menu-item-cafe", quantity: "1" }]);
+    expect(captured!.detail.groups).toEqual([{ release: "fire", lineIndexes: [0] }]);
+  });
+
+  describe("a round of two courses", () => {
+    const pan: TillProduct = {
+      ...cafe,
+      id: "pan",
+      menuItemId: "menu-item-pan",
+      courseId: "entrantes",
+    };
+
+    async function ringTwoCourses(el: TillTableOrderScreen): Promise<void> {
+      // Rung dessert first, so a grouping that follows the ringing order rather than the courses fails.
+      grid(el).store.addProduct(cafe, "1");
+      grid(el).store.addProduct(pan, "2");
+      await el.updateComplete;
+    }
+
+    function sendRound(el: TillTableOrderScreen): CustomEvent {
+      let captured: CustomEvent | undefined;
+      el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
+      el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+      return captured!;
+    }
+
+    it("groups the lines by course in the venue's order: the earliest goes now, the next is held", async () => {
+      const { el } = await mount({ courses, products: [cafe, pan] });
+      await ringTwoCourses(el);
+      const sent = sendRound(el);
+      expect(sent.detail.lines).toEqual([
+        { menuItemId: "menu-item-cafe", quantity: "1" },
+        { menuItemId: "menu-item-pan", quantity: "2" },
+      ]);
+      expect(sent.detail.groups).toEqual([
+        { release: "fire", lineIndexes: [1] },
+        { release: "hold", lineIndexes: [0] },
+      ]);
+    });
+
+    it("holds both groups when the waiter holds every line", async () => {
+      const { el } = await mount({ courses, products: [cafe, pan] });
+      await ringTwoCourses(el);
+      for (const hold of el.shadowRoot!.querySelectorAll<HTMLElement>("[data-round-hold]")) {
+        await toggleHold(el, hold);
+      }
+      expect(sendRound(el).detail.groups).toEqual([
+        { release: "hold", lineIndexes: [1] },
+        { release: "hold", lineIndexes: [0] },
+      ]);
+    });
+
+    it("groups a line by the course the waiter picked over its product's", async () => {
+      const { el } = await mount({ courses, products: [cafe, pan] });
+      await ringTwoCourses(el);
+      const picker = el.shadowRoot!.querySelector<HTMLSelectElement>('[data-round-course="0"]')!;
+      picker.value = "entrantes";
+      picker.dispatchEvent(new Event("change"));
+      await el.updateComplete;
+      expect(sendRound(el).detail.groups).toEqual([{ release: "fire", lineIndexes: [0, 1] }]);
+    });
   });
 
   // A held (fired_at null) line of a named course — the tab's food waiting for the waiter to fire it.
   // Held still means the round-send already inserted its ticket item (fireLines does this for every
   // parent line, fired or held), so `state` is the fresh-insert "queued", not null.
   const heldLine: TabLine = {
+    groupId: null,
     lineNo: 3,
     productId: "cafe",
     quantity: "1.000",
@@ -778,6 +851,7 @@ describe("till-table-order-screen", () => {
     // editable course picker, if the child guard were absent. A fixture with `productId: null` would
     // pass against a screen that still read a null product as "child", so it carries one on purpose.
     const childLine: TabLine = {
+      groupId: null,
       lineNo: 2,
       productId: "cafe",
       parentLineNo: 1,
@@ -865,6 +939,59 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector('[data-send-line="4"]')).toBeNull();
       expect(el.shadowRoot!.querySelector('[data-recall-line="4"]')).toBeNull();
       expect(el.shadowRoot!.querySelector('[data-cancel-line="4"]')).toBeNull();
+    });
+
+    it("offers no Send on a line in a HELD group, which is released by firing its group, while Send all stays", async () => {
+      const inHeldGroup: TabLine = { ...heldLine, groupId: "g-held" };
+      const { el } = await mount({
+        lines: [inHeldGroup],
+        groups: [orderGroup("g-held", "held")],
+        courses,
+      });
+      await openDrawer(el);
+      expect(el.shadowRoot!.querySelector('[data-send-line="3"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-send-all]")).not.toBeNull();
+    });
+
+    it("offers Send all for a no-route line with no course in a HELD group, and not once its group has fired", async () => {
+      // A no-route dish in a held group: no ticket item (state null) and never sent. It offers no
+      // per-line Send and no Fire course button, so Send all is its only release.
+      const noRouteHeld: TabLine = {
+        ...heldLine,
+        lineNo: 5,
+        courseId: null,
+        state: null,
+        groupId: "g-held",
+      };
+      const { el } = await mount({
+        lines: [noRouteHeld],
+        groups: [orderGroup("g-held", "held")],
+        courses,
+        fireControl: "waiter",
+      });
+      await openDrawer(el);
+      expect(el.shadowRoot!.querySelector('[data-send-line="5"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-fire-course]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-send-all]")).not.toBeNull();
+
+      el.groups = [orderGroup("g-held", "fired")];
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-send-all]")).toBeNull();
+    });
+
+    it("offers Send on a recalled line whose group has fired", async () => {
+      const recalled: TabLine = {
+        ...heldLine,
+        groupId: "g-fired",
+        sentAt: "2026-08-20T09:59:00.000Z",
+      };
+      const { el } = await mount({
+        lines: [recalled],
+        groups: [orderGroup("g-fired", "fired")],
+        courses,
+      });
+      await openDrawer(el);
+      expect(el.shadowRoot!.querySelector('[data-send-line="3"]')).not.toBeNull();
     });
 
     it("offers a tab-level Send all that emits send-lines { lineNos: [] } (release every held line)", async () => {
@@ -1025,6 +1152,7 @@ describe("till-table-order-screen", () => {
       items: [extraItem("p-cheese", "Queso", false), extraItem("p-bacon", "Bacon", true)],
     };
     const burgerLine: TabLine = {
+      groupId: null,
       lineNo: 5,
       name: "Burger",
       productId: "burger",

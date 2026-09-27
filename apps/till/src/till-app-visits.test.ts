@@ -8,12 +8,15 @@ import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { CanvasDef, CapabilityFlag } from "./layout.js";
+import { WorkingOrderStore } from "./state/working-order.js";
 import type {
   FloorZone,
+  OrderGroup,
   TabLine,
   TableState,
   TableVisit,
   TillApi,
+  TillProduct,
   TillSaleResult,
   VisitBill,
   ZoneOfferCatalogue,
@@ -97,6 +100,7 @@ const checkBill: VisitBill = {
 };
 
 const tabLine: TabLine = {
+  groupId: null,
   lineNo: 1,
   productId: "vino",
   quantity: "1.000",
@@ -198,7 +202,10 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     finishTable: vi.fn().mockResolvedValue({ state: "closed" }),
     markCleared: vi.fn().mockResolvedValue(undefined),
     getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0, editSentLines: true }),
-    addTabRound: vi.fn().mockResolvedValue({ tabId: "wo-4" }),
+    listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
+    submitGroups: vi.fn().mockResolvedValue({ tabId: "wo-4", revision: 4, groups: [] }),
+    fireGroup: vi.fn().mockResolvedValue({ revision: 4 }),
+    sendLines: vi.fn().mockResolvedValue(undefined),
     moveTab: vi.fn().mockResolvedValue(undefined),
     joinTable: vi.fn().mockResolvedValue(undefined),
     mergeTabs: vi.fn().mockResolvedValue(undefined),
@@ -714,19 +721,6 @@ describe("till-app: every table move sends the party revision it last read", () 
     expect(api.moveTab).toHaveBeenCalledWith("wo-paid", "t9", { expectedVisitRevision: 3 });
     expect(banner(el)).toBeNull();
   });
-
-  it("follows the round onto the party's next tab after its tab was paid", async () => {
-    const { el } = await mountApp({ addTabRound: vi.fn().mockResolvedValue({ tabId: "wo-next" }) });
-    const order = await openMesa(el);
-    const reads = vi.mocked(api.getTablesState).mock.calls.length;
-
-    emit(order, "send-round", { lines: [{ menuItemId: "flan", quantity: "1" }] });
-    await flush(el);
-
-    expect(tableOrder(el)!.orderId).toBe("wo-next");
-    expect(api.getTabLines).toHaveBeenLastCalledWith("wo-next");
-    expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
-  });
 });
 
 const tablet: CanvasDef = {
@@ -1100,6 +1094,18 @@ describe("till-app: another device changed the table first", () => {
     ["table.occupied", "move-tab", { toTableId: "t9" }, "moveTab"],
     ["table.occupied", "join-table", { tableId: "t9" }, "joinTable"],
     ["visit.not_open", "split-lines", { transfers: [{ lineNo: 1 }] }, "splitTab"],
+    [
+      "group.held_leaves_visit",
+      "transfer-lines",
+      { toTabId: "wo-7", transfers: [{ lineNo: 1 }] },
+      "transferLines",
+    ],
+    [
+      "group.held_leaves_visit",
+      "merge-tabs",
+      { fromTabId: "wo-7", freeSourceTable: false },
+      "mergeTabs",
+    ],
   ] as const)("shows %s in its own words after %s", async (code, type, detail, method) => {
     const { el } = await mountApp({ [method]: vi.fn().mockRejectedValue({ code }) });
     const order = await openMesa(el);
@@ -1137,5 +1143,723 @@ describe("till-app: leaving a finished party", () => {
     expect(api.finishTable).toHaveBeenCalledOnce();
     expect(tabletOrderCard(el)!.lines).toEqual([]);
     expect(tabletOrderCard(el)!.bills).toEqual([]);
+  });
+});
+
+describe("till-app: the order's groups", () => {
+  const cafe: TillProduct = {
+    id: "cafe",
+    menuItemId: "menu-item-cafe",
+    name: "Café",
+    pricingUnit: "each",
+    unitPrice: "1.50",
+    vatClass: "general",
+    category: null,
+    allergens: null,
+  };
+
+  function groupOf(id: string, position: number, state: OrderGroup["state"]): OrderGroup {
+    return {
+      id,
+      position,
+      state,
+      firedAt: state === "fired" ? "2026-09-27T10:00:00.000Z" : null,
+      remindAt: null,
+      lineIds: [],
+      summary: "",
+    };
+  }
+
+  function lineIn(
+    lineNo: number,
+    courseId: string,
+    groupId: string | null,
+    held: boolean,
+  ): TabLine {
+    return {
+      ...tabLine,
+      lineNo,
+      courseId,
+      groupId,
+      state: "queued",
+      sentAt: held ? null : "2026-09-27T10:00:00.000Z",
+      firedAt: held ? null : "2026-09-27T10:00:00.000Z",
+    };
+  }
+
+  /** The server's side of D19 for a fire: refused unless it carries the party's current revision,
+   * which each fire moves on by one. */
+  function chainedFire(start: number) {
+    let current = start;
+    return vi.fn(
+      async (_visitId: string, _groupId: string, command: { expectedVisitRevision: number }) => {
+        if (command.expectedVisitRevision !== current)
+          throw { code: "visit.out_of_date", visitId: "v1" };
+        current += 1;
+        return { revision: current };
+      },
+    );
+  }
+
+  const roundLines = [
+    { menuItemId: "flan", quantity: "1" },
+    { menuItemId: "pan", quantity: "2", courseId: "entrantes" },
+  ];
+
+  it("reads the party's groups with the order's lines and gives them to the screen", async () => {
+    const groups = [groupOf("g1", 1, "held")];
+    const { el } = await mountApp({
+      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups }),
+    });
+    const order = await openMesa(el);
+    expect(api.listGroups).toHaveBeenCalledWith("v1");
+    expect(order.groups).toEqual(groups);
+  });
+
+  it("gives the party's groups to an order shown as a card too", async () => {
+    const groups = [groupOf("g1", 1, "held")];
+    const { el } = await mountApp({
+      ...onTablet(),
+      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups }),
+    });
+    const screen = await toFloor(el);
+    emit(screen, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    expect(tabletOrderCard(el)!.groups).toEqual(groups);
+  });
+
+  it("sends a round to the party as its groups in one submission, with the revision the screen showed", async () => {
+    const { el } = await mountApp({
+      submitGroups: vi.fn().mockResolvedValue({ tabId: "wo-4", revision: 4, groups: [] }),
+    });
+    const order = await openMesa(el);
+    const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
+
+    emit(order, "send-round", {
+      lines: roundLines,
+      groups: [
+        { release: "fire", lineIndexes: [1] },
+        { release: "hold", lineIndexes: [0] },
+      ],
+    });
+    await flush(el);
+
+    expect(api.submitGroups).toHaveBeenCalledOnce();
+    expect(api.submitGroups).toHaveBeenCalledWith(
+      "v1",
+      {
+        submissionId: expect.any(String),
+        expectedVisitRevision: 3,
+        groups: [
+          { release: "fire", lines: [roundLines[1]] },
+          { release: "hold", lines: [roundLines[0]] },
+        ],
+      },
+      { signal: expect.any(AbortSignal) },
+    );
+    expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
+  });
+
+  it("sends each round under a submission id of its own", async () => {
+    const { el } = await mountApp({
+      submitGroups: vi.fn().mockResolvedValue({ tabId: "wo-4", revision: 4, groups: [] }),
+    });
+    const order = await openMesa(el);
+    const round = { lines: roundLines, groups: [{ release: "fire", lineIndexes: [0, 1] }] };
+    emit(order, "send-round", round);
+    await flush(el);
+    emit(order, "send-round", round);
+    await flush(el);
+    const [first, second] = vi
+      .mocked(api.submitGroups)
+      .mock.calls.map((call) => call[1].submissionId);
+    expect(first).not.toBe(second);
+  });
+
+  it("sends the revision the submission answered with on the party's next command", async () => {
+    const { el } = await mountApp({
+      submitGroups: vi.fn().mockResolvedValue({ tabId: "wo-4", revision: 4, groups: [] }),
+    });
+    const order = await openMesa(el);
+    emit(order, "send-round", {
+      lines: roundLines,
+      groups: [{ release: "fire", lineIndexes: [0, 1] }],
+    });
+    await flush(el);
+
+    emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
+    await flush(el);
+    expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 4 });
+  });
+
+  it("follows the round onto the party's next tab after its tab was paid", async () => {
+    const { el } = await mountApp({
+      submitGroups: vi.fn().mockResolvedValue({ tabId: "wo-next", revision: 5, groups: [] }),
+    });
+    const order = await openMesa(el);
+    const reads = vi.mocked(api.getTablesState).mock.calls.length;
+
+    emit(order, "send-round", {
+      lines: [roundLines[0]],
+      groups: [{ release: "fire", lineIndexes: [0] }],
+    });
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-next");
+    expect(api.getTabLines).toHaveBeenLastCalledWith("wo-next");
+    expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
+  });
+
+  it("reloads the table and says so when another device changed the party first, keeping the round", async () => {
+    const { el } = await mountApp({
+      submitGroups: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v1" }),
+    });
+    const order = await openMesa(el);
+    const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
+    const round = new WorkingOrderStore();
+    round.addProduct(cafe, "1");
+
+    emit(order, "send-round", {
+      lines: [{ menuItemId: "menu-item-cafe", quantity: "1" }],
+      groups: [{ release: "fire", lineIndexes: [0] }],
+      round,
+      sent: round.lines,
+    });
+    await flush(el);
+
+    expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
+    expect(banner(el)!.textContent).toContain(t("visit.changed").replace("{table}", "4"));
+    expect(round.lineCount).toBe(1);
+  });
+
+  it("sends nothing, and says so, for an order with no party to put the round on", async () => {
+    const barTab = table({ state: "open-tab", hasOpenTab: true, tabId: "wo-bar" });
+    const { el } = await mountApp({ getTablesState: vi.fn().mockResolvedValue([barTab]) });
+    const order = await openMesa(el);
+    emit(order, "send-round", {
+      lines: roundLines,
+      groups: [{ release: "fire", lineIndexes: [0, 1] }],
+    });
+    await flush(el);
+    expect(api.submitGroups).not.toHaveBeenCalled();
+    expect(banner(el)!.textContent).toContain(t("table.error"));
+  });
+
+  it("takes the party's revision from the floor read after a round that got no answer", async () => {
+    let landed = false;
+    const { el } = await mountApp({
+      getTablesState: vi.fn(async () => [
+        landed ? seated({}, { revision: 4 }) : mesa4,
+        mesa7,
+        mesa9,
+      ]),
+      submitGroups: vi.fn(async () => {
+        landed = true;
+        throw new TypeError("offline");
+      }),
+    });
+    const order = await openMesa(el);
+    emit(order, "send-round", {
+      lines: roundLines,
+      groups: [{ release: "fire", lineIndexes: [0, 1] }],
+    });
+    await flush(el);
+
+    emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
+    await flush(el);
+    expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 4 });
+  });
+
+  it("keeps another party's revision when a round's answer arrives after the screen opened its table", async () => {
+    let answer: (value: { tabId: string; revision: number; groups: [] }) => void = () => {};
+    const { el } = await mountApp({
+      submitGroups: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      ),
+    });
+    const order = await openMesa(el);
+    emit(order, "send-round", {
+      lines: roundLines,
+      groups: [{ release: "fire", lineIndexes: [0, 1] }],
+    });
+    await flush(el);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+
+    answer({ tabId: "wo-4", revision: 12, groups: [] });
+    await flush(el);
+    emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
+    await flush(el);
+    expect(api.moveTab).toHaveBeenCalledWith("wo-7", "t9", { expectedVisitRevision: 9 });
+  });
+
+  it("sends no round while a split-off check is the order on screen, and says what a refused round said", async () => {
+    const { el } = await mountApp();
+    const order = await openMesa(el);
+    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+    const round = new WorkingOrderStore();
+    round.addProduct(cafe, "1");
+
+    emit(tableOrder(el)!, "send-round", {
+      lines: [{ menuItemId: "menu-item-cafe", quantity: "1" }],
+      groups: [{ release: "fire", lineIndexes: [0] }],
+      round,
+      sent: round.lines,
+    });
+    await flush(el);
+
+    expect(api.submitGroups).not.toHaveBeenCalled();
+    expect(banner(el)!.textContent).toContain(t("table.error"));
+    expect(round.lineCount).toBe(1);
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+  });
+
+  it("sends a round from a party just seated when the floor could not be read after seating", async () => {
+    const { el } = await mountApp({
+      getTablesState: vi
+        .fn()
+        .mockResolvedValueOnce([mesa4, mesa7, mesa9])
+        .mockRejectedValue(new TypeError("Failed to fetch")),
+      getVisitBills: vi.fn().mockResolvedValue([]),
+      submitGroups: vi.fn().mockResolvedValue({ tabId: "wo-new", revision: 1, groups: [] }),
+    });
+    const screen = await toFloor(el);
+    emit(screen, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-new");
+
+    emit(tableOrder(el)!, "send-round", {
+      lines: roundLines,
+      groups: [{ release: "fire", lineIndexes: [0, 1] }],
+    });
+    await flush(el);
+
+    expect(api.submitGroups).toHaveBeenCalledWith(
+      "v-new",
+      expect.objectContaining({ expectedVisitRevision: 0 }),
+      expect.anything(),
+    );
+    expect(banner(el)).toBeNull();
+  });
+
+  it("keeps the higher revision when two answers about the party arrive out of order", async () => {
+    const answers: ((value: { visit: { id: string; revision: number } }) => void)[] = [];
+    const { el } = await mountApp({
+      voidLine: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            answers.push(resolve);
+          }),
+      ),
+    });
+    const order = await openMesa(el);
+    emit(order, "void-line", { lineNo: 1 });
+    emit(order, "void-line", { lineNo: 2 });
+    await flush(el);
+    expect(answers).toHaveLength(2);
+
+    answers[1]!({ visit: { id: "v1", revision: 5 } });
+    await flush(el);
+    answers[0]!({ visit: { id: "v1", revision: 4 } });
+    await flush(el);
+
+    emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
+    await flush(el);
+    expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 5 });
+  });
+
+  describe("firing", () => {
+    // Lines 1 and 2 are the course in two held groups, listed out of position order; line 3 is
+    // another course's held group; line 4 the course's line in a fired group.
+    const lines = [
+      lineIn(1, "c1", "g-late", true),
+      lineIn(2, "c1", "g-early", true),
+      lineIn(3, "c2", "g-other", true),
+      lineIn(4, "c1", "g-fired", false),
+    ];
+    const groups = [
+      groupOf("g-fired", 1, "fired"),
+      groupOf("g-late", 3, "held"),
+      groupOf("g-early", 2, "held"),
+      groupOf("g-other", 4, "held"),
+    ];
+    const withGroups = (over: Record<string, unknown> = {}) => ({
+      getTabLines: vi.fn().mockResolvedValue({ lines, revision: 0, editSentLines: true }),
+      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups }),
+      fireGroup: chainedFire(3),
+      sendLines: vi.fn().mockResolvedValue(undefined),
+      ...over,
+    });
+
+    it("Fire course fires each held group holding the course, in position order, each with the revision the last answered", async () => {
+      const { el } = await mountApp(withGroups());
+      const order = await openMesa(el);
+      const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
+
+      emit(order, "fire-course", { orderId: "wo-4", courseId: "c1" });
+      await flush(el);
+
+      expect(vi.mocked(api.fireGroup).mock.calls).toEqual([
+        ["v1", "g-early", { submissionId: expect.any(String), expectedVisitRevision: 3 }],
+        ["v1", "g-late", { submissionId: expect.any(String), expectedVisitRevision: 4 }],
+      ]);
+      expect(api.sendLines).not.toHaveBeenCalled();
+      expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
+      expect(banner(el)).toBeNull();
+
+      emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
+      await flush(el);
+      expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 5 });
+    });
+
+    it("Fire course also sends the course's recalled line, whose group has already fired", async () => {
+      const recalled = { ...lineIn(5, "c1", "g-fired", false), firedAt: null };
+      const { el } = await mountApp(
+        withGroups({
+          getTabLines: vi
+            .fn()
+            .mockResolvedValue({ lines: [...lines, recalled], revision: 0, editSentLines: true }),
+        }),
+      );
+      const order = await openMesa(el);
+
+      emit(order, "fire-course", { orderId: "wo-4", courseId: "c1" });
+      await flush(el);
+
+      expect(api.fireGroup).toHaveBeenCalledTimes(2);
+      expect(api.sendLines).toHaveBeenCalledWith("wo-4", [5]);
+    });
+
+    it("Send all fires every held group of the order in position order, then sends the lines outside them", async () => {
+      const { el } = await mountApp(withGroups());
+      const order = await openMesa(el);
+
+      emit(order, "send-lines", { lineNos: [] });
+      await flush(el);
+
+      expect(vi.mocked(api.fireGroup).mock.calls.map((call) => call[1])).toEqual([
+        "g-early",
+        "g-late",
+        "g-other",
+      ]);
+      expect(api.sendLines).toHaveBeenCalledWith("wo-4", []);
+      expect(vi.mocked(api.sendLines).mock.invocationCallOrder[0]).toBeGreaterThan(
+        vi.mocked(api.fireGroup).mock.invocationCallOrder[2]!,
+      );
+    });
+
+    it("Send all fires the held group of a no-route line with no course", async () => {
+      const noRoute: TabLine = { ...lineIn(1, "c1", "g-held", true), courseId: null, state: null };
+      const { el } = await mountApp(
+        withGroups({
+          getTabLines: vi
+            .fn()
+            .mockResolvedValue({ lines: [noRoute], revision: 0, editSentLines: true }),
+          listGroups: vi.fn().mockResolvedValue({
+            revision: 3,
+            groups: [groupOf("g-held", 1, "held")],
+          }),
+        }),
+      );
+      const order = await openMesa(el);
+
+      emit(order, "send-lines", { lineNos: [] });
+      await flush(el);
+
+      expect(vi.mocked(api.fireGroup).mock.calls.map((call) => call[1])).toEqual(["g-held"]);
+      expect(banner(el)).toBeNull();
+    });
+
+    it("a fire refused because another device changed the party reloads the table, says so and fires nothing more", async () => {
+      const { el } = await mountApp(
+        withGroups({
+          fireGroup: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v1" }),
+        }),
+      );
+      const order = await openMesa(el);
+      const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
+
+      emit(order, "send-lines", { lineNos: [] });
+      await flush(el);
+
+      expect(api.fireGroup).toHaveBeenCalledOnce();
+      expect(api.sendLines).not.toHaveBeenCalled();
+      expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
+      expect(banner(el)!.textContent).toContain(t("visit.changed").replace("{table}", "4"));
+    });
+
+    it("a group another device already fired says so in its own words and reloads the order", async () => {
+      const { el } = await mountApp(
+        withGroups({ fireGroup: vi.fn().mockRejectedValue({ code: "group.not_held" }) }),
+      );
+      const order = await openMesa(el);
+      const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
+
+      emit(order, "fire-course", { orderId: "wo-4", courseId: "c1" });
+      await flush(el);
+
+      expect(banner(el)!.textContent).toContain(codeMessage("group.not_held"));
+      expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
+    });
+
+    it("takes the party's revision from the floor read after a fire that got no answer", async () => {
+      let landed = false;
+      const { el } = await mountApp(
+        withGroups({
+          getTablesState: vi.fn(async () => [
+            landed ? seated({}, { revision: 4 }) : mesa4,
+            mesa7,
+            mesa9,
+          ]),
+          fireGroup: vi.fn(async () => {
+            landed = true;
+            throw new TypeError("offline");
+          }),
+        }),
+      );
+      const order = await openMesa(el);
+
+      emit(order, "fire-course", { orderId: "wo-4", courseId: "c1" });
+      await flush(el);
+      emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
+      await flush(el);
+
+      expect(api.fireGroup).toHaveBeenCalledOnce();
+      expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 4 });
+    });
+
+    it.each([
+      ["send-lines", { lineNos: [] }],
+      ["fire-course", { orderId: "wo-4", courseId: "c1" }],
+    ])(
+      "%s sends nothing, and says so, when the order's groups could not be read",
+      async (type, detail) => {
+        const { el } = await mountApp(
+          withGroups({ listGroups: vi.fn().mockRejectedValue(new TypeError("offline")) }),
+        );
+        const order = await openMesa(el);
+
+        emit(order, type, detail);
+        await flush(el);
+
+        expect(api.fireGroup).not.toHaveBeenCalled();
+        expect(api.sendLines).not.toHaveBeenCalled();
+        expect(banner(el)!.textContent).toContain(t("table.error"));
+      },
+    );
+
+    it("reads the groups again after refusing Send all, so pressing it again fires them", async () => {
+      const { el } = await mountApp(
+        withGroups({
+          listGroups: vi
+            .fn()
+            .mockRejectedValueOnce(new TypeError("offline"))
+            .mockResolvedValue({ revision: 3, groups }),
+        }),
+      );
+      const order = await openMesa(el);
+      emit(order, "send-lines", { lineNos: [] });
+      await flush(el);
+      expect(api.fireGroup).not.toHaveBeenCalled();
+
+      emit(tableOrder(el)!, "send-lines", { lineNos: [] });
+      await flush(el);
+
+      expect(api.fireGroup).toHaveBeenCalledTimes(3);
+      expect(api.sendLines).toHaveBeenCalledWith("wo-4", []);
+      expect(banner(el)).toBeNull();
+    });
+
+    describe("after a void or a change, which move the party on", () => {
+      /** The server's side of D19 for a submission: refused unless it carries `current`. */
+      const submitAt = (current: number) =>
+        vi.fn(async (_visitId: string, command: { expectedVisitRevision: number }) => {
+          if (command.expectedVisitRevision !== current)
+            throw { code: "visit.out_of_date", visitId: "v1" };
+          return { tabId: "wo-4", revision: current + 1, groups: [] };
+        });
+
+      it("a round sent after a void carries the revision the void answered", async () => {
+        const { el } = await mountApp(
+          withGroups({
+            voidLine: vi.fn().mockResolvedValue({ visit: { id: "v1", revision: 4 } }),
+            submitGroups: submitAt(4),
+          }),
+        );
+        const order = await openMesa(el);
+
+        emit(order, "void-line", { lineNo: 1 });
+        await flush(el);
+        emit(tableOrder(el)!, "send-round", {
+          lines: roundLines,
+          groups: [{ release: "fire", lineIndexes: [0, 1] }],
+        });
+        await flush(el);
+
+        expect(api.voidLine).toHaveBeenCalledWith("wo-4", 1);
+        expect(vi.mocked(api.submitGroups).mock.calls[0]![1].expectedVisitRevision).toBe(4);
+        expect(banner(el)).toBeNull();
+      });
+
+      it("a Fire course after a saved change carries the revision the change answered", async () => {
+        const { el } = await mountApp(
+          withGroups({
+            updateOrderLine: vi
+              .fn()
+              .mockResolvedValue({ revision: 1, visit: { id: "v1", revision: 4 } }),
+            fireGroup: chainedFire(4),
+          }),
+        );
+        const order = await openMesa(el);
+
+        emit(order, "change-line", {
+          lineNo: 3,
+          lineName: "Vino",
+          patch: { note: "sin hielo" },
+          revision: 0,
+        });
+        await flush(el);
+        emit(tableOrder(el)!, "fire-course", { orderId: "wo-4", courseId: "c1" });
+        await flush(el);
+
+        expect(vi.mocked(api.fireGroup).mock.calls).toEqual([
+          ["v1", "g-early", { submissionId: expect.any(String), expectedVisitRevision: 4 }],
+          ["v1", "g-late", { submissionId: expect.any(String), expectedVisitRevision: 5 }],
+        ]);
+        expect(banner(el)).toBeNull();
+      });
+
+      /** The floor reads the party at revision 3 until `landed`, and at 4 after. */
+      function floorMovedBy(request: string) {
+        let landed = false;
+        return {
+          getTablesState: vi.fn(async () => [
+            landed ? seated({}, { revision: 4 }) : mesa4,
+            mesa7,
+            mesa9,
+          ]),
+          [request]: vi.fn(async () => {
+            landed = true;
+            throw new TypeError("offline");
+          }),
+        };
+      }
+
+      it("a round sent after a void that got no answer carries the floor's revision", async () => {
+        const { el } = await mountApp(
+          withGroups({ ...floorMovedBy("voidLine"), submitGroups: submitAt(4) }),
+        );
+        const order = await openMesa(el);
+
+        emit(order, "void-line", { lineNo: 1 });
+        await flush(el);
+        emit(tableOrder(el)!, "send-round", {
+          lines: roundLines,
+          groups: [{ release: "fire", lineIndexes: [0, 1] }],
+        });
+        await flush(el);
+
+        expect(vi.mocked(api.submitGroups).mock.calls[0]![1].expectedVisitRevision).toBe(4);
+        expect(banner(el)).toBeNull();
+      });
+
+      it("a move after a line change that got no answer carries the floor's revision", async () => {
+        const { el } = await mountApp(withGroups(floorMovedBy("updateOrderLine")));
+        const order = await openMesa(el);
+
+        emit(order, "change-line", {
+          lineNo: 3,
+          lineName: "Vino",
+          patch: { note: "sin hielo" },
+          revision: 0,
+        });
+        await flush(el);
+        emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
+        await flush(el);
+
+        expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 4 });
+      });
+
+      /** The floor lists the party at revision 3, and cannot be read once `request` has been
+       * answered once: its second call gets no answer and takes the floor offline with it. */
+      function offlineAfterOneAnswer(request: string, answer: unknown) {
+        let offline = false;
+        return {
+          getTablesState: vi.fn(async () => {
+            if (offline) throw new TypeError("offline");
+            return [mesa4, mesa7, mesa9];
+          }),
+          [request]: vi
+            .fn()
+            .mockResolvedValueOnce(answer)
+            .mockImplementation(async () => {
+              offline = true;
+              throw new TypeError("offline");
+            }),
+        };
+      }
+
+      it("a void that got no answer, with the floor unread, keeps the revision an earlier void answered", async () => {
+        const { el } = await mountApp(
+          withGroups(offlineAfterOneAnswer("voidLine", { visit: { id: "v1", revision: 4 } })),
+        );
+        const order = await openMesa(el);
+
+        emit(order, "void-line", { lineNo: 1 });
+        await flush(el);
+        emit(tableOrder(el)!, "void-line", { lineNo: 2 });
+        await flush(el);
+        emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
+        await flush(el);
+
+        expect(api.voidLine).toHaveBeenCalledTimes(2);
+        expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 4 });
+      });
+
+      it("a round that got no answer, with the floor unread, keeps the revision an earlier round answered", async () => {
+        const { el } = await mountApp(
+          withGroups(
+            offlineAfterOneAnswer("submitGroups", { tabId: "wo-4", revision: 4, groups: [] }),
+          ),
+        );
+        const order = await openMesa(el);
+        const round = { lines: roundLines, groups: [{ release: "fire", lineIndexes: [0, 1] }] };
+
+        emit(order, "send-round", round);
+        await flush(el);
+        emit(tableOrder(el)!, "send-round", round);
+        await flush(el);
+        emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
+        await flush(el);
+
+        expect(api.submitGroups).toHaveBeenCalledTimes(2);
+        expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 4 });
+      });
+
+      it.each([
+        ["no party", null],
+        ["another party", { id: "v7", revision: 10 }],
+      ])("a void answering %s leaves the revision the screen showed", async (_name, answered) => {
+        const { el } = await mountApp(
+          withGroups({ voidLine: vi.fn().mockResolvedValue({ visit: answered }) }),
+        );
+        const order = await openMesa(el);
+
+        emit(order, "void-line", { lineNo: 1 });
+        await flush(el);
+        emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
+        await flush(el);
+
+        expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 3 });
+      });
+    });
   });
 });

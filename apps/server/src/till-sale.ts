@@ -461,6 +461,7 @@ export async function payWorkingOrder(
         const created = await createOpenOrder(tx, cfg, req.id, req.lines, null, {
           deliveryTableId: req.deliveryTableId,
           zoneId: req.zoneId,
+          creditedTo: operatorId,
         });
         order = created;
         newlyCreatedLines = created.lineRows;
@@ -844,6 +845,7 @@ async function payIntegrated(
       locked === undefined
         ? await createOpenOrder(tx, cfg, req.id, req.lines, null, {
             zoneId: req.zoneId,
+            creditedTo: operatorId,
           })
         : await priceStoredOrderForIssuance(tx, req.id);
     // P3 files THESE gross lines, whatever changes while the reader runs, at the rates of the day it

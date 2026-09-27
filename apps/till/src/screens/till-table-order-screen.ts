@@ -44,8 +44,9 @@ import "../widgets/diet-filter.js";
 import "../widgets/modifier-picker.js";
 import type { ModifierConfirmDetail } from "../widgets/modifier-picker.js";
 import type {
+  GroupLine,
+  OrderGroup,
   OrderLinePatch,
-  RoundLine,
   TabLine,
   TableServiceStatus,
   TableState,
@@ -58,16 +59,24 @@ import type {
 } from "../api/client.js";
 import type { ConfirmPaymentDetail } from "../widgets/tender-pay.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
+import {
+  groupRound,
+  heldGroupIds,
+  inHeldGroup,
+  sendsAlone,
+  type RoundGroup,
+} from "../state/round-groups.js";
 
 export type { TableServiceStatus };
 
 /**
- * A round to add to the tab. The round stays in `round` until the app has the server's answer: it
- * takes out the `sent` lines (the ones `lines` was built from, in order) once the round is added, and
- * a refused round is kept (D9).
+ * A round to add to the tab, in `groups` naming its lines by their place in `lines`. The round stays
+ * in `round` until the app has the server's answer: it takes out the `sent` lines (the ones `lines`
+ * was built from, in order) once the round is added, and a refused round is kept (D9).
  */
 export interface SendRoundDetail {
-  lines: RoundLine[];
+  lines: GroupLine[];
+  groups: RoundGroup[];
   round: WorkingOrderStore;
   sent: readonly OrderLine[];
 }
@@ -476,6 +485,8 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) statuses: TableServiceStatus[] = [];
   /** The venue's ACTIVE kitchen courses, in `displayOrder`. */
   @property({ attribute: false }) courses: TillCourse[] = [];
+  /** The party's order groups, read with {@link lines}. */
+  @property({ attribute: false }) groups: OrderGroup[] = [];
   @property() fireControl: FireControlMode = "waiter";
   @property() orderId?: string;
   /** The visible half of the app's single-flight fiscal guard. */
@@ -571,8 +582,7 @@ export class TillTableOrderScreen extends LitElement {
    * ABSENT here takes its product's default course server-side.
    */
   #roundCourses = new WeakMap<OrderLine, string>();
-  /** Same lifecycle as {@link #roundCourses}. Only ever `true`: {@link #toggleHold} DELETES the entry
-   * rather than storing `false`, so a plain line's wire is `hold`-free. */
+  /** Same lifecycle as {@link #roundCourses}. */
   #roundHolds = new WeakMap<OrderLine, boolean>();
   #payStore?: TabPayStore;
   /** Memoised so a render triggered by a round change does not recompute every line's gross. */
@@ -580,6 +590,8 @@ export class TillTableOrderScreen extends LitElement {
   /** Built with {@link products}, so each line's Change lookup is not a scan. */
   #productsByOffer?: Map<string, TillProduct>;
   #productsById = new Map<string, TillProduct>();
+  /** Built with {@link groups}, so each line's Send check is not a scan. */
+  #heldGroupIds?: ReadonlySet<string>;
 
   constructor() {
     super();
@@ -600,6 +612,9 @@ export class TillTableOrderScreen extends LitElement {
       this.#closeActions();
       this.#closeChange();
       this.cancelLine = null;
+    }
+    if (changed.has("groups") || this.#heldGroupIds === undefined) {
+      this.#heldGroupIds = heldGroupIds(this.groups);
     }
     if (changed.has("products") || this.#productsByOffer === undefined) {
       this.#productsByOffer = new Map();
@@ -673,8 +688,9 @@ export class TillTableOrderScreen extends LitElement {
    * answers name lists, products and labels by id alone: the server takes every price, VAT class and
    * name from the published offer. */
   #sendRound(): void {
-    const lines = this.#roundStore.lines.map((line) => {
-      const roundLine: RoundLine = {
+    const sent = this.#roundStore.lines;
+    const lines = sent.map((line) => {
+      const roundLine: GroupLine = {
         ...toWireProductIdentity(line.product),
         quantity: line.quantity,
         ...toWireLineExtras(line),
@@ -684,16 +700,16 @@ export class TillTableOrderScreen extends LitElement {
       if (courseId !== undefined) {
         roundLine.courseId = courseId;
       }
-      if (this.#roundHolds.get(line) === true) {
-        roundLine.hold = true;
-      }
       return roundLine;
     });
-    const detail: SendRoundDetail = {
-      lines,
-      round: this.#roundStore,
-      sent: this.#roundStore.lines,
-    };
+    const groups = groupRound(
+      sent.map((line) => ({
+        courseId: this.#selectedCourseId(line) || null,
+        held: this.#isHeld(line),
+      })),
+      this.courses,
+    );
+    const detail: SendRoundDetail = { lines, groups, round: this.#roundStore, sent };
     this.dispatchEvent(new CustomEvent("send-round", { detail, bubbles: true, composed: true }));
   }
 
@@ -731,7 +747,6 @@ export class TillTableOrderScreen extends LitElement {
     this.requestUpdate();
   }
 
-  /** A course deactivated since it was rung drops off: firing it would be refused `course.not_found`. */
   #heldCourses(): TillCourse[] {
     const heldIds = new Set(
       this.lines
@@ -765,14 +780,6 @@ export class TillTableOrderScreen extends LitElement {
         composed: true,
       }),
     );
-  }
-
-  /** Shared by the Send button ({@link #lineActions}) and the Send-all gate ({@link #anyHeld}) so the two
-   * stay in lockstep. A ticket-item-less parent (`state === null` — a moved/merged line or an
-   * openTab-initial line) has nothing to send. The child exclusion is stated in its own right although
-   * the server gives a child no ticket item, so `state === null` already refuses it. */
-  #isSendable(line: TabLine): boolean {
-    return !this.#isChild(line) && line.firedAt === null && line.state !== null;
   }
 
   #isStarted(line: TabLine): boolean {
@@ -824,7 +831,7 @@ export class TillTableOrderScreen extends LitElement {
     const name = this.#nameForLine(line);
     const label = (key: StringKey) => `${t(key)} · ${name}`;
     const actions: TemplateResult[] = [];
-    if (this.#isSendable(line))
+    if (sendsAlone(line, this.#heldGroupIds!))
       actions.push(
         html`<wt-button
           class="line-send"
@@ -879,8 +886,11 @@ export class TillTableOrderScreen extends LitElement {
     return actions.length === 0 ? nothing : html`<span class="line-actions">${actions}</span>`;
   }
 
+  /** A held group releases its lines whether or not they have a ticket item: a no-route dish in one has
+   * none, and may have no Fire course button either. */
   #anyHeld(): boolean {
-    return this.lines.some((line) => this.#isSendable(line));
+    const held = this.#heldGroupIds!;
+    return this.lines.some((line) => sendsAlone(line, held) || inHeldGroup(line, held));
   }
 
   #sendLine(lineNo: number): void {

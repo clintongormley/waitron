@@ -693,13 +693,17 @@ describe("POST /api/tabs/:id/merge of a seated party's check back into its tab",
     const offers = await withTransaction(suite.db, (tx) =>
       offerProducts(tx, d.cfg, { zone: "tables" }),
     );
-    const round = await post(`/api/working-orders/${tabId}/round`, {
-      lines: [{ menuItemId: offers.offerFor(cafeId), quantity: "3" }],
+    const round = await post(`/api/visits/${visitId}/groups`, {
+      submissionId: randomUUID(),
+      expectedVisitRevision: revision,
+      groups: [
+        { lines: [{ menuItemId: offers.offerFor(cafeId), quantity: "3" }], release: "fire" },
+      ],
     });
     expect(round.status).toBe(200);
     const split = await post(`/api/tabs/${tabId}/split`, {
       transfers: [{ lineNo: 1, quantity: "1" }],
-      expectedVisitRevision: revision,
+      expectedVisitRevision: ((await round.json()) as { revision: number }).revision,
     });
     expect(split.status).toBe(200);
     const { checkId } = (await split.json()) as { checkId: string };

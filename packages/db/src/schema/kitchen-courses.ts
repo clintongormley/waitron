@@ -3,8 +3,9 @@ import { count, flag, id, label, newId, nowIso, table, tsString } from "./column
 import { locations } from "./tenants.js";
 
 /**
- * A kitchen course. `display_order` is the firing sequence: an order's earliest course fires on send
- * and later ones are held until fired. A line with no course fires earliest.
+ * A kitchen course. `display_order` is the firing sequence. On a counter order or a bill with no
+ * party, the order's earliest course fires on send and later ones are held until fired; a line with
+ * no course fires earliest. For a seated party the till groups each round by course in this order.
  */
 export const kitchenCourses = table(
   "kitchen_courses",

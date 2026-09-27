@@ -68,6 +68,26 @@ import type { TillConfig } from "./till-config.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import "./errors.js";
 
+/** Sends `lines` to a seated party's tab as one group released now, at the visit's current revision. */
+async function sendRound(
+  app: Hono,
+  headers: Record<string, string>,
+  visitId: string,
+  lines: unknown[],
+): Promise<Response> {
+  const read = await app.request(`/api/visits/${visitId}/groups`, { headers });
+  const { revision } = (await read.json()) as { revision: number };
+  return app.request(`/api/visits/${visitId}/groups`, {
+    method: "POST",
+    headers: { ...headers, "content-type": "application/json" },
+    body: JSON.stringify({
+      submissionId: randomUUID(),
+      expectedVisitRevision: revision,
+      groups: [{ lines, release: "fire" }],
+    }),
+  });
+}
+
 let cfg: TillConfig;
 let ana: { id: string };
 // The pre-login roster fixtures: `abel` is a second ACTIVE person whose name sorts BEFORE "Ana" but
@@ -1997,6 +2017,25 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     });
   });
 
+  it("PUT /:id/lines/:lineNo on a counter order names no party in its answer", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const id = randomUUID();
+    expect(
+      (await park(app, cookie, { id, lines: [{ menuItemId: aguaOfferId, quantity: "1" }] })).status,
+    ).toBe(200);
+
+    const edited = await app.request(`/api/working-orders/${id}/lines/1`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ note: "para llevar", revision: 0 }),
+    });
+
+    expect(edited.status).toBe(200);
+    expect(await edited.json()).toEqual({ revision: 1, visit: null });
+  });
+
   it("GET lists it, GET/:id retrieves its lines, PUT edits it, DELETE abandons it", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -2801,17 +2840,11 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       body: JSON.stringify({}),
     });
     expect(tabRes.status).toBe(200);
-    const { tabId } = (await tabRes.json()) as { tabId: string };
-    const round = await app.request(`/api/working-orders/${tabId}/round`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({
-        lines: [
-          { menuItemId: aguaOfferId, quantity: "1" },
-          { menuItemId: aguaOfferId, quantity: "1" },
-        ],
-      }),
-    });
+    const { tabId, visitId } = (await tabRes.json()) as { tabId: string; visitId: string };
+    const round = await sendRound(app, { cookie }, visitId, [
+      { menuItemId: aguaOfferId, quantity: "1" },
+      { menuItemId: aguaOfferId, quantity: "1" },
+    ]);
     expect(round.status).toBe(200);
 
     // GET /api/zones lists the active zone (session-gated, by display_order).
@@ -2919,12 +2952,10 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({}),
     });
-    const { tabId } = (await tabRes.json()) as { tabId: string };
-    const round = await app.request(`/api/working-orders/${tabId}/round`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ lines: [{ menuItemId: tab.aguaOffer, quantity: "1" }] }),
-    });
+    const { tabId, visitId } = (await tabRes.json()) as { tabId: string; visitId: string };
+    const round = await sendRound(app, { cookie }, visitId, [
+      { menuItemId: tab.aguaOffer, quantity: "1" },
+    ]);
     expect(round.status).toBe(200);
 
     for (const lineNo of ["abc", "1.5", "0", "9999999999"]) {
@@ -2957,12 +2988,10 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({}),
     });
-    const { tabId } = (await tabRes.json()) as { tabId: string };
-    const round = await app.request(`/api/working-orders/${tabId}/round`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ lines: [{ menuItemId: tab.aguaOffer, quantity: "1" }] }),
-    });
+    const { tabId, visitId } = (await tabRes.json()) as { tabId: string; visitId: string };
+    const round = await sendRound(app, { cookie }, visitId, [
+      { menuItemId: tab.aguaOffer, quantity: "1" },
+    ]);
     expect(round.status).toBe(200);
 
     const res = await app.request(`/api/working-orders/${tabId}/lines/99/served`, {
@@ -3624,13 +3653,9 @@ describe("canonical modifier HTTP serialization", () => {
       body: JSON.stringify({}),
     });
     expect(opened.status, await opened.clone().text()).toBe(200);
-    const { tabId } = (await opened.json()) as { tabId: string };
+    const { tabId, visitId } = (await opened.json()) as { tabId: string; visitId: string };
     for (let round = 0; round < 2; round++) {
-      const rung = await f.app.request(`/api/working-orders/${tabId}/round`, {
-        method: "POST",
-        headers: f.headers,
-        body: JSON.stringify({ lines: [line] }),
-      });
+      const rung = await sendRound(f.app, f.headers, visitId, [line]);
       expect(rung.status, await rung.clone().text()).toBe(200);
     }
     const got = await f.app.request(`/api/working-orders/${tabId}`, { headers: f.headers });
