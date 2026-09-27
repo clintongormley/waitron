@@ -173,7 +173,7 @@ const PERMANENT_SALE_REFUSALS = new Set([
   "fiscal.foreign_recipient_unsupported",
 ]);
 
-/** Table refusals shown in their code's own words: each tells the operator what to do instead. */
+/** Table refusals shown in their code's own words. */
 const TABLE_REFUSALS = new Set([
   "order.payment_in_flight",
   "table.occupied",
@@ -2462,10 +2462,8 @@ export class TillApp extends LitElement {
     await this.#loadTabLines();
     if (this.orderParty !== null) await this.#loadVisitBills();
     if (store === undefined || store.lineCount > 0 || draft === undefined) return;
-    const { tally } = draft;
-    const filed = tally.fired + tally.held + tally.joined > 0;
-    if (followUp === "find-tab" || !filed || this.activeTableId !== tableId) return;
-    this.submittedNotice = submittedText(tally);
+    if (followUp === "find-tab" || this.activeTableId !== tableId) return;
+    this.submittedNotice = submittedText(draft.tally);
     this.renderRoot.querySelector<WtToast>("wt-toast[data-submitted-toast]")?.show();
     this.#returnToFloor();
   }
