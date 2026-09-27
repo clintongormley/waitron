@@ -825,9 +825,15 @@ describe("till-table-order-screen", () => {
         await ring(el, [beer, "2"], [croquetas, "1"], [steak, "1"]);
         await toggle(el, "Beer");
         await toggle(el, "Steak");
-        expect(draftToggle(el, "Beer").getAttribute("aria-pressed")).toBe("true");
-        expect(draftToggle(el, "Croquetas").getAttribute("aria-pressed")).toBe("false");
-        expect(draftToggle(el, "Steak").getAttribute("aria-pressed")).toBe("true");
+        // Read from the native button, the element a screen reader announces as pressed or not.
+        const pressed = (name: string) => {
+          const button = draftToggle(el, name);
+          expect(button).toBeInstanceOf(HTMLButtonElement);
+          return button.getAttribute("aria-pressed");
+        };
+        expect(pressed("Beer")).toBe("true");
+        expect(pressed("Croquetas")).toBe("false");
+        expect(pressed("Steak")).toBe("true");
         expect(actionKinds(el)).toEqual(["send-selected", "fire-selected"]);
         expect(draftAction(el, "send-selected")!.textContent).toContain(
           t("table.draft_send_selected"),

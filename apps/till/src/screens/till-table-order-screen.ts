@@ -487,12 +487,10 @@ export class TillTableOrderScreen extends LitElement {
         gap: var(--wt-space-3);
       }
 
+      /* A native button, not a wt-button: wt-button does not pass aria-pressed to its inner button. */
       .draft-select {
-        min-width: 0;
-      }
-
-      .draft-select[aria-pressed="true"] {
-        font-weight: var(--wt-font-weight-bold);
+        min-width: var(--wt-tap-min);
+        text-align: start;
       }
 
       .draft-line-name {
@@ -1531,17 +1529,16 @@ export class TillTableOrderScreen extends LitElement {
     const name = lineProductName(line.product);
     const selected = this.#selected.has(line);
     return html`<div class="draft-line">
-      <wt-button
-        class="draft-select"
+      <button
+        type="button"
+        class="option draft-select"
         data-draft-select=${index}
-        variant="secondary"
-        size="sm"
         aria-pressed=${selected}
         @click=${() => this.#toggleSelected(line)}
       >
         <span aria-hidden="true">${selected ? "☑" : "☐"}</span>
         <span class="draft-line-name">${name} ×${this.#displayQty(line.quantity)}</span>
-      </wt-button>
+      </button>
       ${
         this.courses.length === 0
           ? nothing
