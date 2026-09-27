@@ -1,6 +1,5 @@
-# Weekly dependency update pull requests. Dependabot's pull requests are expected to fail the
-# required sign-off check; how to land one: docs/developers/workflow-guide.md → Dependabot pull
-# requests.
+# Weekly dependency update pull requests; how to land one: docs/developers/workflow-guide.md →
+# Dependabot pull requests.
 version: 2
 
 updates:

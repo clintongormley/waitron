@@ -48,42 +48,44 @@ carries no sign-off and fails DCO (#160).
 **Dependabot pull requests** (owner decision 2026-09-27). `.github/dependabot.yml` asks for weekly
 version updates for npm (the pnpm workspace at the root), GitHub Actions, the base images in
 `deploy/Dockerfile`, and the images in `docker-compose.yml` and `deploy/compose.yml`. Minor and
-patch bumps arrive grouped, one PR per kind, except the compose files — that entry lists two
-directories and sets no `group-by`, which GitHub's options reference says means one PR per
-directory; a major bump comes alone. Security-fix PRs were switched on in the repository settings.
-Each PR is EXPECTED to fail the sign-off check, and the check stays strict — expected, not yet
-observed: no Dependabot PR has run in this repository yet (checked 2026-09-27:
-`gh pr list --author app/dependabot --state all --json number` returned `[]`; the same filter on
-the `cli/cli` repository returned its Dependabot PRs, so the filter's spelling matches).
-Dependabot's own source can add a Signed-off-by line when its caller passes sign-off details
-(`common/lib/dependabot/pull_request_creator/message_builder.rb` in dependabot/dependabot-core);
-whether GitHub's hosted Dependabot does so here — for instance under the repository's "Require
-contributors to sign off on web-based commits" setting, currently off — was not tried. Confirm on
-the first real Dependabot PR.
+patch bumps arrive grouped, one PR per kind; a major bump comes alone. The compose entry lists two
+directories, and its first run still opened ONE pull request for both (#764, _"Bump the
+compose-minor-and-patch group across 2 directories with 1 update"_). Security-fix PRs are switched
+on in the repository settings.
 
-To land one — a sequence untested with a Dependabot branch name, which contains slashes: fetch the
-PR's branch into a local branch of the same name (`git fetch origin <branch>:<branch>`), then
-`python3 ~/workspace/tools/worktree.py new waitron <branch> --headless`, which checks out an
-existing local branch rather than making a new one; in that worktree run
-`git rebase --signoff origin/main`, then
-`git push --force-with-lease origin <branch>` through the hook, never `--no-verify`. The rebase
-rewrites the commit even when the branch is already on top of `main` (measured 2026-09-27 on git
-2.55.0: without `--signoff` the same rebase printed `Current branch … is up to date.` and left the
-commit alone; with it, `… up to date, rebase forced.`, the commit was rewritten keeping the bot as
-author, and `scripts/check-signoff.sh` accepted it). CLAUDE.md §2's trap about the hook scoping the
-wrong package after a rebase and force-push applies: confirm with
-`git diff --name-only origin/main..HEAD`. GitHub's docs say _"By default, Dependabot will stop
-rebasing a pull request once extra commits have been pushed to it"_
-(`content/code-security/how-tos/secure-your-supply-chain/manage-your-dependency-security/manage-dependabot-prs.md`
-in github/docs, line 37, read 2026-09-27); whether a signed-off rewrite of its own commit counts
-as an extra commit is untested. The same paragraph of those docs says Dependabot will force-push
-over added commits whose message contains `[dependabot skip]`; that was not tried here. A green CI
-result on one does not prove the build: an npm-only Dependabot PR does not touch `deploy/`, so CI
-builds no front-end bundle (CLAUDE.md §2), and any Dependabot PR — a grouped one or a lone major
-bump — that bumps a bundler or compiler (vite, esbuild, typescript) still needs a local build with
-the root `build` script, its output compared with `main`'s, before landing — why CI does not do
-it: [ci-and-gates.md](ci-and-gates.md) → *What `bundle-smoke` does NOT cover: the three front-end
-bundles*.
+Dependabot's commits up to 2026-09-27 each carried their own sign-off, so the strict sign-off check
+passed: Dependabot's commit in each of #764 (compose), #765 and #766 (npm) carried
+`Signed-off-by: dependabot[bot] <support@github.com>`, and each PR's `Every commit is signed off`
+check passed (with the repository's "Require contributors to sign off on web-based commits" setting
+off). The GitHub Actions and Dockerfile update jobs also ran that day and opened no pull request, so
+no commit of theirs has been seen. A commit without the line fails that check; the repair is the one
+the pre-push hook prints, `git rebase --signoff <base>`, run on the Dependabot branch (checked out as
+the next item describes) and pushed with `--force-with-lease` through the hook.
+
+What still needs a person:
+
+- **A guard that pins a version fails the bump.** #764's mailpit bump failed
+  `scripts/dev-email.test.ts`, which checked for the literal old tag; it now checks for an exact
+  `vX.Y.Z` tag and that both compose files agree. Fix such a guard to test the property rather than
+  the number, on the Dependabot branch: `git fetch origin <branch>:<branch>`, then
+  `python3 ~/workspace/tools/worktree.py new waitron <branch> --headless` (it checks out the
+  existing branch; done with #764's slash-containing name), commit with `-s`, push through the
+  hook. GitHub's docs say _"By default, Dependabot will stop rebasing a pull request once extra
+  commits have been pushed to it"_
+  (`content/code-security/how-tos/secure-your-supply-chain/manage-your-dependency-security/manage-dependabot-prs.md`
+  in github/docs, line 37, read 2026-09-27), so after such a push Dependabot no longer rebases it
+  on its own.
+- **A green CI result does not prove the build.** An npm-only Dependabot PR does not touch
+  `deploy/`, so CI builds no front-end bundle (CLAUDE.md §2); any Dependabot PR that bumps a
+  bundler or compiler (vite, esbuild, typescript) needs a local build with the root `build` script,
+  its output compared with `main`'s, before landing — why CI does not do it:
+  [ci-and-gates.md](ci-and-gates.md) → *What `bundle-smoke` does NOT cover: the three front-end
+  bundles*.
+- **A major bump is a migration, not an update.** #766 moved `@vitest/browser-playwright` alone to
+  5.0.1 while every `vitest` stayed on 4, and failed CI; an earlier Vitest 5 move was abandoned on
+  2026-09-19 because Stryker killed almost no mutants under it, and a retry has to re-measure
+  mutation: [backlog.md](../backlog.md) → Track C, *Left behind by the Stryker upgrade (#447,
+  2026-09-19)*.
 
 **Do not merge a PR automatically — wait for the user's approval.** Invoking `/land-branch` is that
 approval; nothing else is.

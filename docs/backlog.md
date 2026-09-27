@@ -3049,19 +3049,27 @@ image constraints under *Detail → Box image*.
 
 ### B9. CI and test infra
 
-- **Dependabot, switched on by #760 (2026-09-27) — three things OPEN.** Config:
+- **Dependabot, switched on by #760 (2026-09-27) — two things OPEN.** Config:
   `.github/dependabot.yml`; how to land one of its PRs: `docs/developers/workflow-guide.md` →
-  Dependabot pull requests. (1) **Confirm on the first real Dependabot PR** that its commit lacks a
-  `Signed-off-by` line (expected, not yet seen), that the documented `git rebase --signoff` landing
-  sequence works with its slash-containing branch name, and whether Dependabot keeps updating the PR
-  afterwards; correct the workflow guide with what happens. (2) **Owner decision: mailpit arrives
-  twice.** The compose entry lists `/` and `/deploy` with no `group-by`, and mailpit is pinned in
-  both `docker-compose.yml` and `deploy/compose.yml`, so each bump should open one PR per folder;
-  adding `group-by: dependency-name` would make it one. (3) **Triage the security-fix PRs.** On
-  2026-09-27 a push to this repo printed `GitHub found 15 vulnerabilities on
-  clintongormley/waitron's default branch (10 high, 5 moderate)`; which are reachable in this
-  product is unassessed. The `versioning-strategy` question is recorded under #432's loose ends in
-  Track C.
+  Dependabot pull requests. Its first two PRs landed as #764 (mailpit) and #765 (ten npm
+  minor/patch bumps). (1) **Owner decision: #766 is a lone major bump of
+  `@vitest/browser-playwright` to 5.0.1** while every `vitest` and `@vitest/coverage-v8` stays on
+  4.1.11, and its CI failed. Options: close it with `@dependabot ignore this major version`
+  (GitHub's command for a single-dependency PR:
+  `content/code-security/reference/supply-chain-security/dependabot-pull-request-comment-commands.md`
+  in github/docs, line 24, read 2026-09-27), or add a `groups` entry that moves `vitest` and
+  `@vitest/*` together — though a Vitest 5 move still has to re-measure mutation first (Track C,
+  *Left behind by the Stryker upgrade (#447, 2026-09-19)*). (2) **Triage the security alerts.** On
+  2026-09-27 `gh api repos/clintongormley/waitron/dependabot/alerts?state=open` listed 15 open
+  alerts across six packages, every one a transitive dependency with a patched version published
+  (`baseline-browser-mapping`, `brace-expansion`, `browserslist`, `esbuild`, `fast-uri`, `qs`),
+  and no security-fix PR had been opened for any of them. Dependabot's security-update jobs for
+  `qs`, `baseline-browser-mapping`, `browserslist` and `fast-uri` ran twice that day and failed
+  (`qs`: `security_update_not_possible`, newest installable 6.15.1, first fixed 6.16.0); none ran
+  for `esbuild` or `brace-expansion`. The `esbuild` alert (vulnerable up to 0.24.2) can only be
+  the 0.18.20 copy `drizzle-kit` pulls in through `@esbuild-kit/esm-loader`: Track C, *Left
+  behind by the esbuild upgrade (#439, 2026-09-19)*. Which alerts are reachable in this product is
+  unassessed. The `versioning-strategy` question is recorded under #432's loose ends in Track C.
 - **`apps/server/src/stream-host.test.ts` passes only in file order — OPEN (found by #752's review,
   2026-09-27).** Codex ran the file under Vitest's shuffled order (`--sequence.shuffle`, seeds 577 and
   578): seed 578 failed 3 cases, because cases expecting no bucket credential ran after a case that
@@ -4783,16 +4791,21 @@ latest minor or patch release; one loose end came with it.
   style.** `hono` was declared `^4.6.0` and `^4.7.0`, `pg` `^8.13.0`, `playwright` `^1.49.0`,
   `@types/pg` `^8.11.0` and `@aws-sdk/client-s3` `^3.700.0`, in each case well below what was
   installed, while their siblings in the same files were declared at the installed version. #432
-  raised them so that every package declares one identical range, which is now the shape of all
-  nineteen. No commit or doc explains why those floors were low, so this was a judgement, not a
-  rule being followed. If low floors were deliberate, the revert is one line per manifest.
-  Dependabot's npm updates (on `main` since #760, 2026-09-27) set no
+  raised them so that every package declares one identical range, which was the shape of all
+  nineteen on 2026-09-19. No commit or doc explains why those floors were low, so this was a
+  judgement, not a rule being followed. If low floors were deliberate, the revert is one line per
+  manifest. Dependabot's npm updates (on `main` since #760, 2026-09-27) set no
   `versioning-strategy`, so its default applies — GitHub's options reference says that default
-  raises the minimum version for apps and widens the range for libraries; which of these manifests
-  it treats as which is untested. So each weekly PR may keep raising floors, and for any manifest it
-  treats as a library it widens the range instead, which would bring back the mixed-floor state
-  #432 removed — until this is decided (set `versioning-strategy` in `.github/dependabot.yml` once
-  it is).
+  raises the minimum version for apps and widens the range for libraries. Its first npm PR, #765
+  (2026-09-27), widened no range: each of the 64 caret ranges it changed had its floor raised to
+  the new version (`apps/dashboard`'s `vite` went from `^8.0.0` to `^8.3.1`), and the two exact
+  pins it changed moved to the new exact version (`@aws-sdk/client-s3` in `apps/server`,
+  `drizzle-orm` in `packages/store`). On that PR each manifest kept its own form — a caret range
+  stayed a caret range, an exact pin stayed exact — so it did not restore #432's
+  one-range-per-dependency shape where that had already lapsed: `@aws-sdk/client-s3` has been
+  exact in `apps/server` since #582 (2026-09-24) and is a caret range in `packages/stream` and
+  `bench/sqlite-failover`. Whether the floor should follow every bump is still undecided, and the
+  answer goes in `versioning-strategy` in `.github/dependabot.yml`.
 
 **Left behind by the esbuild upgrade (#439, 2026-09-19).** The four packages that build bundles
 moved from esbuild 0.25.12 to 0.28.2. Two things it could not take with it:
