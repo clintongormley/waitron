@@ -3476,6 +3476,10 @@ image constraints under *Detail → Box image*.
     **`fetchMirrorBundle` checks the bundle's shape** — DONE (A94): real HTTP cases for a number,
     string, array, missing required field and wrong nested types failed before validation and pass
     with `mirror.bundle_fetch_failed` after it; the ordinary bundle case remains in the same suite.
+    **Still open:** the setup screen says this code means the primary could not be reached or the
+    login was refused (`apps/setup/src/setup-app.ts`), although the pre-A94 fetcher already used it
+    for unparseable JSON and `null`. Next action: give staff advice that also covers an unusable
+    response, without changing the code's meaning or the existing fetch refusal.
     **Still open** (read, not run): the boot-time fetch is given only the URL (item (ii) of **Still
     open after A63** in the #657 item above), and boot never reads the `superseded` that
     `reconcileMembershipOnBoot` returns (`apps/server/src/boot.ts`, where it is called);

@@ -55,7 +55,7 @@ function isMirrorBundle(value: unknown): value is MirrorBundle {
  * Only the PUBLIC half of the standby's key travels; the private key never leaves the mirror.
  * `standby.contactUrl` may be `""`: a standby that advertises nothing is still a member.
  *
- * A network error, non-2xx response, or malformed bundle is
+ * A network error, non-2xx response, unparseable JSON, or malformed bundle is
  * `mirror.bundle_fetch_failed`; the refusal carries no upstream detail that could include a URL or
  * connection information.
  */
