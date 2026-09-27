@@ -642,6 +642,25 @@ components, then make the guard and both documents agree — one of them is curr
 something CI will not enforce. Whoever picks up the next screen should settle this first, because
 every screen after it inherits the answer.
 
+**Also open: a missing font-weight token on the Cloud services screen, and no guard compares the
+token names read with the names declared** (found 2026-09-27 while fixing the Printers screen's
+`--wt-font-size-xs`, lane C's C21). `apps/dashboard/src/screens/cloud-services-screen.ts` sets its
+`dt` to `var(--wt-font-weight-medium)`, but `packages/ui-core/src/tokens/structure.css` defines only
+`--wt-font-weight-normal` and `--wt-font-weight-bold` (found by reading the code; the screen was not
+opened). Comparing every `var(--wt-…)` read under `apps/` and `packages/` with every declared name
+found five names that are read but declared nowhere. Two are read with no fallback: the Printers
+screen's `--wt-font-size-xs`, now fixed, and `--wt-font-weight-medium` above. Three are read with a
+fallback: `--wt-color-success-text` in `apps/till/src/widgets/diet-badges.ts`;
+`--wt-color-warning-text` in four till files, which has its own entry under A4 ("Four till surfaces
+ask for a caution colour that is defined nowhere"); and `--wt-form-max-width` in the Cloud services
+screen, read as `var(--wt-form-max-width, 36rem)`, whose fallback is also a `rem` value the token
+rule forbids. Such a comparison cannot see a token read from script. No guard compares the `--wt-*`
+names stylesheets read with the names declared: `packages/layouts/src/theme-registry.test.ts` checks
+that names are declared only for its `THEMEABLE_TOKENS` list, and
+`packages/ui/src/no-hardcoded-chrome.test.ts` and its `packages/ui-core` twin reject literal values
+in each package's shared components only. An undefined name a stylesheet reads is caught today only
+by a test that measures a computed style, and only for the property it measures.
+
 **Also open, and product-wide: the primary blue fails the accessibility contrast bar as text on the
 page background, in the light theme.** Measured against the shipped values in
 `packages/ui/src/tokens/colors.css`: light `--wt-color-primary` (`#1f6feb`) on `--wt-color-bg`
@@ -2056,9 +2075,6 @@ approved print agents to try it, so a printer the two discovery passes cannot se
 - Read-back gaps: the per-till printer picker is not location-filtered; the print-mode and
   `drawer_open_policy` toggles are set-only (the latter gates cash access); the Impresoras editor
   leaves agent and transport re-binding read-only though the API accepts it.
-- **A missing font token on the Printers screen** (found 2026-09-26, A61):
-  `apps/dashboard/src/screens/printers-screen.ts` uses `--wt-font-size-xs`, a token that does not
-  exist (the Servers screen copied it; fixed there only).
 
 ### A4. Till, displays and devices
 
