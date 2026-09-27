@@ -61,7 +61,8 @@ import { writePrintHeldWork } from "@waitron/venue-service";
 import "./errors.js";
 
 // Review Focus 6: a kitchen ticket that failed or is stuck shows as a printing problem on the table
-// and on its station's card, never refuses the next order, and clears once a reprint has printed.
+// and on its station's card, never refuses the next order, and clears once a reprint has printed, or
+// once a Reprint would print nothing on that printer for that station.
 
 const LOCALE = "es-ES";
 const ALEX = "cccccccc-0000-4000-8000-00000000000a";
@@ -237,6 +238,34 @@ async function jobFor(orderId: string, printerId: string): Promise<string> {
   );
   expect(rows).toHaveLength(1);
   return rows[0]!.printJobId;
+}
+
+/** The one job among `rows` printed for `orderId` at `printerId`, however many stations it links. */
+function oneJobOf(
+  rows: Awaited<ReturnType<typeof links>>,
+  orderId: string,
+  printerId: string,
+): string {
+  const ids = new Set(
+    rows
+      .filter((row) => row.workingOrderId === orderId && row.printerId === printerId)
+      .map((row) => row.printJobId),
+  );
+  expect(ids.size).toBe(1);
+  return [...ids][0]!;
+}
+
+/** Every job queued for `printerId`, oldest first, each as the lines it prints. */
+async function jobsAt(printerId: string): Promise<{ id: string; lines: string[] }[]> {
+  const rows = await db
+    .select({ id: printJobs.id, payload: printJobs.payload })
+    .from(printJobs)
+    .where(eq(printJobs.printerId, printerId))
+    .orderBy(sql`rowid`);
+  return rows.map((row) => ({
+    id: row.id,
+    lines: printedLines(row.payload).filter((text) => text !== ""),
+  }));
 }
 
 async function setJob(
@@ -637,17 +666,8 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     const pase = await passPrinter(v);
     const source = await firedTable(v, "Mesa 4", ["burger", "beer"]);
     const destination = await firedTable(v, "Mesa 5");
-    const paseJobOf = (rows: Awaited<ReturnType<typeof links>>) => {
-      const ids = new Set(
-        rows
-          .filter((row) => row.workingOrderId === source.tabId && row.printerId === pase)
-          .map((row) => row.printJobId),
-      );
-      expect(ids.size).toBe(1);
-      return [...ids][0]!;
-    };
     const cocinaFailed = await jobFor(source.tabId, v.cocinaPrinter);
-    const paseFailed = paseJobOf(await links());
+    const paseFailed = oneJobOf(await links(), source.tabId, pase);
     await setJob(cocinaFailed, exhausted);
     await setJob(await jobFor(source.tabId, v.barraPrinter), { status: "done" });
     await setJob(paseFailed, exhausted);
@@ -655,7 +675,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     const before = (await links()).length;
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, source.tabId));
     const reprints = (await links()).slice(before);
-    const paseReprint = paseJobOf(reprints);
+    const paseReprint = oneJobOf(reprints, source.tabId, pase);
     await setJob(reprints.find((row) => row.printerId === v.cocinaPrinter)!.printJobId, exhausted);
     await setJob(reprints.find((row) => row.printerId === v.barraPrinter)!.printJobId, {
       status: "done",
@@ -729,26 +749,6 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
 
 describe("a failed HOLD ticket (service plan Task 6)", () => {
   const TIME = expect.stringMatching(/^\d\d:\d\d$/);
-
-  /** A venue that prints held groups in advance. */
-  async function holdingVenue(): Promise<Venue> {
-    const v = await setupVenue();
-    await inTx((tx) => writePrintHeldWork(tx, true));
-    return v;
-  }
-
-  /** Every job queued for `printerId`, oldest first, each as the lines it prints. */
-  async function jobsAt(printerId: string): Promise<{ id: string; lines: string[] }[]> {
-    const rows = await db
-      .select({ id: printJobs.id, payload: printJobs.payload })
-      .from(printJobs)
-      .where(eq(printJobs.printerId, printerId))
-      .orderBy(sql`rowid`);
-    return rows.map((row) => ({
-      id: row.id,
-      lines: printedLines(row.payload).filter((text) => text !== ""),
-    }));
-  }
 
   it("shows on Mesa 4 and on its station's card, as a failed fire ticket does", async () => {
     const v = await holdingVenue();
@@ -1156,11 +1156,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
     await submit(v, mesa4.visitId, [
       { release: "hold", lines: [line(v, "burger"), line(v, "fish")] },
     ]);
-    const [fish] = await db
-      .select({ lineNo: workingOrderLines.lineNo })
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.name, DISHES.fish.staff));
-    await inTx((tx) => voidTabLine(tx, v.cfg, mesa4.tabId, fish!.lineNo, undefined, ALEX));
+    await voidDish(v, mesa4, "fish");
     const [, slip] = await jobsAt(v.cocinaPrinter);
     expect(slip!.lines[0]).toBe("*** HOLD CANCELLED ***");
     const linked = (await links()).map((row) => row.printJobId);
@@ -1180,19 +1176,6 @@ describe("a printing problem a Reprint would print nothing for", () => {
       (await ordersWithPrintProblem(tx, stationId, [orderId], new Date())).has(orderId),
     );
 
-  async function voidDish(v: Venue, s: Seated, dish: Dish): Promise<void> {
-    const [row] = await db
-      .select({ lineNo: workingOrderLines.lineNo })
-      .from(workingOrderLines)
-      .where(
-        and(
-          eq(workingOrderLines.workingOrderId, s.tabId),
-          eq(workingOrderLines.name, DISHES[dish].staff),
-        ),
-      );
-    await inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, row!.lineNo, undefined, ALEX));
-  }
-
   it("clears a failed fire ticket once every dish it carried for that station is voided", async () => {
     const v = await setupVenue();
     const mesa4 = await firedTable(v, "Mesa 4", ["burger", "beer"]);
@@ -1204,11 +1187,16 @@ describe("a printing problem a Reprint would print nothing for", () => {
 
     expect(await problemsOf(mesa4.visitId)).toEqual([]);
     expect(await stationSees(v.cocina, mesa4.tabId)).toBe(false);
+    // What the rule stands on: a Reprint of the bill prints nothing on the Cocina printer now.
+    const before = (await links()).length;
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa4.tabId));
+    expect((await links()).slice(before).map((row) => [row.printerId, row.stationId])).toEqual([
+      [v.barraPrinter, v.barra],
+    ]);
   });
 
   it("clears a failed HOLD ticket once every held dish it carried for that station is voided", async () => {
-    const v = await setupVenue();
-    await inTx((tx) => writePrintHeldWork(tx, true));
+    const v = await holdingVenue();
     const mesa4 = await seated(v, "Mesa 4");
     await submit(v, mesa4.visitId, [{ release: "hold", lines: [line(v, "burger")] }]);
     await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), exhausted);
@@ -1219,6 +1207,10 @@ describe("a printing problem a Reprint would print nothing for", () => {
 
     expect(await problemsOf(mesa4.visitId)).toEqual([]);
     expect(await stationSees(v.cocina, mesa4.tabId)).toBe(false);
+    // What the rule stands on: a Reprint of the bill prints nothing at all now.
+    const before = (await links()).length;
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa4.tabId));
+    expect((await links()).slice(before)).toEqual([]);
   });
 
   it("drops a pass printer's failed ticket at both stations once nothing brings that printer into a Reprint", async () => {
@@ -1226,7 +1218,7 @@ describe("a printing problem a Reprint would print nothing for", () => {
     const pase = await passPrinter(v, [v.cocina]);
     const mesa4 = await firedTable(v, "Mesa 4", ["burger", "beer"]);
     const barraFailed = await jobFor(mesa4.tabId, v.barraPrinter);
-    const paseFailed = (await links()).find((row) => row.printerId === pase)!.printJobId;
+    const paseFailed = oneJobOf(await links(), mesa4.tabId, pase);
     await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), { status: "done" });
     await setJob(barraFailed, exhausted);
     await setJob(paseFailed, exhausted);
@@ -1288,7 +1280,7 @@ describe("a printing problem a Reprint would print nothing for", () => {
     const v = await setupVenue();
     const pase = await passPrinter(v, [v.cocina]);
     const mesa4 = await firedTable(v, "Mesa 4", ["burger", "beer"]);
-    const paseFailed = (await links()).find((row) => row.printerId === pase)!.printJobId;
+    const paseFailed = oneJobOf(await links(), mesa4.tabId, pase);
     await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), { status: "done" });
     await setJob(await jobFor(mesa4.tabId, v.barraPrinter), { status: "done" });
     await setJob(paseFailed, exhausted);
@@ -1300,8 +1292,7 @@ describe("a printing problem a Reprint would print nothing for", () => {
   });
 
   it("keeps a pass printer's failed HOLD ticket at a station a Reprint reaches only through the held dishes' station", async () => {
-    const v = await setupVenue();
-    await inTx((tx) => writePrintHeldWork(tx, true));
+    const v = await holdingVenue();
     const pase = await passPrinter(v, [v.barra]);
     const mesa4 = await seated(v, "Mesa 4");
     await submit(v, mesa4.visitId, [
@@ -1331,7 +1322,12 @@ describe("a printing problem a Reprint would print nothing for", () => {
     );
     // Every ticket printed but the pass printer's HOLD ticket, which carried the burger and the beer.
     const rows = await links();
-    const paseHold = rows.find((row) => row.printerId === pase)!.printJobId;
+    const paseHold = oneJobOf(rows, mesa4.tabId, pase);
+    const [paseTicket] = await jobsAt(pase);
+    expect(paseTicket!.id).toBe(paseHold);
+    expect(paseTicket!.lines[0]).toBe("*** HOLD ***");
+    expect(paseTicket!.lines).toContain(`1.000 ea x ${DISHES.burger.kitchen}`);
+    expect(paseTicket!.lines).toContain(`1.000 ea x ${DISHES.beer.kitchen}`);
     for (const row of rows) {
       await setJob(row.printJobId, row.printJobId === paseHold ? exhausted : { status: "done" });
     }
@@ -1342,6 +1338,27 @@ describe("a printing problem a Reprint would print nothing for", () => {
     expect((await stationCard(v.cocina, mesa4.tabId)).printProblem).toBe(true);
   });
 });
+
+/** A venue that prints held groups in advance. */
+async function holdingVenue(): Promise<Venue> {
+  const v = await setupVenue();
+  await inTx((tx) => writePrintHeldWork(tx, true));
+  return v;
+}
+
+/** Void `dish`'s line on `s`'s bill. */
+async function voidDish(v: Venue, s: Seated, dish: Dish): Promise<void> {
+  const [row] = await db
+    .select({ lineNo: workingOrderLines.lineNo })
+    .from(workingOrderLines)
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, s.tabId),
+        eq(workingOrderLines.name, DISHES[dish].staff),
+      ),
+    );
+  await inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, row!.lineNo, undefined, ALEX));
+}
 
 /** Merge `source`'s bill into `destination`'s, keeping the source's table seated. */
 async function mergeBills(v: Venue, source: Seated, destination: Seated): Promise<void> {
