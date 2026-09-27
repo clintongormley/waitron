@@ -9,6 +9,9 @@ import "./till-app.js";
 import type { TillApp } from "./till-app.js";
 import type { TillApi, TillProduct } from "./api/client.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
+import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
+import type { TillMenuBrowser } from "./widgets/menu-browser.js";
+import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 
 const defaultMenu = { id: "cat-default", name: "Carta", isDefault: true };
 
@@ -266,6 +269,111 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
     await flush(el);
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-layout-notice]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations on the floor while it says what a completed draft sent", async () => {
+    const floorCanvas = {
+      formFactor: "till",
+      tabs: [
+        ...counterCanvas.tabs,
+        {
+          key: "floor",
+          title: "Floor",
+          columns: 24,
+          cards: [{ type: "floor-plan", colSpan: 24, rowSpan: 12, config: {} }],
+        },
+      ],
+    };
+    const party = {
+      id: "v1",
+      revision: 3,
+      guestCount: 2,
+      state: "open",
+      outstanding: "0.00",
+      billCount: 1,
+      tableIds: ["t4"],
+    };
+    const base = stubApi();
+    const api = stubApi({
+      getTill: vi.fn().mockResolvedValue({
+        locale: "es-ES",
+        venueName: "Bar Pepe",
+        nif: "B12345678",
+        orderFlow: "prepay",
+        courses: [],
+        capabilities: [],
+        fireControl: "waiter",
+        canvas: floorCanvas,
+      }),
+      listZoneOffers: base.listDefaultZoneOffers,
+      listZones: vi
+        .fn()
+        .mockResolvedValue([{ id: "z1", name: "Comedor", displayOrder: 0, active: true }]),
+      listStatuses: vi.fn().mockResolvedValue([]),
+      getTablesState: vi.fn().mockResolvedValue([
+        {
+          id: "t4",
+          label: "4",
+          zoneId: "z1",
+          capacity: 4,
+          state: "open-tab",
+          hasOpenTab: true,
+          tabId: "wo-4",
+          tabLineCount: 0,
+          tabTotal: "0.00",
+          pendingDeliveries: 0,
+          pendingToServe: 0,
+          readyToServe: 0,
+          enRoute: 0,
+          timingBand: "fresh",
+          status: null,
+          nextReservation: null,
+          posX: null,
+          posY: null,
+          shape: null,
+          rotation: null,
+          visit: party,
+        },
+      ]),
+      getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
+      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
+      getVisitBills: vi.fn().mockResolvedValue([]),
+      submitGroups: vi.fn().mockResolvedValue({ tabId: "wo-4", revision: 4, groups: [] }),
+    });
+    const { el, host } = await mountWidget<TillApp>("till-app", { api }, theme);
+    await flush(el);
+    const emit = (source: Element, type: string, detail: unknown) =>
+      source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+    emit(el.shadowRoot!.querySelector("till-lock-screen")!, "logged-in", {
+      personId: "p1",
+      displayName: "Ana",
+    });
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
+    await flush(el);
+    const grid = el.shadowRoot!.querySelector("till-card-grid")!;
+    emit(grid.shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
+      tableId: "t4",
+      seated: true,
+    });
+    await flush(el);
+    await flush(el);
+    const order = el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
+    order
+      .shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!
+      .store.addProduct({ ...products[0]!, menuItemId: "menu-item-p1" }, "1");
+    await flush(el);
+    order.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-all"]')!.click();
+    await flush(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
+    await flush(el);
+    await flush(el);
+
+    const toast = el.shadowRoot!.querySelector<WtToast>("wt-toast[data-submitted-toast]")!;
+    expect(toast.open).toBe(true);
+    expect(el.shadowRoot!.querySelector("till-table-order-screen")).toBeNull();
+    await toast.updateComplete;
     await expectNoA11yViolations(host);
   });
 });
