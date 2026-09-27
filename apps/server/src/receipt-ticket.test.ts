@@ -1073,6 +1073,8 @@ function printedCents(line: string): number {
 function expectPaymentRowsToAddUpToTotal(printed: string[]): void {
   const start = printed.findIndex((line) => line.startsWith("TOTAL"));
   const end = printed.indexOf("VERI*FACTU", start);
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(end).toBeGreaterThan(start);
   let paid = 0;
   for (const line of printed.slice(start + 1, end)) {
     if (/^(Efectivo|Tarjeta|Devolución) /.test(line)) paid += printedCents(line);

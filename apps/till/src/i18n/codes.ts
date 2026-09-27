@@ -36,8 +36,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta petición no coincide con la que se envió antes. Vuelve a cargar e inténtalo de nuevo",
   },
   "bill.payments_received": {
-    en: "Money has already been taken on this bill. Take the rest from the bill's payments",
-    es: "Ya se ha cobrado dinero en esta cuenta. Cobra el resto desde los pagos de la cuenta",
+    en: "Money has already been taken on this bill. Take the rest from the bill's payments, or give that money back first",
+    es: "Ya se ha cobrado dinero en esta cuenta. Cobra el resto desde los pagos de la cuenta, o devuelve primero ese dinero",
   },
   "bill.line_paid": {
     en: "This item has already been paid for, so it cannot be changed, moved or charged again. Refund its payment first",
@@ -68,8 +68,16 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Es más de lo que se puede devolver de este pago. La propina solo se devuelve con el pago entero",
   },
   "bill.refund_unsupported": {
-    en: "This card payment cannot be given back from here. Refund it on the card terminal it was taken on",
-    es: "Este pago con tarjeta no se puede devolver desde aquí. Devuélvelo en el datáfono en el que se cobró",
+    en: "A card payment keyed in on a separate terminal can't be given back before the bill is paid. Don't refund it on the terminal: Waitron would still count it as paid",
+    es: "Un pago con tarjeta tecleado en otro datáfono no se puede devolver antes de cobrar la cuenta. No lo devuelvas en el datáfono: Waitron lo seguiría contando como pagado",
+  },
+  "payment.not_refundable": {
+    en: "This card payment can no longer be given back. Reload the bill and try again",
+    es: "Este pago con tarjeta ya no se puede devolver. Vuelve a cargar la cuenta e inténtalo de nuevo",
+  },
+  "payment.refund_exceeds_capture": {
+    en: "That is more than is left to give back on this card payment. Reload the bill and check the amount",
+    es: "Es más de lo que queda por devolver de este pago con tarjeta. Vuelve a cargar la cuenta y revisa el importe",
   },
   "bill.refund_in_progress": {
     en: "A card refund on this bill is still waiting for the card provider. The bill cannot be changed until it finishes",

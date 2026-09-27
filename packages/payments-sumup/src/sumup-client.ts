@@ -39,7 +39,7 @@ export interface SumUpClientOptions {
 }
 
 /** An event as SumUp lists it: `transaction_events[]` names its kind `event_type`, `events[]`
- * names it `type`, and both carry the same numeric `id` (B14 ledger, Step 0 B.2). */
+ * names it `type`, and both carry the same numeric `id`. */
 interface RawEvent {
   event_type?: string;
   type?: string;

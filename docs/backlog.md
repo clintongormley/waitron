@@ -1948,17 +1948,18 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   - **Task 0's [bill payments design](superpowers/specs/2026-09-26-bill-payments-design.md) is
     approved** (owner, 2026-09-26, PR #698), with the owner's answers to its open points (its §11):
     the cash-up counts money on the day it moves, in Task 14 (§9a), and a card refund is a durable
-    attempt that survives an interrupted call (§6b). Task 14 waits only for its dependencies (Task 2;
-    lane C's M7b2 landed as #702), and its Step 0 checks the providers' documentation and the SumUp endpoint
-    before any implementation.
+    attempt that survives an interrupted call (§6b). Task 14 is being built on branch
+    `feat/service-bill-payments`; its Step 0, the check of the providers' documentation and the
+    SumUp endpoint, is done.
   - **The card refund path records only after the provider call, with a fresh key each time**
     (found by the owner reviewing Task 0, 2026-09-26). `reverseViaStripe`
     (`packages/payments-stripe/src/reverse.ts`) sends a fresh `randomUUID()` idempotency key on
     every call and writes `payment_refunds` only after the call returns, so a crash between the two
     leaves no record, and a repeat would send a new key. SumUp's refund sends no key at all. No
-    product route refunds a card today; the only product caller is the reconciler's reversal of an
-    abandoned order's capture (`packages/payments-stripe/src/reconciler.ts`). Task 14 uses a
-    separate, durable path for refunds before the invoice (design §6b). **Next action:** give the
+    product route refunds a card AFTER its invoice; the only product caller of that path is the
+    reconciler's reversal of an abandoned order's capture
+    (`packages/payments-stripe/src/reconciler.ts`). Task 14 adds a route that refunds a card
+    payment of a bill BEFORE its invoice, through a separate, durable path (design §6b). **Next action:** give the
     reconciler's reversal, and any post-invoice refund route when one is built, the same
     durable-attempt rule.
   - **Task 1 landed as #706** (2026-09-26): the new module `packages/adjustments`, holding
@@ -2209,8 +2210,10 @@ pairing consumer, and a standby that has fallen behind.
   never refreshes by itself, and polling must go through the passive-session controller.
 - **The SumUp reconciler** — settlement-report audit and orphan self-heal. `resolvePending` is the
   interim backstop; without an affiliate key a create whose response is lost resolves `failed` and
-  raises `payment.pending_outcome_unactionable` for a human. Note: a SumUp refund is a separate
-  `type: REFUND` transaction linked by `transaction_code`; the original's `status` never flips.
+  raises `payment.pending_outcome_unactionable` for a human. Note: a SumUp refund appears both as a
+  `REFUND` event inside the original transaction (`events` and `transaction_events`, which the
+  refund lookup reads) and as its own item of `type: REFUND` in the transaction history listing;
+  the original's `status` stays `SUCCESSFUL` (read on 2026-09-27 from three refunded transactions).
 - **A SumUp API drift-detection suite** on a Virtual Solo in a sandbox merchant account — would have
   caught the #312 refund-unit bug. Needs a sandbox account and a CI secret.
 - **Stripe does not fill `CardDetails`**, so a Stripe card sale prints `Tarjeta` with no scheme/PAN/

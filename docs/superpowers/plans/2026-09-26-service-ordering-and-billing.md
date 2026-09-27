@@ -1707,13 +1707,15 @@ versus the charge. **It changes what an invoice charges; it lands on the automat
   - **After payment:** an adjustment on a settled bill is refused. The spec says an issued invoice
     is corrected, not edited: grep for the code the correction path uses and reuse it.
   - **A bill that already holds money (bill payments design §6a; §8 tests 5, 11 and 23).** Task 14
-    proved these with a void and a quantity cut, because no comp existed yet (its ledger's Ruling
-    STOP 1); this task proves them again with a comp. The helpers are Task 14's:
+    proved these with a void and a quantity cut, because no comp existed yet; this task proves
+    them again with a comp. The helpers are Task 14's:
     `refusePaidLines` (with `keeps: 0`), `assertBillInvariant` and `issueBillsFullyPaid` in
     `apps/server/src/bill-payments.ts`, `refusePaymentInFlight` in `working-order.ts` (which now
     refuses `bill.refund_in_progress` before `order.payment_in_flight`), and
     `withSaleTillWhenIssuing` in `bill-payments-api.ts`, which files an invoice a write makes due on
-    the requesting device's till, as the void route in `till-api.ts` does.
+    the requesting device's till, as the void route in `till-api.ts` does. Call `issueIfFullyPaid`
+    or `issueBillsFullyPaid` only inside `withSaleTillWhenIssuing`: given no till, they throw
+    `SaleTillRequired`, which is not an `AppError`, so a route without the wrapper answers a 500.
     - **Test 5, a paid line:** after an item payment for the Chuletón, a comp of it and a line
       discount of it are each `bill.line_paid` naming its line, and nothing changes (no adjustment
       row, the same revision).
@@ -1943,6 +1945,11 @@ Spec §6 on screen; the approved design's screen section.
     check. The till's pay action on such a bill takes the rest through the bill's payments, never
     those two routes; a refused merge shows the code's message (`apps/till/src/i18n/codes.ts`)
     and leaves both bills as they were.
+  - **Other refusals the server gives a bill holding money:** raising a paid line's quantity is
+    `bill.line_paid`, as any edit of a paid line is; and a void that leaves the bill fully paid
+    issues its invoice, which is refused `product.unavailable` when an unsent line's product is
+    off sale (`issueBillsFullyPaid` prices the bill with `priceStoredOrderForIssuance`). Each shows
+    the code's message and leaves the bill as it was.
   - Axe in both themes.
 
   Run them: they FAIL.

@@ -112,15 +112,17 @@ it("explains each refusal a bill paid in parts can give, in both languages, nami
     "bill.refund_exceeds_payment",
     "bill.refund_unsupported",
     "bill.refund_in_progress",
+    "payment.not_refundable",
+    "payment.refund_exceeds_capture",
   ]) {
     expect(codeMessage(code, "en")).not.toBe(generic.en);
     expect(codeMessage(code, "es")).not.toBe(generic.es);
     expect(codeMessage(code, "en")).not.toContain(code);
   }
   expect(codeMessage("bill.payments_received", "en")).toBe(
-    "Money has already been taken on this bill. Take the rest from the bill's payments",
+    "Money has already been taken on this bill. Take the rest from the bill's payments, or give that money back first",
   );
   expect(codeMessage("bill.payments_received", "es")).toBe(
-    "Ya se ha cobrado dinero en esta cuenta. Cobra el resto desde los pagos de la cuenta",
+    "Ya se ha cobrado dinero en esta cuenta. Cobra el resto desde los pagos de la cuenta, o devuelve primero ese dinero",
   );
 });

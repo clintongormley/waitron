@@ -173,7 +173,8 @@ export interface TillSaleResult {
   vatBreakdown: { rate: string; base: string; tax: string }[];
   /** The FILED line list (goods identification, art. 7.1.e). */
   lines: TillSaleLine[];
-  /** How the sale was paid, read back from the committed tender and payment rows. */
+  /** The sale's FIRST tender by settle time, read back from the committed tender and payment rows;
+   * `payments` lists them all when the bill was paid in parts. */
   tender: TenderBlock;
   /** Every payment, when the bill was paid in parts before its invoice; absent otherwise. */
   payments?: BillTenderLine[];
@@ -940,8 +941,8 @@ export function paymentAttemptIsLive(db: Database, workingOrderId: string): bool
 /**
  * Which of these orders has a payment that is, or could still become, a capture no sale records:
  * an attempt its provider has not resolved, or a capture not yet filed. This decides whether a
- * mark may be RELEASED and whether Pay may go ahead over one; the write guard
- * (`refusePaymentInFlight`) reads only the mark.
+ * mark may be RELEASED and whether Pay may go ahead over one; the check of the mark itself
+ * (`refuseOrderPaymentMarked`) reads only the mark.
  */
 async function ordersWithUnfiledPayment(
   tx: Transaction,

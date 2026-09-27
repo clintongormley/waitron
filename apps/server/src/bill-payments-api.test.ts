@@ -816,6 +816,9 @@ describe("an item already paid for (design §8 test 5)", () => {
 
     expect(refused.status).toBe(409);
     expect(refused.json).toMatchObject({ code: "bill.line_paid", params: { lineNo: 2 } });
+    const after = await request("GET", `/api/working-orders/${billId}/lines`);
+    expect(after.json).toEqual(lines.json);
+    expect(await lineTotals(billId)).toEqual(["35.00", "25.00", "3.00"]);
   });
 
   it("refuses moving the steak to another table's tab, or splitting it off", async () => {
@@ -1420,7 +1423,8 @@ describe("retries and reused ids (plan D8, design §5.1)", () => {
   });
 
   it("refuses the id resent naming other lines, writing nothing", async () => {
-    const billId = await tabWith("Paella", "Chuletón");
+    // Two lines of one price, so the resend differs only in the line it names.
+    const billId = await tabWith("Paella", "Paella");
     const submissionId = randomUUID();
     const body = {
       submissionId,
@@ -1433,7 +1437,7 @@ describe("retries and reused ids (plan D8, design §5.1)", () => {
       200,
     );
 
-    const refused = await pay(billId, { ...body, lines: [{ lineNo: 2 }], applied: "25.00" });
+    const refused = await pay(billId, { ...body, lines: [{ lineNo: 2 }], applied: "35.00" });
 
     expect(refused.status).toBe(409);
     expect(refused.json).toMatchObject({ code: "submission.id_reused" });
