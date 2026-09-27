@@ -39,7 +39,7 @@ import { createTable } from "./tables.js";
 import { listPrintProblems, reprintOrderTickets } from "./kitchen-print.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { listStationQueue, splitOffCheck } from "./working-order.js";
+import { listStationQueue, mergeTabs, splitOffCheck } from "./working-order.js";
 import { readVisitBills, seatTable } from "./visits.js";
 import {
   listOrderGroups,
@@ -449,6 +449,96 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     expect(await problemsOf(mesa4.visitId)).toHaveLength(1);
   });
 
+  it("is not cleared by the pass printer's reprint printing while the station printer's reprint failed again", async () => {
+    const v = await setupVenue();
+    const pase = await passPrinter(v);
+    const mesa4 = await firedTable(v, "Mesa 4");
+    await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), exhausted);
+    await setJob(await jobFor(mesa4.tabId, pase), { status: "done" });
+
+    const before = (await links()).length;
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa4.tabId));
+    const reprints = (await links()).slice(before);
+    const cocinaReprint = reprints.find((row) => row.printerId === v.cocinaPrinter)!.printJobId;
+    const paseReprint = reprints.find((row) => row.printerId === pase)!.printJobId;
+    await setJob(cocinaReprint, exhausted);
+    await setJob(paseReprint, {
+      status: "done",
+      createdAt: new Date(Date.parse(await createdAtOf(cocinaReprint)) + 1).toISOString(),
+    });
+
+    expect(await problemsOf(mesa4.visitId)).toMatchObject([
+      { workingOrderId: mesa4.tabId, stationId: v.cocina },
+    ]);
+    expect((await stationCard(v.cocina, mesa4.tabId)).printProblem).toBe(true);
+  });
+
+  it("clears once a reprint on the same printer has printed, though it was queued in the same millisecond", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4");
+    const job = await jobFor(mesa4.tabId, v.cocinaPrinter);
+    await setJob(job, exhausted);
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa4.tabId));
+    const reprint = (await links()).find((row) => row.reprint)!.printJobId;
+
+    await setJob(reprint, { status: "done", createdAt: await createdAtOf(job) });
+    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+  });
+
+  it("decides which ticket came later by the order they were queued, not by their clock stamps", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4");
+    const job = await jobFor(mesa4.tabId, v.cocinaPrinter);
+    await setJob(job, exhausted);
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa4.tabId));
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa4.tabId));
+    const [first, second] = (await links()).filter((row) => row.reprint).map((r) => r.printJobId);
+    // The first reprint printed, the second failed; the clock reads the first as the later one.
+    await setJob(first!, { status: "done", createdAt: "2030-01-01T00:00:00.000Z" });
+    await setJob(second!, exhausted);
+
+    expect(await problemsOf(mesa4.visitId)).toMatchObject([
+      { workingOrderId: mesa4.tabId, stationId: v.cocina, since: await createdAtOf(second!) },
+    ]);
+
+    // A reprint queued after the failure clears it, though its clock stamp is the earliest.
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa4.tabId));
+    const third = (await links()).at(-1)!.printJobId;
+    await setJob(third, { status: "done", createdAt: "2000-01-01T00:00:00.000Z" });
+    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+  });
+
+  it("follows the dishes when the bill whose ticket failed is merged into another table's bill", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4");
+    const mesa5 = await firedTable(v, "Mesa 5");
+    const job = await jobFor(mesa4.tabId, v.cocinaPrinter);
+    await setJob(job, exhausted);
+
+    const merge = {
+      freeSourceTable: false,
+      expectedVisitRevision: (await command(mesa5.visitId)).expectedVisitRevision,
+      expectedSourceVisitRevision: (await command(mesa4.visitId)).expectedVisitRevision,
+      operatorId: ALEX,
+    };
+    await inTx((tx) => mergeTabs(tx, v.cfg, mesa5.tabId, mesa4.tabId, merge));
+
+    expect(await problemsOf(mesa5.visitId)).toEqual([
+      {
+        workingOrderId: mesa5.tabId,
+        stationId: v.cocina,
+        stationName: "Cocina",
+        since: await createdAtOf(job),
+      },
+    ]);
+    expect((await stationCard(v.cocina, mesa5.tabId)).printProblem).toBe(true);
+
+    // Mesa 5's bill now carries Mesa 4's dishes, so its reprint printing clears the problem.
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa5.tabId));
+    await setJob((await links()).at(-1)!.printJobId, { status: "done" });
+    expect(await problemsOf(mesa5.visitId)).toEqual([]);
+  });
+
   it("raises no table problem for a failed job no kitchen ticket links, such as a receipt", async () => {
     const v = await setupVenue();
     const mesa4 = await firedTable(v, "Mesa 4");
@@ -482,6 +572,21 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     });
   });
 });
+
+/** An order-scope (pass) printer attached to both stations. */
+async function passPrinter(v: Venue): Promise<string> {
+  return inTx(async (tx) => {
+    const { id } = await createPrinter(
+      tx,
+      { locationId: v.cfg.locationId },
+      { name: "Pase", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
+    );
+    await updatePrinter(tx, { locationId: v.cfg.locationId }, id, { ticketScope: "order" });
+    await attachPrinterToStation(tx, { stationId: v.cocina, printerId: id });
+    await attachPrinterToStation(tx, { stationId: v.barra, printerId: id });
+    return id;
+  });
+}
 
 function byPrinterThenStation(
   a: { printerId: string; stationId: string },

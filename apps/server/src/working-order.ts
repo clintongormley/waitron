@@ -66,6 +66,7 @@ import {
   invoiceSeries,
   isUniqueViolation,
   kitchenCourses,
+  kitchenPrintJobs,
   kitchenStations,
   nowIso,
   orderGroups,
@@ -2632,6 +2633,13 @@ export async function mergeTabs(
   await refuseHeldLeavingVisit(tx, fromTabId, sourceLineIds);
   const before = await readSentWork(tx, cfg, fromTabId);
   await moveOrderLines(tx, cfg, fromTabId, intoTabId, undefined, { modesChecked: false });
+  // A failed ticket's dishes now sit on `intoTabId`, and the source is abandoned below, which
+  // `listPrintProblems` leaves out. A job's link rows all name the one bill it printed for, so no
+  // row moved here can already exist under `intoTabId`.
+  await tx
+    .update(kitchenPrintJobs)
+    .set({ workingOrderId: intoTabId })
+    .where(eq(kitchenPrintJobs.workingOrderId, fromTabId));
   await clearGroups(tx, sourceLineIds);
   await bumpRevision(tx, [fromTabId, intoTabId]);
 

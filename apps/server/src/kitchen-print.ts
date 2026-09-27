@@ -645,8 +645,11 @@ export interface PrintProblem {
 /**
  * The printing problems among the kitchen tickets `scope` selects, abandoned bills left out. A
  * ticket is a problem while {@link printJobInTrouble} holds for its job, until a reprint for the same
- * bill and station queued after it has printed: only a reprint carries every dish fired before it,
- * so a later round's ticket printing clears nothing. Oldest first.
+ * bill and station, on the same printer, queued after it has printed: only a reprint carries every
+ * dish fired before it, so a later round's ticket printing clears nothing, and another printer's
+ * paper says nothing of this one's. "After" is the link row's `rowid`, not `created_at`, which two
+ * jobs can share to the millisecond: SQLite gives a new row one more than the table's largest
+ * `rowid`, and a link row goes only when its job or its bill is deleted. Oldest first.
  */
 async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promise<PrintProblem[]> {
   const troubled = printJobInTrouble(now);
@@ -655,7 +658,9 @@ async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promis
       workingOrderId: kitchenPrintJobs.workingOrderId,
       stationId: kitchenPrintJobs.stationId,
       stationName: kitchenStations.name,
+      printerId: printJobs.printerId,
       createdAt: printJobs.createdAt,
+      queued: sql<number>`${kitchenPrintJobs}.rowid`,
       troubled: sql<number>`${troubled}`,
     })
     .from(kitchenPrintJobs)
@@ -672,17 +677,19 @@ async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promis
 
   const key = (row: { workingOrderId: string; stationId: string }) =>
     `${row.workingOrderId}|${row.stationId}`;
-  const lastReprinted = new Map<string, string>();
+  const printerKey = (row: { workingOrderId: string; stationId: string; printerId: string }) =>
+    `${key(row)}|${row.printerId}`;
+  const lastReprinted = new Map<string, number>();
   for (const row of rows) {
     if (row.troubled) continue;
-    const seen = lastReprinted.get(key(row));
-    if (seen === undefined || row.createdAt > seen) lastReprinted.set(key(row), row.createdAt);
+    const seen = lastReprinted.get(printerKey(row));
+    if (seen === undefined || row.queued > seen) lastReprinted.set(printerKey(row), row.queued);
   }
   const problems = new Map<string, PrintProblem>();
   for (const row of rows) {
     if (!row.troubled) continue;
-    const reprinted = lastReprinted.get(key(row));
-    if (reprinted !== undefined && reprinted > row.createdAt) continue;
+    const reprinted = lastReprinted.get(printerKey(row));
+    if (reprinted !== undefined && reprinted > row.queued) continue;
     const known = problems.get(key(row));
     if (known === undefined || row.createdAt < known.since) {
       problems.set(key(row), {
