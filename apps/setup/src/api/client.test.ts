@@ -232,7 +232,7 @@ describe("SetupApi", () => {
     });
   });
 
-  it("surfaces the mirror.bundle_fetch_failed code on a 502 (couldn't reach/auth the primary)", async () => {
+  it("surfaces the mirror.bundle_fetch_failed code on a 502", async () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValue(
