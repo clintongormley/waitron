@@ -333,12 +333,12 @@ export const en = {
     "Enter a quantity greater than zero and no more than the amount ordered",
   "table.split_options_together": "Dishes with options must be moved in full",
   "table.split_modifier_error": "Dishes with options must be moved in full",
-  "table.split_held_error": "Send held items to the kitchen before moving them to another bill",
+  "table.split_held_error": "Held items cannot move to another bill until their group is fired",
   "table.check_kept_held":
     "The separate bill could not go back to the table. It is in Held orders on the counter.",
   "table.check_return_unconfirmed":
     "The server did not answer, so it is not known whether the separate bill went back to the table. If it is not on the table, it is in Held orders on the counter.",
-  "table.round_sending": "Sending the round…",
+  "table.round_sending": "Sending the order…",
   "table.draft_actions": "Send the order",
   "table.draft_send_all": "Send all",
   "table.draft_fire_all": "Fire all now",
@@ -359,7 +359,6 @@ export const en = {
   "table.preview_hold_one": "Hold: 1 group.",
   "table.preview_join": "Add to held group “{group}”: {n} items.",
   "table.preview_join_one": "Add to held group “{group}”: 1 item.",
-  "table.preview_back": "Back",
   "table.preview_confirm": "Confirm",
   "table.submitted_fired": "Fired: {n} groups.",
   "table.submitted_fired_one": "Fired: 1 group.",
@@ -368,7 +367,7 @@ export const en = {
   "table.submitted_joined": "Added to a held group.",
   "table.submitted_close": "Close",
   "table.round_unconfirmed":
-    "The server did not answer, so the round may have been added. Check the tab before sending it again.",
+    "The server did not answer, so the items may have been added. Check the tab before sending them again.",
   // Errors
   "pin.invalid": "Wrong PIN, try again",
   "person.suspended": "This account is disabled — ask a manager",
@@ -769,12 +768,12 @@ export const es: Record<StringKey, string> = {
   "table.split_options_together": "Los platos con opciones deben moverse completos",
   "table.split_modifier_error": "Los platos con opciones deben moverse completos",
   "table.split_held_error":
-    "Envía a cocina los artículos retenidos antes de pasarlos a otra cuenta",
+    "Los artículos en espera no se pueden pasar a otra cuenta hasta que se marche su grupo",
   "table.check_kept_held":
     "La cuenta separada no pudo volver a la mesa. Está en Pedidos aparcados, en el mostrador.",
   "table.check_return_unconfirmed":
     "El servidor no ha respondido, así que no se sabe si la cuenta separada ha vuelto a la mesa. Si no está en la mesa, está en Pedidos aparcados, en el mostrador.",
-  "table.round_sending": "Enviando la ronda…",
+  "table.round_sending": "Enviando el pedido…",
   "table.draft_actions": "Enviar el pedido",
   "table.draft_send_all": "Enviar todo",
   "table.draft_fire_all": "Marchar todo ya",
@@ -795,7 +794,6 @@ export const es: Record<StringKey, string> = {
   "table.preview_hold_one": "En espera: 1 grupo.",
   "table.preview_join": "Añadir al grupo en espera «{group}»: {n} artículos.",
   "table.preview_join_one": "Añadir al grupo en espera «{group}»: 1 artículo.",
-  "table.preview_back": "Volver",
   "table.preview_confirm": "Confirmar",
   "table.submitted_fired": "Marchados: {n} grupos.",
   "table.submitted_fired_one": "Marchado: 1 grupo.",
@@ -804,7 +802,7 @@ export const es: Record<StringKey, string> = {
   "table.submitted_joined": "Añadido a un grupo en espera.",
   "table.submitted_close": "Cerrar",
   "table.round_unconfirmed":
-    "El servidor no respondió, así que la ronda puede haberse añadido. Revisa la cuenta antes de volver a enviarla.",
+    "El servidor no respondió, así que los artículos pueden haberse añadido. Revisa la cuenta antes de volver a enviarlos.",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "person.suspended": "Esta cuenta está desactivada. Avisa a un responsable",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",

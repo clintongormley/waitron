@@ -32,16 +32,16 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Es la única mesa de estos clientes, así que no se puede separar de su cuenta",
   },
   "group.not_held": {
-    en: "Those items have already gone to the kitchen. The table now shows them as they are",
-    es: "Esos artículos ya se han enviado a cocina. La mesa ya los muestra como están",
+    en: "Those items have already gone to the kitchen. Check the table before trying again",
+    es: "Esos artículos ya se han enviado a cocina. Revisa la mesa antes de volver a intentarlo",
   },
   "group.not_found": {
-    en: "Those items are no longer on this table. The table now shows what is on it",
-    es: "Esos artículos ya no están en esta mesa. La mesa ya muestra lo que tiene",
+    en: "Those items are no longer on this table. Check the table before trying again",
+    es: "Esos artículos ya no están en esta mesa. Revisa la mesa antes de volver a intentarlo",
   },
   "group.held_leaves_visit": {
-    en: "Items still on hold cannot move to another table. Send them to the kitchen first",
-    es: "Los artículos en espera no se pueden pasar a otra mesa. Envíalos antes a cocina",
+    en: "Items still on hold cannot move to another table until their group is fired",
+    es: "Los artículos en espera no se pueden pasar a otra mesa hasta que se marche su grupo",
   },
   "group.line_held": {
     en: "This item is on hold with others. Fire them together to send it",

@@ -1559,8 +1559,8 @@ export class TillTableOrderScreen extends LitElement {
 
   /** A first-order draft: Send all and Fire all now with nothing checked, Send selected and Fire
    * selected now with a selection. A later addition: its destination, then one Send. Firing now is
-   * offered under every `fireControl`: releasing at submission was never gated, and the kitchen and
-   * the pass cannot fire a held group of lines with no course. */
+   * offered under every `fireControl`: the kitchen and the pass cannot fire a held group of lines
+   * with no course. */
   #draftBar(): TemplateResult {
     const store = this.#draftStore;
     const disabled = store.lineCount === 0 || store.sending;
@@ -1657,7 +1657,6 @@ export class TillTableOrderScreen extends LitElement {
       }`;
   }
 
-  /** Always present, driven by {@link pendingDraft}, as the cancel dialog is. */
   #previewDialog(): TemplateResult {
     const pending = this.pendingDraft;
     const preview = pending?.preview;
@@ -1705,7 +1704,7 @@ export class TillTableOrderScreen extends LitElement {
           data-draft-dismiss
           @click=${() => this.#dismissPreview()}
         >
-          ${t("table.preview_back")}
+          ${t("action.back")}
         </wt-button>
         <wt-button
           class="preview-confirm"
@@ -2062,7 +2061,6 @@ export class TillTableOrderScreen extends LitElement {
     } satisfies MoveGroupLineDetail);
   }
 
-  /** Always present, driven by {@link movePending}, as the cancel dialog is. */
   #moveDialog(): TemplateResult {
     const pending = this.movePending;
     const held = this.#heldInOrder;
@@ -2102,7 +2100,7 @@ export class TillTableOrderScreen extends LitElement {
       }
       <div slot="footer" class="cancel-actions">
         <wt-button variant="secondary" data-move-dismiss @click=${() => (this.movePending = null)}>
-          ${t("table.preview_back")}
+          ${t("action.back")}
         </wt-button>
       </div>
     </wt-dialog>`;
@@ -2115,7 +2113,6 @@ export class TillTableOrderScreen extends LitElement {
     this.#dispatch("fire-group", { groupId: group.id } satisfies FireGroupDetail);
   }
 
-  /** Always present, driven by {@link fireGroupPending}, as the cancel dialog is. */
   #fireGroupDialog(): TemplateResult {
     const group = this.fireGroupPending;
     return html`<wt-dialog
@@ -2138,7 +2135,7 @@ export class TillTableOrderScreen extends LitElement {
           data-fire-dismiss
           @click=${() => (this.fireGroupPending = null)}
         >
-          ${t("table.preview_back")}
+          ${t("action.back")}
         </wt-button>
         <wt-button variant="primary" data-fire-confirm @click=${() => this.#confirmFireGroup()}>
           ${t("table.group_fire")}

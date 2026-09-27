@@ -2114,23 +2114,39 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `POST /api/working-orders/:id/round` is deleted. Splits, transfers, merges, voids and line edits
     respect groups (`group.held_leaves_visit`; a void or edit that empties a held group removes it
     and moves the party's revision). The till's table screen looks the same and maps Send round,
-    Fire course and Send all onto groups. Counter orders and bills with no party still fire by
+    Fire course and Send all onto groups _(Task 4, 2026-09-27: replaced by the draft's actions and
+    the Tab drawer's held-groups list)_. Counter orders and bills with no party still fire by
     course, and the station and pass Fire route stays until Task 5. Upgrade: a venue built and
     seeded on `main` took the new migration with no row lost and no table rebuilt, with a control
     showing the checks detect a rebuild (the PR has both). Left open, from the PR's "Parked points"
     and review notes: a cross-party merge can leave a settled check's lines naming a group now on
     the target party; `moveTabLines` (test-only caller) ignores groups; the till's Fire course and
     Send all fire one group per request, so a failure part-way leaves some fired (Task 4 rebuilds
-    the screen) _(Task 4, 2026-09-27: done — the till's table screen has no Fire course or Send all
-    now; the waiter fires one held group at a time, one request each, from the list of the party's
-    groups in the Tab drawer)_; the till, not the server, refuses a round aimed at a split-off
+    the screen) _(Task 4, 2026-09-27: done — the till's table screen has no Fire course and no
+    Tab-drawer Send all now; the waiter fires one held group at a time, one request each, from the
+    list of the party's groups in the Tab drawer, whose Fire button appears only when the venue's
+    `fire_control` is `waiter`)_; the till, not the server, refuses a round aimed at a split-off
     check, because the route names the party, not the bill; a whole-order save replacing a held dish with another
     variant moves it to a new held group at the end; the counter's whole-order save does not answer
     the party's revision; a held no-route dish outside any group gets no Send all button (whether
-    one can occur on a party's tab is not established) _(Task 4, 2026-09-27: the till has no Send
-    all button at all now, and the table screen offers its per-line Send only on a dish with a
+    one can occur on a party's tab is not established) _(Task 4, 2026-09-27: the till has no
+    Tab-drawer Send all now, and the table screen offers its per-line Send only on a dish with a
     kitchen ticket item (`sendsAlone`, `apps/till/src/state/held-groups.ts`), so it offers such a
     dish no Send either; whether one can occur is still not established)_.
+  - **Splitting a held line's quantity on the till takes one request per unit** (found on the
+    Task 4 branch, 2026-09-27). Splitting a quantity of N sends N−1 move requests, each at the
+    revision the one before it answered with (`#onSplitGroupLine`, `apps/till/src/till-app.ts`),
+    because the move route refuses a request naming the same line twice (the distinct-lines check
+    in `moveLinesToGroup`, `apps/server/src/order-groups.ts`). A refusal part-way leaves the units
+    already split. **Next action:** a server command that splits a line into single units in one
+    transaction, so the till sends one request and there is no part-way state.
+  - **The Tab drawer's transfer picker marks a picked line with `aria-pressed` on a `wt-button`**
+    (`#transferLineRow`, `apps/till/src/screens/till-table-order-screen.ts`, since 2026-08-30).
+    `wt-button` does not pass `aria-pressed` to its inner button
+    (`packages/ui-core/src/components/wt-button.ts`), so a screen reader does not hear whether a
+    line is picked. The draft's line toggle was changed to a plain button on the Task 4 branch; the
+    transfer picker was not, and neither was the split picker (`#splitLineRow`), which has the same
+    shape.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card
@@ -2340,7 +2356,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   - on the till at 390 px wide, the header makes the page wider than the screen;
   - on the till's floor map at 390 px wide, tables overlap one another;
   - in Spanish, the till's tab names "Counter", "Floor" and "Order" stay in English;
-  - on the till at 390 px wide, the floating language button covers "Send round";
+  - on the till at 390 px wide, the floating language button covers "Send round" _(2026-09-27:
+    Send round was replaced by the draft's action bar; whether the button covers the new bar has
+    not been checked)_;
   - on the dashboard, the dialog for a new home page layout is nearly full-screen for a single
     name field;
   - on the dashboard, the publish preview says "Home page layout X changed" both for a layout that
