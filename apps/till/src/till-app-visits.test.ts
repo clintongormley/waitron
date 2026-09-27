@@ -100,6 +100,7 @@ const checkBill: VisitBill = {
 };
 
 const tabLine: TabLine = {
+  id: "line-1",
   groupId: null,
   lineNo: 1,
   productId: "vino",

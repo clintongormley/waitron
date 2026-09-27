@@ -42,6 +42,7 @@ const menus: TillZoneMenu[] = servedMenus(
 
 const lines: TabLine[] = [
   {
+    id: "line-1",
     groupId: null,
     lineNo: 1,
     productId: "cafe",
@@ -62,6 +63,7 @@ const lines: TabLine[] = [
     parentProductId: null,
   },
   {
+    id: "line-2",
     groupId: null,
     lineNo: 2,
     productId: "cafe",
@@ -155,6 +157,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     // The child row is painted muted and a size down from its dish, so its contrast against the
     // drawer surface is its own state — the scan above, which has no child row, cannot see it.
     const childLine: TabLine = {
+      id: "line-3",
       groupId: null,
       lineNo: 3,
       productId: "cafe",

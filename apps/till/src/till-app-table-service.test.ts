@@ -77,6 +77,7 @@ const seatedTable: TableState = {
 const seatedFloor = () => ({ getTablesState: vi.fn().mockResolvedValue([seatedTable]) });
 
 const tabLine: TabLine = {
+  id: "line-1",
   groupId: null,
   lineNo: 1,
   productId: "cafe",
@@ -644,6 +645,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     return offers;
   })();
   const burgerLine: TabLine = {
+    id: "line-5",
     groupId: null,
     lineNo: 5,
     name: "Burger",

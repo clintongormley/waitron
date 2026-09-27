@@ -1,4 +1,5 @@
 import type { GroupRelease, OrderGroup, TabLine, TillCourse } from "../api/client.js";
+import { draftSections } from "./draft-groups.js";
 
 /** One round line as the grouping reads it: its course, and whether the waiter held it. */
 export interface RoundEntry {
@@ -22,28 +23,12 @@ export function groupRound(
   entries: readonly RoundEntry[],
   courses: readonly TillCourse[],
 ): RoundGroup[] {
-  const rank = new Map(
-    [...courses]
-      .sort((a, b) => a.displayOrder - b.displayOrder)
-      .map((course, index) => [course.id, index]),
-  );
-  const ranked = entries.map((entry) =>
-    entry.courseId === null ? undefined : rank.get(entry.courseId),
-  );
-  const present = [...new Set(ranked.filter((r): r is number => r !== undefined))].sort(
-    (a, b) => a - b,
-  );
-  const first = present[0];
-  const bucketOf = (index: number) => ranked[index] ?? first;
-  const indexesOf = (bucket: number | undefined, keep: (index: number) => boolean) =>
-    entries.flatMap((_, index) => (bucketOf(index) === bucket && keep(index) ? [index] : []));
-
+  const [first, ...later] = draftSections(entries, courses);
+  if (first === undefined) return [];
   const groups: RoundGroup[] = [
-    { release: "fire", lineIndexes: indexesOf(first, (index) => !entries[index]!.held) },
-    { release: "hold", lineIndexes: indexesOf(first, (index) => entries[index]!.held) },
-    ...present
-      .slice(1)
-      .map((bucket) => ({ release: "hold" as const, lineIndexes: indexesOf(bucket, () => true) })),
+    { release: "fire", lineIndexes: first.lineIndexes.filter((index) => !entries[index]!.held) },
+    { release: "hold", lineIndexes: first.lineIndexes.filter((index) => entries[index]!.held) },
+    ...later.map((section) => ({ release: "hold" as const, lineIndexes: section.lineIndexes })),
   ];
   return groups.filter((group) => group.lineIndexes.length > 0);
 }

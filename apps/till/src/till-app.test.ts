@@ -3709,6 +3709,7 @@ describe("till-app", () => {
 
     describe("table-order screen (FP-1)", () => {
       const tabLine: TabLine = {
+        id: "line-1",
         groupId: null,
         lineNo: 1,
         productId: "cafe",

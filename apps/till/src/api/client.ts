@@ -1129,6 +1129,8 @@ export interface TabLines {
  * marker (`null` ⇒ still to serve).
  */
 export interface TabLine {
+  /** The row's id: what {@link OrderGroup.lineIds} and a group move name. */
+  id: string;
   /** The line's frozen STAFF label — the variant's name on a variant line, else the product's. Absent
    * only on a fixture that omits it, which falls back to the live catalogue name. */
   name?: string;
