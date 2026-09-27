@@ -880,7 +880,7 @@ describe("issuancePass", () => {
     expect(issued.lines.map((l) => [l.productId, l.menuId])).toEqual([[v.products.negroni, null]]);
   });
 
-  it("refuses priced lines that do not line up with the line identities handed with them", async () => {
+  it("refuses gross lines that do not line up with the line identities handed with them", async () => {
     const v = await setupVenue();
     const id = await basketOrder(v, [{ productId: v.products.negroni }]);
 
