@@ -196,7 +196,7 @@ the other device-profile routes, and the choices are stored in `device_profile_h
 
 | Route | Body → success | Refusals |
 | --- | --- | --- |
-| `GET /management-api/device-profiles/:id/home-layouts` | → 200, `{ menus }`: every menu by name, each `{ menuId, menuName, layouts, selectedLayoutId, selectedRemoved }`, where `layouts` is `{ id, name, isDefault }[]` with the default first | `device_profile.not_found` |
+| `GET /management-api/device-profiles/:id/home-layouts` | → 200, an array with every menu by name, each `{ menuId, menuName, layouts, selectedLayoutId, selectedRemoved }`, where `layouts` is `{ id, name, isDefault }[]` with the default first | `device_profile.not_found` |
 | `PUT /management-api/device-profiles/:id/home-layouts/:menuId` | `{ layoutId }`, a layout id or null for the default → 204 | `device_profile.not_found`, `catalogue.not_found`, `menu.layout_not_found`, `management.request_invalid` |
 
 `selectedLayoutId` is null when the profile uses the default. Deleting a layout leaves a profile's
