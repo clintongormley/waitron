@@ -2525,7 +2525,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   shows `44.00 €` while the table screen shows `44,00 €` in Spanish. The floor's format predates
   the visits work; Task 2 now also uses it for what a party still owes. Make the floor follow the
   locale, as the table screen does.
-- **Join and merge keep a table, its bill and its party consistent — done (A73, #PRNUM).**
+- **Join and merge keep a table, its bill and its party consistent — done (A73, #794).**
   `joinTable` and `mergeTabs` refuse with `tab.not_table_tab`, `tab.visit_mismatch` and
   `tab.visit_has_other_open_bill`.
 - **A table's bill with no party can still be made, and a merge can free a table its party still
