@@ -163,12 +163,16 @@ function parseRefund(body: Record<string, unknown>): BillRefundRequest {
   const override = parseDrawerOverride(
     body.override as { personId?: unknown; pin?: unknown } | null | undefined,
   );
+  if (body.manualConfirmed !== undefined && typeof body.manualConfirmed !== "boolean") {
+    throw invalid("manualConfirmed");
+  }
   return {
     submissionId,
     appliedAmount,
     tipAmount,
     reason: body.reason.trim(),
     ...(override === undefined ? {} : { override }),
+    ...(body.manualConfirmed === undefined ? {} : { manualConfirmed: body.manualConfirmed }),
   };
 }
 
@@ -281,8 +285,8 @@ export function mountBillPaymentsApi(app: Hono, deps: TillApiDeps, log: Logger, 
     }),
   );
 
-  // The refund is recorded on the device's own till, whose drawer gives the cash back. A card
-  // refund goes back through the provider its payment was charged by.
+  // The refund is recorded on the device's own till. Cash opens its drawer; a connected card goes
+  // through its provider, while a separately charged card needs staff confirmation and a manager PIN.
   app.post("/api/working-orders/:id/payments/:paymentId/refunds", (c) =>
     run(c, log, async () => {
       const { personId, sessionId } = await requireSession(deps, c);

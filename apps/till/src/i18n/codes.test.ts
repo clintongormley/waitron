@@ -104,6 +104,7 @@ it("explains each refusal a bill paid in parts can give, in both languages, nami
     "bill.refund_exceeds_payment",
     "bill.refund_not_whole",
     "bill.refund_unsupported",
+    "bill.manual_refund_pin_required",
     "bill.refund_in_progress",
     "payment.not_refundable",
     "payment.refund_exceeds_capture",

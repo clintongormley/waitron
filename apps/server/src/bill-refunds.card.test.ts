@@ -121,6 +121,7 @@ interface RefundAsk {
   submissionId?: string;
   applied: string;
   tip?: string;
+  manualConfirmed?: boolean;
   app?: Hono;
   cookie?: string;
 }
@@ -141,6 +142,7 @@ async function refund(billId: string, paymentId: string, ask: RefundAsk) {
       tipAmount: ask.tip ?? "0.00",
       reason: REASON,
       override: { personId: venue.adminId, pin: "1234" },
+      ...(ask.manualConfirmed === undefined ? {} : { manualConfirmed: ask.manualConfirmed }),
     },
   );
   return {
@@ -1797,5 +1799,29 @@ describe("design §8 test 23: the invoice waits for the refund", () => {
 
     expect(issued).toBeNull();
     expect(registroCount(venue, billId)).toBe(0);
+  });
+});
+
+describe("manual confirmation on a connected card", () => {
+  it("still asks the connected reader's provider when manual confirmation is supplied", async () => {
+    const billId = await bill("Pulpo", "Croquetas");
+    const card = await pay(billId, "card", "20.00");
+    const submissionId = randomUUID();
+
+    const { answer } = await refund(billId, card.id, {
+      applied: "5.00",
+      manualConfirmed: true,
+      submissionId,
+    });
+
+    expect(answer.status).toBe(200);
+    const retry = await refund(billId, card.id, { applied: "5.00", submissionId });
+    expect(retry.answer.status).toBe(200);
+    const row = await onlyRefundOf(card.id);
+    expect(row).toMatchObject({ state: "completed", sendCount: 1 });
+    expect(callsFor(row.id)).toHaveLength(1);
+    expect(await providerRefundsOf(card.id)).toEqual([
+      { amount: 500, providerRefundRef: row.providerRefundRef },
+    ]);
   });
 });

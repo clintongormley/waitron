@@ -1,11 +1,13 @@
 import { and, eq, isNotNull, ne } from "drizzle-orm";
 import { billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { authorize } from "@waitron/identity";
+import { authorize, roleHasPermission, verifyPersonCredential } from "@waitron/identity";
 import type { Override } from "@waitron/identity";
 import {
+  MANUAL_PROVIDER,
   assertReversible,
   findPaymentByBillPayment,
+  recordManualRefund,
   recordRefund,
   recordedRefundRefs,
 } from "@waitron/payments";
@@ -43,8 +45,10 @@ export interface BillRefundRequest {
   appliedAmount: string;
   tipAmount: string;
   reason: string;
-  /** A second person holding `sale.refund`, when the operator does not. */
+  /** A PIN holder with `sale.refund`; required for a confirmed standalone-terminal refund. */
   override?: Override;
+  /** Staff confirms the refund has already completed on the standalone card terminal. */
+  manualConfirmed?: boolean;
 }
 
 export interface BillRefundResult {
@@ -87,12 +91,14 @@ export function refundFingerprint(
   appliedAmount: string,
   tipAmount: string,
   reason: string,
+  manualConfirmed = false,
 ): string {
   return fingerprint({
     paymentId,
     appliedAmount: money(decimal(appliedAmount)),
     tipAmount: money(decimal(tipAmount)),
     reason,
+    ...(manualConfirmed ? { manualConfirmed: true } : {}),
   });
 }
 
@@ -455,9 +461,9 @@ export async function attestCardRefund(
  * first and writes nothing, except that a card refund still pending is resumed; the id with another
  * request, of another payment, or naming one of the bill's payments is `submission.id_reused`.
  *
- * Cash is written `completed`, and opens the till's drawer, in one transaction. A card refund is
- * written `pending` before its provider is asked (design §6b), and the bill is locked until the
- * evidence settles it.
+ * Cash and staff-confirmed standalone-terminal refunds are completed in this transaction. A
+ * connected card refund is written `pending` before its provider is asked (design §6b), and the
+ * bill is locked until the evidence settles it.
  */
 export async function refundBillPayment(
   deps: BillRefundDeps,
@@ -469,7 +475,6 @@ export async function refundBillPayment(
 ): Promise<BillRefundResult> {
   const applied = money(decimal(req.appliedAmount));
   const tip = money(decimal(req.tipAmount));
-  const print = refundFingerprint(paymentId, req.appliedAmount, req.tipAmount, req.reason);
   let release = (): void => {};
   try {
     const begun = await withTransaction(deps.db, async (tx) => {
@@ -485,6 +490,15 @@ export async function refundBillPayment(
           and(eq(billPayments.id, paymentId), eq(billPayments.workingOrderId, workingOrderId)),
         );
       if (payment === undefined) throw new AppError("bill.payment_not_found", { paymentId });
+      const provided =
+        payment.method === "card" ? await findPaymentByBillPayment(tx, paymentId) : undefined;
+      const print = refundFingerprint(
+        paymentId,
+        req.appliedAmount,
+        req.tipAmount,
+        req.reason,
+        provided?.provider === MANUAL_PROVIDER && req.manualConfirmed === true,
+      );
 
       const earlier = await findSubmission(tx, workingOrderId, req.submissionId);
       if (earlier.refund !== undefined) {
@@ -553,7 +567,38 @@ export async function refundBillPayment(
         return { kind: "done" as const, result: await resultOf(tx, refund!, workingOrderId) };
       }
 
-      const provided = await findPaymentByBillPayment(tx, paymentId);
+      if (provided?.provider === MANUAL_PROVIDER && req.manualConfirmed === true) {
+        let confirmedBy = authorization.authorizedBy;
+        if (!authorization.viaOverride) {
+          if (req.override === undefined) {
+            throw new AppError("bill.manual_refund_pin_required", { paymentId });
+          }
+          const confirmer = await verifyPersonCredential(
+            tx,
+            req.override.personId,
+            req.override.pin,
+          );
+          if (!roleHasPermission(confirmer.role, "sale.refund")) {
+            throw new AppError("authorization.not_permitted", { permission: "sale.refund" });
+          }
+          confirmedBy = req.override.personId;
+        }
+        const [refund] = await tx
+          .insert(billPaymentRefunds)
+          .values({
+            ...values,
+            authorizedBy: confirmedBy,
+            state: "completed",
+            completedAt: createdAt,
+          })
+          .returning();
+        await recordManualRefund(tx, {
+          paymentRef: provided.paymentRef,
+          amount: centsToDecimal(values.appliedAmount + values.tipAmount),
+          authorizedBy: confirmedBy,
+        });
+        return { kind: "done" as const, result: await resultOf(tx, refund!, workingOrderId) };
+      }
       const provider =
         provided === undefined ? undefined : await deps.refundProviderFor?.(provided.provider);
       if (provided === undefined || provider?.sendRefund === undefined) {

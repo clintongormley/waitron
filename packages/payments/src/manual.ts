@@ -58,11 +58,12 @@ export async function recordManualCardPayment(
  */
 export async function recordManualRefund(
   tx: Transaction,
-  params: { paymentRef: string; amount: Decimal },
+  params: { paymentRef: string; amount: Decimal; authorizedBy?: string },
 ): Promise<PaymentRow> {
   return recordRefund(tx, {
     provider: MANUAL_PROVIDER,
     paymentRef: params.paymentRef,
     amount: params.amount,
+    authorizedBy: params.authorizedBy,
   });
 }
