@@ -1133,11 +1133,12 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       const [sale] = await saleOf(billId);
       const [line] = await inTx((tx) =>
         tx
-          .select({ vatRate: saleLines.vatRate })
+          .select({ vatRate: saleLines.vatRate, classification: saleLines.classification })
           .from(saleLines)
           .where(eq(saleLines.saleId, sale!.id)),
       );
       expect(basisPointsToDecimal(line!.vatRate)).toBe("21.00");
+      expect(line!.classification).not.toBeNull();
     } finally {
       await inTx((tx) =>
         tx
