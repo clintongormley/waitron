@@ -739,6 +739,82 @@ describe("editing held groups", () => {
     expect(row!.state).toBe("removed");
   });
 
+  it("moves part of two lines of one bill in one request, splitting each into a numbered row of the target", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const [steak] = await linesIn(s.visitId, s.mains);
+    const [flan] = await linesIn(s.visitId, s.desserts);
+
+    await move(
+      v,
+      s.visitId,
+      [
+        { lineId: steak!.id, quantity: "1" },
+        { lineId: flan!.id, quantity: "1" },
+      ],
+      "new",
+    );
+
+    const target = (await groupsOf(s.visitId)).groups[5]!.id;
+    const rows = (await linesOf(s.visitId)).map((row) => [
+      row.lineNo,
+      row.productId,
+      row.quantity,
+      row.groupId,
+    ]);
+    expect(rows.slice(4)).toEqual([
+      [5, v.productId.steak, 1000, s.mains],
+      [6, v.productId.fish, 1000, s.mains],
+      [7, v.productId.flan, 1000, s.desserts],
+      [8, v.productId.steak, 1000, target],
+      [9, v.productId.flan, 1000, target],
+    ]);
+  });
+
+  it("moves part of a line on each of two bills in one request, splitting each on its own bill", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const { groups } = await submit(v, s.visitId, [
+      { release: "hold", lines: [line(v, "water", "3"), line(v, "steak", "2")] },
+    ]);
+    const groupId = groups[0]!.id;
+    const [water, steak] = await linesIn(s.visitId, groupId);
+    const revision = await revisionOf(s.visitId);
+    const { checkId } = await inTx((tx) =>
+      splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: water!.lineNo, quantity: "2" }], {
+        expectedVisitRevision: revision,
+        operatorId: ALEX,
+      }),
+    );
+    const [checkWater] = await linesOfBill(checkId);
+
+    await move(
+      v,
+      s.visitId,
+      [
+        { lineId: checkWater!.id, quantity: "1" },
+        { lineId: steak!.id, quantity: "1" },
+      ],
+      "new",
+    );
+
+    const target = (await groupsOf(s.visitId)).groups[1]!.id;
+    const lines = await linesOf(s.visitId);
+    const rowsOf = (billId: string) =>
+      lines
+        .filter((row) => row.workingOrderId === billId)
+        .map((row) => [row.lineNo, row.productId, row.quantity, row.groupId]);
+    expect(rowsOf(s.tabId)).toEqual([
+      [1, v.productId.water, 1000, groupId],
+      [2, v.productId.steak, 1000, groupId],
+      [3, v.productId.steak, 1000, target],
+    ]);
+    expect(rowsOf(checkId)).toEqual([
+      [1, v.productId.water, 1000, groupId],
+      [2, v.productId.water, 1000, target],
+    ]);
+  });
+
   it("splits Steak ×2 into two rows by moving one into a new held group at the end", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
@@ -1326,6 +1402,51 @@ describe("extras lines follow their dish", () => {
       creditedTo: MIA,
     });
     expect(groups[0]).toMatchObject({ lineIds: [dish!.id], summary: "1 × Steak" });
+  });
+
+  it("puts each dish's extras in its own group when one submission carries two groups", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const { groups } = await submit(
+      v,
+      s.visitId,
+      [
+        { release: "fire", lines: [steakWithSauce(v), line(v, "beer")] },
+        { release: "hold", lines: [line(v, "flan"), steakWithSauce(v)] },
+      ],
+      { operatorId: MIA },
+    );
+    const [first, second] = groups.map((group) => group.id);
+
+    const rows = await db
+      .select({
+        id: workingOrderLines.id,
+        lineNo: workingOrderLines.lineNo,
+        productId: workingOrderLines.productId,
+        parentLineId: workingOrderLines.parentLineId,
+        groupId: workingOrderLines.groupId,
+        creditedTo: workingOrderLines.creditedTo,
+      })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, s.tabId))
+      .orderBy(workingOrderLines.lineNo);
+    const lineNoOf = new Map(rows.map((row) => [row.id, row.lineNo]));
+    expect(
+      rows.map((row) => [
+        row.lineNo,
+        row.productId,
+        row.parentLineId === null ? null : lineNoOf.get(row.parentLineId),
+        row.groupId,
+        row.creditedTo,
+      ]),
+    ).toEqual([
+      [1, v.productId.steak, null, first, MIA],
+      [2, v.productId.sauce, 1, first, MIA],
+      [3, v.productId.beer, null, first, MIA],
+      [4, v.productId.flan, null, second, MIA],
+      [5, v.productId.steak, null, second, MIA],
+      [6, v.productId.sauce, 5, second, MIA],
+    ]);
   });
 
   it("moves a whole dish with its extras into another held group", async () => {

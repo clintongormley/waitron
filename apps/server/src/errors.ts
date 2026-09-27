@@ -504,9 +504,9 @@ declare module "@waitron/shared" {
     // The four `booking.*` codes are declared in @waitron/bookings/src/errors.ts.
     /**
      * A tab verb found the order it was asked to modify is not an OPEN tab — not `open`, not pointed
-     * at by any `dining_tables.tab_id`, or absent. `moveTab` and `joinTable`, and `addTabRound` for
-     * a round with lines, also accept the settled or abandoned tab a seated party's tables still
-     * point at.
+     * at by any `dining_tables.tab_id`, or absent. `moveTab` and `joinTable`, and `priceTabRound`
+     * (through which `submitGroups` prices a submission) for a round with lines, also accept the
+     * settled or abandoned tab a seated party's tables still point at.
      */
     "tab.not_open": { tabId: string };
     /** A per-line void named no line on the open tab. Pre-fiscal: a void of an open tab files nothing. */

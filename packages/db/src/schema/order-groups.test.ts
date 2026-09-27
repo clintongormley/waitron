@@ -139,6 +139,35 @@ describe("order_groups, order_group_events and working_order_lines.group_id", ()
     await inTx((tx) => tx.insert(orderGroupEvents).values({ ...event, kind: "submitted" }));
   });
 
+  it("refuses a group naming no visit, and accepts one naming a visit", async () => {
+    const error = await captureError(() => group({ visitId: MISSING }));
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    await group({ visitId: await visit() });
+  });
+
+  it("refuses an event naming no visit, and accepts one naming a visit", async () => {
+    const visitId = await visit();
+    const groupId = await group({ visitId });
+    const event = { groupId, kind: "submitted" as const, actorId: OPERATOR, detail: {} };
+    const error = await captureError(() =>
+      inTx((tx) => tx.insert(orderGroupEvents).values({ ...event, visitId: MISSING })),
+    );
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    await inTx((tx) => tx.insert(orderGroupEvents).values({ ...event, visitId }));
+  });
+
+  it("refuses an event naming no group, and accepts one naming a group or none", async () => {
+    const visitId = await visit();
+    const event = { visitId, kind: "reordered" as const, actorId: OPERATOR, detail: {} };
+    const error = await captureError(() =>
+      inTx((tx) => tx.insert(orderGroupEvents).values({ ...event, groupId: MISSING })),
+    );
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    const groupId = await group({ visitId });
+    await inTx((tx) => tx.insert(orderGroupEvents).values({ ...event, groupId }));
+    await inTx((tx) => tx.insert(orderGroupEvents).values({ ...event, groupId: null }));
+  });
+
   it("refuses a line naming no group, and accepts one naming a group", async () => {
     const visitId = await visit();
     const workingOrderId = await bill(visitId);
