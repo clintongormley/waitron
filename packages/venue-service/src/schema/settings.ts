@@ -20,7 +20,7 @@ export const serviceSettings = table(
     kitchenTicketGrouping: kitchenTicketGrouping("kitchen_ticket_grouping")
       .notNull()
       .default("combined"),
-    // Print held groups in advance on a ticket marked HOLD, then a FIRE slip when they are released.
+    // Whether held groups print in advance.
     printHeldWork: flag("print_held_work").notNull().default(false),
   },
   (t) => [

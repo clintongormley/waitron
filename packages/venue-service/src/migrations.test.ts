@@ -490,4 +490,54 @@ describe("the service settings and kitchen notices tables refuse what their rule
     expect(isRefusal(onVoid, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(onVoid)).toContain("kitchen_notices_moved_to_ck");
   });
+
+  it("refuses a direction outside added and removed, and a direction on a notice that is not a change", async () => {
+    await seedTenant(db);
+    const [location] = await db
+      .insert(locations)
+      .values({ name: "Venue", invoiceLocales: ["en"], operationDescription: "Hospitality" })
+      .returning({ id: locations.id });
+    const [till] = await db
+      .insert(tills)
+      .values({ locationId: location!.id, name: "Bar" })
+      .returning({ id: tills.id });
+    const [station] = await db
+      .insert(kitchenStations)
+      .values({ locationId: location!.id, name: "Grill" })
+      .returning({ id: kitchenStations.id });
+    const orderId = randomUUID();
+    await db.execute(sql`
+      insert into working_orders (id, till_id, order_number, opened_at)
+      values (${orderId}, ${till!.id}, 1, ${new Date().toISOString()})`);
+    const notice = (kind: string, direction: string | null) =>
+      sql`insert into kitchen_notices
+            (id, station_id, working_order_id, order_label, kind, line_name, quantity, direction,
+             created_at)
+          values (${randomUUID()}, ${station!.id}, ${orderId}, '#1', ${kind}, 'Burger', 1000,
+                  ${direction}, ${new Date().toISOString()})`;
+
+    // The controls: a change says which way it went or says nothing, and any notice may have none.
+    for (const [kind, direction] of [
+      ["changed", "added"],
+      ["changed", "removed"],
+      ["changed", null],
+      ["void", null],
+      ["recalled", null],
+      ["moved", null],
+    ] as const) {
+      await db.execute(notice(kind, direction));
+    }
+    expect(
+      (await db.execute(sql`select kind, direction from kitchen_notices order by rowid`)).rows,
+    ).toHaveLength(6);
+
+    const sideways = await captureError(() => db.execute(notice("changed", "sideways")));
+    expect(isRefusal(sideways, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(sideways)).toContain("kitchen_notices_direction_ck");
+    for (const kind of ["void", "recalled", "moved"]) {
+      const onOther = await captureError(() => db.execute(notice(kind, "added")));
+      expect(isRefusal(onOther, CHECK_VIOLATION)).toBe(true);
+      expect(engineErrorMessage(onOther)).toContain("kitchen_notices_direction_kind_ck");
+    }
+  });
 });
