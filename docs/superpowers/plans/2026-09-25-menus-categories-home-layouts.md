@@ -749,8 +749,8 @@ test. Each has its test in the named task.
 1. **Each fact reaches the till at its own moment: availability at once, allergens at publish, VAT
    at issuance — and only the allergen change flags the menu.**
    _(2026-09-27: since menus M7v the VAT class and rate are frozen in the published version, a VAT
-   change flags the menu and Preview names it "VAT", and a Lemonade line already in a tab files the
-   rate the published version froze. See the note under the Goal.)_
+   change flags the menu and Preview names it "VAT", and a Lemonade line with its Extra lemon already
+   in a tab files both at the rates the published version froze. See the note under the Goal.)_
    - Publish Lunch, then: mark Lemonade unavailable; add `sulphites` to Lemonade's allergens and to
      the extra "Extra lemon" that its extras list offers; change both VAT classes `reduced` →
      `general`.
@@ -1476,7 +1476,8 @@ sale-path change in one reviewable task.
     category leaves the hash unchanged, while a name, price, image, **allergens, diet**,
     variant-offered or extras-price change moves it — on the dish, a variant AND an extras item.
     _(2026-09-27: since menus M7v a VAT class change moves the hash too; the cases are in the
-    "moves" list in `packages/catalogue/src/menu-document.test.ts`. See the note under the Goal.)_
+    `moved` list, and the rate case after it, in `packages/catalogue/src/menu-document.test.ts`.
+    See the note under the Goal.)_
   - **Diff:** Lemonade added under Drinks gives `product_added` with `under: ["Drinks"]` and
     `source: "this_menu"`; Burger €12 → €13 gives `price_changed` with `source: "shared_product"`
     and `alsoOn: ["Dinner Menu"]`; sulphites added to Lemonade gives `product_changed` with

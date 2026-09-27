@@ -403,11 +403,10 @@ corrective invoice (R5, *factura rectificativa*) for a VAT error on an issued si
 `recordCorrection` exists (`packages/core/src/record-correction.ts`; the Verifactu backend corrects
 only an F2, as an R5), but no route calls it: its only callers under `apps/` are three scripts in
 `apps/server/scripts/` that each correct a sale they filed themselves (`daily-close-demo.ts`,
-`modelo-303-demo.ts`, `settle-invoice-first.ts`) and one test. The till's on-screen basket prices a
-dish and a variant at the rate the menu froze (`vatRate`, filled in `apps/till/src/api/client.ts`);
-a held line retrieved onto the till carries no rate, so it is priced by its class, and extras picks
-are not in the till's VAT split (`vatBreakdown` in `apps/till/src/state/working-order.ts`). Asesor
-Q26 is still open.
+`modelo-303-demo.ts`, `settle-invoice-first.ts`) and one test. The till computes a basket VAT split
+(`vatBreakdown` in `apps/till/src/state/working-order.ts`) that no screen shows; it uses the rate
+the menu froze for a dish and a variant (`vatRate`, filled in `apps/till/src/api/client.ts`),
+prices a retrieved held line by its class, and leaves out extras picks. Asesor Q26 is still open.
 **M7b2 landed (#702, 2026-09-26): a manager can clear a card payment a crash left running.** The
 Payments screen lists open orders locked by a card payment nothing is finishing any more, and "Check
 with the card provider" files the sale once if the card was charged, marks the payment failed and
