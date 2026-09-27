@@ -7,7 +7,6 @@ type ColorScheme = "light" | "dark" | null;
 
 interface PlaywrightPage {
   emulateMedia(options: { colorScheme?: ColorScheme }): Promise<void>;
-  setViewportSize(size: { width: number; height: number }): Promise<void>;
 }
 
 /**
@@ -20,20 +19,6 @@ const emulateColorScheme: BrowserCommand<[colorScheme: ColorScheme]> = async (
 ) => {
   const { page } = context as unknown as { page: PlaywrightPage };
   await page.emulateMedia({ colorScheme });
-};
-
-/**
- * Resizes the outer Playwright page, NOT the frame a test renders in: the test's `window.innerWidth`
- * does not change. `page.viewport` from `vitest/browser` resizes the frame. See
- * docs/developers/testing-guide.md.
- */
-const setViewportSize: BrowserCommand<[width: number, height: number]> = async (
-  context,
-  width,
-  height,
-) => {
-  const { page } = context as unknown as { page: PlaywrightPage };
-  await page.setViewportSize({ width, height });
 };
 
 // The browser context is pinned to UTC so screen tests' wall-clock assertions read the same on every
@@ -53,7 +38,6 @@ const browserProject = {
       instances: [{ browser: "chromium" }],
       commands: {
         emulateColorScheme,
-        setViewportSize,
         ...parkPointerCommands,
       },
     },
