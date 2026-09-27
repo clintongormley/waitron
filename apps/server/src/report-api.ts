@@ -5,9 +5,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, asc, eq, sql } from "drizzle-orm";
 import {
   AppError,
-  FALLBACK_LOCALE,
   nodeId as brandNodeId,
-  resolveActiveLocale,
   type NodeId,
   type SupportedLocale,
 } from "@waitron/shared";
@@ -19,6 +17,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import {
+  CATEGORY_REPORT_MODES,
   computeCategorySales,
   computeDailyClose,
   computeOverdueOrders,
@@ -33,15 +32,15 @@ import {
   type CategoryReportMode,
   type LiquidationPeriod,
 } from "@waitron/reporting";
-import { currentClassifications, readContentLanguages } from "@waitron/catalogue";
+import { currentClassifications } from "@waitron/catalogue";
 import { enqueuePrintJob } from "@waitron/printing";
-import { authorizeManager, resolveManagementSession, type Permission } from "@waitron/identity";
+import { authorizeManager, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody, requireBodyUuid, requireEnum } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
 import { requirePeriod } from "@waitron/server-kit";
 import { formatCategorySalesPage } from "./category-sales-page.js";
-import { resolveLoginLocale } from "./login-locale.js";
+import { resolveSessionLocale } from "./session-locale.js";
 import type { Logger } from "./logger.js";
 
 /**
@@ -72,8 +71,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // Today's catalogue fails the checks a sale's snapshot passes, as the till route answers it.
   "sale_classification.invalid": 409,
 };
-
-const CATEGORY_MODES: readonly CategoryReportMode[] = ["at_time_of_sale", "current"];
 
 interface CategoryRequest {
   from: string;
@@ -214,12 +211,6 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
 
   const categoryReport = async (tx: Transaction, req: CategoryRequest): Promise<CategoryReport> => {
     const { nodeId, clock } = await buildReportContext(tx);
-    // The language a sale's snapshot names its categories in (`priceOrderLines`), so today's
-    // names come from the same place as the recorded ones.
-    const language =
-      req.mode === "current"
-        ? (await readContentLanguages(tx, FALLBACK_LOCALE)).defaultLanguage
-        : undefined;
     return computeCategorySales(
       tx,
       {
@@ -231,7 +222,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
         mode: req.mode,
         extrasIntoDish: req.extrasIntoDish,
       },
-      language === undefined ? undefined : (ids) => currentClassifications(tx, ids, language),
+      req.mode === "current" ? (ids) => currentClassifications(tx, ids) : undefined,
     );
   };
 
@@ -376,7 +367,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       const sessionId = requireManagementSession(c);
       const req: CategoryRequest = {
         ...requireRange(c.req.query("from"), c.req.query("to")),
-        mode: requireEnum(c.req.query("mode"), "mode", CATEGORY_MODES),
+        mode: requireEnum(c.req.query("mode"), "mode", CATEGORY_REPORT_MODES),
         extrasIntoDish: queryFlag(c.req.query("extrasIntoDish"), "extrasIntoDish"),
       };
       const result = await gated(sessionId, REPORT_VIEW_PERMISSION, (tx) =>
@@ -408,7 +399,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       const body = await readJsonBody<Record<string, unknown>>(c);
       const req: CategoryRequest = {
         ...requireRange(body.from, body.to),
-        mode: requireEnum(body.mode, "mode", CATEGORY_MODES),
+        mode: requireEnum(body.mode, "mode", CATEGORY_REPORT_MODES),
         extrasIntoDish: bodyFlag(body.extrasIntoDish, "extrasIntoDish"),
       };
       const printerId = requireBodyUuid(body.printerId, "printerId");
@@ -423,10 +414,11 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           .where(and(eq(printers.id, printerId), activePrinters()));
         if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
         const report = await categoryReport(tx, req);
-        const session = await resolveManagementSession(tx, sessionId, { touch: false });
-        const locale = resolveActiveLocale(
-          session.locale,
-          resolveLoginLocale(c.req.header("Accept-Language"), deps.venueLocale),
+        const locale = await resolveSessionLocale(
+          tx,
+          sessionId,
+          c.req.header("Accept-Language"),
+          deps.venueLocale,
         );
         const payload = formatCategorySalesPage({ ...req, report, locale, printer });
         return enqueuePrintJob(tx, { locationId: deps.cfg.locationId }, printerId, payload);

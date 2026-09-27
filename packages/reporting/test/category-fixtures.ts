@@ -7,7 +7,7 @@ import type { SeededVenue } from "./fixtures.js";
 export const TZ = "Europe/Madrid";
 export const CUTOVER = "05:00";
 
-/** Noon in Madrid on `day` (UTC+2 in August), well inside that business day. */
+/** `utcTime` UTC on `day`; by default noon in Madrid (UTC+2 in August), well inside that business day. */
 export function at(day: string, utcTime = "10:00"): string {
   return new Date(`${day}T${utcTime}:00Z`).toISOString();
 }

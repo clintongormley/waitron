@@ -4,7 +4,7 @@ import { createPrinterProbes } from "./printer-probes.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, desc, eq, gte, inArray, lt, ne, or, sql } from "drizzle-orm";
-import { AppError, resolveActiveLocale } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import type { SupportedLocale } from "@waitron/shared";
 import {
   drawerOpenPolicy,
@@ -41,7 +41,7 @@ import {
   type CreatePrinterInput,
   type UpdatePrinterInput,
 } from "@waitron/printing";
-import { authorizeManager, resolveManagementSession, type Permission } from "@waitron/identity";
+import { authorizeManager, type Permission } from "@waitron/identity";
 import { routableServers, type SignedMembershipDocument } from "@waitron/membership";
 import { createErrorBoundary } from "@waitron/server-kit";
 import {
@@ -63,7 +63,7 @@ import { previewPrintJob } from "./print-job-preview.js";
 import { formatTestPage } from "./test-page.js";
 import { formatSampleReceipt } from "./sample-receipt.js";
 import { formatCharacterTableTest } from "./character-table-test.js";
-import { resolveLoginLocale } from "./login-locale.js";
+import { resolveSessionLocale } from "./session-locale.js";
 
 export interface PrintApiDeps {
   db: Database;
@@ -760,10 +760,11 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PrinterId");
       const result = await gated(sessionId, async (tx) => {
-        const session = await resolveManagementSession(tx, sessionId, { touch: false });
-        const locale = resolveActiveLocale(
-          session.locale,
-          resolveLoginLocale(c.req.header("Accept-Language"), deps.venueLocale),
+        const locale = await resolveSessionLocale(
+          tx,
+          sessionId,
+          c.req.header("Accept-Language"),
+          deps.venueLocale,
         );
         return enqueuePrintJob(tx, deps.cfg, id, formatTestPage({ locale }));
       });
@@ -802,10 +803,11 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         throw new AppError("management.request_invalid", { field: "startTable" });
       }
       const result = await gated(sessionId, async (tx) => {
-        const session = await resolveManagementSession(tx, sessionId, { touch: false });
-        const locale = resolveActiveLocale(
-          session.locale,
-          resolveLoginLocale(c.req.header("Accept-Language"), deps.venueLocale),
+        const locale = await resolveSessionLocale(
+          tx,
+          sessionId,
+          c.req.header("Accept-Language"),
+          deps.venueLocale,
         );
         const queued = await enqueuePrintJob(
           tx,

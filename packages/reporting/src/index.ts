@@ -2,7 +2,7 @@ export { businessDayStart, currentBusinessDay, validateBusinessDay } from "./bus
 export { computeDailyClose } from "./daily-close.js";
 export { computeVatSummaryForPeriod } from "./vat-summary.js";
 export { computeTopSellers } from "./top-sellers.js";
-export { computeCategorySales } from "./category-sales.js";
+export { CATEGORY_REPORT_MODES, computeCategorySales } from "./category-sales.js";
 export type {
   CategoryReport,
   CategoryReportMode,

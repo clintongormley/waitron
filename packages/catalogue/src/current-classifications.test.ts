@@ -6,6 +6,7 @@ import { createCatalogue, createProduct } from "./operations.js";
 import { createCategory, setMainReportingCategory, updateCategory } from "./categories.js";
 import { createLabel, renameLabel, setProductLabels } from "./labels.js";
 import { setProductVariants } from "./variants.js";
+import { writeContentLanguages } from "./content-languages.js";
 import { currentClassifications } from "./current-classifications.js";
 
 const fx = useCatalogueDb();
@@ -72,8 +73,11 @@ async function fixture() {
 describe("currentClassifications", () => {
   it("classifies each listed product by today's chain and labels, named in the default language", async () => {
     const f = await fixture();
+    await app((tx) =>
+      writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en"] }),
+    );
 
-    const map = await app((tx) => currentClassifications(tx, [f.cola, f.water, f.double], "es"));
+    const map = await app((tx) => currentClassifications(tx, [f.cola, f.water, f.double]));
 
     expect(Object.fromEntries(map)).toEqual({
       [f.cola]: {
@@ -92,6 +96,17 @@ describe("currentClassifications", () => {
     });
   });
 
+  it("names categories in the fallback language when no content language is saved", async () => {
+    const f = await fixture();
+
+    const map = await app((tx) => currentClassifications(tx, [f.cola]));
+
+    expect(map.get(f.cola)?.reporting).toEqual([
+      { id: f.drinks.id, name: "Drinks" },
+      { id: f.softs.id, name: "Softs" },
+    ]);
+  });
+
   it("follows a move, a rename and a relabel made since, rather than any earlier state", async () => {
     const f = await fixture();
     await app(async (tx) => {
@@ -103,7 +118,7 @@ describe("currentClassifications", () => {
       await setMainReportingCategory(tx, f.water, f.drinks.id);
     });
 
-    const map = await app((tx) => currentClassifications(tx, [f.cola, f.water], "en"));
+    const map = await app((tx) => currentClassifications(tx, [f.cola, f.water]));
 
     expect(map.get(f.cola)).toEqual({
       reporting: [
@@ -122,7 +137,7 @@ describe("currentClassifications", () => {
     const f = await fixture();
     const unknown = "00000000-0000-4000-8000-00000000dead";
 
-    const map = await app((tx) => currentClassifications(tx, [unknown, f.water, f.water], "en"));
+    const map = await app((tx) => currentClassifications(tx, [unknown, f.water, f.water]));
 
     expect([...map.keys()]).toEqual([f.water]);
   });
@@ -130,7 +145,7 @@ describe("currentClassifications", () => {
   it("answers an empty list with an empty map", async () => {
     await fixture();
 
-    const map = await app((tx) => currentClassifications(tx, [], "en"));
+    const map = await app((tx) => currentClassifications(tx, []));
 
     expect(map.size).toBe(0);
   });

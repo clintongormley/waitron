@@ -14,9 +14,9 @@ import {
 import type { PeriodVatInput } from "./types.js";
 
 /** "at_time_of_sale" reads each line's recorded snapshot; "current" classifies its product today. */
-export type CategoryReportMode = "at_time_of_sale" | "current";
+export const CATEGORY_REPORT_MODES = ["at_time_of_sale", "current"] as const;
 
-const MODES: readonly string[] = ["at_time_of_sale", "current"] satisfies CategoryReportMode[];
+export type CategoryReportMode = (typeof CATEGORY_REPORT_MODES)[number];
 
 export interface CategorySalesInput extends PeriodVatInput {
   mode: CategoryReportMode;
@@ -140,7 +140,6 @@ function cents(raw: string): number {
   return decimalToCents(rawCentsToDecimal(raw));
 }
 
-/** Adds a line's net and gross to a tally, and takes its name when it is the latest seen. */
 function tally(target: Tally, name: string, rank: Rank, net: number, gross: number | null): void {
   target.netCents += net;
   target.grossCents += gross ?? 0;
@@ -212,7 +211,7 @@ export async function computeCategorySales(
   validateTimeZone(input.timeZone);
   validateCutover(input.dayCutover);
   validateBusinessDayRange(input);
-  if (!MODES.includes(input.mode)) {
+  if (!(CATEGORY_REPORT_MODES as readonly string[]).includes(input.mode)) {
     throw new Error(`reporting: unknown category report mode: ${JSON.stringify(input.mode)}`);
   }
   if (input.mode === "current" && classifyCurrent === undefined) {
@@ -254,11 +253,42 @@ export async function computeCategorySales(
     };
   });
 
-  let today: ReadonlyMap<string, SaleLineClassification> | undefined;
+  // Many lines share one classification: each stored text is parsed once, and each classification
+  // object walked once.
+  const paths = new Map<SaleLineClassification, Segment[]>();
+  const pathFor = (
+    classification: SaleLineClassification | null | undefined,
+    freeText: string | null,
+  ): Segment[] => {
+    if (classification == null) return pathOf(classification, freeText);
+    let path = paths.get(classification);
+    if (path === undefined) {
+      path = pathOf(classification, null);
+      paths.set(classification, path);
+    }
+    return path;
+  };
+  let classify: (line: (typeof lines)[number]) => {
+    classification: SaleLineClassification | null | undefined;
+    path: Segment[];
+  };
   if (input.mode === "current") {
     const productIds = new Set<string>();
     for (const line of lines) if (line.productId !== null) productIds.add(line.productId);
-    today = await classifyCurrent!([...productIds]);
+    const today = await classifyCurrent!([...productIds]);
+    classify = ({ productId }) => {
+      const classification = productId === null ? null : today.get(productId);
+      return { classification, path: pathFor(classification, null) };
+    };
+  } else {
+    const parsed = new Map<string, SaleLineClassification | null>();
+    classify = ({ recorded, freeText }) => {
+      if (recorded !== null && !parsed.has(recorded)) {
+        parsed.set(recorded, JSON.parse(recorded) as SaleLineClassification | null);
+      }
+      const classification = recorded === null ? null : parsed.get(recorded);
+      return { classification, path: pathFor(classification, freeText) };
+    };
   }
 
   const roots = new Map<string, Node>();
@@ -266,14 +296,9 @@ export async function computeCategorySales(
   let linesWithoutGross = 0;
   let netCents = 0;
   let grossCents = 0;
-  for (const { row, productId, freeText, recorded } of lines) {
-    const classification =
-      today === undefined
-        ? (JSON.parse(recorded ?? "null") as SaleLineClassification | null)
-        : productId === null
-          ? null
-          : today.get(productId);
-    const path = pathOf(classification, today === undefined ? freeText : null);
+  for (const line of lines) {
+    const { row } = line;
+    const { classification, path } = classify(line);
     const rank: Rank = { issuedAt: row.issued_at, saleId: row.sale_id, lineNo: row.line_no };
     const net = cents(row.net);
     const gross = row.gross === null ? null : cents(row.gross);

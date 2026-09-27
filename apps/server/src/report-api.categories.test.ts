@@ -500,6 +500,7 @@ describe("GET /management-api/reports/printers", () => {
   it("401 without a session, 403 without report.view", async () => {
     const none = await request("/management-api/reports/printers", { cookie: null });
     expect(none.status).toBe(401);
+    expect((await errorOf(none)).code).toBe("management_session.required");
     const staff = await request("/management-api/reports/printers", { cookie: staffCookie });
     expect(staff.status).toBe(403);
     expect((await errorOf(staff)).code).toBe("authorization.not_permitted");
@@ -589,6 +590,7 @@ describe("POST /management-api/reports/categories/print", () => {
     const before = (await jobsOn(barPrinter)).length;
     const res = await print({ from: DAY3, to: DAY3, mode: "current", printerId: barPrinter });
     expect(res.status).toBe(409);
+    expect((await errorOf(res)).code).toBe("sale_classification.invalid");
     expect((await jobsOn(barPrinter)).length).toBe(before);
   });
 
@@ -623,7 +625,9 @@ describe("POST /management-api/reports/categories/print", () => {
 
   it("401 without a session, 403 without report.view, 202 for a supervisor", async () => {
     const body = { from: DAY1, to: DAY1, mode: "current", printerId: barPrinter };
-    expect((await print(body, { cookie: null })).status).toBe(401);
+    const none = await print(body, { cookie: null });
+    expect(none.status).toBe(401);
+    expect((await errorOf(none)).code).toBe("management_session.required");
     const staff = await print(body, { cookie: staffCookie });
     expect(staff.status).toBe(403);
     expect((await errorOf(staff)).code).toBe("authorization.not_permitted");
