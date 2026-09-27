@@ -1387,6 +1387,56 @@ describe("till-table-order-screen", () => {
       expect(dialog.open).toBe(false);
     });
 
+    /** The messages of errors thrown out of event handlers while `act` runs. */
+    function errorsDuring(act: () => void): string[] {
+      const errors: string[] = [];
+      const trap = (event: ErrorEvent) => {
+        errors.push(event.message);
+        event.preventDefault();
+      };
+      window.addEventListener("error", trap);
+      try {
+        act();
+      } finally {
+        window.removeEventListener("error", trap);
+      }
+      return errors;
+    }
+
+    it("fires once, and throws nothing, when Fire's confirmation is pressed twice in one turn", async () => {
+      const { el } = await mountGroups({ fireControl: "waiter" });
+      const fires = capture(el, "fire-group");
+      control(el, '[data-group-fire="g3"]')!.click();
+      await el.updateComplete;
+      const confirm = control(el, "[data-fire-confirm]")!;
+
+      const errors = errorsDuring(() => {
+        confirm.click();
+        confirm.click();
+      });
+
+      expect(errors).toEqual([]);
+      expect(fires.map((event) => event.detail)).toEqual([{ groupId: "g3" }]);
+    });
+
+    it("moves once, and throws nothing, when a Move to… target is pressed twice in one turn", async () => {
+      const { el } = await mountGroups();
+      const moves = capture(el, "move-group-line");
+      control(el, '[data-move-line="l-flan"]')!.click();
+      await el.updateComplete;
+      const target = control(el, '[data-move-target="new"]')!;
+
+      const errors = errorsDuring(() => {
+        target.click();
+        target.click();
+      });
+
+      expect(errors).toEqual([]);
+      expect(moves.map((event) => event.detail)).toEqual([
+        { lineId: "l-flan", quantity: "1.000", target: "new" },
+      ]);
+    });
+
     it("fires nothing when the Fire confirmation is dismissed", async () => {
       const { el } = await mountGroups({ fireControl: "waiter" });
       const fires = capture(el, "fire-group");

@@ -2071,7 +2071,8 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #moveTo(target: MoveGroupLineDetail["target"]): void {
-    const pending = this.movePending!;
+    const pending = this.movePending;
+    if (pending === null) return;
     this.movePending = null;
     this.#dispatch("move-group-line", {
       lineId: pending.line.id,
@@ -2129,7 +2130,8 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #confirmFireGroup(): void {
-    const group = this.fireGroupPending!;
+    const group = this.fireGroupPending;
+    if (group === null) return;
     this.fireGroupPending = null;
     this.#dispatch("fire-group", { groupId: group.id } satisfies FireGroupDetail);
   }
