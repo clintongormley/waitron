@@ -2294,8 +2294,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       append-only table's check, which is a core migration. The course Ready and Away buttons
       recorded none either.
     - Questions for the owner:
-      - A party's dishes in no group (moved in from another party's bill, or moved or merged in
-        from a bill with no party) show at the pass in a section of their own with no Ready or Away
+      - A party's dishes in no group (moved in from another party's bill or from a
+        bill with no party) show at the pass in a section of their own with no Ready or Away
         button, as dishes with no course did before.
       - The kitchen and pass screens offer Fire on every held group, as the Tab drawer and the
         course-era screens did, where the plan's text said "the first held group".
@@ -2525,14 +2525,29 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   shows `44.00 €` while the table screen shows `44,00 €` in Spanish. The floor's format predates
   the visits work; Task 2 now also uses it for what a party still owes. Make the floor follow the
   locale, as the table screen does.
-- **A party's table can be pointed at a counter order, or at another party's bill (plan Task 2
-  review, 2026-09-26).** `joinTable` and `mergeTabs` (`apps/server/src/working-order.ts`) accept a
-  parked counter order, which belongs to no party, as a tab: `joinTable` accepts any open order
-  whose zone is the table's (or when either has none), and `mergeTabs` one whose service mode
-  matches. So a table can stay in its party while pointing at that counter order, or be held by
-  one party while pointing at another party's bill. "a paid check reached by a table outside its party"
-  (`apps/server/src/visits.test.ts`) reaches both. The till does not send that sequence (read, not
-  tested). **Next action:** decide whether to refuse it.
+- **Join and merge keep a table, its bill and its party consistent — done (A73, #794).**
+  `joinTable` and `mergeTabs` refuse with `tab.not_table_tab`, `tab.visit_mismatch` and
+  `tab.visit_has_other_open_bill`.
+- **A table's bill with no party can still be made, and a merge can free a table its party still
+  holds (A73 review, 2026-09-28).** Three things are left open:
+  - `moveTab` (route `POST /api/tabs/:id/move`) can point a free table at a parked counter order,
+    which makes a table's bill with no party. A review reproduced it with `parkOrder` then
+    `moveTab`. From there `joinTable`, and a merge where neither bill has a party, both pass A73's
+    checks. Moving a counter order to a table as an explicit operation is queued separately.
+  - Joining a table to a split check with no party is refused as `tab.not_table_tab`, because
+    nothing stored tells such a check from a counter order. The review confirmed the refusal by
+    running it; no test covers that call.
+  - A merge within one party with `freeSourceTable: true`, whose source bill has a table, frees that
+    table while it stays a member of the party (`visit_tables`), because `mergeTabs` ends
+    memberships only when it absorbs another party. The review reproduced it for a party's tab
+    merged into its own split check, and for a split check moved to another table and merged back
+    into its tab, which is what the till's "Merge a bill" sends: it always passes
+    `freeSourceTable: true`. It predates A73 (reproduced on the base too). Refusing it
+    was tried and would refuse that till action, which the owner's rule keeps served, so it waits
+    on the owner: end the freed table's membership, as the whole-party merge does, or refuse.
+
+  **Next action:** owner decision on the third point and on whether `moveTab` should refuse a
+  counter order.
 - **Later: optional seat/guest item assignment (owner, 2026-09-20).** Include shared items when
   this is designed. For now, orders remain at table/tab level and staff select items manually
   when splitting bills; seat assignment is not a prerequisite for the service workflow.

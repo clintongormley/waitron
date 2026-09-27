@@ -505,6 +505,22 @@ describe("moveTab", () => {
 });
 
 describe("joinTable", () => {
+  it("refuses to join a detached open order to a table", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const original = await seedTable(cfg, "Detached source");
+    const destination = await seedTable(cfg, "Join destination");
+    const orderId = await openTabOn(cfg, original, [{ productId: cafeId, quantity: "1" }]);
+    await db.execute(sql`update dining_tables set tab_id = null where id = ${original}`);
+
+    await expect(
+      asApp(cfg, (tx) => joinTable(tx, cfg, orderId, destination)),
+    ).rejects.toMatchObject({
+      code: "tab.not_table_tab",
+      params: { tabId: orderId },
+    });
+    expect(await tabIdOf(destination)).toBeNull();
+  });
+
   it("refuses to join a table from a different service zone", async () => {
     const { cfg, cafeId } = await setupVenue();
     const t1 = await seedTable(cfg, "Join-downstairs");
@@ -750,6 +766,20 @@ describe("mergeTabs join (freeSourceTable: false)", () => {
 });
 
 describe("mergeTabs guards", () => {
+  it("refuses a detached open order as the merge target", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const targetTable = await seedTable(cfg, "Detached target");
+    const sourceTable = await seedTable(cfg, "Anchored source");
+    const target = await openTabOn(cfg, targetTable, [{ productId: cafeId, quantity: "1" }]);
+    const source = await openTabOn(cfg, sourceTable, [{ productId: cafeId, quantity: "1" }]);
+    await db.execute(sql`update dining_tables set tab_id = null where id = ${targetTable}`);
+
+    await expect(
+      asApp(cfg, (tx) => mergeTabs(tx, cfg, target, source, { freeSourceTable: false })),
+    ).rejects.toMatchObject({ code: "tab.not_table_tab", params: { tabId: target } });
+    expect(await tabIdOf(sourceTable)).toBe(source);
+  });
+
   it("refuses merging a tab into itself (tab.merge_self)", async () => {
     const { cfg, cafeId } = await setupVenue();
     const t = await seedTable(cfg, "MS");

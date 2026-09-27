@@ -34,6 +34,7 @@ import type { TillApiDeps } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
+import { createOpenOrder, openTab } from "./working-order.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
@@ -499,5 +500,61 @@ describe("the tab routes carry the party's revision", () => {
     expect(unjoined.status).toBe(200);
     expect(await unjoined.json()).toEqual({});
     expect(await current(a.visitId)).toBe(2);
+  });
+});
+
+describe("join and merge refuse bills that would leave a table, a bill and a party disagreeing", () => {
+  it("409 tab.not_table_tab joining a table to a counter order", async () => {
+    const counterOrderId = randomUUID();
+    await withTransaction(suite.db, (tx) => createOpenOrder(tx, cfg, counterOrderId, [], null));
+    const free = await table();
+
+    const res = await post(`/api/tabs/${counterOrderId}/join`, { tableId: free });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "tab.not_table_tab", params: { tabId: counterOrderId } },
+    });
+  });
+
+  it("409 tab.visit_mismatch merging a party's tab into a table's bill of no party", async () => {
+    const a = await seat();
+    const tableId = await table();
+    const noPartyTabId = await withTransaction(
+      suite.db,
+      async (tx) => (await openTab(tx, cfg, { tableId })).tabId,
+    );
+
+    const res = await post(`/api/tabs/${noPartyTabId}/merge`, {
+      fromTabId: a.tabId,
+      freeSourceTable: true,
+      expectedSourceVisitRevision: 0,
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "tab.visit_mismatch", params: { tabId: noPartyTabId } },
+    });
+  });
+
+  it("409 tab.visit_has_other_open_bill merging another party's separate bill while its tab is open", async () => {
+    const a = await seat();
+    const b = await seat();
+    const checkId = randomUUID();
+    await withTransaction(suite.db, (tx) =>
+      createOpenOrder(tx, cfg, checkId, [], null, { visitId: b.visitId }),
+    );
+
+    const res = await post(`/api/tabs/${a.tabId}/merge`, {
+      fromTabId: checkId,
+      freeSourceTable: false,
+      expectedVisitRevision: 0,
+      expectedSourceVisitRevision: 0,
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "tab.visit_has_other_open_bill", params: { tabId: checkId } },
+    });
   });
 });

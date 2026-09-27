@@ -1132,11 +1132,13 @@ describe("a paid party (paying changes no table of the party)", () => {
 });
 
 /**
- * Mesa 5 points at the party's paid check without belonging to the party: it reaches the check
- * through a parked counter order, which a visitless merge or join leaves it on.
+ * A parked counter order would give Mesa 5 a way to the party's paid check without Mesa 5 belonging
+ * to the party; each step of that path is refused, so the check stays with its own party.
  */
-describe("a paid check reached by a table outside its party", () => {
-  async function paidCheckAtMesa5(mesa5Party: "has left the party" | "belongs to another party") {
+describe("a paid check a counter order cannot bring to a table outside its party", () => {
+  async function paidCheckAfterRefusals(
+    mesa5Party: "has left the party" | "belongs to another party",
+  ) {
     const venue = await setupVenue();
     const mesa4 = await venue.table("Mesa 4");
     const mesa5 = await venue.table("Mesa 5");
@@ -1151,41 +1153,58 @@ describe("a paid check reached by a table outside its party", () => {
       zoneId: venue.tables.zoneId,
     });
     let otherVisitId: string | null = null;
+    let mesa5TabId: string | null = null;
     if (mesa5Party === "has left the party") {
       await join(venue.cfg, visitId, tabId, mesa5);
       const command = await cmd(visitId);
       await inTx((tx) => unjoinTable(tx, venue.cfg, tabId, mesa5, undefined, command));
-      await inTx((tx) => joinTable(tx, venue.cfg, parkedId, mesa5));
+      expect(
+        await captureError(() => inTx((tx) => joinTable(tx, venue.cfg, parkedId, mesa5))),
+      ).toMatchObject({ code: "tab.not_table_tab", params: { tabId: parkedId } });
     } else {
       const other = await seat(venue.cfg, mesa5);
       otherVisitId = other.visitId;
+      mesa5TabId = other.tabId;
       const expectedSourceVisitRevision = await revisionOf(other.visitId);
-      await inTx((tx) =>
-        mergeTabs(tx, venue.cfg, parkedId, other.tabId, {
-          freeSourceTable: false,
-          expectedSourceVisitRevision,
-          operatorId: OPERATOR,
-        }),
-      );
+      expect(
+        await captureError(() =>
+          inTx((tx) =>
+            mergeTabs(tx, venue.cfg, parkedId, other.tabId, {
+              freeSourceTable: false,
+              expectedSourceVisitRevision,
+              operatorId: OPERATOR,
+            }),
+          ),
+        ),
+      ).toMatchObject({ code: "tab.not_table_tab", params: { tabId: parkedId } });
+      expect(await statusOf(other.tabId)).toBe("open");
+      expect(await revisionOf(other.visitId)).toBe(expectedSourceVisitRevision);
     }
     const command = await cmd(visitId);
-    await inTx((tx) =>
-      mergeTabs(tx, venue.cfg, checkId, parkedId, { freeSourceTable: false, ...command }),
-    );
-    await pay(venue.cfg, checkId, "32.00");
+    expect(
+      await captureError(() =>
+        inTx((tx) =>
+          mergeTabs(tx, venue.cfg, checkId, parkedId, { freeSourceTable: false, ...command }),
+        ),
+      ),
+    ).toMatchObject({ code: "tab.not_table_tab", params: { tabId: parkedId } });
+    expect(await statusOf(parkedId)).toBe("open");
+    expect(await revisionOf(visitId)).toBe(command.expectedVisitRevision);
+    await pay(venue.cfg, checkId, "30.00");
 
     expect(await statusOf(checkId)).toBe("settled");
     expect((await tableRow(mesa4)).tabId).toBe(tabId);
-    expect((await tableRow(mesa5)).tabId).toBe(checkId);
+    expect((await tableRow(mesa5)).tabId).toBe(mesa5TabId);
     const mesa5Visit = await inTx((tx) => visitForTable(tx, mesa5));
     expect(mesa5Visit?.visitId ?? null).toBe(otherVisitId);
-    return { venue, mesa5, visitId, checkId };
+    return { venue, mesa5, mesa5TabId, visitId, checkId };
   }
 
   for (const mesa5Party of ["has left the party", "belongs to another party"] as const) {
     describe(`when Mesa 5 ${mesa5Party}`, () => {
       it("refuses a round sent to the check, and opens no next tab", async () => {
-        const { venue, mesa5, visitId, checkId } = await paidCheckAtMesa5(mesa5Party);
+        const { venue, mesa5, mesa5TabId, visitId, checkId } =
+          await paidCheckAfterRefusals(mesa5Party);
         const bills = await inTx((tx) => readVisitBills(tx, visitId));
 
         expect(
@@ -1198,11 +1217,12 @@ describe("a paid check reached by a table outside its party", () => {
           ),
         ).toMatchObject({ code: "tab.not_open", params: { tabId: checkId } });
         expect(await inTx((tx) => readVisitBills(tx, visitId))).toEqual(bills);
-        expect((await tableRow(mesa5)).tabId).toBe(checkId);
+        expect((await tableRow(mesa5)).tabId).toBe(mesa5TabId);
       });
 
       it("refuses moving the check to a free table, or joining one to it", async () => {
-        const { venue, mesa5, visitId, checkId } = await paidCheckAtMesa5(mesa5Party);
+        const { venue, mesa5, mesa5TabId, visitId, checkId } =
+          await paidCheckAfterRefusals(mesa5Party);
         const mesa7 = await venue.table("Mesa 7");
         const command = await cmd(visitId);
 
@@ -1215,7 +1235,7 @@ describe("a paid check reached by a table outside its party", () => {
             params: { tabId: checkId },
           });
         }
-        expect((await tableRow(mesa5)).tabId).toBe(checkId);
+        expect((await tableRow(mesa5)).tabId).toBe(mesa5TabId);
         expect((await tableRow(mesa7)).tabId).toBeNull();
       });
     });
@@ -1663,6 +1683,81 @@ describe("merge (D2)", () => {
       id: t.visitId,
       tableIds: expect.arrayContaining([mesa4, mesa6, mesa9]),
     });
+  });
+
+  it("refuses merging one party's split check into another party while its tab is open", async () => {
+    const { venue, mesa4, mesa6, t, s, openCheckId } = await parties();
+    const expectedVisitRevision = await revisionOf(t.visitId);
+    const expectedSourceVisitRevision = await revisionOf(s.visitId);
+
+    const error = await captureError(() =>
+      inTx((tx) =>
+        mergeTabs(tx, venue.cfg, t.tabId, openCheckId, {
+          freeSourceTable: false,
+          expectedVisitRevision,
+          expectedSourceVisitRevision,
+          operatorId: OPERATOR,
+        }),
+      ),
+    );
+
+    expect(error).toMatchObject({
+      code: "tab.visit_has_other_open_bill",
+      params: { tabId: openCheckId },
+    });
+    expect((await tableRow(mesa4)).tabId).toBe(t.tabId);
+    expect((await tableRow(mesa6)).tabId).toBe(s.tabId);
+    expect(await statusOf(openCheckId)).toBe("open");
+    expect(await visitIdOf(openCheckId)).toBe(s.visitId);
+  });
+
+  it("refuses merging a table's bill that belongs to no party into a party's bill", async () => {
+    const { venue, mesa4, t } = await parties();
+    const mesa8 = await venue.table("Mesa 8");
+    const { tabId: noPartyTabId } = await inTx((tx) => openTab(tx, venue.cfg, { tableId: mesa8 }));
+    const command = await cmd(t.visitId);
+
+    const error = await captureError(() =>
+      inTx((tx) =>
+        mergeTabs(tx, venue.cfg, t.tabId, noPartyTabId, { freeSourceTable: false, ...command }),
+      ),
+    );
+
+    expect(error).toMatchObject({ code: "tab.visit_mismatch", params: { tabId: noPartyTabId } });
+    expect(await statusOf(noPartyTabId)).toBe("open");
+    expect((await tableRow(mesa8)).tabId).toBe(noPartyTabId);
+    expect(await inTx((tx) => visitForTable(tx, mesa8))).toBeNull();
+    expect((await tableRow(mesa4)).tabId).toBe(t.tabId);
+    expect(await revisionOf(t.visitId)).toBe(command.expectedVisitRevision);
+  });
+
+  it("points a party's table at its split check when its tab merges into it without freeing the table", async () => {
+    const { venue, mesa6, s, openCheckId } = await parties();
+    const command = await cmd(s.visitId);
+
+    await inTx((tx) =>
+      mergeTabs(tx, venue.cfg, openCheckId, s.tabId, { freeSourceTable: false, ...command }),
+    );
+
+    expect((await tableRow(mesa6)).tabId).toBe(openCheckId);
+    expect(await statusOf(s.tabId)).toBe("abandoned");
+    expect(await statusOf(openCheckId)).toBe("open");
+    expect(await inTx((tx) => visitForTable(tx, mesa6))).toMatchObject({ visitId: s.visitId });
+  });
+
+  it("puts a split check at no table back into its party's tab when asked to free the source table", async () => {
+    const { venue, mesa6, s, openCheckId } = await parties();
+    const memberships = await membershipsOf(s.visitId);
+    const command = await cmd(s.visitId);
+
+    await inTx((tx) =>
+      mergeTabs(tx, venue.cfg, s.tabId, openCheckId, { freeSourceTable: true, ...command }),
+    );
+
+    expect(await statusOf(openCheckId)).toBe("abandoned");
+    expect(await statusOf(s.tabId)).toBe("open");
+    expect((await tableRow(mesa6)).tabId).toBe(s.tabId);
+    expect(await membershipsOf(s.visitId)).toEqual(memberships);
   });
 
   it("points the absorbed party's tables at T's tab when the merged bill is its check and its tab has settled", async () => {

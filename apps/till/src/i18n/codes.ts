@@ -27,6 +27,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Another party is already seated at this table. Check the floor and try again",
     es: "Ya hay clientes sentados en esta mesa. Revisa la sala e inténtalo de nuevo",
   },
+  "tab.not_table_tab": {
+    en: "That order is not a table's bill, so it cannot be joined to a table or merged with one",
+    es: "Ese pedido no es la cuenta de una mesa, así que no se puede unir a una mesa ni combinar con una",
+  },
+  "tab.visit_mismatch": {
+    en: "One of these bills belongs to seated guests and the other does not, so they cannot be merged",
+    es: "Una de estas cuentas es de clientes sentados y la otra no, así que no se pueden combinar",
+  },
+  "tab.visit_has_other_open_bill": {
+    en: "That separate bill's guests still have another open bill. Merge their table's bill instead",
+    es: "Los clientes de esa cuenta separada aún tienen otra cuenta abierta. Combina en su lugar la cuenta de su mesa",
+  },
   "table.not_shared": {
     en: "This is the party's only table, so it cannot be separated from its bill",
     es: "Es la única mesa de estos clientes, así que no se puede separar de su cuenta",

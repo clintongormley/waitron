@@ -181,6 +181,9 @@ const TABLE_REFUSALS = new Set([
   "table.not_shared",
   "group.held_leaves_visit",
   "tab.already_open",
+  "tab.not_table_tab",
+  "tab.visit_mismatch",
+  "tab.visit_has_other_open_bill",
   "visit.not_open",
   "visit.bill_outstanding",
 ]);

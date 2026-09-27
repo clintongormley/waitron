@@ -2049,25 +2049,21 @@ describe("merging a party's tab into a bill of no visit", () => {
     });
   }
 
-  it("refuses when the party's tab holds a held-group line (group.held_leaves_visit), writing nothing", async () => {
+  it("refuses a tab holding a held-group line before looking at the line (tab.visit_mismatch), writing nothing", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
     const into = await noVisitTab(v);
-    const [warm] = await linesIn(s.visitId, s.warm);
     const before = [await snapshot(v, s.visitId), await linesOfBill(into)];
     const command = { expectedSourceVisitRevision: await revisionOf(s.visitId), operatorId: ALEX };
 
     await expect(
       inTx((tx) => mergeTabs(tx, v.cfg, into, s.tabId, { freeSourceTable: true, ...command })),
-    ).rejects.toMatchObject({
-      code: "group.held_leaves_visit",
-      params: { tabId: s.tabId, lineNo: warm!.lineNo },
-    });
+    ).rejects.toMatchObject({ code: "tab.visit_mismatch", params: { tabId: into } });
 
     expect([await snapshot(v, s.visitId), await linesOfBill(into)]).toEqual(before);
   });
 
-  it("moves fired-group lines with no group, their extras included", async () => {
+  it("refuses a tab of fired groups (tab.visit_mismatch), writing nothing", async () => {
     const v = await setupVenue();
     const s = await seated(v);
     await submit(v, s.visitId, [
@@ -2085,13 +2081,14 @@ describe("merging a party's tab into a bill of no visit", () => {
       },
     ]);
     const into = await noVisitTab(v);
+    const before = [await snapshot(v, s.visitId), await linesOfBill(into)];
     const command = { expectedSourceVisitRevision: await revisionOf(s.visitId), operatorId: ALEX };
 
-    await inTx((tx) => mergeTabs(tx, v.cfg, into, s.tabId, { freeSourceTable: true, ...command }));
+    await expect(
+      inTx((tx) => mergeTabs(tx, v.cfg, into, s.tabId, { freeSourceTable: true, ...command })),
+    ).rejects.toMatchObject({ code: "tab.visit_mismatch", params: { tabId: into } });
 
-    const landed = await linesOfBill(into);
-    expect(landed).toHaveLength(3);
-    expect(landed.map((row) => row.groupId)).toEqual([null, null, null]);
+    expect([await snapshot(v, s.visitId), await linesOfBill(into)]).toEqual(before);
   });
 });
 

@@ -145,3 +145,25 @@ it("explains each refusal of an unsent order, in both languages", () => {
     ],
   ]);
 });
+
+it("explains each refusal of joining or merging bills that belong together differently, in both languages", () => {
+  expect(
+    ["tab.not_table_tab", "tab.visit_mismatch", "tab.visit_has_other_open_bill"].map((code) => [
+      codeMessage(code, "en"),
+      codeMessage(code, "es"),
+    ]),
+  ).toEqual([
+    [
+      "That order is not a table's bill, so it cannot be joined to a table or merged with one",
+      "Ese pedido no es la cuenta de una mesa, así que no se puede unir a una mesa ni combinar con una",
+    ],
+    [
+      "One of these bills belongs to seated guests and the other does not, so they cannot be merged",
+      "Una de estas cuentas es de clientes sentados y la otra no, así que no se pueden combinar",
+    ],
+    [
+      "That separate bill's guests still have another open bill. Merge their table's bill instead",
+      "Los clientes de esa cuenta separada aún tienen otra cuenta abierta. Combina en su lugar la cuenta de su mesa",
+    ],
+  ]);
+});
