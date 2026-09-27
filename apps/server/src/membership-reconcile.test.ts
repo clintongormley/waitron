@@ -281,6 +281,11 @@ describe("fetchPeerMembershipDocument (the best-effort HTTP peer read)", () => {
     expect(await fetchPeerMembershipDocument(url)).toBeNull();
   });
 
+  it("returns null on a 200 whose body is JSON null", async () => {
+    const url = await serve((respond) => respond(200, "null"));
+    expect(await fetchPeerMembershipDocument(url)).toBeNull();
+  });
+
   it("returns null when the peer is unreachable (transport error)", async () => {
     // Port 1 is not listening.
     expect(

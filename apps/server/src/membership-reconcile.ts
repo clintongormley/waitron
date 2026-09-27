@@ -68,11 +68,11 @@ export async function fetchPeerMembershipDocument(
     return null;
   }
   if (!res.ok) return null;
-  let body: { document?: SignedMembershipDocument | null };
+  let body: { document?: SignedMembershipDocument | null } | null;
   try {
-    body = (await res.json()) as { document?: SignedMembershipDocument | null };
+    body = (await res.json()) as { document?: SignedMembershipDocument | null } | null;
   } catch {
     return null;
   }
-  return body.document ?? null;
+  return body?.document ?? null;
 }
