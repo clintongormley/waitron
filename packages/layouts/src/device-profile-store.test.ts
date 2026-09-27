@@ -78,8 +78,8 @@ describe("translateWriteError", () => {
   // engine's message names no key, so every such refusal of one class is the same error and no
   // crafted one could tell them apart. The schema holds it instead: `has ONE key out of
   // device_profiles and ONE key into it` (device-profile-store.db.test.ts) fails if another key
-  // could raise one on `device_profiles` — for the schema as it stands, not for whatever is added
-  // later.
+  // could raise one on `device_profiles` — among the sets it migrates (core and identity) only; a
+  // key from another module's set is not seen.
 
   // A refusal of another class on the SAME key the name branch matches: only the class tells a NOT
   // NULL from a unique index apart, so this is the case that proves the class half of the gate.

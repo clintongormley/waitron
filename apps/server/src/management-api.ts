@@ -1100,7 +1100,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
 
   // ── Device profiles ──
   // Gated like the canvases: each read route carries its own gate, the write functions authorize
-  // themselves.
+  // themselves — except the home-layout choice, gated in its route.
   app.get("/management-api/device-profiles", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

@@ -1764,7 +1764,7 @@ export const en = {
   "menu_preview.document_heading_live": "The menu as it is live",
   "menu_preview.warnings_note": "Warnings do not stop you publishing.",
   "menu_preview.shortcut_omitted":
-    "The shortcut to {name} is left out of {layout}: it is no longer on this menu.",
+    "The shortcut to {name} is left out of {layout}: it is not offered on this menu.",
   "menu_preview.publish": "Publish {menu}",
   "menu_preview.publishing": "Publishing {menu}…",
   "menu_preview.only_this_menu":
@@ -3572,7 +3572,7 @@ export const es: Record<StringKey, string> = {
   "menu_preview.document_heading_live": "El menú tal como está publicado",
   "menu_preview.warnings_note": "Los avisos no impiden publicar.",
   "menu_preview.shortcut_omitted":
-    "El acceso directo a {name} se omite en {layout}: ya no está en este menú.",
+    "El acceso directo a {name} se omite en {layout}: no se ofrece en este menú.",
   "menu_preview.publish": "Publicar {menu}",
   "menu_preview.publishing": "Publicando {menu}…",
   "menu_preview.only_this_menu":
