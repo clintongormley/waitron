@@ -2025,8 +2025,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     the day it is issued.)_ The owner's rulings at landing (2026-09-27): a SumUp payment stuck mid-charge keeps its
     bill locked until SumUp answers (no "failed" after a time limit); a card arriving after cash
     paid the rest is refused `working_order.not_open`, and the resolve routes sit beside M7b2's,
-    both accepted and to be written into the design (lane A item A76). Two follow-ups, both queued
-    for lane B before Task 15:
+    both accepted and recorded as dated corrections in the design by lane D item A76. Two follow-ups,
+    both queued for lane B before Task 15:
     - **Refund a hand-keyed card payment on staff's word, with a manager PIN** (lane B item B14a,
       owner's choice). Task 14 refuses it today.
     - **A dashboard screen for card payments and refunds on a bill that nothing has settled**

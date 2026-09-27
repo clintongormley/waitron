@@ -221,12 +221,13 @@ A new `wt-*` primitive under `packages/ui/src/components/` is incomplete review-
 
 ## Event discipline
 
-Custom events are named `wt-*`, carry their payload in `detail`, and are dispatched with
-`bubbles: true, composed: true` so they can cross the component's own shadow boundary. Before
-re-emitting, the native or internal event that triggered them must be stopped with
-`event.stopPropagation()` — otherwise the native event (itself `composed: true` for things like
-`input`/`change`) independently crosses the same boundary and the consumer observes the change
-twice.
+This rule is the contract for shared `wt-*` components. Their custom events are named `wt-*`, carry
+their payload in `detail`, and are dispatched with `bubbles: true, composed: true` so they can cross
+the component's own shadow boundary. Before re-emitting, the native or internal event that triggered
+them must be stopped with `event.stopPropagation()` — otherwise the native event (itself
+`composed: true` for things like `input`/`change`) independently crosses the same boundary and the
+consumer observes the change twice. App screens and app-owned components may name their local action
+events plainly, as the till screens do with events such as `fire-course` and `mark-collected`.
 
 ## A `<select>` over rendered options marks the chosen option, not only the select's `.value`
 

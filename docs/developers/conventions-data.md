@@ -1405,11 +1405,14 @@ proven by mutating the code it covers, widening `bool`/`flag`'s `value === undef
 `value == null` (and, in the extras file, the two `=== undefined ?` defaults beside it) and watching
 exactly that case go red while the rest of the file stayed green.
 
-**One field is deliberately outside the rule**, and a reader who takes the rule as universal will
-get it wrong: an extras list's `maxPicks` accepts an explicit null, because there null is the VALUE
+**Two fields are deliberately outside the rule**, and a reader who takes the rule as universal will
+get them wrong. An extras list's `maxPicks` accepts an explicit null, because there null is the VALUE
 — it means uncapped — rather than a missing field (`row.maxPicks == null ? null : …`,
 `packages/catalogue/src/extra-contract.ts`). That is pinned by its own case, `keeps an explicit null
-maxPicks, because there null is the value`, so the exception cannot quietly spread.
+maxPicks, because there null is the value`, so the exception cannot quietly spread. The seat-a-table
+route's `guestCount` also accepts an explicit null as a value meaning no count; the absent field means
+the same thing (`requireGuestCount`, `apps/server/src/till-api.ts`). Its route case `seats without a
+guest count, absent or null` pins both inputs.
 
 ## A missing unique target now fails at WRITE time, not at migrate time
 
