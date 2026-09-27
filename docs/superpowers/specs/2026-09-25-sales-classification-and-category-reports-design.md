@@ -116,7 +116,8 @@ From this change on, **every sale line also records:**
   - **Collection and replay of an issued sale retain its recorded facts.** A reprint rebuilds
     receipt lines from the stored order lines (`readSettledTicket`), never from a re-classification.
   - _2026-09-27, the owner's decision of 2026-09-26 (menus M7v): the snapshot is now recorded
-    when the line is added, at the same moment its price and VAT rate are fixed, from the
+    when the line is added, at the same moment its price and VAT rate are fixed (2026-09-27, A68:
+    its VAT class; the rate is now looked up when the invoice is issued), from the
     product's classification at that moment (`working_order_lines.classification`, core migration
     `0021`, written by `priceOrderLines` in `apps/server/src/working-order.ts`). Issuance copies
     each line's recorded snapshot onto the sale line and classifies nothing (`issuancePass`,

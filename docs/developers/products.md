@@ -51,9 +51,9 @@ already *sold* — see below.
 
 ## What a sold line freezes
 
-A line freezes its names, its gross price and its VAT rate when it is added and never reads them
-from the catalogue again, so editing a product does not rewrite yesterday's receipt; the VAT rate
-comes from the published menu, below. `working_order_lines` and `sale_lines` each carry:
+A line freezes its names, its gross price and its VAT class when it is added and never reads them
+from the catalogue again, so editing a product does not rewrite yesterday's receipt; the VAT class
+comes from the published menu, and the rate from the day the invoice is issued, below. `working_order_lines` and `sale_lines` each carry:
 
 - `name` — the product's staff name at add time; on a line sold as a variant, the PARENT's. On a
   line with no variant this is what the basket and a retrieved tab show after the product has been
@@ -81,22 +81,32 @@ names, and records the same product in its own `product_id` and a variant's pare
 `parent_product_id`, as plain values with no foreign key, so no catalogue edit reaches a filed line
 (sales classification spec §3). Neither table has a `variant_id` column.
 
-**A line's VAT rate is the one its published menu froze, fixed when its price is.** Each
-published menu version records the VAT class and rate of each dish, variant and extras item
-(`freezeOffer`, `packages/catalogue/src/menu-document.ts`), and a till is served those rather than
-the product's current class. A line added to a held order, a tab or an invoice-first order stores
-that rate with its gross price; a walk-up sale is priced at payment, from the version live then
-(`priceOrderLines`, `apps/server/src/working-order.ts`). A variant with no class of its own was
-frozen at its parent's rate, and an extras line takes the rate frozen for its picked product.
-Raising the quantity of an unsent line in place keeps that row's rate; a line an edit adds takes the
-rate of the version live then. Issuing the invoice files each line's stored rate and resolves
-nothing (`priceStoredOrderForIssuance`, same file), so a change to a product's VAT class reaches a
-till only when a menu including it is published again, and until then that menu shows Unpublished
-changes. The filed `sale_lines` row carries the stored rate, and a reprint or a replay rebuilds its
-lines from the stored lines at their stored rates (`priceStoredOrder`, same file). The line's
-reporting classification is recorded at the same moment, from the product's classification then
-(`working_order_lines.classification`), and issuance copies it (menus spec
-`2026-09-20-menus-categories-and-home-layouts-design.md` §11.4, its 2026-09-27 note).
+**A line's VAT class is the one its published menu froze, fixed when its price is; its rate is the
+one in force on the day the invoice is issued.** Each published menu version records the VAT class
+of each dish, variant and extras item, and no rate (`buildMenuDocument`,
+`packages/catalogue/src/menu-document.ts`), and a till is served that class rather than the
+product's current one. A line added to a held order, a tab or an invoice-first order stores that
+class (`working_order_lines.vat_class`) with its gross price; a walk-up sale is priced at payment,
+from the version live then (`priceOrderLines`, `apps/server/src/working-order.ts`). A variant with
+no class of its own was frozen at its parent's class, and an extras line takes the class frozen for
+its picked product. Raising the quantity of an unsent line in place keeps that row's class; a line
+an edit adds takes the class of the version live then. So a change to a product's VAT class reaches
+a till only when a menu including it is published again, and until then that menu shows
+Unpublished changes.
+
+Each class's percentage is a dated table in code (`VAT_RATE_TABLE` and `vatRateOn`,
+`packages/catalogue/src/vat-rates.ts`): a legal change ships as a new entry dated from the day it
+takes effect. Issuing the invoice takes one clock reading, prices every line's class at the rate in
+force on that reading's local calendar date, and dates the invoice with the same reading
+(`issueMoment`, `apps/server/src/issue-date.ts`). An order open across a change therefore pays the
+new rate, and publishing a menu early cannot bring a rate forward. Invoice-first issues at placing,
+so it takes the placing day's rate; an integrated card payment takes the rate when its record is
+issued after the reader (`repriceOn` in `finalizeCapture`, `apps/server/src/till-sale.ts`). The
+filed `sale_lines.vat_rate` is the percentage actually filed. A reprint or a replay rebuilds its
+lines' gross amounts from the stored lines and takes its VAT breakdown from the filed record. The
+line's reporting classification is recorded when the line is added, from the product's
+classification then (`working_order_lines.classification`), and issuance copies it (menus spec
+`2026-09-20-menus-categories-and-home-layouts-design.md` §11.4, its 2026-09-27 notes).
 
 Because both customer maps (`descriptions` and `variant_descriptions`) had their fallback applied
 *before* being frozen, neither falls back again at render time, except that
@@ -305,7 +315,7 @@ prices only what the edit adds (menus plan D10; `updateHeldOrder`,
 `apps/server/src/working-order.ts`). Lowering or keeping such a line's quantity is allowed; raising
 it is refused `product.variant_required`, as a raise of a line whose product has become Inactive or
 Unavailable is refused. Paying a held order bills its stored lines at their stored prices and
-VAT rates, as _What a sold line freezes_ says; a line not yet sent, dish
+VAT classes, at each class's rate on the day of issue, as _What a sold line freezes_ says; a line not yet sent, dish
 or extra, whose product is now Inactive or Unavailable is refused `product.unavailable`, while a
 sent one is billed whatever its product's availability (`priceStoredOrderForIssuance`, same file;
 a card payment already captured is filed as it stands). On the till, retrieving the order keeps

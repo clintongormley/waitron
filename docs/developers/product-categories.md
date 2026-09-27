@@ -145,8 +145,8 @@ already matches its live version answers that version and writes nothing. A miss
 `expectedHash` is `management.request_invalid` (400). On the three routes that name a menu, an
 unknown menu is `catalogue.not_found` (404) and a malformed id `shared.invalid_id` (400). Tills
 sell from each menu's live version; only availability, course and reporting category are read from
-the current rows when it is served, and the VAT class and rate are the ones the version froze
-(`applyLiveFields`, `packages/catalogue/src/menu-document.ts`).
+the current rows when it is served, and the VAT class is the one the version froze; the version
+holds no rate (`applyLiveFields`, `packages/catalogue/src/menu-document.ts`).
 
 ### Home layout routes
 

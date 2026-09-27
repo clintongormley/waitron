@@ -10,6 +10,9 @@ that VAT and the classification are taken when the invoice is issued, with its p
 the write-back: a line's VAT rate now comes from the published menu it was sold from. §11.4's
 collection-and-replay bullet and its price-lock bullet stand. The dated notes in §10.4, §10.7, §11.1
 and §11.4 say what holds; §11.4's is the full one.
+**2026-09-27, later (A68):** the owner narrowed that decision the same day. The published menu
+freezes each item's VAT CLASS only; a line records its class, and the PERCENTAGE comes from a dated
+table in code, looked up for the day the invoice is issued. §11.4's A68 note is the full one.
 
 **Related decisions, 2026-09-20:** the [service workflow spec](2026-09-20-service-ordering-and-billing-design.md)
 adds a public/staff-only/not sold separately setting for standalone ordering. Menu membership
@@ -469,10 +472,14 @@ was sold under when its price is fixed: when it is added to a saved order, or at
 unsaved basket. Issuing the invoice files that stored rate. A VAT class change flags every menu
 that includes the product. §11.4's note has the detail._
 
+_2026-09-27, later (A68): the version freezes the class, not the rate; a line stores its class, and
+the invoice files that class's rate in force on the day it is issued. §11.4's A68 note._
+
 Asesor question Q26 (`docs/compliance/asesor-questions.md`) asks the venue's tax adviser to confirm
 that the rate in force when the invoice is issued is the right one, including across a legal rate
 change while a table is open (§11.4 states the issuance moment per path).
 _2026-09-27: Q26 now asks about the rate in the published menu the line was sold from._
+_2026-09-27, later (A68): Q26 now asks about the rate in force on the day the invoice is issued._
 
 ### 10.5 Kitchen routing becomes ordered rules — a later spec
 
@@ -527,6 +534,8 @@ These add to §7.
    filed at 21%.)* **VAT at payment:** a held order's drink was added at 10%, and its VAT class is
    corrected to 21% before payment. ~~The invoice files it at 21%~~, and the customer pays the same
    gross price.
+   _(2026-09-27, later, A68: the line recorded the class it was added under, so the drink still
+   files at 10%, the rate that class carries on the day the invoice is issued. §11.4's A68 note.)_
 
 ## 11. Owner decisions after the second outside review, 2026-09-25
 
@@ -563,6 +572,8 @@ measurements, and the plan re-checks the ones it builds on.
   classification is still not menu content: it is not frozen, a category change flags no menu, and
   a line records it from the product's current classification when the line is added. §11.4's note
   has the detail._
+  _2026-09-27, later (A68): the version freezes the VAT class only; the rate is looked up when the
+  invoice is issued. §11.4's A68 note._
 
 ### 11.2 An unsaved basket follows the live menu; a saved order keeps its facts
 
@@ -666,6 +677,29 @@ issue that correction today; see the backlog). What holds now:_
 - _**A version published before this change is not served for selling**, because it froze no rate
   (`readLiveDocuments`, `packages/catalogue/src/menu-publication.ts`): an upgraded box must publish
   every menu once. The backlog's M7v note has what an upgrade measured._
+
+_2026-09-27, later the same day (campaign item A68): the owner narrowed M7v. Two things change, and
+they change differently. What holds now, replacing the first three bullets above and the RATE half
+of the fourth:_
+
+- _**The published version freezes each item's VAT CLASS, and no rate.** A class change still goes
+  live on the day a menu is published and still flags the menu (`buildMenuDocument`,
+  `packages/catalogue/src/menu-document.ts`)._
+- _**Each class's percentage is a dated table in code** (`VAT_RATE_TABLE` and `vatRateOn`,
+  `packages/catalogue/src/vat-rates.ts`): each class lists its rates, each from a local calendar
+  date. A legal change ships in a release as a new dated entry, and changes nothing before its
+  date._
+- _**A line records its class** (`working_order_lines.vat_class`), taken from the version it was
+  sold under when its price is fixed, as M7v's second bullet says for the rate._
+- _**Issuing the invoice looks the rate up for the local calendar date of its issue instant**,
+  from one clock reading that also dates the invoice (`issueMoment`, `apps/server/src/issue-date.ts`).
+  That is payment on every path except invoice-first, which issues at placing, so there it is the
+  placing day's rate. An order open across a legal change pays the new rate; publishing a menu
+  before a change's date cannot bring the rate forward. An integrated card payment takes the rate
+  when its record is issued after the reader, not when it was priced before it._
+- _**A published version from before this change keeps selling.** Its extra `vatRate` keys are read
+  by nothing; the menu shows as changed until it is published again. Upgrading a venue that holds
+  any order line needs a reset (the backlog's A68 note)._
 
 §10.4 said "at payment". The precise rule is **when the invoice record is issued**, which is the
 pricing pass that produces the filed figures. That pass resolves each line's VAT rate from its

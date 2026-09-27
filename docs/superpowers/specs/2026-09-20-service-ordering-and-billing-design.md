@@ -663,7 +663,8 @@ These are future acceptance requirements, not tests run while writing this docum
 C built them): prices on saved orders and edits to them; editing sent work (Change, recall, the
 paper-only-kitchen setting, kitchen notices); unavailable items at send and pay; a split item's
 kitchen ticket and the "moved to table X" slip; the one-card-payment-at-a-time lock; VAT recorded
-on the line from the published menu (lane C's item M7v). Revision 1's §3 "price treatment not
+on the line from the published menu (lane C's item M7v; 2026-09-27, A68: the line records the VAT
+class, and the rate is looked up on the day the invoice is issued). Revision 1's §3 "price treatment not
 settled", §3 and §4's correction wording, and §10's held-work availability now defer to it.
 
 **Proposed by the planning session and accepted by the owner, 2026-09-26:**

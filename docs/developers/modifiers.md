@@ -7,7 +7,7 @@ screen:
   rare, medium, well done). It is a kitchen instruction. It owns no price, no VAT class and no
   allergens, and it never becomes a line of its own: the answer freezes onto the dish's own line.
 - an **extras** list — a reusable, named list of PRODUCTS the diner may add ("Sides": chips, salad).
-  Each pick becomes its own child line at its own price and its own VAT rate, so an extra is sold,
+  Each pick becomes its own child line at its own price and its own VAT class, so an extra is sold,
   reported and filed as the product it is.
 
 There is no third kind, and nothing chooses between them at run time: which table a list lives in
@@ -172,8 +172,9 @@ the basket resolved, and decides what is stored:
   afterwards cannot rewrite a saved order.
 - Each extras pick becomes its own CHILD line (`parent_line_id` set) carrying the picked PRODUCT,
   that product's three frozen names, the price the offer resolved and the PRODUCT's VAT class (its
-  own, or its parent's where a variant leaves it blank — never the dish's), taxed at the rate the
-  published menu version froze for that product.
+  own, or its parent's where a variant leaves it blank — never the dish's), as the published menu
+  version froze it for that product, and taxed at that class's rate on the day the invoice is
+  issued.
   The child's stored quantity is dish quantity × pick quantity.
 - A list's own counts are enforced per list: too few picks for `minPicks`, too many for `maxPicks`,
   or more of one product than its `maxQuantity` is `extras.limit_exceeded` carrying the list id. A

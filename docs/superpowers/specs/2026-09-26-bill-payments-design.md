@@ -787,7 +787,9 @@ one sale per working order (`sales_working_order_id_key`) makes a repeat impossi
 **VAT.** Each line is filed at the rate lane C's M7v records on it when its price locks, and issuance
 re-resolves nothing. (Today issuance re-resolves a line's rate from its product's current VAT class,
 `priceStoredOrderForIssuance`, `apps/server/src/working-order.ts:593-620` on `main`; M7v removes
-that. _2026-09-27: M7v removed it; `priceStoredOrderForIssuance` now files each line's stored rate._)
+that. _2026-09-27: M7v removed it; `priceStoredOrderForIssuance` now files each line's stored rate._
+_Later on 2026-09-27 (A68): a line stores its VAT class, and the invoice at full payment files that
+class's rate on the day it is issued (the menus spec's §11.4 A68 note)._)
 The fiscal record is the same one a single payment files today; tenders and tips never reach
 the fingerprint (`computeHuella`), so the golden huella test must pass unedited.
 

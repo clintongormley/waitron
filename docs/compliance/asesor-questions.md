@@ -9,9 +9,11 @@ Each question has English context (for us) and a Spanish formulation (to hand ov
 Question numbers are **stable identifiers**, not reading order — sections are ordered by
 priority. Q9 is referenced from other documents; do not renumber it.
 
-Last revised **2026-09-27** — Q26 reworded: the owner reversed the rule it asks about on
-2026-09-26, and each line now keeps the VAT rate in the published menu it was sold from; the
-question stays open. Before that, **2026-09-26** — Q29 (how a discount or comp appears on a simplified invoice) added. Earlier the same day, Q27 (money taken against a bill before its invoice exists, then a split) and Q28 (a table leaves without paying: is the invoice still owed?) added beside Q21 and Q15, from the service design's §14. Earlier the same day, Q26 updated: the rule it asks about is now built, and the question
+Last revised **2026-09-27**, later — Q26 reworded again: the owner narrowed the 2026-09-26 rule, and
+each line now keeps its VAT class while the invoice takes the rate in force on the day it is issued;
+the question stays open. Earlier on 2026-09-27, Q26 reworded: the owner reversed the rule it asks
+about on 2026-09-26, and each line kept the VAT rate in the published menu it was sold from. Before
+that, **2026-09-26** — Q29 (how a discount or comp appears on a simplified invoice) added. Earlier the same day, Q27 (money taken against a bill before its invoice exists, then a split) and Q28 (a table leaves without paying: is the invoice still owed?) added beside Q21 and Q15, from the service design's §14. Earlier the same day, Q26 updated: the rule it asks about is now built, and the question
 stays open. Before that, **2026-09-25** — Q26 (a VAT change while an order is open: we apply the rate in force
 when the invoice is issued — is that right?) added beside Q25, and later the same day reworded from
 "at payment" to "when the invoice is issued", naming the invoice-first case. Before that, **2026-09-24** — Q25 (a void made on a later day: which VAT period the annulment lands
@@ -1311,57 +1313,62 @@ correct treatment for the venue's particular product.
 
 ---
 
-### Q26. A VAT change while an order is still open — each line keeps the rate in the published menu it was sold from; is that right? (added 2026-09-25; reworded 2026-09-27)
+### Q26. A VAT change while an order is still open — the invoice takes the rate in force on the day it is issued; is that right? (added 2026-09-25; reworded 2026-09-27, twice)
 
 **Why it matters.** An order can stay open for hours: a table's tab, or an order held for
-collection. The owner decided on 2026-09-26, reversing a decision of 2026-09-25, that each line's
-VAT rate is **the rate in the published menu the line was sold from**. Each published version of a
-menu records the VAT rate of every item on it. A line takes that rate at the moment its price is
-fixed: when it is added to an open order, or, for a sale rung up and paid in one go, at payment.
-Issuing the invoice files the rate each line recorded and looks nothing up again. A rate change
-therefore reaches the till only when the venue publishes the menu again, so the intent is that a
-legal change taking effect on a date is applied by publishing a new menu on that date. The
-customer pays the same gross price either way, so only the VAT split is affected. Since 2026-09-27
-this is how the product works (`priceOrderLines` records the rate and
-`priceStoredOrderForIssuance` files it, both in `apps/server/src/working-order.ts`). Two different
-events are affected:
+collection. The owner decided on 2026-09-27 how the two things that can change are treated.
 
-- **A set-up error corrected mid-service**, for example a drink configured at 10% that should always
-  have been 21%. Once the product is corrected and the menu published again, new lines are filed at
-  21%. Lines already in open orders keep 10%, and so do invoices already issued. Correcting an issued
-  invoice would take a corrective invoice (*factura rectificativa*), which the product cannot issue
-  today.
-- **A legal rate change effective from a given moment**, for example a change on 1 January. The
-  venue publishes a menu with the new rate at midnight. When a product moves to another rate, the
-  venue first changes the product's VAT class; when a rate itself changes (say 21% becomes 22%),
-  the rates are part of the software, so an updated version of Waitron must be installed first.
-  A New Year's Eve table opened before midnight and paid after it keeps the old rate on the lines
-  added before the new version was published, and the lines added after it take the new rate.
+- **Which VAT class a product belongs to** (general, reduced, super-reduced, zero) is part of the
+  published menu. A line records the class of the menu version it was sold from when its price is
+  fixed, so a class change reaches the till on the day a menu is published.
+- **The percentage of each class** is a dated table in the software: each class has its rates, each
+  from a calendar date. A legal change is installed ahead of time as a new dated entry and changes
+  nothing before its date. The invoice looks the percentage up for **the day it is issued**, in the
+  venue's local time. The customer pays the same gross price either way, so only the VAT split is
+  affected.
+
+Since 2026-09-27 this is how the product works (`vatRateOn`, `packages/catalogue/src/vat-rates.ts`;
+the issuing paths in `apps/server/src/till-sale.ts`, `bill-payments.ts` and `working-order.ts`).
+The invoice is issued at payment on every path except orders invoiced when they are placed and paid
+on collection, where it is issued at placing, so there the placing day's rate applies. Two
+different events are affected:
+
+- **A legal rate change effective from a given date**, for example 1 January. **The edge case: an
+  order open across the change pays the new rate on every line.** A New Year's Eve table opened
+  before midnight and paid after it is invoiced entirely at the new rate, including what was served
+  before midnight, because the invoice is issued after midnight.
+- **A set-up error corrected mid-service**, for example a drink configured in the 10% class that
+  should always have been in the 21% class. Once the product is corrected and the menu published
+  again, new lines record the 21% class. Lines already in open orders keep the class they recorded,
+  and so do invoices already issued. Correcting an issued invoice would take a corrective invoice
+  (*factura rectificativa*), which the product cannot issue today.
 
 A wrong rate on a filed invoice can only be corrected by a further record, so we want the rule
 confirmed before production, not after.
 
 > En nuestro TPV, el precio (IVA incluido) de cada línea de un pedido abierto (una mesa, o un pedido
-> pendiente de recoger) queda fijado cuando se añade, y en ese mismo momento queda fijado también su
-> tipo de IVA: el que figura en la carta publicada desde la que se vendió. Cada versión publicada de
-> la carta recoge el tipo de IVA de cada producto; un cambio de tipo solo llega a la caja cuando se
-> publica una nueva versión. La factura simplificada se emite con el tipo guardado en cada línea.
-> Normalmente la emisión coincide con el cobro; en los pedidos que se facturan al hacerlos y se
-> cobran al recoger, la emisión es anterior al cobro.
+> pendiente de recoger) queda fijado cuando se añade, y en ese mismo momento queda fijada su
+> categoría de IVA (general, reducido, superreducido o exento): la que figura en la carta publicada
+> desde la que se vendió. El porcentaje de cada categoría no se guarda en la línea: el programa lleva
+> una tabla de tipos con la fecha de entrada en vigor de cada uno, y la factura simplificada aplica
+> el tipo vigente el día en que se emite, en hora local. Normalmente la emisión coincide con el cobro;
+> en los pedidos que se facturan al hacerlos y se cobran al recoger, la emisión es anterior al cobro
+> y se aplica el tipo vigente ese día.
 >
-> **(a)** Si se descubre una configuración errónea (por ejemplo, una bebida dada de alta al 10 % que
-> debía estar al 21 %) y se corrige publicando una nueva carta, las líneas ya añadidas a pedidos
-> abiertos se facturan al 10 %. ¿Es correcto, corrigiéndolo después con una factura rectificativa, o
-> deben facturarse al tipo corregido?
+> **(a)** Si entra en vigor un cambio legal de tipo (por ejemplo, el 1 de enero a las 00:00), una
+> mesa abierta antes y cobrada después se factura entera al nuevo tipo, también lo consumido antes
+> de medianoche, porque la factura se emite después. ¿Es correcto, o debe aplicarse a cada
+> consumición el tipo vigente cuando se sirvió?
 >
-> **(b)** Si entra en vigor un cambio legal de tipo en un momento concreto (por ejemplo, el 1 de enero
-> a las 00:00) y publicamos la carta con el nuevo tipo en ese momento, una mesa abierta antes y
-> cobrada después conserva el tipo anterior en las consumiciones añadidas antes de publicarse la
-> nueva carta, y el nuevo en las añadidas después. ¿Es correcto, o debe aplicarse a todas el tipo
-> vigente al emitir la factura?
+> **(b)** Si se descubre una configuración errónea (por ejemplo, una bebida dada de alta en la
+> categoría del 10 % que debía estar en la del 21 %) y se corrige publicando una nueva carta, las
+> líneas ya añadidas a pedidos abiertos se facturan en la categoría con la que se añadieron (10 %).
+> ¿Es correcto, corrigiéndolo después con una factura rectificativa, o deben facturarse con la
+> categoría corregida?
 >
 > **(c)** ¿Cambia algo si el cobro se hace días después (por ejemplo, un pedido de grupo facturado
-> más tarde)? ¿Y si la factura se emite al hacer el pedido y se cobra después?
+> más tarde)? ¿Y si la factura se emite al hacer el pedido y se cobra después, con un cambio de tipo
+> entre ambos momentos?
 
 This records a question; no enquiry has been sent.
 
