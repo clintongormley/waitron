@@ -4489,9 +4489,8 @@ approved.
   together with N at or below the file count; rebalance `LIGHT_A/B_PACKAGES` when one light shard
   dominates.
 - **Dependency loop removed — LANDED #348.** `scripts/workspace-cycles.test.ts` fails if a loop
-  returns. One review point remains:
-  - The loop guard reports the whole group of packages in a loop, not a path through it, so a failure
-    does not say which link to cut. Optional: print one cycle path alongside the group.
+  returns. Its one review point is DONE (#790, 2026-09-28): a failure now prints one path round each loop,
+  with the manifest field or fields behind every link, above the groups.
 - **A throwaway script found six comments that described code that was no longer there, and it is
   not a guard yet** (written 2026-09-14 during the tenant-column removal). It flags a comment whose
   subject has gone from the lines beneath it; on that branch it found six real ones that a green
