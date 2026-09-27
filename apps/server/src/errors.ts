@@ -328,10 +328,7 @@ declare module "@waitron/shared" {
      * arguments. The id is the device's own, made fresh for each person's action.
      */
     "submission.id_reused": { submissionId: string };
-    /**
-     * A draft was saved by someone who no longer owns it: another person has taken it over.
-     * `ownerName` is who holds it now, for the till to say so.
-     */
+    /** The draft is owned by someone else; `ownerId` and `ownerName` say who owns it now. */
     "draft.taken_over": { draftId: string; ownerId: string; ownerName: string };
     /** The draft has been submitted, so it can no longer be saved or taken over. */
     "draft.already_submitted": { draftId: string };

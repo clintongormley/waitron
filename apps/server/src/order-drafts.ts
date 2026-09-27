@@ -136,7 +136,8 @@ export async function readDrafts(
 /**
  * Replace the lines of the operator's draft with `input.lines`, added together by
  * {@link normaliseDraftLines}, or start the operator's draft on the visit when `draftId` is null. A
- * save moves the draft's revision on, never the visit's, and sends nothing to the kitchen.
+ * save to an existing draft moves its revision on; no save moves the visit's, and none sends
+ * anything to the kitchen.
  */
 export async function saveDraft(
   tx: Transaction,
@@ -184,9 +185,9 @@ export async function saveDraft(
 
 /**
  * Make the operator the owner of another person's open draft. Where the operator already has an
- * open draft on the visit, the taken lines are added to the end of it and the taken draft is
- * discarded, so no one holds two; the operator's draft is returned. Taking over one's own draft
- * changes nothing and returns it as it is. A draft of another visit is not found.
+ * open draft on the visit, the taken lines are added to it, as a save adds lines, and the taken
+ * draft is discarded, so no one holds two; the operator's draft is returned. Taking over one's own
+ * draft changes nothing and returns it as it is. A draft of another visit is not found.
  */
 export async function takeOverDraft(
   tx: Transaction,
@@ -225,8 +226,8 @@ export async function takeOverDraft(
 
 /**
  * A merge's drafts (D2): each open draft on `fromVisitId` moves to `intoVisitId`, unless its owner
- * already has an open draft there; then that draft takes its lines at the end, as a takeover into
- * the taker's own draft does, and it is discarded. Every draft this touches has its revision moved
+ * already has an open draft there; then its lines are added to that draft, as a takeover into the
+ * taker's own draft adds them, and it is discarded. Every draft this touches has its revision moved
  * on. A merge naming no operator records the owner as the one who discarded.
  */
 export async function moveDraftsToVisit(
@@ -498,7 +499,6 @@ async function requireCourses(
   if (missing !== undefined) throw new AppError("course.not_found", { courseId: missing });
 }
 
-/** The visit's draft, open or sent; a discarded one, or one of another visit, is not found. */
 async function requireDraft(tx: Transaction, draftId: string, visitId: string) {
   const [draft] = await tx
     .select({

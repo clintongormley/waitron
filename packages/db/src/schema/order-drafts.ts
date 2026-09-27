@@ -62,7 +62,6 @@ export const orderDraftLines = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     draftId: id("draft_id").notNull(),
-    // No unique index, for the reason `order_groups.position` states.
     position: count("position").notNull(),
     // No key: `menu_items` is in the catalogue module's migration set; pricing at submission
     // refuses a menu item the zone does not offer.
