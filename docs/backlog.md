@@ -2052,9 +2052,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   pairing plan must not make a paired device claim work or say that it can print.
 - **The virtual PDF printer**, and a `print_jobs` retention sweep — nothing deletes a job today.
   Deleting a print job also deletes its `kitchen_print_jobs` link rows (the key is
-  `ON DELETE CASCADE`), which would silently clear a table's printing problem and change which link
-  counts as later, so a sweep must leave a job with an uncleared printing problem, or its links,
-  alone.
+  `ON DELETE CASCADE`). Deleting a failed job's links clears its printing problem, and deleting a
+  printed reprint's links brings back the failures it cleared, so a sweep must remove a bill's
+  kitchen print jobs all together or not at all.
 - **Printing A4 invoices on an office printer** (owner, 2026-09-14): a separate design, not started.
   It reverses the 2026-09-09 provisioning design's "raw ESC/POS only" decision and needs an A4
   invoice layout, a way to send a PDF to the printer over IPP (the standard office printing protocol,
@@ -2244,18 +2244,20 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - Setting up a venue from an imported configuration deletes every kitchen station, and the new
       table's station key has no delete rule; whether that venue can already hold link rows at that
       point was not tested (read, not run).
-    - The pass's Ready and Away record no `order_group_events` row, so who pressed them is only in
-      the command fingerprint: a new kind changes that append-only table's check, which is a core
-      migration. The course buttons recorded none either.
+    - The pass's Ready and Away record no `order_group_events` row, so who pressed them is recorded
+      nowhere readable; the command row keeps only a hash of its arguments. A new kind changes that
+      append-only table's check, which is a core migration. The course Ready and Away buttons
+      recorded none either.
     - Questions for the owner:
-      - A party's dishes in no group (moved or merged in from another party's bill, or from a bill
-        with no party) show at the pass in a section of their own with no Ready or Away button, as
-        dishes with no course did before.
+      - A party's dishes in no group (moved in from another party's bill, or moved or merged in
+        from a bill with no party) show at the pass in a section of their own with no Ready or Away
+        button, as dishes with no course did before.
       - The kitchen and pass screens offer Fire on every held group, as the Tab drawer and the
         course-era screens did, where the plan's text said "the first held group".
       - The table screen reads its printing problems in a second request beside the groups read on
         every table load. Folding them into the groups response would change the exact-body
-        assertion at `apps/server/src/till-api.groups.test.ts:717`, so it was left.
+        assertion in `apps/server/src/till-api.groups.test.ts`'s "answers the visit's revision and
+        its groups in sequence", so it was left.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card

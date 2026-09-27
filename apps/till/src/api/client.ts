@@ -489,8 +489,8 @@ export interface OrderGroup {
   summary: string;
 }
 
-/** A kitchen ticket of a party's bill not printed after two minutes, or given up on; `since` is when
- * the oldest such ticket was queued. */
+/** A kitchen ticket of a party's bill not printed after the server's `JOBS_WAITING_MS`, or given up
+ * on; `since` is when the oldest such ticket was queued. */
 export interface PrintProblem {
   workingOrderId: string;
   stationId: string;
@@ -820,8 +820,8 @@ export interface StationQueueGroup {
   status: WorkingOrderStatus;
   /** Absent on a bill with no party. */
   visit?: QueueVisit;
-  /** Present only when one of this bill's tickets for the station was not printed after two
-   *  minutes, or was given up on. */
+  /** Present only when one of this bill's tickets for the station was not printed after the
+   *  server's `JOBS_WAITING_MS`, or was given up on. */
   printProblem?: true;
   items: StationQueueItem[];
   /** This station's order-timing thresholds. Every group from one call shares them; they ride
@@ -1220,7 +1220,8 @@ export interface TabLine {
    * (`editSentLines`); "preparing"/"ready" is cancel-only. */
   state: TicketState | null;
   /** The order group the line is released with; null when it is in none, as on a bill with no party
-   * or for a line moved or merged in from another party's bill, or from a bill with no party. */
+   * or for a line moved in from another party's bill, or moved or merged in from a bill with no
+   * party. */
   groupId: string | null;
   note: string | null;
   /** The extras list a CHILD row was picked from, which a prefilled pick goes back to; null on a
@@ -1650,8 +1651,9 @@ export class TillApi {
   }
 
   /**
-   * The cross-station expo/pass queue → `GET /api/expo/queue`: orders aggregated into courses, or into
-   * groups for a seated party's bill, ACROSS all stations, oldest first. See {@link ExpoOrder} for what the server excludes.
+   * The cross-station expo/pass queue → `GET /api/expo/queue`: orders aggregated into courses, or
+   * into groups for a seated party's bill, ACROSS all stations, oldest first. See {@link ExpoOrder}
+   * for what the server excludes.
    */
   getExpoQueue(): Promise<ExpoOrder[]> {
     return this.#request<ExpoOrder[]>("/api/expo/queue", "GET");

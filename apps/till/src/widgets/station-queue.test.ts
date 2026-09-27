@@ -1440,7 +1440,7 @@ describe("till-station-queue — a seated party's groups", () => {
 describe("till-station-queue — printing problems", () => {
   const troubled: StationQueueGroup = { ...groupA, printProblem: true };
 
-  it("rail: a card whose ticket did not print says so; another card does not", async () => {
+  it("rail: a card whose ticket has not printed says so; another card does not", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [troubled, groupB],
       view: "rail",
@@ -1473,7 +1473,7 @@ describe("till-station-queue — printing problems", () => {
     expect(device.el.shadowRoot!.querySelector("[data-reprint]")).toBeNull();
   });
 
-  it("kanban: names each order whose ticket did not print above the columns", async () => {
+  it("kanban: names each order whose ticket has not printed above the columns", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [troubled, groupB],
       stationId: "st-1",

@@ -2312,7 +2312,7 @@ describe("TillApi: a seated party", () => {
     ).rejects.toMatchObject({ code: "visit.out_of_date", status: 409 });
   });
 
-  it("listPrintProblems GETs the party's kitchen tickets that did not print", async () => {
+  it("listPrintProblems GETs the party's kitchen tickets that have not printed", async () => {
     const problems = [
       {
         workingOrderId: "wo-4",

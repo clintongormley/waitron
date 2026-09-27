@@ -2744,7 +2744,7 @@ describe("till-app: submitting the draft", () => {
   });
 });
 
-describe("till-app: a party's kitchen tickets that did not print", () => {
+describe("till-app: a party's kitchen tickets that have not printed", () => {
   const problems: PrintProblem[] = [
     {
       workingOrderId: "wo-4",

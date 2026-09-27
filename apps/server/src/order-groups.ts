@@ -280,9 +280,9 @@ function dishLinesOf(tx: Transaction, groupId: string) {
 
 /**
  * The course Fire: on an order of a visit, release every held group of the visit that holds a dish
- * of this course on this order, whole and in position order, as {@link fireGroup} does. It touches nothing when the order is on
- * no visit or no held group qualifies. It carries no submission id, so it records no replay: each
- * group's `fired` event names the course and the order.
+ * of this course on this order, whole and in position order, as {@link fireGroup} does. It touches
+ * nothing when the order is on no visit or no held group qualifies. It carries no submission id, so
+ * it records no replay: each group's `fired` event names the course and the order.
  */
 export async function fireHeldGroupsOfCourse(
   tx: Transaction,

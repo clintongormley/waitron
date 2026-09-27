@@ -274,7 +274,7 @@ const notices: KitchenNotice[] = [
 ];
 
 // A seated party's bill: a line with no group, a fired group, a held group (its Fire button under
-// `kitchen`), and a ticket that did not print.
+// `kitchen`), and a ticket that has not printed.
 const partyGroups: StationQueueGroup[] = [
   {
     orderId: "wo-p",

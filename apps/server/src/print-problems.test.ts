@@ -389,7 +389,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     expect("printProblem" in (await stationCard(v.cocina, mesa4.tabId))).toBe(false);
   });
 
-  it("shows a ticket still queued after two minutes, and not one queued a moment less", async () => {
+  it("shows a ticket still queued after JOBS_WAITING_MS, and not one queued a moment less", async () => {
     const v = await setupVenue();
     const mesa4 = await firedTable(v, "Mesa 4");
     const job = await jobFor(mesa4.tabId, v.cocinaPrinter);

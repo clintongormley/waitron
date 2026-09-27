@@ -46,8 +46,9 @@ const COLUMNS: readonly TicketState[] = ["queued", "preparing", "ready"];
  *  order at the station. */
 export type BumpMode = "line" | "ticket";
 
-/** Which surface owns the per-course and per-group fire action (`locations.fire_control`): `kitchen` is this widget;
- *  under `waiter` the table-order screen fires and under `expo` the expo screen does. */
+/** Which surface owns the per-course and per-group fire action (`locations.fire_control`):
+ *  `kitchen` is this widget; under `waiter` the table-order screen fires and under `expo` the expo
+ *  screen does. */
 export type FireControlMode = "waiter" | "kitchen" | "expo";
 
 interface FlatItem {
@@ -443,10 +444,10 @@ export class TillStationQueue extends LitElement {
         margin: 0 0 var(--wt-space-2);
       }
 
-      /* The per-order Mode-P handover action (.collect) and the per-course or per-group kitchen-fire
-         action (.fire, KDS-2 §5a) — full-width primary buttons at the foot of a rail card / course section. The
-         wt-color-primary on wt-color-on-primary pairing is the SAME a11y-correct one wt-button's primary
-         variant uses, so contrast holds in both themes. */
+      /* The per-order Mode-P handover action (.collect) and the per-course or per-group
+         kitchen-fire action (.fire, KDS-2 §5a) — full-width primary buttons at the foot of a rail
+         card / course section. The wt-color-primary on wt-color-on-primary pairing is the SAME
+         a11y-correct one wt-button's primary variant uses, so contrast holds in both themes. */
       .collect,
       .fire {
         min-height: var(--wt-tap-min);
