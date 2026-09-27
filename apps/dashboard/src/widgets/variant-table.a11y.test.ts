@@ -3,8 +3,10 @@ import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "./test-help
 import type { VariantTable } from "./variant-table.js";
 import "./variant-table.js";
 import type { ProductEditorVariant } from "../api/client.js";
+import { setLocale } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
+afterEach(() => setLocale("es-ES"));
 
 /** Staff name and customer name differ on every row, as they do in the app. */
 const variants: ProductEditorVariant[] = [
@@ -52,8 +54,17 @@ async function mount(
 }
 
 describe.each(["light", "dark"] as const)("variant table (%s)", (theme) => {
-  it("is accessible listing its variants", async () => {
-    const { host } = await mount(false, theme);
+  it.each([
+    ["en-GB", ["Available: Media", "Available: Entera"]],
+    ["es-ES", ["Disponible: Media", "Disponible: Entera"]],
+  ])("names each available switch for its variant in %s", async (locale, labels) => {
+    setLocale(locale as "en-GB" | "es-ES");
+    const { el, host } = await mount(false, theme);
+    expect(
+      [...el.shadowRoot!.querySelectorAll("tbody wt-switch")].map((control) =>
+        control.shadowRoot!.querySelector('[role="switch"]')!.getAttribute("aria-label"),
+      ),
+    ).toEqual(labels);
     await expectNoA11yViolations(host);
   });
 

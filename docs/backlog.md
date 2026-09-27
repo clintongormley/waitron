@@ -784,11 +784,6 @@ What it left open:
 - **No "category dependants" seat exists on the module contract.** The delete-preview route
   (`GET .../:id/dependants`) is core-catalogue-specific; a module that wants its own kind of
   dependant (beyond products, child categories and preparation routes) has nowhere to plug in one.
-- **The add-products button uses a plural even for one.** The count is dropped into a fixed plural
-  sentence (`categories.add_selected` in `apps/dashboard/src/i18n/strings.ts`), so picking one
-  product reads "Añadir 1 productos", and the English "Add 1 products" is just as wrong. **Next
-  action:** give it a one-item form, as the delete warnings have, or use a plural-aware formatter if
-  the dashboard adopts one.
 - **Nothing stops the next screen making the same mistake.** A check that compares the class names a
   screen's own stylesheet styles against the class names it puts inside `wt-data-table` cell callbacks
   looks feasible and would catch this whole kind of bug; nobody has tried to write it.
@@ -948,14 +943,8 @@ its part done here when it lands.
   modal at the same size as the list's, so it covers the list entirely; only the darker backdrop
   shows that it is stacked.
 
-**Three small follow-ups A67 left open:**
+**One small follow-up A67 left open:**
 
-- **The Modifiers screen's options-list column heading still says "Labels".** The string
-  `options.labels` (`apps/dashboard/src/i18n/strings.ts`) reads "Labels" / "Etiquetas", while the
-  Options editor now says "option". **Next action:** reword it to "Options" / "Opciones".
-- **Nothing takes focus after an option is deleted in the Options list editor.** Focus goes neither
-  to a neighbouring row nor to "Add option" (`apps/dashboard/src/widgets/option-list-form.ts`).
-  **Next action:** move focus to the next row, or to "Add option" when no row is left.
 - **The Options list's rows centre their contents rather than lining up by text baseline (D6).**
   A row is one line of text beside the Default dot and a menu button, so centring reads the same;
   but when a server refusal adds an error line under an option's name, the dot and menu centre on
@@ -1102,9 +1091,6 @@ product is now the variant itself. What it left open:
 - **The product list shows "—" for a variant's allergens**, because the list's data carries none for
   a variant (`ListedVariant`, `packages/catalogue/src/product-types.ts`). **Next action:** decide
   whether the list should read a variant's effective allergens, and add them to that read if so.
-- **Each variants-table row's Available switch is named only "Available"** to a screen reader, not
-  with the variant's name (`apps/dashboard/src/widgets/variant-table.ts`). **Next action:** name the
-  switch after its variant.
 - **Not yet looked at on a phone (390px wide):** a variant's name may sit a few pixels low in its
   product-list row. **Next action:** open it at that width, in both themes, and look. (The variants
   table's unit select, once cut to "Unid" in Spanish at that width, is no longer shown there: a

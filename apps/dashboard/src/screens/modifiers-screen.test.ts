@@ -19,6 +19,7 @@ import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 
 afterEach(cleanupWidgets);
+afterEach(() => setLocale("es-ES"));
 // Each tab's table remembers its sort and its status filter in sessionStorage under its own
 // `viewKey`, so a filter one test chooses would otherwise be restored into every later mount.
 beforeEach(() => sessionStorage.clear());
@@ -372,6 +373,17 @@ it("lists an options list's labels and an extras list's products by their staff 
   const items = extras.columns.find((column) => column.key === "items")!;
   expect(items.searchValue!(extraList as never)).toBe("White bread, Rye bread");
   expect(items.sortValue!(extraList as never)).toBe("White bread, Rye bread");
+});
+
+it.each([
+  ["en-GB", "Options"],
+  ["es-ES", "Opciones"],
+])("heads the options column %s as %s", async (locale, heading) => {
+  setLocale(locale as "en-GB" | "es-ES");
+  const el = await mount();
+  const options = table(el, "option-lists");
+  await options.updateComplete;
+  expect(options.columns.find((column) => column.key === "labels")?.label).toBe(heading);
 });
 
 // ---------------------------------------------------------------------------

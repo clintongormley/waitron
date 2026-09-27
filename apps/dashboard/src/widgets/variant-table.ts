@@ -347,7 +347,7 @@ export class VariantTable extends LitElement {
         <wt-switch
           name=${`available-${index}`}
           data-test=${`available-${index}`}
-          label=${t("editor.available")}
+          label=${`${t("editor.available")}: ${row.variant.name}`}
           hide-label
           .checked=${row.variant.available}
           .disabled=${this.busy}
