@@ -92,6 +92,9 @@ const en = {
   "venue.kitchen_ticket_grouping.combined": "One line: 3 x Burger",
   "venue.kitchen_ticket_grouping.separate": "A line each: 1 x Burger, three times",
   "venue.kitchen_ticket_grouping_hint": "Applies to new kitchen tickets and to reprints.",
+  "venue.print_held_work": "Print held groups in advance",
+  "venue.print_held_work_hint":
+    "A held group prints straight away on a kitchen ticket marked HOLD, and firing it prints a FIRE slip. A group held before this is turned on prints when it is fired, as before.",
 } as const;
 
 const es: Record<keyof typeof en, string> = {
@@ -187,6 +190,9 @@ const es: Record<keyof typeof en, string> = {
   "venue.kitchen_ticket_grouping.separate": "Una por plato: 1 x Hamburguesa, tres veces",
   "venue.kitchen_ticket_grouping_hint":
     "Se aplica a las comandas de cocina nuevas y a las reimpresiones.",
+  "venue.print_held_work": "Imprimir por adelantado los grupos en espera",
+  "venue.print_held_work_hint":
+    "Un grupo en espera se imprime en el momento en una comanda de cocina marcada HOLD, y al marcharlo se imprime un aviso FIRE. Un grupo que ya estaba en espera antes de activarlo se imprime al marcharlo, como hasta ahora.",
 };
 
 export const VENUE_SERVICE_STRINGS = { en, es };

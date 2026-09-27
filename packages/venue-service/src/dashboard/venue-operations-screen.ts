@@ -248,6 +248,21 @@ export class VenueOperationsScreen extends LitElement {
       this.busy = false;
     }
   }
+  async #savePrintHeldWork(printHeldWork: boolean): Promise<void> {
+    if (this.busy) return;
+    this.busy = true;
+    this.error = undefined;
+    this.fieldErrors = {};
+    try {
+      await this.api.savePrintHeldWork(printHeldWork);
+      this.model = { ...this.model!, printHeldWork };
+      await this.#load();
+    } catch {
+      this.fieldErrors = { printHeldWork: t("venue.save_error") };
+    } finally {
+      this.busy = false;
+    }
+  }
   #validate(fields: readonly { name: string; label: string }[]): boolean {
     this.fieldErrors = Object.fromEntries(
       fields
@@ -679,6 +694,19 @@ export class VenueOperationsScreen extends LitElement {
       ></wt-switch>
       <p class="hint" data-test="edit-sent-lines-hint">${t("venue.edit_sent_lines_hint")}</p>
       ${this.#fieldError("editSentLines")} ${this.#kitchenTicketGrouping()}
+      <wt-switch
+        class="setting"
+        name="printHeldWork"
+        label=${t("venue.print_held_work")}
+        .checked=${live(this.model!.printHeldWork)}
+        .disabled=${this.busy}
+        @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+          event.stopPropagation();
+          void this.#savePrintHeldWork(event.detail.checked);
+        }}
+      ></wt-switch>
+      <p class="hint" data-test="print-held-work-hint">${t("venue.print_held_work_hint")}</p>
+      ${this.#fieldError("printHeldWork")}
     </section>`;
   }
   #kitchenTicketGrouping() {

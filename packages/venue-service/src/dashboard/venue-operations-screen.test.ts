@@ -81,6 +81,7 @@ const model: VenueServiceView = {
   products: [{ id: "p1", name: "Negroni" }],
   settings: { editSentLines: true },
   kitchenTicketGrouping: "combined",
+  printHeldWork: false,
 };
 
 async function mount(api: VenueServiceApi): Promise<VenueOperationsScreen> {
@@ -1238,5 +1239,117 @@ describe("the setting for how identical dishes print on a kitchen ticket", () =>
       "Una línea: 3 x Hamburguesa",
       "Una por plato: 1 x Hamburguesa, tres veces",
     ]);
+  });
+});
+
+describe("the setting that prints held groups in advance", () => {
+  function printSwitch(el: VenueOperationsScreen) {
+    const host = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      'wt-switch[name="printHeldWork"]',
+    )!;
+    expect(host).not.toBeNull();
+    return { host, input: host.shadowRoot!.querySelector<HTMLInputElement>('[role="switch"]')! };
+  }
+  function beside(el: VenueOperationsScreen) {
+    return el.shadowRoot!.querySelector('[data-field-error="printHeldWork"]')?.textContent?.trim();
+  }
+  function stored(printHeldWork: boolean): VenueServiceView {
+    return { ...structuredClone(model), printHeldWork };
+  }
+
+  // Fails if the switch stops reading the stored value, leaves the kitchen changes section, or
+  // loses its label or hint.
+  it("shows the stored value on the Preparation routing tab, off by default", async () => {
+    const off = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    await selectTab(off, "routing");
+    const { host, input } = printSwitch(off);
+    expect(host.closest('[data-test="kitchen-changes"]')).not.toBeNull();
+    expect(host.shadowRoot!.querySelector("label")!.textContent).toBe(
+      "Print held groups in advance",
+    );
+    expect(input.checked).toBe(false);
+    expect(
+      off.shadowRoot!.querySelector('[data-test="print-held-work-hint"]')!.textContent,
+    ).toContain("marked HOLD");
+    const on = await mount({
+      load: vi.fn().mockResolvedValue(stored(true)),
+    } as unknown as VenueServiceApi);
+    expect(printSwitch(on).input.checked).toBe(true);
+  });
+
+  // Fails if the switch sends the old value rather than the new one, sends it through another
+  // setting's save, or stays usable mid-save.
+  it("saves the chosen value straight away and is disabled until the save finishes", async () => {
+    let finish!: () => void;
+    const api = {
+      load: vi.fn().mockResolvedValueOnce(model).mockResolvedValue(stored(true)),
+      savePrintHeldWork: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
+      saveSettings: vi.fn(),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "routing");
+    printSwitch(el).input.click();
+    await settle(el);
+    expect(api.savePrintHeldWork).toHaveBeenCalledWith(true);
+    expect(api.saveSettings).not.toHaveBeenCalled();
+    expect(printSwitch(el).host.disabled).toBe(true);
+    expect(printSwitch(el).input.disabled).toBe(true);
+    finish();
+    await settle(el);
+    expect(api.load).toHaveBeenCalledTimes(2);
+    expect(printSwitch(el).input.checked).toBe(true);
+    expect(printSwitch(el).input.disabled).toBe(false);
+    expect(summary(el)).toBe("");
+  });
+
+  // Fails if the in-flight guard goes: two changes arriving before the switch is disabled would
+  // both be sent.
+  it("sends one save for two changes that arrive before the switch is disabled", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      savePrintHeldWork: vi.fn(() => new Promise<void>(() => {})),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    const { host } = printSwitch(el);
+    for (const checked of [true, false])
+      host.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { checked }, bubbles: true, composed: true }),
+      );
+    await settle(el);
+    expect(api.savePrintHeldWork).toHaveBeenCalledTimes(1);
+    expect(api.savePrintHeldWork).toHaveBeenCalledWith(true);
+  });
+
+  // Fails if a refused save leaves the switch showing the value that was never stored, or says
+  // nothing.
+  it("says a refused save failed, beside the switch and in the summary, and shows the stored value again", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      savePrintHeldWork: vi.fn().mockRejectedValue(new Error("offline")),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "routing");
+    printSwitch(el).input.click();
+    await settle(el);
+    expect(api.savePrintHeldWork).toHaveBeenCalledWith(true);
+    expect(summary(el)).toContain("could not be saved");
+    expect(beside(el)).toContain("could not be saved");
+    expect(printSwitch(el).input.checked).toBe(false);
+  });
+
+  // Fails if the Spanish catalogue loses the label or the hint.
+  it("reads in Spanish", async () => {
+    setLocale("es");
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    expect(printSwitch(el).host.shadowRoot!.querySelector("label")!.textContent).toBe(
+      "Imprimir por adelantado los grupos en espera",
+    );
+    expect(
+      el.shadowRoot!.querySelector('[data-test="print-held-work-hint"]')!.textContent,
+    ).toContain("marcada HOLD");
   });
 });
