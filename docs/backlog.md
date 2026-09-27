@@ -1322,13 +1322,14 @@ What Task 11 left open:
   form.** `#save` in `apps/dashboard/src/screens/units-screen.ts` places every refusal with
   `unitRefusalErrors`, beside its field or in the form's summary, and no longer in the banner behind
   the modal.
-- **The Categories screen maps a refused category save to form fields by hand.** `#save` in
-  `apps/dashboard/src/screens/categories-screen.ts` does by hand, less completely, what
-  `categoryRefusalErrors` (`apps/dashboard/src/widgets/category-form.ts`) does: it does not place a
-  `management.request_invalid` beside the field that refusal names, and it keys a refusal naming no
-  field `save` where the mapper uses `_form` (both show in the form's summary alone). **Next
-  action:** call `categoryRefusalErrors` there; the case expecting `{ save: … }` in
-  `apps/dashboard/src/screens/categories-screen.test.ts` changes with it.
+- **DONE (lane C's C23): the Categories screen places a refused save through
+  `categoryRefusalErrors`.**
+- **With "No colour" chosen, the colour field's "Custom" square shows black — OPEN (seen
+  2026-09-27 in lane C's C23 screenshots of the category editor, light and dark, 1280 and 390
+  wide; not investigated).** The square is drawn by `apps/dashboard/src/widgets/color-field.ts`,
+  which C23 did not change. It reads as if black were chosen; why it is black was not checked.
+  **Next action:** open the category editor on a category with no colour and decide whether the
+  square should read as empty.
 - **`wt-tabs` shares the `wt-change` event name with every control a panel slots in, and five
   screens now carry the same `event.target !== event.currentTarget` guard against it**
   (`alerts-screen.ts`, `printers-screen.ts`, `profile-screen.ts`, `venue-operations-screen.ts`, and
