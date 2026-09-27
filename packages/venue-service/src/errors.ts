@@ -20,6 +20,7 @@ declare module "@waitron/shared" {
     "route.station_inactive": { stationId: string };
     "order.service_context_missing": { workingOrderId: string };
     "kitchen_notice.not_found": { noticeId: string };
+    "kitchen_notice.invalid": { field: "direction" };
     // `working_order.not_found` and `station.not_found` are declared in @waitron/db's errors.ts.
   }
 }

@@ -50,6 +50,13 @@
       "when": 1790522446315,
       "tag": "0006_kitchen_ticket_grouping_check",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1790530080461,
+      "tag": "0007_print_held_work_notice_direction",
+      "breakpoints": true
     }
   ]
 }

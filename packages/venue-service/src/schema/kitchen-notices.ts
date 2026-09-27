@@ -18,6 +18,8 @@ import {
 
 export const kitchenNoticeKind = enumType(["recalled", "void", "changed", "moved"]);
 
+export const KITCHEN_NOTICE_DIRECTIONS = ["added", "removed"] as const;
+
 /**
  * A correction to work already sent to a station, kept until a cook acknowledges it. The line is
  * copied by value because a void deletes the line the notice describes.
@@ -37,6 +39,13 @@ export const kitchenNotices = table(
     wasStarted: flag("was_started").notNull().default(false),
     /** On a `moved` notice, the table the work now belongs to; null where it has none. */
     movedTo: label("moved_to"),
+    /**
+     * On a `changed` notice, whether the quantity was added to or taken from the work; null
+     * otherwise. Plain text with no CHECK, because adding one makes drizzle rebuild the table (an
+     * `enumType` column must have one): `recordKitchenNotices` refuses any other value, and a
+     * direction on another kind, with `kitchen_notice.invalid`.
+     */
+    direction: label("direction").$type<(typeof KITCHEN_NOTICE_DIRECTIONS)[number]>(),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     acknowledgedAt: tsString("acknowledged_at"),
   },
