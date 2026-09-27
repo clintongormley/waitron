@@ -4343,13 +4343,29 @@ doubles the single quote only, and a backslash stays as itself. Left as it was, 
 `packages/provisioning/src/identifiers.ts` for `quoteLiteral`, which only re-exports it; the function
 lives in `packages/shared/src/sql-literal.ts`.
 
-**Two identity error descriptions say less than the code raises — OPEN (found 2026-09-23, identity's
-coverage review, PR #526).** In `packages/identity/src/errors.ts`, `account_action.invalid` reads
-"unknown, expired, or already used", but it is also raised for a live proof whose person has since
-been suspended, activated or lost their login email; `management_session.required` reads "unknown or
-already ended", but `profile.ts` also raises it for a live session whose person row is gone. The
-tests for each case are in `account-action.test.ts` and `profile.test.ts`. **Next action:** widen
-the two descriptions to the cases the tests pin.
+**Completing an account action does not refuse a person who has lost their login email — OPEN
+(found 2026-09-27, finish-branch's convention review of the identity tidy-up branch).**
+`inspectAccountAction` (`packages/identity/src/account-action.ts`) refuses a live token whose
+person's email is null with `account_action.invalid`, and its doc comment says "Completion checks it
+again", but `completeAccountAction` hands over to `finishClaimedAction`, which checks only that the
+person exists and has the status the purpose needs, not the email. Receipt: on 2026-09-27, a scratch
+copy of the case "refuses a live proof whose person has since lost their login email" in
+`packages/identity/src/account-action.test.ts`, changed to call `completeAccountAction` with purpose
+`password_reset` after nulling `email` and `email_folded`, completed and returned
+`{"personId":…,"session":null}` instead of refusing. Not established: whether any product path
+clears a person's login email while a token is outstanding. **Next action:** decide whether
+completion should refuse the same way inspection does (and add the case), or narrow the "Completion
+checks it again" comment.
+
+**The dashboard calls a mistyped email-change code an invalid link — OPEN (found 2026-09-27 by
+reading, on the identity tidy-up branch).**
+`apps/dashboard/src/i18n/codes.ts` maps `account_action.invalid` to "This link is invalid or has
+expired. Request a new one." (Spanish: "Este enlace no es válido o ha caducado. Solicita uno
+nuevo."). `apps/server/src/me-api.ts` raises the same code when the email-change code a person types
+on the Profile screen is not accepted, and `apps/dashboard/src/screens/profile-screen.ts` shows
+`codeMessage(code)` for the error `confirmProfileEmail` throws. Found by reading the code; nobody
+has opened the screen to see it. **Next action:** give the email-change refusal its own wording (a
+separate code, or a message the screen chooses), and open the screen to look at it.
 
 **The tunnel's stand-in relay pairs with sockets that have already gone — OPEN (found 2026-09-23,
 writing tunnel's coverage tests, PR #506).** `packages/tunnel/src/testing/relay.ts` is test-only:
@@ -4973,14 +4989,6 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
    `packages/*/src` on 2026-09-14, after `computeDailyClose` was made sequential, found no remaining
    `Promise.all` over one transaction: the rest read or delete files, call HTTP or storage
    services, close pools, or query through a pool.
-5. **`packages/identity/src/totp.test.ts`'s "rejects a wrong token" case can fail by chance.** It
-   sends `000000` against a freshly generated secret and expects a refusal (a comment in
-   `verifyTotp`'s catch called `000000` "well-formed-but-wrong" until #559 pruned it).
-   It is not always wrong: while PR #534 was in review, Codex fixed a secret and a clock at which
-   `000000` IS the valid code, and `apps/server/src/me-api.test.ts`'s authenticator test answered
-   200 where it expected 401. That test now picks a code that is invalid for the enrolment's secret
-   at the current time; the identity case still carries the old assumption. Fix
-   the same way: derive a code the secret does not accept, rather than a constant.
 
 **Names left behind by the tenant-column removal (LANDED #378, 2026-09-16):**
 

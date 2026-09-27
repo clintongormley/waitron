@@ -101,7 +101,11 @@ describe("your profile", () => {
     });
     await expect(
       withTransaction(suite.db, (tx) =>
-        confirmOwnEmailChange(tx, { ...f, code: "000000", codeKey }),
+        confirmOwnEmailChange(tx, {
+          ...f,
+          code: emailChange!.code === "000000" ? "111111" : "000000",
+          codeKey,
+        }),
       ),
     ).resolves.toBeNull();
     await expect(
@@ -339,12 +343,22 @@ describe("your profile", () => {
         keyRing,
       }),
     );
+    // Any fixed code is valid for some secret; pick one no step the verifier accepts produces.
+    const now = Math.floor(Date.now() / 1000);
+    const accepted = new Set(
+      [-60, -30, 0, 30, 60].map((offset) =>
+        generateSync({ secret: pending.secret, epoch: now + offset }),
+      ),
+    );
+    const wrong = ["000000", "111111", "222222", "333333", "444444", "555555"].find(
+      (code) => !accepted.has(code),
+    )!;
     await expect(
       withTransaction(suite.db, (tx) =>
         finishOwnTotpEnrollment(tx, {
           ...f,
           enrollmentId: pending.enrollmentId,
-          code: "000000",
+          code: wrong,
           keyRing,
         }),
       ),
