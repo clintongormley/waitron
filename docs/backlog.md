@@ -320,7 +320,12 @@ and menu-state reads are bounded, at 25 seconds, and a table's round sends and o
 seconds); a refusal that lands after the tab is paid, or after a server switch, shows the
 ordinary unnamed message; the till's screen-to-app events use plain names, while
 [conventions-ui.md](developers/conventions-ui.md) says every custom event is `wt-*` — the rule or
-the till needs to change.
+the till needs to change. **Done since (2026-09-27, lane A's A71, #725):** a notice now carries its
+line's unit, copied when it is recorded (venue-service migration `0004`, a nullable
+`kitchen_notices.unit_name`), and the kitchen screen writes it the way the queue row above it does:
+"0.5 kg× Pulpo". A dish sold by the piece carries the Each unit, so its notice reads "2 ud× Croqueta"
+in Spanish, as its queue row already did; only a line with no unit at all reads "2×". Hiding
+Each on both is the owner's call, not done.
 **Menus M7b3 landed (#713, 2026-09-26): an unpaid split bill goes back on its tab.** When the
 waiter leaves a separate bill made with "Split by item" without paying it, the till that made it
 merges it back into the table's tab (`mergeTabs`; the kitchen is told nothing). Every other case
