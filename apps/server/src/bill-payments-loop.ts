@@ -3,6 +3,7 @@ import { billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { recordIncidentOnce } from "@waitron/core";
+import { codeOf } from "@waitron/server-kit";
 import { findPaymentByBillPayment } from "@waitron/payments";
 import {
   AppError,
@@ -29,6 +30,32 @@ import "./errors.js";
  * §6b: "an alert fires after an hour"). */
 const REFUND_UNRESOLVED_AFTER_MS = 60 * 60 * 1000;
 
+const REFUND_LOOKUP_EVERY_PASS_MS = 5 * 60 * 1000;
+const REFUND_LOOKUP_MAX_GAP_MS = 30 * 60 * 1000;
+
+/**
+ * How long the loop waits between two lookups of a refund sent `sentAgeMs` ago: none for its first
+ * five minutes, then a quarter of its age up to half an hour, so a refund stuck for hours costs its
+ * provider two requests an hour rather than one per pass.
+ */
+export function refundLookupGapMs(sentAgeMs: number): number {
+  if (sentAgeMs < REFUND_LOOKUP_EVERY_PASS_MS) return 0;
+  return Math.min(sentAgeMs / 4, REFUND_LOOKUP_MAX_GAP_MS);
+}
+
+/** When the loop last looked each pending refund up, per venue store. Kept in memory: after a
+ * restart every pending refund is looked up once on the first pass. */
+const LAST_REFUND_LOOKUP = new WeakMap<Database, Map<string, number>>();
+
+function lastLookupsOf(db: Database): Map<string, number> {
+  let last = LAST_REFUND_LOOKUP.get(db);
+  if (last === undefined) {
+    last = new Map();
+    LAST_REFUND_LOOKUP.set(db, last);
+  }
+  return last;
+}
+
 export interface BillPaymentsLoopDeps {
   db: Database;
   backend: FiscalBackend;
@@ -48,9 +75,13 @@ export interface BillPaymentsPass {
   refundsFailed: number;
   /** Refunds pending over an hour, counted on every pass. */
   refundsUnresolved: number;
+  /** The payments and refunds this pass found pending and did not settle. */
+  pending: number;
   /** A payment or refund this pass could not settle, left for the next. */
   errors: (({ billPaymentId: string } | { refundId: string }) & { error: string })[];
 }
+
+type RefundRow = typeof billPaymentRefunds.$inferSelect;
 
 /** The provider row's states that mean the card was charged. */
 export const CHARGED = new Set(["captured", "accepted_offline", "settled"]);
@@ -139,16 +170,22 @@ export async function settlePendingBillPayments(
     refundsCompleted: 0,
     refundsFailed: 0,
     refundsUnresolved: 0,
+    pending: pending.length,
     errors: [],
   };
   for (const { id } of pending) {
+    const now = deps.clock.now().instant;
     try {
       const { settled } = await withTransaction(deps.db, (tx) =>
-        settleFromProviderRow(tx, deps, id, deps.clock.now().instant),
+        settleFromProviderRow(tx, deps, id, now),
       );
       if (settled !== "left") pass[settled] += 1;
+      if (settled === "received" || settled === "failed") pass.pending -= 1;
     } catch (error) {
       pass.errors.push({ billPaymentId: id, error: String(error) });
+      await raiseSettleFailed(deps, id, error, now).catch((alertError: unknown) => {
+        pass.errors.push({ billPaymentId: id, error: String(alertError) });
+      });
     }
   }
   await settlePendingBillRefunds(deps, pass);
@@ -156,10 +193,45 @@ export async function settlePendingBillPayments(
 }
 
 /**
+ * `payment.bill_settle_failed` for a pending bill payment whose card was charged for it but which
+ * could not be recorded, its invoice included: the bill stays locked, and the box's operator reads
+ * the dashboard, not the log.
+ */
+async function raiseSettleFailed(
+  deps: BillPaymentsLoopDeps,
+  billPaymentId: string,
+  error: unknown,
+  now: Date,
+): Promise<void> {
+  await withTransaction(deps.db, async (tx) => {
+    const [payment] = await tx
+      .select()
+      .from(billPayments)
+      .where(eq(billPayments.id, billPaymentId));
+    const provided = await findPaymentByBillPayment(tx, billPaymentId);
+    if (payment?.state !== "pending" || provided === undefined || !CHARGED.has(provided.state)) {
+      return;
+    }
+    await recordIncidentOnce(tx, {
+      tillId: brandTillId(payment.tillId),
+      error: new AppError("payment.bill_settle_failed", {
+        billPaymentId,
+        workingOrderId: payment.workingOrderId,
+        amount: provided.amount,
+        errorCode: codeOf(error),
+      }),
+      severity: "error",
+      detectedAt: now,
+    });
+  });
+}
+
+/**
  * The refund half of a pass (design §6b): each pending card refund nothing in this process drives
- * is failed when it never reached its provider, else looked up and settled by the evidence table,
- * never sent again. One still pending an hour after it was asked for raises
- * `payment.refund_unresolved` on the till that gave it.
+ * is failed when it never reached its provider, else looked up, at most as often as
+ * {@link refundLookupGapMs} allows, and settled by the evidence table, never sent again. One still
+ * pending an hour after it was asked for raises `payment.refund_unresolved` on the till that gave
+ * it, whether or not this pass looked it up.
  */
 async function settlePendingBillRefunds(
   deps: BillPaymentsLoopDeps,
@@ -167,34 +239,50 @@ async function settlePendingBillRefunds(
 ): Promise<void> {
   const pending = await withTransaction(deps.db, (tx) =>
     tx
-      .select({ id: billPaymentRefunds.id })
+      .select({ refund: billPaymentRefunds, workingOrderId: billPayments.workingOrderId })
       .from(billPaymentRefunds)
+      .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
       .where(eq(billPaymentRefunds.state, "pending"))
       .orderBy(billPaymentRefunds.createdAt),
   );
-  for (const { id } of pending) {
+  pass.pending += pending.length;
+  const lastLookups = lastLookupsOf(deps.db);
+  const pendingIds = new Set(pending.map(({ refund }) => refund.id));
+  for (const id of lastLookups.keys()) {
+    if (!pendingIds.has(id)) lastLookups.delete(id);
+  }
+  for (const { refund: found, workingOrderId } of pending) {
+    const id = found.id;
     try {
-      const resumed = await resumeCardRefund(deps, id, "loop");
-      if (!resumed.claimed) continue;
-      const { refund } = resumed;
-      if (refund.state === "completed") pass.refundsCompleted += 1;
-      if (refund.state === "failed") pass.refundsFailed += 1;
+      let refund = found;
       const now = deps.clock.now().instant;
-      if (
-        refund.state === "pending" &&
-        now.getTime() - Date.parse(refund.createdAt) > REFUND_UNRESOLVED_AFTER_MS
-      ) {
+      if (lookupDue(found, lastLookups.get(id), now.getTime())) {
+        const resumed = await resumeCardRefund(deps, id, "loop");
+        if (!resumed.claimed) continue;
+        lastLookups.set(id, now.getTime());
+        refund = resumed.refund;
+        if (refund.state === "completed") pass.refundsCompleted += 1;
+        if (refund.state === "failed") pass.refundsFailed += 1;
+      }
+      if (refund.state !== "pending") {
+        pass.pending -= 1;
+        continue;
+      }
+      if (now.getTime() - Date.parse(refund.createdAt) > REFUND_UNRESOLVED_AFTER_MS) {
         pass.refundsUnresolved += 1;
-        await withTransaction(deps.db, async (tx) => {
-          const [payment] = await tx
-            .select({ workingOrderId: billPayments.workingOrderId })
-            .from(billPayments)
-            .where(eq(billPayments.id, refund.billPaymentId));
-          await raiseRefundUnresolved(tx, refund, payment!.workingOrderId, now);
-        });
+        await withTransaction(deps.db, (tx) =>
+          raiseRefundUnresolved(tx, refund, workingOrderId, now),
+        );
       }
     } catch (error) {
       pass.errors.push({ refundId: id, error: String(error) });
     }
   }
+}
+
+/** A refund never sent is failed at once, asking nothing; a sent one waits out its lookup gap. A
+ * lookup stamped after `now` (the clock went back) does not hold the next one off. */
+function lookupDue(refund: RefundRow, lastLookup: number | undefined, now: number): boolean {
+  if (refund.sentAt === null || lastLookup === undefined || lastLookup > now) return true;
+  return now - lastLookup >= refundLookupGapMs(now - Date.parse(refund.sentAt));
 }

@@ -400,12 +400,12 @@ export async function resumeCardRefund(
   if (!target.claimed) return { claimed: false, refund: target.found.refund };
   const { refund, provided } = target.found;
   try {
+    if (refund.sentAt === null && resolver !== "retry") {
+      const failed = await recordRefundOutcome(deps, refundId, { kind: "never_sent" });
+      return { claimed: true, refund: failed, lookup: null, resent: false };
+    }
     const provider = await providerOf(deps, target.found);
     if (refund.sentAt === null) {
-      if (resolver !== "retry") {
-        const failed = await recordRefundOutcome(deps, refundId, { kind: "never_sent" });
-        return { claimed: true, refund: failed, lookup: null, resent: false };
-      }
       const sent =
         provider?.sendRefund === undefined
           ? refund
@@ -561,7 +561,11 @@ export async function refundBillPayment(
         });
       }
       if (payment.kind === "items" && !whole) {
-        throw new AppError("management.request_invalid", { field: "appliedAmount" });
+        throw new AppError("bill.refund_not_whole", {
+          paymentId,
+          applied: toScale(refundable, MONEY_SCALE),
+          tip: toScale(refundableTip, MONEY_SCALE),
+        });
       }
 
       const createdAt = deps.clock.now().instant.toISOString();

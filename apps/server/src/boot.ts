@@ -395,12 +395,17 @@ export function withStalePaymentRelease(
   };
 }
 
+/** How soon the loop comes back while a bill payment or refund is pending: a bill stays locked
+ * until it settles, and with nothing else due the loop would otherwise sleep its whole ceiling. */
+const BILL_PENDING_RECHECK_MS = 60_000;
+
 /**
  * After each pass, settle the pending card bill payments no attempt in this process is driving
- * (`settlePendingBillPayments`, bill payments design §5.4). Like {@link withStalePaymentRelease} it
- * is log-only: a failure never changes the inner report. Settling files invoices and fails payments
- * this process is not driving, so it runs only while `getRole` answers `primary`, read per pass as
- * `singletonPass` reads it.
+ * (`settlePendingBillPayments`, bill payments design §5.4). A failure never changes the inner
+ * report; while a payment or refund stays pending it brings the report's next due time forward to
+ * {@link BILL_PENDING_RECHECK_MS} from now, never later than the report's own. Settling files
+ * invoices and fails payments this process is not driving, so it runs only while `getRole` answers
+ * `primary`, read per pass as `singletonPass` reads it.
  */
 export function withPendingBillPayments(
   inner: (now: Date) => Promise<PassReport>,
@@ -412,17 +417,17 @@ export function withPendingBillPayments(
     const report = await inner(now);
     if (getRole() !== "primary") return report;
     try {
-      const { errors, ...counts } = await settle();
+      const { errors, pending, ...counts } = await settle();
       const settled =
-        counts.received +
-        counts.failed +
-        counts.mismatched +
-        counts.refundsCompleted +
-        counts.refundsFailed;
+        counts.received + counts.failed + counts.refundsCompleted + counts.refundsFailed;
       if (settled > 0) {
         log("info", "bill_payment.settled", counts);
       }
       for (const failure of errors) log("warn", "bill_payment.settle_failed", failure);
+      const recheckAt = new Date(now.getTime() + BILL_PENDING_RECHECK_MS);
+      if (pending > 0 && (report.nextDueAt === null || report.nextDueAt > recheckAt)) {
+        return { ...report, nextDueAt: recheckAt };
+      }
     } catch (error) {
       log("warn", "bill_payment.settle_failed", { error: String(error) });
     }

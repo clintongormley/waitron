@@ -101,7 +101,6 @@ export interface BillPaymentRequest extends BillPaymentAsk {
   /** A hand-keyed card's terminal operation number. */
   externalRef?: string;
   /** A reader card only, passed to the provider's `collect`. */
-  allowOffline?: boolean;
   simulationOutcome?: "captured" | "declined";
   applied: string;
   tip: string;
@@ -341,8 +340,8 @@ function holdsMoney(payments: readonly PaymentMoney[]): boolean {
 
 /**
  * Refuse `bill.payments_received` for the first of these bills that holds money taken before its
- * invoice (design §4.5, §7): abandoning it would lose that money from the records, and paying it in
- * one go would invoice the whole total beside it.
+ * invoice (design §4.5): abandoning it, or merging it into another bill, would lose that money from
+ * the records.
  */
 export async function refuseBillHoldingMoney(
   tx: Transaction,
@@ -353,6 +352,29 @@ export async function refuseBillHoldingMoney(
       throw new AppError("bill.payments_received", { workingOrderId });
     }
   }
+}
+
+/**
+ * Refuse `bill.payments_received` when the bill holds any pending or received payment, even one
+ * given back in full (design §7): the single-payment routes and placing invoice the whole total as
+ * one tender and link no bill payment's card to the sale, which only the bill's own invoice does
+ * (§2.5).
+ */
+export async function refuseBillWithPayments(
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<void> {
+  const [held] = await tx
+    .select({ id: billPayments.id })
+    .from(billPayments)
+    .where(
+      and(
+        eq(billPayments.workingOrderId, workingOrderId),
+        inArray(billPayments.state, ["pending", "received"]),
+      ),
+    )
+    .limit(1);
+  if (held !== undefined) throw new AppError("bill.payments_received", { workingOrderId });
 }
 
 /** The net applied money each of these bills has received, for those that have received any. */
@@ -799,6 +821,23 @@ async function resultOf(
   };
 }
 
+/** A payment request as its retry fingerprint reads it: the lines in line order and every amount at
+ * the money scale, an absent added tip as none, so a resend that spells the same request another
+ * way is the same request. */
+function retryShapeOf(req: BillPaymentRequest): Record<string, unknown> {
+  const scaled = (value: string | undefined) =>
+    value === undefined ? undefined : money(decimal(value));
+  return {
+    ...req,
+    lines: req.lines?.slice().sort((a, b) => a.lineNo - b.lineNo),
+    amount: scaled(req.amount),
+    tendered: scaled(req.tendered),
+    addedTip: scaled(req.addedTip ?? "0"),
+    applied: scaled(req.applied),
+    tip: scaled(req.tip),
+  };
+}
+
 /**
  * The start every payment of a bill shares, in the caller's transaction: a retry finds its first
  * row; otherwise the bill must be open and no payment of the whole order in flight, the allocation
@@ -818,7 +857,7 @@ async function beginBillPayment(
   state: "received" | "pending",
   now: Date,
 ): Promise<{ replay: PaymentRow } | { payment: PaymentRow }> {
-  const print = fingerprint(req as unknown as Record<string, unknown>);
+  const print = fingerprint(retryShapeOf(req));
   const [earlier] = await tx
     .select()
     .from(billPayments)
@@ -1019,9 +1058,9 @@ export async function failBillPayment(
  *  - P1 (transaction): {@link beginBillPayment} inserts the payment `pending`, which reserves its
  *    applied amount, and registers it as live in this process;
  *  - P2 (no transaction): the provider's `collect` for `applied + tip`, naming the bill payment;
- *  - P3 (transaction): a capture, or an offline acceptance, is {@link completeBillPayment}; a
- *    decline or a refusal to go offline fails it; a reader that stopped answering leaves it
- *    pending, for the loop to settle from the provider's row.
+ *  - P3 (transaction): a capture is {@link completeBillPayment}; a decline or a refusal to go
+ *    offline fails it; a reader that stopped answering leaves it pending, for the loop to settle
+ *    from the provider's row. `collect` is never allowed to accept the card offline (design §11.9).
  *
  * A retry of a payment already taken answers its state and never collects again.
  */
@@ -1064,14 +1103,13 @@ export async function takeReaderBillPayment(
       workingOrderId: brandWorkingOrderId(workingOrderId),
       amount: centsToDecimal(payment.applied + payment.tip),
       ...(deps.readerRef === undefined ? {} : { readerRef: deps.readerRef }),
-      allowOffline: req.allowOffline,
       simulationOutcome: req.simulationOutcome,
       billPaymentId: payment.id,
     });
 
     return await withTransaction(deps.db, async (tx) => {
-      if (result.state === "captured" || result.state === "accepted_offline") {
-        // A captured or offline-accepted result carries its time (`PaymentResult`, provider.ts).
+      if (result.state === "captured") {
+        // A captured result carries its time (`PaymentResult`, provider.ts).
         const done = await completeBillPayment(tx, deps, cfg, payment.id, result.settledAt!);
         return resultOf(tx, deps, cfg, done.payment, done.invoice);
       }

@@ -52,7 +52,7 @@ import {
 } from "./working-order.js";
 import type { LineExtras, PricedOrder, TillSaleDeps } from "./working-order.js";
 import { issuancePass } from "./issuance-pass.js";
-import { refuseBillHoldingMoney } from "./bill-payments.js";
+import { refuseBillWithPayments } from "./bill-payments.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { ticketLinesFrom } from "./receipt-lines.js";
@@ -435,7 +435,7 @@ export async function payWorkingOrder(
       }
       if (locked !== undefined) {
         // Before the in-flight check, so the answer names the money already on the bill.
-        await refuseBillHoldingMoney(tx, [req.id]);
+        await refuseBillWithPayments(tx, req.id);
         // A card payment of this order would file its own sale after this one (plan D22).
         await refusePaymentInFlight(tx, [req.id]);
       }
@@ -806,7 +806,7 @@ async function payIntegrated(
     if (locked !== undefined) {
       // Before the recovery below, which would take a card bill payment's capture for this pay's
       // own and invoice the whole order from it.
-      await refuseBillHoldingMoney(tx, [req.id]);
+      await refuseBillWithPayments(tx, req.id);
       const outstanding = await readOutstandingSaleForOrder(tx, req.id);
 
       // A captured payment with no sale: P2 committed but P3 never ran. Driving `collect` again
@@ -1492,7 +1492,7 @@ export async function collectOrder(
     if (locked === undefined || locked.status !== "placed") {
       throw new AppError("working_order.not_placed", { workingOrderId: req.id });
     }
-    await refuseBillHoldingMoney(tx, [req.id]);
+    await refuseBillWithPayments(tx, req.id);
 
     // AFTER the replay check, so a retry is never refused for its body shape.
     if (req.tender.method !== "cash" && req.tender.method !== "card") {

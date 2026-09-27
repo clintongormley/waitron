@@ -222,10 +222,10 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
     });
   });
 
-  it("counts a card accepted offline as received", async () => {
+  it("refuses to let a card be accepted offline, asking no reader and writing nothing (design §11.9)", async () => {
     const billId = await tabWithDishes("Paella");
     await seedPaymentPolicy(venue.db, "accept_offline", "50.00");
-    venue.card.offlineNextCollect();
+    const calls = venue.card.collectCalls.length;
 
     const paid = await pay(billId, {
       kind: "contribution",
@@ -237,11 +237,13 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
       tip: "0.00",
     });
 
+    expect(paid.status).toBe(400);
     expect(paid.json).toMatchObject({
-      outcome: "received",
-      payment: { state: "received" },
-      balance: { received: "20.00" },
+      code: "management.request_invalid",
+      params: { field: "allowOffline" },
     });
+    expect(venue.card.collectCalls).toHaveLength(calls);
+    expect(await paymentRows(venue, billId)).toEqual([]);
   });
 
   it("issues the invoice from the capture that pays the bill, on the device's till", async () => {

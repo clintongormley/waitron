@@ -148,6 +148,7 @@ import {
   issueBillsFullyPaid,
   readPaidQuantities,
   refuseBillHoldingMoney,
+  refuseBillWithPayments,
   refuseLinesPaid,
   refusePaidLines,
 } from "./bill-payments.js";
@@ -4125,7 +4126,9 @@ export async function placeOrder(
       throw new AppError("working_order.not_open", { workingOrderId: id });
     }
     await refusePaymentInFlight(tx, [id]);
-    await refuseBillHoldingMoney(tx, [id]);
+    // An invoice_first placing files the whole total as one sale, and any other leaves an order
+    // whose collect `refuseBillWithPayments` refuses.
+    await refuseBillWithPayments(tx, id);
     const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
     const orderFlow = serviceContext?.serviceMode ?? cfg.orderFlow;
 

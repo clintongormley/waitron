@@ -1409,6 +1409,31 @@ describe("retries and reused ids (plan D8, design §5.1)", () => {
     expect(opens).toHaveLength(1);
   });
 
+  it("answers the same request resent with its lines in another order and its added tip spelled out", async () => {
+    const billId = await tabWith("Paella", "Chuletón", "Tarta");
+    const submissionId = randomUUID();
+    const body = {
+      submissionId,
+      kind: "items" as const,
+      method: "cash" as const,
+      tendered: "60.00",
+      applied: "60.00",
+      tip: "0.00",
+    };
+    const first = await pay(billId, { ...body, lines: [{ lineNo: 1 }, { lineNo: 2 }] });
+    expect(first.status).toBe(200);
+
+    const again = await pay(billId, {
+      ...body,
+      lines: [{ lineNo: 2 }, { lineNo: 1 }],
+      addedTip: "0",
+    });
+
+    expect(again.status).toBe(200);
+    expect(again.json).toMatchObject({ payment: { id: paymentIdOf(first) } });
+    expect(await paymentRows(billId)).toHaveLength(1);
+  });
+
   it("refuses the id resent with another amount, writing nothing", async () => {
     const billId = await bill120();
     const submissionId = randomUUID();
@@ -1792,10 +1817,10 @@ describe("a cash refund before the invoice (design §6)", () => {
     const paymentId = paymentIdOf(paid);
 
     const part = await refund(billId, paymentId, { appliedAmount: "10.00", tipAmount: "0.00" });
-    expect(part.status).toBe(400);
-    expect(part.json).toMatchObject({
-      code: "management.request_invalid",
-      params: { field: "appliedAmount" },
+    expect(part.status).toBe(422);
+    expect(part.json).toEqual({
+      code: "bill.refund_not_whole",
+      params: { paymentId, applied: "25.00", tip: "0.00" },
     });
     expect(await refundRows(paymentId)).toEqual([]);
 

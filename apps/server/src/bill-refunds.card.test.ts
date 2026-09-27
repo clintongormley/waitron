@@ -1003,6 +1003,38 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
     expect((await pay(billId, "cash", "1.00")).answer.status).toBe(200);
   });
 
+  it("fails a refund that never left without asking for its provider", async () => {
+    const billId = await bill("Pulpo", "Croquetas", "Croquetas");
+    const card = await pay(billId, "card", "20.00");
+    const [stranded] = await inTx(venue, (tx) =>
+      tx
+        .insert(billPaymentRefunds)
+        .values({
+          billPaymentId: card.id,
+          submissionId: randomUUID(),
+          fingerprint: "stranded",
+          appliedAmount: 500,
+          reason: "stranded",
+          authorizedBy: venue.adminId,
+          requestedBy: venue.operatorId,
+          tillId: venue.deviceTillId,
+          state: "pending",
+        })
+        .returning(),
+    );
+
+    const pass = await settlePendingBillPayments({
+      db: venue.db,
+      backend: venue.backend,
+      clock: systemClock(),
+      cfg: venue.cfg,
+      refundProviderFor: () => Promise.reject(new Error("pool down")),
+    });
+
+    expect(pass.errors).not.toContainEqual(expect.objectContaining({ refundId: stranded!.id }));
+    expect(await onlyRefundOf(card.id)).toMatchObject({ state: "failed", sendCount: 0 });
+  });
+
   it("leaves a sent refund it cannot find pending, sending nothing", async () => {
     const { paymentId, refundId } = await pendingRefund();
 
@@ -1425,6 +1457,105 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
         sendCount: 1,
       }),
     );
+  });
+});
+
+describe("how often the loop looks a pending refund up", () => {
+  const MINUTE = 60 * 1000;
+  const lookupsOf = (refundId: string) =>
+    venue.card.lookupCalls.filter((query) => query.refundId === refundId).length;
+
+  it("asks on every pass at first, then less often the longer the refund has been pending", async () => {
+    const { paymentId, refundId } = await pendingRefund();
+    const counts: number[] = [];
+    const at = async (ms: number) => {
+      await runLoop(clockPlus(ms));
+      counts.push(lookupsOf(refundId));
+    };
+
+    await at(0);
+    await at(5_000);
+    await at(10 * MINUTE);
+    await at(10 * MINUTE + 30_000);
+    await at(14 * MINUTE);
+    await at(5 * HOUR);
+    await at(5 * HOUR + 20 * MINUTE);
+    await at(5 * HOUR + 31 * MINUTE);
+
+    expect(counts).toEqual([1, 2, 3, 3, 4, 5, 5, 6]);
+    expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "pending", sendCount: 1 });
+  });
+
+  it("still counts a refund pending over an hour on a pass that does not look it up", async () => {
+    const { refundId } = await pendingRefund();
+
+    await runLoop(clockPlus(HOUR - 60_000));
+    const lookups = lookupsOf(refundId);
+    // A refund asked for before this instant is over an hour old on the pass's clock; one another
+    // case asked for on a clock set ahead is not.
+    const overAnHour = new Date(Date.now() + 60_000).toISOString();
+    const over = await runLoop(clockPlus(HOUR + 60_000));
+
+    expect(lookupsOf(refundId)).toBe(lookups);
+    // The case at "raises the alert for a refund pending over an hour" checks the alert itself. A
+    // refund whose lookup failed on this pass is reported as an error, not counted.
+    const failed = new Set(over.errors.map((error) => ("refundId" in error ? error.refundId : "")));
+    const pending = venue.db
+      .all<{ id: string }>(
+        sql`select id from bill_payment_refunds
+            where state = 'pending' and created_at < ${overAnHour}`,
+      )
+      .filter(({ id }) => !failed.has(id));
+    expect(pending.map(({ id }) => id)).toContain(refundId);
+    expect(over.refundsUnresolved).toBe(pending.length);
+  });
+});
+
+describe("the single-payment routes on a bill whose only card payment was refunded in full (design §7)", () => {
+  it("refuses a cash sale of the whole bill, and the bill's own invoice links the refunded card", async () => {
+    const billId = await bill("Pulpo", "Croquetas");
+    const card = await pay(billId, "card", "20.00");
+    const back = await refund(billId, card.id, { applied: "20.00" });
+    expect(back.answer.json).toMatchObject({ refund: { state: "completed" } });
+
+    const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      lines: [],
+      tender: { method: "cash", amount: "30.00" },
+      workingOrderId: billId,
+    });
+
+    expect(sold.status).toBe(409);
+    expect(sold.json).toMatchObject({
+      code: "bill.payments_received",
+      params: { workingOrderId: billId },
+    });
+    expect(registroCount(venue, billId)).toBe(0);
+
+    const rest = await pay(billId, "cash", "30.00");
+    expect(rest.answer.json).toMatchObject({ invoice: { total: "30.00" } });
+    const linked = venue.db.all<{ state: string; linked: number }>(
+      sql`select p.state, p.sale_id = s.id as linked from payments p
+          join sales s on s.working_order_id = p.working_order_id
+          where p.bill_payment_id = ${card.id}`,
+    );
+    expect(linked).toEqual([{ state: "refunded", linked: 1 }]);
+  });
+
+  it("refuses placing the bill, which would leave it for a collect that is refused too", async () => {
+    const billId = await bill("Pulpo", "Croquetas");
+    const card = await pay(billId, "card", "20.00");
+    await refund(billId, card.id, { applied: "20.00" });
+
+    const placed = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${billId}/place`,
+    );
+
+    expect(placed.status).toBe(409);
+    expect(placed.json).toMatchObject({ code: "bill.payments_received" });
+    expect(await statusOf(venue, billId)).toBe("open");
   });
 });
 

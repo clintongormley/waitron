@@ -126,9 +126,9 @@ function parseRequest(body: Record<string, unknown>): BillPaymentRequest {
     throw invalid("externalRef");
   }
   if (request.entry === "reader") {
-    if (body.allowOffline !== undefined) {
-      if (typeof body.allowOffline !== "boolean") throw invalid("allowOffline");
-      request.allowOffline = body.allowOffline;
+    // Design §11.9: a bill payment is never accepted offline until the Tap to Pay work enables it.
+    if (body.allowOffline !== undefined && body.allowOffline !== false) {
+      throw invalid("allowOffline");
     }
     if (body.simulationOutcome !== undefined) {
       request.simulationOutcome = oneOf(

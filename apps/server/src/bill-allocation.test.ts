@@ -264,14 +264,14 @@ describe("previewAllocation: what is refused", () => {
     ).toMatchObject({ applied: "30.00", tip: "0.00", charged: "30.00" });
   });
 
-  it("refuses cash handed over below the applied amount plus the tip", () => {
+  it("refuses cash handed over below the applied amount, naming the money handed over", () => {
     const error = thrown(() =>
       previewAllocation(
         funds("40.00"),
         {
           kind: "items",
           due: d("40.00"),
-          payment: { method: "cash", tendered: d("45.00"), addedTip: d("6.00") },
+          payment: { method: "cash", tendered: d("39.00"), addedTip: d("1.00") },
         },
         TIPS_ON,
       ),
@@ -279,6 +279,28 @@ describe("previewAllocation: what is refused", () => {
     expect(error.code).toBe("management.request_invalid");
     expect(error.params).toEqual({ field: "tendered" });
   });
+
+  it.each([
+    ["no change at all", "20.00", "20.00", "5.00"],
+    ["less change than the tip", "45.00", "40.00", "6.00"],
+  ])(
+    "refuses an added tip larger than the change when the cash covers the bill (%s), naming the tip",
+    (_name, tendered, due, addedTip) => {
+      const error = thrown(() =>
+        previewAllocation(
+          funds(due),
+          {
+            kind: "items",
+            due: d(due),
+            payment: { method: "cash", tendered: d(tendered), addedTip: d(addedTip) },
+          },
+          TIPS_ON,
+        ),
+      );
+      expect(error.code).toBe("management.request_invalid");
+      expect(error.params).toEqual({ field: "addedTip" });
+    },
+  );
 
   it("accepts cash that exactly covers the applied amount plus the tip", () => {
     expect(

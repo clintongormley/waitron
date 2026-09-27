@@ -128,7 +128,10 @@ function finish(
     return { choice, applied: money(applied), tip, change: null, charged: money(paid) };
   }
   const change = subtractDecimal(payment.tendered, paid);
-  if (compareDecimal(change, ZERO) < 0) throw invalid("tendered");
+  if (compareDecimal(change, ZERO) < 0) {
+    // Cash that covers the applied amount is short only of the tip the payer added.
+    throw invalid(compareDecimal(payment.tendered, applied) >= 0 ? "addedTip" : "tendered");
+  }
   return { choice, applied: money(applied), tip, change: money(change), charged: null };
 }
 

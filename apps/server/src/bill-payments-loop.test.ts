@@ -5,8 +5,9 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { billPayments, incidents, type SingletonRole } from "@waitron/db";
 import { insertCapturedPayment, insertFailedPayment, payments } from "@waitron/payments";
-import { decimal, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
+import { centsToDecimal, decimal, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
+import type { BillPaymentsPass } from "./bill-payments-loop.js";
 import { withPendingBillPayments } from "./boot.js";
 import type { Logger } from "./logger.js";
 import type { PassReport } from "./pass.js";
@@ -82,6 +83,15 @@ async function strandedPending(billId: string, applied: number, tip = 0): Promis
   return row!.id;
 }
 
+/** The bill payments and refunds the database still holds pending. */
+function stillPending(): number {
+  const [row] = venue.db.all<{ n: number }>(
+    sql`select (select count(*) from bill_payments where state = 'pending')
+             + (select count(*) from bill_payment_refunds where state = 'pending') as n`,
+  );
+  return row!.n;
+}
+
 async function stateOf(billPaymentId: string): Promise<string> {
   const [row] = await inTx(venue, (tx) =>
     tx
@@ -90,6 +100,47 @@ async function stateOf(billPaymentId: string): Promise<string> {
       .where(eq(billPayments.id, billPaymentId)),
   );
   return row!.state;
+}
+
+/** A pending card payment of `applied` cents whose provider row captured that amount. */
+async function capturedPending(billId: string, applied: number): Promise<string> {
+  const id = await strandedPending(billId, applied);
+  await inTx(venue, (tx) =>
+    insertCapturedPayment(tx, {
+      workingOrderId: brandWorkingOrderId(billId),
+      provider: "fake",
+      paymentRef: `captured-${randomUUID()}`,
+      amount: centsToDecimal(applied),
+      settledAt: new Date(),
+      billPaymentId: id,
+    }),
+  );
+  return id;
+}
+
+/** Runs `fn` while the database refuses a sale of this bill, as an invoice that cannot be issued. */
+async function refusingSalesOf<T>(billId: string, fn: () => Promise<T>): Promise<T> {
+  // A trigger body takes no bound value, so the id is written into it.
+  venue.db.run(
+    sql.raw(
+      `create trigger refuse_one_sale before insert on sales ` +
+        `when new.working_order_id = '${billId}' begin select raise(abort, 'refused for the test'); end`,
+    ),
+  );
+  try {
+    return await fn();
+  } finally {
+    venue.db.run(sql`drop trigger refuse_one_sale`);
+  }
+}
+
+async function incidentsOf(code: string, tillId: string) {
+  return inTx(venue, (tx) =>
+    tx
+      .select({ params: incidents.params })
+      .from(incidents)
+      .where(and(eq(incidents.code, code), eq(incidents.tillId, tillId))),
+  );
 }
 
 async function mismatchIncidents(tillId: string) {
@@ -147,6 +198,8 @@ describe("recovery after a crash (design §8 test 13)", () => {
     );
 
     expect(pass).toMatchObject({ received: 0, failed: 0 });
+    expect(pass.pending).toBe(await stillPending());
+    expect(pass.pending).toBeGreaterThanOrEqual(1);
     expect(await stateOf(payment!.id)).toBe("pending");
     expect((await balance(billId)).json).toMatchObject({ reserved: "20.00" });
     expect(voided.status).toBe(409);
@@ -239,6 +292,83 @@ describe("the loop's own edges", () => {
       { billPaymentId: stuck, error: expect.stringContaining("refused for the test") },
     ]);
     expect(await stateOf(stuck)).toBe("pending");
+    expect(await stateOf(free)).toBe("failed");
+    await settle();
+  });
+
+  it("raises one alert for a captured card whose invoice cannot be issued, leaving it pending", async () => {
+    const billId = await tabWith(venue, "Paella");
+    const id = await capturedPending(billId, 3500);
+    let first, second;
+    await refusingSalesOf(billId, async () => {
+      first = await settle();
+      second = await settle();
+    });
+
+    expect(first!.errors).toEqual([
+      { billPaymentId: id, error: expect.stringContaining("refused for the test") },
+    ]);
+    expect(second!.errors).toHaveLength(1);
+    expect(await stateOf(id)).toBe("pending");
+    expect(registroCount(venue, billId)).toBe(0);
+    const raised = await incidentsOf("payment.bill_settle_failed", venue.device2TillId);
+    expect(raised).toEqual([
+      {
+        params: {
+          billPaymentId: id,
+          workingOrderId: billId,
+          amount: "35.00",
+          errorCode: "unknown",
+        },
+      },
+    ]);
+    await settle();
+    expect(await stateOf(id)).toBe("received");
+  });
+
+  it("raises no such alert for a payment no card was charged for", async () => {
+    const billId = await tabWith(venue, "Paella");
+    const id = await strandedPending(billId, 1000);
+    const before = await incidentsOf("payment.bill_settle_failed", venue.device2TillId);
+    venue.db.run(
+      sql.raw(
+        `create trigger refuse_one_bill_payment before update on bill_payments ` +
+          `when old.id = '${id}' begin select raise(abort, 'refused for the test'); end`,
+      ),
+    );
+    try {
+      await settle();
+    } finally {
+      venue.db.run(sql`drop trigger refuse_one_bill_payment`);
+    }
+
+    expect(await incidentsOf("payment.bill_settle_failed", venue.device2TillId)).toEqual(before);
+    await settle();
+  });
+
+  it("reports an alert it could not record beside the failure, and carries on with the next", async () => {
+    const billId = await tabWith(venue, "Paella");
+    const id = await capturedPending(billId, 3500);
+    const freeBill = await tabWith(venue, "Paella");
+    const free = await strandedPending(freeBill, 1000);
+    venue.db.run(
+      sql.raw(
+        `create trigger refuse_incidents before insert on incidents ` +
+          `when new.code = 'payment.bill_settle_failed' ` +
+          `begin select raise(abort, 'no alert for the test'); end`,
+      ),
+    );
+    let pass;
+    try {
+      pass = await refusingSalesOf(billId, settle);
+    } finally {
+      venue.db.run(sql`drop trigger refuse_incidents`);
+    }
+
+    expect(pass.errors).toEqual([
+      { billPaymentId: id, error: expect.stringContaining("refused for the test") },
+      { billPaymentId: id, error: expect.stringContaining("no alert for the test") },
+    ]);
     expect(await stateOf(free)).toBe("failed");
     await settle();
   });
@@ -336,6 +466,7 @@ describe("withPendingBillPayments", () => {
           refundsCompleted: 0,
           refundsFailed: 0,
           refundsUnresolved: 0,
+          pending: 0,
           errors: [],
         });
       },
@@ -361,6 +492,53 @@ describe("withPendingBillPayments", () => {
     ]);
   });
 
+  const passOf = (counts: Partial<BillPaymentsPass>): BillPaymentsPass => ({
+    received: 0,
+    failed: 0,
+    mismatched: 0,
+    refundsCompleted: 0,
+    refundsFailed: 0,
+    refundsUnresolved: 0,
+    pending: 0,
+    errors: [],
+    ...counts,
+  });
+
+  it("logs nothing for a pass that only finds a capture of another amount still unresolved", async () => {
+    const lines: unknown[][] = [];
+    const log: Logger = (...args) => void lines.push(args);
+    const pass = withPendingBillPayments(
+      () => Promise.resolve(report),
+      () => Promise.resolve(passOf({ mismatched: 1, pending: 1 })),
+      primary,
+      log,
+    );
+
+    await pass(new Date());
+
+    expect(lines).toEqual([]);
+  });
+
+  it("comes back within a minute while a payment or refund is pending, and never later than the pass asked", async () => {
+    const now = new Date("2026-09-27T12:00:00.000Z");
+    const inHour = { ran: [], nextDueAt: new Date("2026-09-27T13:00:00.000Z") };
+    const inTenSeconds = { ran: [], nextDueAt: new Date("2026-09-27T12:00:10.000Z") };
+    const idle = { ran: [], nextDueAt: null };
+    const wrap = (inner: object, pending: number) =>
+      withPendingBillPayments(
+        () => Promise.resolve(inner as unknown as PassReport),
+        () => Promise.resolve(passOf({ pending })),
+        primary,
+        () => {},
+      )(now);
+
+    expect((await wrap(inHour, 1)).nextDueAt).toEqual(new Date("2026-09-27T12:01:00.000Z"));
+    expect((await wrap(idle, 2)).nextDueAt).toEqual(new Date("2026-09-27T12:01:00.000Z"));
+    expect((await wrap(inTenSeconds, 1)).nextDueAt).toEqual(inTenSeconds.nextDueAt);
+    expect(await wrap(inHour, 0)).toBe(inHour);
+    expect(await wrap(idle, 0)).toBe(idle);
+  });
+
   it("logs a settle that throws, or a payment it could not settle, and never changes the report", async () => {
     const lines: unknown[][] = [];
     const log: Logger = (...args) => void lines.push(args);
@@ -380,6 +558,7 @@ describe("withPendingBillPayments", () => {
           refundsCompleted: 0,
           refundsFailed: 0,
           refundsUnresolved: 3,
+          pending: 0,
           errors: [{ billPaymentId: "bp-1", error: "Error: nope" }],
         }),
       primary,

@@ -625,7 +625,7 @@ describe("the invoice at full payment", () => {
     ).toEqual([]);
   });
 
-  it("pairs each card payment's slip with its own tender", async () => {
+  it("prints a slip for each card payment, each paired with its own tender", async () => {
     const billId = await tabWith("Chuletón", "Tarta");
     const early = new Date(Date.now() - 60_000).toISOString();
     const late = new Date().toISOString();
@@ -681,13 +681,21 @@ describe("the invoice at full payment", () => {
 
     await printSalePaymentSlip(suite.db, venue.cfg, billId);
 
+    // In the order they were written: `rowid`, as `print_jobs` has no sequence of its own.
     const jobs = await inTx((tx) =>
-      tx.select({ id: printJobs.id, payload: printJobs.payload }).from(printJobs),
+      tx
+        .select({ id: printJobs.id, payload: printJobs.payload })
+        .from(printJobs)
+        .orderBy(sql`rowid`),
     );
-    const slip = jobs.find((job) => !before.some((old) => old.id === job.id))!;
-    const printed = decodeTicket(slip.payload);
-    expect(printed).toContain("23,00");
-    expect(printed).toContain("Propina");
+    const slips = jobs.filter((job) => !before.some((old) => old.id === job.id));
+    const printed = slips.map((slip) => decodeTicket(slip.payload));
+    expect(printed).toHaveLength(2);
+    // In the order the money moved: the €20.00 card with no tip, then the €23.00 one with its tip.
+    expect(printed[0]).toContain("20,00");
+    expect(printed[0]).not.toContain("Propina");
+    expect(printed[1]).toContain("23,00");
+    expect(printed[1]).toContain("Propina");
   });
 
   it("records the lines an item payment covers with what they cost when paid", async () => {

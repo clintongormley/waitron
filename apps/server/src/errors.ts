@@ -403,6 +403,11 @@ declare module "@waitron/shared" {
      */
     "bill.refund_exceeds_payment": { paymentId: string; applied: string; tip: string };
     /**
+     * A refund of an item payment asked for less than the whole of it: an item payment is given
+     * back whole, which frees its lines. `applied` and `tip` are that whole.
+     */
+    "bill.refund_not_whole": { paymentId: string; applied: string; tip: string };
+    /**
      * The bill payment was taken by card on a terminal Waitron does not drive, or through a card
      * provider that offers no refund Waitron can record before asking, so it is not given back
      * here.
@@ -443,6 +448,17 @@ declare module "@waitron/shared" {
       workingOrderId: string;
       captured: string;
       expected: string;
+    };
+    /**
+     * An incident: the provider captured a card bill payment for its amount, but the loop could not
+     * record it received, its invoice included, so the payment stays pending and its bill locked.
+     * `errorCode` is the refusal's code, `unknown` for an error that carries none.
+     */
+    "payment.bill_settle_failed": {
+      billPaymentId: string;
+      workingOrderId: string;
+      amount: string;
+      errorCode: string;
     };
     /**
      * An incident: the card provider shows a bill refund made that Waitron had already recorded as

@@ -67,6 +67,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That is more than this payment can give back. A tip is given back only with the whole payment",
     es: "Es más de lo que se puede devolver de este pago. La propina solo se devuelve con el pago entero",
   },
+  "bill.refund_not_whole": {
+    en: "A payment for particular items can only be given back in full, which frees those items to be paid for again",
+    es: "Un pago de artículos concretos solo se puede devolver entero, y así esos artículos se pueden volver a cobrar",
+  },
   "bill.refund_unsupported": {
     en: "A card payment keyed in on a separate terminal can't be given back before the bill is paid. Don't refund it on the terminal: Waitron would still count it as paid",
     es: "Un pago con tarjeta tecleado en otro datáfono no se puede devolver antes de cobrar la cuenta. No lo devuelvas en el datáfono: Waitron lo seguiría contando como pagado",
