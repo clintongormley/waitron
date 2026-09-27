@@ -997,6 +997,10 @@ before treating an implementation as a rule violation.
   requirement and NOTHING else, never a failing check or an open review. Rebase only for `CONFLICTING`,
   or when `main` touched a code file this branch also changed. **Never `gh pr update-branch`** — its
   merge commit carries no sign-off and fails DCO.
+- **A Dependabot pull request is expected to fail the sign-off check, and the check stays strict**
+  (owner decision 2026-09-27: no bot exemption). Land one by rebasing it with `--signoff` in a
+  worktree — the recipe and its caveats: [workflow-guide.md](docs/developers/workflow-guide.md) →
+  _Dependabot pull requests_. Config: `.github/dependabot.yml`.
 - **Do not merge a PR automatically — wait for the user's approval.** Invoking `/land-branch` is that
   approval; nothing else is.
 - **Merging requires resolved conversations.** Copilot is off here; the second model on the diff is

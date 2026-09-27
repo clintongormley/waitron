@@ -42,6 +42,45 @@ docs commits; `/land-branch` step 2 classifies it). Rebase in the worktree only 
 push through the hook, never `--no-verify`. **Never `gh pr update-branch`**, whose merge commit
 carries no sign-off and fails DCO (#160).
 
+**Dependabot pull requests** (owner decision 2026-09-27). `.github/dependabot.yml` asks for weekly
+version updates for npm (the pnpm workspace at the root), GitHub Actions, the base images in
+`deploy/Dockerfile`, and the images in `docker-compose.yml` and `deploy/compose.yml`. Minor and
+patch bumps arrive grouped, one PR per kind, except the compose files — that entry lists two
+directories and sets no `group-by`, which GitHub's options reference says means one PR per
+directory; a major bump comes alone. Security-fix PRs were switched on in the repository settings.
+Each PR is EXPECTED to fail the sign-off check, and the check stays strict — expected, not yet
+observed: no Dependabot PR has run in this repository yet (checked 2026-09-27:
+`gh pr list --author app/dependabot --state all --json number` returned `[]`; the same filter on
+the `cli/cli` repository returned its Dependabot PRs, so the filter's spelling matches).
+Dependabot's own source can add a Signed-off-by line when its caller passes sign-off details
+(`common/lib/dependabot/pull_request_creator/message_builder.rb` in dependabot/dependabot-core);
+whether GitHub's hosted Dependabot does so here — for instance under the repository's "Require
+contributors to sign off on web-based commits" setting, currently off — was not tried. Confirm on
+the first real Dependabot PR.
+
+To land one — a sequence untested with a Dependabot branch name, which contains slashes: fetch the
+PR's branch into a local branch of the same name (`git fetch origin <branch>:<branch>`), then
+`python3 ~/workspace/tools/worktree.py new waitron <branch>`, which checks out an existing local
+branch rather than making a new one; in that worktree run `git rebase --signoff origin/main`, then
+`git push --force-with-lease origin <branch>` through the hook, never `--no-verify`. The rebase
+rewrites the commit even when the branch is already on top of `main` (measured 2026-09-27 on git
+2.55.0: without `--signoff` the same rebase printed `Current branch … is up to date.` and left the
+commit alone; with it, `… up to date, rebase forced.`, the commit was rewritten keeping the bot as
+author, and `scripts/check-signoff.sh` accepted it). CLAUDE.md §2's trap about the hook scoping the
+wrong package after a rebase and force-push applies: confirm with
+`git diff --name-only origin/main..HEAD`. GitHub's docs say _"By default, Dependabot will stop
+rebasing a pull request once extra commits have been pushed to it"_
+(`content/code-security/how-tos/secure-your-supply-chain/manage-your-dependency-security/manage-dependabot-prs.md`
+in github/docs, line 37, read 2026-09-27); whether a signed-off rewrite of its own commit counts
+as an extra commit is untested. The same paragraph of those docs says Dependabot will force-push
+over added commits whose message contains `[dependabot skip]`; that was not tried here. A green CI
+result on one does not prove the build: an npm-only Dependabot PR does not touch `deploy/`, so CI
+builds no front-end bundle (CLAUDE.md §2), and any Dependabot PR — a grouped one or a lone major
+bump — that bumps a bundler or compiler (vite, esbuild, typescript) still needs a local build with
+the root `build` script, its output compared with `main`'s, before landing — why CI does not do
+it: [ci-and-gates.md](ci-and-gates.md) → *What `bundle-smoke` does NOT cover: the three front-end
+bundles*.
+
 **Do not merge a PR automatically — wait for the user's approval.** Invoking `/land-branch` is that
 approval; nothing else is.
 
