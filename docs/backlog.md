@@ -2264,12 +2264,17 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - `*** REPRINT ***` and `GROUP n` print in English. _(Task 6, 2026-09-27: so do `*** HOLD ***`,
       `*** FIRE ***`, `*** HOLD CHANGED ***` and `*** HOLD CANCELLED ***`.)_
     - A resend from the dashboard's Printers screen does not clear a table's printing problem, and
-      there is no way to dismiss one: a detached or replaced printer leaves it showing.
+      there is no way to dismiss one: a detached or replaced printer leaves it showing. _(B6a,
+      2026-09-28: a failed ticket now stops showing once a Reprint would not print on its printer
+      for that station — measured for a printer switched off; a detached printer is the same
+      selection and was not run. A resend still clears nothing.)_
     - A failed ticket on a pass printer (one ticket for the whole order) shows on the card of every
       station it covered, even where that station's own printer printed.
     - Transfer, unjoin and split leave a printing problem on the bill the ticket named, and the
       moved dishes' bill shows none; Finish table drops the problem of a bill that transfers
-      emptied. Read, not run; only a merge carries a problem to the surviving bill.
+      emptied. Read, not run; only a merge carries a problem to the surviving bill. _(B6a,
+      2026-09-28: a problem left on the bill the ticket named also goes once a Reprint of that
+      bill would print nothing on that printer for that station.)_
     - After a merge, a reprint of the absorbed bill that was still waiting at the merge clears
       nothing when it prints, so its warning stays until the merged bill is reprinted once more:
       one queue order cannot let it clear the absorbed bill's older failures without also
@@ -2337,23 +2342,20 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       dish from another station joined to the group, say, or a printer switched back on after the
       HOLD ticket went out. Reprint reads the same per-group marker, so it too can print a REPRINT
       and HOLD section at such a station.
-    - A failed kitchen ticket, fire or HOLD, whose dishes at that station are then all cancelled
-      stays a "Printing problem" on the table and the station, and Reprint prints nothing for that
-      station to clear it (measured on the branch for both, with `voidTabLine`). The fire-ticket case predates Task 6 (the
-      clearing rule landed with #750); Task 6 makes it common, a held dessert the diner declines.
-      The same void can also leave a problem at a station that still has dishes, when the failed
-      ticket was on a pass printer (one ticket for the whole order) not attached to that station.
-      Measured 2026-09-27 with throwaway cases in `apps/server/src/print-problems.test.ts`: a pass
-      printer attached to Cocina only failed a ticket for a burger (Cocina) and a beer (Barra), so
-      the ticket counted against both stations; after the burger was voided with `voidTabLine`,
-      Reprint queued only the Barra station printer's ticket, and once that printed both Barra and
-      Cocina still showed a problem. Barra stays stuck although it still has the beer, because
-      nothing reprints on the pass printer: it is not attached to Barra, and nothing is left at
-      Cocina to bring it in. With the void skipped, the pass printer reprinted and no problem
-      remained. Measured for a HOLD ticket and a fire ticket; the fire-ticket case gave the same
-      result on the base commit `1d524b6e5`, so it predates Task 6.
-      Fix: `readPrintProblems` drops a failed ticket whose bill has nothing a Reprint would print on
-      that printer for that station.
+    - _Fixed by lane B item B6a (2026-09-28, branch `feat/service-print-problem-clears`):_ a failed
+      kitchen ticket, fire or HOLD, whose dishes at that station were then all cancelled stayed a
+      "Printing problem" that Reprint could not clear, and so did a pass printer's failed ticket at
+      a station the pass printer is not attached to once the station that brought it in was
+      emptied. `readPrintProblems` (`apps/server/src/kitchen-print.ts`) now drops a failed ticket
+      when a Reprint of its bill would print nothing on that printer for that station, reading
+      Reprint's own choice of dishes and printers (`readReprintParts`, `routeKitchenTickets`), so
+      the two cannot drift. Cases in `apps/server/src/print-problems.test.ts`, each red before the
+      change. The same rule hides a failed ticket on a printer that has been switched off, since a
+      Reprint prints only on active printers: measured, and the problem shows again once the
+      printer is switched back on. A printer detached from the station goes through the same
+      selection; that case was not run. An active printer's failed job still raises the venue's
+      printer alert (`apps/server/src/alert-sources.ts`, which reads active printers only), so a
+      switched-off printer's raises none.
   - **Task 7 landed as #789** (lane B item B7, 2026-09-28, main `3e4a75e2b`): the server keeps each
     person's unsent order on a seated party, a "draft", so two waiters at one table each have their
     own. Core migration `0031_order_drafts` adds `order_drafts` (one open draft per person and
