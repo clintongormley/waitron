@@ -268,7 +268,6 @@ const LINE_REFUSALS = new Set([
   "submission.id_reused",
 ]);
 
-/** The group a command named has fired, or is gone, since the screen read the groups. */
 function isGroupGone(error: unknown): boolean {
   const code = (error as { code?: string } | undefined)?.code;
   return code === "group.not_held" || code === "group.not_found";
@@ -773,6 +772,7 @@ export class TillApp extends LitElement {
    * the screen shows of it, and the revision every command on it sends (D19). A floor read on its own
    * does not move it, so a glance at the floor cannot lend the order view a revision it never showed. */
   @state() private orderParty: TableVisit | null = null;
+  @state() private groupCommandBusy = false;
   /** Finish table was refused because a bill of the party is unpaid. */
   @state() private finishRefused = false;
   /** The venue's setting for changing sent lines, read with {@link tabLines}. */
@@ -2583,22 +2583,29 @@ export class TillApp extends LitElement {
   }
 
   /** A command on the party's held groups, sent with the revision the party was shown at; then the
-   * order and its groups are read again. */
+   * order and its groups are read again. A press while one is running is dropped: it would carry the
+   * revision the running one is about to move on. */
   async #onGroupCommand(send: (party: TableVisit) => Promise<unknown>): Promise<void> {
-    this.errorKey = undefined;
-    if (await this.#refuseWithGroupsUnread()) return;
-    const party = this.orderParty;
-    if (party === null) {
-      this.errorKey = "table.error";
-      return;
-    }
+    if (this.groupCommandBusy) return;
+    this.groupCommandBusy = true;
     try {
-      await send(party);
-    } catch (error) {
-      await this.#onReleaseRefusal(error);
-      return;
+      this.errorKey = undefined;
+      if (await this.#refuseWithGroupsUnread()) return;
+      const party = this.orderParty;
+      if (party === null) {
+        this.errorKey = "table.error";
+        return;
+      }
+      try {
+        await send(party);
+      } catch (error) {
+        await this.#onReleaseRefusal(error);
+        return;
+      }
+      await this.#loadTabLines();
+    } finally {
+      this.groupCommandBusy = false;
     }
-    await this.#loadTabLines();
   }
 
   /** One request on the party under a submission id of its own, at `revision`. The answer's revision
@@ -3341,6 +3348,7 @@ export class TillApp extends LitElement {
       .visit=${this.orderParty}
       .visitBills=${this.visitBills}
       .finishRefused=${this.finishRefused}
+      .groupCommandBusy=${this.groupCommandBusy}
       .handheld=${this.handheldMode}
     ></till-card-grid>`;
   }
@@ -3375,6 +3383,7 @@ export class TillApp extends LitElement {
           .bills=${this.visitBills}
           .finishRefused=${this.finishRefused}
           .busy=${this.submitting}
+          .groupCommandBusy=${this.groupCommandBusy}
           .handheld=${this.handheldMode}
         ></till-table-order-screen>`;
       case "ticket":

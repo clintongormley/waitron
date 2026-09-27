@@ -631,6 +631,8 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Boolean }) finishRefused = false;
   /** A handheld form factor, whose menu browser shows fewer columns. */
   @property({ type: Boolean }) handheld = false;
+  /** The visible half of the app's guard against a second group command while one runs. */
+  @property({ type: Boolean }) groupCommandBusy = false;
 
   @state() private drawerOpen = false;
 
@@ -1962,7 +1964,7 @@ export class TillTableOrderScreen extends LitElement {
                 variant="secondary"
                 data-group-up=${group.id}
                 aria-label=${label("table.group_up")}
-                ?disabled=${place === 0}
+                ?disabled=${this.groupCommandBusy || place === 0}
                 @click=${() => this.#reorderHeld(held, place, place - 1)}
               >
                 <span aria-hidden="true">↑</span>
@@ -1972,7 +1974,7 @@ export class TillTableOrderScreen extends LitElement {
                 variant="secondary"
                 data-group-down=${group.id}
                 aria-label=${label("table.group_down")}
-                ?disabled=${place === held.length - 1}
+                ?disabled=${this.groupCommandBusy || place === held.length - 1}
                 @click=${() => this.#reorderHeld(held, place, place + 1)}
               >
                 <span aria-hidden="true">↓</span>
@@ -1984,6 +1986,7 @@ export class TillTableOrderScreen extends LitElement {
                       variant="primary"
                       data-group-fire=${group.id}
                       aria-label=${label("table.group_fire")}
+                      ?disabled=${this.groupCommandBusy}
                       @click=${() => (this.fireGroupPending = group)}
                     >
                       ${t("table.group_fire")}
@@ -2021,6 +2024,7 @@ export class TillTableOrderScreen extends LitElement {
                 variant="secondary"
                 data-move-line=${line.id}
                 aria-label=${label("table.move_line")}
+                ?disabled=${this.groupCommandBusy}
                 @click=${() => (this.movePending = { line, group })}
               >
                 ${t("table.move_line")}
@@ -2032,6 +2036,7 @@ export class TillTableOrderScreen extends LitElement {
                       variant="secondary"
                       data-split-group-line=${line.id}
                       aria-label=${label("table.split_group_line")}
+                      ?disabled=${this.groupCommandBusy}
                       @click=${() =>
                         this.#dispatch("split-group-line", {
                           lineId: line.id,

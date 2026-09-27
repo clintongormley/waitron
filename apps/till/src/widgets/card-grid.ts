@@ -105,6 +105,7 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) visit: TableVisit | null = null;
   @property({ attribute: false }) visitBills: VisitBill[] = [];
   @property({ type: Boolean }) finishRefused = false;
+  @property({ type: Boolean }) groupCommandBusy = false;
   /** A handheld form factor, whose menu browser shows fewer columns unless its card sets them. */
   @property({ type: Boolean }) handheld = false;
 
@@ -241,6 +242,7 @@ export class TillCardGrid extends LitElement {
           .bills=${this.visitBills}
           .finishRefused=${this.finishRefused}
           .busy=${this.busy}
+          .groupCommandBusy=${this.groupCommandBusy}
           .handheld=${this.handheld}
         ></till-table-order-screen>`;
       case "notifications":

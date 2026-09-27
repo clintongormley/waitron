@@ -1801,6 +1801,155 @@ describe("till-app: the order's groups", () => {
       expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 4 });
     });
 
+    it("a split whose request gets no answer stops, reads the floor again, and the next command carries the server's revision", async () => {
+      const server = editServer("4.000");
+      const split = server.moveLinesToGroup;
+      const landed = split.getMockImplementation()!;
+      split.mockImplementationOnce(landed);
+      split.mockImplementationOnce(async (...args) => {
+        await landed(...args);
+        throw new TypeError("offline");
+      });
+      const { el } = await mountApp(server);
+      await openGroups(el);
+      const floorReads = server.getTablesState.mock.calls.length;
+
+      await press(el, '[data-split-group-line="line-steak"]');
+
+      expect(split.mock.calls.map((call) => call[3])).toEqual([command(3), command(4)]);
+      expect(server.getTablesState).toHaveBeenCalledTimes(floorReads + 1);
+      expect(banner(el)!.textContent).toContain(t("table.error"));
+      expect(heldGroupsList(el)[2]!.lines).toEqual(["Steak ×2", "Steak ×1", "Steak ×1", "Fish ×1"]);
+
+      emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
+      await flush(el);
+      expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 5 });
+    });
+
+    it("a split refused part-way because another device changed the party stops, reloads the table, says so and never sends again", async () => {
+      const server = editServer("4.000");
+      const split = server.moveLinesToGroup;
+      split.mockImplementationOnce(split.getMockImplementation()!);
+      split.mockRejectedValueOnce({ code: "visit.out_of_date", visitId: "v1" });
+      const { el } = await mountApp(server);
+      await openGroups(el);
+      const floorReads = server.getTablesState.mock.calls.length;
+      const lineReads = server.getTabLines.mock.calls.length;
+
+      await press(el, '[data-split-group-line="line-steak"]');
+
+      expect(split.mock.calls.map((call) => call[3])).toEqual([command(3), command(4)]);
+      expect(server.getTablesState).toHaveBeenCalledTimes(floorReads + 1);
+      expect(server.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
+      expect(banner(el)!.textContent).toContain(t("visit.changed").replace("{table}", "4"));
+      expect(heldGroupsList(el)[2]!.lines).toEqual(["Steak ×3", "Steak ×1", "Fish ×1"]);
+    });
+
+    it("two presses of ↑ in one turn move the group once, and show no message", async () => {
+      const server = editServer();
+      const { el } = await mountApp(server);
+      await openGroups(el);
+      const up = tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-group-up="g4"]')!;
+
+      up.click();
+      up.click();
+      await flush(el);
+
+      expect(server.reorderGroups.mock.calls).toEqual([["v1", ["g2", "g4", "g3"], command(3)]]);
+      expect(banner(el)).toBeNull();
+      expect(heldGroupsList(el).map((group) => group.summary)).toEqual([
+        "1 × Beer",
+        "1 × Croquetas",
+        "1 × Flan",
+        "2 × Steak, 1 × Fish",
+      ]);
+    });
+
+    it("two presses of Split quantity in one turn split the line once, and show no message", async () => {
+      const server = editServer("3.000");
+      const { el } = await mountApp(server);
+      await openGroups(el);
+      const split = tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>(
+        '[data-split-group-line="line-steak"]',
+      )!;
+
+      split.click();
+      split.click();
+      await flush(el);
+
+      expect(server.moveLinesToGroup.mock.calls.map((call) => call[3])).toEqual([
+        command(3),
+        command(4),
+      ]);
+      expect(banner(el)).toBeNull();
+      expect(heldGroupsList(el)[2]!.lines).toEqual(["Steak ×1", "Steak ×1", "Steak ×1", "Fish ×1"]);
+    });
+
+    const handheldOrder = (el: TillApp) =>
+      tabGrid(el)?.shadowRoot?.querySelector<TillTableOrderScreen>("till-table-order-screen") ??
+      null;
+
+    it.each([
+      [
+        "the till's table screen",
+        {},
+        async (el: TillApp) => (await openGroups(el), tableOrder(el)!),
+      ],
+      [
+        "a handheld's order card",
+        {
+          getTill: vi.fn().mockResolvedValue({ ...till, canvas: phone }),
+          getDeviceIdentity: vi
+            .fn()
+            .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+        },
+        async (el: TillApp) => {
+          await flush(el);
+          emit(lock(el), "logged-in", {
+            personId: "p1",
+            displayName: "Ana",
+            canConfigureTill: false,
+          });
+          await flush(el);
+          emit(shell(el), "open-table", { tableId: "t4", seated: true });
+          await flush(el);
+          const order = handheldOrder(el)!;
+          order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+          await flush(el);
+          return handheldOrder(el)!;
+        },
+      ],
+    ] as const)(
+      "%s disables the group controls while a group command waits for its answer",
+      async (_mount, over, open) => {
+        const server = editServer();
+        let answer!: () => void;
+        const reorder = server.reorderGroups.getMockImplementation()!;
+        server.reorderGroups.mockImplementationOnce(async (...args) => {
+          await new Promise<void>((resolve) => (answer = resolve));
+          return reorder(...args);
+        });
+        const { el } = await mountApp({ ...server, ...over });
+        const order = await open(el);
+        const disabled = () =>
+          ['[data-group-up="g4"]', '[data-group-fire="g4"]', '[data-move-line="line-flan"]'].map(
+            (selector) =>
+              order.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(selector)!
+                .disabled,
+          );
+        expect(disabled()).toEqual([false, false, false]);
+
+        order.shadowRoot!.querySelector<HTMLElement>('[data-group-down="g2"]')!.click();
+        await flush(el);
+        expect(disabled()).toEqual([true, true, true]);
+
+        answer();
+        await flush(el);
+        expect(server.reorderGroups).toHaveBeenCalledOnce();
+        expect(disabled()).toEqual([false, false, false]);
+      },
+    );
+
     const commands = [
       ["fire-group", { groupId: "g3" }, "fireGroup"],
       ["reorder-groups", { heldGroupIds: ["g3", "g2", "g4"] }, "reorderGroups"],

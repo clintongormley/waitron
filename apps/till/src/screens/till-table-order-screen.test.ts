@@ -1272,6 +1272,25 @@ describe("till-table-order-screen", () => {
       expect(splits[0]!.bubbles && splits[0]!.composed).toBe(true);
     });
 
+    it("disables every held group's controls while a group command is running, and enables them after", async () => {
+      const { el } = await mountGroups({ fireControl: "waiter", groupCommandBusy: true });
+      const controls = [
+        '[data-group-down="g3"]',
+        '[data-group-up="g4"]',
+        '[data-group-down="g4"]',
+        '[data-group-up="g5"]',
+        '[data-group-fire="g4"]',
+        '[data-move-line="l-steak"]',
+        '[data-split-group-line="l-steak"]',
+      ];
+      const disabled = () => controls.map((selector) => control(el, selector)!.disabled);
+      expect(disabled()).toEqual(controls.map(() => true));
+
+      el.groupCommandBusy = false;
+      await el.updateComplete;
+      expect(disabled()).toEqual(controls.map(() => false));
+    });
+
     it("Fire on a held group asks first, naming its contents, and fires it once confirmed", async () => {
       const { el } = await mountGroups({ fireControl: "waiter" });
       const fires = capture(el, "fire-group");

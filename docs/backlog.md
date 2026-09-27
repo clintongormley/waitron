@@ -2121,11 +2121,16 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     and review notes: a cross-party merge can leave a settled check's lines naming a group now on
     the target party; `moveTabLines` (test-only caller) ignores groups; the till's Fire course and
     Send all fire one group per request, so a failure part-way leaves some fired (Task 4 rebuilds
-    the screen); the till, not the server, refuses a round aimed at a split-off check, because the
-    route names the party, not the bill; a whole-order save replacing a held dish with another
+    the screen) _(Task 4, 2026-09-27: done — the till's table screen has no Fire course or Send all
+    now; the waiter fires one held group at a time, one request each, from the list of the party's
+    groups in the Tab drawer)_; the till, not the server, refuses a round aimed at a split-off
+    check, because the route names the party, not the bill; a whole-order save replacing a held dish with another
     variant moves it to a new held group at the end; the counter's whole-order save does not answer
     the party's revision; a held no-route dish outside any group gets no Send all button (whether
-    one can occur on a party's tab is not established).
+    one can occur on a party's tab is not established) _(Task 4, 2026-09-27: the till has no Send
+    all button at all now, and the table screen offers its per-line Send only on a dish with a
+    kitchen ticket item (`sendsAlone`, `apps/till/src/state/round-groups.ts`), so it offers such a
+    dish no Send either; whether one can occur is still not established)_.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card
