@@ -21,8 +21,8 @@ import {
   listImageLabels,
   listImageTranslationGaps,
   listImages,
-  datedImagePageQuery,
 } from "./images.js";
+import { datedImagePageQuery } from "./image-page-query.js";
 import { mediaImageData, mediaImages } from "./schema/images.js";
 import type { PreparedImage } from "./prepare.js";
 import { samplePreparedImage } from "./testing/sample-image.js";
@@ -423,6 +423,10 @@ describe("search and sorting", () => {
           .set({ createdAt: new Date(2026, 0, index + 1) })
           .where(eq(mediaImages.id, added[index]!.id));
       }
+      await tx
+        .update(mediaImages)
+        .set({ labels: ["food"] })
+        .where(eq(mediaImages.id, added[2]!.id));
       const result = await listImages(tx, {
         label: " FOOD ",
         sort: "date",
@@ -433,11 +437,11 @@ describe("search and sorting", () => {
       expect(result.total).toBe(3);
       expect(result.images.map((image) => image.id)).toEqual([added[2]!.id]);
 
-      const statement = datedImagePageQuery(tx, ["Food"], "desc", 1, 1).toSQL();
+      const statement = datedImagePageQuery(tx, ["Food", "food"], "desc", 1, 1).toSQL();
       expect(statement.sql).toMatch(/json_each/);
       expect(statement.sql).toMatch(/order by .*created_at.*desc.*id.*asc/);
       expect(statement.sql).toMatch(/limit \? offset \?/);
-      expect(statement.params).toEqual(["Food", 1, 1]);
+      expect(statement.params).toEqual(["Food", "food", 1, 1]);
       const unfiltered = datedImagePageQuery(tx, null, "asc", 2, 3).toSQL();
       expect(unfiltered.sql).not.toMatch(/json_each/);
       expect(unfiltered.sql).toMatch(/order by .*created_at.*asc.*id.*asc/);
@@ -460,6 +464,31 @@ describe("search and sorting", () => {
       const result = await listImages(tx, { label: "été", limit: 1 });
       expect(result.total).toBe(1);
       expect(result.images.map((row) => row.id)).toEqual([image.image.id]);
+    });
+  });
+
+  it.each(["search", "name"] as const)("applies the label filter to %s results", async (mode) => {
+    await withTransaction(suite.db, async (tx) => {
+      const add = async (width: number, name: string, labels: string[]) =>
+        (
+          await uploadImage(
+            tx,
+            {
+              image: await prepare(width),
+              names: { en: name },
+              altText: {},
+              labels,
+            },
+            { fallbackLanguage: "en" },
+          )
+        ).image;
+      const food = await add(190, "Bread", ["Food"]);
+      await add(191, "Bread basket", ["Other"]);
+      const options =
+        mode === "search"
+          ? { query: "bread", label: "Food" }
+          : { sort: "name" as const, label: "Food" };
+      expect((await listImages(tx, options)).images.map((row) => row.id)).toEqual([food.id]);
     });
   });
 

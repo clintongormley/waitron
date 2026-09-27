@@ -17,8 +17,13 @@ import {
   FALLBACK_LOCALE,
   resolveContentText,
 } from "@waitron/shared";
-import { asc, count, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { count, eq, inArray, isNotNull } from "drizzle-orm";
 import { mediaImageData, mediaImages } from "./schema/images.js";
+import {
+  IMAGE_LIST_COLUMNS,
+  datedImagePageQuery,
+  imageLabelCondition,
+} from "./image-page-query.js";
 import type { PreparedImage } from "./prepare.js";
 import "./errors.js";
 
@@ -33,8 +38,9 @@ export interface ImageRecord extends ImageMetadataInput {
   createdAt: Date;
   updatedAt: Date;
   /** How many products (variants among them), categories, sections and live menu versions
-   * reference this photo. The single-image and list counters must stay in step or the library
-   * shows a free photo that then refuses to delete. */
+   * reference this photo. `readImage` uses `listImageUsagesForFilename` and `listImages` uses
+   * `countUsages`; the counters must stay in step or the library shows a free photo that then
+   * refuses to delete. */
   usageCount: number;
 }
 export type ImageUsage =
@@ -445,41 +451,6 @@ export interface ListImagesOptions {
   limit?: number;
   language?: string;
   fallbackLanguage?: string;
-}
-
-const IMAGE_LIST_COLUMNS = {
-  id: mediaImages.id,
-  filename: mediaImages.filename,
-  names: mediaImages.names,
-  altText: mediaImages.altText,
-  labels: mediaImages.labels,
-  createdAt: mediaImages.createdAt,
-  updatedAt: mediaImages.updatedAt,
-};
-
-function imageLabelCondition(labels: string[] | null) {
-  if (labels === null) return undefined;
-  if (labels.length === 0) return sql`false`;
-  return sql`exists (select 1 from json_each(${mediaImages.labels}) as image_label where ${inArray(sql<string>`image_label.value`, labels)})`;
-}
-
-export function datedImagePageQuery(
-  tx: Transaction,
-  labels: string[] | null,
-  direction: "asc" | "desc",
-  offset: number,
-  limit: number,
-) {
-  return tx
-    .select(IMAGE_LIST_COLUMNS)
-    .from(mediaImages)
-    .where(imageLabelCondition(labels))
-    .orderBy(
-      direction === "asc" ? asc(mediaImages.createdAt) : desc(mediaImages.createdAt),
-      asc(mediaImages.id),
-    )
-    .limit(limit)
-    .offset(offset);
 }
 
 /**

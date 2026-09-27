@@ -4223,10 +4223,10 @@ will not find it.
 
 **The media library still reads every matching image for search and name sorting, inside the venue
 write lock — OPEN (found 2026-09-23, task F1's review wave).** The unsearched date sort now counts,
-filters by label, orders and pages in SQL; it reads only the selected metadata rows. Search still
-scores and pages in JavaScript, and name sorting still uses `Intl.Collator` for accented names. A
-label filter resolves its canonical spelling by reading the labels column across images before SQL
-filters the page, preserving Unicode case matching; `listImageLabels` and
+filters by label, orders and pages in SQL. With no label filter, it reads only the page's metadata.
+Search still scores and pages in JavaScript, and name sorting still uses `Intl.Collator` for accented
+names. A label filter resolves its canonical spelling by reading the labels column across images
+before SQL filters the page, preserving Unicode case matching; `listImageLabels` and
 `listImageTranslationGaps` still read all rows of their selected columns. The route
 (`GET /management-api/images`) uses `withTransaction`, the venue's exclusive write lock, so these
 remaining scans can delay a sale. **Next action:** decide how far to push search ranking into SQL;
