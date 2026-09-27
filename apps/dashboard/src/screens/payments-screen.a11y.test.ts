@@ -271,7 +271,17 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
     );
     await flush(el);
     await expectNoA11yViolations(host);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=check-bill-payment-bp-1]")!.click();
+    await flush(el);
+    await expectNoA11yViolations(host);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=bill-check-dialog]")!.dispatchEvent(
+      new CustomEvent("wt-close"),
+    );
+    await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=attest-bill-payment-bp-1]")!.click();
+    await flush(el);
+    await expectNoA11yViolations(host);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-bill-attest]")!.click();
     await flush(el);
     await expectNoA11yViolations(host);
   });

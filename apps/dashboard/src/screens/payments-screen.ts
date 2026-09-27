@@ -67,6 +67,24 @@ function billAmount(target: BillTarget): string {
     : centsToDecimal(stringToCents(target.row.appliedAmount) + stringToCents(target.row.tipAmount));
 }
 
+function billRefusalText(error: unknown): string {
+  const code = codeOf(error);
+  const reason = (error as { params?: { reason?: unknown } }).params?.reason;
+  if (code === "bill.payment_outcome_unconfirmed") {
+    if (reason === "attempting") return t("payments.bill.payment_attempting");
+    if (reason === "unreachable") return t("payments.bill.payment_unreachable");
+    if (reason === "ambiguous") return t("payments.bill.payment_ambiguous");
+    if (reason === "mismatched") return t("payments.bill.payment_mismatched");
+  }
+  if (code === "bill.refund_outcome_unconfirmed") {
+    if (reason === "pending") return t("payments.bill.refund_pending");
+    if (reason === "not_found") return t("payments.bill.refund_not_found");
+    if (reason === "ambiguous") return t("payments.bill.refund_ambiguous");
+    if (reason === "unreachable") return t("payments.bill.refund_unreachable");
+  }
+  return codeMessage(code);
+}
+
 /** Provider forms come through CARD_PROVIDER_PANELS; this screen never imports a provider package. */
 @customElement("dashboard-payments-screen")
 export class PaymentsScreen extends LitElement {
@@ -261,7 +279,8 @@ export class PaymentsScreen extends LitElement {
   @state() private stuckResult: { text: string; refused: boolean } | null = null;
   @state() private billPayments: StuckBillPaymentRow[] = [];
   @state() private billRefunds: StuckBillRefundRow[] = [];
-  @state() private billLoadError: string | null = null;
+  @state() private billPaymentLoadError: string | null = null;
+  @state() private billRefundLoadError: string | null = null;
   @state() private billResult: { text: string; refused: boolean } | null = null;
   @state() private billAction: { target: BillTarget; mode: "check" | "attest" } | null = null;
   @state() private billBusy = false;
@@ -270,11 +289,26 @@ export class PaymentsScreen extends LitElement {
   @state() private billPin = "";
   @state() private billInvalid = false;
   @state() private billFormError: string | null = null;
+  @state() private billFormErrorText: string | null = null;
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
     (error) => {
       this.stuckLoadError = codeOf(error);
+    },
+  );
+  readonly #billPaymentQuery = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.billPaymentLoadError = codeOf(error);
+    },
+  );
+  readonly #billRefundQuery = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.billRefundLoadError = codeOf(error);
     },
   );
 
@@ -289,7 +323,18 @@ export class PaymentsScreen extends LitElement {
         this.stuckLoadError = null;
       })
       .catch(() => undefined);
-    void this.#loadBillRecovery(false);
+    void this.#billPaymentQuery
+      .watch("listStuckBillPayments", [], (rows) => {
+        this.billPayments = rows;
+        this.billPaymentLoadError = null;
+      })
+      .catch(() => undefined);
+    void this.#billRefundQuery
+      .watch("listStuckBillRefunds", [], (rows) => {
+        this.billRefunds = rows;
+        this.billRefundLoadError = null;
+      })
+      .catch(() => undefined);
   }
 
   #simulator(): boolean {
@@ -482,12 +527,14 @@ export class PaymentsScreen extends LitElement {
       client.listStuckBillPayments(),
       client.listStuckBillRefunds(),
     ]);
-    const errors: string[] = [];
-    if (payments.status === "fulfilled") this.billPayments = payments.value;
-    else errors.push(codeMessage(codeOf(payments.reason)));
-    if (refunds.status === "fulfilled") this.billRefunds = refunds.value;
-    else errors.push(codeMessage(codeOf(refunds.reason)));
-    this.billLoadError = errors.length ? errors.join(" ") : null;
+    if (payments.status === "fulfilled") {
+      this.billPayments = payments.value;
+      this.billPaymentLoadError = null;
+    } else this.billPaymentLoadError = codeOf(payments.reason);
+    if (refunds.status === "fulfilled") {
+      this.billRefunds = refunds.value;
+      this.billRefundLoadError = null;
+    } else this.billRefundLoadError = codeOf(refunds.reason);
   }
 
   #openBillAction(target: BillTarget, mode: "check" | "attest"): void {
@@ -498,6 +545,7 @@ export class PaymentsScreen extends LitElement {
     this.billPin = "";
     this.billInvalid = false;
     this.billFormError = null;
+    this.billFormErrorText = null;
   }
 
   #billOutcomeText(answer: BillRecoveryOutcome): string | null {
@@ -534,7 +582,7 @@ export class PaymentsScreen extends LitElement {
       };
     } catch (error) {
       this.billResult = {
-        text: `${this.#billOrder(target.row)}: ${codeMessage(codeOf(error))}`,
+        text: `${this.#billOrder(target.row)}: ${billRefusalText(error)}`,
         refused: true,
       };
     }
@@ -557,6 +605,7 @@ export class PaymentsScreen extends LitElement {
     }
     this.billBusy = true;
     this.billFormError = null;
+    this.billFormErrorText = null;
     try {
       const target = action.target;
       const answer =
@@ -579,10 +628,42 @@ export class PaymentsScreen extends LitElement {
       this.billAction = null;
       await this.#loadBillRecovery(true);
     } catch (error) {
-      this.billFormError = codeOf(error);
+      const code = codeOf(error);
+      if (
+        code === "bill.payment_not_stuck" ||
+        code === "bill.refund_not_stuck" ||
+        code === "bill.payment_not_found" ||
+        code === "bill.refund_not_found"
+      ) {
+        this.billAction = null;
+        this.billResult = {
+          text: `${this.#billOrder(action.target.row)}: ${billRefusalText(error)}`,
+          refused: true,
+        };
+        await this.#loadBillRecovery(true);
+      } else {
+        this.billFormError = code;
+        this.billFormErrorText = billRefusalText(error);
+      }
     } finally {
       this.billBusy = false;
     }
+  }
+
+  #billProviderState(state: string | null): string {
+    if (state === "attempting") return t("payments.bill.state_attempting");
+    if (state === "failed" || state === "declined" || state === "voided")
+      return t("payments.bill.state_failed");
+    if (
+      state === "captured" ||
+      state === "settled" ||
+      state === "refunded" ||
+      state === "partially_refunded" ||
+      state === "accepted_offline"
+    )
+      return t("payments.bill.state_charged");
+    if (state === "initiated") return t("payments.bill.state_started");
+    return t("payments.bill.state_missing");
   }
 
   #renderBillRow(target: BillTarget): TemplateResult {
@@ -600,6 +681,25 @@ export class PaymentsScreen extends LitElement {
           </dd>
           <dt>${t("payments.stuck.amount")}</dt>
           <dd>${formatMoney(billAmount(target), currentLocale())}</dd>
+          ${
+            target.kind === "payment"
+              ? html`<dt>${t("payments.bill.provider_state")}</dt>
+                  <dd>${this.#billProviderState(target.row.providerState)}</dd>`
+              : html`<dt>${t("payments.bill.refund_reason")}</dt>
+                  <dd>${target.row.reason}</dd>
+                  <dt>${t("payments.bill.sent_at")}</dt>
+                  <dd>
+                    ${
+                      target.row.sentAt
+                        ? html`<time datetime=${target.row.sentAt}
+                            >${formatAlertTime(target.row.sentAt)}</time
+                          >`
+                        : t("payments.bill.not_sent")
+                    }
+                  </dd>
+                  <dt>${t("payments.bill.send_count")}</dt>
+                  <dd>${target.row.sendCount}</dd>`
+          }
           <dt>${t("payments.stuck.started")}</dt>
           <dd>
             <time
@@ -628,7 +728,16 @@ export class PaymentsScreen extends LitElement {
     </li>`;
   }
 
-  #renderBillRecovery(): TemplateResult {
+  #renderBillRecovery(): TemplateResult | typeof nothing {
+    const errors = [
+      ...new Set(
+        [this.billPaymentLoadError, this.billRefundLoadError]
+          .filter((code): code is string => code !== null)
+          .map((code) => codeMessage(code)),
+      ),
+    ];
+    if (!this.billPayments.length && !this.billRefunds.length && !this.billResult && !errors.length)
+      return nothing;
     return html`<section
       class="stuck-section ${this.billPayments.length || this.billRefunds.length ? "pending" : ""}"
       data-test="bill-recovery"
@@ -637,11 +746,12 @@ export class PaymentsScreen extends LitElement {
       <h2 id="bill-recovery-heading">${t("payments.bill.heading")}</h2>
       <p>${t("payments.bill.intro")}</p>
       ${this.billResult ? html`<p data-test="bill-action-result" role=${this.billResult.refused ? "alert" : "status"} class=${this.billResult.refused ? "error" : ""}>${this.billResult.text}</p>` : nothing}
-      ${this.billLoadError ? html`<p data-test="bill-load-error" role="alert" class="error">${this.billLoadError}</p>` : nothing}
+      ${errors.length ? html`<p data-test="bill-load-error" role="alert" class="error">${errors.join(" ")}</p>` : nothing}
       <wt-button
         variant="secondary"
+        data-test="refresh-bill-recovery"
         ?disabled=${this.billBusy}
-        @click=${() => void this.#loadBillRecovery(true)}
+        @click=${() => void this.#loadBillRecovery(false)}
         >${t("payments.bill.refresh")}</wt-button
       >
       <h3>${t("payments.bill.payments")}</h3>
@@ -718,7 +828,7 @@ export class PaymentsScreen extends LitElement {
           ...(pinMissing ? [t("payments.bill.pin_required")] : []),
         ]}
       ></wt-form-error-summary>
-      ${this.billFormError && !pinRefused ? html`<p role="alert" class="error">${codeMessage(this.billFormError)}</p>` : nothing}
+      ${this.billFormError && !pinRefused ? html`<p role="alert" class="error">${this.billFormErrorText}</p>` : nothing}
       <label class="bill-outcome"
         >${t("payments.bill.outcome")} *
         <select
@@ -740,7 +850,7 @@ export class PaymentsScreen extends LitElement {
           </option>
         </select>
       </label>
-      ${outcomeMissing ? html`<p class="error" role="alert">${t("payments.bill.outcome_required")}</p>` : nothing}
+      ${outcomeMissing ? html`<p class="error" role="alert" data-test="bill-outcome-error">${t("payments.bill.outcome_required")}</p>` : nothing}
       <wt-input
         name="note"
         required
@@ -766,6 +876,7 @@ export class PaymentsScreen extends LitElement {
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           this.billPin = event.detail.value;
           this.billFormError = null;
+          this.billFormErrorText = null;
         }}
       ></wt-input>
       <wt-form-actions slot="footer">

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -41,6 +42,7 @@ const REFUND = {
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
+    liveData: new LiveData(),
     listPaymentProviders: vi.fn().mockResolvedValue([]),
     listReaders: vi.fn().mockResolvedValue([]),
     listStuckPayments: vi.fn().mockResolvedValue([]),
@@ -87,6 +89,40 @@ describe("bill payment recovery on the Payments screen", () => {
     expect(q(el, "[data-test=bill-refund-br-1]")!.textContent).toContain("Order 13");
     expect(q(el, "[data-test=bill-refund-br-1]")!.textContent).toContain("€4.50");
     expect(q(el, "[data-test=bill-refund-br-1]")!.textContent).toContain("Bar till");
+    expect(q(el, "[data-test=bill-payment-bp-1]")!.textContent).toContain("Marked failed");
+    expect(q(el, "[data-test=bill-refund-br-1]")!.textContent).toContain("Guest left");
+    expect(q(el, "[data-test=bill-refund-br-1]")!.textContent).toContain("1");
+  });
+
+  it("hides the recovery section when both lists are empty, then shows a new pending payment on a live change", async () => {
+    const listStuckBillPayments = vi.fn().mockResolvedValueOnce([]).mockResolvedValue([PAYMENT]);
+    const api = stubApi({
+      listStuckBillPayments,
+      listStuckBillRefunds: vi.fn().mockResolvedValue([]),
+    });
+    const el = await mount(api);
+    expect(q(el, "[data-test=bill-recovery]")).toBeNull();
+    api.liveData.invalidate([{ type: "bill_payments" }]);
+    await vi.waitFor(() => expect(q(el, "[data-test=bill-payment-bp-1]")).not.toBeNull());
+    expect(listStuckBillPayments).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows a shared load failure once and lets a deliberate refresh use the active client", async () => {
+    const api = stubApi({
+      listStuckBillPayments: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+      listStuckBillRefunds: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+      background: {
+        listStuckBillPayments: vi.fn().mockResolvedValue([]),
+        listStuckBillRefunds: vi.fn().mockResolvedValue([]),
+      } as unknown as DashboardApi,
+    });
+    const el = await mount(api);
+    const text = q(el, "[data-test=bill-load-error]")!.textContent!;
+    expect(text.match(/This browser could not connect/g)).toHaveLength(1);
+    q(el, "[data-test=refresh-bill-recovery]")!.click();
+    await flush(el);
+    expect(api.listStuckBillPayments).toHaveBeenCalledTimes(2);
+    expect(api.background.listStuckBillPayments).not.toHaveBeenCalled();
   });
 
   it("reads the recovery headings and actions in Spanish", async () => {
@@ -112,6 +148,24 @@ describe("bill payment recovery on the Payments screen", () => {
     expect(api.resolveStuckBillPayment).toHaveBeenCalledWith("bp-1");
     expect(q(el, "[data-test=bill-action-result]")!.getAttribute("role")).toBe("status");
     expect(q(el, "[data-test=bill-load-error]")).not.toBeNull();
+  });
+
+  it("explains when a reader is still processing instead of suggesting another check", async () => {
+    const api = stubApi({
+      resolveStuckBillPayment: vi.fn().mockRejectedValue({
+        code: "bill.payment_outcome_unconfirmed",
+        params: { reason: "attempting" },
+      }),
+    });
+    const el = await mount(api);
+    q(el, "[data-test=check-bill-payment-bp-1]")!.click();
+    await flush(el);
+    q(el, "[data-test=confirm-bill-check]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=bill-action-result]")!.textContent).toContain("still processing");
+    expect(q(el, "[data-test=bill-action-result]")!.textContent).not.toContain(
+      "Ask the card provider about it again",
+    );
   });
 
   it("checks a refund with its own route and reports the completed outcome", async () => {
@@ -163,7 +217,7 @@ describe("bill payment recovery on the Payments screen", () => {
     expect(api.attestStuckBillRefund).not.toHaveBeenCalled();
     const summary = q(el, "[data-test=bill-attest-dialog] wt-form-error-summary")!;
     expect((summary as HTMLElement & { errors: string[] }).errors).toHaveLength(3);
-    expect(q(el, "[data-test=bill-attest-dialog] p.error")!.textContent).toContain("outcome");
+    expect(q(el, "[data-test=bill-outcome-error]")!.textContent).toContain("outcome");
     expect(
       q(el, "[data-test=bill-attest-dialog] wt-input[name=note]")!.hasAttribute("required"),
     ).toBe(true);
@@ -216,5 +270,49 @@ describe("bill payment recovery on the Payments screen", () => {
     expect(
       (q(el, "[data-test=bill-attest-pin]") as HTMLElement & { error: string }).error,
     ).toBeTruthy();
+  });
+
+  it("clears the outcome, note and PIN when a different row's form opens", async () => {
+    const el = await mount();
+    q(el, "[data-test=attest-bill-payment-bp-1]")!.click();
+    await flush(el);
+    const outcome = q(el, "[data-test=bill-attest-outcome]") as HTMLSelectElement;
+    outcome.value = "received";
+    outcome.dispatchEvent(new Event("change"));
+    change(el, "[data-test=bill-attest-note]", "First order note");
+    change(el, "[data-test=bill-attest-pin]", "1234");
+    await flush(el);
+    q(el, "[data-test=bill-attest-dialog]")!.dispatchEvent(new CustomEvent("wt-close"));
+    await flush(el);
+    q(el, "[data-test=attest-bill-refund-br-1]")!.click();
+    await flush(el);
+    expect((q(el, "[data-test=bill-attest-outcome]") as HTMLSelectElement).value).toBe("");
+    expect((q(el, "[data-test=bill-attest-note]") as HTMLElement & { value: string }).value).toBe(
+      "",
+    );
+    expect((q(el, "[data-test=bill-attest-pin]") as HTMLElement & { value: string }).value).toBe(
+      "",
+    );
+  });
+
+  it("closes a stale attestation and refreshes the row after the server says it is no longer pending", async () => {
+    const api = stubApi({
+      listStuckBillPayments: vi.fn().mockResolvedValueOnce([PAYMENT]).mockResolvedValue([]),
+      attestStuckBillPayment: vi.fn().mockRejectedValue({ code: "bill.payment_not_stuck" }),
+    });
+    const el = await mount(api);
+    q(el, "[data-test=attest-bill-payment-bp-1]")!.click();
+    await flush(el);
+    const outcome = q(el, "[data-test=bill-attest-outcome]") as HTMLSelectElement;
+    outcome.value = "received";
+    outcome.dispatchEvent(new Event("change"));
+    change(el, "[data-test=bill-attest-note]", "Provider confirms received");
+    change(el, "[data-test=bill-attest-pin]", "1234");
+    await flush(el);
+    q(el, "[data-test=confirm-bill-attest]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=bill-attest-dialog]")).toBeNull();
+    expect(q(el, "[data-test=bill-payment-bp-1]")).toBeNull();
+    expect(q(el, "[data-test=bill-action-result]")!.getAttribute("role")).toBe("alert");
   });
 });

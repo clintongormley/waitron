@@ -27,6 +27,12 @@ it.each([
   ["listHandledAlerts", [], "persons"],
   ["listStuckPayments", [], "payments"],
   ["listStuckPayments", [], "working_orders"],
+  ["listStuckBillPayments", [], "bill_payments"],
+  ["listStuckBillPayments", [], "payments"],
+  ["listStuckBillRefunds", [], "bill_payments"],
+  ["listStuckBillRefunds", [], "bill_payment_refunds"],
+  ["listStuckBillRefunds", [], "payments"],
+  ["listStuckBillRefunds", [], "working_orders"],
   ["listServers", [], "node_membership"],
   ["listServers", [], "nodes"],
 ] as const)(

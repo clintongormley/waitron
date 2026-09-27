@@ -1541,6 +1541,32 @@ export const en = {
   "payments.bill.no_refunds": "No bill refunds need attention.",
   "payments.bill.refresh": "Refresh list",
   "payments.bill.provider_unknown": "Provider not recorded",
+  "payments.bill.provider_state": "Payment record",
+  "payments.bill.state_attempting": "Still processing at the reader",
+  "payments.bill.state_failed": "Marked failed; confirm with the provider",
+  "payments.bill.state_charged": "Charge recorded",
+  "payments.bill.state_started": "Started",
+  "payments.bill.state_missing": "No provider record",
+  "payments.bill.refund_reason": "Reason",
+  "payments.bill.sent_at": "Sent to provider",
+  "payments.bill.not_sent": "Not sent",
+  "payments.bill.send_count": "Send attempts",
+  "payments.bill.payment_attempting":
+    "The reader is still processing this payment. Wait for it to finish before recording an outcome.",
+  "payments.bill.payment_unreachable":
+    "Waitron could not reach the card provider. The bill stays locked; reconnect the provider and try again.",
+  "payments.bill.payment_ambiguous":
+    "The provider's answer does not settle this payment. Check its transaction or ask provider support before recording an outcome.",
+  "payments.bill.payment_mismatched":
+    "The provider shows a charge for a different amount. The bill stays locked; check the provider transaction before recording an outcome.",
+  "payments.bill.refund_pending":
+    "The provider has not finished this refund. The bill stays locked; check again after it completes.",
+  "payments.bill.refund_not_found":
+    "The provider did not find this refund. That alone does not confirm it failed; check the request with the provider before recording an outcome.",
+  "payments.bill.refund_ambiguous":
+    "The provider shows more than one possible refund. Confirm which request this is before recording an outcome.",
+  "payments.bill.refund_unreachable":
+    "Waitron could not reach the provider about this refund. The bill stays locked; reconnect the provider and try again.",
   "payments.bill.check": "Check with provider",
   "payments.bill.check_heading": "Check this bill item with the provider?",
   "payments.bill.check_body":
@@ -1550,7 +1576,7 @@ export const en = {
   "payments.bill.attest": "Record confirmed outcome",
   "payments.bill.attest_heading": "Record the provider's confirmed outcome",
   "payments.bill.attest_body":
-    "Check {order} in the provider's own dashboard first. Record only the outcome it confirms. Your note and manager PIN become part of the audit record.",
+    "Check {order} in the provider's own dashboard or ask its support. An empty dashboard or an unchanged total does not confirm an outcome. Record only what the provider confirms; your note and manager PIN become part of the audit record.",
   "payments.bill.outcome": "Confirmed outcome",
   "payments.bill.choose_outcome": "Choose an outcome",
   "payments.bill.received_option": "Payment received",
@@ -3408,6 +3434,32 @@ export const es: Record<StringKey, string> = {
   "payments.bill.no_refunds": "No hay devoluciones pendientes.",
   "payments.bill.refresh": "Actualizar lista",
   "payments.bill.provider_unknown": "Proveedor no registrado",
+  "payments.bill.provider_state": "Registro del pago",
+  "payments.bill.state_attempting": "El lector sigue procesando el pago",
+  "payments.bill.state_failed": "Marcado como fallido; confírmalo con el proveedor",
+  "payments.bill.state_charged": "Cobro registrado",
+  "payments.bill.state_started": "Iniciado",
+  "payments.bill.state_missing": "Sin registro del proveedor",
+  "payments.bill.refund_reason": "Motivo",
+  "payments.bill.sent_at": "Enviado al proveedor",
+  "payments.bill.not_sent": "No enviado",
+  "payments.bill.send_count": "Intentos de envío",
+  "payments.bill.payment_attempting":
+    "El lector sigue procesando este pago. Espera a que termine antes de registrar un resultado.",
+  "payments.bill.payment_unreachable":
+    "Waitron no pudo contactar con el proveedor de tarjetas. La cuenta sigue bloqueada; vuelve a conectar el proveedor e inténtalo de nuevo.",
+  "payments.bill.payment_ambiguous":
+    "La respuesta del proveedor no resuelve este pago. Revisa la operación o consulta con el soporte del proveedor antes de registrar un resultado.",
+  "payments.bill.payment_mismatched":
+    "El proveedor muestra un cobro de otro importe. La cuenta sigue bloqueada; revisa la operación del proveedor antes de registrar un resultado.",
+  "payments.bill.refund_pending":
+    "El proveedor aún no ha completado esta devolución. La cuenta sigue bloqueada; vuelve a consultarla cuando termine.",
+  "payments.bill.refund_not_found":
+    "El proveedor no encontró esta devolución. Eso por sí solo no confirma que haya fallado; comprueba la solicitud con el proveedor antes de registrar un resultado.",
+  "payments.bill.refund_ambiguous":
+    "El proveedor muestra más de una posible devolución. Confirma cuál es esta solicitud antes de registrar un resultado.",
+  "payments.bill.refund_unreachable":
+    "Waitron no pudo contactar con el proveedor sobre esta devolución. La cuenta sigue bloqueada; vuelve a conectar el proveedor e inténtalo de nuevo.",
   "payments.bill.check": "Consultar al proveedor",
   "payments.bill.check_heading": "¿Consultar esta operación con el proveedor?",
   "payments.bill.check_body":
@@ -3417,7 +3469,7 @@ export const es: Record<StringKey, string> = {
   "payments.bill.attest": "Registrar resultado confirmado",
   "payments.bill.attest_heading": "Registrar el resultado confirmado por el proveedor",
   "payments.bill.attest_body":
-    "Comprueba primero {order} en el panel del proveedor. Registra solo el resultado que confirme. Tu nota y PIN de gerente quedarán en el registro de auditoría.",
+    "Comprueba {order} en el panel del proveedor o consulta con su soporte. Un panel vacío o un total sin cambios no confirman un resultado. Registra solo lo que confirme el proveedor; tu nota y PIN de gerente quedarán en el registro de auditoría.",
   "payments.bill.outcome": "Resultado confirmado",
   "payments.bill.choose_outcome": "Elige un resultado",
   "payments.bill.received_option": "Pago recibido",

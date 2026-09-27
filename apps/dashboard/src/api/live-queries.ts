@@ -34,6 +34,14 @@ export const QUERY_DEPENDENCIES = {
   // so a reader added/retired OR a device re-pointed refreshes the list.
   listReaders: ["card_readers", "device_card_readers"],
   listStuckPayments: ["payments", "working_orders", "tills"],
+  listStuckBillPayments: ["bill_payments", "payments", "working_orders", "tills"],
+  listStuckBillRefunds: [
+    "bill_payment_refunds",
+    "bill_payments",
+    "payments",
+    "working_orders",
+    "tills",
+  ],
   pairingMode: ["pairing"],
   joinRequests: ["join_requests"],
   listDiscoveredPrinters: ["printer_discovery", "printers", "print_agents"],
