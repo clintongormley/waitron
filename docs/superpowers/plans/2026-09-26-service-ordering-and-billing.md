@@ -184,7 +184,8 @@ names it so the owner can overturn it at review.
     line has NO ticket, so that detection cannot see it. Task 3 replaces it with
     `order_groups.state = 'held'`: a split onto a check of the same visit is allowed (the group,
     not the check, is what fires), and a transfer out of the visit is refused. `tab.split_held_line`
-    stays registered (codes are never renamed) and is no longer thrown; its server test, the till's
+    stays registered (codes are never renamed; _2026-09-26: before a venue is live a code may be
+    renamed or deleted freely, CLAUDE.md §3_) and is no longer thrown; its server test, the till's
     handling of it (`apps/till/src/till-app.ts`) and the till's test for that are retired.
     **Superseded 2026-09-26 (owner):** `tab.split_held_line` stays thrown, and a held line is still
     refused onto a check; the owner routes paying for one held item through Tasks 14 and 15's bill
@@ -545,8 +546,9 @@ Every task's requirements implicitly include this section.
   - Lane C also adds core migrations. On a rebase collision, regenerate; never hand-edit
     (CLAUDE.md §3).
   - Measure the upgrade on a seeded scratch venue, and state it in the PR and the backlog.
-- **Error codes name the domain concept and are never renamed** (CLAUDE.md §3). This plan's new
-  codes (grep the registries first and reuse any sibling):
+- **Error codes name the domain concept and are never renamed** (CLAUDE.md §3). _(2026-09-26: before
+  a venue is live a code may be renamed or deleted freely, CLAUDE.md §3.)_ This plan's new codes
+  (grep the registries first and reuse any sibling):
   - `visit.bill_outstanding`, `visit.not_open`, `visit.out_of_date` (the sibling of M7b's
     `working_order.out_of_date`, D19)
   - `submission.id_reused` (D8)

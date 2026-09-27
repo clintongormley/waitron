@@ -1129,9 +1129,9 @@ What B4 leaves open:
 - **`sale.unknown_product` is no longer raised.** A line naming an item the zone does not offer is
   refused `service_zone.offer_not_allowed` instead. The code stays registered, with its note in
   `apps/server/src/errors.ts` saying nothing raises it, and keeps its 400 in the till surface's
-  status map (`apps/server/src/till-api.ts`), because a shipped code is never renamed or removed.
-  **Next action:** none unless a retired code should also leave the status map; recorded so a
-  reader who meets it knows it is retired.
+  status map (`apps/server/src/till-api.ts`), under the rule of the time that a shipped code was
+  never removed. **Next action:** delete it, under *Delete the error codes nothing raises any more*
+  below (the owner ruled on 2026-09-26 that before a venue is live a code may be deleted freely).
 
 Task 10 has landed as **#471**: the built-in `doneness` field was removed end to end, and the demo
 steak now carries a `Punto` cooking options list instead. The per-line free-text note stays.
@@ -1229,8 +1229,8 @@ What option lists left open, none of it taken in #436 or #445:
   modifier code this replaced had already learned that lesson in an `openOrderUse` helper, and that
   file went with the old model in Task 13.
 - **`options.in_use` is registered and nothing throws it.** Deleting a list is designed to cascade
-  its product attachments rather than be refused, so there may never be a thrower. It stays
-  registered because a shipped code is never removed.
+  its product attachments rather than be refused, so there may never be a thrower. **Next action:**
+  delete it, under *Delete the error codes nothing raises any more* below.
 - **A trap that fooled three readers on #445, not yet written into `CLAUDE.md`.**
   `pnpm --filter <pkg> test <file> -t "name"` SILENTLY DROPS the `-t` and runs the whole file; only a
   bare `--` before it passes it through. Measured both ways: without `--` the echoed command is
@@ -1276,6 +1276,7 @@ What extras lists left open, and what #449 found on the way:
   straight out of `menu_item_extra_lists` rather than reaching them through the products, and the
   products out of `product_modifiers`. Its options twin has only the one table to read.
 - **`extras.in_use` is registered and nothing throws it**, the same posture as `options.in_use`.
+  **Next action:** delete it, under *Delete the error codes nothing raises any more* below.
 
 - **A save reaches the database once per submitted label.** The read that finds which list each
   submitted label belongs to, and the delete that drops the labels a body omits, are each one
@@ -1913,9 +1914,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   result, but nothing bounds the round trip from pressing the button to an answer; the agent only
   picks the request up on its next job pull.
 - **Two review suggestions were deliberately not taken** and would be relitigated otherwise:
-  renaming the new error code (codes name the domain concept and are never renamed once shipped),
-  and deduplicating targets in the agent host (the issuing server already normalises and
-  deduplicates its bounded list of eight).
+  renaming the new error code `printer.probe_busy` (kept under the domain-naming rule, per #335's
+  commit message), and deduplicating targets in the agent host (the issuing server already
+  normalises and deduplicates its bounded list of eight).
 - **Nothing physical has been verified since #327:** discovery, paper output, whether a device knock
   reaches the box while the Add agent dialog is open, the five-line feed before the cut, Bluetooth
   discovery, and the receipt preview against printed paper. #324's slips, duplicates and drawer pulse
@@ -2289,8 +2290,10 @@ ongoing overhaul listed at the top of Track A.
   stores a person's ROLE (`packages/identity/src/schema/persons.ts`), and the names appear only in
   code the box itself serves — and the pre-production rule (CLAUDE.md §3, no
   backwards-compatibility code until a venue is live) covers the rest. The review should confirm that
-  by running it, then drop or narrow that header sentence. Ties in with the next item: editable roles
-  are built from this list.
+  by running it, then drop or narrow that header sentence. **Do it before the editable-roles item
+  below** (owner, 2026-09-26): once an admin can make roles and give them permissions, the stored
+  roles would name their permissions (the roles design is not written yet), so a rename after that
+  has to rewrite those rows as well.
 - **Roles are something an admin can add and edit; the four built-ins are only defaults** (owner
   decision 2026-09-12, design not written). Detail under *Detail → Roles*: the ladder question decides
   the schema.
@@ -3284,8 +3287,8 @@ image constraints under *Detail → Box image*.
     reaches `settleSale`'s catch that turns a `sale_settlements` unique-key refusal into
     `sale.already_settled` (`packages/core/src/settle-sale.ts`); #598 measured the earlier check
     stopping both concurrent-settlement tests first. `sale.number_reused` is registered in
-    `packages/core/src/errors.ts` and `git grep number_reused -- apps packages` finds no thrower.
-    Outside core,
+    `packages/core/src/errors.ts` and `git grep number_reused -- apps packages` finds no thrower
+    (see *Delete the error codes nothing raises any more*). Outside core,
     `docs/developers/conventions-data.md` says the stored breakdown holds "the literals a fiscal
     record hashes" (#598 found the hash covers the totals, not the breakdown).
   - Found by #597 (`packages/payments-sumup`, `packages/migrations`), not fixable in a
@@ -3368,7 +3371,8 @@ image constraints under *Detail → Box image*.
     `packages/provisioning/src/errors.ts` as spelling engine errors by `errcode`; it no longer
     does.
   - `packages/provisioning` code, found by #561 and not changed: `provisioning.database_not_owned`
-    is declared and neither thrown nor read anywhere in `packages/` or `apps/`;
+    is declared and neither thrown nor read anywhere in `packages/` or `apps/` (see *Delete the
+    error codes nothing raises any more*);
     `provisioning.adopt_incomplete`'s `missing` type still lists `"tenant"`; `quoteIdent` has no
     caller outside its own suite, and the `quoteLiteral` re-export in `identifiers.ts` is used only
     by that suite; the `action.email === undefined` branch in `venue-apply.ts`'s seed-admin cannot
@@ -4598,14 +4602,46 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   (`packages/identity/src/staff.ts` and `account-action.ts`), `persons_tenant_live_display_name_uq`
   and `persons_tenant_pending_email_uq` (`staff.ts`) — so renaming them changes behaviour and wants
   its own failing tests first. Only `persons_tenant_google_subject_uq` is declared and never matched.
-- **Three shipped error codes were deleted rather than deprecated, and the owner has not ruled on
-  it.** `stripe.tenant_mismatch`, `sumup.tenant_mismatch` and `payment.webhook_tenant_mismatch` went
-  when the condition they described — two taxpayers disagreeing — stopped being reachable. `CLAUDE.md`
-  §3 says a shipped code is never renamed and that you deprecate and add a sibling; this backlog says
-  removing one is the owner's call; and the nearest precedent, in a file #378 edited, keeps a retired
-  code registered with a note saying codes are never deleted once shipped. The case for deleting them
-  is that Waitron is pre-production with no deployed consumer reading them. **Next action:** the owner
-  decides. Re-registering all three as deprecated siblings is a small change either way round.
+- **Three shipped error codes were deleted rather than deprecated — SETTLED 2026-09-26.**
+  `stripe.tenant_mismatch`, `sumup.tenant_mismatch` and `payment.webhook_tenant_mismatch` went when
+  the condition they described — two taxpayers disagreeing — stopped being reachable. The owner ruled
+  that before a venue is live a code may be renamed or deleted freely (CLAUDE.md §3), so the deletion
+  stands. Nothing to do.
+- **Delete the error codes nothing raises any more** (owner, 2026-09-26: before a venue is live a
+  code may be deleted freely). Several are still registered although nothing raises them, most of
+  them kept because the old rule said a shipped code is never removed. A search on 2026-09-26 found,
+  by file:
+  - `packages/catalogue/src/errors.ts`: the entries marked not thrown, including the three
+    `modifier.*` codes.
+  - `packages/provisioning/src/errors.ts`: `provisioning.adopt_incomplete` (deprecated) and
+    `provisioning.database_not_owned`, whose throwers went in `aabdde6a8` (#489) while the entry
+    stayed.
+  - `apps/server/src/errors.ts`: `sale.unknown_product` (above, *`sale.unknown_product` is no longer
+    raised*), `device.profile_missing`, `option.not_found`, `options.selection_invalid`,
+    `options.unsupported_product`, `order_prep.invalid_transition` and `tenant.not_found` (only a
+    test raises it).
+  - `packages/payments-stripe/src/errors.ts`: `stripe.collect_timeout`.
+  - `packages/identity/src/errors.ts`: `totp.key_unavailable`.
+  - `options.in_use` and `extras.in_use` (above), and the retired entry in
+    `apps/dashboard/src/i18n/codes.ts`.
+
+  `sale.number_reused` (`packages/core/src/errors.ts`) is a different case: it was added in
+  `10b16fd57` for a translation of the invoice-number unique-index violation that was never
+  written, so decide whether that translation is still wanted before deleting it. The list above
+  comes from one search and may be incomplete or out of date. **Next action:** re-run the search
+  (grep each registered code for a raise site outside its registry, status maps, wording and
+  tests) rather than trusting the list, then delete each code nothing raises with its wording,
+  status-map entry and tests in one change, after checking that no prefix matcher or stored copy
+  needs it (docs/developers/conventions-data.md lists both).
+- **`server.credential_unusable` names an unusable credential, although `server.*` is reserved for
+  facts about the process itself.** It is thrown for AEAT's certificate
+  (`packages/fiscal-verifactu/src/aeat-transport.ts`) and for Stripe's secret key and webhook secret
+  (`apps/server/src/stripe-account.ts`, `apps/server/src/webhook.ts`), and both
+  `packages/fiscal-verifactu/src/errors.ts` and `apps/server/src/errors.ts` declare it. Before a
+  venue is live a code may be renamed freely; once one is live a rename is a migration (CLAUDE.md
+  §3). **Next action:** choose a prefix
+  (`credentials.missing` is the nearest sibling) and rename it in one change, checking the prefix
+  matchers `docs/developers/conventions-data.md` lists.
 - **The Stripe webhook endpoint still has to be repointed by hand, at Stripe.** #378 shortened the
   address from `/webhooks/stripe/<an id>` to `/webhooks/stripe`, because the id in that path was
   supplied by the caller and no longer labelled anything real. Nothing in this repository points at

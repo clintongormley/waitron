@@ -19,9 +19,23 @@ reading from that engine and not as something a box can still print.
 ## Error codes name the DOMAIN CONCEPT, never the throwing package
 
 `series.not_found`, not `db.series_not_found` (design note atop `packages/shared/src/errors.ts`).
-Codes are **never renamed once shipped**; deprecate and add a sibling. `server.*` is reserved for
-facts about the process itself (`apps/server/src/errors.ts`). Every file that throws a code imports
-its registry (`import "./errors.js"`); reachability is guarded once, in the root project (§4).
+**Before a venue is live, a code may be renamed or deleted freely; once one is live, either is a
+migration** (owner decision 2026-09-26, replacing "never renamed once shipped; deprecate and add a
+sibling"). Either way it is one change in which every copy in the tree moves or goes. Grepping the
+code finds the registry, the wording keyed
+by it, the tests and the HTTP status maps. It does not find a consumer that matches a code by its
+prefix — the alert area claims (`claimFor`, `apps/server/src/alerts.ts`), the setup wizard's
+`provisioning.`/`fiscal.` routing (`apps/setup/src/setup-app.ts`),
+`apps/server/src/rejoin-command.ts`'s `rejoin.` handling and `apps/server/src/restore-command.ts`'s
+`restore.`/`recovery.`/`backup.` handling — so a rename that changes the prefix, or a deletion, is checked
+against those too. It does not find the stored copies, because each store takes whatever code arrives: `incidents.code` (`packages/db/src/schema/incidents.ts`), `scheduled_runs.error_code`
+(`packages/scheduler/src/schema/scheduled-runs.ts`) and `recovery.json`'s `lastErrorCode`
+(`apps/server/src/recovery-state.ts`). Before a venue is live they are not rewritten (CLAUDE.md
+§3's no-data-migration rule); once one is live they are, and anything outside this repository that
+reads the code accepts both names until both sides are deployed. Old log lines keep the old name. `server.*` is
+reserved for facts about the process itself (`apps/server/src/errors.ts`). Every file that throws a
+code imports its registry (`import "./errors.js"`); reachability is guarded once, in the root
+project (§4).
 
 ## A recorded incident code needs an area claim and English and Spanish alert wording
 

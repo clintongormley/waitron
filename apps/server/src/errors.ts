@@ -7,8 +7,7 @@ import type { ProbeFailure } from "@waitron/stream";
 /**
  * This host's contribution to the shared error registry, by declaration merging. A code names the
  * DOMAIN CONCEPT, lowercase and dot-namespaced, never the throwing package; `server.*` is reserved
- * for facts about the process itself. Codes are never renamed once shipped, and a code nothing
- * raises any more keeps its entry.
+ * for facts about the process itself.
  *
  * No code's params may carry a secret: the shared error boundary
  * (`packages/server-kit/src/error-boundary.ts`) writes them into the response and the log, and the

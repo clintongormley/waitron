@@ -254,8 +254,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "menu_item.variant_not_allowed": 400,
   "product.not_found": 404,
   "product.invalid": 400,
-  // Retired: nothing throws it since a product may have one variant. Still mapped, as a shipped
-  // code stays registered.
+  // Retired: nothing throws it since a product may have one variant.
   "product.variant_count_invalid": 400,
   "menu_section.not_found": 404,
   "menu_section.invalid": 400,
@@ -279,7 +278,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "diet.invalid_origin": 400,
   "diet.invalid_label": 400,
   "diet.add_remove_conflict": 400,
-  // Retired with the option-group machinery; nothing throws them. A shipped code stays mapped.
+  // Retired with the option-group machinery; nothing throws them.
   "modifier.invalid": 400,
   "modifier.not_found": 404,
   "modifier.in_use": 409,

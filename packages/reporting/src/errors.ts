@@ -6,7 +6,6 @@ import "@waitron/shared";
  * packages/reporting's codes in the shared error registry. The concept is the daily close (cierre Z),
  * so the prefix is `close.*`. Thrown by `recordDailyClose`.
  *
- * Codes are never renamed once shipped: a wrong one is deprecated and a new one added beside it.
  * `scripts/errors-reachable.test.ts` checks that this file stays reachable from the package's
  * `index.ts`, weaker than its name: it reads import TEXT, so an import of this file written in a
  * comment or string of another file the barrel reaches fakes an edge.

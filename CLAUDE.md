@@ -59,9 +59,9 @@ wide margin. This section stays in full deliberately: it applies to every change
 - **The correction is a new claim, and deserves MORE scrutiny than the text it replaces.** This is the
   single most productive source of false claims in the repository's history.
 - **Before asserting a convention, grep the siblings** — identifiers AND prose. Cost: an error code
-  prefixed `payments.` landed beside twelve `payment.` siblings (codes are never renamed once
-  shipped), and a spec used `orphan` to mean what `packages/payments/src/reconcile.ts` calls
-  `unmatched`.
+  prefixed `payments.` landed beside twelve `payment.` siblings (once a venue is live, renaming a
+  code is a migration), and a spec used `orphan` to mean what `packages/payments/src/reconcile.ts`
+  calls `unmatched`.
 - **A behaviour change retires every receipt about the old behaviour — editing a file is not auditing
   it.** Read the runbooks and the README paraphrases across the whole base-to-tip range, not the three
   lines of context a diff shows; per-task review cannot see this class. Cost:
@@ -362,8 +362,13 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   — each proven by widening `=== undefined` to `== null`. One field is deliberately outside the rule
   and pinned separately: an extras list's `maxPicks` null MEANS uncapped.
 - **Error codes name the DOMAIN CONCEPT, never the throwing package** — `series.not_found`, not
-  `db.series_not_found`. **Never renamed once shipped**; deprecate and add a sibling. `server.*` is
-  reserved for facts about the process itself. Every file that throws a code imports its registry.
+  `db.series_not_found`. **Before a venue is live, a code may be renamed or deleted freely; once one
+  is live, either is a migration** (owner decision 2026-09-26, replacing "never renamed once shipped;
+  deprecate and add a sibling"). Either way it is one change in which every copy in the tree moves or
+  goes; once live, stored copies are rewritten too and a reader outside this repository accepts both
+  names until both sides are deployed. Stored copies and prefix matchers, which a grep for the code
+  cannot find, are listed in [conventions-data.md](docs/developers/conventions-data.md). `server.*`
+  is reserved for facts about the process itself. Every file that throws a code imports its registry.
 - **A recorded incident code needs an area claim and English and Spanish alert wording.** Guard:
   `scripts/alert-codes.test.ts`, which reads only double-quoted, one-dot, lowercase-and-underscore literals
   in hand-listed files and counts a code recorded even if production never raises it; more: [conventions-data.md](docs/developers/conventions-data.md).

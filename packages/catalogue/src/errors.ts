@@ -13,8 +13,7 @@ declare module "@waitron/shared" {
     /** A category colour is neither null nor a lower-case `#rrggbb` string. */
     "category.color_invalid": Record<string, never>;
     "category.membership_invalid": Record<string, never>;
-    /** Not thrown: a product's main reporting category needs no membership. Kept because a shipped
-     * code is never removed. */
+    /** Not thrown: a product's main reporting category needs no membership. */
     "category.primary_required": Record<string, never>;
     /**
      * A category delete names somewhere its products or subcategories cannot go: the category being
@@ -33,11 +32,10 @@ declare module "@waitron/shared" {
       productId: string;
       reason: "unknown_id" | "empty_name" | "repeated_id" | "wrong_leaf";
     };
-    /** Not thrown: deleting a category cascades instead. Kept because a shipped code is never
-     * removed. */
+    /** Not thrown: deleting a category cascades instead. */
     "category.in_use": { children: number; products: number; routes: number };
     /** The three `modifier.*` codes below are not thrown: Extras and Options refuse under their own
-     * `extras.*` / `options.*` codes. Kept because a shipped code is never removed. */
+     * `extras.*` / `options.*` codes. */
     "modifier.invalid": { field: string };
     "modifier.not_found": { modifierId: string };
     "modifier.in_use": { modifierId: string; dependency: string };
@@ -71,14 +69,12 @@ declare module "@waitron/shared" {
     "diet.invalid_label": { field: string; value: string };
     /** A diet override both adds and removes the same contains-tag — a contradiction. */
     "diet.add_remove_conflict": { tag: string };
-    /** Not thrown (`packages/media` refuses as `image.invalid_metadata`). Kept because a shipped
-     * code is never removed. */
+    /** Not thrown (`packages/media` refuses as `image.invalid_metadata`). */
     "media.missing": Record<string, never>;
     /** `detected` names the type when it is recognisable: a fact about the bytes, never the
      * bytes. */
     "media.unsupported_type": { detected?: string };
-    /** Not thrown (`packages/media` refuses as `image.too_large`). Kept because a shipped code is
-     * never removed. */
+    /** Not thrown (`packages/media` refuses as `image.too_large`). */
     "media.too_large": { size: number; limit: number };
     /** A location-menu write, or a read or write of a menu's structure, names no menu. */
     "catalogue.not_found": { catalogueId: string };
@@ -106,8 +102,7 @@ declare module "@waitron/shared" {
     /** A submitted variant identity is not a variant of the product or, in a menu's variant
      * overrides, not an Active one. */
     "product.variant_not_found": { variantId: string };
-    /** Not thrown: removing a variant makes it Inactive and is always allowed. Kept
-     * because a shipped code is never removed. */
+    /** Not thrown: removing a variant makes it Inactive and is always allowed. */
     "product.variant_in_use": { variantId: string; menuItemIds: string[] };
     /** A product is Inactive or Unavailable, or its menu path is disabled. */
     "product.unavailable": { productId: string };
@@ -126,8 +121,7 @@ declare module "@waitron/shared" {
     /** A product-editor field is missing or malformed. */
     "product.invalid": { field: string };
     "product.not_found": { productId: string };
-    /** Not thrown: a product may have one variant. Kept because a shipped code is
-     * never removed. */
+    /** Not thrown: a product may have one variant. */
     "product.variant_count_invalid": { minimum: number };
     /** `memberId` names a member the section's list does not hold. */
     "menu_section.not_found": { sectionId: string; memberId?: string };
@@ -143,10 +137,9 @@ declare module "@waitron/shared" {
     "menu_section.not_library": { sectionId: string };
     /** A member reference or selection names nothing the write can use. */
     "menu_section.membership_invalid": Record<string, never>;
-    /** Not thrown: options-list authoring refuses as `options.invalid`. Kept because a shipped code
-     * is never removed. */
+    /** Not thrown: options-list authoring refuses as `options.invalid`. */
     "options.group_invalid": { reason: string };
-    /** Not thrown. Kept because a shipped code is never removed. */
+    /** Not thrown. */
     "options.item_invalid": { reason: string };
     /**
      * An options list's authoring body, or an ORDER-time selection list, is refused. `field` is the
@@ -163,8 +156,7 @@ declare module "@waitron/shared" {
      * naming only the language cannot be placed beside an input.
      */
     "options.translation_required": { field: string; language: string };
-    /** Not thrown: deleting a list cascades its product attachments. Kept because a shipped code is
-     * never removed. */
+    /** Not thrown: deleting a list cascades its product attachments. */
     "options.in_use": { optionListId: string; dependency: string };
     /**
      * An order line answered an active options list with nothing, or with a label that list does not
@@ -180,8 +172,7 @@ declare module "@waitron/shared" {
     "extras.invalid": { field: string };
     /** An extras list id names no list. */
     "extras.not_found": { extraListId: string };
-    /** Not thrown: deleting a list cascades its attachments. Kept because a shipped code is never
-     * removed. */
+    /** Not thrown: deleting a list cascades its attachments. */
     "extras.in_use": { extraListId: string; dependency: string };
     /**
      * An order line's answer to an extras list breaks one of that list's COUNTS (`minPicks`,
@@ -196,7 +187,7 @@ declare module "@waitron/shared" {
      * till never offers such a product as an extra. `field` is `items.<i>.productId` of the first.
      */
     "extras.product_has_variants": { field: string; productId: string };
-    /** Not thrown. Kept because a shipped code is never removed. */
+    /** Not thrown. */
     "product.in_use": { productId: string; dependency: string };
   }
 }

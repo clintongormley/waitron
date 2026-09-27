@@ -11,7 +11,10 @@ import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { applyMigrations } from "./apply.js";
 import { manifestSets, migrationOptionsFor } from "./manifest.js";
 
-/** How long a peer holds the lock before letting go. Long enough to lose the race if nothing waits. */
+/**
+ * How long the locking peer holds on. To catch a broken lock it has to outlast only the migrator's
+ * path to opening `venue.db`, not the whole migration.
+ */
 const HOLD_MS = 600;
 
 const scratch: string[] = [];
@@ -23,25 +26,32 @@ function temp(prefix: string): string {
 }
 
 /**
- * A peer process that takes the venue's migration lock, holds it, records that it let go, and
- * exits. `node:sqlite` is a builtin, so the child needs no module resolution.
+ * A peer process on the venue's migration lock file. `node:sqlite` is a builtin, so the child needs
+ * no module resolution.
  *
- * With `takeLock` = `no` it does everything EXCEPT take the lock. That is the control: the same
- * timings, the same log line, nothing for `applyMigrations` to wait for.
+ * `hold` takes the lock and lets go after `HOLD_MS`, on its own timer: while `applyMigrations`
+ * waits on the lock it blocks the test process's event loop, so the test cannot say when.
+ * `idle` takes nothing and lets go when the test writes a line to its stdin.
+ *
+ * As it lets go, the peer records whether `venue.db` exists. A migrator that waited has not opened
+ * it yet; one that did not wait opens it before migrating anything, so a slow migration cannot hide
+ * it.
  */
 const PEER = `
-import { appendFileSync } from "node:fs";
+import { appendFileSync, existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-const [lockPath, logPath, holdMs, takeLock] = process.argv.slice(2);
+const [lockPath, logPath, venueFile, holdMs, mode] = process.argv.slice(2);
 const db = new DatabaseSync(lockPath);
 db.exec("pragma busy_timeout = 30000");
-if (takeLock === "yes") db.exec("begin immediate");
-console.log("held");
-setTimeout(() => {
-  appendFileSync(logPath, "peer-released\\n");
-  if (takeLock === "yes") db.exec("commit");
+if (mode === "hold") db.exec("begin immediate");
+console.log("ready");
+const release = () => {
+  appendFileSync(logPath, "peer-released, venue.db " + (existsSync(venueFile) ? "present" : "absent") + "\\n");
+  if (mode === "hold") db.exec("commit");
   db.close();
-}, Number(holdMs));
+};
+if (mode === "hold") setTimeout(release, Number(holdMs));
+else process.stdin.once("data", () => { release(); process.exit(0); });
 `;
 
 function peerScript(): string {
@@ -51,13 +61,10 @@ function peerScript(): string {
 }
 
 /**
- * Runs one race and returns the order the two sides recorded.
- *
- * The peer writes `peer-released` at the moment it lets go; this process writes `migrated` when
- * `applyMigrations` returns. Order, not elapsed time: a duration assertion would have to name a
- * threshold, and the same two answers would then look alike on a loaded machine.
+ * Runs one race and returns the lines the two sides recorded, in order: the peer's as it lets go,
+ * and `migrated` from this process when `applyMigrations` returns.
  */
-async function race(takeLock: "yes" | "no"): Promise<string[]> {
+async function race(mode: "hold" | "idle"): Promise<string[]> {
   const venue = temp("wt-race-");
   const log = join(venue, "order.log");
   writeFileSync(log, "");
@@ -65,20 +72,20 @@ async function race(takeLock: "yes" | "no"): Promise<string[]> {
     peerScript(),
     join(venue, "migrations.lock"),
     log,
+    join(venue, "venue.db"),
     String(HOLD_MS),
-    takeLock,
+    mode,
   ]);
   const exited = new Promise<void>((resolve) => peer.on("close", () => resolve()));
   await new Promise<void>((resolve, reject) => {
-    peer.stdout.on("data", (chunk) => String(chunk).includes("held") && resolve());
+    peer.stdout.on("data", (chunk) => String(chunk).includes("ready") && resolve());
     peer.on("error", reject);
-    peer.on("close", () =>
-      reject(new Error("the peer exited before it reported holding the lock")),
-    );
+    peer.on("close", () => reject(new Error("the peer exited before it reported ready")));
   });
   const core = manifestSets().find((set) => set.name === "core")!;
   await applyMigrations(venue, migrationOptionsFor([core], null));
   appendFileSync(log, "migrated\n");
+  if (mode === "idle") peer.stdin.write("release\n");
   await exited;
   return readFileSync(log, "utf8").trim().split("\n");
 }
@@ -89,12 +96,14 @@ describe("applyMigrations under two concurrent hosts", () => {
   });
 
   it("waits for a peer process holding the venue's migration lock", async () => {
-    expect(await race("yes")).toEqual(["peer-released", "migrated"]);
+    expect(await race("hold")).toEqual(["peer-released, venue.db absent", "migrated"]);
   });
 
+  // Shows the peer's record can come out the other way, so the case above is not passing on how the
+  // race is built. A migrator that waited on this peer would block for the lock's whole wait, then
+  // fail with `database is locked`.
   it("does not wait when the peer holds nothing — the control", async () => {
-    // The same peer with only the `begin immediate` removed: it reverses the order.
-    expect(await race("no")).toEqual(["migrated", "peer-released"]);
+    expect(await race("idle")).toEqual(["migrated", "peer-released, venue.db present"]);
   });
 });
 
