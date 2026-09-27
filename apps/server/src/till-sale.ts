@@ -30,7 +30,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { Decimal, SaleId } from "@waitron/shared";
-import { repriceOn, type PricedLines } from "@waitron/catalogue";
+import { localToday, repriceOn, type PricedLines } from "@waitron/catalogue";
 import {
   payments,
   associatePaymentWithSale,
@@ -52,7 +52,7 @@ import {
 } from "./working-order.js";
 import type { LineExtras, PricedOrder, TillSaleDeps } from "./working-order.js";
 import { issuancePass } from "./issuance-pass.js";
-import { grossOnlyDate, issueMoment } from "./issue-date.js";
+import { issueMoment } from "./issue-date.js";
 import { cashChange } from "./bill-allocation.js";
 import { perDatabase } from "./live-in-process.js";
 import { refuseBillWithPayments } from "./bill-payments.js";
@@ -548,7 +548,7 @@ export async function readSettledTicket(
 
   // Rebuilt from the stored lock rather than `sale_lines`, which stores the NET base, so recovering
   // the gross could drift by a cent.
-  const ticketLines = ticketLinesFrom(await priceStoredOrder(tx, workingOrderId, grossOnlyDate()));
+  const ticketLines = ticketLinesFrom(await priceStoredOrder(tx, workingOrderId, localToday()));
 
   // Reads the already-filed record; never re-files.
   const filed = await backend.filedReceiptFor(tx, brandSaleId(issued.saleId));
@@ -853,10 +853,10 @@ async function payIntegrated(
     // same on any day.
     const order: PricedOrder =
       locked === undefined
-        ? await createOpenOrder(tx, cfg, req.id, req.lines, grossOnlyDate(), null, {
+        ? await createOpenOrder(tx, cfg, req.id, req.lines, localToday(), null, {
             zoneId: req.zoneId,
           })
-        : await priceStoredOrderForIssuance(tx, req.id, grossOnlyDate());
+        : await priceStoredOrderForIssuance(tx, req.id, localToday());
     // The record is issued from THIS pricing, in P3, whatever changes while the reader runs.
     const priced = await issuancePass(tx, cfg, req.id, order);
     // A `placed` order here is a counter collect, so `finalizeCapture` stamps `collected_at`.

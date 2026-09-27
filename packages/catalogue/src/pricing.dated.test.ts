@@ -108,4 +108,17 @@ describe("pricing takes each rate on the date it is given", () => {
     expect(again.grossLineTotals).toEqual(priced.grossLineTotals);
     expect(repriceOn(tagged, BEFORE)).toEqual(tagged);
   });
+
+  it("priceBasket with no date takes this process's local date today", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const basket = [{ product: each("12.30", "general"), quantity: "1" }];
+      vi.setSystemTime(new Date(2026, 11, 31, 12));
+      expect(priceBasket(basket).lines[0]!.vatRate).toBe(decimal("21.00"));
+      vi.setSystemTime(new Date(2027, 0, 1, 12));
+      expect(priceBasket(basket).lines[0]!.vatRate).toBe(decimal("23.00"));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

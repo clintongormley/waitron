@@ -85,6 +85,7 @@ import {
   contentLanguagesOr,
   expandDietaryDeclarations,
   loadClassification,
+  localToday,
   priceBasket,
   priceBasketWithOptions,
   priceLockedLines,
@@ -121,7 +122,7 @@ import type { FloorAnnotator, PreparationRoute, ZoneMenuOffer, ZoneOffers } from
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { FloorTableShape } from "./tables.js";
 import { issuancePass } from "./issuance-pass.js";
-import { grossOnlyDate, issueMoment } from "./issue-date.js";
+import { issueMoment } from "./issue-date.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import {
@@ -940,7 +941,7 @@ export async function parkOrder(
         cfg,
         req.id,
         req.lines,
-        grossOnlyDate(),
+        localToday(),
         req.label ?? null,
         {
           zoneId: req.zoneId,
@@ -1029,7 +1030,7 @@ export async function openTab(
     cfg,
     tabId,
     req.lines ?? [],
-    grossOnlyDate(),
+    localToday(),
     null,
     {
       zoneId: table.zoneId ?? undefined,
@@ -1684,7 +1685,7 @@ export async function addTabRound(
     cfg,
     tabId,
     lines,
-    grossOnlyDate(),
+    localToday(),
     context?.zoneId,
   );
   const appended = lineRows.map((row, i) => ({ ...row, lineNo: maxLineNo + i + 1 }));
@@ -1725,7 +1726,7 @@ async function openNextPartyTab(
     return null;
   }
   const nextTabId = randomUUID();
-  await createOpenOrder(tx, cfg, nextTabId, [], grossOnlyDate(), null, { visitId: party.visitId });
+  await createOpenOrder(tx, cfg, nextTabId, [], localToday(), null, { visitId: party.visitId });
   await VENUE_SERVICE.copyOrderContext(tx, cfg, tabId, nextTabId);
   await tx
     .update(diningTables)
@@ -2881,7 +2882,7 @@ export async function splitOffCheck(
 
   const { orderLabel } = await readReceiptOrder(tx, cfg, fromTabId);
   const checkId = randomUUID();
-  await createOpenOrder(tx, cfg, checkId, [], grossOnlyDate(), orderLabel, { visitId });
+  await createOpenOrder(tx, cfg, checkId, [], localToday(), orderLabel, { visitId });
   // The check takes the origin's service mode (or, like it, has none), so `carveOffLines` needs no
   // mode check on this path.
   await VENUE_SERVICE.copyOrderContext(tx, cfg, fromTabId, checkId);
@@ -2956,7 +2957,7 @@ export async function unjoinTable(
   }
   // Repointed before the move, so `newTabId` is a tab when `carveBetweenTabs` checks it.
   const newTabId = randomUUID();
-  await createOpenOrder(tx, cfg, newTabId, [], grossOnlyDate(), null, { visitId: newVisitId });
+  await createOpenOrder(tx, cfg, newTabId, [], localToday(), null, { visitId: newVisitId });
   await VENUE_SERVICE.copyOrderContext(tx, cfg, tabId, newTabId);
   if (table.zoneId !== null && (await VENUE_SERVICE.findOrderContext(tx, cfg, newTabId)) !== null) {
     await VENUE_SERVICE.retargetOrderContext(tx, cfg, newTabId, table.zoneId);
@@ -3784,7 +3785,7 @@ async function applyLineEdits(
     cfg,
     orderId,
     pricing,
-    grossOnlyDate(),
+    localToday(),
     context?.zoneId,
     snapshot,
   );

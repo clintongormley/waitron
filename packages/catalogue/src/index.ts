@@ -2,6 +2,7 @@ export * from "./pricing.js";
 export {
   VAT_RATE_TABLE,
   localCalendarDate,
+  localToday,
   vatRateOn,
   type DatedRate,
   type VatRateTable,

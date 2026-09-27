@@ -8,7 +8,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { assertQuantityPrecision } from "@waitron/catalogue";
+import { assertQuantityPrecision, localToday } from "@waitron/catalogue";
 import {
   AppError,
   addDecimal,
@@ -48,7 +48,7 @@ import type {
   BillFunds,
 } from "./bill-allocation.js";
 import { issuancePass } from "./issuance-pass.js";
-import { grossOnlyDate, issueMoment } from "./issue-date.js";
+import { issueMoment } from "./issue-date.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 import { ticketLinesFrom } from "./receipt-lines.js";
@@ -295,7 +295,7 @@ async function billTotal(tx: Transaction, workingOrderId: string): Promise<Decim
   // The same pricing the invoice is issued from; a lineless bill totals nothing.
   return line === undefined
     ? ZERO
-    : (await priceStoredOrder(tx, workingOrderId, grossOnlyDate())).total;
+    : (await priceStoredOrder(tx, workingOrderId, localToday())).total;
 }
 
 function fundsOf(
@@ -549,7 +549,7 @@ export async function readBillBalance(
     total ??
       (lineNos.size === 0
         ? ZERO
-        : (await priceStoredOrder(tx, workingOrderId, grossOnlyDate())).total),
+        : (await priceStoredOrder(tx, workingOrderId, localToday())).total),
     held,
   );
   const outstanding = subtractDecimal(subtractDecimal(funds.total, funds.received), funds.reserved);

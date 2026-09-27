@@ -67,3 +67,9 @@ export function vatRateOn(
 export function localCalendarDate(instant: Date, offsetMinutes: number): string {
   return new Date(instant.getTime() + offsetMinutes * 60_000).toISOString().slice(0, 10);
 }
+
+/** This process's local calendar date today, for pricing that files no rate. */
+export function localToday(): string {
+  const now = new Date();
+  return localCalendarDate(now, -now.getTimezoneOffset());
+}

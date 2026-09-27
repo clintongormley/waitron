@@ -12,7 +12,7 @@ import type { Decimal, OptionSnapshot } from "@waitron/shared";
 import type { RecordSaleLine } from "@waitron/core/src/sale-line.js";
 import type { VatBreakdownLine } from "@waitron/fiscal/src/vat-breakdown.js";
 import { assertQuantityPrecision } from "./unit-validation.js";
-import { vatRateOn, type VatClass } from "./vat-rates.js";
+import { localToday, vatRateOn, type VatClass } from "./vat-rates.js";
 
 export { VAT_CLASSES, type VatClass } from "./vat-rates.js";
 export type PricingUnit = "each" | "weight";
@@ -192,7 +192,8 @@ function priceRows(rows: readonly PricingRow[], on: string): PricedLines {
 
 /** Prices a live basket: gross unit from the product's `unitPrice`, rate its `vatClass`'s on `on`, a
  * local calendar date `YYYY-MM-DD`. */
-export function priceBasket(items: readonly BasketItem[], on: string): PricedLines {
+// The default serves previews and callers that keep only gross amounts; a filing path names its date.
+export function priceBasket(items: readonly BasketItem[], on: string = localToday()): PricedLines {
   return priceRows(
     items.map((item) => {
       assertQuantityPrecision(item.quantity, item.product.unit.precision, { positive: true });
