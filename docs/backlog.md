@@ -4979,7 +4979,7 @@ measured and did not settle.
   about 50 minutes of wall clock on run 35528428168, which is why nobody has put them on the merge
   path. Either accept the weekly lag and say so where a reader meets the gate, or find a cheaper
   per-pull-request signal.
-- **DONE (lane C's A102, PR #TBD): the db mutation aggregate lists a file with no counted mutants
+- **DONE (lane C's A102, PR #787): the db mutation aggregate lists a file with no counted mutants
   as `not measured` with the statuses its mutants ended in, instead of `0.00%  0/0`.** On run
   35528428168 the three such files (`change-feed.ts`, `classification.ts`, `testing/venue-db.ts`)
   were all `Ignored` as static mutants (`ignoreStatic: true` in `packages/db/stryker.config.json`).
