@@ -261,9 +261,7 @@ is made Inactive too (`setProductVariants`). A variant Inactive when its menu wa
 none of that menu's offers, and one made Inactive since is served marked unavailable
 (`applyLiveFields`, `packages/catalogue/src/menu-document.ts`). An Active one
 is listed under its parent's offer with whether that menu offers it, read when the menu is published
-(`readOfferVariants` in `listMenuOffers`, `packages/catalogue/src/operations.ts`). The offers the
-dashboard's menu editor reads are not published ones, and mark a variant available only while it is
-Available and that menu has not switched it off (`listMenuOffersWithTopLevel`).
+(`readOfferVariants` in `listMenuOffers`, `packages/catalogue/src/operations.ts`).
 The offers a till sells from are each menu's published version, which leaves out a product that was
 Inactive when it was published (`listMenuOffers`, `packages/catalogue/src/operations.ts`). A product
 that is Unavailable, or has become Inactive since, is served in its place marked unavailable

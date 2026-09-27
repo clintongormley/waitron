@@ -69,7 +69,6 @@ import type { ListedVariant, Product } from "./product-types.js";
 import type {
   AccessibleCatalogue,
   AvailableProduct,
-  EditableMenuOffer,
   MenuItem,
   MenuOffer,
   MenuOfferVariant,
@@ -78,7 +77,6 @@ import type {
 export type {
   AccessibleCatalogue,
   AvailableProduct,
-  EditableMenuOffer,
   MenuItem,
   MenuOffer,
   MenuOfferVariant,
@@ -368,15 +366,6 @@ async function writeMenuItemSettings(
     await tx.update(menuItems).set(values).where(eq(menuItems.id, menuItemId));
 }
 
-/** Switches a product the menu reaches off on that menu alone. */
-export async function deactivateMenuItem(
-  tx: Transaction,
-  menuId: string,
-  menuItemId: string,
-): Promise<void> {
-  await updateMenuItem(tx, menuId, menuItemId, { active: false });
-}
-
 /**
  * What an offer and each of its variants both carry beyond their names and prices, as one column
  * set and one mapping, so a field added here reaches both. A query selecting these must
@@ -449,9 +438,8 @@ function offerLineValues(row: OfferLineRow, defaultLanguage: string) {
  * The Active offers on the given menus: the products each menu's structure reaches, menus by name
  * and each in its structure's order (`reachableProducts`), Unavailable (sold-out) ones included. A
  * product switched off on the menu (`menu_items.active`) is left out unless the caller passes
- * `includeSwitchedOff`, so the dashboard can switch it back on. Only a top-level product is an
- * offer; each Active variant of it is nested under its offer, an Unavailable one listed as
- * unavailable.
+ * `includeSwitchedOff`. Only a top-level product is an offer; each Active variant of it is nested
+ * under its offer, an Unavailable one listed as unavailable.
  */
 export async function listMenuOffers(
   tx: Transaction,
@@ -461,30 +449,6 @@ export async function listMenuOffers(
   if (menuIds.length === 0) return [];
   const roots = await menuRoots(tx, menuIds);
   return offersOn(tx, roots, options.graph ?? (await loadSectionGraph(tx)), options);
-}
-
-/** `listMenuOffers` for one menu, each offer with its product's membership of the menu's top level. */
-export async function listMenuOffersWithTopLevel(
-  tx: Transaction,
-  menuId: string,
-  options: OfferOptions = {},
-): Promise<EditableMenuOffer[]> {
-  const rootSectionId = await menuRoot(tx, menuId);
-  if (rootSectionId === undefined) return [];
-  const graph = await loadSectionGraph(tx);
-  const offers = await offersOn(tx, new Map([[menuId, rootSectionId]]), graph, options);
-  const onTopLevel = new Map(
-    graph
-      .children(rootSectionId)
-      .flatMap(({ id, ref }) => (ref.kind === "product" ? [[ref.productId, id] as const] : [])),
-  );
-  return offers.map((offer) => {
-    const memberId = onTopLevel.get(offer.productId);
-    return {
-      ...offer,
-      topLevelMember: memberId === undefined ? null : { sectionId: rootSectionId, memberId },
-    };
-  });
 }
 
 interface OfferOptions {

@@ -8,10 +8,8 @@ import {
   createCatalogue,
   createProduct,
   deactivateCatalogue,
-  deactivateMenuItem,
   deactivateProduct,
   listMenuOffers,
-  listMenuOffersWithTopLevel,
   menuPrices,
   renameCatalogue,
   updateMenuItem,
@@ -371,31 +369,6 @@ describe("a menu offers what its structure reaches", () => {
   });
 });
 
-describe("the dashboard's read of a menu's offers", () => {
-  it("gives each offer the top-level membership that takes it off the top level, if it has one", async () => {
-    const f = await fixture();
-    await app(async (tx) => {
-      await addMember(tx, f.drinks, product(f.lemonade));
-      await addMember(tx, f.drinks, product(f.water));
-      await addMember(tx, f.lunchRoot, section(f.drinks));
-      await addMember(tx, f.lunchRoot, product(f.water));
-      await addMember(tx, f.dinnerRoot, product(f.lemonade));
-    });
-    const waterOnTop = await memberHolding(f.lunchRoot, product(f.water));
-    const offers = await app((tx) => listMenuOffersWithTopLevel(tx, f.lunch));
-    expect(offers.map((offer) => [offer.productId, offer.topLevelMember])).toEqual([
-      [f.lemonade, null],
-      [f.water, { sectionId: f.lunchRoot, memberId: waterOnTop }],
-    ]);
-    // Everything else is the offer `listMenuOffers` gives.
-    const plain = await app((tx) => listMenuOffers(tx, [f.lunch]));
-    expect(offers).toEqual(
-      plain.map((offer, index) => ({ ...offer, topLevelMember: offers[index]!.topLevelMember })),
-    );
-    expect(await app((tx) => listMenuOffersWithTopLevel(tx, crypto.randomUUID()))).toEqual([]);
-  });
-});
-
 describe("a product that leaves a menu starts fresh there", () => {
   /**
    * Review Focus 4: Lemonade under Favourites and Drinks on Lunch, with a Lunch price, a Lunch
@@ -599,7 +572,7 @@ describe("a menu's own switch for a product", () => {
       await addMember(tx, f.dinnerRoot, section(f.drinks));
     });
     const item = (await app((tx) => menuItemRow(tx, f.lunch, f.lemonade)))!;
-    await app((tx) => deactivateMenuItem(tx, f.lunch, item.id));
+    await app((tx) => updateMenuItem(tx, f.lunch, item.id, { active: false }));
     expect(await offerNames(f.lunch)).toEqual(["Water (staff)"]);
     expect(await offerNames(f.dinner)).toEqual(["Lemonade (staff)", "Water (staff)"]);
     // A structure change that keeps it reachable leaves the switch where it was.
@@ -621,7 +594,7 @@ describe("a menu's own switch for a product", () => {
       await addMember(tx, f.lunchRoot, section(f.drinks));
     });
     const item = (await app((tx) => menuItemRow(tx, f.lunch, f.lemonade)))!;
-    await app((tx) => deactivateMenuItem(tx, f.lunch, item.id));
+    await app((tx) => updateMenuItem(tx, f.lunch, item.id, { active: false }));
     const listed = await app((tx) => listMenuOffers(tx, [f.lunch], { includeSwitchedOff: true }));
     expect(listed.map(({ id, name, active }) => ({ id, name, active }))).toEqual([
       { id: item.id, name: "Lemonade (staff)", active: false },
@@ -639,7 +612,7 @@ describe("a menu's own switch for a product", () => {
     for (const write of [
       (tx: Transaction): Promise<unknown> =>
         updateMenuItem(tx, f.lunch, item.id, { grossPrice: "1.00" }),
-      (tx: Transaction) => deactivateMenuItem(tx, f.lunch, item.id),
+      (tx: Transaction) => updateMenuItem(tx, f.lunch, item.id, { active: false }),
       (tx: Transaction) => updateMenuItem(tx, f.dinner, item.id, { grossPrice: "1.00" }),
       (tx: Transaction) =>
         setMenuVariants(tx, item.id, [{ variantId: f.large, price: "1.00", offered: true }]),
@@ -822,7 +795,7 @@ describe("a menu's prices", () => {
     });
     const lemonadeItem = await itemOf(f.lunch, f.lemonade);
     await app(async (tx) => {
-      await deactivateMenuItem(tx, f.lunch, lemonadeItem);
+      await updateMenuItem(tx, f.lunch, lemonadeItem, { active: false });
       await updateProduct(tx, f.water, { available: false });
       await deactivateProduct(tx, f.burger);
     });

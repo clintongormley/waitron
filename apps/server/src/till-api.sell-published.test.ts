@@ -25,7 +25,6 @@ import {
   createHomeLayout,
   createProduct,
   createSection,
-  deactivateMenuItem,
   deleteHomeLayout,
   listHomeLayouts,
   menuStatus,
@@ -357,7 +356,9 @@ describe("a basket that spans a publish (Review Focus 2)", () => {
     expect((await pay(v, [lemonadeLine(v, v3)])).status).toBe(200);
 
     // v4 takes Lemonade off Lunch.
-    await withTransaction(suite.db, (tx) => deactivateMenuItem(tx, v.menuId, v.lemonade.offerId));
+    await withTransaction(suite.db, (tx) =>
+      updateMenuItem(tx, v.menuId, v.lemonade.offerId, { active: false }),
+    );
     const v4 = await publish(v.menuId);
     const removed = await pay(v, [lemonadeLine(v, v4)]);
     expect(removed.status).toBe(400);

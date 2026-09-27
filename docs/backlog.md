@@ -227,21 +227,23 @@ dropped and `menu_items` rebuilt to hang off the menu; an offer carries every se
 reaches it (`placements`); the menu's own price, switch, variant prices and extras for a product
 reset when the menu stops reaching it. Left by #659, none blocking: the image library
 links a menu-owned section's photo to the sections screen, though nothing puts a photo on one yet;
-`DELETE /management-api/catalogues/:id/items/:itemId` (`deactivateMenuItem`) still switches a
-product off but the dashboard no longer calls it, since `PATCH` now carries `active` (and since menus
-Task 5 nothing calls `GET …/catalogues/:id/offers` or `POST …/catalogues/:id/items` either: all
-three routes and their tests stay until someone removes them); and
-`sections_owner_menu_fk` still has no delete rule (Task 1's note stands) — nothing deletes a menu
+and `sections_owner_menu_fk` still has no delete rule (Task 1's note stands) — nothing deletes a menu
 today, so it bites only when something does. A product reached through a section offers no extras
-list; that was already so before #659 (checked at `002b79f69`).
+list; that was already so before #659 (checked at `002b79f69`). DONE (lane C's C9): the three
+management routes nothing called — `DELETE …/catalogues/:id/items/:itemId`,
+`GET …/catalogues/:id/offers` and `POST …/catalogues/:id/items` — are removed, with
+`deactivateMenuItem` and `listMenuOffersWithTopLevel`; `addProductToMenu` stays, because the demo
+seed calls it. No route now raises `menu_item.variant_not_allowed`: `addProductToMenu` is its only
+thrower, and the demo seed that function's only caller outside tests. The code and its 400 in
+`apps/server/src/catalogue-api.ts` are left in place for whoever next prunes unraised codes.
 **Menus Task 4 (the Menus screen), landed as #664 (2026-09-26):** **Products and recipes → Menus**
 (`/manage/menus`) lists, creates and renames menus; a menu's Structure tab shows and edits its whole
 tree; and creating a product on the Products screen ends with an optional "Add to menus" step.
-Left, none blocking: `POST /management-api/catalogues` accepts a blank
-name (read, not run; the rename route refuses one), so the screen's own check is the only guard on
-create; "New section here" asks only for the internal name, so a section's customer names, image
-and colour are still edited on the Sections screen; which section is being edited is not in the
-address, only the menu and the tab; and opening "Add to menus" sends one `getMenuStructure` request
+Left, none blocking (the blank-name create is DONE, lane C's C9: refused as the rename is, with
+`management.request_invalid` naming `name`): "New section here" asks only for the internal name, so
+a section's customer names, image and colour are still edited on the Sections screen; which
+section is being edited is not in the address, only the menu and the tab; and opening "Add to
+menus" sends one `getMenuStructure` request
 per menu, each of which reads the whole section graph on the server (`readMenuStructure`,
 `packages/catalogue/src/menu-structure.ts`) — one server read returning every menu's structure, as
 `librarySectionUsages` does for usages, would make it one. Also left by #664: a refused

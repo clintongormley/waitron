@@ -221,6 +221,51 @@ async function createCatalogueVia(app: Hono, name: string): Promise<string> {
   return ((await res.json()) as { id: string }).id;
 }
 
+interface MenuPriceRow {
+  menuItemId: string;
+  productId: string;
+  override: string | null;
+  effectivePrice: string;
+  active: boolean;
+}
+
+async function menuPricesVia(app: Hono, menuId: string): Promise<MenuPriceRow[]> {
+  const res = await send(app, "GET", `/management-api/catalogues/${menuId}/prices`);
+  expect(res.status).toBe(200);
+  return (await res.json()) as MenuPriceRow[];
+}
+
+/** Puts the product on the menu's top level, then sets the menu's price for it when one is given;
+ * answers the menu item id. */
+async function offerVia(
+  app: Hono,
+  menuId: string,
+  productId: string,
+  grossPrice: string | null = null,
+): Promise<string> {
+  const structure = await send(app, "GET", `/management-api/catalogues/${menuId}/structure`);
+  const { rootSectionId } = (await structure.json()) as { rootSectionId: string };
+  const member = await send(app, "POST", `/management-api/sections/${rootSectionId}/members`, {
+    body: { ref: { kind: "product", productId } },
+  });
+  expect(member.status).toBe(201);
+  const itemId = (await menuPricesVia(app, menuId)).find(
+    (row) => row.productId === productId,
+  )!.menuItemId;
+  if (grossPrice !== null) {
+    const priced = await send(
+      app,
+      "PATCH",
+      `/management-api/catalogues/${menuId}/items/${itemId}`,
+      {
+        body: { grossPrice },
+      },
+    );
+    expect(priced.status).toBe(204);
+  }
+  return itemId;
+}
+
 async function createCategoryVia(app: Hono, name: Record<string, string>): Promise<string> {
   const res = await send(app, "POST", "/management-api/categories", { body: { name } });
   expect(res.status).toBe(201);
@@ -932,28 +977,17 @@ describe("mountCatalogueApi — products", () => {
     });
     const productId = ((await createdProduct.json()) as { id: string }).id;
 
-    const createOffer = async (menuId: string, grossPrice: string): Promise<string> => {
-      const response = await send(app, "POST", `/management-api/catalogues/${menuId}/items`, {
-        body: { productId, grossPrice },
-      });
-      expect(response.status).toBe(201);
-      return ((await response.json()) as { id: string }).id;
-    };
-    const upstairsItemId = await createOffer(upstairsMenuId, "11.00");
-    const downstairsItemId = await createOffer(downstairsMenuId, "9.00");
+    const upstairsItemId = await offerVia(app, upstairsMenuId, productId, "11.00");
+    const downstairsItemId = await offerVia(app, downstairsMenuId, productId, "9.00");
 
-    const upstairs = await send(app, "GET", `/management-api/catalogues/${upstairsMenuId}/offers`);
-    const downstairs = await send(
-      app,
-      "GET",
-      `/management-api/catalogues/${downstairsMenuId}/offers`,
-    );
-    expect(
-      ((await upstairs.json()) as { productId: string; grossPrice: string }[])[0],
-    ).toMatchObject({ productId, grossPrice: "11.00" });
-    expect(
-      ((await downstairs.json()) as { productId: string; grossPrice: string }[])[0],
-    ).toMatchObject({ productId, grossPrice: "9.00" });
+    expect((await menuPricesVia(app, upstairsMenuId))[0]).toMatchObject({
+      productId,
+      override: "11.00",
+    });
+    expect((await menuPricesVia(app, downstairsMenuId))[0]).toMatchObject({
+      productId,
+      override: "9.00",
+    });
 
     expect(
       (
@@ -969,16 +1003,17 @@ describe("mountCatalogueApi — products", () => {
       (
         await send(
           app,
-          "DELETE",
+          "PATCH",
           `/management-api/catalogues/${downstairsMenuId}/items/${downstairsItemId}`,
+          { body: { active: false } },
         )
       ).status,
     ).toBe(204);
-    const updated = await send(app, "GET", `/management-api/catalogues/${upstairsMenuId}/offers`);
-    const removed = await send(app, "GET", `/management-api/catalogues/${downstairsMenuId}/offers`);
-    expect(((await updated.json()) as { grossPrice: string }[])[0]!.grossPrice).toBe("12.50");
+    expect((await menuPricesVia(app, upstairsMenuId))[0]!.override).toBe("12.50");
     // The dashboard still lists it, switched off, so it can be switched back on.
-    expect(await removed.json()).toMatchObject([{ id: downstairsItemId, active: false }]);
+    expect(await menuPricesVia(app, downstairsMenuId)).toMatchObject([
+      { menuItemId: downstairsItemId, active: false },
+    ]);
   });
 
   it("GET /management-api/catalogues/:id/products with a non-uuid id → shared.invalid_id 400", async () => {
@@ -1113,10 +1148,7 @@ describe("mountCatalogueApi — products", () => {
     const read = await send(app, "GET", `/management-api/products/${saved.id}/editor`);
     expect(read.status).toBe(200);
     expect(await read.json()).toEqual(saved);
-    const offer = await send(app, "POST", `/management-api/catalogues/${catalogueId}/items`, {
-      body: { productId: saved.id, grossPrice: "2.40" },
-    });
-    const offerId = ((await offer.json()) as { id: string }).id;
+    const offerId = await offerVia(app, catalogueId, saved.id, "2.40");
     const published = await send(
       app,
       "PUT",
@@ -1144,20 +1176,18 @@ describe("mountCatalogueApi — products", () => {
       error: { code: "management.request_invalid", params: { field: "variants.0" } },
     });
     // A variant follows its parent onto the menu; it is never put there on its own.
+    const { rootSectionId } = (await (
+      await send(app, "GET", `/management-api/catalogues/${catalogueId}/structure`)
+    ).json()) as { rootSectionId: string };
     const variantOffer = await send(
       app,
       "POST",
-      `/management-api/catalogues/${catalogueId}/items`,
-      {
-        body: { productId: saved.variants[0]!.id, grossPrice: "4.00" },
-      },
+      `/management-api/sections/${rootSectionId}/members`,
+      { body: { ref: { kind: "product", productId: saved.variants[0]!.id } } },
     );
     expect(variantOffer.status).toBe(400);
     expect(await variantOffer.json()).toMatchObject({
-      error: {
-        code: "menu_item.variant_not_allowed",
-        params: { productId: saved.variants[0]!.id },
-      },
+      error: { code: "menu_section.membership_invalid" },
     });
     const otherCatalogueId = await createCatalogueVia(app, "Other catalogue");
     const mismatched = await send(
@@ -1167,8 +1197,11 @@ describe("mountCatalogueApi — products", () => {
     );
     expect(mismatched.status).toBe(404);
     expect(await mismatched.json()).toMatchObject({ error: { code: "menu_item.not_found" } });
-    const offers = await send(app, "GET", `/management-api/catalogues/${catalogueId}/offers`);
-    expect(((await offers.json()) as { variants: unknown[] }[])[0]!.variants).toEqual([
+    const preview = await send(app, "GET", `/management-api/catalogues/${catalogueId}/preview`);
+    expect(
+      ((await preview.json()) as { document: { offers: Record<string, { variants: unknown[] }> } })
+        .document.offers[offerId]!.variants,
+    ).toEqual([
       expect.objectContaining({ id: saved.variants[0]!.id, unitPrice: "4.10", menuPrice: "4.10" }),
       expect.objectContaining({ id: saved.variants[1]!.id, unitPrice: "2.00", menuPrice: null }),
     ]);
@@ -1835,9 +1868,9 @@ describe("mountCatalogueApi — products", () => {
     });
   });
 
-  // Available "never hides the item from the dashboard", so the menu management route
-  // keeps a sold-out product's offer; an Inactive product's offer stays hidden.
-  it("keeps an Unavailable product's offer on the management offers route and hides an Inactive one", async () => {
+  // Available "never hides the item from the dashboard", so the menu's price list keeps a
+  // sold-out product; an Inactive product stays hidden.
+  it("keeps an Unavailable product on the menu's price list and hides an Inactive one", async () => {
     const app = mountApp("es-ES");
     const catalogueId = await createCatalogueVia(app, "Management offers");
     const created = await send(
@@ -1847,17 +1880,9 @@ describe("mountCatalogueApi — products", () => {
       { body: await editorBody(app) },
     );
     const productId = ((await created.json()) as { id: string }).id;
-    const offer = await send(app, "POST", `/management-api/catalogues/${catalogueId}/items`, {
-      body: { productId, grossPrice: "4.50" },
-    });
-    expect(offer.status).toBe(201);
-    const offerId = ((await offer.json()) as { id: string }).id;
+    const offerId = await offerVia(app, catalogueId, productId, "4.50");
     const offeredIds = async (): Promise<string[]> =>
-      (
-        (await (
-          await send(app, "GET", `/management-api/catalogues/${catalogueId}/offers`)
-        ).json()) as { id: string }[]
-      ).map((row) => row.id);
+      (await menuPricesVia(app, catalogueId)).map((row) => row.menuItemId);
 
     const soldOut = await send(app, "PUT", `/management-api/products/${productId}/editor`, {
       body: await editorBody(app, { active: true, available: false }),
@@ -3513,8 +3538,8 @@ describe("a menu's structure", () => {
       body: { ref: { kind: "section", sectionId: drinks.id } },
     });
     expect(onRoot.status).toBe(201);
-    const item = await send(app, "POST", `/management-api/catalogues/${menuId}/items`, {
-      body: { productId, grossPrice: null },
+    const item = await send(app, "POST", members, {
+      body: { ref: { kind: "product", productId } },
     });
     expect(item.status).toBe(201);
     expect(((await (await send(app, "GET", path)).json()) as { nodes: unknown[] }).nodes).toEqual([
@@ -3523,7 +3548,7 @@ describe("a menu's structure", () => {
         ref: { kind: "section", sectionId: drinks.id },
         children: [],
       },
-      { memberId: expect.any(String), ref: { kind: "product", productId } },
+      { memberId: ((await item.json()) as { id: string }).id, ref: { kind: "product", productId } },
     ]);
 
     expect(
@@ -3540,20 +3565,24 @@ describe("a menu's structure", () => {
     const menuId = await createCatalogueVia(app, "Switched menu");
     const productId = await createNamedProductVia(app, `Oferta ${crypto.randomUUID()}`);
     const items = `/management-api/catalogues/${menuId}/items`;
-    const created = await send(app, "POST", items, { body: { productId, grossPrice: "2.00" } });
-    const itemId = ((await created.json()) as { id: string }).id;
+    const itemId = await offerVia(app, menuId, productId, "2.00");
     const offered = async () =>
-      (
-        (await (await send(app, "GET", `/management-api/catalogues/${menuId}/offers`)).json()) as {
-          id: string;
-          grossPrice: string | null;
-          active: boolean;
-        }[]
-      ).map(({ id, grossPrice, active }) => ({ id, grossPrice, active }));
-    expect((await send(app, "DELETE", `${items}/${itemId}`)).status).toBe(204);
-    expect(await offered()).toEqual([{ id: itemId, grossPrice: "2.00", active: false }]);
+      (await menuPricesVia(app, menuId)).map(({ menuItemId, override, active }) => ({
+        menuItemId,
+        override,
+        active,
+      }));
+    expect(
+      (await send(app, "PATCH", `${items}/${itemId}`, { body: { active: false } })).status,
+    ).toBe(204);
+    expect(await offered()).toEqual([{ menuItemId: itemId, override: "2.00", active: false }]);
     // Still on the menu's top level, so adding it again is refused rather than duplicated.
-    const again = await send(app, "POST", items, { body: { productId, grossPrice: null } });
+    const { rootSectionId } = (await (
+      await send(app, "GET", `/management-api/catalogues/${menuId}/structure`)
+    ).json()) as { rootSectionId: string };
+    const again = await send(app, "POST", `/management-api/sections/${rootSectionId}/members`, {
+      body: { ref: { kind: "product", productId } },
+    });
     expect(again.status).toBe(409);
     expect(await again.json()).toMatchObject({ error: { code: "menu_section.member_duplicate" } });
     const bad = await send(app, "PATCH", `${items}/${itemId}`, { body: { active: "yes" } });
@@ -3564,38 +3593,28 @@ describe("a menu's structure", () => {
     expect(
       (await send(app, "PATCH", `${items}/${itemId}`, { body: { active: true } })).status,
     ).toBe(204);
-    expect(await offered()).toEqual([{ id: itemId, grossPrice: "2.00", active: true }]);
+    expect(await offered()).toEqual([{ menuItemId: itemId, override: "2.00", active: true }]);
   });
 
   it("takes a product off a menu's top level, and then adds it again on the same row", async () => {
     const app = mountApp();
     const menuId = await createCatalogueVia(app, "Removed menu");
     const productId = await createNamedProductVia(app, `Oferta ${crypto.randomUUID()}`);
-    const items = `/management-api/catalogues/${menuId}/items`;
-    const created = await send(app, "POST", items, { body: { productId, grossPrice: "2.00" } });
-    const itemId = ((await created.json()) as { id: string }).id;
+    const itemId = await offerVia(app, menuId, productId, "2.00");
     const structure = (await (
       await send(app, "GET", `/management-api/catalogues/${menuId}/structure`)
     ).json()) as { rootSectionId: string; nodes: { memberId: string }[] };
-    const offers = `/management-api/catalogues/${menuId}/offers`;
-    // The offer names the membership to take off, so the dashboard need not read the structure.
-    expect(await (await send(app, "GET", offers)).json()).toMatchObject([
-      {
-        id: itemId,
-        topLevelMember: {
-          sectionId: structure.rootSectionId,
-          memberId: structure.nodes[0]!.memberId,
-        },
-      },
-    ]);
-    const member = `/management-api/sections/${structure.rootSectionId}/members/${structure.nodes[0]!.memberId}`;
-    expect((await send(app, "DELETE", member)).status).toBe(204);
-    expect(await (await send(app, "GET", offers)).json()).toEqual([]);
-    const again = await send(app, "POST", items, { body: { productId, grossPrice: null } });
+    const members = `/management-api/sections/${structure.rootSectionId}/members`;
+    expect((await send(app, "DELETE", `${members}/${structure.nodes[0]!.memberId}`)).status).toBe(
+      204,
+    );
+    expect(await menuPricesVia(app, menuId)).toEqual([]);
+    const again = await send(app, "POST", members, {
+      body: { ref: { kind: "product", productId } },
+    });
     expect(again.status).toBe(201);
-    expect(await again.json()).toMatchObject({ id: itemId });
-    expect(await (await send(app, "GET", offers)).json()).toMatchObject([
-      { id: itemId, grossPrice: null, active: true },
+    expect(await menuPricesVia(app, menuId)).toMatchObject([
+      { menuItemId: itemId, override: null, active: true },
     ]);
   });
 });
@@ -3623,8 +3642,7 @@ describe("a menu's prices", () => {
       sql`update products set kitchen_name = ${`${name} (kitchen)`} where id = ${productId}`,
     );
     const items = `/management-api/catalogues/${menuId}/items`;
-    const created = await send(app, "POST", items, { body: { productId, grossPrice: "1.40" } });
-    const itemId = ((await created.json()) as { id: string }).id;
+    const itemId = await offerVia(app, menuId, productId, "1.40");
     const path = `/management-api/catalogues/${menuId}/prices`;
     expect((await send(app, "GET", path, { cookie: null })).status).toBe(401);
     expect((await send(app, "GET", path, { cookie: staffCookie })).status).toBe(403);
@@ -3677,11 +3695,7 @@ describe("publishing a menu", () => {
     const menuId = await createCatalogueVia(app, `Published menu ${crypto.randomUUID()}`);
     const name = `Oferta ${crypto.randomUUID()}`;
     const productId = await createNamedProductVia(app, name);
-    const created = await send(app, "POST", `/management-api/catalogues/${menuId}/items`, {
-      body: { productId, grossPrice: "2.00" },
-    });
-    expect(created.status).toBe(201);
-    return { menuId, itemId: ((await created.json()) as { id: string }).id, name };
+    return { menuId, itemId: await offerVia(app, menuId, productId, "2.00"), name };
   }
 
   async function preview(app: Hono, menuId: string): Promise<MenuPreview> {
@@ -4056,26 +4070,12 @@ describe("a negative price is refused at the catalogue request boundary", () => 
     ).toBe(204);
   });
 
-  it("the two menu-item writes refuse a negative grossPrice with a 400, not a 500", async () => {
+  it("the menu-item write refuses a negative grossPrice with a 400, not a 500", async () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Negative menu catalogue");
     const productId = await createNamedProductVia(app, `Oferta ${crypto.randomUUID()}`);
     const items = `/management-api/catalogues/${catalogueId}/items`;
-
-    const badCreate = await send(app, "POST", items, {
-      body: { productId, grossPrice: "-1.00" },
-    });
-    expect(badCreate.status).toBe(400);
-    expect(await badCreate.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "grossPrice" } },
-    });
-
-    // The zero control, which also supplies the item the patch below acts on.
-    const good = await send(app, "POST", items, {
-      body: { productId, grossPrice: "0.00" },
-    });
-    expect(good.status).toBe(201);
-    const itemId = ((await good.json()) as { id: string }).id;
+    const itemId = await offerVia(app, catalogueId, productId);
 
     const badPatch = await send(app, "PATCH", `${items}/${itemId}`, {
       body: { grossPrice: "-1.00" },
@@ -4089,37 +4089,27 @@ describe("a negative price is refused at the catalogue request boundary", () => 
     ).toBe(204);
   });
 
-  it("the two menu-item writes take a blank grossPrice as the product's own price", async () => {
+  it("the menu-item write takes a blank grossPrice as the product's own price", async () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Blank menu price catalogue");
     // The product's own price is 1.00, so a blank menu price must charge exactly that.
     const productId = await createNamedProductVia(app, `Oferta ${crypto.randomUUID()}`);
     const items = `/management-api/catalogues/${catalogueId}/items`;
-    const offer = async () =>
-      (
-        (await (
-          await send(app, "GET", `/management-api/catalogues/${catalogueId}/offers`)
-        ).json()) as { id: string; grossPrice: string | null; unitPrice: string }[]
-      )[0]!;
+    const offer = async () => (await menuPricesVia(app, catalogueId))[0]!;
 
-    const created = await send(app, "POST", items, {
-      body: { productId, grossPrice: null },
-    });
-    expect(created.status).toBe(201);
-    expect(await created.json()).toMatchObject({ grossPrice: null });
-    expect(await offer()).toMatchObject({ grossPrice: null, unitPrice: "1.00" });
-    const itemId = (await offer()).id;
+    const itemId = await offerVia(app, catalogueId, productId);
+    expect(await offer()).toMatchObject({ override: null, effectivePrice: "1.00" });
 
     expect(
       (await send(app, "PATCH", `${items}/${itemId}`, { body: { grossPrice: "2.50" } })).status,
     ).toBe(204);
-    expect(await offer()).toMatchObject({ grossPrice: "2.50", unitPrice: "2.50" });
+    expect(await offer()).toMatchObject({ override: "2.50", effectivePrice: "2.50" });
     expect(
       (await send(app, "PATCH", `${items}/${itemId}`, { body: { grossPrice: null } })).status,
     ).toBe(204);
-    expect(await offer()).toMatchObject({ grossPrice: null, unitPrice: "1.00" });
+    expect(await offer()).toMatchObject({ override: null, effectivePrice: "1.00" });
 
-    // A value of the wrong type is still refused on both routes, and changes nothing.
+    // A value of the wrong type is still refused, and changes nothing.
     const wrongPatch = await send(app, "PATCH", `${items}/${itemId}`, {
       body: { grossPrice: 2.5 },
     });
@@ -4127,29 +4117,7 @@ describe("a negative price is refused at the catalogue request boundary", () => 
     expect(await wrongPatch.json()).toMatchObject({
       error: { code: "management.request_invalid", params: { field: "grossPrice" } },
     });
-    const wrongCreate = await send(app, "POST", items, {
-      body: { productId, grossPrice: 2.5 },
-    });
-    expect(wrongCreate.status).toBe(400);
-    expect(await wrongCreate.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "grossPrice" } },
-    });
-    expect(await offer()).toMatchObject({ grossPrice: null, unitPrice: "1.00" });
-
-    // Only an explicit null means blank: a create that leaves the field out is refused, and adds
-    // no offer. A product not yet on the menu, so nothing but the missing field can refuse it.
-    const otherProductId = await createNamedProductVia(app, `Oferta ${crypto.randomUUID()}`);
-    const absentCreate = await send(app, "POST", items, {
-      body: { productId: otherProductId },
-    });
-    expect(absentCreate.status).toBe(400);
-    expect(await absentCreate.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "grossPrice" } },
-    });
-    const offers = (await (
-      await send(app, "GET", `/management-api/catalogues/${catalogueId}/offers`)
-    ).json()) as { id: string }[];
-    expect(offers.map((row) => row.id)).toEqual([itemId]);
+    expect(await offer()).toMatchObject({ override: null, effectivePrice: "1.00" });
   });
 
   it("leaves a malformed price to the refusal it already had, so no shipped code changes meaning", async () => {
@@ -4255,13 +4223,7 @@ describe("catalogue routes that already refused a negative price", () => {
       error: { code: "product.invalid", params: { field: "unitPrice" } },
     });
 
-    const itemId = (
-      (await (
-        await send(app, "POST", `/management-api/catalogues/${catalogueId}/items`, {
-          body: { productId: saved.id, grossPrice: "1.00" },
-        })
-      ).json()) as { id: string }
-    ).id;
+    const itemId = await offerVia(app, catalogueId, saved.id, "1.00");
     const badOfferVariant = await send(
       app,
       "PUT",
@@ -4794,13 +4756,7 @@ describe("mountCatalogueApi — home layouts", () => {
     const soupName = `Soup ${crypto.randomUUID()}`;
     const soup = await createNamedProductVia(app, soupName);
     const elsewhere = await createNamedProductVia(app, `Elsewhere ${crypto.randomUUID()}`);
-    expect(
-      (
-        await send(app, "POST", `/management-api/catalogues/${menuId}/items`, {
-          body: { productId: soup, grossPrice: null },
-        })
-      ).status,
-    ).toBe(201);
+    await offerVia(app, menuId, soup);
     const drinksName = `Drinks ${crypto.randomUUID()}`;
     const drinks = await json<{ id: string }>(
       await send(app, "POST", "/management-api/sections", { body: { internalName: drinksName } }),
@@ -4927,10 +4883,7 @@ describe("mountCatalogueApi — home layouts", () => {
       error: { code: "menu_section.not_found", params: { sectionId: home!.id, memberId: soup.id } },
     });
     // Removing the tile left the product on the menu.
-    const offers = await json<{ productId: string }[]>(
-      await send(app, "GET", `/management-api/catalogues/${m.menuId}/offers`),
-      200,
-    );
+    const offers = await menuPricesVia(app, m.menuId);
     expect(offers.map((offer) => offer.productId)).toEqual([m.soup]);
     const [listed] = await json<Layout[]>(await send(app, "GET", layoutsOf(m.menuId)), 200);
     expect(listed!.tiles.map((tile) => tile.ref)).toEqual([section(m.drinks)]);
