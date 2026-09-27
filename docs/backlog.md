@@ -324,6 +324,8 @@ rows written before it misbehave (a dish sent before the upgrade counts as unsen
 before it blocks a one-line edit) — the PR has the measured table; settle open orders or reset
 before upgrading. Still open: the `changed`
 notice kind is declared but nothing writes it (the kitchen screen renders it since Task 7c).
+(2026-09-27, Task 6: `enqueueHoldCorrections` now writes it, with a direction, for a HOLD CHANGED
+correction slip.)
 **Menus Task 7c landed (#710, 2026-09-26): changing a sent line from the till, and kitchen-screen notices.** The table
 screen offers Change on a sent line the kitchen has not started, a recalled line and a line with no
 kitchen route; it opens the existing option, extras and note editor prefilled from the line and saves
@@ -2277,15 +2279,16 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - A printed HOLD ticket goes stale when held groups are reordered or a party is merged into
       another, since both renumber `GROUP n` and later slips print the new number; and when the
       party's table moves or is joined, since no MOVED slip goes out for held work (MOVED slips
-      cover fired work only, `readSentWork` in `apps/server/src/kitchen-print.ts`). Only the FIRE
-      ticket, which prints the group as it stands, can be relied on.
+      cover fired work only, `readSentWork` in `apps/server/src/kitchen-print.ts`). Only a FIRE
+      ticket or a Reprint, each of which prints the group as it stands, can be relied on.
     - The route that removes a line, `DELETE /api/working-orders/:id/lines/:lineNo`, takes no
       revision and no retry id, so a retried removal of part of a held dish removes another part
       and prints a second HOLD CANCELLED slip. The route predates Task 6.
     - Whether a group's HOLD ticket was queued is recorded per group, not per station, so a
       correction can print at a station whose printer never printed that group's HOLD ticket — a
       dish from another station joined to the group, say, or a printer switched back on after the
-      HOLD ticket went out.
+      HOLD ticket went out. Reprint reads the same per-group marker, so it too can print a REPRINT
+      and HOLD section at such a station.
     - A failed kitchen ticket, fire or HOLD, whose dishes at that station are then all cancelled
       stays a "Printing problem" on the table and the station, and Reprint prints nothing for that
       station to clear it (measured on the branch for both, with `voidTabLine`). The fire-ticket case predates Task 6 (the

@@ -106,7 +106,7 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify(
     "kitchen_print_jobs",
     "state",
-    "which bill and station each fire or reprint ticket carried; copied to a standby, never drained back",
+    "which bill and station each fire (FIRE slip included), HOLD or reprint ticket carried; copied to a standby, never drained back",
   ),
   classify("visits", "state", "a seated party in flight; copied to a standby, never drained back"),
   classify(

@@ -20,7 +20,6 @@ export const serviceSettings = table(
     kitchenTicketGrouping: kitchenTicketGrouping("kitchen_ticket_grouping")
       .notNull()
       .default("combined"),
-    // Whether held groups print in advance.
     printHeldWork: flag("print_held_work").notNull().default(false),
   },
   (t) => [

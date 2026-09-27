@@ -3946,7 +3946,7 @@ describe("advance HOLD tickets (Task 6)", () => {
       expect((await noticesAt(v)).map((notice) => notice.kind)).toEqual(["recalled"]);
     });
 
-    // R11: an edit that is not a quantity alone takes the dish away as it read and gives it back as
+    // An edit that is not a quantity alone takes the dish away as it read and gives it back as
     // it now reads.
     it("prints a changed note as -N of the dish as it read, then +N as it now reads", async () => {
       const v = await setupVenue();

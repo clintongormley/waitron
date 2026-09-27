@@ -8,7 +8,7 @@ import { printJobs } from "./print-jobs.js";
  * Which bill and station each kitchen ticket's print job carried: one row per (job, bill, station),
  * written by `enqueueKitchenTickets` and `reprintOrderTickets` (`apps/server/src/kitchen-print.ts`),
  * and written again by `moveKitchenPrintLinks` there when a merge carries a bill's tickets onto
- * another. An order-scope printer's one ticket carries every station of the fire, so its job has a
+ * another. An order-scope printer's one ticket carries every station of its ticket, so its job has a
  * row per station. A job no kitchen ticket made (a receipt, a correction slip, a drawer pulse) has
  * none.
  */
