@@ -32,7 +32,13 @@ import {
   type Resolution,
 } from "@waitron/printing";
 import { customerOptionSnapshotLabels } from "@waitron/catalogue";
-import { addDecimal, decimal, perDishOptionQuantity, resolveSnapshotText } from "@waitron/shared";
+import {
+  addDecimal,
+  decimal,
+  perDishOptionQuantity,
+  resolveSnapshotText,
+  subtractDecimal,
+} from "@waitron/shared";
 
 import { qrModules } from "./qr-matrix.js";
 import { formatMoney } from "./receipt-money.js";
@@ -92,6 +98,7 @@ const LABEL = {
   change: "Cambio",
   tip: "Propina",
   charged: "Cobrado",
+  refund: "Devolución",
 } as const;
 
 /** The Veri*Factu legend — a FIXED legal string (Orden HAC/1177/2024 art. 20.1.b). Never translated. */
@@ -239,7 +246,27 @@ export function formatReceipt({
 
   // Allowed operational extras — the tender block. Card identity belongs on the payment slip.
   const t = result.tender;
-  if (t.method === "cash") {
+  if (result.payments !== undefined && result.payments.length > 0) {
+    for (const payment of result.payments) {
+      if (payment.method === "cash") {
+        row(LABEL.cash, formatMoney(payment.tendered, locale));
+        if (payment.change !== "0.00") row(LABEL.change, formatMoney(payment.change, locale));
+      } else {
+        // The tender amount is net of refunds, which print below it: show the original charge.
+        const charged = payment.refunds.reduce(
+          (sum, refund) => addDecimal(addDecimal(sum, decimal(refund.amount)), decimal(refund.tip)),
+          decimal(payment.amount),
+        );
+        row("Tarjeta", formatMoney(charged, locale));
+        if (payment.reference !== null) text(`Ref. ${payment.reference}`);
+      }
+      if (payment.tip !== "0.00") row(LABEL.tip, formatMoney(payment.tip, locale));
+      for (const refund of payment.refunds) {
+        const given = addDecimal(decimal(refund.amount), decimal(refund.tip));
+        row(LABEL.refund, formatMoney(subtractDecimal(decimal("0.00"), given), locale));
+      }
+    }
+  } else if (t.method === "cash") {
     row(LABEL.cash, formatMoney(addDecimal(decimal(result.total), decimal(t.change)), locale));
     row(LABEL.change, formatMoney(t.change, locale));
   } else if (t.method === "card") {

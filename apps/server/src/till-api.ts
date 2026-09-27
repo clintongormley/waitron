@@ -99,6 +99,8 @@ import { listCourses, listStations } from "./kitchen.js";
 import { finishTable, markCleared, readVisitBills, seatTable } from "./visits.js";
 import type { VisitCommand } from "./visits.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
+import { issueIfFullyPaid } from "./bill-payments.js";
+import { mountBillPaymentsApi, withSaleTillWhenIssuing } from "./bill-payments-api.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
 import {
   canonicaliseUuid,
@@ -214,6 +216,25 @@ async function resolvePayReader(
   });
 }
 
+/**
+ * The provider a card on a reader is collected through: in practice mode the local simulator,
+ * stamping no reader; otherwise the pooled provider of the requested reader, or of the device's.
+ */
+export async function resolveCardCollector(
+  deps: TillApiDeps,
+  deviceId: string | undefined,
+  requestedReaderId: string | undefined,
+): Promise<{ provider: PaymentProvider; reader?: { id: string; providerRef: string } }> {
+  if (deps.cardProvider?.provider === "simulator") return { provider: deps.cardProvider };
+  const reader = await resolvePayReader(deps, deviceId, requestedReaderId);
+  /* v8 ignore start -- a live boot always supplies the pool */
+  if (deps.pool === undefined) throw new Error("card provider pool not configured");
+  /* v8 ignore stop */
+  // The provider carries no reader: the chosen one travels per collect as `readerRef`, so one
+  // cached provider serves every reader on the same vendor.
+  return { provider: await deps.pool.get(reader.provider), reader };
+}
+
 /** Every AppError code the till API answers, and its HTTP status; an unlisted code answers 400. */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "pin.invalid": 401,
@@ -303,6 +324,19 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "visit.out_of_date": 409,
   "visit.bill_outstanding": 409,
   "submission.id_reused": 409,
+  "bill.nothing_outstanding": 409,
+  "bill.tip_not_allowed": 422,
+  "bill.allocation_changed": 409,
+  "bill.line_paid": 409,
+  "bill.received_exceeds_total": 409,
+  "bill.payments_received": 409,
+  "bill.payment_not_found": 404,
+  "bill.refund_exceeds_payment": 422,
+  "bill.refund_not_whole": 422,
+  "bill.refund_unsupported": 422,
+  "bill.refund_in_progress": 409,
+  "payment.not_refundable": 409,
+  "payment.refund_exceeds_capture": 422,
   "status.not_found": 404,
   "status.inactive": 409,
   "drawer.no_printer": 400,
@@ -331,7 +365,7 @@ function requireUuidId(
  * credential gate gives a bad credential: `person.not_found` for a non-UUID id, `pin.invalid` for a
  * non-string PIN.
  */
-function parseDrawerOverride(
+export function parseDrawerOverride(
   raw: { personId?: unknown; pin?: unknown } | undefined | null,
 ): { personId: string; pin: string } | undefined {
   if (raw === undefined || raw === null) return undefined;
@@ -462,6 +496,9 @@ function mountCourseVerb(
 export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // Built once per mount so its in-memory state persists across requests.
   const pinThrottle = deps.pinThrottle ?? createPinThrottle();
+  // What a write that leaves a bill fully paid issues its invoice with (bill payments design §7).
+  const fiscal = { db: deps.db, backend: deps.backend, clock: deps.clock };
+  mountBillPaymentsApi(app, deps, log, run);
 
   // Device-gated: the throttle keys on the authenticated device, so dropping the cookie cannot
   // evade it, and the shift records the device's own till rather than `cfg.tillId`.
@@ -804,41 +841,18 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // Resolved after the capability firewall so its refusal keeps its status.
       const saleCfg: TillConfig = { ...deps.cfg, tillId: await requireSaleTillId(deps, c, device) };
 
-      // Practice mode: the local simulator, stamping no reader.
-      if (deps.cardProvider?.provider === "simulator") {
-        const outcome = await payWorkingOrderIntegrated(
-          {
-            db: deps.db,
-            backend: deps.backend,
-            clock: deps.clock,
-            provider: deps.cardProvider,
-            log,
-          },
-          saleCfg,
-          { ...body, zoneId },
-          personId,
-        );
-        return c.json(outcome); // 200 with the discriminated outcome — even a decline.
-      }
-
-      const reader = await resolvePayReader(deps, device?.deviceId, body.readerId);
-      // A live boot always supplies the pool; a missing one is a boot misconfiguration.
-      /* v8 ignore start */
-      if (deps.pool === undefined) {
-        throw new Error("/api/pay: card provider pool not configured");
-      }
-      /* v8 ignore stop */
-      // The provider carries no reader: the chosen one travels per collect as `readerRef`, so one
-      // cached provider serves every reader on the same vendor.
-      const provider = await deps.pool.get(reader.provider);
+      const { provider, reader } = await resolveCardCollector(
+        deps,
+        device?.deviceId,
+        body.readerId,
+      );
       const outcome = await payWorkingOrderIntegrated(
         {
           db: deps.db,
           backend: deps.backend,
           clock: deps.clock,
           provider,
-          readerRef: reader.providerRef,
-          readerId: reader.id,
+          ...(reader === undefined ? {} : { readerRef: reader.providerRef, readerId: reader.id }),
           log,
         },
         saleCfg,
@@ -903,7 +917,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.put("/api/working-orders/:id", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const { personId } = await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       const body = await readJsonBody<{
         lines: ({
@@ -915,11 +929,19 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         label?: string;
         revision?: unknown;
       }>(c);
-      const revision = await updateHeldOrder({ db: deps.db }, deps.cfg, id, {
-        lines: body.lines,
-        label: body.label,
-        revision: requireRevision(body.revision),
-      });
+      const revision = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
+        updateHeldOrder(
+          { db: deps.db },
+          deps.cfg,
+          id,
+          {
+            lines: body.lines,
+            label: body.label,
+            revision: requireRevision(body.revision),
+          },
+          { fiscal, operatorId: personId, saleCfg },
+        ),
+      );
       return c.json({ revision });
     }),
   );
@@ -1367,15 +1389,18 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.delete("/api/working-orders/:id/lines/:lineNo", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const { personId } = await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("tab.not_open", { tabId: id });
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
       // Absent voids the whole line; `voidTabLine` validates a given one.
       const quantity = c.req.query("quantity");
-      await withTransaction(deps.db, async (tx) => {
-        await voidTabLine(tx, deps.cfg, id, lineNo, quantity);
-      });
+      await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
+        withTransaction(deps.db, async (tx) => {
+          await voidTabLine(tx, deps.cfg, id, lineNo, quantity);
+          await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
+        }),
+      );
       return c.body(null, 200);
     }),
   );
@@ -1398,13 +1423,17 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // One line of any open order, edited from the copy at `revision` (plan D10).
   app.put("/api/working-orders/:id/lines/:lineNo", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const { personId } = await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
       const { revision, ...patch } = await readJsonBody<OrderLinePatch & { revision?: unknown }>(c);
       const copy = requireRevision(revision);
-      const saved = await withTransaction(deps.db, (tx) =>
-        updateOrderLine(tx, deps.cfg, id, lineNo, patch, copy),
+      const saved = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
+        withTransaction(deps.db, async (tx) => {
+          const edited = await updateOrderLine(tx, deps.cfg, id, lineNo, patch, copy);
+          await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
+          return edited;
+        }),
       );
       return c.json({ revision: saved });
     }),
@@ -1609,9 +1638,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }>(c);
       if (!isUuid(body.toTabId)) throw new AppError("tab.not_open", { tabId: body.toTabId });
       const command = visitCommand(personId, body, true);
-      await withTransaction(deps.db, async (tx) => {
-        await transferLines(tx, deps.cfg, fromTabId, body.toTabId, body.transfers, command);
-      });
+      await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
+        withTransaction(deps.db, async (tx) => {
+          await transferLines(tx, deps.cfg, fromTabId, body.toTabId, body.transfers, command);
+          await issueIfFullyPaid(tx, fiscal, saleCfg, fromTabId, personId);
+        }),
+      );
       return c.body(null, 200);
     }),
   );
@@ -1635,9 +1667,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         throw new AppError("management.request_invalid", { field: "transfers" });
       }
       const command = visitCommand(personId, body);
-      const result = await withTransaction(deps.db, async (tx) => {
-        return splitOffCheck(tx, deps.cfg, fromTabId, body.transfers, command);
-      });
+      const result = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
+        withTransaction(deps.db, async (tx) => {
+          const split = await splitOffCheck(tx, deps.cfg, fromTabId, body.transfers, command);
+          await issueIfFullyPaid(tx, fiscal, saleCfg, fromTabId, personId);
+          return split;
+        }),
+      );
       return c.json(result);
     }),
   );
@@ -1663,9 +1699,20 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         throw new AppError("management.request_invalid", { field: "transfers" });
       }
       const command = visitCommand(personId, body);
-      const result = await withTransaction(deps.db, async (tx) => {
-        return unjoinTable(tx, deps.cfg, tabId, body.tableId, body.transfers, command);
-      });
+      const result = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
+        withTransaction(deps.db, async (tx) => {
+          const unjoined = await unjoinTable(
+            tx,
+            deps.cfg,
+            tabId,
+            body.tableId,
+            body.transfers,
+            command,
+          );
+          await issueIfFullyPaid(tx, fiscal, saleCfg, tabId, personId);
+          return unjoined;
+        }),
+      );
       return c.json(result);
     }),
   );

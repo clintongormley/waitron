@@ -12,6 +12,15 @@ export const SUMUP_PROVIDER = "sumup";
  * a string it does not recognise, not be silently narrowed away by a type. */
 export type SumUpStatus = "SUCCESSFUL" | "CANCELLED" | "FAILED" | "PENDING" | "REFUNDED";
 
+/** One `REFUND` event of a transaction, as SumUp lists it. */
+export interface SumUpRefundEvent {
+  id: string;
+  status: string;
+  amount: Decimal;
+  /** SumUp's clock, ISO 8601. */
+  timestamp: string;
+}
+
 export interface SumUpTransaction {
   /** SumUp's transaction id — what the refund endpoint addresses. */
   id: string;
@@ -21,6 +30,8 @@ export interface SumUpTransaction {
   card?: { last4: string; type: string };
   entryMode?: string;
   authCode?: string | null;
+  /** Present when SumUp's answer carried the transaction's events. */
+  refundEvents?: SumUpRefundEvent[];
 }
 
 /** A create call has three outcomes, not two: accepted (the reader will wake), REFUSED by SumUp
@@ -62,6 +73,9 @@ export interface SumUpClient {
     transactionId: string;
     amount?: Decimal;
   }): Promise<{ status: "accepted" | "refused" }>;
+  /** A refund whose HTTP answer is returned as data, server errors included; rejects only when no
+   * answer came back. */
+  sendRefund(params: { transactionId: string; amount: Decimal }): Promise<{ httpStatus: number }>;
   /** Every reader paired to the merchant account. */
   listReaders(): Promise<(SumUpReader & { name: string })[]>;
   /** Completes pairing for a reader already showing a pairing code on its screen (Connections →

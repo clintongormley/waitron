@@ -1,5 +1,5 @@
 import type { Decimal } from "@waitron/shared";
-import type { StripeClient } from "../client.js";
+import type { StripeClient, StripeRefund, StripeRefundCreate } from "../client.js";
 import { toMinorUnits } from "../client.js";
 
 let seq = 0;
@@ -22,6 +22,14 @@ const CANCELLABLE = new Set([
   "processing",
 ]);
 
+type CreateRefundParams = Parameters<StripeClient["createRefund"]>[0];
+
+/** What the next `createRefund` does: refuse with an HTTP status (or none) and make nothing, or
+ * make a refund in `status` and answer it, or answer `answer` although it was made. `attempts` is
+ * how many HTTP requests the refusal reports; unscripted, one. */
+type RefusalScript = { httpStatus: number | null; attempts?: number };
+export type CreateRefundScript = RefusalScript | { status: string; answer?: RefusalScript };
+
 /** A stalled action stays `in_progress` until `cancelReaderAction` flips it to `failed`. */
 export class FakeStripe implements StripeClient {
   lastRefund: { paymentIntentId: string; amount?: Decimal; idempotencyKey: string } | undefined;
@@ -36,6 +44,26 @@ export class FakeStripe implements StripeClient {
   private cancelRaces = false;
   /** Every intent `cancelPaymentIntent` cancelled, in order. */
   readonly cancelledIntents: string[] = [];
+  /** Every `createRefund` call, in order. */
+  readonly createRefundCalls: CreateRefundParams[] = [];
+  private readonly madeRefunds: (StripeRefund & { paymentIntentId: string; key: string })[] = [];
+  private readonly refundScripts: CreateRefundScript[] = [];
+  private listUnreachable = 0;
+
+  /** Queued, one per `createRefund`; unscripted, a call makes a succeeded refund, and a key already
+   * used answers the refund it made, as Stripe replays a key's first result. */
+  scriptNextCreateRefund(script: CreateRefundScript): void {
+    this.refundScripts.push(script);
+  }
+  setRefundStatus(refundId: string, status: string): void {
+    const refund = this.madeRefunds.find((r) => r.id === refundId);
+    if (refund === undefined) throw new Error(`FakeStripe: no refund ${refundId}`);
+    refund.status = status;
+  }
+  /** The next `listRefunds` rejects as a network failure would. */
+  listRefundsUnreachableNext(): void {
+    this.listUnreachable += 1;
+  }
 
   declineNext(): void {
     this.outcome = "failed";
@@ -146,5 +174,51 @@ export class FakeStripe implements StripeClient {
     const fails = this.nextRefundFails;
     this.nextRefundFails = false;
     return Promise.resolve({ id: nextId("re"), status: fails ? "failed" : "succeeded" });
+  }
+  createRefund(params: CreateRefundParams): Promise<StripeRefundCreate> {
+    this.createRefundCalls.push(params);
+    const script = this.refundScripts.shift();
+    if (script === undefined) {
+      const earlier = this.madeRefunds.find((r) => r.key === params.idempotencyKey);
+      return Promise.resolve({
+        ok: true,
+        refund: this.view(earlier ?? this.make(params, "succeeded")),
+      });
+    }
+    const refusal = (answer: RefusalScript): StripeRefundCreate => ({
+      ok: false,
+      httpStatus: answer.httpStatus,
+      attempts: answer.attempts ?? 1,
+    });
+    if (!("status" in script)) return Promise.resolve(refusal(script));
+    const made = this.make(params, script.status);
+    return Promise.resolve(
+      script.answer === undefined ? { ok: true, refund: this.view(made) } : refusal(script.answer),
+    );
+  }
+  listRefunds(paymentIntentId: string): Promise<StripeRefund[]> {
+    if (this.listUnreachable > 0) {
+      this.listUnreachable -= 1;
+      return Promise.reject(new Error("stripe unreachable"));
+    }
+    return Promise.resolve(
+      this.madeRefunds
+        .filter((r) => r.paymentIntentId === paymentIntentId)
+        .map((r) => this.view(r)),
+    );
+  }
+  private make(params: CreateRefundParams, status: string) {
+    const made = {
+      id: nextId("re"),
+      status,
+      metadata: { ...params.metadata },
+      paymentIntentId: params.paymentIntentId,
+      key: params.idempotencyKey,
+    };
+    this.madeRefunds.push(made);
+    return made;
+  }
+  private view(refund: StripeRefund): StripeRefund {
+    return { id: refund.id, status: refund.status, metadata: { ...refund.metadata } };
   }
 }

@@ -15,6 +15,13 @@
       "when": 1790434223803,
       "tag": "0001_payment_resolutions",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790462112945,
+      "tag": "0002_bill_payment_link",
+      "breakpoints": true
     }
   ]
 }

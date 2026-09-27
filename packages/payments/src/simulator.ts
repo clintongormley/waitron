@@ -7,7 +7,12 @@ import type {
   PaymentProvider,
   PaymentResult,
   ProviderCapabilities,
+  RefundAnswer,
+  RefundLookup,
+  RefundLookupQuery,
+  RefundSend,
 } from "./provider.js";
+import { refundLookupOf } from "./provider.js";
 import type { PaymentRow } from "./store.js";
 import {
   findPaymentByRef,
@@ -21,8 +26,37 @@ import {
 export class SimulatorPaymentProvider implements PaymentProvider {
   readonly provider = "simulator";
   readonly capabilities: ProviderCapabilities = { partialRefund: true };
+  /** Its refunds live in this process only, so after a restart a lookup finds none of them and a
+   * resend could not be matched to the first. */
+  readonly refundResendWindowMs = null;
+  private readonly refundsByKey = new Map<string, { ref: string; refundId: string }>();
 
   constructor(private readonly db: Database) {}
+
+  sendRefund(req: RefundSend): Promise<RefundAnswer> {
+    let refund = this.refundsByKey.get(req.idempotencyKey);
+    if (refund === undefined) {
+      refund = { ref: `sim-re-${randomUUID()}`, refundId: req.refundId };
+      this.refundsByKey.set(req.idempotencyKey, refund);
+    }
+    return Promise.resolve({
+      kind: "outcome",
+      outcome: "completed",
+      providerRefundRef: refund.ref,
+      providerStatus: "succeeded",
+    });
+  }
+
+  lookupRefund(query: RefundLookupQuery): Promise<RefundLookup> {
+    const found = [...this.refundsByKey.values()].find((r) => r.refundId === query.refundId);
+    return Promise.resolve(
+      refundLookupOf(found === undefined ? [] : [found], (refund) => ({
+        providerRefundRef: refund.ref,
+        outcome: "completed",
+        providerStatus: "succeeded",
+      })),
+    );
+  }
 
   async collect(params: CollectParams): Promise<PaymentResult> {
     const paymentRef = `sim-${randomUUID()}`;
@@ -33,6 +67,7 @@ export class SimulatorPaymentProvider implements PaymentProvider {
       provider: this.provider,
       paymentRef,
       amount: params.amount,
+      billPaymentId: params.billPaymentId,
     };
     await this.db.transaction(async (tx) => {
       if (declined) await insertFailedPayment(tx, common);

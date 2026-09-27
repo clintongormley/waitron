@@ -188,3 +188,54 @@ describe("FakeStripe", () => {
     });
   });
 });
+
+describe("FakeStripe refunds with a key and metadata", () => {
+  const create = (key: string, id = key) => ({
+    paymentIntentId: "pi_r",
+    amount: decimal("4.00"),
+    idempotencyKey: key,
+    metadata: { bill_payment_refund_id: id },
+  });
+
+  it("makes a succeeded refund, lists it under its payment intent, and answers a reused key with it", async () => {
+    const fake = new FakeStripe();
+
+    const first = await fake.createRefund(create("k1"));
+    const again = await fake.createRefund(create("k1"));
+
+    expect(first).toEqual({
+      ok: true,
+      refund: {
+        id: expect.stringMatching(/^re_/) as unknown as string,
+        status: "succeeded",
+        metadata: { bill_payment_refund_id: "k1" },
+      },
+    });
+    expect(again).toEqual(first);
+    expect(await fake.listRefunds("pi_r")).toEqual([(first as { refund: unknown }).refund]);
+    expect(await fake.listRefunds("pi_other")).toEqual([]);
+    expect(fake.createRefundCalls.map((call) => call.idempotencyKey)).toEqual(["k1", "k1"]);
+  });
+
+  it("scriptNextCreateRefund refuses with a status, making nothing, or makes a refund in a state", async () => {
+    const fake = new FakeStripe();
+    fake.scriptNextCreateRefund({ httpStatus: 429 });
+    const refused = await fake.createRefund(create("k2"));
+    fake.scriptNextCreateRefund({ status: "pending", answer: { httpStatus: null } });
+    const lost = await fake.createRefund(create("k3"));
+
+    expect(refused).toEqual({ ok: false, httpStatus: 429, attempts: 1 });
+    expect(lost).toEqual({ ok: false, httpStatus: null, attempts: 1 });
+    expect((await fake.listRefunds("pi_r")).map((r) => r.status)).toEqual(["pending"]);
+  });
+
+  it("setRefundStatus moves a made refund on, and listRefundsUnreachableNext fails one read", async () => {
+    const fake = new FakeStripe();
+    const made = await fake.createRefund(create("k4"));
+    fake.setRefundStatus((made as { refund: { id: string } }).refund.id, "failed");
+    fake.listRefundsUnreachableNext();
+
+    await expect(fake.listRefunds("pi_r")).rejects.toThrow();
+    expect((await fake.listRefunds("pi_r"))[0]!.status).toBe("failed");
+  });
+});

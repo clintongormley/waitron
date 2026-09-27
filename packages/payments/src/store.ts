@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import {
   AppError,
   addDecimal,
@@ -41,6 +41,8 @@ interface NewPayment {
   amount: Decimal;
   externalRef?: string;
   card?: CardDetails;
+  /** The bill payment this attempt charges for; absent for a payment of a whole order. */
+  billPaymentId?: string;
 }
 
 /** The storage boundary: a money column counts whole cents, and nothing above this sees a count. */
@@ -79,6 +81,7 @@ async function insertPayment(
     cardLast4: params.card?.last4 ?? null,
     cardEntryMode: params.card?.entryMode ?? null,
     cardAuthCode: params.card?.authCode ?? null,
+    billPaymentId: params.billPaymentId ?? null,
     state,
     settledAt,
   });
@@ -176,7 +179,7 @@ export async function recordVoid(tx: Transaction, params: Key): Promise<PaymentR
  * `payment.refund_exceeds_capture` if the running total of refunds would exceed the capture. */
 export async function recordRefund(
   tx: Transaction,
-  params: Key & { amount: Decimal; authorizedBy?: string },
+  params: Key & { amount: Decimal; authorizedBy?: string; providerRefundRef?: string },
 ): Promise<PaymentRow> {
   const row = await requireRow(tx, params);
   if (row.state !== "captured" && row.state !== "partially_refunded") {
@@ -207,6 +210,7 @@ export async function recordRefund(
     amount: decimalToCents(params.amount),
     state: "succeeded",
     authorizedBy: params.authorizedBy ?? null,
+    providerRefundRef: params.providerRefundRef ?? null,
   });
   const state: PaymentState =
     compareDecimal(afterThis, captured) === 0 ? "refunded" : "partially_refunded";
@@ -292,7 +296,7 @@ export interface CapturedPaymentForOrder {
   cardAuthCode: string | null;
 }
 
-const CAPTURED_FOR_ORDER_COLUMNS = {
+const PAYMENT_WITH_KEY_COLUMNS = {
   ...PAYMENT_COLUMNS,
   paymentRef: payments.paymentRef,
   provider: payments.provider,
@@ -315,7 +319,7 @@ async function selectCapturedForWorkingOrder(
   key: { workingOrderId: string; provider?: string },
 ): Promise<CapturedPaymentForOrder | undefined> {
   const [row] = await tx
-    .select(CAPTURED_FOR_ORDER_COLUMNS)
+    .select(PAYMENT_WITH_KEY_COLUMNS)
     .from(payments)
     .where(
       and(
@@ -334,6 +338,48 @@ export async function findCapturedPaymentForWorkingOrderAnyProvider(
   key: { workingOrderId: string },
 ): Promise<CapturedPaymentForOrder | null> {
   return (await selectCapturedForWorkingOrder(tx, key)) ?? null;
+}
+
+/** The provider's row for one bill payment, in whatever state it is; at most one exists
+ * (`payments_bill_payment_key`). */
+export async function findPaymentByBillPayment(
+  tx: Transaction,
+  billPaymentId: string,
+): Promise<(PaymentRow & Key) | undefined> {
+  const [row] = await tx
+    .select(PAYMENT_WITH_KEY_COLUMNS)
+    .from(payments)
+    .where(eq(payments.billPaymentId, billPaymentId));
+  return row === undefined ? undefined : withDecimalAmount(row);
+}
+
+/** {@link findPaymentByBillPayment} for several bill payments, by bill payment id. */
+export async function findPaymentsByBillPayments(
+  tx: Transaction,
+  billPaymentIds: readonly string[],
+): Promise<Map<string, PaymentRow & Key>> {
+  if (billPaymentIds.length === 0) return new Map();
+  const rows = await tx
+    .select({ ...PAYMENT_WITH_KEY_COLUMNS, billPaymentId: payments.billPaymentId })
+    .from(payments)
+    .where(inArray(payments.billPaymentId, [...billPaymentIds]));
+  return new Map(rows.map(({ billPaymentId, ...row }) => [billPaymentId!, withDecimalAmount(row)]));
+}
+
+/** The provider refund ids recorded against a bill payment's provider row, oldest first. */
+export async function recordedRefundRefs(
+  tx: Transaction,
+  billPaymentId: string,
+): Promise<string[]> {
+  const rows = await tx
+    .select({ ref: paymentRefunds.providerRefundRef })
+    .from(paymentRefunds)
+    .innerJoin(payments, eq(payments.id, paymentRefunds.paymentId))
+    .where(
+      and(eq(payments.billPaymentId, billPaymentId), isNotNull(paymentRefunds.providerRefundRef)),
+    )
+    .orderBy(paymentRefunds.createdAt);
+  return rows.map((row) => row.ref!);
 }
 
 export async function findPaymentByRef(

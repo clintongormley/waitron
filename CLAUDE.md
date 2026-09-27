@@ -561,7 +561,7 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   `classify()`** — `applyMigrations` turns those declarations into a `RAISE(ABORT)` trigger pair
   after each set migrates (`installAppendOnlyTriggers`, `packages/store/src/append-only.ts`), so
   every migrating path installs them and none can forget. **The CLASS is not the trigger set.**
-  Nine `ledger` tables are updated or deleted by ordinary product code — `payments` records a card
+  Several `ledger` tables are updated or deleted by ordinary product code — `payments` records a card
   payment's progress, `cadenas` and `workforce_chains` hold chain heads — and `order_amendments` is
   `state` and must still refuse both; deriving the triggers from the class refused a card capture
   and left an amendment rewritable, measured 2026-09-22. It needs `PRAGMA recursive_triggers`,
@@ -633,8 +633,10 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **A drizzle migration-number collision on rebase is fixed by regeneration, never by hand-editing the
   snapshots or `_journal.json`.** Reset the migrations dir to main's state, regenerate, and verify by
   RUNNING `scripts/schema-constraints.test.ts`, `scripts/append-only-triggers.test.ts`,
-  `scripts/migrations-match-schema.test.ts` and `inmutabilidad` — the first two because a regeneration is exactly what has dropped constraints and
-  triggers declared outside the TypeScript schema before.
+  `scripts/behavioural-triggers.test.ts`, `scripts/migrations-match-schema.test.ts` and
+  `inmutabilidad` — the first three because a regeneration is exactly what has dropped constraints
+  and triggers declared outside the TypeScript schema before, and the third is what notices a
+  hand-written state trigger gone.
 - **A drizzle table rebuild on this engine runs with foreign keys ON, so its `DROP TABLE` silently
   deletes every cascading child's rows, and fails on a `no action` or `restrict` child holding rows.**
   Drizzle rebuilds a SQLite table to change a column's nullability, and the `PRAGMA foreign_keys=OFF`

@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { withTransaction, workingOrders } from "@waitron/db";
+import { billPayments, withTransaction, workingOrders } from "@waitron/db";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -14,7 +14,13 @@ import {
 import { listAvailableProducts } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend } from "@waitron/fiscal";
-import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
+import {
+  hashPassword,
+  hashPin,
+  persons,
+  PIN_THROTTLE_FREE_ATTEMPTS,
+  startManagementSession,
+} from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { deleteCredential, loadKeyRing, putCredential, type KeyRing } from "@waitron/credentials";
 import {
@@ -28,6 +34,8 @@ import {
 import {
   failAttempting,
   insertAttempting,
+  insertCapturedPayment,
+  insertFailedPayment,
   paymentResolutions,
   payments,
   stampAttemptingRef,
@@ -42,6 +50,7 @@ import {
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { takeReaderBillPayment } from "./bill-payments.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import { deploymentEnvironment } from "./config.js";
@@ -889,5 +898,675 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
         cancelledAtProvider: false,
       },
     ]);
+  });
+});
+
+// --- bill payments (bill payments design §5.4) ------------------------------------------------
+
+type Provided =
+  | { kind: "none" }
+  | { kind: "attempting"; intent: { status: string; amountReceived?: number } }
+  | { kind: "captured"; amount?: string }
+  | { kind: "failed" };
+
+/**
+ * What a crash in the middle of a card bill payment leaves: the payment `pending` for the Café's
+ * €1.50, and its provider row as `provided` says. Returns the bill payment's id.
+ */
+async function strandBillPayment(
+  v: Venue,
+  orderId: string,
+  provided: Provided,
+  amount = "1.50",
+): Promise<string> {
+  const [bill] = await suite.db
+    .insert(billPayments)
+    .values({
+      workingOrderId: orderId,
+      submissionId: randomUUID(),
+      fingerprint: "stranded",
+      kind: "contribution",
+      method: "card",
+      applied: Math.round(Number(amount) * 100),
+      state: "pending",
+      requestedBy: v.managerId,
+      tillId: v.cfg.tillId,
+    })
+    .returning({ id: billPayments.id });
+  const billPaymentId = bill!.id;
+  const key = { provider: "stripe", paymentRef: randomUUID() };
+  const common = {
+    ...key,
+    workingOrderId: brandWorkingOrderId(orderId),
+    amount: decimal(amount),
+    billPaymentId,
+  };
+  await withTransaction(suite.db, async (tx) => {
+    if (provided.kind === "attempting") {
+      const piId = `pi_bill_${randomUUID()}`;
+      v.client.setIntent(piId, {
+        status: provided.intent.status,
+        amount: 150,
+        ...(provided.intent.amountReceived === undefined
+          ? {}
+          : { amountReceived: provided.intent.amountReceived }),
+      });
+      await insertAttempting(tx, common);
+      await stampAttemptingRef(tx, key, piId);
+    } else if (provided.kind === "captured") {
+      await insertCapturedPayment(tx, {
+        ...common,
+        amount: decimal(provided.amount ?? amount),
+        externalRef: `pi_done_${randomUUID()}`,
+        settledAt: new Date("2026-09-27T10:00:00Z"),
+      });
+    } else if (provided.kind === "failed") {
+      await insertFailedPayment(tx, common);
+    }
+  });
+  return billPaymentId;
+}
+
+async function billPaymentOf(id: string) {
+  const [row] = await suite.db
+    .select({
+      state: billPayments.state,
+      attestedBy: billPayments.attestedBy,
+      attestationNote: billPayments.attestationNote,
+    })
+    .from(billPayments)
+    .where(eq(billPayments.id, id));
+  return row!;
+}
+
+async function receivedAtOf(id: string): Promise<string | null> {
+  const [row] = await suite.db
+    .select({ receivedAt: billPayments.receivedAt })
+    .from(billPayments)
+    .where(eq(billPayments.id, id));
+  return row!.receivedAt;
+}
+
+async function post(
+  v: Venue,
+  path: string,
+  body: unknown,
+  cookie: string = v.managerCookie,
+): Promise<Response> {
+  return v.app.request(path, {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+const billResolvePath = (id: string) => `/management-api/payments/bill-payments/${id}/resolve`;
+const attestPath = (id: string) => `/management-api/payments/bill-payments/${id}/attest`;
+
+describe("GET /management-api/payments/bill-payments", () => {
+  it("lists a pending bill payment with its provider row, and omits a settled one", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const pending = await strandBillPayment(v, orderId, {
+      kind: "attempting",
+      intent: { status: "requires_payment_method" },
+    });
+    const settled = await strandBillPayment(v, await openOrder(v), { kind: "none" });
+    await suite.db
+      .update(billPayments)
+      .set({ state: "failed", failedAt: "2026-09-27T10:00:00.000Z" })
+      .where(eq(billPayments.id, settled));
+
+    const res = await send(v, "GET", "/management-api/payments/bill-payments");
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>[];
+    expect(body).toEqual([
+      expect.objectContaining({
+        billPaymentId: pending,
+        workingOrderId: orderId,
+        tillId: v.cfg.tillId,
+        tillName: "Caja 1",
+        method: "card",
+        applied: "1.50",
+        tip: "0.00",
+        provider: "stripe",
+        providerState: "attempting",
+      }),
+    ]);
+  });
+
+  it("is refused to a staff session", async () => {
+    const v = await setup();
+    const res = await send(v, "GET", "/management-api/payments/bill-payments", v.staffCookie);
+    expect(res.status).toBe(403);
+    expect((await errorOf(res)).code).toBe("authorization.not_permitted");
+  });
+});
+
+describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
+  it("completes a payment Stripe captured through the bill's own P3, issuing the invoice once", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const id = await strandBillPayment(v, orderId, {
+      kind: "attempting",
+      intent: { status: "succeeded", amountReceived: 150 },
+    });
+
+    const res = await send(v, "POST", billResolvePath(id));
+    const again = await send(v, "POST", billResolvePath(id));
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { outcome: string; invoiceNumber?: string };
+    expect(body.outcome).toBe("received");
+    expect(body.invoiceNumber).toMatch(/^A\//);
+    expect((await billPaymentOf(id)).state).toBe("received");
+    expect(await orderOf(orderId)).toEqual({ status: "settled", mark: null });
+    expect(saleIdsFor(orderId)).toHaveLength(1);
+    expect(v.client.lastCreateIntent).toBeUndefined();
+    expect(again.status).toBe(409);
+    expect(await errorOf(again)).toEqual({
+      code: "bill.payment_not_stuck",
+      params: { paymentId: id },
+    });
+  });
+
+  it("fails a payment whose PaymentIntent was still waiting for a card, once Stripe cancels it", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const id = await strandBillPayment(v, orderId, {
+      kind: "attempting",
+      intent: { status: "requires_payment_method" },
+    });
+
+    const res = await send(v, "POST", billResolvePath(id));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ outcome: "not_charged" });
+    expect((await billPaymentOf(id)).state).toBe("failed");
+    expect(saleIdsFor(orderId)).toEqual([]);
+  });
+
+  it("refuses outcome_unconfirmed when Stripe cannot be reached, leaving the payment pending", async () => {
+    const v = await setup();
+    const id = await strandBillPayment(v, await openOrder(v), {
+      kind: "attempting",
+      intent: { status: "succeeded", amountReceived: 150 },
+    });
+    v.client.unreachableNext();
+
+    const res = await send(v, "POST", billResolvePath(id));
+
+    expect(res.status).toBe(409);
+    expect(await errorOf(res)).toEqual({
+      code: "bill.payment_outcome_unconfirmed",
+      params: { paymentId: id, reason: "unreachable" },
+    });
+    expect((await billPaymentOf(id)).state).toBe("pending");
+  });
+
+  it("refuses resolve_unsupported for a provider that cannot resolve an abandoned attempt", async () => {
+    const v = await setup({
+      providerFor: (p) =>
+        new Proxy(p, {
+          get: (target, prop) =>
+            prop === "resolveAbandonedAttempt" ? undefined : Reflect.get(target, prop),
+        }),
+    });
+    const id = await strandBillPayment(v, await openOrder(v), {
+      kind: "attempting",
+      intent: { status: "requires_payment_method" },
+    });
+
+    const res = await send(v, "POST", billResolvePath(id));
+
+    expect(res.status).toBe(422);
+    expect(await errorOf(res)).toEqual({
+      code: "payment.resolve_unsupported",
+      params: { providerId: "stripe" },
+    });
+    expect((await billPaymentOf(id)).state).toBe("pending");
+  });
+
+  it("refuses outcome_unconfirmed for a provider row marked failed: that word is not proof", async () => {
+    const v = await setup();
+    const id = await strandBillPayment(v, await openOrder(v), { kind: "failed" });
+
+    const res = await send(v, "POST", billResolvePath(id));
+
+    expect(res.status).toBe(409);
+    expect(await errorOf(res)).toEqual({
+      code: "bill.payment_outcome_unconfirmed",
+      params: { paymentId: id, reason: "ambiguous", providerStatus: "failed" },
+    });
+    expect((await billPaymentOf(id)).state).toBe("pending");
+  });
+
+  it("refuses outcome_unconfirmed as mismatched for a capture of another amount, filing nothing", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const id = await strandBillPayment(v, orderId, { kind: "captured", amount: "1.40" });
+
+    const res = await send(v, "POST", billResolvePath(id));
+
+    expect(res.status).toBe(409);
+    expect(await errorOf(res)).toEqual({
+      code: "bill.payment_outcome_unconfirmed",
+      params: { paymentId: id, reason: "mismatched" },
+    });
+    expect((await billPaymentOf(id)).state).toBe("pending");
+    expect(saleIdsFor(orderId)).toEqual([]);
+  });
+
+  it("refuses outcome_unconfirmed, naming Stripe's status, when Stripe captured another amount", async () => {
+    const v = await setup();
+    const id = await strandBillPayment(v, await openOrder(v), {
+      kind: "attempting",
+      intent: { status: "succeeded", amountReceived: 100 },
+    });
+
+    const res = await send(v, "POST", billResolvePath(id));
+
+    expect(res.status).toBe(409);
+    expect(await errorOf(res)).toEqual({
+      code: "bill.payment_outcome_unconfirmed",
+      params: { paymentId: id, reason: "ambiguous", providerStatus: "succeeded" },
+    });
+    expect((await billPaymentOf(id)).state).toBe("pending");
+  });
+
+  it("refuses not_stuck when a concurrent resolve settles the provider row first", async () => {
+    const v = await setup({
+      providerFor: (p) =>
+        new Proxy(p, {
+          get: (target, prop) =>
+            prop === "resolveAbandonedAttempt"
+              ? async (paymentRef: string, now: Date, audit: { personId: string }) => {
+                  await withTransaction(suite.db, (tx) =>
+                    failAttempting(tx, { provider: "stripe", paymentRef }),
+                  );
+                  return target.resolveAbandonedAttempt(paymentRef, now, audit);
+                }
+              : Reflect.get(target, prop),
+        }),
+    });
+    const id = await strandBillPayment(v, await openOrder(v), {
+      kind: "attempting",
+      intent: { status: "requires_payment_method" },
+    });
+
+    const res = await send(v, "POST", billResolvePath(id));
+
+    expect(res.status).toBe(409);
+    expect(await errorOf(res)).toEqual({
+      code: "bill.payment_not_stuck",
+      params: { paymentId: id },
+    });
+    expect((await billPaymentOf(id)).state).toBe("pending");
+  });
+
+  it("answers an error and changes nothing when the provider's resolve throws something else", async () => {
+    const v = await setup({
+      providerFor: (p) =>
+        new Proxy(p, {
+          get: (target, prop) =>
+            prop === "resolveAbandonedAttempt"
+              ? () => Promise.reject(new Error("database is locked"))
+              : Reflect.get(target, prop),
+        }),
+    });
+    const id = await strandBillPayment(v, await openOrder(v), {
+      kind: "attempting",
+      intent: { status: "requires_payment_method" },
+    });
+
+    const res = await send(v, "POST", billResolvePath(id));
+
+    expect(res.status).toBe(500);
+    expect((await errorOf(res)).code).toBe("server.internal");
+    expect((await billPaymentOf(id)).state).toBe("pending");
+  });
+
+  it("completes a payment its provider row already shows captured", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const id = await strandBillPayment(v, orderId, { kind: "captured" });
+
+    const res = await send(v, "POST", billResolvePath(id));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ outcome: "received" });
+    expect((await billPaymentOf(id)).state).toBe("received");
+  });
+
+  it("completes a payment that leaves the bill owing, answering no invoice", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const id = await strandBillPayment(v, orderId, { kind: "captured" }, "1.00");
+
+    const res = await send(v, "POST", billResolvePath(id));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ outcome: "received" });
+    expect(await orderOf(orderId)).toEqual({ status: "open", mark: null });
+  });
+
+  it("fails a payment no provider was asked to charge", async () => {
+    const v = await setup();
+    const id = await strandBillPayment(v, await openOrder(v), { kind: "none" });
+
+    const res = await send(v, "POST", billResolvePath(id));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ outcome: "not_charged" });
+    expect((await billPaymentOf(id)).state).toBe("failed");
+  });
+
+  it("refuses not_stuck for a payment whose card is at a reader in this process", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const card = new FakePaymentProvider(suite.db);
+    const release = card.holdNextCollect();
+    const paying = takeReaderBillPayment(
+      { db: suite.db, backend, clock, provider: card },
+      v.cfg,
+      orderId,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "1.00",
+        method: "card",
+        entry: "reader",
+        applied: "1.00",
+        tip: "0.00",
+      },
+      v.managerId,
+    );
+    await vi.waitFor(() => expect(card.collectCalls).toHaveLength(1));
+    const [live] = await suite.db
+      .select({ id: billPayments.id })
+      .from(billPayments)
+      .where(eq(billPayments.workingOrderId, orderId));
+
+    const listed = await send(v, "GET", "/management-api/payments/bill-payments");
+    const res = await send(v, "POST", billResolvePath(live!.id));
+    const attested = await post(v, attestPath(live!.id), {
+      outcome: "failed",
+      note: "n",
+      pin: "1234",
+    });
+    release();
+    await paying;
+
+    expect(await listed.json()).toEqual([]);
+    expect(res.status).toBe(409);
+    expect(await errorOf(res)).toEqual({
+      code: "bill.payment_not_stuck",
+      params: { paymentId: live!.id },
+    });
+    expect(attested.status).toBe(409);
+    expect(await errorOf(attested)).toEqual({
+      code: "bill.payment_not_stuck",
+      params: { paymentId: live!.id },
+    });
+    expect((await billPaymentOf(live!.id)).state).toBe("received");
+  });
+
+  it("answers bill.payment_not_found for an unknown id, and refuses a staff session", async () => {
+    const v = await setup();
+    const id = await strandBillPayment(v, await openOrder(v), { kind: "none" });
+    const unknown = randomUUID();
+
+    const missing = await send(v, "POST", billResolvePath(unknown));
+    const staff = await send(v, "POST", billResolvePath(id), v.staffCookie);
+
+    expect(missing.status).toBe(404);
+    expect(await errorOf(missing)).toEqual({
+      code: "bill.payment_not_found",
+      params: { paymentId: unknown },
+    });
+    expect(staff.status).toBe(403);
+    expect((await billPaymentOf(id)).state).toBe("pending");
+  });
+});
+
+describe("POST /management-api/payments/bill-payments/:id/attest", () => {
+  const NOTE = "SumUp dashboard shows transaction TX-1 successful";
+
+  it("records a confirmed receipt with the manager and note, and issues the invoice it completes", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const id = await strandBillPayment(v, orderId, { kind: "failed" });
+
+    const res = await post(v, attestPath(id), { outcome: "received", note: NOTE, pin: "1234" });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { outcome: string; invoiceNumber?: string };
+    expect(body.outcome).toBe("received");
+    expect(body.invoiceNumber).toMatch(/^A\//);
+    expect(await billPaymentOf(id)).toEqual({
+      state: "received",
+      attestedBy: v.managerId,
+      attestationNote: NOTE,
+    });
+    expect(await orderOf(orderId)).toEqual({ status: "settled", mark: null });
+    const [tender] = suite.db.all<{ bill_payment_id: string; method: string }>(
+      sql`select t.bill_payment_id, t.method from tenders t join sales s on s.id = t.sale_id where s.working_order_id = ${orderId}`,
+    );
+    expect(tender).toEqual({ bill_payment_id: id, method: "card" });
+  });
+
+  it("records a confirmed receipt that leaves the bill owing, answering no invoice", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const id = await strandBillPayment(v, orderId, { kind: "failed" }, "1.00");
+
+    const res = await post(v, attestPath(id), { outcome: "received", note: NOTE, pin: "1234" });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ outcome: "received" });
+    expect((await billPaymentOf(id)).state).toBe("received");
+    expect(saleIdsFor(orderId)).toEqual([]);
+  });
+
+  it("records a confirmed failure with the manager and note, releasing the payment", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const id = await strandBillPayment(v, orderId, { kind: "failed" });
+
+    const res = await post(v, attestPath(id), { outcome: "failed", note: NOTE, pin: "1234" });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ outcome: "not_charged" });
+    expect(await billPaymentOf(id)).toEqual({
+      state: "failed",
+      attestedBy: v.managerId,
+      attestationNote: NOTE,
+    });
+    expect(saleIdsFor(orderId)).toEqual([]);
+  });
+
+  it.each(["failed", "received"] as const)(
+    "refuses outcome_unconfirmed to record %s while the provider row is still attempting",
+    async (outcome) => {
+      const v = await setup();
+      const orderId = await openOrder(v);
+      const id = await strandBillPayment(v, orderId, {
+        kind: "attempting",
+        intent: { status: "requires_payment_method" },
+      });
+
+      const res = await post(v, attestPath(id), { outcome, note: NOTE, pin: "1234" });
+
+      expect(res.status).toBe(409);
+      expect(await errorOf(res)).toEqual({
+        code: "bill.payment_outcome_unconfirmed",
+        params: { paymentId: id, reason: "attempting" },
+      });
+      expect(await billPaymentOf(id)).toEqual({
+        state: "pending",
+        attestedBy: null,
+        attestationNote: null,
+      });
+      expect(saleIdsFor(orderId)).toEqual([]);
+    },
+  );
+
+  it("refuses to record a failure over a provider row that shows the card charged, and records its receipt", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const id = await strandBillPayment(v, orderId, { kind: "captured", amount: "1.20" });
+
+    const failed = await post(v, attestPath(id), { outcome: "failed", note: NOTE, pin: "1234" });
+    const pendingAfter = await billPaymentOf(id);
+    const received = await post(v, attestPath(id), {
+      outcome: "received",
+      note: NOTE,
+      pin: "1234",
+    });
+
+    expect(failed.status).toBe(409);
+    expect(await errorOf(failed)).toEqual({
+      code: "bill.attestation_contradicted",
+      params: { id, evidence: "captured" },
+    });
+    expect(pendingAfter).toEqual({ state: "pending", attestedBy: null, attestationNote: null });
+    expect(received.status).toBe(200);
+    expect(await billPaymentOf(id)).toEqual({
+      state: "received",
+      attestedBy: v.managerId,
+      attestationNote: NOTE,
+    });
+  });
+
+  it("dates a confirmed receipt at the provider row's settled time", async () => {
+    const v = await setup();
+    const id = await strandBillPayment(v, await openOrder(v), { kind: "captured", amount: "1.20" });
+
+    const res = await post(v, attestPath(id), { outcome: "received", note: NOTE, pin: "1234" });
+
+    expect(res.status).toBe(200);
+    expect(await receivedAtOf(id)).toBe("2026-09-27T10:00:00.000Z");
+  });
+
+  it("dates a confirmed receipt at the attestation when the provider row carries no settled time", async () => {
+    const v = await setup();
+    const id = await strandBillPayment(v, await openOrder(v), { kind: "failed" });
+    const before = Date.now();
+
+    const res = await post(v, attestPath(id), { outcome: "received", note: NOTE, pin: "1234" });
+
+    expect(res.status).toBe(200);
+    const receivedAt = Date.parse((await receivedAtOf(id))!);
+    expect(receivedAt).toBeGreaterThanOrEqual(before);
+    expect(receivedAt).toBeLessThanOrEqual(Date.now());
+  });
+
+  it("refuses the right PIN once too many wrong ones were entered, and changes nothing", async () => {
+    const v = await setup();
+    const id = await strandBillPayment(v, await openOrder(v), { kind: "failed" });
+    const wrong = { outcome: "failed", note: NOTE, pin: "9999" };
+    for (let i = 0; i <= PIN_THROTTLE_FREE_ATTEMPTS; i += 1) {
+      expect((await errorOf(await post(v, attestPath(id), wrong))).code).toBe("pin.invalid");
+    }
+
+    const res = await post(v, attestPath(id), { outcome: "failed", note: NOTE, pin: "1234" });
+
+    expect(res.status).toBe(429);
+    expect(await errorOf(res)).toEqual({
+      code: "pin.throttled",
+      params: { retryAfterSeconds: expect.any(Number) },
+    });
+    expect((await billPaymentOf(id)).state).toBe("pending");
+  });
+
+  it("starts the wrong-PIN count again after the right PIN", async () => {
+    const v = await setup();
+    const id = await strandBillPayment(v, await openOrder(v), { kind: "failed" });
+    const wrong = { outcome: "failed", note: NOTE, pin: "9999" };
+    for (let i = 0; i < PIN_THROTTLE_FREE_ATTEMPTS; i += 1) await post(v, attestPath(id), wrong);
+    const accepted = await post(v, attestPath(id), { outcome: "failed", note: NOTE, pin: "1234" });
+
+    const again = await post(v, attestPath(id), wrong);
+    const right = await post(v, attestPath(id), { outcome: "failed", note: NOTE, pin: "1234" });
+
+    expect(accepted.status).toBe(200);
+    expect((await errorOf(again)).code).toBe("pin.invalid");
+    expect(await errorOf(right)).toEqual({
+      code: "bill.payment_not_stuck",
+      params: { paymentId: id },
+    });
+  });
+
+  it.each([
+    ["a wrong PIN", { outcome: "failed", note: NOTE, pin: "9999" }, 401, "pin.invalid", undefined],
+    ["no PIN", { outcome: "failed", note: NOTE }, 401, "pin.invalid", undefined],
+    [
+      "a blank note",
+      { outcome: "failed", note: "   ", pin: "1234" },
+      400,
+      "management.request_invalid",
+      { field: "note" },
+    ],
+    [
+      "no note",
+      { outcome: "received", pin: "1234" },
+      400,
+      "management.request_invalid",
+      { field: "note" },
+    ],
+    [
+      "another outcome",
+      { outcome: "declined", note: NOTE, pin: "1234" },
+      400,
+      "management.request_invalid",
+      { field: "outcome" },
+    ],
+  ] as const)("refuses %s and changes nothing", async (_name, body, status, code, params) => {
+    const v = await setup();
+    const id = await strandBillPayment(v, await openOrder(v), { kind: "failed" });
+
+    const res = await post(v, attestPath(id), body);
+
+    expect(res.status).toBe(status);
+    expect(await errorOf(res)).toEqual(
+      params === undefined ? { code, params: {} } : { code, params },
+    );
+    expect(await billPaymentOf(id)).toEqual({
+      state: "pending",
+      attestedBy: null,
+      attestationNote: null,
+    });
+  });
+
+  it("refuses a staff session even with that person's own PIN", async () => {
+    const v = await setup();
+    const id = await strandBillPayment(v, await openOrder(v), { kind: "failed" });
+
+    const res = await post(
+      v,
+      attestPath(id),
+      { outcome: "failed", note: NOTE, pin: "1234" },
+      v.staffCookie,
+    );
+
+    expect(res.status).toBe(403);
+    expect((await errorOf(res)).code).toBe("authorization.not_permitted");
+    expect((await billPaymentOf(id)).state).toBe("pending");
+  });
+
+  it("refuses not_stuck for a payment that is no longer pending", async () => {
+    const v = await setup();
+    const id = await strandBillPayment(v, await openOrder(v), { kind: "none" });
+    await post(v, attestPath(id), { outcome: "failed", note: NOTE, pin: "1234" });
+
+    const res = await post(v, attestPath(id), { outcome: "received", note: NOTE, pin: "1234" });
+
+    expect(res.status).toBe(409);
+    expect(await errorOf(res)).toEqual({
+      code: "bill.payment_not_stuck",
+      params: { paymentId: id },
+    });
+    expect((await billPaymentOf(id)).state).toBe("failed");
   });
 });

@@ -219,14 +219,6 @@ export function businessDayRangeWindow(input: PeriodVatInput): WindowClause {
   return windowBetween(input.fromBusinessDay, input.toBusinessDay, input);
 }
 
-/**
- * The business-day predicate for ONE day over one timestamp column: a row belongs to `businessDay`
- * when its instant falls in that day's window.
- */
-export function businessDayClause(column: SQL, input: DailyCloseInput): SQL {
-  return businessDayWindow(input)(column);
-}
-
 /** F3-canje substitutes are never counted: their VAT is already in the F2 tickets they replace. */
 function notSubstituteClause(): SQL {
   return sql`not exists (select 1 from sale_substitutions sub where sub.substitution_sale_id = s.id)`;
@@ -268,11 +260,11 @@ export function reversedSalesClause(window: WindowClause): SQL {
 }
 
 /**
- * The optional node predicate: `and s.node_id = <nodeId>` when a node is fixed, an empty fragment
- * when it is omitted (a venue-wide aggregate). Assumes the outer query aliases `sales` as `s`, and
- * carries its own leading `and`, so the caller writes it inline as
+ * The optional node predicate: `and <column> = <nodeId>` when a node is fixed, an empty fragment
+ * when it is omitted (a venue-wide aggregate). `column` defaults to `s.node_id`, a `sales` row
+ * aliased `s`. It carries its own leading `and`, so the caller writes it inline as
  * `${nodeScopeClause(input.nodeId)}`.
  */
-export function nodeScopeClause(nodeId?: NodeId): SQL {
-  return nodeId ? sql`and s.node_id = ${nodeId}` : sql``;
+export function nodeScopeClause(nodeId?: NodeId, column: SQL = sql`s.node_id`): SQL {
+  return nodeId ? sql`and ${column} = ${nodeId}` : sql``;
 }

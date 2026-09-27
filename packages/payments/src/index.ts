@@ -13,6 +13,11 @@ export type {
   PaymentResultState,
   PaymentState,
   ProviderCapabilities,
+  RefundAnswer,
+  RefundLookup,
+  RefundLookupQuery,
+  RefundOutcome,
+  RefundSend,
 } from "./provider.js";
 // The test doubles under ./testing/ are NOT re-exported, so importing the package root cannot
 // reach one.
@@ -27,6 +32,8 @@ export {
   failAttempting,
   findCapturedPaymentForWorkingOrder,
   findCapturedPaymentForWorkingOrderAnyProvider,
+  findPaymentByBillPayment,
+  findPaymentsByBillPayments,
   findPaymentByRef,
   getPaymentByRef,
   hasPaymentWithExternalRef,
@@ -42,6 +49,7 @@ export {
   recordFailedRefund,
   recordRefund,
   recordVoid,
+  recordedRefundRefs,
   settleForwarded,
   settleInitiated,
   stampAttemptingRef,
@@ -63,6 +71,7 @@ export {
 export type { NewPaymentResolution } from "./resolutions.js";
 export { MANUAL_PROVIDER, recordManualCardPayment, recordManualRefund } from "./manual.js";
 export { SimulatorPaymentProvider } from "./simulator.js";
+export { refundLookupOf } from "./provider.js";
 export type { ManualCardPaymentParams, ManualCardPaymentResult } from "./manual.js";
 export { PAYMENTS_ALERTS } from "./alerts.js";
 export { PAYMENTS_MIGRATIONS } from "./migrations.js";

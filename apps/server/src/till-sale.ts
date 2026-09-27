@@ -17,6 +17,8 @@ import {
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import {
+  billPaymentRefunds,
+  billPayments,
   invoiceSeries,
   isUniqueViolation,
   nowIso,
@@ -50,6 +52,9 @@ import {
 } from "./working-order.js";
 import type { LineExtras, PricedOrder, TillSaleDeps } from "./working-order.js";
 import { issuancePass } from "./issuance-pass.js";
+import { cashChange } from "./bill-allocation.js";
+import { perDatabase } from "./live-in-process.js";
+import { refuseBillWithPayments } from "./bill-payments.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { ticketLinesFrom } from "./receipt-lines.js";
@@ -141,6 +146,22 @@ export type TenderBlock =
       reference: string | null;
     };
 
+/**
+ * One payment of a bill paid in parts before its invoice, as the ticket lists it. `change` is what
+ * the bill payment handed back when it was taken, never derived from the tender, whose amount a
+ * refund lowers.
+ */
+export type BillTenderLine = (
+  | { method: "cash"; amount: string; tip: string; tendered: string; change: string }
+  | { method: "card"; amount: string; tip: string; reference: string | null }
+) & { refunds: BillTenderRefund[] };
+
+/** Money given back from a bill payment before the invoice: a `completed` refund, oldest first. */
+export interface BillTenderRefund {
+  amount: string;
+  tip: string;
+}
+
 export interface TillSaleResult {
   issuer?: { venueName: string; nif: string };
   orderLabel: string | null;
@@ -154,8 +175,11 @@ export interface TillSaleResult {
   vatBreakdown: { rate: string; base: string; tax: string }[];
   /** The FILED line list (goods identification, art. 7.1.e). */
   lines: TillSaleLine[];
-  /** How the sale was paid, read back from the committed tender and payment rows. */
+  /** The sale's FIRST tender by settle time, read back from the committed tender and payment rows;
+   * `payments` lists them all when the bill was paid in parts. */
   tender: TenderBlock;
+  /** Every payment, when the bill was paid in parts before its invoice; absent otherwise. */
+  payments?: BillTenderLine[];
   /** Where a customer can verify the record, or "" when the regime offers none. */
   qr: string;
 }
@@ -176,7 +200,9 @@ export async function readTenderBlock(
       cashTendered: tenders.cashTendered,
     })
     .from(tenders)
-    .where(eq(tenders.saleId, saleId));
+    .where(eq(tenders.saleId, saleId))
+    .orderBy(tenders.settledAt, tenders.id)
+    .limit(1);
   // Invoice-first issuance legitimately precedes the tender.
   if (row === undefined) return { method: "unpaid" };
   const tender = {
@@ -208,6 +234,74 @@ export async function readTenderBlock(
     tip: tender.tip,
     reference: payment?.externalRef ?? null,
   };
+}
+
+/** The payments of a sale whose tenders were taken as bill payments, in the order they were taken. */
+export async function readBillTenderLines(
+  tx: Transaction,
+  saleId: SaleId,
+): Promise<BillTenderLine[]> {
+  const rows = await tx
+    .select({
+      billPaymentId: billPayments.id,
+      method: tenders.method,
+      amount: tenders.amount,
+      tip: tenders.tipAmount,
+      applied: billPayments.applied,
+      paymentTip: billPayments.tip,
+      tendered: billPayments.tendered,
+      reference: payments.externalRef,
+    })
+    .from(tenders)
+    .innerJoin(billPayments, eq(billPayments.id, tenders.billPaymentId))
+    .leftJoin(
+      payments,
+      and(eq(payments.billPaymentId, billPayments.id), eq(payments.provider, "manual")),
+    )
+    .where(eq(tenders.saleId, saleId))
+    .orderBy(tenders.settledAt, tenders.id);
+  const refundRows =
+    rows.length === 0
+      ? []
+      : await tx
+          .select({
+            billPaymentId: billPaymentRefunds.billPaymentId,
+            amount: billPaymentRefunds.appliedAmount,
+            tip: billPaymentRefunds.tipAmount,
+          })
+          .from(billPaymentRefunds)
+          .where(
+            and(
+              inArray(
+                billPaymentRefunds.billPaymentId,
+                rows.map((row) => row.billPaymentId),
+              ),
+              eq(billPaymentRefunds.state, "completed"),
+            ),
+          )
+          .orderBy(billPaymentRefunds.completedAt, billPaymentRefunds.id);
+  return rows.map((row) => {
+    const amount = centsToDecimal(row.amount);
+    const tip = centsToDecimal(row.tip);
+    const refunds = refundRows
+      .filter((refund) => refund.billPaymentId === row.billPaymentId)
+      .map((refund) => ({
+        amount: centsToDecimal(refund.amount),
+        tip: centsToDecimal(refund.tip),
+      }));
+    if (row.method === "cash") {
+      const tendered = centsToDecimal(row.tendered!);
+      return {
+        method: "cash",
+        amount,
+        tip,
+        tendered,
+        change: cashChange(row.tendered!, row.applied, row.paymentTip),
+        refunds,
+      };
+    }
+    return { method: "card", amount, tip, reference: row.reference ?? null, refunds };
+  });
 }
 
 /**
@@ -341,8 +435,12 @@ export async function payWorkingOrder(
       if (locked !== undefined && locked.status !== "open") {
         throw new AppError("working_order.not_open", { workingOrderId: req.id });
       }
-      // A card payment of this order would file its own sale after this one (plan D22).
-      if (locked !== undefined) await refusePaymentInFlight(tx, [req.id]);
+      if (locked !== undefined) {
+        // Before the in-flight check, so the answer names the money already on the bill.
+        await refuseBillWithPayments(tx, req.id);
+        // A card payment of this order would file its own sale after this one (plan D22).
+        await refusePaymentInFlight(tx, [req.id]);
+      }
 
       // The till is a network boundary. AFTER the replay check, so a retry of an already-settled
       // order is never refused for the shape of its retry body.
@@ -411,7 +509,7 @@ export async function payWorkingOrder(
 }
 
 /** Reconstruct the filed invoice and persisted payment facts for original, duplicate or pay replay. */
-async function readSettledTicket(
+export async function readSettledTicket(
   backend: FiscalBackend,
   tx: Transaction,
   cfg: TillConfig,
@@ -453,6 +551,7 @@ async function readSettledTicket(
   /* v8 ignore stop */
 
   const tender = await readTenderBlock(tx, cfg, brandSaleId(issued.saleId), workingOrderId);
+  const billTenders = await readBillTenderLines(tx, brandSaleId(issued.saleId));
 
   return {
     ...(await readReceiptOrder(tx, cfg, workingOrderId)),
@@ -463,6 +562,7 @@ async function readSettledTicket(
     vatBreakdown: toVatBreakdown(filed.vatBreakdown),
     lines: ticketLines,
     tender,
+    ...(billTenders.length === 0 ? {} : { payments: billTenders }),
     qr: filed.verificationUrl,
     ...(filed.issuer
       ? { issuer: { venueName: filed.issuer.legalName, nif: filed.issuer.taxId } }
@@ -706,6 +806,9 @@ async function payIntegrated(
     // A walk-up has no prior sale, and no payment row either: that row's foreign key needs the
     // order row, which P1 is about to create.
     if (locked !== undefined) {
+      // Before the recovery below, which would take a card bill payment's capture for this pay's
+      // own and invoice the whole order from it.
+      await refuseBillWithPayments(tx, req.id);
       const outstanding = await readOutstandingSaleForOrder(tx, req.id);
 
       // A captured payment with no sale: P2 committed but P3 never ran. Driving `collect` again
@@ -818,19 +921,9 @@ async function payIntegrated(
   return { outcome: "captured", ticket };
 }
 
-/** The integrated card attempts each venue store has running in this process: order id to the
- * mark its P1 wrote (plan D22). One process owns a venue at a time, so a mark missing here was left
- * by an attempt that has ended, in this process or in one that died. */
-const LIVE_ATTEMPTS = new WeakMap<Database, Map<string, string>>();
-
-function liveAttemptsOf(db: Database): Map<string, string> {
-  let live = LIVE_ATTEMPTS.get(db);
-  if (live === undefined) {
-    live = new Map();
-    LIVE_ATTEMPTS.set(db, live);
-  }
-  return live;
-}
+/** The integrated card attempts running in this process: order id to the mark its P1 wrote (plan
+ * D22). */
+const liveAttemptsOf = perDatabase(() => new Map<string, string>());
 
 /** Whether an integrated card attempt on this order is running in this process. */
 export function paymentAttemptIsLive(db: Database, workingOrderId: string): boolean {
@@ -840,8 +933,8 @@ export function paymentAttemptIsLive(db: Database, workingOrderId: string): bool
 /**
  * Which of these orders has a payment that is, or could still become, a capture no sale records:
  * an attempt its provider has not resolved, or a capture not yet filed. This decides whether a
- * mark may be RELEASED and whether Pay may go ahead over one; the write guard
- * (`refusePaymentInFlight`) reads only the mark.
+ * mark may be RELEASED and whether Pay may go ahead over one; the check of the mark itself
+ * (`refuseOrderPaymentMarked`) reads only the mark.
  */
 async function ordersWithUnfiledPayment(
   tx: Transaction,
@@ -1164,7 +1257,7 @@ async function finalizeRecovery(
 }
 
 /** Fire an open order at payment when its frozen service context uses the prepay flow. */
-async function firePrepayOrder(
+export async function firePrepayOrder(
   tx: Transaction,
   cfg: TillConfig,
   workingOrderId: string,
@@ -1391,6 +1484,7 @@ export async function collectOrder(
     if (locked === undefined || locked.status !== "placed") {
       throw new AppError("working_order.not_placed", { workingOrderId: req.id });
     }
+    await refuseBillWithPayments(tx, req.id);
 
     // AFTER the replay check, so a retry is never refused for its body shape.
     if (req.tender.method !== "cash" && req.tender.method !== "card") {

@@ -1,6 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
+  billPayments,
   CHECK_VIOLATION,
   CORE_MIGRATIONS,
   captureError,
@@ -14,6 +15,7 @@ import {
   tenders,
   triggerRaised,
   withTransaction,
+  workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -182,6 +184,64 @@ describe("settleSale — the happy path", () => {
       .from(saleSettlements)
       .where(eq(saleSettlements.saleId, saleId));
     expect(new Date(settled!.settledAt).getTime()).toBe(later.getTime());
+  });
+});
+
+describe("settleSale — a bill paid in parts", () => {
+  it("writes each tender's bill payment, and leaves it null where none is named", async () => {
+    const seed = await seedTenant(suite.db);
+    const saleId = await seedSale(suite.db, seed, { total: "65.00" });
+    const [order] = await suite.db
+      .insert(workingOrders)
+      .values({
+        tillId: seed.tillId,
+        nodeId: seed.nodeId,
+        orderNumber: 1,
+        status: "open",
+        openedAt: SETTLED_AT.toISOString(),
+      })
+      .returning({ id: workingOrders.id });
+    const [payment] = await suite.db
+      .insert(billPayments)
+      .values({
+        workingOrderId: order!.id,
+        submissionId: "s-1",
+        fingerprint: "f",
+        kind: "contribution",
+        method: "cash",
+        applied: 4000,
+        tendered: 5000,
+        state: "received",
+        requestedBy: "cccccccc-0000-4000-8000-000000000001",
+        tillId: seed.tillId,
+        receivedAt: SETTLED_AT.toISOString(),
+      })
+      .returning({ id: billPayments.id });
+
+    await settle(suite.db, {
+      saleId,
+      tenders: [
+        {
+          method: "cash",
+          amount: "40.00",
+          tipAmount: "0.00",
+          cashTendered: "50.00",
+          settledAt: SETTLED_AT,
+          billPaymentId: payment!.id,
+        },
+        { method: "card", amount: "25.00", tipAmount: "0.00", settledAt: SETTLED_AT },
+      ],
+    });
+
+    const rows = await suite.db
+      .select({ amount: tenders.amount, billPaymentId: tenders.billPaymentId })
+      .from(tenders)
+      .where(eq(tenders.saleId, saleId))
+      .orderBy(tenders.amount);
+    expect(rows).toEqual([
+      { amount: 2500, billPaymentId: null },
+      { amount: 4000, billPaymentId: payment!.id },
+    ]);
   });
 });
 

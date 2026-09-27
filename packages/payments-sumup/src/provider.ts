@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { AppError, tillId as brandTillId } from "@waitron/shared";
+import { AppError, compareDecimal, tillId as brandTillId } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -11,12 +11,18 @@ import type {
   PaymentProvider,
   PaymentResult,
   ProviderCapabilities,
+  RefundAnswer,
+  RefundLookup,
+  RefundLookupQuery,
+  RefundOutcome,
+  RefundSend,
 } from "@waitron/payments";
 import {
   captureAttempting,
   failAttempting,
   insertAttempting,
   listAttempting,
+  refundLookupOf,
   stampAttemptingRef,
   tillsForWorkingOrders,
 } from "@waitron/payments";
@@ -39,6 +45,35 @@ export const RESOLVE_RETRY_MS = 60_000;
  * lost may have been accepted; SumUp's own 60 s reader window plus a generous tap allowance is far
  * inside 15 min. After it, SumUp having nothing means no money moved: `failed`, no incident. */
 export const NOT_FOUND_GRACE_MS = 15 * 60_000;
+
+/**
+ * Refusals of `POST /v1.0/merchants/{merchant_code}/payments/{transaction_id}/refunds` that SumUp's
+ * OpenAPI file (`RefundTransaction`, read 2026-09-27) documents as the refund not happening: "'400':
+ * The refund request is invalid.", "'403': The request is authenticated but not permitted for this
+ * operation.", "'404': The requested transaction does not exist or does not belong to the
+ * merchant.", "'409': The transaction cannot be refunded due to business constraints." and "'422':
+ * The refund could not be processed by the payment processor." None says "not created" in those
+ * words. No 401, 429 or 5xx is documented for this operation, so those settle nothing.
+ */
+const DOCUMENTED_REFUND_REFUSALS = new Set([400, 403, 404, 409, 422]);
+
+/**
+ * How far before `sentAt` SumUp may stamp a REFUND event that is still the refund sent then: the
+ * event carries SumUp's clock and `sentAt` the box's, so a box running ahead puts the event before
+ * it. Reasoned, not measured. A time cannot say which refund an event is; the reading taken before
+ * the send (`refsBeforeSend`) does.
+ */
+const CLOCK_ALLOWANCE_MS = 2 * 60_000;
+
+/** SumUp's event statuses: "`REFUNDED`: A refund event has been accepted and recorded in the refund
+ * flow", "`SUCCESSFUL`: The event completed successfully", "`FAILED`: The event could not be
+ * completed" and "`PENDING`: … whose final outcome is not known yet"
+ * (https://developer.sumup.com/api/transactions). A status it adds later is `pending`. */
+function refundOutcomeOf(status: string): RefundOutcome {
+  if (status === "REFUNDED" || status === "SUCCESSFUL") return "completed";
+  if (status === "FAILED") return "failed";
+  return "pending";
+}
 
 export interface SumUpCloudProviderOptions {
   client: SumUpClient;
@@ -110,6 +145,8 @@ type PollOutcome =
 export class SumUpCloudProvider implements PaymentProvider {
   readonly provider = SUMUP_PROVIDER;
   readonly capabilities: ProviderCapabilities = { partialRefund: true };
+  /** SumUp's refund takes no idempotency key, so a resend could refund twice. */
+  readonly refundResendWindowMs = null;
   private readonly poll: Required<NonNullable<SumUpCloudProviderOptions["poll"]>>;
   private readonly now: () => Date;
 
@@ -143,6 +180,7 @@ export class SumUpCloudProvider implements PaymentProvider {
         provider: SUMUP_PROVIDER,
         paymentRef,
         amount: params.amount,
+        billPaymentId: params.billPaymentId,
       }),
     );
 
@@ -358,6 +396,64 @@ export class SumUpCloudProvider implements PaymentProvider {
       declined,
       incidentsRaised,
     };
+  }
+
+  /** SumUp answers an accepted refund `201` with the body `{}`, so it names no refund and only
+   * `lookupRefund` can find it. */
+  async sendRefund(req: RefundSend): Promise<RefundAnswer> {
+    let httpStatus: number;
+    try {
+      ({ httpStatus } = await this.opts.client.sendRefund({
+        transactionId: req.processorRef,
+        amount: req.amount,
+      }));
+    } catch (error) {
+      const timedOut = (error as { name?: unknown } | null)?.name === "AbortError";
+      return { kind: "uncertain", reason: timedOut ? "timeout" : "network" };
+    }
+    if (httpStatus >= 200 && httpStatus < 300) return { kind: "accepted" };
+    if (httpStatus >= 500) return { kind: "uncertain", reason: "server_error", httpStatus };
+    return { kind: "refused", httpStatus, documented: DOCUMENTED_REFUND_REFUSALS.has(httpStatus) };
+  }
+
+  /** SumUp's refunds carry none of our ids, so an event can be told from an earlier refund only by
+   * this reading, taken before the send. An answer listing no events cannot say. */
+  async existingRefundRefs(processorRef: string): Promise<string[]> {
+    const t = await this.opts.client.findTransaction({ id: processorRef });
+    if (t === null) return [];
+    if (t.refundEvents === undefined) throw new Error("SumUp listed no events of the transaction");
+    return t.refundEvents.map((event) => event.id);
+  }
+
+  /** A `REFUND` event of the transaction for the same amount, not one of `excludeRefs` nor of
+   * `refsBeforeSend`, stamped after `sentAt` less {@link CLOCK_ALLOWANCE_MS}. Without
+   * `refsBeforeSend`, an event stamped before `sentAt` may be a refund made before the send, so it
+   * is `ambiguous`, never a match. */
+  async lookupRefund(query: RefundLookupQuery): Promise<RefundLookup> {
+    let t: SumUpTransaction | null;
+    try {
+      t = await this.opts.client.findTransaction({ id: query.processorRef });
+    } catch {
+      return { kind: "unreachable" };
+    }
+    const sentAt = query.sentAt.getTime();
+    const candidates = (t?.refundEvents ?? []).filter(
+      (event) =>
+        Date.parse(event.timestamp) >= sentAt - CLOCK_ALLOWANCE_MS &&
+        compareDecimal(event.amount, query.amount) === 0 &&
+        !query.excludeRefs.includes(event.id) &&
+        !(query.refsBeforeSend?.includes(event.id) ?? false),
+    );
+    return refundLookupOf(
+      candidates,
+      (event) => ({
+        providerRefundRef: event.id,
+        outcome: refundOutcomeOf(event.status),
+        providerStatus: event.status,
+      }),
+      query.refsBeforeSend === undefined &&
+        candidates.some((event) => Date.parse(event.timestamp) < sentAt),
+    );
   }
 
   /** void / refund / partialRefund all share one reversal path (`reverseViaSumUp`); a `void` is a

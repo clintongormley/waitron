@@ -35,6 +35,7 @@ const CLIENT_METHODS = [
   "createCheckout",
   "findTransaction",
   "refund",
+  "sendRefund",
   "listReaders",
   "pairReader",
   "getReader",

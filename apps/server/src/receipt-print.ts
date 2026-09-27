@@ -164,6 +164,52 @@ export async function enqueueOriginalReceipt(
   await enqueuePrintJob(tx, printConfig(cfg), resolved.printer.id, resolved.receiptBytes);
 }
 
+async function enqueueBillDrawer(
+  tx: Transaction,
+  cfg: TillConfig,
+  billPaymentId: string,
+  operatorId: string,
+  reason: "bill_payment" | "bill_refund",
+  authorization: { authorizedBy: string; viaOverride: boolean } | null,
+): Promise<void> {
+  if (cfg.allowCashDrawer === false) return;
+  const printer = await resolveReceiptPrinter(tx, cfg);
+  if (printer === undefined || !printer.hasCashDrawer) return;
+  await tx.insert(drawerOpens).values({
+    tillId: cfg.tillId,
+    printerId: printer.id,
+    personId: operatorId,
+    reason,
+    billPaymentId,
+    ...(authorization ?? {}),
+  });
+  await enqueuePrintJob(tx, printConfig(cfg), printer.id, DRAWER_KICK, "drawer");
+}
+
+/** Cash taken against a bill before its invoice opens the drawer naming the bill payment. */
+export async function enqueueBillPaymentDrawer(
+  tx: Transaction,
+  cfg: TillConfig,
+  billPaymentId: string,
+  operatorId: string,
+): Promise<void> {
+  await enqueueBillDrawer(tx, cfg, billPaymentId, operatorId, "bill_payment", null);
+}
+
+/**
+ * Cash given back from a bill payment before the invoice opens the drawer naming that payment, with
+ * whoever authorised the refund.
+ */
+export async function enqueueBillRefundDrawer(
+  tx: Transaction,
+  cfg: TillConfig,
+  billPaymentId: string,
+  operatorId: string,
+  authorization: { authorizedBy: string; viaOverride: boolean },
+): Promise<void> {
+  await enqueueBillDrawer(tx, cfg, billPaymentId, operatorId, "bill_refund", authorization);
+}
+
 /** Cash collected at a till opens its attached drawer independently of document printing. */
 export async function enqueueCashSaleDrawer(
   tx: Transaction,

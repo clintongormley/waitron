@@ -26,7 +26,7 @@ import {
 } from "@waitron/payments";
 import "./errors.js";
 import { reverseViaStripe } from "./reverse.js";
-import { workingOrderIdempotencyKey } from "./client.js";
+import { billPaymentIdempotencyKey, workingOrderIdempotencyKey } from "./client.js";
 import type { StripeDeviceClient } from "./device-client.js";
 
 // Shared with the other Stripe adapters: one account is one settlement identity. `forward` can scope
@@ -76,7 +76,10 @@ export class StripeOnDeviceProvider implements PaymentProvider {
       return {
         offlineAllowed:
           resolveOfflineDecision(policy, params.allowOffline ?? false, params.amount) === "accept",
-        stripeIdempotencyKey: workingOrderIdempotencyKey(params.workingOrderId, cancelled),
+        stripeIdempotencyKey:
+          params.billPaymentId === undefined
+            ? workingOrderIdempotencyKey(params.workingOrderId, cancelled)
+            : billPaymentIdempotencyKey(params.billPaymentId),
       };
     });
 
@@ -94,6 +97,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
       provider: PROVIDER,
       paymentRef,
       amount: params.amount,
+      billPaymentId: params.billPaymentId,
     };
 
     if (outcome.outcome === "network_unavailable") {

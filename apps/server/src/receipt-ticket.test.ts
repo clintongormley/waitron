@@ -1058,3 +1058,161 @@ describe("formatReceipt — printer layout", () => {
     },
   );
 });
+
+/** Cents from a printed amount such as `-1.234,50 €`. */
+function printedCents(line: string): number {
+  const amount = /(-?[\d.]+,\d{2}) €$/.exec(line)?.[1];
+  if (amount === undefined) throw new Error(`no amount on "${line}"`);
+  return Number(amount.replace(/[.,]/g, ""));
+}
+
+/**
+ * A bill-payment ticket's payment rows must come to its TOTAL: money handed over or charged, less
+ * change, tip and refunds (a refund row is already printed negative).
+ */
+function expectPaymentRowsToAddUpToTotal(printed: string[]): void {
+  const start = printed.findIndex((line) => line.startsWith("TOTAL"));
+  const end = printed.indexOf("VERI*FACTU", start);
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(end).toBeGreaterThan(start);
+  let paid = 0;
+  for (const line of printed.slice(start + 1, end)) {
+    if (/^(Efectivo|Tarjeta|Devolución) /.test(line)) paid += printedCents(line);
+    else if (/^(Cambio|Propina) /.test(line)) paid -= printedCents(line);
+  }
+  expect(paid).toBe(printedCents(printed[start]!));
+}
+
+describe("a bill paid in parts before its invoice", () => {
+  // €20.90 paid as €10.00 cash from a €50.00 note, then €10.90 by hand-keyed card with a €1.00
+  // tip: each payment prints on its own, with the change it gave when it was taken.
+  const PAID_IN_PARTS: TillSaleResult = {
+    ...FILED_SALE,
+    tender: { method: "cash", change: "40.00" },
+    payments: [
+      {
+        method: "cash",
+        amount: "10.00",
+        tip: "0.00",
+        tendered: "50.00",
+        change: "40.00",
+        refunds: [],
+      },
+      { method: "card", amount: "11.90", tip: "1.00", reference: "OP-9", refunds: [] },
+    ],
+  };
+
+  function lines(): string[] {
+    return printedLines(
+      formatReceipt({
+        result: PAID_IN_PARTS,
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
+    ).map((line) => line.trim().replace(/\s+/g, " "));
+  }
+
+  it("prints each payment with what was handed over, the change it gave and its tip", () => {
+    const printed = lines();
+    const start = printed.findIndex((line) => line.startsWith("TOTAL"));
+
+    expect(
+      printed
+        .slice(start + 1)
+        .filter((line) => line !== "")
+        .slice(0, 6),
+    ).toEqual([
+      "Efectivo 50,00 €",
+      "Cambio 40,00 €",
+      "Tarjeta 11,90 €",
+      "Ref. OP-9",
+      "Propina 1,00 €",
+      "VERI*FACTU",
+    ]);
+    expectPaymentRowsToAddUpToTotal(printed);
+  });
+
+  it("never derives cash from the total and the change, as a single payment's ticket does", () => {
+    expect(lines().some((line) => line === "Efectivo 60,90 €")).toBe(false);
+  });
+});
+
+describe("a bill payment partly given back before its invoice", () => {
+  // €50.00 cash handed over exactly against a €60.00 bill, €10.00 of it given back in two refunds
+  // when items were voided, and the €40.00 invoice then issued (design §8 test 11).
+  it("prints the cash as it was handed over and each refund as its own line", () => {
+    const printed = printedLines(
+      formatReceipt({
+        result: {
+          ...FILED_SALE,
+          total: "40.00",
+          tender: { method: "cash", change: "0.00" },
+          payments: [
+            {
+              method: "cash",
+              amount: "40.00",
+              tip: "0.00",
+              tendered: "50.00",
+              change: "0.00",
+              refunds: [
+                { amount: "6.00", tip: "0.00" },
+                { amount: "4.00", tip: "0.00" },
+              ],
+            },
+          ],
+        },
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
+    ).map((line) => line.trim().replace(/\s+/g, " "));
+    const start = printed.findIndex((line) => line.startsWith("TOTAL"));
+
+    expect(
+      printed
+        .slice(start + 1)
+        .filter((line) => line !== "")
+        .slice(0, 4),
+    ).toEqual(["Efectivo 50,00 €", "Devolución -6,00 €", "Devolución -4,00 €", "VERI*FACTU"]);
+    expectPaymentRowsToAddUpToTotal(printed);
+  });
+
+  // The card's tender amount is already net of its refunds, so the card row prints the original
+  // charge: €20.00 charged, €5.00 given back, €15.00 invoiced.
+  it("prints a card payment's original charge and its refund under it", () => {
+    const printed = printedLines(
+      formatReceipt({
+        result: {
+          ...FILED_SALE,
+          total: "15.00",
+          tender: { method: "card", charged: "15.00", tip: "0.00", reference: "OP-3" },
+          payments: [
+            {
+              method: "card",
+              amount: "15.00",
+              tip: "0.00",
+              reference: "OP-3",
+              refunds: [{ amount: "5.00", tip: "0.00" }],
+            },
+          ],
+        },
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
+    ).map((line) => line.trim().replace(/\s+/g, " "));
+    const start = printed.findIndex((line) => line.startsWith("TOTAL"));
+
+    expect(
+      printed
+        .slice(start + 1)
+        .filter((line) => line !== "")
+        .slice(0, 4),
+    ).toEqual(["Tarjeta 20,00 €", "Ref. OP-3", "Devolución -5,00 €", "VERI*FACTU"]);
+    expectPaymentRowsToAddUpToTotal(printed);
+  });
+});

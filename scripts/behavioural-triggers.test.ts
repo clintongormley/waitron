@@ -11,6 +11,10 @@ import { orderedMigrationSets } from "../packages/module/src/module.js";
 // `packages/core` matches one of them (`settle-sale.ts`), and a local copy would test the
 // triggers against this file instead of against what the product reads.
 import {
+  BILL_PAYMENT_CHANGE_REFUSAL,
+  BILL_PAYMENT_DELETE_REFUSAL,
+  BILL_REFUND_CHANGE_REFUSAL,
+  BILL_REFUND_DELETE_REFUSAL,
   COVERAGE_REFUSAL,
   FORM_FACTOR_REFUSAL,
   KDS_BINDING_REFUSAL,
@@ -43,6 +47,9 @@ import {
  * than refuses is `visits_clear_table_status` (`packages/db/drizzle/0020_visit_clears_table_status.sql`):
  * a table's service status comes off when the party's visit leaves `open`, on every table still a
  * member of it. It replaced `working_orders_clear_table_status`, which cleared it when a tab settled.
+ * `packages/db/drizzle/0024_bill_payment_triggers.sql` adds the state guards on `bill_payments` and
+ * `bill_payment_refunds`, and a trigger on each refusing every delete — those two refuse by design
+ * whatever the row, so they have no accepting control here.
  *
  * **It migrates through `applyMigrations`**: a guard that installs the thing under test cannot see
  * the product failing to install it.
@@ -93,11 +100,16 @@ const IMAGE_REFERENCE_TRIGGERS = [
  * Every behavioural trigger the migrations create, pinned by name: those of
  * `0001_behavioural_triggers.sql` (SQLite has no `BEFORE INSERT OR UPDATE`, so a rule covering more
  * than one event is split and the suffix names the event), the `products_*` names of
- * `0004_variant_one_level.sql`, and `visits_clear_table_status` of
- * `0020_visit_clears_table_status.sql`. The `products_*` ones live on `products`, so a later
+ * `0004_variant_one_level.sql`, `visits_clear_table_status` of
+ * `0020_visit_clears_table_status.sql`, and the `bill_payment*` names of
+ * `0024_bill_payment_triggers.sql`. The `products_*` ones live on `products`, so a later
  * migration that RECREATES that table drops them silently — this list is what notices.
  */
 const EXPECTED_TRIGGERS = [
+  "bill_payment_refunds_guard_update",
+  "bill_payment_refunds_no_delete",
+  "bill_payments_guard_update",
+  "bill_payments_no_delete",
   "device_binding_rule_insert",
   "device_binding_rule_update",
   "device_profile_form_factor_locked",
@@ -151,6 +163,28 @@ const STAMP = "2026-09-22T10:00:00.000Z";
  */
 let nextLineNo = 0;
 let nextInvoiceNumber = 0;
+
+/** A bill payment on `wo-open`, taken by card for 10.00. */
+function billPayment(id, state) {
+  const receivedAt = state === "received" ? `'${STAMP}'` : "null";
+  return (
+    `insert into bill_payments (id, working_order_id, submission_id, fingerprint, kind, method, ` +
+    ` applied, tip, state, requested_by, till_id, created_at, received_at) ` +
+    `values ('${id}', 'wo-open', '${id}', 'fp', 'contribution', 'card', 1000, 0, '${state}', ` +
+    ` 'person', 'till', '${STAMP}', ${receivedAt})`
+  );
+}
+
+/** A pending card refund of 5.00 from bill payment `paymentId`, not yet sent. */
+function billRefund(id, paymentId) {
+  return (
+    `insert into bill_payment_refunds (id, bill_payment_id, submission_id, fingerprint, ` +
+    ` applied_amount, tip_amount, reason, authorized_by, requested_by, till_id, state, send_count, ` +
+    ` created_at) ` +
+    `values ('${id}', '${paymentId}', '${id}', 'fp', 500, 0, 'wrong item', 'person', 'person', ` +
+    ` 'till', 'pending', 0, '${STAMP}')`
+  );
+}
 
 /** A working order row. Callers name only what a case turns on. */
 function workingOrder(id, status, extra = {}) {
@@ -307,6 +341,15 @@ function seed(connection) {
     // 1000 sale less a 300 rectificativa: a formula that ignored corrections would want 1000.
     tender("tender-corrected", "sale-corrected", 700),
     `insert into sale_settlements (id, sale_id, settled_at) values ('ss-seed', 'sale-settled', '${STAMP}')`,
+
+    // Bill payments: one each to move, to decline, and to hold a tender, which blocks a decline.
+    billPayment("bp-pending", "pending"),
+    billPayment("bp-received", "received"),
+    billPayment("bp-tendered", "received"),
+    sale("sale-bill", 1000),
+    `insert into tenders (id, sale_id, method, amount, tip_amount, settled_at, bill_payment_id) ` +
+      `values ('tender-bill', 'sale-bill', 'card', 1000, 0, '${STAMP}', 'bp-tendered')`,
+    billRefund("bpr-pending", "bp-received"),
 
     // A kitchen station, so the binding rule's kds arm has a valid station to accept.
     `insert into kitchen_stations (id, location_id, name, created_at) ` +
@@ -984,5 +1027,76 @@ describe("products_id_fixed_update", () => {
     expect(
       refusalFor(connection, `update products set id = id, name = 'Same id' where id = 'p-var'`),
     ).toBeUndefined();
+  });
+});
+
+describe("bill_payments_guard_update", () => {
+  it("refuses a change to a bill payment's applied amount", () => {
+    expect(
+      refusalFor(connection, `update bill_payments set applied = 1 where id = 'bp-pending'`),
+    ).toBe(BILL_PAYMENT_CHANGE_REFUSAL);
+  });
+
+  it("refuses declining a received payment once a tender names it", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update bill_payments set state = 'declined' where id = 'bp-tendered'`,
+      ),
+    ).toBe(BILL_PAYMENT_CHANGE_REFUSAL);
+  });
+
+  it("accepts pending to received", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update bill_payments set state = 'received', received_at = '${STAMP}' where id = 'bp-pending'`,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("accepts declining a received payment no tender names", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update bill_payments set state = 'declined' where id = 'bp-received'`,
+      ),
+    ).toBeUndefined();
+  });
+});
+
+describe("bill_payments_no_delete", () => {
+  it("refuses deleting a bill payment", () => {
+    expect(refusalFor(connection, `delete from bill_payments where id = 'bp-pending'`)).toBe(
+      BILL_PAYMENT_DELETE_REFUSAL,
+    );
+  });
+});
+
+describe("bill_payment_refunds_guard_update", () => {
+  it("refuses counting two sends at once", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update bill_payment_refunds set sent_at = '${STAMP}', send_count = 2 where id = 'bpr-pending'`,
+      ),
+    ).toBe(BILL_REFUND_CHANGE_REFUSAL);
+  });
+
+  it("accepts stamping the first send", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update bill_payment_refunds set sent_at = '${STAMP}', send_count = 1 where id = 'bpr-pending'`,
+      ),
+    ).toBeUndefined();
+  });
+});
+
+describe("bill_payment_refunds_no_delete", () => {
+  it("refuses deleting a bill payment refund", () => {
+    expect(
+      refusalFor(connection, `delete from bill_payment_refunds where id = 'bpr-pending'`),
+    ).toBe(BILL_REFUND_DELETE_REFUSAL);
   });
 });

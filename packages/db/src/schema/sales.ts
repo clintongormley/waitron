@@ -1,6 +1,6 @@
 import type { OptionSnapshot, SaleLineClassification } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, index, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
 import {
   count,
   enumCheck,
@@ -16,6 +16,7 @@ import {
   table,
   tsString,
 } from "./columns.js";
+import { billPayments } from "./bill-payments.js";
 import { nodes } from "./nodes.js";
 import { workingOrders } from "./orders.js";
 import { invoiceSeries } from "./series.js";
@@ -242,6 +243,8 @@ export const tenders = table(
     cashTendered: money("cash_tendered"),
     tipAmount: money("tip_amount").notNull().default(0),
     settledAt: tsString("settled_at").notNull(),
+    /** The bill payment this tender was made from (bill payments design §2.5); unique where set. */
+    billPaymentId: id("bill_payment_id"),
   },
   (t) => [
     foreignKey({
@@ -249,6 +252,16 @@ export const tenders = table(
       foreignColumns: [sales.id],
       name: "tenders_sale_fk",
     }).onDelete("restrict"),
+    // No delete rule: drizzle adds this column with a plain `ALTER TABLE ADD`, which writes none
+    // (`drizzle/0022_bill_payments.sql`), and a declared `restrict` would not match the table built.
+    foreignKey({
+      columns: [t.billPaymentId],
+      foreignColumns: [billPayments.id],
+      name: "tenders_bill_payment_fk",
+    }),
+    uniqueIndex("tenders_bill_payment_key")
+      .on(t.billPaymentId)
+      .where(sql`${t.billPaymentId} is not null`),
     index("tenders_sale_idx").on(t.saleId),
     check("tenders_amount_ck", sql`${t.amount} > 0`),
     check(

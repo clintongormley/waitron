@@ -3,8 +3,11 @@ import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
+import { billPaymentOfRow, seedBillPayment } from "@waitron/payments/test/seed.js";
 import { setup } from "./testing/setup.js";
+import type { FakeSumUp } from "./testing/fake-sumup.js";
 import { SumUpCloudProvider, cardFromTransaction, mapEntryMode } from "./provider.js";
+import type { SumUpClient } from "./client.js";
 
 describe("SumUp card details mapping", () => {
   it("maps SumUp entry modes to the four normalised values", () => {
@@ -184,6 +187,28 @@ describe("SumUpCloudProvider.collect", () => {
   });
 });
 
+describe("SumUpCloudProvider.collect for a bill payment", () => {
+  it("names the bill payment on the row it commits before calling SumUp", async () => {
+    const { t, provider, params, row } = await setup(suite, (f) => f.throwOnCreateNext());
+    const billPaymentId = await seedBillPayment(suite.db, t);
+
+    const result = await provider.collect({ ...params, billPaymentId });
+
+    expect((await row(result.paymentRef)).state).toBe("attempting");
+    expect(await billPaymentOfRow(suite.db, result.paymentRef)).toBe(billPaymentId);
+  });
+
+  it("keeps the bill payment on the row it captures", async () => {
+    const { t, provider, params } = await setup(suite);
+    const billPaymentId = await seedBillPayment(suite.db, t);
+
+    const result = await provider.collect({ ...params, billPaymentId });
+
+    expect(result.state).toBe("captured");
+    expect(await billPaymentOfRow(suite.db, result.paymentRef)).toBe(billPaymentId);
+  });
+});
+
 describe("SumUpCloudProvider default poll", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -231,6 +256,249 @@ describe("SumUpCloudProvider.forward", () => {
       forwarded: 0,
       declined: 0,
       incidentsRaised: 0,
+    });
+  });
+});
+
+describe("SumUpCloudProvider.sendRefund and lookupRefund", () => {
+  /** A captured SumUp transaction the refunds address. */
+  async function refundable(tune?: Parameters<typeof setup>[1]) {
+    const s = await setup(suite, tune);
+    const collected = await s.provider.collect(s.params);
+    const transactionId = (await s.row(collected.paymentRef))!.externalRef!;
+    return { ...s, transactionId };
+  }
+  const request = (processorRef: string, amount = "4.00") => ({
+    processorRef,
+    amount: decimal(amount),
+    idempotencyKey: "bpr_unused",
+    refundId: "r-1",
+  });
+  const query = (
+    processorRef: string,
+    over: Partial<{
+      amount: string;
+      sentAt: Date;
+      excludeRefs: string[];
+      refsBeforeSend: string[];
+    }> = {},
+  ) => ({
+    processorRef,
+    refundId: "r-1",
+    amount: decimal(over.amount ?? "4.00"),
+    sentAt: over.sentAt ?? new Date("2026-09-27T10:00:00.000Z"),
+    excludeRefs: over.excludeRefs ?? [],
+    ...(over.refsBeforeSend === undefined ? {} : { refsBeforeSend: over.refsBeforeSend }),
+  });
+  const REFUNDED_AT =
+    (fake: FakeSumUp, transactionId: string) =>
+    (iso: string, id: string, amount = "4.00") =>
+      fake.addRefundEvent(transactionId, {
+        id,
+        status: "REFUNDED",
+        amount: decimal(amount),
+        timestamp: iso,
+      });
+
+  it("answers SumUp's 201, which names no refund, as accepted, asking for the exact amount", async () => {
+    const { fake, provider, transactionId } = await refundable();
+
+    expect(await provider.sendRefund(request(transactionId, "4.10"))).toEqual({ kind: "accepted" });
+    expect(fake.sendRefundCalls).toEqual([{ transactionId, amount: decimal("4.10") }]);
+  });
+
+  it.each([400, 403, 404, 409, 422])(
+    "answers %i as a refusal SumUp documents as no refund made",
+    async (httpStatus) => {
+      const { fake, provider, transactionId } = await refundable();
+      fake.scriptNextSendRefund({ httpStatus });
+      expect(await provider.sendRefund(request(transactionId))).toEqual({
+        kind: "refused",
+        httpStatus,
+        documented: true,
+      });
+    },
+  );
+
+  it.each([401, 429])(
+    "answers %i, which SumUp does not document for a refund, as a refusal that settles nothing",
+    async (httpStatus) => {
+      const { fake, provider, transactionId } = await refundable();
+      fake.scriptNextSendRefund({ httpStatus });
+      expect(await provider.sendRefund(request(transactionId))).toEqual({
+        kind: "refused",
+        httpStatus,
+        documented: false,
+      });
+    },
+  );
+
+  it.each([500, 503])("answers %i as uncertain", async (httpStatus) => {
+    const { fake, provider, transactionId } = await refundable();
+    fake.scriptNextSendRefund({ httpStatus });
+    expect(await provider.sendRefund(request(transactionId))).toEqual({
+      kind: "uncertain",
+      reason: "server_error",
+      httpStatus,
+    });
+  });
+
+  it("answers no answer as uncertain, a timed-out one as a timeout", async () => {
+    const { provider, transactionId } = await refundable();
+    const timedOut = new SumUpCloudProvider({
+      client: {
+        ...({} as SumUpClient),
+        sendRefund: () => Promise.reject(new DOMException("aborted", "AbortError")),
+      },
+      db: suite.db,
+      nodeId: "n",
+      incidents: () => Promise.resolve(true),
+    });
+    const lost = new SumUpCloudProvider({
+      client: {
+        ...({} as SumUpClient),
+        sendRefund: () => Promise.reject(new TypeError("fetch failed")),
+      },
+      db: suite.db,
+      nodeId: "n",
+      incidents: () => Promise.resolve(true),
+    });
+
+    expect(await timedOut.sendRefund(request(transactionId))).toEqual({
+      kind: "uncertain",
+      reason: "timeout",
+    });
+    expect(await lost.sendRefund(request(transactionId))).toEqual({
+      kind: "uncertain",
+      reason: "network",
+    });
+    expect(provider.refundResendWindowMs).toBeNull();
+  });
+
+  it.each([
+    ["REFUNDED", "completed"],
+    ["SUCCESSFUL", "completed"],
+    ["FAILED", "failed"],
+    ["PENDING", "pending"],
+    ["A_STATUS_SUMUP_ADDS", "pending"],
+  ] as const)("maps a matching REFUND event %s to %s", async (status, outcome) => {
+    const { fake, provider, transactionId } = await refundable();
+    fake.addRefundEvent(transactionId, {
+      id: "501",
+      status,
+      amount: decimal("4.00"),
+      timestamp: "2026-09-27T10:00:03.000Z",
+    });
+
+    expect(await provider.lookupRefund(query(transactionId))).toEqual({
+      kind: "match",
+      providerRefundRef: "501",
+      outcome,
+      providerStatus: status,
+    });
+  });
+
+  it("matches an event stamped up to the clock allowance before the send that the reading before the send did not hold, of the same amount and not already recorded", async () => {
+    const { fake, provider, transactionId } = await refundable();
+    const at = REFUNDED_AT(fake, transactionId);
+    at("2026-09-27T09:59:00.000Z", "made-before-the-send");
+    at("2026-09-27T09:57:59.000Z", "too-early");
+    at("2026-09-27T10:00:01.000Z", "other-amount", "4.01");
+    at("2026-09-27T10:00:02.000Z", "ours-before");
+    at("2026-09-27T09:58:30.000Z", "box-clock-ahead");
+
+    const found = await provider.lookupRefund(
+      query(transactionId, {
+        excludeRefs: ["ours-before"],
+        refsBeforeSend: ["made-before-the-send"],
+      }),
+    );
+
+    expect(found).toEqual({
+      kind: "match",
+      providerRefundRef: "box-clock-ahead",
+      outcome: "completed",
+      providerStatus: "REFUNDED",
+    });
+  });
+
+  it("never takes a refund the reading before the send held for the one sent, whenever SumUp stamped it", async () => {
+    const { fake, provider, transactionId } = await refundable();
+    const at = REFUNDED_AT(fake, transactionId);
+    at("2026-09-27T09:59:00.000Z", "made-a-minute-before");
+    at("2026-09-27T10:00:05.000Z", "stamped-after");
+
+    expect(
+      await provider.lookupRefund(
+        query(transactionId, { refsBeforeSend: ["made-a-minute-before", "stamped-after"] }),
+      ),
+    ).toEqual({ kind: "none" });
+  });
+
+  it("answers an event stamped before the send as ambiguous when no reading was taken before it, and one stamped after as the match", async () => {
+    const { fake, provider, transactionId } = await refundable();
+    REFUNDED_AT(fake, transactionId)("2026-09-27T09:59:00.000Z", "external-old");
+    const before = await provider.lookupRefund(query(transactionId));
+    const { fake: laterFake, provider: laterProvider, transactionId: later } = await refundable();
+    REFUNDED_AT(laterFake, later)("2026-09-27T10:00:00.500Z", "after");
+
+    expect(before).toEqual({ kind: "ambiguous", candidates: 1 });
+    expect(await laterProvider.lookupRefund(query(later))).toMatchObject({
+      kind: "match",
+      providerRefundRef: "after",
+    });
+  });
+
+  it("reads the ids of every refund event of the transaction, of any status and amount", async () => {
+    const { fake, provider, transactionId } = await refundable();
+    REFUNDED_AT(fake, transactionId)("2026-09-27T09:00:00.000Z", "701", "1.00");
+    fake.addRefundEvent(transactionId, {
+      id: "702",
+      status: "FAILED",
+      amount: decimal("4.00"),
+      timestamp: "2026-09-27T09:30:00.000Z",
+    });
+
+    expect(await provider.existingRefundRefs(transactionId)).toEqual(["701", "702"]);
+    expect(await provider.existingRefundRefs("no-such-transaction")).toEqual([]);
+  });
+
+  it("cannot say which refunds exist when SumUp's answer lists no events, or SumUp cannot be read", async () => {
+    const { fake, provider, transactionId } = await refundable();
+    const unlisted = provider.existingRefundRefs(transactionId);
+    await expect(unlisted).rejects.toThrow();
+    fake.throwOnFindNext();
+    await expect(provider.existingRefundRefs(transactionId)).rejects.toThrow("sumup unreachable");
+  });
+
+  it("answers two candidate events as ambiguous, none as none, and SumUp unreachable as unreachable", async () => {
+    const { fake, provider, transactionId } = await refundable();
+    const none = await provider.lookupRefund(query(transactionId));
+    for (const id of ["a", "b"]) {
+      fake.addRefundEvent(transactionId, {
+        id,
+        status: "REFUNDED",
+        amount: decimal("4.00"),
+        timestamp: "2026-09-27T10:00:05.000Z",
+      });
+    }
+    const two = await provider.lookupRefund(query(transactionId));
+    fake.throwOnFindNext();
+    const unreachable = await provider.lookupRefund(query(transactionId));
+
+    expect(none).toEqual({ kind: "none" });
+    expect(two).toEqual({ kind: "ambiguous", candidates: 2 });
+    expect(unreachable).toEqual({ kind: "unreachable" });
+  });
+
+  it("finds its own send, in euros converted at the client, through a 201 and a lookup", async () => {
+    const { fake, provider, transactionId } = await refundable();
+    fake.eventClock = () => new Date("2026-09-27T10:00:01.500Z");
+    await provider.sendRefund(request(transactionId, "0.40"));
+
+    expect(await provider.lookupRefund(query(transactionId, { amount: "0.40" }))).toMatchObject({
+      kind: "match",
+      outcome: "completed",
     });
   });
 });

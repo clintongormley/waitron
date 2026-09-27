@@ -469,10 +469,16 @@ describe("sumup-add-reader", () => {
     await dialog.updateComplete;
     const native = dialog.shadowRoot!.querySelector("dialog")!;
     expect(native.open).toBe(true);
+    // The browser reports a close a task after the dialog shuts, which can be after the key press
+    // resolves; this listener runs after wt-dialog's own, so onClose has been called by then.
+    const reported = new Promise<void>((resolve) => {
+      native.addEventListener("close", () => resolve(), { once: true });
+    });
 
     await userEvent.keyboard("{Escape}");
 
     expect(native.open).toBe(false);
+    await reported;
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onAdded).not.toHaveBeenCalled();
     expect(request).not.toHaveBeenCalled();

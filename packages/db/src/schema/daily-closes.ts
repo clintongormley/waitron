@@ -32,7 +32,8 @@ export interface DailyCloseSnapshot {
       payouts: string;
       /** Physical drawer count at close (supplied). */
       countedCash: string;
-      /** Cash added to the drawer over the day (from `close.cash.byTill[].cashTakings`). */
+      /** Net cash the day moved through the drawer, taken less refunded, so it can be negative
+       * (from `close.cash.byTill[].cashTakings`). */
       cashTakings: string;
       /** countedCash − (openingFloat + cashTakings − payouts). */
       cashVariance: string;

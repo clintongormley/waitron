@@ -1948,17 +1948,18 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   - **Task 0's [bill payments design](superpowers/specs/2026-09-26-bill-payments-design.md) is
     approved** (owner, 2026-09-26, PR #698), with the owner's answers to its open points (its §11):
     the cash-up counts money on the day it moves, in Task 14 (§9a), and a card refund is a durable
-    attempt that survives an interrupted call (§6b). Task 14 waits only for its dependencies (Task 2;
-    lane C's M7b2 landed as #702), and its Step 0 checks the providers' documentation and the SumUp endpoint
-    before any implementation.
+    attempt that survives an interrupted call (§6b). Task 14 is being built on branch
+    `feat/service-bill-payments`; its Step 0, the check of the providers' documentation and the
+    SumUp endpoint, is done.
   - **The card refund path records only after the provider call, with a fresh key each time**
     (found by the owner reviewing Task 0, 2026-09-26). `reverseViaStripe`
     (`packages/payments-stripe/src/reverse.ts`) sends a fresh `randomUUID()` idempotency key on
     every call and writes `payment_refunds` only after the call returns, so a crash between the two
     leaves no record, and a repeat would send a new key. SumUp's refund sends no key at all. No
-    product route refunds a card today; the only product caller is the reconciler's reversal of an
-    abandoned order's capture (`packages/payments-stripe/src/reconciler.ts`). Task 14 uses a
-    separate, durable path for refunds before the invoice (design §6b). **Next action:** give the
+    product route refunds a card AFTER its invoice; the only product caller of that path is the
+    reconciler's reversal of an abandoned order's capture
+    (`packages/payments-stripe/src/reconciler.ts`). Task 14 adds a route that refunds a card
+    payment of a bill BEFORE its invoice, through a separate, durable path (design §6b). **Next action:** give the
     reconciler's reversal, and any post-invoice refund route when one is built, the same
     durable-attempt rule.
   - **Task 1 landed as #706** (2026-09-26): the new module `packages/adjustments`, holding
@@ -1984,6 +1985,25 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     byte-identical to what was measured. Left open: `service_commands` rows are never pruned; a
     line void does not move the party's revision yet (Task 3 builds that with groups); the four
     items directly below.
+  - **Task 14 is built and reviewed, awaiting the owner's review and landing** (lane B item B14,
+    branch `feat/service-bill-payments`, 2026-09-27). The server lets a bill take several payments
+    before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card
+    on a reader), issues the invoice in the same transaction that leaves the bill fully paid, gives
+    money back before the invoice (a card refund keeps its record through an interrupted call), and
+    the cash-up counts each payment and refund on the day and at the till where the money moved.
+    No till screen calls these routes yet; Task 15 builds them. The questions it raised, and how
+    each was ruled, are in lane B's questions log. With M7v landed (#720), the invoice issued at a
+    bill's last payment files each line at the VAT rate recorded on it, however long the payments
+    took. One follow-up:
+    - **A dashboard screen for card payments and refunds on a bill that nothing has settled**
+      (Task 14's Ruling STOP 5), needed before or with Task 15. The routes exist:
+      `GET /management-api/payments/bill-payments` and `.../bill-refunds` list them, and each has a
+      `resolve` (ask the card provider) and an `attest` (a manager records the outcome the provider
+      confirmed, with a note and their PIN re-entered). Nothing in the dashboard calls them. Until a
+      screen does, a SumUp payment or refund whose outcome SumUp never shows keeps its bill locked:
+      no line changes and no invoice. **Next action:** extend the Payments screen
+      (`apps/dashboard/src/screens/payments-screen.ts`) with that list and the two actions, with
+      English and Spanish text and an axe test.
   - **A keydown guard that cancels Escape while a save runs did not keep one dialog open.** Measured
     on Task 1's reasons screen (`packages/adjustments/src/dashboard/reasons-screen.ts`): a real
     Escape pressed with Vitest's `userEvent` during a save closed the editor, although the screen's
@@ -2186,8 +2206,10 @@ pairing consumer, and a standby that has fallen behind.
   never refreshes by itself, and polling must go through the passive-session controller.
 - **The SumUp reconciler** — settlement-report audit and orphan self-heal. `resolvePending` is the
   interim backstop; without an affiliate key a create whose response is lost resolves `failed` and
-  raises `payment.pending_outcome_unactionable` for a human. Note: a SumUp refund is a separate
-  `type: REFUND` transaction linked by `transaction_code`; the original's `status` never flips.
+  raises `payment.pending_outcome_unactionable` for a human. Note: a SumUp refund appears both as a
+  `REFUND` event inside the original transaction (`events` and `transaction_events`, which the
+  refund lookup reads) and as its own item of `type: REFUND` in the transaction history listing;
+  the original's `status` stays `SUCCESSFUL` (read on 2026-09-27 from three refunded transactions).
 - **A SumUp API drift-detection suite** on a Virtual Solo in a sandbox merchant account — would have
   caught the #312 refund-unit bug. Needs a sandbox account and a CI secret.
 - **Stripe does not fill `CardDetails`**, so a Stripe card sale prints `Tarjeta` with no scheme/PAN/
@@ -2403,9 +2425,9 @@ ongoing overhaul listed at the top of Track A.
 - **One original per invoice, structurally.** `POST /api/sales/:id/receipt` has no limit and no
   idempotency; two calls produced three unmarked originals, and art. 14.1 says exactly one. Cheapest
   containment: idempotent per sale, invoice number on the slip.
-- **A per-tender payment slip** when one sale is settled by several cards — needs a multi-tender pay
-  path (`settleSale` takes `tenders[]`; `payWorkingOrder` and `readTenderBlock` assume one). Art. 11.1
-  bounds how long an invoice may sit open.
+- **A payment slip per card: done by bill payments.** Printing the payment slip of a bill paid by
+  several cards prints one slip per card payment (`apps/server/src/payment-slip-print.ts`). The
+  one-payment routes (`payWorkingOrder`) take a single tender.
 - **Bilingual receipts** — `invoice_locales` is configured and snapshotted but rendered by neither
   document.
 - **Tip-collection UI** — the only surface that COLLECTS a tip is the integrated-Stripe idle screen;
@@ -3251,8 +3273,7 @@ image constraints under *Detail → Box image*.
     (`src/daily-close-hash.ts`) throws on a `null`, and a key holding `undefined` hashes
     differently from the row the database stores (the column drops the key); its comment now
     states the precondition, and nothing enforces it for callers. Not fixable in a comments-only
-    change: the SQL comment inside `src/cash-up.ts`'s `sql` string (~36) still explains the
-    ordering by a `::text` cast on "a PostgreSQL ENUM"; test titles still say "jsonb"
+    change: test titles still say "jsonb"
     (`verify-daily-close-chain.test.ts:70`), "tenant" (`top-sellers.test.ts:501`,
     `overdue-orders.test.ts:252`, `vat-summary.test.ts:233`, `vat-summary-period.test.ts:128`),
     "design §3" (`overdue-orders.test.ts:194`), "spec §12" (`top-sellers.test.ts:307`) and

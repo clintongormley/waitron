@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import {
   addDecimal,
@@ -13,6 +14,8 @@ import {
 } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import {
+  billPaymentRefunds,
+  billPayments,
   catalogues,
   diningTables,
   invoiceSeries,
@@ -197,7 +200,14 @@ export async function seedSale(
 export async function seedTender(
   db: Database,
   ref: { saleId: SaleId },
-  opts: { method: TenderMethod; amount: string; tipAmount?: string; settledAt: string },
+  opts: {
+    method: TenderMethod;
+    amount: string;
+    tipAmount?: string;
+    settledAt: string;
+    /** The bill payment this tender was issued from, as the invoice at full payment writes it. */
+    billPaymentId?: string;
+  },
 ): Promise<void> {
   await db.insert(tenders).values({
     saleId: ref.saleId,
@@ -205,6 +215,79 @@ export async function seedTender(
     amount: stringToCents(opts.amount),
     tipAmount: stringToCents(opts.tipAmount ?? "0.00"),
     settledAt: opts.settledAt,
+    billPaymentId: opts.billPaymentId ?? null,
+  });
+}
+
+// A plain person id: `requested_by` and its siblings carry no key.
+const PERSON = "dddddddd-0000-4000-8000-000000000001";
+
+/**
+ * One payment taken against a bill before its invoice. `at` is when it moved out of `pending`:
+ * `received_at` for `received` and `declined`, `failed_at` for `failed`; a `pending` one has
+ * neither.
+ */
+export async function seedBillPayment(
+  db: Database,
+  ref: { workingOrderId: string; tillId: TillId },
+  opts: {
+    method: "cash" | "card";
+    applied: string;
+    tip?: string;
+    /** Cash handed over; defaults to exactly `applied + tip`. Ignored for a card. */
+    tendered?: string;
+    state: "pending" | "received" | "failed" | "declined";
+    at?: string;
+  },
+): Promise<string> {
+  const tip = opts.tip ?? "0.00";
+  const owed = addDecimal(decimal(opts.applied), decimal(tip));
+  const moved = opts.state === "received" || opts.state === "declined";
+  const [row] = await db
+    .insert(billPayments)
+    .values({
+      workingOrderId: ref.workingOrderId,
+      submissionId: randomUUID(),
+      fingerprint: "fixture",
+      kind: "contribution",
+      method: opts.method,
+      applied: stringToCents(opts.applied),
+      tip: stringToCents(tip),
+      tendered: opts.method === "cash" ? stringToCents(opts.tendered ?? owed) : null,
+      state: opts.state,
+      requestedBy: PERSON,
+      tillId: ref.tillId,
+      receivedAt: moved ? opts.at! : null,
+      failedAt: opts.state === "failed" ? opts.at! : null,
+    })
+    .returning({ id: billPayments.id });
+  return row!.id;
+}
+
+/** Money given back from one bill payment, on `tillId`. `at` is `completed_at` or `failed_at`. */
+export async function seedBillRefund(
+  db: Database,
+  ref: { billPaymentId: string; tillId: TillId },
+  opts: {
+    applied: string;
+    tip?: string;
+    state: "pending" | "completed" | "failed";
+    at?: string;
+  },
+): Promise<void> {
+  await db.insert(billPaymentRefunds).values({
+    billPaymentId: ref.billPaymentId,
+    submissionId: randomUUID(),
+    fingerprint: "fixture",
+    appliedAmount: stringToCents(opts.applied),
+    tipAmount: stringToCents(opts.tip ?? "0.00"),
+    reason: "fixture",
+    authorizedBy: PERSON,
+    requestedBy: PERSON,
+    tillId: ref.tillId,
+    state: opts.state,
+    completedAt: opts.state === "completed" ? opts.at! : null,
+    failedAt: opts.state === "failed" ? opts.at! : null,
   });
 }
 

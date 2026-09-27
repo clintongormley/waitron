@@ -66,3 +66,15 @@ export const VARIANT_PARENT_FIXED_REFUSAL = "a variant's parent is fixed when it
 
 /** `products_id_fixed_update`: a product's `id` changed after insert. */
 export const PRODUCT_ID_FIXED_REFUSAL = "a product's id never changes";
+
+/** `bill_payments_guard_update`: a fixed column changed, or the state moved another way. */
+export const BILL_PAYMENT_CHANGE_REFUSAL = "bill payment cannot make that change";
+
+/** `bill_payments_no_delete`. */
+export const BILL_PAYMENT_DELETE_REFUSAL = "a bill payment is never deleted";
+
+/** `bill_payment_refunds_guard_update`: a fixed column changed, or a pending-only write came late. */
+export const BILL_REFUND_CHANGE_REFUSAL = "bill payment refund cannot make that change";
+
+/** `bill_payment_refunds_no_delete`. */
+export const BILL_REFUND_DELETE_REFUSAL = "a bill payment refund is never deleted";

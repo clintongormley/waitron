@@ -187,6 +187,12 @@ outcome; it refuses any change
 to the amounts, the payment, the device, or a `sent_at` already set. A cash refund is inserted `completed` in its own transaction; only a card refund is
 ever `pending`. For a card, the provider refund it made is also recorded where refunds already are
 (`payment_refunds`, `packages/payments/src/schema/payment-refunds.ts`), through the `payments` row.
+_(2026-09-27, finish-branch review: a further column, `refs_before_send`, holds the provider's
+refund ids that already existed on the payment, read just before the first send, for a provider
+whose refunds cannot carry our id (SumUp, §6b). It is written only with the first send's `sent_at`
+and never changed after; it stays null when no reading was taken. A `failed` refund also keeps
+`provider_refund_ref` when the evidence names one; the trigger sets that column once and never
+changes it. `packages/db/drizzle/0024_bill_payment_triggers.sql`.)_
 Only a `completed` refund counts in the sums below. A payment's **net applied** is `applied − sum(applied_amount)` and its **net tip** is
 `tip − sum(tip_amount)`. A refund gives back applied money first; it returns a tip only when the
 whole payment is refunded at the payer's request (§6).
@@ -473,6 +479,11 @@ invoice is issued by the second capture's P3, never by the first).
   `pending`.
 - **Offline acceptance** (`accepted_offline`) counts as received, the rule today's P3 follows (see
   §5.4 for when that can happen).
+  _(2026-09-27, as built, changing the two bullets above: the bill route refuses `allowOffline`
+  (`apps/server/src/bill-payments-api.ts`, per §11.9), so a reader bill payment is never accepted
+  offline. At P3 only `captured` marks it `received`; any answer that does not establish that no
+  money moved, an unexpected `accepted_offline` included, leaves it `pending` for the loop or a
+  manager to settle from the provider's row.)_
 
 ### 5.4 After a crash, and M7b2's manual clear
 
@@ -512,6 +523,18 @@ A pending bill payment is resolved from the provider's row, never from its age:
   is not listed, and a Stripe capture whose amount differs from the row's is refused as ambiguous,
   not filed. So the extension must add a `failed` row, a mismatched captured amount, and a pending
   bill payment with no `payments` row; none of the three reaches the landed action.)_
+  _(2026-09-27, finish-branch review: the bill-payment manager routes
+  (`/management-api/payments/bill-payments/:id/resolve` and `…/attest`,
+  `apps/server/src/payments-api.ts`) answer with their own codes: `bill.payment_not_stuck` for a
+  payment that is not pending or is still at a reader in this process, and
+  `bill.payment_outcome_unconfirmed`, with a `reason`, when the outcome cannot be settled. The
+  attest routes for bill payments and bill refunds refuse `pin.throttled` (HTTP 429) after too many
+  wrong PINs. A `received` a manager attests is dated at the provider row's settled time when the
+  row has one, and at the moment of the attestation otherwise.)_
+- **A charged card the loop cannot finish** (2026-09-27): when the loop cannot record a pending
+  bill payment whose card was charged for it (for example, its invoice fails to issue), it raises
+  the alert `payment.bill_settle_failed` and the bill stays locked (`raiseSettleFailed`,
+  `apps/server/src/bill-payments-loop.ts`).
 - **An offline-accepted payment the provider later declines** (`forward`,
   `packages/payments/src/provider.ts:108-110`: a decline is an incident with no fiscal change). No
   path the server uses today produces one: only the on-device Tap to Pay provider writes
@@ -538,7 +561,8 @@ A pending bill payment is resolved from the provider's row, never from its age:
   `provider.ts:112`, the simulator `simulator.ts:23`), which is the capability §6b's new
   non-recording refund call relies on; a provider that did not would offer no card refund before
   the invoice. An item payment is refunded whole, which
-  releases its lines.
+  releases its lines. _(2026-09-27: a partial refund of an item payment is refused
+  `bill.refund_not_whole`, `apps/server/src/bill-refunds.ts`.)_
 - **After the invoice**, the bill's payments are tenders on a filed sale. A refund of one of them is
   a payment action with no fiscal effect when the charge was right. When the charge was wrong, it is
   the fiscal correction workflow (`recordCorrection`, which "settles nothing; a refund is a separate
@@ -613,7 +637,7 @@ action, so no path can conclude more than another.
 | No `sent_at` on the row | `failed`: it never left us |
 | The provider's answer to the call, or a lookup match, says Stripe `succeeded`, or SumUp `REFUNDED` or `SUCCESSFUL` | `completed` |
 | The provider's answer, or a lookup match, says Stripe `failed` or `canceled`, or SumUp `FAILED` | `failed` |
-| A documented refusal answering the attempt's ONLY send (`send_count` = 1): a response the provider documents as meaning the refund was not created, from the list Task 14's Step 0 compiles per provider | `failed` |
+| A documented refusal answering the attempt's ONLY send (`send_count` = 1): a response the provider documents as meaning the refund was not created, from the list Task 14's Step 0 compiles per provider. For Stripe, only when that send made exactly one HTTP attempt (2026-09-27, below) | `failed` |
 | Any refusal or 4xx answering a LATER send (`send_count` > 1) | stays `pending`: it answers that send only, and the earlier uncertain send is unresolved |
 | A match that is Stripe `pending` or `requires_action`, or SumUp `PENDING` | stays `pending` |
 | No match, an unchanged SumUp refunded total, a timeout, a 5xx, a 4xx not on the documented-refusal list, or no answer | stays `pending` |
@@ -633,6 +657,27 @@ returned by the call or by lookup — or a confirmed manual resolution does.
   equals the pending refund and whose event id is not already the `provider_refund_ref` of one of
   our completed refunds; its `status` is the evidence. Two or more such events is ambiguous.
 
+_(2026-09-27, finish-branch review, changing the lookup rules above:)_
+
+- **The ids a lookup leaves out** are every provider refund id already attributed to another refund
+  of the same payment, completed or failed: the `provider_refund_ref` of its other
+  `bill_payment_refunds` rows and the refund ids in `payment_refunds` for its `payments` row
+  (`attributedRefundRefs`, `apps/server/src/bill-refunds.ts`). SumUp's lookup skips those events;
+  Stripe's matches by the row's id in metadata and does not read the list.
+- **SumUp, the before-send list.** Just before the first send, the server reads the payment's
+  existing refund event ids into `refs_before_send` (§2.3). A lookup never matches an event in that
+  list. The time rule allows two minutes before `sent_at` for clock difference, and only for events
+  not in the list. With no before-send list (the reading failed), an event stamped before `sent_at`
+  makes the answer ambiguous, so the refund stays pending (`lookupRefund`,
+  `packages/payments-sumup/src/provider.ts`).
+- **Stripe, one HTTP attempt.** The Stripe library sends a request again by itself after the
+  connection drops (`ECONNRESET` or `EPIPE`), even with its retries set to zero, so a refusal may
+  answer a repeat of an attempt Stripe acted on. The client counts the attempts of each send
+  (`createRefund`, `packages/payments-stripe/src/stripe-client.ts`). After a refusal the provider
+  looks the refund up; a match's status decides, and with no match a documented refusal settles the
+  refund `failed` only when the send made exactly one attempt. Otherwise it stays pending
+  (`sendRefund`, `packages/payments-stripe/src/provider.ts`).
+
 **Who resolves a pending refund, and how.** Only one actor at a time: a pending refund whose R2 is
 still running in this process (the live attempts §5.4 already tracks) is skipped by the loop, and a
 retry or the manager action is answered "in progress".
@@ -649,6 +694,10 @@ retry or the manager action is answered "in progress".
   **SumUp:** never re-sent; its refund takes no key, so re-sending could refund twice.
 - **A retry with a NEW `submission_id`** while a refund is pending → `bill.refund_in_progress`.
 - **The loop** (§5.4) only looks up and applies the table; it never sends a refund.
+  _(2026-09-27: it looks a sent card refund up on every pass for the first five minutes after
+  `sent_at`, then waits a quarter of the time since `sent_at` between lookups, at most 30 minutes
+  (`refundLookupGapMs`, `apps/server/src/bill-payments-loop.ts`). While any bill payment or refund
+  is pending it comes back within a minute (`withPendingBillPayments`, `apps/server/src/boot.ts`).)_
 - **M7b2's manager action** lists a bill's pending refunds beside its pending payments and resolves
   one at a time by the same table, and for Stripe may re-send with the same key under the same
   24-hour limit as a retry.
@@ -723,6 +772,11 @@ second trigger to close it later.
 Task 15 moves it to the bill routes; each of them pays a bill in one go exactly as today. On a bill
 that already holds a pending or received bill payment they refuse with `bill.payments_received`,
 because they would invoice the whole total as one tender beside money already taken.
+_(2026-09-27, finish-branch review: `/api/sales`, `/api/pay`, collecting an order and placing an
+order refuse `bill.payments_received` for a bill holding ANY pending or received bill payment,
+including one refunded in full (`refuseBillWithPayments`, `apps/server/src/bill-payments.ts`).
+Abandoning a bill and merging it into another still go through once every payment is refunded in
+full (§4.5; `refuseBillHoldingMoney`, the same file).)_
 
 The helper calls `recordSale` with immediate settlement and the tenders of §2.5, links every card
 bill payment's `payments` row to the sale, settles the order and queues the receipt (which lists
@@ -991,3 +1045,5 @@ New codes, with English and Spanish text wherever the till can meet them: `bill.
 `bill.received_exceeds_total`, `bill.payments_received`. No `bill.*` code exists on `906ab157b`:
 `grep -rn '"bill\.' packages apps --include='*.ts'` printed nothing, where the same command for
 `"tab\.` printed 128 lines. Task 14 greps again. `order.payment_in_flight` is reused.
+_(2026-09-27: the till also has text for `bill.refund_not_whole` (§6),
+`apps/till/src/i18n/codes.ts`.)_

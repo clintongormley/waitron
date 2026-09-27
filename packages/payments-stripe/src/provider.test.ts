@@ -1,3 +1,7 @@
+import { randomUUID } from "node:crypto";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import Stripe from "stripe";
 import { describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
@@ -22,18 +26,30 @@ import type { PaymentRow } from "@waitron/payments";
 import { FakeStripe } from "./testing/fake-stripe.js";
 import { StripeTerminalProvider } from "./provider.js";
 import { reverseViaStripe } from "./reverse.js";
+import { stripeClient } from "./stripe-client.js";
 import type { StripeClient } from "./client.js";
-import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
+import {
+  billPaymentOfRow,
+  freshNif,
+  seedBillPayment,
+  seedWorkingOrder,
+} from "@waitron/payments/test/seed.js";
 
 const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 const TEST_NODE_ID = "11111111-1111-4111-8111-111111111111";
 
 const noSleep = (): Promise<void> => Promise.resolve();
-/** For a hand-built client whose test never reads or cancels a PaymentIntent. */
-const NO_INTENT_READS: Pick<StripeClient, "retrievePaymentIntent" | "cancelPaymentIntent"> = {
+/** For a hand-built client whose test never reads or cancels a PaymentIntent, nor refunds with a
+ * key. */
+const UNUSED_CALLS: Pick<
+  StripeClient,
+  "retrievePaymentIntent" | "cancelPaymentIntent" | "createRefund" | "listRefunds"
+> = {
   retrievePaymentIntent: () => Promise.reject(new Error("not expected in this test")),
   cancelPaymentIntent: () => Promise.reject(new Error("not expected in this test")),
+  createRefund: () => Promise.reject(new Error("not expected in this test")),
+  listRefunds: () => Promise.reject(new Error("not expected in this test")),
 };
 function providerFor(client: StripeClient): StripeTerminalProvider {
   return new StripeTerminalProvider({
@@ -122,7 +138,7 @@ describe("StripeTerminalProvider.collect", () => {
       readerOutcome: () => Promise.resolve({ status: "succeeded" }),
       cancelReaderAction: () => Promise.resolve(),
       refund: () => Promise.resolve({ id: "re_x", status: "succeeded" }),
-      ...NO_INTENT_READS,
+      ...UNUSED_CALLS,
     };
     const p = await collectParams();
     const result = await providerFor(failing).collect(p);
@@ -157,7 +173,7 @@ describe("StripeTerminalProvider.collect", () => {
         return Promise.reject(new Error("reader unreachable"));
       },
       refund: () => Promise.resolve({ id: "re_x", status: "succeeded" }),
-      ...NO_INTENT_READS,
+      ...UNUSED_CALLS,
     };
     const p = await collectParams();
     const result = await providerFor(client).collect(p);
@@ -178,7 +194,7 @@ describe("StripeTerminalProvider.collect", () => {
         return Promise.reject(new Error("reader unreachable"));
       },
       refund: () => Promise.resolve({ id: "re_x", status: "succeeded" }),
-      ...NO_INTENT_READS,
+      ...UNUSED_CALLS,
     };
     const p = await collectParams();
     const result = await providerFor(client).collect(p);
@@ -197,7 +213,7 @@ describe("StripeTerminalProvider.collect", () => {
         throw new Error("stripe client broke synchronously");
       },
       refund: () => Promise.resolve({ id: "re_x", status: "succeeded" }),
-      ...NO_INTENT_READS,
+      ...UNUSED_CALLS,
     };
     const p = await collectParams();
     const result = await providerFor(client).collect(p);
@@ -215,7 +231,7 @@ describe("StripeTerminalProvider.collect", () => {
       readerOutcome: () => Promise.resolve({ status: polls++ === 0 ? "in_progress" : "succeeded" }),
       cancelReaderAction: () => Promise.resolve(),
       refund: () => Promise.resolve({ id: "re_x", status: "succeeded" }),
-      ...NO_INTENT_READS,
+      ...UNUSED_CALLS,
     };
     const p = await collectParams();
     const provider = new StripeTerminalProvider({
@@ -418,7 +434,7 @@ describe("StripeTerminalProvider.collect stamps the PaymentIntent before the rea
       readerOutcome: (r) => fake.readerOutcome(r),
       cancelReaderAction: (r) => fake.cancelReaderAction(r),
       refund: (params) => fake.refund(params),
-      ...NO_INTENT_READS,
+      ...UNUSED_CALLS,
     };
     const result = await providerFor(client).collect(p);
     expect(seen).toHaveLength(1);
@@ -440,7 +456,7 @@ describe("StripeTerminalProvider.collect stamps the PaymentIntent before the rea
         return Promise.resolve();
       },
       refund: (params) => fake.refund(params),
-      ...NO_INTENT_READS,
+      ...UNUSED_CALLS,
     };
     const p = await collectParams();
     const result = await providerFor(client).collect(p);
@@ -470,7 +486,7 @@ describe("StripeTerminalProvider.collect stamps the PaymentIntent before the rea
         return Promise.resolve();
       },
       refund: (params) => fake.refund(params),
-      ...NO_INTENT_READS,
+      ...UNUSED_CALLS,
     };
     const result = await providerFor(client).collect(p);
     expect(result.state).toBe("failed");
@@ -627,6 +643,9 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
       readerOutcome: (r: string) => fake.readerOutcome(r),
       cancelReaderAction: (r: string) => fake.cancelReaderAction(r),
       refund: (params: Parameters<StripeClient["refund"]>[0]) => fake.refund(params),
+      createRefund: (params: Parameters<StripeClient["createRefund"]>[0]) =>
+        fake.createRefund(params),
+      listRefunds: (pi: string) => fake.listRefunds(pi),
       retrievePaymentIntent: async (id: string) => {
         const next = reads.shift();
         if (next === undefined) throw new Error("unexpected retrieve");
@@ -918,5 +937,381 @@ describe("the Stripe idempotency key after a PaymentIntent was cancelled at Stri
     await resolved({ paymentId: other, workingOrderId: p.workingOrderId }, true);
     await providerFor(fake).collect(p);
     expect(fake.lastCreateIntent?.idempotencyKey).toBe(`wo_${p.workingOrderId}`);
+  });
+});
+
+describe("StripeTerminalProvider.collect for a bill payment", () => {
+  it("keys the PaymentIntent on the bill payment and names it on the row", async () => {
+    const fake = new FakeStripe();
+    const p = await collectParams();
+    const billPaymentId = await seedBillPayment(pg.db, p._seeded);
+
+    const result = await providerFor(fake).collect({ ...p, billPaymentId });
+
+    expect(result.state).toBe("captured");
+    expect(fake.lastCreateIntent?.idempotencyKey).toBe(`bp_${billPaymentId}`);
+    expect(await billPaymentOfRow(pg.db, result.paymentRef)).toBe(billPaymentId);
+  });
+
+  it("names the bill payment on a declined row", async () => {
+    const fake = new FakeStripe();
+    fake.declineNext();
+    const p = await collectParams();
+    const billPaymentId = await seedBillPayment(pg.db, p._seeded);
+
+    const result = await providerFor(fake).collect({ ...p, billPaymentId });
+
+    expect(result.state).toBe("failed");
+    expect(await billPaymentOfRow(pg.db, result.paymentRef)).toBe(billPaymentId);
+  });
+
+  it("keeps the bill payment's key when a PaymentIntent of the order was cancelled at Stripe", async () => {
+    const fake = new FakeStripe();
+    const p = await collectParams();
+    const stuck = await abandonedRow("pi_cancelled", p.workingOrderId);
+    await withTransaction(pg.db, (tx) =>
+      recordResolution(tx, {
+        paymentId: stuck.paymentId,
+        workingOrderId: p.workingOrderId,
+        personId: MANAGER,
+        outcome: "failed",
+        cancelledAtProvider: true,
+        providerStatus: null,
+        resolvedAt: NOW,
+      }),
+    );
+    const billPaymentId = await seedBillPayment(pg.db, p._seeded);
+
+    await providerFor(fake).collect({ ...p, billPaymentId });
+
+    expect(fake.lastCreateIntent?.idempotencyKey).toBe(`bp_${billPaymentId}`);
+  });
+});
+
+describe("StripeTerminalProvider.sendRefund and lookupRefund", () => {
+  const request = (refundId = randomUUID(), amount = "4.00") => ({
+    processorRef: "pi_refunded",
+    amount: decimal(amount),
+    idempotencyKey: `bpr_${refundId}`,
+    refundId,
+  });
+  const query = (refundId: string) => ({
+    processorRef: "pi_refunded",
+    refundId,
+    amount: decimal("4.00"),
+    sentAt: new Date("2026-09-27T10:00:00Z"),
+    excludeRefs: [],
+  });
+
+  it("asks Stripe for the exact amount under the caller's key, carrying the refund's id, and records nothing", async () => {
+    const fake = new FakeStripe();
+    const refundId = randomUUID();
+
+    const answer = await providerFor(fake).sendRefund(request(refundId, "7.25"));
+
+    expect(fake.createRefundCalls).toEqual([
+      {
+        paymentIntentId: "pi_refunded",
+        amount: decimal("7.25"),
+        idempotencyKey: `bpr_${refundId}`,
+        metadata: { bill_payment_refund_id: refundId },
+      },
+    ]);
+    expect(answer).toMatchObject({
+      kind: "outcome",
+      outcome: "completed",
+      providerStatus: "succeeded",
+    });
+    const refunds = await pg.db.execute<{ n: number }>(
+      sql`select count(*) as n from payment_refunds`,
+    );
+    expect(refunds.rows[0]!.n).toBe(0);
+  });
+
+  it.each([
+    ["succeeded", "completed"],
+    ["failed", "failed"],
+    ["canceled", "failed"],
+    ["pending", "pending"],
+    ["requires_action", "pending"],
+    ["a status Stripe adds later", "pending"],
+  ] as const)("maps a refund Stripe answers %s to %s", async (status, outcome) => {
+    const fake = new FakeStripe();
+    fake.scriptNextCreateRefund({ status });
+
+    const answer = await providerFor(fake).sendRefund(request());
+
+    expect(answer).toEqual({
+      kind: "outcome",
+      outcome,
+      providerRefundRef: expect.stringMatching(/^re_/) as unknown as string,
+      providerStatus: status,
+    });
+  });
+
+  it.each([400, 401, 404])(
+    "answers %i as a refusal Stripe documents as no refund made, once Stripe shows no refund of it",
+    async (httpStatus) => {
+      const fake = new FakeStripe();
+      fake.scriptNextCreateRefund({ httpStatus });
+      expect(await providerFor(fake).sendRefund(request())).toEqual({
+        kind: "refused",
+        httpStatus,
+        documented: true,
+      });
+    },
+  );
+
+  it.each([402, 403, 409, 424, 429])(
+    "answers %i as a refusal that does not say no refund was made",
+    async (httpStatus) => {
+      const fake = new FakeStripe();
+      fake.scriptNextCreateRefund({ httpStatus });
+      expect(await providerFor(fake).sendRefund(request())).toEqual({
+        kind: "refused",
+        httpStatus,
+        documented: false,
+      });
+    },
+  );
+
+  it.each([400, 401, 404, 429])(
+    "answers a %i that followed a refund Stripe made with the refund Stripe shows",
+    async (httpStatus) => {
+      const fake = new FakeStripe();
+      const refundId = randomUUID();
+      fake.scriptNextCreateRefund({ status: "succeeded", answer: { httpStatus } });
+
+      const answer = await providerFor(fake).sendRefund(request(refundId));
+
+      expect(answer).toEqual({
+        kind: "outcome",
+        outcome: "completed",
+        providerRefundRef: expect.stringMatching(/^re_/) as unknown as string,
+        providerStatus: "succeeded",
+      });
+    },
+  );
+
+  it.each([400, 401, 404])(
+    "answers a %i as uncertain when the SDK sent the request more than once and Stripe shows no refund yet",
+    async (httpStatus) => {
+      const fake = new FakeStripe();
+      fake.scriptNextCreateRefund({ httpStatus, attempts: 2 });
+
+      expect(await providerFor(fake).sendRefund(request())).toEqual({
+        kind: "uncertain",
+        reason: "network",
+        httpStatus,
+      });
+    },
+  );
+
+  it("answers a refusal it cannot check against Stripe's refunds as uncertain", async () => {
+    const fake = new FakeStripe();
+    fake.scriptNextCreateRefund({ httpStatus: 400 });
+    fake.listRefundsUnreachableNext();
+
+    expect(await providerFor(fake).sendRefund(request())).toEqual({
+      kind: "uncertain",
+      reason: "network",
+      httpStatus: 400,
+    });
+  });
+
+  it.each([500, 503])("answers %i as uncertain: Stripe's server error", async (httpStatus) => {
+    const fake = new FakeStripe();
+    fake.scriptNextCreateRefund({ httpStatus });
+    expect(await providerFor(fake).sendRefund(request())).toEqual({
+      kind: "uncertain",
+      reason: "server_error",
+      httpStatus,
+    });
+  });
+
+  it("answers a call with no HTTP answer, or a client that throws, as uncertain", async () => {
+    const fake = new FakeStripe();
+    fake.scriptNextCreateRefund({ httpStatus: null });
+    const thrown: StripeClient = {
+      ...fake,
+      createPaymentIntent: (p) => fake.createPaymentIntent(p),
+      processPaymentIntent: (r, pi) => fake.processPaymentIntent(r, pi),
+      readerOutcome: (r) => fake.readerOutcome(r),
+      cancelReaderAction: (r) => fake.cancelReaderAction(r),
+      refund: (p) => fake.refund(p),
+      retrievePaymentIntent: (id) => fake.retrievePaymentIntent(id),
+      cancelPaymentIntent: (id) => fake.cancelPaymentIntent(id),
+      listRefunds: (pi) => fake.listRefunds(pi),
+      createRefund: () => Promise.reject(new Error("credential unreadable")),
+    };
+
+    expect(await providerFor(fake).sendRefund(request())).toEqual({
+      kind: "uncertain",
+      reason: "network",
+    });
+    expect(await providerFor(thrown).sendRefund(request())).toEqual({
+      kind: "uncertain",
+      reason: "network",
+    });
+  });
+
+  it("finds the refund whose metadata carries the refund's id, among the payment intent's others", async () => {
+    const fake = new FakeStripe();
+    const provider = providerFor(fake);
+    const refundId = randomUUID();
+    await provider.sendRefund(request());
+    fake.scriptNextCreateRefund({ status: "requires_action", answer: { httpStatus: null } });
+    await provider.sendRefund(request(refundId));
+    await provider.sendRefund(request());
+
+    const found = await provider.lookupRefund(query(refundId));
+
+    expect(found).toEqual({
+      kind: "match",
+      providerRefundRef: expect.stringMatching(/^re_/) as unknown as string,
+      outcome: "pending",
+      providerStatus: "requires_action",
+    });
+  });
+
+  it("finds none for a refund Stripe never made, and answers unreachable when Stripe cannot be read", async () => {
+    const fake = new FakeStripe();
+    const provider = providerFor(fake);
+    await provider.sendRefund(request());
+
+    const none = await provider.lookupRefund(query(randomUUID()));
+    fake.listRefundsUnreachableNext();
+    const unreachable = await provider.lookupRefund(query(randomUUID()));
+
+    expect(none).toEqual({ kind: "none" });
+    expect(unreachable).toEqual({ kind: "unreachable" });
+  });
+
+  it("answers ambiguous when two of Stripe's refunds carry the refund's id", async () => {
+    const fake = new FakeStripe();
+    const provider = providerFor(fake);
+    const refundId = randomUUID();
+    await provider.sendRefund(request(refundId));
+    await provider.sendRefund({ ...request(refundId), idempotencyKey: "another key" });
+
+    expect(await provider.lookupRefund(query(refundId))).toEqual({
+      kind: "ambiguous",
+      candidates: 2,
+    });
+  });
+
+  it("keeps a resend with the same key safe for 24 hours, the time Stripe keeps a key", () => {
+    expect(providerFor(new FakeStripe()).refundResendWindowMs).toBe(24 * 60 * 60 * 1000);
+  });
+});
+
+describe("a Stripe refund whose first attempt refunded and whose answer was a refusal", () => {
+  it("stays uncertain when the repeat is refused before the first attempt's refund shows, through the installed SDK against a local Stripe", async () => {
+    const refundId = randomUUID();
+    const refund = {
+      id: "re_local_1",
+      object: "refund",
+      status: "succeeded",
+      metadata: { bill_payment_refund_id: refundId },
+    };
+    const posts: (string | undefined)[] = [];
+    let visible = false;
+    const server = createServer((req, res) => {
+      req.resume();
+      req.on("end", () => {
+        const answer = (status: number, body: unknown) => {
+          res.writeHead(status, { "content-type": "application/json" });
+          res.end(JSON.stringify(body));
+        };
+        if (req.method === "GET") {
+          answer(200, { object: "list", data: visible ? [refund] : [], has_more: false });
+          return;
+        }
+        posts.push(req.headers["idempotency-key"] as string | undefined);
+        // The first attempt refunds and its connection closes before the answer.
+        if (posts.length === 1) req.socket.destroy();
+        else answer(400, { error: { type: "invalid_request_error", message: "invalid" } });
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as AddressInfo;
+    try {
+      const provider = providerFor(
+        stripeClient(new Stripe("sk_test_local", { host: "127.0.0.1", port, protocol: "http" })),
+      );
+
+      const answer = await provider.sendRefund({
+        processorRef: "pi_local",
+        amount: decimal("5.00"),
+        idempotencyKey: `bpr_${refundId}`,
+        refundId,
+      });
+      visible = true;
+      const later = await provider.lookupRefund({
+        processorRef: "pi_local",
+        refundId,
+        amount: decimal("5.00"),
+        sentAt: new Date(),
+        excludeRefs: [],
+      });
+
+      expect(posts).toEqual([`bpr_${refundId}`, `bpr_${refundId}`]);
+      expect(answer).toEqual({ kind: "uncertain", reason: "network", httpStatus: 400 });
+      expect(later).toMatchObject({ kind: "match", outcome: "completed" });
+    } finally {
+      server.close();
+    }
+  });
+
+  it("is answered with the refund Stripe holds, through the installed SDK against a local Stripe", async () => {
+    const refundId = randomUUID();
+    const refund = {
+      id: "re_local_1",
+      object: "refund",
+      status: "succeeded",
+      metadata: { bill_payment_refund_id: refundId },
+    };
+    const posts: (string | undefined)[] = [];
+    const server = createServer((req, res) => {
+      req.resume();
+      req.on("end", () => {
+        const answer = (status: number, body: unknown) => {
+          res.writeHead(status, { "content-type": "application/json" });
+          res.end(JSON.stringify(body));
+        };
+        if (req.method === "GET") {
+          answer(200, { object: "list", data: [refund], has_more: false });
+          return;
+        }
+        posts.push(req.headers["idempotency-key"] as string | undefined);
+        // The first attempt refunds and its connection closes before the answer.
+        if (posts.length === 1) req.socket.destroy();
+        else answer(429, { error: { type: "invalid_request_error", message: "rate limited" } });
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as AddressInfo;
+    try {
+      const client = stripeClient(
+        new Stripe("sk_test_local", { host: "127.0.0.1", port, protocol: "http" }),
+      );
+
+      const answer = await providerFor(client).sendRefund({
+        processorRef: "pi_local",
+        amount: decimal("5.00"),
+        idempotencyKey: `bpr_${refundId}`,
+        refundId,
+      });
+
+      expect(posts).toEqual([`bpr_${refundId}`, `bpr_${refundId}`]);
+      expect(answer).toEqual({
+        kind: "outcome",
+        outcome: "completed",
+        providerRefundRef: "re_local_1",
+        providerStatus: "succeeded",
+      });
+    } finally {
+      server.close();
+    }
   });
 });

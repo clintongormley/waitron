@@ -396,3 +396,143 @@ describe("sumupClient reader management", () => {
     expect(s.calls).toContainEqual(["GET", "/v0.1/memberships"]);
   });
 });
+
+describe("sumupClient sendRefund", () => {
+  const answering =
+    (status: number, seen: { url?: string; body?: string } = {}): typeof fetch =>
+    (url, init) => {
+      seen.url = String(url);
+      seen.body = String((init as RequestInit).body);
+      return Promise.resolve(
+        new Response(status === 201 ? "{}" : JSON.stringify({ title: "no" }), {
+          status,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    };
+
+  it("sends the exact amount in minor units and answers SumUp's HTTP status", async () => {
+    const seen: { url?: string; body?: string } = {};
+    const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: answering(201, seen) });
+
+    const answer = await client.sendRefund({ transactionId: "txn_1", amount: decimal("0.40") });
+
+    expect(answer).toEqual({ httpStatus: 201 });
+    expect(JSON.parse(seen.body ?? "null")).toEqual({ amount: 40 });
+    expect(seen.url).toContain("/v1.0/merchants/MC/payments/txn_1/refunds");
+  });
+
+  it.each([400, 409, 422, 429, 500, 503])(
+    "answers %i as data rather than throwing",
+    async (status) => {
+      const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: answering(status) });
+      expect(await client.sendRefund({ transactionId: "t", amount: decimal("1.00") })).toEqual({
+        httpStatus: status,
+      });
+    },
+  );
+
+  it("rejects when no answer comes back", async () => {
+    const client = sumupClient({
+      apiKey: "k",
+      merchantCode: "MC",
+      fetch: () => Promise.reject(new TypeError("fetch failed")),
+    });
+    await expect(
+      client.sendRefund({ transactionId: "t", amount: decimal("1.00") }),
+    ).rejects.toThrow("fetch failed");
+  });
+});
+
+describe("sumupClient findTransaction refund events", () => {
+  const respondingWith =
+    (body: unknown): typeof fetch =>
+    () =>
+      Promise.resolve(
+        new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+  // The field shapes the venue's live account returned on 2026-09-27: the event id a number, the
+  // amount a number of euros. The timestamps here are the test's own.
+  it("reads the REFUND transaction events, in euros, with their ids as text", async () => {
+    const client = sumupClient({
+      apiKey: "k",
+      merchantCode: "MC",
+      fetch: respondingWith({
+        id: "54a5a753",
+        status: "SUCCESSFUL",
+        amount: 1.0,
+        transaction_events: [
+          { event_type: "PAYOUT", status: "SUCCESSFUL", id: 1, amount: 1.0, timestamp: "x" },
+          {
+            event_type: "REFUND",
+            status: "REFUNDED",
+            id: 11234017009,
+            amount: 0.4,
+            date: "2026-09-11",
+            timestamp: "2026-09-11T11:30:02.100Z",
+          },
+          {
+            event_type: "REFUND",
+            status: "REFUNDED",
+            id: 11234029448,
+            amount: 0.6,
+            date: "2026-09-11",
+            timestamp: "2026-09-11T11:31:40.000Z",
+          },
+        ],
+      }),
+    });
+
+    const t = await client.findTransaction({ id: "54a5a753" });
+
+    expect(t?.refundEvents).toEqual([
+      {
+        id: "11234017009",
+        status: "REFUNDED",
+        amount: decimal("0.40"),
+        timestamp: "2026-09-11T11:30:02.100Z",
+      },
+      {
+        id: "11234029448",
+        status: "REFUNDED",
+        amount: decimal("0.60"),
+        timestamp: "2026-09-11T11:31:40.000Z",
+      },
+    ]);
+  });
+
+  it("falls back to `events` when SumUp sends no transaction_events", async () => {
+    const client = sumupClient({
+      apiKey: "k",
+      merchantCode: "MC",
+      fetch: respondingWith({
+        id: "f37572ac",
+        status: "SUCCESSFUL",
+        amount: 1.0,
+        events: [
+          {
+            type: "REFUND",
+            status: "REFUNDED",
+            id: 11233372107,
+            amount: 1.0,
+            timestamp: "2026-09-11T11:24:51.016Z",
+            transaction_id: "f37572ac",
+          },
+        ],
+      }),
+    });
+
+    expect((await client.findTransaction({ id: "f37572ac" }))?.refundEvents).toEqual([
+      {
+        id: "11233372107",
+        status: "REFUNDED",
+        amount: decimal("1.00"),
+        timestamp: "2026-09-11T11:24:51.016Z",
+      },
+    ]);
+  });
+});

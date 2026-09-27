@@ -2,12 +2,20 @@ import type { Decimal } from "@waitron/shared";
 import type {
   CreateCheckoutOutcome,
   SumUpClient,
+  SumUpRefundEvent,
   SumUpTransaction,
   TransactionQuery,
 } from "../client.js";
 
 let seq = 0;
 const nextId = (prefix: string): string => `${prefix}_${String(++seq).padStart(8, "0")}`;
+let eventSeq = 11_000_000_000;
+
+/** What the next `sendRefund` does: answer `httpStatus` having made nothing, or make a refund
+ * event in `made` and answer `httpStatus` (201 by default) or reject. */
+export type SendRefundScript =
+  | { httpStatus: number; made?: undefined }
+  | { made: string; httpStatus?: number; throws?: boolean };
 
 /** The card facts a transaction carries, mirroring `SumUpTransaction`'s optional card fields. */
 interface CardFacts {
@@ -37,6 +45,7 @@ interface Held extends CardFacts {
   foreignTransactionId: string;
   status: SumUpTransaction["status"];
   amount: Decimal;
+  refundEvents?: SumUpRefundEvent[];
   /** When set, the FIRST `findTransaction` that locates this checkout rewrites its status to this
    * value, then clears the field — models a checkout that resolves the moment the adapter first
    * polls it (`resolveOnFirstFind`). */
@@ -51,6 +60,11 @@ interface Held extends CardFacts {
 export class FakeSumUp implements SumUpClient {
   lastCreate: Parameters<SumUpClient["createCheckout"]>[0] | undefined;
   lastRefund: { transactionId: string; amount?: Decimal } | undefined;
+  /** Every `sendRefund` call, in order. */
+  readonly sendRefundCalls: { transactionId: string; amount: Decimal }[] = [];
+  /** Stamps the refund events `sendRefund` makes, as SumUp's own clock would. */
+  eventClock: () => Date = () => new Date();
+  private readonly sendRefundScripts: SendRefundScript[] = [];
   private next: "SUCCESSFUL" | "FAILED" | "CANCELLED" | "PENDING" = "SUCCESSFUL";
   private nextCreateRefused = false;
   private nextCreateThrows = false;
@@ -101,6 +115,36 @@ export class FakeSumUp implements SumUpClient {
    * otherwise is the VISA contactless block. */
   cardNext(facts: CardFacts | null): void {
     this.nextCard = facts === null ? {} : facts;
+  }
+
+  /** Queued, one per `sendRefund`; unscripted, a send answers 201 and makes a `REFUNDED` event. */
+  scriptNextSendRefund(script: SendRefundScript): void {
+    this.sendRefundScripts.push(script);
+  }
+
+  /** A refund event on a transaction, as if SumUp had recorded one this fake did not make. */
+  addRefundEvent(transactionId: string, event: SumUpRefundEvent): void {
+    const h = this.held.find((x) => x.id === transactionId);
+    if (h === undefined) throw new Error(`FakeSumUp: no transaction ${transactionId}`);
+    (h.refundEvents ??= []).push(event);
+  }
+
+  sendRefund(params: { transactionId: string; amount: Decimal }): Promise<{ httpStatus: number }> {
+    this.sendRefundCalls.push(params);
+    const script = this.sendRefundScripts.shift() ?? { made: "REFUNDED" };
+    if (script.made !== undefined) {
+      const h = this.held.find((x) => x.id === params.transactionId);
+      if (h !== undefined) {
+        (h.refundEvents ??= []).push({
+          id: String(++eventSeq),
+          status: script.made,
+          amount: params.amount,
+          timestamp: this.eventClock().toISOString(),
+        });
+      }
+      if (script.throws === true) return Promise.reject(new Error("sumup unreachable"));
+    }
+    return Promise.resolve({ httpStatus: script.httpStatus ?? 201 });
   }
 
   /** Resolve a stalled checkout by its client transaction id. */
@@ -184,6 +228,9 @@ export class FakeSumUp implements SumUpClient {
       ...(h.card === undefined ? {} : { card: h.card }),
       ...(h.entryMode === undefined ? {} : { entryMode: h.entryMode }),
       ...(h.authCode === undefined ? {} : { authCode: h.authCode }),
+      ...(h.refundEvents === undefined
+        ? {}
+        : { refundEvents: h.refundEvents.map((event) => ({ ...event })) }),
     });
   }
 

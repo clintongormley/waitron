@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -17,7 +17,14 @@ import {
   insertAttempting,
 } from "../store.js";
 import { FakePaymentProvider } from "./fake-provider.js";
-import { freshNif, seedPaymentPolicy, seedSale, seedWorkingOrder } from "../../test/seed.js";
+import {
+  billPaymentOfRow,
+  freshNif,
+  seedBillPayment,
+  seedPaymentPolicy,
+  seedSale,
+  seedWorkingOrder,
+} from "../../test/seed.js";
 import type { Seeded } from "../../test/seed.js";
 
 const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
@@ -143,6 +150,115 @@ describe("FakePaymentProvider.partialRefund", () => {
 describe("FakePaymentProvider.capabilities", () => {
   it("advertises partialRefund support", () => {
     expect(new FakePaymentProvider(pg.db).capabilities.partialRefund).toBe(true);
+  });
+});
+
+describe("FakePaymentProvider.collect for a bill payment", () => {
+  function collectFor(provider: FakePaymentProvider, s: Seeded, billPaymentId: string) {
+    return provider.collect({
+      tillId: brandTillId(s.tillId),
+      workingOrderId: brandWorkingOrderId(s.workingOrderId),
+      amount: decimal("10.00"),
+      billPaymentId,
+    });
+  }
+
+  it("names the bill payment on a captured row and on a failed one", async () => {
+    const s = await seedTenant();
+    const provider = new FakePaymentProvider(pg.db);
+    const first = await seedBillPayment(pg.db, s);
+    const second = await seedBillPayment(pg.db, s);
+
+    const captured = await collectFor(provider, s, first);
+    provider.failNextCollect();
+    const failed = await collectFor(provider, s, second);
+
+    expect(await billPaymentOfRow(pg.db, captured.paymentRef)).toBe(first);
+    expect(await billPaymentOfRow(pg.db, failed.paymentRef)).toBe(second);
+  });
+
+  it("names the bill payment on a row accepted offline", async () => {
+    const s = await seedTenant();
+    await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
+    const provider = new FakePaymentProvider(pg.db);
+    const billPaymentId = await seedBillPayment(pg.db, s);
+    provider.offlineNextCollect();
+
+    const r = await provider.collect({
+      tillId: brandTillId(s.tillId),
+      workingOrderId: brandWorkingOrderId(s.workingOrderId),
+      amount: decimal("10.00"),
+      allowOffline: true,
+      billPaymentId,
+    });
+
+    expect(r.state).toBe("accepted_offline");
+    expect(await billPaymentOfRow(pg.db, r.paymentRef)).toBe(billPaymentId);
+  });
+
+  it("records every collect it is asked for, with its parameters", async () => {
+    const s = await seedTenant();
+    const provider = new FakePaymentProvider(pg.db);
+    const billPaymentId = await seedBillPayment(pg.db, s);
+
+    await collectFor(provider, s, billPaymentId);
+
+    expect(provider.collectCalls).toEqual([
+      expect.objectContaining({ amount: "10.00", billPaymentId }),
+    ]);
+  });
+
+  it("stallNextCollect leaves an attempting row and answers attempting, once", async () => {
+    const s = await seedTenant();
+    const provider = new FakePaymentProvider(pg.db);
+    const billPaymentId = await seedBillPayment(pg.db, s);
+    provider.stallNextCollect();
+
+    const stalled = await collectFor(provider, s, billPaymentId);
+    const next = await collect(provider, s);
+
+    expect(stalled).toMatchObject({ state: "attempting", settledAt: null });
+    const row = await pg.db.transaction((tx) => findPaymentByRef(tx, "fake", stalled.paymentRef));
+    expect(row?.state).toBe("attempting");
+    expect(await billPaymentOfRow(pg.db, stalled.paymentRef)).toBe(billPaymentId);
+    expect(next.state).toBe("captured");
+  });
+
+  it.each(["captured", "attempting"] as const)(
+    "crashNextCollect writes a %s row and then throws, as a process dying after the provider wrote",
+    async (state) => {
+      const s = await seedTenant();
+      const provider = new FakePaymentProvider(pg.db);
+      const billPaymentId = await seedBillPayment(pg.db, s);
+      provider.crashNextCollect(state);
+
+      const error = await collectFor(provider, s, billPaymentId).catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(Error);
+      const rows = await pg.db.execute<{ state: string }>(
+        sql`select state from payments where bill_payment_id = ${billPaymentId}`,
+      );
+      expect(rows.rows).toEqual([{ state }]);
+      expect((await collect(provider, s)).state).toBe("captured");
+    },
+  );
+
+  it("holdNextCollect waits, having recorded the call, until released", async () => {
+    const s = await seedTenant();
+    const provider = new FakePaymentProvider(pg.db);
+    const billPaymentId = await seedBillPayment(pg.db, s);
+    const release = provider.holdNextCollect();
+
+    const pending = collectFor(provider, s, billPaymentId);
+    await vi.waitFor(() => expect(provider.collectCalls).toHaveLength(1));
+    const before = await pg.db.execute<{ n: number }>(
+      sql`select count(*) as n from payments where bill_payment_id = ${billPaymentId}`,
+    );
+    release();
+    const result = await pending;
+
+    expect(before.rows[0]!.n).toBe(0);
+    expect(result.state).toBe("captured");
   });
 });
 
@@ -431,5 +547,136 @@ describe("FakePaymentProvider.resolveAbandonedAttempt", () => {
       .catch((e: unknown) => e);
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe("payment.not_found");
+  });
+});
+
+describe("FakePaymentProvider.sendRefund and lookupRefund", () => {
+  const send = (refundId: string, key = `bpr_${refundId}`, amount = "4.00") => ({
+    processorRef: "fake-ext-1",
+    amount: decimal(amount),
+    idempotencyKey: key,
+    refundId,
+  });
+  const query = (refundId: string, amount = "4.00") => ({
+    processorRef: "fake-ext-1",
+    refundId,
+    amount: decimal(amount),
+    sentAt: new Date("2026-09-27T10:00:00Z"),
+    excludeRefs: [],
+  });
+
+  it("refunds by default, answering the refund's own outcome, and records the call", async () => {
+    const provider = new FakePaymentProvider(pg.db);
+
+    const answer = await provider.sendRefund(send("r-1"));
+
+    expect(answer).toEqual({
+      kind: "outcome",
+      outcome: "completed",
+      providerRefundRef: expect.stringMatching(/^fake-re-/) as unknown as string,
+      providerStatus: "succeeded",
+    });
+    expect(provider.refundCalls).toEqual([send("r-1")]);
+    expect(await provider.lookupRefund(query("r-1"))).toEqual({
+      kind: "match",
+      providerRefundRef: (answer as { providerRefundRef: string }).providerRefundRef,
+      outcome: "completed",
+      providerStatus: "succeeded",
+    });
+  });
+
+  it("answers a resend with the same key with the first refund, making no second one", async () => {
+    const provider = new FakePaymentProvider(pg.db);
+
+    const first = await provider.sendRefund(send("r-2"));
+    const again = await provider.sendRefund(send("r-2"));
+
+    expect(again).toEqual(first);
+    expect(provider.refundCalls).toHaveLength(2);
+    expect((await provider.lookupRefund(query("r-2"))).kind).toBe("match");
+  });
+
+  it("finds nothing for a refund it was never asked for", async () => {
+    const provider = new FakePaymentProvider(pg.db);
+    expect(await provider.lookupRefund(query("r-none"))).toEqual({ kind: "none" });
+    expect(provider.lookupCalls).toEqual([query("r-none")]);
+  });
+
+  it("scriptNextRefund answers as told, once, and makes the refund only when told to", async () => {
+    const provider = new FakePaymentProvider(pg.db);
+    provider.scriptNextRefund({
+      made: "completed",
+      answer: { kind: "uncertain", reason: "timeout" },
+    });
+
+    const lost = await provider.sendRefund(send("r-3"));
+    const next = await provider.sendRefund(send("r-4"));
+    provider.scriptNextRefund({
+      made: false,
+      answer: { kind: "refused", httpStatus: 400, documented: true },
+    });
+    const refused = await provider.sendRefund(send("r-5"));
+
+    expect(lost).toEqual({ kind: "uncertain", reason: "timeout" });
+    expect((await provider.lookupRefund(query("r-3"))).kind).toBe("match");
+    expect(next.kind).toBe("outcome");
+    expect(refused).toEqual({ kind: "refused", httpStatus: 400, documented: true });
+    expect(await provider.lookupRefund(query("r-5"))).toEqual({ kind: "none" });
+  });
+
+  it("scriptNextRefund can make a refund in another state, and throw after making it", async () => {
+    const provider = new FakePaymentProvider(pg.db);
+    provider.scriptNextRefund({ made: "failed", status: "canceled", answer: "made" });
+    const failed = await provider.sendRefund(send("r-6"));
+    provider.scriptNextRefund({ made: "completed", answer: "throw" });
+
+    await expect(provider.sendRefund(send("r-7"))).rejects.toThrow(/stopped/);
+    expect(failed).toMatchObject({
+      kind: "outcome",
+      outcome: "failed",
+      providerStatus: "canceled",
+    });
+    expect(await provider.lookupRefund(query("r-7"))).toMatchObject({
+      kind: "match",
+      outcome: "completed",
+    });
+  });
+
+  it("scriptLookups answers every lookup as told until cleared", async () => {
+    const provider = new FakePaymentProvider(pg.db);
+    await provider.sendRefund(send("r-8"));
+    provider.scriptLookups({ kind: "ambiguous", candidates: 2 });
+
+    const scripted = [
+      await provider.lookupRefund(query("r-8")),
+      await provider.lookupRefund(query("r-8")),
+    ];
+    provider.scriptLookups(null);
+
+    expect(scripted).toEqual([
+      { kind: "ambiguous", candidates: 2 },
+      { kind: "ambiguous", candidates: 2 },
+    ]);
+    expect((await provider.lookupRefund(query("r-8"))).kind).toBe("match");
+  });
+
+  it("holdNextRefund waits, having recorded the call, until released", async () => {
+    const provider = new FakePaymentProvider(pg.db);
+    const release = provider.holdNextRefund();
+
+    const pending = provider.sendRefund(send("r-9"));
+    await vi.waitFor(() => expect(provider.refundCalls).toHaveLength(1));
+    const during = await provider.lookupRefund(query("r-9"));
+    release();
+
+    expect(during).toEqual({ kind: "none" });
+    expect((await pending).kind).toBe("outcome");
+  });
+
+  it("resends safely for a day by default, and can be told otherwise", () => {
+    const provider = new FakePaymentProvider(pg.db);
+    expect(provider.refundResendWindowMs).toBe(24 * 60 * 60 * 1000);
+    provider.refundResendWindowMs = null;
+    expect(provider.refundResendWindowMs).toBeNull();
   });
 });

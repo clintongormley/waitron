@@ -19,6 +19,8 @@ export const paymentRefunds = table(
     amount: money("amount").notNull(),
     state: paymentRefundState("state").notNull(),
     authorizedBy: id("authorized_by"),
+    /** The provider's own id for this refund, where the call or a lookup returned one. */
+    providerRefundRef: label("provider_refund_ref"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [

@@ -1604,7 +1604,7 @@ versus the charge. **It changes what an invoice charges; it lands on the automat
   export function spreadBillDiscount(lines: { lineId: string; addedOrder: number; gross: Decimal; quantity: string; weighed: boolean; grossUnit: Decimal }[], discount: Decimal): Map<string, { newGrossUnit: Decimal; reduction: Decimal }>; // D15 then D4, pure; adjustment.exceeds_amount
   export function nearestWeighedUnitPrice(grossUnit: Decimal, quantity: string, targetGross: Decimal): Decimal; // D4, pure: the whole-cent unit price whose rounded line total is nearest the target; a tie takes the higher total; among prices giving that total, the highest
   export async function applyAdjustment(tx, cfg, args: { orderId: string; submissionId: string; expectedRevision: number; lineId: string | null; reasonId: string; action: AdjustmentAction; quantity?: string; percentBp?: number; amount?: Decimal; note: string | null; operatorId: string; approver?: { personId: string; pin: string } }): Promise<{ adjustmentIds: string[]; revision: number }>;
-  // runs through runServiceCommand with the bill scope (D8); refusals: submission.id_reused, adjustment.* (Task 1, plus adjustment.exceeds_amount and adjustment.approval_required), pin.invalid, working_order.out_of_date (expectedRevision, D19), order.payment_in_flight
+  // runs through runServiceCommand with the bill scope (D8); refusals: submission.id_reused, adjustment.* (Task 1, plus adjustment.exceeds_amount and adjustment.approval_required), pin.invalid, working_order.out_of_date (expectedRevision, D19), order.payment_in_flight, and on a bill with payments before its invoice (Task 14): bill.line_paid, bill.received_exceeds_total, bill.refund_in_progress
   ```
 
 - [ ] **Step 0: Re-map** `voidTabLine`, M7b's kitchen notices and editing rules, M7v's per-line VAT,
@@ -1706,6 +1706,29 @@ versus the charge. **It changes what an invoice charges; it lands on the automat
     it is `order.payment_in_flight`.
   - **After payment:** an adjustment on a settled bill is refused. The spec says an issued invoice
     is corrected, not edited: grep for the code the correction path uses and reuse it.
+  - **A bill that already holds money (bill payments design §6a; §8 tests 5, 11 and 23).** Task 14
+    proved these with a void and a quantity cut, because no comp existed yet; this task proves
+    them again with a comp. The helpers are Task 14's:
+    `refusePaidLines` (with `keeps: 0`), `assertBillInvariant` and `issueIfFullyPaid` in
+    `apps/server/src/bill-payments.ts`, `refusePaymentInFlight` in `working-order.ts` (which now
+    refuses `bill.refund_in_progress` before `order.payment_in_flight`), and
+    `withSaleTillWhenIssuing` in `bill-payments-api.ts`, which files an invoice a write makes due on
+    the requesting device's till, as the void route in `till-api.ts` does. Call `issueIfFullyPaid`
+    only inside `withSaleTillWhenIssuing`: given no till, it throws
+    `SaleTillRequired`, which is not an `AppError`, so a route without the wrapper answers a 500.
+    - **Test 5, a paid line:** after an item payment for the Chuletón, a comp of it and a line
+      discount of it are each `bill.line_paid` naming its line, and nothing changes (no adjustment
+      row, the same revision).
+    - **Test 11, a reduction after contributions:** a €60.00 bill with €50.00 contributed in cash;
+      a €20.00 comp is `bill.received_exceeds_total` with `excess` €10.00, and nothing changes.
+      After a €10.00 refund the same comp goes through, and ITS transaction issues the €40.00
+      invoice: one fiscal record, one cash tender of €40.00 with no tip, and the ticket prints the
+      cash €50.00 and the "Devolución -10,00 €" row.
+    - **Test 23, the invoice waits for the refund:** a €60.00 bill holding €30.00 by card and €20.00
+      in cash, with a €10.00 refund of the card payment left pending. A €10.00 comp (which would
+      leave the bill at €50.00, exactly what was received) is `bill.refund_in_progress`, and no
+      invoice exists. Once the refund completes, a €20.00 cash payment issues one invoice for
+      €60.00 whose tenders are card €20.00, cash €20.00 and cash €20.00.
   - **Browser:** the reason picker lists only reasons allowing the action; a required note is
     enforced beside the field; the approver prompt; an axe test.
 
@@ -1915,6 +1938,18 @@ Spec §6 on screen; the approved design's screen section.
   - The steak case offers its two choices.
   - Moving lines to a new bill after a contribution, paying it, printing its invoice and returning
     to the original, which shows the contribution still applied.
+  - **A bill that already holds money** (a pending payment, or a received one not refunded in
+    full): Task 14's server refuses the one-payment routes, `POST /api/sales` naming the bill and
+    `POST /api/pay`, with `bill.payments_received`, and refuses M7b3's merge of a split check
+    holding money back into its tab (`POST /api/tabs/:id/merge`) with the same code, naming the
+    check. The till's pay action on such a bill takes the rest through the bill's payments, never
+    those two routes; a refused merge shows the code's message (`apps/till/src/i18n/codes.ts`)
+    and leaves both bills as they were.
+  - **Other refusals the server gives a bill holding money:** raising a paid line's quantity is
+    `bill.line_paid`, as any edit of a paid line is; and a void that leaves the bill fully paid
+    issues its invoice, which is refused `product.unavailable` when an unsent line's product is
+    off sale (`issueIfFullyPaid` prices the bill with `priceStoredOrderForIssuance`). Each shows
+    the code's message and leaves the bill as it was.
   - Axe in both themes.
 
   Run them: they FAIL.

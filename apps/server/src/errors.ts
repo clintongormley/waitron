@@ -3,6 +3,7 @@
 import "@waitron/shared";
 import type { VerifyFailure } from "@waitron/membership";
 import type { ProbeFailure } from "@waitron/stream";
+import type { AllocationPreview } from "./bill-allocation.js";
 
 /**
  * This host's contribution to the shared error registry, by declaration merging. A code names the
@@ -265,9 +266,10 @@ declare module "@waitron/shared" {
      */
     "working_order.out_of_date": { workingOrderId: string; revision: number };
     /**
-     * A write reached an OPEN order an integrated card payment is between pricing and filing
-     * (`working_orders.payment_attempt_at` is set, plan D22): the payment files what it priced, so the
-     * order is not changed under it. The caller waits for the payment to settle or fail.
+     * A write reached an OPEN order a card payment is in flight on: an integrated payment between
+     * pricing and filing (`working_orders.payment_attempt_at` is set), or a pending card payment
+     * towards the bill. The payment settles what it was asked for, so the order is not changed under
+     * it. The caller waits for the payment to settle or fail.
      */
     "order.payment_in_flight": { workingOrderId: string };
     /**
@@ -349,6 +351,139 @@ declare module "@waitron/shared" {
      * arguments. The id is the device's own, made fresh for each person's action.
      */
     "submission.id_reused": { submissionId: string };
+    /** A payment was asked of a bill with nothing left to pay and no card pending on it. */
+    "bill.nothing_outstanding": { workingOrderId: string };
+    /**
+     * The venue has tips off and the payment would record a tip. `chargeable` is what can be taken
+     * without one.
+     */
+    "bill.tip_not_allowed": { workingOrderId: string; chargeable: string };
+    /**
+     * The allocation the operator was shown is no longer the server's, or a choice between paying
+     * the full price with a tip and using the earlier contributions is needed. `preview` is the
+     * server's current answer, for the till to show again.
+     */
+    "bill.allocation_changed": { workingOrderId: string; preview: AllocationPreview };
+    /**
+     * A write would charge again, move, void, reduce or edit a quantity of a line that a pending
+     * or received item payment has paid for. The line's unpaid quantity stays free.
+     */
+    "bill.line_paid": { workingOrderId: string; lineNo: number };
+    /**
+     * A write would leave the bill's total below the money it has received or reserved. `excess`
+     * is by how much; refunding that first lets the write through.
+     */
+    "bill.received_exceeds_total": { workingOrderId: string; excess: string };
+    /**
+     * Money has been taken on the bill before its invoice. Paying it in one go by the
+     * single-payment routes, and placing it, are refused while it has any pending or received bill
+     * payment, even one given back in full; abandoning it, merging it into another bill, and
+     * finishing its table are refused while it still holds money.
+     */
+    "bill.payments_received": { workingOrderId: string };
+    /** No bill payment with this id; `paymentId` is the id the caller sent. */
+    "bill.payment_not_found": { paymentId: string };
+    /** A manager's action was refused: the bill payment is no longer pending, its card is at a
+     * reader in this process, or another resolve settled its provider row first. */
+    "bill.payment_not_stuck": { paymentId: string };
+    /**
+     * What became of a pending card bill payment is not confirmed, so nothing was recorded and the
+     * payment stays pending. `reason`: `unreachable` (the provider could not be asked), `ambiguous`
+     * (the provider's answer, or its row's state named by `providerStatus`, does not settle it),
+     * `mismatched` (the card was captured for another amount; `payment.bill_capture_mismatch` is
+     * raised), `attempting` (the provider row is still attempting, so the card may yet be charged).
+     */
+    "bill.payment_outcome_unconfirmed": {
+      paymentId: string;
+      reason: "unreachable" | "ambiguous" | "mismatched" | "attempting";
+      providerStatus?: string;
+    };
+    /**
+     * A refund asked for more than the bill payment can still give back. `applied` and `tip` are
+     * what it can: a refund may take up to `applied`, and the tip comes back only with the whole of
+     * what is left of the payment.
+     */
+    "bill.refund_exceeds_payment": { paymentId: string; applied: string; tip: string };
+    /**
+     * A refund of an item payment asked for less than the whole of it: an item payment is given
+     * back whole, which frees its lines. `applied` and `tip` are that whole.
+     */
+    "bill.refund_not_whole": { paymentId: string; applied: string; tip: string };
+    /**
+     * The bill payment was taken by card on a terminal Waitron does not drive, or through a card
+     * provider that offers no refund Waitron can record before asking, so it is not given back
+     * here.
+     */
+    "bill.refund_unsupported": { paymentId: string };
+    /**
+     * A card refund of the bill is still pending: until the card provider shows its outcome, the
+     * bill's payments, lines and invoice stay as they are.
+     */
+    "bill.refund_in_progress": { workingOrderId: string };
+    /** No refund of a bill payment with this id; `refundId` is the id the caller sent. */
+    "bill.refund_not_found": { refundId: string };
+    /** A manager's action was refused: the refund is no longer pending, or its request is still
+     * running in this process. */
+    "bill.refund_not_stuck": { refundId: string };
+    /**
+     * The card provider did not show what became of a pending refund, so nothing was recorded and
+     * the bill stays locked. `reason`: `not_found` (no such refund there), `ambiguous` (more than
+     * one could be it), `unreachable` (the provider could not be asked), `pending` (the provider
+     * has not finished it).
+     */
+    "bill.refund_outcome_unconfirmed": {
+      refundId: string;
+      reason: "not_found" | "ambiguous" | "unreachable" | "pending";
+    };
+    /**
+     * A manager's recorded outcome is contradicted by Waitron's own record, so it was not recorded.
+     * `evidence`: `captured` (the provider's record shows the card charged), `never_sent` (the
+     * refund never reached the provider).
+     */
+    "bill.attestation_contradicted": { id: string; evidence: "captured" | "never_sent" };
+    /**
+     * An incident: the provider captured a card bill payment for another amount than its applied
+     * money plus its tip. Nothing was filed and the payment stays pending for a manager.
+     */
+    "payment.bill_capture_mismatch": {
+      billPaymentId: string;
+      workingOrderId: string;
+      captured: string;
+      expected: string;
+    };
+    /**
+     * An incident: the provider captured a card bill payment for its amount, but the loop could not
+     * record it received, its invoice included, so the payment stays pending and its bill locked.
+     * `errorCode` is the refusal's code, `unknown` for an error that carries none.
+     */
+    "payment.bill_settle_failed": {
+      billPaymentId: string;
+      workingOrderId: string;
+      amount: string;
+      errorCode: string;
+    };
+    /**
+     * An incident: the card provider shows a bill refund made that Waitron had already recorded as
+     * failed. Nothing was recorded; the money went back to the payer.
+     */
+    "payment.refund_outcome_conflict": {
+      refundId: string;
+      billPaymentId: string;
+      workingOrderId: string;
+      amount: string;
+      providerRefundRef: string | null;
+    };
+    /**
+     * An incident: a card refund of a bill has been pending for more than an hour, so its bill is
+     * locked until the card provider shows the outcome or a manager records a confirmed one.
+     */
+    "payment.refund_unresolved": {
+      refundId: string;
+      billPaymentId: string;
+      workingOrderId: string;
+      amount: string;
+      pendingSince: string;
+    };
     // The four `booking.*` codes are declared in @waitron/bookings/src/errors.ts.
     /**
      * A tab verb found the order it was asked to modify is not an OPEN tab — not `open`, not pointed

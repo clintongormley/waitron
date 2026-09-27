@@ -2,7 +2,7 @@
 export { formatInvoiceNumber, recordSale } from "./record-sale.js";
 export type { RecordSaleInput, RecordSaleLine, RecordSaleTender } from "./record-sale.js";
 export { settleSale } from "./settle-sale.js";
-export type { SettleSaleInput } from "./settle-sale.js";
+export type { SettleSaleInput, SettleSaleTender } from "./settle-sale.js";
 export { recordVoid } from "./record-void.js";
 export { recordCorrection } from "./record-correction.js";
 export type { RecordCorrectionInput } from "./record-correction.js";

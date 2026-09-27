@@ -11,6 +11,7 @@ import {
   listAvailableProducts,
 } from "@waitron/catalogue";
 import {
+  billPaymentRefunds,
   captureError,
   diningTables,
   saleLines,
@@ -55,7 +56,9 @@ import {
   splitOffCheck,
   transferLines,
   unjoinTable,
+  voidTabLine,
 } from "./working-order.js";
+import { takeBillPayment } from "./bill-payments.js";
 import { payWorkingOrder } from "./till-sale.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import {
@@ -2125,5 +2128,100 @@ describe("runServiceCommand", () => {
       ),
     );
     expect(await inTx((tx) => tx.select().from(serviceCommands))).toHaveLength(0);
+  });
+});
+
+describe("money received against a bill before its invoice", () => {
+  /** A cash contribution of `applied`, with `tip` of the change left as a tip. */
+  async function contribute(
+    cfg: TillConfig,
+    billId: string,
+    applied: string,
+    tip = "0.00",
+  ): Promise<string> {
+    const tendered = toScale(sumDecimals([decimal(applied), decimal(tip)]), MONEY_SCALE);
+    const result = await takeBillPayment(
+      { db: suite.db, backend, clock },
+      { ...cfg, tipsEnabled: true },
+      billId,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: applied,
+        method: "cash",
+        tendered,
+        addedTip: tip,
+        applied,
+        tip,
+      },
+      OPERATOR,
+    );
+    return result.payment.id;
+  }
+
+  /** A completed cash refund of `applied` and `tip` cents, as a refund of the payment leaves it. */
+  async function refund(
+    cfg: TillConfig,
+    paymentId: string,
+    applied: number,
+    tip: number,
+  ): Promise<void> {
+    await inTx((tx) =>
+      tx.insert(billPaymentRefunds).values({
+        billPaymentId: paymentId,
+        submissionId: randomUUID(),
+        fingerprint: "f",
+        appliedAmount: applied,
+        tipAmount: tip,
+        reason: "error",
+        authorizedBy: OPERATOR,
+        requestedBy: OPERATOR,
+        tillId: cfg.tillId,
+        state: "completed",
+        completedAt: new Date().toISOString(),
+      }),
+    );
+  }
+
+  it("counts a contribution off what the bill and the party still owe", async () => {
+    const venue = await setupVenue();
+    const mesa4 = await venue.table("Mesa 4");
+    const { visitId, tabId } = await seat(venue.cfg, mesa4, 2);
+    await order(venue, tabId, "Burger", "Vino");
+
+    await contribute(venue.cfg, tabId, "20.00");
+
+    expect(await inTx((tx) => readVisitBills(tx, visitId))).toMatchObject([
+      { workingOrderId: tabId, total: "42.00", outstanding: "22.00" },
+    ]);
+    expect((await floorRow(venue.cfg, mesa4)).visit).toMatchObject({ outstanding: "22.00" });
+  });
+
+  it("will not abandon an emptied bill that still holds a tip, and finishes once it is given back", async () => {
+    const venue = await setupVenue();
+    const { visitId, tabId } = await seat(venue.cfg, await venue.table("Mesa 4"));
+    await order(venue, tabId, "Vino");
+    const paymentId = await contribute(venue.cfg, tabId, "10.00", "5.00");
+    await refund(venue.cfg, paymentId, 1000, 0);
+    await inTx((tx) => voidTabLine(tx, venue.cfg, tabId, 1));
+
+    const seen = (await visitRow(visitId)).revision;
+    const error = await captureError(() =>
+      inTx((tx) => finishTable(tx, { visitId, expectedVisitRevision: seen, operatorId: OPERATOR })),
+    );
+
+    expect(error).toMatchObject({
+      code: "bill.payments_received",
+      params: { workingOrderId: tabId },
+    });
+    expect(await statusOf(tabId)).toBe("open");
+    expect((await visitRow(visitId)).state).toBe("open");
+
+    await refund(venue.cfg, paymentId, 0, 500);
+    const revision = (await visitRow(visitId)).revision;
+    await inTx((tx) =>
+      finishTable(tx, { visitId, expectedVisitRevision: revision, operatorId: OPERATOR }),
+    );
+    expect(await statusOf(tabId)).toBe("abandoned");
   });
 });
