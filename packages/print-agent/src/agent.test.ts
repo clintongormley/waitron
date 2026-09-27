@@ -520,6 +520,34 @@ describe("createAgent — setup controls", () => {
     });
   });
 
+  it("serves a setup snapshot without waiting for an in-flight pull", async () => {
+    const pullStarted = deferred();
+    const pullReply = deferred<Result<PullReply>>();
+    const host = fakeHost({ config: CONFIG, token: "a1.s" });
+    const agent = createAgent({
+      host,
+      client: client({
+        pullJobs: vi.fn(async () => {
+          pullStarted.resolve();
+          return pullReply.promise;
+        }),
+      }),
+    });
+    const tick = agent.runOnce();
+    await pullStarted.promise;
+    try {
+      const served = await Promise.race([
+        agent.setupSnapshot(),
+        new Promise<"blocked">((resolve) => setTimeout(() => resolve("blocked"), 100)),
+      ]);
+      expect(served).not.toBe("blocked");
+      expect(served).toMatchObject({ joined: true });
+    } finally {
+      pullReply.resolve(okR({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: null }));
+      await tick;
+    }
+  });
+
   it("starts one five-minute reset window only for an approved out-of-touch agent", async () => {
     let now = 1_000;
     const host = fakeHost({
@@ -540,6 +568,47 @@ describe("createAgent — setup controls", () => {
     now = 2_000;
     await expect(agent.beginNetworkReset()).resolves.toBe(true);
     expect((await agent.setupSnapshot()).resetAt).toBe(301_000);
+  });
+
+  it("wakes a sleeping loop to retry the venue when a network reset starts", async () => {
+    const sleepStarted = deferred();
+    const retried = deferred();
+    const host = fakeHost({
+      config: CONFIG,
+      token: "a1.s",
+      sleep: async () => {
+        sleepStarted.resolve();
+        await new Promise(() => {});
+      },
+    });
+    let probeCalls = 0;
+    let agent!: ReturnType<typeof createAgent>;
+    const probeNode = vi.fn(async () => {
+      probeCalls += 1;
+      if (probeCalls === 3) {
+        retried.resolve();
+        agent.stop();
+      }
+      return failR({ kind: "unreachable", detail: "offline" });
+    });
+    agent = createAgent({ host, client: client({ probeNode }) });
+
+    await agent.runOnce();
+    const running = agent.start();
+    await sleepStarted.promise;
+    try {
+      await expect(agent.beginNetworkReset()).resolves.toBe(true);
+      const result = await Promise.race([
+        retried.promise.then(() => "retried" as const),
+        new Promise<"sleeping">((resolve) => setTimeout(() => resolve("sleeping"), 100)),
+      ]);
+      expect(result).toBe("retried");
+    } finally {
+      agent.stop();
+      await running;
+    }
+
+    expect(probeNode).toHaveBeenCalledTimes(3);
   });
 
   it("marks only loss of a primary or an authenticated pull failure as out of touch", async () => {

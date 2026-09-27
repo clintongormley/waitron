@@ -370,9 +370,10 @@ export function createAgent(opts: AgentOptions): Agent {
     outOfTouch = false;
     resetAt = undefined;
     r.merge(pulled.value.servers);
-    const servers = r.servers().slice(1).map(({ url, nodeId }) =>
-      nodeId === undefined ? { url } : { url, nodeId },
-    );
+    const servers = r
+      .servers()
+      .slice(1)
+      .map(({ url, nodeId }) => (nodeId === undefined ? { url } : { url, nodeId }));
     if (JSON.stringify(servers) !== JSON.stringify(config.servers ?? [])) {
       config = { ...config, servers };
       await host.saveConfig(config);
@@ -472,18 +473,16 @@ export function createAgent(opts: AgentOptions): Agent {
         return true;
       });
     },
-    setupSnapshot() {
-      return exclusive(async () => {
-        const config = await host.config();
-        const token = await host.token();
-        return {
-          status: { ...status },
-          config,
-          joined: isJoined(config, token),
-          outOfTouch,
-          ...(resetAt === undefined ? {} : { resetAt }),
-        };
-      });
+    async setupSnapshot() {
+      const config = await host.config();
+      const token = await host.token();
+      return {
+        status: { ...status },
+        config,
+        joined: isJoined(config, token),
+        outOfTouch,
+        ...(resetAt === undefined ? {} : { resetAt }),
+      };
     },
   };
 }

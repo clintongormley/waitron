@@ -2050,8 +2050,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
 - **Print-agent setup lockdown — BUILT 2026-09-27.** A joined agent not known to be out of touch
   serves its `:9110` page and status only to a loopback socket peer; forwarding headers do not open
   it to the LAN. An out-of-touch agent exposes a five-minute, cancellable reset on the LAN, calls it
-  off after a successful venue pull, and can join again without a process restart. Join state records
-  the pending verification number before the token, and learned venue nodes survive an agent restart.
+  off after a successful venue pull, and can join again without a process restart. A process restart
+  cancels that countdown and starts fail-closed until the first venue probe. Join state records the
+  pending verification number before the token, and learned venue nodes survive an agent restart.
   The old Bluetooth card and routes are gone. The owner-approved
   [design](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and
   [implementation plan](superpowers/plans/2026-09-27-print-agent-setup-lockdown.md) leave the

@@ -1809,6 +1809,16 @@ describe("printers-screen", () => {
 
   // ── Printers: register a discovered USB / Bluetooth device ─────────────────────────────────────────
 
+  it("does not direct Bluetooth pairing to the removed setup-page controls", async () => {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    q(el, "[data-test=open-add-printer]")!.click();
+    await el.updateComplete;
+    expect(q(el, "[data-test=new-printer-modal]")!.textContent).not.toContain("9110");
+  });
+
   it("registers a discovered USB printer using its advertised name", async () => {
     const api = stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered) });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });

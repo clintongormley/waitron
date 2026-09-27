@@ -246,7 +246,7 @@ describe("waitron.sh install (published main)", () => {
     // No .env AT ALL: this path records no image override, so nothing asks install to write the file.
     expect(existsSync(join(sb.boxDir, ".env"))).toBe(false);
     expect(r.stdout).toContain("https://waitron.local/manage/email");
-    expect(r.stdout).toContain("http://waitron.local:9110");
+    expect(r.stdout).not.toContain("http://waitron.local:9110");
     expect(r.stdout).toContain("http://waitron.local/setup/trust");
     expect(r.stdout).toContain("https://waitron.local/setup/trust");
   });
