@@ -3867,13 +3867,17 @@ approved.
     "via NULLS NOT DISTINCT" (PostgreSQL wording); `record-void.test.ts:340` and
     `record-correction.test.ts:443` say an ordering "never leaks an authz error", which #598's
     review did not bear out (Codex ran both orders: with the lookup first, an unauthorised caller
-    tells a missing sale from an existing one by the error); and `record-sale.test.ts:854`, `:930`
-    and `:995` carry history ("legacy path unchanged", "additive, no behaviour change").
-    `record-sale.test.ts:280` ("groups two lines at the same VAT rate into one breakdown entry")
+    tells a missing sale from an existing one by the error); and `record-sale.test.ts:888`, `:964`
+    and `:1029` carry history ("legacy path unchanged", "additive, no behaviour change").
+    `record-sale.test.ts:282` ("groups two lines at the same VAT rate into one breakdown entry")
     asserts only the record's total, which is the input passed through, so it passes with no
-    grouping; the fake backend stores the breakdown, so it could assert the merged entry. No test
-    reaches `settleSale`'s catch that turns a `sale_settlements` unique-key refusal into
-    `sale.already_settled` (`packages/core/src/settle-sale.ts`); #598 measured the earlier check
+    grouping; the fake backend stores the breakdown, so it could assert the merged entry —
+    **Done (2026-09-27, lane A's A98, #784):** it now reads the sale's stored breakdown and expects the one
+    entry (21%, base 8.00, tax 1.68), and a new case, two lines of 1.07 at 21%, expects tax 0.45 from
+    the summed base where taxing each line gives 0.44; with `buildVatBreakdown` emitting one entry
+    per line both go red, and with it summing each line's rounded tax only the new case does. Still
+    open: no test reaches `settleSale`'s catch that turns a `sale_settlements` unique-key refusal
+    into `sale.already_settled` (`packages/core/src/settle-sale.ts`); #598 measured the earlier check
     stopping both concurrent-settlement tests first. `sale.number_reused` is registered in
     `packages/core/src/errors.ts` and `git grep number_reused -- apps packages` finds no thrower
     (see *Decide whether to implement `sale.number_reused`*). Outside core,

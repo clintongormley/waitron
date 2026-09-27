@@ -282,7 +282,7 @@ describe("recordSale — the happy path", () => {
   it("groups two lines at the same VAT rate into one breakdown entry", async () => {
     // Two lines at one rate exercise `buildVatBreakdown`'s merge.
     const backend = new FakeFiscalBackend(suite.db);
-    await run(backend, {
+    const { saleId } = await run(backend, {
       total: "9.68",
       lines: [
         {
@@ -312,6 +312,38 @@ describe("recordSale — the happy path", () => {
     });
     const [record] = await backend.recordsFor(nodeId);
     expect(record?.total).toBe("9.68");
+    const [saleRow] = await suite.db
+      .select({ vb: sales.vatBreakdown })
+      .from(sales)
+      .where(eq(sales.id, saleId));
+    expect(saleRow!.vb).toEqual([{ rate: "21.00", base: "8.00", tax: "1.68" }]);
+  });
+
+  it("takes a rate's tax from the summed base, not from each line's rounded tax", async () => {
+    // 1.07 at 21% is 0.2247, so two lines taxed one by one give 0.22 + 0.22 = 0.44; the grouped
+    // base 2.14 gives 0.4494, which is 0.45, so the total is 2.14 + 0.45 = 2.59.
+    const backend = new FakeFiscalBackend(suite.db);
+    const line = {
+      name: "Café solo",
+      descriptions: { "es-ES": "Café solo" },
+      quantity: "1",
+      unitPrice: "1.07",
+      vatRate: "21.00",
+      lineTotal: "1.07",
+    };
+    const { saleId } = await run(backend, {
+      total: "2.59",
+      lines: [
+        { lineNo: 1, ...line },
+        { lineNo: 2, ...line },
+      ],
+      settlement: { kind: "deferred" },
+    });
+    const [saleRow] = await suite.db
+      .select({ vb: sales.vatBreakdown })
+      .from(sales)
+      .where(eq(sales.id, saleId));
+    expect(saleRow!.vb).toEqual([{ rate: "21.00", base: "2.14", tax: "0.45" }]);
   });
 
   it("stores the filed vatBreakdown on sales, equal to what the backend filed", async () => {
