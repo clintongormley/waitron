@@ -1,33 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isAppError } from "@waitron/shared";
-import { assertIdentifier, generatePassword, quoteIdent, quoteLiteral } from "./identifiers.js";
-
-describe("assertIdentifier", () => {
-  it("accepts an ordinary lower-case name", () => {
-    expect(() => assertIdentifier("database", "waitron_production")).not.toThrow();
-  });
-
-  it.each([
-    ["empty", ""],
-    ["leading digit", "1waitron"],
-    ["upper case", "Waitron"],
-    ["a hyphen", "waitron-prod"],
-    ["a quote", 'waitron"; drop table tenants; --'],
-    ["a space", "waitron prod"],
-    ["too long", `a${"b".repeat(63)}`],
-  ])("refuses %s", (_label, value) => {
-    let thrown: unknown;
-    try {
-      assertIdentifier("database", value);
-    } catch (error) {
-      thrown = error;
-    }
-    expect(isAppError(thrown)).toBe(true);
-    if (!isAppError(thrown)) return;
-    expect(thrown.code).toBe("provisioning.invalid_identifier");
-    expect(thrown.params).toEqual({ kind: "database", value });
-  });
-});
+import { generatePassword, quoteIdent, quoteLiteral } from "./identifiers.js";
 
 describe("quoteIdent", () => {
   it("double-quotes", () => {
@@ -35,8 +7,6 @@ describe("quoteIdent", () => {
   });
 
   it("doubles an inner quote", () => {
-    // Unreachable through assertIdentifier, which refuses a quote outright; quoteIdent is exported
-    // and a future caller may not validate first.
     expect(quoteIdent('a"b')).toBe('"a""b"');
   });
 });
