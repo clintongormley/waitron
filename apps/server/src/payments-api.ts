@@ -807,6 +807,14 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         if (typeof pin !== "string") throw new AppError("pin.invalid", {});
         await verifyPersonCredential(tx, personId, pin);
         await requireStuckBillPayment(tx, id);
+        // A provider row still `attempting` can yet be charged, so no outcome is recorded over it.
+        if ((await findPaymentByBillPayment(tx, id))?.state === "attempting") {
+          throw new AppError("payment.outcome_unknown", {
+            paymentId: id,
+            reason: "ambiguous",
+            providerStatus: "attempting",
+          });
+        }
         const attestation = { attestedBy: personId, note };
         const now = deps.clock.now().instant;
         if (outcome === "failed") {

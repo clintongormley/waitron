@@ -1348,10 +1348,7 @@ describe("POST /management-api/payments/bill-payments/:id/attest", () => {
   it("records a confirmed failure with the manager and note, releasing the payment", async () => {
     const v = await setup();
     const orderId = await openOrder(v);
-    const id = await strandBillPayment(v, orderId, {
-      kind: "attempting",
-      intent: { status: "requires_payment_method" },
-    });
+    const id = await strandBillPayment(v, orderId, { kind: "failed" });
 
     const res = await post(v, attestPath(id), { outcome: "failed", note: NOTE, pin: "1234" });
 
@@ -1364,6 +1361,32 @@ describe("POST /management-api/payments/bill-payments/:id/attest", () => {
     });
     expect(saleIdsFor(orderId)).toEqual([]);
   });
+
+  it.each(["failed", "received"] as const)(
+    "refuses outcome_unknown to record %s while the provider row is still attempting",
+    async (outcome) => {
+      const v = await setup();
+      const orderId = await openOrder(v);
+      const id = await strandBillPayment(v, orderId, {
+        kind: "attempting",
+        intent: { status: "requires_payment_method" },
+      });
+
+      const res = await post(v, attestPath(id), { outcome, note: NOTE, pin: "1234" });
+
+      expect(res.status).toBe(409);
+      expect(await errorOf(res)).toEqual({
+        code: "payment.outcome_unknown",
+        params: { paymentId: id, reason: "ambiguous", providerStatus: "attempting" },
+      });
+      expect(await billPaymentOf(id)).toEqual({
+        state: "pending",
+        attestedBy: null,
+        attestationNote: null,
+      });
+      expect(saleIdsFor(orderId)).toEqual([]);
+    },
+  );
 
   it.each([
     ["a wrong PIN", { outcome: "failed", note: NOTE, pin: "9999" }, 401, "pin.invalid", undefined],

@@ -3,7 +3,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { billPayments, incidents } from "@waitron/db";
+import { billPayments, incidents, type SingletonRole } from "@waitron/db";
 import { insertCapturedPayment, insertFailedPayment, payments } from "@waitron/payments";
 import { decimal, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
@@ -296,6 +296,27 @@ describe("a pending card with no provider row (design §8 test 16)", () => {
 
 describe("withPendingBillPayments", () => {
   const report = { ran: [] } as unknown as PassReport;
+  const primary = () => "primary" as const;
+
+  it("settles nothing on a node that is not the singleton primary, reading the role each pass", async () => {
+    const billId = await tabWith(venue, "Paella");
+    const id = await strandedPending(billId, 2000);
+    let role: SingletonRole = "secondary";
+    const pass = withPendingBillPayments(
+      () => Promise.resolve(report),
+      settle,
+      () => role,
+      () => {},
+    );
+
+    expect(await pass(new Date())).toBe(report);
+    const onSecondary = await stateOf(id);
+    role = "primary";
+    await pass(new Date());
+
+    expect(onSecondary).toBe("pending");
+    expect(await stateOf(id)).toBe("failed");
+  });
 
   it("runs the settle after the pass and answers the pass's own report", async () => {
     const order: string[] = [];
@@ -310,6 +331,7 @@ describe("withPendingBillPayments", () => {
         order.push("settle");
         return Promise.resolve({ received: 1, failed: 2, mismatched: 0, errors: [] });
       },
+      primary,
       log,
     );
 
@@ -326,6 +348,7 @@ describe("withPendingBillPayments", () => {
     const throwing = withPendingBillPayments(
       () => Promise.resolve(report),
       () => Promise.reject(new Error("boom")),
+      primary,
       log,
     );
     const partial = withPendingBillPayments(
@@ -337,6 +360,7 @@ describe("withPendingBillPayments", () => {
           mismatched: 0,
           errors: [{ billPaymentId: "bp-1", error: "Error: nope" }],
         }),
+      primary,
       log,
     );
 

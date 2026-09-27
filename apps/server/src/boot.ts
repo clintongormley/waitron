@@ -28,6 +28,7 @@ import {
   withTransaction,
   applicationVersion,
   type Database,
+  type SingletonRole,
 } from "@waitron/db";
 import { credentialProvisioned, loadKeyRing, tenantCredentials } from "@waitron/credentials";
 import { registerModulePermissions, withPassiveManagementRead } from "@waitron/identity";
@@ -396,15 +397,19 @@ export function withStalePaymentRelease(
 /**
  * After each pass, settle the pending card bill payments no attempt in this process is driving
  * (`settlePendingBillPayments`, bill payments design §5.4). Like {@link withStalePaymentRelease} it
- * is log-only: a failure never changes the inner report.
+ * is log-only: a failure never changes the inner report. Settling files invoices and fails payments
+ * this process is not driving, so it runs only while `getRole` answers `primary`, read per pass as
+ * `singletonPass` reads it.
  */
 export function withPendingBillPayments(
   inner: (now: Date) => Promise<PassReport>,
   settle: () => Promise<BillPaymentsPass>,
+  getRole: () => SingletonRole,
   log: Logger,
 ): (now: Date) => Promise<PassReport> {
   return async (now) => {
     const report = await inner(now);
+    if (getRole() !== "primary") return report;
     try {
       const { errors, ...counts } = await settle();
       if (counts.received + counts.failed + counts.mismatched > 0) {
@@ -1943,6 +1948,7 @@ async function bootServer(
         log,
       ),
       () => settlePendingBillPayments({ db, backend: tillBackend, clock: tillClock, cfg: till }),
+      () => holders.singletonRole.current,
       log,
     ),
     now,
