@@ -2287,8 +2287,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       dish from another station joined to the group, say, or a printer switched back on after the
       HOLD ticket went out.
     - A failed kitchen ticket, fire or HOLD, whose dishes at that station are then all cancelled
-      stays a "Printing problem" on the table and the station until the party leaves, and Reprint
-      prints nothing for that station to clear it. The fire-ticket case predates Task 6 (the
+      stays a "Printing problem" on the table and the station, and Reprint prints nothing for that
+      station to clear it (measured on the branch for both, with `voidTabLine`). The fire-ticket case predates Task 6 (the
       clearing rule landed with #750); Task 6 makes it common, a held dessert the diner declines.
       Fix: `readPrintProblems` drops a failed ticket whose bill has nothing left at that station a
       Reprint would print.
