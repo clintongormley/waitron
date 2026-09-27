@@ -849,8 +849,8 @@ hedges from its own header belong here, because a failing test can never restore
 `EXECUTE (FUNCTION|PROCEDURE)` detector was DELETED as dead syntax — SQLite has no functions, so
 `CREATE FUNCTION` and `FOR EACH ROW EXECUTE FUNCTION f()` are both syntax errors on it. And a SQLite
 trigger's body is read as text for five statement shapes: `FROM`, `JOIN`, `INSERT INTO`, `UPDATE`
-and `DELETE FROM`. Other SQL syntax can still name a table without being detected; the guard does
-not parse SQL. The engine does not catch a missing body target either. Measured 2026-09-23 on
+and `DELETE FROM`. Other SQL syntax and top-level migration writes can still name a table without
+being detected; the guard does not parse SQL. The engine does not catch a missing body target either. Measured 2026-09-23 on
 `node:sqlite` (Node v26.7.0): a trigger whose body reads or writes a
 table that does not exist is created without complaint, and the insert that fires it fails with
 `no such table: main.<name>`; create the table and the same insert succeeds. The control in the

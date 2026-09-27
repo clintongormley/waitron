@@ -624,7 +624,7 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   triggers on tables core and catalogue create, and others whose bodies read them. Guard:
   `scripts/module-graph-honesty.test.ts`, weaker than its name — it reads SQL as TEXT and recognizes
   `FROM`, `JOIN`, `INSERT INTO`, `UPDATE` and `DELETE FROM` in a trigger body, not arbitrary SQL
-  syntax. The engine will not catch a missing body target either: measured 2026-09-23 on `node:sqlite` (Node
+  syntax or top-level migration writes. The engine will not catch a missing body target either: measured 2026-09-23 on `node:sqlite` (Node
   v26.7.0), a trigger whose body names a missing table is created without complaint and fails only
   when it fires, with `no such table`. Cost: the first `requires` graph was derived from `REFERENCES`
   alone and missed two edges made by triggers ON another module's tables, caught by hand in review. See
