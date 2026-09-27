@@ -648,7 +648,8 @@ issue that correction today; see the backlog). What holds now:_
   the quantity of an unsent line in place keeps that row's price and rate; a line an edit adds takes
   the rate of the version live then._
 - _**Issuing the invoice files each line's stored rate and resolves nothing**, on every path in the
-  table below (`priceStoredOrderForIssuance`, same file). Nothing is written back onto the line; the
+  table below (`priceStoredOrderForIssuance` for a stored order; a walk-up sale files what
+  `priceOrderLines` priced in the same pass). Nothing is written back onto the line; the
   write-back described in this section, and its note below, are gone._
 - _**A VAT change flags the menu.** After a change to a product's VAT class, every menu that
   includes the product as a dish, variant or extras item differs from its published version, so it

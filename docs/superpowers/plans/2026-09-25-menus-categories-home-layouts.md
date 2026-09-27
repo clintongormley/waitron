@@ -748,6 +748,9 @@ test. Each has its test in the named task.
 
 1. **Each fact reaches the till at its own moment: availability at once, allergens at publish, VAT
    at issuance — and only the allergen change flags the menu.**
+   _(2026-09-27: since menus M7v the VAT class and rate are frozen in the published version, a VAT
+   change flags the menu and Preview names it "VAT", and a Lemonade line already in a tab files the
+   rate the published version froze. See the note under the Goal.)_
    - Publish Lunch, then: mark Lemonade unavailable; add `sulphites` to Lemonade's allergens and to
      the extra "Extra lemon" that its extras list offers; change both VAT classes `reduced` →
      `general`.
@@ -1472,6 +1475,8 @@ sale-path change in one reviewable task.
   - **Review Focus 1's document half:** changing VAT class, availability, course or reporting
     category leaves the hash unchanged, while a name, price, image, **allergens, diet**,
     variant-offered or extras-price change moves it — on the dish, a variant AND an extras item.
+    _(2026-09-27: since menus M7v a VAT class change moves the hash too; the cases are in the
+    "moves" list in `packages/catalogue/src/menu-document.test.ts`. See the note under the Goal.)_
   - **Diff:** Lemonade added under Drinks gives `product_added` with `under: ["Drinks"]` and
     `source: "this_menu"`; Burger €12 → €13 gives `price_changed` with `source: "shared_product"`
     and `alsoOn: ["Dinner Menu"]`; sulphites added to Lemonade gives `product_changed` with
@@ -1916,6 +1921,8 @@ the golden huella and `inmutabilidad` pass unedited.**
     served offer still carries the PUBLISHED allergens on the dish and the extra; after a republish
     it carries the new ones. The filed VAT is Task 7a's. The golden fingerprint is unaffected because
     its fixture changes nothing.
+    _(2026-09-27: since menus M7v a line files the rate the published version froze when its price
+    was fixed, not Task 7a's. See the note under the Goal.)_
   - **Provenance:** a held line and a tab line record `working_line_contexts.menu_version_id` when
     added. Paying them hours later, after another publish, files `sale_lines.menu_version_id` = the
     version each line came from, not the live one, and their prices are unchanged (D10).

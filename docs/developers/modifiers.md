@@ -118,7 +118,8 @@ column underneath holds a count of whole cents and the row converts (`stringToCe
 
 The VAT class is never resolved that way — an extra always carries the picked PRODUCT's VAT class,
 because it is sold as that product: the product's own, or its parent's where a variant leaves it
-blank, and never the dish's.
+blank, and never the dish's. It is taxed at the rate the published menu version froze for that
+product.
 
 ### The dashboard
 
@@ -171,7 +172,8 @@ the basket resolved, and decides what is stored:
   afterwards cannot rewrite a saved order.
 - Each extras pick becomes its own CHILD line (`parent_line_id` set) carrying the picked PRODUCT,
   that product's three frozen names, the price the offer resolved and the PRODUCT's VAT class (its
-  own, or its parent's where a variant leaves it blank — never the dish's).
+  own, or its parent's where a variant leaves it blank — never the dish's), taxed at the rate the
+  published menu version froze for that product.
   The child's stored quantity is dish quantity × pick quantity.
 - A list's own counts are enforced per list: too few picks for `minPicks`, too many for `maxPicks`,
   or more of one product than its `maxQuantity` is `extras.limit_exceeded` carrying the list id. A
