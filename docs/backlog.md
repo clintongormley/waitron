@@ -3440,26 +3440,32 @@ image constraints under *Detail → Box image*.
     cross-station pass queue" (the queue is venue-wide and includes placed orders); #623 fixed
     the server's own "open" comments.
   - Found by #617 (`apps/server` part f1), not fixable in a comments-only change.
-    **`fetchPeerMembershipDocument` throws on a 200 whose body is JSON `null`**
-    (`apps/server/src/membership-reconcile.ts`, the final `body.document ?? null` reads a property
-    of `null`; the review reproduced it in a script), and boot re-throws what reconciliation throws,
-    so boot fails where it meant to carry on. Read, not run: the boot comment above that call says
-    the peer credential rides in a header, but the fetch is given only the URL, and the returned
-    `superseded` is never read; `shouldFenceRestart` (`membership-fence.ts`) has no caller outside
-    its test (`git grep`); `device-api.ts`'s ticket-item advance route does not enforce the
-    `act-as-kds` capability, and the obstacle its comment gave (null profile ids) no longer exists;
-    `enrol-rate-limit.ts` keeps one global limit whose stated reason (snitun) is gone;
-    `provision-till.test.ts` inserts its tenant with `onConflictDoNothing`, so a second call's new
-    NIF is silently kept out; `provision.ts` stamps the deployment in its own transaction before
-    `applyVenue`, a split with no commented decision (believed to predate #617, not checked); and
-    `setup-operation.ts` (around lines 128–133) may treat a lock written by a different store as a
-    previous boot's, so a live process's lock could be taken over (a belief, not verified).
-    `node-entry.test.ts` fixtures are still PostgreSQL-shaped (a `Failed query` wrapper, code
-    `42703`). `packages/db/drizzle/0000_baseline.sql` still names an index
-    `tills_tenant_location_name_key`. Test titles #617 could not touch: "(real Postgres)" five
-    times and "(SP-A.2 §16, device-profile §5)" in `device-session.test.ts`; "since Task 7" and
-    "this tenant's devices" in `device-api.test.ts`; "never a raw devices_pkey 23505" in
-    `join-requests.test.ts`; "(R1 behaviour preserved)" in `membership-mint.test.ts`.
+    **`fetchPeerMembershipDocument` throws on a 200 whose body is JSON `null`** — DONE (#753): it
+    now answers `null`, as it already did for a body that does not parse, so boot carries on
+    (`apps/server/src/membership-reconcile.ts`; the case is in `membership-reconcile.test.ts`).
+    **Still open** (read, not run): the boot-time fetch is given only the URL (item (ii) of **Still
+    open after A63** in the #657 item above), and boot never reads the `superseded` that
+    `reconcileMembershipOnBoot` returns (`apps/server/src/boot.ts`, where it is called);
+    `fetchMirrorBundle` (`apps/server/src/mirror-bundle-fetch.ts`) has the same shape, found by
+    #753's review — a 200 whose body is JSON `null` is returned as the bundle, and
+    `adoptFromPrimary` (`apps/server/src/adopt.ts`) then fails with a plain `TypeError` when it
+    destructures it, rather than the `mirror.bundle_fetch_failed` that `fetchMirrorBundle`'s doc
+    comment promises for any failure;
+    `shouldFenceRestart` (`membership-fence.ts`) has no caller outside its test (`git grep`);
+    `device-api.ts`'s ticket-item advance route does not enforce the `act-as-kds` capability, and
+    the obstacle its comment gave (null profile ids) no longer exists; `enrol-rate-limit.ts` keeps
+    one global limit whose stated reason (snitun) is gone; `provision-till.test.ts` inserts its
+    tenant with `onConflictDoNothing`, so a second call's new NIF is silently kept out;
+    `provision.ts` stamps the deployment in its own transaction before `applyVenue`, a split with no
+    commented decision (believed to predate #617, not checked); and `setup-operation.ts` (around
+    lines 128–133) may treat a lock written by a different store as a previous boot's, so a live
+    process's lock could be taken over (a belief, not verified). `node-entry.test.ts` fixtures are
+    still PostgreSQL-shaped (a `Failed query` wrapper, code `42703`).
+    `packages/db/drizzle/0000_baseline.sql` still names an index `tills_tenant_location_name_key`.
+    Test titles #617 could not touch: "(real Postgres)" five times and "(SP-A.2 §16, device-profile
+    §5)" in `device-session.test.ts`; "since Task 7" and "this tenant's devices" in
+    `device-api.test.ts`; "never a raw devices_pkey 23505" in `join-requests.test.ts`; "(R1
+    behaviour preserved)" in `membership-mint.test.ts`.
   - Found by #616 (`apps/till/src/widgets`), not fixable in a comments-only change. Test titles
     repeat claims the branch corrected: `apps/till/src/screens/till-allergen-screen.test.ts`
     "(escape/backdrop)" — `wt-dialog` closes on Escape and, measured in Playwright's Chromium 153,
