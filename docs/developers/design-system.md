@@ -238,7 +238,7 @@ this floor — removing the `min-width` regresses that guard.
 
 | Element | Properties | Events |
 | --- | --- | --- |
-| `wt-button` | `variant` (`primary`\|`secondary`\|`danger`\|`ghost`), `size` (`sm`\|`md`\|`lg`), `shape` (`default`\|`round`), `disabled`, `loading`, `aria-label` | native `click` |
+| `wt-button` | `variant` (`primary`\|`secondary`\|`danger`\|`ghost`), `size` (`sm`\|`md`\|`lg`), `shape` (`default`\|`round`), `disabled`, `loading`, `aria-label`, `aria-haspopup`, `aria-expanded` (each forwarded to the inner `<button>`) | native `click` |
 | `wt-icon` | `name`, `size` (`sm`\|`md`\|`lg`) | — |
 | `wt-spinner` | `size` (`sm`\|`md`\|`lg`), `label` (the status region's accessible name), `decorative` | — |
 | `wt-card` | `raised`; default slot (body), `header` slot | — |

@@ -72,6 +72,29 @@ describe("dashboard-language-chooser", () => {
     expect(menu.right).toBeLessThanOrEqual(window.innerWidth);
   });
 
+  it("tells a screen reader the trigger opens a menu, and whether it is open, on the inner button", async () => {
+    const { el } = await mountWidget<LanguageChooser>("dashboard-language-chooser", {
+      loadLocales: twoLocales,
+    });
+    const trigger = el.shadowRoot!.querySelector<
+      HTMLElement & { updateComplete: Promise<unknown> }
+    >('[data-test="lang-trigger"]')!;
+    const inner = trigger.shadowRoot!.querySelector("button")!;
+    await trigger.updateComplete;
+    expect(inner.getAttribute("aria-haspopup")).toBe("menu");
+    expect(inner.getAttribute("aria-expanded")).toBe("false");
+
+    trigger.click();
+    await settle(el);
+    await trigger.updateComplete;
+    expect(inner.getAttribute("aria-expanded")).toBe("true");
+
+    trigger.click();
+    await settle(el);
+    await trigger.updateComplete;
+    expect(inner.getAttribute("aria-expanded")).toBe("false");
+  });
+
   it("fetches once and caches — closing then re-opening does not re-fetch", async () => {
     const loadLocales = vi.fn(twoLocales);
     const { el } = await mountWidget<LanguageChooser>("dashboard-language-chooser", {

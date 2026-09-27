@@ -3555,10 +3555,8 @@ image constraints under *Detail → Box image*.
     `"alt"` case in its test), while an upload leaves alt text optional, so a venue holding such a
     photo may export a bundle it cannot import.
   - Found by #610 (`apps/dashboard/src/api` + `src/widgets`), not fixable in a comments-only
-    change. `apps/dashboard/src/widgets/language-chooser.ts` puts `aria-haspopup` and
-    `aria-expanded` on the `wt-button` host, and `wt-button` does not pass them to its inner
-    button, so a screen reader probably never hears them (read, not run). `reorder.test.ts`'s test
-    names say an out-of-range move "clamps"; `reorder()` ignores it. #616 fixed the till's copies of
+    change. `reorder.test.ts`'s test names say an out-of-range move "clamps"; `reorder()` ignores
+    it. #616 fixed the till's copies of
     "a `wt-button` forwards only `disabled`/`aria-label`", and #618 the till's "a runtime shape
     error a view test catches".
   - Found by #607 (`apps/dashboard/src/screens`), outside the screens folder; #610 fixed the
