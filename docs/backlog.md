@@ -1992,13 +1992,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     money back before the invoice (a card refund keeps its record through an interrupted call), and
     the cash-up counts each payment and refund on the day and at the till where the money moved.
     No till screen calls these routes yet; Task 15 builds them. The questions it raised, and how
-    each was ruled, are in lane B's questions log. Two follow-ups:
-    - **Until lane C's M7v lands, the invoice issued at a bill's last payment files each line at
-      the VAT rate its product has at that moment** (Task 14's Ruling STOP 2):
-      `priceStoredOrderForIssuance` (`apps/server/src/working-order.ts`) resolves each line's rate
-      from its product's current VAT class when the invoice is issued, so a meal paid across a
-      change of VAT class files the rate current at the last payment. M7v changes that one
-      function.
+    each was ruled, are in lane B's questions log. With M7v landed (#720), the invoice issued at a
+    bill's last payment files each line at the VAT rate recorded on it, however long the payments
+    took. One follow-up:
     - **A dashboard screen for card payments and refunds on a bill that nothing has settled**
       (Task 14's Ruling STOP 5), needed before or with Task 15. The routes exist:
       `GET /management-api/payments/bill-payments` and `.../bill-refunds` list them, and each has a

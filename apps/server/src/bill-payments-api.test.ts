@@ -1118,7 +1118,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     expect(await statusOf(billId)).toBe("settled");
   });
 
-  it("files each line at the rate its product has when the last payment lands, until the rate is recorded on the line", async () => {
+  it("files each line at the rate recorded on it, not the rate its product has when the last payment lands", async () => {
     const billId = await tabWith("Ensalada");
     expect((await contribute(billId, "5.00")).status).toBe(200);
     await inTx((tx) =>
@@ -1137,7 +1137,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
           .from(saleLines)
           .where(eq(saleLines.saleId, sale!.id)),
       );
-      expect(basisPointsToDecimal(line!.vatRate)).toBe("10.00");
+      expect(basisPointsToDecimal(line!.vatRate)).toBe("21.00");
     } finally {
       await inTx((tx) =>
         tx
