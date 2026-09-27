@@ -658,6 +658,83 @@ describe("a line takes the rate NUMBER the published version froze", () => {
   });
 });
 
+describe("an edit prices only what it adds", () => {
+  it("an extras pick added to a stored line by an edit takes the rate the published version froze", async () => {
+    const v = await setupVenue();
+    const id = await park(v, one(v, v.products.burger));
+    freezeRateAs(v, "10.00", "11.00");
+    const [dish] = await suite.db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    const revision = await withTransaction(suite.db, (tx) => readOrderRevision(tx, id));
+
+    await updateHeldOrder({ db: suite.db }, v.cfg, id, {
+      lines: [
+        {
+          workingOrderLineId: dish!.id,
+          menuItemId: v.counter.offerFor(v.products.burger),
+          quantity: "1",
+          extras: [
+            {
+              listId: v.products.extrasListId,
+              picks: [{ productId: v.products.queso, quantity: 1 }],
+            },
+          ],
+        },
+      ],
+      revision,
+    });
+    await payWorkingOrder(deps(), v.cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "10.75" },
+    });
+
+    expect((await stored(id)).map((line) => [line.productId, line.vatRate])).toEqual([
+      [v.products.burger, 1000],
+      [v.products.queso, 1100],
+    ]);
+    expect(await rates(id)).toEqual([1000, 1100]);
+  });
+
+  it("raising the quantity of a line the kitchen does not have keeps the rate it locked with its price, after a new publish; a line the same edit adds takes the new rate", async () => {
+    const v = await setupVenue();
+    const id = await park(v, one(v, v.products.cana));
+    await setVat(v.products.cana, "general");
+    await republish(v);
+    const [kept] = await suite.db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    const revision = await withTransaction(suite.db, (tx) => readOrderRevision(tx, id));
+
+    await updateHeldOrder({ db: suite.db }, v.cfg, id, {
+      lines: [
+        {
+          workingOrderLineId: kept!.id,
+          menuItemId: v.counter.offerFor(v.products.cana),
+          quantity: "2",
+        },
+        ...one(v, v.products.cana),
+      ],
+      revision,
+    });
+    await payWorkingOrder(deps(), v.cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "7.50" },
+    });
+
+    const sale = await filed(id);
+    expect(sale.lines.map((line) => [line.vatRate, line.lineGross])).toEqual([
+      [1000, 500],
+      [2100, 250],
+    ]);
+    expect(sale.total).toBe(750);
+  });
+});
+
 describe("a new version published with the new rate", () => {
   it("a held order: a line added before the publish keeps 10%, and one added after it takes 21%", async () => {
     const v = await setupVenue();

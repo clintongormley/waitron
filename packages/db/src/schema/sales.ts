@@ -194,7 +194,6 @@ export const saleLines = table(
     menuVersionId: id("menu_version_id"),
     // The line's VAT-inclusive total, beside `line_total`'s net base.
     lineGross: money("line_gross"),
-    // The product's reporting chain and labels as they stood when the line was added to its order.
     classification: json<SaleLineClassification>("classification"),
   },
   (t) => [

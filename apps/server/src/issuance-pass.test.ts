@@ -835,9 +835,10 @@ describe("issuancePass", () => {
     expect(forFive.filter((s) => /from "labels"/.test(s))).toHaveLength(1);
   });
 
-  it("records a stored line with no product id as Uncategorised with no product", async () => {
+  it("copies each stored line's recorded classification as it is: a line whose product id is gone keeps its snapshot, and a line with none recorded files none", async () => {
     const v = await setupVenue();
     const id = await basketOrder(v, [
+      { productId: v.products.negroni },
       { productId: v.products.negroni },
       { productId: v.products.pan },
     ]);
@@ -845,18 +846,23 @@ describe("issuancePass", () => {
       .update(workingOrderLines)
       .set({ productId: null })
       .where(and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.lineNo, 2)));
+    await suite.db
+      .update(workingOrderLines)
+      .set({ classification: null })
+      .where(and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.lineNo, 3)));
 
     const issued = await withTransaction(suite.db, async (tx) =>
       issuancePass(tx, v.cfg, id, await priceStoredOrderForIssuance(tx, id)),
     );
 
+    const negroni = {
+      reporting: underAlcoholic(v),
+      labels: labelsOf(v.labels.happyHour, v.labels.alcohol),
+    };
     expect(issued.lines.map((l) => [l.productId, l.parentProductId, l.classification])).toEqual([
-      [
-        v.products.negroni,
-        null,
-        { reporting: underAlcoholic(v), labels: labelsOf(v.labels.happyHour, v.labels.alcohol) },
-      ],
-      [null, null, { reporting: [], labels: [] }],
+      [v.products.negroni, null, negroni],
+      [null, null, negroni],
+      [v.products.pan, null, null],
     ]);
   });
 

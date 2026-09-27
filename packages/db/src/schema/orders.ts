@@ -171,7 +171,7 @@ export const workingOrderLines = table(
     // the list existed.
     extraListId: id("extra_list_id"),
     // The product's reporting chain and labels when the line was added; issuance copies it onto
-    // `sale_lines.classification`. Null on a line added before this column existed.
+    // `sale_lines.classification`.
     classification: json<SaleLineClassification>("classification"),
   },
   (t) => [

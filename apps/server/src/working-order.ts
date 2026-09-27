@@ -84,6 +84,7 @@ import {
   MAX_UNIT_PRECISION,
   assertQuantityPrecision,
   classifyLine,
+  contentLanguagesOr,
   expandDietaryDeclarations,
   loadClassification,
   priceBasket,
@@ -94,6 +95,7 @@ import {
   readProductModifiers,
   toInvoiceLineDescriptions,
   readContentLanguages,
+  readSavedContentLanguages,
   readInvoiceLocales,
   parentsWithActiveVariants,
   selectMenuVariant,
@@ -396,7 +398,8 @@ async function priceOrderLines(
     return { ...line, offer };
   });
   const invoiceLocales = await readInvoiceLocales(tx, cfg.locationId);
-  const contentConfig = await readContentLanguages(tx, cfg.locale);
+  const savedLanguages = await readSavedContentLanguages(tx);
+  const contentConfig = contentLanguagesOr(savedLanguages, cfg.locale);
 
   const modifiersByOffer = new Map<string, OfferModifiers>();
   for (const { offer } of lines) {
@@ -531,7 +534,9 @@ async function priceOrderLines(
   const classification = await loadClassification(
     tx,
     [...new Set(lineMeta.map((meta) => meta.productId))],
-    (await readContentLanguages(tx, FALLBACK_LOCALE)).defaultLanguage,
+    // The language the served offer's free-text `category` is resolved in (`applyLiveFields`,
+    // menu-document.ts); it differs from `contentConfig`'s only when no content languages are saved.
+    contentLanguagesOr(savedLanguages, FALLBACK_LOCALE).defaultLanguage,
   );
   const classifications = lineMeta.map((meta) => classifyLine(classification, meta.productId));
 
@@ -738,7 +743,7 @@ export interface StoredOrderLine {
 export interface OrderLineIdentity {
   id: string;
   productId: string | null;
-  /** Recorded when the line was added; null on a line added before it was recorded. */
+  /** Recorded when the line was added. */
   classification: SaleLineClassification | null;
 }
 
