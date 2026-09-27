@@ -4304,7 +4304,7 @@ exported (the `CLAUDE.md` §3 rule, unguarded, is what stands against a new call
 near-identical word-matching checks in `constraint-target.ts` could share one private helper.
 
 **`VenueMigrationOptions.appendOnlyTables` is optional while `MigrationSet.appendOnlyTables` is
-required — DONE (2026-09-27, lane C's C14; found 2026-09-23, task F1's review wave).**
+required — DONE (2026-09-27, #737, lane C's C14; found 2026-09-23, task F1's review wave).**
 `applyMigrations` reads the field as `?? []`, so a caller passing a plain options array gets a
 migrated database with no append-only triggers and no error. The field stayed optional; instead
 `scripts/apply-migrations-callers.test.ts` now holds that every non-test `applyMigrations` call
