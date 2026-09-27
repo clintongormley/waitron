@@ -1263,3 +1263,243 @@ describe("till-station-queue — kitchen notices strip", () => {
     expect(el.shadowRoot!.querySelector(".notices")).toBeNull();
   });
 });
+
+// A seated party's bill: listed out of position order, with a line moved in from another bill (no
+// group) and each item still carrying a course, so a passing test proves the card sections by GROUP.
+const partyOrder: StationQueueGroup = {
+  orderId: "wo-p",
+  orderNumber: 9,
+  label: "Mesa 4",
+  queuedAt: "2026-08-17T10:00:00.000Z",
+  status: "open",
+  thresholds: DEFAULT_THRESHOLDS,
+  visit: { id: "v-4", revision: 12 },
+  items: [
+    {
+      id: "it-steak",
+      workingOrderLineId: "wl-steak",
+      state: "queued",
+      name: "Solomillo",
+      quantity: "2.000",
+      course: { id: "co-main", name: "Principales", displayOrder: 2 },
+      group: { id: "g-3", position: 3, state: "held" },
+      firedAt: null,
+    },
+    {
+      id: "it-salad",
+      workingOrderLineId: "wl-salad",
+      state: "preparing",
+      name: "Ensalada",
+      quantity: "1.000",
+      course: { id: "co-start", name: "Entrantes", displayOrder: 1 },
+      group: { id: "g-2", position: 2, state: "fired" },
+      firedAt: "2026-08-17T10:00:00.000Z",
+    },
+    {
+      id: "it-moved",
+      workingOrderLineId: "wl-moved",
+      state: "queued",
+      name: "Pan",
+      quantity: "1.000",
+      course: null,
+      firedAt: "2026-08-17T10:00:00.000Z",
+    },
+    {
+      id: "it-flan",
+      workingOrderLineId: "wl-flan",
+      state: "queued",
+      name: "Flan",
+      quantity: "1.000",
+      course: { id: "co-dessert", name: "Postres", displayOrder: 3 },
+      group: { id: "g-4", position: 4, state: "held" },
+      firedAt: null,
+    },
+    {
+      id: "it-fish",
+      workingOrderLineId: "wl-fish",
+      state: "queued",
+      name: "Merluza",
+      quantity: "1.000",
+      course: { id: "co-main", name: "Principales", displayOrder: 2 },
+      group: { id: "g-3", position: 3, state: "held" },
+      firedAt: null,
+    },
+  ],
+};
+
+describe("till-station-queue — a seated party's groups", () => {
+  const sections = (el: TillStationQueue) => [
+    ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-group-section]"),
+  ];
+
+  it("rail: sections a party's card by group position, the lines with no group first, and no course headers", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [partyOrder],
+      view: "rail",
+      stationId: "st-1",
+    });
+    expect(sections(el).map((s) => s.dataset.groupSection)).toEqual(["none", "g-2", "g-3", "g-4"]);
+    expect(sections(el)[0]!.querySelector(".course-head")).toBeNull();
+    expect(sections(el)[0]!.querySelector('[data-item="it-moved"]')).not.toBeNull();
+    expect(sections(el)[1]!.querySelector(".course-head")!.textContent).toContain(
+      t("table.group_n").replace("{n}", "2"),
+    );
+    expect(
+      [...sections(el)[2]!.querySelectorAll<HTMLElement>("[data-item]")].map((i) => i.dataset.item),
+    ).toEqual(["it-steak", "it-fish"]);
+    expect(el.shadowRoot!.querySelector("[data-course]")).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain("Principales");
+  });
+
+  it("rail: a held group says it is held, not released, and its lines are greyed and not bump targets", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [partyOrder],
+      view: "rail",
+      stationId: "st-1",
+    });
+    const [, fired, held] = sections(el);
+    expect(held!.querySelector("[data-group-held]")!.textContent).toContain(
+      t("station.group_held"),
+    );
+    expect(fired!.querySelector("[data-group-held]")).toBeNull();
+    expect(held!.querySelector('[data-item="it-steak"]')!.classList.contains("held")).toBe(true);
+    expect(el.shadowRoot!.querySelector('button[data-item="it-steak"]')).toBeNull();
+  });
+
+  it("kitchen fire: Fire on each held group emits fire-kitchen-group with the card's party and revision", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [partyOrder],
+      view: "rail",
+      stationId: "st-1",
+      fireControl: "kitchen",
+    });
+    const fires = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-fire-group]")];
+    expect(fires.map((b) => b.dataset.fireGroup)).toEqual(["g-3", "g-4"]);
+    expect(fires[0]!.textContent).toContain(t("station.fire_group"));
+    expect(fires[0]!.getAttribute("aria-label")).toBe(
+      `${t("station.fire_group")} ${t("table.group_n").replace("{n}", "3")}`,
+    );
+    expect(el.shadowRoot!.querySelector("[data-fire]")).toBeNull();
+    let captured: CustomEvent | undefined;
+    el.addEventListener("fire-kitchen-group", (e) => (captured = e as CustomEvent));
+    fires[0]!.click();
+    expect(captured!.detail).toEqual({ visitId: "v-4", groupId: "g-3", expectedVisitRevision: 12 });
+    expect(captured!.composed).toBe(true);
+    expect(captured!.bubbles).toBe(true);
+  });
+
+  it.each(["waiter", "expo"] as const)(
+    "fire control %s: no Fire on a held group",
+    async (fireControl) => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [partyOrder],
+        view: "rail",
+        stationId: "st-1",
+        fireControl,
+      });
+      expect(el.shadowRoot!.querySelector("[data-fire-group]")).toBeNull();
+    },
+  );
+
+  it("advanceOnly: a device display never offers Fire on a held group", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [partyOrder],
+      view: "rail",
+      stationId: "st-1",
+      fireControl: "kitchen",
+      advanceOnly: true,
+    });
+    expect(el.shadowRoot!.querySelector("[data-fire-group]")).toBeNull();
+  });
+
+  it("kanban: no Fire on a held group", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [partyOrder],
+      stationId: "st-1",
+      fireControl: "kitchen",
+    });
+    expect(el.shadowRoot!.querySelector("[data-fire-group]")).toBeNull();
+  });
+
+  it("a card with no party keeps its course sections beside a party's card", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [coursedOrder, partyOrder],
+      view: "rail",
+      stationId: "st-1",
+      fireControl: "kitchen",
+    });
+    const counter = el.shadowRoot!.querySelector('[data-order="7"]')!;
+    expect(
+      [...counter.querySelectorAll<HTMLElement>("[data-course]")].map((s) => s.dataset.course),
+    ).toEqual(["none", "co-start", "co-main"]);
+    expect(counter.querySelector("[data-group-section]")).toBeNull();
+    expect(counter.querySelector('[data-fire="co-main"]')).not.toBeNull();
+  });
+});
+
+describe("till-station-queue — printing problems", () => {
+  const troubled: StationQueueGroup = { ...groupA, printProblem: true };
+
+  it("rail: a card whose ticket did not print says so; another card does not", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [troubled, groupB],
+      view: "rail",
+      stationId: "st-1",
+    });
+    const card = el.shadowRoot!.querySelector('[data-order="5"]')!;
+    expect(card.querySelector("[data-print-problem]")!.textContent).toContain(
+      t("station.print_problem"),
+    );
+    expect(el.shadowRoot!.querySelector('[data-order="6"] [data-print-problem]')).toBeNull();
+  });
+
+  it("rail: Reprint is on the troubled card only where the widget shows Reprint", async () => {
+    const operator = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [troubled],
+      view: "rail",
+      stationId: "st-1",
+      showReprint: true,
+    });
+    expect(
+      operator.el.shadowRoot!.querySelector('[data-order="5"] [data-reprint="wo-1"]'),
+    ).not.toBeNull();
+    const device = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [troubled],
+      view: "rail",
+      stationId: "st-1",
+      advanceOnly: true,
+    });
+    expect(device.el.shadowRoot!.querySelector("[data-print-problem]")).not.toBeNull();
+    expect(device.el.shadowRoot!.querySelector("[data-reprint]")).toBeNull();
+  });
+
+  it("kanban: names each order whose ticket did not print above the columns", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [troubled, groupB],
+      stationId: "st-1",
+    });
+    const strip = el.shadowRoot!.querySelector("[data-print-problems]")!;
+    expect(strip.textContent).toContain(t("station.print_problem"));
+    expect(strip.textContent).toContain("#5 · Mesa 4");
+    expect(strip.textContent).not.toContain("#6");
+  });
+
+  it("kanban: an order with no label is named by its number alone", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [{ ...groupB, printProblem: true }],
+      stationId: "st-1",
+    });
+    const strip = el.shadowRoot!.querySelector("[data-print-problems]")!;
+    expect(strip.textContent!.replace(/\s+/g, " ").trim()).toBe(
+      `${t("station.print_problem")}: #6`,
+    );
+  });
+
+  it("kanban: no strip while every ticket printed", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+    });
+    expect(el.shadowRoot!.querySelector("[data-print-problems]")).toBeNull();
+  });
+});

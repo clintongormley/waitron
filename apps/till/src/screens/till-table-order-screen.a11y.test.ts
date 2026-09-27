@@ -442,6 +442,23 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       await press(el, '[data-group-fire="g2"]');
       await expectNoA11yViolations(host);
     });
+
+    it("has no violations with a ready group and the printing-problem notice", async () => {
+      const { el, host } = await withGroups();
+      el.groups = [{ ...groups[0]!, ready: true }, ...groups.slice(1)];
+      el.printProblems = [
+        {
+          workingOrderId: "wo-1",
+          stationId: "st-1",
+          stationName: "Cocina",
+          since: "2026-08-20T09:59:00.000Z",
+        },
+      ];
+      await el.updateComplete;
+      if (el.shadowRoot!.querySelector("[data-print-problem-reprint]") === null)
+        throw new Error("the scan must include the printing-problem Reprint");
+      await expectNoA11yViolations(host);
+    });
   });
 
   it("has no violations in the split quantity picker", async () => {

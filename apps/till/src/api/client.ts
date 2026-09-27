@@ -481,8 +481,21 @@ export interface OrderGroup {
   state: "held" | "fired";
   firedAt: string | null;
   remindAt: string | null;
+  /** Present only when a person recorded every fired kitchen item of the group ready. */
+  ready?: true;
+  /** Present only when every fired kitchen item of the group has left the pass. */
+  away?: true;
   lineIds: string[];
   summary: string;
+}
+
+/** A kitchen ticket of a party's bill that has not printed and will not on its own; `since` is when
+ * the oldest such ticket was queued. */
+export interface PrintProblem {
+  workingOrderId: string;
+  stationId: string;
+  stationName: string;
+  since: string;
 }
 
 /** What every group command sends: its submission id, and the party's revision as last read. */
@@ -708,6 +721,19 @@ export interface AsServedAllergens {
   pending: boolean;
 }
 
+/** The seated party a queue card's bill belongs to, at the revision the queue was read at. */
+export interface QueueVisit {
+  id: string;
+  revision: number;
+}
+
+/** The group a queue item's dish was sent in. */
+export interface QueueGroup {
+  id: string;
+  position: number;
+  state: "held" | "fired";
+}
+
 /** One ticket item on a station's queue; `id` is the per-line bump target. */
 export interface StationQueueItem {
   /** The dish's frozen answers to its options lists; absent on a line that answered none and on
@@ -732,6 +758,8 @@ export interface StationQueueItem {
   asServedDiet?: DietProfile;
   /** The item's course, or `null` for a line with none — the display groups the queue by it. */
   course: StationQueueCourse | null;
+  /** Absent on a bill with no party, and on a line moved in from another bill. */
+  group?: QueueGroup;
   /** `null` while the item's course is HELD — not advanceable (`ticket.item_held`); a timestamp once
    *  fired. */
   firedAt: string | null;
@@ -790,6 +818,11 @@ export interface StationQueueGroup {
   /** The order's own status. Abandoned and collected orders are excluded server-side, so a `settled`
    *  order here is a pickup awaiting its counter handover ({@link TillApi.markCollected}). */
   status: WorkingOrderStatus;
+  /** Absent on a bill with no party. */
+  visit?: QueueVisit;
+  /** Present only when one of this bill's tickets for the station has not printed and will not on
+   *  its own. */
+  printProblem?: true;
   items: StationQueueItem[];
   /** This station's order-timing thresholds. Every group from one call shares them; they ride
    *  per-group so the widget can re-derive {@link queuedAt}'s band locally between refreshes
@@ -875,8 +908,10 @@ export interface ExpoItem {
   state: TicketState;
   /** `null` while the item's course is HELD; a timestamp once fired. */
   firedAt: string | null;
-  /** `null` until the expediter dispatches it (`markCourseAway`); a timestamp once away to the floor. */
+  /** `null` until the expediter dispatches it; a timestamp once away to the floor. */
   awayAt: string | null;
+  /** Absent on a bill with no party, and on a line moved in from another bill. */
+  group?: QueueGroup;
   /** The kitchen note as frozen at fire, as {@link StationQueueItem.note}. */
   note?: string | null;
   /** The dish's selected options, in selection order; absent reads as none. */
@@ -912,7 +947,21 @@ export interface ExpoCourse {
 }
 
 /**
- * One order on the cross-station expo/pass board, its items grouped BY COURSE. `tableLabel` is omitted
+ * One group section of a seated party's bill on the expo board. The section of lines with no group
+ * has every group field `null` and sorts first. `fired` and `away` roll up as {@link ExpoCourse}'s.
+ */
+export interface ExpoGroup {
+  groupId: string | null;
+  position: number | null;
+  state: QueueGroup["state"] | null;
+  fired: boolean;
+  away: boolean;
+  items: ExpoItem[];
+}
+
+/**
+ * One order on the cross-station expo/pass board, its items grouped BY COURSE, or by group for a
+ * seated party's bill. `tableLabel` is omitted
  * when the order maps to no table. The server excludes abandoned, collected and FULLY-away orders; a
  * surviving order still carries its away items, so the SCREEN hides fully-away courses (via
  * {@link ExpoCourse.away}).
@@ -922,7 +971,12 @@ export interface ExpoOrder {
   tableLabel?: string;
   orderNumber: number;
   openedMinutes: number;
+  /** Absent on a bill with no party. */
+  visit?: QueueVisit;
+  /** Empty on a seated party's bill. */
   courses: ExpoCourse[];
+  /** A seated party's bill's sections; absent or empty on any other bill. */
+  groups?: ExpoGroup[];
   /** The worst age band across the order's UNSERVED lines on the server's clock at fetch time.
    *  Not read by `till-expo-screen`, which derives the band from each item's `queuedAt` and
    *  thresholds. */
@@ -1724,6 +1778,32 @@ export class TillApi {
     command: GroupCommand,
   ): Promise<{ revision: number }> {
     return this.#request(`/api/visits/${visitId}/groups/${groupId}/fire`, "POST", command);
+  }
+
+  /** The pass marks a fired group's kitchen items ready → `POST /api/visits/:visitId/groups/:groupId/ready`.
+   * A held group is a no-op that still moves the revision. Rejects `group.not_found` and the command
+   * refusals. */
+  bumpGroupReady(
+    visitId: string,
+    groupId: string,
+    command: GroupCommand,
+  ): Promise<{ revision: number }> {
+    return this.#request(`/api/visits/${visitId}/groups/${groupId}/ready`, "POST", command);
+  }
+
+  /** The pass sends a group's ready items to the floor → `POST /api/visits/:visitId/groups/:groupId/away`.
+   * Rejects `group.not_found` and the command refusals. */
+  markGroupAway(
+    visitId: string,
+    groupId: string,
+    command: GroupCommand,
+  ): Promise<{ revision: number }> {
+    return this.#request(`/api/visits/${visitId}/groups/${groupId}/away`, "POST", command);
+  }
+
+  /** A party's kitchen tickets that did not print → `GET /api/visits/:visitId/print-problems`. */
+  listPrintProblems(visitId: string): Promise<{ problems: PrintProblem[] }> {
+    return this.#request(`/api/visits/${visitId}/print-problems`, "GET");
   }
 
   /** Put a party's held groups in a new order → `PUT /api/visits/:visitId/groups/order`, naming every

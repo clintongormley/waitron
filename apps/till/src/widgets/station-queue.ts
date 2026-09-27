@@ -11,6 +11,8 @@ import { snapshotDescriptionFor, trimQuantity } from "./dish-format.js";
 import type {
   KitchenNotice,
   KitchenNoticeKind,
+  QueueGroup,
+  QueueVisit,
   StationQueueCourse,
   StationQueueGroup,
   StationQueueItem,
@@ -57,6 +59,18 @@ interface CourseSection {
   course: StationQueueCourse | null;
   items: StationQueueItem[];
   held: boolean;
+}
+
+interface GroupSection {
+  group: QueueGroup | null;
+  items: StationQueueItem[];
+}
+
+/** What `fire-kitchen-group` carries: the held group, and the party at the revision the card was read. */
+export interface FireKitchenGroupDetail {
+  visitId: string;
+  groupId: string;
+  expectedVisitRevision: number;
 }
 
 /** Courseless lines sort first: the server fires them at once unless the send asks to hold them. */
@@ -409,6 +423,28 @@ export class TillStationQueue extends LitElement {
         text-transform: uppercase;
       }
 
+      .held-note {
+        font-weight: var(--wt-font-weight-normal);
+        text-transform: none;
+      }
+
+      /* The printing-problem tell: a warning chip on the card, words first so it never rests on colour. */
+      .print-problem {
+        align-self: flex-start;
+        margin: 0;
+        padding: var(--wt-space-1) var(--wt-space-2);
+        border-radius: var(--wt-radius-sm);
+        background: var(--wt-color-warning);
+        color: var(--wt-color-on-warning);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .print-problems {
+        display: block;
+        margin: 0 0 var(--wt-space-2);
+      }
+
       /* The per-order Mode-P handover action (.collect) and the per-course kitchen-fire action (.fire,
          KDS-2 §5a) — full-width primary buttons at the foot of a rail card / course section. The
          wt-color-primary on wt-color-on-primary pairing is the SAME a11y-correct one wt-button's primary
@@ -582,6 +618,16 @@ export class TillStationQueue extends LitElement {
     );
   }
 
+  #fireGroup(visit: QueueVisit, group: QueueGroup): void {
+    this.dispatchEvent(
+      new CustomEvent<FireKitchenGroupDetail>("fire-kitchen-group", {
+        detail: { visitId: visit.id, groupId: group.id, expectedVisitRevision: visit.revision },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
   #reprint(group: StationQueueGroup): void {
     this.dispatchEvent(
       new CustomEvent("reprint-order", {
@@ -609,6 +655,24 @@ export class TillStationQueue extends LitElement {
       if (item.firedAt !== null) section.held = false;
     }
     return [...byCourse.values()].sort((a, b) => courseOrder(a.course) - courseOrder(b.course));
+  }
+
+  /** A party's bill sections by the group each dish was sent in; lines with no group come first. */
+  #groupSections(group: StationQueueGroup): GroupSection[] {
+    const byGroup = new Map<string | null, GroupSection>();
+    for (const item of group.items) {
+      const sent = item.group ?? null;
+      const key = sent === null ? null : sent.id;
+      let section = byGroup.get(key);
+      if (section === undefined) {
+        section = { group: sent, items: [] };
+        byGroup.set(key, section);
+      }
+      section.items.push(item);
+    }
+    const position = (section: GroupSection) =>
+      section.group === null ? Number.NEGATIVE_INFINITY : section.group.position;
+    return [...byGroup.values()].sort((a, b) => position(a) - position(b));
   }
 
   /** Never a fresh `Date.now()` call, so every render in one tick sees the identical `now`. */
@@ -651,7 +715,9 @@ export class TillStationQueue extends LitElement {
     if (this.groups.length === 0) {
       return html`<p class="empty">${t("station.empty")}</p>`;
     }
-    return html`${this.#header()}${this.view === "rail" ? this.#rail() : this.#kanban()}`;
+    return html`${this.#header()}${
+      this.view === "rail" ? this.#rail() : html`${this.#printProblems()}${this.#kanban()}`
+    }`;
   }
 
   #notices(): TemplateResult | typeof nothing {
@@ -725,7 +791,18 @@ export class TillStationQueue extends LitElement {
             ${group.label ? html`<span class="label">${group.label}</span>` : nothing}
             <span class="age">${this.#elapsedMinutes(group.queuedAt)} ${t("station.min")}</span>
           </div>
-          ${this.#courseSections(group).map((section) => this.#courseSection(group, section))}
+          ${
+            group.printProblem
+              ? html`<p class="print-problem" data-print-problem>${t("station.print_problem")}</p>`
+              : nothing
+          }
+          ${
+            group.visit === undefined
+              ? this.#courseSections(group).map((section) => this.#courseSection(group, section))
+              : this.#groupSections(group).map((section) =>
+                  this.#groupSection(group, group.visit!, section),
+                )
+          }
           ${this.#collectAction(group)} ${this.#reprintAction(group)}
         </article>`;
       })}
@@ -740,6 +817,56 @@ export class TillStationQueue extends LitElement {
       </ul>
       ${this.#fireAction(group, section)}
     </div>`;
+  }
+
+  #groupSection(
+    group: StationQueueGroup,
+    visit: QueueVisit,
+    section: GroupSection,
+  ): TemplateResult {
+    const sent = section.group;
+    const name = sent === null ? "" : t("table.group_n").replace("{n}", String(sent.position));
+    return html`<div class="course" data-group-section=${sent?.id ?? "none"}>
+      ${
+        sent === null
+          ? nothing
+          : html`<div class="course-head">
+              ${name}${
+                sent.state === "held"
+                  ? html` ·
+                      <span class="held-note" data-group-held>${t("station.group_held")}</span>`
+                  : nothing
+              }
+            </div>`
+      }
+      <ul class="lines">
+        ${section.items.map((item) => html`<li>${this.#line(group, item)}</li>`)}
+      </ul>
+      ${
+        sent === null || sent.state !== "held" || this.advanceOnly || this.fireControl !== "kitchen"
+          ? nothing
+          : html`<button
+              class="fire"
+              data-fire-group=${sent.id}
+              aria-label=${`${t("station.fire_group")} ${name}`}
+              @click=${() => this.#fireGroup(visit, sent)}
+            >
+              ${t("station.fire_group")}
+            </button>`
+      }
+    </div>`;
+  }
+
+  /** Kanban columns cut across orders, so the orders whose tickets did not print are named above them. */
+  #printProblems(): TemplateResult | typeof nothing {
+    const troubled = this.groups.filter((group) => group.printProblem);
+    if (troubled.length === 0) return nothing;
+    const orders = troubled
+      .map((group) => `#${group.orderNumber}${group.label ? ` · ${group.label}` : ""}`)
+      .join(", ");
+    return html`<p class="print-problem print-problems" data-print-problems>
+      ${t("station.print_problem")}: ${orders}
+    </p>`;
   }
 
   #fireAction(group: StationQueueGroup, section: CourseSection): TemplateResult | typeof nothing {

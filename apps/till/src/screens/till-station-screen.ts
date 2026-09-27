@@ -5,7 +5,11 @@ import { tillPath } from "../navigation.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "../widgets/station-queue.js";
-import type { BumpMode, FireControlMode } from "../widgets/station-queue.js";
+import type {
+  BumpMode,
+  FireControlMode,
+  FireKitchenGroupDetail,
+} from "../widgets/station-queue.js";
 import type {
   DeviceStation,
   KitchenNotice,
@@ -89,7 +93,12 @@ export class TillStationScreen extends LitElement {
         margin: 0;
       }
 
-      .stale[data-stale] {
+      .table-changed {
+        margin: 0;
+      }
+
+      .stale[data-stale],
+      .table-changed {
         flex-basis: 100%;
         padding: var(--wt-space-2) var(--wt-space-3);
         border-radius: var(--wt-radius-md);
@@ -143,6 +152,8 @@ export class TillStationScreen extends LitElement {
   @state() private reprintErrorCode?: string;
   @state() private acknowledgeFailed = false;
   @state() private stale = false;
+  /** A group command was refused because the party changed since the queue was read. */
+  @state() private tableChanged = false;
   #lastGoodAt = new Date();
   #initialConsumed = false;
   #refreshTimer?: ReturnType<typeof setInterval>;
@@ -410,6 +421,25 @@ export class TillStationScreen extends LitElement {
     await this.#advance(() => this.api.fireCourse(orderId, courseId));
   }
 
+  /** Refused `visit.out_of_date`, the queue is read again and the cook decides; nothing is resent. */
+  async #onFireKitchenGroup(event: Event): Promise<void> {
+    event.stopPropagation();
+    if (this.deviceMode) return;
+    const { visitId, groupId, expectedVisitRevision } = (
+      event as CustomEvent<FireKitchenGroupDetail>
+    ).detail;
+    this.tableChanged = false;
+    try {
+      await this.api.fireGroup(visitId, groupId, {
+        submissionId: crypto.randomUUID(),
+        expectedVisitRevision,
+      });
+    } catch (error) {
+      this.tableChanged = (error as { code?: string }).code === "visit.out_of_date";
+    }
+    await this.#reload();
+  }
+
   async #onReprintOrder(event: Event): Promise<void> {
     event.stopPropagation();
     if (this.deviceMode) return;
@@ -466,6 +496,7 @@ export class TillStationScreen extends LitElement {
         @advance-ticket=${(event: Event) => void this.#onAdvanceTicket(event)}
         @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
         @fire-course=${(event: Event) => void this.#onFireCourse(event)}
+        @fire-kitchen-group=${(event: Event) => void this.#onFireKitchenGroup(event)}
         @reprint-order=${(event: Event) => void this.#onReprintOrder(event)}
         @acknowledge-notice=${(event: Event) => void this.#onAcknowledgeNotice(event)}
       >
@@ -500,6 +531,13 @@ export class TillStationScreen extends LitElement {
           <p class="stale" role="status" ?data-stale=${this.stale}>
             ${this.stale ? this.#staleMessage() : nothing}
           </p>
+          ${
+            this.tableChanged
+              ? html`<p class="table-changed" role="status" data-table-changed>
+                  ${t("station.table_changed")}
+                </p>`
+              : nothing
+          }
         </div>
         ${
           this.reprintErrorCode

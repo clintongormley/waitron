@@ -2277,6 +2277,62 @@ describe("TillApi: a seated party", () => {
     ).rejects.toMatchObject({ code: "group.not_held", status: 409 });
   });
 
+  it.each([
+    ["bumpGroupReady", "ready"],
+    ["markGroupAway", "away"],
+  ] as const)(
+    "%s POSTs the submission and revision to the group's /%s route and returns the party's revision",
+    async (method, step) => {
+      const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ revision: 11 }));
+
+      await expect(
+        new TillApi("", fetchStub)[method]("v1", "g2", {
+          submissionId: "sub-9",
+          expectedVisitRevision: 10,
+        }),
+      ).resolves.toEqual({ revision: 11 });
+
+      expect(fetchStub).toHaveBeenCalledWith(
+        `/api/visits/v1/groups/g2/${step}`,
+        post({ submissionId: "sub-9", expectedVisitRevision: 10 }),
+      );
+    },
+  );
+
+  it("markGroupAway surfaces a stale revision as { code }", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "visit.out_of_date" } }, 409));
+
+    await expect(
+      new TillApi("", fetchStub).markGroupAway("v1", "g2", {
+        submissionId: "sub-10",
+        expectedVisitRevision: 3,
+      }),
+    ).rejects.toMatchObject({ code: "visit.out_of_date", status: 409 });
+  });
+
+  it("listPrintProblems GETs the party's kitchen tickets that did not print", async () => {
+    const problems = [
+      {
+        workingOrderId: "wo-4",
+        stationId: "st-1",
+        stationName: "Cocina",
+        since: "2026-09-27T12:00:00.000Z",
+      },
+    ];
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ problems }));
+
+    await expect(new TillApi("", fetchStub).listPrintProblems("v1")).resolves.toEqual({
+      problems,
+    });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/visits/v1/print-problems",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+  });
+
   it("reorderGroups PUTs the held groups in their new order and returns the party's revision", async () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ revision: 10 }));
 

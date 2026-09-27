@@ -21,6 +21,7 @@ import type {
   HeldOrderSummary,
   OrderFlow,
   OrderGroup,
+  PrintProblem,
   StationQueueGroup,
   TableServiceStatus,
   TableState,
@@ -93,6 +94,7 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) initialDeviceStation?: DeviceStation;
   @property({ attribute: false }) tabLines: TabLine[] = [];
   @property({ attribute: false }) tabGroups: OrderGroup[] = [];
+  @property({ attribute: false }) printProblems: PrintProblem[] = [];
   @property({ attribute: false }) tabRevision = 0;
   @property({ attribute: false }) editSentLines = true;
   @property({ attribute: false }) cancelOffer: number | null = null;
@@ -226,6 +228,7 @@ export class TillCardGrid extends LitElement {
           embedded
           .lines=${this.tabLines}
           .groups=${this.tabGroups}
+          .printProblems=${this.printProblems}
           .revision=${this.tabRevision}
           .editSentLines=${this.editSentLines}
           .cancelOffer=${this.cancelOffer}
