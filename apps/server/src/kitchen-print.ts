@@ -276,21 +276,28 @@ async function readOrderHeader(
   return { orderNumber: String(order.orderNumber), tableLabel: order.tableLabel };
 }
 
-/** One kitchen print job: its printer, the stations its paper carries, and its bytes. */
-interface KitchenJob {
-  printerId: string;
-  /** A `station`-scope printer's job names the one station; an `order`-scope printer's is null. */
-  station: string | null;
-  stationIds: string[];
-  bytes: Uint8Array;
-}
-
 /** A kitchen ticket's printers, all of one layout so they share its bytes. */
 interface KitchenRoute {
   /** A `station`-scope printer's route names the one station; an `order`-scope printer's is null. */
   station: string | null;
   stationIds: string[];
-  printers: (KitchenPrinterLayout & { printerId: string })[];
+  printers: PrinterMapping[];
+}
+
+/** One kitchen print job: its printer, the stations its paper carries, and its bytes. */
+type KitchenJob = Omit<KitchenRoute, "printers"> & { printerId: string; bytes: Uint8Array };
+
+/** Each station's printer mappings, in the order of the list they came from, with their place in it. */
+type MappingsByStation = ReadonlyMap<string, readonly (PrinterMapping & { at: number })[]>;
+
+function mappingsByStation(mappings: readonly PrinterMapping[]): MappingsByStation {
+  const byStation = new Map<string, (PrinterMapping & { at: number })[]>();
+  mappings.forEach((mapping, at) => {
+    const bucket = byStation.get(mapping.stationId) ?? [];
+    bucket.push({ ...mapping, at });
+    byStation.set(mapping.stationId, bucket);
+  });
+  return byStation;
 }
 
 /**
@@ -303,23 +310,13 @@ interface KitchenRoute {
 function routeKitchenTickets(
   stationIds: readonly string[],
   orderScopeAlsoAt: readonly string[],
-  mappings: readonly PrinterMapping[],
+  mappings: MappingsByStation,
 ): KitchenRoute[] {
   if (stationIds.length === 0) return [];
-  const reached = new Set([...stationIds, ...orderScopeAlsoAt]);
-  const mappingRows = mappings.filter((mapping) => reached.has(mapping.stationId));
-
-  const printersByStation = new Map<string, PrinterMapping[]>();
-  for (const mapping of mappingRows) {
-    const bucket = printersByStation.get(mapping.stationId) ?? [];
-    bucket.push(mapping);
-    printersByStation.set(mapping.stationId, bucket);
-  }
-
   const routes: KitchenRoute[] = [];
   const groupPrinters = new Map<string, PrinterMapping>();
   for (const stationId of stationIds) {
-    const attached = printersByStation.get(stationId) ?? [];
+    const attached = mappings.get(stationId) ?? [];
     for (const printer of attached) {
       if (printer.ticketScope === "order") groupPrinters.set(printer.printerId, printer);
     }
@@ -328,10 +325,13 @@ function routeKitchenTickets(
       routes.push({ station: stationId, stationIds: [stationId], printers });
     }
   }
-  for (const mapping of mappingRows) {
-    if (mapping.ticketScope === "order" && !groupPrinters.has(mapping.printerId)) {
-      groupPrinters.set(mapping.printerId, mapping);
-    }
+  // Back in the list's order, as walking the whole list would add them.
+  const orderScope = [...new Set([...stationIds, ...orderScopeAlsoAt])]
+    .flatMap((stationId) => mappings.get(stationId) ?? [])
+    .filter((mapping) => mapping.ticketScope === "order")
+    .sort((a, b) => a.at - b.at);
+  for (const mapping of orderScope) {
+    if (!groupPrinters.has(mapping.printerId)) groupPrinters.set(mapping.printerId, mapping);
   }
   for (const printers of groupByLayout([...groupPrinters.values()])) {
     routes.push({ station: null, stationIds: [...stationIds], printers });
@@ -400,40 +400,32 @@ async function planKitchenTickets(
     .sort((a, b) => a.name.localeCompare(b.name));
   const stationById = new Map(stations.map((station) => [station.id, station]));
 
-  const firedAt = new Date();
-  const tableLabel = order.tableLabel ?? "";
-  const orderNumber = order.orderNumber;
   const jobs: KitchenJob[] = [];
   const routes = routeKitchenTickets(
     stations.map((station) => station.id),
     orderScopeAlsoAt,
-    mappingRows,
+    mappingsByStation(mappingRows),
   );
+  const head = {
+    reprint,
+    mark,
+    tableLabel: order.tableLabel ?? "",
+    orderNumber: order.orderNumber,
+    firedAt: new Date(),
+  };
   for (const route of routes) {
+    const station = route.station === null ? null : stationById.get(route.station)!;
     const bytes = formatKitchenTicket(
-      route.station === null
+      station === null
         ? {
-            reprint,
-            mark,
+            ...head,
             scope: "order",
-            tableLabel,
-            orderNumber,
-            firedAt,
-            stations: stations.map((station): KitchenTicketStation => ({
-              stationName: station.name,
-              items: station.items,
+            stations: stations.map((each): KitchenTicketStation => ({
+              stationName: each.name,
+              items: each.items,
             })),
           }
-        : {
-            reprint,
-            mark,
-            scope: "station",
-            stationName: stationById.get(route.station)!.name,
-            tableLabel,
-            orderNumber,
-            firedAt,
-            items: stationById.get(route.station)!.items,
-          },
+        : { ...head, scope: "station", stationName: station.name, items: station.items },
       layoutOf(route.printers[0]!),
     );
     for (const printer of route.printers) {
@@ -819,10 +811,11 @@ async function readReprintTargets(
   }
   // A switched-off printer's failed ticket still names unprinted dishes: once it is back on, a
   // Reprint prints them there.
-  const mappings =
+  const mappings = mappingsByStation(
     stationIds.size === 0
       ? []
-      : await printerMappings(tx, [...stationIds], { switchedOffToo: true });
+      : await printerMappings(tx, [...stationIds], { switchedOffToo: true }),
+  );
   const targets = new Map<string, Set<string>>();
   for (const [orderId, parts] of partsByOrder) {
     const pairs = new Set<string>();
