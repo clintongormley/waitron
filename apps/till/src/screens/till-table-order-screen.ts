@@ -22,7 +22,7 @@ import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { selectStyles } from "../select-styles.js";
 import { type DietPredicate, hasDietData, memoVisibleProducts, shownMenu } from "../menu-filter.js";
-import { lineProductName, productName, productUnit } from "../widgets/product-name.js";
+import { lineProductName, productName, soldByTheUnit } from "../widgets/product-name.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import {
   WorkingOrderStore,
@@ -869,14 +869,11 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #draftEntries(lines: readonly OrderLine[]): DraftEntry[] {
-    return lines.map((line) => {
-      const unit = productUnit(line.product);
-      return {
-        courseId: this.#selectedCourseId(line) || null,
-        quantity: line.quantity,
-        wholeUnits: unit.hardwareUnit === null && unit.precision === 0,
-      };
-    });
+    return lines.map((line) => ({
+      courseId: this.#selectedCourseId(line) || null,
+      quantity: line.quantity,
+      wholeUnits: soldByTheUnit(line.product),
+    }));
   }
 
   #selectedIndexes(lines: readonly OrderLine[]): Set<number> {
@@ -1172,9 +1169,8 @@ export class TillTableOrderScreen extends LitElement {
     this.cancelLine = null;
   }
 
-  /** A line sold by the unit and holding more than one can be cancelled one at a time; a weighed
-   * line cancels whole. */
-  #cancelsOneAtATime(line: TabLine): boolean {
+  /** Such a line can be cancelled, or split, one unit at a time; a weighed line cannot. */
+  #moreThanOneWholeUnit(line: TabLine): boolean {
     return line.unitPrecision === 0 && compareDecimal(decimal(line.quantity), decimal("1")) > 0;
   }
 
@@ -1183,7 +1179,7 @@ export class TillTableOrderScreen extends LitElement {
   #cancelDialog(): TemplateResult {
     const line = this.cancelLine;
     const started = line !== null && this.#isStarted(line);
-    const oneAtATime = line !== null && this.#cancelsOneAtATime(line);
+    const oneAtATime = line !== null && this.#moreThanOneWholeUnit(line);
     return html`<wt-dialog
       class="cancel-confirm"
       .open=${line !== null}
@@ -2020,7 +2016,8 @@ export class TillTableOrderScreen extends LitElement {
   ): TemplateResult {
     const name = this.#nameForLine(line);
     const label = (key: StringKey) => `${t(key)} · ${name}`;
-    const splits = group !== null && this.#cancelsOneAtATime(line) && !withExtras.has(line.lineNo);
+    const splits =
+      group !== null && this.#moreThanOneWholeUnit(line) && !withExtras.has(line.lineNo);
     return html`<li class="group-line" data-group-line=${line.id}>
       <span class="group-line-name">${name} ×${this.#displayQty(line.quantity)}</span>
       ${
