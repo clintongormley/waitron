@@ -326,8 +326,8 @@ Six things it is worth knowing about that payload:
   afresh as a check, so there it is refused like a new pick. All of these are pinned by "keeps an extra whose product sold out on a line the kitchen does not have, and
   refuses to send it again on one it has" in `apps/server/src/tabs.test.ts`. The filter's own tests:
   "refuses an extras pick of an Unavailable or an Inactive product as a pick the list does not
-  offer" in `apps/server/src/till-sale.test.ts`, and "puts availability, VAT, course and category
-  back from the current rows" in `packages/catalogue/src/menu-document.test.ts`, which clears an
+  offer" in `apps/server/src/till-sale.test.ts`, and "puts availability, course and category back
+  from the current rows, and not VAT" in `packages/catalogue/src/menu-document.test.ts`, which clears an
   extras item's flag only through the menu withdrawing it, not through its product.
   An extras list also leaves out a product that has an Active variant (it is never sold as
   itself; `readExtraProducts`), and a basket priced afresh refuses a pick of one with a

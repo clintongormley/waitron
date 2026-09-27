@@ -388,7 +388,9 @@ reporting classification when it is added, from the product's current classifica
 (`working_order_lines.classification`, core migration `0021`), and issuance copies it; a category
 change still flags no menu. A change to a class's RATE has no product surface: the rates are in code
 (`RATES`, `packages/catalogue/src/pricing.ts`), and a release changing them now reaches tills only
-when each menu is published again. **Upgrading** (measured: a database with a published menu, a
+when each menu is published again; a menu published once that release is installed freezes the new
+rate at once, even before the date it takes effect, so the release and the publish have to be timed
+together (a publish cannot be scheduled). **Upgrading** (measured: a database with a published menu, a
 held order and an open tab, written before this change and migrated through `applyMigrations`): the
 migration adds one column and applies cleanly; every menu published before M7v shows Unpublished
 changes and sells nothing until it is published again — its zone is offered none of its dishes,

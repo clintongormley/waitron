@@ -1319,11 +1319,12 @@ VAT rate is **the rate in the published menu the line was sold from**. Each publ
 menu records the VAT rate of every item on it. A line takes that rate at the moment its price is
 fixed: when it is added to an open order, or, for a sale rung up and paid in one go, at payment.
 Issuing the invoice files the rate each line recorded and looks nothing up again. A rate change
-therefore reaches the till only when the venue publishes the menu again, so a legal change that
-takes effect on a date is applied by publishing a new menu on that date. The customer pays the same
-gross price either way, so only the VAT split is affected. Since 2026-09-27 this is how the product
-works (`priceOrderLines` records the rate and `priceStoredOrderForIssuance` files it, both in
-`apps/server/src/working-order.ts`). Two different events are affected:
+therefore reaches the till only when the venue publishes the menu again, so the intent is that a
+legal change taking effect on a date is applied by publishing a new menu on that date. The
+customer pays the same gross price either way, so only the VAT split is affected. Since 2026-09-27
+this is how the product works (`priceOrderLines` records the rate and
+`priceStoredOrderForIssuance` files it, both in `apps/server/src/working-order.ts`). Two different
+events are affected:
 
 - **A set-up error corrected mid-service**, for example a drink configured at 10% that should always
   have been 21%. Once the product is corrected and the menu published again, new lines are filed at
@@ -1331,9 +1332,11 @@ works (`priceOrderLines` records the rate and `priceStoredOrderForIssuance` file
   invoice would take a corrective invoice (*factura rectificativa*), which the product cannot issue
   today.
 - **A legal rate change effective from a given moment**, for example a change on 1 January. The
-  venue publishes a menu with the new rate at midnight. A New Year's Eve table opened before
-  midnight and paid after it keeps the old rate on the lines added before the new version was
-  published, and the lines added after it take the new rate.
+  venue publishes a menu with the new rate at midnight. When a product moves to another rate, the
+  venue first changes the product's VAT class; when a rate itself changes (say 21% becomes 22%),
+  the rates are part of the software, so an updated version of Waitron must be installed first.
+  A New Year's Eve table opened before midnight and paid after it keeps the old rate on the lines
+  added before the new version was published, and the lines added after it take the new rate.
 
 A wrong rate on a filed invoice can only be corrected by a further record, so we want the rule
 confirmed before production, not after.

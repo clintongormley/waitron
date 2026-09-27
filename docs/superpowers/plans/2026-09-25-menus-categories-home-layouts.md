@@ -326,12 +326,14 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
     reporting classification and the kitchen route. VAT is resolved when the invoice record is
     issued (Task 7a; spec §11.4; asesor Q26), classification is recorded at the same moment (the
     classification plan), and the route is decided when the line is sent, as today. A change to any
-    of them flags no menu. _(2026-09-27: VAT is now in the document and flags the menu, and the
-    classification is recorded when the line is added; see the note under the Goal.)_ The served
+    of them flags no menu. The served
     offer still carries `vatClass`, `courseId` and the reporting
     `category` label read from the current rows, because `recordWorkingLineContexts` and the till's
     held-order view read them off the offer today (`packages/venue-service/src/operations.ts:749`);
     they are informational there, and filing never reads them.
+    _(2026-09-27: VAT is now in the document and flags the menu, and the served offer carries the
+    VAT class and rate the published version froze, not the current row's; the classification is
+    recorded when the line is added. See the note under the Goal.)_
   - Everything else the till shows or charges is frozen: names, descriptions, images, prices
     (dish, variant and extras item), units, variants offered, extras lists offered with their picks
     rules, option lists offered with their labels' text, allergens, diet, structure, order, and

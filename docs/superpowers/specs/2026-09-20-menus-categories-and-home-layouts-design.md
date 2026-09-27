@@ -5,9 +5,11 @@ Further owner decisions, 2026-09-25, are in §9, §10 and §11; a later section 
 **2026-09-25:** the owner lifted the wait on SQLite slice 2 and the dependency upgrades (the latter
 are finished); the implementation plan is
 [2026-09-25-menus-categories-home-layouts.md](../plans/2026-09-25-menus-categories-home-layouts.md).
-**2026-09-27:** the owner's decision of 2026-09-26 overturns §11.1's VAT bullet and §11.4: a line's
-VAT rate now comes from the published menu it was sold from, not from its product when the invoice
-is issued. The dated notes in §10.4, §10.7, §11.1 and §11.4 say what holds; §11.4's is the full one.
+**2026-09-27:** the owner's decision of 2026-09-26 overturns §11.1's VAT bullet and §11.4's rule
+that VAT and the classification are taken when the invoice is issued, with its per-path table and
+the write-back: a line's VAT rate now comes from the published menu it was sold from. §11.4's
+collection-and-replay bullet and its price-lock bullet stand. The dated notes in §10.4, §10.7, §11.1
+and §11.4 say what holds; §11.4's is the full one.
 
 **Related decisions, 2026-09-20:** the [service workflow spec](2026-09-20-service-ordering-and-billing-design.md)
 adds a public/staff-only/not sold separately setting for standalone ordering. Menu membership
@@ -625,11 +627,16 @@ asks for confirmation; after it, the sale files €2.50 + €2.50. It never file
 
 ### 11.4 VAT and classification are taken when the invoice record is issued
 
-_2026-09-27: this whole section is overturned by the owner's decision of 2026-09-26, built as menus
-M7v. The owner's reason: when a VAT rate officially changes on a date, the venue should publish a
-new menu on that date with the new rate, not pay the new rate early; and for a set-up error, "there
-must be some accounting technique to correct it after the fact" (the product cannot issue that
-correction today; see the backlog). What holds now:_
+_2026-09-27: the owner's decision of 2026-09-26, built as menus M7v, overturns this section's rule
+that VAT and the classification are taken when the invoice record is issued, the per-path table
+that applies it, and the write-back (with the 2026-09-26 note about it). Two bullets still hold:
+collection and replay of an issued sale keep its recorded facts, and prices stop changing once the
+order is committed, with the guard that refuses a second device's edit while a card payment is in
+flight (`order.payment_in_flight`, D22). Asesor Q26, named in the last bullet, is reworded to the
+new rule. The owner's reason: when a VAT rate officially changes on a date, the venue should
+publish a new menu on that date with the new rate, not pay the new rate early; and for a set-up
+error, "there must be some accounting technique to correct it after the fact" (the product cannot
+issue that correction today; see the backlog). What holds now:_
 
 - _**The published version freezes each item's VAT rate.** Each dish, variant and extras item in a
   published version carries its VAT class and the rate that class had at publishing, and a till is
@@ -648,7 +655,8 @@ correction today; see the backlog). What holds now:_
   shows "Unpublished changes" and its Preview names a VAT change. A change to a class's RATE has no
   product surface today: the rates are fixed in code (`RATES`, `packages/catalogue/src/pricing.ts`),
   and a release that changes them reaches tills only when each menu is published again, because
-  the version froze the number._
+  the version froze the number. A menu published after that release is installed freezes the new
+  rate at once, even before the date it takes effect._
 - _**The reporting classification is recorded when the line is added**, at the same moment as the
   rate, from the product's current classification (`working_order_lines.classification`, core
   migration `0021`); issuance copies it onto the sale line. It is not frozen in the published
