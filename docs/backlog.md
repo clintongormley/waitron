@@ -2840,7 +2840,9 @@ image constraints under *Detail → Box image*.
     (`POST /management-api/servers/:nodeId/remove`), marking it `evicted`. Still open:
     "never finished joining" is read as `serving-secondary` with no `nodes` row in the primary's
     database, and a remote standby writes that row in its own database, so the check cannot see a
-    remote standby that finished — none can today (`finish-adoption.ts`).
+    remote standby that finished — none can today (`finish-adoption.ts`). **Done (2026-09-27,
+    lane A's A70):** the standby's reset page now says so — "open Servers on the primary's dashboard
+    and choose Remove on this server's row" (`apps/setup/src/screens/reset-screen.ts`).
     **Done (2026-09-26, lane A's A63, #712) for A61's two other open notes** (a removed entry still took a
     `MAX_NODES` place; a removed node still held the primary's endorsement of its key): an admin
     (`mirror.create`) on the serving primary can clear a removed machine from the Servers screen

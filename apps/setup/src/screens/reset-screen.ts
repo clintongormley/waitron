@@ -164,6 +164,7 @@ export class SetupResetScreen extends LitElement {
       <p>
         This removes what the half-finished join left on this server and restarts it at a fresh
         setup. Nothing on the primary server is changed, so the primary may still list this server.
+        If it does, open Servers on the primary's dashboard and choose Remove on this server's row.
       </p>
       <p>Enter the admin person ID and password you used to connect this server.</p>
       ${this.#field("Admin login (person ID)", "personId")}

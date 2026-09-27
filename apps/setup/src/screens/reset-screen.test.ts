@@ -61,6 +61,14 @@ describe("setup-reset-screen", () => {
     expect(text).toContain("Nothing on the primary server is changed");
   });
 
+  it("says how to take this server off the primary's list", async () => {
+    const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
+    const text = el.shadowRoot!.textContent!.replace(/\s+/g, " ");
+    expect(text).toContain(
+      "If it does, open Servers on the primary's dashboard and choose Remove on this server's row.",
+    );
+  });
+
   it("emits reset-requested with the trimmed person ID and the password as typed", async () => {
     const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
     const events = collect(host);
