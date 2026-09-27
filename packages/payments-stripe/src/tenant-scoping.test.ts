@@ -24,8 +24,7 @@ const sources = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"], {
 
 /** Blanks comments so a doc comment that mentions `.transaction(` does not trip the guard.
  *
- * Blind spot: `blankComments` guesses from the code before a `/` whether it opens a regular
- * expression, and a wrong guess can blank real code on a later line as if it were a comment. */
+ * Blind spot: comments are found by `mapComments`, whose guesses about `/` are listed on it. */
 function stripComments(source: string): string {
   return blankComments(source);
 }

@@ -15,7 +15,8 @@ import { mapComments } from "../packages/shared/src/source-comments.js";
  * transitive leak (a dashboard file → a browser-safe `@waitron/x` export → server code inside that
  * package) is NOT followed, and no dashboard bundle is built by a pull request that leaves
  * `deploy/` alone, so nothing catches that case on such a pull request. A `from "@waitron/db"`
- * inside a comment counts, and a dynamic `import("…")` does not.
+ * inside a comment counts, and a dynamic `import("…")` does not. The type-only check finds
+ * comments with `mapComments`, whose guesses about `/` are listed on it.
  */
 const REPO = join(import.meta.dirname, "..");
 const FORBIDDEN = ["@waitron/db", "hono", "pg", "drizzle-orm", "node:"];

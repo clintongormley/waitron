@@ -295,9 +295,10 @@ copy, so a suite that reads the package's source as text reads Stryker's code on
 Measured 2026-09-27: main's `conventions.test.ts` with one added `import "./sql-literal.js"` failed
 Stryker's first test run on `expected '\nfunction stryNS_9fa48() {…' not to match /[-+*/%]/`;
 unchanged, it was not run at all (that run counted 396 tests, the package's 449 less that file's
-53), and neither was a probe suite whose only input was `?raw` source. `packages/ui` and
-`packages/ui-core` also have suites that read source text; whether Stryker runs them was not
-checked.
+53), and neither was a probe suite whose only input was `?raw` source. Any mutation-tested package
+with a suite that imports a mutated file and reads its package's `src` as text could read Stryker's
+instrumented copies the same way — `packages/fiscal/src/no-hardcoded-margin.test.ts` imports `./clock.js`, which fiscal's
+`mutate` list names, and reads `./*.ts` as raw text. Only `packages/shared` was checked.
 
 ### Reading `packages/db`'s score by hand
 

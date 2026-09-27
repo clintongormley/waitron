@@ -15,7 +15,7 @@ declare global {
 }
 
 // Weaker than the suite's name: it scans the non-test `.ts` files under `src/` only, and never
-// reads a comment.
+// reads a comment. Comments are found by `mapComments`, whose guesses about `/` are listed on it.
 const sources = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"], {
   query: "?raw",
   import: "default",
