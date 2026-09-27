@@ -174,7 +174,7 @@ _2026-09-27, menus M7v: the reporting chain and labels are now recorded on each 
 added (`working_order_lines.classification`) and issuance copies them, so `sale_classification.invalid`
 refuses adding a line rather than filing a sale, and a card recovery can no longer be refused that
 way. Whether the till's message for that refusal on the add paths is right is not checked._
-**Classification Task 3 landed (this branch, 2026-09-27), which completes the classification
+**Classification Task 3, landed as #738 (2026-09-27), completes the sales classification
 plan:** a category sales report on the dashboard Sales screen, for THIS node only, in two modes — at
 time of sale (the reporting chain and labels recorded on each sale line) and current (today's
 catalogue) — with an option to count an extra under its dish, totals by category and label, a Not
