@@ -5,7 +5,12 @@ import {
   sameOptionSelections,
 } from "./modifier-selection.js";
 import type { ExtraChild, ExtraProductFacts } from "./modifier-selection.js";
-import type { ExtraSelection, OptionSelection, OptionSnapshot } from "@waitron/shared";
+import type {
+  ExtraSelection,
+  OptionSelection,
+  OptionSnapshot,
+  SaleLineClassification,
+} from "@waitron/shared";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
@@ -34,6 +39,7 @@ import {
   decimalToBasisPoints,
   decimalToCents,
   decimalToThousandths,
+  FALLBACK_LOCALE,
   locationId as brandLocationId,
   MONEY_SCALE,
   multiplyDecimal,
@@ -77,14 +83,15 @@ import type { Database, Transaction } from "@waitron/db";
 import {
   MAX_UNIT_PRECISION,
   assertQuantityPrecision,
+  classifyLine,
   expandDietaryDeclarations,
+  loadClassification,
   priceBasket,
   priceBasketWithOptions,
   priceLockedLines,
   menusOfVersions,
   readOptionListsByIds,
   readProductModifiers,
-  resolveVatRate,
   toInvoiceLineDescriptions,
   readContentLanguages,
   readInvoiceLocales,
@@ -218,6 +225,7 @@ function offerModifiers(offer: ZoneMenuOffer, defaultLanguage: string): OfferMod
         ).product,
         kitchenName: item.kitchenName,
         vatClass: item.vatClass as VatClass,
+        vatRate: item.vatRate,
       });
     }
     extras.push({
@@ -307,15 +315,17 @@ async function readBasketOffers(
 
 /**
  * Price requested lines from the order's zone's live menu versions — the dish, variant, extras and
- * options alike. Return both the insertable line snapshots and the basket result so a caller filing
- * the same basket can reuse it. Stored gross unit prices preserve the price agreed at add time.
+ * options alike, each at the VAT rate the version froze — and classify each line's product as it
+ * stands now. Return both the insertable line snapshots and the basket result so a caller filing
+ * the same basket can reuse it. The stored gross unit price, rate and classification are what the
+ * line files.
  */
 async function priceOrderLines(
   tx: Transaction,
   cfg: TillConfig,
   workingOrderId: string,
   // `courseId` absent or null = the offer's default course; a string is an override.
-  // Each extras pick becomes a CHILD row taxed at the picked product's VAT class, never the dish's.
+  // Each extras pick becomes a CHILD row taxed at the picked product's frozen rate, never the dish's.
   // An ACTIVE options list must be answered even when `options` is absent.
   // `frozenOptions` and `frozenExtras` stand for answers an edit has already settled: an options
   // answer or an extras pick given that way is not validated or looked up again.
@@ -425,6 +435,7 @@ async function priceOrderLines(
       unit: selection.unit,
       pricingUnit: selection.unit.hardwareUnit === null ? ("each" as const) : ("weight" as const),
       vatClass: selection.vatClass as VatClass,
+      vatRate: selection.vatRate,
       category: selection.category,
       courseId: selection.courseId,
       descriptions: customerText.product,
@@ -478,8 +489,9 @@ async function priceOrderLines(
         kitchenName: child.kitchenName,
         // The GROSS price of ONE of this extra.
         priceDelta: child.price,
-        // Never null, so the dish's rate is never inherited.
+        // Always set, so the dish's rate is never inherited.
         vatClass: child.vatClass,
+        vatRate: child.vatRate,
         quantity: child.quantity,
       })),
     });
@@ -516,6 +528,12 @@ async function priceOrderLines(
   }
 
   const priced = priceBasketWithOptions(items);
+  const classification = await loadClassification(
+    tx,
+    [...new Set(lineMeta.map((meta) => meta.productId))],
+    (await readContentLanguages(tx, FALLBACK_LOCALE)).defaultLanguage,
+  );
+  const classifications = lineMeta.map((meta) => classifyLine(classification, meta.productId));
 
   // New lines snapshot the location's receipt languages; locked and issued lines keep their stored
   // text. A locale a variant's text leaves blank takes the variant's own staff name, never the
@@ -575,11 +593,13 @@ async function priceOrderLines(
       variantDescriptions: line.variantDescriptions ?? null,
       variantKitchenName: line.variantKitchenName ?? null,
       kitchenName: line.kitchenName ?? null,
+      classification: classifications[i]!,
     };
   });
   const identities = lineMeta.map((meta, index) => ({
     id: ids[index]!,
     productId: meta.productId,
+    classification: classifications[index]!,
   }));
   const lineContexts = lineMeta.map((meta, index) => ({
     workingOrderLineId: ids[index]!,
@@ -626,6 +646,7 @@ const storedLineColumns = {
   variantDescriptions: workingOrderLines.variantDescriptions,
   variantKitchenName: workingOrderLines.variantKitchenName,
   kitchenName: workingOrderLines.kitchenName,
+  classification: workingOrderLines.classification,
 };
 
 type StoredLineRow = {
@@ -634,9 +655,8 @@ type StoredLineRow = {
 
 /**
  * Read a persisted order's STORED lines, snapshotted at add time, so every path that files a
- * persisted order files the same locked composition and a later catalogue price change never moves
- * the filed total. Each line's rate is the stored one; issuance replaces it while the order is open
- * ({@link priceStoredOrderForIssuance}).
+ * persisted order files the same locked composition and a later catalogue price or VAT change never
+ * moves the filed total.
  *
  * Refuses a LINELESS order with `sale.empty_basket`: an empty tab is a reachable state, and this is
  * the last check before its pay or place reaches a fiscal write or a card charge.
@@ -654,19 +674,14 @@ export async function readLockedLines(
   );
 }
 
-/**
- * {@link readLockedLines}, with each line's product's CURRENT effective VAT class read in the same
- * query — a variant with none of its own reads its parent's — or `null` for a line that names no
- * product.
- */
+/** {@link readLockedLines}, with whether each line may be paid now, read in the same query. */
 async function readLockedLinesForIssuance(
   tx: Transaction,
   workingOrderId: string,
-): Promise<(StoredOrderLine & { vatClass: VatClass | null; payable: boolean })[]> {
+): Promise<(StoredOrderLine & { payable: boolean })[]> {
   const rows = await tx
     .select({
       ...storedLineColumns,
-      vatClass: effectiveProductColumns.vatClass,
       sentAt: workingOrderLines.sentAt,
       sellable: productSellable,
     })
@@ -677,8 +692,6 @@ async function readLockedLinesForIssuance(
     .orderBy(workingOrderLines.lineNo);
   return toStoredLines(rows).map((line, i) => ({
     ...line,
-    // `working_order_lines_product_fk` is `on delete restrict`, so a line naming a product joins it.
-    vatClass: line.identity.productId === null ? null : (rows[i]!.vatClass as VatClass),
     // A sent line is committed work, payable whatever its product's availability now.
     payable:
       line.identity.productId === null || rows[i]!.sentAt !== null || Boolean(rows[i]!.sellable),
@@ -694,7 +707,7 @@ function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
   // them would file a child under the wrong parent in the immutable record.
   const positionById = new Map(stored.map((line, i) => [line.id, i + 1]));
   return stored.map((line) => ({
-    identity: { id: line.id, productId: line.productId },
+    identity: { id: line.id, productId: line.productId, classification: line.classification },
     locked: {
       grossUnitPrice: centsToDecimal(line.grossUnitPrice),
       quantity: thousandthsToDecimal(line.quantity),
@@ -725,6 +738,8 @@ export interface StoredOrderLine {
 export interface OrderLineIdentity {
   id: string;
   productId: string | null;
+  /** Recorded when the line was added; null on a line added before it was recorded. */
+  classification: SaleLineClassification | null;
 }
 
 /** Priced lines together with, at the same index, the working-order line each was priced from. */
@@ -734,9 +749,8 @@ export interface PricedOrder {
 }
 
 /** Price a persisted order exactly as its lines are stored, rates included, to rebuild a filed
- * ticket's lines. The stored rate is not always the filed one (an order issued while placed keeps
- * its stored rate), so a rebuilt ticket takes its VAT breakdown from the filed record, never from
- * these lines. */
+ * ticket's lines. A rebuilt ticket takes its VAT breakdown from the filed record, never from these
+ * lines. */
 export async function priceStoredOrder(
   tx: Transaction,
   workingOrderId: string,
@@ -745,14 +759,9 @@ export async function priceStoredOrder(
 }
 
 /**
- * Issue a persisted order's price: each line's stored gross unit price, at the VAT rate of its
- * product's CURRENT effective VAT class (spec §11.4), read with the lines themselves. Returns each
- * priced line's working-order identity for `issuancePass`, and refuses a lineless order (see
- * {@link readLockedLines}).
- *
- * The resolved rate and its net unit price are written back, on the caller's transaction, onto each
- * line whose rate changed, but only while the order is open. A placed order's lines are not
- * written.
+ * Issue a persisted order's price: each line's stored gross unit price at its stored VAT rate,
+ * re-resolving nothing. Returns each priced line's working-order identity for `issuancePass`, and
+ * refuses a lineless order (see {@link readLockedLines}).
  *
  * A line never sent whose product cannot be sold now is refused `product.unavailable` (spec §11.3):
  * staff remove it, or split the rest off, before paying. A sent line pays whatever its product's
@@ -769,53 +778,10 @@ export async function priceStoredOrderForIssuance(
   if (options.refuseUnsentUnavailable && unpayable !== undefined) {
     throw new AppError("product.unavailable", { productId: unpayable.identity.productId! });
   }
-  const priced = priceLockedLines(
-    stored.map(({ locked, vatClass }) =>
-      // A line with no product names nothing to resolve from, so it keeps the rate it was added at.
-      vatClass === null ? locked : { ...locked, vatRate: resolveVatRate(vatClass) },
-    ),
-  );
-  const changed = stored.flatMap(({ identity, locked }, i) => {
-    const line = priced.lines[i]!;
-    const vatRate = stringToBasisPoints(line.vatRate);
-    return vatRate === stringToBasisPoints(locked.vatRate)
-      ? []
-      : [{ id: identity.id, vatRate, unitPrice: stringToCents(line.unitPrice) }];
-  });
-  await writeBackIssuedRates(tx, workingOrderId, changed);
-  return { priced, identities: stored.map(({ identity }) => identity) };
-}
-
-async function writeBackIssuedRates(
-  tx: Transaction,
-  workingOrderId: string,
-  changed: readonly { id: string; vatRate: number; unitPrice: number }[],
-): Promise<void> {
-  if (changed.length === 0) return;
-  const byLine = (value: (line: (typeof changed)[number]) => number) =>
-    sql`case ${workingOrderLines.id} ${sql.join(
-      changed.map((line) => sql`when ${line.id} then ${value(line)}`),
-      sql` `,
-    )} end`;
-  await tx
-    .update(workingOrderLines)
-    .set({ vatRate: byLine((line) => line.vatRate), unitPrice: byLine((line) => line.unitPrice) })
-    .where(
-      and(
-        inArray(
-          workingOrderLines.id,
-          changed.map((line) => line.id),
-        ),
-        // `working_order_lines_require_open_parent_update` refuses an update of a line whose order
-        // is not open, so an order issued while placed keeps its stored rate on the line.
-        exists(
-          tx
-            .select({ one: sql`1` })
-            .from(workingOrders)
-            .where(and(eq(workingOrders.id, workingOrderId), eq(workingOrders.status, "open"))),
-        ),
-      ),
-    );
+  return {
+    priced: priceLockedLines(stored.map(({ locked }) => locked)),
+    identities: stored.map(({ identity }) => identity),
+  };
 }
 
 /** Read a filed sale's invoice number ("A/1"); the fiscal record reference is regime-opaque and
@@ -2640,6 +2606,7 @@ async function carveOffLines(
       variantDescriptions: workingOrderLines.variantDescriptions,
       variantKitchenName: workingOrderLines.variantKitchenName,
       kitchenName: workingOrderLines.kitchenName,
+      classification: workingOrderLines.classification,
       sentAt: workingOrderLines.sentAt,
       servedAt: workingOrderLines.servedAt,
       courseId: workingOrderLines.courseId,
@@ -2775,6 +2742,7 @@ async function carveOffLines(
         variantDescriptions: line.variantDescriptions,
         variantKitchenName: line.variantKitchenName,
         kitchenName: line.kitchenName,
+        classification: line.classification,
         sentAt: line.sentAt,
         servedAt: line.servedAt,
         courseId: line.courseId,

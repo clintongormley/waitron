@@ -53,8 +53,7 @@ export interface BasketItem {
 
 /**
  * A stored working-order line to price. Deliberately the STORED gross unit, never
- * `line_total ÷ quantity`, which drifts for a fractional line. The rate is the caller's: the one
- * resolved at issuance, or the stored one to rebuild a filed ticket.
+ * `line_total ÷ quantity`, which drifts for a fractional line.
  */
 export interface LockedLine {
   /** The stored `working_order_lines.unit_price_gross` — GROSS, per selected unit. */
