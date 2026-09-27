@@ -2227,7 +2227,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       "portion") prints line by line, because nothing records a unit's kind (a unit field would
       need a migration).
     - The setting sits under "Changes after sending" on the Preparation routing tab; it may deserve
-      a heading of its own.
+      a heading of its own. _(Task 6, 2026-09-27: so does "Print held groups in advance", which is
+      not about sent work at all.)_
     - `fireHeldGroupsOfCourse` (`apps/server/src/order-groups.ts`), through which a course Fire
       still fires a party's held groups, is to be removed in a follow-up.
     - The setting's upgrade was measured with a throwaway script over the real migration folders
@@ -2254,7 +2255,18 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   - **Task 6 (advance HOLD tickets)**, on branch `feat/service-advance-hold-tickets`, not yet
     landed: with the venue's "Print held groups in advance" setting on, a held group prints a
     kitchen ticket marked HOLD; later changes to it print HOLD CHANGED or HOLD CANCELLED slips, each
-    also a notice on the station screen; firing it prints its ticket marked FIRE. Left open:
+    also a notice on the station screen; firing it prints its ticket marked FIRE. Core `0030` adds
+    `order_groups.hold_printed_at`; venue-service `0007` adds `service_settings.print_held_work` and
+    `kitchen_notices.direction`, and `0008` rebuilds `kitchen_notices` to add checks on `direction`:
+    a value other than `added` or `removed` is refused, and so is a direction on a notice that is not
+    `changed`. The rebuild is safe because no foreign key points at `kitchen_notices` and its only
+    triggers, the change feed's, are removed before migrating and reinstalled at boot. The upgrade
+    was measured with a throwaway probe on a venue migrated to main's head and seeded with groups, a
+    settings row and notices of every kind: after migrating, every row read back equal, the new
+    columns read null or 0, `pragma foreign_key_check` returned nothing, the change feed's triggers
+    came back after `installChangeFeed` and logged updates, and setting `direction = 'added'` on a
+    `void` notice was refused with `CHECK constraint failed: kitchen_notices_direction_kind_ck`.
+    Left open:
     - A failed HOLD ticket or HOLD correction raises no "Printing problem": neither is recorded in
       `kitchen_print_jobs`, which is all the printing problems read, because only fired work can be
       reprinted to clear one. The FIRE ticket is recorded, as any fire ticket is.

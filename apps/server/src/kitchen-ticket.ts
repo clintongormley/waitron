@@ -227,7 +227,10 @@ export type CorrectionSlip = {
   | { kind: "HOLD CANCELLED" }
 );
 
-/** Reuses {@link emitItem}, so the item prints exactly as on the original ticket. */
+/**
+ * Prints the item through {@link emitItem}, as a ticket does; a HOLD CHANGED slip prefixes it with
+ * + or -.
+ */
 export function formatCorrectionSlip(slip: CorrectionSlip, layout: KitchenLayout): Uint8Array {
   const b = esc(layout.charset, layout.characterTable).init();
   const text = (s: string): void => {

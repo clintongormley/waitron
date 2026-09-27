@@ -1,4 +1,5 @@
-// Kitchen print jobs for fired items, enqueued on the fire's own transaction so they roll back with it.
+// Kitchen print jobs for fired items, and HOLD tickets and HOLD corrections for held work, each
+// enqueued on its caller's transaction so it rolls back with it.
 //
 // A printer never blocks a fire (CLAUDE.md §5): `enqueuePrintJob` is an outbox insert that opens no
 // socket. Its one throw, `printer.not_found` for an inactive printer, cannot happen here: the mapping
@@ -34,8 +35,9 @@ import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
 /**
- * One line that fired in THIS round. The caller captures it from its own write's `RETURNING`, never by
- * re-querying `ticket_items`, which would re-select earlier rounds' items and reprint them.
+ * An item to print: its line, its station and the quantity to print. A fire captures its items from
+ * its own write's `RETURNING`, never by re-querying `ticket_items`, which would re-select earlier
+ * rounds' items and reprint them.
  */
 export interface FiredItem {
   workingOrderLineId: string;

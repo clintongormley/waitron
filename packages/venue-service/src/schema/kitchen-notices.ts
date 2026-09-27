@@ -22,8 +22,8 @@ export const KITCHEN_NOTICE_DIRECTIONS = ["added", "removed"] as const;
 const kitchenNoticeDirection = enumType(KITCHEN_NOTICE_DIRECTIONS);
 
 /**
- * A correction to work already sent to a station, kept until a cook acknowledges it. The line is
- * copied by value because a void deletes the line the notice describes.
+ * A correction to work a station already has on paper or on screen, kept until a cook acknowledges
+ * it. The line is copied by value because a void deletes the line the notice describes.
  */
 export const kitchenNotices = table(
   "kitchen_notices",

@@ -756,8 +756,8 @@ async function readGroups(
 /**
  * Print a HOLD ticket for each of these held groups, where the venue prints held work in advance:
  * its held kitchen items, bill by bill in the order the bills were opened, as a fire prints them.
- * A group records when its ticket printed, or nothing when no active printer took one, so it then
- * fires with an ordinary ticket.
+ * A group records when its ticket was queued for a printer, or nothing when no active printer took
+ * one, so it then fires with an ordinary ticket.
  */
 export async function printHoldTickets(
   tx: Transaction,

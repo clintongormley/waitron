@@ -26,7 +26,7 @@ export const orderGroups = table(
     firedBy: id("fired_by"),
     submittedBy: id("submitted_by").notNull(),
     remindAt: tsString("remind_at"),
-    // When this group's advance HOLD ticket printed; null if it never printed one.
+    // When this group's advance HOLD ticket was queued for a printer; null if none was.
     holdPrintedAt: tsString("hold_printed_at"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },

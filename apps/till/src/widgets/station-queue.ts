@@ -469,8 +469,8 @@ export class TillStationQueue extends LitElement {
       wt-button.reprint {
         display: block;
       }
-      /* The notices strip: corrections to work already sent, each until a cook acknowledges it. The
-         kind is always text plus an icon; the left border only repeats it. */
+      /* The notices strip: corrections to work a station already has, each until a cook acknowledges
+         it. The kind is always text plus an icon; the left border only repeats it. */
       .notices {
         display: flex;
         flex-direction: column;
