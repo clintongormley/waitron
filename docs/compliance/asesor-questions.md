@@ -9,7 +9,8 @@ Each question has English context (for us) and a Spanish formulation (to hand ov
 Question numbers are **stable identifiers**, not reading order — sections are ordered by
 priority. Q9 is referenced from other documents; do not renumber it.
 
-Last revised **2026-09-27**, later — Q26 reworded again: the owner narrowed the 2026-09-26 rule, and
+Last revised **2026-09-27** — Q30 added for certificate permissions when consulting AEAT records.
+Earlier that day, Q26 reworded again: the owner narrowed the 2026-09-26 rule, and
 each line now keeps its VAT class while the invoice takes the rate in force on the day it is issued;
 the question stays open. Earlier on 2026-09-27, Q26 reworded: the owner reversed the rule it asks
 about on 2026-09-26, and each line kept the VAT rate in the published menu it was sold from. Before
@@ -825,6 +826,33 @@ warn and whether the system should refuse to trade rather than accumulate unsend
 >
 > ¿Existe algún criterio sobre la antelación exigible en la sustitución de certificados? Y si la
 > AEAT requiere al obligado durante ese periodo, **¿qué justificación se considera suficiente?**
+
+---
+
+### Q30. Which certificate permissions cover issuer and recipient consultations? (added 2026-09-27)
+
+**Why it matters.** The default local-server SIF submits with the client's own certificate; Q16
+covers the separate question of certificate custody in a future hosted SIF. AEAT's
+[service description](https://sede.agenciatributaria.gob.es/static_files/AEAT_Desarrolladores/EEDD/IVA/VERI-FACTU/Veri-Factu_Descripcion_SWeb.pdf)
+describes consultations as issuer (`ObligadoEmision`) and recipient (`Destinatario`), with optional
+filters. That describes the request, not the authority granted to a particular certificate or
+representative. Before relying on either consultation mode for a client, confirm the required
+mandate and what proof to retain. An authorized preproduction query must separately check the
+service's actual response; the asesor's opinion cannot establish that behavior.
+
+> Nuestro SIF local utiliza el certificado cualificado del propio cliente para acceder a los
+> servicios de la AEAT. La documentación del servicio permite consultar registros como emisor
+> (`ObligadoEmision`) y como destinatario (`Destinatario`). En una modalidad futura podría actuar
+> un representante o colaborador social con su propio certificado.
+>
+> **¿Qué autorización, representación o apoderamiento se necesita en cada caso para consultar los
+> registros del cliente como emisor o destinatario, y qué justificantes debemos conservar?**
+> ¿Cubre la autorización para remitir registros también estas consultas, o requiere un alcance
+> distinto? ¿Existen límites para una consulta sin filtro de contraparte?
+
+**Route.** Ask the asesor about the mandate and retained evidence. Ask AEAT's technical channel
+about any unresolved service-permission detail, then verify it with an authorized preproduction
+certificate. Do not treat a successful test as proof of a broader legal mandate.
 
 ---
 
