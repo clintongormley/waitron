@@ -4136,10 +4136,13 @@ run without the code):
 give it the lock check), with a receipt each; key the label lookup on own properties; rename or
 rewrite that wake-lock test; and rename those two show-floor test titles.
 
-**`quoteLiteral` quotes the way SQLite does — DONE (2026-09-27, C13; found 2026-09-23, identity's
+**`quoteLiteral` quotes the way SQLite does — DONE (2026-09-27, #734; found 2026-09-23, identity's
 coverage review, PR #526).** `packages/shared/src/sql-literal.ts` used to double the backslashes in
 a value holding one and wrap it in PostgreSQL's `E'…'` form, which this engine refuses. It now
-doubles the single quote only, and a backslash stays as itself.
+doubles the single quote only, and a backslash stays as itself. Left as it was, from #734's review:
+`docs/developers/conventions-data.md`'s SQL-building section points at
+`packages/provisioning/src/identifiers.ts` for `quoteLiteral`, which only re-exports it; the function
+lives in `packages/shared/src/sql-literal.ts`.
 
 **Two identity error descriptions say less than the code raises — OPEN (found 2026-09-23, identity's
 coverage review, PR #526).** In `packages/identity/src/errors.ts`, `account_action.invalid` reads
