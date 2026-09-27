@@ -376,7 +376,7 @@ Follow-up: a round kept after a refused send survives leaving the table only on 
 the floor and the order side by side, because the table screen holds it; on the till's drill view
 and a handheld's separate order tab, leaving destroys the screen and the round. Keeping rounds on
 the app, one per order, would keep them on every layout.
-**Menus M7v (a line keeps the VAT rate its published menu froze), 2026-09-27:** the owner's
+**Menus M7v landed (#720, 2026-09-27): a line keeps the VAT rate its published menu froze.** the owner's
 decision of 2026-09-26 replaces menus Task 7a's rule. Each published menu version now freezes the
 VAT class and rate of each dish, variant and extras item, and a till is served those. A line
 records that rate when its price is fixed — when it is added to a saved order, or at payment for an
@@ -1990,7 +1990,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     on each form tried only with a hand-built event or not at all, and move the ones that close to
     `dismissible`.
   - **Every other task waits for lane C's menus tasks that change the same order and till code**
-    (M9; M7b landed as #696, M7b2 as #702, M7c as #710, M7b3 as #713, and M7v on 2026-09-27). Building beside them would collide on
+    (M9; M7b landed as #696, M7b2 as #702, M7c as #710, M7b3 as #713, and M7v as #720). Building beside them would collide on
     `apps/server/src/working-order.ts`, the till and the core migrations.
   - **Task 17** (unpaid departure) also waits for asesor Q28.
   - **Asesor questions to send:**
