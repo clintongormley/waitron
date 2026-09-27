@@ -2617,6 +2617,7 @@ export class TillApp extends LitElement {
       this.#noteBillParty(visit);
     } catch (error) {
       this.errorKey = lineWriteError(error);
+      if (isNetworkFailure(error)) await this.#retakePartyFromFloor();
     }
     await this.#loadTabLines();
   }
@@ -2673,6 +2674,7 @@ export class TillApp extends LitElement {
       code === "working_order.out_of_date"
         ? "held.changed_elsewhere"
         : lineWriteError(outcome.error);
+    if (isNetworkFailure(outcome.error)) await this.#retakePartyFromFloor();
     await this.#loadTabLines();
     if (code === "ticket.already_started" && !left()) this.cancelOffer = lineNo;
   }

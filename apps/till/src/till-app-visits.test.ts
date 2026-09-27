@@ -1675,6 +1675,57 @@ describe("till-app: the order's groups (R5)", () => {
         expect(banner(el)).toBeNull();
       });
 
+      /** The floor reads the party at revision 3 until `landed`, and at 4 after. */
+      function floorMovedBy(request: string) {
+        let landed = false;
+        return {
+          getTablesState: vi.fn(async () => [
+            landed ? seated({}, { revision: 4 }) : mesa4,
+            mesa7,
+            mesa9,
+          ]),
+          [request]: vi.fn(async () => {
+            landed = true;
+            throw new TypeError("offline");
+          }),
+        };
+      }
+
+      it("a round sent after a void that got no answer carries the floor's revision", async () => {
+        const { el } = await mountApp(
+          withGroups({ ...floorMovedBy("voidLine"), submitGroups: submitAt(4) }),
+        );
+        const order = await openMesa(el);
+
+        emit(order, "void-line", { lineNo: 1 });
+        await flush(el);
+        emit(tableOrder(el)!, "send-round", {
+          lines: roundLines,
+          groups: [{ release: "fire", lineIndexes: [0, 1] }],
+        });
+        await flush(el);
+
+        expect(vi.mocked(api.submitGroups).mock.calls[0]![1].expectedVisitRevision).toBe(4);
+        expect(banner(el)).toBeNull();
+      });
+
+      it("a move after a line change that got no answer carries the floor's revision", async () => {
+        const { el } = await mountApp(withGroups(floorMovedBy("updateOrderLine")));
+        const order = await openMesa(el);
+
+        emit(order, "change-line", {
+          lineNo: 3,
+          lineName: "Vino",
+          patch: { note: "sin hielo" },
+          revision: 0,
+        });
+        await flush(el);
+        emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
+        await flush(el);
+
+        expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 4 });
+      });
+
       it.each([
         ["no party", null],
         ["another party", { id: "v7", revision: 10 }],
