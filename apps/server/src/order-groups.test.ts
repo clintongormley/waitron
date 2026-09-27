@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, expectTypeOf, it } from "vitest";
 import {
   diningTables,
   locations,
@@ -43,6 +43,7 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {
+  addTabRound,
   createOpenOrder,
   fireCourse,
   joinTable,
@@ -57,6 +58,7 @@ import {
   updateHeldOrder,
   updateOrderLine,
   voidTabLine,
+  type TillSaleDeps,
 } from "./working-order.js";
 import { seatTable } from "./visits.js";
 import {
@@ -2019,6 +2021,22 @@ describe("sending lines on their own (R6)", () => {
     ]);
   });
 
+  it("sends a recalled line that lost its group by moving to another party's tab", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    await submit(v, s.visitId, [{ release: "fire", lines: [line(v, "steak")] }]);
+    const other = await seated(v);
+    await transfer(v, s, other, [{ lineNo: 1 }]);
+    const [moved] = await linesOfBill(other.tabId);
+    await inTx((tx) => recallLines(tx, v.cfg, other.tabId, [moved!.lineNo]));
+    expect(await firedTicketLineIds(other.visitId)).toEqual([]);
+
+    await inTx((tx) => sendLines(tx, v.cfg, other.tabId, [moved!.lineNo]));
+
+    expect(moved).toMatchObject({ groupId: null });
+    expect(await firedTicketLineIds(other.visitId)).toEqual([moved!.id]);
+  });
+
   it("leaves a held group's no-route line held when a recalled line of the same course is sent", async () => {
     const v = await setupVenue();
     const s = await seated(v);
@@ -2432,6 +2450,37 @@ describe("edits inside groups (D19, R7, R10)", () => {
     expect((await groupsOf(s.visitId)).groups.map((group) => group.id)).toEqual([held]);
   });
 
+  it("puts an extra Mia adds to Alex's FIRED Steak in the Steak's fired group, credited to Alex", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const fired = (await submit(v, s.visitId, [{ release: "fire", lines: [line(v, "steak")] }]))
+      .groups[0]!.id;
+    const [steak] = await linesIn(s.visitId, fired);
+    const events = (await eventsOf(s.visitId)).length;
+
+    await changeLine(
+      v,
+      s.tabId,
+      steak!.lineNo,
+      {
+        extras: [
+          { listId: v.extrasListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] },
+        ],
+      },
+      MIA,
+    );
+
+    const rows = await linesOfBill(s.tabId);
+    expect(rows.map((row) => [row.parentLineId, row.groupId, row.creditedTo])).toEqual([
+      [null, fired, ALEX],
+      [steak!.id, fired, ALEX],
+    ]);
+    expect((await groupsOf(s.visitId)).groups.map((group) => [group.id, group.state])).toEqual([
+      [fired, "fired"],
+    ]);
+    expect(await eventsOf(s.visitId)).toHaveLength(events);
+  });
+
   it("puts a new dish a save adds, where some line was sent, in a new fired group credited to the editor", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
@@ -2511,6 +2560,39 @@ describe("edits inside groups (D19, R7, R10)", () => {
     expect(await db.select().from(orderGroups)).toEqual([]);
   });
 
+  it("credits nobody and starts no group for an edit with no operator on a bill of no visit", async () => {
+    const v = await setupVenue();
+    const tabId = await inTx(async (tx) => {
+      const { id: tableId } = await createTable(tx, v.cfg, {
+        label: `N-${randomUUID().slice(0, 6)}`,
+        zoneId: v.zoneId,
+      });
+      const { tabId: id } = await openTab(tx, v.cfg, { tableId });
+      await addTabRound(tx, v.cfg, id, [{ ...line(v, "steak"), release: true }], {
+        creditedTo: ALEX,
+      });
+      return id;
+    });
+    expect(await linesOfBill(tabId)).toMatchObject([{ sentAt: expect.any(String) }]);
+
+    await changeLine(v, tabId, 1, { quantity: "2" });
+    await saveWhole(v, tabId, [...(await keptLines(v, tabId)), line(v, "flan")], undefined);
+
+    expect(
+      (await linesOfBill(tabId)).map((row) => [
+        row.lineNo,
+        row.quantity,
+        row.groupId,
+        row.creditedTo,
+      ]),
+    ).toEqual([
+      [1, 1000, null, ALEX],
+      [2, 1000, null, null],
+      [3, 1000, null, null],
+    ]);
+    expect(await db.select().from(orderGroups)).toEqual([]);
+  });
+
   it("refuses an edit that must start a group when no operator is named, writing nothing", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
@@ -2525,7 +2607,59 @@ describe("edits inside groups (D19, R7, R10)", () => {
   });
 });
 
+describe("the bill a group's first event names", () => {
+  it("names the bill its lines went on by the same key, whether a submission, a join or an edit started it", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const first = (await submit(v, s.visitId, [{ release: "fire", lines: [line(v, "cold")] }]))
+      .groups[0]!.id;
+    const held = (await submit(v, s.visitId, [{ release: "hold", lines: [line(v, "steak")] }]))
+      .groups[0]!.id;
+    await submit(v, s.visitId, [{ release: "hold", lines: [line(v, "fish")] }], {
+      joinGroupId: held,
+    });
+    const [croquettes] = await linesIn(s.visitId, first);
+    const { checkId } = await inTx(async (tx) =>
+      splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: croquettes!.lineNo }], {
+        expectedVisitRevision: await revisionOf(s.visitId),
+        operatorId: ALEX,
+      }),
+    );
+    const [onCheck] = await linesOfBill(checkId);
+
+    await changeLine(v, checkId, onCheck!.lineNo, { quantity: "2" }, MIA);
+
+    const added = (await groupsOf(s.visitId)).groups.at(-1)!.id;
+    expect(
+      (await eventsOf(s.visitId)).map((event) => [event.groupId, event.kind, event.detail]),
+    ).toEqual([
+      [first, "submitted", { workingOrderId: s.tabId, release: "fire" }],
+      [held, "submitted", { workingOrderId: s.tabId, release: "hold" }],
+      [held, "joined", { workingOrderId: s.tabId, release: "hold" }],
+      [added, "submitted", { workingOrderId: checkId, release: "fire" }],
+    ]);
+  });
+});
+
 describe("credit (D5, R11)", () => {
+  // The directive is the assertion: typecheck reports an unused `@ts-expect-error` the moment a
+  // save that may issue the bill's invoice types without naming who saves. Vitest does not typecheck.
+  it("will not type a save that may issue the invoice without naming who saves", () => {
+    const cfg = {} as TillConfig;
+    const issue = { fiscal: {} as TillSaleDeps, saleCfg: null };
+    const unnamed = { lines: [], revision: 0 };
+    expectTypeOf(updateHeldOrder).toBeCallableWith({ db }, cfg, "order", unnamed);
+    expectTypeOf(updateHeldOrder).toBeCallableWith(
+      { db },
+      cfg,
+      "order",
+      { ...unnamed, operatorId: MIA },
+      issue,
+    );
+    // @ts-expect-error a save given `issue` must carry `operatorId`
+    expectTypeOf(updateHeldOrder).toBeCallableWith({ db }, cfg, "order", unnamed, issue);
+  });
+
   it("credits the lines a parked counter order is created with to the operator who parked it", async () => {
     const v = await setupVenue();
     const id = randomUUID();

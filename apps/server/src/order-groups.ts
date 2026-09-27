@@ -109,7 +109,7 @@ export async function submitGroups(
           groupId,
           kind: input.joinGroupId === undefined ? "submitted" : "joined",
           actorId: operatorId,
-          detail: { tabId, release: group.release },
+          detail: { workingOrderId: tabId, release: group.release },
         });
         groupIds.push(groupId);
       }

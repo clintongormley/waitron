@@ -3410,6 +3410,12 @@ export interface UpdateHeldOrderRequest {
   operatorId?: string;
 }
 
+/** What {@link updateHeldOrder} needs to issue the bill's invoice when the save leaves it fully paid. */
+interface IssueOnSave {
+  fiscal: TillSaleDeps;
+  saleCfg: TillConfig | null;
+}
+
 /** What `PUT /api/working-orders/:id/lines/:lineNo` changes on one line; an absent field is kept. */
 export interface OrderLinePatch {
   quantity?: string;
@@ -4196,14 +4202,27 @@ async function countEdit(
  * offer and variant, edits it; a line naming a different offer or variant replaces it with a new
  * item priced now; a line naming none is new; a stored line the basket leaves out is removed. An
  * absent label clears it: the whole request is the new state. Answers the order's revision after
- * the save.
+ * the save. A save given `issue` may issue the bill's invoice, so it must name who saves.
  */
 export async function updateHeldOrder(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
   id: string,
   req: UpdateHeldOrderRequest,
-  issue?: { fiscal: TillSaleDeps; saleCfg: TillConfig | null },
+): Promise<number>;
+export async function updateHeldOrder(
+  deps: WorkingOrderDeps,
+  cfg: TillConfig,
+  id: string,
+  req: UpdateHeldOrderRequest & { operatorId: string },
+  issue: IssueOnSave,
+): Promise<number>;
+export async function updateHeldOrder(
+  deps: WorkingOrderDeps,
+  cfg: TillConfig,
+  id: string,
+  req: UpdateHeldOrderRequest,
+  issue?: IssueOnSave,
 ): Promise<number> {
   return withTransaction(deps.db, async (tx) => {
     const { label } = await requireEditableOrder(tx, id, req.revision);
