@@ -60,7 +60,6 @@ import type { FireControlMode } from "../widgets/station-queue.js";
 
 export type { TableServiceStatus };
 
-/** `change-line`: one sent line's edit, from the copy of the order read at `revision`. */
 /**
  * A round to add to the tab. The round stays in `round` until the app has the server's answer: it
  * takes out the `sent` lines (the ones `lines` was built from, in order) once the round is added, and
@@ -72,6 +71,7 @@ export interface SendRoundDetail {
   sent: readonly OrderLine[];
 }
 
+/** `change-line`: one sent line's edit, from the copy of the order read at `revision`. */
 export interface ChangeLineDetail {
   lineNo: number;
   /** The line's staff name, for a message about the change shown once another order is open. */

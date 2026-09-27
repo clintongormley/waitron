@@ -510,6 +510,16 @@ describe("WorkingOrderStore", () => {
       expect(notified).toBe(2);
       expect(s.dirty).toBe(false);
     });
+
+    it("setBlocked without notify marks the line and tells no listener", () => {
+      const s = new WorkingOrderStore();
+      s.addProduct(cafe, "1");
+      let notified = 0;
+      s.subscribe(() => notified++);
+      s.setBlocked(["unavailable"], false);
+      expect(s.lines[0]!.blocked).toBe("unavailable");
+      expect(notified).toBe(0);
+    });
   });
 
   describe("extras picked on a basket line", () => {

@@ -73,6 +73,7 @@ import { MenuStatePoll } from "./state/menu-state-poll.js";
 import {
   type BasketRefresh,
   type BlockReason,
+  isStale,
   lineBlock,
   refreshBasket,
   withUnavailable,
@@ -124,8 +125,12 @@ const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
  */
 const TABLE_REQUEST_LIMIT_MS = 150_000;
 
-/** What a round's send leaves to do once the round is open for edits again. */
-type RoundFollowUp = "read-tab" | "mark-sold-out" | undefined;
+/**
+ * What a round's send leaves to do once the round is open for edits again. `find-tab`, after a send
+ * that got no answer, follows the table the round was sent from to the tab the floor shows for it
+ * now; `landedOn` names the tab the server added the round to, when it is not the one it was sent to.
+ */
+type RoundFollowUp = "read-tab" | "find-tab" | "mark-sold-out" | { landedOn: string } | undefined;
 
 /** A whole-count unit's three-place server quantity reads "2", not "2.000". */
 function displayQuantity(product: TillProduct, quantity: string): string {
@@ -303,7 +308,7 @@ function versionsMoved(loaded: readonly TillZoneMenu[], polled: MenuState["menus
 }
 
 /** The offers a zone sells now: as loaded, or with the latest poll's unavailable set applied. */
-class ZoneOffers {
+class ZoneOfferIndex {
   #loaded: TillMenuOffer[] = [];
   /** The set last applied, as a sorted key, so an unchanged poll answer rebuilds nothing. */
   #unavailableKey: string | null = null;
@@ -570,7 +575,9 @@ export class TillApp extends LitElement {
     // Re-renders on a locale switch, so `keyed(currentLocale(), …)` recreates the screens, which read
     // `t()` at render time.
     new LocaleChangeController(this);
-    this.#store.subscribe(() => this.#evaluateBasket());
+    // Subscribed before any widget, so the marks this sets inside the basket's own notification
+    // reach every later listener in that same notification.
+    this.#store.subscribe(() => this.#evaluateBasket(false));
   }
 
   @state() private screen: Screen = "lock";
@@ -608,8 +615,8 @@ export class TillApp extends LitElement {
   @state() private tableMenus: TillZoneMenu[] = [];
   /** What {@link products} and {@link tableProducts} are built from, so a poll's unavailable set
    * applies without reloading them. */
-  readonly #counterOffers = new ZoneOffers();
-  readonly #tableOffers = new ZoneOffers();
+  readonly #counterOffers = new ZoneOfferIndex();
+  readonly #tableOffers = new ZoneOfferIndex();
   /** The zone {@link tableProducts} came from, polled beside the counter's while it is set. */
   #tableZoneId?: string;
   /** The basket-refresh dialog's contents while it is open (D9): the counter's basket or a table's
@@ -1291,21 +1298,21 @@ export class TillApp extends LitElement {
 
   /** Marks each unsaved basket line that cannot be sold as it stands against the counter's offers,
    * and works out whether Pay is held. */
-  #evaluateBasket(): void {
+  #evaluateBasket(notify = true): void {
     const versions = this.#counterOffers.versions;
-    this.#store.setBlocked(this.#counterOffers.blocks(this.#store.lines));
+    this.#store.setBlocked(this.#counterOffers.blocks(this.#store.lines), notify);
     const unsaved = this.#store.lines.filter((line) => line.workingOrderLineId === undefined);
-    const stale = (line: OrderLine) =>
-      line.product.menuVersionId !== undefined &&
-      versions.get(line.product.catalogueId ?? "") !== line.product.menuVersionId;
-    this.basketStale = unsaved.some((line) => line.blocked === undefined && stale(line));
-    this.basketHeld = unsaved.some((line) => line.blocked !== undefined || stale(line));
+    this.basketStale = unsaved.some(
+      (line) => line.blocked === undefined && isStale(line, versions),
+    );
+    this.basketHeld = unsaved.some((line) => line.blocked !== undefined || isStale(line, versions));
   }
 
   /**
-   * A poll's answer (D11): the unavailable set applies to the loaded offers at once, and a version
-   * other than the one loaded runs the refresh flow — unless a sale, hold or place is in flight or
-   * the dialog is already open, when the next poll asks again.
+   * A poll's answer (D11): the unavailable set applies to the loaded offers at once. On the counter's
+   * zone a version other than the one loaded runs the basket refresh — unless a sale, hold or place
+   * is in flight or the dialog is already open, when the next poll asks again. On the open table's
+   * zone it only reloads that zone's offers.
    */
   #onMenuState(zoneId: string, state: MenuState): void {
     if (zoneId === this.counterServiceZoneId) {
@@ -1379,7 +1386,7 @@ export class TillApp extends LitElement {
   /** Nothing relevant changed: the lines take the live version silently. Otherwise the dialog. */
   #reconcileBasket(
     store: WorkingOrderStore = this.#store,
-    offers: ZoneOffers = this.#counterOffers,
+    offers: ZoneOfferIndex = this.#counterOffers,
   ): "adopted" | "confirming" {
     const outcome = refreshBasket(store.lines, offers.live, offers.versions);
     if (outcome.changed.length === 0 && outcome.blocked.length === 0) {
@@ -2242,6 +2249,7 @@ export class TillApp extends LitElement {
       event as CustomEvent<Pick<SendRoundDetail, "lines"> & Partial<SendRoundDetail>>
     ).detail;
     const tabId = this.activeTabId;
+    const tableId = this.activeTableId;
     if (tabId === undefined || round?.sending === true) return;
     // The round is shut to edits until the answer, so a retry sends what the screen shows and success
     // takes out exactly what was sent.
@@ -2252,15 +2260,28 @@ export class TillApp extends LitElement {
     } finally {
       if (round !== undefined) round.sending = false;
     }
-    if (followUp === "read-tab") {
-      await this.#loadTabLines();
-      if (this.orderParty !== null) await this.#loadVisitBills();
-    } else if (followUp === "mark-sold-out" && round !== undefined) await this.#markSoldOut(round);
+    if (followUp === undefined) return;
+    if (followUp === "mark-sold-out") {
+      if (round !== undefined) await this.#markSoldOut(round);
+      return;
+    }
+    // The tab may have moved to another table meanwhile, and a new party sat down at this one.
+    const onSentTable = () => this.activeTabId === tabId && this.activeTableId === tableId;
+    if (followUp === "find-tab" && onSentTable()) {
+      await this.#refreshFloor();
+      const now = this.tables.find((row) => row.id === tableId)?.tabId;
+      if (now !== undefined && onSentTable()) this.#followRound(tabId, now);
+    } else if (typeof followUp === "object" && this.activeTabId === tabId) {
+      await this.#reloadTables();
+      this.#followRound(tabId, followUp.landedOn);
+    }
+    await this.#loadTabLines();
+    if (this.orderParty !== null) await this.#loadVisitBills();
   }
 
   /**
    * A refused round stays on the table screen. One the server may have added — no answer came —
-   * is taken out as before, because sending it again could put it on the tab twice.
+   * is taken out, because sending it again could put it on the tab twice.
    */
   async #sendRound(
     tabId: string,
@@ -2291,7 +2312,7 @@ export class TillApp extends LitElement {
       if (isNetworkFailure(error)) {
         this.errorKey = "table.round_unconfirmed";
         round?.removeLines(sent);
-        return "read-tab";
+        return "find-tab";
       }
       this.errorKey = lineWriteError(error);
       return (error as { code?: string }).code === "product.unavailable"
@@ -2301,12 +2322,15 @@ export class TillApp extends LitElement {
       clearTimeout(limit);
     }
     round?.removeLines(sent);
-    if (landedOn !== tabId && this.activeTabId === tabId) {
-      this.activeTabId = landedOn;
-      await this.#reloadTables();
-      this.#rememberOrderParty();
-    }
-    return "read-tab";
+    return landedOn === tabId ? "read-tab" : { landedOn };
+  }
+
+  /** Moves the screen from the tab a round was sent to onto the tab it went to, only while the
+   * operator is still on the first; the floor has already been read after the send. */
+  #followRound(sentTo: string, landedOn: string): void {
+    if (landedOn === sentTo || this.activeTabId !== sentTo) return;
+    this.activeTabId = landedOn;
+    this.#rememberOrderParty();
   }
 
   async #onFireCourse(event: Event): Promise<void> {

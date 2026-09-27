@@ -152,6 +152,13 @@ function adoptLine(line: OrderLine, offer: TillMenuOffer, menuVersionId: string)
   return adopted;
 }
 
+/** Whether the line was priced against a version of its menu other than the live one. A line with
+ * no version is priced by the server from the live version. */
+export function isStale(line: OrderLine, liveVersions: ReadonlyMap<string, string>): boolean {
+  const { menuVersionId, catalogueId } = line.product;
+  return menuVersionId !== undefined && liveVersions.get(catalogueId ?? "") !== menuVersionId;
+}
+
 /**
  * Compares each unsaved line priced against an earlier version of its menu with the live version's
  * offers (D9): what the line would cost now, and whether it can still be sold as it stands. Saved
@@ -166,10 +173,9 @@ export function refreshBasket(
   const offerById = new Map(offers.map((offer) => [offer.id, offer]));
   const outcome: BasketRefresh = { changed: [], blocked: [], adopted: new Map() };
   lines.forEach((line, index) => {
+    if (line.workingOrderLineId !== undefined || !isStale(line, liveVersions)) return;
     const { product } = line;
     const live = liveVersions.get(product.catalogueId ?? "");
-    if (line.workingOrderLineId !== undefined || product.menuVersionId === undefined) return;
-    if (product.menuVersionId === live) return;
     const lineNo = index + 1;
     const offer = offerById.get(product.menuItemId ?? "");
     const block = lineBlock(line, offer);

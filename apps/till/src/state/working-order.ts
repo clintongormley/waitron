@@ -336,8 +336,9 @@ export class WorkingOrderStore {
     this.emit("changed");
   }
 
-  /** One entry per line. Display only, so the lines stay as clean as they were. */
-  setBlocked(reasons: readonly (BlockReason | undefined)[]): void {
+  /** One entry per line. Display only, so the lines stay as clean as they were. Without `notify`, a
+   * change is left for the notification already under way to carry. */
+  setBlocked(reasons: readonly (BlockReason | undefined)[], notify = true): void {
     let changed = false;
     this.#lines.forEach((line, index) => {
       const reason = reasons[index];
@@ -346,7 +347,7 @@ export class WorkingOrderStore {
       if (reason === undefined) delete line.blocked;
       else line.blocked = reason;
     });
-    if (changed) this.emit("changed");
+    if (changed && notify) this.emit("changed");
   }
 
   /** Mints a FRESH {@link id}: a cleared basket is a new working order, so its next park or pay does

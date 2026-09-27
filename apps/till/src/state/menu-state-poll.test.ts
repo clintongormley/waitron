@@ -32,7 +32,9 @@ async function settle(): Promise<void> {
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"] });
 });
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("MenuStatePoll", () => {
   it("reads each named zone every 15 seconds once started, and reports each answer with its zone", async () => {

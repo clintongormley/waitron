@@ -1540,3 +1540,149 @@ describe("a round the server adds to another tab", () => {
     expect(api.getTabLines).not.toHaveBeenCalledWith("wo-next");
   });
 });
+
+describe("a round that got no answer while the party moved on to its next tab", () => {
+  const unconfirmed =
+    "The server did not answer, so the round may have been added. Check the tab before sending it again.";
+
+  it("reads the table's party again and shows the tab the table now points at", async () => {
+    const { el } = await mountApp(
+      tableStubs(DINING, { addTabRound: vi.fn().mockRejectedValue(new TypeError("offline")) }),
+    );
+    await toTable(el);
+    api.getTablesState.mockResolvedValue([{ ...table, tabId: "wo-next" }]);
+    const round = roundStore(el);
+    await sendLemonadeRound(el);
+    await flush(el);
+
+    expect(shownTab(el)).toBe("wo-next");
+    expect(api.getTabLines).toHaveBeenLastCalledWith("wo-next");
+    expect(round.lineCount).toBe(0);
+    expect(banner(el)!.textContent).toContain(unconfirmed);
+  });
+
+  it("leaves the operator on the table they opened while the send was out", async () => {
+    let fail!: (error: unknown) => void;
+    const { el } = await mountApp(
+      tableStubs(DINING, {
+        getTablesState: vi.fn().mockResolvedValue([table, tableB]),
+        addTabRound: vi.fn(() => new Promise((_resolve, reject) => (fail = reject))),
+      }),
+    );
+    await toTable(el);
+    await sendLemonadeRound(el);
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
+    await flush(el);
+    emit(shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
+      tableId: "t3",
+      seated: true,
+    });
+    await flush(el);
+    expect(shownTab(el)).toBe("wo-8");
+
+    api.getTablesState.mockResolvedValue([{ ...table, tabId: "wo-next" }, tableB]);
+    fail(new TypeError("offline"));
+    await flush(el);
+    await flush(el);
+    expect(shownTab(el)).toBe("wo-8");
+    expect(api.getTabLines).not.toHaveBeenCalledWith("wo-next");
+  });
+});
+
+describe("an edit that changes a basket line's mark", () => {
+  it("notifies the basket's other listeners once, with the mark already set", async () => {
+    const { el } = await mountApp();
+    await toCounter(el);
+    api.menuState.mockResolvedValue(menuState("v1", { products: ["Burger"] }));
+    await poll(el);
+    const seen: (string | undefined)[][] = [];
+    const store = counter(el).store;
+    store.subscribe(() => seen.push(store.lines.map((line) => line.blocked)));
+
+    add(el, "Burger");
+
+    expect(seen).toEqual([["unavailable"]]);
+  });
+});
+
+describe("a round send that timed out while the floor cannot be read either", () => {
+  it("opens the round for edits without waiting for the floor", async () => {
+    const { el } = await mountApp(
+      tableStubs(DINING, {
+        addTabRound: vi.fn(
+          (_tabId: string, _lines: unknown, options?: { signal?: AbortSignal }) =>
+            new Promise<void>((_resolve, reject) => {
+              options?.signal?.addEventListener("abort", () =>
+                reject(new DOMException("The operation was aborted.", "AbortError")),
+              );
+            }),
+        ),
+      }),
+    );
+    await toTable(el);
+    api.getTablesState.mockImplementation(() => new Promise(() => {}));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    const settle = async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+    };
+    lemonadeTile(el).click();
+    await settle();
+    tableScreen(el).shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    await settle();
+
+    await vi.advanceTimersByTimeAsync(150_000);
+    await settle();
+    await settle();
+    expect(roundStore(el).lineCount).toBe(0);
+    expect(roundSending(el)).toBeNull();
+    lemonadeTile(el).click();
+    await settle();
+    expect(roundStore(el).lineCount).toBe(1);
+  });
+});
+
+describe("a round the server adds to another tab while the floor cannot be read", () => {
+  it("opens the round for edits without waiting for the floor", async () => {
+    const { el } = await mountApp(
+      tableStubs(DINING, { addTabRound: vi.fn().mockResolvedValue({ tabId: "wo-next" }) }),
+    );
+    await toTable(el);
+    api.getTablesState.mockImplementation(() => new Promise(() => {}));
+    await sendLemonadeRound(el);
+
+    expect(roundStore(el).lineCount).toBe(0);
+    expect(roundSending(el)).toBeNull();
+    lemonadeTile(el).click();
+    await flush(el);
+    expect(roundStore(el).lineCount).toBe(1);
+  });
+});
+
+describe("a round that got no answer while its tab moved to another table", () => {
+  it("does not follow the table the round was sent from", async () => {
+    let fail!: (error: unknown) => void;
+    const { el } = await mountApp(
+      tableStubs(DINING, {
+        addTabRound: vi.fn(() => new Promise((_resolve, reject) => (fail = reject))),
+        moveTab: vi.fn().mockResolvedValue(undefined),
+      }),
+    );
+    await toTable(el);
+    await sendLemonadeRound(el);
+    // The tab moves from t2 to t4, and another party is seated at t2.
+    api.getTablesState.mockResolvedValue([
+      { ...table, tabId: "wo-other" },
+      { ...table, id: "t4", label: "4" },
+    ]);
+    emit(tableScreen(el), "move-tab", { toTableId: "t4" });
+    await flush(el);
+    expect(api.moveTab).toHaveBeenCalledOnce();
+
+    fail(new TypeError("offline"));
+    await flush(el);
+    await flush(el);
+    expect(shownTab(el)).toBe("wo-7");
+    expect(api.getTabLines).not.toHaveBeenCalledWith("wo-other");
+  });
+});
