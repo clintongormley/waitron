@@ -324,7 +324,7 @@ line's unit, copied when it is recorded (venue-service migration `0004`, a nulla
 `kitchen_notices.unit_name`), and the kitchen screen writes it the way the queue row above it does:
 "0.5 kg× Pulpo". A dish sold by the piece carries the Each unit, so its notice reads "2 ud× Croqueta"
 in Spanish, as its queue row already did; only a line with no unit at all reads "2×". Hiding
-Each on both is the owner's call, not done. **Done since (2026-09-27, lane A's A72):** while the
+Each on both is the owner's call, not done. **Done since (2026-09-27, lane A's A72, #727):** while the
 kitchen screen's queue reads fail (including a read cancelled at 25 seconds), a banner above the
 list says "Not up to date since 10:20" ("Sin actualizar desde las 10:20"), giving the time of the
 last read it showed, or, if none has succeeded, the time the screen opened, or the time the
