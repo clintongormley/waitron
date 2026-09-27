@@ -192,6 +192,7 @@ export interface ZoneOffers {
 export interface ZoneUnavailable {
   /** Every product or variant that is Inactive or Unavailable, extras items' products included. */
   readonly products: readonly string[];
+  /** Every option label that is unavailable, or deleted since the version was published. */
   readonly optionLabels: readonly string[];
   /** Every extras item an offer has switched off, in the list it is switched off in. */
   readonly extraItems: readonly {
@@ -254,12 +255,15 @@ export interface VenueServiceContribution {
     productIds: readonly string[],
   ): Promise<ReadonlyMap<string, PreparationRoute>>;
   /** Refused `menu.version_changed` unless every `asserted` version is the live version of one of
-   *  the zone's menus. */
+   *  the zone's menus. With `menuItemIds`, only the offers it names are served. */
   listZoneOffers(
     tx: Transaction,
     cfg: { locationId: LocationId },
     zoneId: string,
-    asserted?: readonly { menuId: string; versionId: string }[],
+    options?: {
+      asserted?: readonly { menuId: string; versionId: string }[];
+      menuItemIds?: readonly string[];
+    },
   ): Promise<ZoneOffers>;
   /** Does not check the zone: an unknown one holds nothing. */
   menuState(tx: Transaction, zoneId: string): Promise<ZoneMenuState>;

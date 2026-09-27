@@ -91,14 +91,68 @@ export async function menuStatus(
   return status;
 }
 
-/** Each published menu's live version and its document. */
+/** Parsed documents a database handle has read, by version id: at most this many per handle. */
+const CACHED_DOCUMENTS = 32;
+
+interface CachedDocument {
+  contentHash: string;
+  document: MenuDocument;
+}
+
+const documentCaches = new WeakMap<Transaction, Map<string, CachedDocument>>();
+
+function deepFreeze<T>(value: T): T {
+  if (value !== null && typeof value === "object") {
+    Object.freeze(value);
+    for (const child of Object.values(value)) deepFreeze(child);
+  }
+  return value;
+}
+
+/**
+ * Each published menu's live version and its document. A version's row is never changed once
+ * written (`menu_versions` is `appendOnly()`), so each handle keeps the parsed documents it has read,
+ * frozen, and reads a document again only when it is not kept or its row's content hash differs from
+ * the kept one.
+ */
 export async function readLiveDocuments(
   tx: Transaction,
   menuIds: readonly string[],
 ): Promise<Map<string, { versionId: string; document: MenuDocument }>> {
+  const versions = await liveVersions(tx, menuIds, false);
+  let cache = documentCaches.get(tx);
+  if (cache === undefined) documentCaches.set(tx, (cache = new Map()));
+  const found = new Map<string, MenuDocument>();
+  const missing: string[] = [];
+  for (const { versionId, contentHash } of versions.values()) {
+    const kept = cache.get(versionId);
+    if (kept?.contentHash === contentHash) {
+      cache.delete(versionId);
+      cache.set(versionId, kept);
+      found.set(versionId, kept.document);
+    } else missing.push(versionId);
+  }
+  for (const batch of batches(missing))
+    for (const row of await tx
+      .select({
+        id: menuVersions.id,
+        contentHash: menuVersions.contentHash,
+        document: menuVersions.document,
+      })
+      .from(menuVersions)
+      .where(inArray(menuVersions.id, batch))) {
+      const document = deepFreeze(row.document);
+      found.set(row.id, document);
+      cache.delete(row.id);
+      cache.set(row.id, { contentHash: row.contentHash, document });
+    }
+  for (const versionId of cache.keys()) {
+    if (cache.size <= CACHED_DOCUMENTS) break;
+    cache.delete(versionId);
+  }
   const live = new Map<string, { versionId: string; document: MenuDocument }>();
-  for (const [menuId, { versionId, document }] of await liveVersions(tx, menuIds, true))
-    live.set(menuId, { versionId, document: document! });
+  for (const [menuId, { versionId }] of versions)
+    live.set(menuId, { versionId, document: found.get(versionId)! });
   return live;
 }
 

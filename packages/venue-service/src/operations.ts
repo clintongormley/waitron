@@ -13,15 +13,16 @@ import type { Transaction } from "@waitron/db";
 import {
   applyLiveFields,
   assertLiveVersions,
+  documentOffers,
   effectiveProductColumns,
-  menuItemExtraItems,
-  optionLabels,
   parentJoin,
   parentProducts,
   productWithId,
-  type LiveOffer,
+  readLiveDocuments,
+  readUnavailable,
   type MenuDocument,
   type MenuOffer,
+  type MenuState,
 } from "@waitron/catalogue";
 import type { PreparationRoute, ServiceMode, ZoneMenuState, ZoneOffers } from "@waitron/module";
 import { AppError, type LocationId, normaliseUuid } from "@waitron/shared";
@@ -307,37 +308,44 @@ export async function listVenueReadiness(
     }
     return [];
   });
-  for (const zone of zones) {
-    if (
-      zone.departmentId === null ||
-      zone.departmentActive !== true ||
-      zone.defaultMenuId === null ||
-      zone.assignedMenuId === null
-    ) {
-      continue;
-    }
-    // A sold-out product is served marked, so it still fills its menu and still needs a route.
-    const configured = await listZoneOffers(tx, cfg, zone.id);
-    if (configured.menus.length === 0) {
+  const ready = zones.filter(
+    (zone) =>
+      zone.departmentId !== null &&
+      zone.departmentActive === true &&
+      zone.defaultMenuId !== null &&
+      zone.assignedMenuId !== null,
+  );
+  if (ready.length === 0) return issues;
+  const menusOf = await zoneMenuIdsByZone(tx, cfg);
+  const live = await readLiveDocuments(tx, [...new Set([...menusOf.values()].flat())]);
+  for (const zone of ready) {
+    const published = menusOf.get(zone.id)!.flatMap((menuId) => {
+      const version = live.get(menuId);
+      return version === undefined ? [] : [{ menuId, offers: documentOffers(version.document) }];
+    });
+    if (published.length === 0) {
       issues.push({ code: "zone.menu_unpublished", zoneId: zone.id, zoneName: zone.name });
       continue;
     }
-    for (const menu of configured.menus) {
-      if (!configured.offers.some((offer) => offer.menuId === menu.id)) {
+    for (const { menuId, offers } of published) {
+      if (offers.length === 0) {
         issues.push({
           code: "zone.menu_empty",
           zoneId: zone.id,
           zoneName: zone.name,
-          menuId: menu.id,
-          menuName: menu.name,
+          menuId,
+          menuName: live.get(menuId)!.document.menuName,
         });
       }
     }
+    // A sold-out product is served marked, so it still fills its menu and still needs a route.
     // Staff-facing, so each product is named by its staff name. `products.name`
     // (`packages/db/src/schema/catalogue.ts`) is NOT NULL with no non-blank check, so a blank one
     // falls back to the id.
     const productsById = new Map(
-      configured.offers.map((offer) => [offer.productId, offer.name || offer.productId]),
+      published.flatMap(({ offers }) =>
+        offers.map((offer) => [offer.productId, offer.name || offer.productId] as const),
+      ),
     );
     const outcomes = await resolvePreparationRouteOutcomes(tx, cfg, zone.id, [
       ...productsById.keys(),
@@ -467,6 +475,22 @@ export async function resolveZoneContext(
   };
 }
 
+/** The menus each of the venue's zones may sell from, in each zone's order. */
+async function zoneMenuIdsByZone(tx: Transaction, cfg: VenueScope): Promise<Map<string, string[]>> {
+  const byZone = new Map<string, string[]>();
+  for (const row of await tx
+    .select({ zoneId: zoneMenus.zoneId, menuId: zoneMenus.menuId })
+    .from(zoneMenus)
+    .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneMenus.zoneId))
+    .where(eq(zoneServicePolicies.locationId, cfg.locationId))
+    .orderBy(zoneMenus.displayOrder, zoneMenus.menuId)) {
+    const menus = byZone.get(row.zoneId);
+    if (menus === undefined) byZone.set(row.zoneId, [row.menuId]);
+    else menus.push(row.menuId);
+  }
+  return byZone;
+}
+
 /** The menus a zone may sell from, in the zone's order. */
 async function zoneMenuIds(tx: Transaction, zoneId: string): Promise<string[]> {
   const rows = await tx
@@ -499,23 +523,23 @@ async function zoneLiveDocuments(
  * (an unavailable offer is served marked, in its place). A menu with no live version is left out,
  * and an unpublished default gives way to the zone's first published menu. Refused
  * `menu.version_changed` unless every `asserted` version is the live version of one of the zone's
- * menus.
+ * menus. With `menuItemIds`, only the offers it names are served; the menus are all listed.
  */
 export async function listZoneOffers(
   tx: Transaction,
   cfg: VenueScope,
   zoneId: string,
-  asserted: readonly { menuId: string; versionId: string }[] = [],
-): Promise<{
-  defaultMenuId: string | null;
-  menus: { id: string; name: string; isDefault: boolean; versionId: string }[];
-  offers: LiveOffer[];
-}> {
+  options: {
+    asserted?: readonly { menuId: string; versionId: string }[];
+    menuItemIds?: readonly string[];
+  } = {},
+): Promise<ZoneOffers> {
   const context = await resolveZoneContext(tx, cfg, zoneId);
-  const published = await zoneLiveDocuments(tx, zoneId, asserted);
+  const published = await zoneLiveDocuments(tx, zoneId, options.asserted);
   const served = await applyLiveFields(
     tx,
     published.map((menu) => menu.document),
+    options.menuItemIds === undefined ? undefined : new Set(options.menuItemIds),
   );
   const defaultMenuId =
     context.defaultMenuId === null ||
@@ -535,87 +559,20 @@ export async function listZoneOffers(
 }
 
 /**
- * Each of the zone's live menus with its version, and the products and variants (extras items'
- * included), option labels and per-offer extras items those versions hold that cannot be sold now:
- * one read of each table. Does not check the zone: an unknown one holds nothing.
+ * Each of the zone's live menus with its version, and what those versions hold that cannot be sold
+ * now (`readUnavailable`). Does not check the zone: an unknown one holds nothing.
  */
 export async function menuState(tx: Transaction, zoneId: string): Promise<ZoneMenuState> {
-  const productIds = new Set<string>();
-  const labelIds = new Set<string>();
-  const extraItems = new Map<
-    string,
-    { menuItemId: string; productId: string; extraListId: string }
-  >();
-  const itemKey = (menuItemId: string, listId: string, productId: string) =>
-    `${menuItemId}\u0000${listId}\u0000${productId}`;
   const published = await zoneLiveDocuments(tx, zoneId);
-  for (const { document } of published)
-    for (const offer of Object.values(document.offers)) {
-      productIds.add(offer.productId);
-      for (const variant of offer.variants) productIds.add(variant.id);
-      for (const entry of offer.offeredModifiers)
-        if (entry.kind === "options") for (const label of entry.labels) labelIds.add(label.id);
-        else
-          for (const item of entry.items) {
-            productIds.add(item.productId);
-            extraItems.set(itemKey(offer.id, entry.id, item.productId), {
-              menuItemId: offer.id,
-              productId: item.productId,
-              extraListId: entry.id,
-            });
-          }
-    }
-
-  const unavailableProducts: string[] = [];
-  if (productIds.size > 0)
-    for (const row of await tx
-      .select({ id: products.id })
-      .from(products)
-      .where(
-        and(
-          inArray(products.id, [...productIds]),
-          or(eq(products.active, false), eq(products.available, false)),
-        ),
-      ))
-      unavailableProducts.push(row.id);
-  const labels: string[] = [];
-  if (labelIds.size > 0)
-    for (const row of await tx
-      .select({ id: optionLabels.id })
-      .from(optionLabels)
-      .where(and(inArray(optionLabels.id, [...labelIds]), eq(optionLabels.available, false))))
-      labels.push(row.id);
-  const withdrawn = new Map<
-    string,
-    { menuItemId: string; productId: string; extraListId: string }
-  >();
-  const menuItemIds = [...new Set([...extraItems.values()].map((item) => item.menuItemId))];
-  if (menuItemIds.length > 0)
-    for (const row of await tx
-      .select({
-        menuItemId: menuItemExtraItems.menuItemId,
-        listId: menuItemExtraItems.listId,
-        productId: menuItemExtraItems.productId,
-      })
-      .from(menuItemExtraItems)
-      .where(
-        and(
-          inArray(menuItemExtraItems.menuItemId, menuItemIds),
-          eq(menuItemExtraItems.available, false),
-        ),
-      )) {
-      const key = itemKey(row.menuItemId, row.listId, row.productId);
-      const item = extraItems.get(key);
-      if (item !== undefined) withdrawn.set(key, item);
-    }
-  return {
+  // Catalogue's `MenuState` is the type the till reads this answer as.
+  const state: MenuState = {
     menus: published.map(({ menuId, versionId }) => ({ menuId, versionId })),
-    unavailable: {
-      products: unavailableProducts,
-      optionLabels: labels,
-      extraItems: [...withdrawn.values()],
-    },
+    unavailable: await readUnavailable(
+      tx,
+      published.map((menu) => menu.document),
+    ),
   };
+  return state;
 }
 
 /** Resolve an explicit service zone, or the venue's configured counter default for a new order. */
@@ -774,7 +731,6 @@ export async function listWorkingLineContexts(
     workingOrderLineId: string;
     menuItemId: string;
     menuId: string;
-    /** Null for a line added before lines recorded their menu version. */
     menuVersionId: string | null;
     menuName: string;
     categoryName: string;

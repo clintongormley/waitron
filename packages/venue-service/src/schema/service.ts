@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { check, foreignKey, index, primaryKey, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { menuItems } from "@waitron/catalogue";
+import { menuItems, menuVersions } from "@waitron/catalogue";
 import {
   catalogues,
   categories,
@@ -283,6 +283,9 @@ export const workingLineContexts = table(
     workingOrderLineId: id("working_order_line_id").notNull(),
     menuItemId: id("menu_item_id").notNull(),
     menuId: id("menu_id").notNull(),
+    // Nullable because its migration adds it to a table that may already hold rows: SQLite refuses
+    // `ADD COLUMN ... NOT NULL` with no default on a table holding one (measured on `node:sqlite`,
+    // Node v26.7.0; the same statement on an empty table was accepted).
     menuVersionId: id("menu_version_id"),
     menuName: label("menu_name").notNull(),
     departmentId: id("department_id").notNull(),
@@ -312,6 +315,14 @@ export const workingLineContexts = table(
       columns: [t.menuItemId],
       foreignColumns: [menuItems.id],
       name: "working_line_contexts_menu_item_fk",
+    }),
+    // Refuses a version that does not exist, but not a row naming another menu's version: the
+    // two-column key `menu_publications_version_fk` uses would take a table rebuild (CLAUDE.md §3).
+    // `recordWorkingLineContexts` takes both from one served offer's menu; the copy copies both.
+    foreignKey({
+      columns: [t.menuVersionId],
+      foreignColumns: [menuVersions.id],
+      name: "working_line_contexts_menu_version_fk",
     }),
     check("working_line_contexts_unit_precision_ck", sql`${t.unitPrecision} between 0 and 3`),
     check(

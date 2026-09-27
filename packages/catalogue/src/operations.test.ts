@@ -1540,8 +1540,7 @@ describe("menu offers nest a product's variants", () => {
     });
   });
 
-  const offers = (options: { includeUnavailable?: boolean } = {}) =>
-    run((tx) => listMenuOffers(tx, [f.menuId], options));
+  const offers = () => run((tx) => listMenuOffers(tx, [f.menuId]));
   const nested = async () =>
     (await offers())[0]!.variants.map(({ name, unitPrice, menuPrice, offered, available }) => ({
       name,
@@ -1716,11 +1715,9 @@ describe("menu offers nest a product's variants", () => {
     ]);
   });
 
-  it("takes the offer and its variants away when the parent is Inactive or Unavailable", async () => {
+  it("takes the offer and its variants away when the parent is Inactive", async () => {
     await run((tx) => setProductVariants(tx, f.parentId, [wine("Wine 125", null)], "en"));
-    await run((tx) => updateProduct(tx, f.parentId, { available: false }));
-    expect(await offers()).toEqual([]);
-    await run((tx) => updateProduct(tx, f.parentId, { available: true, active: false }));
+    await run((tx) => updateProduct(tx, f.parentId, { active: false }));
     expect(await offers()).toEqual([]);
   });
 

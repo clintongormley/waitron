@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { deviceProfiles, products, saleLines, sales, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -369,6 +369,38 @@ describe("a basket that spans a publish (Review Focus 2)", () => {
       .innerJoin(sales, eq(sales.id, saleLines.saleId))
       .where(eq(sales.total, 250));
     expect(latest!.menuVersionId).toBe(v2);
+  });
+
+  it("looks up a version's menu only for a version that is not live, to name it in the refusal", async () => {
+    const v = await setupLunch();
+    const v1 = await publish(v.menuId);
+    const session = (
+      suite.db as unknown as { session: { prepareQuery: (q: { sql: string }) => unknown } }
+    ).session;
+    const prepared = vi.spyOn(session, "prepareQuery");
+    const versionLookups = () =>
+      prepared.mock.calls.filter(([query]) =>
+        /select "id", "menu_id" from "menu_versions"/.test(query.sql),
+      ).length;
+
+    expect((await pay(v, [lemonadeLine(v, v1), lemonadeLine(v, v1)])).status).toBe(200);
+    expect(versionLookups()).toBe(0);
+
+    await withTransaction(suite.db, (tx) =>
+      updateMenuItem(tx, v.menuId, v.lemonade.offerId, { grossPrice: "2.50" }),
+    );
+    const v2 = await publish(v.menuId);
+    prepared.mockClear();
+    const stale = await pay(v, [lemonadeLine(v, v1)]);
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toEqual({
+      error: {
+        code: "menu.version_changed",
+        params: { menus: [{ menuId: v.menuId, liveVersionId: v2 }] },
+      },
+    });
+    expect(versionLookups()).toBe(1);
+    prepared.mockRestore();
   });
 
   it("refuses, as a malformed request, a version of no menu, one that is not an id, and another menu's", async () => {

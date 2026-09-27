@@ -195,6 +195,7 @@ describe("the venue-service migration set carries no tenant column", () => {
         primaryKey: ["working_order_line_id"],
         foreignKeys: [
           "(menu_item_id) -> menu_items(id)",
+          "(menu_version_id) -> menu_versions(id)",
           "(working_order_line_id) -> working_order_lines(id) on delete cascade",
         ],
       },

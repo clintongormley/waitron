@@ -13,7 +13,10 @@ import { compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
  *
  * The OFFER and MENU shapes are the exception: `TillMenuOffer`, `TillMenu` and `OfferedModifier` are
  * `import type` aliases from catalogue's type-only leaves `@waitron/catalogue/src/menu-types.js` and
- * `menu-document-types.js`, which pull in no runtime, so removing or retyping a field the till reads is a compile break here.
+ * `menu-document-types.js`, which pull in no runtime, so removing or retyping a field the till reads
+ * is a compile break here. `MenuState` and `MenuUnavailable` come from the same leaf, and
+ * venue-service builds its `menuState` answer as that `MenuState`, so adding a required field to
+ * either, or dropping or retyping one, breaks the server's compile too; an optional one does not.
  * `TillProduct` stays LOCAL: it is the till's own display model, built by
  * {@link menuOfferToTillProduct} from an offer and by `getHeldOrder` from a retrieved line.
  */
@@ -27,7 +30,11 @@ import type {
   TimingBand,
 } from "@waitron/shared";
 import type { AccessibleCatalogue, OfferedModifier } from "@waitron/catalogue/src/menu-types.js";
-import type { LiveOffer } from "@waitron/catalogue/src/menu-document-types.js";
+import type {
+  LiveOffer,
+  MenuState,
+  MenuUnavailable,
+} from "@waitron/catalogue/src/menu-document-types.js";
 
 /** Re-exported, never re-declared, so a widget imports the offered-list shapes where it imports every
  * other wire type. */
@@ -370,20 +377,7 @@ export interface ServiceZoneSummary {
   serviceMode: "table_tab" | "prepay" | "invoice_first" | "ticket_then_pay";
 }
 
-/** What a zone's live menus hold that cannot be sold now — `GET /api/menu-state`'s `unavailable`. */
-export interface MenuUnavailable {
-  /** Every product or variant that is Inactive or Unavailable, extras items' products included. */
-  products: string[];
-  optionLabels: string[];
-  /** Every extras item an offer has switched off, in the list it is switched off in. */
-  extraItems: { menuItemId: string; extraListId: string; productId: string }[];
-}
-
-/** `GET /api/menu-state?zoneId=` — each live menu's published version, and what cannot be sold now. */
-export interface MenuState {
-  menus: { menuId: string; versionId: string }[];
-  unavailable: MenuUnavailable;
-}
+export type { MenuState, MenuUnavailable };
 
 /** The offered lists as the picker asks them: only the extras items and option labels sellable now. */
 function sellableModifiers(entries: TillMenuOffer["offeredModifiers"]): OfferedModifier[] {

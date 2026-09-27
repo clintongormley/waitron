@@ -110,7 +110,11 @@ const EXPECTED: Record<
   },
   working_line_contexts: {
     table: workingLineContexts,
-    foreignKeys: ["working_line_contexts_line_fk", "working_line_contexts_menu_item_fk"],
+    foreignKeys: [
+      "working_line_contexts_line_fk",
+      "working_line_contexts_menu_item_fk",
+      "working_line_contexts_menu_version_fk",
+    ],
     checks: [
       "working_line_contexts_unit_precision_ck",
       "working_line_contexts_hardware_unit_ck",

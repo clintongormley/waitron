@@ -266,9 +266,9 @@ async function productOptionLists(
 }
 
 /**
- * The zone's offers from each menu's live version, once every version the basket's lines assert is
- * live (`menu.version_changed` otherwise, before anything is priced or written). An asserted id
- * that is no menu version at all is a malformed request.
+ * The offers `menuItemIds` names from the zone's live menu versions, once every version the basket's
+ * lines assert is live (`menu.version_changed` otherwise, before anything is priced or written). An
+ * asserted id that is no menu version at all is a malformed request.
  */
 async function readBasketOffers(
   tx: Transaction,
@@ -276,6 +276,7 @@ async function readBasketOffers(
   workingOrderId: string,
   zoneId: string | undefined,
   lines: readonly { menuVersionId?: unknown }[],
+  menuItemIds: readonly unknown[],
 ): Promise<ZoneOffers> {
   if (zoneId === undefined) {
     throw new AppError("order.service_context_missing", { workingOrderId });
@@ -288,16 +289,20 @@ async function readBasketOffers(
     }
     versionIds.add(menuVersionId.toLowerCase());
   }
-  const menus = await menusOfVersions(tx, [...versionIds]);
-  if (menus.size < versionIds.size) {
+  const named = menuItemIds.filter((id): id is string => typeof id === "string");
+  const offers = await VENUE_SERVICE.listZoneOffers(tx, cfg, zoneId, { menuItemIds: named });
+  const live = new Set(offers.menus.map((menu) => menu.versionId));
+  const stale = [...versionIds].filter((versionId) => !live.has(versionId));
+  if (stale.length === 0) return offers;
+  // Only a refusal is left: its details name each stale version's menu, which is looked up here.
+  const menus = await menusOfVersions(tx, stale);
+  if (menus.size < stale.length) {
     throw new AppError("management.request_invalid", { field: "menuVersionId" });
   }
-  return VENUE_SERVICE.listZoneOffers(
-    tx,
-    cfg,
-    zoneId,
-    [...menus].map(([versionId, menuId]) => ({ menuId, versionId })),
-  );
+  return VENUE_SERVICE.listZoneOffers(tx, cfg, zoneId, {
+    asserted: [...menus].map(([versionId, menuId]) => ({ menuId, versionId })),
+    menuItemIds: named,
+  });
 }
 
 /**
@@ -345,7 +350,15 @@ async function priceOrderLines(
     };
   }
   const offers =
-    snapshot ?? (await readBasketOffers(tx, cfg, workingOrderId, zoneId, requestedLines));
+    snapshot ??
+    (await readBasketOffers(
+      tx,
+      cfg,
+      workingOrderId,
+      zoneId,
+      requestedLines,
+      requestedLines.map((line) => line.menuItemId),
+    ));
   const offerById = new Map(offers.offers.map((offer) => [offer.id, offer]));
   const versionOf = new Map(offers.menus.map((menu) => [menu.id, menu.versionId]));
   const lines = requestedLines.map((line) => {
@@ -3504,7 +3517,10 @@ async function applyLineEdits(
     : "";
   // Read once for the answers the edits are checked against and for the lines priced below.
   const snapshot = needsModifiers
-    ? await readBasketOffers(tx, cfg, orderId, context?.zoneId, plan.fresh)
+    ? await readBasketOffers(tx, cfg, orderId, context?.zoneId, plan.fresh, [
+        ...plan.fresh.map((line) => line.menuItemId),
+        ...plan.edits.map(({ parent }) => parent.menuItemId),
+      ])
     : undefined;
   const offerById = new Map(snapshot?.offers.map((offer) => [offer.id, offer]));
   // A stored line whose dish the live version no longer offers has no published lists left: its

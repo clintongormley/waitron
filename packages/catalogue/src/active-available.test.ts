@@ -67,7 +67,7 @@ async function save(flags: { active: boolean; available: boolean }) {
   return run((tx) => saveProductEditor(tx, productId, catalogueId, { ...body, ...flags }, "en"));
 }
 
-/** What the till would be offered, and what the dashboard lists and manages, for the one product. */
+/** What the editor, the product list, the menu's offers and the sellable list say of the one product. */
 async function reads() {
   return run(async (tx) => {
     const editor = await readProductEditor(tx, productId);
@@ -76,23 +76,19 @@ async function reads() {
       editor: { active: editor.active, available: editor.available },
       listed: { active: listed!.active, available: listed!.available },
       offers: (await listMenuOffers(tx, [catalogueId])).map((offer) => offer.productId),
-      managed: (await listMenuOffers(tx, [catalogueId], { includeUnavailable: true })).map(
-        (offer) => offer.productId,
-      ),
       sellable: (await listAvailableProducts(tx, locationId)).products.map((p) => p.id),
     };
   });
 }
 
 describe("Active and Available", () => {
-  it("an Unavailable product stays Active, leaves listMenuOffers and listAvailableProducts and stays managed", async () => {
+  it("an Unavailable product stays Active and on listMenuOffers, and leaves listAvailableProducts", async () => {
     await save({ active: true, available: false });
 
     expect(await reads()).toEqual({
       editor: { active: true, available: false },
       listed: { active: true, available: false },
-      offers: [],
-      managed: [productId],
+      offers: [productId],
       sellable: [],
     });
   });
@@ -104,7 +100,6 @@ describe("Active and Available", () => {
       editor: { active: false, available: true },
       listed: { active: false, available: true },
       offers: [],
-      managed: [],
       sellable: [],
     });
   });
@@ -124,7 +119,6 @@ describe("Active and Available", () => {
       editor: { active: true, available: true },
       listed: { active: true, available: true },
       offers: [productId],
-      managed: [productId],
       sellable: [productId],
     });
   });

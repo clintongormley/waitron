@@ -24,7 +24,9 @@ import {
 } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  captureError,
   deviceProfiles,
+  engineErrorMessage,
   devices,
   floorZones,
   kitchenStations,
@@ -1732,14 +1734,9 @@ describe("zone offers from the published menus", () => {
       await recordOrderServiceContext(tx, cfg, orderId, venue.diningZone);
       const lineIds = [];
       for (const lineNo of [1, 2, 3, 4]) lineIds.push(await addLine(tx, venue, orderId, lineNo));
-      const round = async (lines: { workingOrderLineId: string; menuItemId: string }[]) =>
-        recordWorkingLineContexts(
-          tx,
-          cfg,
-          orderId,
-          lines,
-          await listZoneOffers(tx, cfg, venue.diningZone),
-        );
+      const offers = await listZoneOffers(tx, cfg, venue.diningZone);
+      const round = (lines: { workingOrderLineId: string; menuItemId: string }[]) =>
+        recordWorkingLineContexts(tx, cfg, orderId, lines, offers);
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
 
       await round([{ workingOrderLineId: lineIds[0]!, menuItemId: venue.menuItemId }]);
@@ -1813,6 +1810,17 @@ describe("zone offers from the published menus", () => {
           { ...offers, menus: [] },
         ),
       ).rejects.toThrow(/no live version/);
+
+      const noSuchVersion = await captureError(() =>
+        recordWorkingLineContexts(
+          tx,
+          cfg,
+          orderId,
+          [{ workingOrderLineId: stranger!, menuItemId: venue.menuItemId }],
+          { ...offers, menus: offers.menus.map((menu) => ({ ...menu, versionId: UNKNOWN_ID })) },
+        ),
+      );
+      expect(engineErrorMessage(noSuchVersion)).toContain("FOREIGN KEY constraint failed");
     });
   });
 
@@ -2013,6 +2021,72 @@ describe("zone offers from the published menus", () => {
         menus: [],
         unavailable: { products: [], optionLabels: [], extraItems: [] },
       });
+    });
+  });
+
+  it("lists an option label deleted since publishing, which the served offer marks unavailable", async () => {
+    const venue = await seedTwoMenuVenue();
+    await scoped(async (tx) => {
+      await updateOptionList(
+        tx,
+        venue.iceList,
+        {
+          name: "Ice",
+          defaultLabelId: NO_ICE,
+          labels: [{ id: NO_ICE, name: "No ice", available: true }],
+        },
+        "en",
+      );
+      expect((await menuState(tx, venue.diningZone)).unavailable.optionLabels).toEqual([WITH_ICE]);
+      const lemonade = (await listZoneOffers(tx, venue.cfg, venue.diningZone)).offers.find(
+        (offer) => offer.id === venue.lemonadeOffer,
+      )!;
+      const ice = lemonade.offeredModifiers.find((entry) => entry.kind === "options")!;
+      expect(
+        ice.kind === "options" && ice.labels.map((label) => [label.id, label.available]),
+      ).toEqual([
+        [NO_ICE, true],
+        [WITH_ICE, false],
+      ]);
+    });
+  });
+
+  it("serves only the offers named, as the whole zone serves them, with every menu listed", async () => {
+    const venue = await seedTwoMenuVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      await updateProduct(tx, venue.extraMint, { available: false });
+      const whole = await listZoneOffers(tx, cfg, venue.diningZone);
+      const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
+      const named = await listZoneOffers(tx, cfg, venue.diningZone, {
+        menuItemIds: [venue.lemonadeOffer, UNKNOWN_ID],
+      });
+      expect(named).toEqual({
+        ...whole,
+        offers: whole.offers.filter((offer) => offer.id === venue.lemonadeOffer),
+      });
+      // The live rows are read for the named offer's products alone.
+      const productReads = prepared.mock.calls
+        .map(([query]) => query as unknown as { sql: string; params: unknown[] })
+        .filter((query) => /from "products"/.test(query.sql));
+      expect(productReads).toHaveLength(1);
+      expect(productReads[0]!.params).not.toContain(venue.burger);
+      expect(productReads[0]!.params).toContain(venue.lemonade);
+    });
+  });
+
+  it("reads the live versions once for every zone, however many share a menu", async () => {
+    const venue = await seedTwoMenuVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      for (const productId of [venue.productId, venue.lemonade, venue.burger])
+        await createPreparationRoute(tx, cfg, { productId, target: { kind: "no_preparation" } });
+      await allowMenuInZone(tx, cfg, venue.barZone, venue.dinner);
+      const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
+      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([]);
+      const sqlOf = prepared.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
+      expect(sqlOf.filter((text) => /from "menu_publications"/.test(text))).toHaveLength(1);
+      expect(sqlOf.filter((text) => /from "zone_menus"/.test(text))).toHaveLength(1);
     });
   });
 

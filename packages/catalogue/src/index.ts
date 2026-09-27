@@ -31,7 +31,9 @@ export {
   applyLiveFields,
   buildMenuDocument,
   diffMenuDocuments,
+  documentOffers,
   menuDocumentHash,
+  readUnavailable,
   type OmittedShortcut,
 } from "./menu-document.js";
 export type * from "./menu-document-types.js";

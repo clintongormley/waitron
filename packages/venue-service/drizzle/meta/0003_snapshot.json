@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "0e24f861-3c03-46d8-94fd-6ee44b0929ac",
+  "id": "0ff7cb8b-d67f-4395-b711-fb7f6904f868",
   "prevId": "9f5474e9-dbcd-4349-b6ae-3996fc3ea896",
   "tables": {
     "department_hours": {
@@ -652,6 +652,19 @@
           "tableTo": "menu_items",
           "columnsFrom": [
             "menu_item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "working_line_contexts_menu_version_fk": {
+          "name": "working_line_contexts_menu_version_fk",
+          "tableFrom": "working_line_contexts",
+          "tableTo": "menu_versions",
+          "columnsFrom": [
+            "menu_version_id"
           ],
           "columnsTo": [
             "id"

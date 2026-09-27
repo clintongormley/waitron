@@ -195,6 +195,7 @@ const EXPECTED_FOREIGN_KEYS = [
   ["workforce_chains", ["location_id"], "locations"],
   ["workforce_chains", ["node_id"], "nodes"],
   ["working_line_contexts", ["menu_item_id"], "menu_items"],
+  ["working_line_contexts", ["menu_version_id"], "menu_versions"],
   ["working_line_contexts", ["working_order_line_id"], "working_order_lines"],
   ["working_order_counters", ["node_id"], "nodes"],
   ["working_order_lines", ["course_id"], "kitchen_courses"],
