@@ -4462,7 +4462,7 @@ names the engine, which is the thing `packages/store` exists to prevent — the 
 `columns.ts` makes for column types. The lock file does need a connection the store does not offer
 today, so the fix is a small `openLock(path)` export, not a restructure. Nothing guards this.
 
-**The store's file layout is re-declared in two app files — DONE (2026-09-27, #TBD; found
+**The store's file layout is re-declared in two app files — DONE (2026-09-27, #757; found
 2026-09-23, task F1's review wave).** `@waitron/store` exports `VENUE_FILE`, `NODE_FILE`,
 `DATABASE_FILES`, `WAL_SUFFIX` and `SIDE_FILE_SUFFIXES`, which `apps/server/src/db-wipe.ts`,
 `restore.ts`, `reset-request.ts`, `stream-host.ts` and `restore-stream.ts` read, and
