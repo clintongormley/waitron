@@ -18,7 +18,7 @@ import {
   menuDocumentHash,
   type MenuDocument,
 } from "./menu-document.js";
-import * as pricing from "./pricing.js";
+import * as vatRates from "./vat-rates.js";
 import { deactivateProduct, renameCatalogue, updateMenuItem, updateProduct } from "./operations.js";
 import { addMember, moveMember, removeMember, updateSection } from "./sections.js";
 import { setMenuVariants, setProductVariants } from "./variants.js";
@@ -159,7 +159,7 @@ describe("buildMenuDocument", () => {
     for (const label of options.labels) expect(Object.keys(label)).not.toContain("available");
   });
 
-  it("freezes the VAT class and rate of the dish, each variant and each extras item", async () => {
+  it("freezes the VAT class, and no rate, of the dish, each variant and each extras item", async () => {
     const f = await menusFixture(fx.db);
     await app(async (tx) => {
       await updateProduct(tx, f.large, { vatClass: "general" });
@@ -167,13 +167,13 @@ describe("buildMenuDocument", () => {
     });
     const document = await build(f.lunch);
     const offer = document.offers[await app((tx) => offerOf(tx, f.lunch, f.lemonade))]!;
-    expect(offer).toMatchObject({ vatClass: "reduced", vatRate: "10.00" });
-    expect(offer.variants[0]).toMatchObject({ vatClass: "general", vatRate: "21.00" });
+    expect(offer).toMatchObject({ vatClass: "reduced" });
+    expect(offer.variants[0]).toMatchObject({ vatClass: "general" });
     const extras = offer.offeredModifiers[0]!;
     expect(extras.kind === "extras" && extras.items[0]).toMatchObject({
       vatClass: "super_reduced",
-      vatRate: "4.00",
     });
+    expect(JSON.stringify(document)).not.toMatch(/vatRate/);
   });
 
   it("holds an extras item and an option label whatever their availability", async () => {
@@ -425,13 +425,13 @@ describe("menuDocumentHash", () => {
     expect(menuDocumentHash(await build(f.dinner))).not.toBe(before);
   });
 
-  it("moves when the rate of a class the menu uses changes", async () => {
+  it("stays when the rate of a class the menu uses changes", async () => {
     const f = await menusFixture(fx.db);
     const before = menuDocumentHash(await build(f.dinner));
-    vi.spyOn(pricing, "resolveVatRate").mockImplementation((vatClass) =>
+    vi.spyOn(vatRates, "vatRateOn").mockImplementation((vatClass) =>
       decimal(vatClass === "reduced" ? "11.00" : "21.00"),
     );
-    expect(menuDocumentHash(await build(f.dinner))).not.toBe(before);
+    expect(menuDocumentHash(await build(f.dinner))).toBe(before);
   });
 });
 
@@ -497,7 +497,7 @@ describe("applyLiveFields", () => {
     expect(dinnerExtras.kind === "extras" && dinnerExtras.items[0]!.available).toBe(false);
   });
 
-  it("serves the VAT class and rate the version froze, whatever each product's class is now", async () => {
+  it("serves the VAT class the version froze, whatever each product's class is now", async () => {
     const f = await menusFixture(fx.db);
     const document = await build(f.lunch);
     await app(async (tx) => {
@@ -506,13 +506,10 @@ describe("applyLiveFields", () => {
       await updateProduct(tx, f.extraLemon, { vatClass: "general" });
     });
     const [lemonade] = (await app((tx) => applyLiveFields(tx, [document]))).get(f.lunch)!;
-    expect(lemonade).toMatchObject({ vatClass: "reduced", vatRate: "10.00" });
-    expect(lemonade!.variants[0]).toMatchObject({ vatClass: "reduced", vatRate: "10.00" });
+    expect(lemonade).toMatchObject({ vatClass: "reduced" });
+    expect(lemonade!.variants[0]).toMatchObject({ vatClass: "reduced" });
     const extras = lemonade!.offeredModifiers[0]!;
-    expect(extras.kind === "extras" && extras.items[0]).toMatchObject({
-      vatClass: "reduced",
-      vatRate: "10.00",
-    });
+    expect(extras.kind === "extras" && extras.items[0]).toMatchObject({ vatClass: "reduced" });
   });
 
   it("offers a label unavailable when the document was built once it is available again", async () => {

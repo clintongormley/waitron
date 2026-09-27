@@ -371,8 +371,6 @@ export interface SellingValues<
 > {
   unit: Unit;
   vatClass: Vat;
-  /** The rate a published menu version froze, e.g. "10.00", when the offer carries one. */
-  vatRate?: string;
   category: string | null;
   courseId: string | null;
 }
@@ -427,7 +425,6 @@ export function selectMenuVariant<Unit, Vat extends string>(
       unitPrice: offer.unitPrice,
       unit: offer.unit,
       vatClass: offer.vatClass,
-      ...(offer.vatRate === undefined ? {} : { vatRate: offer.vatRate }),
       category: offer.category,
       courseId: offer.courseId,
     };
@@ -443,7 +440,6 @@ export function selectMenuVariant<Unit, Vat extends string>(
     unitPrice: variant.unitPrice,
     unit: variant.unit,
     vatClass: variant.vatClass,
-    ...(variant.vatRate === undefined ? {} : { vatRate: variant.vatRate }),
     category: variant.category,
     courseId: variant.courseId,
   };

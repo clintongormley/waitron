@@ -13,7 +13,6 @@ import { sections } from "./schema/sections.js";
 import { loadSectionGraph, type SectionGraph } from "./section-graph.js";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 import type { MenuOffer } from "./menu-types.js";
-import { resolveVatRate, type VatClass } from "./pricing.js";
 import type { MemberRef } from "./section-types.js";
 import type {
   DocumentLayout,
@@ -258,8 +257,6 @@ function without<T extends object, K extends keyof T>(value: T, keys: readonly K
   >;
 }
 
-const vatRateOf = (row: { vatClass: VatClass }): string => resolveVatRate(row.vatClass);
-
 function freezeOffer(
   offer: MenuOffer,
   facts: { image: string | null; description: Record<string, string> | null },
@@ -267,13 +264,11 @@ function freezeOffer(
 ): FrozenOffer {
   return {
     ...without(offer, ["courseId", "category", "offeredModifiers", "variants"]),
-    vatRate: vatRateOf(offer),
     image: facts.image,
     description: facts.description,
-    variants: offer.variants.map((variant) => ({
-      ...without(variant, ["available", "courseId", "category"]),
-      vatRate: vatRateOf(variant),
-    })),
+    variants: offer.variants.map((variant) =>
+      without(variant, ["available", "courseId", "category"]),
+    ),
     offeredModifiers: offer.offeredModifiers.map((entry): FrozenOfferedModifier =>
       entry.kind === "options"
         ? { ...entry, labels: entry.labels.map((label) => without(label, ["available"])) }
@@ -281,7 +276,6 @@ function freezeOffer(
             ...entry,
             items: entry.items.map((item) => ({
               ...item,
-              vatRate: vatRateOf(item),
               image: extraImages.get(item.productId)!,
             })),
           },
@@ -645,7 +639,7 @@ const PRODUCT_FACTS: readonly [ProductChangeField, readonly string[]][] = [
   ["unit", ["unit", "pricingUnit"]],
   ["allergens", ["allergens"]],
   ["diet", ["diet", "dietDerivation", "dietOverride", "dietaryDeclarations"]],
-  ["vat", ["vatClass", "vatRate"]],
+  ["vat", ["vatClass"]],
 ];
 
 const EXTRA_FACTS: readonly [ProductChangeField, readonly string[]][] = [
@@ -653,7 +647,7 @@ const EXTRA_FACTS: readonly [ProductChangeField, readonly string[]][] = [
   ["image", ["image"]],
   ["allergens", ["addAllergens"]],
   ["diet", ["suitableFor"]],
-  ["vat", ["vatClass", "vatRate"]],
+  ["vat", ["vatClass"]],
 ];
 
 function changedFacts(
