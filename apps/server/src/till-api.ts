@@ -523,6 +523,12 @@ function requireDraftVisitParam(id: string): string {
   return requireVisitParam(id).toLowerCase();
 }
 
+/** A draft route's draft, in lower case as ids are stored: an id that is no UUID names none. */
+function requireDraftParam(draftId: string): string {
+  if (!isUuid(draftId)) throw new AppError("draft.not_found", { draftId });
+  return draftId.toLowerCase();
+}
+
 /** A save's draft: null for the operator's new one, else a UUID. */
 function requireDraftId(value: unknown): string | null {
   if (value === null) return null;
@@ -1630,10 +1636,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
       const visitId = requireDraftVisitParam(c.req.param("id"));
+      const draftId = requireDraftParam(c.req.param("did"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const revision = requireRevision(body.revision);
       const draft = await withTransaction(deps.db, (tx) =>
-        takeOverDraft(tx, deps.cfg, c.req.param("did"), personId, revision, visitId),
+        takeOverDraft(tx, deps.cfg, draftId, personId, revision, visitId),
       );
       return c.json(draft);
     }),
@@ -1643,6 +1650,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
       const visitId = requireDraftVisitParam(c.req.param("id"));
+      const draftId = requireDraftParam(c.req.param("did"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const input: SubmitDraftInput = {
         submissionId: submissionIdOf(body),
@@ -1655,7 +1663,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         input.joinGroupId = body.joinGroupId;
       }
       const submitted = await withTransaction(deps.db, (tx) =>
-        submitDraft(tx, deps.cfg, c.req.param("did"), personId, input, visitId),
+        submitDraft(tx, deps.cfg, draftId, personId, input, visitId),
       );
       return c.json(submitted);
     }),

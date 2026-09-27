@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  kitchenCourses,
   locations,
   orderDraftEvents,
   orderDraftLines,
@@ -749,20 +750,20 @@ describe("a refused save writes nothing", () => {
     [
       "an explicit null where the options default only on absence",
       (v) => [{ ...item(v, "beer"), options: null }],
-      "management.request_invalid",
-      "lines.0.options",
+      "options.invalid",
+      "optionSelections",
     ],
     [
       "an option without a label",
       (v) => [{ ...item(v, "beer"), options: [{ listId: randomUUID() }] }],
-      "management.request_invalid",
-      "lines.0.options",
+      "options.invalid",
+      "labelId",
     ],
     [
       "an option whose label is not an id",
       (v) => [{ ...item(v, "burger"), options: [{ listId: v.rare.listId, labelId: "rare" }] }],
-      "management.request_invalid",
-      "lines.0.options",
+      "options.invalid",
+      "labelId",
     ],
     [
       "an extras pick whose product is not an id",
@@ -772,48 +773,48 @@ describe("a refused save writes nothing", () => {
           extras: [{ listId: v.sauceListId, picks: [{ productId: "sauce", quantity: 1 }] }],
         },
       ],
-      "management.request_invalid",
-      "lines.0.extras",
+      "extras.invalid",
+      "productId",
     ],
     [
       "an option that is not an object",
       (v) => [{ ...item(v, "beer"), options: ["rare"] }],
-      "management.request_invalid",
-      "lines.0.options",
+      "options.invalid",
+      "optionSelections",
     ],
     [
       "an explicit null where the extras default only on absence",
       (v) => [{ ...item(v, "beer"), extras: null }],
-      "management.request_invalid",
-      "lines.0.extras",
+      "extras.invalid",
+      "extraSelections",
     ],
     [
       "an extras list whose picks are not a list",
       (v) => [{ ...item(v, "burger"), extras: [{ listId: v.sauceListId, picks: "sauce" }] }],
-      "management.request_invalid",
-      "lines.0.extras",
+      "extras.invalid",
+      "picks",
     ],
     [
       "an extras answer that is not an object",
       (v) => [{ ...item(v, "burger"), extras: [v.sauceListId] }],
-      "management.request_invalid",
-      "lines.0.extras",
+      "extras.invalid",
+      "extraSelections",
     ],
     [
       "an extras pick with no product",
       (v) => [
         { ...item(v, "burger"), extras: [{ listId: v.sauceListId, picks: [{ quantity: 1 }] }] },
       ],
-      "management.request_invalid",
-      "lines.0.extras",
+      "extras.invalid",
+      "productId",
     ],
     [
       "an extras pick that is not an object",
       (v) => [
         { ...item(v, "burger"), extras: [{ listId: v.sauceListId, picks: [v.productId.sauce] }] },
       ],
-      "management.request_invalid",
-      "lines.0.extras",
+      "extras.invalid",
+      "picks",
     ],
     [
       "an extras pick of none",
@@ -824,8 +825,8 @@ describe("a refused save writes nothing", () => {
           ],
         }),
       ],
-      "management.request_invalid",
-      "lines.0.extras",
+      "extras.invalid",
+      "quantity",
     ],
     [
       "an extras pick of one and a half",
@@ -836,8 +837,62 @@ describe("a refused save writes nothing", () => {
           ],
         }),
       ],
-      "management.request_invalid",
-      "lines.0.extras",
+      "extras.invalid",
+      "quantity",
+    ],
+    [
+      "an option whose list is not an id",
+      (v) => [{ ...item(v, "burger"), options: [{ listId: "doneness", labelId: v.rare.labelId }] }],
+      "options.invalid",
+      "listId",
+    ],
+    [
+      "an option carrying a field an answer does not have",
+      (v) => [{ ...item(v, "burger"), options: [{ ...v.rare, colour: "red" }] }],
+      "options.invalid",
+      "optionSelections.colour",
+    ],
+    [
+      "an extras list that is not an id",
+      (v) => [
+        {
+          ...item(v, "burger"),
+          extras: [{ listId: "sauces", picks: [{ productId: v.productId.sauce, quantity: 1 }] }],
+        },
+      ],
+      "extras.invalid",
+      "listId",
+    ],
+    [
+      "an extras pick carrying a field a pick does not have",
+      (v) => [
+        {
+          ...item(v, "burger"),
+          extras: [
+            {
+              listId: v.sauceListId,
+              picks: [{ productId: v.productId.sauce, quantity: 1, price: "0.00" }],
+            },
+          ],
+        },
+      ],
+      "extras.invalid",
+      "picks.price",
+    ],
+    [
+      "an extras pick above the largest count a list can allow",
+      (v) => [
+        item(v, "burger", {
+          extras: [
+            {
+              listId: v.sauceListId,
+              picks: [{ productId: v.productId.sauce, quantity: 2147483648 }],
+            },
+          ],
+        }),
+      ],
+      "extras.invalid",
+      "quantity",
     ],
     [
       "a bad second line after a good first",
@@ -888,6 +943,40 @@ describe("a refused save writes nothing", () => {
     ).rejects.toMatchObject({ code: "course.not_found", params: { courseId } });
     expect(await storedLines(draft.id)).toEqual(before);
     expect(await draftRow(draft.id)).toMatchObject({ revision: 0 });
+  });
+
+  it("refuses a course of another location with course.not_found", async () => {
+    const v = await setupVenue();
+    const { visitId } = await seated(v);
+    const draft = await save(v, visitId, ALEX, null, 0, [item(v, "fish")]);
+    const [elsewhere] = await db
+      .insert(locations)
+      .values({ name: "Terraza", invoiceLocales: [LOCALE], operationDescription: "Restaurante" })
+      .returning({ id: locations.id });
+    const { id: courseId } = await inTx((tx) =>
+      createCourse(tx, { ...v.cfg, locationId: brandLocationId(elsewhere!.id) }, { name: "Mains" }),
+    );
+
+    await refusedWritingNothing(
+      () => save(v, visitId, ALEX, draft.id, 0, [item(v, "beer", { courseId })]),
+      { code: "course.not_found", params: { courseId } },
+    );
+  });
+
+  it("keeps a line of an inactive course, which is refused only when it is sent", async () => {
+    const v = await setupVenue();
+    const { visitId } = await seated(v);
+    await db.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, v.courseId));
+
+    const draft = await save(v, visitId, ALEX, null, 0, [
+      item(v, "beer", { courseId: v.courseId }),
+    ]);
+
+    expect(draft.lines.map((line) => line.courseId)).toEqual([v.courseId]);
+    await refusedWritingNothing(
+      () => submit(v, visitId, draft, ALEX, [{ lineIds: lineIds(draft), release: "hold" }]),
+      { code: "course.not_found", params: { courseId: v.courseId } },
+    );
   });
 
   it("creates no draft when the first save is refused", async () => {
@@ -1641,6 +1730,56 @@ describe("partial submission", () => {
     expect(joined.groups.map((group) => group.id)).toEqual([groupId]);
     expect((await tabLines(visitId)).map((row) => row.groupId)).toEqual([groupId, groupId]);
   });
+
+  it("takes joinGroupId in upper case", async () => {
+    const v = await setupVenue();
+    const { visitId } = await seated(v);
+    const draft = await save(v, visitId, ALEX, null, 0, [item(v, "beer"), item(v, "fish")]);
+    const held = await submit(v, visitId, draft, ALEX, [
+      { lineIds: [draft.lines[0]!.id], release: "hold" },
+    ]);
+    const groupId = held.groups[0]!.id;
+
+    const joined = await submit(
+      v,
+      visitId,
+      held.draft!,
+      ALEX,
+      [{ lineIds: lineIds(held.draft!), release: "hold" }],
+      { joinGroupId: groupId.toUpperCase() },
+    );
+
+    expect(joined.groups.map((group) => group.id)).toEqual([groupId]);
+    expect((await tabLines(visitId)).map((row) => row.groupId)).toEqual([groupId, groupId]);
+  });
+
+  it("answers a retried join whose group id differs only in case with the first result", async () => {
+    const v = await setupVenue();
+    const { visitId } = await seated(v);
+    const draft = await save(v, visitId, ALEX, null, 0, [item(v, "beer"), item(v, "fish")]);
+    const held = await submit(v, visitId, draft, ALEX, [
+      { lineIds: [draft.lines[0]!.id], release: "hold" },
+    ]);
+    const groupId = held.groups[0]!.id;
+    const retry = {
+      submissionId: randomUUID(),
+      visitRevision: await visitRevision(visitId),
+    };
+    const rest = [{ lineIds: lineIds(held.draft!), release: "hold" as const }];
+    const first = await submit(v, visitId, held.draft!, ALEX, rest, {
+      ...retry,
+      joinGroupId: groupId,
+    });
+    const before = await everything();
+
+    const again = await submit(v, visitId, held.draft!, ALEX, rest, {
+      ...retry,
+      joinGroupId: groupId.toUpperCase(),
+    });
+
+    expect(again).toEqual(first);
+    expect(await everything()).toEqual(before);
+  });
 });
 
 describe("what a submitted line carries", () => {
@@ -1678,6 +1817,85 @@ describe("what a submitted line carries", () => {
       },
     ]);
   });
+});
+
+describe("answers pricing would refuse as duplicates (a valid line never adds into one)", () => {
+  const sauce = (v: Venue) => ({ productId: v.productId.sauce, quantity: 1 });
+  const priced = ({ menuItemId, quantity, options, extras }: LineInput) => ({
+    menuItemId,
+    quantity,
+    options,
+    extras,
+  });
+  const cases: [
+    string,
+    (v: Venue) => LineInput,
+    { code: string; params: Record<string, unknown> },
+  ][] = [
+    [
+      "the same answer twice to one options list",
+      (v) => item(v, "burger", { options: [v.rare, v.rare] }),
+      { code: "options.invalid", params: { field: "listId" } },
+    ],
+    [
+      "two answers to one options list",
+      (v) => item(v, "burger", { options: [v.rare, v.well] }),
+      { code: "options.invalid", params: { field: "listId" } },
+    ],
+    [
+      "one extras list answered twice",
+      (v) =>
+        item(v, "burger", {
+          options: [v.rare],
+          extras: [
+            { listId: v.sauceListId, picks: [sauce(v)] },
+            { listId: v.sauceListId, picks: [sauce(v)] },
+          ],
+        }),
+      { code: "extras.invalid", params: { field: "listId" } },
+    ],
+    [
+      "one product picked twice from a list",
+      (v) =>
+        item(v, "burger", {
+          options: [v.rare],
+          extras: [{ listId: v.sauceListId, picks: [sauce(v), sauce(v)] }],
+        }),
+      { code: "extras.invalid", params: { field: "productId" } },
+    ],
+  ];
+
+  it.each(cases)(
+    "refuses %s at the save, whichever line comes first, with pricing's own code",
+    async (_name, duplicated, expected) => {
+      const v = await setupVenue();
+      const { visitId } = await seated(v);
+      const draft = await save(v, visitId, ALEX, null, 0, [item(v, "fish")]);
+      const line = duplicated(v);
+      const valid = { ...line, options: [v.rare], extras: [] };
+
+      await refusedWritingNothing(
+        () => save(v, visitId, ALEX, draft.id, 0, [valid, line]),
+        expected,
+      );
+      await refusedWritingNothing(
+        () => save(v, visitId, ALEX, draft.id, 0, [line, valid]),
+        expected,
+      );
+      await refusedWritingNothing(
+        () =>
+          inTx(async (tx) =>
+            submitGroups(tx, v.cfg, visitId, {
+              submissionId: randomUUID(),
+              expectedVisitRevision: await visitRevision(visitId),
+              operatorId: ALEX,
+              groups: [{ release: "fire", lines: [priced(line)] }],
+            }),
+          ),
+        expected,
+      );
+    },
+  );
 });
 
 describe("which lines a submission names", () => {

@@ -317,6 +317,21 @@ describe("a draft named on another party", () => {
     expect(notAnId.json).toEqual(refusal("draft.not_found", { draftId: "draft-1" }));
     expect(await snapshot()).toEqual(before);
   });
+
+  it("refuses 404 draft.not_found for a submit to an id that is not one, even under a submission id the party has used", async () => {
+    const visit = await seated();
+    const anas = await newDraft(ana, visit.visitId, [dish("Caña"), dish("Pulpo")]);
+    const body = await submitBody(visit.visitId, anas, [anas.lines[0]!]);
+    const sent = await ana("POST", `/api/visits/${visit.visitId}/drafts/${anas.id}/submit`, body);
+    expect(sent.status).toBe(200);
+    const before = await snapshot();
+
+    const refused = await ana("POST", `/api/visits/${visit.visitId}/drafts/draft-1/submit`, body);
+
+    expect(refused.status).toBe(404);
+    expect(refused.json).toEqual(refusal("draft.not_found", { draftId: "draft-1" }));
+    expect(await snapshot()).toEqual(before);
+  });
 });
 
 const ID = "cccccccc-0000-4000-8000-000000000001";
@@ -401,6 +416,48 @@ describe("a malformed body", () => {
 
       expect(refused.status).toBe(400);
       expect(refused.json).toEqual(refusal("management.request_invalid", { field }));
+      expect(await snapshot()).toEqual(before);
+    },
+  );
+});
+
+describe("a line's answers of the wrong shape", () => {
+  it.each([
+    ["options.invalid", "optionSelections", { options: {} }],
+    [
+      "options.invalid",
+      "optionSelections.colour",
+      { options: [{ listId: ID, labelId: ID, colour: "red" }] },
+    ],
+    ["extras.invalid", "extraSelections", { extras: "all" }],
+    [
+      "extras.invalid",
+      "extraSelections.price",
+      { extras: [{ listId: ID, picks: [], price: "1" }] },
+    ],
+  ] as const)(
+    "refuses a save 400 %s naming %s, as a group submission pricing the same line does",
+    async (code, field, answers) => {
+      const visit = await seated();
+      await newDraft(ana, visit.visitId, [dish("Caña")]);
+      const before = await snapshot();
+      const line = { ...dish("Caña"), ...answers };
+
+      const saved = await admin("PUT", `/api/visits/${visit.visitId}/drafts`, {
+        draftId: null,
+        revision: 0,
+        lines: [line],
+      });
+      const priced = await ana("POST", `/api/visits/${visit.visitId}/groups`, {
+        submissionId: randomUUID(),
+        expectedVisitRevision: await revisionOf(visit.visitId),
+        groups: [{ lines: [line], release: "fire" }],
+      });
+
+      expect(saved.status).toBe(400);
+      expect(saved.json).toEqual(refusal(code, { field }));
+      expect(priced.status).toBe(400);
+      expect(priced.json).toEqual(saved.json);
       expect(await snapshot()).toEqual(before);
     },
   );

@@ -9,6 +9,7 @@ import {
   visits,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import { readExtraSelections, readOptionSelections } from "@waitron/catalogue";
 import { persons } from "@waitron/identity";
 import type { ZoneMenuOffer } from "@waitron/module";
 import {
@@ -146,7 +147,7 @@ export async function saveDraft(
 ): Promise<Draft> {
   const lines = parseDraftLines(input.lines);
   await requireOpenVisit(tx, visitId);
-  await requireCourses(tx, lines);
+  await requireCourses(tx, cfg, lines);
   let draftId: string;
   if (input.draftId === null) {
     const [held] = await tx
@@ -356,7 +357,7 @@ export async function submitDraft(
     lineIds: lineIds.map(lineIdOf),
     release,
   }));
-  const { joinGroupId } = input;
+  const joinGroupId = input.joinGroupId === undefined ? undefined : groupIdOf(input.joinGroupId);
   return runServiceCommand(
     tx,
     { kind: "visit", visitId },
@@ -464,6 +465,11 @@ function lineIdOf(lineId: string): string {
   return isUuid(lineId) ? normaliseUuid(lineId, "groups") : lineId;
 }
 
+/** A group id that is no UUID names no group, so it is kept as sent and then not found. */
+function groupIdOf(groupId: string): string {
+  return isUuid(groupId) ? normaliseUuid(groupId, "joinGroupId") : groupId;
+}
+
 /** A draft line as pricing takes a basket line, with each null field left out. */
 function groupLine(line: DraftLine): GroupLine {
   return {
@@ -481,36 +487,6 @@ function groupLine(line: DraftLine): GroupLine {
 /** A draft id that is no UUID names no draft, so it is kept as sent and then not found. */
 function draftIdOf(draftId: string): string {
   return isUuid(draftId) ? normaliseUuid(draftId, "draftId") : draftId;
-}
-
-function parseOptions(value: unknown, field: string): OptionSelection[] {
-  if (value === undefined) return [];
-  if (!Array.isArray(value)) throw invalid(field);
-  return value.map((entry: unknown) => {
-    if (!isRecord(entry)) throw invalid(field);
-    return { listId: uuid(entry.listId, field), labelId: uuid(entry.labelId, field) };
-  });
-}
-
-/** A pick's quantity is a whole number from one, as the basket's extras validator requires. */
-function parseExtras(value: unknown, field: string): ExtraSelection[] {
-  if (value === undefined) return [];
-  if (!Array.isArray(value)) throw invalid(field);
-  return value.map((entry: unknown) => {
-    if (!isRecord(entry)) throw invalid(field);
-    const listId = uuid(entry.listId, field);
-    const { picks } = entry;
-    if (!Array.isArray(picks)) throw invalid(field);
-    return {
-      listId,
-      picks: picks.map((pick: unknown) => {
-        if (!isRecord(pick)) throw invalid(field);
-        const { quantity } = pick;
-        if (!Number.isSafeInteger(quantity) || (quantity as number) < 1) throw invalid(field);
-        return { productId: uuid(pick.productId, field), quantity: quantity as number };
-      }),
-    };
-  });
 }
 
 /**
@@ -539,8 +515,8 @@ function parseDraftLines(value: unknown): DraftLineInput[] {
       menuItemId,
       variantId: optionalId(entry.variantId, field("variantId")),
       menuVersionId: optionalId(entry.menuVersionId, field("menuVersionId")),
-      options: parseOptions(entry.options, field("options")),
-      extras: parseExtras(entry.extras, field("extras")),
+      options: entry.options === undefined ? [] : readOptionSelections(entry.options),
+      extras: entry.extras === undefined ? [] : readExtraSelections(entry.extras),
       note: screenNote(note),
       quantity,
       courseId: optionalId(entry.courseId, field("courseId")),
@@ -549,8 +525,16 @@ function parseDraftLines(value: unknown): DraftLineInput[] {
   });
 }
 
-/** A named course must exist, or the line's key to `kitchen_courses` would refuse the insert. */
-async function requireCourses(tx: Transaction, lines: readonly DraftLineInput[]): Promise<void> {
+/**
+ * A named course must be one of this location's, as `requireCourse` (kitchen.ts) asks. An inactive
+ * one is kept: every save replaces all the lines, so refusing it would leave a line saved before
+ * the course was switched off unsavable; submission refuses it.
+ */
+async function requireCourses(
+  tx: Transaction,
+  cfg: TillConfig,
+  lines: readonly DraftLineInput[],
+): Promise<void> {
   const named = [
     ...new Set(lines.flatMap((line) => (line.courseId === null ? [] : [line.courseId]))),
   ];
@@ -560,7 +544,9 @@ async function requireCourses(tx: Transaction, lines: readonly DraftLineInput[])
       await tx
         .select({ id: kitchenCourses.id })
         .from(kitchenCourses)
-        .where(inArray(kitchenCourses.id, named))
+        .where(
+          and(inArray(kitchenCourses.id, named), eq(kitchenCourses.locationId, cfg.locationId)),
+        )
     ).map((row) => row.id),
   );
   const missing = named.find((courseId) => !found.has(courseId));

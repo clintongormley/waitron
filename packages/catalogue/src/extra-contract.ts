@@ -192,6 +192,56 @@ export function parseExtraListInput(value: unknown): ExtraListInput {
 }
 
 /**
+ * One sent answer's list, lower-cased for the same reason as `id` above, and its picks unread.
+ * Deliberately NOT `id()`: a value that is no uuid at all keeps its `extras.invalid` from
+ * {@link validateExtraSelections}' membership check.
+ */
+function extrasAnswer(entry: unknown): { listId: string; picks: unknown } {
+  const row = record(entry, "extraSelections");
+  keys(row, ["listId", "picks"], "extraSelections");
+  const { listId } = row;
+  if (typeof listId !== "string") invalid("listId");
+  return { listId: listId.toLowerCase(), picks: row.picks };
+}
+
+/** One sent pick, its product lower-cased as {@link extrasAnswer} lower-cases a list, its count unread. */
+function extrasPick(entry: unknown): { productId: string; quantity: unknown } {
+  const pick = record(entry, "picks");
+  keys(pick, ["productId", "quantity"], "picks");
+  const { productId } = pick;
+  if (typeof productId !== "string") invalid("productId");
+  return { productId: productId.toLowerCase(), quantity: pick.quantity };
+}
+
+/**
+ * A line's answers read without the lists they answer, for a caller that stores them unpriced:
+ * every refusal {@link validateExtraSelections} makes without consulting a list, with the same code
+ * and field — a shape fault, one list answered twice, one product picked twice from a list, or a
+ * count that is no whole number from one up to the largest a list can allow. Every id must also be
+ * a UUID, since nothing here can find out that a list does not carry it.
+ */
+export function readExtraSelections(value: unknown): ExtraSelection[] {
+  if (!Array.isArray(value)) invalid("extraSelections");
+  const answered = new Set<string>();
+  return value.map((entry) => {
+    const { listId, picks } = extrasAnswer(entry);
+    if (!isUuid(listId) || answered.has(listId)) invalid("listId");
+    answered.add(listId);
+    if (!Array.isArray(picks)) invalid("picks");
+    const picked = new Set<string>();
+    return {
+      listId,
+      picks: picks.map((each) => {
+        const { productId, quantity } = extrasPick(each);
+        if (!isUuid(productId) || picked.has(productId)) invalid("productId");
+        picked.add(productId);
+        return { productId, quantity: whole(quantity, "quantity", 1) };
+      }),
+    };
+  });
+}
+
+/**
  * Validate a line's answers to the extras lists a dish offers, returning one entry per ACTIVE list
  * in `lists` order — including an empty `picks` for a list left unanswered, so the caller sees the
  * whole answered set rather than only what was sent. Each list's picks come back in that list's own
@@ -212,26 +262,16 @@ export function validateExtraSelections(
   const offered = new Map(lists.filter((list) => list.active).map((list) => [list.id, list]));
   const answers = new Map<string, Map<string, number>>();
   for (const entry of value) {
-    const row = record(entry, "extraSelections");
-    keys(row, ["listId", "picks"], "extraSelections");
-    const sentListId = row.listId;
-    if (typeof sentListId !== "string") invalid("listId");
-    // Lower-cased for the same reason as `id` above. Deliberately NOT `id()`: a value that is no
-    // uuid at all keeps its `extras.invalid` from the membership check below.
-    const listId = sentListId.toLowerCase();
+    const { listId, picks } = extrasAnswer(entry);
     const list = offered.get(listId);
     if (!list || answers.has(listId)) invalid("listId");
-    if (!Array.isArray(row.picks)) invalid("picks");
+    if (!Array.isArray(picks)) invalid("picks");
     const picked = new Map<string, number>();
-    for (const entry of row.picks) {
-      const pick = record(entry, "picks");
-      keys(pick, ["productId", "quantity"], "picks");
-      const sentProductId = pick.productId;
-      if (typeof sentProductId !== "string") invalid("productId");
-      const productId = sentProductId.toLowerCase();
+    for (const entry of picks) {
+      const { productId, quantity } = extrasPick(entry);
       if (picked.has(productId)) invalid("productId");
       if (!list.items.some((item) => item.productId === productId)) invalid("productId");
-      picked.set(productId, whole(pick.quantity, "quantity", 1));
+      picked.set(productId, whole(quantity, "quantity", 1));
     }
     answers.set(listId, picked);
   }
