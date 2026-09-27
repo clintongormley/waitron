@@ -200,6 +200,7 @@ describe("recordKitchenNotices", () => {
         orderLabel: "#12 · Table 4",
         kind: "void",
         lineName: "BRGR",
+        unitName: null,
         quantity: ONE,
         note: "no onions",
         wasStarted: true,
@@ -240,6 +241,50 @@ describe("recordKitchenNotices", () => {
     expect(
       (await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).map((n) => n.lineName),
     ).toEqual(["LRG PZ"]);
+  });
+
+  it("copies a weighed line's unit, in every language it was recorded in", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 5, null);
+    const [octopus] = await db
+      .insert(workingOrderLines)
+      .values({
+        workingOrderId: order.orderId,
+        lineNo: 4,
+        name: "Octopus",
+        descriptions: { en: "Galician octopus" },
+        unitName: { en: "kg", "es-ES": "kilo" },
+        quantity: 500,
+        unitPrice: 4000,
+        unitPriceGross: 4400,
+        vatRate: 1000,
+        lineTotal: 2200,
+      })
+      .returning({ id: workingOrderLines.id });
+    await inTx((tx) =>
+      recordKitchenNotices(
+        tx,
+        v.cfg,
+        order.orderId,
+        [
+          {
+            workingOrderLineId: octopus!.id,
+            stationId: v.grill,
+            quantity: thousandthsToDecimal(500),
+            wasStarted: false,
+          },
+        ],
+        "void",
+      ),
+    );
+    await db.delete(workingOrderLines).where(eq(workingOrderLines.id, octopus!.id));
+    expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).toEqual([
+      expect.objectContaining({
+        lineName: "Octopus",
+        unitName: { en: "kg", "es-ES": "kilo" },
+        quantity: thousandthsToDecimal(500),
+      }),
+    ]);
   });
 
   describe("refuses", () => {
@@ -389,6 +434,7 @@ describe("recordKitchenNotices", () => {
         orderLabel: "#9",
         kind: "moved",
         lineName: "BRGR",
+        unitName: null,
         quantity: ONE,
         note: "no onions",
         wasStarted: false,

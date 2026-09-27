@@ -61,6 +61,16 @@ function courseOrder(course: StationQueueCourse | null): number {
   return course === null ? Number.NEGATIVE_INFINITY : course.displayOrder;
 }
 
+/** One format for a queue row and a notice, so a cook reads the same line the same way in both. */
+function dishLine(
+  quantity: string,
+  unitName: Record<string, string> | null | undefined,
+  name: string,
+): string {
+  const unit = unitName == null ? "" : ` ${snapshotDescriptionFor(unitName, "")}`;
+  return `${trimQuantity(quantity)}${unit}× ${name}`;
+}
+
 /**
  * One station's ticket items grouped by order, shown as a kanban board (a column per kitchen state) or a
  * ticket rail (a card per order). A pure view: the container owns {@link groups} and turns the events
@@ -653,7 +663,7 @@ export class TillStationQueue extends LitElement {
 
   #notice(notice: KitchenNotice): TemplateResult {
     const kind = t(`station.notice.${notice.kind}` as const);
-    const line = `${trimQuantity(notice.quantity)}× ${notice.lineName}`;
+    const line = dishLine(notice.quantity, notice.unitName, notice.lineName);
     const acknowledge = t("station.notice.acknowledge");
     const { movedTo } = notice;
     return html`<li class="notice kind-${notice.kind}" data-notice=${notice.id}>
@@ -893,8 +903,7 @@ export class TillStationQueue extends LitElement {
 
   /** The name is the server-resolved kitchen label and is rendered as sent. */
   #dish(item: StationQueueItem): string {
-    const unit = item.unitName == null ? "" : ` ${snapshotDescriptionFor(item.unitName, "")}`;
-    return `${trimQuantity(item.quantity)}${unit}× ${item.name}`;
+    return dishLine(item.quantity, item.unitName, item.name);
   }
 
   #bumpLabel(group: StationQueueGroup): string {

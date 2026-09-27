@@ -749,6 +749,7 @@ describe("TillApi", () => {
         orderLabel: "Mesa 4",
         kind: "void",
         lineName: "Paella kitchen",
+        unitName: null,
         quantity: "1",
         note: "sin gambas",
         wasStarted: true,

@@ -29,6 +29,13 @@
       "when": 1790468915628,
       "tag": "0003_working_line_menu_version",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790495077591,
+      "tag": "0004_kitchen_notice_unit",
+      "breakpoints": true
     }
   ]
 }

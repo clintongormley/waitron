@@ -1070,6 +1070,7 @@ describe("till-station-queue — kitchen notices strip", () => {
     orderLabel: "#5 · Mesa 4",
     kind: "void",
     lineName: "Burger",
+    unitName: null,
     quantity: "1.000",
     note: null,
     wasStarted: false,
@@ -1152,6 +1153,27 @@ describe("till-station-queue — kitchen notices strip", () => {
     expect(first!.querySelector(".notice-line")!.textContent!.trim()).toBe("1× Burger");
     expect(first!.querySelector(".notice-order")!.textContent!.trim()).toBe("#5 · Mesa 4");
     expect(second!.querySelector(".notice-line")!.textContent!.trim()).toBe("0.25× Jamón");
+  });
+
+  it("shows the line's unit as the queue row does, and none when the line recorded none", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+      notices: [
+        notice({ quantity: "0.500", lineName: "Pulpo", unitName: { "es-ES": "kg" } }),
+        notice({
+          id: "kn-2",
+          quantity: "2.000",
+          lineName: "Croqueta",
+          unitName: { "es-ES": "ud" },
+        }),
+        notice({ id: "kn-3", quantity: "2.000", lineName: "Gilda", unitName: null }),
+      ],
+    });
+    const [weighed, counted, noUnit] = rows(el);
+    expect(weighed!.querySelector(".notice-line")!.textContent!.trim()).toBe("0.5 kg× Pulpo");
+    expect(counted!.querySelector(".notice-line")!.textContent!.trim()).toBe("2 ud× Croqueta");
+    expect(noUnit!.querySelector(".notice-line")!.textContent!.trim()).toBe("2× Gilda");
   });
 
   it("marks a started void as started, and says nothing of it on one that was not", async () => {
