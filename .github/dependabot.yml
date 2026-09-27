@@ -1,0 +1,41 @@
+# Dependabot's commits carry no Signed-off-by trailer, so its pull requests fail the required
+# "Every commit is signed off" check until someone runs `git rebase --signoff` on them (owner
+# decision 2026-09-27: the check stays strict).
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm-minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions-minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directory: /deploy
+    schedule:
+      interval: weekly
+    groups:
+      docker-minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker-compose
+    directories: [/, /deploy]
+    schedule:
+      interval: weekly
+    groups:
+      compose-minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
