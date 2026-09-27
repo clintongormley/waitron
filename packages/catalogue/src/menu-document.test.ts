@@ -1023,7 +1023,7 @@ describe("diffMenuDocuments", () => {
     ]);
   });
 
-  it("names a VAT change against the dish, a variant's own against the variants, and an extra's against the extra", async () => {
+  it("names a VAT change against the dish, a variant's own as VAT in the variants, and an extra's against the extra", async () => {
     const f = await menusFixture(fx.db);
     const live = await build(f.dinner);
     await app((tx) => updateProduct(tx, f.lemonade, { vatClass: "general" }));
@@ -1046,7 +1046,7 @@ describe("diffMenuDocuments", () => {
         kind: "product_changed",
         productId: f.lemonade,
         name: "Lemonade",
-        fields: ["variants"],
+        fields: ["vat", "variants"],
         source: "shared_product",
       },
       {

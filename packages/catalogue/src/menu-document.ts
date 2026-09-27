@@ -711,9 +711,11 @@ function productFields(
       keys.every(
         (key) => same(read(variant, key), read(b, key)) && same(read(was, key), read(a, key)),
       );
-    for (const [, keys] of PRODUCT_FACTS)
-      if (keys.some((key) => !same(read(was, key), read(variant, key))) && !inherited(keys))
+    for (const [field, keys] of PRODUCT_FACTS)
+      if (keys.some((key) => !same(read(was, key), read(variant, key))) && !inherited(keys)) {
         shared.add("variants");
+        if (field === "vat") shared.add("vat");
+      }
     if (was.offered !== variant.offered || was.menuPrice !== variant.menuPrice)
       menu.add("variants");
     else if (was.unitPrice !== variant.unitPrice)
