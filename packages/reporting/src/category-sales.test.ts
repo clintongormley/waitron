@@ -323,6 +323,34 @@ describe("computeCategorySales at time of sale", () => {
     expect(report.tree[3]!.children.map((n) => n.kind)).toEqual(["free_text", "free_text"]);
   });
 
+  it("puts a line that names its product but recorded no classification under Not recorded, by its free-text category", async () => {
+    await sell("2026-08-04", [
+      { net: "1.00", productId: "prod-negroni", category: "Cócteles" },
+      { net: "2.00", productId: "prod-water" },
+    ]);
+
+    const report = await run();
+
+    expect(rows(report.tree)).toEqual([
+      {
+        path: "(not_recorded)",
+        id: "not_recorded",
+        depth: 0,
+        gross: "0.00",
+        net: "3.00",
+        direct: "0.00/2.00/1",
+      },
+      {
+        path: "(not_recorded) > Cócteles",
+        id: "Cócteles",
+        depth: 1,
+        gross: "0.00",
+        net: "1.00",
+        direct: "0.00/1.00/1",
+      },
+    ]);
+  });
+
   it("marks the gross total incomplete by the count of lines, issued or reversed, that recorded none", async () => {
     const old = await sell("2026-07-20", [{ net: "9.00" }]);
     await seedVoid(suite.db, { saleId: old }, at("2026-08-06"));

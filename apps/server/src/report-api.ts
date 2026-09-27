@@ -2,10 +2,24 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { sql } from "drizzle-orm";
-import { AppError, nodeId as brandNodeId, type NodeId } from "@waitron/shared";
-import { readTenant, withTransaction, type Database, type Transaction } from "@waitron/db";
+import { and, asc, eq, sql } from "drizzle-orm";
 import {
+  AppError,
+  FALLBACK_LOCALE,
+  nodeId as brandNodeId,
+  resolveActiveLocale,
+  type NodeId,
+  type SupportedLocale,
+} from "@waitron/shared";
+import {
+  printers,
+  readTenant,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
+import {
+  computeCategorySales,
   computeDailyClose,
   computeOverdueOrders,
   computeTopSellers,
@@ -15,12 +29,19 @@ import {
   mapModelo303,
   parsePeriodToken,
   toDr303Record,
+  type CategoryReport,
+  type CategoryReportMode,
   type LiquidationPeriod,
 } from "@waitron/reporting";
-import { authorizeManager, type Permission } from "@waitron/identity";
+import { currentClassifications, readContentLanguages } from "@waitron/catalogue";
+import { enqueuePrintJob } from "@waitron/printing";
+import { authorizeManager, resolveManagementSession, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "@waitron/server-kit";
+import { readJsonBody, requireBodyUuid, requireEnum } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
 import { requirePeriod } from "@waitron/server-kit";
+import { formatCategorySalesPage } from "./category-sales-page.js";
+import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
 
 /**
@@ -29,7 +50,10 @@ import type { Logger } from "./logger.js";
  */
 export interface ReportApiDeps {
   db: Database;
-  cfg: { nodeId: string };
+  /** `locationId` is this box's own location: the printers a report prints on, and its jobs. */
+  cfg: { nodeId: string; locationId: string };
+  /** The printed page's language when neither the person nor the browser names one. */
+  venueLocale: SupportedLocale;
 }
 
 /** Two distinct seams: viewing the takings dashboard is not exporting the fiscal file (a supervisor
@@ -44,7 +68,41 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "person.suspended": 403,
   "authorization.not_permitted": 403,
   "management.request_invalid": 400,
+  "printer.not_found": 404,
+  // Today's catalogue fails the checks a sale's snapshot passes, as the till route answers it.
+  "sale_classification.invalid": 409,
 };
+
+const CATEGORY_MODES: readonly CategoryReportMode[] = ["at_time_of_sale", "current"];
+
+interface CategoryRequest {
+  from: string;
+  to: string;
+  mode: CategoryReportMode;
+  extrasIntoDish: boolean;
+}
+
+/** Both ends passed `requirePeriod`'s fixed "YYYY-MM-DD" shape, so a string compare orders them. */
+function requireRange(from: unknown, to: unknown): { from: string; to: string } {
+  const range = { from: requirePeriod(from, "from"), to: requirePeriod(to, "to") };
+  if (range.from > range.to) {
+    throw new AppError("management.request_invalid", { field: "range" });
+  }
+  return range;
+}
+
+/** Absent is false; the query string spells a flag "true" or "false". */
+function queryFlag(raw: string | undefined, field: string): boolean {
+  if (raw === undefined) return false;
+  if (raw === "true" || raw === "false") return raw === "true";
+  throw new AppError("management.request_invalid", { field });
+}
+
+function bodyFlag(raw: unknown, field: string): boolean {
+  if (raw === undefined) return false;
+  if (typeof raw === "boolean") return raw;
+  throw new AppError("management.request_invalid", { field });
+}
 
 const run = createErrorBoundary(STATUS, "report.failed");
 
@@ -153,6 +211,32 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     const clock = await resolveVenueClock(tx, deps.cfg.nodeId);
     return { nodeId, clock };
   };
+
+  const categoryReport = async (tx: Transaction, req: CategoryRequest): Promise<CategoryReport> => {
+    const { nodeId, clock } = await buildReportContext(tx);
+    // The language a sale's snapshot names its categories in (`priceOrderLines`), so today's
+    // names come from the same place as the recorded ones.
+    const language =
+      req.mode === "current"
+        ? (await readContentLanguages(tx, FALLBACK_LOCALE)).defaultLanguage
+        : undefined;
+    return computeCategorySales(
+      tx,
+      {
+        nodeId,
+        fromBusinessDay: req.from,
+        toBusinessDay: req.to,
+        timeZone: clock.timeZone,
+        dayCutover: clock.dayCutover,
+        mode: req.mode,
+        extrasIntoDish: req.extrasIntoDish,
+      },
+      language === undefined ? undefined : (ids) => currentClassifications(tx, ids, language),
+    );
+  };
+
+  const activePrinters = () =>
+    and(eq(printers.locationId, deps.cfg.locationId), eq(printers.active, true));
 
   app.get("/management-api/reports/modelo-303", (c) =>
     run(c, log, async () => {
@@ -263,16 +347,11 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     }),
   );
 
-  // VAT summary and top sellers over an inclusive business-day range, for this node. Both ends
-  // passed `requirePeriod`'s fixed "YYYY-MM-DD" shape, so a string compare orders them.
+  // VAT summary and top sellers over an inclusive business-day range, for this node.
   app.get("/management-api/reports/period", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const from = requirePeriod(c.req.query("from"), "from");
-      const to = requirePeriod(c.req.query("to"), "to");
-      if (from > to) {
-        throw new AppError("management.request_invalid", { field: "range" });
-      }
+      const { from, to } = requireRange(c.req.query("from"), c.req.query("to"));
       const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
         const { nodeId, clock } = await buildReportContext(tx);
         const common = {
@@ -288,6 +367,71 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
         return { from, to, vat, topSellers };
       });
       return c.json(result);
+    }),
+  );
+
+  // Sales by reporting category over an inclusive business-day range, for this node.
+  app.get("/management-api/reports/categories", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const req: CategoryRequest = {
+        ...requireRange(c.req.query("from"), c.req.query("to")),
+        mode: requireEnum(c.req.query("mode"), "mode", CATEGORY_MODES),
+        extrasIntoDish: queryFlag(c.req.query("extrasIntoDish"), "extrasIntoDish"),
+      };
+      const result = await gated(sessionId, REPORT_VIEW_PERMISSION, (tx) =>
+        categoryReport(tx, req),
+      );
+      return c.json(result);
+    }),
+  );
+
+  // The printers a report may be printed on. The printer settings list needs `printer.manage`,
+  // which a supervisor printing a report does not hold.
+  app.get("/management-api/reports/printers", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const rows = await gated(sessionId, REPORT_VIEW_PERMISSION, (tx) =>
+        tx
+          .select({ id: printers.id, name: printers.name })
+          .from(printers)
+          .where(activePrinters())
+          .orderBy(asc(printers.name), asc(printers.id)),
+      );
+      return c.json(rows);
+    }),
+  );
+
+  app.post("/management-api/reports/categories/print", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const req: CategoryRequest = {
+        ...requireRange(body.from, body.to),
+        mode: requireEnum(body.mode, "mode", CATEGORY_MODES),
+        extrasIntoDish: bodyFlag(body.extrasIntoDish, "extrasIntoDish"),
+      };
+      const printerId = requireBodyUuid(body.printerId, "printerId");
+      const queued = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
+        const [printer] = await tx
+          .select({
+            paperWidth: printers.paperWidth,
+            characterSet: printers.characterSet,
+            characterTable: printers.characterTable,
+          })
+          .from(printers)
+          .where(and(eq(printers.id, printerId), activePrinters()));
+        if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
+        const report = await categoryReport(tx, req);
+        const session = await resolveManagementSession(tx, sessionId, { touch: false });
+        const locale = resolveActiveLocale(
+          session.locale,
+          resolveLoginLocale(c.req.header("Accept-Language"), deps.venueLocale),
+        );
+        const payload = formatCategorySalesPage({ ...req, report, locale, printer });
+        return enqueuePrintJob(tx, { locationId: deps.cfg.locationId }, printerId, payload);
+      });
+      return c.json(queued, 202);
     }),
   );
 

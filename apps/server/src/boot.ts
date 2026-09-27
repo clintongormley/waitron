@@ -1533,7 +1533,11 @@ async function bootServer(
   };
   for (const m of setsToMigrate) m.routes?.mount(app, routeCtx, log);
   // `dataNodeId`, not this node's own id: see its declaration above.
-  mountReportApi(app, { db, cfg: { nodeId: dataNodeId } }, log);
+  mountReportApi(
+    app,
+    { db, cfg: { nodeId: dataNodeId, locationId: till.locationId }, venueLocale },
+    log,
+  );
   mountWorkforceApi(app, { db, cfg: { nodeId: till.nodeId } }, log);
   mountScheduleApi(app, { db }, log);
   mountMeApi(
