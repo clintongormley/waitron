@@ -3473,7 +3473,6 @@ export async function splitOffCheck(
   // mode check on this path.
   await VENUE_SERVICE.copyOrderContext(tx, cfg, fromTabId, checkId);
 
-  // A check is paid, never sent, so held work moved onto it would never fire.
   await carveOffLines(tx, cfg, fromTabId, checkId, transfers, {
     refuseHeld: true,
     leavesParty: false,

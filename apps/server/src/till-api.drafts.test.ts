@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { parties, withTransaction } from "@waitron/db";
+import { parties, withTransaction, workingOrderLines } from "@waitron/db";
 import { loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createTable } from "./tables.js";
+import { splitOffCheck } from "./working-order.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";
@@ -108,6 +109,24 @@ async function snapshot() {
     }
     return rows;
   });
+}
+
+async function lineNames(billId: string): Promise<string[]> {
+  const rows = await inTx(venue, (tx) =>
+    tx
+      .select({ name: workingOrderLines.name })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, billId))
+      .orderBy(asc(workingOrderLines.lineNo)),
+  );
+  return rows.map((row) => row.name);
+}
+
+async function mainBillOf(partyId: string): Promise<string | null> {
+  const [row] = await inTx(venue, (tx) =>
+    tx.select({ mainBillId: parties.mainBillId }).from(parties).where(eq(parties.id, partyId)),
+  );
+  return row!.mainBillId;
 }
 
 function refusal(code: string, params?: Record<string, unknown>) {
@@ -288,17 +307,35 @@ describe("POST /api/parties/:id/drafts/:did/submit", () => {
 });
 
 describe("POST /api/parties/:id/drafts/:did/submit naming a bill", () => {
-  it("puts the lines on the bill billId names, and refuses the same id without it 409 submission.id_reused", async () => {
+  it("puts the lines on the split bill billId names, leaving the main bill main, and refuses the same id without it 409 submission.id_reused", async () => {
     const party = await seated();
     const anas = await newDraft(ana, party.partyId, [dish("Caña"), dish("Pulpo")]);
+    const first = await ana(
+      "POST",
+      `/api/parties/${party.partyId}/drafts/${anas.id}/submit`,
+      await submitBody(party.partyId, anas, [anas.lines[0]!]),
+    );
+    expect(first.status).toBe(200);
+    const left = (first.json as unknown as { draft: DraftAnswer }).draft;
+    const command = {
+      expectedPartyRevision: await revisionOf(party.partyId),
+      operatorId: venue.operatorId,
+    };
+    const { checkId } = await inTx(venue, (tx) =>
+      splitOffCheck(tx, venue.cfg, party.tabId, [{ lineNo: 1 }], command),
+    );
     const body = {
-      ...(await submitBody(party.partyId, anas, [anas.lines[0]!])),
-      billId: party.tabId.toUpperCase(),
+      ...(await submitBody(party.partyId, left)),
+      billId: checkId.toUpperCase(),
     };
 
     const named = await ana("POST", `/api/parties/${party.partyId}/drafts/${anas.id}/submit`, body);
+
     expect(named.status).toBe(200);
-    expect(named.json).toMatchObject({ tabId: party.tabId });
+    expect(named.json).toMatchObject({ tabId: checkId });
+    expect(await lineNames(checkId)).toEqual(["Caña", "Pulpo"]);
+    expect(await lineNames(party.tabId)).toEqual([]);
+    expect(await mainBillOf(party.partyId)).toBe(party.tabId);
     const before = await snapshot();
 
     // `undefined` leaves the key out of the JSON body.

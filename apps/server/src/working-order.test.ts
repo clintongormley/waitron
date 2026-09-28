@@ -5122,8 +5122,9 @@ describe("voidTabLine extras cascade (FIX 2)", () => {
     return { listId: list.id, productId: offered.id };
   }
 
-  /** Open an OPEN order with extras lines and point a fresh table at it → a real tab (`assertAnchoredTabOpen`
-   *  needs the `dining_tables.tab_id` back-pointer). Skips firing, so no station is required. */
+  /** Open an OPEN order with extras lines and point a fresh table at it → a real tab: a bill of no
+   *  party passes `assertPartyBillOpen` only with the `dining_tables.tab_id` back-pointer. Skips
+   *  firing, so no station is required. */
   async function openExtrasTab(
     tx: Transaction,
     cfg: TillConfig,

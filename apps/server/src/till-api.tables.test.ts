@@ -615,7 +615,7 @@ describe("table + tab routes", () => {
   });
 
   it("an OUT-OF-int4-RANGE :lineNo on the void route → 404 tab.line_not_found (not an opaque 22003 500)", async () => {
-    // Open a REAL tab so `voidTabLine`'s `assertAnchoredTabOpen` passes — a random uuid would be
+    // Open a REAL tab so `voidTabLine`'s `assertPartyBillOpen` passes — a random uuid would be
     // refused as tab.not_open first. `9999999999` IS a `Number.isInteger`; the route's range bound
     // refuses it as `tab.line_not_found` (a line number that cannot exist names no line).
     const { id } = (await (

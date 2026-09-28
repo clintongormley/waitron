@@ -439,7 +439,7 @@ describe("PATCH /api/working-orders/:id/lines/:lineNo/course (A1 re-course a hel
 
   it("a malformed courseId is 404 course.not_found, screened before any DB touch", async () => {
     // A well-formed tab id + line no, but a non-uuid courseId. No tab is even opened: the screen runs
-    // before assertAnchoredTabOpen.
+    // before assertPartyBillOpen.
     const res = await app.request(`/api/working-orders/${randomUUID()}/lines/1/course`, {
       method: "PATCH",
       headers: { "content-type": "application/json", cookie },

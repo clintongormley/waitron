@@ -143,6 +143,9 @@ describe("the main bill", () => {
     const { tabId: next } = await orderForParty(v, partyId, ["Agua"]);
 
     expect(next).not.toBe(tabId);
+    expect((await partyRow(v, partyId)).mainBillId).toBe(next);
+    expect((await billRow(v, next)).partyId).toBe(partyId);
+    expect((await linesOf(v, next)).map((line) => line.name)).toEqual(["Agua"]);
     expect((await linesOf(v, tabId)).map((line) => line.name)).toEqual(["Paella"]);
     expect((await billRow(v, tabId)).status).toBe("placed");
   });
@@ -202,10 +205,13 @@ describe("an order sent to a named bill (P5)", () => {
     const { partyId, tabId } = await seat(v, mesa9);
     await order(v, tabId, "Burger", "Vino");
     const checkId = await split(partyId, tabId, [2]);
+    const revisionBefore = await revisionOf(v, partyId);
 
-    const { tabId: landed } = await orderForParty(v, partyId, ["Agua"], checkId);
+    const { tabId: landed, revision } = await orderForParty(v, partyId, ["Agua"], checkId);
 
     expect(landed).toBe(checkId);
+    expect(revision).toBe(revisionBefore);
+    expect(await revisionOf(v, partyId)).toBe(revisionBefore);
     expect((await linesOf(v, checkId)).map((line) => line.name)).toEqual(["Vino", "Agua"]);
     expect((await partyRow(v, partyId)).mainBillId).toBe(tabId);
   });
@@ -384,6 +390,7 @@ describe("pay, then order dessert", () => {
     await pay(v, tabId, "12.00");
     await pay(v, checkId, "30.00");
     const { tabId: dessertTab } = await orderForParty(v, partyId, ["Flan"]);
+    const revisionBefore = await revisionOf(v, partyId);
 
     for (const stale of [tabId, checkId]) {
       expect(await captureError(() => orderForParty(v, partyId, ["Agua"], stale))).toMatchObject({
@@ -393,6 +400,7 @@ describe("pay, then order dessert", () => {
     }
     expect((await tableRow(v, mesa22)).tabId).toBe(dessertTab);
     expect(await inTx(v, (tx) => readPartyBills(tx, partyId))).toHaveLength(3);
+    expect(await revisionOf(v, partyId)).toBe(revisionBefore);
   });
 
   it("refuses a round for a finished party", async () => {
