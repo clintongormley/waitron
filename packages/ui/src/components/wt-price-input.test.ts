@@ -426,7 +426,7 @@ test("with an English locale the euro sign sits inside the field, before the typ
 
 test("with a Spanish locale the euro sign sits inside the field, after the typed amount", async () => {
   const { input, currency } = await mountPrice(
-    '<wt-price-input label="Precio" unit="kg" value="9,00" locale="es-ES"></wt-price-input>',
+    '<wt-price-input label="Price" unit="kg" value="9,00" locale="es-ES"></wt-price-input>',
   );
   expect(currency!.textContent!.trim()).toBe("€");
   expectInsideField(currency!, input);

@@ -84,7 +84,7 @@ describe.each(["light", "dark"] as const)("wt-price-input a11y (%s theme)", (the
 
   test("Spanish currency sign, after the amount, with a fixed unit and an error", async () => {
     await mountThemed(
-      '<wt-price-input label="Precio" name="precio" unit="kg" fixed-unit locale="es-ES" value="9,90" error="Introduce un precio"></wt-price-input>',
+      '<wt-price-input label="Price" name="price" unit="kg" fixed-unit locale="es-ES" value="9,90" error="Enter a price"></wt-price-input>',
       theme,
     );
     await expectNoA11yViolations(host);
@@ -104,7 +104,7 @@ describe.each(["light", "dark"] as const)("wt-price-input a11y (%s theme)", (the
 
   test("hint line, with a currency sign and an error", async () => {
     await mountThemed(
-      '<wt-price-input label="Precio" name="precio" locale="es-ES" fixed-unit hint="Déjalo vacío para usar el precio del producto, 9,00 €." error="Introduce un precio"></wt-price-input>',
+      '<wt-price-input label="Price" name="price" locale="es-ES" fixed-unit hint="Leave it empty to use the product price, 9,00 €." error="Enter a price"></wt-price-input>',
       theme,
     );
     await expectNoA11yViolations(host);
@@ -112,7 +112,7 @@ describe.each(["light", "dark"] as const)("wt-price-input a11y (%s theme)", (the
 
   test("disabled currency sign", async () => {
     await mountThemed(
-      '<wt-price-input label="Precio" name="precio" unit="ud" locale="es-ES" value="9,90" disabled></wt-price-input>',
+      '<wt-price-input label="Price" name="price" unit="ud" locale="es-ES" value="9,90" disabled></wt-price-input>',
       theme,
     );
     await expectNoA11yViolations(host);
