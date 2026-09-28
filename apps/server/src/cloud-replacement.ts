@@ -48,6 +48,7 @@ interface SavedReplacement {
   peerPublicKey: string;
   peerPrivateKey: string;
   view?: ReplacementView;
+  stopped?: true;
 }
 export interface ReplacementOptions {
   stateDir: string;
@@ -98,7 +99,8 @@ export function createCloudReplacement(options: ReplacementOptions) {
         typeof value.privateKey !== "string" ||
         typeof value.publicKey !== "string" ||
         typeof value.peerPrivateKey !== "string" ||
-        typeof value.peerPublicKey !== "string"
+        typeof value.peerPublicKey !== "string" ||
+        (value.stopped !== undefined && value.stopped !== true)
       )
         throw Error();
       const key = createPrivateKey({
@@ -336,17 +338,20 @@ export function createCloudReplacement(options: ReplacementOptions) {
     await authorize?.();
     saved.view = view;
     await save(saved);
-    if (saved.view.state === "complete")
-      await options.connection.importReplacement({
-        requestId: saved.requestId,
-        privateKey: saved.privateKey,
-        publicKey: saved.publicKey,
-        expiresAt: saved.view.expiresAt,
-        organisationName: saved.view.organisationName,
-        legalBusinessName: saved.view.legalBusinessName,
-        registration: saved.view.registration!,
-      });
+    if (saved.view.state === "complete") await importInto(saved, saved.view);
     return saved.view;
+  }
+  async function importInto(saved: SavedReplacement, view: ReplacementView) {
+    await options.connection.importReplacement({
+      requestId: saved.requestId,
+      privateKey: saved.privateKey,
+      publicKey: saved.publicKey,
+      expiresAt: view.expiresAt,
+      organisationName: view.organisationName,
+      legalBusinessName: view.legalBusinessName,
+      registration: view.registration!,
+      stopped: saved.stopped === true,
+    });
   }
   return {
     async approval(): Promise<{ requestId: string; code: string; openCloudUrl: string } | null> {
@@ -376,15 +381,22 @@ export function createCloudReplacement(options: ReplacementOptions) {
       await locked(async () => {
         const saved = await read();
         if (!saved?.view || saved.view.state !== "complete") return;
-        await options.connection.importReplacement({
-          requestId: saved.requestId,
-          privateKey: saved.privateKey,
-          publicKey: saved.publicKey,
-          expiresAt: saved.view.expiresAt,
-          organisationName: saved.view.organisationName,
-          legalBusinessName: saved.view.legalBusinessName,
-          registration: saved.view.registration!,
-        });
+        await importInto(saved, saved.view);
+      });
+    },
+    /** Called once Stop access is authorised: `cloud-connection.json` alone cannot keep the stop if it is deleted. */
+    async recordStop(): Promise<void> {
+      await locked(async () => {
+        let saved: SavedReplacement | undefined;
+        try {
+          saved = await read();
+        } catch {
+          // Resume and check refuse this file too, so no connection can be re-imported from it.
+          return;
+        }
+        if (!saved || (await options.connection.status()).requestId !== saved.requestId) return;
+        saved.stopped = true;
+        await save(saved);
       });
     },
   };

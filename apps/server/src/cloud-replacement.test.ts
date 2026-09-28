@@ -305,3 +305,135 @@ it("imports a durable completion on boot after the recovery request file is remo
   await createCloudReplacement({ ...f.options, connection: f.connection }).resume();
   expect((await f.connection.status()).registration).toEqual(registration);
 });
+
+function installationCloud() {
+  const cloud = { actions: [] as string[], offline: false, revoked: false };
+  vi.stubGlobal("fetch", async (url: string) => {
+    const action = new URL(url).pathname.split("/").at(-1)!;
+    cloud.actions.push(action);
+    if (cloud.offline) return new Response("{}", { status: 503 });
+    if (action === "revoke") cloud.revoked = true;
+    if (cloud.revoked) return Response.json({ error: "revoked" }, { status: 403 });
+    return new Response("{}", { status: 503 });
+  });
+  return cloud;
+}
+async function connectedReplacement() {
+  const f = await fixture();
+  const cloud = installationCloud();
+  const client = createCloudReplacement({ ...f.options, connection: f.connection });
+  await client.prepare();
+  f.setMode("complete");
+  await client.check();
+  const restart = () => {
+    const connection = createCloudConnection({
+      stateDir: f.stateDir,
+      origin,
+      localVenueId,
+      environment: "test",
+    });
+    return { connection, replacement: createCloudReplacement({ ...f.options, connection }) };
+  };
+  return { f, cloud, client, restart };
+}
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+for (const heard of [false, true])
+  it(`sends a stop again, never a renewal, after the connection file is deleted (Cloud ${heard ? "heard" : "had not heard"} the stop)`, async () => {
+    const { f, cloud, client, restart } = await connectedReplacement();
+    cloud.offline = !heard;
+    const stopping = f.connection.revoke(() => client.recordStop());
+    if (heard) await stopping;
+    else await expect(stopping).rejects.toMatchObject({ code: "cloud.unavailable" });
+    await rm(join(f.stateDir, "cloud-connection.json"));
+    const { connection, replacement } = restart();
+    await replacement.resume();
+    cloud.offline = false;
+    cloud.actions.length = 0;
+    await connection.refresh();
+    expect(cloud.actions).toEqual(["revoke"]);
+    expect((await connection.status()).installation?.state).toBe("revoked");
+    expect((await connection.status()).registration).toEqual(registration);
+  });
+
+it("carries the stop when Check reconnection re-imports after the connection file is deleted", async () => {
+  const { f, cloud, client, restart } = await connectedReplacement();
+  cloud.offline = true;
+  await expect(f.connection.revoke(() => client.recordStop())).rejects.toMatchObject({
+    code: "cloud.unavailable",
+  });
+  await rm(join(f.stateDir, "cloud-connection.json"));
+  const { connection, replacement } = restart();
+  expect((await replacement.check()).registration).toEqual(registration);
+  cloud.offline = false;
+  cloud.actions.length = 0;
+  await connection.refresh();
+  expect(cloud.actions).toEqual(["revoke"]);
+});
+
+it("resumes a replacement that was never stopped after the connection file is deleted", async () => {
+  const { f, cloud, restart } = await connectedReplacement();
+  await rm(join(f.stateDir, "cloud-connection.json"));
+  const { connection, replacement } = restart();
+  await replacement.resume();
+  expect((await connection.status()).registration).toEqual(registration);
+  cloud.actions.length = 0;
+  await expect(connection.refresh()).rejects.toMatchObject({ code: "cloud.unavailable" });
+  expect(cloud.actions).toEqual(["renew"]);
+  expect((await connection.status()).installation?.state).toBe("unavailable");
+});
+
+it("records a stop only for the Cloud connection this replacement imported", async () => {
+  const f = await fixture();
+  const client = createCloudReplacement({ ...f.options, connection: f.connection });
+  const path = join(f.stateDir, "cloud-replacement.json");
+  await client.recordStop();
+  await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
+  await client.prepare();
+  await client.recordStop();
+  expect(JSON.parse(await readFile(path, "utf8")).stopped).toBeUndefined();
+  f.setMode("complete");
+  await client.check();
+  const key = generateKeyPairSync("ed25519");
+  await writeFile(
+    join(f.stateDir, "cloud-connection.json"),
+    JSON.stringify({
+      version: 1,
+      origin,
+      localVenueId,
+      environment: "test",
+      requestId: randomUUID(),
+      code: "12345678",
+      privateKey: key.privateKey.export({ format: "der", type: "pkcs8" }).toString("base64url"),
+      publicKey: key.publicKey.export({ format: "der", type: "spki" }).toString("base64url"),
+    }),
+    { mode: 0o600 },
+  );
+  await client.recordStop();
+  expect(JSON.parse(await readFile(path, "utf8")).stopped).toBeUndefined();
+});
+
+it("saves a recorded stop and refuses a saved stop that is not true", async () => {
+  const { f, client } = await connectedReplacement();
+  const path = join(f.stateDir, "cloud-replacement.json");
+  await client.recordStop();
+  const saved = JSON.parse(await readFile(path, "utf8"));
+  expect(saved.stopped).toBe(true);
+  await writeFile(path, JSON.stringify({ ...saved, stopped: false }), { mode: 0o600 });
+  await expect(client.status()).rejects.toMatchObject({
+    code: "cloud.replacement_state_invalid",
+  });
+});
+
+it("does not let a corrupt replacement file block Stop access, since nothing can be re-imported from it", async () => {
+  const { f, cloud, client } = await connectedReplacement();
+  const path = join(f.stateDir, "cloud-replacement.json");
+  await chmod(path, 0o640);
+  await f.connection.revoke(() => client.recordStop());
+  expect(cloud.actions).toEqual(["revoke"]);
+  expect((await f.connection.status()).installation?.state).toBe("revoked");
+  await expect(client.resume()).rejects.toMatchObject({ code: "cloud.replacement_state_invalid" });
+  await expect(client.check()).rejects.toMatchObject({ code: "cloud.replacement_state_invalid" });
+});

@@ -353,6 +353,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       organisationName: string;
       legalBusinessName: string;
       registration: CloudRegistration;
+      stopped: boolean;
     }) {
       return run(async () => {
         const existing = await read();
@@ -387,6 +388,15 @@ export function createCloudConnection(options: CloudConnectionOptions) {
             legalBusinessName: input.legalBusinessName,
             registration: input.registration,
           },
+          ...(input.stopped
+            ? {
+                lifecycle: {
+                  unavailable: false,
+                  revoked: false,
+                  pending: { action: "revoke", operationId: randomUUID(), lease: "", body: "{}" },
+                },
+              }
+            : {}),
         };
         await save(state);
         return project(state);

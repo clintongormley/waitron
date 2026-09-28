@@ -17,7 +17,7 @@ export interface CloudApiDeps {
   connection?: CloudConnection;
   replacement?: Pick<
     CloudReplacement,
-    "status" | "hasProposal" | "approval" | "eligible" | "prepare" | "check"
+    "status" | "hasProposal" | "approval" | "eligible" | "prepare" | "check" | "recordStop"
   >;
   managementOrigin: string;
   isPrimary: () => boolean;
@@ -173,7 +173,10 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
           action === "refresh"
             ? await client.refresh()
             : action === "revoke"
-              ? await client.revoke(() => authorize(c, true))
+              ? await client.revoke(async () => {
+                  await authorize(c, true);
+                  await deps.replacement?.recordStop();
+                })
               : action === "start"
                 ? await client.start(data.restart === true)
                 : action === "check"

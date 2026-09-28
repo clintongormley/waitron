@@ -199,7 +199,10 @@ server holding the primary role.
 
 A lost reply or a restart reuses the saved request and keys, and **Check reconnection** recovers
 Cloud's answer. If the server restarts after saving an approved reply but before importing it,
-it finishes the import when it starts again. On a server that was not restored from a Cloud
+it finishes the import when it starts again. **Stop Cloud access** on a reconnected server also
+records the stop in `cloud-replacement.json`, so if `cloud-connection.json` is lost, the import on
+the next start or **Check reconnection** restores the connection with the stop still waiting, and
+the next check with Cloud, once a minute or **Refresh status**, sends the stop again. On a server that was not restored from a Cloud
 snapshot, the screen offers **Connect to Cloud** instead of **Request reconnection**. Keep the
 previous server out of service throughout.
 
