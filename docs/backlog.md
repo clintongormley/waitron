@@ -3313,7 +3313,8 @@ approved.
 
 ### B9. CI and test infra
 
-- **Dependabot, switched on by #760 (2026-09-27) — one thing OPEN.** Config:
+- **Dependabot, switched on by #760 (2026-09-27) — DONE: the 15 security alerts fixed by lane A's
+  A107 (**PR #796**, 2026-09-28).** Config:
   `.github/dependabot.yml`; how to land one of its PRs: `docs/developers/workflow-guide.md` →
   Dependabot pull requests. Its first two PRs landed as #764 (mailpit) and #765 (ten npm
   minor/patch bumps). #766, a lone major bump of `@vitest/browser-playwright` to 5.0.1 beside
@@ -3322,18 +3323,42 @@ approved.
   together, majors included. That close stored an ignore of `@vitest/browser-playwright` 5.x;
   whether the group's Vitest 5 PR obeys it is untested and GitHub's docs do not say (how to check
   and clear it: workflow-guide → Dependabot pull requests); such a PR also has to re-measure
-  mutation first (Track C, *Left behind by the Stryker upgrade (#447, 2026-09-19)*). OPEN, queued as lane A's A107 (2026-09-27): **Triage
-  the security alerts.** On 2026-09-27
-  `gh api repos/clintongormley/waitron/dependabot/alerts?state=open` listed 15 open alerts across
-  six packages, every one a transitive dependency with a patched version published
-  (`baseline-browser-mapping`, `brace-expansion`, `browserslist`, `esbuild`, `fast-uri`, `qs`), and
-  no security-fix PR had been opened for any of them. Dependabot's security-update jobs for `qs`,
-  `baseline-browser-mapping`, `browserslist` and `fast-uri` ran twice that day and failed (`qs`:
-  `security_update_not_possible`, newest installable 6.15.1, first fixed 6.16.0); none ran for
-  `esbuild` or `brace-expansion`. The `esbuild` alert (vulnerable up to 0.24.2) can only be the
-  0.18.20 copy `drizzle-kit` pulls in through `@esbuild-kit/esm-loader`: Track C, *Left behind by
-  the esbuild upgrade (#439, 2026-09-19)*. Which alerts are reachable in this product is unassessed.
-  The `versioning-strategy` question is recorded under #432's loose ends in Track C.
+  mutation first (Track C, *Left behind by the Stryker upgrade (#447, 2026-09-19)*). **The security
+  alerts.** On 2026-09-28 `gh api repos/clintongormley/waitron/dependabot/alerts?state=open` listed
+  15 open alerts, every one a package another package pulls in, and every one in a development
+  tool: none of the six packages is among Waitron's own dependencies in the box image, whose
+  application JavaScript is the built bundles and whose only application `node_modules` is sharp's
+  own folder (`deploy/Dockerfile`) — npm's own copy of `brace-expansion` in the Node base image,
+  5.0.9, is outside every alert range — and the three front-ends, the print agent and the server
+  built byte-identical before and after the change (189 files compared). Where each came from, from
+  the lockfile: `fast-uri` 3.1.3 through `ajv` in `@stryker-mutator/core`; `qs` 6.15.1 through
+  `typed-rest-client` 2.3.1, which pins exactly that version, in `@stryker-mutator/core`;
+  `browserslist` 4.28.6 and `baseline-browser-mapping` 2.10.43 through Babel 8 in Stryker's
+  instrumenter; `brace-expansion` 2.1.2 through `testcontainers` in the two `bench/` rigs; `esbuild`
+  0.18.20 through `drizzle-kit` → `@esbuild-kit/esm-loader` → `@esbuild-kit/core-utils`, which is
+  what declares `~0.18.20`. The fix: four were moved inside the ranges their parents already
+  declare (`fast-uri` 3.1.8, `browserslist` 4.29.1, `baseline-browser-mapping` 2.11.26,
+  `brace-expansion` 2.1.7), and two are forced by root `pnpm.overrides` entries —
+  `typed-rest-client>qs` to `^6.16.0` (6.16.0), and `@esbuild-kit/core-utils>esbuild` to `^0.25.0`
+  (the 0.25.12 already in the tree). The same install also moved `brace-expansion` 5.0.7, not an
+  alerted version, onto the 5.0.12 already in the tree, and moved the four other packages
+  `browserslist` 4.29.1 depends on (`caniuse-lite`, `electron-to-chromium`, `node-releases`,
+  `update-browserslist-db`). What was run for the two overrides: `typed-rest-client`'s query-string
+  builder over eight parameter shapes gave the same URLs under `qs` 6.15.1 and 6.16.0 except one,
+  where 6.15.1 threw a `TypeError` and 6.16.0 does not (the `arrayFormat: 'comma'` null-entry fix
+  in `qs` 6.15.2's changelog); a search of Stryker's installed `dist` found `typed-rest-client`
+  imported in two of its JavaScript files, `initializer/npm-registry.js` and
+  `reporters/dashboard-reporter/index.js` (its type files name it only in the same two areas), and
+  no `stryker.config.json` here names the dashboard reporter.
+  `drizzle-kit` 0.31.11's shipped code never names `@esbuild-kit` (only its `package.json` does):
+  with both `@esbuild-kit` folders renamed away, `drizzle-kit generate` in all fourteen migration
+  sets printed the same as before; each set generated from nothing gave the same SQL and snapshots
+  before and after the override (ids and timestamps aside); and the loader itself still runs a
+  TypeScript file on esbuild 0.25.12. A full Stryker run over `packages/shared` gave the same 990
+  mutants with the same results on the old and new lockfile. The alerts are expected to close once
+  Dependabot rescans `main` after this change merges; that has not been seen yet. To check, rerun
+  `gh api repos/clintongormley/waitron/dependabot/alerts?state=open`. The `versioning-strategy`
+  question is recorded under #432's loose ends in Track C.
 - **CodeQL's three smaller findings — DONE (lane A's A106, run by lane C, **PR #792**,
   2026-09-28).** `js/biased-cryptographic-random` (alert 34): the demo company tax id in
   `packages/country-es/src/spain.ts` now draws again when a 32-bit draw lands at or above
@@ -5234,11 +5259,13 @@ latest minor or patch release; one loose end came with it.
 **Left behind by the esbuild upgrade (#439, 2026-09-19).** The four packages that build bundles
 moved from esbuild 0.25.12 to 0.28.2. Two things it could not take with it:
 
-- **Two esbuild copies older than ours stay in the tree, and they are not ours to move.**
-  `drizzle-kit` declares `^0.25.4` and resolves 0.25.12, and it also pulls the deprecated
-  `@esbuild-kit/esm-loader`, which carries esbuild **0.18.20**. Those ranges belong to those
-  packages: the only way to move either copy is to upgrade `drizzle-kit`. Nothing currently planned
-  does, and `pnpm install` warns about the package that brings the 0.18.20 one on every run.
+- **One esbuild copy older than ours stays in the tree: `drizzle-kit`'s own range holds it.**
+  `drizzle-kit` declares `^0.25.4` and resolves 0.25.12. It also pulls the deprecated
+  `@esbuild-kit/esm-loader`, whose `@esbuild-kit/core-utils` declared esbuild `~0.18.20`, which
+  resolved to **0.18.20**; since A107 (2026-09-28) a root `pnpm.overrides` entry moves that copy
+  onto the same 0.25.12 (the receipts are in B9's Dependabot entry). An install that re-resolves
+  the lockfile still warns that the `@esbuild-kit` packages are deprecated; a `--frozen-lockfile`
+  install printed no such warning.
 - **The bundles are checked by comparison, and the comparison is a thing you have to remember to
   do.** What established this upgrade was safe was building all twelve bundles on both versions and
   diffing the bytes — not the test suites, which run against TypeScript source and cannot see a
