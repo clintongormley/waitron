@@ -7,7 +7,7 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import { t } from "../i18n/t.js";
-import { roleName, statusName } from "../i18n/domain.js";
+import { roleName, rolesByName, statusName } from "../i18n/domain.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import "../widgets/staff-list.js";
 import "../widgets/person-form.js";
@@ -350,9 +350,14 @@ export class StaffScreen extends LitElement {
             @change=${(event: Event) =>
               (this.roleFilter = (event.target as HTMLSelectElement).value as PersonRole | "all")}
           >
-            <option value="all">${t("staff.filter_all_roles")}</option>
-            ${(["staff", "supervisor", "manager", "admin"] as const).map(
-              (role) => html`<option value=${role}>${roleName(role)}</option>`,
+            <option value="all" .selected=${this.roleFilter === "all"}>
+              ${t("staff.filter_all_roles")}
+            </option>
+            ${rolesByName().map(
+              (role) =>
+                html`<option value=${role} .selected=${this.roleFilter === role}>
+                  ${roleName(role)}
+                </option>`,
             )}
           </select>
         </label>

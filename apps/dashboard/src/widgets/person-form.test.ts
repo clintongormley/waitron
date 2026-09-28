@@ -57,14 +57,23 @@ describe("person-form", () => {
     expect((await openedDialog(el)).open).toBe(true);
     const options = [...el.shadowRoot!.querySelectorAll("option")];
     expect(options.map((option) => option.value)).toEqual([
-      "staff",
-      "supervisor",
-      "manager",
       "admin",
+      "staff",
+      "manager",
+      "supervisor",
     ]);
     expect(options.map((option) => option.textContent?.trim())).toEqual(
-      ["staff", "supervisor", "manager", "admin"].map((role) => roleName(role, "es-ES")),
+      ["admin", "staff", "manager", "supervisor"].map((role) => roleName(role, "es-ES")),
     );
+  });
+
+  it("starts a new person as staff even though another role is listed first", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    await openedDialog(el);
+    const select = el.shadowRoot!.querySelector("select")!;
+    expect(select.options[0]!.value).not.toBe("staff");
+    expect(select.value).toBe("staff");
+    expect(select.selectedOptions[0]!.textContent?.trim()).toBe(roleName("staff", "es-ES"));
   });
 
   it("emits trimmed account details without asking the administrator for a PIN", async () => {

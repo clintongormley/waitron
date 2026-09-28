@@ -2,10 +2,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { PersonSummary } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { roleName } from "../i18n/domain.js";
+import { setLocale, t } from "../i18n/t.js";
 import { PersonEdit } from "./person-edit.js";
 
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("es-ES");
+});
 
 const person: PersonSummary = {
   personId: "p1",
@@ -48,6 +52,16 @@ describe("person-edit", () => {
     }
     // No <hr> divider ahead of role/status — one continuous field list instead.
     expect(el.shadowRoot!.querySelector("hr")).toBeNull();
+  });
+
+  it("lists the roles alphabetically in the current language, keeping the person's own role chosen", async () => {
+    setLocale("en-GB");
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    const role = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=edit-role]")!;
+    expect([...role.options].map((option) => option.textContent?.trim())).toEqual(
+      ["admin", "manager", "staff", "supervisor"].map((value) => roleName(value, "en-GB")),
+    );
+    expect(role.value).toBe("manager");
   });
 
   it("presents one populated form and emits the full edit through one Save", async () => {

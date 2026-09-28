@@ -1,5 +1,5 @@
 import { currentLocale, resolveNameTable, type NameTable } from "@waitron/dashboard-kit";
-import type { AllergenDeclaration } from "../api/client.js";
+import type { AllergenDeclaration, PersonRole } from "../api/client.js";
 
 // Each table is a local, `string`-keyed copy of a server token set; api/client.ts says why the
 // dashboard does not import `@waitron/catalogue`'s main entry.
@@ -134,6 +134,13 @@ const DRAWER_OPEN_POLICY_NAMES: NameTable = {
 
 export function roleName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(ROLE_NAMES, value, locale);
+}
+
+const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"];
+
+export function rolesByName(locale: string = currentLocale()): PersonRole[] {
+  const collator = new Intl.Collator(locale, { sensitivity: "base" });
+  return [...ROLES].sort((a, b) => collator.compare(roleName(a, locale), roleName(b, locale)));
 }
 
 export function transportName(value: string, locale: string = currentLocale()): string {

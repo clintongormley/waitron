@@ -83,6 +83,34 @@ it("combines role and status filters and can include inactive users", async () =
   expect(shown(el).map((person) => person.displayName)).toEqual(["Inactive Alex"]);
 });
 
+it("lists the role filter's roles alphabetically in the current language, after All roles", async () => {
+  setLocale("en-GB");
+  const el = await screen();
+  const role = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=role-filter]")!;
+  expect([...role.options].map((option) => option.value)).toEqual([
+    "all",
+    "admin",
+    "manager",
+    "staff",
+    "supervisor",
+  ]);
+});
+
+it("marks the chosen role's option selected when the options re-render in a different order", async () => {
+  setLocale("en-GB");
+  const el = await screen();
+  const role = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=role-filter]")!;
+  role.value = "manager";
+  role.dispatchEvent(new Event("change"));
+  await el.updateComplete;
+  setLocale("es-ES");
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(shown(el).map((person) => person.displayName)).toEqual(["Grace"]);
+  expect(role.value).toBe("manager");
+  expect(role.selectedOptions[0]!.textContent!.trim()).toBe("Encargado");
+});
+
 it("explains what current users are in a help tooltip beside the status filter", async () => {
   setLocale("en-GB");
   const el = await screen();
