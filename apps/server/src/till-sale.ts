@@ -700,9 +700,9 @@ async function fileImmediateSale(
 }
 
 /**
- * The already-issued, unsettled sale for a working order, if any. Under `invoice_first` the invoice
- * is filed at placing, so a `placed` order already carries one; every other flow files at pay. The
- * presence of the row, not `cfg.orderFlow`, is the discriminator.
+ * The already-issued, unsettled sale for a working order, if any. An order placed under
+ * `invoice_first` carries its sale from placing; one placed under any other mode files at pay. The
+ * presence of the row, not the order's service mode, is the discriminator.
  *
  * `amountDue` is `total + corrections`, the same `due` `settleSale` re-derives, so a card charged
  * `amountDue + tip` settles the sale exactly. `${sales}.id` (not `${sales.id}`) renders the column
@@ -753,8 +753,8 @@ async function readOutstandingSaleForOrder(
  *  - `recover` / `recover-settle` — a captured payment with no sale (P2 committed, P3 never ran).
  *    Finish it WITHOUT charging again: file a sale, or settle the already-issued invoice when there is
  *    one, since a second `recordSale` would collide with it.
- *  - `settle` — invoice-first: collect the amount due and SETTLE the issued invoice.
- *  - `collect` — walk-up or issue-at-pay: collect the priced total and file the sale.
+ *  - `settle` — a sale was already issued for the order: collect the amount due and SETTLE it.
+ *  - `collect` — no sale yet: collect the priced total and file the sale.
  */
 export async function payWorkingOrderIntegrated(
   deps: IntegratedPayDeps,
@@ -1288,9 +1288,9 @@ export async function firePrepayOrder(
 }
 
 /**
- * P3 of {@link payWorkingOrderIntegrated}'s invoice-first branch: SETTLE the invoice issued at
- * placing, link the captured payment and settle the order in ONE transaction. It files NO second
- * fiscal record.
+ * P3 of {@link payWorkingOrderIntegrated}'s branch for an order whose sale was already issued:
+ * SETTLE that sale, link the captured payment and settle the order in ONE transaction. It files NO
+ * second fiscal record.
  *
  * The card was charged `amountDue + tip`, and the tender records that whole charge with the tip on
  * it, outside the fiscal total.
@@ -1337,7 +1337,7 @@ async function finalizeSettle(
         ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
       });
 
-      // An invoice-first settle is always a counter collect of a placed order.
+      // A settle is always a counter collect of a placed order.
       await tx
         .update(workingOrders)
         .set({
@@ -1362,9 +1362,9 @@ async function finalizeSettle(
 }
 
 /**
- * The invoice-first counterpart of {@link finalizeRecovery}: SETTLE the already-issued invoice for a
- * captured payment that has no sale, WITHOUT charging again and never with `recordSale`, which would
- * collide with the issued invoice. One transaction, so a concurrent recovery replays as in
+ * The counterpart of {@link finalizeRecovery} for an order whose sale was already issued: SETTLE that
+ * sale for a captured payment that has no sale link, WITHOUT charging again and never with
+ * `recordSale`, which would collide with it. One transaction, so a concurrent recovery replays as in
  * `finalizeRecovery`.
  *
  * The tip is reconstructed as `captured.amount − amountDue`. A charge below the amount due settles
@@ -1426,7 +1426,7 @@ async function finalizeSettleRecovery(
       ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
     });
 
-    // Settled at the ORIGINAL capture instant; an invoice-first recovery is always a counter collect.
+    // Settled at the ORIGINAL capture instant; a settle recovery is always a counter collect.
     await tx
       .update(workingOrders)
       .set({
