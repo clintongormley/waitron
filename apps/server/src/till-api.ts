@@ -144,7 +144,7 @@ import {
   requireSaleTillId,
   tryReadDevice,
 } from "./device-session.js";
-import { requireUuidParam } from "@waitron/server-kit";
+import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
 // Side-effect only: loads this host's errors.ts augmentation.
 import "./errors.js";
 
@@ -520,8 +520,7 @@ function joinGroupOf(body: Record<string, unknown>): { joinGroupId?: string } {
 function billOf(body: Record<string, unknown>): { billId?: string } {
   const { billId } = body;
   if (billId === undefined) return {};
-  if (typeof billId !== "string" || !isUuid(billId)) throw invalid("billId");
-  return { billId: billId.toLowerCase() };
+  return { billId: requireBodyUuid(billId, "billId").toLowerCase() };
 }
 
 /**

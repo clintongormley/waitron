@@ -11,7 +11,6 @@ import {
   listTablesWithState,
   mergeTabs,
   moveTab,
-  splitOffCheck,
   unjoinTable,
   voidTabLine,
 } from "./working-order.js";
@@ -32,6 +31,8 @@ import {
   activeTablesOf,
   billRow,
   billsOfParty,
+  commandFor,
+  floorRow,
   inTx,
   linesOf,
   order,
@@ -42,6 +43,7 @@ import {
   revisionOf,
   seat,
   setupPartyVenue,
+  split,
   tableRow,
   type PartyVenue,
 } from "./testing/party-venue.js";
@@ -60,25 +62,6 @@ useVenueDb({
   },
 });
 
-/** What a tab path is sent on a party: the revision the caller read, and who acts. */
-async function command(partyId: string) {
-  return { expectedPartyRevision: await revisionOf(v, partyId), operatorId: OPERATOR };
-}
-
-async function split(partyId: string, billId: string, lineNos: number[]): Promise<string> {
-  const sent = await command(partyId);
-  const { checkId } = await inTx(v, (tx) =>
-    splitOffCheck(
-      tx,
-      v.cfg,
-      billId,
-      lineNos.map((lineNo) => ({ lineNo })),
-      sent,
-    ),
-  );
-  return checkId;
-}
-
 async function soldLinesOf(billId: string) {
   return inTx(v, (tx) =>
     tx
@@ -88,11 +71,6 @@ async function soldLinesOf(billId: string) {
       .where(eq(sales.workingOrderId, billId))
       .orderBy(saleLines.lineNo),
   );
-}
-
-async function floorRow(tableId: string) {
-  const rows = await inTx(v, (tx) => listTablesWithState(tx, v.cfg));
-  return rows.find((row) => row.id === tableId)!;
 }
 
 async function abandon(billId: string): Promise<void> {
@@ -204,7 +182,7 @@ describe("an order sent to a named bill (P5)", () => {
     const mesa9 = await v.table("Mesa 9");
     const { partyId, tabId } = await seat(v, mesa9);
     await order(v, tabId, "Burger", "Vino");
-    const checkId = await split(partyId, tabId, [2]);
+    const checkId = await split(v, partyId, tabId, [2]);
     const revisionBefore = await revisionOf(v, partyId);
 
     const { tabId: landed, revision } = await orderForParty(v, partyId, ["Agua"], checkId);
@@ -258,7 +236,7 @@ describe("a split bill is a bill like any other", () => {
     const mesa10 = await v.table("Mesa 10");
     const { partyId, tabId } = await seat(v, mesa10);
     await order(v, tabId, "Burger", "Vino");
-    const checkId = await split(partyId, tabId, [2]);
+    const checkId = await split(v, partyId, tabId, [2]);
 
     await inTx(v, (tx) => voidTabLine(tx, v.cfg, checkId, 1));
 
@@ -271,9 +249,9 @@ describe("the old merge keeps the main bill in step", () => {
     const mesa11 = await v.table("Mesa 11");
     const { partyId, tabId } = await seat(v, mesa11);
     await order(v, tabId, "Burger", "Vino");
-    const checkId = await split(partyId, tabId, [2]);
+    const checkId = await split(v, partyId, tabId, [2]);
 
-    const merge = { freeSourceTable: false, ...(await command(partyId)) };
+    const merge = { freeSourceTable: false, ...(await commandFor(v, partyId)) };
     await inTx(v, (tx) => mergeTabs(tx, v.cfg, checkId, tabId, merge));
 
     expect((await partyRow(v, partyId)).mainBillId).toBe(checkId);
@@ -328,7 +306,7 @@ describe("pay, then order dessert", () => {
     const mesa20 = await v.table("Mesa 20");
     const { partyId, tabId } = await seat(v, mesa20, 2);
     await order(v, tabId, "Burger", "Vino");
-    const checkId = await split(partyId, tabId, [2]);
+    const checkId = await split(v, partyId, tabId, [2]);
     await pay(v, tabId, "12.00");
     await pay(v, checkId, "30.00");
     const soldBefore = await soldLinesOf(tabId);
@@ -352,7 +330,7 @@ describe("pay, then order dessert", () => {
       [checkId, "30.00", "0.00"],
       [dessertTab, "5.00", "5.00"],
     ]);
-    const floor = await floorRow(mesa20);
+    const floor = await floorRow(v, mesa20);
     expect(floor).toMatchObject({ state: "open-tab", hasOpenTab: true, tabId: dessertTab });
   });
 
@@ -362,7 +340,7 @@ describe("pay, then order dessert", () => {
     await order(v, tabId, "Burger");
     await pay(v, tabId, "12.00");
 
-    const floor = await floorRow(mesa21);
+    const floor = await floorRow(v, mesa21);
 
     expect(floor).toMatchObject({ state: "open-tab", hasOpenTab: false, tabId });
     expect(floor.tabTotal).toBeUndefined();
@@ -386,7 +364,7 @@ describe("pay, then order dessert", () => {
     const mesa22 = await v.table("Mesa 22");
     const { partyId, tabId } = await seat(v, mesa22);
     await order(v, tabId, "Burger", "Vino");
-    const checkId = await split(partyId, tabId, [2]);
+    const checkId = await split(v, partyId, tabId, [2]);
     await pay(v, tabId, "12.00");
     await pay(v, checkId, "30.00");
     const { tabId: dessertTab } = await orderForParty(v, partyId, ["Flan"]);
@@ -433,11 +411,11 @@ describe("pay, then order dessert", () => {
 
     expect((await partyRow(v, partyId)).state).toBe("open");
     expect(await activeTablesOf(v, partyId)).toEqual([mesa24]);
-    expect((await floorRow(mesa24)).state).toBe("open-tab");
+    expect((await floorRow(v, mesa24)).state).toBe("open-tab");
     const { tabId: next } = await orderForParty(v, partyId, ["Flan"]);
     expect((await billRow(v, next)).partyId).toBe(partyId);
     expect((await tableRow(v, mesa24)).tabId).toBe(next);
-    expect((await floorRow(mesa24)).party).toMatchObject({
+    expect((await floorRow(v, mesa24)).party).toMatchObject({
       billCount: 1,
       outstanding: "5.00",
     });
@@ -454,10 +432,10 @@ describe("the main bill agrees with the old rule on every old path", () => {
     const { partyId, tabId } = await seat(v, first);
     if (path === "unjoin") {
       const second = await v.table(`Mesa old ${path} 2`);
-      const joined = await command(partyId);
+      const joined = await commandFor(v, partyId);
       await inTx(v, (tx) => joinTable(tx, v.cfg, tabId, second, joined));
       await order(v, tabId, "Burger", "Vino");
-      const sent = await command(partyId);
+      const sent = await commandFor(v, partyId);
       const { tabId: newTab } = await inTx(v, (tx) =>
         unjoinTable(tx, v.cfg, tabId, second, [{ lineNo: 2 }], sent),
       );
@@ -466,17 +444,17 @@ describe("the main bill agrees with the old rule on every old path", () => {
     await order(v, tabId, "Burger", "Vino");
     if (path === "join") {
       const other = await v.table(`Mesa old ${path} 2`);
-      const sent = await command(partyId);
+      const sent = await commandFor(v, partyId);
       await inTx(v, (tx) => joinTable(tx, v.cfg, tabId, other, sent));
     }
     if (path === "move") {
       const other = await v.table(`Mesa old ${path} 2`);
-      const sent = await command(partyId);
+      const sent = await commandFor(v, partyId);
       await inTx(v, (tx) => moveTab(tx, v.cfg, tabId, other, sent));
     }
     if (path === "merge") {
-      const checkId = await split(partyId, tabId, [2]);
-      const merge = { freeSourceTable: false, ...(await command(partyId)) };
+      const checkId = await split(v, partyId, tabId, [2]);
+      const merge = { freeSourceTable: false, ...(await commandFor(v, partyId)) };
       await inTx(v, (tx) => mergeTabs(tx, v.cfg, tabId, checkId, merge));
     }
     return { partyId };

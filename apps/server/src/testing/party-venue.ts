@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -9,7 +9,6 @@ import {
 import {
   diningTables,
   parties,
-  partyTables,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -29,11 +28,12 @@ import {
 import { deploymentEnvironment } from "../config.js";
 import { ALL_MODULES } from "../modules.js";
 import { placeGroups } from "../order-groups.js";
-import { seatTable } from "../parties.js";
+import { memberTables, seatTable } from "../parties.js";
 import { createTable } from "../tables.js";
 import type { TillConfig } from "../till-config.js";
+import { systemClock } from "../till-backend.js";
 import { payWorkingOrder } from "../till-sale.js";
-import { addTabRound } from "../working-order.js";
+import { addTabRound, listTablesWithState, splitOffCheck } from "../working-order.js";
 import { offerProducts, type ZoneOffers } from "./zone-offers.js";
 
 /**
@@ -71,22 +71,7 @@ export interface PartyVenue {
 type HasDb = Pick<PartyVenue, "db">;
 
 export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
-  const clock: TrustedClock = {
-    now: () => {
-      const instant = new Date();
-      return {
-        instant,
-        offsetMinutes: -instant.getTimezoneOffset(),
-        confident: true,
-        confidence: "anchored",
-        anchorAgeSeconds: 0,
-      };
-    },
-    anchor: () => {
-      throw new Error("party venue: anchor() is not used by these cases");
-    },
-    currentAnchor: () => null,
-  };
+  const clock = systemClock();
   const backend = new VerifactuBackend({
     clock,
     db,
@@ -221,6 +206,40 @@ export async function orderForParty(
   return { tabId, revision };
 }
 
+/** What a tab path is sent on a party: the revision the caller read, and who acts. */
+export async function commandFor(
+  v: HasDb,
+  partyId: string,
+): Promise<{ expectedPartyRevision: number; operatorId: string }> {
+  return { expectedPartyRevision: await revisionOf(v, partyId), operatorId: OPERATOR };
+}
+
+/** Splits the named lines off the bill into a new check of the party, as the till's split does. */
+export async function split(
+  v: PartyVenue,
+  partyId: string,
+  billId: string,
+  lineNos: number[],
+): Promise<string> {
+  const sent = await commandFor(v, partyId);
+  const { checkId } = await inTx(v, (tx) =>
+    splitOffCheck(
+      tx,
+      v.cfg,
+      billId,
+      lineNos.map((lineNo) => ({ lineNo })),
+      sent,
+    ),
+  );
+  return checkId;
+}
+
+/** The table as the till's floor lists it. */
+export async function floorRow(v: Pick<PartyVenue, "db" | "cfg">, tableId: string) {
+  const rows = await inTx(v, (tx) => listTablesWithState(tx, v.cfg));
+  return rows.find((row) => row.id === tableId)!;
+}
+
 /** Pays the bill in cash in one go. */
 export async function pay(v: PartyVenue, billId: string, amount: string): Promise<void> {
   await payWorkingOrder({ db: v.db, backend: v.backend, clock: v.clock }, v.cfg, {
@@ -254,14 +273,7 @@ export async function partyRow(v: HasDb, partyId: string): Promise<typeof partie
 
 /** The tables the party holds, in the order they joined it. */
 export async function activeTablesOf(v: HasDb, partyId: string): Promise<string[]> {
-  const rows = await inTx(v, (tx) =>
-    tx
-      .select({ tableId: partyTables.tableId })
-      .from(partyTables)
-      .where(and(eq(partyTables.partyId, partyId), isNull(partyTables.leftAt)))
-      .orderBy(asc(partyTables.joinedAt), asc(partyTables.id)),
-  );
-  return rows.map((row) => row.tableId);
+  return inTx(v, (tx) => memberTables(tx, partyId));
 }
 
 export async function tableRow(
