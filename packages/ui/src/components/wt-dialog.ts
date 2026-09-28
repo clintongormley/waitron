@@ -53,7 +53,12 @@ export class WtDialog extends LitElement {
   /** Whether Escape may close this dialog. Off for a surface with nothing behind it — the setup
    * wizard is the whole page, so a dismissed dialog would strand the operator on an empty document.
    * An absent boolean attribute reads as false in Lit, so a caller turns this off with the property
-   * binding `.dismissible=${false}`, never `?dismissible`. */
+   * binding `.dismissible=${false}`, never `?dismissible`.
+   *
+   * Off, the inner dialog carries `closedby="none"`: refusing `cancel` is not enough, because
+   * Playwright's Chromium 153 and WebKit (Safari 26.6) builds both sent a second Escape's `cancel`
+   * uncancelable and closed the dialog. A close the caller did not ask for while this is off — a
+   * browser without `closedby`, or a `close()` from outside — shows the dialog again. */
   @property({ type: Boolean }) dismissible = true;
 
   // Shadows the native ARIAMixin accessor so a caller's aria-label reaches the inner <dialog> when
@@ -80,6 +85,10 @@ export class WtDialog extends LitElement {
     // The browser reports a close a task after it happens, so a dialog shut and reopened in between
     // still gets the report; honouring it would shut the reopened dialog.
     if (this.dialog.open) return;
+    if (this.open && !this.dismissible) {
+      this.dialog.showModal();
+      return;
+    }
     this.open = false;
     this.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
   }
@@ -100,6 +109,7 @@ export class WtDialog extends LitElement {
       <dialog
         @close=${this.onClose}
         @cancel=${this.onCancel}
+        closedby=${this.dismissible ? "closerequest" : "none"}
         role="dialog"
         aria-labelledby=${this.heading ? this.headingId : nothing}
         aria-label=${!this.heading && this.ariaLabel ? this.ariaLabel : nothing}

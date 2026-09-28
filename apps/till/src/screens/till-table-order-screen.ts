@@ -1836,7 +1836,7 @@ export class TillTableOrderScreen extends LitElement {
       .open=${other !== null}
       .dismissible=${this.takeOverSent === null}
       .heading=${named(name, "table.take_over_title", "table.take_over_title_unnamed")}
-      @wt-close=${(event: Event) => void this.#takeOverClosed(event)}
+      @wt-close=${() => void this.#takeOverClosed()}
     >
       <p data-take-over-body>
         ${named(name, "table.take_over_body", "table.take_over_body_unnamed")}
@@ -1862,17 +1862,9 @@ export class TillTableOrderScreen extends LitElement {
     </wt-dialog>`;
   }
 
-  /**
-   * While the take-over is out the dialog is shown again, however it was closed: Chromium lets a
-   * repeated Escape close a modal dialog without a cancelable `cancel`, so refusing the cancel alone
-   * does not keep it open. Once answered, focus goes to the draft's Take over when the draft is still
-   * there, and otherwise to the person's own order, which now holds it.
-   */
-  async #takeOverClosed(event: Event): Promise<void> {
-    if (this.takeOverSent !== null && this.takeOverPending !== null) {
-      (event.target as HTMLElement & { open: boolean }).open = true;
-      return;
-    }
+  /** Once answered, focus goes to the draft's Take over when the draft is still there, and
+   * otherwise to the person's own order, which now holds it. */
+  async #takeOverClosed(): Promise<void> {
     this.takeOverPending = null;
     const taken = this.#takeOverAnswered;
     this.#takeOverAnswered = undefined;

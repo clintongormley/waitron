@@ -1,4 +1,5 @@
 import { expect, test, afterEach, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import "./wt-dialog.js";
 
@@ -187,6 +188,108 @@ test("refuses Escape when dismissible is off", async () => {
   dialog.dispatchEvent(cancel);
   expect(cancel.defaultPrevented).toBe(true);
   expect(el.open).toBe(true);
+});
+
+/**
+ * A real key press, then a timer rather than `closeReportsDelivered`: with that helper's throwaway
+ * dialog between presses, Chromium 153 let every Escape be refused and a dialog without `closedby`
+ * passed the repeated-Escape tests below.
+ */
+async function pressEscape(): Promise<void> {
+  await userEvent.keyboard("{Escape}");
+  await new Promise((resolve) => setTimeout(resolve, 50));
+}
+
+test("closes on a real Escape press when dismissible", async () => {
+  const el = (await mount("<wt-dialog>body</wt-dialog>")) as Openable;
+  el.open = true;
+  await el.updateComplete;
+  const closes = vi.fn();
+  el.addEventListener("wt-close", closes);
+
+  await pressEscape();
+
+  expect(el.shadowRoot!.querySelector("dialog")!.open).toBe(false);
+  expect(el.open).toBe(false);
+  expect(closes).toHaveBeenCalledOnce();
+});
+
+test("stays open through repeated Escape presses when dismissible is off", async () => {
+  const el = (await mount("<wt-dialog>body</wt-dialog>")) as Openable & { dismissible: boolean };
+  el.dismissible = false;
+  el.open = true;
+  await el.updateComplete;
+  const closes = vi.fn();
+  el.addEventListener("wt-close", closes);
+  const dialog = el.shadowRoot!.querySelector("dialog")!;
+  // Never shut, rather than shut and shown again.
+  const nativeCloses = vi.fn();
+  dialog.addEventListener("close", nativeCloses);
+
+  for (let press = 1; press <= 3; press += 1) {
+    await pressEscape();
+    expect(dialog.open, `after Escape ${press}`).toBe(true);
+  }
+  expect(el.open).toBe(true);
+  expect(closes).not.toHaveBeenCalled();
+  expect(nativeCloses).not.toHaveBeenCalled();
+});
+
+test("stays open through repeated Escape presses once dismissible is turned off while open", async () => {
+  const el = (await mount("<wt-dialog>body</wt-dialog>")) as Openable & { dismissible: boolean };
+  el.open = true;
+  await el.updateComplete;
+  el.dismissible = false;
+  await el.updateComplete;
+  const dialog = el.shadowRoot!.querySelector("dialog")!;
+  const nativeCloses = vi.fn();
+  dialog.addEventListener("close", nativeCloses);
+
+  for (let press = 1; press <= 3; press += 1) {
+    await pressEscape();
+    expect(dialog.open, `after Escape ${press}`).toBe(true);
+  }
+  expect(nativeCloses).not.toHaveBeenCalled();
+
+  el.dismissible = true;
+  await el.updateComplete;
+  await pressEscape();
+  expect(dialog.open).toBe(false);
+});
+
+test("closes, and reports it, when its caller shuts it while dismissible is off", async () => {
+  const el = (await mount("<wt-dialog>body</wt-dialog>")) as Openable & { dismissible: boolean };
+  el.dismissible = false;
+  el.open = true;
+  await el.updateComplete;
+  const closes = vi.fn();
+  el.addEventListener("wt-close", closes);
+
+  el.open = false;
+  await el.updateComplete;
+  await closeReportsDelivered();
+
+  expect(el.shadowRoot!.querySelector("dialog")!.open).toBe(false);
+  expect(closes).toHaveBeenCalledOnce();
+});
+
+test("reopens, and reports no close, when shut behind its back while dismissible is off", async () => {
+  const el = (await mount("<wt-dialog>body</wt-dialog>")) as Openable & { dismissible: boolean };
+  el.dismissible = false;
+  el.open = true;
+  await el.updateComplete;
+  const closes = vi.fn();
+  el.addEventListener("wt-close", closes);
+  const dialog = el.shadowRoot!.querySelector("dialog")!;
+
+  dialog.close();
+  await closeReportsDelivered();
+  await el.updateComplete;
+
+  expect(dialog.open).toBe(true);
+  expect(dialog.matches(":modal")).toBe(true);
+  expect(el.open).toBe(true);
+  expect(closes).not.toHaveBeenCalled();
 });
 
 test("draws a divider above the footer only when there is footer content", async () => {
