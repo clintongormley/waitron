@@ -387,12 +387,9 @@ function errorText(error: CounterError): string | TemplateResult {
   if ("code" in error) return codeMessage(error.code);
   if ("takenOver" in error) {
     const name = error.takenOver;
-    const lost =
-      name === ""
-        ? t("table.draft_unsaved")
-        : t("table.draft_taken_unsaved").replace("{name}", () => name);
-    return html`<span class="error-part">${codeMessage("draft.taken_over")}</span
-      ><span class="error-part">${lost}</span>`;
+    return name === ""
+      ? t("table.draft_taken_over_unsaved_unnamed")
+      : t("table.draft_taken_over_unsaved").replace("{name}", () => name);
   }
   if ("visitChanged" in error) return visitChangeMessage(error.visitChanged);
   const late = lateChangeMessage(error.lateChange);

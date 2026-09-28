@@ -13,6 +13,7 @@ import { DRAFT_SAVE_DELAY_MS } from "./state/draft-sync.js";
 import { WorkingOrderStore } from "./state/working-order.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
+import { resized } from "./screens/till-table-order-screen.test-helpers.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import type { CanvasDef, CapabilityFlag } from "./layout.js";
@@ -661,7 +662,7 @@ describe("till-app: a save the server refuses", () => {
     expect(rows(el)).toEqual(["Steak ×2"]);
   });
 
-  it("re-reads the drafts after a save refused as taken over, and says so in the code's words", async () => {
+  it("re-reads the drafts after a save refused as taken over, and says who took it and that the change was not saved", async () => {
     const { el } = await mountApp({
       saveDraft: vi.fn(server.saveDraft).mockRejectedValueOnce({
         code: "draft.taken_over",
@@ -677,7 +678,9 @@ describe("till-app: a save the server refuses", () => {
     await back(el);
 
     expect(api.listDrafts.mock.calls.length).toBe(reads + 1);
-    expect(banner(el)!.textContent).toContain(codeMessage("draft.taken_over"));
+    expect(banner(el)!.textContent).toContain(
+      "Sam has taken over this order. Your last change was not saved.",
+    );
   });
 
   it("says a closed party in its own words", async () => {
@@ -1697,7 +1700,7 @@ describe("till-app: the draft beside browsing, or on its own Review view", () =>
     await page.viewport(1280, 720);
     try {
       const { el } = await mountApp();
-      await openMesa(el);
+      await resized(await openMesa(el));
       await tap(el, "Beer");
 
       expect(visible(el, "[data-browsing]")).toBe(true);
@@ -2155,8 +2158,9 @@ describe("till-app: other people's drafts and taking one over", () => {
     await flush(el);
 
     expect(api.saveDraft).toHaveBeenCalledTimes(2);
-    expect(banner(el)!.textContent).toContain(codeMessage("draft.taken_over"));
-    expect(banner(el)!.textContent).toContain("Sam has it now. Your last change was not saved.");
+    expect(banner(el)!.textContent).toBe(
+      "Sam has taken over this order. Your last change was not saved.",
+    );
     expect(rows(el)).toEqual([]);
     await reviewed(el);
     expect(panelOf(el)).toMatchObject({ heading: "Taken over by Sam", lines: ["Beer ×1"] });
@@ -2274,7 +2278,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     ["no name", { ownerName: "" }],
     ["nothing about who", {}],
   ])(
-    "says only that the change was not saved when the refusal carries %s",
+    "says someone else took it over, and the change was not saved, when the refusal carries %s",
     async (_case, carries) => {
       const { el } = await mountApp({
         saveDraft: vi.fn(server.saveDraft).mockRejectedValueOnce({
@@ -2288,9 +2292,9 @@ describe("till-app: other people's drafts and taking one over", () => {
       await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
       await flush(el);
 
-      expect(banner(el)!.textContent).toContain(codeMessage("draft.taken_over"));
-      expect(banner(el)!.textContent).toContain(t("table.draft_unsaved"));
-      expect(banner(el)!.textContent).not.toContain("has it now");
+      expect(banner(el)!.textContent).toBe(
+        "Someone else has taken over this order. Your last change was not saved.",
+      );
     },
   );
 
@@ -2311,7 +2315,9 @@ describe("till-app: other people's drafts and taking one over", () => {
     await act(el, "fire-all");
 
     expect(api.submitDraft).not.toHaveBeenCalled();
-    expect(banner(el)!.textContent).toContain("Sam has it now. Your last change was not saved.");
+    expect(banner(el)!.textContent).toBe(
+      "Sam has taken over this order. Your last change was not saved.",
+    );
     await reviewed(el);
     expect(panelOf(el).heading).toBe("Taken over by Sam");
   });

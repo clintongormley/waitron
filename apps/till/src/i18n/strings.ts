@@ -416,8 +416,10 @@ export const en = {
   "table.take_over_confirm": "Take over",
   "table.take_over_changed":
     "This order changed before you could take it over. Check it and try again.",
-  "table.draft_taken_unsaved": "{name} has it now. Your last change was not saved.",
-  "table.draft_unsaved": "Your last change was not saved.",
+  "table.draft_taken_over_unsaved":
+    "{name} has taken over this order. Your last change was not saved.",
+  "table.draft_taken_over_unsaved_unnamed":
+    "Someone else has taken over this order. Your last change was not saved.",
   "table.taking_over": "Taking over the order…",
   "table.take_over_sent": "This order has just been sent. Here is the table as it is now.",
   "table.take_over_gone": "This order is no longer on this table. Here is the table as it is now.",
@@ -902,8 +904,10 @@ export const es: Record<StringKey, string> = {
   "table.take_over_confirm": "Tomar",
   "table.take_over_changed":
     "Este pedido cambió antes de que pudieras tomarlo. Revísalo e inténtalo de nuevo.",
-  "table.draft_taken_unsaved": "Ahora lo tiene {name}. Tu último cambio no se ha guardado.",
-  "table.draft_unsaved": "Tu último cambio no se ha guardado.",
+  "table.draft_taken_over_unsaved":
+    "{name} ha tomado este pedido. Tu último cambio no se ha guardado.",
+  "table.draft_taken_over_unsaved_unnamed":
+    "Otra persona ha tomado este pedido. Tu último cambio no se ha guardado.",
   "table.taking_over": "Tomando el pedido…",
   "table.take_over_sent": "Este pedido se acaba de enviar. Así está ahora la mesa.",
   "table.take_over_gone": "Este pedido ya no está en esta mesa. Así está ahora la mesa.",
