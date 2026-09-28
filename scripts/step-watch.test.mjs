@@ -1,10 +1,19 @@
 import { EventEmitter } from "node:events";
-import { closeSync, mkdtempSync, openSync, readFileSync, rmSync, statSync } from "node:fs";
+import {
+  closeSync,
+  mkdtempSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { setTimeout } from "node:timers";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createStepWatch, reportStallAfter, watchFromAnotherThread } from "./step-watch.mjs";
 
 function clock(...readings) {
@@ -39,6 +48,10 @@ function databaseHolding(hold) {
   });
   return { query: () => db.prepare("select hold() as held").get(), close: () => db.close() };
 }
+
+const monotonicMs = () => Number(process.hrtime.bigint() / 1_000_000n);
+
+const openFileDescriptors = () => readdirSync("/dev/fd").length;
 
 function sleepHere(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -123,6 +136,7 @@ describe("createStepWatch", () => {
   });
 
   it("replays the phases so far to a new observer, then tells it each phase as it starts and ends", async () => {
+    const before = monotonicMs();
     const watch = createStepWatch({ now: clock(0, 3, 10, 12, 20, 25, 30, 31) });
     await watch.phase("done", () => undefined);
     let release;
@@ -135,6 +149,8 @@ describe("createStepWatch", () => {
     stop();
     await watch.phase("unobserved", () => undefined);
 
+    const startedAt = events.filter((event) => event.started).map((event) => event.at);
+    expect(startedAt.every((at) => at >= before && at <= monotonicMs())).toBe(true);
     expect(events).toEqual([
       { finished: { label: "done", ms: 3 } },
       { started: "running", at: expect.any(Number) },
@@ -206,13 +222,15 @@ describe("watchFromAnotherThread", () => {
     expect(dog.written).toEqual([]);
   });
 
-  it("writes to the file descriptor with the real clock and timer by default", async () => {
+  it("writes to the file descriptor when the time falls due on the shared monotonic clock, by default", async () => {
     const report = reportFile();
+    const startedAt = monotonicMs();
+    let writtenAfter;
     try {
       watchFromAnotherThread(new EventEmitter(), {
-        dueAt: Date.now() + 10,
-        ms: 5,
-        graceMs: 5,
+        dueAt: startedAt + 100,
+        ms: 50,
+        graceMs: 50,
         answered: answeredFlag(0),
         reportTo: report.fd,
       });
@@ -220,12 +238,14 @@ describe("watchFromAnotherThread", () => {
       while (!report.written() && Date.now() < giveUpAt) {
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
+      writtenAfter = monotonicMs() - startedAt;
     } finally {
       report.close();
     }
 
+    expect(writtenAfter).toBeGreaterThanOrEqual(95);
     expect(report.read()).toBe(
-      "The test's thread has not run its 5 ms deadline timer 5 ms after it fell due: something synchronous is holding it. Stalled between phases.\nPhases finished before it:\n(none)\n",
+      "The test's thread has not run its 50 ms deadline timer 50 ms after it fell due: something synchronous is holding it. Stalled between phases.\nPhases finished before it:\n(none)\n",
     );
   });
 });
@@ -316,6 +336,75 @@ describe("reportStallAfter", () => {
     }
     expect(report.read()).toBe("");
   });
+
+  it("writes no report when the body waits without holding the thread and finishes in time", async () => {
+    const report = reportFile();
+    try {
+      await reportStallAfter(
+        createStepWatch(),
+        300,
+        () => new Promise((resolve) => setTimeout(resolve, 150)),
+        { graceMs: 1, reportTo: report.fd },
+      );
+    } finally {
+      report.close();
+    }
+
+    expect(report.read()).toBe("");
+  });
+
+  it("has ended its watchdog thread by the time it returns", async () => {
+    await reportStallAfter(createStepWatch(), 1000, () => undefined);
+    const before = openFileDescriptors();
+
+    await reportStallAfter(createStepWatch(), 1000, () => undefined);
+
+    expect(openFileDescriptors()).toBe(before);
+  });
+
+  it("warns, and leaves the body's result alone, when the watchdog thread cannot start", async () => {
+    const warn = vi.spyOn(process, "emitWarning").mockImplementation(() => undefined);
+    try {
+      const result = await reportStallAfter(
+        createStepWatch(),
+        5000,
+        async () => {
+          const giveUpAt = Date.now() + 4000;
+          while (warn.mock.calls.length === 0 && Date.now() < giveUpAt) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+          return "migrated";
+        },
+        { helper: pathToFileURL(join(import.meta.dirname, "no-such-step-watch.mjs")).href },
+      );
+
+      expect(result).toBe("migrated");
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("no-such-step-watch.mjs"),
+        "StepWatchWarning",
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    "refuses a grace period of %s before running the body",
+    async (graceMs) => {
+      let ran = false;
+      await expect(
+        reportStallAfter(
+          createStepWatch(),
+          100,
+          () => {
+            ran = true;
+          },
+          { graceMs },
+        ),
+      ).rejects.toThrow("The grace period must be a positive finite number of milliseconds");
+      expect(ran).toBe(false);
+    },
+  );
 
   it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
     "refuses a deadline of %s before running the body",

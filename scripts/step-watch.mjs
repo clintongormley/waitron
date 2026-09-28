@@ -1,7 +1,10 @@
 import { writeSync } from "node:fs";
-import { performance } from "node:perf_hooks";
 import { clearTimeout, setTimeout } from "node:timers";
 import { Worker } from "node:worker_threads";
+
+// Both threads read this clock, not the wall clock, because a wall-clock step would move when the
+// watchdog fires.
+const monotonicMs = () => Number(process.hrtime.bigint() / 1_000_000n);
 
 const lines = (phases) => phases.map(({ label, ms }) => `${label}: ${ms} ms`).join("\n");
 
@@ -18,9 +21,8 @@ function describeStall({ current, finished, active }) {
   ].join("\n");
 }
 
-/** Times each phase of a test's steps, so a test that outlives its bound can say which phase it was in. */
 export function createStepWatch({
-  now = () => performance.now(),
+  now = monotonicMs,
   resources = () => process.getActiveResourcesInfo(),
 } = {}) {
   const finished = [];
@@ -36,7 +38,7 @@ export function createStepWatch({
   return {
     async phase(label, run) {
       const startedAt = now();
-      current = { label, startedAt, at: Date.now() };
+      current = { label, startedAt, at: monotonicMs() };
       for (const observer of observers) observer({ started: label, at: current.at });
       try {
         return await run();
@@ -47,7 +49,6 @@ export function createStepWatch({
         for (const observer of observers) observer({ finished: done });
       }
     },
-    /** Replays what has happened so far to `observer`, then tells it each phase as it starts and ends. */
     observe(observer) {
       for (const done of finished) observer({ finished: done });
       if (current) observer({ started: current.label, at: current.at });
@@ -72,7 +73,7 @@ export function createStepWatch({
 export function watchFromAnotherThread(
   port,
   { dueAt, ms, graceMs, answered, reportTo },
-  { write = writeSync, now = Date.now, setTimer = setTimeout } = {},
+  { write = writeSync, now = monotonicMs, setTimer = setTimeout } = {},
 ) {
   const finished = [];
   let current;
@@ -97,8 +98,10 @@ export function watchFromAnotherThread(
   }, dueAt - now());
 }
 
+// The eval'd source is parsed as a module or a script depending on the parent's flags, so it reaches
+// Node's modules through `process.getBuiltinModule`, as `packages/store/src/venue-liveness.ts` does.
 const WATCHDOG = `
-const { parentPort, workerData } = require("node:worker_threads");
+const { parentPort, workerData } = process.getBuiltinModule("node:worker_threads");
 import(workerData.helper).then(({ watchFromAnotherThread }) =>
   watchFromAnotherThread(parentPort, workerData.settings),
 );`;
@@ -116,24 +119,30 @@ export async function reportStallAfter(
   {
     setTimer = setTimeout,
     clearTimer = clearTimeout,
-    now = () => performance.now(),
+    now = monotonicMs,
     graceMs = 1000,
     reportTo = 2,
+    helper = import.meta.url,
   } = {},
 ) {
   if (!Number.isFinite(ms) || ms <= 0) {
     throw new Error("The deadline must be a positive finite number of milliseconds");
+  }
+  if (!Number.isFinite(graceMs) || graceMs <= 0) {
+    throw new Error("The grace period must be a positive finite number of milliseconds");
   }
   const startedAt = now();
   const answered = new Int32Array(new SharedArrayBuffer(4));
   const watchdog = new Worker(WATCHDOG, {
     eval: true,
     workerData: {
-      helper: import.meta.url,
-      settings: { dueAt: Date.now() + ms + graceMs, ms, graceMs, answered, reportTo },
+      helper,
+      settings: { dueAt: monotonicMs() + ms + graceMs, ms, graceMs, answered, reportTo },
     },
   });
   watchdog.unref();
+  // The watchdog is a diagnostic: its own failure must not decide the test's result.
+  watchdog.on("error", (error) => process.emitWarning(error.message, "StepWatchWarning"));
   const stopObserving = watch.observe((event) => watchdog.postMessage(event));
   const took = () => Math.round(now() - startedAt);
   let timer;
@@ -160,6 +169,8 @@ export async function reportStallAfter(
     Atomics.store(answered, 0, 1);
     clearTimer(timer);
     stopObserving();
-    void watchdog.terminate();
+    // A worker holds file descriptors until `terminate()` resolves; `allSettled` keeps a refusal
+    // from replacing the body's own error.
+    await Promise.allSettled([watchdog.terminate()]);
   }
 }
