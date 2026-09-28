@@ -23,7 +23,7 @@ export interface KitchenTicketItem {
   modifiers?: string[];
   /** The position of the party's group the item fired in; absent for an item in no group. */
   group?: number;
-  /** Sold by a measure rather than counted: printed as sold, never merged or split. */
+  /** Printed as sold, never merged or split. */
   measured?: boolean;
 }
 

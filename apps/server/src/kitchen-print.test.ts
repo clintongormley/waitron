@@ -46,7 +46,7 @@ import {
   openTab,
   voidTabLine,
 } from "./working-order.js";
-import { listStationNotices } from "@waitron/venue-service";
+import { listStationNotices, writeKitchenTicketGrouping } from "@waitron/venue-service";
 import { attachPrinterToStation } from "./station-printers.js";
 import {
   enqueueCorrectionSlips,
@@ -938,6 +938,60 @@ describe("a dish sold by the piece prints no unit", () => {
     expect(printed).toContain(`${thousandthsToDecimal(2000)} x Croqueta`);
     expect(printed).toContain(`${thousandthsToDecimal(500)} kg x Pulpo`);
   });
+
+  // Fails if merging and splitting go by the unit's spelling while the unit's printing goes by its
+  // identity: Pan's unit is spelled like Each but is the venue's own, and Bomba's is Each renamed.
+  const at = (thousandths: number, rest: string) => `${thousandthsToDecimal(thousandths)} ${rest}`;
+  it.each([
+    {
+      grouping: "combined",
+      dish: "pan",
+      name: "Pan",
+      sold: ["1", "1"],
+      printed: [at(1000, "ea x Pan"), at(1000, "ea x Pan")],
+    },
+    {
+      grouping: "separate",
+      dish: "pan",
+      name: "Pan",
+      sold: ["2"],
+      printed: [at(2000, "ea x Pan")],
+    },
+    {
+      grouping: "combined",
+      dish: "bomba",
+      name: "Bomba",
+      sold: ["1", "1"],
+      printed: [at(2000, "x Bomba")],
+    },
+    {
+      grouping: "separate",
+      dish: "bomba",
+      name: "Bomba",
+      sold: ["2"],
+      printed: [at(1000, "x Bomba"), at(1000, "x Bomba")],
+    },
+  ] as const)(
+    "merges or splits an entry only when its unit does not print ($dish, $grouping)",
+    async ({ grouping, dish, name, sold, printed }) => {
+      const { cfg, catalogueId } = await setupVenue();
+      const jobs = await asApp(cfg, async (tx) => {
+        await writeKitchenTicketGrouping(tx, grouping);
+        const dishes = await sellInEveryUnit(tx, cfg, catalogueId);
+        await fireNewOrder(
+          tx,
+          cfg,
+          sold.map((quantity) => ({ productId: dishes[dish], quantity })),
+        );
+        return printJobsFor(tx);
+      });
+
+      expect(jobs).toHaveLength(1);
+      expect(printedLines(jobs[0]!.payload).filter((text) => text.endsWith(` x ${name}`))).toEqual(
+        printed,
+      );
+    },
+  );
 });
 
 describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, child sub-text)", () => {
