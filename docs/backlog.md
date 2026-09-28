@@ -2893,26 +2893,22 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   with `minPicks: 0` and `maxQuantity: 9` can be failing. The real-world shape is a parked line
   whose list had its cap reduced under it, the same family as the "list lost the product between the
   park and the edit" escape recorded under Task 8.
-- **After a line is cancelled or changed, the table's bill figures can stay out of date until a
-  reload.**
-  - A saved line Change (`#onChangeLine`, `apps/till/src/till-app.ts`) reads only the lines, and one
-    that got no answer reads the floor's party and the lines but not the bills. The dialog sends a
-    dish's extras when it offers any (`#confirmChange`,
-    `apps/till/src/screens/till-table-order-screen.ts`), and an extra can carry a price, so a Change
-    can move an amount. Seen on the dev till only with a note, which moves no amount; the demo menu
-    offers no priced extra, so a stale figure after one is read from the code, not run.
-  - After a cancel the server answered, if the floor read then fails, the party's "Still to pay"
-    keeps the amount it showed before the cancel while the bills are read afresh, with no message,
-    because `#refreshFloor` (`apps/till/src/till-app.ts`) keeps the last floor on a failed read.
-    Found by the run-it review of A110, in a browser test that failed the floor read after a
-    successful cancel: the bills then showed 9.00 and 30.00 while "Still to pay" stayed 44.00.
-  - _Fixed by campaign item A110 (2026-09-28):_ seen by lane B while checking B6a. Reproduced on the
-    dev till at `main` `53883ae7e`: cancelling a €2.80 drink from a €10.60 order left the bill's
-    total, its "to pay" and the party's "Still to pay" at €10.60 while the order total read €7.80,
-    and the till requested neither the bills nor the floor after the cancel. `#onVoidLine` now also
-    reads the bills after a cancel that landed or got no answer, and reads the floor's party after
-    one that landed as well as one that got no answer; a refused one reads the lines only, as
-    before.
+- **DONE (#809 for A110; campaign item A115, from the run-it review of #809, branch
+  `fix/till-bill-figures-refresh`): after a line is cancelled or changed, the table's bill figures
+  update straight away.** A cancel (A110) and a saved line Change, or one that got no answer while
+  the waiter is still on the order (A115), read the floor's party, the order's lines and the
+  party's bills again (`#rereadAmounts`, `apps/till/src/till-app.ts`); a refused one reads the
+  lines only. When the re-read's own floor or bills read fails, the till says so
+  (`table.reread_failed`) unless another message is already shown, the waiter has left the order,
+  or a later re-read has started; it says so even when another read has refreshed the order since,
+  because the message is still true of this re-read. "Still to pay" comes from the floor when the
+  floor read works and lists the party at a revision no older than the one shown; when the floor
+  read fails, from the re-read's own bills for the same party while that bills read is still the
+  latest, the waiter is still on the order and no later re-read has started — the floor's figure is
+  the sum of the same bills (`readBillsOfVisits`, `apps/server/src/visits.ts`) — and otherwise it
+  is left alone.
+  The priced-extra case was shown in the till's browser tests with a fixture adding a 1.50 extra;
+  the demo menu offers no priced extra, so it was not run on the dev till.
 - **DONE (#812, campaign item A113, from the A108r retro review of #719, branch
   `fix/retro-review-719-till`): the till's option default returns to the published one once it is
   back in stock, and when a line's total is unchanged the basket refresh names each dish, variant

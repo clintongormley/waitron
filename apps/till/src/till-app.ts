@@ -4,7 +4,14 @@ import { LitElement, type PropertyValues, type TemplateResult, css, html, nothin
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { UrlStateController, baseStyles, registerIcons } from "@waitron/ui";
-import { formatMoney, resolveActiveLocale } from "@waitron/shared";
+import {
+  MONEY_SCALE,
+  decimal,
+  formatMoney,
+  resolveActiveLocale,
+  sumDecimals,
+  toScale,
+} from "@waitron/shared";
 import { countText, currentLocale, named, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { diag } from "./diagnostics.js";
@@ -371,6 +378,15 @@ type CounterError =
   | { takenOver: string; unsent?: true }
   | { visitChanged: VisitChange }
   | { lateChange: LateChange; also?: StringKey };
+
+/** A read of the party's bills: the party it was for (null when there was none), the bills (null
+ * when the read failed), and its generation, current until a later read starts or
+ * {@link #leaveTable} closes the finished table. */
+interface ReadBills {
+  read: number;
+  visitId: string | null;
+  bills: VisitBill[] | null;
+}
 
 function errorText(error: CounterError): string | TemplateResult {
   if (typeof error === "string") return t(error);
@@ -812,6 +828,9 @@ export class TillApp extends LitElement {
   #tabLinesRead = 0;
   /** The same for the party's bills. */
   #visitBillsRead = 0;
+  /** Identifies the latest {@link #rereadAmounts}, so once a newer one has started, an older one
+   * works out no "Still to pay" from its bills and says nothing. */
+  #amountsReread = 0;
   /** The last read of the party's groups failed, so {@link tabGroups} is empty for want of an answer. */
   #groupsUnread = false;
   /** The check {@link #onSplitLines} made and the tab it came from, cleared when a tab is paid, the
@@ -2327,20 +2346,22 @@ export class TillApp extends LitElement {
         )
       : Promise.resolve(false);
     if (this.#tabNeedsFloorData(tab)) {
-      void returned.then((floorRead) => {
+      void returned.then(async (floorRead) => {
         if (session !== this.#operatorSession) return;
         if (!this.#floorLoaded) return this.#loadFloorData();
-        return floorRead ? undefined : this.#refreshFloor();
+        if (!floorRead) await this.#refreshFloor();
       });
     }
   }
 
-  /** Tables only: a placement write changes neither the zones nor the statuses. */
-  async #refreshFloor(): Promise<void> {
+  /** Tables only: a placement write changes neither the zones nor the statuses. A failed read keeps
+   * the last-known floor. */
+  async #refreshFloor(): Promise<boolean> {
     try {
       this.tables = await this.api.getTablesState();
+      return true;
     } catch {
-      // Non-fatal: the last-known floor stays.
+      return false;
     }
   }
 
@@ -2550,9 +2571,9 @@ export class TillApp extends LitElement {
   /** After a command that moved the party on, or may have: the floor is read again, and its party
    * taken while the open table still holds that party and the floor's revision is not lower than
    * the one held. A failed read leaves the last floor, which can be older. */
-  async #retakePartyFromFloor(): Promise<void> {
+  async #retakePartyFromFloor(): Promise<boolean> {
     const partyId = this.orderParty?.id;
-    await this.#refreshFloor();
+    const read = await this.#refreshFloor();
     const row = this.tables.find((table) => table.id === this.activeTableId);
     const held = this.orderParty;
     if (
@@ -2562,6 +2583,48 @@ export class TillApp extends LitElement {
       row.visit.revision >= held.revision
     )
       this.orderParty = row.visit;
+    return read;
+  }
+
+  /** After a cancel or Change to the order `orderId` that landed, or may have: the floor's party,
+   * then the order's lines and bills. When the order is no longer the open one once the floor
+   * answers, or a later re-read has started, nothing more is read or said. Otherwise, unless the
+   * waiter has left the order since `visit` ({@link #hasLeftOrder}) or a later re-read has started:
+   * this re-read's own failed floor or bills read is said, unless another message already is,
+   * whether or not another read has refreshed the order since; and with its floor read failed and
+   * its bills read still the latest, what the party still owes is taken from those bills when they
+   * are the party's, which is the sum the floor would have answered (`readBillsOfVisits` in
+   * `apps/server/src/visits.ts` feeds both). */
+  async #rereadAmounts(orderId: string, visit: number): Promise<void> {
+    const reread = ++this.#amountsReread;
+    const floorRead = await this.#retakePartyFromFloor();
+    if (this.activeTabId !== orderId || reread !== this.#amountsReread) return;
+    const [, bills] = await this.#loadLinesAndBills();
+    if (this.#hasLeftOrder(orderId, visit) || reread !== this.#amountsReread) return;
+    if (
+      !floorRead &&
+      bills.read === this.#visitBillsRead &&
+      bills.bills !== null &&
+      this.orderParty?.id === bills.visitId
+    ) {
+      const outstanding = sumDecimals(bills.bills.map((bill) => decimal(bill.outstanding)));
+      this.orderParty = {
+        ...this.orderParty,
+        outstanding: toScale(outstanding, MONEY_SCALE),
+      };
+    }
+    if ((!floorRead || bills.bills === null) && this.errorKey === undefined)
+      this.errorKey = "table.reread_failed";
+  }
+
+  /** The order `orderId` is no longer the open one, or {@link #orderVisit} has moved on from `visit`
+   * and the waiter has not come back to the order. */
+  #hasLeftOrder(orderId: string, visit: number): boolean {
+    return (
+      this.activeTabId !== orderId ||
+      (this.#orderVisit !== visit &&
+        (this.#shownOnVisit !== this.#orderVisit || this.#tableOpensPending > 0))
+    );
   }
 
   /** A void or line edit moves its bill's party on without a revision of its own to send. */
@@ -2737,8 +2800,8 @@ export class TillApp extends LitElement {
     await this.#loadLinesAndBills();
   }
 
-  async #loadLinesAndBills(): Promise<void> {
-    await Promise.all([this.#loadTabLines(), this.#loadVisitBills()]);
+  async #loadLinesAndBills(): Promise<[void, ReadBills]> {
+    return Promise.all([this.#loadTabLines(), this.#loadVisitBills()]);
   }
 
   /** The party a tab's table belongs to, as the floor last read it. */
@@ -2746,21 +2809,23 @@ export class TillApp extends LitElement {
     return this.tables.find((table) => table.tabId === tabId)?.visit ?? null;
   }
 
-  /** A failed read leaves the list empty rather than showing another party's bills. */
-  async #loadVisitBills(): Promise<void> {
+  /** A failed read leaves the list empty rather than showing another party's bills. A read
+   * overtaken by a later one leaves the list alone, and only its generation, compared with
+   * {@link #visitBillsRead}, tells a caller so. */
+  async #loadVisitBills(): Promise<ReadBills> {
     const read = ++this.#visitBillsRead;
     const visit = this.orderParty;
     if (visit === null) {
       this.visitBills = [];
-      return;
+      return { read, visitId: null, bills: [] };
     }
     try {
       const bills = await this.api.getVisitBills(visit.id);
-      if (read !== this.#visitBillsRead) return;
-      this.visitBills = bills;
+      if (read === this.#visitBillsRead) this.visitBills = bills;
+      return { read, visitId: visit.id, bills };
     } catch {
-      if (read !== this.#visitBillsRead) return;
-      this.visitBills = [];
+      if (read === this.#visitBillsRead) this.visitBills = [];
+      return { read, visitId: visit.id, bills: null };
     }
   }
 
@@ -3173,12 +3238,14 @@ export class TillApp extends LitElement {
   async #onVoidLine(event: Event): Promise<void> {
     const { lineNo, quantity } = (event as CustomEvent<{ lineNo: number; quantity?: string }>)
       .detail;
-    if (this.activeTabId === undefined) return;
+    const orderId = this.activeTabId;
+    if (orderId === undefined) return;
+    const orderVisit = this.#orderVisit;
     this.errorKey = undefined;
     try {
       const { visit } = await (quantity === undefined
-        ? this.api.voidLine(this.activeTabId, lineNo)
-        : this.api.voidLine(this.activeTabId, lineNo, quantity));
+        ? this.api.voidLine(orderId, lineNo)
+        : this.api.voidLine(orderId, lineNo, quantity));
       this.#noteBillParty(visit);
     } catch (error) {
       this.errorKey = lineWriteError(error);
@@ -3187,29 +3254,27 @@ export class TillApp extends LitElement {
         return;
       }
     }
-    await this.#retakePartyFromFloor();
-    await this.#loadLinesAndBills();
+    await this.#rereadAmounts(orderId, orderVisit);
   }
 
   /**
-   * A saved change stores the new revision and reads the order again whenever that order is still the
-   * open one, wherever the waiter is, so the next change is not refused as out of date. A refusal
-   * reads the order again too, and one because the kitchen has started the line offers to cancel it.
+   * A saved change stores the new revision and reads the order, its bills and what the party owes
+   * again whenever that order is still the open one, wherever the waiter is, so the next change is
+   * not refused as out of date and an extra's price shows at once. A refusal reads the order again
+   * too, and one because the kitchen has started the line offers to cancel it. A change that got
+   * no answer also reads the order, its bills and what the party owes again.
    * When the order is no longer the open one, or {@link #orderVisit} says the waiter started leaving
-   * it and did not come back to it, a refusal changes nothing on screen but the message, which names
-   * the line, and its table while the floor lists it, because the waiter may believe a note (an
-   * allergy, say) was saved. Paying the tab and a server switch take the order off screen without
-   * that counter moving.
+   * it and did not come back to it, a refusal or a change that got no answer changes nothing on
+   * screen but the message, which names the line, and its table while the floor lists it, because
+   * the waiter may believe a note (an allergy, say) was saved. Paying the tab and a server switch
+   * take the order off screen without that counter moving.
    */
   async #onChangeLine(event: Event): Promise<void> {
     const { lineNo, lineName, patch, revision } = (event as CustomEvent<ChangeLineDetail>).detail;
     const orderId = this.activeTabId;
     if (orderId === undefined) return;
     const visit = this.#orderVisit;
-    const left = () =>
-      this.activeTabId !== orderId ||
-      (this.#orderVisit !== visit &&
-        (this.#shownOnVisit !== this.#orderVisit || this.#tableOpensPending > 0));
+    const left = () => this.#hasLeftOrder(orderId, visit);
     const tableId = this.activeTableId;
     this.errorKey = undefined;
     this.cancelOffer = null;
@@ -3223,7 +3288,7 @@ export class TillApp extends LitElement {
       this.#noteBillParty(outcome.saved.visit);
       if (this.activeTabId !== orderId) return;
       this.tabRevision = outcome.saved.revision;
-      await this.#loadTabLines();
+      await this.#rereadAmounts(orderId, visit);
       return;
     }
     const code = (outcome.error as { code?: string } | undefined)?.code;
@@ -3243,8 +3308,8 @@ export class TillApp extends LitElement {
       code === "working_order.out_of_date"
         ? "held.changed_elsewhere"
         : lineWriteError(outcome.error);
-    if (isNetworkFailure(outcome.error)) await this.#retakePartyFromFloor();
-    await this.#loadTabLines();
+    if (isNetworkFailure(outcome.error)) await this.#rereadAmounts(orderId, visit);
+    else await this.#loadTabLines();
     if (code === "ticket.already_started" && !left()) this.cancelOffer = lineNo;
   }
 
