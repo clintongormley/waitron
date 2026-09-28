@@ -157,6 +157,7 @@ it("requires manager, origin and primary, and rechecks primary before responding
       return { state: "awaiting_owner" } as ReplacementView;
     }),
     check: vi.fn(),
+    recordStop: vi.fn(),
   };
   const app = new Hono();
   mountCloudApi(
@@ -201,6 +202,7 @@ it("keeps Cloud status visible with a diagnostic when saved replacement state is
         hasProposal: async () => false,
         prepare: vi.fn(),
         check: vi.fn(),
+        recordStop: vi.fn(),
       },
     },
     () => {},
@@ -381,6 +383,87 @@ it("refresh and revoke require a live manager and exact Origin; revoke rechecks 
     await suite.db.update(persons).set({ status: "active" }).where(eq(persons.id, manager.id));
     primary = false;
     expect((await send("revoke")).status).toBe(200);
+    expect((await f.client.status()).installation?.state).toBe("revoked");
+  } finally {
+    await f.close();
+  }
+});
+it("Stop access records the stop with the replacement after the permission recheck, before Cloud hears it", async () => {
+  const { installationFixture } = await import("../test/cloud-installation-fixture.js");
+  const f = await installationFixture();
+  try {
+    const manager = await person("manager");
+    const stops: number[] = [];
+    const app = new Hono();
+    mountCloudApi(
+      app,
+      {
+        db: suite.db,
+        connection: f.client,
+        managementOrigin: "https://venue.test",
+        isPrimary: () => true,
+        replacement: {
+          status: async () => null,
+          eligible: async () => false,
+          approval: async () => null,
+          hasProposal: async () => false,
+          prepare: vi.fn(),
+          check: vi.fn(),
+          recordStop: async () => {
+            stops.push(f.requests.filter((v) => v[2] === "revoke").length);
+          },
+        },
+      },
+      () => {},
+    );
+    const send = () =>
+      app.request("/management-api/cloud/revoke", {
+        method: "POST",
+        headers: {
+          cookie: manager.cookie,
+          origin: "https://venue.test",
+          "content-type": "application/json",
+        },
+        body: "{}",
+      });
+    let release = () => {};
+    let entered = () => {};
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    f.delay(async () => {
+      entered();
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, manager.id));
+    });
+    const refreshing = f.client.refresh();
+    await started;
+    const oldActivity = new Date(Date.now() - 60000).toISOString();
+    await suite.db
+      .update(managementSessions)
+      .set({ lastSeenAt: oldActivity })
+      .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)));
+    const revoking = send();
+    try {
+      await vi.waitFor(async () => {
+        const [row] = await suite.db
+          .select()
+          .from(managementSessions)
+          .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)));
+        expect(row!.lastSeenAt).not.toBe(oldActivity);
+      });
+    } finally {
+      release();
+    }
+    await refreshing;
+    expect((await revoking).status).toBe(403);
+    expect(stops).toEqual([]);
+    f.delay(async () => {});
+    await suite.db.update(persons).set({ status: "active" }).where(eq(persons.id, manager.id));
+    expect((await send()).status).toBe(200);
+    expect(stops).toEqual([0]);
     expect((await f.client.status()).installation?.state).toBe("revoked");
   } finally {
     await f.close();

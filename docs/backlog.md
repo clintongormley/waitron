@@ -88,9 +88,11 @@ remote-access integration covers venue-owned staff certificate keys, CSR/install
 reload and the minimal public availability endpoint; the serving-primary test installation schedules
 signed, encrypted daily snapshots and uploads them to Cloud; the setup wizard guides a fresh
 replacement through Cloud owner approval of one verified snapshot for a test venue; and the restored
-test-server Cloud replacement path has landed (#638). Observations are synthetic until service
-adapters exist. Cloud owns the two-server WireGuard/HAProxy proof, bot gate, DNS override, gateway
-replacement and revocation.
+test-server Cloud replacement path has landed (#638). A stopped replacement stays stopped when
+`cloud-connection.json` is lost, because Stop access also records the stop in
+`cloud-replacement.json`, unless that file cannot be read (see Open). Observations are synthetic
+until service adapters exist. Cloud owns the two-server WireGuard/HAProxy proof, bot gate, DNS
+override, gateway replacement and revocation.
 
 Open:
 
@@ -102,18 +104,11 @@ Open:
 - After a Cloud replacement (#638), installing the new tunnel and TLS certificate remains an
   operator step. Continuous complete-server recovery, planned final-write handover and production
   recovery remain open. Cloud owns route placement and fencing in its backlog.
-- **A stopped replacement's key comes back if `cloud-connection.json` is deleted and the server
-  restarts** (found reviewing the guide fix after the retroactive Codex review of #640,
-  2026-09-28). The stop record lives only in `cloud-connection.json`; on start, `resume()`
-  (`apps/server/src/cloud-replacement.ts`) re-imports a `complete` replacement from
-  `cloud-replacement.json`, and `importReplacement` (`apps/server/src/cloud-client.ts`) writes a
-  fresh connection file with no stop record. Run on `main` at `81dbda46f` with the replacement
-  suite's Cloud fake, calling the same objects in the order `boot.ts` does (not a whole-server
-  start): after Stop access and the delete, the file came back on the retired key as `pending` and
-  the next check sent `renew`; when Cloud had not yet heard the stop, the saved stop request was
-  lost too. With the file kept, the stop survived. It needs the file deleted by hand, which
-  `docs/developers/cloud-connection.md` tells the operator not to do. Next: record the stop in
-  `cloud-replacement.json` too, or have `resume()` refuse once access was stopped.
+- A stop made while `cloud-replacement.json` is unreadable is not recorded in it. If that file is
+  later repaired and `cloud-connection.json` lost, the next start restores the connection without
+  the stop and the next check sends `renew`, so a stop Cloud had not yet heard is lost (reproduced
+  by the review of lane C's C29, 2026-09-28). Owner to choose: refuse Stop access while the replacement file is unreadable, or
+  record the stop somewhere that survives the repair.
 
 The Litestream stream's sealed-state restore and activation still need integration with Cloud
 storage and owner recovery. Connected does

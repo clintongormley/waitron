@@ -5,6 +5,7 @@ import {
 } from "./cloud-backup.js";
 import {
   installationClient,
+  pendingRequest,
   projectCloudInstallation,
   readCloudInstallation,
   type CloudInstallationState,
@@ -353,6 +354,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       organisationName: string;
       legalBusinessName: string;
       registration: CloudRegistration;
+      stopped: boolean;
     }) {
       return run(async () => {
         const existing = await read();
@@ -364,6 +366,11 @@ export function createCloudConnection(options: CloudConnectionOptions) {
             JSON.stringify(existing.view?.registration) !== JSON.stringify(input.registration)
           )
             throw new AppError("cloud.binding_conflict", {});
+          const c = (existing.lifecycle ??= { unavailable: false, revoked: false });
+          if (input.stopped && !c.revoked && c.pending?.action !== "revoke") {
+            c.pending = pendingRequest("revoke");
+            await save(existing);
+          }
           return project(existing);
         }
         const state: SavedCloudState = {
@@ -387,6 +394,15 @@ export function createCloudConnection(options: CloudConnectionOptions) {
             legalBusinessName: input.legalBusinessName,
             registration: input.registration,
           },
+          ...(input.stopped
+            ? {
+                lifecycle: {
+                  unavailable: false,
+                  revoked: false,
+                  pending: pendingRequest("revoke"),
+                },
+              }
+            : {}),
         };
         await save(state);
         return project(state);

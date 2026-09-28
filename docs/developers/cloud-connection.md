@@ -199,9 +199,14 @@ server holding the primary role.
 
 A lost reply or a restart reuses the saved request and keys, and **Check reconnection** recovers
 Cloud's answer. If the server restarts after saving an approved reply but before importing it,
-it finishes the import when it starts again. On a server that was not restored from a Cloud
-snapshot, the screen offers **Connect to Cloud** instead of **Request reconnection**. Keep the
-previous server out of service throughout.
+it finishes the import when it starts again. **Stop Cloud access** on a reconnected server also
+records the stop in `cloud-replacement.json`, unless that file cannot be read. With the stop
+recorded, if `cloud-connection.json` is lost, the import on the next start or **Check
+reconnection** restores the connection with the stop still waiting, and the next check with
+Cloud, once a minute or **Refresh status**, sends the stop again. A stop pressed while **Check
+reconnection** is running may be refused as busy; if it is, press it again once the check
+finishes. On a server that was not restored from a Cloud snapshot, the screen offers **Connect to
+Cloud** instead of **Request reconnection**. Keep the previous server out of service throughout.
 
 Reconnecting registers the replacement with Cloud. Installing the new WireGuard tunnel and a
 new TLS certificate remain operator steps, and Cloud access and backups need their own checks
