@@ -222,7 +222,8 @@ export interface ZoneMenu extends ZoneDeviceHomeLayout {
   readonly defaultHomeLayoutId: string;
 }
 
-/** What a zone sells: its published menus' live versions, each offer marked with its availability. */
+/** What a zone sells: its active, published menus' live versions, each offer marked with its
+ *  availability. */
 export interface ZoneOffers {
   readonly defaultMenuId: string | null;
   readonly menus: readonly ZoneMenu[];
@@ -300,7 +301,7 @@ export interface VenueServiceContribution {
     productIds: readonly string[],
   ): Promise<ReadonlyMap<string, PreparationRoute>>;
   /** Refused `menu.version_changed` unless every `asserted` version is the live version of one of
-   *  the zone's menus. With `menuItemIds`, only the offers it names are served. Each menu's home
+   *  the zone's active menus. With `menuItemIds`, only the offers it names are served. Each menu's home
    *  layout is the one `deviceProfileId` chose for it when the menu's live version holds it, and
    *  the menu's default otherwise. */
   listZoneOffers(

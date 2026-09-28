@@ -25,6 +25,7 @@ import {
   createHomeLayout,
   createProduct,
   createSection,
+  deactivateCatalogue,
   deleteHomeLayout,
   listHomeLayouts,
   menuStatus,
@@ -445,6 +446,34 @@ describe("a basket that spans a publish (Review Focus 2)", () => {
         error: { code: "management.request_invalid", params: { field: "menuVersionId" } },
       });
     }
+    expect(await written()).toEqual(before);
+  });
+});
+
+describe("a menu deactivated after it was published", () => {
+  it("is no longer offered, and a sale from it is refused with no sale, fiscal record or order written", async () => {
+    const v = await setupLunch();
+    const v1 = await publish(v.menuId);
+    await withTransaction(suite.db, (tx) => deactivateCatalogue(tx, v.menuId));
+
+    const offers = await send(v, "GET", `/api/service-zones/${v.zoneId}/offers`);
+    expect(offers.status).toBe(200);
+    expect(await offers.json()).toMatchObject({ defaultMenuId: null, menus: [], offers: [] });
+
+    const before = await written();
+    const unversioned = await pay(v, [lemonadeLine(v)]);
+    expect(unversioned.status).toBe(400);
+    expect(await unversioned.json()).toMatchObject({
+      error: { code: "service_zone.offer_not_allowed" },
+    });
+    const versioned = await pay(v, [lemonadeLine(v, v1)]);
+    expect(versioned.status).toBe(409);
+    expect(await versioned.json()).toEqual({
+      error: {
+        code: "menu.version_changed",
+        params: { menus: [{ menuId: v.menuId, liveVersionId: null }] },
+      },
+    });
     expect(await written()).toEqual(before);
   });
 });
