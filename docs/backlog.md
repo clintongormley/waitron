@@ -3131,11 +3131,11 @@ bill is refused.
   the other is the "Unchecked since the service plan's Task 8" entry below. The part rows read as
   unit prices ("€9.00 each", "9,00 € c/u", or "€20.00/kg" for a weighed dish) since campaign item
   C32 (#817, branch `fix/basket-refresh-unit-price-label`, 2026-09-28), on the owner's "label
-  them". Since campaign item C49 (branch `fix/price-change-dialog-unit-only`, 2026-09-29), a dish or
+  them". Since campaign item C49 (#831, 2026-09-29), a dish or
   variant now sold by another unit is named too, even when no price changed, and when the unit and
   a price change together, the dish or variant's row, plus a row for each extra whose price
   changed, is shown instead of the line's total.
-- **DONE (campaign item C49, branch `fix/price-change-dialog-unit-only`, 2026-09-29, on the owner's
+- **DONE (campaign item C49, #831, 2026-09-29, on the owner's
   go-ahead): the till's price-change dialog names a dish or variant now sold by another unit, even
   at the same price, and C32 (#817)'s two review leftovers are closed.** (2) When a publish sells a
   dish by another unit (say each to kg), the till's price-change dialog now gives the dish a row at
