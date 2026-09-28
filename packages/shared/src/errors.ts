@@ -35,8 +35,8 @@ export interface ErrorParams {
   "shared.invalid_basis_points": { value: string };
   "locale.unsupported": { locale: string };
   /**
-   * Co-declared, with identical params, with `@waitron/server-kit`, which also throws it; identical
-   * declarations merge. Names the FIELD, never its value.
+   * Names the FIELD, never its value: a PIN or password is exactly the kind of secret a caller can
+   * mis-send.
    */
   "management.request_invalid": { field: string };
 }

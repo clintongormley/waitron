@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import { createErrorBoundary } from "./error-boundary.js";
 import type { Logger, LogLevel } from "./logger.js";
-// This package's own registry augmentation (`management.request_invalid`, `management_session.required`).
+// This package's own registry augmentation (`management_session.required`).
 import "./errors.js";
 
 // Test-local codes, declared only so the fixtures typecheck; AppError validates nothing at runtime.

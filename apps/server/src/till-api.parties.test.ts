@@ -348,6 +348,42 @@ describe("PUT /api/parties/:id/name", () => {
     expect(await partyRow(partyId)).toMatchObject({ name: null, revision });
   });
 
+  it("answers 409 party.out_of_date for a stale revision, changing nothing", async () => {
+    const { partyId, revision } = await seat();
+    const res = await put(`/api/parties/${partyId}/name`, {
+      name: "Ana",
+      expectedPartyRevision: revision + 4,
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "party.out_of_date", params: { partyId, revision } },
+    });
+    expect(await partyRow(partyId)).toMatchObject({ name: null, revision });
+  });
+
+  it.each([undefined, -1, 1.5, "0", null])(
+    "refuses the revision %j as a bad field, changing nothing",
+    async (expectedPartyRevision) => {
+      const { partyId, revision } = await seat();
+      const res = await put(`/api/parties/${partyId}/name`, { name: "Ana", expectedPartyRevision });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "expectedPartyRevision" } },
+      });
+      expect(await partyRow(partyId)).toMatchObject({ name: null, revision });
+    },
+  );
+
+  it("answers 409 party.not_open for a malformed or unknown party", async () => {
+    for (const id of ["not-a-uuid", randomUUID()]) {
+      const res = await put(`/api/parties/${id}/name`, { name: "Ana", expectedPartyRevision: 0 });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({
+        error: { code: "party.not_open", params: { partyId: id } },
+      });
+    }
+  });
+
   it("401s without a session", async () => {
     const { partyId, revision } = await seat();
     const res = await put(
