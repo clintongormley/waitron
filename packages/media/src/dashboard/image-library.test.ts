@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { setContentLanguages } from "@waitron/ui";
 import { codeMessage, setLocale, LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import "./image-library.js";
@@ -61,6 +61,37 @@ it("shows the default name and alt text when the interface language is disabled 
     "Pan recién hecho",
   );
 });
+
+for (const { locale, edit, remove, use } of [
+  { locale: "en-GB", edit: "Edit", remove: "Delete", use: "Use image" },
+  { locale: "es-ES", edit: "Editar", remove: "Eliminar", use: "Usar imagen" },
+]) {
+  it(`labels each card's actions briefly and names the image in each one's accessible name (${locale})`, async () => {
+    setLocale(locale);
+    const client = api();
+    const toast = { ...image, id: "two", names: { es: "Tostada", en: "Toast" } };
+    client.listImages.mockResolvedValue({ images: [image, toast], total: 2 });
+    await mount(client, true);
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelectorAll("article")).toHaveLength(2));
+    for (const [id, name] of [
+      ["one", "Pan"],
+      ["two", "Tostada"],
+    ]) {
+      for (const [test, label] of [
+        [`edit-${id}`, edit],
+        [`delete-${id}`, remove],
+        [`select-${id}`, use],
+      ]) {
+        const button = el.shadowRoot!.querySelector(`[data-test=${test}]`)!;
+        expect(button.textContent!.trim()).toBe(label);
+        expect(
+          page.getByRole("button", { name: `${label}: ${name}`, exact: true }).query(),
+          `a button named "${label}: ${name}"`,
+        ).not.toBeNull();
+      }
+    }
+  });
+}
 
 it("asks the server to sort names in the displayed content language", async () => {
   setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] });
