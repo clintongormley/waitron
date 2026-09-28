@@ -2585,6 +2585,15 @@ describe("TillApi: a party's drafts", () => {
     );
   });
 
+  it("takeOverDraft hands a caller's abort signal to fetch", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(draft));
+    const signal = new AbortController().signal;
+
+    await new TillApi("", fetchStub).takeOverDraft("v1", "d1", 1, { signal });
+
+    expect(fetchStub.mock.calls[0]![1]?.signal).toBe(signal);
+  });
+
   it("submitDraft POSTs the submission, both revisions and each group's line ids, and answers the groups and what is left", async () => {
     const answer = {
       tabId: "wo-1",

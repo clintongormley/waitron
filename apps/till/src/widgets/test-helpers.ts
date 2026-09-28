@@ -245,6 +245,9 @@ export function draftServer(
     submitDraft: vi.fn(async (visitId: string, draftId: string, submission: DraftSubmission) =>
       clone(server.apply(visitId, draftId, submission)),
     ),
+    takeOverDraft: vi.fn(async (visitId: string, draftId: string, revision: number) =>
+      clone(server.takeOver(visitId, draftId, revision)),
+    ),
     save(visitId: string, save: DraftSave): Draft {
       const own = server.drafts.find(
         (draft) => draft.visitId === visitId && draft.ownerId === server.personId,
@@ -259,6 +262,7 @@ export function draftServer(
           ownerName: server.personName,
           revision: 0,
           lines: [],
+          takenOverFrom: null,
         };
         server.drafts.push(draft);
       } else {
@@ -271,6 +275,34 @@ export function draftServer(
         return saved;
       });
       return draft;
+    },
+    /** A take-over as the server does it: the person's own draft answers as it is; another's
+     * becomes theirs, or is added into the draft they already hold, which answers. */
+    takeOver(visitId: string, draftId: string, revision: number): Draft {
+      const draft = server.drafts.find(
+        (candidate) => candidate.id === draftId && candidate.visitId === visitId,
+      );
+      if (draft === undefined) throw { code: "draft.not_found", status: 404, draftId };
+      if (draft.ownerId === server.personId) return draft;
+      if (draft.revision !== revision) throw refusal("draft.out_of_date", draft);
+      const own = server.drafts.find(
+        (candidate) => candidate.visitId === visitId && candidate.ownerId === server.personId,
+      );
+      if (own === undefined) {
+        draft.takenOverFrom = { personId: draft.ownerId, name: draft.ownerName };
+        draft.ownerId = server.personId;
+        draft.ownerName = server.personName;
+        draft.revision += 1;
+        return draft;
+      }
+      server.drafts.splice(server.drafts.indexOf(draft), 1);
+      own.revision += 1;
+      own.lines = normaliseDraftLines([...own.lines, ...draft.lines]).map((line) => {
+        const saved = { ...line, id: `line-${++ids}`, unavailable: false };
+        server.linesById.set(saved.id, saved);
+        return saved;
+      });
+      return own;
     },
     /** A submission as the server takes it, whether or not its answer reaches the till. */
     apply(visitId: string, draftId: string, submission: DraftSubmission): SubmittedDraft {

@@ -342,6 +342,18 @@ describe("DraftSync: a refused save", () => {
     },
   );
 
+  it("keeps the edit unsaved after a save rejected with nothing at all", async () => {
+    const draft = sync();
+    await draft.load();
+    server.saveDraft.mockRejectedValueOnce(undefined);
+    draft.store.addProduct(beer, "1");
+
+    expect(await draft.flush()).toBe("failed");
+    expect(refused).toEqual([]);
+    expect(await draft.flush()).toBe("saved");
+    expect(server.saveDraft).toHaveBeenCalledTimes(2);
+  });
+
   it("says any other refusal without reading the drafts again", async () => {
     const draft = sync();
     await draft.load();
@@ -545,5 +557,189 @@ describe("DraftSync: a party's draft store", () => {
     draft.store.addProduct(steak, "1");
     draft.store.addProduct(beer, "2");
     expect(rows(draft)).toEqual(["Beer ×3", "Steak ×1"]);
+  });
+});
+
+describe("DraftSync: taking over another person's draft", () => {
+  it("takes the draft over as the person's own, under its id and the answered revision", async () => {
+    const theirs = structuredClone(seed("p2", steak));
+    const draft = sync();
+    await draft.load();
+
+    expect(await draft.takeOver(theirs.id, theirs.revision)).toBe("taken");
+
+    expect(server.takeOverDraft).toHaveBeenCalledExactlyOnceWith(
+      "v1",
+      theirs.id,
+      theirs.revision,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(rows(draft)).toEqual(["Steak ×1"]);
+    expect(draft.draftId).toBe(theirs.id);
+    expect(draft.revision).toBe(theirs.revision + 1);
+    expect(draft.others).toEqual([]);
+    expect(server.saveDraft).not.toHaveBeenCalled();
+    draft.store.addProduct(beer, "1");
+    await settle();
+    expect(server.saveDraft).toHaveBeenLastCalledWith(
+      "v1",
+      expect.objectContaining({ draftId: theirs.id, revision: theirs.revision + 1 }),
+      expect.anything(),
+    );
+    expect(refused).toEqual([]);
+  });
+
+  it("saves the person's own edit first, then takes the draft the server added into theirs", async () => {
+    const theirs = seed("p2", steak);
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+
+    expect(await draft.takeOver(theirs.id, theirs.revision)).toBe("taken");
+
+    const saved = server.saveDraft.mock.invocationCallOrder[0]!;
+    expect(saved).toBeLessThan(server.takeOverDraft.mock.invocationCallOrder[0]!);
+    const own = server.drafts.find((each) => each.ownerId === "p1")!;
+    expect(draft.draftId).toBe(own.id);
+    expect(draft.draftId).not.toBe(theirs.id);
+    expect(rows(draft)).toEqual(["Beer ×1", "Steak ×1"]);
+    expect(draft.lineIds([0, 1])).toEqual(own.lines.map((line) => line.id));
+    expect(draft.others).toEqual([]);
+  });
+
+  it("keeps the other people's drafts it did not take", async () => {
+    const theirs = seed("p2", steak);
+    const another = seed("p3", beer);
+    const draft = sync();
+    await draft.load();
+
+    expect(await draft.takeOver(theirs.id, theirs.revision)).toBe("taken");
+
+    expect(draft.others.map((other) => other.id)).toEqual([another.id]);
+  });
+
+  it("takes nothing over when the person's own edit could not be saved", async () => {
+    const theirs = seed("p2", steak);
+    const draft = sync();
+    await draft.load();
+    server.saveDraft.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    draft.store.addProduct(beer, "1");
+
+    expect(await draft.takeOver(theirs.id, theirs.revision)).toBe("unsaved");
+
+    expect(server.takeOverDraft).not.toHaveBeenCalled();
+    expect(rows(draft)).toEqual(["Beer ×1"]);
+    expect(draft.lineIds([0])).toBeNull();
+  });
+
+  it("takes nothing over when the person's own edit was refused, which it has already said", async () => {
+    const theirs = seed("p2", steak);
+    const draft = sync();
+    await draft.load();
+    server.saveDraft.mockRejectedValueOnce({ code: "visit.not_open", status: 409 });
+    draft.store.addProduct(beer, "1");
+
+    expect(await draft.takeOver(theirs.id, theirs.revision)).toBe("unsaved");
+
+    expect(server.takeOverDraft).not.toHaveBeenCalled();
+    expect(refused).toEqual(["visit.not_open"]);
+  });
+
+  it("reads the drafts again, and sends nothing more, when the draft moved on since it was read", async () => {
+    const theirs = seed("p2", steak);
+    const draft = sync();
+    await draft.load();
+    const reads = server.listDrafts.mock.calls.length;
+
+    expect(await draft.takeOver(theirs.id, theirs.revision - 1)).toEqual({
+      refused: "draft.out_of_date",
+    });
+
+    expect(server.takeOverDraft).toHaveBeenCalledOnce();
+    expect(server.listDrafts).toHaveBeenCalledTimes(reads + 1);
+    expect(draft.others.map((other) => other.ownerId)).toEqual(["p2"]);
+    expect(draft.draftId).toBeNull();
+    expect(rows(draft)).toEqual([]);
+    await settle();
+    expect(server.takeOverDraft).toHaveBeenCalledOnce();
+    expect(server.saveDraft).not.toHaveBeenCalled();
+  });
+
+  it("reads the drafts again when the take-over got no answer by its limit", async () => {
+    const theirs = seed("p2", steak);
+    const draft = sync();
+    await draft.load();
+    server.takeOverDraft.mockImplementationOnce(noAnswer);
+    const reads = server.listDrafts.mock.calls.length;
+
+    const outcome = draft.takeOver(theirs.id, theirs.revision);
+    await vi.advanceTimersByTimeAsync(LIMIT);
+
+    expect(await outcome).toBe("failed");
+    expect(server.listDrafts).toHaveBeenCalledTimes(reads + 1);
+    expect(server.takeOverDraft).toHaveBeenCalledOnce();
+  });
+
+  it("takes no answer, and reads nothing, once dropped while the take-over was out", async () => {
+    const theirs = seed("p2", steak);
+    const draft = sync();
+    await draft.load();
+    let answer!: (value: Draft) => void;
+    server.takeOverDraft.mockImplementationOnce(
+      () => new Promise<Draft>((resolve) => (answer = resolve)),
+    );
+    const reads = server.listDrafts.mock.calls.length;
+
+    const outcome = draft.takeOver(theirs.id, theirs.revision);
+    await vi.advanceTimersByTimeAsync(0);
+    draft.drop();
+    answer(structuredClone(server.takeOver("v1", theirs.id, theirs.revision)));
+
+    expect(await outcome).toBe("failed");
+    expect(rows(draft)).toEqual([]);
+    expect(draft.draftId).toBeNull();
+    expect(server.listDrafts).toHaveBeenCalledTimes(reads);
+  });
+
+  it("reads nothing again for a refusal answering once dropped", async () => {
+    const theirs = seed("p2", steak);
+    const draft = sync();
+    await draft.load();
+    let refuse!: (error: unknown) => void;
+    server.takeOverDraft.mockImplementationOnce(
+      () => new Promise<Draft>((_resolve, reject) => (refuse = reject)),
+    );
+    const reads = server.listDrafts.mock.calls.length;
+
+    const outcome = draft.takeOver(theirs.id, theirs.revision);
+    await vi.advanceTimersByTimeAsync(0);
+    draft.drop();
+    refuse({ code: "draft.out_of_date", status: 409 });
+
+    expect(await outcome).toBe("failed");
+    expect(server.listDrafts).toHaveBeenCalledTimes(reads);
+  });
+
+  it("passes the new owner's name on with a save refused as taken over", async () => {
+    const names: (string | undefined)[] = [];
+    const draft = new DraftSync({
+      api: server,
+      visitId: "v1",
+      personId: "p1",
+      rebuild,
+      onRefused: (_code, ownerName) => names.push(ownerName),
+      requestLimitMs: LIMIT,
+    });
+    await draft.load();
+    server.saveDraft.mockRejectedValueOnce({
+      code: "draft.taken_over",
+      status: 409,
+      ownerId: "p2",
+      ownerName: "Sam",
+    });
+    draft.store.addProduct(beer, "1");
+
+    expect(await draft.flush()).toEqual({ refused: "draft.taken_over", ownerName: "Sam" });
+    expect(names).toEqual(["Sam"]);
   });
 });

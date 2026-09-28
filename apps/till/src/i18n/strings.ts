@@ -401,6 +401,23 @@ export const en = {
   "table.draft_title": "Unsent order",
   "table.review": "Review ({n})",
   "table.last_added": "Last added",
+  // `{name}` is substituted at the call site; `t()` does not interpolate.
+  "table.others_draft": "{name} has an unsent order",
+  "table.others_draft_unnamed": "An unsent order",
+  "table.draft_taken_by": "Taken over by {name}",
+  "table.draft_taken_by_unnamed": "Taken over by someone else",
+  "table.take_over": "Take over draft",
+  "table.take_over_title": "Take over {name}'s order?",
+  "table.take_over_title_unnamed": "Take over this order?",
+  "table.take_over_body":
+    "It becomes yours to change and send; {name} can no longer change or send it.",
+  "table.take_over_body_unnamed":
+    "It becomes yours to change and send; the person who had it can no longer change or send it.",
+  "table.take_over_confirm": "Take over",
+  "table.take_over_changed":
+    "This order changed before you could take it over. Check it and try again.",
+  "table.draft_taken_unsaved": "{name} has it now. Your last change was not saved.",
+  "table.draft_unsaved": "Your last change was not saved.",
   // Errors
   "pin.invalid": "Wrong PIN, try again",
   "person.suspended": "This account is disabled — ask a manager",
@@ -868,6 +885,22 @@ export const es: Record<StringKey, string> = {
   "table.draft_title": "Pedido sin enviar",
   "table.review": "Revisar ({n})",
   "table.last_added": "Lo último añadido",
+  "table.others_draft": "{name} tiene un pedido sin enviar",
+  "table.others_draft_unnamed": "Un pedido sin enviar",
+  "table.draft_taken_by": "Tomado por {name}",
+  "table.draft_taken_by_unnamed": "Tomado por otra persona",
+  "table.take_over": "Tomar el pedido",
+  "table.take_over_title": "¿Tomar el pedido de {name}?",
+  "table.take_over_title_unnamed": "¿Tomar este pedido?",
+  "table.take_over_body":
+    "Pasa a ser tuyo para cambiarlo y enviarlo; {name} ya no podrá cambiarlo ni enviarlo.",
+  "table.take_over_body_unnamed":
+    "Pasa a ser tuyo para cambiarlo y enviarlo; quien lo tenía ya no podrá cambiarlo ni enviarlo.",
+  "table.take_over_confirm": "Tomar",
+  "table.take_over_changed":
+    "Este pedido cambió antes de que pudieras tomarlo. Revísalo e inténtalo de nuevo.",
+  "table.draft_taken_unsaved": "Ahora lo tiene {name}. Tu último cambio no se ha guardado.",
+  "table.draft_unsaved": "Tu último cambio no se ha guardado.",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "person.suspended": "Esta cuenta está desactivada. Avisa a un responsable",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",

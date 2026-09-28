@@ -21,17 +21,28 @@ export class DraftStore extends WorkingOrderStore {
   }
 }
 
-/** `failed`: no answer, and the edits stay unsaved. `refused` names the refusal. */
-export type DraftSaveOutcome = "saved" | "failed" | { refused: string };
+/** `failed`: no answer, and the edits stay unsaved. `refused` names the refusal, and a
+ * `draft.taken_over` names the person who now holds the draft. */
+export type DraftSaveOutcome = "saved" | "failed" | DraftRefused;
+
+export interface DraftRefused {
+  refused: string;
+  ownerName?: string;
+}
+
+/** `taken`: the draft is the person's own now, shown as the server answered it. `unsaved`: the
+ * person's own edits could not be saved first, so nothing was taken; a refusal of that save has
+ * gone to `onRefused`. */
+export type TakeOverOutcome = "taken" | "failed" | "unsaved" | DraftRefused;
 
 export interface DraftSyncOptions {
-  api: Pick<TillApi, "listDrafts" | "saveDraft">;
+  api: Pick<TillApi, "listDrafts" | "saveDraft" | "takeOverDraft">;
   visitId: string;
   personId: string;
   /** The saved lines as the till shows them, from the table's offers. */
   rebuild: (lines: readonly DraftLine[]) => OrderLine[];
   /** A save was refused. When the draft itself was, the drafts have been read again first. */
-  onRefused: (code: string) => void;
+  onRefused: (code: string, ownerName?: string) => void;
   /** How long one read or save may stay out before it is cut off. */
   requestLimitMs: number;
 }
@@ -52,6 +63,13 @@ function aborted(signal: AbortSignal): Promise<void> {
     if (signal.aborted) resolve();
     else signal.addEventListener("abort", () => resolve(), { once: true });
   });
+}
+
+/** A coded refusal, with the new owner's name when it carries one; undefined for no answer. */
+function asRefusal(error: unknown): DraftRefused | undefined {
+  const { code, ownerName } = (error ?? {}) as { code?: unknown; ownerName?: unknown };
+  if (typeof code !== "string") return undefined;
+  return typeof ownerName === "string" ? { refused: code, ownerName } : { refused: code };
 }
 
 /** What a line orders, with its answers and picks in a fixed order. */
@@ -182,6 +200,35 @@ export class DraftSync {
     else this.#show(draft);
   }
 
+  /**
+   * Makes another person's draft this person's, once their own edits are saved: a take-over is
+   * never sent over an edit the server has not got. The answer, which is the person's own draft
+   * with the taken lines added when they already held one, replaces what the store shows. A
+   * refused take-over, or one with no answer, reads the drafts again and sends nothing more.
+   */
+  async takeOver(draftId: string, revision: number): Promise<TakeOverOutcome> {
+    if ((await this.flush()) !== "saved") return "unsaved";
+    const read = this.#reads;
+    const limit = limited(this.#options.requestLimitMs);
+    let taken: Draft;
+    try {
+      taken = await this.#options.api.takeOverDraft(this.visitId, draftId, revision, {
+        signal: limit.signal,
+      });
+    } catch (error) {
+      if (this.#dropped || read !== this.#reads) return "failed";
+      await this.load();
+      const refusal = asRefusal(error);
+      return refusal ?? "failed";
+    } finally {
+      limit.done();
+    }
+    if (this.#dropped || read !== this.#reads) return "failed";
+    this.others = this.others.filter((other) => other.id !== draftId);
+    this.#show(taken);
+    return "taken";
+  }
+
   /** No save is sent after this, and no answer taken. */
   drop(): void {
     this.#dropped = true;
@@ -244,15 +291,15 @@ export class DraftSync {
   /** A refusal of the draft itself shows the server's draft; after any other, and after no answer,
    * the edits stay unsaved, so the next flush sends them again. */
   async #refused(error: unknown): Promise<DraftSaveOutcome> {
-    const code = (error as { code?: unknown } | undefined)?.code;
-    if (typeof code !== "string") {
+    const refusal = asRefusal(error);
+    if (refusal === undefined) {
       this.#unsaved = true;
       return "failed";
     }
-    if (DRAFT_REFUSALS.has(code)) await this.load();
+    if (DRAFT_REFUSALS.has(refusal.refused)) await this.load();
     else this.#unsaved = true;
-    this.#options.onRefused(code);
-    return { refused: code };
+    this.#options.onRefused(refusal.refused, refusal.ownerName);
+    return refusal;
   }
 
   #take(draft: Draft | null): void {

@@ -20,7 +20,7 @@ import {
 } from "./state/order-line.js";
 import { deriveExtraSelections } from "./state/held-extras.js";
 import { deriveOptionSelections } from "./state/held-options.js";
-import { DRAFT_REFUSALS, DraftSync } from "./state/draft-sync.js";
+import { DRAFT_REFUSALS, DraftSync, type DraftRefused } from "./state/draft-sync.js";
 import { fromDraftLine } from "./state/draft-lines.js";
 import "./screens/till-lock-screen.js";
 import "./screens/till-counter-screen.js";
@@ -33,9 +33,11 @@ import type {
   Draft,
   FireGroupDetail,
   MoveGroupLineDetail,
+  OtherDraft,
   ReorderGroupsDetail,
   SplitGroupLineDetail,
   SubmitDraftDetail,
+  TakeOverDraftDetail,
 } from "./screens/till-table-order-screen.js";
 import type { DraftGroup } from "./state/draft-groups.js";
 import "@waitron/ui/src/components/wt-toast.js";
@@ -219,6 +221,22 @@ function draftRefusalError(code: string): CounterError {
     : tableWriteError({ code });
 }
 
+/** A refusal of the person's own save. Taken over, it names who holds the draft now, and says the
+ * change the refused save carried is lost: the till never sends it again. */
+function saveRefusalError({ refused, ownerName }: DraftRefused): CounterError {
+  return refused === "draft.taken_over"
+    ? { takenOver: ownerName ?? "" }
+    : draftRefusalError(refused);
+}
+
+/** A refused take-over: the drafts have been read again, so each says what changed. */
+function takeOverRefusalError(code: string): CounterError {
+  if (code === "draft.out_of_date" || code === "draft.taken_over") return "table.take_over_changed";
+  return code === "draft.not_found" || code === "draft.already_submitted"
+    ? { code }
+    : tableWriteError({ code });
+}
+
 /** Settles after `ms`, or as soon as `signal` aborts. */
 function pause(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
@@ -354,17 +372,28 @@ function lateChangeMessage(late: LateChange): string {
   return text.replace("{reason}", () => codeMessage(late.code ?? "server.internal"));
 }
 
-/** A banner's string key, a refusal shown through its code's own message, or a change that failed
- * after its order left the screen, with a second message when something else failed since. */
+/** A banner's string key, a refusal shown through its code's own message, a save refused because
+ * someone took the draft over (naming them), or a change that failed after its order left the
+ * screen, with a second message when something else failed since. */
 type CounterError =
   | StringKey
   | { code: string }
+  | { takenOver: string }
   | { visitChanged: VisitChange }
   | { lateChange: LateChange; also?: StringKey };
 
 function errorText(error: CounterError): string | TemplateResult {
   if (typeof error === "string") return t(error);
   if ("code" in error) return codeMessage(error.code);
+  if ("takenOver" in error) {
+    const name = error.takenOver;
+    const lost =
+      name === ""
+        ? t("table.draft_unsaved")
+        : t("table.draft_taken_unsaved").replace("{name}", () => name);
+    return html`<span class="error-part">${codeMessage("draft.taken_over")}</span
+      ><span class="error-part">${lost}</span>`;
+  }
   if ("visitChanged" in error) return visitChangeMessage(error.visitChanged);
   const late = lateChangeMessage(error.lateChange);
   return error.also === undefined
@@ -839,6 +868,8 @@ export class TillApp extends LitElement {
    * does not move it, so a glance at the floor cannot lend the order view a revision it never showed. */
   @state() private orderParty: TableVisit | null = null;
   @state() private groupCommandBusy = false;
+  /** Moved on each time a take-over the table screen asked for has answered, or failed. */
+  @state() private takeOversAnswered = 0;
   /** Finish table was refused because a bill of the party is unpaid. */
   @state() private finishRefused = false;
   /** The venue's setting for changing sent lines, read with {@link tabLines}. */
@@ -2476,7 +2507,11 @@ export class TillApp extends LitElement {
       visitId: party.id,
       personId: this.operatorPersonId,
       rebuild: (lines) => lines.map((line) => fromDraftLine(line, this.#tableOffers.byId)),
-      onRefused: (code) => this.#onDraftRefused(sync, code),
+      onRefused: (code, ownerName) =>
+        this.#onDraftRefused(sync, {
+          refused: code,
+          ...(ownerName === undefined ? {} : { ownerName }),
+        }),
       requestLimitMs: TABLE_REQUEST_LIMIT_MS,
     });
     this.#draftSync = sync;
@@ -2525,9 +2560,58 @@ export class TillApp extends LitElement {
   }
 
   /** A save refused. An edit made after the session ended is lost: nothing can send it now. */
-  #onDraftRefused(sync: DraftSync, code: string): void {
-    if (sync !== this.#draftSync || code === "session.required") return;
-    this.errorKey = draftRefusalError(code);
+  #onDraftRefused(sync: DraftSync, refusal: DraftRefused): void {
+    if (sync !== this.#draftSync || refusal.refused === "session.required") return;
+    this.errorKey = saveRefusalError(refusal);
+  }
+
+  /** The other people's drafts on the party of the draft shown, read-only, built again only when
+   * they or the table's offers change. */
+  #otherDrafts(): readonly OtherDraft[] {
+    const sync = this.#draftSync;
+    if (sync === undefined || this.#tableDraft() !== sync.store) return [];
+    const key = { others: sync.others, offers: this.tableProducts };
+    const cached = this.#otherDraftViews;
+    if (
+      cached !== undefined &&
+      cached.key.others === key.others &&
+      cached.key.offers === key.offers
+    )
+      return cached.views;
+    const views = sync.others.map((other) => ({
+      id: other.id,
+      revision: other.revision,
+      ownerName: other.ownerName,
+      takenFromYou: other.takenOverFrom?.personId === sync.personId,
+      lines: other.lines.map((line) => fromDraftLine(line, this.#tableOffers.byId)),
+    }));
+    this.#otherDraftViews = { key, views };
+    return views;
+  }
+
+  #otherDraftViews?: {
+    key: { others: unknown; offers: unknown };
+    views: readonly OtherDraft[];
+  };
+
+  /** The person's own unsaved edits go first; the answer's draft becomes theirs to change. */
+  async #onTakeOverDraft(event: Event): Promise<void> {
+    const { draftId, revision } = (event as CustomEvent<TakeOverDraftDetail>).detail;
+    const sync = this.#draftSync;
+    try {
+      if (sync === undefined) {
+        this.errorKey = "table.error";
+        return;
+      }
+      this.errorKey = undefined;
+      const outcome = await sync.takeOver(draftId, revision);
+      if (sync !== this.#draftSync || outcome === "taken") return;
+      if (outcome === "unsaved") this.errorKey ??= "table.error";
+      else if (outcome === "failed") this.errorKey = "table.error";
+      else this.errorKey = takeOverRefusalError(outcome.refused);
+    } finally {
+      this.takeOversAnswered += 1;
+    }
   }
 
   /** The floor, then the order's party from it, then the order's lines and bills. */
@@ -2697,7 +2781,7 @@ export class TillApp extends LitElement {
     try {
       const saved = await sync.flush(send.signal);
       if (saved !== "saved") {
-        this.errorKey = saved === "failed" ? "table.error" : draftRefusalError(saved.refused);
+        this.errorKey = saved === "failed" ? "table.error" : saveRefusalError(saved);
         return;
       }
       const positions = sent.map((line) => sync.store.lines.indexOf(line));
@@ -3580,6 +3664,8 @@ export class TillApp extends LitElement {
       .cancelOffer=${this.cancelOffer}
       .orderId=${this.activeTabId}
       .draftStore=${tab.key === this.#tableOrderTabKey() ? this.#tableDraft() : undefined}
+      .otherDrafts=${tab.key === this.#tableOrderTabKey() ? this.#otherDrafts() : []}
+      .takeOversAnswered=${this.takeOversAnswered}
       .visit=${this.orderParty}
       .visitBills=${this.visitBills}
       .finishRefused=${this.finishRefused}
@@ -3617,6 +3703,8 @@ export class TillApp extends LitElement {
           .tables=${this.tables}
           .orderId=${this.activeTabId}
           .draftStore=${this.#tableDraft()}
+          .otherDrafts=${this.#otherDrafts()}
+          .takeOversAnswered=${this.takeOversAnswered}
           .visit=${this.orderParty}
           .bills=${this.visitBills}
           .finishRefused=${this.finishRefused}
@@ -3703,6 +3791,7 @@ export class TillApp extends LitElement {
         @floor-refresh=${() => void this.#refreshFloor()}
         @open-table=${(event: Event) => void this.#onOpenTable(event)}
         @submit-draft=${(event: Event) => void this.#onSubmitDraft(event)}
+        @take-over-draft=${(event: Event) => void this.#onTakeOverDraft(event)}
         @fire-group=${(event: Event) => void this.#onFireGroup(event)}
         @reorder-groups=${(event: Event) => void this.#onReorderGroups(event)}
         @move-group-line=${(event: Event) => void this.#onMoveGroupLine(event)}

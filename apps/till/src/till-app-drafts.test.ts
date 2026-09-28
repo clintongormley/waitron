@@ -232,6 +232,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     listDrafts: server.listDrafts,
     saveDraft: server.saveDraft,
     submitDraft: server.submitDraft,
+    takeOverDraft: server.takeOverDraft,
     logout: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as Record<string, ReturnType<typeof vi.fn>>;
@@ -1957,5 +1958,400 @@ describe("till-app: another device's save arriving while the draft is shown", ()
     expect(rows(el)).toEqual(["Steak ×2"]);
     expect(bar(el)).toContain("Steak ×2");
     expect(api.saveDraft).toHaveBeenCalledOnce();
+  });
+});
+
+describe("till-app: other people's drafts and taking one over", () => {
+  const ALEX = "p-alex";
+  const SAM = "p-sam";
+
+  const line = (menuItemId: string, quantity = "1") => ({
+    menuItemId,
+    variantId: null,
+    menuVersionId: "v1",
+    options: [],
+    extras: [],
+    note: null,
+    quantity,
+    courseId: null,
+    noMerge: false,
+  });
+
+  /** Saves a draft on Mesa 4's party straight into the server, as `personId` on another till. */
+  function savedBy(personId: string, personName: string, ...menuItemIds: string[]) {
+    const [signedIn, name] = [server.personId, server.personName];
+    server.personId = personId;
+    server.personName = personName;
+    const saved = structuredClone(
+      server.save("v1", { draftId: null, revision: 0, lines: menuItemIds.map((id) => line(id)) }),
+    );
+    server.personId = signedIn;
+    server.personName = name;
+    return saved;
+  }
+
+  async function openAs(el: TillApp, personId: string, name: string): Promise<void> {
+    await flush(el);
+    await signIn(el, personId, name);
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+  }
+
+  const screen = (el: TillApp) => tableOrder(el)!.shadowRoot!;
+  const panels = (el: TillApp) => [
+    ...screen(el).querySelectorAll<HTMLElement>("[data-other-draft]"),
+  ];
+  const panelOf = (el: TillApp) => {
+    const [panel] = panels(el);
+    return {
+      heading: panel!.querySelector(".other-draft-title")!.textContent!.trim(),
+      lines: [...panel!.querySelectorAll("[data-other-draft-line]")].map((one) =>
+        one.textContent!.replace(/\s+/g, " ").trim(),
+      ),
+      sends: panel!.querySelector("[data-draft-action]") !== null,
+      takeOver: panel!.querySelector<HTMLElement>("[data-take-over]"),
+    };
+  };
+  const dialogOpen = (el: TillApp) =>
+    screen(el).querySelector<HTMLElement & { open: boolean }>("[data-take-over-dialog]")!.open;
+
+  async function takeOver(el: TillApp): Promise<void> {
+    panelOf(el).takeOver!.click();
+    await flush(el);
+    screen(el).querySelector<HTMLElement>("[data-take-over-confirm]")!.click();
+    await flush(el, 6);
+  }
+
+  it("shows no read-only panel when only the person's own draft is on the party", async () => {
+    const { el } = await mountApp();
+    savedBy(SAM, "Sam", "offer-flan");
+    await openAs(el, SAM, "Sam");
+
+    expect(rows(el)).toEqual(["Flan ×1"]);
+    expect(panels(el)).toEqual([]);
+  });
+
+  it("two operators: Sam sees Alex's draft read-only, takes it over after confirming, and Alex then sees it taken over by Sam", async () => {
+    const { el } = await mountApp();
+    const alexs = savedBy(ALEX, "Alex", "offer-beer");
+    await openAs(el, SAM, "Sam");
+
+    expect(rows(el)).toEqual([]);
+    expect(panelOf(el)).toMatchObject({
+      heading: "Alex has an unsent order",
+      lines: ["Beer ×1"],
+      sends: false,
+    });
+
+    panelOf(el).takeOver!.click();
+    await flush(el);
+    expect(dialogOpen(el)).toBe(true);
+    screen(el).querySelector<HTMLElement>("[data-take-over-cancel]")!.click();
+    await flush(el);
+    expect(dialogOpen(el)).toBe(false);
+    expect(api.takeOverDraft).not.toHaveBeenCalled();
+
+    await takeOver(el);
+
+    expect(api.takeOverDraft).toHaveBeenCalledExactlyOnceWith(
+      "v1",
+      alexs.id,
+      alexs.revision,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(dialogOpen(el)).toBe(false);
+    expect(panels(el)).toEqual([]);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    await tap(el, "Flan");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    expect(api.saveDraft).toHaveBeenLastCalledWith(
+      "v1",
+      expect.objectContaining({ draftId: alexs.id, revision: alexs.revision + 1 }),
+      expect.anything(),
+    );
+    expect(server.drafts.map(({ ownerId, lines }) => ({ ownerId, lines: lines.length }))).toEqual([
+      { ownerId: SAM, lines: 2 },
+    ]);
+
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "logout");
+    await flush(el, 6);
+    await openAs(el, ALEX, "Alex");
+
+    expect(rows(el)).toEqual([]);
+    expect(panelOf(el)).toMatchObject({
+      heading: "Taken over by Sam",
+      lines: ["Beer ×1", "Flan ×1"],
+      sends: false,
+    });
+    expect(panelOf(el).takeOver).not.toBeNull();
+  });
+
+  it("adds Alex's lines into the draft Sam already holds, and keeps that draft's id", async () => {
+    const { el } = await mountApp();
+    const alexs = savedBy(ALEX, "Alex", "offer-beer", "offer-flan");
+    const sams = savedBy(SAM, "Sam", "offer-flan", "offer-steak");
+    await openAs(el, SAM, "Sam");
+    expect(rows(el)).toEqual(["Flan ×1", "Steak ×1"]);
+
+    await takeOver(el);
+
+    expect(api.takeOverDraft).toHaveBeenCalledExactlyOnceWith(
+      "v1",
+      alexs.id,
+      alexs.revision,
+      expect.anything(),
+    );
+    expect(rows(el)).toEqual(["Flan ×2", "Steak ×1", "Beer ×1"]);
+    expect(panels(el)).toEqual([]);
+    await tap(el, "Steak");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    expect(api.saveDraft).toHaveBeenLastCalledWith(
+      "v1",
+      expect.objectContaining({ draftId: sams.id, revision: sams.revision + 1 }),
+      expect.anything(),
+    );
+  });
+
+  it("drops Alex's save refused because Sam took the draft over, says the change was not saved, and shows it taken over", async () => {
+    const { el } = await mountApp();
+    await openAs(el, ALEX, "Alex");
+    await tap(el, "Beer");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    const alexs = structuredClone(server.drafts[0]!);
+    server.personId = SAM;
+    server.personName = "Sam";
+    server.takeOver("v1", alexs.id, alexs.revision);
+    server.personId = ALEX;
+    server.personName = "Alex";
+
+    await tap(el, "Flan");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await flush(el);
+
+    expect(api.saveDraft).toHaveBeenCalledTimes(2);
+    expect(banner(el)!.textContent).toContain(codeMessage("draft.taken_over"));
+    expect(banner(el)!.textContent).toContain("Sam has it now. Your last change was not saved.");
+    expect(rows(el)).toEqual([]);
+    expect(panelOf(el)).toMatchObject({ heading: "Taken over by Sam", lines: ["Beer ×1"] });
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    expect(api.saveDraft).toHaveBeenCalledTimes(2);
+
+    await tap(el, "Steak");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    expect(api.saveDraft).toHaveBeenCalledTimes(3);
+    expect(api.saveDraft).toHaveBeenLastCalledWith(
+      "v1",
+      expect.objectContaining({ draftId: null, revision: 0 }),
+      expect.anything(),
+    );
+  });
+
+  it("takes nothing over, and says so, when Sam's own change could not be saved first", async () => {
+    const { el } = await mountApp({
+      saveDraft: vi.fn(server.saveDraft).mockRejectedValueOnce(new TypeError("Failed to fetch")),
+    });
+    savedBy(ALEX, "Alex", "offer-beer");
+    await openAs(el, SAM, "Sam");
+    press(el, "Flan");
+
+    await takeOver(el);
+
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+    expect(api.takeOverDraft).not.toHaveBeenCalled();
+    expect(banner(el)!.textContent).toContain(t("table.error"));
+    expect(dialogOpen(el)).toBe(false);
+    expect(rows(el)).toEqual(["Flan ×1"]);
+  });
+
+  it("keeps the words of a refusal of Sam's own change, and takes nothing over", async () => {
+    const { el } = await mountApp({
+      saveDraft: vi.fn().mockRejectedValue({ code: "visit.not_open", status: 409 }),
+    });
+    savedBy(ALEX, "Alex", "offer-beer");
+    await openAs(el, SAM, "Sam");
+    press(el, "Flan");
+
+    await takeOver(el);
+
+    expect(api.takeOverDraft).not.toHaveBeenCalled();
+    expect(banner(el)!.textContent).toContain(codeMessage("visit.not_open"));
+  });
+
+  it("says a take-over that got no answer, having read the drafts again", async () => {
+    const { el } = await mountApp({
+      takeOverDraft: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    savedBy(ALEX, "Alex", "offer-beer");
+    await openAs(el, SAM, "Sam");
+    const reads = api.listDrafts.mock.calls.length;
+
+    await takeOver(el);
+
+    expect(api.listDrafts.mock.calls.length).toBe(reads + 1);
+    expect(banner(el)!.textContent).toContain(t("table.error"));
+    expect(dialogOpen(el)).toBe(false);
+  });
+
+  it.each([
+    ["draft.not_found", codeMessage("draft.not_found")],
+    ["draft.already_submitted", codeMessage("draft.already_submitted")],
+    ["draft.taken_over", t("table.take_over_changed")],
+    ["visit.not_open", codeMessage("visit.not_open")],
+  ])("says a take-over refused %s in words for what changed", async (code, words) => {
+    const { el } = await mountApp({
+      takeOverDraft: vi.fn().mockRejectedValue({ code, status: 409 }),
+    });
+    savedBy(ALEX, "Alex", "offer-beer");
+    await openAs(el, SAM, "Sam");
+
+    await takeOver(el);
+
+    expect(banner(el)!.textContent).toContain(words);
+  });
+
+  it("says nothing of a take-over that answers after Sam has signed out", async () => {
+    let refuse!: (error: unknown) => void;
+    const { el } = await mountApp({
+      takeOverDraft: vi.fn(() => new Promise((_resolve, reject) => (refuse = reject))),
+    });
+    savedBy(ALEX, "Alex", "offer-beer");
+    await openAs(el, SAM, "Sam");
+    await takeOver(el);
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "logout");
+    await flush(el, 6);
+    await signIn(el, ALEX, "Alex");
+
+    refuse(new TypeError("Failed to fetch"));
+    await flush(el, 6);
+
+    expect(banner(el)).toBeNull();
+  });
+
+  it("answers a take-over asked for with no table's draft open, sending nothing", async () => {
+    const { el } = await mountApp();
+    await flush(el);
+    await signIn(el, SAM, "Sam");
+
+    emit(shell(el), "take-over-draft", { draftId: "draft-1", revision: 0 });
+    await flush(el);
+
+    expect(api.takeOverDraft).not.toHaveBeenCalled();
+    expect(banner(el)!.textContent).toContain(t("table.error"));
+  });
+
+  it.each([
+    ["no name", { ownerName: "" }],
+    ["nothing about who", {}],
+  ])(
+    "says only that the change was not saved when the refusal carries %s",
+    async (_case, carries) => {
+      const { el } = await mountApp({
+        saveDraft: vi.fn(server.saveDraft).mockRejectedValueOnce({
+          code: "draft.taken_over",
+          status: 409,
+          ...carries,
+        }),
+      });
+      await openAs(el, ALEX, "Alex");
+      await tap(el, "Beer");
+      await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+      await flush(el);
+
+      expect(banner(el)!.textContent).toContain(codeMessage("draft.taken_over"));
+      expect(banner(el)!.textContent).toContain(t("table.draft_unsaved"));
+      expect(banner(el)!.textContent).not.toContain("has it now");
+    },
+  );
+
+  it("says the change was not saved when Alex's Send finds the draft taken over by Sam", async () => {
+    const { el } = await mountApp();
+    await openAs(el, ALEX, "Alex");
+    await tap(el, "Beer");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    const alexs = structuredClone(server.drafts[0]!);
+    server.personId = SAM;
+    server.personName = "Sam";
+    server.takeOver("v1", alexs.id, alexs.revision);
+    server.personId = ALEX;
+    server.personName = "Alex";
+    press(el, "Flan");
+
+    await act(el, "fire-all");
+
+    expect(api.submitDraft).not.toHaveBeenCalled();
+    expect(banner(el)!.textContent).toContain("Sam has it now. Your last change was not saved.");
+    expect(panelOf(el).heading).toBe("Taken over by Sam");
+  });
+
+  it("shows other people's drafts on a tablet's Order tab, and takes one over there", async () => {
+    const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(till(orderTabCanvas)) });
+    savedBy(ALEX, "Alex", "offer-beer");
+    await openAs(el, SAM, "Sam");
+    emit(shell(el), "tab-select", { key: "order" });
+    await flush(el);
+
+    expect(panelOf(el).heading).toBe("Alex has an unsent order");
+    await takeOver(el);
+
+    expect(dialogOpen(el)).toBe(false);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(panels(el)).toEqual([]);
+  });
+
+  it("names the other drafts' dishes again when the table's menu is published anew", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const state = (versionId: string) => ({
+        menus: [{ menuId: "lunch", versionId, homeLayoutId: "layout-home", layoutFallback: null }],
+        unavailable: { products: [], optionLabels: [], extraItems: [] },
+      });
+      const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
+      savedBy(ALEX, "Alex", "offer-beer");
+      await openAs(el, SAM, "Sam");
+      expect(panelOf(el).lines).toEqual(["Beer ×1"]);
+      const v2 = catalogue("v2");
+      api.listZoneOffers.mockResolvedValue({
+        ...v2,
+        offers: v2.offers.map((each) =>
+          each.id === "offer-beer" ? { ...each, name: "Caña" } : each,
+        ),
+      });
+      api.menuState.mockResolvedValue(state("v2"));
+
+      vi.advanceTimersByTime(15_000);
+      await flush(el, 6);
+
+      expect(panelOf(el).lines).toEqual(["Caña ×1"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reads the drafts again and says so, sending nothing more, when Alex changed the draft before Sam's take-over", async () => {
+    const { el } = await mountApp();
+    const alexs = savedBy(ALEX, "Alex", "offer-beer");
+    await openAs(el, SAM, "Sam");
+    server.personId = ALEX;
+    server.save("v1", {
+      draftId: alexs.id,
+      revision: alexs.revision,
+      lines: [line("offer-beer", "2")],
+    });
+    server.personId = SAM;
+    const reads = api.listDrafts.mock.calls.length;
+
+    await takeOver(el);
+
+    expect(api.takeOverDraft).toHaveBeenCalledOnce();
+    expect(api.listDrafts.mock.calls.length).toBe(reads + 1);
+    expect(banner(el)!.textContent).toContain(t("table.take_over_changed"));
+    expect(dialogOpen(el)).toBe(false);
+    expect(panelOf(el)).toMatchObject({ heading: "Alex has an unsent order", lines: ["Beer ×2"] });
+    expect(rows(el)).toEqual([]);
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    expect(api.takeOverDraft).toHaveBeenCalledOnce();
+    expect(api.saveDraft).not.toHaveBeenCalled();
   });
 });

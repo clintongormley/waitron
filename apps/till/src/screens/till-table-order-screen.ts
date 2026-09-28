@@ -104,6 +104,28 @@ export interface Draft {
   readonly tally: { fired: number; held: number; joined: number };
 }
 
+/** Another person's open draft on the party, shown read-only. `takenFromYou`: its latest take-over
+ * was from the signed-in person, so it is headed by who holds it now. */
+export interface OtherDraft {
+  id: string;
+  revision: number;
+  ownerName: string;
+  takenFromYou: boolean;
+  lines: readonly OrderLine[];
+}
+
+/** `take-over-draft`: another person's draft, at the revision the screen showed, the person
+ * confirmed taking over. */
+export interface TakeOverDraftDetail {
+  draftId: string;
+  revision: number;
+}
+
+/** "Alex …", or the no-name wording when the server has no name for the person. */
+function named(name: string, withName: StringKey, unnamed: StringKey): string {
+  return name === "" ? t(unnamed) : t(withName).replace("{name}", () => name);
+}
+
 /** Where a later addition goes: `add-to-held` is offered only while the party has a held group. */
 type Destination = "fire-now" | "add-to-held" | "add-as-new";
 
@@ -707,6 +729,37 @@ export class TillTableOrderScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
+      .other-draft {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--wt-space-2);
+        padding: var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+      }
+
+      .other-draft-title {
+        margin: 0;
+        font-size: var(--wt-font-size-md);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .other-draft-lines {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        overflow-wrap: anywhere;
+      }
+
+      .other-draft-name {
+        font-weight: var(--wt-font-weight-bold);
+      }
+
       .last-added-steps {
         display: flex;
         flex: 0 0 auto;
@@ -833,6 +886,15 @@ export class TillTableOrderScreen extends LitElement {
 
   readonly #ownDraft = new WorkingOrderStore();
 
+  /** The other people's open drafts on the party, oldest first. */
+  @property({ attribute: false }) otherDrafts: readonly OtherDraft[] = [];
+  /** Moved on by the app each time a take-over it was asked for has answered, or failed. */
+  @property({ attribute: false }) takeOversAnswered = 0;
+  /** The draft whose take-over is being asked about. */
+  @state() private takeOverPending: OtherDraft | null = null;
+  /** {@link takeOversAnswered} when a take-over was sent; unset while none is out. */
+  @state() private takeOverSent: number | null = null;
+
   get #draftStore(): WorkingOrderStore | null {
     return this.draftStore === undefined ? this.#ownDraft : this.draftStore;
   }
@@ -954,6 +1016,10 @@ export class TillTableOrderScreen extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     this.#watchDraft();
+    if (this.takeOverSent !== null && this.takeOversAnswered !== this.takeOverSent) {
+      this.takeOverSent = null;
+      this.takeOverPending = null;
+    }
     // The gross map is filled BEFORE `#tabTotal` sums it below.
     if (changed.has("lines") || this.#payStore === undefined) {
       this.#lineGrossByLineNo = new Map(
@@ -1634,7 +1700,7 @@ export class TillTableOrderScreen extends LitElement {
           ${this.drawerOpen ? this.#drawer(pending) : nothing}
         </div>
         ${this.#previewDialog()} ${this.#cancelDialog()} ${this.#fireGroupDialog()}
-        ${this.#moveDialog()} ${this.#changeEditor()}
+        ${this.#moveDialog()} ${this.#changeEditor()} ${this.#takeOverDialog()}
       </section>
     `;
   }
@@ -1669,9 +1735,85 @@ export class TillTableOrderScreen extends LitElement {
               : nothing
           }
         </div>
-        ${this.#roundControl(draft)}
+        ${this.#roundControl(draft)} ${this.#otherDraftPanels(draft)}
       </section>
     </div>`;
+  }
+
+  /** Read-only: nothing in a panel changes or sends another person's lines but taking them over. */
+  #otherDraftPanels(draft: WorkingOrderStore): TemplateResult[] {
+    const busy = draft.sending || this.takeOverSent !== null;
+    return this.otherDrafts.map((other, index) => {
+      const title = other.takenFromYou
+        ? named(other.ownerName, "table.draft_taken_by", "table.draft_taken_by_unnamed")
+        : named(other.ownerName, "table.others_draft", "table.others_draft_unnamed");
+      return html`<section
+        class="other-draft"
+        data-other-draft=${other.id}
+        aria-labelledby=${`other-draft-${index}`}
+      >
+        <h3 class="other-draft-title" id=${`other-draft-${index}`}>${title}</h3>
+        <ul class="other-draft-lines">
+          ${other.lines.map(
+            (line) =>
+              html`<li class="other-draft-line" data-other-draft-line>
+                ${this.#lineSummary(line, "other-draft-name")}
+              </li>`,
+          )}
+        </ul>
+        <wt-button
+          variant="secondary"
+          data-take-over=${other.id}
+          aria-label=${`${t("table.take_over")} · ${title}`}
+          ?disabled=${busy}
+          @click=${() => (this.takeOverPending = other)}
+        >
+          ${t("table.take_over")}
+        </wt-button>
+      </section>`;
+    });
+  }
+
+  #takeOverDialog(): TemplateResult {
+    const other = this.takeOverPending;
+    const name = other?.ownerName ?? "";
+    return html`<wt-dialog
+      class="take-over-dialog"
+      data-take-over-dialog
+      .open=${other !== null}
+      .heading=${named(name, "table.take_over_title", "table.take_over_title_unnamed")}
+      @wt-close=${() => (this.takeOverPending = null)}
+    >
+      <p data-take-over-body>
+        ${named(name, "table.take_over_body", "table.take_over_body_unnamed")}
+      </p>
+      <div slot="footer" class="cancel-actions">
+        <wt-button
+          variant="secondary"
+          data-take-over-cancel
+          @click=${() => (this.takeOverPending = null)}
+        >
+          ${t("action.cancel")}
+        </wt-button>
+        <wt-button
+          variant="primary"
+          data-take-over-confirm
+          ?disabled=${this.takeOverSent !== null}
+          @click=${() => this.#confirmTakeOver()}
+        >
+          ${t("table.take_over_confirm")}
+        </wt-button>
+      </div>
+    </wt-dialog>`;
+  }
+
+  /** One request per press: Confirm stays off until the app says this one has answered. */
+  #confirmTakeOver(): void {
+    const other = this.takeOverPending;
+    if (other === null || this.takeOverSent !== null) return;
+    this.takeOverSent = this.takeOversAnswered;
+    const detail: TakeOverDraftDetail = { draftId: other.id, revision: other.revision };
+    this.#dispatch("take-over-draft", detail);
   }
 
   /** Under browsing: the line the last tap added or grew and, when the draft has its own view, the
@@ -1726,23 +1868,7 @@ export class TillTableOrderScreen extends LitElement {
       aria-label=${t("table.last_added")}
       ?inert=${store.sending}
     >
-      <p class="last-added-line">
-        <span class="last-added-name">${name} ×${this.#displayQty(line.quantity)}</span>
-        ${optionAnswers(line.optionSnapshots, { reads: "staff" }).map(
-          (answer) => html`<span class="modifier-answer">${answer}</span>`,
-        )}
-        ${(line.extras ?? []).map(
-          (extra) =>
-            html`<span class="modifier-answer"
-              >${extra.quantity > 1 ? `${extra.name} ×${extra.quantity}` : extra.name}</span
-            >`,
-        )}
-        ${
-          line.note === undefined
-            ? nothing
-            : html`<span class="line-note">${t("line.note.label")}: ${line.note}</span>`
-        }
-      </p>
+      <p class="last-added-line">${this.#lineSummary(line, "last-added-name")}</p>
       ${
         soldByTheUnit(line.product)
           ? html`<span class="last-added-steps">
@@ -1751,6 +1877,27 @@ export class TillTableOrderScreen extends LitElement {
           : nothing
       }
     </div>`;
+  }
+
+  /** A line's name and quantity, its staff answers, its extras and its note. A dish or pick the
+   * table's offers no longer hold has no name to show, so it reads as not offered. */
+  #lineSummary(line: OrderLine, nameClass: string): TemplateResult {
+    const name = lineProductName(line.product) || t("basket.not_offered");
+    return html`<span class=${nameClass}>${name} ×${this.#displayQty(line.quantity)}</span>
+      ${optionAnswers(line.optionSnapshots, { reads: "staff" }).map(
+        (answer) => html`<span class="modifier-answer">${answer}</span>`,
+      )}
+      ${(line.extras ?? []).map((extra) => {
+        const extraName = extra.name || t("basket.not_offered");
+        return html`<span class="modifier-answer"
+          >${extra.quantity > 1 ? `${extraName} ×${extra.quantity}` : extraName}</span
+        >`;
+      })}
+      ${
+        line.note === undefined
+          ? nothing
+          : html`<span class="line-note">${t("line.note.label")}: ${line.note}</span>`
+      }`;
   }
 
   /** Focus follows the view: the control pressed is hidden by what it opens. */

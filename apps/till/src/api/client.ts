@@ -553,6 +553,9 @@ export interface Draft {
   ownerName: string;
   revision: number;
   lines: DraftLine[];
+  /** The owner before the draft was last taken over; null when it never was. `name` is "" for a
+   * person the server has no name for. */
+  takenOverFrom: { personId: string; name: string } | null;
 }
 
 /** A save of the signed-in person's draft: `draftId` null and `revision` 0 start a new one. */
@@ -1867,10 +1870,18 @@ export class TillApi {
    * `POST /api/visits/:visitId/drafts/:draftId/take-over`. When they already hold a draft on the
    * party, the taken lines join it and the answer is THAT draft, under its own id.
    */
-  takeOverDraft(visitId: string, draftId: string, revision: number): Promise<Draft> {
-    return this.#request(`/api/visits/${visitId}/drafts/${draftId}/take-over`, "POST", {
-      revision,
-    });
+  takeOverDraft(
+    visitId: string,
+    draftId: string,
+    revision: number,
+    options: ReadOptions = {},
+  ): Promise<Draft> {
+    return this.#request(
+      `/api/visits/${visitId}/drafts/${draftId}/take-over`,
+      "POST",
+      { revision },
+      options.signal,
+    );
   }
 
   /**
