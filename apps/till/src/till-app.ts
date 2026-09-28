@@ -2782,9 +2782,9 @@ export class TillApp extends LitElement {
   /**
    * Another device changed a party this screen was acting on. The floor, the order and the bills are
    * read again and the message says what changed; the command is not sent again on its own, because
-   * the person has to see the new state and decide.
+   * the person has to see the new state and decide. Nothing is said once `live` is false.
    */
-  async #onVisitOutOfDate(error: unknown): Promise<void> {
+  async #onVisitOutOfDate(error: unknown, live: () => boolean = () => true): Promise<void> {
     const named = (error as { visitId?: unknown }).visitId;
     const before = this.tables;
     const shown = this.#tableCatalogueActive() ? this.orderParty : null;
@@ -2794,6 +2794,7 @@ export class TillApp extends LitElement {
         : (shown ?? undefined);
     if (this.#tableCatalogueActive()) await this.#reloadOrder();
     else await this.#reloadTables();
+    if (!live()) return;
     this.errorKey =
       was === undefined
         ? { code: "visit.out_of_date" }
@@ -2811,7 +2812,8 @@ export class TillApp extends LitElement {
 
   /** A draft sent to a seated party's settled or abandoned tab lands on the party's next tab, which
    * the screen follows. Once a submission leaves the draft empty, the till goes back to the floor
-   * and says what the draft's submissions filed. */
+   * and says what the draft's submissions filed. Once the operator's session ends, the submission
+   * sends nothing more, says nothing and does not move the next person's screen. */
   async #onSubmitDraft(event: Event): Promise<void> {
     const { groups, joinGroupId, store, sent, draft } = (
       event as CustomEvent<Partial<SubmitDraftDetail>>
@@ -2835,11 +2837,21 @@ export class TillApp extends LitElement {
       return;
     }
     const partyId = party.id;
+    const session = this.#operatorSession;
+    const live = () => session === this.#operatorSession;
     // The draft is shut to edits until the answer, so what is sent is what the screen shows.
     store.sending = true;
     let followUp: DraftFollowUp;
     try {
-      followUp = await this.#submitDraft(tabId, party, sync, { groups, joinGroupId }, sent, false);
+      followUp = await this.#submitDraft(
+        tabId,
+        party,
+        sync,
+        { groups, joinGroupId },
+        sent,
+        live,
+        false,
+      );
     } finally {
       store.sending = false;
     }
@@ -2852,6 +2864,7 @@ export class TillApp extends LitElement {
     if (followUp !== "find-tab" && draft !== undefined) this.#tally(draft, groups, joinGroupId);
     if (followUp === "find-tab" && onSentTable()) {
       await this.#retakePartyFromFloor();
+      if (!live()) return;
       // The server moves a draft only onto its own party's next tab, so the table is followed only
       // while it still holds the party the screen showed when the draft was sent.
       const now = this.tables.find((row) => row.id === tableId);
@@ -2859,11 +2872,12 @@ export class TillApp extends LitElement {
         this.#followDraft(tabId, now.tabId);
     } else if (typeof followUp === "object" && this.activeTabId === tabId) {
       await this.#reloadTables();
+      if (!live()) return;
       this.#followDraft(tabId, followUp.landedOn);
     }
     await this.#loadTabLines();
     if (this.orderParty !== null) await this.#loadVisitBills();
-    if (store.lineCount > 0 || draft === undefined) return;
+    if (!live() || store.lineCount > 0 || draft === undefined) return;
     if (followUp === "find-tab" || this.activeTableId !== tableId) return;
     this.submittedNotice = submittedText(draft.tally);
     this.renderRoot.querySelector<WtToast>("wt-toast[data-submitted-toast]")?.show();
@@ -2889,6 +2903,7 @@ export class TillApp extends LitElement {
     sync: DraftSync,
     submission: { groups: readonly DraftGroup[]; joinGroupId?: string },
     sent: readonly OrderLine[],
+    live: () => boolean,
     retried: boolean,
   ): Promise<DraftFollowUp> {
     const { groups, joinGroupId } = submission;
@@ -2899,6 +2914,7 @@ export class TillApp extends LitElement {
     let submitted: SubmittedDraft;
     try {
       const saved = await sync.flush(send.signal);
+      if (!live()) return;
       if (saved !== "saved") {
         this.errorKey = saved === "failed" ? "table.error" : saveRefusalError(saved);
         return;
@@ -2907,6 +2923,7 @@ export class TillApp extends LitElement {
       const ids = positions.includes(-1) ? null : sync.lineIds(positions);
       if (ids === null || sync.draftId === null) {
         await sync.load();
+        if (!live()) return;
         this.errorKey = "table.draft_recount";
         return;
       }
@@ -2920,28 +2937,32 @@ export class TillApp extends LitElement {
         })),
         ...(joinGroupId === undefined ? {} : { joinGroupId }),
       };
-      submitted = await this.#sendDraft(party.id, sync.draftId, command, send.signal);
+      submitted = await this.#sendDraft(party.id, sync.draftId, command, send.signal, live);
     } catch (error) {
+      if (!live()) return;
       if (isVersionRefusal(error)) {
         const outcome = await this.#refreshRound(sync.store);
+        if (!live()) return;
         // The adopted lines are saved under their new versions, and so under new ids: another request.
         if (outcome === "adopted" && !retried)
-          return this.#submitDraft(tabId, party, sync, submission, sent, true);
+          return this.#submitDraft(tabId, party, sync, submission, sent, live, true);
         if (outcome !== "confirming") this.errorKey = { code: "menu.version_changed" };
         return;
       }
       if (isNetworkFailure(error)) {
         await sync.load();
+        if (!live()) return;
         this.errorKey = "table.round_unconfirmed";
         return "find-tab";
       }
       if (isVisitOutOfDate(error)) {
-        await this.#onVisitOutOfDate(error);
+        await this.#onVisitOutOfDate(error, live);
         return;
       }
       const code = (error as { code?: string }).code;
       if (code !== undefined && DRAFT_REFUSALS.has(code)) {
         await sync.load();
+        if (!live()) return;
         const { ownerName } = error as { ownerName?: unknown };
         this.errorKey =
           code === "draft.taken_over"
@@ -2950,23 +2971,26 @@ export class TillApp extends LitElement {
         return;
       }
       if (isGroupGone(error)) await this.#loadTabLines();
+      if (!live()) return;
       this.errorKey = lineWriteError(error);
       return code === "product.unavailable" ? "mark-sold-out" : undefined;
     } finally {
       clearTimeout(limit);
     }
     this.#noteVisitRevision(party.id, submitted.revision);
+    if (!live()) return;
     sync.submitted(submitted.draft, sent);
     return submitted.tabId === tabId ? "read-tab" : { landedOn: submitted.tabId };
   }
 
   /** A request that got no answer is sent again unchanged after a pause, until the time limit ends
-   * the wait. */
+   * the wait or the session it was first sent in ends: the next person may have signed in by then. */
   async #sendDraft(
     visitId: string,
     draftId: string,
     command: DraftSubmission,
     signal: AbortSignal,
+    live: () => boolean,
   ): Promise<SubmittedDraft> {
     for (let attempt = 0; ; attempt += 1) {
       try {
@@ -2974,7 +2998,7 @@ export class TillApp extends LitElement {
       } catch (error) {
         if (!isNetworkFailure(error) || signal.aborted || attempt === SUBMIT_RETRIES) throw error;
         await pause(SUBMIT_RETRY_PAUSE_MS, signal);
-        if (signal.aborted) throw error;
+        if (signal.aborted || !live()) throw error;
       }
     }
   }

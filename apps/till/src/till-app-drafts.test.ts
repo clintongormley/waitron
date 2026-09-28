@@ -356,6 +356,35 @@ async function settle(el: TillApp): Promise<void> {
   await flush(el);
 }
 
+/** Holds the next save until the returned function is called; it is then saved as the person who
+ * sent it, whoever is signed in by then. */
+function holdNextSave(): () => void {
+  let answer!: () => void;
+  const held = new Promise<void>((resolve) => (answer = resolve));
+  server.saveDraft.mockImplementationOnce(async (visitId, save) => {
+    const sentBy = server.personId;
+    await held;
+    const now = server.personId;
+    server.personId = sentBy;
+    const saved = server.save(visitId, save);
+    server.personId = now;
+    return structuredClone(saved);
+  });
+  return answer;
+}
+
+/** A submission that records who was signed in when it was sent. */
+function submitRecordingWho(sentBy: string[], lostFirst?: (lose: () => void) => void) {
+  return vi.fn(async (...args: Parameters<DraftServer["apply"]>) => {
+    sentBy.push(server.personId);
+    if (lostFirst !== undefined && sentBy.length === 1) {
+      await new Promise<void>((resolve) => lostFirst(resolve));
+      throw new TypeError("Failed to fetch");
+    }
+    return structuredClone(server.apply(...args));
+  });
+}
+
 const unsentMark = (el: TillApp, tableId: string) =>
   floor(el)!
     .shadowRoot!.querySelector(`[data-table="${tableId}"] [data-unsent]`)
@@ -1134,6 +1163,156 @@ describe("till-app: signing out while a save is out", () => {
 
     expect(api.saveDraft).toHaveBeenCalledOnce();
     expect(api.logout).toHaveBeenCalledOnce();
+  });
+});
+
+describe("till-app: a Send the session outlives", () => {
+  it("sends nothing as the next person when Send was waiting on a save at sign-out", async () => {
+    const sentBy: string[] = [];
+    const { el } = await mountApp({ submitDraft: submitRecordingWho(sentBy) });
+    await openMesa(el);
+    const answer = holdNextSave();
+    await tap(el, "Beer");
+    await act(el, "fire-all");
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+
+    emit(tableOrder(el)!, "logout");
+    await flush(el);
+    await signIn(el, "p2", "Sam");
+    answer();
+    await flush(el, 8);
+
+    expect(sentBy).toEqual([]);
+    expect(server.drafts.map((each) => [each.ownerId, each.lines.length])).toEqual([["p1", 1]]);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("does not send again as the next person a Send whose reply was lost after sign-out", async () => {
+    let lose!: () => void;
+    const sentBy: string[] = [];
+    const { el } = await mountApp({
+      submitDraft: submitRecordingWho(sentBy, (resolve) => (lose = resolve)),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+    await act(el, "fire-all");
+    expect(sentBy).toEqual(["p1"]);
+
+    emit(tableOrder(el)!, "logout");
+    await flush(el);
+    await signIn(el, "p2", "Sam");
+    const reads = api.listDrafts.mock.calls.length;
+    lose();
+    await new Promise((resolve) => setTimeout(resolve, 2 * SUBMIT_RETRY_PAUSE_MS + 50));
+    await flush(el);
+
+    expect(sentBy).toEqual(["p1"]);
+    expect(api.listDrafts.mock.calls.length).toBe(reads);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("says nothing to the next person when the read after a lost reply answers after sign-out", async () => {
+    let answer!: () => void;
+    const { el } = await mountApp({
+      submitDraft: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    await openMesa(el);
+    const read = server.listDrafts.getMockImplementation()!;
+    server.listDrafts.mockImplementationOnce(async (visitId: string) => {
+      await new Promise<void>((resolve) => (answer = resolve));
+      return read(visitId);
+    });
+    await tap(el, "Beer");
+    await act(el, "fire-all");
+    await new Promise((resolve) => setTimeout(resolve, 2 * SUBMIT_RETRY_PAUSE_MS + 50));
+    await flush(el);
+    expect(api.submitDraft).toHaveBeenCalledTimes(3);
+
+    emit(tableOrder(el)!, "logout");
+    await flush(el);
+    await signIn(el, "p2", "Sam");
+    answer();
+    await flush(el, 6);
+
+    expect(banner(el)).toBeNull();
+  });
+
+  it("says nothing to the next person when the floor read after a party changed elsewhere answers after sign-out", async () => {
+    let answer!: () => void;
+    const { el } = await mountApp({
+      submitDraft: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v1" }),
+    });
+    await openMesa(el);
+    api.getTablesState.mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => (answer = resolve));
+      return [mesa4, mesa7];
+    });
+    await tap(el, "Beer");
+    await act(el, "fire-all");
+    expect(api.submitDraft).toHaveBeenCalledOnce();
+
+    emit(tableOrder(el)!, "logout");
+    await flush(el);
+    await signIn(el, "p2", "Sam");
+    answer();
+    await flush(el, 6);
+
+    expect(banner(el)).toBeNull();
+  });
+
+  it("asks the next person nothing when the offers read after a newer menu version answers after sign-out", async () => {
+    let answer!: () => void;
+    const { el } = await mountApp({
+      submitDraft: vi.fn().mockRejectedValue({
+        code: "menu.version_changed",
+        status: 409,
+        menus: [{ menuId: "lunch", liveVersionId: "v2" }],
+      }),
+    });
+    await openMesa(el);
+    api.listZoneOffers.mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => (answer = resolve));
+      return catalogue("v2", { Beer: "6.00" });
+    });
+    await tap(el, "Beer");
+    await act(el, "fire-all");
+    expect(api.submitDraft).toHaveBeenCalledOnce();
+
+    emit(tableOrder(el)!, "logout");
+    await flush(el);
+    await signIn(el, "p2", "Sam");
+    answer();
+    await flush(el, 6);
+
+    expect(el.shadowRoot!.querySelector("till-basket-refresh-dialog")).toBeNull();
+    expect(banner(el)).toBeNull();
+    expect(api.submitDraft).toHaveBeenCalledOnce();
+  });
+
+  it("leaves the next person where they are when the reads after a Send answer after sign-out", async () => {
+    let answer!: () => void;
+    const { el } = await mountApp();
+    await openMesa(el);
+    api.getTabLines.mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => (answer = resolve));
+      return { lines: [], revision: 0, editSentLines: true };
+    });
+    await tap(el, "Beer");
+    await act(el, "fire-all");
+    expect(api.submitDraft).toHaveBeenCalledOnce();
+
+    emit(tableOrder(el)!, "logout");
+    await flush(el);
+    await signIn(el, "p2", "Sam");
+    answer();
+    await flush(el, 6);
+
+    expect(floor(el)).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { message: string }>(
+        "wt-toast[data-submitted-toast]",
+      )?.message ?? "",
+    ).toBe("");
   });
 });
 
@@ -2274,6 +2453,27 @@ describe("till-app: other people's drafts and taking one over", () => {
     refuse(new TypeError("Failed to fetch"));
     await flush(el, 6);
 
+    expect(banner(el)).toBeNull();
+  });
+
+  it("sends no take-over as the next person when Sam's take-over was waiting on his own save at sign-out", async () => {
+    const { el } = await mountApp();
+    const alex = savedBy(ALEX, "Alex", "offer-beer");
+    await openAs(el, SAM, "Sam");
+    await browsing(el);
+    const answer = holdNextSave();
+    press(el, "Flan");
+    await takeOver(el);
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+
+    emit(shell(el), "logout");
+    await flush(el);
+    await signIn(el, "p-kim", "Kim");
+    answer();
+    await flush(el, 8);
+
+    expect(api.takeOverDraft).not.toHaveBeenCalled();
+    expect(server.drafts.find((each) => each.id === alex.id)!.ownerId).toBe(ALEX);
     expect(banner(el)).toBeNull();
   });
 

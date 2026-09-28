@@ -225,7 +225,8 @@ export class DraftSync {
    * never sent over an edit the server has not got. The answer, which is the person's own draft
    * with the taken lines added when they already held one, replaces what the store shows, so the
    * store takes no edit until then. A refused take-over, or one with no answer, reads the drafts
-   * again and sends nothing more.
+   * again and sends nothing more. One still waiting on that save when the person signs out, or the
+   * sync is dropped, is not sent: the next person may have signed in by then.
    */
   async takeOver(draftId: string, revision: number): Promise<TakeOverOutcome> {
     const locked = this.store.sending;
@@ -238,7 +239,9 @@ export class DraftSync {
   }
 
   async #takeOver(draftId: string, revision: number): Promise<TakeOverOutcome> {
-    if ((await this.flush()) !== "saved") return "unsaved";
+    const saved = await this.flush();
+    if (this.#ended) return "failed";
+    if (saved !== "saved") return "unsaved";
     const read = this.#reads;
     const limit = limited(this.#options.requestLimitMs);
     let taken: Draft;
@@ -247,14 +250,14 @@ export class DraftSync {
         signal: limit.signal,
       });
     } catch (error) {
-      if (this.#dropped || read !== this.#reads) return "failed";
+      if (this.#ended || read !== this.#reads) return "failed";
       await this.load();
       const refusal = asRefusal(error);
       return refusal ?? "failed";
     } finally {
       limit.done();
     }
-    if (this.#dropped || read !== this.#reads) return "failed";
+    if (this.#ended || read !== this.#reads) return "failed";
     this.others = this.others.filter((other) => other.id !== draftId);
     this.#show(taken);
     return "taken";
@@ -271,6 +274,10 @@ export class DraftSync {
     this.#dropped = true;
     this.#cancelTimer();
     this.#unsubscribe();
+  }
+
+  get #ended(): boolean {
+    return this.#closed || this.#dropped;
   }
 
   #onChange(): void {
