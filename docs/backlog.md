@@ -3435,7 +3435,7 @@ ongoing overhaul listed at the top of Track A.
   (`apps/dashboard/src/widgets/purchase-form.ts`), a `rem` the design-token rule forbids; it
   predates this change.
 
-- **Every dashboard list shown with `wt-data-table` lets each person choose its columns (C45, owner
+- **Every dashboard list shown with `wt-data-table` lets each person choose its columns (C45, #834, owner
   request 2026-09-28).** The main list on the products, staff, categories, labels, units, modifiers,
   sections, menus, printers (agents, printers and print queue), card readers, alerts (open and
   handled), adjustment reasons and venue operations (departments, hours, zones, zone menus, routes)
