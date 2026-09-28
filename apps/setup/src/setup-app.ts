@@ -1,7 +1,8 @@
 import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { baseStyles } from "@waitron/ui";
-import "@waitron/ui/src/components/wt-modal.js";
+import waitronLockup from "../../../packages/ui/brand/waitron-lockup.svg?raw";
 import "./screens/role-screen.js";
 import "./screens/connection-screen.js";
 import "./screens/connect-screen.js";
@@ -274,6 +275,32 @@ export class SetupApp extends LitElement {
     css`
       :host {
         display: block;
+      }
+
+      main {
+        box-sizing: border-box;
+        width: min(calc(var(--wt-space-6) * 22), calc(100% - 2 * var(--wt-modal-inline-margin)));
+        margin: var(--wt-space-5) auto;
+        padding: var(--wt-space-5) var(--wt-modal-inline-padding);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-lg);
+        background: var(--wt-color-surface-raised);
+      }
+
+      .logo svg {
+        display: block;
+        width: calc(var(--wt-space-6) * 5);
+        height: auto;
+      }
+
+      /* The brand file paints fixed light-theme ink, which an <img> could not change; inlined, its
+         two groups (the waiter, then the word) follow the theme. */
+      .logo svg > g:first-of-type {
+        fill: var(--wt-color-primary);
+      }
+
+      .logo svg > g:last-of-type {
+        fill: var(--wt-color-text);
       }
     `,
   ];
@@ -937,10 +964,7 @@ export class SetupApp extends LitElement {
 
   override render(): TemplateResult {
     // Listening on the container lets each screen talk back without the shell knowing which is mounted.
-    return html`<wt-modal
-      open
-      .dismissible=${false}
-      aria-label="Set up your server"
+    return html`<main
       @setup-defaults-requested=${(event: CustomEvent) => {
         event.stopPropagation();
         void this.#loadVenueDefaults();
@@ -961,8 +985,13 @@ export class SetupApp extends LitElement {
       @reset-requested=${(e: CustomEvent<{ credential: ResetCredential }>) =>
         void this.#onResetRequested(e)}
     >
+      <header>
+        <div class="logo" data-test="setup-logo" role="img" aria-label="Waitron">
+          ${unsafeHTML(waitronLockup)}
+        </div>
+      </header>
       ${this.#renderScreen()}
-    </wt-modal>`;
+    </main>`;
   }
 
   #renderScreen(): TemplateResult {

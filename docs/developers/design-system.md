@@ -377,11 +377,7 @@ query cannot read a custom property, and the no-hardcoded-chrome guard
 `packages/ui` primitive. Unlike `wt-dialog`, it is not held to 90% of the viewport. The body scrolls
 independently, so your footer actions stay visible. It uses the raised surface and shadow tokens:
 white in the light theme, with the matching dark surface in the dark theme. Put `wt-form-actions` in
-its `footer` slot to keep Cancel on the left and Save on the right. The one standing exception is
-the setup wizard, which uses a non-dismissible `wt-modal` as its whole page and keeps Back and Next
-in the scrolling body (#347: a wizard that Escape could dismiss would leave the operator on an empty
-page with no way back, and moving Back and Next into the footer would mean every screen handing its
-actions up to the shell):
+its `footer` slot to keep Cancel on the left and Save on the right:
 
 ```html
 <wt-modal heading="Add printer">
@@ -392,6 +388,9 @@ actions up to the shell):
   </wt-form-actions>
 </wt-modal>
 ```
+
+The setup wizard is not a modal: its screens sit in a raised column centred on the page, with the
+Waitron logo at the top of every screen (owner decision 2026-09-28, C39).
 
 **A page with a persistent view and one reused `wt-modal` for every edit action** (a settings-style
 screen editing itself, as opposed to a list opening a modal per row) has one more thing to get

@@ -52,8 +52,8 @@ describe("SetupConfigurationPreviewScreen", () => {
     expect((goto.mock.calls[0]![0] as CustomEvent).detail.screen).toBe("admin");
   });
 
-  it("sits directly on the wizard's modal rather than in a card of its own", async () => {
-    // The modal paints the same surface a raised card does, so a screen-wide card inside it shows
+  it("sits directly on the wizard's page rather than in a card of its own", async () => {
+    // The page paints the same surface a raised card does, so a screen-wide card inside it shows
     // only as a border and a shadow on an identical background. Cards on the other wizard screens
     // are choice tiles; this screen has no choices.
     const { el } = await mountWidget<SetupConfigurationPreviewScreen>(
