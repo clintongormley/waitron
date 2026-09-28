@@ -391,13 +391,25 @@ describe("venue operations screen", () => {
     expect(text).toContain("Create an active department");
     expect(text).toContain("Dining room needs an active department");
     expect(text).toContain("Deli counter needs a default menu");
-    expect(text).toContain("Terrace needs a published menu");
+    expect(text).toContain("Terrace needs an active, published menu");
     expect(text).toContain("Casa Delgado has no products for Dining room");
     await selectTab(el, "routing");
     expect(tableText(el, "preparation-routes")).toContain("All service zones");
     expect(tableText(el, "preparation-routes")).toContain("No preparation");
     expect(tableText(el, "preparation-routes")).toContain("Negroni");
     expect(tableText(el, "preparation-routes")).toContain("Bar");
+  });
+
+  it("asks in Spanish for an active, published menu for a zone with none", async () => {
+    setLocale("es");
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        readiness: [{ code: "zone.menu_unpublished", zoneId: "z3", zoneName: "Terraza" }],
+      }),
+    } as unknown as VenueServiceApi);
+    const text = el.shadowRoot!.querySelector('[data-test="readiness"]')!.textContent!;
+    expect(text).toContain("Terraza necesita una carta activa y publicada.");
   });
 
   it("removes a preparation route from the shared data table", async () => {
