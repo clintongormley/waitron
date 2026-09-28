@@ -761,6 +761,16 @@ describe("WorkingOrderStore.addMerging (D10)", () => {
     expect(rows(s)).toEqual(["burger ×1", "burger ×1"]);
   });
 
+  it.each([
+    ["not offered", { notOffered: true as const }],
+    ["blocked", { blocked: "unavailable" as const }],
+  ])("never adds into a line marked %s", (_mark, mark) => {
+    const s = new WorkingOrderStore();
+    s.loadFrom("draft", [{ product: burger, quantity: "1", ...mark }]);
+    s.addMerging(burger, "1");
+    expect(rows(s)).toEqual(["burger ×1", "burger ×1"]);
+  });
+
   it("never merges a fractional quantity", () => {
     const s = new WorkingOrderStore();
     s.addMerging(fish, "0.5");

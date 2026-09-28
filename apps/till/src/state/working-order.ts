@@ -51,8 +51,9 @@ export interface LineSelection {
   extras?: SelectedExtra[];
   options?: OptionSelection[];
   optionSnapshots?: OptionSnapshot[];
-  /** Read by {@link WorkingOrderStore.addProduct} alone; {@link WorkingOrderStore.setLineExtras} owns
-   * a line's note after that. */
+  /** Read when a line is created ({@link WorkingOrderStore.addProduct},
+   * {@link WorkingOrderStore.addMerging}); {@link WorkingOrderStore.setLineExtras} owns a line's note
+   * after that. */
   note?: string;
 }
 
@@ -262,12 +263,16 @@ export class WorkingOrderStore {
 
   /**
    * As {@link addProduct}, except that a line ordering the same thing as an earlier one (the draft
-   * merge rule, D10) adds its quantity to the first such line, which keeps its place.
+   * merge rule, D10) adds its quantity to the first such line, which keeps its place. A line marked
+   * not offered or blocked takes nothing, so a fresh tap never joins a line that cannot be sent.
    */
   addMerging(product: TillProduct, quantity: string, selection?: LineSelection): void {
     if (this.#sending) return;
     const line = newLine(product, quantity, selection);
-    const into = this.#lines.find((kept) => orderLinesMerge(kept, line));
+    const into = this.#lines.find(
+      (kept) =>
+        kept.notOffered === undefined && kept.blocked === undefined && orderLinesMerge(kept, line),
+    );
     if (into === undefined) this.#lines.push(line);
     else into.quantity = addDecimal(decimal(into.quantity), decimal(quantity));
     this.#changedLines();

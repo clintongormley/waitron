@@ -17,6 +17,7 @@ const REASON_WORDS: Record<BlockReason, StringKey> = {
   unavailable: "basket_refresh.unavailable",
   extra_unavailable: "basket_refresh.unavailable",
   extra_removed: "basket_refresh.extra_removed",
+  unit_changed: "basket_refresh.unit_changed",
 };
 
 /**

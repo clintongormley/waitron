@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { fromDraftLine, orderLinesMerge, toDraftLineInput } from "./draft-lines.js";
 import { productAsVariant } from "./order-line.js";
-import type { OrderLine } from "./working-order.js";
+import { WorkingOrderStore, type OrderLine } from "./working-order.js";
 import {
   menuOfferToTillProduct,
   type DraftLine,
@@ -343,6 +343,57 @@ describe("fromDraftLine", () => {
 
     expect(rebuilt.extras?.[0]?.name).toBe("p-cheese staff");
     expect(rebuilt.optionSnapshots?.[0]?.labelName).toEqual({ en: "rare staff" });
+  });
+});
+
+describe("fromDraftLine: a saved quantity the offered unit cannot hold", () => {
+  const preview = (line: OrderLine) => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("draft-1", [line]);
+    return { vatBreakdown: store.vatBreakdown, total: store.total };
+  };
+
+  it("keeps a weighed dish no longer offered at its exact quantity, and the preview reads it", () => {
+    const input = toDraftLineInput({
+      product: menuOfferToTillProduct(fish, VERSION),
+      quantity: "0.350",
+    });
+    const rebuilt = fromDraftLine(saved(input, "0.350"), new Map());
+
+    expect(() => preview(rebuilt)).not.toThrow();
+    expect(preview(rebuilt).total).toBe("0.00");
+    expect(rebuilt.quantity).toBe("0.35");
+    expect(toDraftLineInput(rebuilt)).toEqual({ ...input, quantity: "0.35" });
+  });
+
+  it("keeps a dish no longer offered at a whole quantity, and the preview reads it", () => {
+    const rebuilt = fromDraftLine(saved(toDraftLineInput(burgerLine()), "2.000"), new Map());
+    expect(rebuilt.quantity).toBe("2");
+    expect(rebuilt.product.unit?.precision).toBe(3);
+    expect(preview(rebuilt).total).toBe("0.00");
+  });
+
+  it("never trims the zeros of a whole quantity written without places", () => {
+    const rebuilt = fromDraftLine(saved(toDraftLineInput(burgerLine()), "30"), new Map());
+    expect(rebuilt.quantity).toBe("30");
+    expect(rebuilt.blocked).toBe("removed");
+  });
+
+  it("keeps an offered dish whose unit now takes fewer places, marked, and the preview reads it", () => {
+    const input = { ...toDraftLineInput(burgerLine()), quantity: "0.500" };
+    const rebuilt = fromDraftLine(saved(input, "0.500"), offers);
+
+    expect(() => preview(rebuilt)).not.toThrow();
+    expect(preview(rebuilt).total).toBe("9.25");
+    expect(rebuilt.quantity).toBe("0.500");
+    expect(rebuilt.blocked).toBe("unit_changed");
+    expect(toDraftLineInput(rebuilt)).toEqual(input);
+  });
+
+  it("leaves an offered line that fits its unit unmarked", () => {
+    const rebuilt = fromDraftLine(saved(toDraftLineInput(burgerLine()), "2.000"), offers);
+    expect(rebuilt.blocked).toBeUndefined();
+    expect(rebuilt.product.unit?.precision).toBe(0);
   });
 });
 

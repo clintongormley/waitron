@@ -7,7 +7,12 @@ import type { OrderLine } from "./working-order.js";
 
 /** Why a basket line cannot be paid as it stands (D9). */
 export type BlockReason =
-  "removed" | "unavailable" | "variant_removed" | "extra_removed" | "extra_unavailable";
+  | "removed"
+  | "unavailable"
+  | "variant_removed"
+  | "extra_removed"
+  | "extra_unavailable"
+  | "unit_changed";
 
 export interface LineBlock {
   reason: BlockReason;

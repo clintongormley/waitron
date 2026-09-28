@@ -35,6 +35,7 @@ const BLOCKED_WORDS: Record<BlockReason, StringKey> = {
   unavailable: "basket.blocked.unavailable",
   extra_removed: "basket.blocked.extra",
   extra_unavailable: "basket.blocked.extra",
+  unit_changed: "basket.blocked.unit",
 };
 
 /** A line a menu change stops being paid until it is removed or replaced (D9). */
