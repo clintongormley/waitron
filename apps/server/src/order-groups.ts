@@ -155,12 +155,13 @@ export async function placeGroups(
     throw new AppError("sale.empty_basket", {});
   }
   const { tabId } = round;
-  const addedLater = input.addedLater ?? (await visitHasGroup(tx, visitId));
   const groupIds: string[] = [];
-  for (const group of input.groups) {
-    groupIds.push(
-      input.joinGroupId ?? (await startGroup(tx, visitId, group.release, operatorId, addedLater)),
-    );
+  if (input.joinGroupId !== undefined) groupIds.push(input.joinGroupId);
+  else {
+    const addedLater = input.addedLater ?? (await visitHasGroup(tx, visitId));
+    for (const group of input.groups) {
+      groupIds.push(await startGroup(tx, visitId, group.release, operatorId, addedLater));
+    }
   }
   // The k-th parent row is input line k; an extras child goes with its dish.
   const groupOfLine = input.groups.flatMap((group, i) => group.lines.map(() => groupIds[i]!));
@@ -981,7 +982,7 @@ export interface CurrentOrderGroup {
   firedAt: string | null;
   /** A snooze's time, until the group fires, empties or moves in a reorder. */
   remindAt: string | null;
-  /** Recorded when the group was started: the party already had a group (`order_groups.added_later`). */
+  /** Recorded when the group was started (`order_groups.added_later`). */
   addedLater: boolean;
   rows: CurrentOrderRow[];
 }

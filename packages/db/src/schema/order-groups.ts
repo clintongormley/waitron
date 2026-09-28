@@ -39,7 +39,7 @@ export const orderGroups = table(
     remindAt: tsString("remind_at"),
     // When this group's advance HOLD ticket was queued for a printer; null if none was.
     holdPrintedAt: tsString("hold_printed_at"),
-    // A later addition (spec §4): the party already had a group when this one was submitted.
+    // A later addition to the party's order (spec §4).
     addedLater: flag("added_later").notNull().default(false),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },

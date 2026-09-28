@@ -301,7 +301,9 @@ export async function submitDraft(
         }),
         joinGroupId,
         operatorId,
-        addedLater: await startedAfterAGroup(tx, visitId, draft.createdAt),
+        ...(joinGroupId === undefined
+          ? { addedLater: await startedAfterAGroup(tx, visitId, draft.createdAt) }
+          : {}),
       });
       const emptied = named.size === lines.length;
       await tx.delete(orderDraftLines).where(inArray(orderDraftLines.id, [...named]));
