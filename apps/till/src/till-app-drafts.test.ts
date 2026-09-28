@@ -1279,3 +1279,88 @@ describe("till-app: a later addition is decided from the table's own groups", ()
     ).not.toBeNull();
   });
 });
+
+describe("till-app: a table open that another overtakes", () => {
+  const beerLine = {
+    menuItemId: "offer-beer",
+    variantId: null,
+    menuVersionId: "v1",
+    options: [],
+    extras: [],
+    note: null,
+    quantity: "1",
+    courseId: null,
+    noMerge: false,
+  };
+
+  it("keeps the next table's draft on screen when an earlier table's read answers late", async () => {
+    const sideBySide: CanvasDef = {
+      formFactor: "till",
+      tabs: [
+        drillCanvas.tabs[0]!,
+        {
+          key: "service",
+          title: "Service",
+          columns: 24,
+          cards: [
+            { type: "floor-plan", colSpan: 12, rowSpan: 12, config: {} },
+            { type: "table-order", colSpan: 12, rowSpan: 12, config: {} },
+          ],
+        },
+      ],
+    };
+    let answerMesa7!: () => void;
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(till(sideBySide)),
+      listDrafts: vi.fn(async (visitId: string) => {
+        if (visitId === "v7") await new Promise<void>((resolve) => (answerMesa7 = resolve));
+        return server.listDrafts(visitId);
+      }),
+    });
+    server.save("v1", { draftId: null, revision: 0, lines: [beerLine] });
+    await flush(el);
+    await signIn(el);
+    emit(shell(el), "tab-select", { key: "service" });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+
+    answerMesa7();
+    await flush(el);
+
+    expect(browser(el)).not.toBeNull();
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("gives no one the draft of a table opened by someone who has since signed out", async () => {
+    let answerOffers!: () => void;
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(till(orderTabCanvas)),
+      listZoneOffers: vi.fn(async () => {
+        await new Promise<void>((resolve) => (answerOffers = resolve));
+        return catalogue("v1");
+      }),
+    });
+    server.save("v1", { draftId: null, revision: 0, lines: [beerLine] });
+    await flush(el);
+    await signIn(el);
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "logout");
+    await flush(el);
+    answerOffers();
+    await flush(el);
+    await signIn(el, "p2", "Sam");
+    emit(shell(el), "tab-select", { key: "order" });
+    await flush(el);
+
+    expect(browser(el)?.store.lines ?? []).toEqual([]);
+  });
+});

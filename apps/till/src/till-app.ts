@@ -173,6 +173,10 @@ export const SUBMIT_RETRY_PAUSE_MS = 500;
  */
 type DraftFollowUp = "read-tab" | "find-tab" | "mark-sold-out" | { landedOn: string } | undefined;
 
+/** A draft opened for the order: `sync` is undefined for an order with no party, and `read` false
+ * when its read failed. Undefined when the operator session it was opened in has ended. */
+type OpenedDraft = { sync: DraftSync | undefined; read: boolean } | undefined;
+
 /**
  * Sale refusals a retry can never clear: the same basket files the same refused record. Every handler
  * whose server call reaches `recordSale` checks them. The settle paths show `sale.refused`, because
@@ -2234,6 +2238,7 @@ export class TillApp extends LitElement {
     guestCount: number | null | undefined,
     offerRequest: number,
   ): Promise<void> {
+    const session = this.#operatorSession;
     const table = this.tables.find((candidate) => candidate.id === tableId);
     if (table?.zoneId !== null && table?.zoneId !== undefined) {
       try {
@@ -2264,8 +2269,11 @@ export class TillApp extends LitElement {
     if (guestCount === undefined) {
       this.activeTabId = table?.tabId;
       this.orderParty = table?.visit ?? null;
-      const [, read] = await Promise.all([this.#loadLinesAndBills(), this.#openDraft()]);
-      this.#showDraft(read);
+      const [, opened] = await Promise.all([
+        this.#loadLinesAndBills(),
+        this.#openDraft(true, session),
+      ]);
+      this.#showDraft(opened);
     } else {
       try {
         const { tabId, visitId, revision } = await this.api.seatTable(tableId, guestCount);
@@ -2280,8 +2288,7 @@ export class TillApp extends LitElement {
           tableIds: [tableId],
           unsentDrafts: [],
         };
-        await this.#openDraft(false);
-        this.#showDraft(true);
+        this.#showDraft(await this.#openDraft(false, session));
       } catch (error) {
         this.errorKey = tableWriteError(error);
         await this.#refreshFloor();
@@ -2437,13 +2444,15 @@ export class TillApp extends LitElement {
     return this.#draftReady && sync?.visitId === this.orderParty.id ? sync.store : null;
   }
 
-  /** Starts the person's draft on the order's party, read from the server unless `read` is false;
-   * false when the read failed. The screen shows it only once {@link #showDraft} says so. */
-  async #openDraft(read = true): Promise<boolean> {
+  /** Starts the person's draft on the order's party, read from the server unless `read` is false.
+   * The screen shows it only once {@link #showDraft} says so. Nothing is started for a table opened
+   * in an operator session that has since ended. */
+  async #openDraft(read: boolean, session: number): Promise<OpenedDraft> {
     this.#dropDraft();
     this.#partylessDraft = new WorkingOrderStore();
+    if (session !== this.#operatorSession) return undefined;
     const party = this.orderParty;
-    if (party === null) return true;
+    if (party === null) return { sync: undefined, read: true };
     const sync: DraftSync = new DraftSync({
       api: this.api,
       visitId: party.id,
@@ -2453,14 +2462,16 @@ export class TillApp extends LitElement {
       requestLimitMs: TABLE_REQUEST_LIMIT_MS,
     });
     this.#draftSync = sync;
-    return read ? sync.load() : true;
+    return { sync, read: read ? await sync.load() : true };
   }
 
-  /** A draft that could not be read is not shown, so an empty one never stands in for it. */
-  #showDraft(read: boolean): void {
-    this.#draftReady = read;
+  /** A draft that could not be read is not shown, so an empty one never stands in for it. A draft
+   * another open has since replaced is left alone. */
+  #showDraft(opened: OpenedDraft): void {
+    if (opened === undefined || opened.sync !== this.#draftSync) return;
+    this.#draftReady = opened.read;
     this.requestUpdate();
-    if (!read) this.errorKey = "table.draft_read_failed";
+    if (!opened.read) this.errorKey = "table.draft_read_failed";
   }
 
   #dropDraft(): void {
@@ -2481,9 +2492,10 @@ export class TillApp extends LitElement {
   #followPartyDraft(): void {
     const sync = this.#draftSync;
     if (sync === undefined || sync.visitId === this.orderParty?.id) return;
+    const session = this.#operatorSession;
     void this.#flushDraft().then(async () => {
       if (this.#draftSync !== sync) return;
-      this.#showDraft(await this.#openDraft());
+      this.#showDraft(await this.#openDraft(true, session));
     });
   }
 
