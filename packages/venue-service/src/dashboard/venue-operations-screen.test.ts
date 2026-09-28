@@ -82,6 +82,7 @@ const model: VenueServiceView = {
   settings: { editSentLines: true },
   kitchenTicketGrouping: "combined",
   printHeldWork: false,
+  releaseReminderMinutes: 10,
 };
 
 async function mount(api: VenueServiceApi): Promise<VenueOperationsScreen> {
@@ -1363,5 +1364,134 @@ describe("the setting that prints held groups in advance", () => {
     expect(
       el.shadowRoot!.querySelector('[data-test="print-held-work-hint"]')!.textContent,
     ).toContain("marcada HOLD");
+  });
+});
+
+describe("the setting for the reminder to fire the next group", () => {
+  function reminderSelect(el: VenueOperationsScreen) {
+    const select = el.shadowRoot!.querySelector<HTMLSelectElement>(
+      'select[name="releaseReminderMinutes"]',
+    )!;
+    expect(select).not.toBeNull();
+    return select;
+  }
+  function beside(el: VenueOperationsScreen) {
+    return el
+      .shadowRoot!.querySelector('[data-field-error="releaseReminderMinutes"]')
+      ?.textContent?.trim();
+  }
+  function stored(releaseReminderMinutes: number | null): VenueServiceView {
+    return { ...structuredClone(model), releaseReminderMinutes };
+  }
+  async function choose(el: VenueOperationsScreen, value: string) {
+    const select = reminderSelect(el);
+    select.value = value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await settle(el);
+  }
+
+  // Fails if the select stops reading the stored value, leaves the kitchen changes section, or
+  // loses its label, choices or hint.
+  it("shows the stored value on the Preparation routing tab, ten minutes by default", async () => {
+    const ten = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    await selectTab(ten, "routing");
+    const select = reminderSelect(ten);
+    expect(select.closest('[data-test="kitchen-changes"]')).not.toBeNull();
+    expect(select.labels![0]!.textContent).toContain("Reminder to fire the next group");
+    expect([...select.options].map((option) => [option.value, option.textContent!.trim()])).toEqual(
+      [
+        ["", "Off"],
+        ["5", "5 minutes"],
+        ["10", "10 minutes"],
+        ["15", "15 minutes"],
+        ["20", "20 minutes"],
+        ["30", "30 minutes"],
+      ],
+    );
+    expect(select.value).toBe("10");
+    expect(
+      ten.shadowRoot!.querySelector('[data-test="release-reminder-hint"]')!.textContent,
+    ).toContain("marked served");
+    const off = await mount({
+      load: vi.fn().mockResolvedValue(stored(null)),
+    } as unknown as VenueServiceApi);
+    expect(reminderSelect(off).value).toBe("");
+  });
+
+  // Fails if a stored value outside the list reads as another choice.
+  it("keeps a stored value the list does not offer", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(stored(45)),
+    } as unknown as VenueServiceApi);
+    const select = reminderSelect(el);
+    expect(select.value).toBe("45");
+    expect(select.selectedOptions[0]!.textContent!.trim()).toBe("45 minutes");
+  });
+
+  // Fails if the select sends the old value, a string rather than a number, or stays usable mid-save.
+  it("saves the chosen minutes straight away, or none for Off, and is disabled until the save finishes", async () => {
+    let finish!: () => void;
+    const api = {
+      load: vi
+        .fn()
+        .mockResolvedValueOnce(model)
+        .mockResolvedValueOnce(stored(20))
+        .mockResolvedValue(stored(null)),
+      saveReleaseReminderMinutes: vi
+        .fn()
+        .mockImplementationOnce(() => new Promise<void>((resolve) => (finish = resolve)))
+        .mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "routing");
+    await choose(el, "20");
+    expect(api.saveReleaseReminderMinutes).toHaveBeenCalledWith(20);
+    expect(reminderSelect(el).disabled).toBe(true);
+    finish();
+    await settle(el);
+    expect(reminderSelect(el).value).toBe("20");
+    expect(reminderSelect(el).disabled).toBe(false);
+    await choose(el, "");
+    expect(api.saveReleaseReminderMinutes).toHaveBeenLastCalledWith(null);
+    expect(api.load).toHaveBeenCalledTimes(3);
+    expect(reminderSelect(el).value).toBe("");
+    expect(summary(el)).toBe("");
+  });
+
+  // Fails if a refused save leaves the select showing the value that was never stored, or says
+  // nothing.
+  it("says a refused save failed, beside the select and in the summary, and shows the stored value again", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      saveReleaseReminderMinutes: vi.fn().mockRejectedValue(new Error("refused")),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "routing");
+    await choose(el, "5");
+    expect(api.saveReleaseReminderMinutes).toHaveBeenCalledWith(5);
+    expect(summary(el)).toContain("could not be saved");
+    expect(beside(el)).toContain("could not be saved");
+    expect(reminderSelect(el).value).toBe("10");
+    expect(reminderSelect(el).getAttribute("aria-invalid")).toBe("true");
+  });
+
+  // Fails if the Spanish catalogue loses the label or a choice.
+  it("reads in Spanish", async () => {
+    setLocale("es");
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const select = reminderSelect(el);
+    expect(select.labels![0]!.textContent).toContain("Aviso para marchar el siguiente grupo");
+    expect([...select.options].map((option) => option.textContent!.trim())).toEqual([
+      "Desactivado",
+      "5 minutos",
+      "10 minutos",
+      "15 minutos",
+      "20 minutos",
+      "30 minutos",
+    ]);
   });
 });

@@ -87,6 +87,31 @@ describe("VenueServiceApi", () => {
     ]);
   });
 
+  it("stores the release reminder's minutes, or none for off", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+    await api.saveReleaseReminderMinutes(15);
+    await api.saveReleaseReminderMinutes(null);
+    expect(
+      fetchImpl.mock.calls.map(([path, init]) => [
+        path,
+        init.method,
+        JSON.parse(init.body as string),
+      ]),
+    ).toEqual([
+      [
+        "/management-api/venue-service/settings/release-reminder-minutes",
+        "PUT",
+        { releaseReminderMinutes: 15 },
+      ],
+      [
+        "/management-api/venue-service/settings/release-reminder-minutes",
+        "PUT",
+        { releaseReminderMinutes: null },
+      ],
+    ]);
+  });
+
   it("loads the service model and its authoring choices", async () => {
     const fetchImpl = vi
       .fn()
