@@ -391,7 +391,7 @@ describe("venue operations screen", () => {
     expect(text).toContain("Create an active department");
     expect(text).toContain("Dining room needs an active department");
     expect(text).toContain("Deli counter needs a default menu");
-    expect(text).toContain("Terrace needs a published menu");
+    expect(text).toContain("Terrace needs an active, published menu");
     expect(text).toContain("Casa Delgado has no products for Dining room");
     await selectTab(el, "routing");
     expect(tableText(el, "preparation-routes")).toContain("All service zones");

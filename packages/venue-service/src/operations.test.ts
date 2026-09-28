@@ -15,6 +15,7 @@ import {
   addProductToMenu,
   createProduct,
   createSection,
+  deactivateCatalogue,
   menuDocumentHash,
   publishMenu,
   readMenuStructure,
@@ -2017,6 +2018,57 @@ describe("zone offers from the published menus", () => {
       await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([]);
       // The bar sells All day alone; the dining room still has Dinner in the current format.
       await liveInEarlierFormat(tx, venue.menuId, venue.versionId);
+      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([
+        { code: "zone.menu_unpublished", zoneId: venue.barZone, zoneName: "Bar" },
+      ]);
+    });
+  });
+
+  it("sells nothing from a published menu once it is deactivated, and keeps selling an active one beside it", async () => {
+    const venue = await seedTwoMenuVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      await deactivateCatalogue(tx, venue.menuId);
+
+      const dining = await listZoneOffers(tx, cfg, venue.diningZone);
+      expect(dining.defaultMenuId).toBe(venue.dinner);
+      expect(dining.menus.map((menu) => menu.id)).toEqual([venue.dinner]);
+      expect(dining.offers.map((offer) => offer.id)).toEqual([
+        venue.lemonadeOffer,
+        venue.burgerOffer,
+      ]);
+      expect((await menuState(tx, venue.diningZone)).menus.map(stateVersionOf)).toEqual([
+        { menuId: venue.dinner, versionId: venue.dinnerVersionId },
+      ]);
+      await expect(
+        rejection(
+          listZoneOffers(tx, cfg, venue.diningZone, {
+            asserted: [{ menuId: venue.menuId, versionId: venue.versionId }],
+          }),
+        ),
+      ).resolves.toEqual({
+        code: "menu.version_changed",
+        params: { menus: [{ menuId: venue.menuId, liveVersionId: null }] },
+      });
+
+      // The bar sells All day alone.
+      await expect(listZoneOffers(tx, cfg, venue.barZone)).resolves.toEqual({
+        defaultMenuId: null,
+        menus: [],
+        offers: [],
+      });
+    });
+  });
+
+  it("reports a zone whose only published menu is deactivated", async () => {
+    const venue = await seedTwoMenuVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      for (const productId of [venue.productId, venue.lemonade, venue.burger])
+        await createPreparationRoute(tx, cfg, { productId, target: { kind: "no_preparation" } });
+      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([]);
+      // The bar sells All day alone; the dining room still has Dinner, which stays active.
+      await deactivateCatalogue(tx, venue.menuId);
       await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([
         { code: "zone.menu_unpublished", zoneId: venue.barZone, zoneName: "Bar" },
       ]);

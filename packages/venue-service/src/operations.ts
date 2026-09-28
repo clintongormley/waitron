@@ -323,7 +323,7 @@ export async function listVenueReadiness(
   const menusOf = await zoneMenuIdsByZone(tx, cfg);
   const live = await readLiveDocuments(tx, [...new Set([...menusOf.values()].flat())]);
   for (const zone of ready) {
-    const published = menusOf.get(zone.id)!.flatMap((menuId) => {
+    const published = (menusOf.get(zone.id) ?? []).flatMap((menuId) => {
       const version = live.get(menuId);
       return version === undefined ? [] : [{ menuId, offers: documentOffers(version.document) }];
     });
@@ -479,14 +479,15 @@ export async function resolveZoneContext(
   };
 }
 
-/** The menus each of the venue's zones may sell from, in each zone's order. */
+/** The active menus each of the venue's zones may sell from, in each zone's order. */
 async function zoneMenuIdsByZone(tx: Transaction, cfg: VenueScope): Promise<Map<string, string[]>> {
   const byZone = new Map<string, string[]>();
   for (const row of await tx
     .select({ zoneId: zoneMenus.zoneId, menuId: zoneMenus.menuId })
     .from(zoneMenus)
     .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneMenus.zoneId))
-    .where(eq(zoneServicePolicies.locationId, cfg.locationId))
+    .innerJoin(catalogues, eq(catalogues.id, zoneMenus.menuId))
+    .where(and(eq(zoneServicePolicies.locationId, cfg.locationId), eq(catalogues.active, true)))
     .orderBy(zoneMenus.displayOrder, zoneMenus.menuId)) {
     const menus = byZone.get(row.zoneId);
     if (menus === undefined) byZone.set(row.zoneId, [row.menuId]);
@@ -495,19 +496,21 @@ async function zoneMenuIdsByZone(tx: Transaction, cfg: VenueScope): Promise<Map<
   return byZone;
 }
 
-/** The menus a zone may sell from, in the zone's order. */
+/** The active menus a zone may sell from, in the zone's order. */
 async function zoneMenuIds(tx: Transaction, zoneId: string): Promise<string[]> {
   const rows = await tx
     .select({ id: zoneMenus.menuId })
     .from(zoneMenus)
-    .where(eq(zoneMenus.zoneId, zoneId))
+    .innerJoin(catalogues, eq(catalogues.id, zoneMenus.menuId))
+    .where(and(eq(zoneMenus.zoneId, zoneId), eq(catalogues.active, true)))
     .orderBy(zoneMenus.displayOrder, zoneMenus.menuId);
   return rows.map((row) => row.id);
 }
 
 /**
- * The zone's published menus, in the zone's order, each with its live version and document, once
- * every `asserted` version is the live version of one of the zone's menus (`menu.version_changed`).
+ * The zone's active, published menus, in the zone's order, each with its live version and
+ * document, once every `asserted` version is the live version of one of the zone's active menus
+ * (`menu.version_changed`).
  */
 async function zoneLiveDocuments(
   tx: Transaction,
@@ -525,11 +528,11 @@ async function zoneLiveDocuments(
 /**
  * What the zone sells: each published menu's live version, with the current availability put back
  * (an unavailable offer is served marked, in its place), and that version's structure and home
- * layouts. A menu with no live version is left out, and an unpublished default gives way to the
- * zone's first published menu. Refused `menu.version_changed` unless every `asserted` version is the
- * live version of one of the zone's menus. With `menuItemIds`, only the offers it names are served;
- * the menus are all listed. Each menu's `homeLayoutId` is resolved against its live version
- * (`resolveDeviceHomeLayouts`).
+ * layouts. An inactive menu, or one with no live version, is left out, and a default that is
+ * inactive or unpublished gives way to the zone's first menu that is served. Refused
+ * `menu.version_changed` unless every `asserted` version is the live version of one of the zone's
+ * active menus. With `menuItemIds`, only the offers it names are served; the menus are all listed. Each
+ * menu's `homeLayoutId` is resolved against its live version (`resolveDeviceHomeLayouts`).
  */
 export async function listZoneOffers(
   tx: Transaction,
