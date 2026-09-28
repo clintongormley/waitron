@@ -53,6 +53,7 @@ import {
   addTabRound,
   markGroupServed,
   markServed,
+  recallLines,
   splitOffCheck,
   unmarkServed,
   updateOrderLine,
@@ -729,6 +730,30 @@ describe("refusals, each writing nothing", () => {
       s.visitId,
       () => serve(v, s.visitId, [{ lineId: croq.id, quantity: "1" }]),
       { code: "group.line_held", params: { tabId: s.tabId, lineNo: croq.lineNo } },
+    );
+  });
+
+  it("refuses a line of a fired group that was recalled from the kitchen, one by one or the whole group (group.line_held)", async () => {
+    const v = await setupVenue();
+    const s = await croquetas(v);
+    await inTx((tx) => recallLines(tx, v.cfg, s.tabId, [s.croq.lineNo]));
+    const [ticket] = await suite.db
+      .select({ firedAt: ticketItems.firedAt, sentAt: workingOrderLines.sentAt })
+      .from(ticketItems)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(ticketItems.workingOrderLineId, s.croq.id));
+    expect(ticket).toEqual({ firedAt: null, sentAt: expect.any(String) });
+
+    const refusal = { code: "group.line_held", params: { tabId: s.tabId, lineNo: s.croq.lineNo } };
+    await expectRefusedWithNothingWritten(
+      s.visitId,
+      () => serve(v, s.visitId, [{ lineId: s.croq.id, quantity: "1" }]),
+      refusal,
+    );
+    await expectRefusedWithNothingWritten(
+      s.visitId,
+      () => serveGroup(v, s.visitId, s.groupId),
+      refusal,
     );
   });
 
