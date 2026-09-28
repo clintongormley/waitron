@@ -99,6 +99,13 @@ What still needs a person:
   and opens a new one, and
   `content/code-security/how-tos/secure-your-supply-chain/manage-your-dependency-security/controlling-dependencies-updated.md`
   (line 117, read 2026-09-27) says reopening the PR also un-ignores it.
+- **An alert whose fixed version no allowed release of its parent accepts gets no Dependabot
+  PR.** Its security-update job fails with `security_update_not_possible`, as the `qs` one did on
+  2026-09-27: `typed-rest-client` 2.3.1 pins `qs` 6.15.1 exactly, and `@stryker-mutator/core`
+  allows only `typed-rest-client` `~2.3.0`, while `typed-rest-client` 3.1.2 declares `qs`
+  `^6.16.0`. Fix it with a root `pnpm.overrides` entry scoped to that parent (`parent>child`), after
+  running the parent's code that uses the child on both versions, as the 2026-09-28 security-alert
+  fix did; receipts: [backlog.md](../backlog.md) → B9, the Dependabot entry.
 
 **Do not merge a PR automatically — wait for the user's approval.** Invoking `/land-branch` is that
 approval; nothing else is.
@@ -279,9 +286,10 @@ Do NOT use a root-level `pnpm link --global @waitron/verifactu` here. At the wor
 and `packages/provisioning` go on resolving the published `0.1.0` — so it looks applied while
 changing nothing that matters. (This was proven by the extraction branch's run-it reviewer.)
 
-Keep the override out of the commit: the manifests that land always reference the published version,
-and CI installs that version, so an override left in a diff would make CI and the box build a version
-they cannot fetch.
+Keep that entry out of the commit (the other `pnpm.overrides` entries are committed security
+fixes; see the Dependabot entry under B9 in [backlog.md](../backlog.md)): the manifests that land
+always reference the published version, and CI installs that version, so an override left in a diff
+would make CI and the box build a version they cannot fetch.
 
 ## Model selection
 
