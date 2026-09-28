@@ -2520,10 +2520,6 @@ export class TillApp extends LitElement {
     this.printProblems = partyProblems;
     this.currentOrders = partyOrders;
     this.currentOrdersUnread = partyId !== null && partyOrders === null;
-    // A reload that read Current orders but not the floor must not leave the next command on the
-    // older revision the floor gave.
-    if (partyId !== null && partyOrders !== null)
-      this.#noteVisitRevision(partyId, partyOrders.revision);
   }
 
   /** A failed read answers null: the screen then offers nothing to mark served. */

@@ -18,7 +18,6 @@ import { WorkingOrderStore } from "./state/working-order.js";
 import type {
   CurrentOrders,
   FloorZone,
-  GroupCommand,
   OrderGroup,
   PrintProblem,
   TabLine,
@@ -3763,45 +3762,6 @@ describe("till-app: Current orders", () => {
 
     expect(tableOrder(el)!.currentOrdersUnread).toBe(false);
     expect(tableOrder(el)!.currentOrders).toEqual(orders);
-  });
-
-  it("sends the revision Current orders were read at when a reload read them and not the floor", async () => {
-    // Another device served first. The till's press is refused on its quantity, which reads the
-    // order and Current orders again but not the floor.
-    const server = { revision: 3 };
-    const markServed = vi
-      .fn()
-      .mockImplementationOnce(async () => {
-        server.revision = 5;
-        throw { code: "tab.serve_quantity_invalid" };
-      })
-      .mockImplementation(async (_visit: string, _items: unknown, command: GroupCommand) => {
-        if (command.expectedVisitRevision !== server.revision)
-          throw { code: "visit.out_of_date", visitId: "v1", revision: server.revision };
-        server.revision += 1;
-        return { revision: server.revision };
-      });
-    const { el } = await mountApp({
-      markServed,
-      readCurrentOrders: vi.fn(async () => ({ ...orders, revision: server.revision })),
-    });
-    const order = await openMesa(el);
-    const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
-    const items = [{ lineId: "line-1", quantity: "1" }];
-
-    emit(order, "serve-lines", { items });
-    await flush(el);
-    expect(banner(el)!.textContent).toContain(codeMessage("tab.serve_quantity_invalid"));
-    expect(api.getTablesState).toHaveBeenCalledTimes(floorReads);
-
-    emit(tableOrder(el)!, "serve-lines", { items });
-    await flush(el);
-
-    expect(markServed).toHaveBeenLastCalledWith("v1", items, {
-      submissionId: expect.any(String),
-      expectedVisitRevision: 5,
-    });
-    expect(banner(el)).toBeNull();
   });
 
   it("moves a held row on another open bill of the party from Current orders", async () => {
