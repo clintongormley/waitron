@@ -2693,9 +2693,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       a venue's invoice languages after setup today. **Next action:** limit both triggers to
       updates of `descriptions` (and `variant_descriptions`) and `working_order_id`.
     - The floor dashboard shows no reminder mark on a table yet. The floor data already carries
-      each party's `reminder` (the held group waiting and when it is due), and the table screen's
-      Current orders shows it (Task 9 Part 4). **Next action:** a mark on the table token when a
-      party's reminder is due.
+      each party's `reminder` (the held group waiting and when it is due). The table screen's
+      Current orders shows it on the waiting group: the time it falls due, then Snooze and Fire once
+      it has. **Next action:** a mark on the table token when a party's reminder is due.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card

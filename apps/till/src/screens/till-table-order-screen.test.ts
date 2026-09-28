@@ -332,41 +332,29 @@ describe("till-table-order-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-pending-badge]")).toBeNull();
   });
 
+  // Marking served moved into Current orders (till-table-order-screen.current-orders.test.ts): an
+  // unserved row offers it and a served one does not, a dish's extras never do, and a press emits
+  // `serve-lines`. The bill's lines no longer carry a whole-line tick.
   it("splits the drawer into Pendiente de servir and Servido lines", async () => {
     const { el } = await mount({ lines: [pendingLine, servedLine] });
     await openDrawer(el);
-    // The un-served line carries a Servido tick; the served one does not.
-    expect(el.shadowRoot!.querySelector('[data-serve="1"]')).not.toBeNull();
-    expect(el.shadowRoot!.querySelector('[data-serve="2"]')).toBeNull();
+    expect(el.shadowRoot!.querySelectorAll(".pending-line")).toHaveLength(1);
+    expect(el.shadowRoot!.querySelectorAll(".served-line")).toHaveLength(1);
+    expect(el.shadowRoot!.querySelector("[data-serve]")).toBeNull();
     const text = el.shadowRoot!.textContent ?? "";
     expect(text).toContain(t("table.pending_title"));
     expect(text).toContain(t("table.served_title"));
   });
 
-  it("offers Servido on a dish and not on its extras, which are served with it", async () => {
+  it("keeps an extras row's figures in its dish's columns", async () => {
     const extra = { ...pendingLine, lineNo: 2, parentLineNo: 1, quantity: "2.000" };
     const { el } = await mount({ lines: [pendingLine, extra] });
     await openDrawer(el);
     const pending = [...el.shadowRoot!.querySelectorAll(".pending-line")];
     expect(pending).toHaveLength(2);
-    expect(el.shadowRoot!.querySelector('[data-serve="1"]')).not.toBeNull();
-    expect(el.shadowRoot!.querySelector('[data-serve="2"]')).toBeNull();
-    expect(pending[1]!.querySelector("[data-serve]")).toBeNull();
-    // The extras row's figures stay in the dish's columns.
     const totalRight = (row: Element) =>
       Math.round(row.querySelector(".line-total")!.getBoundingClientRect().right);
     expect(totalRight(pending[1]!)).toBe(totalRight(pending[0]!));
-  });
-
-  it("emits serve-line { lineNo } when a Servido tick is tapped", async () => {
-    const { el } = await mount({ lines: [pendingLine] });
-    await openDrawer(el);
-    let captured: CustomEvent | undefined;
-    el.addEventListener("serve-line", (e) => (captured = e as CustomEvent));
-    el.shadowRoot!.querySelector<HTMLElement>('[data-serve="1"]')!.click();
-    expect(captured).toBeInstanceOf(CustomEvent);
-    expect(captured!.composed).toBe(true);
-    expect(captured!.detail).toEqual({ lineNo: 1 });
   });
 
   it("shows the tab total from the LOCKED add-time prices (never a catalogue recompute)", async () => {

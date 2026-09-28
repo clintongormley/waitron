@@ -40,6 +40,7 @@ function visit(over: Partial<TableVisit> = {}): TableVisit {
     billCount: 2,
     tableIds: ["t4"],
     unsentDrafts: [],
+    reminder: null,
     ...over,
   };
 }

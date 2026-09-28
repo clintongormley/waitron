@@ -16,6 +16,7 @@ import "../screens/till-table-order-screen.js";
 import { CARD_REQUIRED_CAPABILITY, CARD_REQUIRED_PERMISSION } from "../layout.js";
 import type { CapabilityFlag, CardInstance, CardType, TabDef } from "../layout.js";
 import type {
+  CurrentOrders,
   DeviceStation,
   FloorZone,
   HeldOrderSummary,
@@ -95,6 +96,7 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) initialDeviceStation?: DeviceStation;
   @property({ attribute: false }) tabLines: TabLine[] = [];
   @property({ attribute: false }) tabGroups: OrderGroup[] = [];
+  @property({ attribute: false }) currentOrders: CurrentOrders | null = null;
   @property({ attribute: false }) printProblems: PrintProblem[] = [];
   @property({ attribute: false }) reprintSent: string[] = [];
   @property({ attribute: false }) tabRevision = 0;
@@ -235,6 +237,7 @@ export class TillCardGrid extends LitElement {
           embedded
           .lines=${this.tabLines}
           .groups=${this.tabGroups}
+          .currentOrders=${this.currentOrders}
           .printProblems=${this.printProblems}
           .reprintSent=${this.reprintSent}
           .revision=${this.tabRevision}

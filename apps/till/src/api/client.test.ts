@@ -2260,6 +2260,64 @@ describe("TillApi: a seated party", () => {
     );
   });
 
+  it("snoozeGroup POSTs the submission, revision and minutes to the group's /snooze route", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ revision: 8 }));
+
+    await expect(
+      new TillApi("", fetchStub).snoozeGroup("v1", "g3", 5, {
+        submissionId: "sub-6",
+        expectedVisitRevision: 7,
+      }),
+    ).resolves.toEqual({ revision: 8 });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/visits/v1/groups/g3/snooze",
+      post({ submissionId: "sub-6", expectedVisitRevision: 7, minutes: 5 }),
+    );
+  });
+
+  it("readCurrentOrders GETs the party's Current orders", async () => {
+    const answer = {
+      revision: 6,
+      reminder: { groupId: "g2", dueAt: "2026-09-28T20:15:00.000Z" },
+      groups: [
+        {
+          id: "g1",
+          position: 1,
+          state: "fired",
+          firedAt: "2026-09-28T19:50:00.000Z",
+          remindAt: null,
+          addedLater: false,
+          rows: [
+            {
+              lineId: "l1",
+              workingOrderId: "wo-1",
+              lineNo: 1,
+              name: "Croquetas",
+              quantity: "4.000",
+              unitPrecision: 0,
+              servedQuantity: "2.000",
+              servedAt: null,
+              released: true,
+              kitchen: { state: "queued", firedAt: "2026-09-28T19:50:00.000Z", awayAt: null },
+              note: null,
+              extras: [],
+            },
+          ],
+        },
+      ],
+      ungrouped: [],
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
+
+    await expect(new TillApi("", fetchStub).readCurrentOrders("v1")).resolves.toEqual(answer);
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/visits/v1/current-orders",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+  });
+
   it("markServed surfaces more than is left to serve as { code }", async () => {
     const fetchStub = vi
       .fn()

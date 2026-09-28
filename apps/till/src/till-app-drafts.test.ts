@@ -115,6 +115,7 @@ function party(over: Partial<TableVisit> = {}): TableVisit {
     billCount: 1,
     tableIds: ["t4"],
     unsentDrafts: [],
+    reminder: null,
     ...over,
   };
 }

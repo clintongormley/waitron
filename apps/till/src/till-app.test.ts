@@ -144,6 +144,7 @@ const seatedTable: TableState = {
     billCount: 1,
     tableIds: ["t2"],
     unsentDrafts: [],
+    reminder: null,
   },
 };
 
@@ -4097,7 +4098,7 @@ describe("till-app", () => {
         expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(t("table.error"));
       });
 
-      it("serve-line marks what is left of the line served, on its party, then reloads its lines", async () => {
+      it("serve-lines marks the chosen quantity of a row served, on its party, then reloads its lines", async () => {
         const markServed = vi.fn().mockResolvedValue({ revision: 4 });
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
@@ -4108,17 +4109,17 @@ describe("till-app", () => {
         });
         const screen = await toTableOrder(el, seatedTable);
 
-        emit(screen, "serve-line", { lineNo: 1 });
+        emit(screen, "serve-lines", { items: [{ lineId: "line-1", quantity: "2" }] });
         await flush(el);
 
-        expect(markServed).toHaveBeenCalledWith("v-2", [{ lineId: "line-1", quantity: "2.000" }], {
+        expect(markServed).toHaveBeenCalledWith("v-2", [{ lineId: "line-1", quantity: "2" }], {
           submissionId: expect.any(String),
           expectedVisitRevision: 3,
         });
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 
-      it("a serve-line refused because the quantity no longer fits the line says so in its own words", async () => {
+      it("a serve-lines refused because the quantity no longer fits the line says so in its own words", async () => {
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([seatedTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -4127,7 +4128,7 @@ describe("till-app", () => {
         });
         const screen = await toTableOrder(el, seatedTable);
 
-        emit(screen, "serve-line", { lineNo: 1 });
+        emit(screen, "serve-lines", { items: [{ lineId: "line-1", quantity: "2" }] });
         await flush(el);
 
         expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(
@@ -4206,7 +4207,7 @@ describe("till-app", () => {
 
         for (const [type, detail] of [
           ["submit-draft", await ringCafe(el, screen)],
-          ["serve-line", { lineNo: 1 }],
+          ["serve-lines", { items: [{ lineId: "line-1", quantity: "2" }] }],
           ["set-line-course", { lineNo: 1, courseId: "c2" }],
           ["set-status", { statusId: "s1" }],
         ] as const) {

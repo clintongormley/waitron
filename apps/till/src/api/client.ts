@@ -489,6 +489,59 @@ export interface OrderGroup {
   summary: string;
 }
 
+/** The party's first held group, and when staff are reminded to fire it; `dueAt` is null while work
+ * fired before it is not fully served. */
+export interface ReleaseReminder {
+  groupId: string;
+  dueAt: string | null;
+}
+
+/** Only what the kitchen recorded for a dish: a station that records nothing leaves `queued`. */
+export interface CurrentOrderKitchen {
+  state: TicketState;
+  firedAt: string | null;
+  awayAt: string | null;
+}
+
+/** A dish row of `GET /api/visits/:id/current-orders`, on whichever bill of the party, a paid one
+ * included. Only a `released` row can be marked served; its extras are served with it. */
+export interface CurrentOrderRow {
+  lineId: string;
+  workingOrderId: string;
+  lineNo: number;
+  /** The staff name. */
+  name: string;
+  quantity: string;
+  /** Decimal places the line's unit takes (0 = sold by the unit). */
+  unitPrecision: number | null;
+  servedQuantity: string;
+  /** Set once the whole quantity is served. */
+  servedAt: string | null;
+  released: boolean;
+  kitchen: CurrentOrderKitchen | null;
+  note: string | null;
+  extras: { lineId: string; name: string; quantity: string }[];
+}
+
+export interface CurrentOrderGroup {
+  id: string;
+  position: number;
+  state: "held" | "fired";
+  firedAt: string | null;
+  remindAt: string | null;
+  addedLater: boolean;
+  rows: CurrentOrderRow[];
+}
+
+/** What the party has ordered and what is known of it, groups in sequence. */
+export interface CurrentOrders {
+  revision: number;
+  reminder: ReleaseReminder | null;
+  groups: CurrentOrderGroup[];
+  /** Dish rows in no group. */
+  ungrouped: CurrentOrderRow[];
+}
+
 /** A kitchen ticket of a party's bill not printed after the server's `JOBS_WAITING_MS`, or given up
  * on; `since` is when the oldest such ticket was queued. */
 export interface PrintProblem {
@@ -1132,6 +1185,8 @@ export interface TableVisit {
   /** Every open draft on the party that holds a line, oldest first; `ownerName` is "" for an
    * unknown person. */
   unsentDrafts: UnsentDraft[];
+  /** Null when the venue has reminders off, no group is held, or the party is not open. */
+  reminder: ReleaseReminder | null;
 }
 
 /** One bill of a seated party from `GET /api/visits/:id/bills`. `outstanding` is zero on a settled or
@@ -1956,6 +2011,25 @@ export class TillApi {
     command: GroupCommand,
   ): Promise<{ revision: number }> {
     return this.#request(`/api/visits/${visitId}/groups/${groupId}/served`, "POST", command);
+  }
+
+  /** Put off a held group's release reminder → `POST /api/visits/:visitId/groups/:groupId/snooze`: it
+   * becomes due `minutes` from now. A fired group rejects `group.not_held`. */
+  snoozeGroup(
+    visitId: string,
+    groupId: string,
+    minutes: number,
+    command: GroupCommand,
+  ): Promise<{ revision: number }> {
+    return this.#request(`/api/visits/${visitId}/groups/${groupId}/snooze`, "POST", {
+      ...command,
+      minutes,
+    });
+  }
+
+  /** A party's Current orders → `GET /api/visits/:visitId/current-orders`. */
+  readCurrentOrders(visitId: string): Promise<CurrentOrders> {
+    return this.#request(`/api/visits/${visitId}/current-orders`, "GET");
   }
 
   /** A party's kitchen tickets that have not printed → `GET /api/visits/:visitId/print-problems`. */
