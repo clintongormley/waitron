@@ -378,6 +378,26 @@ describe("till-app: seating a party", () => {
   });
 });
 
+/** The open bill's total and amount to pay, and the party's still to pay, as the drawer shows them. */
+function figures(el: TillApp) {
+  const screen = tableOrder(el)!.shadowRoot!;
+  const shown = screen.querySelector('[data-bill="wo-4"]')!;
+  return {
+    total: shown.querySelector("[data-bill-total]")?.textContent,
+    toPay: shown.querySelector("[data-bill-state]")?.textContent,
+    stillToPay: screen.querySelector("[data-visit-outstanding]")?.textContent,
+  };
+}
+
+/** {@link figures} as they read for these amounts. */
+function figuresOf(total: string, stillToPay: string) {
+  return {
+    total: formatMoney(total, "en"),
+    toPay: t("table.bill_to_pay").replace("{amount}", formatMoney(total, "en")),
+    stillToPay: formatMoney(stillToPay, "en"),
+  };
+}
+
 describe("till-app: the party's bills and Finish table", () => {
   it("gives the table screen the party and every bill it has", async () => {
     const { el } = await mountApp();
@@ -425,6 +445,78 @@ describe("till-app: the party's bills and Finish table", () => {
       { method: "cash", amount: "30.00" },
       "wo-check",
     );
+  });
+
+  it("shows the bill's new figures right after a dish is cancelled", async () => {
+    const server = { voided: false };
+    const cancelled = { ...tabBill, total: "9.00", outstanding: "9.00" };
+    const { el } = await mountApp({
+      voidLine: vi.fn(async () => {
+        server.voided = true;
+        return { visit: { id: "v1", revision: 4 } };
+      }),
+      getVisitBills: vi.fn(async () =>
+        server.voided ? [cancelled, checkBill] : [tabBill, checkBill],
+      ),
+      getTablesState: vi.fn(async () =>
+        server.voided
+          ? [seated({ tabTotal: "9.00" }, { revision: 4, outstanding: "39.00" }), mesa7, mesa9]
+          : [mesa4, mesa7, mesa9],
+      ),
+    });
+    const order = await openMesa(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await flush(el);
+    expect(figures(el)).toEqual(figuresOf("14.00", "44.00"));
+
+    emit(order, "void-line", { lineNo: 1 });
+    await flush(el);
+
+    expect(figures(el)).toEqual(figuresOf("9.00", "39.00"));
+  });
+
+  it("shows the new figures after a cancel that got no answer but reached the server", async () => {
+    const server = { voided: false };
+    const cancelled = { ...tabBill, total: "9.00", outstanding: "9.00" };
+    const { el } = await mountApp({
+      voidLine: vi.fn(async () => {
+        server.voided = true;
+        throw new TypeError("Failed to fetch");
+      }),
+      getVisitBills: vi.fn(async () =>
+        server.voided ? [cancelled, checkBill] : [tabBill, checkBill],
+      ),
+      getTablesState: vi.fn(async () =>
+        server.voided
+          ? [seated({ tabTotal: "9.00" }, { revision: 4, outstanding: "39.00" }), mesa7, mesa9]
+          : [mesa4, mesa7, mesa9],
+      ),
+    });
+    const order = await openMesa(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await flush(el);
+
+    emit(order, "void-line", { lineNo: 1 });
+    await flush(el);
+
+    expect(figures(el)).toEqual(figuresOf("9.00", "39.00"));
+  });
+
+  it("a refused cancel reads the order's lines again and nothing else", async () => {
+    const { el } = await mountApp({
+      voidLine: vi.fn().mockRejectedValue({ code: "tab.void_quantity_invalid" }),
+    });
+    const order = await openMesa(el);
+    const billReads = vi.mocked(api.getVisitBills).mock.calls.length;
+    const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
+    const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
+
+    emit(order, "void-line", { lineNo: 1 });
+    await flush(el);
+
+    expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
+    expect(api.getVisitBills).toHaveBeenCalledTimes(billReads);
+    expect(api.getTablesState).toHaveBeenCalledTimes(floorReads);
   });
 
   it("prints a copy of a paid bill's receipt", async () => {

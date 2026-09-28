@@ -2880,6 +2880,26 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   with `minPicks: 0` and `maxQuantity: 9` can be failing. The real-world shape is a parked line
   whose list had its cap reduced under it, the same family as the "list lost the product between the
   park and the edit" escape recorded under Task 8.
+- **After a line is cancelled or changed, the table's bill figures can stay out of date until a
+  reload.**
+  - A saved line Change (`#onChangeLine`, `apps/till/src/till-app.ts`) reads only the lines, and one
+    that got no answer reads the floor's party and the lines but not the bills. The dialog sends a
+    dish's extras when it offers any (`#confirmChange`,
+    `apps/till/src/screens/till-table-order-screen.ts`), and an extra can carry a price, so a Change
+    can move an amount. Seen on the dev till only with a note, which moves no amount; the demo menu
+    offers no priced extra, so a stale figure after one is read from the code, not run.
+  - After a cancel the server answered, if the floor read then fails, the party's "Still to pay"
+    keeps the amount it showed before the cancel while the bills are read afresh, with no message,
+    because `#refreshFloor` (`apps/till/src/till-app.ts`) keeps the last floor on a failed read.
+    Found by the run-it review of A110, in a browser test that failed the floor read after a
+    successful cancel: the bills then showed 9.00 and 30.00 while "Still to pay" stayed 44.00.
+  - _Fixed by campaign item A110 (2026-09-28):_ seen by lane B while checking B6a. Reproduced on the
+    dev till at `main` `53883ae7e`: cancelling a €2.80 drink from a €10.60 order left the bill's
+    total, its "to pay" and the party's "Still to pay" at €10.60 while the order total read €7.80,
+    and the till requested neither the bills nor the floor after the cancel. `#onVoidLine` now also
+    reads the bills after a cancel that landed or got no answer, and reads the floor's party after
+    one that landed as well as one that got no answer; a refused one reads the lines only, as
+    before.
 - **Two till menu-refresh defects the retroactive Codex review of #719 found (campaign item A108r,
   2026-09-28), both still present on `main` at `f5a186cd9`; fix them once lane B's drafts-on-the-till
   branch, which changes `apps/till/src/state/menu-refresh.ts`, has landed.** (1) After an option

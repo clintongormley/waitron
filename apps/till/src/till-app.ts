@@ -2547,9 +2547,9 @@ export class TillApp extends LitElement {
       this.orderParty = { ...party, revision };
   }
 
-  /** After a command on the party that got no answer, which may have moved it on: the floor is read
-   * again, and its party taken while the open table still holds that party and the floor's revision
-   * is not lower than the one held. A failed read leaves the last floor, which can be older. */
+  /** After a command that moved the party on, or may have: the floor is read again, and its party
+   * taken while the open table still holds that party and the floor's revision is not lower than
+   * the one held. A failed read leaves the last floor, which can be older. */
   async #retakePartyFromFloor(): Promise<void> {
     const partyId = this.orderParty?.id;
     await this.#refreshFloor();
@@ -3168,7 +3168,8 @@ export class TillApp extends LitElement {
   }
 
   /** Already confirmed on the screen; an absent `quantity` cancels the whole line. The reload runs on
-   * both paths, as in {@link #onRecallLines}. */
+   * both paths, as in {@link #onRecallLines}; a cancel that may have landed also reads the party's
+   * bills and what it still owes. */
   async #onVoidLine(event: Event): Promise<void> {
     const { lineNo, quantity } = (event as CustomEvent<{ lineNo: number; quantity?: string }>)
       .detail;
@@ -3181,9 +3182,13 @@ export class TillApp extends LitElement {
       this.#noteBillParty(visit);
     } catch (error) {
       this.errorKey = lineWriteError(error);
-      if (isNetworkFailure(error)) await this.#retakePartyFromFloor();
+      if (!isNetworkFailure(error)) {
+        await this.#loadTabLines();
+        return;
+      }
     }
-    await this.#loadTabLines();
+    await this.#retakePartyFromFloor();
+    await this.#loadLinesAndBills();
   }
 
   /**
