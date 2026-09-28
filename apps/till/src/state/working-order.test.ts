@@ -796,6 +796,13 @@ describe("WorkingOrderStore.addMerging (D10)", () => {
     ]);
   });
 
+  it("adds nothing into a kept line that names no menu item", () => {
+    const s = new WorkingOrderStore();
+    s.addMerging(cafe, "1");
+    s.addMerging(beer, "1");
+    expect(rows(s)).toEqual(["Café ×1", "beer ×1"]);
+  });
+
   it("refuses a quantity the unit cannot take, and changes nothing while the basket is sending", () => {
     const s = new WorkingOrderStore();
     s.addMerging(beer, "1");

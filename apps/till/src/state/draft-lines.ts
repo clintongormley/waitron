@@ -1,4 +1,4 @@
-import { draftLinesMerge, QUANTITY_SCALE } from "@waitron/shared";
+import { draftLineMergeKey, QUANTITY_SCALE } from "@waitron/shared";
 import type { OptionSelection, OptionSnapshot } from "@waitron/shared";
 import {
   menuOfferToTillProduct,
@@ -12,6 +12,7 @@ import {
   displayQuantity,
   productAsVariant,
   quantityPlaces,
+  shortestQuantity,
   toWireModifiers,
 } from "./order-line.js";
 import type { OrderLine, SelectedExtra } from "./working-order.js";
@@ -40,11 +41,17 @@ export function toDraftLineInput(line: OrderLine): DraftLineInput {
   };
 }
 
-/** Whether adding `added` to a draft holding `kept` adds to that line (D10). A line naming no menu
- * item is no draft line, and merges with nothing. */
+/** The draft merge key (D10) of the line as its draft saves it. A line naming no menu item is no
+ * draft line, and merges with nothing. */
+export function orderLineMergeKey(line: OrderLine): string | null {
+  return line.product.menuItemId === undefined ? null : draftLineMergeKey(toDraftLineInput(line));
+}
+
+/** Whether adding `added` to a draft holding `kept` adds to that line (D10). */
 export function orderLinesMerge(kept: OrderLine, added: OrderLine): boolean {
   if (kept.product.menuItemId === undefined || added.product.menuItemId === undefined) return false;
-  return draftLinesMerge(toDraftLineInput(kept), toDraftLineInput(added));
+  const key = orderLineMergeKey(kept);
+  return key !== null && key === orderLineMergeKey(added);
 }
 
 /**
@@ -85,7 +92,9 @@ export function fromDraftLine(
   return {
     product,
     quantity:
-      offer === undefined ? shortest(line.quantity) : displayQuantity(product, line.quantity),
+      offer === undefined
+        ? shortestQuantity(line.quantity)
+        : displayQuantity(product, line.quantity),
     ...(offer === undefined ? { notOffered: true as const, blocked: "removed" as const } : {}),
     ...(fits ? {} : { blocked: "unit_changed" as const }),
     ...(extras.length === 0 ? {} : { extras }),
@@ -115,11 +124,6 @@ export function rebuildReturned(
     rebuilt.set(index, fromDraftLine(saved, offers, liveVersions));
   });
   return rebuilt;
-}
-
-/** "2.000" reads "2" and "0.350" "0.35": the unit, and so its places, are unknown. */
-function shortest(quantity: string): string {
-  return quantity.includes(".") ? quantity.replace(/0+$/, "").replace(/\.$/, "") : quantity;
 }
 
 /** A variant the offer no longer holds keeps its id, sold under the dish's own names. */

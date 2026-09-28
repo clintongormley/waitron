@@ -15,7 +15,7 @@ import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.
 import { addDecimal, decimal, sumDecimals } from "@waitron/shared";
 import type { Decimal, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { lineGross } from "./order-line.js";
-import { orderLinesMerge } from "./draft-lines.js";
+import { orderLineMergeKey } from "./draft-lines.js";
 import type { BlockReason } from "./menu-refresh.js";
 import type { HeldExtra, TillProduct } from "../api/client.js";
 import { productUnit, soldByTheUnit, toPresentation } from "../widgets/product-name.js";
@@ -136,6 +136,31 @@ function copyLine(line: OrderLine): OrderLine {
   if (line.optionSnapshots !== undefined)
     copy.optionSnapshots = line.optionSnapshots.map((snapshot) => ({ ...snapshot }));
   return copy;
+}
+
+/** For {@link WorkingOrderStore.addMerging}. `added`'s key is taken once, and only once a kept line
+ * has a key to compare it with. */
+function mergeTarget(lines: readonly OrderLine[], added: OrderLine): OrderLine | undefined {
+  if (added.product.menuItemId === undefined) return undefined;
+  let addedKey: string | null | undefined;
+  return lines.find((kept) => {
+    if (kept.notOffered !== undefined || kept.blocked !== undefined) return false;
+    const keptKey = orderLineMergeKey(kept);
+    if (keptKey === null) return false;
+    if (addedKey === undefined) addedKey = orderLineMergeKey(added);
+    return keptKey === addedKey;
+  });
+}
+
+/** The first line of `lines` that would have added to `kept` by the draft merge rule (D10). */
+function mergingWith(lines: readonly OrderLine[], kept: OrderLine): OrderLine | undefined {
+  if (kept.product.menuItemId === undefined) return undefined;
+  let keptKey: string | null | undefined;
+  return lines.find((line) => {
+    if (line.product.menuItemId === undefined) return false;
+    if (keptKey === undefined) keptKey = orderLineMergeKey(kept);
+    return keptKey !== null && orderLineMergeKey(line) === keptKey;
+  });
 }
 
 /** An empty list is not an answer, so it leaves no key. */
@@ -295,10 +320,7 @@ export class WorkingOrderStore {
   addMerging(product: TillProduct, quantity: string, selection?: LineSelection): void {
     if (this.#sending) return;
     const line = newLine(product, quantity, selection);
-    const into = this.#lines.find(
-      (kept) =>
-        kept.notOffered === undefined && kept.blocked === undefined && orderLinesMerge(kept, line),
-    );
+    const into = mergeTarget(this.#lines, line);
     if (into === undefined) this.#lines.push(line);
     else into.quantity = addDecimal(decimal(into.quantity), decimal(quantity));
     this.#lastAdded = into ?? line;
@@ -459,8 +481,7 @@ export class WorkingOrderStore {
    * by the draft merge rule. */
   loadFrom(id: string, lines: OrderLine[], label?: string, revision = 0): void {
     const last = id === this.#id ? this.lastAdded : undefined;
-    this.#lastAdded =
-      last === undefined ? undefined : lines.find((line) => orderLinesMerge(last, line));
+    this.#lastAdded = last === undefined ? undefined : mergingWith(lines, last);
     this.#id = id;
     this.#revision = revision;
     this.#lines.length = 0;

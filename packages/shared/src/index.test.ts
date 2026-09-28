@@ -10,6 +10,7 @@ import {
   compareDecimal,
   decimal,
   deriveDisplayName,
+  draftLineMergeKey,
   draftLinesMerge,
   firstCodeInCauseChain,
   divideDecimal,
@@ -162,5 +163,22 @@ describe("package public surface (./index.js)", () => {
     };
     expect(draftLinesMerge(beer, beer)).toBe(true);
     expect(normaliseDraftLines([beer, beer])).toEqual([{ ...beer, quantity: "2.000" }]);
+  });
+
+  it("re-exports the draft merge key", () => {
+    const line = {
+      menuItemId: "beer",
+      variantId: null,
+      menuVersionId: null,
+      courseId: null,
+      note: null,
+      options: [],
+      extras: [],
+      quantity: "1",
+      noMerge: false,
+    };
+    expect(draftLineMergeKey(line)).toEqual(expect.any(String));
+    expect(draftLineMergeKey(line)).toBe(draftLineMergeKey({ ...line, quantity: "3.000" }));
+    expect(draftLineMergeKey({ ...line, noMerge: true })).toBeNull();
   });
 });

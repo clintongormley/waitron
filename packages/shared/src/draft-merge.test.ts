@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { draftLinesMerge, normaliseDraftLines } from "./draft-merge.js";
+import { draftLineMergeKey, draftLinesMerge, normaliseDraftLines } from "./draft-merge.js";
 import type { MergeableDraftLine } from "./draft-merge.js";
 
 const BEER = "beer";
@@ -165,6 +165,49 @@ describe("draftLinesMerge (D10)", () => {
         line({ menuItemId: FISH, quantity: "1" }),
       ),
     ).toBe(true);
+  });
+});
+
+describe("draftLineMergeKey (D10)", () => {
+  it("gives two lines ordering the same thing one key", () => {
+    const key = draftLineMergeKey(
+      line({ menuItemId: BURGER, quantity: "2.000", options: [NO_ONIONS, RARE] }),
+    );
+    expect(key).toEqual(expect.any(String));
+    expect(draftLineMergeKey(line({ menuItemId: BURGER, options: [RARE, NO_ONIONS] }))).toBe(key);
+  });
+
+  it.each([
+    ["menu item", { menuItemId: FISH }],
+    ["variant", { variantId: "variant-large" }],
+    ["menu version", { menuVersionId: "version-8" }],
+    ["course", { courseId: "course-mains" }],
+    ["note", { note: "no salt" }],
+    ["options answer", { options: [WELL_DONE] }],
+    ["extras pick", { extras: [{ listId: TOPPINGS, picks: [cheese(2)] }] }],
+  ])("gives lines that differ in their %s different keys", (_part, difference) => {
+    const burger = { menuItemId: BURGER, options: [RARE], extras: [] };
+    const key = draftLineMergeKey(line(burger));
+    expect(key).toEqual(expect.any(String));
+    expect(draftLineMergeKey(line({ ...burger, ...difference }))).not.toBe(key);
+  });
+
+  it("gives a pick listed twice the key of that pick with its counts added", () => {
+    expect(
+      draftLineMergeKey(
+        line({ menuItemId: BURGER, extras: [{ listId: TOPPINGS, picks: [cheese(1), cheese(1)] }] }),
+      ),
+    ).toBe(
+      draftLineMergeKey(
+        line({ menuItemId: BURGER, extras: [{ listId: TOPPINGS, picks: [cheese(2)] }] }),
+      ),
+    );
+  });
+
+  it("gives a no-merge line and a fractional quantity no key", () => {
+    expect(draftLineMergeKey(line({ menuItemId: BURGER, noMerge: true }))).toBeNull();
+    expect(draftLineMergeKey(line({ menuItemId: FISH, quantity: "0.5" }))).toBeNull();
+    expect(draftLineMergeKey(line({ menuItemId: FISH, quantity: "1.001" }))).toBeNull();
   });
 });
 

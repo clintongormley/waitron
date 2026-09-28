@@ -18,11 +18,12 @@ export interface MergeableDraftLine {
 }
 
 /**
- * Null for a line that never merges. A fractional quantity never merges: 0.5 kg and 0.3 kg of fish
- * are two portions the kitchen cooks separately, and one 0.8 kg row would lose that. Options compare
- * as a set and extras picks as a multiset, never by order.
+ * Two lines merge exactly when their keys are equal and not null; null for a line that never merges.
+ * A fractional quantity never merges: 0.5 kg and 0.3 kg of fish are two portions the kitchen cooks
+ * separately, and one 0.8 kg row would lose that. Options compare as a set and extras picks as a
+ * multiset, never by order.
  */
-function mergeKey(line: MergeableDraftLine): string | null {
+export function draftLineMergeKey(line: MergeableDraftLine): string | null {
   if (line.noMerge || stringToThousandths(line.quantity) % 1000 !== 0) return null;
   const options = [
     ...new Set(line.options.map(({ listId, labelId }) => JSON.stringify([listId, labelId]))),
@@ -48,8 +49,8 @@ function mergeKey(line: MergeableDraftLine): string | null {
 
 /** Whether adding `added` to a draft holding `kept` adds to that line rather than a new row. */
 export function draftLinesMerge(kept: MergeableDraftLine, added: MergeableDraftLine): boolean {
-  const key = mergeKey(kept);
-  return key !== null && key === mergeKey(added);
+  const key = draftLineMergeKey(kept);
+  return key !== null && key === draftLineMergeKey(added);
 }
 
 /**
@@ -60,7 +61,7 @@ export function normaliseDraftLines<T extends MergeableDraftLine>(lines: readonl
   const merged: T[] = [];
   const byKey = new Map<string, number>();
   for (const line of lines) {
-    const key = mergeKey(line);
+    const key = draftLineMergeKey(line);
     if (key !== null) {
       const into = byKey.get(key);
       if (into !== undefined) {

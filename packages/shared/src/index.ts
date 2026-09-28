@@ -85,7 +85,7 @@ export type { ContentLanguages } from "./content-languages.js";
 export { BAND_RANK, classifyBand, worstBand } from "./timing.js";
 export type { StationThresholds, TimingBand } from "./timing.js";
 export { perDishOptionQuantity } from "./quantity.js";
-export { draftLinesMerge, normaliseDraftLines } from "./draft-merge.js";
+export { draftLineMergeKey, draftLinesMerge, normaliseDraftLines } from "./draft-merge.js";
 export type { MergeableDraftLine } from "./draft-merge.js";
 export { deriveDisplayName } from "./derive-display-name.js";
 export { isValidTelephone } from "./telephone.js";
