@@ -2526,7 +2526,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         while one is open;
       - taking over someone's draft when you already have one on the party adds their lines to
         yours (identical lines add together) and discards theirs, instead of refusing.
-  - **Task 8 landed as #PR** (lane B item B8, 2026-09-28, main `MAIN`): the till now works from
+  - **Task 8 landed as #806** (lane B item B8, 2026-09-28, main `1356ff14a`): the till now works from
     each person's unsent order kept on the server (Task 7's "draft"), so an order being rung up is
     still there after leaving the table or reloading the till. What a person at the till sees:
     - A tap adds the dish to their draft, and identical taps add together ("Beer ×3"), by one rule
