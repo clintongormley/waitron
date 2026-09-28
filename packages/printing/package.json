@@ -22,6 +22,6 @@
     "@vitest/coverage-v8": "^4.1.11",
     "@waitron/print-agent": "workspace:*",
     "typescript": "^7.0.0",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.1"
   }
 }
