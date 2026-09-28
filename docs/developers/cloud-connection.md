@@ -84,12 +84,13 @@ screen at `WAITRON_MANAGEMENT_ORIGIN`; remote-access setup must configure its st
 session idle time unchanged. Clicking Check connection or Refresh status counts as your activity.
 
 Version 1 returns exactly three services. Adding services requires a negotiated protocol
-version before changing that response. Stopping access permanently retires the key.
-Do not delete the state file to reconnect: a new key does not take over the existing venue.
-A test server restored from a Cloud snapshot reconnects to its venue through the steps in
+version before changing that response. Stopping access permanently retires the key. A stop
+request waits for the local worker, rechecks your permission, and saves the stop intent before
+contacting Cloud. Do not delete the state file to reconnect: pairing again with a new key does
+not take over the existing venue. A test server restored from a Cloud snapshot reconnects to its
+venue through the steps in
 [Reconnect a restored test server to its Cloud venue](#reconnect-a-restored-test-server-to-its-cloud-venue)
-instead. A stop request waits for the local
-worker, rechecks your permission, and saves the stop intent before contacting Cloud.
+instead.
 
 ## Local remote-access integration
 
@@ -186,9 +187,9 @@ a local manager with `system.manage`, the screen open at `WAITRON_MANAGEMENT_ORI
 server holding the primary role.
 
 1. Open the Cloud services screen on the restored server and choose **Request reconnection**.
-   Before it contacts Cloud, the server saves a fresh installation key and a fresh WireGuard key
-   in `cloud-replacement.json` under `WAITRON_STATE_DIR`, with mode 0600. If the restore has not
-   yet been reported to Cloud, the server reports it first.
+   If the restore has not yet been reported to Cloud, the server reports it first. Before it
+   sends the reconnection request, it saves a fresh installation key and a fresh WireGuard key in
+   `cloud-replacement.json` under `WAITRON_STATE_DIR`, with mode 0600.
 2. The screen shows the previous installation, the organisation and the business, together with
    the original recovery code and an **Open Cloud** link. Use them so the owner of the Cloud
    venue can approve the replacement in Cloud.
@@ -202,11 +203,10 @@ it finishes the import when it starts again. On a server that was not restored f
 snapshot, the screen offers **Connect to Cloud** instead of **Request reconnection**. Keep the
 previous server out of service throughout.
 
-Reconnecting registers the replacement with Cloud and nothing more. Installing the new
-WireGuard tunnel and a new TLS certificate remain operator steps, and Cloud access and backups
-need their own checks afterwards. Cloud owns route placement and fencing. Continuous
-complete-server recovery, a planned handover of the final writes and production recovery are
-not implemented.
+Reconnecting registers the replacement with Cloud. Installing the new WireGuard tunnel and a
+new TLS certificate remain operator steps, and Cloud access and backups need their own checks
+afterwards. Cloud owns route placement and fencing. Continuous complete-server recovery, a
+planned handover of the final writes and production recovery are not implemented.
 
 ### Reissue staff TLS after a restore
 
@@ -221,8 +221,7 @@ The certificate commands do not reconnect the replacement to Cloud; that is the 
 step in [Reconnect a restored test server to its Cloud venue](#reconnect-a-restored-test-server-to-its-cloud-venue).
 For local recovery first, use Waitron's existing local-certificate setup and its matching
 local management origin, then change to the staff hostname once the replacement is reconnected
-and its new tunnel and certificate are installed. Do not copy the old staff key or delete the
-Cloud connection state to bypass reconnection.
+and its new tunnel and certificate are installed. Do not copy the old staff key.
 
 
 ## Deliver a managed snapshot locally
