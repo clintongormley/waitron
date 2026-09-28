@@ -5259,7 +5259,7 @@ does when its tables change under it (re-pick the first, or close) and fix it te
 may make one or both of those branches reachable, or show they can go.
 
 **The content-languages dialog keeps the languages it opened with — OPEN (found 2026-09-29,
-reviewing C44's content-languages page).** `apps/dashboard/src/widgets/content-languages.ts` copies
+reviewing C44's content-languages page, #829).** `apps/dashboard/src/widgets/content-languages.ts` copies
 the settings it is given when the dialog opens and does not take a newer copy while it is open. A
 throwaway browser test opened Edit with Spanish and English enabled, then delivered a live update
 adding French (as a change saved from another tab would), then saved without touching anything: the
