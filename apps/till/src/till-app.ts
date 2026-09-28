@@ -2900,8 +2900,7 @@ export class TillApp extends LitElement {
     this.errorKey = tableWriteError(error);
   }
 
-  /** A draft sent to a seated party's settled or abandoned tab lands on the party's next tab, which
-   * the screen follows. Once a submission leaves the draft empty, the till goes back to the floor
+  /** A draft lands on the party's main bill, which the screen follows. Once a submission leaves the draft empty, the till goes back to the floor
    * and says what the draft's submissions filed. Once the operator's session ends, the submission
    * sends nothing more, says nothing and does not move the next person's screen. */
   async #onSubmitDraft(event: Event): Promise<void> {
@@ -2916,6 +2915,8 @@ export class TillApp extends LitElement {
       this.errorKey = "table.error";
       return;
     }
+    // The till's own rule until plan Task 10 names a bill: sent without one, the server puts the
+    // round on the party's main bill, not on this check.
     if (this.#showsCheck()) {
       this.errorKey = lineWriteError({ code: "tab.not_open" });
       return;
@@ -2955,7 +2956,7 @@ export class TillApp extends LitElement {
     if (followUp === "find-tab" && onSentTable()) {
       await this.#retakePartyFromFloor();
       if (!live()) return;
-      // The server moves a draft only onto its own party's next tab, so the table is followed only
+      // The server puts a draft only on its own party's main bill, so the table is followed only
       // while it still holds the party the screen showed when the draft was sent.
       const now = this.tables.find((row) => row.id === tableId);
       if (now?.tabId !== undefined && now.party?.id === partyId && onSentTable())

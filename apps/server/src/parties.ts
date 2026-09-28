@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { createHash, randomUUID } from "node:crypto";
+import { and, eq, inArray, isNull, notExists, sql } from "drizzle-orm";
 import {
   diningTables,
   nowIso,
@@ -15,13 +15,14 @@ import {
   AppError,
   centsToDecimal,
   MONEY_SCALE,
+  normalisePartyName,
   rawCentsToDecimal,
   subtractDecimal,
   toScale,
 } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
-import { openTab } from "./working-order.js";
+import { createOpenOrder, openTab } from "./working-order.js";
 import { readReceivedByBill, refuseBillHoldingMoney } from "./bill-payments.js";
 import { discardPartyDrafts } from "./order-drafts.js";
 import "./errors.js";
@@ -79,7 +80,152 @@ export async function seatTable(
     partyId,
   });
   await tx.insert(partyTables).values({ partyId, tableId: args.tableId });
+  await setMainBill(tx, partyId, tabId);
   return { partyId, tabId, revision, orderNumber };
+}
+
+/**
+ * The party's main bill, where an order that names no bill goes: always an open bill of the party.
+ * When the party has none, an empty one is made on the party and becomes its main bill, moving the
+ * party's revision on unless the caller's command already has (`"moved"`). A main bill that is not
+ * an open bill of the party is refused `tab.not_open`, so a caller may write to the answer without
+ * checking it again.
+ */
+export async function partyMainBill(
+  tx: Transaction,
+  cfg: TillConfig,
+  partyId: string,
+  revision: "move" | "moved" = "move",
+): Promise<string> {
+  const [party] = await tx
+    .select({
+      state: parties.state,
+      mainBillId: parties.mainBillId,
+      billStatus: workingOrders.status,
+      billPartyId: workingOrders.partyId,
+    })
+    .from(parties)
+    .leftJoin(workingOrders, eq(workingOrders.id, parties.mainBillId))
+    .where(eq(parties.id, partyId));
+  if (party?.state !== "open") {
+    throw new AppError("party.not_open", { partyId });
+  }
+  if (party.mainBillId !== null) {
+    if (party.billStatus !== "open" || party.billPartyId !== partyId) {
+      throw new AppError("tab.not_open", { tabId: party.mainBillId });
+    }
+    return party.mainBillId;
+  }
+  const billId = randomUUID();
+  const zoneId = await partyZone(tx, cfg, partyId);
+  await createOpenOrder(tx, cfg, billId, [], null, { zoneId: zoneId ?? undefined, partyId });
+  await setMainBill(tx, partyId, billId);
+  if (revision === "move") await bumpPartyRevision(tx, partyId);
+  return billId;
+}
+
+/**
+ * Name the party's main bill. This is the only writer of `parties.main_bill_id` in apps/server. The
+ * database checks only that it names an existing order; nothing checks that the bill is open or the
+ * party's, and the triggers in `0038_main_bill_release.sql` only clear it. While tables still point
+ * at bills, each table of the party that points at no open bill is pointed at this one, so the old tab paths and the till
+ * read the bill the party orders on; a table showing another open bill of the party keeps it.
+ */
+export async function setMainBill(
+  tx: Transaction,
+  partyId: string,
+  billId: string | null,
+): Promise<void> {
+  await tx.update(parties).set({ mainBillId: billId }).where(eq(parties.id, partyId));
+  if (billId === null) return;
+  await tx
+    .update(diningTables)
+    .set({ tabId: billId })
+    .where(
+      and(
+        inArray(
+          diningTables.id,
+          tx
+            .select({ id: partyTables.tableId })
+            .from(partyTables)
+            .where(and(eq(partyTables.partyId, partyId), isNull(partyTables.leftAt))),
+        ),
+        notExists(
+          tx
+            .select({ id: workingOrders.id })
+            .from(workingOrders)
+            .where(and(eq(workingOrders.id, diningTables.tabId), eq(workingOrders.status, "open"))),
+        ),
+      ),
+    );
+}
+
+/** The service zone of the party's earliest active table; null when it holds none, or no zone. */
+export async function partyZone(
+  tx: Transaction,
+  cfg: TillConfig,
+  partyId: string,
+): Promise<string | null> {
+  void cfg;
+  const [table] = await tx
+    .select({ zoneId: diningTables.zoneId })
+    .from(partyTables)
+    .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
+    .where(and(eq(partyTables.partyId, partyId), isNull(partyTables.leftAt)))
+    .orderBy(partyTables.joinedAt, partyTables.id)
+    .limit(1);
+  return table?.zoneId ?? null;
+}
+
+/** Each party's active tables' labels, in the order the tables joined it. */
+export async function partyTableLabels(
+  tx: Transaction,
+  partyIds: readonly string[],
+): Promise<Map<string, string[]>> {
+  const labels = new Map(partyIds.map((id) => [id, [] as string[]]));
+  if (partyIds.length === 0) return labels;
+  const rows = await tx
+    .select({ partyId: partyTables.partyId, label: diningTables.label })
+    .from(partyTables)
+    .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
+    .where(and(inArray(partyTables.partyId, [...partyIds]), isNull(partyTables.leftAt)))
+    .orderBy(partyTables.joinedAt, partyTables.id);
+  for (const row of rows) labels.get(row.partyId)!.push(row.label);
+  return labels;
+}
+
+/** Name the party, or with an empty name clear it; a party command guarded by its revision. */
+export async function setPartyName(
+  tx: Transaction,
+  args: { partyId: string; name: unknown; expectedPartyRevision: number },
+): Promise<{ revision: number; name: string | null }> {
+  const revision = await checkAndBumpParty(tx, args.partyId, args.expectedPartyRevision, "open");
+  const name = normalisePartyName(args.name);
+  await tx.update(parties).set({ name }).where(eq(parties.id, args.partyId));
+  return { revision, name };
+}
+
+/**
+ * Refuse an order sent to a bill that is not an open bill of the party, in this order: a
+ * bill of another party (or of none) first, then a paid, an abandoned and a presented one. An id
+ * naming no bill is `tab.not_open`, as an absent tab is elsewhere.
+ */
+export async function requireBillOfParty(
+  tx: Transaction,
+  partyId: string,
+  billId: string,
+): Promise<void> {
+  const [bill] = await tx
+    .select({ partyId: workingOrders.partyId, status: workingOrders.status })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, billId));
+  if (bill === undefined) throw new AppError("tab.not_open", { tabId: billId });
+  if (bill.partyId !== partyId) {
+    throw new AppError("bill.other_party", { workingOrderId: billId });
+  }
+  if (bill.status === "settled") throw new AppError("bill.paid", { workingOrderId: billId });
+  if (bill.status === "abandoned") throw new AppError("tab.not_open", { tabId: billId });
+  if (bill.status === "placed") throw new AppError("bill.presented", { workingOrderId: billId });
 }
 
 async function insertParty(

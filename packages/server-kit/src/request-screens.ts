@@ -1,4 +1,3 @@
-import "./errors.js";
 import { AppError, isUuid } from "@waitron/shared";
 
 /**

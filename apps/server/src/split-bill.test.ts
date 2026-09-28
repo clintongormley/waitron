@@ -301,7 +301,7 @@ describe("splitOffCheck", () => {
     ).rejects.toMatchObject({ code: "tab.not_open" });
   });
 
-  it("refuses a DETACHED CHECK as the split origin (tab.not_open) — origin must be an open TAB", async () => {
+  it("refuses a check of no party as the split origin (tab.not_open)", async () => {
     // A detached check — a table-LESS open order minted BY a prior split — is a payment unit, not a
     // seat: no `dining_tables.tab_id` points at it, so it fails closed to `tab.not_open`.
     const { cfg, aguaId, tableId } = await setupVenue();

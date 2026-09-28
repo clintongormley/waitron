@@ -1721,6 +1721,12 @@ harness), as the existing party tests do.
       comment. It asserts `assertPartyBillOpen`, which replaces `assertAnchoredTabOpen` at every
       caller Step 0 listed. It passes when the order is `open` and has a `party_id`, or (while
       `tab_id` exists) a table points at it. Otherwise it is `tab.not_open`, as today.
+    - _2026-09-28, as built (`9168014fb`): `partyMainBill` reads the party and its main bill in one
+      query and refuses `tab.not_open` when that bill is not an open bill of the party, rather than
+      trusting the triggers. `placeGroups` passes `"checked"` to `priceTabRound`, which then skips
+      `assertPartyBillOpen`; `addTabRound` still checks. `partyMainBill` moves the party's
+      revision only when the caller's command has not already moved it: `submitGroups` and
+      `submitDraft` pass `"moved"`._
     - `mergeTabs` calls `setMainBill(tx, into.partyId, intoTabId)` when `from` was its party's main
       bill and both are one party.
     - `unjoinTable` calls `setMainBill(tx, newPartyId, newTabId)` after opening the new party.

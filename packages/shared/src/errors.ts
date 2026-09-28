@@ -34,6 +34,11 @@ export interface ErrorParams {
   "shared.invalid_thousandths": { value: string };
   "shared.invalid_basis_points": { value: string };
   "locale.unsupported": { locale: string };
+  /**
+   * Names the FIELD, never its value: a PIN or password is exactly the kind of secret a caller can
+   * mis-send.
+   */
+  "management.request_invalid": { field: string };
 }
 
 export type ErrorCode = keyof ErrorParams;

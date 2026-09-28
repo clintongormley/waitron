@@ -35,6 +35,14 @@ export {
 export { centsToDecimal, decimalToCents, rawCentsToDecimal, stringToCents } from "./cents.js";
 export { formatMoney } from "./money-format.js";
 export {
+  normalisePartyName,
+  PARTY_NAME_MAX,
+  partyDisplayName,
+  partyReceiptLabel,
+  partyTablesName,
+  TABLE_SEPARATOR,
+} from "./party-name.js";
+export {
   basisPointsToDecimal,
   decimalToBasisPoints,
   decimalToThousandths,

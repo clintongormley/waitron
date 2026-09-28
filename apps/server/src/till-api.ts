@@ -101,6 +101,7 @@ import {
   markCleared,
   readPartyBills,
   seatTable,
+  setPartyName,
   partyRevisionOfOrder,
 } from "./parties.js";
 import type { PartyCommand } from "./parties.js";
@@ -143,7 +144,7 @@ import {
   requireSaleTillId,
   tryReadDevice,
 } from "./device-session.js";
-import { requireUuidParam } from "@waitron/server-kit";
+import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
 // Side-effect only: loads this host's errors.ts augmentation.
 import "./errors.js";
 
@@ -367,6 +368,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "bill.line_paid": 409,
   "bill.received_exceeds_total": 409,
   "bill.payments_received": 409,
+  "bill.presented": 409,
+  "bill.paid": 409,
+  "bill.other_party": 409,
   "bill.payment_not_found": 404,
   "bill.refund_exceeds_payment": 422,
   "bill.refund_not_whole": 422,
@@ -510,6 +514,13 @@ function joinGroupOf(body: Record<string, unknown>): { joinGroupId?: string } {
   if (joinGroupId === undefined) return {};
   if (typeof joinGroupId !== "string") throw invalid("joinGroupId");
   return { joinGroupId };
+}
+
+/** A submission's bill, when it names one: a UUID, in lower case as ids are stored. */
+function billOf(body: Record<string, unknown>): { billId?: string } {
+  const { billId } = body;
+  if (billId === undefined) return {};
+  return { billId: requireBodyUuid(billId, "billId").toLowerCase() };
 }
 
 /**
@@ -1513,6 +1524,24 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
+  app.put("/api/parties/:id/name", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const partyId = requirePartyParam(c.req.param("id"));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const expectedPartyRevision = requireRevision(
+        body.expectedPartyRevision,
+        "expectedPartyRevision",
+      );
+      // The wire always carries a name; null or "" clears it.
+      if (body.name === undefined) throw invalid("name");
+      const named = await withTransaction(deps.db, (tx) =>
+        setPartyName(tx, { partyId, name: body.name, expectedPartyRevision }),
+      );
+      return c.json(named);
+    }),
+  );
+
   app.get("/api/parties/:id/bills", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1560,6 +1589,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         ...groupCommand(personId, body),
         groups: parseSubmittedGroups(body.groups),
         ...joinGroupOf(body),
+        ...billOf(body),
       };
       const submitted = await withTransaction(deps.db, (tx) =>
         submitGroups(tx, deps.cfg, partyId, input),
@@ -1732,6 +1762,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         draftRevision: requireRevision(body.draftRevision, "draftRevision"),
         groups: parseDraftGroups(body.groups),
         ...joinGroupOf(body),
+        ...billOf(body),
       };
       const submitted = await withTransaction(deps.db, (tx) =>
         submitDraft(tx, deps.cfg, partyId, draftId, input),

@@ -394,6 +394,12 @@ declare module "@waitron/shared" {
      * finishing its table are refused while it still holds money.
      */
     "bill.payments_received": { workingOrderId: string };
+    /** The bill has been presented (placed), so it takes no new order. */
+    "bill.presented": { workingOrderId: string };
+    /** The bill is paid, so it takes no new order. */
+    "bill.paid": { workingOrderId: string };
+    /** An order named a bill that is not the party's: a bill of another party, or of none. */
+    "bill.other_party": { workingOrderId: string };
     /** No bill payment with this id; `paymentId` is the id the caller sent. */
     "bill.payment_not_found": { paymentId: string };
     /** A manager's action was refused: the bill payment is no longer pending, its card is at a
@@ -500,10 +506,10 @@ declare module "@waitron/shared" {
     };
     // The four `booking.*` codes are declared in @waitron/bookings/src/errors.ts.
     /**
-     * A tab verb found the order it was asked to modify is not an OPEN tab — not `open`, not pointed
-     * at by any `dining_tables.tab_id`, or absent. `moveTab` and `joinTable`, and `priceTabRound`
-     * (through which `submitGroups` prices a submission) for a round with lines, also accept the
-     * settled or abandoned tab a seated party's tables still point at.
+     * A tab verb found the order it was asked to modify is not open, or is absent; or, for a verb
+     * on a party's bills, is an open order of no party that no table points at: a counter order, or
+     * a check split from a table's bill of no party. `moveTab` and `joinTable` also
+     * accept the settled or abandoned tab a seated party's tables still point at.
      */
     "tab.not_open": { tabId: string };
     /**
@@ -640,8 +646,7 @@ declare module "@waitron/shared" {
      * of range, or an unknown shape. `field` carries the field NAME only, never the value.
      */
     "placement.invalid": { field: string };
-    // `management.request_invalid` is declared in `@waitron/server-kit` (`src/errors.ts`) with the
-    // request screens that throw it, and reaches this program through their package barrel.
+    // `management.request_invalid` is declared in `@waitron/shared` (`src/errors.ts`).
     /**
      * A request to a device-authenticated route carried no usable device identity — the
      * `waitron_device` cookie was absent, malformed, named no device, carried a wrong token, or

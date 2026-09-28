@@ -271,8 +271,8 @@ describe("transferLines — whole line", () => {
     expect(await linesOf(tabA)).toHaveLength(1); // untouched
   });
 
-  // A PARKED walk-up IS an open working order, but no dining_tables row points at it, so only
-  // assertAnchoredTabOpen's back-pointer check refuses it: a transfer moves items between two TABS.
+  // A PARKED walk-up IS an open working order, but it belongs to no party and no dining_tables row
+  // points at it, so `assertPartyBillOpen` refuses it.
   it("refuses transferring INTO an open order no table points at — a parked walk-up (tab.not_open)", async () => {
     const { cfg, tableAId, zoneId, cafeOffer, aguaOffer } = await setupVenue();
     const tabA = await openTabWith(cfg, tableAId, [{ menuItemId: cafeOffer, quantity: "2" }]);
@@ -594,8 +594,9 @@ describe("transferLines — extras children (FIX 2 cascade / FIX 4 split)", () =
     return list.id;
   }
 
-  /** Open an OPEN order with extras lines and point `tableId` at it → a real tab (`assertAnchoredTabOpen` needs
-   *  the back-pointer). `openTab` does not thread `extras`, so build the tab directly here. No fire. */
+  /** Open an OPEN order with extras lines and point `tableId` at it → a real tab: a bill of no party
+   *  passes `assertPartyBillOpen` only with the back-pointer. `openTab` does not thread `extras`, so
+   *  build the tab directly here. No fire. */
   async function openExtrasTab(
     cfg: TillConfig,
     zoneId: string,

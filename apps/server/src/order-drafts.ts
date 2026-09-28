@@ -22,10 +22,10 @@ import {
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { placeGroups, partyTab } from "./order-groups.js";
+import { placeGroups } from "./order-groups.js";
 import type { GroupLine, GroupRelease, SubmittedGroups, PartyCommandArgs } from "./order-groups.js";
 import type { TillConfig } from "./till-config.js";
-import { checkAndBumpParty, requireOpenParty, runServiceCommand } from "./parties.js";
+import { checkAndBumpParty, partyZone, requireOpenParty, runServiceCommand } from "./parties.js";
 import { screenNote } from "./working-order.js";
 import "./errors.js";
 
@@ -251,6 +251,8 @@ export interface SubmitDraftInput extends PartyCommandArgs {
   groups: { lineIds: string[]; release: GroupRelease }[];
   /** As `submitGroups` takes it: add the one held group's lines to this held group. */
   joinGroupId?: string;
+  /** As `submitGroups` takes it: the bill of the party the lines go on. */
+  billId?: string;
 }
 
 /** The groups placed, and the operator's draft as it is left: null once every line was sent. */
@@ -282,7 +284,7 @@ export async function submitDraft(
     { kind: "visit", partyId },
     input.submissionId,
     "draft.submit",
-    { partyId, draftId: id, operatorId, groups, joinGroupId },
+    { partyId, draftId: id, operatorId, groups, joinGroupId, billId: input.billId },
     async () => {
       const draft = await requireDraft(tx, id, partyId);
       await requireOwnDraftAt(tx, draft, operatorId, input.draftRevision);
@@ -301,6 +303,8 @@ export async function submitDraft(
         }),
         joinGroupId,
         operatorId,
+        billId: input.billId,
+        revisionMoved: true,
         ...(joinGroupId === undefined
           ? { addedLater: await startedAfterAGroup(tx, partyId, draft.createdAt) }
           : {}),
@@ -733,7 +737,7 @@ async function takenOverFrom(
   );
 }
 
-/** The zone's live offers for the menu items, from the source `priceOrderLines` refuses from. */
+/** The live offers for the menu items in the zone of {@link partyZone}; none when there is no zone. */
 async function offersFor(
   tx: Transaction,
   cfg: TillConfig,
@@ -741,7 +745,8 @@ async function offersFor(
   menuItemIds: readonly string[],
 ): Promise<Map<string, ZoneMenuOffer>> {
   if (menuItemIds.length === 0) return new Map();
-  const { zoneId } = await VENUE_SERVICE.getOrderContext(tx, cfg, await partyTab(tx, partyId));
+  const zoneId = await partyZone(tx, cfg, partyId);
+  if (zoneId === null) return new Map();
   const { offers } = await VENUE_SERVICE.listZoneOffers(tx, cfg, zoneId, {
     menuItemIds: [...new Set(menuItemIds)],
   });

@@ -540,6 +540,16 @@ describe("the spec's example (§3, §12 item 3)", () => {
     const [flan] = await linesIn(s.partyId, result.groups[0]!.id);
     expect(flan).toMatchObject({ workingOrderId: result.tabId, name: DISHES.flan.staff });
   });
+
+  it("puts a submission on the party's main bill even when its tables point at no tab", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    await db.run(sql`update dining_tables set tab_id = null where tab_id = ${s.tabId}`);
+
+    const result = await submit(v, s.partyId, [{ release: "fire", lines: [line(v, "beer")] }]);
+
+    expect(result.tabId).toBe(s.tabId);
+  });
 });
 
 describe("fire all now", () => {
@@ -1667,18 +1677,6 @@ describe("malformed commands are refused, writing nothing", () => {
         { code: "tab.transfer_quantity_invalid" },
       );
     }
-  });
-
-  it("refuses a submission when the party's tables point at no tab", async () => {
-    const v = await setupVenue();
-    const s = await seated(v);
-    await db.run(sql`update dining_tables set tab_id = null where tab_id = ${s.tabId}`);
-    await expectRefusedWithNothingWritten(
-      v,
-      s.partyId,
-      () => submit(v, s.partyId, [{ release: "fire", lines: [line(v, "beer")] }]),
-      { code: "party.not_open", params: { partyId: s.partyId } },
-    );
   });
 
   it("lists no groups of a party that does not exist", async () => {

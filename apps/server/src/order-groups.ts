@@ -2,12 +2,10 @@ import { and, asc, eq, inArray, isNotNull, isNull, ne, notExists, or, sql } from
 import type { SQL } from "drizzle-orm";
 import { staffPresentationName } from "@waitron/catalogue";
 import {
-  diningTables,
   nowIso,
   orderGroupEvents,
   orderGroups,
   ticketItems,
-  partyTables,
   parties,
   workingOrderLines,
   workingOrders,
@@ -21,9 +19,11 @@ import { trimQuantityForDisplay } from "./receipt-lines.js";
 import type { TillConfig } from "./till-config.js";
 import {
   checkAndBumpParty,
-  runServiceCommand,
   partyFamily,
+  partyMainBill,
   partyRevisionOfOrder,
+  requireBillOfParty,
+  runServiceCommand,
 } from "./parties.js";
 import {
   advanceSet,
@@ -51,6 +51,8 @@ export interface SubmitGroupsInput {
   /** Add to this HELD group instead of creating one: then `groups` holds one group, `hold`. */
   joinGroupId?: string;
   operatorId: string;
+  /** The bill of the party the lines go on; absent, the party's main bill. */
+  billId?: string;
 }
 
 export interface PartyCommandArgs {
@@ -79,7 +81,7 @@ export interface OrderGroup {
 }
 
 export interface SubmittedGroups {
-  /** The tab the lines went on: the party's next tab when its tab had been paid. */
+  /** The bill the lines went on. */
   tabId: string;
   revision: number;
   /** The groups this submission created or joined, in the order submitted. */
@@ -87,11 +89,11 @@ export interface SubmittedGroups {
 }
 
 /**
- * Put each submitted group's lines on the party's tab, released to the kitchen now (`fire`) or held
- * until {@link fireGroup}. Every line is credited to the operator. A group never matches another by
- * course; only `joinGroupId` adds to an existing one. A new held group prints its HOLD ticket where
- * the venue prints held work in advance ({@link printHoldTickets}); lines joining a group whose HOLD
- * ticket was queued print `+N` for it.
+ * Put each submitted group's lines on the party's main bill, or on the bill of the party it names,
+ * released to the kitchen now (`fire`) or held until {@link fireGroup}. Every line is credited to
+ * the operator. A group never matches another by course; only `joinGroupId` adds to an existing
+ * one. A new held group prints its HOLD ticket where the venue prints held work in advance
+ * ({@link printHoldTickets}); lines joining a group whose HOLD ticket was queued print `+N` for it.
  */
 export async function submitGroups(
   tx: Transaction,
@@ -108,14 +110,19 @@ export async function submitGroups(
     { partyId, operatorId, ...body },
     async () => {
       await checkAndBumpParty(tx, partyId, expectedPartyRevision, "open");
-      return placeGroups(tx, cfg, partyId, input);
+      return placeGroups(tx, cfg, partyId, { ...input, revisionMoved: true });
     },
   );
 }
 
-export type PlaceGroupsInput = Pick<SubmitGroupsInput, "groups" | "joinGroupId" | "operatorId"> & {
+export type PlaceGroupsInput = Pick<
+  SubmitGroupsInput,
+  "groups" | "joinGroupId" | "operatorId" | "billId"
+> & {
   /** Whether the groups it starts are a later addition; by default, whether the party had a group. */
   addedLater?: boolean;
+  /** The command has already moved the party's revision on, so making a main bill does not. */
+  revisionMoved?: boolean;
 };
 
 /**
@@ -145,17 +152,18 @@ export async function placeGroups(
       release: group.release === "fire",
     })),
   );
-  // A first group with no lines prices nothing, as the tab is checked before the empty basket.
+  // A first group with no lines prices nothing, as the bill is checked before the empty basket.
+  const tabId = await resolveOrderBill(tx, cfg, partyId, input);
   const round = await priceTabRound(
     tx,
     cfg,
-    await partyTab(tx, partyId),
+    tabId,
     input.groups[0]!.lines.length === 0 ? [] : lines,
+    "checked",
   );
   if (input.groups.some((group) => group.lines.length === 0)) {
     throw new AppError("sale.empty_basket", {});
   }
-  const { tabId } = round;
   const groupIds: string[] = [];
   if (input.joinGroupId !== undefined) groupIds.push(input.joinGroupId);
   else {
@@ -213,6 +221,22 @@ export async function placeGroups(
     revision: await currentRevision(tx, partyId),
     groups: groupIds.map((id) => listed.get(id)!),
   };
+}
+
+/** The bill a submission goes on: the open bill of the party it names, or else the main bill. */
+async function resolveOrderBill(
+  tx: Transaction,
+  cfg: TillConfig,
+  partyId: string,
+  input: Pick<PlaceGroupsInput, "billId" | "revisionMoved">,
+): Promise<string> {
+  const { billId } = input;
+  if (billId === undefined) {
+    return partyMainBill(tx, cfg, partyId, input.revisionMoved === true ? "moved" : "move");
+  } else {
+    await requireBillOfParty(tx, partyId, billId);
+    return billId;
+  }
 }
 
 /**
@@ -1296,19 +1320,6 @@ export async function requireGroup(
     throw new AppError("group.not_found", { groupId });
   }
   return group.state;
-}
-
-/** The tab the party's tables point at, which may be a paid one the party can still order on. */
-export async function partyTab(tx: Transaction, partyId: string): Promise<string> {
-  const [table] = await tx
-    .select({ tabId: diningTables.tabId })
-    .from(partyTables)
-    .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
-    .where(and(eq(partyTables.partyId, partyId), isNull(partyTables.leftAt)))
-    .orderBy(asc(partyTables.joinedAt), asc(partyTables.id))
-    .limit(1);
-  if (table?.tabId == null) throw new AppError("party.not_open", { partyId });
-  return table.tabId;
 }
 
 async function lastPosition(tx: Transaction, partyId: string): Promise<number> {
