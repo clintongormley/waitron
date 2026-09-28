@@ -1675,6 +1675,20 @@ describe("dashboard-app", () => {
     expect(panel.hidden).toBe(false);
   });
 
+  it.each([
+    ["es-ES", "Productos y menús"],
+    ["en-GB", "Products and menus"],
+  ])("names the products group for menus as well as products (%s)", async (locale, heading) => {
+    const me = { ...meResponse, venueLocale: locale, sessionDefault: locale };
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ getMe: vi.fn().mockResolvedValue(me) }),
+    });
+    await flush(el);
+    expect(currentLocale()).toBe(locale);
+    const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-menu"]')!;
+    expect(header.textContent!.replace(/\s+/g, " ").trim()).toBe(heading);
+  });
+
   it("keeps a group expanded once collapsed if it holds the current screen, so you never lose your place", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),

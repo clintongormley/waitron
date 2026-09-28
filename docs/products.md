@@ -147,7 +147,7 @@ When you save a new product, the editor closes and a window such as **Add Flat w
 lists each menu's **Top level** and the sections inside it: tick the places you want and choose
 **Add to menus**, or choose **Skip** and place it later. The product is already saved by then, so a
 place that refuses it does not undo the save — the window names the places that failed and keeps them
-ticked so you can try again. A menu's sections themselves are built under **Products and recipes →
+ticked so you can try again. A menu's sections themselves are built under **Products and menus →
 Menus**.
 
 ## Keep choices reusable
