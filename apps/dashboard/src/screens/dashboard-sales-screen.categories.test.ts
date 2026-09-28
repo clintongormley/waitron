@@ -316,23 +316,23 @@ describe("dashboard-sales-screen — category report", () => {
   it("lays the tree out depth first, with a Directly-in row only for a parent that has children and lines of its own", async () => {
     const el = await mount(stubApi());
     expect(rows(el)).toEqual([
-      ["Bebidas Casa", 0, "category", "20.00", "17.00"],
-      ["Directamente en Bebidas Casa", 1, "direct", "5.00", "4.50"],
-      ["Refrescos Casa", 1, "category", "15.00", "12.50"],
+      ["Bebidas Casa", 0, "category", "20,00\u00a0€", "17,00\u00a0€"],
+      ["Directamente en Bebidas Casa", 1, "direct", "5,00\u00a0€", "4,50\u00a0€"],
+      ["Refrescos Casa", 1, "category", "15,00\u00a0€", "12,50\u00a0€"],
       // No Directly-in row: Cocina Casa has children but no lines of its own.
-      ["Cocina Casa", 0, "category", "20.00", "18.00"],
-      ["Entrantes Casa", 1, "category", "20.00", "18.00"],
+      ["Cocina Casa", 0, "category", "20,00\u00a0€", "18,00\u00a0€"],
+      ["Entrantes Casa", 1, "category", "20,00\u00a0€", "18,00\u00a0€"],
       // Its direct amounts cancel to zero, but it has lines, so the row stays.
-      ["Directamente en Entrantes Casa", 2, "direct", "0.00", "0.00"],
+      ["Directamente en Entrantes Casa", 2, "direct", "0,00\u00a0€", "0,00\u00a0€"],
       // A leaf with lines of its own has no Directly-in row.
-      ["Croquetas Casa", 2, "category", "20.00", "18.00"],
-      ["Sin categoría", 0, "uncategorised", "3.00", "2.70"],
-      ["No registrada", 0, "not_recorded", "1.00", "6.00"],
-      ["Sin categoría registrada", 1, "direct", "0.00", "2.00"],
-      ["Tapas viejas", 1, "free_text", "1.00", "4.00"],
+      ["Croquetas Casa", 2, "category", "20,00\u00a0€", "18,00\u00a0€"],
+      ["Sin categoría", 0, "uncategorised", "3,00\u00a0€", "2,70\u00a0€"],
+      ["No registrada", 0, "not_recorded", "1,00\u00a0€", "6,00\u00a0€"],
+      ["Sin categoría registrada", 1, "direct", "0,00\u00a0€", "2,00\u00a0€"],
+      ["Tapas viejas", 1, "free_text", "1,00\u00a0€", "4,00\u00a0€"],
     ]);
-    expect(q(el, "category-total-gross")!.textContent!.trim()).toBe("44.00");
-    expect(q(el, "category-total-net")!.textContent!.trim()).toBe("43.70");
+    expect(q(el, "category-total-gross")!.textContent!.trim()).toBe("44,00\u00a0€");
+    expect(q(el, "category-total-net")!.textContent!.trim()).toBe("43,70\u00a0€");
   });
 
   it("indents each row by its depth, and names its parents for a screen reader", async () => {
@@ -385,8 +385,8 @@ describe("dashboard-sales-screen — category report", () => {
       [...row.querySelectorAll("th, td")].map((cell) => cell.textContent!.trim()),
     );
     expect(labelRows).toEqual([
-      ["Hora feliz Casa", "8.00", "7.00"],
-      ["Sin gluten Casa", "5.00", "4.50"],
+      ["Hora feliz Casa", "€8.00", "€7.00"],
+      ["Sin gluten Casa", "€5.00", "€4.50"],
     ]);
     expect(q(el, "labels-overlap")!.textContent!.trim()).toBe(
       "Label totals overlap: a line counts in every label it carries, and a label can cut across categories.",

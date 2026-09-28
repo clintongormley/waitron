@@ -4,7 +4,7 @@ import { allergenStateName, vatClassName } from "../i18n/domain.js";
 import type { Product } from "../api/client.js";
 import type { ListedVariant } from "@waitron/catalogue/src/product-types.js";
 import { ProductList } from "./product-list.js";
-import { t } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
 // The table remembers its sort and filter choices in sessionStorage under waitron.products.table, so
@@ -43,6 +43,10 @@ async function choose(el: ProductList, column: string, value: string): Promise<v
   select.dispatchEvent(new Event("change", { bubbles: true }));
   await table.updateComplete;
 }
+
+/** A Spanish price, which the suite's default language writes with a no-break space before the
+ * sign. */
+const euros = (amount: string) => `${amount}\u00a0€`;
 
 const bunVariant = {
   id: "small",
@@ -170,8 +174,162 @@ describe("product-list", () => {
     ];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
     const rows = [...(await tableRoot(el)).querySelectorAll("tbody tr")];
-    expect(rows[0]!.textContent).toContain("12.50");
-    expect(rows[1]!.textContent).toContain("4.00–7.50");
+    expect(rows[0]!.textContent).toContain(euros("12,50"));
+    expect(rows[1]!.textContent).toContain(`${euros("4,00")}–${euros("7,50")}`);
+  });
+
+  // Spanish writes a no-break space (U+00A0) before the sign, spelled out here rather than taken
+  // from the formatter the widget calls.
+  it.each([
+    { locale: "en-GB", plain: "€12.50", range: "€4.00–€7.50", variant: "€7.50" },
+    {
+      locale: "es-ES",
+      plain: "12,50\u00a0€",
+      range: "4,00\u00a0€–7,50\u00a0€",
+      variant: "7,50\u00a0€",
+    },
+  ])(
+    "writes each price with the euro sign where $locale writes it",
+    async ({ locale, ...want }) => {
+      setLocale(locale);
+      try {
+        const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+          products: [
+            product({ id: "plain", unitPrice: "12.5" }),
+            product({
+              id: "sized",
+              variants: [
+                { ...bunVariant, id: "small", unitPrice: "4.00" },
+                { ...bunVariant, id: "large", name: "Large", unitPrice: "7.50" },
+              ],
+            }),
+          ],
+        });
+        const table = el.shadowRoot!.querySelector("wt-data-table")!;
+        const root = await tableRoot(el);
+        const price = (key: string) =>
+          cellUnder(root, key, t("product.price")).querySelector('[data-test="price"]')!
+            .textContent;
+        expect(price("plain")).toBe(want.plain);
+        expect(price("sized")).toBe(want.range);
+        root.querySelector<HTMLElement>(".tree-toggle")!.click();
+        await table.updateComplete;
+        expect(price("sized:large")).toBe(want.variant);
+      } finally {
+        setLocale("es-ES");
+      }
+    },
+  );
+
+  it("sorts by price as an amount, a range by its low end, whatever the language writes", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({ id: "ten", name: "A", unitPrice: "10.00" }),
+        product({ id: "nine", name: "B", unitPrice: "9.00" }),
+        product({
+          id: "range",
+          name: "C",
+          variants: [
+            { ...bunVariant, id: "s", unitPrice: "9.50" },
+            { ...bunVariant, id: "l", name: "Large", unitPrice: "30.00" },
+          ],
+        }),
+      ],
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    root.querySelector<HTMLElement>('button[data-sort="price"]')!.click();
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["nine", "range", "ten"]);
+  });
+
+  // Sorted as text, English puts €1,000.00 before €999.00 and Spanish puts 10.000,00 € before
+  // 9500,00 €, so only a numeric sort passes in either language.
+  it.each(["en-GB", "es-ES"])(
+    "sorts amounts of a thousand and more as amounts in %s",
+    async (locale) => {
+      setLocale(locale);
+      try {
+        const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+          products: [
+            product({ id: "10000", name: "A", unitPrice: "10000.00" }),
+            product({ id: "1000", name: "B", unitPrice: "1000.00" }),
+            product({ id: "9500", name: "C", unitPrice: "9500.00" }),
+            product({ id: "999", name: "D", unitPrice: "999.00" }),
+          ],
+        });
+        const table = el.shadowRoot!.querySelector("wt-data-table")!;
+        const root = await tableRoot(el);
+        root.querySelector<HTMLElement>('button[data-sort="price"]')!.click();
+        await table.updateComplete;
+        expect(rowKeys(root)).toEqual(["999", "1000", "9500", "10000"]);
+      } finally {
+        setLocale("es-ES");
+      }
+    },
+  );
+
+  // A term typed from the keyboard carries an ordinary space where Spanish shows a no-break one.
+  it.each([
+    { locale: "es-ES", term: "12,00", want: ["twelve"] },
+    { locale: "es-ES", term: "12,00 €", want: ["twelve"] },
+    { locale: "en-GB", term: "€12.00", want: ["twelve"] },
+    { locale: "es-ES", term: "12.00", want: ["twelve"] },
+    { locale: "es-ES", term: "7,50", want: ["sized"] },
+    { locale: "es-ES", term: "7.50", want: ["sized"] },
+  ])(
+    "finds a product in $locale by the price as shown, or as its raw amount: $term",
+    async ({ locale, term, want }) => {
+      setLocale(locale);
+      try {
+        const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+          products: [
+            product({ id: "twelve", name: "Tortilla", unitPrice: "12.00" }),
+            product({ id: "other", name: "Pan", unitPrice: "8.50" }),
+            product({
+              id: "sized",
+              name: "Café",
+              variants: [
+                { ...bunVariant, id: "small", name: "Pequeño", unitPrice: "4.00" },
+                { ...bunVariant, id: "large", name: "Grande", unitPrice: "7.50" },
+              ],
+            }),
+          ],
+        });
+        const table = el.shadowRoot!.querySelector("wt-data-table")!;
+        const root = await tableRoot(el);
+        const search = root.querySelector<HTMLInputElement>('input[name="search"]')!;
+        search.value = term;
+        search.dispatchEvent(new Event("input", { bubbles: true }));
+        await table.updateComplete;
+        expect(rowKeys(root)).toEqual(want);
+      } finally {
+        setLocale("es-ES");
+      }
+    },
+  );
+
+  it("finds a middle variant's price on the variant, not on its product's range", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({
+          id: "sized",
+          name: "Café",
+          variants: [
+            { ...bunVariant, id: "small", name: "Pequeño", unitPrice: "4.00" },
+            { ...bunVariant, id: "mid", name: "Mediano", unitPrice: "5.50" },
+            { ...bunVariant, id: "large", name: "Grande", unitPrice: "7.50" },
+          ],
+        }),
+      ],
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    const search = root.querySelector<HTMLInputElement>('input[name="search"]')!;
+    search.value = "5.50";
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["sized", "sized:mid"]);
   });
 
   it("prices a variant with no price of its own at its product's price", async () => {
@@ -189,11 +347,17 @@ describe("product-list", () => {
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = await tableRoot(el);
-    expect(cellUnder(root, "wine", t("product.price")).textContent!.trim()).toBe("4.00–5.50");
+    expect(cellUnder(root, "wine", t("product.price")).textContent!.trim()).toBe(
+      `${euros("4,00")}–${euros("5,50")}`,
+    );
     root.querySelector<HTMLElement>(".tree-toggle")!.click();
     await table.updateComplete;
-    expect(cellUnder(root, "wine:w125", t("product.price")).textContent!.trim()).toBe("4.00");
-    expect(cellUnder(root, "wine:w175", t("product.price")).textContent!.trim()).toBe("5.50");
+    expect(cellUnder(root, "wine:w125", t("product.price")).textContent!.trim()).toBe(
+      euros("4,00"),
+    );
+    expect(cellUnder(root, "wine:w175", t("product.price")).textContent!.trim()).toBe(
+      euros("5,50"),
+    );
   });
 
   // The Modifiers column names the lists a manager attached through `Product.modifiers`. Two things
@@ -590,8 +754,10 @@ describe("product-list", () => {
       ],
     });
     const root = await tableRoot(el);
-    expect(cellUnder(root, "wine", t("product.price")).textContent!.trim()).toBe("4.50–5.50");
-    expect(cellUnder(root, "beer", t("product.price")).textContent!.trim()).toBe("3.00");
+    expect(cellUnder(root, "wine", t("product.price")).textContent!.trim()).toBe(
+      `${euros("4,50")}–${euros("5,50")}`,
+    );
+    expect(cellUnder(root, "beer", t("product.price")).textContent!.trim()).toBe(euros("3,00"));
   });
 
   // Every field differs between Wine 175 and its product, and its three names differ from one
@@ -637,7 +803,7 @@ describe("product-list", () => {
     const cell = (header: string) => cellUnder(root, "wine:w175", header);
     expect(cell(t("product.name")).textContent!.trim()).toBe("Wine 175");
     expect(cell(t("product.price")).querySelector('[data-test="price"]')!.textContent!.trim()).toBe(
-      "4.75",
+      euros("4,75"),
     );
     expect(cell(t("editor.main_category")).textContent!.trim()).toBe("Bebidas");
     expect(cellUnder(root, "wine", t("editor.main_category")).textContent!.trim()).toBe("Comida");
@@ -697,7 +863,9 @@ describe("product-list", () => {
       ["wine:w125", "Wine 125"],
     ] as const)
       expect(cellUnder(root, rowKey, t("product.name")).textContent!.trim()).toBe(name);
-    expect(cellUnder(root, "wine:w125", t("product.price")).textContent!.trim()).toBe("4.00");
+    expect(cellUnder(root, "wine:w125", t("product.price")).textContent!.trim()).toBe(
+      euros("4,00"),
+    );
     // Cell markup lives in the table's shadow root, so only ::part reaches it.
     const style = getComputedStyle(note("wine:w175")!);
     expect(style.display).toBe("block");

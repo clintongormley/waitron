@@ -22,7 +22,13 @@ import type {
 } from "../api/client.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { byLabel, categoryAncestors, categoryPath } from "./category-form.js";
-import { switchField, textField, type FieldContext } from "./form-fields.js";
+import {
+  priceField,
+  priceSearchText,
+  priceText,
+  switchField,
+  type FieldContext,
+} from "./form-fields.js";
 
 /** What saving one product's settings on the menu asks the host to write. `item` is null when the
  * menu's price and switch are unchanged, and `variants` is null when no variant changed, which
@@ -92,8 +98,8 @@ const priced = (
 
 const spanText = ({ low, high, lowCents, highCents }: Span): string =>
   lowCents === highCents
-    ? low
-    : t("menu_prices.range").replace("{low}", low).replace("{high}", high);
+    ? priceText(low)
+    : t("menu_prices.range").replace("{low}", priceText(low)).replace("{high}", priceText(high));
 
 const muted = (content: unknown) => html`<span part="muted">${content}</span>`;
 
@@ -380,7 +386,9 @@ export class MenuPricesTable extends LitElement {
       searchValue: (line: Line) => {
         const value = read(line);
         if (value === null) return "";
-        return typeof value === "string" ? value : `${value.low} ${value.high}`;
+        return typeof value === "string"
+          ? priceSearchText(priceText(value), [value])
+          : priceSearchText(spanText(value), [value.low, value.high]);
       },
     });
     return [
@@ -451,7 +459,7 @@ export class MenuPricesTable extends LitElement {
         ...price("menu-price", t("menu_prices.menu_price"), menuPrice),
         cell: (line) => {
           const set = menuPrice(line);
-          if (set !== null) return set;
+          if (set !== null) return priceText(set);
           return variantPriced(line)
             ? t("menu_prices.variant_overrides")
             : muted(t("menu_prices.no_override"));
@@ -579,7 +587,7 @@ export class MenuPricesTable extends LitElement {
         heading=${t("form.error_heading")}
         .errors=${Object.values(this.errors)}
       ></wt-form-error-summary>
-      ${textField(
+      ${priceField(
         context,
         "grossPrice",
         t("menu_prices.override"),
@@ -587,7 +595,7 @@ export class MenuPricesTable extends LitElement {
         (value) => this.#edit((current) => ({ ...current, grossPrice: value }), "grossPrice"),
         false,
         productPrice,
-        t("menu_prices.override_help").replace("{price}", productPrice),
+        t("menu_prices.override_help").replace("{price}", priceText(productPrice)),
       )}
       ${
         draft.grossPrice !== ""
@@ -614,7 +622,7 @@ export class MenuPricesTable extends LitElement {
                 const known = this.#variants.get(variant.variantId);
                 return html`<fieldset>
                   <legend>${known?.name ?? t("members.missing")}</legend>
-                  ${textField(
+                  ${priceField(
                     context,
                     `variants.${index}.price`,
                     t("menu_prices.override"),

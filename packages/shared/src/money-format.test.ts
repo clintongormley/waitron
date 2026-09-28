@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { formatMoney } from "./money-format.js";
+import { currencySymbol, formatMoney } from "./money-format.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -49,4 +49,39 @@ it("builds one formatter per locale and reuses it", () => {
   formatMoney("1.00", "de-DE");
   expect(built).toEqual(["fr-FR", "de-DE"]);
   expect(norm(formatMoney("1.00", "fr-FR"))).toBe("1,00 €");
+});
+
+it("puts the euro sign before the amount in English, as the dashboard's English writes it", () => {
+  expect(currencySymbol("en")).toEqual({ symbol: "€", side: "before" });
+  expect(currencySymbol("en-GB")).toEqual({ symbol: "€", side: "before" });
+});
+
+it("puts the euro sign after the amount in Spanish", () => {
+  expect(currencySymbol("es-ES")).toEqual({ symbol: "€", side: "after" });
+});
+
+it("reads the side from where the locale writes the sign, not from its decimal comma", () => {
+  // Dutch writes a decimal comma, as Spanish does, but puts the sign first: "€ 9,00".
+  expect(currencySymbol("nl-NL")).toEqual({ symbol: "€", side: "before" });
+});
+
+it("reads the sign itself from the locale", () => {
+  // Swiss German writes euros with the code rather than the sign: "EUR 9.00".
+  expect(currencySymbol("de-CH")).toEqual({ symbol: "EUR", side: "before" });
+});
+
+it("shares one formatter per locale with formatMoney", () => {
+  const Original = Intl.NumberFormat;
+  const built: string[] = [];
+  vi.spyOn(Intl, "NumberFormat").mockImplementation(function (
+    locale?: Intl.LocalesArgument,
+    options?: Intl.NumberFormatOptions,
+  ) {
+    built.push(String(locale));
+    return new Original(locale, options);
+  } as typeof Intl.NumberFormat);
+  currencySymbol("it-IT");
+  formatMoney("1.00", "it-IT");
+  currencySymbol("it-IT");
+  expect(built).toEqual(["it-IT"]);
 });

@@ -98,7 +98,23 @@ const panel = (theme: "light" | "dark") => `
       </wt-disclosure>
     </div>
     <div class="row" style="margin-top:16px; flex-direction:column; align-items:stretch">
-      <wt-price-input class="demo-price" label="Precio" name="precio" value="1,80" unit="ud">
+      <wt-price-input
+        class="demo-price"
+        label="Precio"
+        name="precio"
+        value="1,80"
+        unit="ud"
+        locale="es-ES"
+      >
+      </wt-price-input>
+      <wt-price-input
+        class="demo-price"
+        label="Price"
+        name="price"
+        placeholder="1.80"
+        unit="ea"
+        locale="en-GB"
+      >
       </wt-price-input>
       <wt-price-input
         class="demo-price"

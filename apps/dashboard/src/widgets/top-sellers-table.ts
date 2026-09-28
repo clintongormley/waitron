@@ -1,4 +1,6 @@
 import { type TemplateResult, css, html } from "lit";
+import { formatMoney } from "@waitron/shared";
+import { currentLocale } from "../i18n/t.js";
 import type { TopSellerRow } from "../api/client.js";
 
 /**
@@ -39,7 +41,7 @@ export function renderTopSellers(rows: TopSellerRow[], labels: TopSellersLabels)
           html`<tr data-test=${`seller-row-${i}`}>
               <th scope="row" data-test="seller-name">${row.name}</th>
               <td class="num">${row.quantity}</td>
-              <td class="num">${row.total}</td>
+              <td class="num">${formatMoney(row.total, currentLocale())}</td>
             </tr>
             ${row.variants.map(
               (variant, j) =>
@@ -49,7 +51,7 @@ export function renderTopSellers(rows: TopSellerRow[], labels: TopSellersLabels)
                     ><span data-test="variant-name">${variant.name}</span>
                   </th>
                   <td class="num">${variant.quantity}</td>
-                  <td class="num">${variant.total}</td>
+                  <td class="num">${formatMoney(variant.total, currentLocale())}</td>
                 </tr>`,
             )}`,
       )}

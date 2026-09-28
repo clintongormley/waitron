@@ -3430,7 +3430,7 @@ describe("alerts in the shell", () => {
 
   it("pops up a new alert, and opens the panel when the pop-up is pressed", async () => {
     const { el } = await mountWithPopup();
-    expect(toast(el).message).toContain("A card payment of 12.50 taken while offline");
+    expect(toast(el).message).toContain("A card payment of €12.50 taken while offline");
     expect(toast(el).tone).toBe("error");
     toastButton(el, "message").click();
     expect(panel(el).matches(":popover-open")).toBe(true);

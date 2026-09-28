@@ -1,9 +1,10 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
+import { formatMoney } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-button.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { regimeName } from "../i18n/domain.js";
 import type { PurchaseInvoice } from "../api/client.js";
 
@@ -132,7 +133,7 @@ export class PurchaseList extends LitElement {
                   <span class="meta">
                     <span class="number">${inv.supplierInvoiceNumber}</span>
                     <span class="received">${inv.receivedOn}</span>
-                    <span class="total">${inv.total}</span>
+                    <span class="total">${formatMoney(inv.total, currentLocale())}</span>
                     <span class="badge" data-test="regime" data-regime=${inv.regime}
                       >${regimeName(inv.regime)}</span
                     >

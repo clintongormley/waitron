@@ -112,7 +112,7 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     modal.querySelector<HTMLElement>('[data-test="offer-save"]')!.click();
     await el.updateComplete;
     expect(
-      modal.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="grossPrice"]')!.error,
+      modal.querySelector<HTMLElementTagNameMap["wt-price-input"]>('[name="grossPrice"]')!.error,
     ).toBe(t("editor.price_invalid"));
     await expectNoA11yViolations(host);
   });

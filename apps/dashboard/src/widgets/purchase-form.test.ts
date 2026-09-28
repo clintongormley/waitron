@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
+import { setLocale, t } from "../i18n/t.js";
 import { regimeName, vatKindName } from "../i18n/domain.js";
 import { PurchaseForm } from "./purchase-form.js";
 import type { PurchaseInvoice } from "../api/client.js";
@@ -429,6 +431,45 @@ describe("purchase-form", () => {
     });
   });
 
+  it("gives every control it draws a semantic name, numbering each VAT line's", async () => {
+    const { el } = await mountWidget<PurchaseForm>(
+      "dashboard-purchase-form",
+      baseProps({ invoice: EDIT_INVOICE }),
+    );
+    await el.updateComplete;
+    const fields = [...el.shadowRoot!.querySelectorAll<HTMLElement>("wt-input, wt-price-input")];
+    await Promise.all(
+      fields.map(
+        (field) => (field as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete,
+      ),
+    );
+    const controls = [
+      ...el.shadowRoot!.querySelectorAll("input, select, textarea, wt-input, wt-price-input"),
+    ].flatMap((node) =>
+      node.shadowRoot ? [...node.shadowRoot.querySelectorAll("input, select, textarea")] : [node],
+    ) as (HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement)[];
+    expect(controls.map((control) => control.name)).toEqual([
+      "supplier-tax-id",
+      "supplier-name",
+      "supplier-invoice-number",
+      "issued-on",
+      "received-on",
+      "total",
+      "regime",
+      "deductible-proportion",
+      "note",
+      "line-0-rate",
+      "line-0-base",
+      "line-0-tax",
+      "line-0-kind",
+      "line-1-rate",
+      "line-1-base",
+      "line-1-tax",
+      "line-1-kind",
+    ]);
+    for (const control of controls) expect(control.id, control.name).not.toMatch(/^wt-/);
+  });
+
   it("resets open to false when the dialog is closed (wt-close)", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     const nativeDialog = await openedDialog(el);
@@ -466,4 +507,101 @@ describe("purchase-form keyboard submit", () => {
       { rate: "21.00", base: "100.00", tax: "21.00", kind: "ordinary" },
     ]);
   });
+});
+
+describe("purchase-form — money fields", () => {
+  afterEach(() => setLocale("es-ES"));
+
+  type MoneyField = HTMLElement & { label: string; value: string };
+  const MONEY = [
+    ["total", "purchase.total", "242.00"],
+    ["line-base-0", "purchase.line_base", "100.00"],
+    ["line-tax-0", "purchase.line_tax", "10.00"],
+    ["line-base-1", "purchase.line_base", "100.00"],
+    ["line-tax-1", "purchase.line_tax", "21.00"],
+  ] as const;
+
+  it.each([
+    ["es-ES", "after"],
+    ["en-GB", "before"],
+  ])(
+    "draws the euro sign in the total and each line's base and tax, where %s writes it",
+    async (locale, side) => {
+      setLocale(locale);
+      const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", {
+        open: true,
+        invoice: EDIT_INVOICE,
+      });
+      await el.updateComplete;
+      for (const [id, label, value] of MONEY) {
+        const field = el.shadowRoot!.querySelector<MoneyField>(`[data-test=${id}]`)!;
+        await (field as MoneyField & { updateComplete: Promise<unknown> }).updateComplete;
+        expect(field.tagName, id).toBe("WT-PRICE-INPUT");
+        expect(field.label, id).toBe(t(label));
+        expect(field.value, id).toBe(value);
+        const sign = field.shadowRoot!.querySelector("[part=currency]");
+        expect(sign?.textContent, id).toBe("€");
+        const amount = field.shadowRoot!.querySelector("[part=amount]")!.getBoundingClientRect();
+        const signLeft = sign!.getBoundingClientRect().left;
+        expect(signLeft < amount.left + amount.width / 2 ? "before" : "after", id).toBe(side);
+        expect(field.shadowRoot!.querySelector("button"), `${id} has no unit button`).toBeNull();
+      }
+      for (const id of ["line-rate-0", "deductible-proportion"]) {
+        expect(el.shadowRoot!.querySelector(`[data-test=${id}]`)!.tagName, id).toBe("WT-INPUT");
+      }
+    },
+  );
+
+  it.each(["en-GB", "es-ES"])(
+    "on a phone in %s, a VAT line wraps its fields rather than overlapping or cutting them",
+    async (locale) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      try {
+        setLocale(locale);
+        await page.viewport(390, 844);
+        const big = { rate: "21.00", base: "10000.00", tax: "10000.00", kind: "capital" as const };
+        const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", {
+          open: true,
+          invoice: { ...EDIT_INVOICE, lines: [big] },
+        });
+        // The field measures its sign after layout, and sizes its amount box then.
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const line = el.shadowRoot!.querySelector<HTMLElement>("[data-test=line-0]")!;
+        const row = line.getBoundingClientRect();
+        const boxes = (Array.from(line.children) as HTMLElement[]).map((child) => {
+          const amount = child.shadowRoot?.querySelector("[part=amount]");
+          return { child, box: (amount ?? child).getBoundingClientRect() };
+        });
+        for (const [i, { child, box }] of boxes.entries()) {
+          const at = `${locale} ${child.dataset.test ?? child.tagName}`;
+          expect(box.right, `${at} runs past the line`).toBeLessThanOrEqual(row.right + 0.5);
+          for (const { child: other, box: next } of boxes.slice(i + 1)) {
+            const apart =
+              next.left >= box.right - 0.5 ||
+              next.right <= box.left + 0.5 ||
+              next.top >= box.bottom - 0.5 ||
+              next.bottom <= box.top + 0.5;
+            expect(apart, `${at} overlaps ${other.dataset.test ?? other.tagName}`).toBe(true);
+          }
+        }
+        for (const id of ["line-base-0", "line-tax-0"]) {
+          const input = el
+            .shadowRoot!.querySelector(`[data-test=${id}]`)!
+            .shadowRoot!.querySelector("input")!;
+          expect(input.scrollWidth, `${locale} ${id} is cut off`).toBeLessThanOrEqual(
+            input.clientWidth,
+          );
+        }
+        const kind = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=line-kind-0]")!;
+        const shown = kind.getBoundingClientRect().width;
+        kind.style.width = "max-content";
+        const needed = kind.getBoundingClientRect().width;
+        kind.style.width = "";
+        expect(shown, `${locale} the VAT type is cut off`).toBeGreaterThanOrEqual(needed);
+      } finally {
+        await page.viewport(width, height);
+      }
+    },
+  );
 });

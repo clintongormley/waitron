@@ -2270,7 +2270,9 @@ async function inOffer(el: MenusScreen, testId: string): Promise<void> {
 }
 
 function offerField(el: MenusScreen, name: string) {
-  return pricesModal(el).querySelector<HTMLElementTagNameMap["wt-input"]>(`[name="${name}"]`)!;
+  return pricesModal(el).querySelector<HTMLElementTagNameMap["wt-price-input"]>(
+    `[name="${name}"]`,
+  )!;
 }
 
 /** A save with nothing changed writes nothing, so a test of a write changes the price first. */

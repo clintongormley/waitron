@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles, currentContentLanguages, type DataTableColumn } from "@waitron/ui";
+import { formatMoney } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -8,6 +9,7 @@ import { t, currentLocale } from "../i18n/t.js";
 import { allergenState, allergenStateName, vatClassName } from "../i18n/domain.js";
 import { categoryPath } from "./category-form.js";
 import { labelsText } from "./classification-fields.js";
+import { priceSearchText } from "./form-fields.js";
 import {
   modifierListName,
   modifierListNames,
@@ -147,14 +149,22 @@ export class ProductList extends LitElement {
 
   /** A product with an Active variant is sold only as one of them, and one with none sells as
    * itself. */
-  #price({ product, variant }: ProductRow): string {
-    if (variant) return Number(variant.effective.unitPrice).toFixed(2);
+  #amounts({ product, variant }: ProductRow): string[] {
+    if (variant) return [variant.effective.unitPrice];
     const sold = product.variants.filter(({ active }) => active);
-    if (sold.length === 0) return Number(product.unitPrice).toFixed(2);
-    const prices = sold.map(({ effective }) => Number(effective.unitPrice));
-    const low = Math.min(...prices).toFixed(2);
-    const high = Math.max(...prices).toFixed(2);
-    return low === high ? low : `${low}–${high}`;
+    return sold.length ? sold.map(({ effective }) => effective.unitPrice) : [product.unitPrice];
+  }
+
+  #prices(row: ProductRow): { low: number; high: number } {
+    const prices = this.#amounts(row).map(Number);
+    return { low: Math.min(...prices), high: Math.max(...prices) };
+  }
+
+  #price(row: ProductRow): string {
+    const locale = currentLocale();
+    const { low, high } = this.#prices(row);
+    const text = formatMoney(String(low), locale);
+    return low === high ? text : `${text}–${formatMoney(String(high), locale)}`;
   }
 
   #columns(): DataTableColumn<ProductRow>[] {
@@ -210,7 +220,12 @@ export class ProductList extends LitElement {
                   >`
             }`;
         },
-        sortValue: (row) => Number(this.#price(row).split("–")[0]),
+        sortValue: (row) => this.#prices(row).low,
+        searchValue: (row) => {
+          const { low, high } = this.#prices(row);
+          const ends = this.#amounts(row).filter((raw) => [low, high].includes(Number(raw)));
+          return priceSearchText(this.#price(row), ends);
+        },
       },
       {
         key: "modifiers",

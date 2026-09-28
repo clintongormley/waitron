@@ -2,14 +2,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, type TemplateResult } from "lit";
 import { setContentLanguages, type WtInput } from "@waitron/ui";
 import type { WtSwitch } from "@waitron/ui/src/components/wt-switch.js";
+import type { WtPriceInput } from "@waitron/ui/src/components/wt-price-input.js";
 import { MAX_MODIFIER_INTEGER } from "@waitron/catalogue/src/modifier-limits.js";
+import { setLocale } from "../i18n/t.js";
 import {
   type FieldContext,
   isModifierQuantity,
   nameFields,
   nonBlankNames,
   optionalTextFields,
+  priceField,
   priceLabel,
+  priceText,
   switchField,
   textField,
   translations,
@@ -280,5 +284,91 @@ describe("switchField", () => {
     expect(control!.disabled).toBe(true);
     expect(changeFrom(control!, { checked: true })).toBe(false);
     expect(change).toHaveBeenCalledExactlyOnceWith(true);
+  });
+});
+
+describe("priceText", () => {
+  afterEach(() => setLocale("es-ES"));
+
+  // Spanish writes a no-break space (U+00A0) between the amount and the sign; the strings below
+  // spell it out rather than trusting the formatter under test to produce its own expectation.
+  it("writes an amount with the euro sign where the dashboard's language writes it", () => {
+    setLocale("en-GB");
+    expect(priceText("9")).toBe("€9.00");
+    expect(priceText("1250.5")).toBe("€1,250.50");
+    setLocale("es-ES");
+    expect(priceText("9")).toBe("9,00\u00a0€");
+    expect(priceText("12.5")).toBe("12,50\u00a0€");
+  });
+
+  it("leaves text that is not a price as it was typed, rather than writing a sign beside NaN", () => {
+    setLocale("en-GB");
+    expect(priceText("abc")).toBe("abc");
+    expect(priceText("9.")).toBe("9.");
+    expect(priceText("")).toBe("");
+  });
+});
+
+describe("priceField", () => {
+  afterEach(() => setLocale("es-ES"));
+
+  it("is a money field with no unit, carrying the value, label, placeholder, hint, required flag, error and the dashboard's language", async () => {
+    setLocale("en-GB");
+    const [input] = await renderAll<WtPriceInput>(
+      priceField(
+        context({ error: (key) => (key === "price" ? "Bad price" : "") }),
+        "price",
+        "Price",
+        "4.50",
+        () => {},
+        true,
+        "3.00",
+        "Leave it empty for 3.00",
+      ),
+      "wt-price-input",
+    );
+    expect(input!.name).toBe("price");
+    expect(input!.label).toBe("Price");
+    expect(input!.value).toBe("4.50");
+    expect(input!.placeholder).toBe("3.00");
+    expect(input!.hint).toBe("Leave it empty for 3.00");
+    expect(input!.required).toBe(true);
+    expect(input!.disabled).toBe(false);
+    expect(input!.error).toBe("Bad price");
+    expect(input!.locale).toBe("en-GB");
+    // A plain money field: nothing to press beside the amount, and no unit box.
+    expect(input!.fixedUnit).toBe(true);
+    expect(input!.unit).toBe("");
+    expect(input!.shadowRoot!.querySelector(".unit")).toBeNull();
+  });
+
+  it("is optional, valid, unhinted and without a placeholder unless told otherwise", async () => {
+    const [input] = await renderAll<WtPriceInput>(
+      priceField(context(), "price", "Price", "", () => {}),
+      "wt-price-input",
+    );
+    expect(input!.required).toBe(false);
+    expect(input!.placeholder).toBe("");
+    expect(input!.hint).toBe("");
+    expect(input!.error).toBe("");
+    expect(input!.locale).toBe("es-ES");
+  });
+
+  it("is disabled while the form is busy", async () => {
+    const [input] = await renderAll<WtPriceInput>(
+      priceField(context({ busy: true }), "price", "Price", "", () => {}),
+      "wt-price-input",
+    );
+    expect(input!.disabled).toBe(true);
+  });
+
+  it("hands an edit to the form and keeps the field's own change event inside it", async () => {
+    const change = vi.fn();
+    const [input] = await renderAll<WtPriceInput>(
+      priceField(context(), "price", "Price", "", change),
+      "wt-price-input",
+    );
+    expect(changeFrom(input!, { value: "2.80" })).toBe(false);
+    expect(change).toHaveBeenCalledExactlyOnceWith("2.80");
   });
 });

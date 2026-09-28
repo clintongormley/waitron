@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { t } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { regimeName } from "../i18n/domain.js";
 import type { PurchaseInvoice } from "../api/client.js";
 import { PurchaseList } from "./purchase-list.js";
@@ -39,7 +39,19 @@ describe("purchase-list", () => {
     expect(text).toContain("Distribuciones García SL");
     expect(text).toContain("F-2026/001");
     expect(text).toContain("2026-08-12");
-    expect(text).toContain("121.00");
+    expect(text).toContain("121,00\u00a0€");
+  });
+
+  it("writes the total as English writes euros", async () => {
+    setLocale("en-GB");
+    try {
+      const { el } = await mountWidget<PurchaseList>("dashboard-purchase-list", {
+        invoices: [invoice({ total: "1210.50" })],
+      });
+      expect(el.shadowRoot!.querySelector("[data-test=row] .total")!.textContent).toBe("€1,210.50");
+    } finally {
+      setLocale("es-ES");
+    }
   });
 
   it("shows the localised regime name, not the raw token", async () => {

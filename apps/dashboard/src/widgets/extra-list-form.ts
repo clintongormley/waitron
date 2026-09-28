@@ -19,7 +19,7 @@ import { optionalTextFields, translations, wholeWithin, type FieldContext } from
 import { reorder } from "./reorder.js";
 import { ReorderController, type ReorderModel } from "./reorder-table.js";
 import type { ExtraList, ExtraListInput, Product } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 
 const decreaseLabel = (label: string) => t("action.decrease").replace("{label}", label);
 const increaseLabel = (label: string) => t("action.increase").replace("{label}", label);
@@ -506,6 +506,7 @@ export class ExtraListForm extends LitElement {
           hide-label
           fixed-unit
           unit=${this.#unitLabel(item.productId)}
+          locale=${currentLocale()}
           placeholder=${this.#inheritedPrice(item.productId)}
           .disabled=${this.busy}
           .value=${item.price}

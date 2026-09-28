@@ -662,15 +662,17 @@ export class AdjustmentReasonsScreen extends LitElement {
         .disabled=${this.busy}
         @wt-change=${percent.change}
       ></wt-input>
-      <wt-input
+      <wt-price-input
         name="maxAmount"
+        fixed-unit
+        locale=${currentLocale()}
         label=${t("adjustments.field.max_amount")}
         hint=${t("adjustments.field.max_amount_hint")}
         .value=${money.value}
         .error=${money.error}
         .disabled=${this.busy}
         @wt-change=${money.change}
-      ></wt-input>
+      ></wt-price-input>
       ${this.#roleSelect("applyRole", t("adjustments.field.apply_role"))}
       ${this.#roleSelect("approverRole", t("adjustments.field.approver_role"))}
       <div>

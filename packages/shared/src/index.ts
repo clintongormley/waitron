@@ -33,7 +33,7 @@ export {
   workingOrderLineId,
 } from "./ids.js";
 export { centsToDecimal, decimalToCents, rawCentsToDecimal, stringToCents } from "./cents.js";
-export { formatMoney } from "./money-format.js";
+export { currencySymbol, formatMoney, type CurrencySymbol } from "./money-format.js";
 export {
   normalisePartyName,
   PARTY_NAME_MAX,

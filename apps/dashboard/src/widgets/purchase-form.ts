@@ -4,7 +4,8 @@ import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { t } from "../i18n/t.js";
+import "@waitron/ui/src/components/wt-price-input.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { regimeName, vatKindName } from "../i18n/domain.js";
 import type {
@@ -87,6 +88,14 @@ export class PurchaseForm extends LitElement {
       .line-field {
         flex: 1;
         min-width: 5rem;
+      }
+      /* A money field's amount box never shrinks below its amount and sign, and the VAT type never
+         below its longest name, so a narrow line wraps them rather than overlapping or cutting. */
+      wt-price-input.line-field {
+        min-width: min-content;
+      }
+      label.line-field {
+        min-width: max-content;
       }
       .error {
         color: var(--wt-color-danger);
@@ -257,28 +266,36 @@ export class PurchaseForm extends LitElement {
     return html`<div class="line" data-test=${`line-${index}`}>
       <wt-input
         class="line-field"
+        name=${`line-${index}-rate`}
         data-test=${`line-rate-${index}`}
         label=${t("purchase.line_rate")}
         .value=${line.rate}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onLineFieldChange(e, index, "rate")}
       ></wt-input>
-      <wt-input
+      <wt-price-input
         class="line-field"
+        fixed-unit
+        locale=${currentLocale()}
+        name=${`line-${index}-base`}
         data-test=${`line-base-${index}`}
         label=${t("purchase.line_base")}
         .value=${line.base}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onLineFieldChange(e, index, "base")}
-      ></wt-input>
-      <wt-input
+      ></wt-price-input>
+      <wt-price-input
         class="line-field"
+        fixed-unit
+        locale=${currentLocale()}
+        name=${`line-${index}-tax`}
         data-test=${`line-tax-${index}`}
         label=${t("purchase.line_tax")}
         .value=${line.tax}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onLineFieldChange(e, index, "tax")}
-      ></wt-input>
+      ></wt-price-input>
       <label class="line-field"
         >${t("purchase.line_kind")}
         <select
+          name=${`line-${index}-kind`}
           data-test=${`line-kind-${index}`}
           @change=${(e: Event) => this.#onLineKindChange(e, index)}
         >
@@ -308,6 +325,7 @@ export class PurchaseForm extends LitElement {
       >
         <wt-input
           class="field"
+          name="supplier-tax-id"
           data-test="supplier-tax-id"
           label=${t("purchase.supplier_tax_id")}
           .value=${this.supplierTaxId}
@@ -316,6 +334,7 @@ export class PurchaseForm extends LitElement {
         ></wt-input>
         <wt-input
           class="field"
+          name="supplier-name"
           data-test="supplier-name"
           label=${t("purchase.supplier_name")}
           .value=${this.supplierName}
@@ -323,6 +342,7 @@ export class PurchaseForm extends LitElement {
         ></wt-input>
         <wt-input
           class="field"
+          name="supplier-invoice-number"
           data-test="supplier-invoice-number"
           label=${t("purchase.supplier_invoice_number")}
           .value=${this.supplierInvoiceNumber}
@@ -332,6 +352,7 @@ export class PurchaseForm extends LitElement {
         <wt-input
           class="field"
           type="date"
+          name="issued-on"
           data-test="issued-on"
           label=${t("purchase.issued_on")}
           .value=${this.issuedOn}
@@ -340,21 +361,25 @@ export class PurchaseForm extends LitElement {
         <wt-input
           class="field"
           type="date"
+          name="received-on"
           data-test="received-on"
           label=${t("purchase.received_on")}
           .value=${this.receivedOn}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onFieldChange(e, "receivedOn")}
         ></wt-input>
-        <wt-input
+        <wt-price-input
           class="field"
+          fixed-unit
+          locale=${currentLocale()}
+          name="total"
           data-test="total"
           label=${t("purchase.total")}
           .value=${this.total}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onFieldChange(e, "total")}
-        ></wt-input>
+        ></wt-price-input>
         <label class="field"
           >${t("purchase.regime")}
-          <select data-test="regime" @change=${(e: Event) => this.#onRegimeChange(e)}>
+          <select name="regime" data-test="regime" @change=${(e: Event) => this.#onRegimeChange(e)}>
             ${REGIMES.map(
               (r) =>
                 html`<option value=${r} .selected=${r === this.regime}>${regimeName(r)}</option>`,
@@ -363,6 +388,7 @@ export class PurchaseForm extends LitElement {
         </label>
         <wt-input
           class="field"
+          name="deductible-proportion"
           data-test="deductible-proportion"
           label=${t("purchase.deductible_proportion")}
           .value=${this.deductibleProportion}
@@ -371,6 +397,7 @@ export class PurchaseForm extends LitElement {
         ></wt-input>
         <wt-input
           class="field"
+          name="note"
           data-test="note"
           label=${t("purchase.note")}
           .value=${this.note}
