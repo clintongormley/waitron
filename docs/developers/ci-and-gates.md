@@ -981,6 +981,19 @@ The guard applies everything up to `0003` together for that reason; a future reb
 another set's trigger BODY reads fails it. It seeds no rows, so a migration that fails only on data
 passes it.
 
+It also says where it waited. Each step is timed in four phases — migrate, open, change feed,
+close — by `scripts/step-watch.mjs`, and at `STALL_DEADLINE_MS` (110 seconds, under the test's own
+120) it fails with the phase still running, what the process was waiting on
+(`process.getActiveResourcesInfo()`) and every finished phase's duration. The deadline does not
+stop the stalled work; it only names it. Measured 2026-09-28 with the deadline set to one second:
+the test failed `Still running after 1000 ms. Stalled in step core/0009_node_sealed_state: migrate
+after 36 ms. Waiting on: PipeWrap, PipeWrap, PipeWrap, PipeWrap, MessagePort, Timeout.`, then
+listed the phases before it. A healthy run prints the step count, the total and the five slowest
+phases. Vitest hides a passing test's console output when it runs under an AI agent (`AI_AGENT`
+set, as in a Claude Code session), so that line shows in CI's log but not in an agent's local run:
+measured 2026-09-28 with a one-line probe suite, whose `console.log` printed only once `CLAUDECODE`
+and `AI_AGENT` were unset.
+
 ## Check every command's exit status
 
 A shell sequence separated by newlines reports only its last command's status. Use `&&` for dependent

@@ -11,6 +11,7 @@ import {
   resolveMigrationsFolder,
 } from "../packages/migrations/src/manifest.js";
 import { orderedMigrationSets } from "../packages/module/src/module.js";
+import { createStepWatch, withDeadline } from "./step-watch.mjs";
 
 /**
  * One database upgraded the way a box is: every shipped migration applied in date order, with what
@@ -42,6 +43,9 @@ interface JournalEntry {
  */
 const FLOOR = { set: "core", tag: "0003_variant_inherited_nullable" };
 
+/** Below the test's own bound, so a stall fails with the step it was on rather than a bare timeout. */
+const STALL_DEADLINE_MS = 110_000;
+
 const scratch: string[] = [];
 afterAll(() => {
   for (const dir of scratch) rmSync(dir, { recursive: true, force: true });
@@ -53,69 +57,83 @@ function readJournal(folder: string): { entries: JournalEntry[] } {
 
 describe("upgrading a venue one migration at a time", () => {
   it("applies every shipped migration on top of the change feed the step before installed", async () => {
-    const sets = orderedMigrationSets(ALL_MODULES);
-    const sources = ALL_MODULES.flatMap((module) => module.changes ?? []);
-
-    const root = mkdtempSync(join(tmpdir(), "wt-migration-upgrade-"));
-    scratch.push(root);
-    const staged = join(root, "migrations");
-    const venueDir = join(root, "venue");
-    const journals = new Map<string, ReturnType<typeof readJournal>>();
-    for (const set of sets) {
-      const from = resolveMigrationsFolder(set, null);
-      cpSync(from, join(staged, set.name), { recursive: true });
-      journals.set(set.name, readJournal(from));
-    }
-
-    const floorEntry = journals.get(FLOOR.set)?.entries.find((entry) => entry.tag === FLOOR.tag);
-    expect(floorEntry).toBeDefined();
-    const floor = floorEntry?.when ?? 0;
-
-    const cuts = [
-      ...new Set(
-        [...journals.values()].flatMap((journal) =>
-          journal.entries.filter((entry) => entry.when > floor).map((entry) => entry.when),
-        ),
-      ),
-    ].sort((a, b) => a - b);
-    expect(cuts.length).toBeGreaterThan(1);
-
-    let existing = new Set<string>();
-    for (const cut of [floor, ...cuts]) {
-      // Only tables the step before already had: a set's declared list is today's, and some of its
-      // tables are created by later migrations.
-      const options = migrationOptionsFor(sets, staged).map((set) => ({
-        ...set,
-        appendOnlyTables: (set.appendOnlyTables ?? []).filter((table) => existing.has(table)),
-      }));
-      for (const [name, journal] of journals) {
-        const entries = journal.entries.filter((entry) => entry.idx === 0 || entry.when <= cut);
-        writeFileSync(
-          join(staged, name, "meta", "_journal.json"),
-          JSON.stringify({ ...journal, entries }),
-        );
-      }
-      await applyMigrations(venueDir, options);
-
-      const store = await openVenueDatabase(venueDir);
-      try {
-        const present = sources.filter((source) => {
-          const columns = new Set(
-            store.venue
-              .all<{ name: string }>(`select name from pragma_table_info('${source.table}')`)
-              .map((column) => column.name),
-          );
-          return columns.size > 0 && (source.related ?? []).every((rel) => columns.has(rel.column));
-        });
-        await installChangeFeed(store.venue, present);
-        existing = new Set(
-          store.venue
-            .all<{ name: string }>(`select name from sqlite_master where type = 'table'`)
-            .map((table) => table.name),
-        );
-      } finally {
-        await store.close();
-      }
-    }
+    const watch = createStepWatch();
+    await withDeadline(watch, STALL_DEADLINE_MS, () => upgradeOneStepAtATime(watch));
+    console.log(watch.summary(5));
   }, 120_000);
 });
+
+async function upgradeOneStepAtATime(watch: ReturnType<typeof createStepWatch>) {
+  const sets = orderedMigrationSets(ALL_MODULES);
+  const sources = ALL_MODULES.flatMap((module) => module.changes ?? []);
+
+  const root = mkdtempSync(join(tmpdir(), "wt-migration-upgrade-"));
+  scratch.push(root);
+  const staged = join(root, "migrations");
+  const venueDir = join(root, "venue");
+  const journals = new Map<string, ReturnType<typeof readJournal>>();
+  for (const set of sets) {
+    const from = resolveMigrationsFolder(set, null);
+    cpSync(from, join(staged, set.name), { recursive: true });
+    journals.set(set.name, readJournal(from));
+  }
+
+  const floorEntry = journals.get(FLOOR.set)?.entries.find((entry) => entry.tag === FLOOR.tag);
+  expect(floorEntry).toBeDefined();
+  const floor = floorEntry?.when ?? 0;
+
+  const cuts = [
+    ...new Set(
+      [...journals.values()].flatMap((journal) =>
+        journal.entries.filter((entry) => entry.when > floor).map((entry) => entry.when),
+      ),
+    ),
+  ].sort((a, b) => a - b);
+  expect(cuts.length).toBeGreaterThan(1);
+
+  let existing = new Set<string>();
+  for (const cut of [floor, ...cuts]) {
+    const tags = [...journals]
+      .flatMap(([name, journal]) =>
+        journal.entries
+          .filter((entry) => entry.when === cut)
+          .map((entry) => `${name}/${entry.tag}`),
+      )
+      .join(", ");
+    const label = cut === floor ? `baselines to ${FLOOR.set}/${FLOOR.tag}` : tags;
+    // Only tables the step before already had: a set's declared list is today's, and some of its
+    // tables are created by later migrations.
+    const options = migrationOptionsFor(sets, staged).map((set) => ({
+      ...set,
+      appendOnlyTables: (set.appendOnlyTables ?? []).filter((table) => existing.has(table)),
+    }));
+    for (const [name, journal] of journals) {
+      const entries = journal.entries.filter((entry) => entry.idx === 0 || entry.when <= cut);
+      writeFileSync(
+        join(staged, name, "meta", "_journal.json"),
+        JSON.stringify({ ...journal, entries }),
+      );
+    }
+    await watch.step(`${label}: migrate`, () => applyMigrations(venueDir, options));
+
+    const store = await watch.step(`${label}: open`, () => openVenueDatabase(venueDir));
+    try {
+      const present = sources.filter((source) => {
+        const columns = new Set(
+          store.venue
+            .all<{ name: string }>(`select name from pragma_table_info('${source.table}')`)
+            .map((column) => column.name),
+        );
+        return columns.size > 0 && (source.related ?? []).every((rel) => columns.has(rel.column));
+      });
+      await watch.step(`${label}: change feed`, () => installChangeFeed(store.venue, present));
+      existing = new Set(
+        store.venue
+          .all<{ name: string }>(`select name from sqlite_master where type = 'table'`)
+          .map((table) => table.name),
+      );
+    } finally {
+      await watch.step(`${label}: close`, () => store.close());
+    }
+  }
+}
