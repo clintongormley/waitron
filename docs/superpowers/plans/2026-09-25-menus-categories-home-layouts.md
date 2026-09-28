@@ -495,7 +495,8 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
     copy came from. A mismatch is refused (409, a code named for the concept — grep the
     working-order codes first), and the till reloads the order (spec §10.7 example 2). No revision
     exists today. _(2026-09-26: a save or line edit that changes nothing leaves the revision unchanged; see the
-    Task 7c correction below.)_
+    Task 7c correction below.)_ _(2026-09-28: a served mark, and its undo, no longer moves the
+    bill's revision and is taken while a card payment runs; owner ruling, campaign item A118.)_
   - **A per-line edit route for sent lines:** `PUT /api/working-orders/:id/lines/:lineNo`
     `{quantity, note, options, extras, revision}` applies the rules above to ONE line, so the till's
     Change action (Task 7c) never sends the whole order. `PUT /api/working-orders/:id` (the counter
@@ -614,7 +615,9 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
   proven only against a fixture made to satisfy it. A server that dies between P1 and P3 leaves the
   mark set: the recovery branch of `POST /api/pay` clears it when it files or fails, and boot's
   reconcile clears any mark older than the provider timeout. It never outlives the payment
-  attempt, whose own timeout bounds it. Built in Task 7b.
+  attempt, whose own timeout bounds it. Built in Task 7b. _(2026-09-28: a served mark, and its
+  undo, no longer moves the bill's revision and is taken while a card payment runs; owner ruling,
+  campaign item A118.)_
   - **2026-09-26, after review:** no mark is released by its age. An attempt still running in this
     process keeps its mark however long the reader waits, and so does an order with a payment still
     `attempting` or a capture no sale records; after each pass the server's loop clears any other

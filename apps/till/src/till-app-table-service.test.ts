@@ -557,7 +557,6 @@ describe("till-app table ordering: refused and failed table actions", () => {
       { lineNo: 1, lineName: "Café", patch: { note: "sin sal" }, revision: 0 },
       "updateOrderLine",
     ],
-    ["serve-lines", { items: [{ lineId: "line-1", quantity: "1" }] }, "markServed"],
     ["send-lines", { lineNos: [1] }, "sendLines"],
     ["transfer-lines", { toTabId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferLines"],
   ] as const)(

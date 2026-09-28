@@ -862,47 +862,53 @@ describe("refusals, each writing nothing", () => {
   });
 });
 
-describe("the bill's revision and a card payment (menus plan D10, D22)", () => {
-  it("counts a served mark and its undo on the open bill's revision too", async () => {
+/**
+ * The owner's decision of 2026-09-28, overturning menus plan D10 and D22 where they conflict: a served
+ * mark does not move the open bill's revision, so it is taken while a card payment runs on the bill.
+ */
+describe("the bill's revision and a card payment (menus plan D10, D22; owner 2026-09-28)", () => {
+  it("counts a served mark and its undo on the party's revision, never the open bill's", async () => {
     const v = await setupVenue();
     const s = await croquetas(v);
     const before = await billRevision(s.tabId);
+    const party = await revisionOf(s.partyId);
 
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "1" }]);
-    expect(await billRevision(s.tabId)).toBe(before + 1);
+    expect(await billRevision(s.tabId)).toBe(before);
 
     await unserve(v, s.partyId, [{ lineId: s.croq.id, quantity: "1" }]);
-    expect(await billRevision(s.tabId)).toBe(before + 2);
+    expect(await billRevision(s.tabId)).toBe(before);
 
     await serveGroup(v, s.partyId, s.groupId);
-    expect(await billRevision(s.tabId)).toBe(before + 3);
+    expect(await billRevision(s.tabId)).toBe(before);
+    expect(await revisionOf(s.partyId)).toBe(party + 3);
   });
 
-  it("refuses a served mark, its undo and a group's served mark while a card payment runs on the bill (order.payment_in_flight)", async () => {
+  it("takes a served mark, its undo and a group's served mark while a card payment runs on the bill, leaving the payment's mark", async () => {
     const v = await setupVenue();
     const s = await croquetas(v);
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "1" }]);
+    const mark = new Date().toISOString();
     await suite.db
       .update(workingOrders)
-      .set({ paymentAttemptAt: new Date().toISOString() })
+      .set({ paymentAttemptAt: mark })
       .where(eq(workingOrders.id, s.tabId));
-    const refused = { code: "order.payment_in_flight", params: { workingOrderId: s.tabId } };
 
-    await expectRefusedWithNothingWritten(
-      s.partyId,
-      () => serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "1" }]),
-      refused,
-    );
-    await expectRefusedWithNothingWritten(
-      s.partyId,
-      () => unserve(v, s.partyId, [{ lineId: s.croq.id, quantity: "1" }]),
-      refused,
-    );
-    await expectRefusedWithNothingWritten(
-      s.partyId,
-      () => serveGroup(v, s.partyId, s.groupId),
-      refused,
-    );
+    await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "1" }]);
+    expect(await lineById(s.partyId, s.croq.id)).toMatchObject({ servedQuantity: 2000 });
+    await unserve(v, s.partyId, [{ lineId: s.croq.id, quantity: "1" }]);
+    expect(await lineById(s.partyId, s.croq.id)).toMatchObject({ servedQuantity: 1000 });
+    await serveGroup(v, s.partyId, s.groupId);
+    expect(await lineById(s.partyId, s.croq.id)).toMatchObject({
+      servedQuantity: 4000,
+      servedAt: expect.any(String),
+    });
+
+    const [bill] = await suite.db
+      .select({ paymentAttemptAt: workingOrders.paymentAttemptAt })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, s.tabId));
+    expect(bill).toEqual({ paymentAttemptAt: mark });
   });
 });
 

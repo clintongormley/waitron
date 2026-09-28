@@ -1000,6 +1000,8 @@ tests drive the routes.
     - M7b's rules for editing sent work (menus §10.3), its kitchen notices and its
       `order.payment_in_flight` refusal apply to every group write, and every group write goes
       through Task 2's `runServiceCommand` and `checkAndBumpVisit` (D8, D19);
+      _(2026-09-28: a served mark, and its undo, no longer moves the bill's revision and is taken
+      while a card payment runs; owner ruling, campaign item A118.)_
     - a split or transfer that changes a group's membership bumps the visit's revision as well as
       each bill's;
     - `voidTabLine` and `applyLineEdits` bump the visit's revision and mark a held group they empty

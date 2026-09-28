@@ -2431,7 +2431,7 @@ async function partyTab() {
   return { ...venue, tabId };
 }
 
-describe("every write to an open order's lines counts on its revision (plan D10)", () => {
+describe("every write to an open order's lines counts on its revision, a served mark aside (plan D10)", () => {
   it.each<[string, (tx: Transaction, tabs: Tabs) => Promise<unknown>, ("tab" | "other")[]]>([
     [
       "a round",
@@ -2477,16 +2477,17 @@ describe("every write to an open order's lines counts on its revision (plan D10)
     }
   });
 
-  // Serving is a command on a party, and `twoTabs`' tabs have none.
-  it("a served mark, and a served mark cleared", async () => {
+  // Serving is a command on a party, and `twoTabs`' tabs have none. It moves the party's revision
+  // (`served.test.ts`), not the bill's.
+  it("except a served mark, and a served mark cleared", async () => {
     const { cfg, tabId } = await partyTab();
     const before = await revisionOf(tabId);
 
     await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
-    expect(await revisionOf(tabId)).toBe(before + 1);
+    expect(await revisionOf(tabId)).toBe(before);
 
     await asApp(cfg, (tx) => unserveLine(tx, cfg, tabId, 1));
-    expect(await revisionOf(tabId)).toBe(before + 2);
+    expect(await revisionOf(tabId)).toBe(before);
   });
 
   it("does not count a write refused as out of date, nor one that changes nothing", async () => {
@@ -2544,7 +2545,7 @@ describe("every write to an open order's lines counts on its revision (plan D10)
   });
 });
 
-describe("a line write on an order whose card payment is in flight is refused (plan D22)", () => {
+describe("a line write on an order whose card payment is in flight is refused, a served mark aside (plan D22)", () => {
   const MARK = "2026-09-26T10:00:00.000Z";
 
   async function markPaying(orderId: string, at: string | null = MARK): Promise<void> {
@@ -2554,7 +2555,7 @@ describe("a line write on an order whose card payment is in flight is refused (p
       .where(eq(workingOrders.id, orderId));
   }
 
-  /** Everything a refused write could have changed on either tab. */
+  /** The line and order fields these cases compare, on either tab — not every column. */
   async function snapshot(t: Pick<Tabs, "tabId" | "otherId">) {
     const lines = await db
       .select({
@@ -2563,6 +2564,7 @@ describe("a line write on an order whose card payment is in flight is refused (p
         quantity: workingOrderLines.quantity,
         note: workingOrderLines.note,
         servedAt: workingOrderLines.servedAt,
+        servedQuantity: workingOrderLines.servedQuantity,
         courseId: workingOrderLines.courseId,
         sentAt: workingOrderLines.sentAt,
         firedAt: ticketItems.firedAt,
@@ -2634,19 +2636,24 @@ describe("a line write on an order whose card payment is in flight is refused (p
     }
   });
 
-  it("a served mark", async () => {
+  it("takes a served mark, changing none of the compared fields but the line's served ones", async () => {
     const tab = await partyTab();
     const tabs = { tabId: tab.tabId, otherId: tab.tabId };
     await markPaying(tab.tabId, MARK);
     const before = await snapshot(tabs);
 
-    await expect(
-      asApp(tab.cfg, (tx) => serveLine(tx, tab.cfg, tab.tabId, 1)),
-    ).rejects.toMatchObject({
-      code: "order.payment_in_flight",
-      params: { workingOrderId: tab.tabId },
-    });
-    expect(await snapshot(tabs)).toEqual(before);
+    await asApp(tab.cfg, (tx) => serveLine(tx, tab.cfg, tab.tabId, 1));
+
+    const after = await snapshot(tabs);
+    expect(after.orders).toEqual(before.orders);
+    expect(before.lines.map((line) => [line.servedAt, line.servedQuantity])).toEqual([[null, 0]]);
+    expect(after.lines).toEqual(
+      before.lines.map((line) => ({
+        ...line,
+        servedAt: expect.any(String),
+        servedQuantity: line.quantity,
+      })),
+    );
   });
 
   it("refuses even an edit that changes nothing, one line or the whole order", async () => {

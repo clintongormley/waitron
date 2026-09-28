@@ -2716,6 +2716,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       whole-line mark, and they work on a bill already paid without touching its filed sale. Only
       released work can be marked: a line in a held group, or whose kitchen ticket has not fired,
       is refused `group.line_held`.
+      Since campaign item A118 (owner, 2026-09-28: "a payment could happen while food is still
+      being served, so yes you should be able to mark it served"), a served mark no longer moves
+      any bill's revision, so it is taken while a card payment runs on the bill; the party's
+      revision still counts it. A pending card refund of an open bill still refuses it
+      (`bill.refund_in_progress`), as before.
     - The server works out when the party's next held group should be fired: once every dish of
       the fired groups ahead of it is served, a set number of minutes after the last of them.
       Staff can put it off by five minutes. A manager sets the minutes, or turns the reminder off,

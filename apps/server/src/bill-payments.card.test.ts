@@ -874,7 +874,7 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
     expect(captured.json).toMatchObject({ invoice: { total: "70.00" } });
   });
 
-  it("refuses every line write and abandoning the bill while its card is at the reader, and leaves another bill of the party alone", async () => {
+  it("refuses a void, a round and abandoning the bill while its card is at the reader, and leaves another bill of the party alone", async () => {
     const billId = await tabWithDishes("Paella", "Tarta", "Caña", "Caña");
     const split = await send(venue.app, venue.cookie, "POST", `/api/tabs/${billId}/split`, {
       transfers: [{ lineNo: 3 }, { lineNo: 4 }],
