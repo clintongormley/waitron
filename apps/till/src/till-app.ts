@@ -379,6 +379,7 @@ type CounterError =
   | StringKey
   | { code: string }
   | { takenOver: string }
+  | { takenOverUnsent: string }
   | { visitChanged: VisitChange }
   | { lateChange: LateChange; also?: StringKey };
 
@@ -390,6 +391,12 @@ function errorText(error: CounterError): string | TemplateResult {
     return name === ""
       ? t("table.draft_taken_over_unsaved_unnamed")
       : t("table.draft_taken_over_unsaved").replace("{name}", () => name);
+  }
+  if ("takenOverUnsent" in error) {
+    const name = error.takenOverUnsent;
+    return name === ""
+      ? t("table.draft_taken_over_unsent_unnamed")
+      : t("table.draft_taken_over_unsent").replace("{name}", () => name);
   }
   if ("visitChanged" in error) return visitChangeMessage(error.visitChanged);
   const late = lateChangeMessage(error.lateChange);
@@ -407,6 +414,14 @@ function submittedText(tally: { fired: number; held: number; joined: number }): 
     ...count(tally.held, "table.submitted_held", "table.submitted_held_one"),
     ...(tally.joined === 0 ? [] : [t("table.submitted_joined")]),
   ].join(" ");
+}
+
+/** Whether a dialog anywhere under `root`, through every shadow root, is open. */
+function dialogOpenUnder(root: ParentNode): boolean {
+  if (root.querySelector("dialog[open]") !== null) return true;
+  for (const element of root.querySelectorAll("*"))
+    if (element.shadowRoot !== null && dialogOpenUnder(element.shadowRoot)) return true;
+  return false;
 }
 
 /** A request asserting a menu version that is no longer live (D9): nothing was written. */
@@ -752,7 +767,10 @@ export class TillApp extends LitElement {
   #tableZoneId?: string;
   /** The basket-refresh dialog's contents while it is open (D9): the counter's basket or a table's
    * round, and the lines it would re-price. */
-  @state() private basketRefresh?: BasketRefresh & { store: WorkingOrderStore };
+  @state() private basketRefresh?: BasketRefresh & {
+    store: WorkingOrderStore;
+    lines: readonly OrderLine[];
+  };
   /** Whether an unsaved basket line keeps Pay shut: it cannot be sold as it stands, or it was priced
    * against a menu version staff have not yet reviewed. */
   @state() private basketHeld = false;
@@ -775,6 +793,9 @@ export class TillApp extends LitElement {
   #partylessDraft = new WorkingOrderStore();
   /** {@link #draftSync} has been read, so the screen may show it. */
   #draftReady = false;
+  /** The draft may hold lines priced against a menu version that is not the live one, and has not
+   * been compared with the live version since (D9). */
+  #draftRefreshDue = false;
   /** The party whose groups {@link tabGroups} holds, once a read of them has finished. */
   #groupsReadFor: string | null = null;
   readonly #menuPoll = new MenuStatePoll({
@@ -1454,7 +1475,10 @@ export class TillApp extends LitElement {
     this.#reportRemovedLayouts(this.tableMenus, catalogue.menus);
     this.tableMenus = catalogue.menus;
     this.tableProducts = this.#tableOffers.products();
-    if (loaded) this.#markRounds(true);
+    if (loaded) {
+      this.#markRounds(true);
+      this.#markDraft(true);
+    }
   }
 
   #reportRemovedLayouts(shown: readonly TillZoneMenu[], next: readonly TillZoneMenu[]): void {
@@ -1481,6 +1505,42 @@ export class TillApp extends LitElement {
     }
   }
 
+  /**
+   * Marks each line of the person's draft that cannot be sold as it stands against the table's
+   * offers. With `newer`, the offers are fresher than the server's last answer, so a line the offers
+   * say can be sold loses the server's flag; the next answer brings it back if the server still
+   * disagrees. Nothing is marked while the offers could not be read.
+   */
+  #markDraft(newer = false, notify = true): void {
+    const store = this.#draftSync?.store;
+    if (store === undefined || !this.#tableOffers.loaded) return;
+    const reasons = this.#tableOffers.blocks(store.lines);
+    store.setBlocked(reasons, notify);
+    if (newer)
+      store.setUnavailableOnServer(
+        store.lines.map(
+          (line, index) => line.unavailableOnServer === true && reasons[index] !== undefined,
+        ),
+      );
+  }
+
+  /**
+   * D9 on the table: the person's draft is compared with the table's live offers, as the counter's
+   * basket is, when it is due — a publish reloaded the offers, or the server's draft replaced what
+   * the screen held. Nothing relevant changed: the lines take the live version silently. Otherwise
+   * the refresh dialog asks. Either way the adopted lines are saved as any edit is. It waits while
+   * a send or take-over holds the draft, a save is out, or any dialog is open; the next poll asks
+   * again. Another person's draft is never compared.
+   */
+  #reconcileDraft(): void {
+    const sync = this.#draftSync;
+    if (!this.#draftRefreshDue || sync === undefined || !this.#draftReady) return;
+    if (!this.#tableOffers.loaded || sync.store.sending || sync.saving) return;
+    if (this.basketRefresh !== undefined || dialogOpenUnder(this.renderRoot)) return;
+    this.#draftRefreshDue = false;
+    if (sync.store.lineCount > 0) this.#reconcileBasket(sync.store, this.#tableOffers);
+  }
+
   /** Marks each unsaved basket line that cannot be sold as it stands against the counter's offers,
    * and works out whether Pay is held. */
   #evaluateBasket(notify = true): void {
@@ -1499,7 +1559,8 @@ export class TillApp extends LitElement {
    * a layout the answer says was removed added, once, to the removed-layout notice. On the counter's
    * zone a version other than the one loaded runs the basket refresh — unless a sale, hold or place
    * is in flight or the dialog is already open, when the next poll asks again. On the open table's
-   * zone it only reloads that zone's offers.
+   * zone a new version reloads that zone's offers and then compares the person's draft
+   * ({@link #reconcileDraft}); a comparison put off earlier is tried again at each poll.
    */
   #onMenuState(zoneId: string, state: MenuState): void {
     if (zoneId === this.counterServiceZoneId) {
@@ -1518,8 +1579,15 @@ export class TillApp extends LitElement {
       if (this.#tableOffers.setUnavailable(state.unavailable)) {
         this.tableProducts = this.#tableOffers.products();
         this.#markRounds();
+        this.#markDraft(true);
       }
-      if (versionsMoved(this.tableMenus, state.menus)) void this.#reloadTableOffers(zoneId);
+      if (!versionsMoved(this.tableMenus, state.menus)) this.#reconcileDraft();
+      else
+        void this.#reloadTableOffers(zoneId).then((read) => {
+          if (!read) return;
+          this.#draftRefreshDue = true;
+          this.#reconcileDraft();
+        });
     }
   }
 
@@ -1586,15 +1654,24 @@ export class TillApp extends LitElement {
       if (outcome.adopted.size > 0) store.adoptLines(outcome.adopted);
       return "adopted";
     }
-    this.basketRefresh = { ...outcome, store };
+    this.basketRefresh = { ...outcome, store, lines: store.lines };
     return "confirming";
   }
 
+  /** Each adopted line is found by the line it was compared as: a draft's lines can move, or be
+   * replaced by the server's, while the dialog is open, and a line no longer there is not adopted. */
   #onBasketRefreshConfirmed(): void {
     const refresh = this.basketRefresh;
     this.basketRefresh = undefined;
     if (refresh === undefined) return;
-    if (refresh.adopted.size > 0) refresh.store.adoptLines(refresh.adopted);
+    const lines = refresh.store.lines;
+    const adopted = new Map(
+      [...refresh.adopted].flatMap(([index, line]) => {
+        const now = lines.indexOf(refresh.lines[index]!);
+        return now < 0 ? [] : [[now, line] as const];
+      }),
+    );
+    if (adopted.size > 0) refresh.store.adoptLines(adopted);
     // The counter's basket is marked again on every change; a round is marked here.
     if (refresh.store !== this.#store) this.#markRounds();
   }
@@ -2503,7 +2580,15 @@ export class TillApp extends LitElement {
       api: this.api,
       visitId: party.id,
       personId: this.operatorPersonId,
-      rebuild: (lines) => lines.map((line) => fromDraftLine(line, this.#tableOffers.byId)),
+      rebuild: (lines) =>
+        lines.map((line) =>
+          fromDraftLine(line, this.#tableOffers.byId, this.#tableOffers.versions),
+        ),
+      onReplaced: () => {
+        if (sync !== this.#draftSync) return;
+        this.#draftRefreshDue = true;
+        this.#reconcileDraft();
+      },
       onRefused: (code, ownerName) =>
         this.#onDraftRefused(sync, {
           refused: code,
@@ -2512,6 +2597,10 @@ export class TillApp extends LitElement {
       requestLimitMs: TABLE_REQUEST_LIMIT_MS,
     });
     this.#draftSync = sync;
+    // Subscribed before any screen, so a line's mark is set before the draft is drawn.
+    sync.store.subscribe(() => {
+      if (sync === this.#draftSync) this.#markDraft(false, false);
+    });
     return { sync, read: read ? await sync.load() : true };
   }
 
@@ -2529,6 +2618,7 @@ export class TillApp extends LitElement {
     this.#draftReady = opened.read;
     this.requestUpdate();
     if (!opened.read) this.errorKey = "table.draft_read_failed";
+    else this.#reconcileDraft();
   }
 
   #dropDraft(): void {
@@ -2820,7 +2910,11 @@ export class TillApp extends LitElement {
       const code = (error as { code?: string }).code;
       if (code !== undefined && DRAFT_REFUSALS.has(code)) {
         await sync.load();
-        this.errorKey = draftRefusalError(code);
+        const { ownerName } = error as { ownerName?: unknown };
+        this.errorKey =
+          code === "draft.taken_over"
+            ? { takenOverUnsent: typeof ownerName === "string" ? ownerName : "" }
+            : draftRefusalError(code);
         return;
       }
       if (isGroupGone(error)) await this.#loadTabLines();
@@ -3871,6 +3965,7 @@ export class TillApp extends LitElement {
             : html`<till-basket-refresh-dialog
                 .changed=${this.basketRefresh.changed}
                 .blocked=${this.basketRefresh.blocked}
+                .purpose=${this.basketRefresh.store === this.#store ? "pay" : "send"}
                 @wt-basket-refresh-confirmed=${() => this.#onBasketRefreshConfirmed()}
                 @wt-basket-refresh-cancelled=${() => (this.basketRefresh = undefined)}
               ></till-basket-refresh-dialog>`

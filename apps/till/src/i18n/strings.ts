@@ -431,6 +431,9 @@ export const en = {
     "{name} has taken over this order. Your last change was not saved.",
   "table.draft_taken_over_unsaved_unnamed":
     "Someone else has taken over this order. Your last change was not saved.",
+  "table.draft_taken_over_unsent": "{name} has taken over this order, so nothing was sent.",
+  "table.draft_taken_over_unsent_unnamed":
+    "Someone else has taken over this order, so nothing was sent.",
   "table.taking_over": "Taking over the order…",
   "table.take_over_sent": "This order has just been sent. Here is the table as it is now.",
   "table.take_over_gone": "This order is no longer on this table. Here is the table as it is now.",
@@ -931,6 +934,9 @@ export const es: Record<StringKey, string> = {
     "{name} ha tomado este pedido. Tu último cambio no se ha guardado.",
   "table.draft_taken_over_unsaved_unnamed":
     "Otra persona ha tomado este pedido. Tu último cambio no se ha guardado.",
+  "table.draft_taken_over_unsent": "{name} ha tomado este pedido, así que no se ha enviado nada.",
+  "table.draft_taken_over_unsent_unnamed":
+    "Otra persona ha tomado este pedido, así que no se ha enviado nada.",
   "table.taking_over": "Tomando el pedido…",
   "table.take_over_sent": "Este pedido se acaba de enviar. Así está ahora la mesa.",
   "table.take_over_gone": "Este pedido ya no está en esta mesa. Así está ahora la mesa.",

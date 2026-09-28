@@ -940,7 +940,10 @@ describe("till-app: sending the draft", () => {
 
     await act(el, "fire-all");
 
-    expect(banner(el)!.textContent).toContain(codeMessage("draft.taken_over"));
+    expect(banner(el)!.textContent).toContain(
+      t("table.draft_taken_over_unsent").replace("{name}", "Sam"),
+    );
+    expect(banner(el)!.textContent).not.toContain(codeMessage("draft.taken_over"));
     expect(rows(el)).toEqual([]);
   });
 
@@ -2396,5 +2399,526 @@ describe("till-app: other people's drafts and taking one over", () => {
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
     expect(api.takeOverDraft).toHaveBeenCalledOnce();
     expect(api.saveDraft).not.toHaveBeenCalled();
+  });
+});
+
+describe("till-app: a menu published while a table's draft is open (D9)", () => {
+  const state = (versionId: string, soldOut: string[] = []) => ({
+    menus: [{ menuId: "lunch", versionId, homeLayoutId: "layout-home", layoutFallback: null }],
+    unavailable: { products: soldOut, optionLabels: [], extraItems: [] },
+  });
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function poll(el: TillApp): Promise<void> {
+    vi.advanceTimersByTime(15_000);
+    await flush(el, 6);
+  }
+
+  /** Lets a debounced save go out and answer. */
+  async function saved(el: TillApp): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await flush(el);
+  }
+
+  const refresh = (el: TillApp) => el.shadowRoot!.querySelector("till-basket-refresh-dialog");
+  const refreshText = (el: TillApp) => refresh(el)!.shadowRoot!.textContent!.replace(/\s+/g, " ");
+  const versions = () =>
+    server.drafts.flatMap((each) =>
+      each.lines.map((line) => `${line.menuItemId} ${line.menuVersionId}`),
+    );
+
+  async function publish(el: TillApp, prices: Record<string, string> = {}): Promise<void> {
+    api.listZoneOffers.mockResolvedValue(catalogue("v2", prices));
+    api.menuState.mockResolvedValue(state("v2"));
+    await poll(el);
+  }
+
+  async function answerRefresh(el: TillApp, button: "confirm" | "cancel"): Promise<void> {
+    refresh(el)!.shadowRoot!.querySelector<HTMLElement>(`[data-${button}]`)!.click();
+    await flush(el);
+  }
+
+  it("shows a price the publish changed in the draft and waits; Confirm saves the lines under the new version", async () => {
+    const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
+    await openMesa(el);
+    await tap(el, "Beer");
+    await tap(el, "Flan");
+    await saved(el);
+
+    await publish(el, { Beer: "6.00" });
+
+    expect(refreshText(el)).toContain("Beer €5.00 → €6.00");
+    expect(refreshText(el)).not.toContain("Flan");
+    expect(versions()).toEqual(["offer-beer v1", "offer-flan v1"]);
+    await answerRefresh(el, "confirm");
+    await saved(el);
+
+    expect(refresh(el)).toBeNull();
+    expect(versions()).toEqual(["offer-beer v2", "offer-flan v2"]);
+    expect(api.submitDraft).not.toHaveBeenCalled();
+  });
+
+  it("takes the new version without asking, and saves it, when nothing in the draft changed", async () => {
+    const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
+    await openMesa(el);
+    await tap(el, "Beer");
+    await saved(el);
+
+    await publish(el, { Steak: "12.00" });
+    await saved(el);
+
+    expect(refresh(el)).toBeNull();
+    expect(versions()).toEqual(["offer-beer v2"]);
+  });
+
+  it("keeps the draft as it was on Cancel, and a later poll does not ask again", async () => {
+    const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
+    await openMesa(el);
+    await tap(el, "Beer");
+    await saved(el);
+    await publish(el, { Beer: "6.00" });
+
+    await answerRefresh(el, "cancel");
+    await saved(el);
+    await poll(el);
+
+    expect(refresh(el)).toBeNull();
+    expect(versions()).toEqual(["offer-beer v1"]);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+  });
+
+  it("asks nothing while a send is out, and asks at the next poll once it has answered", async () => {
+    const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
+    await openMesa(el);
+    await tap(el, "Beer");
+    await tap(el, "Flan");
+    await saved(el);
+    let answer!: () => void;
+    const take = server.submitDraft.getMockImplementation()!;
+    server.submitDraft.mockImplementationOnce(async (...args) => {
+      await new Promise<void>((resolve) => (answer = resolve));
+      return take(...args);
+    });
+    await toggle(el, "Flan");
+    await act(el, "fire-selected");
+
+    await publish(el, { Beer: "6.00" });
+    expect(refresh(el)).toBeNull();
+    answer();
+    await flush(el, 6);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(refresh(el)).toBeNull();
+
+    await poll(el);
+    expect(refreshText(el)).toContain("Beer €5.00 → €6.00");
+  });
+
+  it("asks nothing while a save is out, and asks at the next poll once it has answered", async () => {
+    const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
+    await openMesa(el);
+    await tap(el, "Beer");
+    await saved(el);
+    let answer!: () => void;
+    const keep = server.saveDraft.getMockImplementation()!;
+    server.saveDraft.mockImplementationOnce(async (...args) => {
+      await new Promise<void>((resolve) => (answer = resolve));
+      return keep(...args);
+    });
+    await tap(el, "Beer");
+    await saved(el);
+
+    await publish(el, { Beer: "6.00" });
+    expect(refresh(el)).toBeNull();
+    answer();
+    await flush(el);
+    await poll(el);
+
+    expect(refreshText(el)).toContain("Beer €10.00 → €12.00");
+  });
+
+  it("asks nothing while the check before sending is open, and asks at the next poll once it is closed", async () => {
+    const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
+    await openMesa(el);
+    await tap(el, "Beer");
+    await saved(el);
+    const screen = tableOrder(el)!.shadowRoot!;
+    screen.querySelector<HTMLElement>('[data-draft-action="send-all"]')!.click();
+    await flush(el);
+
+    await publish(el, { Beer: "6.00" });
+    expect(refresh(el)).toBeNull();
+    screen.querySelector<HTMLElement>("[data-draft-dismiss]")!.click();
+    await flush(el);
+    await poll(el);
+
+    expect(refreshText(el)).toContain("Beer €5.00 → €6.00");
+  });
+
+  it("adopts nothing onto another line when the server's draft replaced the lines while it asked", async () => {
+    const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
+    await openMesa(el);
+    await tap(el, "Beer");
+    await tap(el, "Flan");
+    await saved(el);
+    await publish(el, { Beer: "6.00" });
+    expect(refreshText(el)).toContain("Beer €5.00 → €6.00");
+    server.saveDraft.mockImplementationOnce(async (visitId, save) => {
+      const answer = server.flagged(structuredClone(server.save(visitId, save)));
+      answer.lines.reverse();
+      return answer;
+    });
+    draft(el).setLineQuantity(1, "2");
+    await saved(el);
+    expect(rows(el)).toEqual(["Flan ×2", "Beer ×1"]);
+
+    await answerRefresh(el, "confirm");
+
+    expect(rows(el)).toEqual(["Flan ×2", "Beer ×1"]);
+    expect(draft(el).lines.map((line) => line.product.menuVersionId)).toEqual(["v1", "v1"]);
+  });
+
+  it("heads a line the publish took off the menu as staying unsent", async () => {
+    const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
+    await openMesa(el);
+    await tap(el, "Flan");
+    await saved(el);
+    const v2 = catalogue("v2");
+    api.listZoneOffers.mockResolvedValue({
+      ...v2,
+      offers: v2.offers.filter((each) => each.id !== "offer-flan"),
+    });
+    api.menuState.mockResolvedValue(state("v2"));
+
+    await poll(el);
+
+    expect(refreshText(el)).toContain(t("basket_refresh.blocked_send"));
+    expect(refreshText(el)).toContain("Flan is no longer on this menu");
+  });
+
+  it("flags a line the publish took off the menu once its offers are read, even with the question put aside", async () => {
+    const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
+    await openMesa(el);
+    await tap(el, "Beer");
+    await tap(el, "Flan");
+    await saved(el);
+    const v2 = catalogue("v2");
+    api.listZoneOffers.mockResolvedValue({
+      ...v2,
+      offers: v2.offers.filter((each) => each.id !== "offer-flan"),
+    });
+    api.menuState.mockResolvedValue(state("v2"));
+    await poll(el);
+
+    await answerRefresh(el, "cancel");
+
+    expect(draft(el).lines.map((line) => line.blocked)).toEqual([undefined, "removed"]);
+  });
+
+  it("never re-prices another person's draft", async () => {
+    server.personId = "p-alex";
+    server.personName = "Alex";
+    server.save("v1", {
+      draftId: null,
+      revision: 0,
+      lines: [
+        {
+          menuItemId: "offer-beer",
+          variantId: null,
+          menuVersionId: "v1",
+          options: [],
+          extras: [],
+          note: null,
+          quantity: "1",
+          courseId: null,
+          noMerge: false,
+        },
+      ],
+    });
+    const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
+    await openMesa(el);
+
+    await publish(el, { Beer: "6.00" });
+    await saved(el);
+
+    expect(refresh(el)).toBeNull();
+    expect(api.saveDraft).not.toHaveBeenCalled();
+    expect(versions()).toEqual(["offer-beer v1"]);
+  });
+});
+
+describe("till-app: a draft read from the server with a line on an earlier menu version", () => {
+  async function saved(el: TillApp): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await flush(el);
+  }
+
+  function savedAt(version: string, ...menuItemIds: string[]): void {
+    server.save("v1", {
+      draftId: null,
+      revision: 0,
+      lines: menuItemIds.map((menuItemId) => ({
+        menuItemId,
+        variantId: null,
+        menuVersionId: version,
+        options: [],
+        extras: [],
+        note: null,
+        quantity: "1",
+        courseId: null,
+        noMerge: false,
+      })),
+    });
+  }
+
+  const refresh = (el: TillApp) => el.shadowRoot!.querySelector("till-basket-refresh-dialog");
+  const changedLines = (el: TillApp) =>
+    [...refresh(el)!.shadowRoot!.querySelectorAll("[data-changed] li")].map((line) =>
+      line.textContent!.replace(/\s+/g, " ").trim(),
+    );
+
+  it("asks to confirm the line at its new price alone, and saves it under the live version on Confirm", async () => {
+    savedAt("v1", "offer-beer");
+    const { el } = await mountApp({
+      listZoneOffers: vi.fn().mockResolvedValue(catalogue("v2", { Beer: "6.00" })),
+    });
+
+    await openMesa(el);
+
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(changedLines(el)).toEqual(["Beer €6.00"]);
+    refresh(el)!.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!.click();
+    await flush(el);
+    await saved(el);
+    expect(server.drafts[0]!.lines.map((line) => line.menuVersionId)).toEqual(["v2"]);
+  });
+
+  it("asks nothing, and saves nothing, when every line is on the live version", async () => {
+    savedAt("v1", "offer-beer");
+    const { el } = await mountApp();
+
+    await openMesa(el);
+    await saved(el);
+
+    expect(refresh(el)).toBeNull();
+    expect(api.saveDraft).not.toHaveBeenCalled();
+  });
+
+  it("asks again at Send, rather than sending, when the question was put aside", async () => {
+    savedAt("v1", "offer-beer");
+    const { el } = await mountApp({
+      listZoneOffers: vi.fn().mockResolvedValue(catalogue("v2")),
+      submitDraft: vi.fn(server.submitDraft).mockRejectedValueOnce({
+        code: "menu.version_changed",
+        status: 409,
+        menus: [{ menuId: "lunch", liveVersionId: "v2" }],
+      }),
+    });
+    await openMesa(el);
+    refresh(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!.click();
+    await flush(el);
+
+    await act(el, "fire-all");
+
+    expect(api.submitDraft).toHaveBeenCalledOnce();
+    expect(changedLines(el)).toEqual(["Beer €5.00"]);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+  });
+});
+
+describe("till-app: a draft line that cannot be sold now", () => {
+  const state = (soldOut: string[]) => ({
+    menus: [
+      { menuId: "lunch", versionId: "v1", homeLayoutId: "layout-home", layoutFallback: null },
+    ],
+    unavailable: { products: soldOut, optionLabels: [], extraItems: [] },
+  });
+
+  async function saved(el: TillApp): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await flush(el);
+  }
+
+  const screen = (el: TillApp) => tableOrder(el)!.shadowRoot!;
+  const flagText = (el: TillApp) =>
+    [...screen(el).querySelectorAll("till-basket")]
+      .flatMap((basket) => [...basket.shadowRoot!.querySelectorAll(".line .not-offered")])
+      .map((marker) => marker.textContent!.trim());
+  const sentNames = (call = 0) =>
+    server
+      .sentGroups(api.submitDraft.mock.calls[call]![2])
+      .flatMap((group) => group.lines.map((line) => line.menuItemId));
+
+  async function pressAndRead(el: TillApp, action: string): Promise<string> {
+    screen(el).querySelector<HTMLElement>(`[data-draft-action="${action}"]`)!.click();
+    await flush(el);
+    return screen(el)
+      .querySelector("[data-preview-body]")!
+      .textContent!.replace(/\s+/g, " ")
+      .trim();
+  }
+
+  async function confirm(el: TillApp): Promise<void> {
+    screen(el).querySelector<HTMLElement>("[data-draft-confirm]")!.click();
+    await flush(el, 6);
+  }
+
+  it("shows a line the server alone flags, and Send all leaves it out with a message, sending the rest", async () => {
+    server.unavailable.add("offer-flan");
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    await tap(el, "Flan");
+    await saved(el);
+
+    expect(flagText(el)).toEqual([t("basket.blocked.server")]);
+    expect(await pressAndRead(el, "send-all")).toContain(
+      t("table.left_out_one").replace("{names}", "Flan ×1"),
+    );
+    await confirm(el);
+
+    expect(sentNames()).toEqual(["offer-beer"]);
+    expect(rows(el)).toEqual(["Flan ×1"]);
+    expect(server.drafts[0]!.lines.map((line) => line.menuItemId)).toEqual(["offer-flan"]);
+  });
+
+  it("shows a line the till's own poll flags, and Fire all leaves it out", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const { el } = await mountApp({
+        menuState: vi.fn().mockResolvedValue(state(["product-offer-flan"])),
+      });
+      await openMesa(el);
+      await tap(el, "Beer");
+      await tap(el, "Flan");
+      vi.advanceTimersByTime(15_000);
+      await flush(el, 6);
+
+      expect(flagText(el)).toEqual([t("basket.blocked.unavailable")]);
+      expect(await pressAndRead(el, "fire-all")).toContain(
+        t("table.left_out_one").replace("{names}", "Flan ×1"),
+      );
+      await confirm(el);
+
+      expect(sentNames()).toEqual(["offer-beer"]);
+      expect(rows(el)).toEqual(["Flan ×1"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("flags a line of a draft read from the server that the table's offers say is sold out", async () => {
+    server.save("v1", {
+      draftId: null,
+      revision: 0,
+      lines: ["offer-beer", "offer-flan"].map((menuItemId) => ({
+        menuItemId,
+        variantId: null,
+        menuVersionId: "v1",
+        options: [],
+        extras: [],
+        note: null,
+        quantity: "1",
+        courseId: null,
+        noMerge: false,
+      })),
+    });
+    const offers = catalogue("v1");
+    const { el } = await mountApp({
+      listZoneOffers: vi.fn().mockResolvedValue({
+        ...offers,
+        offers: offers.offers.map((each) =>
+          each.id === "offer-flan" ? { ...each, available: false } : each,
+        ),
+      }),
+    });
+
+    await openMesa(el);
+
+    expect(rows(el)).toEqual(["Beer ×1", "Flan ×1"]);
+    expect(flagText(el)).toEqual([t("basket.blocked.unavailable")]);
+  });
+
+  it("takes a flagged line out on Remove, and saves that", async () => {
+    server.unavailable.add("offer-flan");
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    await tap(el, "Flan");
+    await saved(el);
+
+    screen(el).querySelector<HTMLElement>('[data-flag-remove="1"]')!.click();
+    await saved(el);
+
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(server.drafts[0]!.lines.map((line) => line.menuItemId)).toEqual(["offer-beer"]);
+  });
+
+  it("keeps a flagged line on Keep, still flagged and not sent, and sends it once it can be sold again", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const { el } = await mountApp({
+        menuState: vi.fn().mockResolvedValue(state(["product-offer-flan"])),
+      });
+      await openMesa(el);
+      await tap(el, "Beer");
+      await tap(el, "Flan");
+      vi.advanceTimersByTime(15_000);
+      await flush(el, 6);
+      screen(el).querySelector<HTMLElement>('[data-flag-keep="1"]')!.click();
+      await flush(el);
+      await act(el, "fire-all");
+      expect(sentNames(0)).toEqual(["offer-beer"]);
+      expect(flagText(el)).toEqual([t("basket.blocked.unavailable")]);
+
+      api.menuState.mockResolvedValue(state([]));
+      vi.advanceTimersByTime(15_000);
+      await flush(el, 6);
+      expect(flagText(el)).toEqual([]);
+      await act(el, "fire-all");
+
+      expect(sentNames(1)).toEqual(["offer-flan"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("drops a flag only the server gave once a later poll finds the dish can be sold", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      server.unavailable.add("offer-flan");
+      const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state([])) });
+      await openMesa(el);
+      await tap(el, "Flan");
+      await saved(el);
+      expect(flagText(el)).toEqual([t("basket.blocked.server")]);
+
+      server.unavailable.clear();
+      vi.advanceTimersByTime(15_000);
+      await flush(el, 6);
+
+      expect(flagText(el)).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("sends nothing, and says why, when every line is flagged", async () => {
+    server.unavailable.add("offer-flan");
+    server.unavailable.add("offer-beer");
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    await tap(el, "Flan");
+    await saved(el);
+
+    expect(await pressAndRead(el, "send-all")).toContain(t("table.nothing_sent"));
+    expect(screen(el).querySelector("[data-draft-confirm]")).toBeNull();
+    expect(api.submitDraft).not.toHaveBeenCalled();
   });
 });
