@@ -5,7 +5,7 @@ import {
   mountWidget,
   type DraftServer,
 } from "./widgets/test-helpers.js";
-import { TillApp } from "./till-app.js";
+import { SUBMIT_RETRY_PAUSE_MS, TillApp } from "./till-app.js";
 import { formatMoney } from "@waitron/shared";
 import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
@@ -212,7 +212,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     markCleared: vi.fn().mockResolvedValue(undefined),
     getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0, editSentLines: true }),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
-    submitGroups: vi.fn().mockResolvedValue({ tabId: "wo-4", revision: 4, groups: [] }),
     fireGroup: vi.fn().mockResolvedValue({ revision: 4 }),
     sendLines: vi.fn().mockResolvedValue(undefined),
     moveTab: vi.fn().mockResolvedValue(undefined),
@@ -1442,6 +1441,7 @@ describe("till-app: the order's groups", () => {
     const order = await openMesa(el);
     await ringRound(el, order);
     emit(order, "submit-draft", roundDetail(order, [{ release: "fire", lineIndexes: [0, 1] }]));
+    await new Promise((resolve) => setTimeout(resolve, 2 * SUBMIT_RETRY_PAUSE_MS + 50));
     await flush(el);
 
     emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });

@@ -157,8 +157,12 @@ registerIcons({ close: CROSS_ICON_PATH });
 const TABLE_REQUEST_LIMIT_MS = 150_000;
 
 /** How many times a draft submission that got no answer is sent again under the same submission id,
- * within {@link TABLE_REQUEST_LIMIT_MS}; the server answers a repeat as it answered the first (D8). */
+ * within {@link TABLE_REQUEST_LIMIT_MS}; the server answers a repeat as it answered the first (D8). A
+ * send cut off by that limit is not sent again. */
 const SUBMIT_RETRIES = 2;
+
+/** The wait before a submission that got no answer is sent again. */
+export const SUBMIT_RETRY_PAUSE_MS = 500;
 
 /**
  * What a draft's submission leaves to do once the draft is open for edits again. `find-tab`, after a
@@ -206,7 +210,24 @@ function tableWriteError(error: unknown): CounterError {
 /** A refusal of a person's draft save or submission. */
 function draftRefusalError(code: string): CounterError {
   if (code === "draft.out_of_date") return "table.draft_changed_elsewhere";
-  return DRAFT_REFUSALS.has(code) ? { code } : tableWriteError({ code });
+  return DRAFT_REFUSALS.has(code) || code === "session.required"
+    ? { code }
+    : tableWriteError({ code });
+}
+
+/** Settles after `ms`, or as soon as `signal` aborts. */
+function pause(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
+  });
 }
 
 /** What another device changed about a party, worked out by comparing the floor before and after.
@@ -722,6 +743,8 @@ export class TillApp extends LitElement {
   #signIns = 0;
   /** The draft of an order with no party, which is never saved. */
   #partylessDraft = new WorkingOrderStore();
+  /** {@link #draftSync} has been read, and the party's groups with it, so the screen may show it. */
+  #draftReady = false;
   readonly #menuPoll = new MenuStatePoll({
     read: (zoneId, signal) => this.api.menuState(zoneId, { signal }),
     // A table's zone only while its order is on screen: each read takes a turn of the write lock.
@@ -1062,7 +1085,6 @@ export class TillApp extends LitElement {
     ).detail;
     setLocale(resolveActiveLocale(locale, this.#venueLocale));
     this.#signIns++;
-    if (this.#draftSync !== undefined && this.#draftSync.personId !== personId) this.#dropDraft();
     // Refresh restores regular destinations only after login; sale context remains local.
     this.drill = undefined;
     this.#floorLoaded = false;
@@ -2242,7 +2264,8 @@ export class TillApp extends LitElement {
     if (guestCount === undefined) {
       this.activeTabId = table?.tabId;
       this.orderParty = table?.visit ?? null;
-      await Promise.all([this.#loadLinesAndBills(), this.#openDraft()]);
+      const [, read] = await Promise.all([this.#loadLinesAndBills(), this.#openDraft()]);
+      this.#showDraft(read);
     } else {
       try {
         const { tabId, visitId, revision } = await this.api.seatTable(tableId, guestCount);
@@ -2258,6 +2281,7 @@ export class TillApp extends LitElement {
           unsentDrafts: [],
         };
         await this.#openDraft(false);
+        this.#showDraft(true);
       } catch (error) {
         this.errorKey = tableWriteError(error);
         await this.#refreshFloor();
@@ -2410,34 +2434,46 @@ export class TillApp extends LitElement {
     if (row?.tabId !== undefined && this.#showsCheck()) return null;
     if (this.orderParty === null) return this.#partylessDraft;
     const sync = this.#draftSync;
-    return sync !== undefined && sync.visitId === this.orderParty.id ? sync.store : null;
+    return this.#draftReady && sync?.visitId === this.orderParty.id ? sync.store : null;
   }
 
-  /** Starts the person's draft on the order's party, read from the server unless `read` is false. */
-  async #openDraft(read = true): Promise<void> {
+  /** Starts the person's draft on the order's party, read from the server unless `read` is false;
+   * false when the read failed. The screen shows it only once {@link #showDraft} says so. */
+  async #openDraft(read = true): Promise<boolean> {
     this.#dropDraft();
     this.#partylessDraft = new WorkingOrderStore();
     const party = this.orderParty;
-    if (party === null) return;
+    if (party === null) return true;
     const sync: DraftSync = new DraftSync({
       api: this.api,
       visitId: party.id,
       personId: this.operatorPersonId,
       rebuild: (lines) => lines.map((line) => fromDraftLine(line, this.#tableOffers.byId)),
       onRefused: (code) => this.#onDraftRefused(sync, code),
+      requestLimitMs: TABLE_REQUEST_LIMIT_MS,
     });
     this.#draftSync = sync;
-    if (read) await sync.load();
+    return read ? sync.load() : true;
+  }
+
+  /** A draft that could not be read is not shown, so an empty one never stands in for it. */
+  #showDraft(read: boolean): void {
+    this.#draftReady = read;
+    this.requestUpdate();
+    if (!read) this.errorKey = "table.draft_read_failed";
   }
 
   #dropDraft(): void {
     this.#draftSync?.drop();
     this.#draftSync = undefined;
+    this.#draftReady = false;
     this.requestUpdate();
   }
 
+  /** At a point the person leaves the draft: an edit no save reached is said. */
   async #flushDraft(): Promise<void> {
-    await this.#draftSync?.flush();
+    if (this.#draftSync === undefined) return;
+    if ((await this.#draftSync.flush()) === "failed") this.errorKey = "table.draft_save_failed";
   }
 
   /** An order that moved to another party, by a merge or a move, takes that party's draft; the
@@ -2445,8 +2481,9 @@ export class TillApp extends LitElement {
   #followPartyDraft(): void {
     const sync = this.#draftSync;
     if (sync === undefined || sync.visitId === this.orderParty?.id) return;
-    void sync.flush().then(() => {
-      if (this.#draftSync === sync) void this.#openDraft();
+    void this.#flushDraft().then(async () => {
+      if (this.#draftSync !== sync) return;
+      this.#showDraft(await this.#openDraft());
     });
   }
 
@@ -2616,34 +2653,33 @@ export class TillApp extends LitElement {
   ): Promise<DraftFollowUp> {
     const { groups, joinGroupId } = submission;
     this.errorKey = undefined;
-    const saved = await sync.flush();
-    // A refused save has already been said.
-    if (typeof saved === "object") return;
-    if (saved === "failed") {
-      this.errorKey = "table.error";
-      return;
-    }
-    const positions = sent.map((line) => sync.store.lines.indexOf(line));
-    const ids = positions.includes(-1) ? null : sync.lineIds(positions);
-    if (ids === null || sync.draftId === null) {
-      await sync.load();
-      this.errorKey = "table.draft_recount";
-      return;
-    }
-    const command: DraftSubmission = {
-      submissionId: crypto.randomUUID(),
-      expectedVisitRevision: party.revision,
-      draftRevision: sync.revision,
-      groups: groups.map((group) => ({
-        release: group.release,
-        lineIds: group.lineIndexes.map((index) => ids[index]!),
-      })),
-      ...(joinGroupId === undefined ? {} : { joinGroupId }),
-    };
-    let submitted: SubmittedDraft;
+    // One limit covers the save before the send and the send with its retries.
     const send = new AbortController();
     const limit = setTimeout(() => send.abort(), TABLE_REQUEST_LIMIT_MS);
+    let submitted: SubmittedDraft;
     try {
+      const saved = await sync.flush(send.signal);
+      if (saved !== "saved") {
+        this.errorKey = saved === "failed" ? "table.error" : draftRefusalError(saved.refused);
+        return;
+      }
+      const positions = sent.map((line) => sync.store.lines.indexOf(line));
+      const ids = positions.includes(-1) ? null : sync.lineIds(positions);
+      if (ids === null || sync.draftId === null) {
+        await sync.load();
+        this.errorKey = "table.draft_recount";
+        return;
+      }
+      const command: DraftSubmission = {
+        submissionId: crypto.randomUUID(),
+        expectedVisitRevision: party.revision,
+        draftRevision: sync.revision,
+        groups: groups.map((group) => ({
+          release: group.release,
+          lineIds: group.lineIndexes.map((index) => ids[index]!),
+        })),
+        ...(joinGroupId === undefined ? {} : { joinGroupId }),
+      };
       submitted = await this.#sendDraft(party.id, sync.draftId, command, send.signal);
     } catch (error) {
       if (isVersionRefusal(error)) {
@@ -2680,7 +2716,8 @@ export class TillApp extends LitElement {
     return submitted.tabId === tabId ? "read-tab" : { landedOn: submitted.tabId };
   }
 
-  /** A request that got no answer is sent again unchanged, until the time limit ends the wait. */
+  /** A request that got no answer is sent again unchanged after a pause, until the time limit ends
+   * the wait. */
   async #sendDraft(
     visitId: string,
     draftId: string,
@@ -2692,6 +2729,8 @@ export class TillApp extends LitElement {
         return await this.api.submitDraft(visitId, draftId, command, { signal });
       } catch (error) {
         if (!isNetworkFailure(error) || signal.aborted || attempt === SUBMIT_RETRIES) throw error;
+        await pause(SUBMIT_RETRY_PAUSE_MS, signal);
+        if (signal.aborted) throw error;
       }
     }
   }
@@ -3364,7 +3403,13 @@ export class TillApp extends LitElement {
     this.#configureSessionActivity();
     // The server takes the person from the session, so the draft is saved before the session ends.
     const signIns = this.#signIns;
-    if (this.#draftSync !== undefined) await this.#draftSync.flush();
+    const sync = this.#draftSync;
+    if (sync !== undefined) {
+      this.#draftSync = undefined;
+      this.#draftReady = false;
+      await sync.close();
+      sync.drop();
+    }
     if (signIns !== this.#signIns) return;
     try {
       await this.api.logout();

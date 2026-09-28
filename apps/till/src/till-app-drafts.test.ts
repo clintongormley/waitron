@@ -5,7 +5,7 @@ import {
   mountWidget,
   type DraftServer,
 } from "./widgets/test-helpers.js";
-import { TillApp } from "./till-app.js";
+import { SUBMIT_RETRY_PAUSE_MS, TillApp } from "./till-app.js";
 import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { DRAFT_SAVE_DELAY_MS } from "./state/draft-sync.js";
@@ -285,10 +285,15 @@ async function openMesa(el: TillApp, tableId = "t4"): Promise<TillTableOrderScre
   return tableOrder(el)!;
 }
 
-async function tap(el: TillApp, name: string): Promise<void> {
+/** Taps a dish's tile, without waiting. */
+function press(el: TillApp, name: string): void {
   [...browser(el)!.shadowRoot!.querySelectorAll<HTMLElement>("wt-button")]
     .find((button) => button.querySelector(".name")?.textContent === name)!
     .click();
+}
+
+async function tap(el: TillApp, name: string): Promise<void> {
+  press(el, name);
   await flush(el);
 }
 
@@ -348,7 +353,7 @@ describe("till-app: a table's draft is kept on the server", () => {
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
     await flush(el);
 
-    expect(api.listDrafts).toHaveBeenLastCalledWith("v1");
+    expect(api.listDrafts).toHaveBeenLastCalledWith("v1", expect.anything());
     expect(rows(el)).toEqual(["Beer ×1"]);
   });
 
@@ -503,7 +508,7 @@ describe("till-app: an order that moves to another party", () => {
       ["v9", 1],
       ["v1", 1],
     ]);
-    expect(api.listDrafts).toHaveBeenLastCalledWith("v9");
+    expect(api.listDrafts).toHaveBeenLastCalledWith("v9", expect.anything());
     expect(rows(el)).toEqual(["Flan ×1"]);
   });
 });
@@ -732,6 +737,8 @@ describe("till-app: sending the draft", () => {
     await tap(el, "Beer");
 
     await act(el, "fire-all");
+    await new Promise((resolve) => setTimeout(resolve, 2 * SUBMIT_RETRY_PAUSE_MS + 50));
+    await flush(el);
 
     const calls = api.submitDraft.mock.calls;
     expect(calls).toHaveLength(2);
@@ -750,6 +757,8 @@ describe("till-app: sending the draft", () => {
     const reads = api.listDrafts.mock.calls.length;
 
     await act(el, "fire-all");
+    await new Promise((resolve) => setTimeout(resolve, 2 * SUBMIT_RETRY_PAUSE_MS + 50));
+    await flush(el);
 
     const calls = api.submitDraft.mock.calls;
     expect(calls).toHaveLength(3);
@@ -773,6 +782,8 @@ describe("till-app: sending the draft", () => {
     await toggle(el, "Beer");
 
     await act(el, "fire-selected");
+    await new Promise((resolve) => setTimeout(resolve, 2 * SUBMIT_RETRY_PAUSE_MS + 50));
+    await flush(el);
 
     expect(api.submitDraft).toHaveBeenCalledTimes(3);
     expect(rows(el)).toEqual(["Steak ×1"]);
@@ -926,5 +937,345 @@ describe("till-app: sending the draft", () => {
 
     expect(api.submitDraft).not.toHaveBeenCalled();
     expect(banner(el)!.textContent).toContain(codeMessage("visit.not_open"));
+  });
+});
+
+/** A request that gets no answer: it rejects only when the signal among its arguments is aborted. */
+const noAnswer = (...args: unknown[]) =>
+  new Promise<never>((_resolve, reject) => {
+    const { signal } = args.at(-1) as { signal: AbortSignal };
+    signal.addEventListener("abort", () =>
+      reject(new DOMException("The operation was aborted.", "AbortError")),
+    );
+  });
+
+const sending = (el: TillApp) =>
+  tableOrder(el)!.shadowRoot!.querySelector("[data-round-sending]") !== null;
+
+describe("till-app: a refused save when the draft is sent", () => {
+  it("sends the refused edits again at Send, and says the refusal", async () => {
+    const { el } = await mountApp({
+      saveDraft: vi.fn().mockRejectedValue({ code: "visit.not_open", status: 409 }),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await flush(el);
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+
+    await act(el, "fire-all");
+
+    expect(api.saveDraft).toHaveBeenCalledTimes(2);
+    expect(api.submitDraft).not.toHaveBeenCalled();
+    expect(banner(el)!.textContent).toContain(codeMessage("visit.not_open"));
+    expect(tableOrder(el)).not.toBeNull();
+  });
+
+  it("says an ended session at Send", async () => {
+    const { el } = await mountApp({
+      saveDraft: vi.fn().mockRejectedValue({ code: "session.required", status: 401 }),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+
+    await act(el, "fire-all");
+
+    expect(api.submitDraft).not.toHaveBeenCalled();
+    expect(banner(el)!.textContent).toContain(codeMessage("session.required"));
+  });
+
+  it("says a closed party in its own words when the submission is refused, and stays on the table", async () => {
+    const { el } = await mountApp({
+      submitDraft: vi.fn().mockRejectedValue({ code: "visit.not_open", status: 409 }),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+    const floorReads = api.getTablesState.mock.calls.length;
+
+    await act(el, "fire-all");
+
+    expect(banner(el)!.textContent).toContain(codeMessage("visit.not_open"));
+    expect(tableOrder(el)).not.toBeNull();
+    expect(api.getTablesState.mock.calls.length).toBe(floorReads);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+  });
+});
+
+describe("till-app: a draft that cannot be saved or read", () => {
+  it("says a change that could not be saved when the table is left", async () => {
+    const { el } = await mountApp({
+      saveDraft: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+
+    await back(el);
+
+    expect(banner(el)!.textContent).toContain(t("table.draft_save_failed"));
+  });
+
+  it("shows no draft over the saved one when it cannot be read, and says so", async () => {
+    const { el } = await mountApp({
+      listDrafts: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    await openMesa(el);
+
+    expect(tableOrder(el)).not.toBeNull();
+    expect(browser(el)).toBeNull();
+    expect(tableOrder(el)!.shadowRoot!.querySelector("[data-draft-action]")).toBeNull();
+    expect(banner(el)!.textContent).toContain(t("table.draft_read_failed"));
+  });
+});
+
+describe("till-app: signing out while a save is out", () => {
+  it("starts no save after sign-out begins", async () => {
+    let answer!: () => void;
+    const { el } = await mountApp();
+    await openMesa(el);
+    server.saveDraft.mockImplementationOnce(async (visitId, save) => {
+      await new Promise<void>((resolve) => (answer = resolve));
+      return structuredClone(server.save(visitId, save));
+    });
+    await tap(el, "Beer");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await tap(el, "Steak");
+    // The second save is queued behind the first, which is still out.
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+
+    emit(tableOrder(el)!, "logout");
+    await flush(el);
+    answer();
+    await flush(el);
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+    expect(api.logout).toHaveBeenCalledOnce();
+  });
+});
+
+describe("till-app: how long a send may take", () => {
+  /** Settles answers and renders under fake timers. */
+  async function settle(el: TillApp): Promise<void> {
+    for (let i = 0; i < 3; i++) {
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+    }
+  }
+
+  async function confirmFireAll(el: TillApp): Promise<void> {
+    tableOrder(el)!
+      .shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-all"]')!
+      .click();
+    await settle(el);
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
+    await settle(el);
+  }
+
+  afterEach(() => vi.useRealTimers());
+
+  it("cuts a send with no answer off at 150 seconds, not before, and does not send it again", async () => {
+    const { el } = await mountApp({ submitDraft: vi.fn(noAnswer) });
+    await openMesa(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    press(el, "Beer");
+    await settle(el);
+    await confirmFireAll(el);
+    const [, , , options] = api.submitDraft.mock.calls[0] as [
+      string,
+      string,
+      unknown,
+      { signal: AbortSignal },
+    ];
+
+    await vi.advanceTimersByTimeAsync(149_999);
+    await settle(el);
+    expect(options.signal.aborted).toBe(false);
+    expect(sending(el)).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await settle(el);
+    expect(options.signal.aborted).toBe(true);
+    expect(api.submitDraft).toHaveBeenCalledOnce();
+    expect(sending(el)).toBe(false);
+    expect(banner(el)!.textContent).toContain(t("table.round_unconfirmed"));
+    expect(rows(el)).toEqual(["Beer ×1"]);
+  });
+
+  it("waits a moment before sending again after a quick failure", async () => {
+    const { el } = await mountApp({
+      submitDraft: vi
+        .fn(server.submitDraft)
+        .mockRejectedValueOnce(new TypeError("Failed to fetch")),
+    });
+    await openMesa(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    press(el, "Beer");
+    await settle(el);
+    await confirmFireAll(el);
+    expect(api.submitDraft).toHaveBeenCalledOnce();
+
+    await vi.advanceTimersByTimeAsync(SUBMIT_RETRY_PAUSE_MS - 1);
+    expect(api.submitDraft).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(1);
+    await settle(el);
+    expect(api.submitDraft).toHaveBeenCalledTimes(2);
+  });
+
+  it("unlocks the draft at the limit when the save before the send gets no answer", async () => {
+    const { el } = await mountApp({ saveDraft: vi.fn(noAnswer) });
+    await openMesa(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    press(el, "Beer");
+    await settle(el);
+    await confirmFireAll(el);
+
+    await vi.advanceTimersByTimeAsync(149_999);
+    await settle(el);
+    expect(sending(el)).toBe(true);
+    await vi.advanceTimersByTimeAsync(1);
+    await settle(el);
+
+    expect(sending(el)).toBe(false);
+    expect(api.submitDraft).not.toHaveBeenCalled();
+    expect(banner(el)!.textContent).toContain(t("table.error"));
+  });
+
+  it("unlocks the draft 150 seconds after Send even when a save was already out", async () => {
+    const { el } = await mountApp({ saveDraft: vi.fn(noAnswer) });
+    await openMesa(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    press(el, "Beer");
+    await settle(el);
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS);
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(100_000);
+    press(el, "Steak");
+    await settle(el);
+    await confirmFireAll(el);
+
+    await vi.advanceTimersByTimeAsync(149_999);
+    await settle(el);
+    expect(sending(el)).toBe(true);
+    await vi.advanceTimersByTimeAsync(1);
+    await settle(el);
+
+    expect(sending(el)).toBe(false);
+    expect(api.submitDraft).not.toHaveBeenCalled();
+  });
+
+  it("does not send again when the limit ends a pause between tries", async () => {
+    const { el } = await mountApp({
+      submitDraft: vi.fn(
+        () =>
+          new Promise((_resolve, reject) =>
+            setTimeout(() => reject(new TypeError("Failed to fetch")), 149_800),
+          ),
+      ),
+    });
+    await openMesa(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    press(el, "Beer");
+    await settle(el);
+    await confirmFireAll(el);
+
+    await vi.advanceTimersByTimeAsync(150_000);
+    await settle(el);
+
+    expect(api.submitDraft).toHaveBeenCalledOnce();
+    expect(sending(el)).toBe(false);
+    expect(banner(el)!.textContent).toContain(t("table.round_unconfirmed"));
+  });
+
+  it("unlocks the draft at the limit when the read after a lost reply gets no answer", async () => {
+    const { el } = await mountApp({
+      submitDraft: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    await openMesa(el);
+    api.listDrafts.mockImplementation(noAnswer);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    press(el, "Beer");
+    await settle(el);
+    await confirmFireAll(el);
+    await vi.advanceTimersByTimeAsync(2 * SUBMIT_RETRY_PAUSE_MS);
+    await settle(el);
+    expect(api.submitDraft).toHaveBeenCalledTimes(3);
+    expect(sending(el)).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(150_000);
+    await settle(el);
+
+    expect(sending(el)).toBe(false);
+    expect(banner(el)!.textContent).toContain(t("table.round_unconfirmed"));
+  });
+});
+
+describe("till-app: a later addition is decided from the table's own groups", () => {
+  it("treats a restored draft as a first order when the table it opens has no group", async () => {
+    const held: OrderGroup = {
+      id: "g-7",
+      position: 1,
+      state: "held",
+      firedAt: null,
+      remindAt: null,
+      lineIds: ["l-1"],
+      summary: "1 × Steak",
+    };
+    const sideBySide: CanvasDef = {
+      formFactor: "till",
+      tabs: [
+        drillCanvas.tabs[0]!,
+        {
+          key: "service",
+          title: "Service",
+          columns: 24,
+          cards: [
+            { type: "floor-plan", colSpan: 12, rowSpan: 12, config: {} },
+            { type: "table-order", colSpan: 12, rowSpan: 12, config: {} },
+          ],
+        },
+      ],
+    };
+    let answerGroups!: () => void;
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(till(sideBySide)),
+      listGroups: vi.fn(async (visitId: string) => {
+        if (visitId === "v7") return { revision: 9, groups: [held] };
+        await new Promise<void>((resolve) => (answerGroups = resolve));
+        return { revision: 3, groups: [] };
+      }),
+    });
+    server.save("v1", {
+      draftId: null,
+      revision: 0,
+      lines: [
+        {
+          menuItemId: "offer-beer",
+          variantId: null,
+          menuVersionId: "v1",
+          options: [],
+          extras: [],
+          note: null,
+          quantity: "1",
+          courseId: null,
+          noMerge: false,
+        },
+      ],
+    });
+    await flush(el);
+    await signIn(el);
+    emit(shell(el), "tab-select", { key: "service" });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    answerGroups();
+    await flush(el);
+
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(
+      tableOrder(el)!.shadowRoot!.querySelector('[data-draft-action="send-all"]'),
+    ).not.toBeNull();
   });
 });

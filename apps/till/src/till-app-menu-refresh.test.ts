@@ -6,7 +6,7 @@ import {
   mountWidget,
   type DraftServer,
 } from "./widgets/test-helpers.js";
-import { TillApp } from "./till-app.js";
+import { SUBMIT_RETRY_PAUSE_MS, TillApp } from "./till-app.js";
 import { setLocale } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
@@ -1663,6 +1663,7 @@ describe("a round that got no answer while the party moved on to its next tab", 
     ]);
     const round = roundStore(el);
     await sendLemonadeRound(el);
+    await new Promise((resolve) => setTimeout(resolve, 2 * SUBMIT_RETRY_PAUSE_MS + 50));
     await flush(el);
 
     expect(shownTab(el)).toBe("wo-next");
@@ -1687,6 +1688,7 @@ describe("a round that got no answer while the party moved on to its next tab", 
       { ...seated, tabId: "wo-other", visit: { ...party, id: "visit-b" } },
     ]);
     await sendLemonadeRound(el);
+    await new Promise((resolve) => setTimeout(resolve, 2 * SUBMIT_RETRY_PAUSE_MS + 50));
     await flush(el);
 
     expect(shownTab(el)).toBe("wo-7");

@@ -389,6 +389,9 @@ export const en = {
     "The server did not answer, so the items may have been added. Check the tab before sending them again.",
   "table.draft_changed_elsewhere": "Your order on this table was changed on another device.",
   "table.draft_recount": "The order on this table changed. Check it and send again.",
+  "table.draft_save_failed":
+    "Your last change to an order was not saved. Open its table to check it.",
+  "table.draft_read_failed": "The order on this table could not be read. Open the table again.",
   // Errors
   "pin.invalid": "Wrong PIN, try again",
   "person.suspended": "This account is disabled — ask a manager",
@@ -845,6 +848,9 @@ export const es: Record<StringKey, string> = {
     "El servidor no respondió, así que los artículos pueden haberse añadido. Revisa la cuenta antes de volver a enviarlos.",
   "table.draft_changed_elsewhere": "Tu pedido de esta mesa se ha cambiado en otro dispositivo.",
   "table.draft_recount": "El pedido de esta mesa ha cambiado. Revísalo y vuelve a enviarlo.",
+  "table.draft_save_failed":
+    "Tu último cambio en un pedido no se ha guardado. Abre su mesa para revisarlo.",
+  "table.draft_read_failed": "No se pudo leer el pedido de esta mesa. Vuelve a abrir la mesa.",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "person.suspended": "Esta cuenta está desactivada. Avisa a un responsable",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",

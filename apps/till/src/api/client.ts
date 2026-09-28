@@ -1842,10 +1842,12 @@ export class TillApi {
   }
 
   /** Every open draft on a party, whoever holds it, oldest first → `GET /api/visits/:visitId/drafts`. */
-  async listDrafts(visitId: string): Promise<Draft[]> {
+  async listDrafts(visitId: string, options: ReadOptions = {}): Promise<Draft[]> {
     const { drafts } = await this.#request<{ drafts: Draft[] }>(
       `/api/visits/${visitId}/drafts`,
       "GET",
+      undefined,
+      options.signal,
     );
     return drafts;
   }
@@ -1856,8 +1858,8 @@ export class TillApi {
    * others, `draft.out_of_date` (with the draft's `draftId` and `revision`), `draft.taken_over` (with
    * `ownerId` and `ownerName`), `draft.not_found`, `draft.already_submitted` and `visit.not_open`.
    */
-  saveDraft(visitId: string, save: DraftSave): Promise<Draft> {
-    return this.#request(`/api/visits/${visitId}/drafts`, "PUT", save);
+  saveDraft(visitId: string, save: DraftSave, options: ReadOptions = {}): Promise<Draft> {
+    return this.#request(`/api/visits/${visitId}/drafts`, "PUT", save, options.signal);
   }
 
   /**

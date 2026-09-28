@@ -253,7 +253,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listStatuses: vi.fn().mockResolvedValue([]),
     seatTable: vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 }),
     getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0, editSentLines: true }),
-    submitGroups: vi.fn().mockResolvedValue({ tabId: "wo-7", revision: 4, groups: [] }),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
     fireGroup: vi.fn().mockResolvedValue({ revision: 4 }),
     fireCourse: vi.fn().mockResolvedValue(undefined),

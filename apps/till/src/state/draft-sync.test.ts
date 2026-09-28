@@ -29,6 +29,18 @@ const rebuild = (lines: readonly DraftLine[]): OrderLine[] =>
 const rows = (sync: DraftSync) =>
   sync.store.lines.map((line) => `${line.product.name} ×${line.quantity}`);
 
+/** Each request's own time limit in these tests. */
+const LIMIT = 5_000;
+
+/** A request that gets no answer: it rejects only when the signal among its arguments is aborted. */
+const noAnswer = (...args: unknown[]) =>
+  new Promise<never>((_resolve, reject) => {
+    const { signal } = args.at(-1) as { signal: AbortSignal };
+    signal.addEventListener("abort", () =>
+      reject(new DOMException("The operation was aborted.", "AbortError")),
+    );
+  });
+
 let server: DraftServer;
 let refused: string[];
 
@@ -39,6 +51,7 @@ function sync(personId = "p1"): DraftSync {
     personId,
     rebuild,
     onRefused: (code) => refused.push(code),
+    requestLimitMs: LIMIT,
   });
 }
 
@@ -119,11 +132,15 @@ describe("DraftSync: saving", () => {
 
     expect(rows(draft)).toEqual(["Beer ×3"]);
     expect(server.saveDraft).toHaveBeenCalledOnce();
-    expect(server.saveDraft).toHaveBeenCalledWith("v1", {
-      draftId: null,
-      revision: 0,
-      lines: [expect.objectContaining({ menuItemId: "offer-beer", quantity: "3" })],
-    });
+    expect(server.saveDraft).toHaveBeenCalledWith(
+      "v1",
+      {
+        draftId: null,
+        revision: 0,
+        lines: [expect.objectContaining({ menuItemId: "offer-beer", quantity: "3" })],
+      },
+      { signal: expect.any(AbortSignal) },
+    );
     expect(draft.draftId).toBe(server.drafts[0]!.id);
     expect(draft.revision).toBe(1);
   });
@@ -136,11 +153,15 @@ describe("DraftSync: saving", () => {
     draft.store.addProduct(steak, "1");
     await settle();
 
-    expect(server.saveDraft).toHaveBeenLastCalledWith("v1", {
-      draftId: server.drafts[0]!.id,
-      revision: 1,
-      lines: [expect.anything(), expect.anything()],
-    });
+    expect(server.saveDraft).toHaveBeenLastCalledWith(
+      "v1",
+      {
+        draftId: server.drafts[0]!.id,
+        revision: 1,
+        lines: [expect.anything(), expect.anything()],
+      },
+      { signal: expect.any(AbortSignal) },
+    );
     expect(draft.revision).toBe(2);
   });
 
@@ -356,6 +377,108 @@ describe("DraftSync: a refused save", () => {
   });
 });
 
+describe("DraftSync: a save or read that does not come back", () => {
+  it("sends the edits again at the next flush after a refusal that is not about the draft", async () => {
+    const draft = sync();
+    await draft.load();
+    server.saveDraft.mockRejectedValueOnce({ code: "visit.not_open", status: 409 });
+    draft.store.addProduct(beer, "1");
+
+    expect(await draft.flush()).toEqual({ refused: "visit.not_open" });
+    expect(await draft.flush()).toBe("saved");
+
+    expect(server.saveDraft).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up on a save with no answer at its limit, and keeps the edit unsaved", async () => {
+    const draft = sync();
+    await draft.load();
+    server.saveDraft.mockImplementationOnce(noAnswer);
+    draft.store.addProduct(beer, "1");
+    let outcome: unknown;
+    void draft.flush().then((value) => (outcome = value));
+
+    await vi.advanceTimersByTimeAsync(LIMIT - 1);
+    expect(outcome).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(outcome).toBe("failed");
+
+    expect(await draft.flush()).toBe("saved");
+    expect(server.saveDraft).toHaveBeenCalledTimes(2);
+  });
+
+  it("answers failed when the caller's signal is cut off, and cuts the save off with it", async () => {
+    const draft = sync();
+    await draft.load();
+    server.saveDraft.mockImplementationOnce(noAnswer);
+    draft.store.addProduct(beer, "1");
+    const caller = new AbortController();
+    const flushed = draft.flush(caller.signal);
+    await vi.advanceTimersByTimeAsync(0);
+
+    caller.abort();
+
+    expect(await flushed).toBe("failed");
+    const [, , options] = server.saveDraft.mock.calls[0] as unknown as [
+      string,
+      unknown,
+      { signal: AbortSignal },
+    ];
+    expect(options.signal.aborted).toBe(true);
+  });
+
+  it("gives up on a read with no answer at its limit", async () => {
+    const draft = sync();
+    server.listDrafts.mockImplementationOnce(noAnswer);
+    let read: boolean | undefined;
+    void draft.load().then((value) => (read = value));
+
+    await vi.advanceTimersByTimeAsync(LIMIT - 1);
+    expect(read).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(read).toBe(false);
+  });
+});
+
+describe("DraftSync: signing out", () => {
+  it("sends what is unsaved at once when no save is out, and nothing after", async () => {
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+
+    const closed = draft.close();
+    expect(await closed).toBe("saved");
+    expect(server.saveDraft).toHaveBeenCalledOnce();
+
+    draft.store.addProduct(steak, "1");
+    await settle();
+    expect(await draft.flush()).toBe("failed");
+    expect(server.saveDraft).toHaveBeenCalledOnce();
+  });
+
+  it("sends nothing more while a save is out, since it could go out under the next session", async () => {
+    let answer!: () => void;
+    const draft = sync();
+    await draft.load();
+    server.saveDraft.mockImplementationOnce(async (visitId, save) => {
+      await new Promise<void>((resolve) => (answer = resolve));
+      return structuredClone(server.save(visitId, save));
+    });
+    draft.store.addProduct(beer, "1");
+    await settle();
+    draft.store.addProduct(steak, "1");
+    const queued = draft.flush();
+
+    const closed = draft.close();
+    answer();
+    await closed;
+    await queued;
+    await settle();
+
+    expect(server.saveDraft).toHaveBeenCalledOnce();
+  });
+});
+
 describe("DraftSync: after a submission", () => {
   it("takes the sent lines out and keeps the rest as they are, when the server kept the same", async () => {
     const draft = sync();
@@ -397,6 +520,7 @@ describe("DraftSync: after a submission", () => {
     expect(server.saveDraft).toHaveBeenLastCalledWith(
       "v1",
       expect.objectContaining({ draftId: null }),
+      expect.anything(),
     );
   });
 

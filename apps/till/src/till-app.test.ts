@@ -420,7 +420,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listZones: vi.fn().mockResolvedValue([]),
     seatTable: vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 }),
     getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
-    submitGroups: vi.fn().mockResolvedValue({ tabId: "wo-7", revision: 4, groups: [] }),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
     fireGroup: vi.fn().mockResolvedValue({ revision: 4 }),
     fireCourse: vi.fn().mockResolvedValue(undefined),
@@ -3995,7 +3994,7 @@ describe("till-app", () => {
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 
-      it("submit-draft forwards a per-line course OVERRIDE verbatim to submitGroups (KDS-2 §5b)", async () => {
+      it("submit-draft forwards a per-line course OVERRIDE verbatim with the draft (KDS-2 §5b)", async () => {
         const submitDraft = answering({ tabId: "wo-7", revision: 4, groups: [] });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([seatedTable]),

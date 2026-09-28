@@ -32,6 +32,26 @@ export interface DraftSyncOptions {
   rebuild: (lines: readonly DraftLine[]) => OrderLine[];
   /** A save was refused. When the draft itself was, the drafts have been read again first. */
   onRefused: (code: string) => void;
+  /** How long one read or save may stay out before it is cut off. */
+  requestLimitMs: number;
+}
+
+/** A signal that aborts after `ms`, or with `also`. */
+function limited(ms: number, also?: AbortSignal): { signal: AbortSignal; done: () => void } {
+  const own = new AbortController();
+  const timer = setTimeout(() => own.abort(), ms);
+  return {
+    signal: also === undefined ? own.signal : AbortSignal.any([own.signal, also]),
+    done: () => clearTimeout(timer),
+  };
+}
+
+/** Settles when `signal` aborts. */
+function aborted(signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) resolve();
+    else signal.addEventListener("abort", () => resolve(), { once: true });
+  });
 }
 
 /** What a line orders, with its answers and picks in a fixed order. */
@@ -82,8 +102,11 @@ export class DraftSync {
   #lineIds: string[] = [];
   /** An edit not yet sent in a save. */
   #unsaved = false;
-  #last: DraftSaveOutcome = "saved";
   #queue: Promise<DraftSaveOutcome> = Promise.resolve("saved");
+  /** A save is out. */
+  #saving = false;
+  /** Signing out: no save starts after this. */
+  #closed = false;
   #timer?: ReturnType<typeof setTimeout>;
   /** Moved on by each read, so a save answering after it is not taken. */
   #reads = 0;
@@ -116,11 +139,14 @@ export class DraftSync {
   async load(): Promise<boolean> {
     const read = ++this.#reads;
     this.#cancelTimer();
+    const limit = limited(this.#options.requestLimitMs);
     let drafts: Draft[];
     try {
-      drafts = await this.#options.api.listDrafts(this.visitId);
+      drafts = await this.#options.api.listDrafts(this.visitId, { signal: limit.signal });
     } catch {
       return false;
+    } finally {
+      limit.done();
     }
     if (this.#dropped || read !== this.#reads) return false;
     const own = drafts.find((draft) => draft.ownerId === this.personId) ?? null;
@@ -129,10 +155,22 @@ export class DraftSync {
     return true;
   }
 
-  /** Sends any unsaved edit now; resolves once every save has answered, with the last outcome. */
-  flush(): Promise<DraftSaveOutcome> {
+  /** Sends any unsaved edit now; resolves once every save has answered, with the last outcome, or
+   * as `failed` once `signal` aborts, which also cuts off the save this sends. */
+  flush(signal?: AbortSignal): Promise<DraftSaveOutcome> {
     this.#cancelTimer();
-    return this.#save();
+    const saved = this.#save(signal);
+    if (signal === undefined) return saved;
+    return Promise.race([saved, aborted(signal).then((): DraftSaveOutcome => "failed")]);
+  }
+
+  /** At sign-out. What is unsaved is sent now only when no save is out: one started after the next
+   * person has signed in would be saved as theirs. No save starts after this. */
+  close(): Promise<DraftSaveOutcome> {
+    this.#cancelTimer();
+    const last = this.#saving ? this.#queue : this.#save(undefined, true);
+    this.#closed = true;
+    return last;
   }
 
   /** After a submission answered: the `sent` lines leave, and the rest are taken as the server's
@@ -167,36 +205,44 @@ export class DraftSync {
     this.#timer = undefined;
   }
 
-  #save(): Promise<DraftSaveOutcome> {
-    this.#queue = this.#queue.then(() => this.#saveNow()).catch((): DraftSaveOutcome => "failed");
+  /** `closing` is the sign-out's own save, queued just before {@link close} shuts the queue. */
+  #save(signal?: AbortSignal, closing = false): Promise<DraftSaveOutcome> {
+    this.#queue = this.#queue
+      .then(() => this.#saveNow(signal, closing))
+      .catch((): DraftSaveOutcome => "failed");
     return this.#queue;
   }
 
-  async #saveNow(): Promise<DraftSaveOutcome> {
-    if (this.#dropped) return "failed";
-    if (!this.#unsaved) return this.#last;
+  async #saveNow(signal: AbortSignal | undefined, closing: boolean): Promise<DraftSaveOutcome> {
+    if (this.#dropped || (this.#closed && !closing)) return "failed";
+    if (!this.#unsaved) return "saved";
     const read = this.#reads;
     const lines = this.store.lines.map((line) => toDraftLineInput(line));
     this.#unsaved = false;
+    const limit = limited(this.#options.requestLimitMs, signal);
     let saved: Draft;
+    this.#saving = true;
     try {
-      saved = await this.#options.api.saveDraft(this.visitId, {
-        draftId: this.#draftId,
-        revision: this.#revision,
-        lines,
-      });
+      saved = await this.#options.api.saveDraft(
+        this.visitId,
+        { draftId: this.#draftId, revision: this.#revision, lines },
+        { signal: limit.signal },
+      );
     } catch (error) {
       if (this.#dropped || read !== this.#reads) return "failed";
-      this.#last = await this.#refused(error);
-      return this.#last;
+      return await this.#refused(error);
+    } finally {
+      this.#saving = false;
+      limit.done();
     }
     if (this.#dropped || read !== this.#reads) return "failed";
     if (!this.#unsaved && !sameLines(lines, saved.lines)) this.#show(saved);
     else this.#take(saved);
-    this.#last = "saved";
-    return this.#last;
+    return "saved";
   }
 
+  /** A refusal of the draft itself shows the server's draft; after any other, and after no answer,
+   * the edits stay unsaved, so the next flush sends them again. */
   async #refused(error: unknown): Promise<DraftSaveOutcome> {
     const code = (error as { code?: unknown } | undefined)?.code;
     if (typeof code !== "string") {
@@ -204,6 +250,7 @@ export class DraftSync {
       return "failed";
     }
     if (DRAFT_REFUSALS.has(code)) await this.load();
+    else this.#unsaved = true;
     this.#options.onRefused(code);
     return { refused: code };
   }
@@ -218,7 +265,6 @@ export class DraftSync {
   #show(draft: Draft | null): void {
     this.#take(draft);
     this.#unsaved = false;
-    this.#last = "saved";
     const lines = draft === null ? [] : this.#options.rebuild(draft.lines);
     this.#quietly(() => this.store.loadFrom(this.store.id, lines));
   }

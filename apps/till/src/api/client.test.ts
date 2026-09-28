@@ -2485,6 +2485,20 @@ describe("TillApi: a party's drafts", () => {
     lines: [{ ...beer, id: "dl-1", quantity: "1.000", unavailable: false }],
   };
 
+  it("listDrafts and saveDraft hand a caller's abort signal to fetch", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ drafts: [] }))
+      .mockResolvedValueOnce(jsonResponse(draft));
+    const api = new TillApi("", fetchStub);
+    const signal = new AbortController().signal;
+
+    await api.listDrafts("v1", { signal });
+    await api.saveDraft("v1", { draftId: null, revision: 0, lines: [beer] }, { signal });
+
+    expect(fetchStub.mock.calls.map(([, init]) => init?.signal)).toEqual([signal, signal]);
+  });
+
   it("listDrafts GETs every open draft on the party and answers the list", async () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ drafts: [draft] }));
 
