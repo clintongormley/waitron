@@ -474,10 +474,10 @@ required options list to a dish in the basket, or lowers a list's picks limit, s
 new version silently and the server then refuses the request `options.label_required` (or
 `extras.limit_exceeded`, per `validateExtraSelections`); nothing wrong is filed, but staff see a refusal where the dialog should have asked.
 The comparison also looks only at each line's total, so dish and extra price changes that cancel out
-are adopted without asking — see the campaign item A113 entry further down. _(Campaign item A113,
-branch `fix/retro-review-719-till`, 2026-09-28: no longer so — when a line's total is unchanged,
-`refreshBasket` lists the dish or variant and each extra whose price changed, each on its own row
-of the dialog.)_
+are adopted without asking — see the campaign item A113 entry further down. _(#812, campaign item
+A113, branch `fix/retro-review-719-till`, 2026-09-28: no longer so — when a line's total is
+unchanged, `refreshBasket` lists the dish or variant and each extra whose price changed, each on its
+own row of the dialog.)_
 A table's round is also not marked by the poll's sold-out list, only when a send is refused.
 _(Task 8, 2026-09-28: no longer so — when the poll's sold-out list for the open table's zone
 changes, `#onMenuState` in `apps/till/src/till-app.ts` marks the draft again, `#markDraft(true)`.)_
@@ -2906,7 +2906,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     reads the bills after a cancel that landed or got no answer, and reads the floor's party after
     one that landed as well as one that got no answer; a refused one reads the lines only, as
     before.
-- **DONE (campaign item A113, from the A108r retro review of #719, branch
+- **DONE (#812, campaign item A113, from the A108r retro review of #719, branch
   `fix/retro-review-719-till`): the till's option default returns to the published one once it is
   back in stock, and when a line's total is unchanged the basket refresh names each dish, variant
   or extra whose price changed.** The served options list carries the published default as
