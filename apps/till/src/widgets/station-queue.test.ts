@@ -165,6 +165,52 @@ describe("till-station-queue", () => {
     );
   });
 
+  it("leaves out the unit of a line sold in Each, and keeps every other unit's", async () => {
+    const counted: StationQueueGroup = {
+      ...groupA,
+      items: [
+        {
+          ...groupA.items[0]!,
+          id: "ti-each",
+          name: "Croqueta",
+          quantity: "2.000",
+          unitName: { "es-ES": "ud" },
+          unitPrecision: 0,
+          soldInEach: true,
+        },
+        {
+          ...groupA.items[0]!,
+          id: "ti-kg",
+          name: "Pulpo",
+          quantity: "0.500",
+          unitName: { "es-ES": "kg" },
+          unitPrecision: 3,
+          soldInEach: false,
+        },
+        {
+          ...groupA.items[0]!,
+          id: "ti-g",
+          name: "Almendras",
+          quantity: "200.000",
+          unitName: { "es-ES": "g" },
+          unitPrecision: 0,
+          soldInEach: false,
+        },
+      ],
+    };
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [counted],
+      view: "rail",
+      stationId: "st-1",
+    });
+    const text = (id: string) =>
+      el.shadowRoot!.querySelector(`[data-item="${id}"]`)!.textContent!.replace(/\s+/g, " ");
+    expect(text("ti-each")).toContain("2× Croqueta");
+    expect(text("ti-each")).not.toContain("ud");
+    expect(text("ti-kg")).toContain("0.5 kg× Pulpo");
+    expect(text("ti-g")).toContain("200 g× Almendras");
+  });
+
   it("kanban: each cell shows its quantity × dish name alongside the order number", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
@@ -1071,6 +1117,7 @@ describe("till-station-queue — kitchen notices strip", () => {
     kind: "void",
     lineName: "Burger",
     unitName: null,
+    soldInEach: false,
     quantity: "1.000",
     note: null,
     wasStarted: false,
@@ -1175,6 +1222,40 @@ describe("till-station-queue — kitchen notices strip", () => {
     expect(weighed!.querySelector(".notice-line")!.textContent!.trim()).toBe("0.5 kg× Pulpo");
     expect(counted!.querySelector(".notice-line")!.textContent!.trim()).toBe("2 ud× Croqueta");
     expect(noUnit!.querySelector(".notice-line")!.textContent!.trim()).toBe("2× Gilda");
+  });
+
+  it("leaves out the unit of a notice for a line sold in Each, and keeps every other unit's", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+      notices: [
+        notice({
+          quantity: "2.000",
+          lineName: "Croqueta",
+          unitName: { "es-ES": "ud" },
+          soldInEach: true,
+        }),
+        notice({
+          id: "kn-2",
+          quantity: "0.500",
+          lineName: "Pulpo",
+          unitName: { "es-ES": "kg" },
+          soldInEach: false,
+        }),
+        notice({
+          id: "kn-3",
+          quantity: "200.000",
+          lineName: "Almendras",
+          unitName: { "es-ES": "g" },
+          soldInEach: false,
+        }),
+      ],
+    });
+    expect(rows(el).map((row) => row.querySelector(".notice-line")!.textContent!.trim())).toEqual([
+      "2× Croqueta",
+      "0.5 kg× Pulpo",
+      "200 g× Almendras",
+    ]);
   });
 
   // Fails if a HOLD correction's "-1" and "+1" notices read the same on the screen.

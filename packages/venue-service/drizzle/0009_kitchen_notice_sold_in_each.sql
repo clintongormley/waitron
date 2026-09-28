@@ -1,0 +1,1 @@
+ALTER TABLE `kitchen_notices` ADD `sold_in_each` integer DEFAULT false NOT NULL;

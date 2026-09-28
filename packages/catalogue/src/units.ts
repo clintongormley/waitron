@@ -29,6 +29,14 @@ export const EACH_UNIT: SellableUnit = {
   hardwareUnit: null,
 };
 
+/**
+ * Whether a unit is Each, decided by its identity and never by its abbreviation, which a venue can
+ * rename. A stored unit seeded as `each` is Each too.
+ */
+export function isEachUnit(unit: { id: string; seedKey: string | null }): boolean {
+  return unit.id === EACH_UNIT_ID || unit.seedKey === "each";
+}
+
 export interface CreateUnitInput {
   name: Record<string, string>;
   precision: number;

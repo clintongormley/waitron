@@ -15,12 +15,14 @@ import {
   assertLiveVersions,
   documentOffers,
   effectiveProductColumns,
+  isEachUnit,
   parentJoin,
   parentProducts,
   productWithId,
   readLiveDocuments,
   readUnavailable,
   resolveDeviceHomeLayouts,
+  units,
   type MenuDocument,
   type MenuOffer,
   type MenuState,
@@ -791,6 +793,27 @@ export async function listWorkingLineContexts(
     ...row,
     hardwareUnit: row.hardwareUnit as "kg" | "g" | "mg" | null,
   }));
+}
+
+/**
+ * Which of `lineIds` were sold in Each: by the unit id their context froze, and for a stored unit
+ * by that unit's current seed key; a line with no context is not.
+ */
+export async function readLinesSoldInEach(
+  tx: Transaction,
+  lineIds: readonly string[],
+): Promise<Set<string>> {
+  if (lineIds.length === 0) return new Set();
+  const rows = await tx
+    .select({
+      workingOrderLineId: workingLineContexts.workingOrderLineId,
+      id: workingLineContexts.unitId,
+      seedKey: units.seedKey,
+    })
+    .from(workingLineContexts)
+    .leftJoin(units, eq(units.id, workingLineContexts.unitId))
+    .where(inArray(workingLineContexts.workingOrderLineId, [...lineIds]));
+  return new Set(rows.filter(isEachUnit).map((row) => row.workingOrderLineId));
 }
 
 /**

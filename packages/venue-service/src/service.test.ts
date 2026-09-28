@@ -18,6 +18,7 @@ describe("VENUE_SERVICE", () => {
       "readClearingWorkflow",
       "readEditSentLines",
       "readKitchenTicketGrouping",
+      "readLinesSoldInEach",
       "readPrintHeldWork",
       "recordKitchenNotices",
       "recordLineContexts",

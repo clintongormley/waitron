@@ -371,7 +371,27 @@ line's unit, copied when it is recorded (venue-service migration `0004`, a nulla
 `kitchen_notices.unit_name`), and the kitchen screen writes it the way the queue row above it does:
 "0.5 kg× Pulpo". A dish sold by the piece carries the Each unit, so its notice reads "2 ud× Croqueta"
 in Spanish, as its queue row already did; only a line with no unit at all reads "2×". Hiding
-Each on both is the owner's call, not done. **Done since (2026-09-27, lane A's A72, #727):** while the
+Each on both is the owner's call, not done. **Done since (2026-09-28, A78):** the kitchen screen
+leaves the Each unit out of a queue row and a notice alike, "2× Croqueta", while a weighed or
+measured line keeps its unit ("0.5 kg× Pulpo") and so does any other unit counted in whole numbers
+("200 g× Almendras"). Each is decided by the unit's identity, never its abbreviation: the unit a
+product with no stored unit reads as, or a stored unit seeded as `each` (`isEachUnit`,
+`@waitron/catalogue`; provisioning has not seeded one since #375, so only test fixtures hold one).
+The queue payload and each notice carry `soldInEach`; a notice copies it when recorded (venue-service
+migration `0009`, `kitchen_notices.sold_in_each`, a flag so it still answers once the line is voided
+or the unit deleted). One known gap: while a line is still open, deleting the stored unit seeded
+as `each` it was sold in makes its queue row, and any notice recorded after, read as not Each,
+because `readLinesSoldInEach` looks the seed key up on the live unit row (reproduced by the
+finish-branch run-it review, 2026-09-28); the unit a product with no stored unit reads as cannot be
+deleted, so only such a stored unit is affected. Left open, outside that item: the printed kitchen
+ticket still prints the Each unit (`apps/server/src/split-bill.test.ts` pins a slip line "1.000 ea x Agua";
+`apps/server/src/kitchen-ticket.ts` `itemLine` prints any unit it is given, and
+`soldInEach` in `apps/server/src/kitchen-print.ts` decides only whether an entry may be merged or
+split, by comparing the abbreviation TEXT with Each's); and, from reading the code only, so do the
+expo board (`apps/till/src/screens/till-expo-screen.ts` `#item`), the printed receipt
+(`apps/server/src/receipt-ticket.ts`) and the till's ticket view. Whether any of
+them should follow is the owner's call; the ticket and the expo board could share
+`readLinesSoldInEach`. **Done since (2026-09-27, lane A's A72, #727):** while the
 kitchen screen's queue reads fail (including a read cancelled at 25 seconds), a banner above the
 list says "Not up to date since 10:20" ("Sin actualizar desde las 10:20"), giving the time of the
 last read it showed, or, if none has succeeded, the time the screen opened, or the time the

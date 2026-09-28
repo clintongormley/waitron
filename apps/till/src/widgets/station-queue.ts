@@ -79,14 +79,21 @@ function courseOrder(course: StationQueueCourse | null): number {
   return course === null ? Number.NEGATIVE_INFINITY : course.displayOrder;
 }
 
-/** One format for a queue row and a notice, so a cook reads the same line the same way in both. */
+/** One format for a queue row and a notice, so a cook reads the same line the same way in both.
+ *  A line counted in Each shows no unit: "2× Croqueta". */
 function dishLine(
-  quantity: string,
-  unitName: Record<string, string> | null | undefined,
+  line: {
+    quantity: string;
+    unitName?: Record<string, string> | null;
+    soldInEach?: boolean;
+  },
   name: string,
 ): string {
-  const unit = unitName == null ? "" : ` ${snapshotDescriptionFor(unitName, "")}`;
-  return `${trimQuantity(quantity)}${unit}× ${name}`;
+  const unit =
+    line.unitName == null || line.soldInEach === true
+      ? ""
+      : ` ${snapshotDescriptionFor(line.unitName, "")}`;
+  return `${trimQuantity(line.quantity)}${unit}× ${name}`;
 }
 
 /**
@@ -732,7 +739,7 @@ export class TillStationQueue extends LitElement {
   #notice(notice: KitchenNotice): TemplateResult {
     const kind = t(`station.notice.${notice.kind}` as const);
     const sign = notice.direction === null ? "" : notice.direction === "added" ? "+" : "\u2212";
-    const line = `${sign}${dishLine(notice.quantity, notice.unitName, notice.lineName)}`;
+    const line = `${sign}${dishLine(notice, notice.lineName)}`;
     const acknowledge = t("station.notice.acknowledge");
     const { movedTo } = notice;
     return html`<li class="notice kind-${notice.kind}" data-notice=${notice.id}>
@@ -1033,7 +1040,7 @@ export class TillStationQueue extends LitElement {
 
   /** The name is the server-resolved kitchen label and is rendered as sent. */
   #dish(item: StationQueueItem): string {
-    return dishLine(item.quantity, item.unitName, item.name);
+    return dishLine(item, item.name);
   }
 
   #bumpLabel(group: StationQueueGroup): string {

@@ -253,6 +253,7 @@ const baseNotice: KitchenNotice = {
   kind: "void",
   lineName: "Burger",
   unitName: null,
+  soldInEach: false,
   quantity: "1.000",
   note: null,
   wasStarted: true,

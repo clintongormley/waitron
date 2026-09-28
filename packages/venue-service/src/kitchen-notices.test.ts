@@ -1,6 +1,16 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
+import {
+  CATALOGUE_MIGRATIONS,
+  EACH_UNIT,
+  EACH_UNIT_ID,
+  addProductToMenu,
+  createCatalogue,
+  createProduct,
+  deleteUnit,
+  units,
+  updateUnit,
+} from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   kitchenStations,
@@ -17,6 +27,7 @@ import { AppError, locationId as brandLocationId, thousandthsToDecimal } from "@
 import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { kitchenNotices } from "./schema/kitchen-notices.js";
+import { workingLineContexts } from "./schema/service.js";
 import { serviceSettings } from "./schema/settings.js";
 import {
   acknowledgeKitchenNotice,
@@ -204,6 +215,7 @@ describe("recordKitchenNotices", () => {
         kind: "void",
         lineName: "BRGR",
         unitName: null,
+        soldInEach: false,
         quantity: ONE,
         note: "no onions",
         wasStarted: true,
@@ -287,6 +299,114 @@ describe("recordKitchenNotices", () => {
         unitName: { en: "kg", "es-ES": "kilo" },
         quantity: thousandthsToDecimal(500),
       }),
+    ]);
+  });
+
+  /**
+   * Each line is sold in a unit its context names: Each as a product with no stored unit reads it,
+   * the stored unit seeded as each after a venue renamed its abbreviation, kg, the seeded g (a
+   * second unit counted in whole numbers), and a unit the venue created with Each's own
+   * abbreviations. Only the first two are Each; the last proves the answer ignores the text.
+   */
+  it("marks a notice sold in Each by the identity of the unit its line was sold in, never its text", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 7, null);
+    const stored = await db
+      .insert(units)
+      .values([
+        { seedKey: "each", name: { en: "each" }, abbreviation: { en: "ea" }, precision: 0 },
+        { seedKey: "kg", name: { en: "kg" }, abbreviation: { en: "kg" }, precision: 3 },
+        { seedKey: "g", name: { en: "gram" }, abbreviation: { en: "g" }, precision: 0 },
+        { name: { en: "Portion" }, abbreviation: EACH_UNIT.abbreviation, precision: 0 },
+      ])
+      .returning({ id: units.id, abbreviation: units.abbreviation, precision: units.precision });
+    const [seededEach, kg, gram, lookalike] = stored;
+    await inTx((tx) => updateUnit(tx, seededEach!.id, { abbreviation: { en: "pc" } }, "en"));
+    const offer = await inTx(async (tx) => {
+      const menu = await createCatalogue(tx, { name: "Tapas" });
+      const product = await createProduct(tx, {
+        catalogueId: menu.id,
+        categoryId: null,
+        name: "Tapa",
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "reduced",
+      });
+      return addProductToMenu(tx, { menuId: menu.id, productId: product.id });
+    });
+    const soldIn = [
+      {
+        name: "Croqueta",
+        unit: { id: EACH_UNIT_ID, abbreviation: EACH_UNIT.abbreviation, precision: 0 },
+      },
+      { name: "Gilda", unit: { ...seededEach!, abbreviation: { en: "pc" } } },
+      { name: "Pulpo", unit: kg! },
+      { name: "Almendras", unit: gram! },
+      { name: "Pan", unit: lookalike! },
+    ];
+    const lineIds: string[] = [];
+    for (const [index, sold] of soldIn.entries()) {
+      const [line] = await db
+        .insert(workingOrderLines)
+        .values({
+          workingOrderId: order.orderId,
+          lineNo: 10 + index,
+          name: sold.name,
+          descriptions: { en: sold.name },
+          unitName: sold.unit.abbreviation,
+          unitPrecision: sold.unit.precision,
+          quantity: 2000,
+          unitPriceGross: 100,
+          vatClass: "reduced",
+          lineTotal: 200,
+        })
+        .returning({ id: workingOrderLines.id });
+      await db.insert(workingLineContexts).values({
+        workingOrderLineId: line!.id,
+        menuItemId: offer.id,
+        menuId: offer.menuId,
+        menuName: "Tapas",
+        departmentId: "00000000-0000-4000-8000-0000000000d1",
+        departmentName: "Restaurant",
+        categoryName: "Uncategorised",
+        unitId: sold.unit.id,
+        unitName: sold.unit.abbreviation,
+        unitPrecision: sold.unit.precision,
+        vatClass: "reduced",
+      });
+      lineIds.push(line!.id);
+    }
+
+    await inTx((tx) =>
+      recordKitchenNotices(
+        tx,
+        v.cfg,
+        order.orderId,
+        [...lineIds, order.burgerLineId].map((workingOrderLineId) => ({
+          workingOrderLineId,
+          stationId: v.grill,
+          quantity: TWO,
+          wasStarted: false,
+        })),
+        "void",
+      ),
+    );
+    // The void deletes the lines, and their contexts with them; the seeded each unit then goes too.
+    await db.delete(workingOrderLines).where(eq(workingOrderLines.workingOrderId, order.orderId));
+    await inTx((tx) => deleteUnit(tx, seededEach!.id));
+
+    expect(
+      (await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).map((notice) => [
+        notice.lineName,
+        notice.soldInEach,
+      ]),
+    ).toEqual([
+      ["Croqueta", true],
+      ["Gilda", true],
+      ["Pulpo", false],
+      ["Almendras", false],
+      ["Pan", false],
+      ["BRGR", false],
     ]);
   });
 
@@ -533,6 +653,7 @@ describe("recordKitchenNotices", () => {
         kind: "moved",
         lineName: "BRGR",
         unitName: null,
+        soldInEach: false,
         quantity: ONE,
         note: "no onions",
         wasStarted: false,

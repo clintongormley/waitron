@@ -392,9 +392,12 @@ export interface VenueServiceContribution {
     fromWorkingOrderLineId: string,
     toWorkingOrderLineId: string,
   ): Promise<void>;
-  /** Records one kitchen notice per item, copying each line's kitchen name and note as they stand
-   *  now, so a caller removing a line records its notices first. `direction` is for a `changed`
-   *  notice only. */
+  /** Which of the lines were sold in Each: by the unit id their context froze, and for a stored
+   *  unit by that unit's current seed key; a line with no context is not. */
+  readLinesSoldInEach(tx: Transaction, lineIds: readonly string[]): Promise<ReadonlySet<string>>;
+  /** Records one kitchen notice per item, copying each line's kitchen name, unit, note and whether
+   *  it was sold in Each as they stand now, so a caller removing a line records its notices first.
+   *  `direction` is for a `changed` notice only. */
   recordKitchenNotices(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -423,6 +426,7 @@ export interface VenueServiceContribution {
       kind: "recalled" | "void" | "changed" | "moved";
       lineName: string;
       unitName: Record<string, string> | null;
+      soldInEach: boolean;
       quantity: Decimal;
       note: string | null;
       wasStarted: boolean;

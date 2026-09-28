@@ -28,6 +28,9 @@ import {
   createExtraList,
   addProductToMenu,
   createProduct,
+  EACH_UNIT,
+  units,
+  updateUnit,
   writeProductModifiers,
 } from "@waitron/catalogue";
 import {
@@ -2619,5 +2622,97 @@ describe("a line write on an order whose card payment is in flight is refused (p
     );
 
     expect(await revisionOf(tabs.tabId)).toBe(before + 3);
+  });
+});
+
+/**
+ * The owner's decision of 2026-09-27 (A78): a dish counted in Each reads "2× Croqueta" on the kitchen
+ * screen, while every other unit keeps its text. Five dishes, each sold in its own unit: Each as a
+ * product with no stored unit reads it; the stored unit seeded as each, after its abbreviation was
+ * renamed; kg; the seeded g, a second unit counted in whole numbers; and a unit the venue created
+ * with Each's own abbreviations, so an answer read from the text would call it Each.
+ */
+describe("the kitchen screen is told which lines were sold in Each, by the unit's identity", () => {
+  async function fiveDishesOnATab() {
+    const seeded = await setupVenue();
+    const { cfg, tableId } = seeded;
+    const [seededEach] = await db
+      .select({ id: units.id })
+      .from(units)
+      .where(eq(units.seedKey, "each"));
+    const [kg] = await db.select({ id: units.id }).from(units).where(eq(units.seedKey, "kg"));
+    const [gram, lookalike] = await db
+      .insert(units)
+      .values([
+        { seedKey: "g", name: { es: "gramo" }, abbreviation: { es: "g" }, precision: 0 },
+        { name: { es: "Ración" }, abbreviation: EACH_UNIT.abbreviation, precision: 0 },
+      ])
+      .returning({ id: units.id });
+    const offerFor = await asApp(cfg, async (tx) => {
+      await updateUnit(tx, seededEach!.id, { abbreviation: { es: "pz" } }, "es");
+      const dish = (name: string, unitId: string | null, unitPrice: string) =>
+        createProduct(tx, {
+          catalogueId: seeded.menuId,
+          categoryId: null,
+          name,
+          unitId,
+          unitPrice,
+          vatClass: "reduced",
+        });
+      await dish("Croqueta", null, "1.50");
+      await dish("Gilda", seededEach!.id, "2.00");
+      await dish("Pulpo", kg!.id, "40.00");
+      await dish("Almendras", gram!.id, "0.05");
+      await dish("Pan", lookalike!.id, "1.00");
+      return (await offerProducts(tx, cfg, { zone: "tables" })).offerFor;
+    });
+    const productIds = new Map(
+      (await db.execute<{ id: string; name: string }>(sql`select id, name from products`)).rows.map(
+        (row) => [row.name, row.id],
+      ),
+    );
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { menuItemId: offerFor(productIds.get("Croqueta")!), quantity: "2" },
+        { menuItemId: offerFor(productIds.get("Gilda")!), quantity: "2" },
+        { menuItemId: offerFor(productIds.get("Pulpo")!), quantity: "0.5" },
+        { menuItemId: offerFor(productIds.get("Almendras")!), quantity: "200" },
+        { menuItemId: offerFor(productIds.get("Pan")!), quantity: "2" },
+      ]),
+    );
+    return { cfg, tabId, stationId: (await ticketOfLine(tabId, 1)).stationId };
+  }
+
+  it("marks each queue item sold in Each or not, whatever its unit's abbreviation says", async () => {
+    const { cfg, stationId } = await fiveDishesOnATab();
+
+    const [group] = await asApp(cfg, (tx) => listStationQueue(tx, stationId));
+
+    expect(group!.items.map((item) => [item.name, item.soldInEach])).toEqual([
+      ["Croqueta", true],
+      ["Gilda", true],
+      ["Pulpo", false],
+      ["Almendras", false],
+      ["Pan", false],
+    ]);
+  });
+
+  it("marks each void notice the same way, after the line it describes is gone", async () => {
+    const { cfg, tabId, stationId } = await fiveDishesOnATab();
+
+    for (let lineNo = 5; lineNo >= 1; lineNo--) {
+      await asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, lineNo));
+    }
+
+    expect(await linesOf(tabId)).toEqual([]);
+    const notices = await asApp(cfg, (tx) => listStationNotices(tx, cfg, stationId));
+    expect(notices.map((notice) => [notice.kind, notice.lineName, notice.soldInEach])).toEqual([
+      ["void", "Pan", false],
+      ["void", "Almendras", false],
+      ["void", "Pulpo", false],
+      ["void", "Gilda", true],
+      ["void", "Croqueta", true],
+    ]);
   });
 });

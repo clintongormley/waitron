@@ -64,6 +64,13 @@
       "when": 1790531019538,
       "tag": "0008_kitchen_notice_direction_check",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1790556251346,
+      "tag": "0009_kitchen_notice_sold_in_each",
+      "breakpoints": true
     }
   ]
 }
