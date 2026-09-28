@@ -891,6 +891,24 @@ describe("your profile — validation, refusals and the remaining actions", () =
     expect(field(el, "currentPassword").error).toBe("");
   });
 
+  it("puts a taken display name beside its field and once in the summary, and clears the field when it is edited", async () => {
+    const saveProfile = vi.fn().mockRejectedValue({ code: "person.display_name_taken" });
+    const { el } = await mount({ saveProfile });
+    await editDetails(el);
+    input(el, "displayName", "Alex R");
+    await flush(el);
+    await click(el, "save");
+    expect(saveProfile).toHaveBeenCalledTimes(1);
+    const message = codeMessage("person.display_name_taken");
+    expect(field(el, "displayName").error).toBe(message);
+    expect(field(el, "email").error).toBe("");
+    expect(el.shadowRoot!.querySelector("wt-form-error-summary")!.errors).toEqual([message]);
+
+    input(el, "displayName", "Alex Rivera");
+    await flush(el);
+    expect(field(el, "displayName").error).toBe("");
+  });
+
   it("announces the Security tab when it is chosen, and ignores a change event from inside a panel", async () => {
     const { el } = await mount();
     const announced: unknown[] = [];

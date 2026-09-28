@@ -1,4 +1,4 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { createRef, ref } from "lit/directives/ref.js";
 import { deriveDisplayName, isValidTelephone } from "@waitron/shared";
@@ -15,6 +15,9 @@ import { roleName, rolesByName } from "../i18n/domain.js";
 import { t } from "../i18n/t.js";
 
 type Field = "firstNames" | "lastNames" | "displayName" | "email";
+
+/** Shown beside the display-name field, so the summary does not list it a second time. */
+const DISPLAY_NAME_TAKEN = "person.display_name_taken";
 
 @customElement("dashboard-person-form")
 export class PersonForm extends LitElement {
@@ -53,6 +56,12 @@ export class PersonForm extends LitElement {
 
   #roleSelect = createRef<HTMLSelectElement>();
 
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("error") && this.error === DISPLAY_NAME_TAKEN) {
+      this.fieldErrors = { ...this.fieldErrors, displayName: codeMessage(DISPLAY_NAME_TAKEN) };
+    }
+  }
+
   override updated(): void {
     if (this.#roleSelect.value) this.#roleSelect.value.value = this.selectedRole;
   }
@@ -60,6 +69,7 @@ export class PersonForm extends LitElement {
   #change(field: Field | "telephone", event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     const value = event.detail.value;
+    const prevDisplayName = this.displayName;
     if (field === "firstNames" || field === "lastNames") {
       const prevFirst = this.firstNames;
       const prevLast = this.lastNames;
@@ -77,7 +87,11 @@ export class PersonForm extends LitElement {
     } else if (field === "displayName") this.displayName = value;
     else if (field === "email") this.email = value;
     else this.telephone = value;
-    this.fieldErrors = { ...this.fieldErrors, [field]: undefined };
+    this.fieldErrors = {
+      ...this.fieldErrors,
+      [field]: undefined,
+      ...(this.displayName !== prevDisplayName && { displayName: undefined }),
+    };
   }
 
   #validate(): boolean {
@@ -91,8 +105,13 @@ export class PersonForm extends LitElement {
     }
     const tel = this.telephone.trim();
     if (tel && !isValidTelephone(tel)) errors.telephone = codeMessage("person.telephone_invalid");
+    const valid = Object.keys(errors).length === 0;
+    // Kept only when a local check fails; a form that passes goes on for the server to judge again.
+    if (!valid && this.fieldErrors.displayName === codeMessage(DISPLAY_NAME_TAKEN)) {
+      errors.displayName ??= this.fieldErrors.displayName;
+    }
     this.fieldErrors = errors;
-    return Object.keys(errors).length === 0;
+    return valid;
   }
 
   #confirm(event: Event): void {
@@ -139,7 +158,10 @@ export class PersonForm extends LitElement {
       >
         <wt-form-error-summary
           heading=${t("form.error_heading")}
-          .errors=${[...errors, ...(this.error ? [codeMessage(this.error)] : [])]}
+          .errors=${[
+            ...errors,
+            ...(this.error && this.error !== DISPLAY_NAME_TAKEN ? [codeMessage(this.error)] : []),
+          ]}
         ></wt-form-error-summary>
         ${this.#input("first-names", "given-name", t("person.first_names"), this.firstNames, true)}
         ${this.#input("last-names", "family-name", t("person.last_names"), this.lastNames, true)}

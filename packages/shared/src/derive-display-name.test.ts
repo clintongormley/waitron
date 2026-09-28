@@ -34,8 +34,35 @@ describe("deriveDisplayName", () => {
   });
 
   it("compares correctly when previous names carry internal spaces", () => {
+    expect(deriveDisplayName("Alex Ramos", "Alex Maria", "Ramos", "Alex Maria", "Soler")).toBe(
+      "Alex Soler",
+    );
+  });
+
+  it("takes the first given name and the first surname from multi-word fields", () => {
+    expect(deriveDisplayName("", "", "", "María José", "García López")).toBe("María García");
+  });
+
+  it("takes the first word of the one field that is filled in", () => {
+    expect(deriveDisplayName("", "", "", "  María   José ", "")).toBe("María");
+    expect(deriveDisplayName("", "", "", "", "  García   López ")).toBe("García");
+  });
+
+  it("regenerates a name the first-word rule generated from multi-word previous values", () => {
     expect(
-      deriveDisplayName("Alex Maria Ramos", "Alex Maria", "Ramos", "Alex Maria", "Soler"),
-    ).toBe("Alex Maria Soler");
+      deriveDisplayName("María García", "María José", "García López", "Ana Belén", "Ruiz Soler"),
+    ).toBe("Ana Ruiz");
+  });
+
+  it("keeps a customised name that spells out the whole of both fields", () => {
+    expect(
+      deriveDisplayName(
+        "María José García López",
+        "María José",
+        "García López",
+        "Ana Belén",
+        "Ruiz Soler",
+      ),
+    ).toBe("María José García López");
   });
 });

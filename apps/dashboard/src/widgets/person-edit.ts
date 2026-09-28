@@ -14,6 +14,9 @@ import { t } from "../i18n/t.js";
 
 type EditableField = "displayName" | "firstNames" | "lastNames" | "email";
 
+/** Shown beside the display-name field, so the summary does not list it a second time. */
+const DISPLAY_NAME_TAKEN = "person.display_name_taken";
+
 @customElement("dashboard-person-edit")
 export class PersonEdit extends LitElement {
   static override styles = [
@@ -79,6 +82,9 @@ export class PersonEdit extends LitElement {
     if (changed.has("person") && this.person?.personId !== this.#personId) {
       this.#loadPerson();
     }
+    if (changed.has("error") && this.error === DISPLAY_NAME_TAKEN) {
+      this.fieldErrors = { ...this.fieldErrors, displayName: codeMessage(DISPLAY_NAME_TAKEN) };
+    }
   }
 
   #loadPerson(): void {
@@ -99,6 +105,7 @@ export class PersonEdit extends LitElement {
   #change(field: EditableField | "telephone", event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     const value = event.detail.value;
+    const prevDisplayName = this.details.displayName;
     if (field === "firstNames" || field === "lastNames") {
       const next = { ...this.details, [field]: value };
       // Auto-fill the display name only while it still matches the generated form, so it resumes
@@ -114,7 +121,11 @@ export class PersonEdit extends LitElement {
     } else {
       this.details = { ...this.details, [field]: field === "telephone" ? value || null : value };
     }
-    this.fieldErrors = { ...this.fieldErrors, [field]: undefined };
+    this.fieldErrors = {
+      ...this.fieldErrors,
+      [field]: undefined,
+      ...(this.details.displayName !== prevDisplayName && { displayName: undefined }),
+    };
   }
 
   #validate(): boolean {
@@ -130,8 +141,13 @@ export class PersonEdit extends LitElement {
     }
     const tel = this.details.telephone?.trim() ?? "";
     if (tel && !isValidTelephone(tel)) errors.telephone = codeMessage("person.telephone_invalid");
+    const valid = Object.keys(errors).length === 0;
+    // Kept only when a local check fails; a form that passes goes on for the server to judge again.
+    if (!valid && this.fieldErrors.displayName === codeMessage(DISPLAY_NAME_TAKEN)) {
+      errors.displayName ??= this.fieldErrors.displayName;
+    }
     this.fieldErrors = errors;
-    return Object.keys(errors).length === 0;
+    return valid;
   }
 
   #save(event: Event): void {
@@ -194,7 +210,9 @@ export class PersonEdit extends LitElement {
                     ...Object.values(this.fieldErrors).filter(
                       (message): message is string => message !== undefined,
                     ),
-                    ...(this.error ? [codeMessage(this.error)] : []),
+                    ...(this.error && this.error !== DISPLAY_NAME_TAKEN
+                      ? [codeMessage(this.error)]
+                      : []),
                   ]}
                 ></wt-form-error-summary>
                 <div class="fields">
