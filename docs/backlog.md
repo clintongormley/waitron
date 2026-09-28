@@ -449,7 +449,7 @@ the retroactive Codex review of #719._) (_2026-09-28: a zone left with no active
 is reported on the readiness list as needing "an active, published menu" / "una carta activa y
 publicada", no longer "a published menu"; a zone whose active, published menus were all last
 published before M7v reads the same wording, and needs them published again (M7v's **Upgrading**
-note); the code stays `zone.menu_unpublished`. Branch `fix/readiness-active-menu-wording`._)
+note); the code stays `zone.menu_unpublished`. Branch `fix/readiness-active-menu-wording`, #810._)
 Each unsaved line a till sends may name the version it was priced against (`menuVersionId`); a
 request naming one that is no longer live is refused `menu.version_changed` (409), listing each
 affected menu's live version, before anything is priced or written. A held or tab line records the
