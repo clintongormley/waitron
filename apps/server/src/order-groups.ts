@@ -933,7 +933,7 @@ async function requireHeldGroup(tx: Transaction, visitId: string, groupId: strin
 }
 
 /** The state of a group of this visit that is not removed, else `group.not_found`. */
-async function requireGroup(
+export async function requireGroup(
   tx: Transaction,
   visitId: string,
   groupId: string,

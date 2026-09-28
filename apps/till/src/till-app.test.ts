@@ -423,7 +423,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
     fireGroup: vi.fn().mockResolvedValue({ revision: 4 }),
     fireCourse: vi.fn().mockResolvedValue(undefined),
-    markLineServed: vi.fn().mockResolvedValue(undefined),
+    markServed: vi.fn().mockResolvedValue({ revision: 4 }),
     setLineCourse: vi.fn().mockResolvedValue(undefined),
     sendLines: vi.fn().mockResolvedValue(undefined),
     recallLines: vi.fn().mockResolvedValue(undefined),
@@ -4097,22 +4097,42 @@ describe("till-app", () => {
         expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(t("table.error"));
       });
 
-      it("serve-line marks the line served then reloads its lines", async () => {
-        const markLineServed = vi.fn().mockResolvedValue(undefined);
+      it("serve-line marks what is left of the line served, on its party, then reloads its lines", async () => {
+        const markServed = vi.fn().mockResolvedValue({ revision: 4 });
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
-          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          getTablesState: vi.fn().mockResolvedValue([seatedTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
-          markLineServed,
+          markServed,
           getTabLines,
         });
-        const screen = await toTableOrder(el, openTable);
+        const screen = await toTableOrder(el, seatedTable);
 
         emit(screen, "serve-line", { lineNo: 1 });
         await flush(el);
 
-        expect(markLineServed).toHaveBeenCalledWith("wo-7", 1);
+        expect(markServed).toHaveBeenCalledWith("v-2", [{ lineId: "line-1", quantity: "2.000" }], {
+          submissionId: expect.any(String),
+          expectedVisitRevision: 3,
+        });
         expect(getTabLines).toHaveBeenCalledTimes(2);
+      });
+
+      it("a serve-line refused because the quantity no longer fits the line says so in its own words", async () => {
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([seatedTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
+          markServed: vi.fn().mockRejectedValue({ code: "tab.serve_quantity_invalid" }),
+        });
+        const screen = await toTableOrder(el, seatedTable);
+
+        emit(screen, "serve-line", { lineNo: 1 });
+        await flush(el);
+
+        expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(
+          codeMessage("tab.serve_quantity_invalid"),
+        );
       });
 
       it("set-line-course moves a held line's course then reloads its lines", async () => {
@@ -4178,7 +4198,7 @@ describe("till-app", () => {
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
           submitDraft: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
-          markLineServed: vi.fn().mockRejectedValue({ code: "tab.line_not_found" }),
+          markServed: vi.fn().mockRejectedValue({ code: "tab.line_not_found" }),
           setLineCourse: vi.fn().mockRejectedValue({ code: "course.not_found" }),
           setTableStatus: vi.fn().mockRejectedValue({ code: "status.not_found" }),
         });

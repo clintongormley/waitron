@@ -155,6 +155,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That quantity cannot be cancelled from this line. Check how many are left on it",
     es: "No se puede cancelar esa cantidad de esta línea. Comprueba cuántos quedan",
   },
+  "tab.serve_quantity_invalid": {
+    en: "That quantity cannot be marked on this line. Check how many are left to serve, or how many were served",
+    es: "No se puede marcar esa cantidad en esta línea. Comprueba cuántos quedan por servir o cuántos se han servido",
+  },
   "product.unavailable": {
     en: "An item on this order has sold out. Remove it and try again",
     es: "Un artículo de este pedido está agotado. Quítalo e inténtalo de nuevo",

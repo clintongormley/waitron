@@ -518,7 +518,19 @@ describe("table + tab routes", () => {
       { menuItemId, quantity: "1" },
       { menuItemId, quantity: "2" },
     ]);
-    await request(`/api/working-orders/${tabId}/lines/1/served`, { method: "POST" });
+    const before = (await (await request(`/api/working-orders/${tabId}/lines`)).json()) as {
+      lines: { id: string; lineNo: number }[];
+    };
+    const first = before.lines.find((line) => line.lineNo === 1);
+    const served = await request(`/api/visits/${visitId}/served`, {
+      method: "POST",
+      body: JSON.stringify({
+        submissionId: randomUUID(),
+        expectedVisitRevision: await visitRevision(visitId),
+        items: [{ lineId: first!.id, quantity: "1" }],
+      }),
+    });
+    expect(served.status).toBe(200);
 
     const res = await request(`/api/working-orders/${tabId}/lines`);
     expect(res.status).toBe(200);

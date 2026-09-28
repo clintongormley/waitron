@@ -40,13 +40,8 @@ import {
   updateTable,
   updateZone,
 } from "./tables.js";
-import {
-  advanceTicketItem,
-  fireLines,
-  listTablesWithState,
-  markLineServed,
-  openTab,
-} from "./working-order.js";
+import { advanceTicketItem, fireLines, listTablesWithState, openTab } from "./working-order.js";
+import { openPartyTab, serveLine } from "./testing/serve-line.js";
 import "./errors.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
@@ -546,7 +541,7 @@ describe("listTablesWithState — readyToServe (N listos, KDS-1 §3d)", () => {
     const { cfg, cafeId, aguaId, tableId, offers } = await setupTabVenue();
 
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, {
+      openPartyTab(tx, cfg, {
         tableId,
         lines: offers.toOfferLines([
           { productId: cafeId, quantity: "1" },
@@ -587,7 +582,7 @@ describe("listTablesWithState — readyToServe (N listos, KDS-1 §3d)", () => {
     row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 1, pendingToServe: 2 });
 
-    await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1));
+    await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
     row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 0, pendingToServe: 1 });
   });
@@ -599,7 +594,7 @@ describe("listTablesWithState — enRoute (en camino, KDS-3 §3c)", () => {
     const { cfg, cafeId, aguaId, tableId, offers } = await setupTabVenue();
 
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, {
+      openPartyTab(tx, cfg, {
         tableId,
         lines: offers.toOfferLines([
           { productId: cafeId, quantity: "1" },
@@ -649,7 +644,7 @@ describe("listTablesWithState — enRoute (en camino, KDS-3 §3c)", () => {
     row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ enRoute: 1, readyToServe: 2, pendingToServe: 2 });
 
-    await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1));
+    await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
     row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ enRoute: 0, readyToServe: 1, pendingToServe: 1 });
   });
@@ -661,7 +656,7 @@ describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
     const { cfg, cafeId, aguaId, tableId, offers } = await setupTabVenue();
 
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, {
+      openPartyTab(tx, cfg, {
         tableId,
         lines: offers.toOfferLines([
           { productId: cafeId, quantity: "1" },
@@ -696,7 +691,7 @@ describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
     )!;
     expect(row.timingBand).toBe("overdue");
 
-    await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1));
+    await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
     row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
     expect(row.timingBand).toBe("fresh");
   });

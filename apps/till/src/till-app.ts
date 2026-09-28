@@ -317,6 +317,7 @@ const LINE_REFUSALS = new Set([
   "ticket.already_started",
   "ticket.already_fired",
   "tab.void_quantity_invalid",
+  "tab.serve_quantity_invalid",
   "group.not_held",
   "group.not_found",
   "group.line_held",
@@ -3172,17 +3173,15 @@ export class TillApp extends LitElement {
     });
   }
 
+  /** Marks what is left of the line served, as a command on its party. */
   async #onServeLine(event: Event): Promise<void> {
     const { lineNo } = (event as CustomEvent<{ lineNo: number }>).detail;
     if (this.activeTabId === undefined) return;
-    this.errorKey = undefined;
-    try {
-      await this.api.markLineServed(this.activeTabId, lineNo);
-    } catch (error) {
-      this.errorKey = tableWriteError(error);
-      return;
-    }
-    await this.#loadTabLines();
+    const line = this.tabLines.find((row) => row.lineNo === lineNo);
+    if (line === undefined) return;
+    await this.#onGroupRequest((party, command) =>
+      this.api.markServed(party.id, [{ lineId: line.id, quantity: line.quantity }], command),
+    );
   }
 
   /** The reload runs on both paths: after a raced `ticket.already_fired` the line is fired, and

@@ -349,8 +349,9 @@ declare module "@waitron/shared" {
      */
     "group.not_held": { groupId: string };
     /**
-     * No group of this visit has the id (a removed group included), or a moved line is not a dish
-     * line in one of the visit's groups. One of the two ids is named.
+     * No group of this visit has the id (a removed group included), a moved line is not a dish
+     * line in one of the visit's groups, or a served line is not a dish line on a bill of the visit.
+     * One of the two ids is named.
      */
     "group.not_found": { groupId: string } | { lineId: string };
     /**
@@ -358,7 +359,10 @@ declare module "@waitron/shared" {
      * visit, so held work may not leave it; fire the group first.
      */
     "group.held_leaves_visit": { tabId: string; lineNo: number };
-    /** A line was sent on its own while its group is held; it is released by firing the group. */
+    /**
+     * A line was sent on its own, or marked served, while its group is held or its kitchen item
+     * unreleased; it is released by firing the group.
+     */
     "group.line_held": { tabId: string; lineNo: number };
     /** A payment was asked of a bill with nothing left to pay and no card pending on it. */
     "bill.nothing_outstanding": { workingOrderId: string };
@@ -544,6 +548,12 @@ declare module "@waitron/shared" {
      * whole of an extras line, whose quantity follows its dish. `quantity` is the caller's own text.
      */
     "tab.void_quantity_invalid": { tabId: string; lineNo: number; quantity: string };
+    /**
+     * A served or unserved mark named a `quantity` that is not a positive decimal in the line's
+     * unit's decimal places, more than is left to serve on the line, or, for an undo, more than is
+     * served. `quantity` is the caller's own text.
+     */
+    "tab.serve_quantity_invalid": { tabId: string; lineNo: number; quantity: string };
     /**
      * A transfer batch named the same source `line_no` more than once. Refused because each entry is
      * checked against the line's quantity before the batch, so repeats would not conserve quantity.

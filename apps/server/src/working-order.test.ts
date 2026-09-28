@@ -61,7 +61,6 @@ import {
   listHeldOrders,
   listStationQueue,
   markCourseAway,
-  markLineServed,
   openTab,
   parkOrder,
   placeOrder,
@@ -95,6 +94,7 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { VENUE_SERVICE } from "./modules.js";
+import { openPartyTab, serveLine } from "./testing/serve-line.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
@@ -4935,9 +4935,9 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       const cafe = await makeProduct(tx, cfg, catalogueId, {});
       const agua = await makeProduct(tx, cfg, catalogueId, {});
       const tableId = await makeTable(tx, cfg);
-      // `served_at` is writable only while the parent order is OPEN (design H2, ruling R4), so this
-      // needs a tab rather than `placeOrderWith`'s settled/placed order.
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      // Serving is a command on a party, so this needs a party's tab rather than `placeOrderWith`'s
+      // order.
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [line(cafe), line(agua)]);
 
       const rows = await ticketItemRows(tx, tabId);
@@ -4951,7 +4951,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
 
       // Serve the overdue line — it drops off the clock. Line 2 is still unserved but fresh, so the
       // order's worst band clears.
-      await markLineServed(tx, cfg, tabId, rows[0]!.lineNo);
+      await serveLine(tx, cfg, tabId, rows[0]!.lineNo);
       order = (await listExpoQueue(tx, cfg)).find((o) => o.orderId === tabId)!;
       expect(order.worstBand).toBe("fresh");
     });

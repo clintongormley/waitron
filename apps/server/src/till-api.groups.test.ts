@@ -993,6 +993,195 @@ describe("the line-editing routes act as the session's operator", () => {
   });
 });
 
+/** How much of a line is served, and whether all of it. */
+async function servedOf(lineId: string) {
+  const [row] = await inTx(venue, (tx) =>
+    tx
+      .select({
+        servedQuantity: workingOrderLines.servedQuantity,
+        servedAt: workingOrderLines.servedAt,
+      })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.id, lineId)),
+  );
+  return row!;
+}
+
+describe("POST /api/visits/:id/served, /unserved and /groups/:gid/served", () => {
+  it("serves a line, takes it back, then serves its group, answering the visit's revision each time", async () => {
+    const visit = await withGroups();
+    const lineId = visit.fired.lineIds[0]!;
+    const revision = await revisionOf(visit.visitId);
+    const items = [{ lineId, quantity: "1" }];
+
+    const served = await call("POST", `/api/visits/${visit.visitId}/served`, {
+      submissionId: randomUUID(),
+      expectedVisitRevision: revision,
+      items,
+    });
+    expect(served.status).toBe(200);
+    expect(served.json).toEqual({ revision: revision + 1 });
+    expect(await servedOf(lineId)).toEqual({ servedQuantity: 1000, servedAt: expect.any(String) });
+
+    const unserved = await call("POST", `/api/visits/${visit.visitId}/unserved`, {
+      submissionId: randomUUID(),
+      expectedVisitRevision: revision + 1,
+      items,
+    });
+    expect(unserved.status).toBe(200);
+    expect(unserved.json).toEqual({ revision: revision + 2 });
+    expect(await servedOf(lineId)).toEqual({ servedQuantity: 0, servedAt: null });
+
+    const whole = await call(
+      "POST",
+      `/api/visits/${visit.visitId}/groups/${visit.fired.id}/served`,
+      { submissionId: randomUUID(), expectedVisitRevision: revision + 2 },
+    );
+    expect(whole.status).toBe(200);
+    expect(whole.json).toEqual({ revision: revision + 3 });
+    expect(await servedOf(lineId)).toEqual({ servedQuantity: 1000, servedAt: expect.any(String) });
+  });
+
+  it("answers a repeat with the first answer and writes nothing, even at a revision since moved on", async () => {
+    const visit = await withGroups();
+    const lineId = visit.fired.lineIds[0]!;
+    const body = {
+      submissionId: randomUUID(),
+      expectedVisitRevision: await revisionOf(visit.visitId),
+      items: [{ lineId, quantity: "1" }],
+    };
+    const first = await call("POST", `/api/visits/${visit.visitId}/served`, body);
+    const before = { ...(await snapshot(visit)), served: await servedOf(lineId) };
+
+    const again = await call("POST", `/api/visits/${visit.visitId}/served`, body);
+
+    expect(first.status).toBe(200);
+    expect(again.status).toBe(200);
+    expect(again.json).toEqual(first.json);
+    expect({ ...(await snapshot(visit)), served: await servedOf(lineId) }).toEqual(before);
+  });
+
+  it("answers each refusal with its status, writing nothing", async () => {
+    const visit = await withGroups();
+    const lineId = visit.fired.lineIds[0]!;
+    const held = visit.tarta.lineIds[0]!;
+    const [tartaLine] = await inTx(venue, (tx) =>
+      tx
+        .select({ lineNo: workingOrderLines.lineNo, tabId: workingOrderLines.workingOrderId })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, held)),
+    );
+    const [canaLine] = await inTx(venue, (tx) =>
+      tx
+        .select({ lineNo: workingOrderLines.lineNo })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, lineId)),
+    );
+    const used = randomUUID();
+    await call("POST", `/api/visits/${visit.visitId}/served`, {
+      submissionId: used,
+      expectedVisitRevision: await revisionOf(visit.visitId),
+      items: [{ lineId, quantity: "1" }],
+    });
+    const before = { ...(await snapshot(visit)), served: await servedOf(lineId) };
+    const revision = await revisionOf(visit.visitId);
+    const at = (extra: Record<string, unknown>) => ({
+      submissionId: randomUUID(),
+      expectedVisitRevision: revision,
+      ...extra,
+    });
+    const base = `/api/visits/${visit.visitId}`;
+
+    const cases: [string, unknown, number, unknown][] = [
+      [
+        `${base}/served`,
+        at({ items: [{ lineId, quantity: "1" }] }),
+        400,
+        refusal("tab.serve_quantity_invalid", {
+          tabId: visit.tabId,
+          lineNo: canaLine!.lineNo,
+          quantity: "1",
+        }),
+      ],
+      [
+        `${base}/unserved`,
+        at({ items: [{ lineId, quantity: "2" }] }),
+        400,
+        refusal("tab.serve_quantity_invalid", {
+          tabId: visit.tabId,
+          lineNo: canaLine!.lineNo,
+          quantity: "2",
+        }),
+      ],
+      [
+        `${base}/served`,
+        at({ items: [{ lineId: held, quantity: "1" }] }),
+        409,
+        refusal("group.line_held", { tabId: tartaLine!.tabId, lineNo: tartaLine!.lineNo }),
+      ],
+      [
+        `${base}/groups/${visit.tarta.id}/served`,
+        at({}),
+        409,
+        refusal("group.line_held", { tabId: tartaLine!.tabId, lineNo: tartaLine!.lineNo }),
+      ],
+      [
+        `${base}/served`,
+        at({ items: [{ lineId: randomUUID(), quantity: "1" }] }),
+        404,
+        refusal("group.not_found"),
+      ],
+      [
+        `${base}/groups/not-a-uuid/served`,
+        at({}),
+        404,
+        refusal("group.not_found", { groupId: "not-a-uuid" }),
+      ],
+      [
+        `${base}/served`,
+        { submissionId: randomUUID(), expectedVisitRevision: revision - 1, items: [] },
+        409,
+        refusal("visit.out_of_date", { visitId: visit.visitId, revision }),
+      ],
+      [
+        `${base}/unserved`,
+        { submissionId: used, expectedVisitRevision: revision, items: [{ lineId, quantity: "1" }] },
+        409,
+        refusal("submission.id_reused", { submissionId: used }),
+      ],
+      [
+        `${base}/served`,
+        { expectedVisitRevision: revision, items: [] },
+        400,
+        refusal("management.request_invalid", { field: "submissionId" }),
+      ],
+      [
+        `${base}/groups/${visit.fired.id}/served`,
+        { submissionId: randomUUID() },
+        400,
+        refusal("management.request_invalid", { field: "expectedVisitRevision" }),
+      ],
+      [
+        `${base}/served`,
+        at({ items: {} }),
+        400,
+        refusal("management.request_invalid", { field: "items" }),
+      ],
+      [
+        `${base}/served`,
+        at({ items: [] }),
+        400,
+        refusal("management.request_invalid", { field: "items" }),
+      ],
+    ];
+    for (const [path, body, status, error] of cases) {
+      const answer = await call("POST", path, body);
+      expect([path, answer.status, answer.json]).toEqual([path, status, error]);
+    }
+    expect({ ...(await snapshot(visit)), served: await servedOf(lineId) }).toEqual(before);
+  });
+});
+
 describe("the group routes without a session", () => {
   it("refuse every route 401 session.required, writing nothing", async () => {
     const visit = await withGroups();

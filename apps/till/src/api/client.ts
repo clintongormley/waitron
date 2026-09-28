@@ -1782,19 +1782,6 @@ export class TillApi {
   }
 
   /**
-   * Mark ONE line of an open tab as delivered → `POST /api/working-orders/:orderId/lines/:lineNo/served`.
-   * PRE-FISCAL: it never enters `registros`/`computeHuella`.
-   */
-  async markLineServed(orderId: string, lineNo: number): Promise<void> {
-    await this.#request<void>(`/api/working-orders/${orderId}/lines/${lineNo}/served`, "POST");
-  }
-
-  /** Clear ONE line's delivered marker, for a mis-tap — the inverse of {@link markLineServed}. */
-  async unmarkLineServed(orderId: string, lineNo: number): Promise<void> {
-    await this.#request<void>(`/api/working-orders/${orderId}/lines/${lineNo}/served`, "DELETE");
-  }
-
-  /**
    * Seat a party at a free table → `POST /api/tables/:tableId/seat`, which opens its tab. `guestCount`
    * is sent as an explicit null when none was given. A table a party already holds rejects
    * `tab.already_open`; `table.not_found` and `table.inactive` surface as a rejected `{ code }`.
@@ -1935,6 +1922,40 @@ export class TillApi {
     command: GroupCommand,
   ): Promise<{ revision: number }> {
     return this.#request(`/api/visits/${visitId}/groups/${groupId}/away`, "POST", command);
+  }
+
+  /**
+   * Mark part or all of each of a party's lines served → `POST /api/visits/:visitId/served`, on any
+   * of its bills, a paid one included. `quantity` is how much THIS command serves. Rejects
+   * `tab.serve_quantity_invalid` for more than is left to serve, `group.line_held` for a line not yet
+   * released, `group.not_found`, `order.payment_in_flight` and the command refusals.
+   */
+  markServed(
+    visitId: string,
+    items: { lineId: string; quantity: string }[],
+    command: GroupCommand,
+  ): Promise<{ revision: number }> {
+    return this.#request(`/api/visits/${visitId}/served`, "POST", { ...command, items });
+  }
+
+  /** Take back part or all of what was marked served on each line → `POST /api/visits/:visitId/unserved`;
+   * more than is served rejects `tab.serve_quantity_invalid`. */
+  unmarkServed(
+    visitId: string,
+    items: { lineId: string; quantity: string }[],
+    command: GroupCommand,
+  ): Promise<{ revision: number }> {
+    return this.#request(`/api/visits/${visitId}/unserved`, "POST", { ...command, items });
+  }
+
+  /** Mark every line of a fired group served → `POST /api/visits/:visitId/groups/:groupId/served`.
+   * A held group rejects `group.line_held`. */
+  markGroupServed(
+    visitId: string,
+    groupId: string,
+    command: GroupCommand,
+  ): Promise<{ revision: number }> {
+    return this.#request(`/api/visits/${visitId}/groups/${groupId}/served`, "POST", command);
   }
 
   /** A party's kitchen tickets that have not printed → `GET /api/visits/:visitId/print-problems`. */

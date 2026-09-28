@@ -1373,35 +1373,6 @@ describe("TillApi", () => {
     expect(r[1]).toMatchObject({ posX: null, shape: null });
   });
 
-  it("markLineServed POSTs the served path (empty 200 body, no request body)", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
-
-    await expect(new TillApi("", fetchStub).markLineServed("ord-1", 2)).resolves.toBeUndefined();
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/working-orders/ord-1/lines/2/served",
-      expect.objectContaining({ method: "POST", credentials: "include" }),
-    );
-    // An operational tap carries neither a request body nor a content-type header.
-    const init = fetchStub.mock.calls[0]![1] as RequestInit;
-    expect(init.body).toBeUndefined();
-    expect(init.headers).toBeUndefined();
-  });
-
-  it("unmarkLineServed DELETEs the served path (empty 200 body, no request body)", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
-
-    await expect(new TillApi("", fetchStub).unmarkLineServed("ord-1", 2)).resolves.toBeUndefined();
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/working-orders/ord-1/lines/2/served",
-      expect.objectContaining({ method: "DELETE", credentials: "include" }),
-    );
-    const init = fetchStub.mock.calls[0]![1] as RequestInit;
-    expect(init.body).toBeUndefined();
-    expect(init.headers).toBeUndefined();
-  });
-
   it("getTabLines GETs the open tab's lines, decoding the locked price + served state per line", async () => {
     // Typed `TabLine[]` so `tsc` checks the client mirror declares every field. The first line was
     // sold as a variant, so it names its parent product; the second is a CHILD extras row with no
@@ -2248,6 +2219,58 @@ describe("TillApi: a seated party", () => {
         groups: [{ lines: [{ menuItemId: "mi-tarta", quantity: "1" }], release: "fire" }],
       }),
     ).rejects.toMatchObject({ code: "visit.out_of_date", status: 409 });
+  });
+
+  it.each([
+    ["markServed", "served"],
+    ["unmarkServed", "unserved"],
+  ] as const)(
+    "%s POSTs the submission, revision and items to the party's /%s route and returns its revision",
+    async (method, path) => {
+      const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ revision: 5 }));
+      const items = [{ lineId: "line-2", quantity: "2" }];
+
+      await expect(
+        new TillApi("", fetchStub)[method]("v1", items, {
+          submissionId: "sub-1",
+          expectedVisitRevision: 4,
+        }),
+      ).resolves.toEqual({ revision: 5 });
+
+      expect(fetchStub).toHaveBeenCalledWith(
+        `/api/visits/v1/${path}`,
+        post({ submissionId: "sub-1", expectedVisitRevision: 4, items }),
+      );
+    },
+  );
+
+  it("markGroupServed POSTs the submission and revision to the group's /served route", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ revision: 7 }));
+
+    await expect(
+      new TillApi("", fetchStub).markGroupServed("v1", "g2", {
+        submissionId: "sub-2",
+        expectedVisitRevision: 6,
+      }),
+    ).resolves.toEqual({ revision: 7 });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/visits/v1/groups/g2/served",
+      post({ submissionId: "sub-2", expectedVisitRevision: 6 }),
+    );
+  });
+
+  it("markServed surfaces more than is left to serve as { code }", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "tab.serve_quantity_invalid" } }, 400));
+
+    await expect(
+      new TillApi("", fetchStub).markServed("v1", [{ lineId: "line-2", quantity: "9" }], {
+        submissionId: "sub-3",
+        expectedVisitRevision: 4,
+      }),
+    ).rejects.toMatchObject({ code: "tab.serve_quantity_invalid", status: 400 });
   });
 
   it("fireGroup POSTs the submission and revision to the group's /fire route and returns the party's revision", async () => {

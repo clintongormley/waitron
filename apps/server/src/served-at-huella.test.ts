@@ -42,13 +42,13 @@ import {
   addTabRound,
   advanceTicketItem,
   fireLines,
-  markLineServed,
   openTab,
   type TicketState,
 } from "./working-order.js";
 import { payWorkingOrder } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
+import { openPartyTab, serveLine } from "./testing/serve-line.js";
 import "./errors.js";
 
 // The fiscal firewall (CLAUDE.md §5): our own metadata never enters `computeHuella`. `served_at` is
@@ -250,7 +250,7 @@ async function openServeAndPay(
 ): Promise<{ tabId: string; huella: string }> {
   const { db, backend, cfg, aguaMenuItemId, cafeMenuItemId, tableId } = shop;
   const { tabId } = await withTransaction(db, async (tx) => {
-    return openTab(tx, cfg, {
+    return openPartyTab(tx, cfg, {
       tableId,
       lines: [
         { menuItemId: aguaMenuItemId, quantity: "1" },
@@ -261,8 +261,8 @@ async function openServeAndPay(
 
   if (serveEveryLine) {
     await withTransaction(db, async (tx) => {
-      await markLineServed(tx, cfg, tabId, 1);
-      await markLineServed(tx, cfg, tabId, 2);
+      await serveLine(tx, cfg, tabId, 1);
+      await serveLine(tx, cfg, tabId, 2);
     });
   }
 

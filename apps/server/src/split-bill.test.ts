@@ -42,7 +42,6 @@ import {
   joinTable,
   listExpoQueue,
   listStationQueue,
-  markLineServed,
   mergeTabs,
   moveTab,
   moveTabLines,
@@ -62,6 +61,7 @@ import { printedLines } from "./testing/decode-ticket.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
+import { openPartyTab, serveLine } from "./testing/serve-line.js";
 import "./errors.js";
 
 // What this suite proves: the check being table-less, and the line partition — plain row state. The
@@ -708,7 +708,7 @@ describe("splitting a line the kitchen has", () => {
     const course = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Principales", displayOrder: 1 }),
     );
-    const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         {
@@ -719,14 +719,17 @@ describe("splitting a line the kitchen has", () => {
         },
       ]),
     );
-    await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1));
+    const { revision } = await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
     const [before] = await linesWithTickets(tabId);
     const original = (await ticketOf(before!.id))!;
     expect(original).toMatchObject({ quantity: 3000, courseId: course.id, note: "sin hielo" });
     expect(original.firedAt).not.toBeNull();
 
     const { checkId } = await asApp(cfg, (tx) =>
-      splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+      splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }], {
+        expectedVisitRevision: revision,
+        operatorId: "cccccccc-0000-4000-8000-0000000000f1",
+      }),
     );
 
     const [source] = await linesWithTickets(tabId);

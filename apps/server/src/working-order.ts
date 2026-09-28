@@ -17,12 +17,15 @@ import { readReceiptIssuer } from "./receipt-issuer.js";
 import "./errors.js";
 import {
   bumpVisitRevision,
+  checkAndBumpVisit,
   guardVisits,
   leaveTables,
   memberTables,
   openVisit,
   readBillsOfVisits,
+  runServiceCommand,
   tableHeld,
+  visitFamily,
   visitOfOrder,
 } from "./visits.js";
 import type { VisitCommand } from "./visits.js";
@@ -135,9 +138,11 @@ import {
   printHoldTickets,
   recordGroupEvent,
   removeEmptiedHeldGroups,
+  requireGroup,
   requireOperator,
   startGroup,
   type HeldChange,
+  type VisitCommandArgs,
 } from "./order-groups.js";
 import {
   copyKitchenPrintLinks,
@@ -2081,6 +2086,7 @@ async function reduceLine(
     })
     .where(eq(workingOrderLines.id, target.id));
   await rescaleExtras(tx, children, remaining);
+  await clampServed(tx, [target.id, ...children.map(({ child }) => child.id)]);
   if (target.ticketItemId !== null) {
     await tx
       .update(ticketItems)
@@ -2151,44 +2157,262 @@ export async function setLineCourse(
   await bumpRevision(tx, [tabId]);
 }
 
-/** Set or clear ONE line's `served_at` on an OPEN tab. Pre-fiscal: never read into a filed record. */
-async function setLineServed(
+/** A dish line on a bill of a visit, as a served command reads it. */
+interface ServableLine {
+  id: string;
+  workingOrderId: string;
+  lineNo: number;
+  quantity: number;
+  servedQuantity: number;
+  unitPrecision: number | null;
+  groupState: "held" | "fired" | "removed" | null;
+  ticketItemId: string | null;
+  ticketFiredAt: string | null;
+}
+
+/**
+ * The dish lines `where` selects on the bills of the visit and of every visit merged into it, bill
+ * by bill in the order the bills were opened. An extras line is never one: it follows its dish.
+ */
+async function servableLines(
   tx: Transaction,
-  cfg: TillConfig,
-  tabId: string,
-  lineNo: number,
-  served: boolean,
-): Promise<void> {
-  await assertAnchoredTabOpen(tx, cfg, tabId);
-  const updated = await tx
-    .update(workingOrderLines)
-    .set({ servedAt: served ? nowIso() : null })
-    .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, lineNo)))
-    .returning({ lineNo: workingOrderLines.lineNo });
-  if (updated.length === 0) {
-    throw new AppError("tab.line_not_found", { tabId, lineNo });
+  visitId: string,
+  where: SQL,
+): Promise<ServableLine[]> {
+  const family = await visitFamily(tx, visitId);
+  return tx
+    .select({
+      id: workingOrderLines.id,
+      workingOrderId: workingOrderLines.workingOrderId,
+      lineNo: workingOrderLines.lineNo,
+      quantity: workingOrderLines.quantity,
+      servedQuantity: workingOrderLines.servedQuantity,
+      unitPrecision: workingOrderLines.unitPrecision,
+      groupState: orderGroups.state,
+      ticketItemId: ticketItems.id,
+      ticketFiredAt: ticketItems.firedAt,
+    })
+    .from(workingOrderLines)
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
+    .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+    .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .where(
+      and(where, isNull(workingOrderLines.parentLineId), inArray(workingOrders.visitId, family)),
+    )
+    .orderBy(
+      workingOrders.openedAt,
+      workingOrders.orderNumber,
+      workingOrders.id,
+      workingOrderLines.lineNo,
+    );
+}
+
+/** Serving needs released work: a line of a held group, or whose kitchen item is unreleased, is
+ * refused `group.line_held`. */
+function refuseUnreleased(line: ServableLine): void {
+  if (line.groupState === "held" || (line.ticketItemId !== null && line.ticketFiredAt === null)) {
+    throw new AppError("group.line_held", { tabId: line.workingOrderId, lineNo: line.lineNo });
   }
-  await bumpRevision(tx, [tabId]);
 }
 
-/** Mark one line of an open tab as served. */
-export async function markLineServed(
-  tx: Transaction,
-  cfg: TillConfig,
-  tabId: string,
-  lineNo: number,
-): Promise<void> {
-  await setLineServed(tx, cfg, tabId, lineNo, true);
+/**
+ * `quantity` as thousandths, refused `tab.serve_quantity_invalid` unless it is a positive decimal in
+ * the line's unit's decimal places and no more than `limit`.
+ */
+function servedAmount(line: ServableLine, quantity: string, limit: number): number {
+  const invalid = () =>
+    new AppError("tab.serve_quantity_invalid", {
+      tabId: line.workingOrderId,
+      lineNo: line.lineNo,
+      quantity,
+    });
+  let asked: number;
+  try {
+    assertQuantityPrecision(quantity, line.unitPrecision ?? MAX_UNIT_PRECISION, { positive: true });
+    asked = stringToThousandths(quantity);
+  } catch {
+    throw invalid();
+  }
+  if (asked > limit) throw invalid();
+  return asked;
 }
 
-/** Clear ONE line's served marker on an OPEN tab, for a mis-tap. */
-export async function unmarkLineServed(
+/**
+ * Give each line its new served count, and its extras children theirs in step; `served_at` is set
+ * when a row is fully served and cleared when it is not. Each OPEN bill written counts one more
+ * write, and one whose card payment is running refuses (`bumpRevision`). A paid bill's lines are
+ * written too: serving is an operational fact, never billing, and the filed sale does not read it.
+ */
+async function writeServed(
+  tx: Transaction,
+  changes: readonly { line: ServableLine; served: number }[],
+): Promise<void> {
+  if (changes.length === 0) return;
+  await bumpRevision(tx, [...new Set(changes.map(({ line }) => line.workingOrderId))]);
+  const at = nowIso();
+  const children = await tx
+    .select({
+      id: workingOrderLines.id,
+      parentLineId: workingOrderLines.parentLineId,
+      quantity: workingOrderLines.quantity,
+      servedQuantity: workingOrderLines.servedQuantity,
+    })
+    .from(workingOrderLines)
+    .where(
+      inArray(
+        workingOrderLines.parentLineId,
+        changes.map(({ line }) => line.id),
+      ),
+    );
+  for (const { line, served } of changes) {
+    const servedAt = served === line.quantity ? at : null;
+    await tx
+      .update(workingOrderLines)
+      .set({ servedQuantity: served, servedAt })
+      .where(eq(workingOrderLines.id, line.id));
+    for (const child of children.filter((row) => row.parentLineId === line.id)) {
+      // A child's quantity is its dish's times the picks per dish, so this divides exactly.
+      const childServed = Math.round((child.quantity * served) / line.quantity);
+      await tx
+        .update(workingOrderLines)
+        .set({ servedQuantity: childServed, servedAt })
+        .where(eq(workingOrderLines.id, child.id));
+    }
+  }
+}
+
+/**
+ * Mark part or all of each named dish line of the visit served. `quantity` is how much THIS command
+ * serves, never more than is left to serve. Replayed by submission id before the visit's revision is
+ * compared (D8, D19).
+ */
+export async function markServed(
   tx: Transaction,
   cfg: TillConfig,
-  tabId: string,
-  lineNo: number,
-): Promise<void> {
-  await setLineServed(tx, cfg, tabId, lineNo, false);
+  visitId: string,
+  items: { lineId: string; quantity: string }[],
+  args: VisitCommandArgs,
+): Promise<{ revision: number }> {
+  return changeServed(tx, cfg, visitId, items, args, "line.served");
+}
+
+/** Take back part or all of what was marked served on each named dish line, for a mis-tap. */
+export async function unmarkServed(
+  tx: Transaction,
+  cfg: TillConfig,
+  visitId: string,
+  items: { lineId: string; quantity: string }[],
+  args: VisitCommandArgs,
+): Promise<{ revision: number }> {
+  return changeServed(tx, cfg, visitId, items, args, "line.unserved");
+}
+
+async function changeServed(
+  tx: Transaction,
+  cfg: TillConfig,
+  visitId: string,
+  items: { lineId: string; quantity: string }[],
+  args: VisitCommandArgs,
+  kind: "line.served" | "line.unserved",
+): Promise<{ revision: number }> {
+  void cfg;
+  return runServiceCommand(
+    tx,
+    { kind: "visit", visitId },
+    args.submissionId,
+    kind,
+    { visitId, items, operatorId: args.operatorId },
+    async () => {
+      const revision = await checkAndBumpVisit(tx, visitId, args.expectedVisitRevision, "open");
+      if (items.length === 0 || new Set(items.map((item) => item.lineId)).size !== items.length) {
+        throw new AppError("management.request_invalid", { field: "items" });
+      }
+      const lines = new Map(
+        (
+          await servableLines(
+            tx,
+            visitId,
+            inArray(
+              workingOrderLines.id,
+              items.map((item) => item.lineId),
+            ),
+          )
+        ).map((line) => [line.id, line]),
+      );
+      const changes = items.map(({ lineId, quantity }) => {
+        const line = lines.get(lineId);
+        if (line === undefined) throw new AppError("group.not_found", { lineId });
+        refuseUnreleased(line);
+        const serving = kind === "line.served";
+        const amount = servedAmount(
+          line,
+          quantity,
+          serving ? line.quantity - line.servedQuantity : line.servedQuantity,
+        );
+        return { line, served: line.servedQuantity + (serving ? amount : -amount) };
+      });
+      await writeServed(tx, changes);
+      return { revision };
+    },
+  );
+}
+
+/**
+ * Mark every dish line of a fired group fully served, on every bill of the visit it sits on, a paid
+ * one included. A held group is refused `group.line_held`, naming its first line.
+ */
+export async function markGroupServed(
+  tx: Transaction,
+  cfg: TillConfig,
+  visitId: string,
+  groupId: string,
+  args: VisitCommandArgs,
+): Promise<{ revision: number }> {
+  void cfg;
+  return runServiceCommand(
+    tx,
+    { kind: "visit", visitId },
+    args.submissionId,
+    "group.served",
+    { visitId, groupId, operatorId: args.operatorId },
+    async () => {
+      const revision = await checkAndBumpVisit(tx, visitId, args.expectedVisitRevision, "open");
+      const state = await requireGroup(tx, visitId, groupId);
+      const lines = await servableLines(tx, visitId, eq(workingOrderLines.groupId, groupId));
+      if (state === "held" && lines.length === 0) {
+        throw new AppError("group.not_held", { groupId });
+      }
+      lines.forEach(refuseUnreleased);
+      await writeServed(
+        tx,
+        lines
+          .filter((line) => line.servedQuantity < line.quantity)
+          .map((line) => ({ line, served: line.quantity })),
+      );
+      return { revision };
+    },
+  );
+}
+
+/**
+ * After a line's quantity changed: what was served is cut to what it now holds, and `served_at`
+ * says whether that is all of it, keeping the time it was first fully served.
+ */
+async function clampServed(tx: Transaction, lineIds: readonly string[]): Promise<void> {
+  if (lineIds.length === 0) return;
+  const { servedQuantity, quantity, servedAt } = workingOrderLines;
+  await tx
+    .update(workingOrderLines)
+    .set({
+      servedQuantity: sql`min(${servedQuantity}, ${quantity})`,
+      servedAt: sql`case when ${servedQuantity} >= ${quantity} then coalesce(${servedAt}, ${nowIso()}) end`,
+    })
+    .where(
+      and(
+        inArray(workingOrderLines.id, [...lineIds]),
+        sql`(${servedQuantity} > ${quantity} or (${servedAt} is not null) <> (${servedQuantity} >= ${quantity}))`,
+      ),
+    );
 }
 
 /**
@@ -2925,6 +3149,7 @@ async function carveOffLines(
       classification: workingOrderLines.classification,
       sentAt: workingOrderLines.sentAt,
       servedAt: workingOrderLines.servedAt,
+      servedQuantity: workingOrderLines.servedQuantity,
       courseId: workingOrderLines.courseId,
       note: workingOrderLines.note,
       extraListId: workingOrderLines.extraListId,
@@ -3056,6 +3281,11 @@ async function carveOffLines(
             eq(workingOrderLines.lineNo, line.lineNo),
           ),
         );
+      await clampServed(tx, [line.id]);
+      // What was served stays on the source as far as it still holds; the rest goes with the split.
+      const moved = stringToThousandths(quantity);
+      const splitServed =
+        line.servedQuantity - Math.min(line.servedQuantity, decimalToThousandths(remaining));
       const splitLineId = randomUUID();
       await tx.insert(workingOrderLines).values({
         id: splitLineId,
@@ -3079,7 +3309,8 @@ async function carveOffLines(
         kitchenName: line.kitchenName,
         classification: line.classification,
         sentAt: line.sentAt,
-        servedAt: line.servedAt,
+        servedQuantity: splitServed,
+        servedAt: splitServed === moved ? (line.servedAt ?? nowIso()) : null,
         courseId: line.courseId,
         note: line.note,
         extraListId: line.extraListId,
@@ -4263,6 +4494,7 @@ async function applyLineEdits(
       );
     }
     await rescaleExtras(tx, kept, quantity);
+    await clampServed(tx, [parent.id, ...kept.map(({ child }) => child.id)]);
     if (change.addedAt !== null) {
       // The dish and the extras it keeps move after the highest number, and the added ones follow.
       for (const line of [parent, ...kept.map(({ child }) => child)]) {

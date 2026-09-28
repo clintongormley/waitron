@@ -88,6 +88,15 @@ it("localises the refusals of changing or cancelling a sent line in both languag
   );
 });
 
+it("says in both languages that a served quantity does not fit the line", () => {
+  expect(codeMessage("tab.serve_quantity_invalid", "en")).toBe(
+    "That quantity cannot be marked on this line. Check how many are left to serve, or how many were served",
+  );
+  expect(codeMessage("tab.serve_quantity_invalid", "es")).toBe(
+    "No se puede marcar esa cantidad en esta línea. Comprueba cuántos quedan por servir o cuántos se han servido",
+  );
+});
+
 it("explains each refusal a bill paid in parts can give, in both languages, naming no identifier", () => {
   const generic = {
     en: codeMessage("server.internal", "en"),
