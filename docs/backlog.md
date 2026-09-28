@@ -122,9 +122,9 @@ Ranked 2026-09-27, after the specs still in `docs/superpowers/specs/` were check
 (each spec's state is under *Reference → Specs still in the tree*). Each item is its own brainstorm →
 spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
-1. **Finish table service and paying a bill in parts** (A4, lane B). Ten of the service plan's
-   eighteen tasks have landed (0–8 and 14). Left: marking dishes served (9), the attention signals
-   (10), applying a cancellation, comp or discount to an order (11) and its reports (12), standalone
+1. **Finish table service and paying a bill in parts** (A4, lane B). Eleven of the service plan's
+   eighteen tasks have landed (0–9 and 14; Task 9, marking dishes served, as #814). Left: the
+   attention signals (10), applying a cancellation, comp or discount to an order (11) and its reports (12), standalone
    ordering (13), several payments on the till (15 — the server side landed as #721 and nothing on
    the till calls it yet), counter handover (16) and a table that leaves without paying (17).
    **Send asesor Q27–Q29 now:** Task 17 waits on Q28, how Task 11's discount appears on the
@@ -2690,8 +2690,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         server's mark gives way to a newer menu read on the till;
       - Cancel on the menu-change question holds until the next publish, re-read or Send, not
         the next poll.
-  - **Task 9 (served by quantity, release reminders, Current orders) is on its branch**,
-    `feat/service-served-and-reminders` (lane B item B9, 2026-09-28). What it does:
+  - **Task 9 (served by quantity, release reminders, Current orders) LANDED as #814** (main
+    `e0f863014`, lane B item B9, 2026-09-28). What it does:
     - Staff mark dishes served by quantity ("2 of 4 served"), row by row or a whole fired group at
       once, and can take a mark back. The marks are commands on the party (`markServed`,
       `unmarkServed`, `markGroupServed`, `apps/server/src/working-order.ts`), replacing the old
