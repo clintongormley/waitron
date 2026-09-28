@@ -46,11 +46,13 @@ import {
  * `packages/db/drizzle/0019_settled_order_freeze_visit_id.sql`, and
  * `working_order_lines_require_open_parent_update` by `0027_line_vat_class_triggers.sql` and again,
  * with its served exception and a refusal to move a line off an order that is not open, by
- * `packages/db/drizzle/0033_line_served_exception.sql`. The one trigger that ACTS rather
- * than refuses is `parties_clear_table_status` (`packages/db/drizzle/0020_visit_clears_table_status.sql`,
+ * `packages/db/drizzle/0033_line_served_exception.sql`. Three triggers ACT rather than refuse.
+ * `parties_clear_table_status` (`packages/db/drizzle/0020_visit_clears_table_status.sql`,
  * re-created under this name by `packages/db/drizzle/0036_party_rename.sql`):
  * a table's service status comes off when the party leaves `open`, on every table still a
  * member of it. It replaced `working_orders_clear_table_status`, which cleared it when a tab settled.
+ * And the two of `packages/db/drizzle/0038_main_bill_release.sql`: a party's `main_bill_id` is
+ * cleared when that bill leaves `open`, or moves to another party.
  * `packages/db/drizzle/0024_bill_payment_triggers.sql` adds the state guards on `bill_payments` and
  * `bill_payment_refunds`, and a trigger on each refusing every delete — those two refuse by design
  * whatever the row, so they have no accepting control here.
@@ -105,7 +107,8 @@ const IMAGE_REFERENCE_TRIGGERS = [
  * `0001_behavioural_triggers.sql` (SQLite has no `BEFORE INSERT OR UPDATE`, so a rule covering more
  * than one event is split and the suffix names the event), the `products_*` names of
  * `0004_variant_one_level.sql`, `parties_clear_table_status` of
- * `0036_party_rename.sql`, and the `bill_payment*` names of
+ * `0036_party_rename.sql`, the `working_orders_release_main_bill*` names of
+ * `0038_main_bill_release.sql`, and the `bill_payment*` names of
  * `0024_bill_payment_triggers.sql`. The `products_*` ones live on `products`, so a later
  * migration that RECREATES that table drops them silently — this list is what notices.
  */
@@ -130,6 +133,8 @@ const EXPECTED_TRIGGERS = [
   "working_order_lines_require_open_parent_insert",
   "working_order_lines_require_open_parent_update",
   "working_orders_enforce_transition",
+  "working_orders_release_main_bill",
+  "working_orders_release_main_bill_on_move",
   "parties_clear_table_status",
 ];
 
@@ -195,9 +200,10 @@ function workingOrder(id, status, extra = {}) {
   const tillId = extra.tillId ?? "till";
   const settledAt = status === "settled" ? `'${STAMP}'` : "null";
   const collectedAt = extra.collectedAt ? `'${extra.collectedAt}'` : "null";
+  const partyId = extra.partyId ? `'${extra.partyId}'` : "null";
   return (
-    `insert into working_orders (id, till_id, order_number, status, opened_at, settled_at, collected_at) ` +
-    `values ('${id}', '${tillId}', 1, '${status}', '${STAMP}', ${settledAt}, ${collectedAt})`
+    `insert into working_orders (id, till_id, order_number, status, opened_at, settled_at, collected_at, party_id) ` +
+    `values ('${id}', '${tillId}', 1, '${status}', '${STAMP}', ${settledAt}, ${collectedAt}, ${partyId})`
   );
 }
 
@@ -324,6 +330,23 @@ function seed(connection) {
     membership("vt-left", "party-finishes", "dt-left-earlier", STAMP),
     membership("vt-clearing", "party-clearing", "dt-clearing", null),
     membership("vt-bumped", "party-bumped", "dt-bumped", null),
+
+    // A party per main-bill case, each with the open bill its case names as the main bill, so no
+    // case's write changes what another case reads. `party-main-other` also holds a second open
+    // bill, which its case moves.
+    party("party-main-settles"),
+    party("party-main-places"),
+    party("party-main-moves"),
+    party("party-main-revision"),
+    party("party-main-other"),
+    party("party-main-destination"),
+    workingOrder("wo-main-settles", "open", { partyId: "party-main-settles" }),
+    workingOrder("wo-main-places", "open", { partyId: "party-main-places" }),
+    workingOrder("wo-main-moves", "open", { partyId: "party-main-moves" }),
+    workingOrder("wo-main-revision", "open", { partyId: "party-main-revision" }),
+    workingOrder("wo-main-other", "open", { partyId: "party-main-other" }),
+    workingOrder("wo-main-other-split", "open", { partyId: "party-main-other" }),
+    workingOrder("wo-main-destination", "open", { partyId: "party-main-destination" }),
 
     // Sales and their tenders. Every tender is written BEFORE any settlement, because
     // tenders_reject_post_settlement is one of the triggers under test.
@@ -918,6 +941,56 @@ describe("parties_clear_table_status", () => {
       `update working_orders set status = 'settled', settled_at = '${STAMP}' where id = 'wo-tab'`,
     );
     expect(statusOf("dt-closes")).toBe("status-busy");
+  });
+});
+
+describe("working_orders_release_main_bill", () => {
+  const mainBillOf = (party) =>
+    connection.prepare(`select main_bill_id from parties where id = ?`).get(party).main_bill_id;
+  // Set inside each case rather than in `seed`, so the seed does not depend on the column.
+  const nameMainBill = (party, bill) =>
+    connection.exec(`update parties set main_bill_id = '${bill}' where id = '${party}'`);
+
+  it("clears the main bill when it moves from open to settled", () => {
+    nameMainBill("party-main-settles", "wo-main-settles");
+    connection.exec(
+      `update working_orders set status = 'settled', settled_at = '${STAMP}' ` +
+        `where id = 'wo-main-settles'`,
+    );
+    expect(mainBillOf("party-main-settles")).toBeNull();
+  });
+
+  it("clears the main bill when it moves from open to placed", () => {
+    nameMainBill("party-main-places", "wo-main-places");
+    connection.exec(`update working_orders set status = 'placed' where id = 'wo-main-places'`);
+    expect(mainBillOf("party-main-places")).toBeNull();
+  });
+
+  it("clears the main bill on the old party when the bill moves to another party", () => {
+    nameMainBill("party-main-moves", "wo-main-moves");
+    nameMainBill("party-main-destination", "wo-main-destination");
+    connection.exec(
+      `update working_orders set party_id = 'party-main-destination' where id = 'wo-main-moves'`,
+    );
+    expect(mainBillOf("party-main-moves")).toBeNull();
+    expect(mainBillOf("party-main-destination")).toBe("wo-main-destination");
+  });
+
+  it("leaves the main bill set when the bill changes only its revision", () => {
+    nameMainBill("party-main-revision", "wo-main-revision");
+    connection.exec(
+      `update working_orders set revision = revision + 1 where id = 'wo-main-revision'`,
+    );
+    expect(mainBillOf("party-main-revision")).toBe("wo-main-revision");
+  });
+
+  it("leaves the main bill set when ANOTHER bill of the party moves to another party", () => {
+    nameMainBill("party-main-other", "wo-main-other");
+    connection.exec(
+      `update working_orders set party_id = 'party-main-destination' ` +
+        `where id = 'wo-main-other-split'`,
+    );
+    expect(mainBillOf("party-main-other")).toBe("wo-main-other");
   });
 });
 
