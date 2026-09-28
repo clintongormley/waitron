@@ -11,7 +11,6 @@ import {
   decimal,
   deriveDisplayName,
   draftLineMergeKey,
-  draftLinesMerge,
   firstCodeInCauseChain,
   divideDecimal,
   FALLBACK_LOCALE,
@@ -161,7 +160,6 @@ describe("package public surface (./index.js)", () => {
       quantity: "1",
       noMerge: false,
     };
-    expect(draftLinesMerge(beer, beer)).toBe(true);
     expect(normaliseDraftLines([beer, beer])).toEqual([{ ...beer, quantity: "2.000" }]);
   });
 

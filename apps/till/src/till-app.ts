@@ -160,9 +160,9 @@ const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
 registerIcons({ close: CROSS_ICON_PATH });
 
 /**
- * How long the till waits on a read of the table's offers, a draft read, save or take-over, or a
- * submission (from the save before it to its last retry) before cancelling it. It is above the server
- * watchdog's kill bound (`WATCHDOG_KILL_MS` plus `STACK_CAPTURE_MS`,
+ * How long the till waits on a re-read of the table's offers, a draft read, save or take-over, or a
+ * submission (from the save before it to its last retry) before cancelling it. It is above the
+ * server watchdog's kill bound (`WATCHDOG_KILL_MS` plus `STACK_CAPTURE_MS`,
  * `packages/store/src/venue-liveness.ts`), so a server whose main thread had stopped when the wait
  * began is killed before the till gives up.
  */
@@ -2320,11 +2320,13 @@ export class TillApp extends LitElement {
     const leftOrder = wasShowingOrder && !this.#tableCatalogueActive();
     if (leftOrder) this.#orderVisit++;
     if (!wasShowingOrder && this.#tableCatalogueActive()) this.#shownOnVisit = this.#orderVisit;
+    const session = this.#operatorSession;
     const returned = leftOrder
       ? this.#flushDraft().then(() => this.#returnSplitCheck())
       : Promise.resolve(false);
     if (this.#tabNeedsFloorData(tab)) {
       void returned.then((floorRead) => {
+        if (session !== this.#operatorSession) return;
         if (!this.#floorLoaded) return this.#loadFloorData();
         return floorRead ? undefined : this.#refreshFloor();
       });
@@ -2351,9 +2353,11 @@ export class TillApp extends LitElement {
     this.#clearErrorKeepingLateChange();
     this.cancelOffer = null;
     this.#tableOpensPending++;
+    const session = this.#operatorSession;
     try {
       await this.#flushDraft();
       await this.#returnSplitCheck();
+      if (session !== this.#operatorSession) return;
       await this.#openTable(tableId, seated ? undefined : (guestCount ?? null), offerRequest);
     } finally {
       this.#tableOpensPending--;
@@ -2646,10 +2650,14 @@ export class TillApp extends LitElement {
     this.requestUpdate();
   }
 
-  /** At a point the person leaves the draft: an edit no save reached is said. */
+  /** At a point the person leaves the draft: an edit no save reached is said, unless the operator
+   * session has ended by the time the save answers, since the next person may have signed in. */
   async #flushDraft(): Promise<void> {
     if (this.#draftSync === undefined) return;
-    if ((await this.#draftSync.flush()) === "failed") this.errorKey = "table.draft_save_failed";
+    const session = this.#operatorSession;
+    const saved = await this.#draftSync.flush();
+    if (saved === "failed" && session === this.#operatorSession)
+      this.errorKey = "table.draft_save_failed";
   }
 
   /** An order that moved to another party, by a merge or a move, takes that party's draft; the
@@ -3621,13 +3629,16 @@ export class TillApp extends LitElement {
   #onBackToFloor(): void {
     this.#orderVisit++;
     this.cancelOffer = null;
+    const session = this.#operatorSession;
     const flushed = this.#flushDraft();
     if (this.#inShell()) {
       this.#clearErrorKeepingLateChange();
       this.#popDrill();
       void flushed
         .then(() => this.#returnSplitCheck())
-        .then((floorRead) => (floorRead ? undefined : this.#refreshFloor()));
+        .then((floorRead) =>
+          floorRead || session !== this.#operatorSession ? undefined : this.#refreshFloor(),
+        );
     } else {
       void flushed.then(() => this.#onShowFloor());
     }

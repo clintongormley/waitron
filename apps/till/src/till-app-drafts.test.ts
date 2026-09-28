@@ -1317,6 +1317,120 @@ describe("till-app: a Send the session outlives", () => {
   });
 });
 
+describe("till-app: leaving a draft while a save is out, then signing out", () => {
+  const mesa9 = table("t9", "9", null);
+  const sideBySide: CanvasDef = {
+    formFactor: "till",
+    tabs: [
+      drillCanvas.tabs[0]!,
+      {
+        key: "service",
+        title: "Service",
+        columns: 24,
+        cards: [
+          { type: "floor-plan", colSpan: 12, rowSpan: 12, config: {} },
+          { type: "table-order", colSpan: 12, rowSpan: 12, config: {} },
+        ],
+      },
+    ],
+  };
+
+  /** Beer's save is held, and Steak is an edit waiting behind it, so the next save queues. */
+  async function editBehindHeldSave(el: TillApp): Promise<() => void> {
+    const answer = holdNextSave();
+    await tap(el, "Beer");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await tap(el, "Steak");
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+    return answer;
+  }
+
+  /** Resolves to how many floor reads there had been when the held save answered. */
+  async function signOutAndInAsSam(el: TillApp, answer: () => void): Promise<number> {
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "logout");
+    await flush(el);
+    await signIn(el, "p2", "Sam");
+    const floorReads = api.getTablesState.mock.calls.length;
+    answer();
+    await flush(el, 8);
+    return floorReads;
+  }
+
+  it("seats no table for the next person when opening it waited on a save at sign-out", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(till(sideBySide)),
+      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
+      seatTable: vi.fn().mockResolvedValue({
+        visitId: "v-new",
+        tabId: "wo-new",
+        revision: 0,
+        orderNumber: 12,
+      }),
+    });
+    await flush(el);
+    await signIn(el);
+    emit(shell(el), "tab-select", { key: "service" });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    const answer = await editBehindHeldSave(el);
+    const offerReads = api.listZoneOffers.mock.calls.length;
+    emit(floor(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
+    await flush(el);
+
+    await signOutAndInAsSam(el, answer);
+
+    expect(api.seatTable).not.toHaveBeenCalled();
+    expect(api.listZoneOffers.mock.calls.length).toBe(offerReads);
+    expect(api.getTabLines).not.toHaveBeenCalledWith("wo-new");
+    expect(banner(el)).toBeNull();
+  });
+
+  it("opens no seated table for the next person when opening it waited on a save at sign-out", async () => {
+    const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(till(sideBySide)) });
+    await flush(el);
+    await signIn(el);
+    emit(shell(el), "tab-select", { key: "service" });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    const answer = await editBehindHeldSave(el);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+
+    await signOutAndInAsSam(el, answer);
+
+    expect(api.getTabLines).not.toHaveBeenCalledWith("wo-7");
+    expect(api.listDrafts).not.toHaveBeenCalledWith("v7", expect.anything());
+    expect(banner(el)).toBeNull();
+  });
+
+  it("says nothing to the next person when Back to floor waited on a save at sign-out", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    const answer = await editBehindHeldSave(el);
+    await back(el);
+
+    const floorReads = await signOutAndInAsSam(el, answer);
+
+    expect(banner(el)).toBeNull();
+    expect(api.getTablesState.mock.calls.length).toBe(floorReads);
+  });
+
+  it("says nothing to the next person when choosing another tab waited on a save at sign-out", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    const answer = await editBehindHeldSave(el);
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+
+    const floorReads = await signOutAndInAsSam(el, answer);
+
+    expect(banner(el)).toBeNull();
+    expect(api.getTablesState.mock.calls.length).toBe(floorReads);
+  });
+});
+
 describe("till-app: how long a send may take", () => {
   /** Settles answers and renders under fake timers. */
   async function settle(el: TillApp): Promise<void> {

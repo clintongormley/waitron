@@ -7,7 +7,6 @@ import {
   needsModifierPicker,
   quantityLabel,
   quantityPlaces,
-  shortestQuantity,
   toWireLineExtras,
   toWireModifiers,
   toWireProductIdentity,
@@ -132,20 +131,6 @@ describe("order-line pricing", () => {
         unit: { id: "", name: {}, abbreviation: {}, precision: 3, hardwareUnit: null },
       };
       expect(quantityLabel({ product: nameless, quantity: "2" })).toBe("2");
-    });
-  });
-
-  describe("shortestQuantity", () => {
-    it("drops the zeros after the point, and the point when nothing is left after it", () => {
-      expect(shortestQuantity("2.000")).toBe("2");
-      expect(shortestQuantity("0.350")).toBe("0.35");
-      expect(shortestQuantity("-0.50")).toBe("-0.5");
-      expect(shortestQuantity("2.")).toBe("2");
-    });
-
-    it("leaves a whole number's own zeros", () => {
-      expect(shortestQuantity("10")).toBe("10");
-      expect(shortestQuantity("0")).toBe("0");
     });
   });
 

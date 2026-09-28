@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   fromDraftLine,
-  orderLinesMerge,
+  orderLineMergeKey,
   rebuildReturned,
   toDraftLineInput,
 } from "./draft-lines.js";
@@ -477,6 +477,19 @@ describe("rebuildReturned: a line kept while its dish was not offered", () => {
     expect(rebuilt?.unavailableOnServer).toBe(true);
   });
 
+  it("rebuilds a weighed dish at the quantity the kept line holds, not the one saved", () => {
+    const input = toDraftLineInput({
+      product: menuOfferToTillProduct(fish, VERSION),
+      quantity: "0.350",
+    });
+    const fishKept = fromDraftLine(saved(input, "0.350"), new Map());
+
+    const rebuilt = rebuildReturned([fishKept], offers, live(VERSION)).get(0);
+
+    expect(rebuilt?.quantity).toBe("0.35");
+    expect(fromDraftLine(saved(input, "0.350"), offers).quantity).toBe("0.350");
+  });
+
   it("leaves out a line still not offered, and a line that is offered already", () => {
     const offered = fromDraftLine(saved(toDraftLineInput(burgerLine()), "2.000"), offers);
     const fishGone = kept(
@@ -493,7 +506,7 @@ describe("rebuildReturned: a line kept while its dish was not offered", () => {
   });
 });
 
-describe("orderLinesMerge (D10, the shared rule)", () => {
+describe("orderLineMergeKey (D10, the shared rule)", () => {
   const beerOffer = offer({ id: "mi-beer", productId: "p-beer", unitPrice: "3.00" });
   const beer = (over: Partial<OrderLine> = {}): OrderLine => ({
     product: menuOfferToTillProduct(beerOffer, VERSION),
@@ -501,17 +514,18 @@ describe("orderLinesMerge (D10, the shared rule)", () => {
     ...over,
   });
 
-  it("merges two lines of one dish, and not a line with a different course", () => {
-    expect(orderLinesMerge(beer(), beer())).toBe(true);
-    expect(orderLinesMerge(beer(), beer({ courseId: "course-drinks" }))).toBe(false);
+  it("gives two lines of one dish one key, and a line with a different course another", () => {
+    const key = orderLineMergeKey(beer());
+    expect(key).toEqual(expect.any(String));
+    expect(orderLineMergeKey(beer())).toBe(key);
+    expect(orderLineMergeKey(beer({ courseId: "course-drinks" }))).not.toBe(key);
   });
 
-  it("never merges a line that names no menu item", () => {
+  it("gives a line that names no menu item no key", () => {
     const counter: OrderLine = {
       product: { ...beer().product, menuItemId: undefined },
       quantity: "1",
     };
-    expect(orderLinesMerge(counter, counter)).toBe(false);
-    expect(orderLinesMerge(beer(), counter)).toBe(false);
+    expect(orderLineMergeKey(counter)).toBeNull();
   });
 });

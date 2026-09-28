@@ -12,10 +12,10 @@ import {
   displayQuantity,
   productAsVariant,
   quantityPlaces,
-  shortestQuantity,
   toWireModifiers,
 } from "./order-line.js";
 import type { OrderLine, SelectedExtra } from "./working-order.js";
+import { trimQuantity } from "../widgets/dish-format.js";
 import { productUnit } from "../widgets/product-name.js";
 
 /**
@@ -45,13 +45,6 @@ export function toDraftLineInput(line: OrderLine): DraftLineInput {
  * draft line, and merges with nothing. */
 export function orderLineMergeKey(line: OrderLine): string | null {
   return line.product.menuItemId === undefined ? null : draftLineMergeKey(toDraftLineInput(line));
-}
-
-/** Whether adding `added` to a draft holding `kept` adds to that line (D10). */
-export function orderLinesMerge(kept: OrderLine, added: OrderLine): boolean {
-  if (kept.product.menuItemId === undefined || added.product.menuItemId === undefined) return false;
-  const key = orderLineMergeKey(kept);
-  return key !== null && key === orderLineMergeKey(added);
 }
 
 /**
@@ -92,9 +85,7 @@ export function fromDraftLine(
   return {
     product,
     quantity:
-      offer === undefined
-        ? shortestQuantity(line.quantity)
-        : displayQuantity(product, line.quantity),
+      offer === undefined ? trimQuantity(line.quantity) : displayQuantity(product, line.quantity),
     ...(offer === undefined ? { notOffered: true as const, blocked: "removed" as const } : {}),
     ...(fits ? {} : { blocked: "unit_changed" as const }),
     ...(extras.length === 0 ? {} : { extras }),
@@ -110,7 +101,10 @@ export function fromDraftLine(
 
 /**
  * By index, each line kept as no longer offered whose menu item `offers` holds again, rebuilt as
- * {@link fromDraftLine} would build it from the saved line now. The saved line is unchanged.
+ * {@link fromDraftLine} would build it from the line as its draft saves it now. The quantity is the
+ * one the kept line holds, whose trailing zeros were dropped when it was read, so a weighed dish
+ * saved as "0.350" comes back as "0.35" where a fresh read shows "0.350". The saved line is
+ * unchanged.
  */
 export function rebuildReturned(
   lines: readonly OrderLine[],
@@ -119,9 +113,11 @@ export function rebuildReturned(
 ): Map<number, OrderLine> {
   const rebuilt = new Map<number, OrderLine>();
   lines.forEach((line, index) => {
-    if (line.notOffered !== true || !offers.has(line.product.menuItemId ?? "")) return;
-    const saved = { ...toDraftLineInput(line), unavailable: line.unavailableOnServer === true };
-    rebuilt.set(index, fromDraftLine(saved, offers, liveVersions));
+    if (line.notOffered !== true) return;
+    const saved = toDraftLineInput(line);
+    if (!offers.has(saved.menuItemId)) return;
+    const returned = { ...saved, unavailable: line.unavailableOnServer === true };
+    rebuilt.set(index, fromDraftLine(returned, offers, liveVersions));
   });
   return rebuilt;
 }

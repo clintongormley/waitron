@@ -11,6 +11,7 @@ import {
 } from "@waitron/shared";
 import { sellingValuesOf, type SaleLine, type TillProduct } from "../api/client.js";
 import type { OrderLine, SelectedExtra } from "./working-order.js";
+import { trimQuantity } from "../widgets/dish-format.js";
 import { productUnit, unitName } from "../widgets/product-name.js";
 
 type PricedPick = Pick<SelectedExtra, "price" | "quantity">;
@@ -82,12 +83,7 @@ export function productAsVariant(
 
 /** A whole-count unit's three-place server quantity reads "2", not "2.000". */
 export function displayQuantity(product: TillProduct, quantity: string): string {
-  return productUnit(product).precision !== 0 ? quantity : shortestQuantity(quantity);
-}
-
-/** "2.000" reads "2" and "0.350" "0.35". Not `trimQuantity`, which leaves "1.x0" as it is. */
-export function shortestQuantity(quantity: string): string {
-  return quantity.includes(".") ? quantity.replace(/0+$/, "").replace(/\.$/, "") : quantity;
+  return productUnit(product).precision !== 0 ? quantity : trimQuantity(quantity);
 }
 
 export function quantityLabel(line: OrderLine): string {

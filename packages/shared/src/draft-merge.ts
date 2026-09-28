@@ -47,12 +47,6 @@ export function draftLineMergeKey(line: MergeableDraftLine): string | null {
   ]);
 }
 
-/** Whether adding `added` to a draft holding `kept` adds to that line rather than a new row. */
-export function draftLinesMerge(kept: MergeableDraftLine, added: MergeableDraftLine): boolean {
-  const key = draftLineMergeKey(kept);
-  return key !== null && key === draftLineMergeKey(added);
-}
-
 /**
  * Adds each line into the first earlier line that orders the same thing, which keeps its id and
  * position; a merged quantity is written at the quantity scale.

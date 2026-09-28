@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { draftLineMergeKey, draftLinesMerge, normaliseDraftLines } from "./draft-merge.js";
+import { draftLineMergeKey, normaliseDraftLines } from "./draft-merge.js";
 import type { MergeableDraftLine } from "./draft-merge.js";
 
 const BEER = "beer";
@@ -38,9 +38,15 @@ function line(overrides: Partial<Line> & { menuItemId: string }): Line {
 
 const cheese = (quantity: number) => ({ productId: CHEESE, quantity });
 
-describe("draftLinesMerge (D10)", () => {
+/** Whether a draft holding `kept` adds `added` to that line: both keys equal and not null. */
+function merges(kept: MergeableDraftLine, added: MergeableDraftLine): boolean {
+  const key = draftLineMergeKey(kept);
+  return key !== null && key === draftLineMergeKey(added);
+}
+
+describe("merging by draftLineMergeKey (D10)", () => {
   it("merges two lines of the same dish", () => {
-    expect(draftLinesMerge(line({ menuItemId: BEER }), line({ menuItemId: BEER }))).toBe(true);
+    expect(merges(line({ menuItemId: BEER }), line({ menuItemId: BEER }))).toBe(true);
   });
 
   it.each([
@@ -52,14 +58,14 @@ describe("draftLinesMerge (D10)", () => {
     ["options answer", { options: [RARE] }],
     ["extras pick", { extras: [{ listId: TOPPINGS, picks: [cheese(1)] }] }],
   ])("does not merge lines that differ in their %s", (_part, difference) => {
-    expect(
-      draftLinesMerge(line({ menuItemId: BURGER }), line({ menuItemId: BURGER, ...difference })),
-    ).toBe(false);
+    expect(merges(line({ menuItemId: BURGER }), line({ menuItemId: BURGER, ...difference }))).toBe(
+      false,
+    );
   });
 
   it("merges options answered in either order", () => {
     expect(
-      draftLinesMerge(
+      merges(
         line({ menuItemId: BURGER, options: [NO_ONIONS, RARE] }),
         line({ menuItemId: BURGER, options: [RARE, NO_ONIONS] }),
       ),
@@ -68,7 +74,7 @@ describe("draftLinesMerge (D10)", () => {
 
   it("does not merge a rare Burger with a well-done one", () => {
     expect(
-      draftLinesMerge(
+      merges(
         line({ menuItemId: BURGER, options: [RARE] }),
         line({ menuItemId: BURGER, options: [WELL_DONE] }),
       ),
@@ -77,7 +83,7 @@ describe("draftLinesMerge (D10)", () => {
 
   it("reads the options as a set: an answer given twice is that answer once", () => {
     expect(
-      draftLinesMerge(
+      merges(
         line({ menuItemId: BURGER, options: [RARE, RARE] }),
         line({ menuItemId: BURGER, options: [RARE] }),
       ),
@@ -86,7 +92,7 @@ describe("draftLinesMerge (D10)", () => {
 
   it('does not merge an extra from "Toppings" with the same extra from "Premium toppings"', () => {
     expect(
-      draftLinesMerge(
+      merges(
         line({ menuItemId: BURGER, extras: [{ listId: TOPPINGS, picks: [cheese(1)] }] }),
         line({ menuItemId: BURGER, extras: [{ listId: PREMIUM_TOPPINGS, picks: [cheese(1)] }] }),
       ),
@@ -95,7 +101,7 @@ describe("draftLinesMerge (D10)", () => {
 
   it("does not merge two different extras from one list", () => {
     expect(
-      draftLinesMerge(
+      merges(
         line({ menuItemId: BURGER, extras: [{ listId: TOPPINGS, picks: [cheese(1)] }] }),
         line({
           menuItemId: BURGER,
@@ -107,7 +113,7 @@ describe("draftLinesMerge (D10)", () => {
 
   it("does not merge lines whose extras differ only in how many of a pick", () => {
     expect(
-      draftLinesMerge(
+      merges(
         line({ menuItemId: BURGER, extras: [{ listId: TOPPINGS, picks: [cheese(1)] }] }),
         line({ menuItemId: BURGER, extras: [{ listId: TOPPINGS, picks: [cheese(2)] }] }),
       ),
@@ -118,7 +124,7 @@ describe("draftLinesMerge (D10)", () => {
     const bacon = { listId: PREMIUM_TOPPINGS, picks: [{ productId: BACON, quantity: 2 }] };
     const toppings = { listId: TOPPINGS, picks: [cheese(1)] };
     expect(
-      draftLinesMerge(
+      merges(
         line({ menuItemId: BURGER, extras: [toppings, bacon] }),
         line({ menuItemId: BURGER, extras: [bacon, toppings] }),
       ),
@@ -131,13 +137,13 @@ describe("draftLinesMerge (D10)", () => {
       extras: [{ listId: TOPPINGS, picks: [cheese(1), cheese(1)] }],
     });
     expect(
-      draftLinesMerge(
+      merges(
         twice,
         line({ menuItemId: BURGER, extras: [{ listId: TOPPINGS, picks: [cheese(2)] }] }),
       ),
     ).toBe(true);
     expect(
-      draftLinesMerge(
+      merges(
         twice,
         line({ menuItemId: BURGER, extras: [{ listId: TOPPINGS, picks: [cheese(1)] }] }),
       ),
@@ -146,21 +152,21 @@ describe("draftLinesMerge (D10)", () => {
 
   it("never merges a no-merge line, even with its identical twin", () => {
     const split = line({ menuItemId: BURGER, noMerge: true });
-    expect(draftLinesMerge(split, { ...split })).toBe(false);
-    expect(draftLinesMerge(split, line({ menuItemId: BURGER }))).toBe(false);
-    expect(draftLinesMerge(line({ menuItemId: BURGER }), split)).toBe(false);
+    expect(merges(split, { ...split })).toBe(false);
+    expect(merges(split, line({ menuItemId: BURGER }))).toBe(false);
+    expect(merges(line({ menuItemId: BURGER }), split)).toBe(false);
   });
 
   it("never merges a fractional quantity, even with its identical twin", () => {
     const fish = line({ menuItemId: FISH, quantity: "0.5" });
-    expect(draftLinesMerge(fish, { ...fish })).toBe(false);
-    expect(draftLinesMerge(fish, line({ menuItemId: FISH }))).toBe(false);
-    expect(draftLinesMerge(line({ menuItemId: FISH }), fish)).toBe(false);
+    expect(merges(fish, { ...fish })).toBe(false);
+    expect(merges(fish, line({ menuItemId: FISH }))).toBe(false);
+    expect(merges(line({ menuItemId: FISH }), fish)).toBe(false);
   });
 
   it("merges a whole-number weighed quantity, whatever places it is written with", () => {
     expect(
-      draftLinesMerge(
+      merges(
         line({ menuItemId: FISH, quantity: "2.000" }),
         line({ menuItemId: FISH, quantity: "1" }),
       ),

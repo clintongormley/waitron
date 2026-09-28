@@ -10,6 +10,12 @@ it("trims a three-place quantity's trailing zeros and leaves a whole number alon
   expect(trimQuantity("10")).toBe("10");
 });
 
+it("trims a negative quantity, drops a bare point, and leaves a whole zero alone", () => {
+  expect(trimQuantity("-0.50")).toBe("-0.5");
+  expect(trimQuantity("2.")).toBe("2");
+  expect(trimQuantity("0")).toBe("0");
+});
+
 it("keeps a stored receipt name in a language the venue has since disabled", () => {
   // Live catalogue text reads enabled languages only; a snapshot keeps whatever it was frozen in.
   const frozen = { ca: "Pa amb tomàquet" };
