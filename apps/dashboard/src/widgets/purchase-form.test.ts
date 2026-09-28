@@ -431,6 +431,45 @@ describe("purchase-form", () => {
     });
   });
 
+  it("gives every control it draws a semantic name, numbering each VAT line's", async () => {
+    const { el } = await mountWidget<PurchaseForm>(
+      "dashboard-purchase-form",
+      baseProps({ invoice: EDIT_INVOICE }),
+    );
+    await el.updateComplete;
+    const fields = [...el.shadowRoot!.querySelectorAll<HTMLElement>("wt-input, wt-price-input")];
+    await Promise.all(
+      fields.map(
+        (field) => (field as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete,
+      ),
+    );
+    const controls = [
+      ...el.shadowRoot!.querySelectorAll("input, select, textarea, wt-input, wt-price-input"),
+    ].flatMap((node) =>
+      node.shadowRoot ? [...node.shadowRoot.querySelectorAll("input, select, textarea")] : [node],
+    ) as (HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement)[];
+    expect(controls.map((control) => control.name)).toEqual([
+      "supplier-tax-id",
+      "supplier-name",
+      "supplier-invoice-number",
+      "issued-on",
+      "received-on",
+      "total",
+      "regime",
+      "deductible-proportion",
+      "note",
+      "line-0-rate",
+      "line-0-base",
+      "line-0-tax",
+      "line-0-kind",
+      "line-1-rate",
+      "line-1-base",
+      "line-1-tax",
+      "line-1-kind",
+    ]);
+    for (const control of controls) expect(control.id, control.name).not.toMatch(/^wt-/);
+  });
+
   it("resets open to false when the dialog is closed (wt-close)", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     const nativeDialog = await openedDialog(el);
