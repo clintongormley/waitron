@@ -203,9 +203,9 @@ export function isStale(line: OrderLine, liveVersions: ReadonlyMap<string, strin
  * lines are never re-priced (D10), and a line with no version is priced by the server from the live
  * version already. A line whose earlier price is unknown is always named, at its new price alone. A
  * line whose total is unchanged while its parts' prices moved, or whose dish or variant is now sold
- * by another unit, names each part that moved — the dish or variant, then each extra — at its unit
- * price; a line total cannot show a change of unit. A line whose quantity the live unit cannot hold
- * is not adopted: the live unit would refuse it.
+ * by another unit, names at its unit price the dish or variant if its price or unit changed, then
+ * each extra whose price changed; a line total cannot show a change of unit. A line whose quantity
+ * the live unit cannot hold is not adopted: the live unit would refuse it.
  */
 export function refreshBasket(
   lines: readonly OrderLine[],
