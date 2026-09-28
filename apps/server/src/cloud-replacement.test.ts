@@ -20,7 +20,7 @@ const registration = {
 const dirs: string[] = [];
 const clouds: { close: () => Promise<void> }[] = [];
 afterEach(async () => {
-  await Promise.all(clouds.splice(0).map((cloud) => cloud.close()));
+  await Promise.all(clouds.splice(0).map((cloud) => cloud?.close()));
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
