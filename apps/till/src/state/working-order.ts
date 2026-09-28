@@ -12,9 +12,10 @@ import { localToday } from "@waitron/catalogue/src/vat-rates.js";
 import { customerPresentationText } from "@waitron/catalogue/src/product-presentation.js";
 import { currentContentLanguages } from "@waitron/ui";
 import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.js";
-import { sumDecimals } from "@waitron/shared";
+import { addDecimal, decimal, sumDecimals } from "@waitron/shared";
 import type { Decimal, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { lineGross } from "./order-line.js";
+import { orderLinesMerge } from "./draft-lines.js";
 import type { BlockReason } from "./menu-refresh.js";
 import type { HeldExtra, TillProduct } from "../api/client.js";
 import { productUnit, toPresentation } from "../widgets/product-name.js";
@@ -77,6 +78,10 @@ export interface OrderLine {
   optionSnapshots?: OptionSnapshot[];
   /** A kitchen instruction; ABSENT (never `""`) when none. */
   note?: string;
+  /** The waiter's course override on a table draft; ABSENT means the product's default course. */
+  courseId?: string;
+  /** Never merged with another line, either way; Split quantity's rows carry it. */
+  noMerge?: true;
 }
 
 /** `"product-selected"` is a widget-to-widget broadcast that does NOT mutate the basket. */
@@ -102,6 +107,17 @@ function toPriceable(line: OrderLine): BasketItem {
       unit: productUnit(p),
     },
   };
+}
+
+/** Refuses a quantity the product's unit cannot take. */
+function newLine(product: TillProduct, quantity: string, selection?: LineSelection): OrderLine {
+  assertQuantityPrecision(quantity, productUnit(product).precision, { positive: true });
+  const line: OrderLine = { product, quantity };
+  applySelection(line, selection);
+  if (selection?.note !== undefined) {
+    line.note = selection.note;
+  }
+  return line;
 }
 
 /** An empty list is not an answer, so it leaves no key. */
@@ -240,13 +256,24 @@ export class WorkingOrderStore {
 
   addProduct(product: TillProduct, quantity: string, selection?: LineSelection): void {
     if (this.#sending) return;
-    assertQuantityPrecision(quantity, productUnit(product).precision, { positive: true });
-    const line: OrderLine = { product, quantity };
-    applySelection(line, selection);
-    if (selection?.note !== undefined) {
-      line.note = selection.note;
-    }
-    this.#lines.push(line);
+    this.#lines.push(newLine(product, quantity, selection));
+    this.#changedLines();
+  }
+
+  /**
+   * As {@link addProduct}, except that a line ordering the same thing as an earlier one (the draft
+   * merge rule, D10) adds its quantity to the first such line, which keeps its place.
+   */
+  addMerging(product: TillProduct, quantity: string, selection?: LineSelection): void {
+    if (this.#sending) return;
+    const line = newLine(product, quantity, selection);
+    const into = this.#lines.find((kept) => orderLinesMerge(kept, line));
+    if (into === undefined) this.#lines.push(line);
+    else into.quantity = addDecimal(decimal(into.quantity), decimal(quantity));
+    this.#changedLines();
+  }
+
+  #changedLines(): void {
     this.#invalidatePricing();
     this.#markDirty();
     this.emit("changed");

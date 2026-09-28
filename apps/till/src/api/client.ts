@@ -519,6 +519,66 @@ export interface SubmittedGroups {
   groups: OrderGroup[];
 }
 
+/**
+ * One line of a person's unsent order on a party (`apps/server/src/order-drafts.ts`). A draft line
+ * carries ids and no name or price. Every save gives every line a NEW id, so an id names a line of
+ * one revision only. `unavailable` is worked out by the server on each read, never stored.
+ */
+export interface DraftLine {
+  id: string;
+  menuItemId: string;
+  variantId: string | null;
+  /** The published menu version the line was priced against; null means the live one. */
+  menuVersionId: string | null;
+  options: OptionSelection[];
+  extras: ExtraSelection[];
+  note: string | null;
+  /** A decimal string of up to three places. */
+  quantity: string;
+  /** The waiter's course override; null means the product's default course. */
+  courseId: string | null;
+  /** Never merged with another line, either way; Split quantity's rows carry it. */
+  noMerge: boolean;
+  unavailable: boolean;
+}
+
+/** A draft line as the till saves it. */
+export type DraftLineInput = Omit<DraftLine, "id" | "unavailable">;
+
+/** One person's unsent order on a party, at the revision a save or submit sends back. */
+export interface Draft {
+  id: string;
+  visitId: string;
+  ownerId: string;
+  ownerName: string;
+  revision: number;
+  lines: DraftLine[];
+}
+
+/** A save of the signed-in person's draft: `draftId` null and `revision` 0 start a new one. */
+export interface DraftSave {
+  draftId: string | null;
+  revision: number;
+  lines: DraftLineInput[];
+}
+
+/** A submission of lines of the draft at `draftRevision`, each group naming that revision's line
+ * ids, in the order the groups go in the party's sequence. */
+export interface DraftSubmission extends GroupCommand {
+  draftRevision: number;
+  groups: { lineIds: string[]; release: GroupRelease }[];
+  joinGroupId?: string;
+}
+
+/** The groups placed, and the draft as it is left: null once every line was sent. */
+export type SubmittedDraft = SubmittedGroups & { draft: Draft | null };
+
+/** One unsent draft on a party, as the floor shows it: `lineCount` counts rows, not units. */
+export interface UnsentDraft {
+  ownerName: string;
+  lineCount: number;
+}
+
 /** The party a bill belongs to, at its revision after a void or line edit on the bill; null for a
  * bill with no party. */
 export type BillParty = { id: string; revision: number } | null;
@@ -1064,6 +1124,9 @@ export interface TableVisit {
   outstanding: string;
   billCount: number;
   tableIds: string[];
+  /** Every open draft on the party that holds a line, oldest first; `ownerName` is "" for an
+   * unknown person. */
+  unsentDrafts: UnsentDraft[];
 }
 
 /** One bill of a seated party from `GET /api/visits/:id/bills`. `outstanding` is zero on a settled or
@@ -1776,6 +1839,56 @@ export class TillApi {
     options: ReadOptions = {},
   ): Promise<SubmittedGroups> {
     return this.#request(`/api/visits/${visitId}/groups`, "POST", submission, options.signal);
+  }
+
+  /** Every open draft on a party, whoever holds it, oldest first → `GET /api/visits/:visitId/drafts`. */
+  async listDrafts(visitId: string): Promise<Draft[]> {
+    const { drafts } = await this.#request<{ drafts: Draft[] }>(
+      `/api/visits/${visitId}/drafts`,
+      "GET",
+    );
+    return drafts;
+  }
+
+  /**
+   * Replace every line of the signed-in person's draft → `PUT /api/visits/:visitId/drafts`. The
+   * server merges lines that order the same thing and answers the draft as saved. Rejects, among
+   * others, `draft.out_of_date` (with the draft's `draftId` and `revision`), `draft.taken_over` (with
+   * `ownerId` and `ownerName`), `draft.not_found`, `draft.already_submitted` and `visit.not_open`.
+   */
+  saveDraft(visitId: string, save: DraftSave): Promise<Draft> {
+    return this.#request(`/api/visits/${visitId}/drafts`, "PUT", save);
+  }
+
+  /**
+   * Make another person's draft the signed-in person's →
+   * `POST /api/visits/:visitId/drafts/:draftId/take-over`. When they already hold a draft on the
+   * party, the taken lines join it and the answer is THAT draft, under its own id.
+   */
+  takeOverDraft(visitId: string, draftId: string, revision: number): Promise<Draft> {
+    return this.#request(`/api/visits/${visitId}/drafts/${draftId}/take-over`, "POST", {
+      revision,
+    });
+  }
+
+  /**
+   * Send lines of the signed-in person's draft as groups →
+   * `POST /api/visits/:visitId/drafts/:draftId/submit`. A repeat with the same submission id answers
+   * as the first. Rejects, among others, the `draft.*` refusals, `visit.out_of_date`,
+   * `visit.not_open`, `submission.id_reused` and pricing refusals such as `menu.version_changed`.
+   */
+  submitDraft(
+    visitId: string,
+    draftId: string,
+    submission: DraftSubmission,
+    options: ReadOptions = {},
+  ): Promise<SubmittedDraft> {
+    return this.#request(
+      `/api/visits/${visitId}/drafts/${draftId}/submit`,
+      "POST",
+      submission,
+      options.signal,
+    );
   }
 
   /** Send a held group to the kitchen → `POST /api/visits/:visitId/groups/:groupId/fire`. Rejects

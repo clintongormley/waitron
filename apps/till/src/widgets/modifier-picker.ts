@@ -1,4 +1,4 @@
-import { ContentLanguageController, currentContentLanguages } from "@waitron/ui";
+import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
@@ -6,6 +6,7 @@ import type { OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { lineGross, productAsVariant } from "../state/order-line.js";
+import { optionSnapshotOf } from "../state/held-options.js";
 import { productName } from "./product-name.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import type { LineSelection, OrderLine, SelectedExtra } from "../state/working-order.js";
@@ -297,28 +298,15 @@ export class TillModifierPicker extends LitElement {
     return this.#answeredLists().map(({ list, labelId }) => ({ listId: list.id, labelId }));
   }
 
-  /**
-   * The same answers frozen the way the order path freezes them (`buildLineExtras`,
-   * `apps/server/src/modifier-selection.ts`): the list's three names and the chosen label's three,
-   * and no ids at all. Built here so the basket renders a line the operator has just answered
-   * through the same reader as a line read back from a held order.
-   *
-   * The two plain staff names widen under the venue's default content language, which is what the
-   * server widens them under too, so the map holds exactly one entry either way.
-   */
+  /** Built here so the basket renders a line the operator has just answered through the same reader
+   * as a line read back from a held order. */
   #selectedSnapshots(): OptionSnapshot[] {
-    const language = currentContentLanguages().defaultLanguage;
-    return this.#answeredLists().map(({ list, labelId }) => {
-      const label = list.labels.find((candidate) => candidate.id === labelId)!;
-      return {
-        listName: { [language]: list.name },
-        listCustomerName: list.customerName,
-        listKitchenName: list.kitchenName,
-        labelName: { [language]: label.name },
-        labelCustomerName: label.customerName,
-        labelKitchenName: label.kitchenName,
-      };
-    });
+    return this.#answeredLists().map(({ list, labelId }) =>
+      optionSnapshotOf(
+        list,
+        list.labels.find((candidate) => candidate.id === labelId)!,
+      ),
+    );
   }
 
   /** Each offered options list that holds an answer naming one of its own labels, in offer order. */

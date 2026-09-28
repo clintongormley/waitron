@@ -685,3 +685,124 @@ describe("WorkingOrderStore: the VAT preview takes each class's rate today", () 
     expect(s.vatBreakdown).toEqual([{ rate: "10.00", base: "3.30", tax: "0.33" }]);
   });
 });
+
+describe("WorkingOrderStore.addMerging (D10)", () => {
+  const product = (menuItemId: string, over: Partial<TillProduct> = {}): TillProduct => ({
+    ...cafe,
+    id: `p-${menuItemId}`,
+    name: menuItemId,
+    menuItemId,
+    menuVersionId: "version-7",
+    ...over,
+  });
+  const beer = product("beer");
+  const burger = product("burger");
+  const fish = product("fish", { pricingUnit: "weight", unitPrice: "30.00" });
+  const answers = (...labelIds: string[]) => ({
+    options: labelIds.map((labelId) => ({ listId: labelId.split(":")[0]!, labelId })),
+  });
+  const cheeseFrom = (listId: string): { extras: SelectedExtra[] } => ({
+    extras: [{ listId, productId: "p-cheese", name: "Cheese", price: "1.00", quantity: 1 }],
+  });
+  const rows = (s: WorkingOrderStore) =>
+    s.lines.map((line) => `${line.product.name} ×${line.quantity}`);
+
+  it("gives one line Beer ×3 from three Beer adds", () => {
+    const s = new WorkingOrderStore();
+    for (let tap = 0; tap < 3; tap += 1) s.addMerging(beer, "1");
+    expect(rows(s)).toEqual(["beer ×3"]);
+  });
+
+  it("adds into the first matching line, which keeps its place and stays the same line", () => {
+    const s = new WorkingOrderStore();
+    s.addMerging(beer, "1");
+    s.addMerging(burger, "1");
+    const first = s.lines[0];
+    s.addMerging(beer, "2");
+    expect(rows(s)).toEqual(["beer ×3", "burger ×1"]);
+    expect(s.lines[0]).toBe(first);
+    expect(s.total).toBe("6.00");
+    expect(s.dirty).toBe(true);
+  });
+
+  it("merges options answered in either order", () => {
+    const s = new WorkingOrderStore();
+    s.addMerging(burger, "1", answers("onions:none", "doneness:rare"));
+    s.addMerging(burger, "1", answers("doneness:rare", "onions:none"));
+    expect(rows(s)).toEqual(["burger ×2"]);
+  });
+
+  it("keeps a rare Burger and a well-done one apart", () => {
+    const s = new WorkingOrderStore();
+    s.addMerging(burger, "1", answers("doneness:rare"));
+    s.addMerging(burger, "1", answers("doneness:well-done"));
+    expect(rows(s)).toEqual(["burger ×1", "burger ×1"]);
+  });
+
+  it("keeps lines with different notes apart", () => {
+    const s = new WorkingOrderStore();
+    s.addMerging(burger, "1", { note: "no salt" });
+    s.addMerging(burger, "1", { note: "extra sauce" });
+    s.addMerging(burger, "1", { note: "no salt" });
+    expect(rows(s)).toEqual(["burger ×2", "burger ×1"]);
+  });
+
+  it('keeps the same extra from "Toppings" and from "Premium toppings" apart', () => {
+    const s = new WorkingOrderStore();
+    s.addMerging(burger, "1", cheeseFrom("toppings"));
+    s.addMerging(burger, "1", cheeseFrom("premium-toppings"));
+    expect(rows(s)).toEqual(["burger ×1", "burger ×1"]);
+  });
+
+  it("never adds into a no-merge line", () => {
+    const s = new WorkingOrderStore();
+    s.loadFrom("draft", [{ product: burger, quantity: "1", noMerge: true }]);
+    s.addMerging(burger, "1");
+    expect(rows(s)).toEqual(["burger ×1", "burger ×1"]);
+  });
+
+  it("never merges a fractional quantity", () => {
+    const s = new WorkingOrderStore();
+    s.addMerging(fish, "0.5");
+    s.addMerging(fish, "0.5");
+    s.addMerging(fish, "1");
+    expect(rows(s)).toEqual(["fish ×0.5", "fish ×0.5", "fish ×1"]);
+  });
+
+  it("merges a whole-number weighed quantity", () => {
+    const s = new WorkingOrderStore();
+    s.addMerging(fish, "1");
+    s.addMerging(fish, "2.000");
+    expect(rows(s)).toEqual(["fish ×3.000"]);
+  });
+
+  it("appends a product that names no menu item, as addProduct does", () => {
+    const s = new WorkingOrderStore();
+    s.addMerging(cafe, "1");
+    s.addMerging(cafe, "1");
+    expect(s.lines).toEqual([
+      { product: cafe, quantity: "1" },
+      { product: cafe, quantity: "1" },
+    ]);
+  });
+
+  it("refuses a quantity the unit cannot take, and changes nothing while the basket is sending", () => {
+    const s = new WorkingOrderStore();
+    s.addMerging(beer, "1");
+    expect(() => s.addMerging(beer, "0.5")).toThrowError(
+      expect.objectContaining({ code: "quantity.invalid" }),
+    );
+    s.sending = true;
+    s.addMerging(beer, "1");
+    expect(rows(s)).toEqual(["beer ×1"]);
+  });
+
+  it("notifies once per add", () => {
+    const s = new WorkingOrderStore();
+    let calls = 0;
+    s.subscribe(() => (calls += 1));
+    s.addMerging(beer, "1");
+    s.addMerging(beer, "1");
+    expect(calls).toBe(2);
+  });
+});

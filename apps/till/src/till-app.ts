@@ -12,7 +12,12 @@ import { LocaleChangeController } from "./state/locale-controller.js";
 import { TillApi, isNetworkFailure } from "./api/client.js";
 import type { ServerRouter } from "./api/server-router.js";
 import { WorkingOrderStore } from "./state/working-order.js";
-import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "./state/order-line.js";
+import {
+  displayQuantity,
+  toWireLineExtras,
+  toWireModifiers,
+  toWireProductIdentity,
+} from "./state/order-line.js";
 import { deriveExtraSelections } from "./state/held-extras.js";
 import { deriveOptionSelections } from "./state/held-options.js";
 import "./screens/till-lock-screen.js";
@@ -81,7 +86,6 @@ import type {
   ZoneOfferCatalogue,
 } from "./api/client.js";
 import { menuOfferToTillProduct } from "./api/client.js";
-import { productUnit } from "./widgets/product-name.js";
 import { kindOfFormFactor } from "./layout.js";
 import type { CanvasDef, CapabilityFlag, DeviceKind, ReceiptConfig, TabDef } from "./layout.js";
 import { SessionActivity } from "./session-activity.js";
@@ -157,12 +161,6 @@ const TABLE_REQUEST_LIMIT_MS = 150_000;
  * one it was sent to.
  */
 type DraftFollowUp = "read-tab" | "find-tab" | "mark-sold-out" | { landedOn: string } | undefined;
-
-/** A whole-count unit's three-place server quantity reads "2", not "2.000". */
-function displayQuantity(product: TillProduct, quantity: string): string {
-  if (productUnit(product).precision !== 0 || !quantity.includes(".")) return quantity;
-  return quantity.replace(/0+$/, "").replace(/\.$/, "");
-}
 
 /**
  * Sale refusals a retry can never clear: the same basket files the same refused record. Every handler
@@ -2231,6 +2229,7 @@ export class TillApp extends LitElement {
           outstanding: "0.00",
           billCount: 1,
           tableIds: [tableId],
+          unsentDrafts: [],
         };
       } catch (error) {
         this.errorKey = tableWriteError(error);

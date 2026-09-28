@@ -10,6 +10,7 @@ import {
   compareDecimal,
   decimal,
   deriveDisplayName,
+  draftLinesMerge,
   firstCodeInCauseChain,
   divideDecimal,
   FALLBACK_LOCALE,
@@ -32,6 +33,7 @@ import {
   multiplyDecimal,
   negateDecimal,
   nodeId,
+  normaliseDraftLines,
   normaliseUuid,
   resolveActiveLocale,
   QUANTITY_SCALE,
@@ -144,5 +146,21 @@ describe("package public surface (./index.js)", () => {
     expect(blankComments("a // c")).toBe("a     ");
     expect(blankCommentsAndLiterals('f("}") // c')).toBe('f(" ")     ');
     expect(mapComments("a /* c */", () => "")).toBe("a ");
+  });
+
+  it("re-exports the draft merge rule", () => {
+    const beer = {
+      menuItemId: "beer",
+      variantId: null,
+      menuVersionId: null,
+      courseId: null,
+      note: null,
+      options: [],
+      extras: [],
+      quantity: "1",
+      noMerge: false,
+    };
+    expect(draftLinesMerge(beer, beer)).toBe(true);
+    expect(normaliseDraftLines([beer, beer])).toEqual([{ ...beer, quantity: "2.000" }]);
   });
 });

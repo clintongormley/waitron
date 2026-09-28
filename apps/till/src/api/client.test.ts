@@ -2456,6 +2456,191 @@ describe("TillApi: a seated party", () => {
   });
 });
 
+describe("TillApi: a party's drafts", () => {
+  const send = (method: string, body: unknown) =>
+    expect.objectContaining({
+      method,
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  const beer = {
+    menuItemId: "mi-beer",
+    variantId: null,
+    menuVersionId: "mv-7",
+    options: [],
+    extras: [],
+    note: null,
+    quantity: "1",
+    courseId: null,
+    noMerge: false,
+  };
+  const draft = {
+    id: "d1",
+    visitId: "v1",
+    ownerId: "p-alex",
+    ownerName: "Alex",
+    revision: 1,
+    lines: [{ ...beer, id: "dl-1", quantity: "1.000", unavailable: false }],
+  };
+
+  it("listDrafts GETs every open draft on the party and answers the list", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ drafts: [draft] }));
+
+    await expect(new TillApi("", fetchStub).listDrafts("v1")).resolves.toEqual([draft]);
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/visits/v1/drafts",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+  });
+
+  it("saveDraft PUTs a new draft as draftId null at revision 0, and answers the saved draft", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(draft));
+
+    await expect(
+      new TillApi("", fetchStub).saveDraft("v1", { draftId: null, revision: 0, lines: [beer] }),
+    ).resolves.toEqual(draft);
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/visits/v1/drafts",
+      send("PUT", { draftId: null, revision: 0, lines: [beer] }),
+    );
+  });
+
+  it("saveDraft PUTs an existing draft's id and the revision it was read at", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ ...draft, revision: 2 }));
+
+    await new TillApi("", fetchStub).saveDraft("v1", { draftId: "d1", revision: 1, lines: [] });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/visits/v1/drafts",
+      send("PUT", { draftId: "d1", revision: 1, lines: [] }),
+    );
+  });
+
+  it("saveDraft surfaces a takeover with the new owner's id and name", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          error: {
+            code: "draft.taken_over",
+            params: { draftId: "d1", ownerId: "p-sam", ownerName: "Sam" },
+          },
+        },
+        409,
+      ),
+    );
+
+    await expect(
+      new TillApi("", fetchStub).saveDraft("v1", { draftId: "d1", revision: 1, lines: [beer] }),
+    ).rejects.toEqual({
+      code: "draft.taken_over",
+      status: 409,
+      draftId: "d1",
+      ownerId: "p-sam",
+      ownerName: "Sam",
+    });
+  });
+
+  it("saveDraft surfaces a stale revision with the draft's current one", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse(
+          { error: { code: "draft.out_of_date", params: { draftId: "d1", revision: 3 } } },
+          409,
+        ),
+      );
+
+    await expect(
+      new TillApi("", fetchStub).saveDraft("v1", { draftId: null, revision: 0, lines: [beer] }),
+    ).rejects.toEqual({ code: "draft.out_of_date", status: 409, draftId: "d1", revision: 3 });
+  });
+
+  it("takeOverDraft POSTs the revision it read to the draft's /take-over route and answers the draft now held", async () => {
+    const taken = { ...draft, ownerId: "p-sam", ownerName: "Sam", revision: 2 };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(taken));
+
+    await expect(new TillApi("", fetchStub).takeOverDraft("v1", "d1", 1)).resolves.toEqual(taken);
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/visits/v1/drafts/d1/take-over",
+      send("POST", { revision: 1 }),
+    );
+  });
+
+  it("submitDraft POSTs the submission, both revisions and each group's line ids, and answers the groups and what is left", async () => {
+    const answer = {
+      tabId: "wo-1",
+      revision: 5,
+      groups: [
+        {
+          id: "g1",
+          position: 1,
+          state: "fired",
+          firedAt: "2026-09-28T10:00:00.000Z",
+          remindAt: null,
+          lineIds: ["l1"],
+          summary: "1 × Caña",
+        },
+      ],
+      draft: null,
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
+    const body = {
+      submissionId: "sub-1",
+      expectedVisitRevision: 4,
+      draftRevision: 2,
+      groups: [
+        { lineIds: ["dl-1"], release: "fire" as const },
+        { lineIds: ["dl-2", "dl-3"], release: "hold" as const },
+      ],
+    };
+
+    await expect(new TillApi("", fetchStub).submitDraft("v1", "d1", body)).resolves.toEqual(answer);
+
+    expect(fetchStub).toHaveBeenCalledWith("/api/visits/v1/drafts/d1/submit", send("POST", body));
+  });
+
+  it("submitDraft sends joinGroupId when adding to a held group, and the caller's abort signal", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ tabId: "wo-1", revision: 6, groups: [], draft }));
+    const body = {
+      submissionId: "sub-2",
+      expectedVisitRevision: 5,
+      draftRevision: 3,
+      groups: [{ lineIds: ["dl-1"], release: "hold" as const }],
+      joinGroupId: "g2",
+    };
+    const signal = new AbortController().signal;
+
+    await new TillApi("", fetchStub).submitDraft("v1", "d1", body, { signal });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/visits/v1/drafts/d1/submit",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(body), signal }),
+    );
+  });
+
+  it("submitDraft surfaces a stale party as { code }", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "visit.out_of_date" } }, 409));
+
+    await expect(
+      new TillApi("", fetchStub).submitDraft("v1", "d1", {
+        submissionId: "sub-3",
+        expectedVisitRevision: 1,
+        draftRevision: 2,
+        groups: [{ lineIds: ["dl-1"], release: "fire" }],
+      }),
+    ).rejects.toMatchObject({ code: "visit.out_of_date", status: 409 });
+  });
+});
+
 describe("isNetworkFailure", () => {
   it("is true for a fetch TypeError or an AbortError, false for a server {code}", () => {
     expect(isNetworkFailure(new TypeError("Failed to fetch"))).toBe(true);

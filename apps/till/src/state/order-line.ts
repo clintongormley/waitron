@@ -11,7 +11,7 @@ import {
 } from "@waitron/shared";
 import { sellingValuesOf, type SaleLine, type TillProduct } from "../api/client.js";
 import type { OrderLine, SelectedExtra } from "./working-order.js";
-import { unitName } from "../widgets/product-name.js";
+import { productUnit, unitName } from "../widgets/product-name.js";
 
 type PricedPick = Pick<SelectedExtra, "price" | "quantity">;
 
@@ -78,6 +78,12 @@ export function productAsVariant(
     variantCustomerName: variant.customerName ?? null,
     variantKitchenName: variant.kitchenName ?? null,
   };
+}
+
+/** A whole-count unit's three-place server quantity reads "2", not "2.000". */
+export function displayQuantity(product: TillProduct, quantity: string): string {
+  if (productUnit(product).precision !== 0 || !quantity.includes(".")) return quantity;
+  return quantity.replace(/0+$/, "").replace(/\.$/, "");
 }
 
 export function quantityLabel(line: OrderLine): string {

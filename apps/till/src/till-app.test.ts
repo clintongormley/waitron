@@ -136,6 +136,7 @@ const seatedTable: TableState = {
     outstanding: "12.00",
     billCount: 1,
     tableIds: ["t2"],
+    unsentDrafts: [],
   },
 };
 

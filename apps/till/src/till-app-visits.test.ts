@@ -59,6 +59,7 @@ function party(over: Partial<TableVisit> = {}): TableVisit {
     outstanding: "44.00",
     billCount: 1,
     tableIds: ["t4"],
+    unsentDrafts: [],
     ...over,
   };
 }

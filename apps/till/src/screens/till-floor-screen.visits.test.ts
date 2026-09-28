@@ -39,6 +39,7 @@ function visit(over: Partial<TableVisit> = {}): TableVisit {
     outstanding: "44.00",
     billCount: 2,
     tableIds: ["t4"],
+    unsentDrafts: [],
     ...over,
   };
 }
