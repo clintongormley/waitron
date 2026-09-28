@@ -44,6 +44,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import {
   fireGroup,
   moveLinesToGroup,
+  readCurrentOrders,
   submitGroups,
   type GroupLine,
   type GroupRelease,
@@ -415,6 +416,25 @@ async function croquetas(v: Venue) {
   return { ...s, groupId, croq };
 }
 
+/** Splits one Croquetas onto a second bill and marks that bill abandoned; answers the row it holds,
+ * after checking Current orders leaves it out. */
+async function abandonedSplitRow(v: Venue, s: Awaited<ReturnType<typeof croquetas>>) {
+  const { checkId } = await inTx(async (tx) =>
+    splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: s.croq.lineNo, quantity: "1" }], {
+      expectedVisitRevision: await revisionOf(s.visitId),
+      operatorId: ALEX,
+    }),
+  );
+  const row = (await linesOf(s.visitId)).find((r) => r.workingOrderId === checkId)!;
+  await suite.db
+    .update(workingOrders)
+    .set({ status: "abandoned" })
+    .where(eq(workingOrders.id, checkId));
+  const current = await inTx((tx) => readCurrentOrders(tx, s.visitId));
+  expect(JSON.stringify(current)).not.toContain(row.id);
+  return row;
+}
+
 describe("served by quantity (§12 item 5)", () => {
   it("serves 2 of Croquetas ×4, then the other 2, which sets served_at", async () => {
     const v = await setupVenue();
@@ -451,6 +471,20 @@ describe("served by quantity (§12 item 5)", () => {
     expect(answer).toEqual({ revision: revision + 1 });
     expect(await lineById(s.visitId, s.croq.id)).toMatchObject({
       servedQuantity: 3000,
+      servedAt: null,
+    });
+  });
+
+  it("takes back what was served on a dish since recalled from the kitchen", async () => {
+    const v = await setupVenue();
+    const s = await croquetas(v);
+    await serve(v, s.visitId, [{ lineId: s.croq.id, quantity: "2" }]);
+    await inTx((tx) => recallLines(tx, v.cfg, s.tabId, [s.croq.lineNo]));
+
+    await unserve(v, s.visitId, [{ lineId: s.croq.id, quantity: "1" }]);
+
+    expect(await lineById(s.visitId, s.croq.id)).toMatchObject({
+      servedQuantity: 1000,
       servedAt: null,
     });
   });
@@ -506,6 +540,17 @@ describe("served by quantity (§12 item 5)", () => {
     for (const row of served) {
       expect(row).toMatchObject({ servedQuantity: row.quantity, servedAt: expect.any(String) });
     }
+  });
+
+  it("markGroupServed leaves a line on an abandoned bill as it was, as Current orders leaves it out", async () => {
+    const v = await setupVenue();
+    const s = await croquetas(v);
+    const gone = await abandonedSplitRow(v, s);
+
+    await serveGroup(v, s.visitId, s.groupId);
+
+    expect(await lineById(s.visitId, s.croq.id)).toMatchObject({ servedQuantity: 3000 });
+    expect(await lineById(s.visitId, gone.id)).toMatchObject({ servedQuantity: 0, servedAt: null });
   });
 
   it("markGroupServed leaves a line already fully served as it was", async () => {
@@ -672,6 +717,17 @@ describe("refusals, each writing nothing", () => {
     }
   });
 
+  it("refuses a line on an abandoned bill, which Current orders leaves out (group.not_found)", async () => {
+    const v = await setupVenue();
+    const s = await croquetas(v);
+    const gone = await abandonedSplitRow(v, s);
+    await expectRefusedWithNothingWritten(
+      s.visitId,
+      () => serve(v, s.visitId, [{ lineId: gone.id, quantity: "1" }]),
+      { code: "group.not_found", params: { lineId: gone.id } },
+    );
+  });
+
   it("refuses an empty list and a line named twice (management.request_invalid)", async () => {
     const v = await setupVenue();
     const s = await croquetas(v);
@@ -806,7 +862,7 @@ describe("refusals, each writing nothing", () => {
   });
 });
 
-describe("the bill's revision and a card payment (ruling 3; menus plan D10, D22)", () => {
+describe("the bill's revision and a card payment (menus plan D10, D22)", () => {
   it("counts a served mark and its undo on the open bill's revision too", async () => {
     const v = await setupVenue();
     const s = await croquetas(v);
@@ -1045,7 +1101,7 @@ describe("served on a bill paid before its group was fired (D18)", () => {
   });
 });
 
-describe("a card refund pending on a bill (ruling 3 is for an OPEN bill only)", () => {
+describe("a card refund pending on a bill", () => {
   /** A received card payment of the bill, and a refund of it the provider has not answered. */
   async function pendingRefund(v: Venue, billId: string): Promise<void> {
     const [payment] = await suite.db
@@ -1107,7 +1163,7 @@ describe("a card refund pending on a bill (ruling 3 is for an OPEN bill only)", 
   });
 });
 
-describe("a partly served line split or cut (ruling 6)", () => {
+describe("a partly served line split or cut", () => {
   it("keeps as much served on the line as it still holds and gives the rest to the split row", async () => {
     const v = await setupVenue();
     const s = await croquetas(v);

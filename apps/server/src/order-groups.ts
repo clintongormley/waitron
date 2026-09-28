@@ -1,4 +1,5 @@
 import { and, asc, eq, inArray, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 import { staffPresentationName } from "@waitron/catalogue";
 import {
   diningTables,
@@ -918,7 +919,7 @@ export async function readReleaseReminders(
           groups.map((group) => group.id),
         ),
         isNull(workingOrderLines.parentLineId),
-        ne(workingOrders.status, "abandoned"),
+        onShownBill(),
       ),
     );
   for (const visitId of new Set(groups.map((group) => group.visitId))) {
@@ -998,6 +999,11 @@ export interface CurrentOrders {
   ungrouped: CurrentOrderRow[];
 }
 
+/** The bills Current orders shows, and serving acts on: every one but an abandoned bill. */
+export function onShownBill(): SQL {
+  return ne(workingOrders.status, "abandoned");
+}
+
 /**
  * The party's Current orders: its groups in sequence with their dish rows, and the rows in no
  * group, across every bill of the visit and of every visit merged into it, paid ones included; rows
@@ -1050,7 +1056,7 @@ export async function readCurrentOrders(tx: Transaction, visitId: string): Promi
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
-    .where(and(inArray(workingOrders.visitId, family), ne(workingOrders.status, "abandoned")))
+    .where(and(inArray(workingOrders.visitId, family), onShownBill()))
     .orderBy(
       asc(workingOrders.openedAt),
       asc(workingOrders.orderNumber),

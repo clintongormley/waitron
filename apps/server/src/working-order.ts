@@ -134,6 +134,7 @@ import {
   correctHoldTickets,
   fireHeldGroupsOfCourse,
   moveGroupsToVisit,
+  onShownBill,
   printedHeldGroups,
   printHoldTickets,
   readReleaseReminders,
@@ -2176,8 +2177,9 @@ interface ServableLine {
 }
 
 /**
- * The dish lines `where` selects on the bills of the visit and of every visit merged into it, bill
- * by bill in the order the bills were opened. An extras line is never one: it follows its dish.
+ * The dish lines `where` selects on the bills of the visit and of every visit merged into it that
+ * Current orders shows ({@link onShownBill}), bill by bill in the order the bills were opened. An
+ * extras line is never one: it follows its dish.
  */
 async function servableLines(
   tx: Transaction,
@@ -2204,7 +2206,12 @@ async function servableLines(
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(
-      and(where, isNull(workingOrderLines.parentLineId), inArray(workingOrders.visitId, family)),
+      and(
+        where,
+        isNull(workingOrderLines.parentLineId),
+        inArray(workingOrders.visitId, family),
+        onShownBill(),
+      ),
     )
     .orderBy(
       workingOrders.openedAt,
@@ -2366,8 +2373,9 @@ async function changeServed(
       const changes = items.map(({ lineId, quantity }) => {
         const line = lines.get(lineId);
         if (line === undefined) throw new AppError("group.not_found", { lineId });
-        refuseUnreleased(line);
         const serving = kind === "line.served";
+        // An undo stays open on a recalled dish: staff correct what was recorded.
+        if (serving) refuseUnreleased(line);
         const amount = servedAmount(
           line,
           quantity,
@@ -2382,8 +2390,9 @@ async function changeServed(
 }
 
 /**
- * Mark every dish line of a fired group fully served, on every bill of the visit it sits on, a paid
- * one included. A held group is refused `group.line_held`, naming its first line.
+ * Mark every dish line of a fired group fully served, on every bill of the visit it sits on that
+ * Current orders shows, a paid one included. A held group is refused `group.line_held`, naming its
+ * first line.
  */
 export async function markGroupServed(
   tx: Transaction,
