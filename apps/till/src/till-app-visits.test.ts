@@ -519,6 +519,191 @@ describe("till-app: the party's bills and Finish table", () => {
     expect(api.getTablesState).toHaveBeenCalledTimes(floorReads);
   });
 
+  it("says so when the floor cannot be read after a cancel, and still to pay follows the new bills", async () => {
+    const server = { voided: false };
+    const cancelled = { ...tabBill, total: "9.00", outstanding: "9.00" };
+    const { el } = await mountApp({
+      voidLine: vi.fn(async () => {
+        server.voided = true;
+        return { visit: { id: "v1", revision: 4 } };
+      }),
+      getVisitBills: vi.fn(async () =>
+        server.voided ? [cancelled, checkBill] : [tabBill, checkBill],
+      ),
+      getTablesState: vi.fn(async () => {
+        if (server.voided) throw new TypeError("Failed to fetch");
+        return [mesa4, mesa7, mesa9];
+      }),
+    });
+    const order = await openMesa(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await flush(el);
+
+    emit(order, "void-line", { lineNo: 1 });
+    await flush(el);
+
+    expect(figures(el)).toEqual(figuresOf("9.00", "39.00"));
+    expect(banner(el)!.textContent).toContain(t("table.reread_failed"));
+  });
+
+  it("says so when the bills cannot be read after a cancel", async () => {
+    const server = { voided: false };
+    const { el } = await mountApp({
+      voidLine: vi.fn(async () => {
+        server.voided = true;
+        return { visit: { id: "v1", revision: 4 } };
+      }),
+      getVisitBills: vi.fn(async () => {
+        if (server.voided) throw new TypeError("Failed to fetch");
+        return [tabBill, checkBill];
+      }),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "void-line", { lineNo: 1 });
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(t("table.reread_failed"));
+  });
+
+  /** A Change adding a priced extra (cheese at 1.50) to the tab's dish, as the server answers it. */
+  const cheese = {
+    lineNo: 1,
+    lineName: "Hamburguesa",
+    patch: { extras: [{ listId: "toppings", picks: [{ productId: "cheese", quantity: 1 }] }] },
+    revision: 0,
+  };
+
+  /** The server's bills and floor for {@link cheese}: 14.00 on the tab, 44.00 to pay, until the
+   * change lands, then 15.50 and 45.50. */
+  function cheeseServer(updateOrderLine: () => Promise<unknown>) {
+    const server = { changed: false };
+    const withCheese = { ...tabBill, total: "15.50", outstanding: "15.50" };
+    return {
+      updateOrderLine: vi.fn(async () => {
+        server.changed = true;
+        return updateOrderLine();
+      }),
+      getVisitBills: vi.fn(async () =>
+        server.changed ? [withCheese, checkBill] : [tabBill, checkBill],
+      ),
+      getTablesState: vi.fn(async () =>
+        server.changed
+          ? [seated({ tabTotal: "15.50" }, { revision: 4, outstanding: "45.50" }), mesa7, mesa9]
+          : [mesa4, mesa7, mesa9],
+      ),
+    };
+  }
+
+  it("shows the bill's new figures right after a Change adds a priced extra", async () => {
+    const { el } = await mountApp(
+      cheeseServer(async () => ({ revision: 1, visit: { id: "v1", revision: 4 } })),
+    );
+    const order = await openMesa(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await flush(el);
+    expect(figures(el)).toEqual(figuresOf("14.00", "44.00"));
+
+    emit(order, "change-line", cheese);
+    await flush(el);
+
+    expect(figures(el)).toEqual(figuresOf("15.50", "45.50"));
+  });
+
+  it("shows the new figures after a Change that got no answer but reached the server", async () => {
+    const { el } = await mountApp(
+      cheeseServer(async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    );
+    const order = await openMesa(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await flush(el);
+
+    emit(order, "change-line", cheese);
+    await flush(el);
+
+    expect(figures(el)).toEqual(figuresOf("15.50", "45.50"));
+  });
+
+  it("says so when the floor cannot be read after a Change, and still to pay follows the new bills", async () => {
+    const server = cheeseServer(async () => ({ revision: 1, visit: { id: "v1", revision: 4 } }));
+    let changed = false;
+    const { el } = await mountApp({
+      ...server,
+      updateOrderLine: vi.fn(async () => {
+        changed = true;
+        return server.updateOrderLine();
+      }),
+      getTablesState: vi.fn(async () => {
+        if (changed) throw new TypeError("Failed to fetch");
+        return [mesa4, mesa7, mesa9];
+      }),
+    });
+    const order = await openMesa(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await flush(el);
+
+    emit(order, "change-line", cheese);
+    await flush(el);
+
+    expect(figures(el)).toEqual(figuresOf("15.50", "45.50"));
+    expect(banner(el)!.textContent).toContain(t("table.reread_failed"));
+  });
+
+  it("a Change that got no answer, with the floor unread, keeps saying it got no answer", async () => {
+    const { el } = await mountApp({
+      updateOrderLine: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      getTablesState: vi
+        .fn()
+        .mockResolvedValueOnce([mesa4, mesa7, mesa9])
+        .mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "change-line", cheese);
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(t("table.error"));
+    expect(banner(el)!.textContent).not.toContain(t("table.reread_failed"));
+  });
+
+  it("an order with no party gets no still to pay when the floor cannot be read after a cancel", async () => {
+    const partyless = table({ state: "open-tab", hasOpenTab: true, tabId: "wo-4" });
+    const { el } = await mountApp({
+      voidLine: vi.fn().mockResolvedValue({ visit: null }),
+      getTablesState: vi
+        .fn()
+        .mockResolvedValueOnce([partyless, mesa7, mesa9])
+        .mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    const order = await openMesa(el);
+    expect(order.visit).toBeNull();
+
+    emit(order, "void-line", { lineNo: 1 });
+    await flush(el);
+
+    expect(tableOrder(el)!.visit).toBeNull();
+    expect(banner(el)!.textContent).toContain(t("table.reread_failed"));
+  });
+
+  it("a refused Change reads the order's lines again and nothing else", async () => {
+    const { el } = await mountApp({
+      updateOrderLine: vi.fn().mockRejectedValue({ code: "tab.line_not_found" }),
+    });
+    const order = await openMesa(el);
+    const billReads = vi.mocked(api.getVisitBills).mock.calls.length;
+    const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
+    const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
+
+    emit(order, "change-line", cheese);
+    await flush(el);
+
+    expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
+    expect(api.getVisitBills).toHaveBeenCalledTimes(billReads);
+    expect(api.getTablesState).toHaveBeenCalledTimes(floorReads);
+  });
+
   it("prints a copy of a paid bill's receipt", async () => {
     const { el } = await mountApp();
     const order = await openMesa(el);
