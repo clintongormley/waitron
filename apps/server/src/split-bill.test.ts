@@ -727,7 +727,7 @@ describe("splitting a line the kitchen has", () => {
 
     const { checkId } = await asApp(cfg, (tx) =>
       splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }], {
-        expectedVisitRevision: revision,
+        expectedPartyRevision: revision,
         operatorId: "cccccccc-0000-4000-8000-0000000000f1",
       }),
     );

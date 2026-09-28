@@ -35,7 +35,7 @@ const tables: TableState[] = [
     posY: null,
     shape: null,
     rotation: null,
-    visit: null,
+    party: null,
   },
   {
     id: "t2",
@@ -55,7 +55,7 @@ const tables: TableState[] = [
     posY: null,
     shape: null,
     rotation: null,
-    visit: null,
+    party: null,
   },
   {
     id: "t3",
@@ -75,7 +75,7 @@ const tables: TableState[] = [
     posY: null,
     shape: null,
     rotation: null,
-    visit: null,
+    party: null,
   },
   {
     id: "t9",
@@ -95,7 +95,7 @@ const tables: TableState[] = [
     posY: null,
     shape: null,
     rotation: null,
-    visit: null,
+    party: null,
   },
   {
     id: "t5",
@@ -118,7 +118,7 @@ const tables: TableState[] = [
     posY: null,
     shape: null,
     rotation: null,
-    visit: null,
+    party: null,
   },
   {
     id: "t6",
@@ -141,7 +141,7 @@ const tables: TableState[] = [
     posY: null,
     shape: null,
     rotation: null,
-    visit: null,
+    party: null,
   },
 ];
 
@@ -168,7 +168,7 @@ const placedTables: TableState[] = [
     posY: 400,
     shape: "round",
     rotation: 0,
-    visit: null,
+    party: null,
   },
   {
     id: "t4",
@@ -188,7 +188,7 @@ const placedTables: TableState[] = [
     posY: null,
     shape: null,
     rotation: null,
-    visit: null,
+    party: null,
   },
 ];
 
@@ -209,7 +209,7 @@ const partyTables: TableState[] = [
     label: "5",
     status: null,
     nextReservation: null,
-    visit: { ...party, id: "v1", state: "open", outstanding: "44.00" },
+    party: { ...party, id: "v1", state: "open", outstanding: "44.00" },
   },
   {
     ...tables[0]!,
@@ -220,7 +220,7 @@ const partyTables: TableState[] = [
     tabTotal: undefined,
     status: null,
     nextReservation: null,
-    visit: { ...party, id: "v2", state: "open", outstanding: "0.00", tableIds: ["t7"] },
+    party: { ...party, id: "v2", state: "open", outstanding: "0.00", tableIds: ["t7"] },
   },
   ...["t8", "t9"].map((id): TableState => ({
     ...tables[0]!,
@@ -235,7 +235,7 @@ const partyTables: TableState[] = [
     enRoute: 0,
     status: null,
     nextReservation: null,
-    visit: {
+    party: {
       ...party,
       id: "v3",
       state: "needs_clearing",
@@ -269,8 +269,8 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
   it("has no violations with unsent orders marked, on the list and on the map", async () => {
     const withUnsent = (table: TableState): TableState => ({
       ...table,
-      visit: {
-        ...table.visit!,
+      party: {
+        ...table.party!,
         unsentDrafts: [
           { ownerName: "Alex", lineCount: 2 },
           { ownerName: "", lineCount: 1 },

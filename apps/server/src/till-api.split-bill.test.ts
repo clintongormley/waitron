@@ -9,8 +9,8 @@ import {
   printJobs,
   ticketItems,
   tills,
-  visitTables,
-  visits,
+  partyTables,
+  parties,
   withTransaction,
   workingOrderLines,
 } from "@waitron/db";
@@ -666,7 +666,7 @@ describe("POST /api/tabs/:id/merge of a seated party's check back into its tab",
     post: (path: string, body: unknown) => Promise<Response>;
     tabId: string;
     checkId: string;
-    visitId: string;
+    partyId: string;
     revision: number;
   }> {
     const app = new Hono();
@@ -684,18 +684,18 @@ describe("POST /api/tabs/:id/merge of a seated party's check back into its tab",
     );
     const seated = await post(`/api/tables/${table.id}/seat`, { guestCount: 2 });
     expect(seated.status).toBe(200);
-    const { tabId, visitId, revision } = (await seated.json()) as {
+    const { tabId, partyId, revision } = (await seated.json()) as {
       tabId: string;
-      visitId: string;
+      partyId: string;
       revision: number;
     };
     await kitchenStation(d.cfg);
     const offers = await withTransaction(suite.db, (tx) =>
       offerProducts(tx, d.cfg, { zone: "tables" }),
     );
-    const round = await post(`/api/visits/${visitId}/groups`, {
+    const round = await post(`/api/parties/${partyId}/groups`, {
       submissionId: randomUUID(),
-      expectedVisitRevision: revision,
+      expectedPartyRevision: revision,
       groups: [
         { lines: [{ menuItemId: offers.offerFor(cafeId), quantity: "3" }], release: "fire" },
       ],
@@ -703,15 +703,15 @@ describe("POST /api/tabs/:id/merge of a seated party's check back into its tab",
     expect(round.status).toBe(200);
     const split = await post(`/api/tabs/${tabId}/split`, {
       transfers: [{ lineNo: 1, quantity: "1" }],
-      expectedVisitRevision: ((await round.json()) as { revision: number }).revision,
+      expectedPartyRevision: ((await round.json()) as { revision: number }).revision,
     });
     expect(split.status).toBe(200);
     const { checkId } = (await split.json()) as { checkId: string };
     const floor = await app.request("/api/tables/state", { headers: { cookie } });
-    const row = ((await floor.json()) as { id: string; visit: { revision: number } | null }[]).find(
+    const row = ((await floor.json()) as { id: string; party: { revision: number } | null }[]).find(
       (candidate) => candidate.id === table.id,
     );
-    return { post, tabId, checkId, visitId, revision: row!.visit!.revision };
+    return { post, tabId, checkId, partyId, revision: row!.party!.revision };
   }
 
   async function quantitiesOn(orderId: string): Promise<string[]> {
@@ -722,33 +722,33 @@ describe("POST /api/tabs/:id/merge of a seated party's check back into its tab",
     return rows.map((row) => row.quantity);
   }
 
-  async function partyOf(visitId: string) {
-    const [visit] = await suite.db
-      .select({ state: visits.state })
-      .from(visits)
-      .where(eq(visits.id, visitId));
+  async function partyOf(partyId: string) {
+    const [party] = await suite.db
+      .select({ state: parties.state })
+      .from(parties)
+      .where(eq(parties.id, partyId));
     const members = await suite.db
-      .select({ tableId: visitTables.tableId, leftAt: visitTables.leftAt })
-      .from(visitTables)
-      .where(eq(visitTables.visitId, visitId));
-    return { state: visit?.state, members };
+      .select({ tableId: partyTables.tableId, leftAt: partyTables.leftAt })
+      .from(partyTables)
+      .where(eq(partyTables.partyId, partyId));
+    return { state: party?.state, members };
   }
 
   it("puts the check's lines back on the tab when sent with the party's revision, keeping the party", async () => {
-    const { post, tabId, checkId, visitId, revision } = await seatedSplit();
-    const before = await partyOf(visitId);
+    const { post, tabId, checkId, partyId, revision } = await seatedSplit();
+    const before = await partyOf(partyId);
 
     const res = await post(`/api/tabs/${tabId}/merge`, {
       fromTabId: checkId,
       freeSourceTable: false,
-      expectedVisitRevision: revision,
+      expectedPartyRevision: revision,
     });
 
     expect(res.status).toBe(200);
     expect(await quantitiesOn(checkId)).toEqual([]);
     expect(await quantitiesOn(tabId)).toEqual(["2000", "1000"]);
     expect(before).toMatchObject({ state: "open", members: [{ leftAt: null }] });
-    expect(await partyOf(visitId)).toEqual(before);
+    expect(await partyOf(partyId)).toEqual(before);
   });
 
   it("refuses the merge sent without a revision, leaving the check's line on it", async () => {
@@ -761,7 +761,7 @@ describe("POST /api/tabs/:id/merge of a seated party's check back into its tab",
 
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "expectedVisitRevision" } },
+      error: { code: "management.request_invalid", params: { field: "expectedPartyRevision" } },
     });
     expect(await quantitiesOn(checkId)).toEqual(["1000"]);
   });

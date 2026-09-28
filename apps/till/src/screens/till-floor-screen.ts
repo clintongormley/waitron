@@ -26,10 +26,10 @@ import { decimal, isZeroDecimal } from "@waitron/shared";
 import { countText, named, t } from "../i18n/t.js";
 import "../widgets/seat-dialog.js";
 import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
-import type { FloorZone, TableState, TableVisit, TillApi, UnsentDraft } from "../api/client.js";
+import type { FloorZone, TableState, TableParty, TillApi, UnsentDraft } from "../api/client.js";
 
-function needsClearing(table: TableState): table is TableState & { visit: TableVisit } {
-  return table.visit?.state === "needs_clearing";
+function needsClearing(table: TableState): table is TableState & { party: TableParty } {
+  return table.party?.state === "needs_clearing";
 }
 
 function unsentText({ ownerName, lineCount }: UnsentDraft): string {
@@ -43,7 +43,7 @@ function unsentText({ ownerName, lineCount }: UnsentDraft): string {
 /** Nothing of the party is left to pay, and no tab is open that could still take a round. */
 function partyPaid(table: TableState): boolean {
   return (
-    table.visit !== null && !table.hasOpenTab && isZeroDecimal(decimal(table.visit.outstanding))
+    table.party !== null && !table.hasOpenTab && isZeroDecimal(decimal(table.party.outstanding))
   );
 }
 
@@ -362,7 +362,7 @@ export class TillFloorScreen extends LitElement {
   /** The free table whose guest count is being asked for. */
   @state() private seating: TableState | null = null;
   /** The table tapped on the map whose party needs clearing. */
-  @state() private clearing: (TableState & { visit: TableVisit }) | null = null;
+  @state() private clearing: (TableState & { party: TableParty }) | null = null;
 
   readonly #url = new UrlStateController(
     this,
@@ -379,7 +379,7 @@ export class TillFloorScreen extends LitElement {
       this.clearing = table;
       return;
     }
-    if (table.visit === null && !table.hasOpenTab) {
+    if (table.party === null && !table.hasOpenTab) {
       this.seating = table;
       return;
     }
@@ -393,9 +393,9 @@ export class TillFloorScreen extends LitElement {
     this.#emit("open-table", { tableId: table.id, seated: false, guestCount });
   }
 
-  #markCleared(visit: TableVisit): void {
+  #markCleared(party: TableParty): void {
     this.clearing = null;
-    this.#emit("mark-cleared", { visitId: visit.id, expectedVisitRevision: visit.revision });
+    this.#emit("mark-cleared", { partyId: party.id, expectedPartyRevision: party.revision });
   }
 
   #emit(type: string, detail: unknown): void {
@@ -469,11 +469,11 @@ export class TillFloorScreen extends LitElement {
    */
   #toFloorTable(table: TableState): FloorTable {
     const tabTotal =
-      table.visit === null
+      table.party === null
         ? table.tabTotal
-        : isZeroDecimal(decimal(table.visit.outstanding))
+        : isZeroDecimal(decimal(table.party.outstanding))
           ? null
-          : table.visit.outstanding;
+          : table.party.outstanding;
     const status =
       needsClearing(table) && table.status === null
         ? {
@@ -487,7 +487,7 @@ export class TillFloorScreen extends LitElement {
       tabTotal,
       status,
       reservedTime: table.nextReservation?.time ?? null,
-      unsentDrafts: table.visit?.unsentDrafts.map((draft) => draft.ownerName),
+      unsentDrafts: table.party?.unsentDrafts.map((draft) => draft.ownerName),
     });
   }
 
@@ -710,7 +710,7 @@ export class TillFloorScreen extends LitElement {
         slot="footer"
         data-mark-cleared
         variant="primary"
-        @click=${() => this.#markCleared(table.visit)}
+        @click=${() => this.#markCleared(table.party)}
       >
         ${t("floor.mark_cleared")}
       </wt-button>
@@ -719,7 +719,7 @@ export class TillFloorScreen extends LitElement {
 
   /** A card is one button, so a table needing clearing, whose card holds its own Mark cleared, is a
    * plain box instead. */
-  #clearingCard(table: TableState & { visit: TableVisit }): TemplateResult {
+  #clearingCard(table: TableState & { party: TableParty }): TemplateResult {
     return html`<div class="card state-${table.state} clearing" data-table=${table.id}>
       <span class="card-head">
         <span class="label">${table.label}</span>
@@ -730,12 +730,12 @@ export class TillFloorScreen extends LitElement {
         }
       </span>
       <span class="occupancy" data-needs-clearing>${t("floor.needs_clearing")}</span>
-      ${this.#unsent(table.visit)}
+      ${this.#unsent(table.party)}
       <wt-button
         size="sm"
         variant="secondary"
         data-mark-cleared
-        @click=${() => this.#markCleared(table.visit)}
+        @click=${() => this.#markCleared(table.party)}
       >
         ${t("floor.mark_cleared")}
       </wt-button>
@@ -757,7 +757,7 @@ export class TillFloorScreen extends LitElement {
             : nothing
         }
       </span>
-      ${this.#occupancy(table)} ${this.#unsent(table.visit)}
+      ${this.#occupancy(table)} ${this.#unsent(table.party)}
       <span class="badges">
         ${this.#hint(table)}
         ${
@@ -788,19 +788,19 @@ export class TillFloorScreen extends LitElement {
     </button>`;
   }
 
-  #unsent(visit: TableVisit | null): TemplateResult | typeof nothing {
-    const drafts = visit?.unsentDrafts ?? [];
+  #unsent(party: TableParty | null): TemplateResult | typeof nothing {
+    const drafts = party?.unsentDrafts ?? [];
     if (drafts.length === 0) return nothing;
     return html`<span class="unsent">
       ${drafts.map((draft) => html`<span class="badge unsent" data-unsent>${unsentText(draft)}</span>`)}
     </span>`;
   }
 
-  #party(visit: TableVisit | null): TemplateResult | typeof nothing {
-    if (visit === null) return nothing;
+  #party(party: TableParty | null): TemplateResult | typeof nothing {
+    if (party === null) return nothing;
     const parts = [
-      ...(visit.guestCount === null ? [] : [`${t("floor.guests")}: ${visit.guestCount}`]),
-      ...(visit.billCount > 1 ? [`${t("floor.bills")}: ${visit.billCount}`] : []),
+      ...(party.guestCount === null ? [] : [`${t("floor.guests")}: ${party.guestCount}`]),
+      ...(party.billCount > 1 ? [`${t("floor.bills")}: ${party.billCount}`] : []),
     ];
     return parts.length === 0 ? nothing : html`<span class="party">${parts.join(" · ")}</span>`;
   }
@@ -835,14 +835,14 @@ export class TillFloorScreen extends LitElement {
           ${
             partyPaid(table)
               ? html`<span class="paid" data-paid>${t("floor.paid")}</span>`
-              : html`<span class="total">${table.visit?.outstanding ?? table.tabTotal} €</span>`
+              : html`<span class="total">${table.party?.outstanding ?? table.tabTotal} €</span>`
           }
           ${
             table.hasOpenTab
               ? html`<span class="lines">${table.tabLineCount} ${t("floor.line_count")}</span>`
               : nothing
           }
-          ${this.#party(table.visit)}
+          ${this.#party(table.party)}
         </span>`;
       case "delivery-pending":
         return html`<span class="occupancy delivery"

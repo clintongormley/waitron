@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { kitchenPrintJobs, kitchenStations, printJobs, visits } from "@waitron/db";
+import { kitchenPrintJobs, kitchenStations, printJobs, parties } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createPrinter, MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
@@ -10,7 +10,7 @@ import { createTable } from "./tables.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import "./errors.js";
 
-// The HTTP layer of `GET /api/visits/:id/print-problems`; what counts as a problem is pinned in
+// The HTTP layer of `GET /api/parties/:id/print-problems`; what counts as a problem is pinned in
 // `print-problems.test.ts`.
 let venue: BillVenue;
 let stationId: string;
@@ -44,13 +44,13 @@ async function tableWithFailedTicket() {
   );
   const seat = await send(venue.app, venue.cookie, "POST", `/api/tables/${tableId}/seat`, {});
   expect(seat.status).toBe(200);
-  const { visitId, tabId } = seat.json as unknown as { visitId: string; tabId: string };
-  const [visit] = await inTx(venue, (tx) =>
-    tx.select({ revision: visits.revision }).from(visits).where(eq(visits.id, visitId)),
+  const { partyId, tabId } = seat.json as unknown as { partyId: string; tabId: string };
+  const [party] = await inTx(venue, (tx) =>
+    tx.select({ revision: parties.revision }).from(parties).where(eq(parties.id, partyId)),
   );
-  const submitted = await send(venue.app, venue.cookie, "POST", `/api/visits/${visitId}/groups`, {
+  const submitted = await send(venue.app, venue.cookie, "POST", `/api/parties/${partyId}/groups`, {
     submissionId: randomUUID(),
-    expectedVisitRevision: visit!.revision,
+    expectedPartyRevision: party!.revision,
     groups: [{ lines: [{ menuItemId: venue.offerFor("Pulpo"), quantity: "1" }], release: "fire" }],
   });
   expect(submitted.status).toBe(200);
@@ -67,18 +67,18 @@ async function tableWithFailedTicket() {
       .where(eq(printJobs.id, link!.jobId))
       .returning({ createdAt: printJobs.createdAt }),
   );
-  return { visitId, tabId, since: job!.createdAt };
+  return { partyId, tabId, since: job!.createdAt };
 }
 
-describe("GET /api/visits/:id/print-problems", () => {
-  it("answers 200 with the visit's printing problems", async () => {
+describe("GET /api/parties/:id/print-problems", () => {
+  it("answers 200 with the party's printing problems", async () => {
     const table = await tableWithFailedTicket();
 
     const answer = await send(
       venue.app,
       venue.cookie,
       "GET",
-      `/api/visits/${table.visitId}/print-problems`,
+      `/api/parties/${table.partyId}/print-problems`,
     );
 
     expect(answer.status).toBe(200);
@@ -97,24 +97,24 @@ describe("GET /api/visits/:id/print-problems", () => {
   it("refuses 401 session.required without a session", async () => {
     const table = await tableWithFailedTicket();
 
-    const answer = await send(venue.app, "", "GET", `/api/visits/${table.visitId}/print-problems`);
+    const answer = await send(venue.app, "", "GET", `/api/parties/${table.partyId}/print-problems`);
 
     expect(answer.status).toBe(401);
     expect(answer.json).toMatchObject({ code: "session.required" });
   });
 
-  it.each([randomUUID(), "not-a-visit"])(
-    "refuses 409 visit.not_open for an unknown visit id: %s",
-    async (visitId) => {
+  it.each([randomUUID(), "not-a-party"])(
+    "refuses 409 party.not_open for an unknown party id: %s",
+    async (partyId) => {
       const answer = await send(
         venue.app,
         venue.cookie,
         "GET",
-        `/api/visits/${visitId}/print-problems`,
+        `/api/parties/${partyId}/print-problems`,
       );
 
       expect(answer.status).toBe(409);
-      expect(answer.json).toMatchObject({ code: "visit.not_open", params: { visitId } });
+      expect(answer.json).toMatchObject({ code: "party.not_open", params: { partyId } });
     },
   );
 });

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { visits, withTransaction } from "@waitron/db";
+import { parties, withTransaction } from "@waitron/db";
 import { loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -11,7 +11,7 @@ import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";
 
 // The HTTP layer of the draft routes: body parsing, the operator taken from the session, the draft
-// scoped to the visit in the path, and the status each refusal maps to. What the commands do is
+// scoped to the party in the path, and the status each refusal maps to. What the commands do is
 // pinned in `order-drafts.db.test.ts`.
 let venue: BillVenue;
 /** A second person's session: the provisioned administrator's. */
@@ -31,14 +31,14 @@ useVenueDb({
 });
 
 interface Seated {
-  visitId: string;
+  partyId: string;
   tabId: string;
   revision: number;
 }
 
 interface DraftAnswer {
   id: string;
-  visitId: string;
+  partyId: string;
   ownerId: string;
   ownerName: string;
   revision: number;
@@ -65,13 +65,13 @@ function admin(method: string, path: string, body?: unknown) {
 
 const dish = (name: string, quantity = "1") => ({ menuItemId: venue.offerFor(name), quantity });
 
-/** A new draft of the caller's on the visit, holding the lines. */
+/** A new draft of the caller's on the party, holding the lines. */
 async function newDraft(
   caller: typeof ana,
-  visitId: string,
+  partyId: string,
   lines: ReturnType<typeof dish>[],
 ): Promise<DraftAnswer> {
-  const saved = await caller("PUT", `/api/visits/${visitId}/drafts`, {
+  const saved = await caller("PUT", `/api/parties/${partyId}/drafts`, {
     draftId: null,
     revision: 0,
     lines,
@@ -80,18 +80,18 @@ async function newDraft(
   return saved.json as unknown as DraftAnswer;
 }
 
-async function revisionOf(visitId: string): Promise<number> {
+async function revisionOf(partyId: string): Promise<number> {
   const [row] = await inTx(venue, (tx) =>
-    tx.select({ revision: visits.revision }).from(visits).where(eq(visits.id, visitId)),
+    tx.select({ revision: parties.revision }).from(parties).where(eq(parties.id, partyId)),
   );
   return row!.revision;
 }
 
-async function submitBody(visitId: string, draft: DraftAnswer, lineIds = draft.lines) {
+async function submitBody(partyId: string, draft: DraftAnswer, lineIds = draft.lines) {
   return {
     submissionId: randomUUID(),
     draftRevision: draft.revision,
-    expectedVisitRevision: await revisionOf(visitId),
+    expectedPartyRevision: await revisionOf(partyId),
     groups: [{ lineIds: lineIds.map((line) => line.id), release: "fire" }],
   };
 }
@@ -114,14 +114,14 @@ function refusal(code: string, params?: Record<string, unknown>) {
   return params === undefined ? expect.objectContaining({ code }) : { code, params };
 }
 
-describe("GET /api/visits/:id/drafts", () => {
+describe("GET /api/parties/:id/drafts", () => {
   it("answers every open draft on the party, each person's, with the owner's name", async () => {
-    const visit = await seated();
-    const anas = await newDraft(ana, visit.visitId, [dish("Caña", "2")]);
-    const admins = await newDraft(admin, visit.visitId, [dish("Pulpo")]);
+    const party = await seated();
+    const anas = await newDraft(ana, party.partyId, [dish("Caña", "2")]);
+    const admins = await newDraft(admin, party.partyId, [dish("Pulpo")]);
 
-    const read = await ana("GET", `/api/visits/${visit.visitId}/drafts`);
-    const upper = await ana("GET", `/api/visits/${visit.visitId.toUpperCase()}/drafts`);
+    const read = await ana("GET", `/api/parties/${party.partyId}/drafts`);
+    const upper = await ana("GET", `/api/parties/${party.partyId.toUpperCase()}/drafts`);
 
     expect(read.status).toBe(200);
     const { drafts } = read.json as unknown as { drafts: DraftAnswer[] };
@@ -134,19 +134,19 @@ describe("GET /api/visits/:id/drafts", () => {
     expect(upper).toEqual(read);
   });
 
-  it("refuses 409 visit.not_open for an id that is not one", async () => {
-    const refused = await ana("GET", "/api/visits/not-a-uuid/drafts");
+  it("refuses 409 party.not_open for an id that is not one", async () => {
+    const refused = await ana("GET", "/api/parties/not-a-uuid/drafts");
 
     expect(refused.status).toBe(409);
-    expect(refused.json).toEqual(refusal("visit.not_open", { visitId: "not-a-uuid" }));
+    expect(refused.json).toEqual(refusal("party.not_open", { partyId: "not-a-uuid" }));
   });
 });
 
-describe("PUT /api/visits/:id/drafts", () => {
+describe("PUT /api/parties/:id/drafts", () => {
   it("saves the session's person's draft, whatever operator the body names", async () => {
-    const visit = await seated();
+    const party = await seated();
 
-    const saved = await ana("PUT", `/api/visits/${visit.visitId}/drafts`, {
+    const saved = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
       draftId: null,
       revision: 0,
       operatorId: venue.adminId,
@@ -155,7 +155,7 @@ describe("PUT /api/visits/:id/drafts", () => {
 
     expect(saved.status).toBe(200);
     expect(saved.json).toMatchObject({
-      visitId: visit.visitId,
+      partyId: party.partyId,
       ownerId: venue.operatorId,
       revision: 0,
       lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1.000", unavailable: false }],
@@ -163,8 +163,8 @@ describe("PUT /api/visits/:id/drafts", () => {
   });
 
   it("refuses 409 draft.taken_over for a save or a submit by someone other than the owner, writing nothing", async () => {
-    const visit = await seated();
-    const anas = await newDraft(ana, visit.visitId, [dish("Caña")]);
+    const party = await seated();
+    const anas = await newDraft(ana, party.partyId, [dish("Caña")]);
     const before = await snapshot();
     const taken = refusal("draft.taken_over", {
       draftId: anas.id,
@@ -172,16 +172,20 @@ describe("PUT /api/visits/:id/drafts", () => {
       ownerName: "Ana",
     });
 
-    const saved = await admin("PUT", `/api/visits/${visit.visitId}/drafts`, {
+    const saved = await admin("PUT", `/api/parties/${party.partyId}/drafts`, {
       draftId: anas.id,
       revision: anas.revision,
       operatorId: venue.operatorId,
       lines: [dish("Pulpo")],
     });
-    const submitted = await admin("POST", `/api/visits/${visit.visitId}/drafts/${anas.id}/submit`, {
-      ...(await submitBody(visit.visitId, anas)),
-      operatorId: venue.operatorId,
-    });
+    const submitted = await admin(
+      "POST",
+      `/api/parties/${party.partyId}/drafts/${anas.id}/submit`,
+      {
+        ...(await submitBody(party.partyId, anas)),
+        operatorId: venue.operatorId,
+      },
+    );
 
     expect(saved.status).toBe(409);
     expect(saved.json).toEqual(taken);
@@ -191,12 +195,12 @@ describe("PUT /api/visits/:id/drafts", () => {
   });
 });
 
-describe("POST /api/visits/:id/drafts/:did/take-over", () => {
+describe("POST /api/parties/:id/drafts/:did/take-over", () => {
   it("makes the session's person the owner, and refuses 409 draft.out_of_date for a stale revision and draft.already_submitted for a sent draft", async () => {
-    const visit = await seated();
-    const anas = await newDraft(ana, visit.visitId, [dish("Croquetas")]);
+    const party = await seated();
+    const anas = await newDraft(ana, party.partyId, [dish("Croquetas")]);
 
-    const taken = await admin("POST", `/api/visits/${visit.visitId}/drafts/${anas.id}/take-over`, {
+    const taken = await admin("POST", `/api/parties/${party.partyId}/drafts/${anas.id}/take-over`, {
       revision: anas.revision,
     });
 
@@ -208,7 +212,7 @@ describe("POST /api/visits/:id/drafts/:did/take-over", () => {
       revision: anas.revision + 1,
     });
     const before = await snapshot();
-    const stale = await ana("POST", `/api/visits/${visit.visitId}/drafts/${anas.id}/take-over`, {
+    const stale = await ana("POST", `/api/parties/${party.partyId}/drafts/${anas.id}/take-over`, {
       revision: anas.revision,
     });
     expect(stale.status).toBe(409);
@@ -219,12 +223,12 @@ describe("POST /api/visits/:id/drafts/:did/take-over", () => {
 
     const sent = await admin(
       "POST",
-      `/api/visits/${visit.visitId}/drafts/${anas.id}/submit`,
-      await submitBody(visit.visitId, admins),
+      `/api/parties/${party.partyId}/drafts/${anas.id}/submit`,
+      await submitBody(party.partyId, admins),
     );
     expect(sent.status).toBe(200);
     const afterSending = await snapshot();
-    const late = await ana("POST", `/api/visits/${visit.visitId}/drafts/${anas.id}/take-over`, {
+    const late = await ana("POST", `/api/parties/${party.partyId}/drafts/${anas.id}/take-over`, {
       revision: admins.revision + 1,
     });
     expect(late.status).toBe(409);
@@ -233,26 +237,26 @@ describe("POST /api/visits/:id/drafts/:did/take-over", () => {
   });
 });
 
-describe("POST /api/visits/:id/drafts/:did/submit", () => {
+describe("POST /api/parties/:id/drafts/:did/submit", () => {
   it("sends the named lines as groups, answers the groups and the draft left, and replays a retry with the first answer", async () => {
-    const visit = await seated();
-    const anas = await newDraft(ana, visit.visitId, [dish("Caña"), dish("Pulpo")]);
-    const body = await submitBody(visit.visitId, anas, [anas.lines[0]!]);
+    const party = await seated();
+    const anas = await newDraft(ana, party.partyId, [dish("Caña"), dish("Pulpo")]);
+    const body = await submitBody(party.partyId, anas, [anas.lines[0]!]);
 
-    const first = await ana("POST", `/api/visits/${visit.visitId}/drafts/${anas.id}/submit`, body);
+    const first = await ana("POST", `/api/parties/${party.partyId}/drafts/${anas.id}/submit`, body);
 
     expect(first.status).toBe(200);
     expect(first.json).toMatchObject({
-      tabId: visit.tabId,
-      revision: visit.revision + 1,
+      tabId: party.tabId,
+      revision: party.revision + 1,
       groups: [{ state: "fired", summary: "1 × Caña" }],
       draft: { id: anas.id, revision: anas.revision + 1, lines: [anas.lines[1]] },
     });
     const before = await snapshot();
-    // The retry spells both ids in upper case: the path's visit is folded as it is stored.
+    // The retry spells both ids in upper case: the path's party is folded as it is stored.
     const again = await ana(
       "POST",
-      `/api/visits/${visit.visitId.toUpperCase()}/drafts/${anas.id.toUpperCase()}/submit`,
+      `/api/parties/${party.partyId.toUpperCase()}/drafts/${anas.id.toUpperCase()}/submit`,
       body,
     );
     expect(again.status).toBe(200);
@@ -261,16 +265,16 @@ describe("POST /api/visits/:id/drafts/:did/submit", () => {
   });
 
   it("adds the lines to the held group joinGroupId names", async () => {
-    const visit = await seated();
-    const anas = await newDraft(ana, visit.visitId, [dish("Tarta"), dish("Croquetas")]);
-    const held = await ana("POST", `/api/visits/${visit.visitId}/drafts/${anas.id}/submit`, {
-      ...(await submitBody(visit.visitId, anas, [anas.lines[0]!])),
+    const party = await seated();
+    const anas = await newDraft(ana, party.partyId, [dish("Tarta"), dish("Croquetas")]);
+    const held = await ana("POST", `/api/parties/${party.partyId}/drafts/${anas.id}/submit`, {
+      ...(await submitBody(party.partyId, anas, [anas.lines[0]!])),
       groups: [{ lineIds: [anas.lines[0]!.id], release: "hold" }],
     });
     const heldAnswer = held.json as unknown as { groups: { id: string }[]; draft: DraftAnswer };
 
-    const joined = await ana("POST", `/api/visits/${visit.visitId}/drafts/${anas.id}/submit`, {
-      ...(await submitBody(visit.visitId, heldAnswer.draft)),
+    const joined = await ana("POST", `/api/parties/${party.partyId}/drafts/${anas.id}/submit`, {
+      ...(await submitBody(party.partyId, heldAnswer.draft)),
       groups: [{ lineIds: [anas.lines[1]!.id], release: "hold" }],
       joinGroupId: heldAnswer.groups[0]!.id,
     });
@@ -287,25 +291,25 @@ describe("a draft named on another party", () => {
   it("is refused 404 draft.not_found by the save, the take-over and the submit, as is an id that is not one", async () => {
     const mesa4 = await seated();
     const mesa5 = await seated();
-    const anas = await newDraft(ana, mesa4.visitId, [dish("Caña")]);
+    const anas = await newDraft(ana, mesa4.partyId, [dish("Caña")]);
     const before = await snapshot();
 
     const answers = [
-      await ana("PUT", `/api/visits/${mesa5.visitId}/drafts`, {
+      await ana("PUT", `/api/parties/${mesa5.partyId}/drafts`, {
         draftId: anas.id,
         revision: anas.revision,
         lines: [],
       }),
-      await admin("POST", `/api/visits/${mesa5.visitId}/drafts/${anas.id}/take-over`, {
+      await admin("POST", `/api/parties/${mesa5.partyId}/drafts/${anas.id}/take-over`, {
         revision: anas.revision,
       }),
       await ana(
         "POST",
-        `/api/visits/${mesa5.visitId}/drafts/${anas.id}/submit`,
-        await submitBody(mesa5.visitId, anas),
+        `/api/parties/${mesa5.partyId}/drafts/${anas.id}/submit`,
+        await submitBody(mesa5.partyId, anas),
       ),
     ];
-    const notAnId = await admin("POST", `/api/visits/${mesa4.visitId}/drafts/draft-1/take-over`, {
+    const notAnId = await admin("POST", `/api/parties/${mesa4.partyId}/drafts/draft-1/take-over`, {
       revision: 0,
     });
 
@@ -319,14 +323,14 @@ describe("a draft named on another party", () => {
   });
 
   it("refuses 404 draft.not_found for a submit to an id that is not one, even under a submission id the party has used", async () => {
-    const visit = await seated();
-    const anas = await newDraft(ana, visit.visitId, [dish("Caña"), dish("Pulpo")]);
-    const body = await submitBody(visit.visitId, anas, [anas.lines[0]!]);
-    const sent = await ana("POST", `/api/visits/${visit.visitId}/drafts/${anas.id}/submit`, body);
+    const party = await seated();
+    const anas = await newDraft(ana, party.partyId, [dish("Caña"), dish("Pulpo")]);
+    const body = await submitBody(party.partyId, anas, [anas.lines[0]!]);
+    const sent = await ana("POST", `/api/parties/${party.partyId}/drafts/${anas.id}/submit`, body);
     expect(sent.status).toBe(200);
     const before = await snapshot();
 
-    const refused = await ana("POST", `/api/visits/${visit.visitId}/drafts/draft-1/submit`, body);
+    const refused = await ana("POST", `/api/parties/${party.partyId}/drafts/draft-1/submit`, body);
 
     expect(refused.status).toBe(404);
     expect(refused.json).toEqual(refusal("draft.not_found", { draftId: "draft-1" }));
@@ -350,11 +354,11 @@ describe("a malformed body", () => {
   ] as const)(
     "refuses a save 400 management.request_invalid naming %s for %j",
     async (field, body) => {
-      const visit = await seated();
-      await newDraft(ana, visit.visitId, [dish("Caña")]);
+      const party = await seated();
+      await newDraft(ana, party.partyId, [dish("Caña")]);
       const before = await snapshot();
 
-      const refused = await admin("PUT", `/api/visits/${visit.visitId}/drafts`, body);
+      const refused = await admin("PUT", `/api/parties/${party.partyId}/drafts`, body);
 
       expect(refused.status).toBe(400);
       expect(refused.json).toEqual(refusal("management.request_invalid", { field }));
@@ -370,13 +374,13 @@ describe("a malformed body", () => {
   ] as const)(
     "refuses a take-over 400 management.request_invalid naming %s for %j",
     async (field, body) => {
-      const visit = await seated();
-      const anas = await newDraft(ana, visit.visitId, [dish("Caña")]);
+      const party = await seated();
+      const anas = await newDraft(ana, party.partyId, [dish("Caña")]);
       const before = await snapshot();
 
       const refused = await admin(
         "POST",
-        `/api/visits/${visit.visitId}/drafts/${anas.id}/take-over`,
+        `/api/parties/${party.partyId}/drafts/${anas.id}/take-over`,
         body,
       );
 
@@ -386,13 +390,13 @@ describe("a malformed body", () => {
     },
   );
 
-  const valid = { submissionId: "s", draftRevision: 0, expectedVisitRevision: 0 };
+  const valid = { submissionId: "s", draftRevision: 0, expectedPartyRevision: 0 };
   it.each([
     ["body", null],
     ["submissionId", { ...valid, submissionId: undefined, groups: [] }],
     ["draftRevision", { ...valid, draftRevision: 0.5, groups: [] }],
     ["draftRevision", { ...valid, draftRevision: undefined, groups: [] }],
-    ["expectedVisitRevision", { ...valid, expectedVisitRevision: "0", groups: [] }],
+    ["expectedPartyRevision", { ...valid, expectedPartyRevision: "0", groups: [] }],
     ["groups", { ...valid, groups: {} }],
     ["groups", { ...valid, groups: [null] }],
     ["lineIds", { ...valid, groups: [{ release: "fire" }] }],
@@ -404,13 +408,13 @@ describe("a malformed body", () => {
   ] as const)(
     "refuses a submit 400 management.request_invalid naming %s for %j",
     async (field, body) => {
-      const visit = await seated();
-      const anas = await newDraft(ana, visit.visitId, [dish("Caña")]);
+      const party = await seated();
+      const anas = await newDraft(ana, party.partyId, [dish("Caña")]);
       const before = await snapshot();
 
       const refused = await ana(
         "POST",
-        `/api/visits/${visit.visitId}/drafts/${anas.id}/submit`,
+        `/api/parties/${party.partyId}/drafts/${anas.id}/submit`,
         body,
       );
 
@@ -438,19 +442,19 @@ describe("a line's answers of the wrong shape", () => {
   ] as const)(
     "refuses a save 400 %s naming %s, as a group submission pricing the same line does",
     async (code, field, answers) => {
-      const visit = await seated();
-      await newDraft(ana, visit.visitId, [dish("Caña")]);
+      const party = await seated();
+      await newDraft(ana, party.partyId, [dish("Caña")]);
       const before = await snapshot();
       const line = { ...dish("Caña"), ...answers };
 
-      const saved = await admin("PUT", `/api/visits/${visit.visitId}/drafts`, {
+      const saved = await admin("PUT", `/api/parties/${party.partyId}/drafts`, {
         draftId: null,
         revision: 0,
         lines: [line],
       });
-      const priced = await ana("POST", `/api/visits/${visit.visitId}/groups`, {
+      const priced = await ana("POST", `/api/parties/${party.partyId}/groups`, {
         submissionId: randomUUID(),
-        expectedVisitRevision: await revisionOf(visit.visitId),
+        expectedPartyRevision: await revisionOf(party.partyId),
         groups: [{ lines: [line], release: "fire" }],
       });
 

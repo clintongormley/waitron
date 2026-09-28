@@ -1329,7 +1329,7 @@ describe("TillApi", () => {
         posY: 400,
         shape: "round",
         rotation: 15,
-        visit: null,
+        party: null,
       },
       {
         id: "t2",
@@ -1350,7 +1350,7 @@ describe("TillApi", () => {
         posY: null,
         shape: null,
         rotation: null,
-        visit: null,
+        party: null,
       },
     ];
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(rows));
@@ -1558,11 +1558,11 @@ describe("TillApi", () => {
     const fetchStub = vi
       .fn()
       .mockResolvedValue(
-        new Response(JSON.stringify({ visit: { id: "v1", revision: 4 } }), { status: 200 }),
+        new Response(JSON.stringify({ party: { id: "v1", revision: 4 } }), { status: 200 }),
       );
 
     await expect(new TillApi("", fetchStub).voidLine("ord-1", 2)).resolves.toEqual({
-      visit: { id: "v1", revision: 4 },
+      party: { id: "v1", revision: 4 },
     });
 
     expect(fetchStub).toHaveBeenCalledWith(
@@ -1577,7 +1577,7 @@ describe("TillApi", () => {
   it("voidLine with a quantity voids that part only, as a query parameter", async () => {
     const fetchStub = vi
       .fn()
-      .mockResolvedValue(new Response(JSON.stringify({ visit: null }), { status: 200 }));
+      .mockResolvedValue(new Response(JSON.stringify({ party: null }), { status: 200 }));
 
     await new TillApi("", fetchStub).voidLine("ord-1", 2, "1.5");
 
@@ -1589,7 +1589,7 @@ describe("TillApi", () => {
 
   it("updateOrderLine PUTs the changed fields of one line with the revision it was read at, and resolves the one the server answers", async () => {
     const fetchStub = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ revision: 8, visit: { id: "v1", revision: 5 } }), {
+      new Response(JSON.stringify({ revision: 8, party: { id: "v1", revision: 5 } }), {
         status: 200,
       }),
     );
@@ -1601,7 +1601,7 @@ describe("TillApi", () => {
         { quantity: "2", note: null, extras: [] },
         7,
       ),
-    ).resolves.toEqual({ revision: 8, visit: { id: "v1", revision: 5 } });
+    ).resolves.toEqual({ revision: 8, party: { id: "v1", revision: 5 } });
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/working-orders/ord-1/lines/3",
@@ -2060,7 +2060,7 @@ describe("TillApi: a seated party", () => {
     });
 
   it("seatTable POSTs the guest count to the table's /seat route and returns the party and its tab", async () => {
-    const answer = { visitId: "v1", tabId: "wo-1", revision: 0, orderNumber: 12 };
+    const answer = { partyId: "v1", tabId: "wo-1", revision: 0, orderNumber: 12 };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
 
     await expect(new TillApi("", fetchStub).seatTable("tbl-1", 3)).resolves.toEqual(answer);
@@ -2069,7 +2069,7 @@ describe("TillApi: a seated party", () => {
   });
 
   it("seatTable sends an explicit null when no guest count was given", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ visitId: "v1", tabId: "wo-1" }));
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ partyId: "v1", tabId: "wo-1" }));
 
     await new TillApi("", fetchStub).seatTable("tbl-1", null);
 
@@ -2084,18 +2084,18 @@ describe("TillApi: a seated party", () => {
     });
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/visits/v1/finish",
-      post({ expectedVisitRevision: 4 }),
+      "/api/parties/v1/finish",
+      post({ expectedPartyRevision: 4 }),
     );
   });
 
   it("finishTable surfaces the unpaid-bill refusal as { code }", async () => {
     const fetchStub = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ error: { code: "visit.bill_outstanding" } }, 409));
+      .mockResolvedValue(jsonResponse({ error: { code: "party.bill_outstanding" } }, 409));
 
     await expect(new TillApi("", fetchStub).finishTable("v1", 4)).rejects.toMatchObject({
-      code: "visit.bill_outstanding",
+      code: "party.bill_outstanding",
       status: 409,
     });
   });
@@ -2106,16 +2106,16 @@ describe("TillApi: a seated party", () => {
     await expect(new TillApi("", fetchStub).markCleared("v1", 5)).resolves.toBeUndefined();
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/visits/v1/cleared",
-      post({ expectedVisitRevision: 5 }),
+      "/api/parties/v1/cleared",
+      post({ expectedPartyRevision: 5 }),
     );
   });
 
-  it("getVisitBills GETs the party's bills", async () => {
+  it("getPartyBills GETs the party's bills", async () => {
     const bills = [
       {
         workingOrderId: "wo-1",
-        visitId: "v1",
+        partyId: "v1",
         label: null,
         status: "settled",
         total: "14.00",
@@ -2125,10 +2125,10 @@ describe("TillApi: a seated party", () => {
     ];
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(bills));
 
-    await expect(new TillApi("", fetchStub).getVisitBills("v1")).resolves.toEqual(bills);
+    await expect(new TillApi("", fetchStub).getPartyBills("v1")).resolves.toEqual(bills);
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/visits/v1/bills",
+      "/api/parties/v1/bills",
       expect.objectContaining({ method: "GET" }),
     );
   });
@@ -2163,7 +2163,7 @@ describe("TillApi: a seated party", () => {
     });
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/visits/v1/groups",
+      "/api/parties/v1/groups",
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
   });
@@ -2173,7 +2173,7 @@ describe("TillApi: a seated party", () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
     const body = {
       submissionId: "sub-1",
-      expectedVisitRevision: 6,
+      expectedPartyRevision: 6,
       groups: [
         { lines: [{ menuItemId: "mi-cana", quantity: "2" }], release: "fire" as const },
         {
@@ -2188,7 +2188,7 @@ describe("TillApi: a seated party", () => {
 
     await expect(new TillApi("", fetchStub).submitGroups("v1", body)).resolves.toEqual(answer);
 
-    expect(fetchStub).toHaveBeenCalledWith("/api/visits/v1/groups", post(body));
+    expect(fetchStub).toHaveBeenCalledWith("/api/parties/v1/groups", post(body));
   });
 
   it("submitGroups sends joinGroupId when adding to a held group", async () => {
@@ -2197,28 +2197,28 @@ describe("TillApi: a seated party", () => {
       .mockResolvedValue(jsonResponse({ tabId: "wo-1", revision: 8, groups }));
     const body = {
       submissionId: "sub-2",
-      expectedVisitRevision: 7,
+      expectedPartyRevision: 7,
       groups: [{ lines: [{ menuItemId: "mi-tarta", quantity: "1" }], release: "hold" as const }],
       joinGroupId: "g2",
     };
 
     await new TillApi("", fetchStub).submitGroups("v1", body);
 
-    expect(fetchStub).toHaveBeenCalledWith("/api/visits/v1/groups", post(body));
+    expect(fetchStub).toHaveBeenCalledWith("/api/parties/v1/groups", post(body));
   });
 
   it("submitGroups surfaces a stale revision as { code }", async () => {
     const fetchStub = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ error: { code: "visit.out_of_date" } }, 409));
+      .mockResolvedValue(jsonResponse({ error: { code: "party.out_of_date" } }, 409));
 
     await expect(
       new TillApi("", fetchStub).submitGroups("v1", {
         submissionId: "sub-3",
-        expectedVisitRevision: 1,
+        expectedPartyRevision: 1,
         groups: [{ lines: [{ menuItemId: "mi-tarta", quantity: "1" }], release: "fire" }],
       }),
-    ).rejects.toMatchObject({ code: "visit.out_of_date", status: 409 });
+    ).rejects.toMatchObject({ code: "party.out_of_date", status: 409 });
   });
 
   it.each([
@@ -2233,13 +2233,13 @@ describe("TillApi: a seated party", () => {
       await expect(
         new TillApi("", fetchStub)[method]("v1", items, {
           submissionId: "sub-1",
-          expectedVisitRevision: 4,
+          expectedPartyRevision: 4,
         }),
       ).resolves.toEqual({ revision: 5 });
 
       expect(fetchStub).toHaveBeenCalledWith(
-        `/api/visits/v1/${path}`,
-        post({ submissionId: "sub-1", expectedVisitRevision: 4, items }),
+        `/api/parties/v1/${path}`,
+        post({ submissionId: "sub-1", expectedPartyRevision: 4, items }),
       );
     },
   );
@@ -2250,13 +2250,13 @@ describe("TillApi: a seated party", () => {
     await expect(
       new TillApi("", fetchStub).markGroupServed("v1", "g2", {
         submissionId: "sub-2",
-        expectedVisitRevision: 6,
+        expectedPartyRevision: 6,
       }),
     ).resolves.toEqual({ revision: 7 });
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/visits/v1/groups/g2/served",
-      post({ submissionId: "sub-2", expectedVisitRevision: 6 }),
+      "/api/parties/v1/groups/g2/served",
+      post({ submissionId: "sub-2", expectedPartyRevision: 6 }),
     );
   });
 
@@ -2266,13 +2266,13 @@ describe("TillApi: a seated party", () => {
     await expect(
       new TillApi("", fetchStub).snoozeGroup("v1", "g3", 5, {
         submissionId: "sub-6",
-        expectedVisitRevision: 7,
+        expectedPartyRevision: 7,
       }),
     ).resolves.toEqual({ revision: 8 });
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/visits/v1/groups/g3/snooze",
-      post({ submissionId: "sub-6", expectedVisitRevision: 7, minutes: 5 }),
+      "/api/parties/v1/groups/g3/snooze",
+      post({ submissionId: "sub-6", expectedPartyRevision: 7, minutes: 5 }),
     );
   });
 
@@ -2313,7 +2313,7 @@ describe("TillApi: a seated party", () => {
     await expect(new TillApi("", fetchStub).readCurrentOrders("v1")).resolves.toEqual(answer);
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/visits/v1/current-orders",
+      "/api/parties/v1/current-orders",
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
   });
@@ -2326,7 +2326,7 @@ describe("TillApi: a seated party", () => {
     await expect(
       new TillApi("", fetchStub).markServed("v1", [{ lineId: "line-2", quantity: "9" }], {
         submissionId: "sub-3",
-        expectedVisitRevision: 4,
+        expectedPartyRevision: 4,
       }),
     ).rejects.toMatchObject({ code: "tab.serve_quantity_invalid", status: 400 });
   });
@@ -2337,13 +2337,13 @@ describe("TillApi: a seated party", () => {
     await expect(
       new TillApi("", fetchStub).fireGroup("v1", "g2", {
         submissionId: "sub-4",
-        expectedVisitRevision: 8,
+        expectedPartyRevision: 8,
       }),
     ).resolves.toEqual({ revision: 9 });
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/visits/v1/groups/g2/fire",
-      post({ submissionId: "sub-4", expectedVisitRevision: 8 }),
+      "/api/parties/v1/groups/g2/fire",
+      post({ submissionId: "sub-4", expectedPartyRevision: 8 }),
     );
   });
 
@@ -2355,7 +2355,7 @@ describe("TillApi: a seated party", () => {
     await expect(
       new TillApi("", fetchStub).fireGroup("v1", "g1", {
         submissionId: "sub-5",
-        expectedVisitRevision: 8,
+        expectedPartyRevision: 8,
       }),
     ).rejects.toMatchObject({ code: "group.not_held", status: 409 });
   });
@@ -2371,13 +2371,13 @@ describe("TillApi: a seated party", () => {
       await expect(
         new TillApi("", fetchStub)[method]("v1", "g2", {
           submissionId: "sub-9",
-          expectedVisitRevision: 10,
+          expectedPartyRevision: 10,
         }),
       ).resolves.toEqual({ revision: 11 });
 
       expect(fetchStub).toHaveBeenCalledWith(
-        `/api/visits/v1/groups/g2/${step}`,
-        post({ submissionId: "sub-9", expectedVisitRevision: 10 }),
+        `/api/parties/v1/groups/g2/${step}`,
+        post({ submissionId: "sub-9", expectedPartyRevision: 10 }),
       );
     },
   );
@@ -2385,14 +2385,14 @@ describe("TillApi: a seated party", () => {
   it("markGroupAway surfaces a stale revision as { code }", async () => {
     const fetchStub = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ error: { code: "visit.out_of_date" } }, 409));
+      .mockResolvedValue(jsonResponse({ error: { code: "party.out_of_date" } }, 409));
 
     await expect(
       new TillApi("", fetchStub).markGroupAway("v1", "g2", {
         submissionId: "sub-10",
-        expectedVisitRevision: 3,
+        expectedPartyRevision: 3,
       }),
-    ).rejects.toMatchObject({ code: "visit.out_of_date", status: 409 });
+    ).rejects.toMatchObject({ code: "party.out_of_date", status: 409 });
   });
 
   it("listPrintProblems GETs the party's kitchen tickets that have not printed", async () => {
@@ -2411,7 +2411,7 @@ describe("TillApi: a seated party", () => {
     });
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/visits/v1/print-problems",
+      "/api/parties/v1/print-problems",
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
   });
@@ -2422,19 +2422,19 @@ describe("TillApi: a seated party", () => {
     await expect(
       new TillApi("", fetchStub).reorderGroups("v1", ["g3", "g2"], {
         submissionId: "sub-6",
-        expectedVisitRevision: 9,
+        expectedPartyRevision: 9,
       }),
     ).resolves.toEqual({ revision: 10 });
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/visits/v1/groups/order",
+      "/api/parties/v1/groups/order",
       expect.objectContaining({
         method: "PUT",
         credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           submissionId: "sub-6",
-          expectedVisitRevision: 9,
+          expectedPartyRevision: 9,
           heldGroupIds: ["g3", "g2"],
         }),
       }),
@@ -2456,77 +2456,77 @@ describe("TillApi: a seated party", () => {
         { groupId: "g3" },
         {
           submissionId: "sub-7",
-          expectedVisitRevision: 10,
+          expectedPartyRevision: 10,
         },
       ),
     ).resolves.toEqual({ revision: 11 });
     await expect(
       api.moveLinesToGroup("v1", moves, "new", {
         submissionId: "sub-8",
-        expectedVisitRevision: 11,
+        expectedPartyRevision: 11,
       }),
     ).resolves.toEqual({ revision: 12 });
 
     expect(fetchStub).toHaveBeenNthCalledWith(
       1,
-      "/api/visits/v1/groups/move",
-      post({ submissionId: "sub-7", expectedVisitRevision: 10, moves, target: { groupId: "g3" } }),
+      "/api/parties/v1/groups/move",
+      post({ submissionId: "sub-7", expectedPartyRevision: 10, moves, target: { groupId: "g3" } }),
     );
     expect(fetchStub).toHaveBeenNthCalledWith(
       2,
-      "/api/visits/v1/groups/move",
-      post({ submissionId: "sub-8", expectedVisitRevision: 11, moves, target: "new" }),
+      "/api/parties/v1/groups/move",
+      post({ submissionId: "sub-8", expectedPartyRevision: 11, moves, target: "new" }),
     );
   });
 
   it.each([
     [
       "moveTab",
-      (api: TillApi) => api.moveTab("wo-1", "tbl-9", { expectedVisitRevision: 3 }),
+      (api: TillApi) => api.moveTab("wo-1", "tbl-9", { expectedPartyRevision: 3 }),
       "/api/tabs/wo-1/move",
-      { toTableId: "tbl-9", expectedVisitRevision: 3 },
+      { toTableId: "tbl-9", expectedPartyRevision: 3 },
     ],
     [
       "joinTable",
-      (api: TillApi) => api.joinTable("wo-1", "tbl-9", { expectedVisitRevision: 3 }),
+      (api: TillApi) => api.joinTable("wo-1", "tbl-9", { expectedPartyRevision: 3 }),
       "/api/tabs/wo-1/join",
-      { tableId: "tbl-9", expectedVisitRevision: 3 },
+      { tableId: "tbl-9", expectedPartyRevision: 3 },
     ],
     [
       "mergeTabs",
       (api: TillApi) =>
         api.mergeTabs("wo-into", "wo-from", true, {
-          expectedVisitRevision: 3,
-          expectedSourceVisitRevision: 7,
+          expectedPartyRevision: 3,
+          expectedSourcePartyRevision: 7,
         }),
       "/api/tabs/wo-into/merge",
       {
         fromTabId: "wo-from",
         freeSourceTable: true,
-        expectedVisitRevision: 3,
-        expectedSourceVisitRevision: 7,
+        expectedPartyRevision: 3,
+        expectedSourcePartyRevision: 7,
       },
     ],
     [
       "transferLines",
       (api: TillApi) =>
         api.transferLines("wo-src", "wo-dst", [{ lineNo: 1 }], {
-          expectedVisitRevision: 7,
-          expectedSourceVisitRevision: 3,
+          expectedPartyRevision: 7,
+          expectedSourcePartyRevision: 3,
         }),
       "/api/tabs/wo-src/transfer",
       {
         toTabId: "wo-dst",
         transfers: [{ lineNo: 1 }],
-        expectedVisitRevision: 7,
-        expectedSourceVisitRevision: 3,
+        expectedPartyRevision: 7,
+        expectedSourcePartyRevision: 3,
       },
     ],
     [
       "splitTab",
-      (api: TillApi) => api.splitTab("wo-7", [{ lineNo: 1 }], { expectedVisitRevision: 3 }),
+      (api: TillApi) => api.splitTab("wo-7", [{ lineNo: 1 }], { expectedPartyRevision: 3 }),
       "/api/tabs/wo-7/split",
-      { transfers: [{ lineNo: 1 }], expectedVisitRevision: 3 },
+      { transfers: [{ lineNo: 1 }], expectedPartyRevision: 3 },
     ],
   ] as const)("%s sends the party revisions it was given", async (_name, call, path, body) => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ checkId: "c1" }));
@@ -2559,7 +2559,7 @@ describe("TillApi: a party's drafts", () => {
   };
   const draft = {
     id: "d1",
-    visitId: "v1",
+    partyId: "v1",
     ownerId: "p-alex",
     ownerName: "Alex",
     revision: 1,
@@ -2586,7 +2586,7 @@ describe("TillApi: a party's drafts", () => {
     await expect(new TillApi("", fetchStub).listDrafts("v1")).resolves.toEqual([draft]);
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/visits/v1/drafts",
+      "/api/parties/v1/drafts",
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
   });
@@ -2599,7 +2599,7 @@ describe("TillApi: a party's drafts", () => {
     ).resolves.toEqual(draft);
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/visits/v1/drafts",
+      "/api/parties/v1/drafts",
       send("PUT", { draftId: null, revision: 0, lines: [beer] }),
     );
   });
@@ -2610,7 +2610,7 @@ describe("TillApi: a party's drafts", () => {
     await new TillApi("", fetchStub).saveDraft("v1", { draftId: "d1", revision: 1, lines: [] });
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/visits/v1/drafts",
+      "/api/parties/v1/drafts",
       send("PUT", { draftId: "d1", revision: 1, lines: [] }),
     );
   });
@@ -2661,7 +2661,7 @@ describe("TillApi: a party's drafts", () => {
     await expect(new TillApi("", fetchStub).takeOverDraft("v1", "d1", 1)).resolves.toEqual(taken);
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/visits/v1/drafts/d1/take-over",
+      "/api/parties/v1/drafts/d1/take-over",
       send("POST", { revision: 1 }),
     );
   });
@@ -2695,7 +2695,7 @@ describe("TillApi: a party's drafts", () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
     const body = {
       submissionId: "sub-1",
-      expectedVisitRevision: 4,
+      expectedPartyRevision: 4,
       draftRevision: 2,
       groups: [
         { lineIds: ["dl-1"], release: "fire" as const },
@@ -2705,7 +2705,7 @@ describe("TillApi: a party's drafts", () => {
 
     await expect(new TillApi("", fetchStub).submitDraft("v1", "d1", body)).resolves.toEqual(answer);
 
-    expect(fetchStub).toHaveBeenCalledWith("/api/visits/v1/drafts/d1/submit", send("POST", body));
+    expect(fetchStub).toHaveBeenCalledWith("/api/parties/v1/drafts/d1/submit", send("POST", body));
   });
 
   it("submitDraft sends joinGroupId when adding to a held group, and the caller's abort signal", async () => {
@@ -2714,7 +2714,7 @@ describe("TillApi: a party's drafts", () => {
       .mockResolvedValue(jsonResponse({ tabId: "wo-1", revision: 6, groups: [], draft }));
     const body = {
       submissionId: "sub-2",
-      expectedVisitRevision: 5,
+      expectedPartyRevision: 5,
       draftRevision: 3,
       groups: [{ lineIds: ["dl-1"], release: "hold" as const }],
       joinGroupId: "g2",
@@ -2724,7 +2724,7 @@ describe("TillApi: a party's drafts", () => {
     await new TillApi("", fetchStub).submitDraft("v1", "d1", body, { signal });
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/visits/v1/drafts/d1/submit",
+      "/api/parties/v1/drafts/d1/submit",
       expect.objectContaining({ method: "POST", body: JSON.stringify(body), signal }),
     );
   });
@@ -2732,16 +2732,16 @@ describe("TillApi: a party's drafts", () => {
   it("submitDraft surfaces a stale party as { code }", async () => {
     const fetchStub = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ error: { code: "visit.out_of_date" } }, 409));
+      .mockResolvedValue(jsonResponse({ error: { code: "party.out_of_date" } }, 409));
 
     await expect(
       new TillApi("", fetchStub).submitDraft("v1", "d1", {
         submissionId: "sub-3",
-        expectedVisitRevision: 1,
+        expectedPartyRevision: 1,
         draftRevision: 2,
         groups: [{ lineIds: ["dl-1"], release: "fire" }],
       }),
-    ).rejects.toMatchObject({ code: "visit.out_of_date", status: 409 });
+    ).rejects.toMatchObject({ code: "party.out_of_date", status: 409 });
   });
 });
 

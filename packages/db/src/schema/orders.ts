@@ -22,7 +22,7 @@ import { kitchenCourses } from "./kitchen-courses.js";
 import { nodes } from "./nodes.js";
 import { orderGroups } from "./order-groups.js";
 import { tills } from "./tenants.js";
-import { visits } from "./visits.js";
+import { parties } from "./parties.js";
 
 export const workingOrderStatus = enumType([
   "open",
@@ -48,7 +48,8 @@ export const workingOrderStatus = enumType([
  *
  * That trigger names every column of this table except `status` and
  * `collected_at`, so a column added here goes into its list too, by a migration
- * that re-creates it (the latest: `drizzle/0019_settled_order_freeze_visit_id.sql`).
+ * that re-creates it. The latest text is `drizzle/0019_settled_order_freeze_visit_id.sql`'s with
+ * `visit_id` renamed `party_id` by `drizzle/0036_party_rename.sql`, so a re-creation uses `party_id`.
  */
 export const workingOrders = table(
   "working_orders",
@@ -82,7 +83,7 @@ export const workingOrders = table(
     revision: count("revision").notNull().default(0),
     paymentAttemptAt: tsString("payment_attempt_at"),
     // The seated party this bill belongs to; a counter order has none.
-    visitId: id("visit_id"),
+    partyId: id("party_id"),
   },
   (t) => [
     index("working_orders_tenant_status_idx").on(t.status),
@@ -92,11 +93,11 @@ export const workingOrders = table(
       name: "working_orders_node_fk",
     }),
     foreignKey({
-      columns: [t.visitId],
-      foreignColumns: [visits.id],
-      name: "working_orders_visit_fk",
+      columns: [t.partyId],
+      foreignColumns: [parties.id],
+      name: "working_orders_party_fk",
     }),
-    index("working_orders_visit_idx").on(t.visitId),
+    index("working_orders_party_idx").on(t.partyId),
     check("working_orders_status_ck", enumCheck(t.status)),
     // Biconditional, not two one-way checks: a settled order always carries a
     // timestamp and a non-settled one never does.
@@ -177,8 +178,8 @@ export const workingOrderLines = table(
     // The product's reporting chain and labels when the line was added; issuance copies it onto
     // `sale_lines.classification`.
     classification: json<SaleLineClassification>("classification"),
-    // The visit's group the line is released with; an extras child carries its dish's. Null on a
-    // bill with no visit.
+    // The party's group the line is released with; an extras child carries its dish's. Null on a
+    // bill with no party.
     groupId: id("group_id"),
     // Whose sale the line counts as. A plain person id with no key: `persons` is in
     // @waitron/identity's migration set, not the core one.

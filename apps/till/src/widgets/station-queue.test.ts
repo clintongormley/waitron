@@ -1372,7 +1372,7 @@ const partyOrder: StationQueueGroup = {
   queuedAt: "2026-08-17T10:00:00.000Z",
   status: "open",
   thresholds: DEFAULT_THRESHOLDS,
-  visit: { id: "v-4", revision: 12 },
+  party: { id: "v-4", revision: 12 },
   items: [
     {
       id: "it-steak",
@@ -1482,7 +1482,7 @@ describe("till-station-queue — a seated party's groups", () => {
     let captured: CustomEvent | undefined;
     el.addEventListener("fire-kitchen-group", (e) => (captured = e as CustomEvent));
     fires[0]!.click();
-    expect(captured!.detail).toEqual({ visitId: "v-4", groupId: "g-3", expectedVisitRevision: 12 });
+    expect(captured!.detail).toEqual({ partyId: "v-4", groupId: "g-3", expectedPartyRevision: 12 });
     expect(captured!.composed).toBe(true);
     expect(captured!.bubbles).toBe(true);
   });

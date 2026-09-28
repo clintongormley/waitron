@@ -94,7 +94,7 @@ import type {
   TabTransfer,
   TableServiceStatus,
   TableState,
-  TableVisit,
+  TableParty,
   TicketState,
   TillActiveReader,
   TillCourse,
@@ -104,8 +104,8 @@ import type {
   TillMenuOffer,
   TillProduct,
   TillSaleResult,
-  VisitBill,
-  VisitRevisions,
+  PartyBill,
+  PartyRevisions,
   TillZoneMenu,
   ZoneOfferCatalogue,
 } from "./api/client.js";
@@ -215,18 +215,18 @@ const TABLE_REFUSALS = new Set([
   "order.payment_in_flight",
   "table.occupied",
   "table.not_shared",
-  "group.held_leaves_visit",
+  "group.held_leaves_party",
   "tab.already_open",
   "tab.not_table_tab",
-  "tab.visit_mismatch",
-  "tab.visit_has_other_open_bill",
+  "tab.party_mismatch",
+  "tab.party_has_other_open_bill",
   "tab.merge_leaves_no_table",
-  "visit.not_open",
-  "visit.bill_outstanding",
+  "party.not_open",
+  "party.bill_outstanding",
 ]);
 
-function isVisitOutOfDate(error: unknown): boolean {
-  return (error as { code?: string } | undefined)?.code === "visit.out_of_date";
+function isPartyOutOfDate(error: unknown): boolean {
+  return (error as { code?: string } | undefined)?.code === "party.out_of_date";
 }
 
 function tableWriteError(error: unknown): CounterError {
@@ -255,7 +255,7 @@ function takeOverRefusalError(code: string): CounterError {
 
 /** What another device changed about a party, worked out by comparing the floor before and after.
  * `tables` names the party's tables as they were. */
-type VisitChange = { tables: string } & (
+type PartyChange = { tables: string } & (
   | { kind: "gone" }
   | { kind: "tables"; now: string }
   | { kind: "bills"; outstanding: string }
@@ -269,16 +269,16 @@ function tableLabels(tables: TableState[], ids: readonly string[]): string {
     .join(", ");
 }
 
-function visitOf(tables: TableState[], visitId: string): TableVisit | undefined {
-  return tables.find((table) => table.visit?.id === visitId)?.visit ?? undefined;
+function partyOf(tables: TableState[], partyId: string): TableParty | undefined {
+  return tables.find((table) => table.party?.id === partyId)?.party ?? undefined;
 }
 
-function describeVisitChange(
-  was: TableVisit,
+function describePartyChange(
+  was: TableParty,
   before: TableState[],
   after: TableState[],
-): VisitChange {
-  const is = visitOf(after, was.id);
+): PartyChange {
+  const is = partyOf(after, was.id);
   const tables = tableLabels(before, was.tableIds);
   if (is === undefined || is.state !== "open") return { tables, kind: "gone" };
   if (was.tableIds.join() !== is.tableIds.join()) {
@@ -290,27 +290,27 @@ function describeVisitChange(
   return { tables, kind: "other" };
 }
 
-function visitChangeDetail(change: VisitChange): string {
+function partyChangeDetail(change: PartyChange): string {
   switch (change.kind) {
     case "gone":
-      return t("visit.changed_gone");
+      return t("party.changed_gone");
     case "tables":
-      return t("visit.changed_tables").replace("{tables}", () => change.now);
+      return t("party.changed_tables").replace("{tables}", () => change.now);
     case "bills":
-      return t("visit.changed_bills").replace("{amount}", () =>
+      return t("party.changed_bills").replace("{amount}", () =>
         formatMoney(change.outstanding, currentLocale()),
       );
     case "other":
-      return t("visit.changed_other");
+      return t("party.changed_other");
   }
 }
 
-function visitChangeMessage(change: VisitChange): string {
-  const detail = visitChangeDetail(change);
+function partyChangeMessage(change: PartyChange): string {
+  const detail = partyChangeDetail(change);
   return [
-    t("visit.changed").replace("{table}", () => change.tables),
+    t("party.changed").replace("{table}", () => change.tables),
     detail,
-    t("visit.try_again"),
+    t("party.try_again"),
   ].join(" ");
 }
 
@@ -381,7 +381,7 @@ type CounterError =
   | StringKey
   | { code: string }
   | { takenOver: string; unsent?: true }
-  | { visitChanged: VisitChange }
+  | { partyChanged: PartyChange }
   | { lateChange: LateChange; also?: StringKey };
 
 /** A read of the party's bills: the party it was for (null when there was none), the bills (null
@@ -389,8 +389,8 @@ type CounterError =
  * {@link #leaveTable} closes the finished table. */
 interface ReadBills {
   read: number;
-  visitId: string | null;
-  bills: VisitBill[] | null;
+  partyId: string | null;
+  bills: PartyBill[] | null;
 }
 
 function errorText(error: CounterError): string | TemplateResult {
@@ -408,7 +408,7 @@ function errorText(error: CounterError): string | TemplateResult {
           t("table.draft_taken_over_unsaved"),
           t("table.draft_taken_over_unsaved_unnamed"),
         );
-  if ("visitChanged" in error) return visitChangeMessage(error.visitChanged);
+  if ("partyChanged" in error) return partyChangeMessage(error.partyChanged);
   const late = lateChangeMessage(error.lateChange);
   return error.also === undefined
     ? late
@@ -832,7 +832,7 @@ export class TillApp extends LitElement {
   /** Identifies the latest tab-lines read, so an earlier read answering later cannot win. */
   #tabLinesRead = 0;
   /** The same for the party's bills. */
-  #visitBillsRead = 0;
+  #partyBillsRead = 0;
   /** Identifies the latest {@link #rereadAmounts}, so once a newer one has started, an older one
    * works out no "Still to pay" from its bills and says nothing. */
   #amountsReread = 0;
@@ -892,11 +892,11 @@ export class TillApp extends LitElement {
   @state() private reprintSent: string[] = [];
   #reprinting = false;
   /** Every bill of the party at {@link activeTableId}, read when the table opens and after it changes. */
-  @state() private visitBills: VisitBill[] = [];
+  @state() private partyBills: PartyBill[] = [];
   /** The party of the order on screen as it was read just before that order's lines and bills: what
    * the screen shows of it, and the revision every command on it sends (D19). A floor read on its own
    * does not move it, so a glance at the floor cannot lend the order view a revision it never showed. */
-  @state() private orderParty: TableVisit | null = null;
+  @state() private orderParty: TableParty | null = null;
   @state() private groupCommandBusy = false;
   /** Moved on each time a take-over the table screen asked for has answered, or failed. */
   @state() private takeOversAnswered = 0;
@@ -2435,7 +2435,7 @@ export class TillApp extends LitElement {
     this.reprintSent = [];
     if (guestCount === undefined) {
       this.activeTabId = table?.tabId;
-      this.orderParty = table?.visit ?? null;
+      this.orderParty = table?.party ?? null;
       const [, opened] = await Promise.all([
         this.#loadLinesAndBills(),
         this.#openDraft(true, session),
@@ -2444,13 +2444,13 @@ export class TillApp extends LitElement {
       this.#showDraft(opened);
     } else {
       try {
-        const { tabId, visitId, revision } = await this.api.seatTable(tableId, guestCount);
+        const { tabId, partyId, revision } = await this.api.seatTable(tableId, guestCount);
         // A table opened after this one has made its own table the active one, so this answer
         // would put this table's order beside that table.
         if (session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
         this.activeTabId = tabId;
         this.orderParty = {
-          id: visitId,
+          id: partyId,
           revision,
           guestCount,
           state: "open",
@@ -2590,9 +2590,9 @@ export class TillApp extends LitElement {
 
   /** Keeps the revision a command on the party answered with, while the screen still shows that
    * party. A later revision already noted stays: answers can arrive out of order. */
-  #noteVisitRevision(visitId: string, revision: number): void {
+  #notePartyRevision(partyId: string, revision: number): void {
     const party = this.orderParty;
-    if (party?.id === visitId && revision > party.revision)
+    if (party?.id === partyId && revision > party.revision)
       this.orderParty = { ...party, revision };
   }
 
@@ -2606,11 +2606,11 @@ export class TillApp extends LitElement {
     const held = this.orderParty;
     if (
       partyId !== undefined &&
-      row?.visit?.id === partyId &&
+      row?.party?.id === partyId &&
       held?.id === partyId &&
-      row.visit.revision >= held.revision
+      row.party.revision >= held.revision
     )
-      this.orderParty = row.visit;
+      this.orderParty = row.party;
     return read;
   }
 
@@ -2621,8 +2621,8 @@ export class TillApp extends LitElement {
    * this re-read's own failed floor or bills read is said, unless another message already is,
    * whether or not another read has refreshed the order since; and with its floor read failed and
    * its bills read still the latest, what the party still owes is taken from those bills when they
-   * are the party's, which is the sum the floor would have answered (`readBillsOfVisits` in
-   * `apps/server/src/visits.ts` feeds both). */
+   * are the party's, which is the sum the floor would have answered (`readBillsOfParties` in
+   * `apps/server/src/parties.ts` feeds both). */
   async #rereadAmounts(orderId: string, visit: number): Promise<void> {
     const reread = ++this.#amountsReread;
     const floorRead = await this.#retakePartyFromFloor();
@@ -2631,9 +2631,9 @@ export class TillApp extends LitElement {
     if (this.#hasLeftOrder(orderId, visit) || reread !== this.#amountsReread) return;
     if (
       !floorRead &&
-      bills.read === this.#visitBillsRead &&
+      bills.read === this.#partyBillsRead &&
       bills.bills !== null &&
-      this.orderParty?.id === bills.visitId
+      this.orderParty?.id === bills.partyId
     ) {
       const outstanding = sumDecimals(bills.bills.map((bill) => decimal(bill.outstanding)));
       this.orderParty = {
@@ -2656,15 +2656,15 @@ export class TillApp extends LitElement {
   }
 
   /** A void or line edit moves its bill's party on without a revision of its own to send. */
-  #noteBillParty(visit: BillParty): void {
-    if (visit !== null) this.#noteVisitRevision(visit.id, visit.revision);
+  #noteBillParty(party: BillParty): void {
+    if (party !== null) this.#notePartyRevision(party.id, party.revision);
   }
 
   /** Takes the order's party from the floor just read, before the order's lines and bills are read
    * after it. A floor that does not list the table, as after a failed read, keeps the party known. */
   #rememberOrderParty(): void {
     const row = this.tables.find((table) => table.id === this.activeTableId);
-    if (row !== undefined) this.orderParty = row.visit;
+    if (row !== undefined) this.orderParty = row.party;
     this.#followPartyDraft();
   }
 
@@ -2678,7 +2678,7 @@ export class TillApp extends LitElement {
     if (this.orderParty === null) return this.#partylessDraft;
     const sync = this.#draftSync;
     const party = this.orderParty.id;
-    return this.#draftReady && sync?.visitId === party && this.#groupsReadFor === party
+    return this.#draftReady && sync?.partyId === party && this.#groupsReadFor === party
       ? sync.store
       : null;
   }
@@ -2694,7 +2694,7 @@ export class TillApp extends LitElement {
     if (party === null) return { sync: undefined, read: true };
     const sync: DraftSync = new DraftSync({
       api: this.api,
-      visitId: party.id,
+      partyId: party.id,
       personId: this.operatorPersonId,
       rebuild: (lines) =>
         lines.map((line) =>
@@ -2758,7 +2758,7 @@ export class TillApp extends LitElement {
    * person's edits are saved to the party they were made on first. */
   #followPartyDraft(): void {
     const sync = this.#draftSync;
-    if (sync === undefined || sync.visitId === this.orderParty?.id) return;
+    if (sync === undefined || sync.partyId === this.orderParty?.id) return;
     const session = this.#operatorSession;
     void this.#flushDraft().then(async () => {
       if (this.#draftSync !== sync) return;
@@ -2829,43 +2829,43 @@ export class TillApp extends LitElement {
   }
 
   async #loadLinesAndBills(): Promise<[void, ReadBills]> {
-    return Promise.all([this.#loadTabLines(), this.#loadVisitBills()]);
+    return Promise.all([this.#loadTabLines(), this.#loadPartyBills()]);
   }
 
   /** The party a tab's table belongs to, as the floor last read it. */
-  #visitOfTab(tabId: string): TableVisit | null {
-    return this.tables.find((table) => table.tabId === tabId)?.visit ?? null;
+  #partyOfTab(tabId: string): TableParty | null {
+    return this.tables.find((table) => table.tabId === tabId)?.party ?? null;
   }
 
   /** A failed read leaves the list empty rather than showing another party's bills. A read
    * overtaken by a later one leaves the list alone, and only its generation, compared with
-   * {@link #visitBillsRead}, tells a caller so. */
-  async #loadVisitBills(): Promise<ReadBills> {
-    const read = ++this.#visitBillsRead;
-    const visit = this.orderParty;
-    if (visit === null) {
-      this.visitBills = [];
-      return { read, visitId: null, bills: [] };
+   * {@link #partyBillsRead}, tells a caller so. */
+  async #loadPartyBills(): Promise<ReadBills> {
+    const read = ++this.#partyBillsRead;
+    const party = this.orderParty;
+    if (party === null) {
+      this.partyBills = [];
+      return { read, partyId: null, bills: [] };
     }
     try {
-      const bills = await this.api.getVisitBills(visit.id);
-      if (read === this.#visitBillsRead) this.visitBills = bills;
-      return { read, visitId: visit.id, bills };
+      const bills = await this.api.getPartyBills(party.id);
+      if (read === this.#partyBillsRead) this.partyBills = bills;
+      return { read, partyId: party.id, bills };
     } catch {
-      if (read === this.#visitBillsRead) this.visitBills = [];
-      return { read, visitId: visit.id, bills: null };
+      if (read === this.#partyBillsRead) this.partyBills = [];
+      return { read, partyId: party.id, bills: null };
     }
   }
 
   /** The revision of the party at the open table, and of another party the command reaches into. */
-  #revisions(other: TableVisit | null, otherIsSource: boolean): VisitRevisions {
+  #revisions(other: TableParty | null, otherIsSource: boolean): PartyRevisions {
     const own = this.orderParty;
     const theirs = other !== null && other.id !== own?.id ? other : null;
     const destination = otherIsSource ? own : (theirs ?? own);
     const source = otherIsSource ? theirs : theirs === null ? null : own;
     return {
-      ...(destination === null ? {} : { expectedVisitRevision: destination.revision }),
-      ...(source === null ? {} : { expectedSourceVisitRevision: source.revision }),
+      ...(destination === null ? {} : { expectedPartyRevision: destination.revision }),
+      ...(source === null ? {} : { expectedSourcePartyRevision: source.revision }),
     };
   }
 
@@ -2874,27 +2874,27 @@ export class TillApp extends LitElement {
    * read again and the message says what changed; the command is not sent again on its own, because
    * the person has to see the new state and decide. Nothing is said once `live` is false.
    */
-  async #onVisitOutOfDate(error: unknown, live: () => boolean = () => true): Promise<void> {
-    const named = (error as { visitId?: unknown }).visitId;
+  async #onPartyOutOfDate(error: unknown, live: () => boolean = () => true): Promise<void> {
+    const named = (error as { partyId?: unknown }).partyId;
     const before = this.tables;
     const shown = this.#tableCatalogueActive() ? this.orderParty : null;
     const was =
       typeof named === "string" && named !== shown?.id
-        ? visitOf(before, named)
+        ? partyOf(before, named)
         : (shown ?? undefined);
     if (this.#tableCatalogueActive()) await this.#reloadOrder();
     else await this.#reloadTables();
     if (!live()) return;
     this.errorKey =
       was === undefined
-        ? { code: "visit.out_of_date" }
-        : { visitChanged: describeVisitChange(was, before, this.tables) };
+        ? { code: "party.out_of_date" }
+        : { partyChanged: describePartyChange(was, before, this.tables) };
   }
 
   /** Every command on a party's tables or bills ends here when refused. */
   async #onTableRefusal(error: unknown): Promise<void> {
-    if (isVisitOutOfDate(error)) {
-      await this.#onVisitOutOfDate(error);
+    if (isPartyOutOfDate(error)) {
+      await this.#onPartyOutOfDate(error);
       return;
     }
     this.errorKey = tableWriteError(error);
@@ -2958,7 +2958,7 @@ export class TillApp extends LitElement {
       // The server moves a draft only onto its own party's next tab, so the table is followed only
       // while it still holds the party the screen showed when the draft was sent.
       const now = this.tables.find((row) => row.id === tableId);
-      if (now?.tabId !== undefined && now.visit?.id === partyId && onSentTable())
+      if (now?.tabId !== undefined && now.party?.id === partyId && onSentTable())
         this.#followDraft(tabId, now.tabId);
     } else if (typeof followUp === "object" && this.activeTabId === tabId) {
       await this.#reloadTables();
@@ -2966,7 +2966,7 @@ export class TillApp extends LitElement {
       this.#followDraft(tabId, followUp.landedOn);
     }
     await this.#loadTabLines();
-    if (this.orderParty !== null) await this.#loadVisitBills();
+    if (this.orderParty !== null) await this.#loadPartyBills();
     if (!live() || store.lineCount > 0 || draft === undefined) return;
     if (followUp === "find-tab" || this.activeTableId !== tableId) return;
     this.submittedNotice = submittedText(draft.tally);
@@ -2989,7 +2989,7 @@ export class TillApp extends LitElement {
    */
   async #submitDraft(
     tabId: string,
-    party: TableVisit,
+    party: TableParty,
     sync: DraftSync,
     submission: { groups: readonly DraftGroup[]; joinGroupId?: string },
     sent: readonly OrderLine[],
@@ -3018,7 +3018,7 @@ export class TillApp extends LitElement {
       }
       const command: DraftSubmission = {
         submissionId: crypto.randomUUID(),
-        expectedVisitRevision: party.revision,
+        expectedPartyRevision: party.revision,
         draftRevision: sync.revision,
         groups: groups.map((group) => ({
           release: group.release,
@@ -3044,8 +3044,8 @@ export class TillApp extends LitElement {
         this.errorKey = "table.round_unconfirmed";
         return "find-tab";
       }
-      if (isVisitOutOfDate(error)) {
-        await this.#onVisitOutOfDate(error, live);
+      if (isPartyOutOfDate(error)) {
+        await this.#onPartyOutOfDate(error, live);
         return;
       }
       const refusal = asRefusal(error);
@@ -3062,7 +3062,7 @@ export class TillApp extends LitElement {
     } finally {
       send.done();
     }
-    this.#noteVisitRevision(party.id, submitted.revision);
+    this.#notePartyRevision(party.id, submitted.revision);
     if (!live()) return;
     sync.submitted(submitted.draft, sent);
     return submitted.tabId === tabId ? "read-tab" : { landedOn: submitted.tabId };
@@ -3071,7 +3071,7 @@ export class TillApp extends LitElement {
   /** A request that got no answer is sent again unchanged after a pause, until the time limit ends
    * the wait or the session it was first sent in ends: the next person may have signed in by then. */
   async #sendDraft(
-    visitId: string,
+    partyId: string,
     draftId: string,
     command: DraftSubmission,
     signal: AbortSignal,
@@ -3079,7 +3079,7 @@ export class TillApp extends LitElement {
   ): Promise<SubmittedDraft> {
     for (let attempt = 0; ; attempt += 1) {
       try {
-        return await this.api.submitDraft(visitId, draftId, command, { signal });
+        return await this.api.submitDraft(partyId, draftId, command, { signal });
       } catch (error) {
         if (!isNetworkFailure(error) || signal.aborted || attempt === SUBMIT_RETRIES) throw error;
         await pause(signal, SUBMIT_RETRY_PAUSE_MS);
@@ -3107,8 +3107,8 @@ export class TillApp extends LitElement {
    * sent again; anything else reads the order and its groups again, since part of it may have gone,
    * and then says what was refused. */
   async #onReleaseRefusal(error: unknown): Promise<void> {
-    if (isVisitOutOfDate(error)) {
-      await this.#onVisitOutOfDate(error);
+    if (isPartyOutOfDate(error)) {
+      await this.#onPartyOutOfDate(error);
       return;
     }
     if (isNetworkFailure(error)) await this.#retakePartyFromFloor();
@@ -3119,7 +3119,7 @@ export class TillApp extends LitElement {
   /** A command on the party's held groups, sent with the revision the party was shown at; then the
    * order and its groups are read again. A press while one is running is dropped: it would carry the
    * revision the running one is about to move on. */
-  async #onGroupCommand(send: (party: TableVisit) => Promise<unknown>): Promise<void> {
+  async #onGroupCommand(send: (party: TableParty) => Promise<unknown>): Promise<void> {
     if (this.groupCommandBusy) return;
     this.groupCommandBusy = true;
     try {
@@ -3145,21 +3145,21 @@ export class TillApp extends LitElement {
   /** One request on the party under a submission id of its own, at `revision`. The answer's revision
    * is noted, so a later command carries it, and returned for a next request in the same command. */
   async #partyRequest(
-    party: TableVisit,
+    party: TableParty,
     revision: number,
     request: (command: GroupCommand) => Promise<{ revision: number }>,
   ): Promise<number> {
     const answer = await request({
       submissionId: crypto.randomUUID(),
-      expectedVisitRevision: revision,
+      expectedPartyRevision: revision,
     });
-    this.#noteVisitRevision(party.id, answer.revision);
+    this.#notePartyRevision(party.id, answer.revision);
     return answer.revision;
   }
 
   /** A group command of one request, at the revision the party was shown at. */
   async #onGroupRequest(
-    request: (party: TableVisit, command: GroupCommand) => Promise<{ revision: number }>,
+    request: (party: TableParty, command: GroupCommand) => Promise<{ revision: number }>,
   ): Promise<void> {
     await this.#onGroupCommand((party) =>
       this.#partyRequest(party, party.revision, (command) => request(party, command)),
@@ -3203,7 +3203,7 @@ export class TillApp extends LitElement {
   /** Serving, its undo and a reminder's snooze are commands on the party whose order is open; with
    * no order open they send nothing. */
   async #onServiceRequest(
-    request: (party: TableVisit, command: GroupCommand) => Promise<{ revision: number }>,
+    request: (party: TableParty, command: GroupCommand) => Promise<{ revision: number }>,
   ): Promise<void> {
     if (this.activeTabId === undefined) return;
     await this.#onGroupRequest(request);
@@ -3293,10 +3293,10 @@ export class TillApp extends LitElement {
     const orderVisit = this.#orderVisit;
     this.errorKey = undefined;
     try {
-      const { visit } = await (quantity === undefined
+      const { party } = await (quantity === undefined
         ? this.api.voidLine(orderId, lineNo)
         : this.api.voidLine(orderId, lineNo, quantity));
-      this.#noteBillParty(visit);
+      this.#noteBillParty(party);
     } catch (error) {
       this.errorKey = lineWriteError(error);
       if (!isNetworkFailure(error)) {
@@ -3328,14 +3328,14 @@ export class TillApp extends LitElement {
     const tableId = this.activeTableId;
     this.errorKey = undefined;
     this.cancelOffer = null;
-    let outcome: { saved: { revision: number; visit: BillParty } } | { error: unknown };
+    let outcome: { saved: { revision: number; party: BillParty } } | { error: unknown };
     try {
       outcome = { saved: await this.api.updateOrderLine(orderId, lineNo, patch, revision) };
     } catch (error) {
       outcome = { error };
     }
     if ("saved" in outcome) {
-      this.#noteBillParty(outcome.saved.visit);
+      this.#noteBillParty(outcome.saved.party);
       if (this.activeTabId !== orderId) return;
       this.tabRevision = outcome.saved.revision;
       await this.#rereadAmounts(orderId, visit);
@@ -3437,7 +3437,7 @@ export class TillApp extends LitElement {
         this.activeTabId,
         fromTabId,
         freeSourceTable,
-        this.#revisions(this.#visitOfTab(fromTabId), true),
+        this.#revisions(this.#partyOfTab(fromTabId), true),
       );
     } catch (error) {
       await this.#onTableRefusal(error);
@@ -3457,7 +3457,7 @@ export class TillApp extends LitElement {
         this.activeTabId,
         toTabId,
         transfers,
-        this.#revisions(this.#visitOfTab(toTabId), false),
+        this.#revisions(this.#partyOfTab(toTabId), false),
       );
     } catch (error) {
       await this.#onTableRefusal(error);
@@ -3491,16 +3491,16 @@ export class TillApp extends LitElement {
   /** Finish frees the party's tables, or leaves them to clear; either way the floor comes next. A bill
    * still unpaid is said on the screen, beside the offer to take its payment. */
   async #onFinishTable(): Promise<void> {
-    const visit = this.orderParty;
-    if (visit === null) return;
+    const party = this.orderParty;
+    if (party === null) return;
     this.errorKey = undefined;
     this.finishRefused = false;
     try {
-      await this.api.finishTable(visit.id, visit.revision);
+      await this.api.finishTable(party.id, party.revision);
     } catch (error) {
-      if ((error as { code?: string } | undefined)?.code === "visit.bill_outstanding") {
+      if ((error as { code?: string } | undefined)?.code === "party.bill_outstanding") {
         this.finishRefused = true;
-        await this.#loadVisitBills();
+        await this.#loadPartyBills();
         return;
       }
       await this.#onTableRefusal(error);
@@ -3515,7 +3515,7 @@ export class TillApp extends LitElement {
     this.activeTableId = undefined;
     this.orderParty = null;
     this.#tabLinesRead++;
-    this.#visitBillsRead++;
+    this.#partyBillsRead++;
     this.tabLines = [];
     this.tabGroups = [];
     this.printProblems = [];
@@ -3523,7 +3523,7 @@ export class TillApp extends LitElement {
     this.currentOrdersUnread = false;
     this.reprintSent = [];
     this.#groupsUnread = false;
-    this.visitBills = [];
+    this.partyBills = [];
     this.#returnToFloor();
   }
 
@@ -3557,15 +3557,15 @@ export class TillApp extends LitElement {
   }
 
   async #onMarkCleared(event: Event): Promise<void> {
-    const { visitId, expectedVisitRevision } = (
-      event as CustomEvent<{ visitId: string; expectedVisitRevision: number }>
+    const { partyId, expectedPartyRevision } = (
+      event as CustomEvent<{ partyId: string; expectedPartyRevision: number }>
     ).detail;
     this.errorKey = undefined;
     try {
-      await this.api.markCleared(visitId, expectedVisitRevision);
+      await this.api.markCleared(partyId, expectedPartyRevision);
     } catch (error) {
-      await this.#onTableRefusal({ visitId, ...(error as object) });
-      if ((error as { code?: string } | undefined)?.code !== "visit.out_of_date") {
+      await this.#onTableRefusal({ partyId, ...(error as object) });
+      if ((error as { code?: string } | undefined)?.code !== "party.out_of_date") {
         await this.#refreshFloor();
       }
       return;
@@ -3599,13 +3599,13 @@ export class TillApp extends LitElement {
    * it acts on the new revision; resolves to whether it did. */
   async #mergeCheckBack(split: { checkId: string; tabId: string }): Promise<boolean> {
     const session = this.#operatorSession;
-    const party = this.#visitOfTab(split.tabId);
+    const party = this.#partyOfTab(split.tabId);
     try {
       await this.api.mergeTabs(
         split.tabId,
         split.checkId,
         false,
-        party === null ? {} : { expectedVisitRevision: party.revision },
+        party === null ? {} : { expectedPartyRevision: party.revision },
       );
     } catch (error) {
       if (session !== this.#operatorSession) return false;
@@ -3930,8 +3930,8 @@ export class TillApp extends LitElement {
       .draftStore=${draft}
       .otherDrafts=${draft === undefined ? [] : this.#otherDrafts(draft)}
       .takeOversAnswered=${this.takeOversAnswered}
-      .visit=${this.orderParty}
-      .visitBills=${this.visitBills}
+      .party=${this.orderParty}
+      .partyBills=${this.partyBills}
       .finishRefused=${this.finishRefused}
       .groupCommandBusy=${this.groupCommandBusy}
       .handheld=${this.handheldMode}
@@ -3972,8 +3972,8 @@ export class TillApp extends LitElement {
           .draftStore=${draft}
           .otherDrafts=${this.#otherDrafts(draft)}
           .takeOversAnswered=${this.takeOversAnswered}
-          .visit=${this.orderParty}
-          .bills=${this.visitBills}
+          .party=${this.orderParty}
+          .bills=${this.partyBills}
           .finishRefused=${this.finishRefused}
           .busy=${this.submitting}
           .groupCommandBusy=${this.groupCommandBusy}

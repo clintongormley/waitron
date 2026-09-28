@@ -28,7 +28,7 @@ function table(over: Partial<TableState> = {}): TableState {
     posY: null,
     shape: null,
     rotation: null,
-    visit: null,
+    party: null,
     ...over,
   };
 }

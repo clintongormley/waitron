@@ -818,7 +818,7 @@ const DINING = {
 };
 
 const party = {
-  id: "visit-a",
+  id: "party-a",
   revision: 1,
   guestCount: 2,
   state: "open" as const,
@@ -848,7 +848,7 @@ const table = {
   posY: null,
   shape: null,
   rotation: null,
-  visit: party as typeof party | null,
+  party: party as typeof party | null,
 };
 
 /** What a round's submission answers when its lines went on `tabId`. */
@@ -1347,7 +1347,7 @@ const tableB = {
   id: "t3",
   label: "3",
   tabId: "wo-8",
-  visit: { ...party, id: "visit-c", tableIds: ["t3"] },
+  party: { ...party, id: "party-c", tableIds: ["t3"] },
 };
 
 describe("a kept round and another table", () => {
@@ -1602,9 +1602,9 @@ describe("a round the server adds to another tab", () => {
     await sendLemonadeRound(el);
 
     expect(api.submitDraft).toHaveBeenCalledWith(
-      "visit-a",
+      "party-a",
       "draft-1",
-      expect.objectContaining({ expectedVisitRevision: 1 }),
+      expect.objectContaining({ expectedPartyRevision: 1 }),
       expect.anything(),
     );
     expect(api.getTabLines).toHaveBeenLastCalledWith("wo-next");
@@ -1647,13 +1647,13 @@ describe("a round that got no answer while the party moved on to its next tab", 
     "The server did not answer, so the items may have been added. Check the tab before sending them again.";
 
   const shownParty = (el: TillApp) =>
-    (tableScreen(el) as unknown as { visit: { id: string } | null }).visit?.id;
+    (tableScreen(el) as unknown as { party: { id: string } | null }).party?.id;
 
   it("reads the table's party again and shows the tab the table now points at", async () => {
     const { el } = await mountApp(
       tableStubs(DINING, {
         getTablesState: vi.fn().mockResolvedValue([seated]),
-        getVisitBills: vi.fn().mockResolvedValue([]),
+        getPartyBills: vi.fn().mockResolvedValue([]),
         submitDraft: vi.fn(async (...args: SubmitArgs) => {
           drafts.apply(...args);
           throw new TypeError("offline");
@@ -1662,7 +1662,7 @@ describe("a round that got no answer while the party moved on to its next tab", 
     );
     await toTable(el);
     api.getTablesState.mockResolvedValue([
-      { ...seated, tabId: "wo-next", visit: { ...party, revision: 2 } },
+      { ...seated, tabId: "wo-next", party: { ...party, revision: 2 } },
     ]);
     const round = roundStore(el);
     await sendLemonadeRound(el);
@@ -1671,8 +1671,8 @@ describe("a round that got no answer while the party moved on to its next tab", 
 
     expect(shownTab(el)).toBe("wo-next");
     expect(api.getTabLines).toHaveBeenLastCalledWith("wo-next");
-    expect(shownParty(el)).toBe("visit-a");
-    expect(api.getVisitBills).toHaveBeenLastCalledWith("visit-a");
+    expect(shownParty(el)).toBe("party-a");
+    expect(api.getPartyBills).toHaveBeenLastCalledWith("party-a");
     expect(round.lineCount).toBe(0);
     expect(banner(el)!.textContent).toContain(unconfirmed);
   });
@@ -1681,14 +1681,14 @@ describe("a round that got no answer while the party moved on to its next tab", 
     const { el } = await mountApp(
       tableStubs(DINING, {
         getTablesState: vi.fn().mockResolvedValue([seated]),
-        getVisitBills: vi.fn().mockResolvedValue([]),
+        getPartyBills: vi.fn().mockResolvedValue([]),
         submitDraft: vi.fn().mockRejectedValue(new TypeError("offline")),
       }),
     );
     await toTable(el);
     // Another till settled and cleared the party, and seated a new one at the same table.
     api.getTablesState.mockResolvedValue([
-      { ...seated, tabId: "wo-other", visit: { ...party, id: "visit-b" } },
+      { ...seated, tabId: "wo-other", party: { ...party, id: "party-b" } },
     ]);
     await sendLemonadeRound(el);
     await new Promise((resolve) => setTimeout(resolve, 2 * SUBMIT_RETRY_PAUSE_MS + 50));
@@ -1696,19 +1696,19 @@ describe("a round that got no answer while the party moved on to its next tab", 
 
     expect(shownTab(el)).toBe("wo-7");
     expect(api.getTabLines).not.toHaveBeenCalledWith("wo-other");
-    expect(shownParty(el)).toBe("visit-a");
-    expect(api.getVisitBills).not.toHaveBeenCalledWith("visit-b");
+    expect(shownParty(el)).toBe("party-a");
+    expect(api.getPartyBills).not.toHaveBeenCalledWith("party-b");
     expect(banner(el)!.textContent).toContain(unconfirmed);
   });
 
   it("sends nothing, and follows nothing, when the tab had no party", async () => {
     const { el } = await mountApp(
       tableStubs(DINING, {
-        getTablesState: vi.fn().mockResolvedValue([{ ...table, visit: null }]),
+        getTablesState: vi.fn().mockResolvedValue([{ ...table, party: null }]),
       }),
     );
     await toTable(el);
-    api.getTablesState.mockResolvedValue([{ ...table, visit: null, tabId: "wo-other" }]);
+    api.getTablesState.mockResolvedValue([{ ...table, party: null, tabId: "wo-other" }]);
     await sendLemonadeRound(el);
     await flush(el);
 
@@ -1723,7 +1723,7 @@ describe("a round that got no answer while the party moved on to its next tab", 
     const { el } = await mountApp(
       tableStubs(DINING, {
         getTablesState: vi.fn().mockResolvedValue([seated, tableB]),
-        getVisitBills: vi.fn().mockResolvedValue([]),
+        getPartyBills: vi.fn().mockResolvedValue([]),
         submitDraft: failLater((reject) => (fail = reject)),
       }),
     );
@@ -1739,7 +1739,7 @@ describe("a round that got no answer while the party moved on to its next tab", 
     expect(shownTab(el)).toBe("wo-8");
 
     api.getTablesState.mockResolvedValue([
-      { ...seated, tabId: "wo-next", visit: { ...party, revision: 2 } },
+      { ...seated, tabId: "wo-next", party: { ...party, revision: 2 } },
       tableB,
     ]);
     fail(new TypeError("offline"));
@@ -1772,12 +1772,12 @@ describe("a round send that timed out while the floor cannot be read either", ()
       tableStubs(DINING, {
         submitDraft: vi.fn(
           (
-            visitId: string,
+            partyId: string,
             draftId: string,
             submission: SubmitArgs[2],
             options?: { signal?: AbortSignal },
           ) => {
-            drafts.apply(visitId, draftId, submission);
+            drafts.apply(partyId, draftId, submission);
             return new Promise<void>((_resolve, reject) => {
               options?.signal?.addEventListener("abort", () =>
                 reject(new DOMException("The operation was aborted.", "AbortError")),
@@ -1835,7 +1835,7 @@ describe("a round that got no answer while its tab moved to another table", () =
     const { el } = await mountApp(
       tableStubs(DINING, {
         getTablesState: vi.fn().mockResolvedValue([seated]),
-        getVisitBills: vi.fn().mockResolvedValue([]),
+        getPartyBills: vi.fn().mockResolvedValue([]),
         submitDraft: failLater((reject) => (fail = reject)),
         moveTab: vi.fn().mockResolvedValue(undefined),
       }),
@@ -1845,8 +1845,8 @@ describe("a round that got no answer while its tab moved to another table", () =
     // The tab moves from t2 to t4, and the party, which holds both, has a new tab at t2.
     const spread = { ...party, revision: 2, tableIds: ["t2", "t4"] };
     api.getTablesState.mockResolvedValue([
-      { ...seated, tabId: "wo-other", visit: spread },
-      { ...seated, id: "t4", label: "4", visit: spread },
+      { ...seated, tabId: "wo-other", party: spread },
+      { ...seated, id: "t4", label: "4", party: spread },
     ]);
     emit(tableScreen(el), "move-tab", { toTableId: "t4" });
     await flush(el);

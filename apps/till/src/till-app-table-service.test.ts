@@ -64,13 +64,13 @@ const openTable: TableState = {
   posY: null,
   shape: null,
   rotation: null,
-  visit: null,
+  party: null,
 };
 
 /** {@link openTable} with a party seated at it: a round goes to the party. */
 const seatedTable: TableState = {
   ...openTable,
-  visit: {
+  party: {
     id: "v-2",
     revision: 3,
     guestCount: 2,
@@ -261,8 +261,8 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     setLineCourse: vi.fn().mockResolvedValue(undefined),
     sendLines: vi.fn().mockResolvedValue(undefined),
     recallLines: vi.fn().mockResolvedValue(undefined),
-    voidLine: vi.fn().mockResolvedValue({ visit: null }),
-    updateOrderLine: vi.fn().mockResolvedValue({ revision: 1, visit: null }),
+    voidLine: vi.fn().mockResolvedValue({ party: null }),
+    updateOrderLine: vi.fn().mockResolvedValue({ revision: 1, party: null }),
     setTableStatus: vi.fn().mockResolvedValue(undefined),
     moveTab: vi.fn().mockResolvedValue(undefined),
     joinTable: vi.fn().mockResolvedValue(undefined),
@@ -730,7 +730,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       });
     const { el, screen } = await openBurgerTab({
       getTabLines,
-      updateOrderLine: vi.fn().mockResolvedValue({ revision: 8, visit: null }),
+      updateOrderLine: vi.fn().mockResolvedValue({ revision: 8, party: null }),
     });
     screen.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await screen.updateComplete;
@@ -950,7 +950,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     it("says nothing when the change was saved", async () => {
       const { el, settle, reads } = await changeThenOpenTable3();
 
-      settle.resolve({ revision: 8, visit: null });
+      settle.resolve({ revision: 8, party: null });
       await flush(el);
 
       expect(banner(el)).toBeNull();
@@ -1398,7 +1398,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       const readsBack = reads();
 
       saved();
-      settle().resolve({ revision: 8, visit: null });
+      settle().resolve({ revision: 8, party: null });
       await flush(el);
 
       expect(reads()).toBe(readsBack + 1);
@@ -1442,7 +1442,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       const readsBack = reads();
 
       saved();
-      settle().resolve({ revision: 8, visit: null });
+      settle().resolve({ revision: 8, party: null });
       await flush(el);
 
       expect(reads()).toBe(readsBack + 1);
@@ -1477,7 +1477,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       const readsBefore = reads();
 
       saved();
-      settle().resolve({ revision: 8, visit: null });
+      settle().resolve({ revision: 8, party: null });
       await flush(el);
 
       expect(reads()).toBe(readsBefore + 1);
@@ -1494,7 +1494,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       const readsBefore = reads();
 
       saved();
-      settle().resolve({ revision: 8, visit: null });
+      settle().resolve({ revision: 8, party: null });
       await flush(el);
       expect(reads()).toBe(readsBefore + 1);
 
@@ -1550,7 +1550,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     const { el, screen } = await openBurgerTab({
       getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
       getTabLines,
-      updateOrderLine: vi.fn().mockResolvedValue({ revision: 8, visit: null }),
+      updateOrderLine: vi.fn().mockResolvedValue({ revision: 8, party: null }),
     });
 
     emit(screen, "change-line", change);
@@ -1586,7 +1586,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     const { el, screen } = await openBurgerTab({
       getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
       getTabLines,
-      updateOrderLine: vi.fn().mockResolvedValue({ revision: 8, visit: null }),
+      updateOrderLine: vi.fn().mockResolvedValue({ revision: 8, party: null }),
     });
 
     emit(screen, "change-line", change);

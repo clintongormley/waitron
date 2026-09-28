@@ -716,8 +716,8 @@ reload, on another device, after logging out, after a server switch, while the c
 paid, or when the server refuses the merge, the check stays in the counter's Held orders, where it
 can be paid; when the merge gets no answer the till says it cannot tell which of the two places the
 check is in.
-The durable link between a check and its table is lane B's visits, landed as #715: a split check
-carries its party's visit, the till's table screen lists it among the party's bills, and Finish
+The durable link between a check and its table is lane B's party record, landed as #715: a split
+check carries its party, the till's table screen lists it among the party's bills, and Finish
 table is refused while it is unpaid.
 
 **Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
@@ -1328,7 +1328,7 @@ What B4 leaves open:
   **Next action:** owner to decide whether to retire `location_catalogues` and those routes with
   `GET /api/products`, or keep them.
 - **A table in no zone still opens a tab, and nothing can be added to it.** The till seats a
-  party through `seatTable` (`#onOpenTable`, `apps/till/src/till-app.ts`), which opens a visit and
+  party through `seatTable` (`#onOpenTable`, `apps/till/src/till-app.ts`), which opens a party and
   a tab with no lines, and a booking seated at a table does the same through `core.seatTable`
   (`seatBooking`, `packages/bookings/src/bookings.ts`); on a table
   in no zone that tab opens, and every round on it is refused `order.service_context_missing`. The
@@ -2193,7 +2193,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   [Design](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md), Revision 2,
   approved by the owner and merged as #693 (§14 lists every change from Revision 1);
   [plan](superpowers/plans/2026-09-26-service-ordering-and-billing.md), Revision 2, eighteen tasks,
-  reviewed three times before the merge. What stays open:
+  reviewed three times before the merge. _(2026-09-28: table actions Task 1 renamed "visit" to
+  "party" — the tables and columns by core migration `0036`, and the routes and error codes in
+  code — and the entries below use the new names; the four `visits_*_ck` CHECK names and the
+  stored scope value `'visit'` stay until Task 13.)_ What stays open:
   - **Task 0's [bill payments design](superpowers/specs/2026-09-26-bill-payments-design.md) is
     approved** (owner, 2026-09-26, PR #698), with the owner's answers to its open points (its §11):
     the cash-up counts money on the day it moves, in Task 14 (§9a), and a card refund is a durable
@@ -2219,12 +2222,13 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     the reasons screen repeats the role list in `apps/dashboard/src/widgets/person-edit.ts` and the
     placeholder-filling helper in `apps/dashboard/src/widgets/menu-preview.ts`; sharing them means moving both into `@waitron/dashboard-kit`. **Next
     action:** do that move if a third module screen needs them.
-  - **Task 2 landed as #715** (2026-09-27): a visit per seated party. Core tables `visits`,
-    `visit_tables` (one active membership per table) and `service_commands`, and
-    `working_orders.visit_id` (core migrations `0018`–`0020`); the venue setting
+  - **Task 2 landed as #715** (2026-09-27): a record per seated party. Core tables `parties`,
+    `party_tables` (one active membership per table) and `service_commands`, and
+    `working_orders.party_id` (core migrations `0018`–`0020`, where they were named after visits;
+    `0036` renamed them, table actions Task 1); the venue setting
     `clearing_workflow` (off by default, and no dashboard control sets it yet). Paying a bill no
     longer frees the table: the party keeps it, with every related bill listed on the till's table
-    screen, until Finish table, which is refused `visit.bill_outstanding` while any bill of the
+    screen, until Finish table, which is refused `party.bill_outstanding` while any bill of the
     party, or of a party merged into it, is unpaid. `runServiceCommand` (retried commands answered
     once) and `service_commands` have no product caller yet; Tasks 3 onwards use them. Upgrade:
     before the rebase renumbered them, the implementer applied the new migrations to a seeded venue
@@ -2235,10 +2239,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     course firing for a seated party. Core migration `0028_order_groups` (tables `order_groups` and
     `order_group_events`, the second append-only; `working_order_lines.group_id` and
     `credited_to`); `apps/server/src/order-groups.ts` and the routes under
-    `POST /api/visits/:id/groups` (submit, fire, reorder, move lines), each checking the party's
-    revision (`visit.out_of_date`) and refusing while a card payment is under way; the round route
+    `POST /api/parties/:id/groups` (submit, fire, reorder, move lines), each checking the party's
+    revision (`party.out_of_date`) and refusing while a card payment is under way; the round route
     `POST /api/working-orders/:id/round` is deleted. Splits, transfers, merges, voids and line edits
-    respect groups (`group.held_leaves_visit`; a void or edit that empties a held group removes it
+    respect groups (`group.held_leaves_party`; a void or edit that empties a held group removes it
     and moves the party's revision). The till's table screen looks the same and maps Send round,
     Fire course and Send all onto groups _(Task 4, 2026-09-27: replaced by the draft's actions and
     the Tab drawer's held-groups list)_. Counter orders and bills with no party still fire by
@@ -2315,9 +2319,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     sections; a held group reads "Held, not released" and, when the venue's who-fires setting
     (`fire_control`) is `kitchen`, has a Fire button (never on an enrolled kitchen display).
     **Pass:** each group has Fire (under `expo` only), "Group ready" or Away, through the new
-    `POST /api/visits/:id/groups/:gid/ready` and `.../away`, which answer a resent press from its
+    `POST /api/parties/:id/groups/:gid/ready` and `.../away`, which answer a resent press from its
     record without acting twice and refuse a screen read before the table changed
-    (`visit.out_of_date`); the kitchen screen and the pass then read again and say the table
+    (`party.out_of_date`); the kitchen screen and the pass then read again and say the table
     changed. A counter order, or a bill with no party, keeps its course sections and course
     buttons, and the course routes stay, because a counter order's held course has no other
     release. **Table screen:** a fired group in the Tab drawer
@@ -2349,7 +2353,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     once a Reprint of that bill would print nothing on that printer for that station.)_ Left open,
     from the branch's ledger:
     - A party finished while its food is still on the pass keeps its cards there with no group
-      button that works (each is refused `visit.not_open`); a question for the owner.
+      button that works (each is refused `party.not_open`); a question for the owner.
     - "Ready" and "Fired N min ago" on the table screen are the plan's default, not an owner
       decision.
     - A fired group with nothing for the kitchen (bottled water, say) never reads Ready.
@@ -2406,7 +2410,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - The setting's upgrade was measured with a throwaway script over the real migration folders
       and a database holding one settings row, not on a seeded venue.
     - Every pass press moves the party's revision, so a waiter's open Tab drawer meets
-      `visit.out_of_date` after it and reads again.
+      `party.out_of_date` after it and reads again.
     - Setting up a venue from an imported configuration deletes every kitchen station, and the new
       table's station key has no delete rule; whether that venue can already hold link rows at that
       point was not tested (read, not run).
@@ -2422,7 +2426,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         course-era screens did, where the plan's text said "the first held group".
       - The table screen reads its printing problems in a second request beside the groups read on
         every table load. Folding them into the groups response would change the exact-body
-        assertion in `apps/server/src/till-api.groups.test.ts`'s "answers the visit's revision and
+        assertion in `apps/server/src/till-api.groups.test.ts`'s "answers the party's revision and
         its groups in sequence", so it was left.
   - **Task 6 landed as #761** (lane B item B6, 2026-09-27, main `75ab7c10e`): with the venue's "Print held groups in advance" setting on, a held group prints a
     kitchen ticket marked HOLD; later changes to it print HOLD CHANGED or HOLD CANCELLED slips, each
@@ -2481,9 +2485,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     own. Core migration `0031_order_drafts` adds `order_drafts` (one open draft per person and
     party, by the partial unique index `order_drafts_open_owner_uq`), `order_draft_lines` and
     `order_draft_events` (append-only: created, taken over, submitted, discarded). They are in core
-    beside `visits` and `order_groups`, the tables they belong with. The work is in
-    `apps/server/src/order-drafts.ts`, reached through `GET` and `PUT /api/visits/:id/drafts` and
-    `POST /api/visits/:id/drafts/:did/take-over` and `.../submit`; the person is always the one
+    beside `parties` and `order_groups`, the tables they belong with. The work is in
+    `apps/server/src/order-drafts.ts`, reached through `GET` and `PUT /api/parties/:id/drafts` and
+    `POST /api/parties/:id/drafts/:did/take-over` and `.../submit`; the person is always the one
     signed in, never a name in the body. A save replaces the draft's lines and adds identical lines
     together (same dish, variant, menu version, course, options, extras and note), except a line
     marked not to merge or one whose quantity is not a whole number; it does not move the party's
@@ -2529,13 +2533,13 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       prepared before the merge names), replay the first answer and write nothing; a moved draft
       asked on the party it moved to is refused `draft.out_of_date`. The branch's first ruling
       expected a refusal in every case; a replay was accepted because it writes nothing.
-    - Only the draft routes fold the ids in the path to lower case, the visit id
-      (`requireDraftVisitParam`, `apps/server/src/till-api.ts`) and the draft id; a draft
+    - Only the draft routes fold the ids in the path to lower case, the party id
+      (`requireDraftPartyParam`, `apps/server/src/till-api.ts`) and the draft id; a draft
       submission also folds its `joinGroupId` (`submitDraft`, `apps/server/src/order-drafts.ts`).
-      The other visit routes only check that the visit or group id in the path is an id, and the
+      The other party routes only check that the party or group id in the path is an id, and the
       group submission passes `joinGroupId` on as sent.
     - The till does not read or save drafts yet: nothing in `apps/till` calls these routes, and its
-      `TableVisit` type does not declare `unsentDrafts`. Task 8. _(Task 8, 2026-09-28: the till
+      `TableParty` type does not declare `unsentDrafts`. Task 8. _(Task 8, 2026-09-28: the till
       reads, saves, takes over and sends drafts through these routes, and the floor shows
       `unsentDrafts`.)_
     - After a takeover into the taker's existing draft, or a merge that discards a draft, the
@@ -2840,7 +2844,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
 
   Owner decisions (2026-09-26), each in the spec where it applies:
   - groups replace named courses, and who may release a held group stays a venue setting;
-  - a visit record ties a party's orders and bills (joined tables and merged parties included) and
+  - a party record ties a party's orders and bills (joined tables and merged parties included) and
     keeps the table occupied until Finish table;
   - a bill's invoice is issued when it is fully paid, several payments may come before it, and lines
     can still be split off after a contribution;
@@ -2851,6 +2855,14 @@ approved print agents to try it, so a printer the two discovery passes cannot se
 
   Out of scope for this plan: guest access, inventory, seat and staff assignment, changing the floor
   layout during service, screen plugins and Bizum.
+- **Tables, parties and bills — the till's table actions: planned (2026-09-28).**
+  [plan](superpowers/plans/2026-09-28-table-actions.md), thirteen tasks; the service plan's B10
+  onward wait until its Task 13 lands.
+  - **Task 1 built, in review as #816** (`refactor/party-rename`): "visit" renamed "party" in the
+    code, the tables (`parties`, `party_tables`, the `party_id` columns, core migration `0036`), the
+    routes (`/api/parties/...`) and the error codes (`party.*`, `tab.party_mismatch`,
+    `tab.party_has_other_open_bill`, `group.held_leaves_party`), with no behaviour change. The four
+    `visits_*_ck` CHECK names and the stored scope value `'visit'` stay until Task 13.
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
   joined to it, but merging another table's bill into its paid bill, or moving items to or from
@@ -2864,11 +2876,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   the person to take payment but offers no button that does it. Charging it belongs to plan Task 14 (bill payments).
 - **The floor and the table screen write amounts differently (plan Task 2, 2026-09-26).** The floor
   shows `44.00 €` while the table screen shows `44,00 €` in Spanish. The floor's format predates
-  the visits work; Task 2 now also uses it for what a party still owes. Make the floor follow the
+  the parties work; Task 2 now also uses it for what a party still owes. Make the floor follow the
   locale, as the table screen does.
 - **Join and merge keep a table, its bill and its party consistent — done (A73, #794).**
-  `joinTable` and `mergeTabs` refuse with `tab.not_table_tab`, `tab.visit_mismatch` and
-  `tab.visit_has_other_open_bill` (and `mergeTabs`, since A111, with `tab.merge_leaves_no_table`).
+  `joinTable` and `mergeTabs` refuse with `tab.not_table_tab`, `tab.party_mismatch` and
+  `tab.party_has_other_open_bill` (and `mergeTabs`, since A111, with `tab.merge_leaves_no_table`).
 - **A table's bill with no party can still be made (A73 review, 2026-09-28).** Two things are left
   open:
   - `moveTab` (route `POST /api/tabs/:id/move`) can point a free table at a parked counter order,
@@ -2889,7 +2901,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   merge already did. A merge that would free every table the party holds is refused with
   `tab.merge_leaves_no_table`. Merging a split check at no table back into the party's own bill
   frees no table, so a table joined to that bill with `joinTable` stays in the party (a case in
-  `apps/server/src/visits.test.ts`). Merging the party's own bill INTO a check at another table,
+  `apps/server/src/parties.test.ts`). Merging the party's own bill INTO a check at another table,
   with `freeSourceTable: true`, frees every table on that bill, a joined one included, and takes
   them out of the party, unless that would leave the party with none. A table joined to a split
   CHECK rather than to the party's tab is freed with that check, like a check moved to its own
@@ -2981,7 +2993,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   floor read works and lists the party at a revision no older than the one shown; when the floor
   read fails, from the re-read's own bills for the same party while that bills read is still the
   latest, the waiter is still on the order and no later re-read has started — the floor's figure is
-  the sum of the same bills (`readBillsOfVisits`, `apps/server/src/visits.ts`) — and otherwise it
+  the sum of the same bills (`readBillsOfParties`, `apps/server/src/parties.ts`) — and otherwise it
   is left alone.
   The priced-extra case was shown in the till's browser tests with a fixture adding a 1.50 extra;
   the demo menu offers no priced extra, so it was not run on the dev till.

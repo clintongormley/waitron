@@ -2086,7 +2086,7 @@ describe("till-station-screen out-of-date banner", () => {
 });
 
 describe("till-station-screen — firing a party's held group", () => {
-  const fireDetail = { visitId: "v-4", groupId: "g-3", expectedVisitRevision: 12 };
+  const fireDetail = { partyId: "v-4", groupId: "g-3", expectedPartyRevision: 12 };
 
   function fireFromWidget(el: TillStationScreen): void {
     queueWidget(el)!.dispatchEvent(
@@ -2112,8 +2112,8 @@ describe("till-station-screen — firing a party's held group", () => {
     await flush(el);
     const calls = vi.mocked(api.fireGroup).mock.calls;
     expect(calls).toEqual([
-      ["v-4", "g-3", { submissionId: expect.any(String), expectedVisitRevision: 12 }],
-      ["v-4", "g-3", { submissionId: expect.any(String), expectedVisitRevision: 12 }],
+      ["v-4", "g-3", { submissionId: expect.any(String), expectedPartyRevision: 12 }],
+      ["v-4", "g-3", { submissionId: expect.any(String), expectedPartyRevision: 12 }],
     ]);
     expect(calls[0]![2].submissionId).not.toBe(calls[1]![2].submissionId);
     expect(api.getStationQueue).toHaveBeenCalledTimes(3);
@@ -2121,9 +2121,9 @@ describe("till-station-screen — firing a party's held group", () => {
     expect(tableChanged(el)).toBeNull();
   });
 
-  it("on visit.out_of_date it reloads and says the table changed, and never sends again on its own", async () => {
+  it("on party.out_of_date it reloads and says the table changed, and never sends again on its own", async () => {
     const api = stubApi({
-      fireGroup: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v-4" }),
+      fireGroup: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v-4" }),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
@@ -2143,7 +2143,7 @@ describe("till-station-screen — firing a party's held group", () => {
     const api = stubApi({
       fireGroup: vi
         .fn()
-        .mockRejectedValueOnce({ code: "visit.out_of_date" })
+        .mockRejectedValueOnce({ code: "party.out_of_date" })
         .mockResolvedValue({ revision: 14 }),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
@@ -2167,7 +2167,7 @@ describe("till-station-screen — firing a party's held group", () => {
         orderNumber: 12,
         label,
         status: "placed",
-        visit: { id: "v-4", revision: 12 },
+        party: { id: "v-4", revision: 12 },
         items: [
           {
             ...cocinaQueue[0]!.items[0]!,
@@ -2186,7 +2186,7 @@ describe("till-station-screen — firing a party's held group", () => {
   it("names the table that changed, and never says where it changed", async () => {
     const api = stubApi({
       getStationQueue: vi.fn().mockResolvedValue({ items: partyQueue("Mesa 4"), notices: [] }),
-      fireGroup: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v-4" }),
+      fireGroup: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v-4" }),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
@@ -2203,7 +2203,7 @@ describe("till-station-screen — firing a party's held group", () => {
   it("names a card with no label by its order number", async () => {
     const api = stubApi({
       getStationQueue: vi.fn().mockResolvedValue({ items: partyQueue(null), notices: [] }),
-      fireGroup: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v-4" }),
+      fireGroup: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v-4" }),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
@@ -2217,7 +2217,7 @@ describe("till-station-screen — firing a party's held group", () => {
 
   it("says a table changed when the group's card is not on screen", async () => {
     const api = stubApi({
-      fireGroup: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v-4" }),
+      fireGroup: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v-4" }),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
@@ -2236,7 +2236,7 @@ describe("till-station-screen — firing a party's held group", () => {
     try {
       const api = stubApi({
         getStationQueue: vi.fn().mockResolvedValue({ items: partyQueue("Mesa 4"), notices: [] }),
-        fireGroup: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v-4" }),
+        fireGroup: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v-4" }),
       });
       const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
         api,

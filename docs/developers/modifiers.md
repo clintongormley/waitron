@@ -136,19 +136,19 @@ A requested line carries two optional fields, `options` and `extras`. Six routes
 each threading them into `priceOrderLines` (`apps/server/src/working-order.ts`): the walk-up sale
 `POST /api/sales`, the park `POST /api/working-orders`, the held-order edit
 `PUT /api/working-orders/:id`, the one-line edit `PUT /api/working-orders/:id/lines/:lineNo`
-(through `applyLineEdits`), a seated party's group submission `POST /api/visits/:id/groups`,
+(through `applyLineEdits`), a seated party's group submission `POST /api/parties/:id/groups`,
 and the integrated card pay `POST /api/pay` — the last on its WALK-UP branch only, since a retrieved or
 placed order ignores the request's lines and files its own stored ones (`IntegratedPayRequest`,
 `apps/server/src/till-sale.ts`).
 
 One more route takes them, for a seated party's unsent order (`apps/server/src/order-drafts.ts`):
-the draft save `PUT /api/visits/:id/drafts`. It stores the answers UNPRICED, so it checks only their
+the draft save `PUT /api/parties/:id/drafts`. It stores the answers UNPRICED, so it checks only their
 shape, through `readOptionSelections` and `readExtraSelections` (`packages/catalogue/src/`): each
 refuses what its validator below refuses without consulting a list — a malformed entry, two answers
 to one options list, one extras list answered twice or one product picked twice from it — under the
 same `options.invalid` or `extras.invalid` naming the same field, and also refuses an id that is no
 UUID. What needs the lists (an unanswered list, a withdrawn label, a count a list refuses) is left
-to the draft submission `POST /api/visits/:id/drafts/:did/submit`. Its body carries no answers,
+to the draft submission `POST /api/parties/:id/drafts/:did/submit`. Its body carries no answers,
 only groups of the draft's line ids; it prices the answers the save stored, through `placeGroups`
 (`apps/server/src/order-groups.ts`), as a group submission does.
 

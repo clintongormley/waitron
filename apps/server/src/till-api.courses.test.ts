@@ -272,17 +272,17 @@ async function tabWithSopaAndFilete(): Promise<string> {
     body: JSON.stringify({}),
   });
   expect(opened.status).toBe(200);
-  const { tabId, visitId, revision } = (await opened.json()) as {
+  const { tabId, partyId, revision } = (await opened.json()) as {
     tabId: string;
-    visitId: string;
+    partyId: string;
     revision: number;
   };
-  const round = await app.request(`/api/visits/${visitId}/groups`, {
+  const round = await app.request(`/api/parties/${partyId}/groups`, {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
     body: JSON.stringify({
       submissionId: randomUUID(),
-      expectedVisitRevision: revision,
+      expectedPartyRevision: revision,
       groups: [
         { lines: [{ menuItemId: ids.get(SOPA)!, quantity: "1" }], release: "fire" },
         { lines: [{ menuItemId: ids.get(FILETE)!, quantity: "1" }], release: "hold" },

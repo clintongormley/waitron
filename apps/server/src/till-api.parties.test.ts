@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   locations,
   tills,
-  visits,
+  parties,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -40,7 +40,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
 // The HTTP surface of seating and finishing a table: the session guard, the body and id screens and
-// the status each refusal answers. The verbs themselves are pinned in `visits.test.ts`.
+// the status each refusal answers. The verbs themselves are pinned in `parties.test.ts`.
 let cfg: TillConfig;
 let ana: { id: string };
 
@@ -91,7 +91,7 @@ const clock: TrustedClock = {
     };
   },
   anchor: () => {
-    throw new Error("till-api.visits.test: anchor() is not used by these routes");
+    throw new Error("till-api.parties.test: anchor() is not used by these routes");
   },
   currentAnchor: () => null,
 };
@@ -137,13 +137,13 @@ async function seat(guestCount: number | null = 2) {
   expect(res.status).toBe(200);
   return {
     tableId,
-    ...((await res.json()) as { visitId: string; tabId: string; revision: number }),
+    ...((await res.json()) as { partyId: string; tabId: string; revision: number }),
   };
 }
 
-async function visitRow(id: string) {
+async function partyRow(id: string) {
   const [row] = await withTransaction(suite.db, (tx) =>
-    tx.select().from(visits).where(eq(visits.id, id)),
+    tx.select().from(parties).where(eq(parties.id, id)),
   );
   return row!;
 }
@@ -158,19 +158,19 @@ describe("POST /api/tables/:id/seat", () => {
   it("seats a free table for the signed-in operator", async () => {
     const seated = await seat(3);
     expect(seated.revision).toBe(0);
-    expect(await visitRow(seated.visitId)).toMatchObject({ guestCount: 3, openedBy: ana.id });
+    expect(await partyRow(seated.partyId)).toMatchObject({ guestCount: 3, openedBy: ana.id });
     const [tab] = await withTransaction(suite.db, (tx) =>
       tx.select().from(workingOrders).where(eq(workingOrders.id, seated.tabId)),
     );
-    expect(tab!.visitId).toBe(seated.visitId);
+    expect(tab!.partyId).toBe(seated.partyId);
   });
 
   it("seats without a guest count, absent or null", async () => {
-    expect((await visitRow((await seat(null)).visitId)).guestCount).toBeNull();
+    expect((await partyRow((await seat(null)).partyId)).guestCount).toBeNull();
     const res = await post(`/api/tables/${await table()}/seat`, {});
     expect(res.status).toBe(200);
-    const { visitId } = (await res.json()) as { visitId: string };
-    expect((await visitRow(visitId)).guestCount).toBeNull();
+    const { partyId } = (await res.json()) as { partyId: string };
+    expect((await partyRow(partyId)).guestCount).toBeNull();
   });
 
   it.each([0, -1, 1.5, "3", true, 100_000])(
@@ -235,110 +235,110 @@ describe("POST /api/tables/:id/seat", () => {
   });
 });
 
-describe("POST /api/visits/:id/finish", () => {
-  it("closes the visit for the signed-in operator", async () => {
-    const { visitId } = await seat();
-    const res = await post(`/api/visits/${visitId}/finish`, { expectedVisitRevision: 0 });
+describe("POST /api/parties/:id/finish", () => {
+  it("closes the party for the signed-in operator", async () => {
+    const { partyId } = await seat();
+    const res = await post(`/api/parties/${partyId}/finish`, { expectedPartyRevision: 0 });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ state: "closed" });
-    expect(await visitRow(visitId)).toMatchObject({ state: "closed", closedBy: ana.id });
+    expect(await partyRow(partyId)).toMatchObject({ state: "closed", closedBy: ana.id });
   });
 
-  it("answers 409 visit.bill_outstanding while a bill is unpaid", async () => {
-    const { visitId, tabId } = await seat();
+  it("answers 409 party.bill_outstanding while a bill is unpaid", async () => {
+    const { partyId, tabId } = await seat();
     await withTransaction(suite.db, (tx) =>
       tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, tabId)),
     );
-    const res = await post(`/api/visits/${visitId}/finish`, { expectedVisitRevision: 0 });
+    const res = await post(`/api/parties/${partyId}/finish`, { expectedPartyRevision: 0 });
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({
-      error: { code: "visit.bill_outstanding", params: { visitId } },
+      error: { code: "party.bill_outstanding", params: { partyId } },
     });
   });
 
-  it("answers 409 visit.out_of_date for a stale revision", async () => {
-    const { visitId } = await seat();
-    const res = await post(`/api/visits/${visitId}/finish`, { expectedVisitRevision: 4 });
+  it("answers 409 party.out_of_date for a stale revision", async () => {
+    const { partyId } = await seat();
+    const res = await post(`/api/parties/${partyId}/finish`, { expectedPartyRevision: 4 });
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({
-      error: { code: "visit.out_of_date", params: { visitId, revision: 0 } },
+      error: { code: "party.out_of_date", params: { partyId, revision: 0 } },
     });
   });
 
   it.each([undefined, -1, 1.5, "0", null])(
     "refuses the revision %j as a bad field",
-    async (expectedVisitRevision) => {
-      const { visitId } = await seat();
-      const res = await post(`/api/visits/${visitId}/finish`, { expectedVisitRevision });
+    async (expectedPartyRevision) => {
+      const { partyId } = await seat();
+      const res = await post(`/api/parties/${partyId}/finish`, { expectedPartyRevision });
       expect(res.status).toBe(400);
       expect(await res.json()).toMatchObject({
-        error: { code: "management.request_invalid", params: { field: "expectedVisitRevision" } },
+        error: { code: "management.request_invalid", params: { field: "expectedPartyRevision" } },
       });
     },
   );
 
-  it("answers 409 visit.not_open for a malformed or unknown visit", async () => {
+  it("answers 409 party.not_open for a malformed or unknown party", async () => {
     for (const id of ["not-a-uuid", randomUUID()]) {
-      const res = await post(`/api/visits/${id}/finish`, { expectedVisitRevision: 0 });
+      const res = await post(`/api/parties/${id}/finish`, { expectedPartyRevision: 0 });
       expect(res.status).toBe(409);
       expect(await res.json()).toMatchObject({
-        error: { code: "visit.not_open", params: { visitId: id } },
+        error: { code: "party.not_open", params: { partyId: id } },
       });
     }
   });
 
   it("401s without a session", async () => {
     const res = await post(
-      `/api/visits/${randomUUID()}/finish`,
-      { expectedVisitRevision: 0 },
+      `/api/parties/${randomUUID()}/finish`,
+      { expectedPartyRevision: 0 },
       false,
     );
     expect(res.status).toBe(401);
   });
 });
 
-describe("POST /api/visits/:id/cleared", () => {
+describe("POST /api/parties/:id/cleared", () => {
   it("clears a table that needs clearing", async () => {
     await withTransaction(suite.db, (tx) => writeClearingWorkflow(tx, true));
-    const { visitId } = await seat();
-    const finished = await post(`/api/visits/${visitId}/finish`, { expectedVisitRevision: 0 });
+    const { partyId } = await seat();
+    const finished = await post(`/api/parties/${partyId}/finish`, { expectedPartyRevision: 0 });
     expect(await finished.json()).toEqual({ state: "needs_clearing" });
 
-    const res = await post(`/api/visits/${visitId}/cleared`, { expectedVisitRevision: 1 });
+    const res = await post(`/api/parties/${partyId}/cleared`, { expectedPartyRevision: 1 });
 
     expect(res.status).toBe(204);
-    expect((await visitRow(visitId)).state).toBe("closed");
+    expect((await partyRow(partyId)).state).toBe("closed");
     await withTransaction(suite.db, (tx) => writeClearingWorkflow(tx, false));
   });
 
-  it("answers 409 visit.not_open for a visit that does not need clearing", async () => {
-    const { visitId } = await seat();
-    const res = await post(`/api/visits/${visitId}/cleared`, { expectedVisitRevision: 0 });
+  it("answers 409 party.not_open for a party that does not need clearing", async () => {
+    const { partyId } = await seat();
+    const res = await post(`/api/parties/${partyId}/cleared`, { expectedPartyRevision: 0 });
     expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: { code: "visit.not_open" } });
+    expect(await res.json()).toMatchObject({ error: { code: "party.not_open" } });
   });
 
   it("refuses a bad revision as a bad field, and a malformed id as not open", async () => {
-    const { visitId } = await seat();
-    const bad = await post(`/api/visits/${visitId}/cleared`, { expectedVisitRevision: "1" });
+    const { partyId } = await seat();
+    const bad = await post(`/api/parties/${partyId}/cleared`, { expectedPartyRevision: "1" });
     expect(bad.status).toBe(400);
-    const malformed = await post(`/api/visits/nope/cleared`, { expectedVisitRevision: 0 });
+    const malformed = await post(`/api/parties/nope/cleared`, { expectedPartyRevision: 0 });
     expect(malformed.status).toBe(409);
-    expect(await malformed.json()).toMatchObject({ error: { code: "visit.not_open" } });
+    expect(await malformed.json()).toMatchObject({ error: { code: "party.not_open" } });
   });
 });
 
-describe("GET /api/visits/:id/bills", () => {
-  it("lists the visit's bills", async () => {
-    const { visitId, tabId } = await seat();
-    const res = await app(suite.db).request(`/api/visits/${visitId}/bills`, {
+describe("GET /api/parties/:id/bills", () => {
+  it("lists the party's bills", async () => {
+    const { partyId, tabId } = await seat();
+    const res = await app(suite.db).request(`/api/parties/${partyId}/bills`, {
       headers: { cookie: await cookie() },
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual([
       {
         workingOrderId: tabId,
-        visitId,
+        partyId,
         label: null,
         status: "open",
         total: "0.00",
@@ -348,24 +348,24 @@ describe("GET /api/visits/:id/bills", () => {
     ]);
   });
 
-  it("answers 409 visit.not_open for a malformed or unknown visit, and 401 without a session", async () => {
+  it("answers 409 party.not_open for a malformed or unknown party, and 401 without a session", async () => {
     for (const id of ["nope", randomUUID()]) {
-      const res = await app(suite.db).request(`/api/visits/${id}/bills`, {
+      const res = await app(suite.db).request(`/api/parties/${id}/bills`, {
         headers: { cookie: await cookie() },
       });
       expect(res.status).toBe(409);
       expect(await res.json()).toMatchObject({
-        error: { code: "visit.not_open", params: { visitId: id } },
+        error: { code: "party.not_open", params: { partyId: id } },
       });
     }
-    const res = await app(suite.db).request(`/api/visits/${randomUUID()}/bills`);
+    const res = await app(suite.db).request(`/api/parties/${randomUUID()}/bills`);
     expect(res.status).toBe(401);
   });
 });
 
 describe("the tab routes carry the party's revision", () => {
-  async function current(visitId: string): Promise<number> {
-    return (await visitRow(visitId)).revision;
+  async function current(partyId: string): Promise<number> {
+    return (await partyRow(partyId)).revision;
   }
 
   /** Each route, sent to party `a`'s tab (party `b` is the other end of a merge or transfer). */
@@ -408,27 +408,27 @@ describe("the tab routes carry the party's revision", () => {
 
   type Seated = Awaited<ReturnType<typeof seat>>;
 
-  it.each(ROUTES)("$name answers 409 visit.out_of_date for a stale revision", async (route) => {
+  it.each(ROUTES)("$name answers 409 party.out_of_date for a stale revision", async (route) => {
     const a = await seat();
     const b = await seat();
     const res = await post(
       route.path(a),
       route.body(a, b, await table(), {
-        expectedVisitRevision: 7,
-        expectedSourceVisitRevision: 7,
+        expectedPartyRevision: 7,
+        expectedSourcePartyRevision: 7,
       }),
     );
     expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: { code: "visit.out_of_date" } });
+    expect(await res.json()).toMatchObject({ error: { code: "party.out_of_date" } });
   });
 
   it.each(ROUTES)("$name refuses a malformed revision as a bad field", async (route) => {
     const a = await seat();
     const b = await seat();
-    const crossesVisits = route.name === "merge" || route.name === "transfer";
-    const fields = crossesVisits
-      ? ["expectedVisitRevision", "expectedSourceVisitRevision"]
-      : ["expectedVisitRevision"];
+    const crossesParties = route.name === "merge" || route.name === "transfer";
+    const fields = crossesParties
+      ? ["expectedPartyRevision", "expectedSourcePartyRevision"]
+      : ["expectedPartyRevision"];
     for (const field of fields) {
       const res = await post(route.path(a), route.body(a, b, await table(), { [field]: "0" }));
       expect(res.status).toBe(400);
@@ -444,15 +444,15 @@ describe("the tab routes carry the party's revision", () => {
     const missing = await post(`/api/tabs/${a.tabId}/move`, { toTableId: to });
     expect(missing.status).toBe(400);
     expect(await missing.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "expectedVisitRevision" } },
+      error: { code: "management.request_invalid", params: { field: "expectedPartyRevision" } },
     });
 
     const moved = await post(`/api/tabs/${a.tabId}/move`, {
       toTableId: to,
-      expectedVisitRevision: 0,
+      expectedPartyRevision: 0,
     });
     expect(moved.status).toBe(200);
-    expect(await current(a.visitId)).toBe(1);
+    expect(await current(a.partyId)).toBe(1);
   });
 
   it("merge closes the absorbed party for the signed-in operator, and needs both revisions", async () => {
@@ -461,26 +461,26 @@ describe("the tab routes carry the party's revision", () => {
     const missing = await post(`/api/tabs/${a.tabId}/merge`, {
       fromTabId: b.tabId,
       freeSourceTable: true,
-      expectedVisitRevision: 0,
+      expectedPartyRevision: 0,
     });
     expect(missing.status).toBe(400);
     expect(await missing.json()).toMatchObject({
       error: {
         code: "management.request_invalid",
-        params: { field: "expectedSourceVisitRevision" },
+        params: { field: "expectedSourcePartyRevision" },
       },
     });
 
     const merged = await post(`/api/tabs/${a.tabId}/merge`, {
       fromTabId: b.tabId,
       freeSourceTable: true,
-      expectedVisitRevision: 0,
-      expectedSourceVisitRevision: 0,
+      expectedPartyRevision: 0,
+      expectedSourcePartyRevision: 0,
     });
     expect(merged.status).toBe(200);
-    expect(await visitRow(b.visitId)).toMatchObject({
+    expect(await partyRow(b.partyId)).toMatchObject({
       state: "closed",
-      mergedIntoVisitId: a.visitId,
+      mergedIntoPartyId: a.partyId,
       closedBy: ana.id,
     });
   });
@@ -490,16 +490,16 @@ describe("the tab routes carry the party's revision", () => {
     const other = await table();
     const joined = await post(`/api/tabs/${a.tabId}/join`, {
       tableId: other,
-      expectedVisitRevision: 0,
+      expectedPartyRevision: 0,
     });
     expect(joined.status).toBe(200);
     const unjoined = await post(`/api/tabs/${a.tabId}/unjoin`, {
       tableId: other,
-      expectedVisitRevision: 1,
+      expectedPartyRevision: 1,
     });
     expect(unjoined.status).toBe(200);
     expect(await unjoined.json()).toEqual({});
-    expect(await current(a.visitId)).toBe(2);
+    expect(await current(a.partyId)).toBe(2);
   });
 });
 
@@ -517,7 +517,7 @@ describe("join and merge refuse bills that would leave a table, a bill and a par
     });
   });
 
-  it("409 tab.visit_mismatch merging a party's tab into a table's bill of no party", async () => {
+  it("409 tab.party_mismatch merging a party's tab into a table's bill of no party", async () => {
     const a = await seat();
     const tableId = await table();
     const noPartyTabId = await withTransaction(
@@ -528,12 +528,12 @@ describe("join and merge refuse bills that would leave a table, a bill and a par
     const res = await post(`/api/tabs/${noPartyTabId}/merge`, {
       fromTabId: a.tabId,
       freeSourceTable: true,
-      expectedSourceVisitRevision: 0,
+      expectedSourcePartyRevision: 0,
     });
 
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({
-      error: { code: "tab.visit_mismatch", params: { tabId: noPartyTabId } },
+      error: { code: "tab.party_mismatch", params: { tabId: noPartyTabId } },
     });
   });
 
@@ -541,13 +541,13 @@ describe("join and merge refuse bills that would leave a table, a bill and a par
     const a = await seat();
     const checkId = randomUUID();
     await withTransaction(suite.db, (tx) =>
-      createOpenOrder(tx, cfg, checkId, [], null, { visitId: a.visitId }),
+      createOpenOrder(tx, cfg, checkId, [], null, { partyId: a.partyId }),
     );
 
     const res = await post(`/api/tabs/${checkId}/merge`, {
       fromTabId: a.tabId,
       freeSourceTable: true,
-      expectedVisitRevision: 0,
+      expectedPartyRevision: 0,
     });
 
     expect(res.status).toBe(409);
@@ -556,24 +556,24 @@ describe("join and merge refuse bills that would leave a table, a bill and a par
     });
   });
 
-  it("409 tab.visit_has_other_open_bill merging another party's separate bill while its tab is open", async () => {
+  it("409 tab.party_has_other_open_bill merging another party's separate bill while its tab is open", async () => {
     const a = await seat();
     const b = await seat();
     const checkId = randomUUID();
     await withTransaction(suite.db, (tx) =>
-      createOpenOrder(tx, cfg, checkId, [], null, { visitId: b.visitId }),
+      createOpenOrder(tx, cfg, checkId, [], null, { partyId: b.partyId }),
     );
 
     const res = await post(`/api/tabs/${a.tabId}/merge`, {
       fromTabId: checkId,
       freeSourceTable: false,
-      expectedVisitRevision: 0,
-      expectedSourceVisitRevision: 0,
+      expectedPartyRevision: 0,
+      expectedSourcePartyRevision: 0,
     });
 
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({
-      error: { code: "tab.visit_has_other_open_bill", params: { tabId: checkId } },
+      error: { code: "tab.party_has_other_open_bill", params: { tabId: checkId } },
     });
   });
 });

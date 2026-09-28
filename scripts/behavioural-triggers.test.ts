@@ -47,8 +47,9 @@ import {
  * `working_order_lines_require_open_parent_update` by `0027_line_vat_class_triggers.sql` and again,
  * with its served exception and a refusal to move a line off an order that is not open, by
  * `packages/db/drizzle/0033_line_served_exception.sql`. The one trigger that ACTS rather
- * than refuses is `visits_clear_table_status` (`packages/db/drizzle/0020_visit_clears_table_status.sql`):
- * a table's service status comes off when the party's visit leaves `open`, on every table still a
+ * than refuses is `parties_clear_table_status` (`packages/db/drizzle/0020_visit_clears_table_status.sql`,
+ * re-created under this name by `packages/db/drizzle/0036_party_rename.sql`):
+ * a table's service status comes off when the party leaves `open`, on every table still a
  * member of it. It replaced `working_orders_clear_table_status`, which cleared it when a tab settled.
  * `packages/db/drizzle/0024_bill_payment_triggers.sql` adds the state guards on `bill_payments` and
  * `bill_payment_refunds`, and a trigger on each refusing every delete — those two refuse by design
@@ -103,8 +104,8 @@ const IMAGE_REFERENCE_TRIGGERS = [
  * Every behavioural trigger the migrations create, pinned by name: those of
  * `0001_behavioural_triggers.sql` (SQLite has no `BEFORE INSERT OR UPDATE`, so a rule covering more
  * than one event is split and the suffix names the event), the `products_*` names of
- * `0004_variant_one_level.sql`, `visits_clear_table_status` of
- * `0020_visit_clears_table_status.sql`, and the `bill_payment*` names of
+ * `0004_variant_one_level.sql`, `parties_clear_table_status` of
+ * `0036_party_rename.sql`, and the `bill_payment*` names of
  * `0024_bill_payment_triggers.sql`. The `products_*` ones live on `products`, so a later
  * migration that RECREATES that table drops them silently — this list is what notices.
  */
@@ -129,7 +130,7 @@ const EXPECTED_TRIGGERS = [
   "working_order_lines_require_open_parent_insert",
   "working_order_lines_require_open_parent_update",
   "working_orders_enforce_transition",
-  "visits_clear_table_status",
+  "parties_clear_table_status",
 ];
 
 const scratch = [];
@@ -226,10 +227,10 @@ function sale(id, total, correctsSaleId = null) {
   );
 }
 
-/** An open visit. Check constraints are off here, so `closed_at` need not follow `state`. */
-function visit(id) {
+/** An open party. Check constraints are off here, so `closed_at` need not follow `state`. */
+function party(id) {
   return (
-    `insert into visits (id, state, opened_at, opened_by, revision) ` +
+    `insert into parties (id, state, opened_at, opened_by, revision) ` +
     `values ('${id}', 'open', '${STAMP}', 'person', 0)`
   );
 }
@@ -242,12 +243,12 @@ function table(id, label) {
   );
 }
 
-/** A table's membership of a visit; `leftAt` null while the table belongs to it. */
-function membership(id, visitId, tableId, leftAt) {
+/** A table's membership of a party; `leftAt` null while the table belongs to it. */
+function membership(id, partyId, tableId, leftAt) {
   const left = leftAt === null ? "null" : `'${leftAt}'`;
   return (
-    `insert into visit_tables (id, visit_id, table_id, joined_at, left_at) ` +
-    `values ('${id}', '${visitId}', '${tableId}', '${STAMP}', ${left})`
+    `insert into party_tables (id, party_id, table_id, joined_at, left_at) ` +
+    `values ('${id}', '${partyId}', '${tableId}', '${STAMP}', ${left})`
   );
 }
 
@@ -284,7 +285,7 @@ function seed(connection) {
     workingOrder("wo-settled-extra", "settled"),
     workingOrder("wo-settled-revision", "settled"),
     workingOrder("wo-settled-payment", "settled"),
-    workingOrder("wo-settled-visit", "settled"),
+    workingOrder("wo-settled-party", "settled"),
     workingOrder("wo-settled-reopen", "settled"),
     workingOrder("wo-flip", "open"),
     workingOrder("wo-lines-update", "open"),
@@ -300,29 +301,29 @@ function seed(connection) {
     line("line-delete", "wo-lines-delete", '{"es":"Plato","ca":"Plat"}'),
     line("line-orphaned", "wo-orphaned-parent", '{"es":"Plato","ca":"Plat"}'),
 
-    // A tab's table carrying a service status: settling the tab leaves it (the visit clears it).
+    // A tab's table carrying a service status: settling the tab leaves it (the party clears it).
     `insert into table_service_statuses (id, label, color, created_at) ` +
       `values ('status-busy', 'Ocupada', '#ff0000', '${STAMP}')`,
     `insert into dining_tables (id, location_id, label, tab_id, status_id, created_at) ` +
       `values ('dt-closes', 'loc', '1', 'wo-tab', 'status-busy', '${STAMP}')`,
 
-    // Visits and their memberships, for the clear-when-the-visit-leaves-open trigger. Each case
-    // moves its own visit, so no case's write changes what another case reads.
-    visit("visit-finishes"),
-    visit("visit-clearing"),
-    visit("visit-bumped"),
-    visit("visit-frozen"),
+    // Parties and their memberships, for the clear-when-the-party-leaves-open trigger. Each case
+    // moves its own party, so no case's write changes what another case reads.
+    party("party-finishes"),
+    party("party-clearing"),
+    party("party-bumped"),
+    party("party-frozen"),
     table("dt-member-a", "3"),
     table("dt-member-b", "4"),
     table("dt-left-earlier", "5"),
     table("dt-bystander", "6"),
     table("dt-clearing", "7"),
     table("dt-bumped", "8"),
-    membership("vt-a", "visit-finishes", "dt-member-a", null),
-    membership("vt-b", "visit-finishes", "dt-member-b", null),
-    membership("vt-left", "visit-finishes", "dt-left-earlier", STAMP),
-    membership("vt-clearing", "visit-clearing", "dt-clearing", null),
-    membership("vt-bumped", "visit-bumped", "dt-bumped", null),
+    membership("vt-a", "party-finishes", "dt-member-a", null),
+    membership("vt-b", "party-finishes", "dt-member-b", null),
+    membership("vt-left", "party-finishes", "dt-left-earlier", STAMP),
+    membership("vt-clearing", "party-clearing", "dt-clearing", null),
+    membership("vt-bumped", "party-bumped", "dt-bumped", null),
 
     // Sales and their tenders. Every tender is written BEFORE any settlement, because
     // tenders_reject_post_settlement is one of the triggers under test.
@@ -568,14 +569,14 @@ describe("working_orders_enforce_transition", () => {
     ).toBe(TRANSITION_REFUSAL);
   });
 
-  // Changing `visit_id` ALONE would be refused whether or not the column is in the list, because the
+  // Changing `party_id` ALONE would be refused whether or not the column is in the list, because the
   // settled exception also needs `collected_at` to go from null to set; so the stamp rides along.
-  it("refuses the handover stamp when the order's visit changes with it", () => {
+  it("refuses the handover stamp when the order's party changes with it", () => {
     expect(
       refusalFor(
         connection,
-        `update working_orders set collected_at = '${STAMP}', visit_id = 'visit-frozen' ` +
-          `where id = 'wo-settled-visit'`,
+        `update working_orders set collected_at = '${STAMP}', party_id = 'party-frozen' ` +
+          `where id = 'wo-settled-party'`,
       ),
     ).toBe(TRANSITION_REFUSAL);
   });
@@ -886,13 +887,13 @@ describe("working_order_lines_check_variant_locales", () => {
   });
 });
 
-describe("visits_clear_table_status", () => {
+describe("parties_clear_table_status", () => {
   const statusOf = (table) =>
     connection.prepare(`select status_id from dining_tables where id = ?`).get(table).status_id;
 
-  it("clears the status of every table still a member when the visit closes, and no other", () => {
+  it("clears the status of every table still a member when the party closes, and no other", () => {
     connection.exec(
-      `update visits set state = 'closed', closed_at = '${STAMP}' where id = 'visit-finishes'`,
+      `update parties set state = 'closed', closed_at = '${STAMP}' where id = 'party-finishes'`,
     );
     expect(statusOf("dt-member-a")).toBeNull();
     expect(statusOf("dt-member-b")).toBeNull();
@@ -900,15 +901,15 @@ describe("visits_clear_table_status", () => {
     expect(statusOf("dt-bystander")).toBe("status-busy");
   });
 
-  it("clears it when the visit moves to needs clearing", () => {
+  it("clears it when the party moves to needs clearing", () => {
     connection.exec(
-      `update visits set state = 'needs_clearing', closed_at = '${STAMP}' where id = 'visit-clearing'`,
+      `update parties set state = 'needs_clearing', closed_at = '${STAMP}' where id = 'party-clearing'`,
     );
     expect(statusOf("dt-clearing")).toBeNull();
   });
 
-  it("leaves it alone when an open visit only changes its revision", () => {
-    connection.exec(`update visits set revision = revision + 1 where id = 'visit-bumped'`);
+  it("leaves it alone when an open party only changes its revision", () => {
+    connection.exec(`update parties set revision = revision + 1 where id = 'party-bumped'`);
     expect(statusOf("dt-bumped")).toBe("status-busy");
   });
 

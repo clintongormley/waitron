@@ -183,34 +183,34 @@ async function request(path: string, init: RequestInit = {}): Promise<Response> 
   });
 }
 
-/** Seats table `id`; answers the party's tab and visit. */
-async function seat(id: string): Promise<{ tabId: string; visitId: string }> {
+/** Seats table `id`; answers the party's tab and party. */
+async function seat(id: string): Promise<{ tabId: string; partyId: string }> {
   const seated = await request(`/api/tables/${id}/seat`, {
     method: "POST",
     body: JSON.stringify({}),
   });
   expect(seated.status).toBe(200);
-  return (await seated.json()) as { tabId: string; visitId: string };
+  return (await seated.json()) as { tabId: string; partyId: string };
 }
 
-/** The visit's current revision, as the groups route reads it. */
-async function visitRevision(visitId: string): Promise<number> {
-  const { revision } = (await (await request(`/api/visits/${visitId}/groups`)).json()) as {
+/** The party's current revision, as the groups route reads it. */
+async function partyRevision(partyId: string): Promise<number> {
+  const { revision } = (await (await request(`/api/parties/${partyId}/groups`)).json()) as {
     revision: number;
   };
   return revision;
 }
 
-/** Sends `lines` to the party's tab as one group released now, at the visit's current revision. */
-async function sendRound(visitId: string, lines: unknown[]): Promise<Response> {
-  const { revision } = (await (await request(`/api/visits/${visitId}/groups`)).json()) as {
+/** Sends `lines` to the party's tab as one group released now, at the party's current revision. */
+async function sendRound(partyId: string, lines: unknown[]): Promise<Response> {
+  const { revision } = (await (await request(`/api/parties/${partyId}/groups`)).json()) as {
     revision: number;
   };
-  return request(`/api/visits/${visitId}/groups`, {
+  return request(`/api/parties/${partyId}/groups`, {
     method: "POST",
     body: JSON.stringify({
       submissionId: randomUUID(),
-      expectedVisitRevision: revision,
+      expectedPartyRevision: revision,
       groups: [{ lines, release: "fire" }],
     }),
   });
@@ -218,8 +218,8 @@ async function sendRound(visitId: string, lines: unknown[]): Promise<Response> {
 
 /** Seats table `id` and rings one line on its tab; returns the tab id. */
 async function seatWithOneLine(id: string): Promise<string> {
-  const { tabId, visitId } = await seat(id);
-  const round = await sendRound(visitId, [{ menuItemId, quantity: "1" }]);
+  const { tabId, partyId } = await seat(id);
+  const round = await sendRound(partyId, [{ menuItemId, quantity: "1" }]);
   expect(round.status).toBe(200);
   return tabId;
 }
@@ -380,9 +380,9 @@ describe("table + tab routes", () => {
       body: JSON.stringify({}),
     });
     expect(open.status).toBe(200);
-    const { tabId, visitId } = (await open.json()) as { tabId: string; visitId: string };
+    const { tabId, partyId } = (await open.json()) as { tabId: string; partyId: string };
     expect(tabId).toBeDefined();
-    const round = await sendRound(visitId, [{ menuItemId, quantity: "1" }]);
+    const round = await sendRound(partyId, [{ menuItemId, quantity: "1" }]);
     expect(round.status).toBe(200);
 
     const again = await request(`/api/tables/${id}/seat`, {
@@ -402,19 +402,19 @@ describe("table + tab routes", () => {
     expect(await res.json()).toMatchObject({ error: { code: "table.not_found" } });
   });
 
-  it("POST /api/visits/:id/groups appends; DELETE .../lines/:lineNo voids; GET /api/tables/state reflects it", async () => {
+  it("POST /api/parties/:id/groups appends; DELETE .../lines/:lineNo voids; GET /api/tables/state reflects it", async () => {
     const { id } = (await (
       await request("/api/tables", {
         method: "POST",
         body: JSON.stringify({ label: "5", zoneId: tablesZoneId }),
       })
     ).json()) as { id: string };
-    const { tabId, visitId } = await seat(id);
-    expect((await sendRound(visitId, [{ menuItemId, quantity: "1" }])).status).toBe(200);
+    const { tabId, partyId } = await seat(id);
+    expect((await sendRound(partyId, [{ menuItemId, quantity: "1" }])).status).toBe(200);
 
-    const round = await sendRound(visitId, [{ menuItemId, quantity: "1" }]);
+    const round = await sendRound(partyId, [{ menuItemId, quantity: "1" }]);
     expect(round.status).toBe(200);
-    // The tab the round landed on: a seated party's settled tab gets a new one (visits.test.ts).
+    // The tab the round landed on: a seated party's settled tab gets a new one (parties.test.ts).
     expect(await round.json()).toEqual({
       tabId,
       revision: expect.any(Number),
@@ -431,12 +431,12 @@ describe("table + tab routes", () => {
       ],
     });
 
-    const before = await visitRevision(visitId);
+    const before = await partyRevision(partyId);
     const voided = await request(`/api/working-orders/${tabId}/lines/1`, { method: "DELETE" });
     expect(voided.status).toBe(200);
     // The void moves the party on, so the answer says where to, for its next command.
-    expect(await voided.json()).toEqual({ visit: { id: visitId, revision: before + 1 } });
-    expect(await visitRevision(visitId)).toBe(before + 1);
+    expect(await voided.json()).toEqual({ party: { id: partyId, revision: before + 1 } });
+    expect(await partyRevision(partyId)).toBe(before + 1);
 
     const state = (await (await request("/api/tables/state")).json()) as {
       id: string;
@@ -453,8 +453,8 @@ describe("table + tab routes", () => {
         body: JSON.stringify({ label: `V-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
       })
     ).json()) as { id: string };
-    const { tabId, visitId } = await seat(id);
-    await sendRound(visitId, [{ menuItemId, quantity: "3" }]);
+    const { tabId, partyId } = await seat(id);
+    await sendRound(partyId, [{ menuItemId, quantity: "3" }]);
 
     for (const quantity of ["0", "4", "abc"]) {
       const refused = await request(`/api/working-orders/${tabId}/lines/1?quantity=${quantity}`, {
@@ -483,8 +483,8 @@ describe("table + tab routes", () => {
         body: JSON.stringify({ label: `S-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
       })
     ).json()) as { id: string };
-    const { tabId, visitId } = await seat(id);
-    await sendRound(visitId, [{ menuItemId, quantity: "1" }]);
+    const { tabId, partyId } = await seat(id);
+    await sendRound(partyId, [{ menuItemId, quantity: "1" }]);
     await request(`/api/working-orders/${tabId}/lines/recall`, {
       method: "POST",
       body: JSON.stringify({ lineNos: [1] }),
@@ -512,9 +512,9 @@ describe("table + tab routes", () => {
         body: JSON.stringify({ label: "9", zoneId: tablesZoneId }),
       })
     ).json()) as { id: string };
-    const { tabId, visitId } = await seat(id);
+    const { tabId, partyId } = await seat(id);
     // One round of two lines, then serve line 1 (the two floor states the screen renders).
-    await sendRound(visitId, [
+    await sendRound(partyId, [
       { menuItemId, quantity: "1" },
       { menuItemId, quantity: "2" },
     ]);
@@ -522,11 +522,11 @@ describe("table + tab routes", () => {
       lines: { id: string; lineNo: number }[];
     };
     const first = before.lines.find((line) => line.lineNo === 1);
-    const served = await request(`/api/visits/${visitId}/served`, {
+    const served = await request(`/api/parties/${partyId}/served`, {
       method: "POST",
       body: JSON.stringify({
         submissionId: randomUUID(),
-        expectedVisitRevision: await visitRevision(visitId),
+        expectedPartyRevision: await partyRevision(partyId),
         items: [{ lineId: first!.id, quantity: "1" }],
       }),
     });
@@ -588,13 +588,13 @@ describe("table + tab routes", () => {
     expect(await res.json()).toMatchObject({ error: { code: "tab.not_open" } });
   });
 
-  it("a malformed :id on the groups route → 409 visit.not_open (not a 500)", async () => {
-    const res = await request("/api/visits/not-a-uuid/groups", {
+  it("a malformed :id on the groups route → 409 party.not_open (not a 500)", async () => {
+    const res = await request("/api/parties/not-a-uuid/groups", {
       method: "POST",
-      body: JSON.stringify({ submissionId: "s", expectedVisitRevision: 0, groups: [] }),
+      body: JSON.stringify({ submissionId: "s", expectedPartyRevision: 0, groups: [] }),
     });
     expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: { code: "visit.not_open" } });
+    expect(await res.json()).toMatchObject({ error: { code: "party.not_open" } });
   });
 
   it("a malformed :id on the void route → 409 tab.not_open (not a 500)", async () => {
@@ -633,19 +633,19 @@ describe("table + tab routes", () => {
   });
 
   /** A tab on a fresh table with one line fired to the kitchen, and the revision a copy reads. */
-  async function firedTab(): Promise<{ tabId: string; visitId: string; revision: number }> {
+  async function firedTab(): Promise<{ tabId: string; partyId: string; revision: number }> {
     const { id } = (await (
       await request("/api/tables", {
         method: "POST",
         body: JSON.stringify({ label: `E-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
       })
     ).json()) as { id: string };
-    const { tabId, visitId } = await seat(id);
-    await sendRound(visitId, [{ menuItemId, quantity: "1" }]);
+    const { tabId, partyId } = await seat(id);
+    await sendRound(partyId, [{ menuItemId, quantity: "1" }]);
     const { revision } = (await (await request(`/api/working-orders/${tabId}/lines`)).json()) as {
       revision: number;
     };
-    return { tabId, visitId, revision };
+    return { tabId, partyId, revision };
   }
 
   it("PUT .../lines/:lineNo changes one line made from the current copy, and answers 409 working_order.out_of_date for an older one", async () => {
@@ -714,27 +714,27 @@ describe("table + tab routes", () => {
   });
 
   it("both edit routes answer the order's revision after the write, the same one when the edit changes nothing", async () => {
-    const { tabId, visitId, revision } = await firedTab();
+    const { tabId, partyId, revision } = await firedTab();
     const lineEdit = (body: object) =>
       request(`/api/working-orders/${tabId}/lines/1`, {
         method: "PUT",
         body: JSON.stringify(body),
       });
-    const party = await visitRevision(visitId);
+    const party = await partyRevision(partyId);
 
     // The line edit also answers its party's revision, which a change moves on.
     const changed = await lineEdit({ note: "sin gas", revision });
     expect(changed.status).toBe(200);
     expect(await changed.json()).toEqual({
       revision: revision + 1,
-      visit: { id: visitId, revision: party + 1 },
+      party: { id: partyId, revision: party + 1 },
     });
     const unchanged = await lineEdit({ note: "sin gas", revision: revision + 1 });
     expect(await unchanged.json()).toEqual({
       revision: revision + 1,
-      visit: { id: visitId, revision: party + 1 },
+      party: { id: partyId, revision: party + 1 },
     });
-    expect(await visitRevision(visitId)).toBe(party + 1);
+    expect(await partyRevision(partyId)).toBe(party + 1);
 
     const held = (await (await request(`/api/working-orders/${tabId}`)).json()) as {
       lines: { workingOrderLineId: string }[];
@@ -762,12 +762,12 @@ describe("table + tab routes", () => {
   });
 
   it("answers 409 order.payment_in_flight to a round, a line edit and a void while a card payment is in flight", async () => {
-    const { tabId, visitId, revision } = await firedTab();
+    const { tabId, partyId, revision } = await firedTab();
     suite.db.run(
       sql`update working_orders set payment_attempt_at = '2026-09-26T10:00:00.000Z' where id = ${tabId}`,
     );
     const refusals = [
-      await sendRound(visitId, [{ menuItemId, quantity: "1" }]),
+      await sendRound(partyId, [{ menuItemId, quantity: "1" }]),
       await request(`/api/working-orders/${tabId}/lines/1`, {
         method: "PUT",
         body: JSON.stringify({ note: "x", revision }),
@@ -808,10 +808,10 @@ describe("table + tab routes", () => {
         headers: json,
         body: JSON.stringify({}),
       }),
-      noAuth.request(`/api/visits/${id}/groups`, {
+      noAuth.request(`/api/parties/${id}/groups`, {
         method: "POST",
         headers: json,
-        body: JSON.stringify({ submissionId: "s", expectedVisitRevision: 0, groups: [] }),
+        body: JSON.stringify({ submissionId: "s", expectedPartyRevision: 0, groups: [] }),
       }),
       noAuth.request(`/api/working-orders/${id}/lines`),
       noAuth.request(`/api/working-orders/${id}/lines/1`, { method: "DELETE" }),

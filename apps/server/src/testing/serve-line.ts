@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { visitTables, visits, workingOrderLines, workingOrders } from "@waitron/db";
+import { partyTables, parties, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { thousandthsToDecimal } from "@waitron/shared";
 import type { TillConfig } from "../till-config.js";
@@ -22,14 +22,14 @@ export async function openPartyTab(
   tx: Transaction,
   cfg: TillConfig,
   req: { tableId: string; lines?: { menuItemId: string; quantity: string }[] },
-): Promise<{ tabId: string; orderNumber: number; visitId: string }> {
-  const [visit] = await tx
-    .insert(visits)
+): Promise<{ tabId: string; orderNumber: number; partyId: string }> {
+  const [party] = await tx
+    .insert(parties)
     .values({ guestCount: null, openedBy: OPERATOR })
-    .returning({ id: visits.id });
-  const opened = await openTab(tx, cfg, { ...req, visitId: visit!.id });
-  await tx.insert(visitTables).values({ visitId: visit!.id, tableId: req.tableId });
-  return { ...opened, visitId: visit!.id };
+    .returning({ id: parties.id });
+  const opened = await openTab(tx, cfg, { ...req, partyId: party!.id });
+  await tx.insert(partyTables).values({ partyId: party!.id, tableId: req.tableId });
+  return { ...opened, partyId: party!.id };
 }
 
 /** Fire every line of the bill, as `tables.test.ts` fires `openTab`'s lines: only released work can be
@@ -49,12 +49,12 @@ async function partyLine(tx: Transaction, orderId: string, lineNo: number) {
       id: workingOrderLines.id,
       quantity: workingOrderLines.quantity,
       servedQuantity: workingOrderLines.servedQuantity,
-      visitId: workingOrders.visitId,
-      revision: visits.revision,
+      partyId: workingOrders.partyId,
+      revision: parties.revision,
     })
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-    .innerJoin(visits, eq(visits.id, workingOrders.visitId))
+    .innerJoin(parties, eq(parties.id, workingOrders.partyId))
     .where(
       and(eq(workingOrderLines.workingOrderId, orderId), eq(workingOrderLines.lineNo, lineNo)),
     );
@@ -73,9 +73,9 @@ export async function serveLine(
   return markServed(
     tx,
     cfg,
-    line.visitId!,
+    line.partyId!,
     [{ lineId: line.id, quantity: thousandthsToDecimal(line.quantity - line.servedQuantity) }],
-    { submissionId: randomUUID(), expectedVisitRevision: line.revision, operatorId: OPERATOR },
+    { submissionId: randomUUID(), expectedPartyRevision: line.revision, operatorId: OPERATOR },
   );
 }
 
@@ -90,8 +90,8 @@ export async function unserveLine(
   return unmarkServed(
     tx,
     cfg,
-    line.visitId!,
+    line.partyId!,
     [{ lineId: line.id, quantity: thousandthsToDecimal(line.servedQuantity) }],
-    { submissionId: randomUUID(), expectedVisitRevision: line.revision, operatorId: OPERATOR },
+    { submissionId: randomUUID(), expectedPartyRevision: line.revision, operatorId: OPERATOR },
   );
 }

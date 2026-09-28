@@ -105,7 +105,7 @@ const freeTable: TableState = {
   posY: null,
   shape: null,
   rotation: null,
-  visit: null,
+  party: null,
 };
 
 const openTable: TableState = {
@@ -129,13 +129,13 @@ const openTable: TableState = {
   posY: null,
   shape: null,
   rotation: null,
-  visit: null,
+  party: null,
 };
 
 /** {@link openTable} with a party seated at it: a round goes to the party. */
 const seatedTable: TableState = {
   ...openTable,
-  visit: {
+  party: {
     id: "v-2",
     revision: 3,
     guestCount: 2,
@@ -428,7 +428,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     setLineCourse: vi.fn().mockResolvedValue(undefined),
     sendLines: vi.fn().mockResolvedValue(undefined),
     recallLines: vi.fn().mockResolvedValue(undefined),
-    voidLine: vi.fn().mockResolvedValue({ visit: null }),
+    voidLine: vi.fn().mockResolvedValue({ party: null }),
     setTableStatus: vi.fn().mockResolvedValue(undefined),
     moveTab: vi.fn().mockResolvedValue(undefined),
     joinTable: vi.fn().mockResolvedValue(undefined),
@@ -3983,7 +3983,7 @@ describe("till-app", () => {
           "draft-1",
           {
             submissionId: expect.any(String),
-            expectedVisitRevision: 3,
+            expectedPartyRevision: 3,
             draftRevision: 1,
             groups: [{ release: "fire", lineIds: [expect.any(String)] }],
           },
@@ -4078,7 +4078,7 @@ describe("till-app", () => {
         // Re-read so the groups list reconciles to server truth (the fired group is marked fired).
         expect(fireGroup).toHaveBeenCalledWith("v-2", "g1", {
           submissionId: expect.any(String),
-          expectedVisitRevision: 3,
+          expectedPartyRevision: 3,
         });
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
@@ -4114,7 +4114,7 @@ describe("till-app", () => {
 
         expect(markServed).toHaveBeenCalledWith("v-2", [{ lineId: "line-1", quantity: "2" }], {
           submissionId: expect.any(String),
-          expectedVisitRevision: 3,
+          expectedPartyRevision: 3,
         });
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
@@ -4274,7 +4274,7 @@ describe("till-app", () => {
       });
 
       it("void-line cancels the started line then reloads its lines", async () => {
-        const voidLine = vi.fn().mockResolvedValue({ visit: null });
+        const voidLine = vi.fn().mockResolvedValue({ party: null });
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),

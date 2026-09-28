@@ -167,7 +167,7 @@ it("explains a merge refused for leaving the party without a table, in both lang
 
 it("explains each refusal of joining or merging bills that belong together differently, in both languages", () => {
   expect(
-    ["tab.not_table_tab", "tab.visit_mismatch", "tab.visit_has_other_open_bill"].map((code) => [
+    ["tab.not_table_tab", "tab.party_mismatch", "tab.party_has_other_open_bill"].map((code) => [
       codeMessage(code, "en"),
       codeMessage(code, "es"),
     ]),
@@ -183,6 +183,34 @@ it("explains each refusal of joining or merging bills that belong together diffe
     [
       "That separate bill's guests still have another open bill. Merge their table's bill instead",
       "Los clientes de esa cuenta separada aún tienen otra cuenta abierta. Combina en su lugar la cuenta de su mesa",
+    ],
+  ]);
+});
+
+it("explains each refusal about a table's party, in both languages", () => {
+  expect(
+    [
+      "party.not_open",
+      "party.out_of_date",
+      "party.bill_outstanding",
+      "group.held_leaves_party",
+    ].map((code) => [codeMessage(code, "en"), codeMessage(code, "es")]),
+  ).toEqual([
+    [
+      "This table has changed since you opened it. Reload the floor and try again",
+      "Esta mesa ha cambiado desde que la abriste. Vuelve a cargar el plano e inténtalo de nuevo",
+    ],
+    [
+      "Someone else changed this table. Reload it and try again",
+      "Otra persona ha cambiado esta mesa. Vuelve a cargarla e inténtalo de nuevo",
+    ],
+    [
+      "A bill for this table is still unpaid. Take payment before finishing the table",
+      "Hay una cuenta de esta mesa sin pagar. Cóbrala antes de cerrar la mesa",
+    ],
+    [
+      "Items still on hold cannot move to another table until their group is fired",
+      "Los artículos en espera no se pueden pasar a otra mesa hasta que se marche su grupo",
     ],
   ]);
 });

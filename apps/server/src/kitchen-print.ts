@@ -20,7 +20,7 @@ import {
   stationPrinters,
   ticketItems,
   ticketState,
-  visits,
+  parties,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -32,7 +32,7 @@ import type { CharacterSet, PaperWidth, PrintConfig } from "@waitron/printing";
 import { arrangeTicketItems, formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { printJobInTrouble } from "./print-job-trouble.js";
-import { visitFamily } from "./visits.js";
+import { partyFamily } from "./parties.js";
 import type { KitchenLayout, KitchenTicketItem, KitchenTicketStation } from "./kitchen-ticket.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
@@ -1109,17 +1109,17 @@ export async function copyKitchenJobLines(
 
 /**
  * The printing problems on a seated party's bills, the bills of every party merged into it
- * included. A visit that does not exist is `visit.not_open`, as on the other visit reads.
+ * included. A party that does not exist is `party.not_open`, as on the other party reads.
  */
 export async function listPrintProblems(
   tx: Transaction,
-  visitId: string,
+  partyId: string,
   now: Date = new Date(),
 ): Promise<PrintProblem[]> {
-  const [visit] = await tx.select({ id: visits.id }).from(visits).where(eq(visits.id, visitId));
-  if (visit === undefined) throw new AppError("visit.not_open", { visitId });
-  const family = await visitFamily(tx, visitId);
-  return readPrintProblems(tx, inArray(workingOrders.visitId, family), now);
+  const [party] = await tx.select({ id: parties.id }).from(parties).where(eq(parties.id, partyId));
+  if (party === undefined) throw new AppError("party.not_open", { partyId });
+  const family = await partyFamily(tx, partyId);
+  return readPrintProblems(tx, inArray(workingOrders.partyId, family), now);
 }
 
 /** Which of `orderIds` have a printing problem at `stationId`. */

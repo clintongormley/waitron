@@ -16,19 +16,19 @@ import { readReceiptIssuer } from "./receipt-issuer.js";
 // its codes.
 import "./errors.js";
 import {
-  bumpVisitRevision,
-  checkAndBumpVisit,
-  guardVisits,
+  bumpPartyRevision,
+  checkAndBumpParty,
+  guardParties,
   leaveTables,
   memberTables,
-  openVisit,
-  readBillsOfVisits,
+  openParty,
+  readBillsOfParties,
   runServiceCommand,
   tableHeld,
-  visitFamily,
-  visitOfOrder,
-} from "./visits.js";
-import type { VisitCommand } from "./visits.js";
+  partyFamily,
+  partyOfOrder,
+} from "./parties.js";
+import type { PartyCommand } from "./parties.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, exists, inArray, isNotNull, isNull, ne, notInArray, or, sql } from "drizzle-orm";
 import type { GetColumnData, SQL } from "drizzle-orm";
@@ -75,8 +75,8 @@ import {
   products,
   sales,
   ticketItems,
-  visitTables,
-  visits,
+  partyTables,
+  parties,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -128,12 +128,12 @@ import { issuancePass } from "./issuance-pass.js";
 import { issueMoment } from "./issue-moment.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
-import { moveDraftsToVisit, readUnsentDrafts } from "./order-drafts.js";
+import { moveDraftsToParty, readUnsentDrafts } from "./order-drafts.js";
 import type { UnsentDraft } from "./order-drafts.js";
 import {
   correctHoldTickets,
   fireHeldGroupsOfCourse,
-  moveGroupsToVisit,
+  moveGroupsToParty,
   onShownBill,
   printedHeldGroups,
   printHoldTickets,
@@ -143,10 +143,10 @@ import {
   requireGroup,
   requireOperator,
   startGroup,
-  visitHasGroup,
+  partyHasGroup,
   type HeldChange,
   type ReleaseReminder,
-  type VisitCommandArgs,
+  type PartyCommandArgs,
 } from "./order-groups.js";
 import {
   copyKitchenJobLines,
@@ -883,7 +883,7 @@ export async function createOpenOrder(
   placement: {
     deliveryTableId?: string | null;
     zoneId?: string;
-    visitId?: string | null;
+    partyId?: string | null;
     creditedTo?: string;
   } = {},
 ): Promise<{
@@ -925,7 +925,7 @@ export async function createOpenOrder(
     status: "open",
     // Not a fiscal field.
     deliveryTableId,
-    visitId: placement.visitId ?? null,
+    partyId: placement.partyId ?? null,
   });
 
   // An empty tab has no lines, and `tx.insert(...).values([])` throws.
@@ -982,7 +982,7 @@ export async function parkOrder(
  * no tab column.
  *
  * Refused while the table's `tab_id` points at an open order, and while a party still holds the
- * table (an active `visit_tables` row, `left_at` null) whatever its `tab_id` points at. The
+ * table (an active `party_tables` row, `left_at` null) whatever its `tab_id` points at. The
  * check-then-set below cannot interleave with a second `openTab`, because `withTransaction` IS the
  * venue file's write lock. A `tab_id` pointing at a settled or abandoned order on a table no party
  * holds is overwritten.
@@ -993,7 +993,7 @@ export async function openTab(
   req: {
     tableId: string;
     lines?: { menuItemId: string; quantity: string }[];
-    visitId?: string;
+    partyId?: string;
     /** Credited with `lines`. */
     operatorId?: string;
   },
@@ -1037,7 +1037,7 @@ export async function openTab(
   const tabId = randomUUID();
   const { orderNumber } = await createOpenOrder(tx, cfg, tabId, req.lines ?? [], null, {
     zoneId: table.zoneId ?? undefined,
-    visitId: req.visitId,
+    partyId: req.partyId,
     creditedTo: req.operatorId,
   });
   // Also clears any stale manual status as the new tab opens.
@@ -1386,7 +1386,7 @@ async function isOpenOrder(tx: Transaction, orderId: string): Promise<boolean> {
  * in this venue, including a deactivated course whose food still needs release.
  * Already-fired items retain their timestamps; an empty held set is a no-op.
  *
- * On a visit's order, the held groups holding the course's dishes fire whole first
+ * On a party's order, the held groups holding the course's dishes fire whole first
  * ({@link fireHeldGroupsOfCourse}); `operatorId` is who fired them. The course's lines still held
  * outside a held group, such as one recalled from a fired group, are then released.
  */
@@ -1835,7 +1835,7 @@ export async function insertTabRound(
 
 /**
  * A round sent to a seated party's tab after it has settled or been abandoned opens the party's next
- * tab on the same visit and points every table of the party at it. Only the tab the party's tables
+ * tab on the same party and points every table of the party at it. Only the tab the party's tables
  * still point at qualifies, so a round from a screen that has not seen the new tab is refused rather
  * than opening a second one. Returns the new tab, or null when `tabId` is not such a tab.
  */
@@ -1849,45 +1849,45 @@ async function openNextPartyTab(
     return null;
   }
   const nextTabId = randomUUID();
-  await createOpenOrder(tx, cfg, nextTabId, [], null, { visitId: party.visitId });
+  await createOpenOrder(tx, cfg, nextTabId, [], null, { partyId: party.partyId });
   await VENUE_SERVICE.copyOrderContext(tx, cfg, tabId, nextTabId);
   await tx
     .update(diningTables)
     .set({ tabId: nextTabId })
     .where(inArray(diningTables.id, party.tables));
-  await bumpVisitRevision(tx, party.visitId);
+  await bumpPartyRevision(tx, party.partyId);
   return nextTabId;
 }
 
 /**
- * A settled or abandoned tab that tables of its party still point at: its visit, and those tables.
+ * A settled or abandoned tab that tables of its party still point at: its party, and those tables.
  * Null for any other order, so a screen that has not seen the party's next tab cannot act on this one.
  */
 async function closedPartyTab(
   tx: Transaction,
   tabId: string,
-): Promise<{ visitId: string; tables: string[] } | null> {
+): Promise<{ partyId: string; tables: string[] } | null> {
   const [order] = await tx
-    .select({ status: workingOrders.status, visitId: workingOrders.visitId })
+    .select({ status: workingOrders.status, partyId: workingOrders.partyId })
     .from(workingOrders)
     .where(eq(workingOrders.id, tabId));
-  if (order?.visitId == null || (order.status !== "settled" && order.status !== "abandoned")) {
+  if (order?.partyId == null || (order.status !== "settled" && order.status !== "abandoned")) {
     return null;
   }
   const pointed = await tx
     .select({ id: diningTables.id })
     .from(diningTables)
-    .innerJoin(visitTables, eq(visitTables.tableId, diningTables.id))
+    .innerJoin(partyTables, eq(partyTables.tableId, diningTables.id))
     .where(
       and(
         eq(diningTables.tabId, tabId),
-        eq(visitTables.visitId, order.visitId),
-        isNull(visitTables.leftAt),
+        eq(partyTables.partyId, order.partyId),
+        isNull(partyTables.leftAt),
       ),
     );
   return pointed.length === 0
     ? null
-    : { visitId: order.visitId, tables: pointed.map((table) => table.id) };
+    : { partyId: order.partyId, tables: pointed.map((table) => table.id) };
 }
 
 /**
@@ -1996,7 +1996,7 @@ export async function voidTabLine(
         ),
       );
     await assertBillInvariant(tx, [tabId]);
-    await visitAfterEdit(tx, tabId, target.groupId === null ? [] : [target.groupId], operatorId);
+    await partyAfterEdit(tx, tabId, target.groupId === null ? [] : [target.groupId], operatorId);
     return;
   }
   const children = await tx
@@ -2018,24 +2018,24 @@ export async function voidTabLine(
     })),
   );
   await assertBillInvariant(tx, [tabId]);
-  await visitAfterEdit(tx, tabId, [], operatorId);
+  await partyAfterEdit(tx, tabId, [], operatorId);
 }
 
 /**
- * After a line edit or void on a bill of a visit, which carries no visit revision of its own (D19):
- * remove each of `leftGroups` it left held and empty, and move the visit's revision on. A bill of no
- * visit is left as it was.
+ * After a line edit or void on a bill of a party, which carries no party revision of its own (D19):
+ * remove each of `leftGroups` it left held and empty, and move the party's revision on. A bill of no
+ * party is left as it was.
  */
-async function visitAfterEdit(
+async function partyAfterEdit(
   tx: Transaction,
   orderId: string,
   leftGroups: readonly string[],
   operatorId: string | undefined,
 ): Promise<void> {
-  const visitId = await visitOfOrder(tx, orderId);
-  if (visitId === null) return;
-  await removeEmptiedHeldGroups(tx, visitId, leftGroups, operatorId);
-  await bumpVisitRevision(tx, visitId);
+  const partyId = await partyOfOrder(tx, orderId);
+  if (partyId === null) return;
+  await removeEmptiedHeldGroups(tx, partyId, leftGroups, operatorId);
+  await bumpPartyRevision(tx, partyId);
 }
 
 /** A dish's extras child, and how many of it go with one of the dish. */
@@ -2162,7 +2162,7 @@ export async function setLineCourse(
   await bumpRevision(tx, [tabId]);
 }
 
-/** A dish line on a bill of a visit, as a served command reads it. */
+/** A dish line on a bill of a party, as a served command reads it. */
 interface ServableLine {
   id: string;
   workingOrderId: string;
@@ -2178,16 +2178,16 @@ interface ServableLine {
 }
 
 /**
- * The dish lines `where` selects on the bills of the visit and of every visit merged into it that
+ * The dish lines `where` selects on the bills of the party and of every party merged into it that
  * Current orders shows ({@link onShownBill}), bill by bill in the order the bills were opened. An
  * extras line is never one: it follows its dish.
  */
 async function servableLines(
   tx: Transaction,
-  visitId: string,
+  partyId: string,
   where: SQL,
 ): Promise<ServableLine[]> {
-  const family = await visitFamily(tx, visitId);
+  const family = await partyFamily(tx, partyId);
   return tx
     .select({
       id: workingOrderLines.id,
@@ -2210,7 +2210,7 @@ async function servableLines(
       and(
         where,
         isNull(workingOrderLines.parentLineId),
-        inArray(workingOrders.visitId, family),
+        inArray(workingOrders.partyId, family),
         onShownBill(),
       ),
     )
@@ -2314,48 +2314,48 @@ async function writeServed(
 }
 
 /**
- * Mark part or all of each named dish line of the visit served. `quantity` is how much THIS command
- * serves, never more than is left to serve. Replayed by submission id before the visit's revision is
+ * Mark part or all of each named dish line of the party served. `quantity` is how much THIS command
+ * serves, never more than is left to serve. Replayed by submission id before the party's revision is
  * compared (D8, D19).
  */
 export async function markServed(
   tx: Transaction,
   cfg: TillConfig,
-  visitId: string,
+  partyId: string,
   items: { lineId: string; quantity: string }[],
-  args: VisitCommandArgs,
+  args: PartyCommandArgs,
 ): Promise<{ revision: number }> {
-  return changeServed(tx, cfg, visitId, items, args, "line.served");
+  return changeServed(tx, cfg, partyId, items, args, "line.served");
 }
 
 /** Take back part or all of what was marked served on each named dish line, for a mis-tap. */
 export async function unmarkServed(
   tx: Transaction,
   cfg: TillConfig,
-  visitId: string,
+  partyId: string,
   items: { lineId: string; quantity: string }[],
-  args: VisitCommandArgs,
+  args: PartyCommandArgs,
 ): Promise<{ revision: number }> {
-  return changeServed(tx, cfg, visitId, items, args, "line.unserved");
+  return changeServed(tx, cfg, partyId, items, args, "line.unserved");
 }
 
 async function changeServed(
   tx: Transaction,
   cfg: TillConfig,
-  visitId: string,
+  partyId: string,
   items: { lineId: string; quantity: string }[],
-  args: VisitCommandArgs,
+  args: PartyCommandArgs,
   kind: "line.served" | "line.unserved",
 ): Promise<{ revision: number }> {
   void cfg;
   return runServiceCommand(
     tx,
-    { kind: "visit", visitId },
+    { kind: "visit", partyId },
     args.submissionId,
     kind,
-    { visitId, items, operatorId: args.operatorId },
+    { partyId, items, operatorId: args.operatorId },
     async () => {
-      const revision = await checkAndBumpVisit(tx, visitId, args.expectedVisitRevision, "open");
+      const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
       if (items.length === 0 || new Set(items.map((item) => item.lineId)).size !== items.length) {
         throw new AppError("management.request_invalid", { field: "items" });
       }
@@ -2363,7 +2363,7 @@ async function changeServed(
         (
           await servableLines(
             tx,
-            visitId,
+            partyId,
             inArray(
               workingOrderLines.id,
               items.map((item) => item.lineId),
@@ -2391,28 +2391,28 @@ async function changeServed(
 }
 
 /**
- * Mark every dish line of a fired group fully served, on every bill of the visit it sits on that
+ * Mark every dish line of a fired group fully served, on every bill of the party it sits on that
  * Current orders shows, a paid one included. A held group is refused `group.line_held`, naming its
  * first line.
  */
 export async function markGroupServed(
   tx: Transaction,
   cfg: TillConfig,
-  visitId: string,
+  partyId: string,
   groupId: string,
-  args: VisitCommandArgs,
+  args: PartyCommandArgs,
 ): Promise<{ revision: number }> {
   void cfg;
   return runServiceCommand(
     tx,
-    { kind: "visit", visitId },
+    { kind: "visit", partyId },
     args.submissionId,
     "group.served",
-    { visitId, groupId, operatorId: args.operatorId },
+    { partyId, groupId, operatorId: args.operatorId },
     async () => {
-      const revision = await checkAndBumpVisit(tx, visitId, args.expectedVisitRevision, "open");
-      const state = await requireGroup(tx, visitId, groupId);
-      const lines = await servableLines(tx, visitId, eq(workingOrderLines.groupId, groupId));
+      const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
+      const state = await requireGroup(tx, partyId, groupId);
+      const lines = await servableLines(tx, partyId, eq(workingOrderLines.groupId, groupId));
       // A held group left with no line is on its way to `removed`.
       if (state === "held" && lines.length === 0) {
         throw new AppError("group.not_found", { groupId });
@@ -2632,8 +2632,8 @@ export interface TabLine {
   firedAt: string | null;
   /** Null when the line has no ticket item (always, on a child). */
   state: TicketState | null;
-  /** The order group the line is released with; null when it is in none, as on a bill with no visit
-   * or for a line moved here from another visit's bill. */
+  /** The order group the line is released with; null when it is in none, as on a bill with no party
+   * or for a line moved here from another party's bill. */
   groupId: string | null;
   note: string | null;
   /** The extras list a CHILD row was picked from; null on a dish. */
@@ -2741,7 +2741,7 @@ export async function readOrderRevision(tx: Transaction, orderId: string): Promi
 
 /**
  * Assert a move/join TARGET table exists, is `active`, and is FREE: its `tab_id` is null or points
- * at a settled or abandoned order, and no party holds it (an active `visit_tables` row).
+ * at a settled or abandoned order, and no party holds it (an active `party_tables` row).
  */
 async function assertTableAvailable(
   tx: Transaction,
@@ -2792,11 +2792,11 @@ export async function moveTab(
   cfg: TillConfig,
   tabId: string,
   toTableId: string,
-  command?: VisitCommand,
+  command?: PartyCommand,
 ): Promise<void> {
   await assertTabOpenOrPartyCurrent(tx, cfg, tabId);
-  const visitId = await visitOfOrder(tx, tabId);
-  await guardVisits(tx, visitId, null, command);
+  const partyId = await partyOfOrder(tx, tabId);
+  await guardParties(tx, partyId, null, command);
 
   const involved = await tx
     .select({
@@ -2826,12 +2826,12 @@ export async function moveTab(
     .update(diningTables)
     .set({ tabId, statusId: null })
     .where(eq(diningTables.id, toTableId));
-  if (visitId !== null) {
+  if (partyId !== null) {
     await leaveTables(
       tx,
       involved.filter((table) => table.tabId === tabId).map((table) => table.id),
     );
-    await tx.insert(visitTables).values({ visitId, tableId: toTableId });
+    await tx.insert(partyTables).values({ partyId, tableId: toTableId });
   }
   await enqueueMovedSlips(tx, cfg, before, tabId);
 }
@@ -2852,40 +2852,40 @@ async function tablePointsAt(tx: Transaction, orderId: string): Promise<boolean>
  */
 async function refuseInconsistentMerge(
   tx: Transaction,
-  into: { id: string; visitId: string | null },
-  from: { id: string; visitId: string | null },
+  into: { id: string; partyId: string | null },
+  from: { id: string; partyId: string | null },
 ): Promise<void> {
-  if (into.visitId === null && !(await tablePointsAt(tx, into.id))) {
+  if (into.partyId === null && !(await tablePointsAt(tx, into.id))) {
     throw new AppError("tab.not_table_tab", { tabId: into.id });
   }
   const fromAtTable = await tablePointsAt(tx, from.id);
-  if (into.visitId === null && from.visitId === null) {
+  if (into.partyId === null && from.partyId === null) {
     return;
   }
-  if (from.visitId === null) {
-    throw new AppError(fromAtTable ? "tab.visit_mismatch" : "tab.not_table_tab", {
+  if (from.partyId === null) {
+    throw new AppError(fromAtTable ? "tab.party_mismatch" : "tab.not_table_tab", {
       tabId: from.id,
     });
   }
-  if (into.visitId === null) {
-    throw new AppError("tab.visit_mismatch", { tabId: into.id });
+  if (into.partyId === null) {
+    throw new AppError("tab.party_mismatch", { tabId: into.id });
   }
   // Merging another party's bill that no table points at absorbs that whole party, which is
   // intended only when no other bill of that party is open.
-  if (!fromAtTable && from.visitId !== into.visitId) {
+  if (!fromAtTable && from.partyId !== into.partyId) {
     const [otherOpenBill] = await tx
       .select({ id: workingOrders.id })
       .from(workingOrders)
       .where(
         and(
-          eq(workingOrders.visitId, from.visitId),
+          eq(workingOrders.partyId, from.partyId),
           eq(workingOrders.status, "open"),
           ne(workingOrders.id, from.id),
         ),
       )
       .limit(1);
     if (otherOpenBill !== undefined) {
-      throw new AppError("tab.visit_has_other_open_bill", { tabId: from.id });
+      throw new AppError("tab.party_has_other_open_bill", { tabId: from.id });
     }
   }
 }
@@ -2896,10 +2896,10 @@ async function refuseInconsistentMerge(
  */
 async function refuseMergeLeavingNoTable(
   tx: Transaction,
-  visitId: string,
+  partyId: string,
   fromTabId: string,
 ): Promise<string[]> {
-  const members = await memberTables(tx, visitId);
+  const members = await memberTables(tx, partyId);
   const freed = await tx
     .select({ id: diningTables.id })
     .from(diningTables)
@@ -2921,14 +2921,14 @@ export async function joinTable(
   cfg: TillConfig,
   tabId: string,
   tableId: string,
-  command?: VisitCommand,
+  command?: PartyCommand,
 ): Promise<void> {
   await assertTabOpenOrPartyCurrent(tx, cfg, tabId);
-  const visitId = await visitOfOrder(tx, tabId);
-  if (visitId === null && !(await tablePointsAt(tx, tabId))) {
+  const partyId = await partyOfOrder(tx, tabId);
+  if (partyId === null && !(await tablePointsAt(tx, tabId))) {
     throw new AppError("tab.not_table_tab", { tabId });
   }
-  await guardVisits(tx, visitId, null, command);
+  await guardParties(tx, partyId, null, command);
 
   const [table] = await tx
     .select({
@@ -2955,8 +2955,8 @@ export async function joinTable(
   }
 
   await tx.update(diningTables).set({ tabId }).where(eq(diningTables.id, tableId));
-  if (visitId !== null) {
-    await tx.insert(visitTables).values({ visitId, tableId });
+  if (partyId !== null) {
+    await tx.insert(partyTables).values({ partyId, tableId });
   }
 }
 
@@ -2975,7 +2975,7 @@ export async function mergeTabs(
   cfg: TillConfig,
   intoTabId: string,
   fromTabId: string,
-  options: { freeSourceTable: boolean } & Partial<VisitCommand>,
+  options: { freeSourceTable: boolean } & Partial<PartyCommand>,
 ): Promise<void> {
   if (intoTabId === fromTabId) {
     throw new AppError("tab.merge_self", { tabId: intoTabId });
@@ -2983,7 +2983,7 @@ export async function mergeTabs(
 
   // Both orders in one read; each must be open.
   const tabs = await tx
-    .select({ id: workingOrders.id, status: workingOrders.status, visitId: workingOrders.visitId })
+    .select({ id: workingOrders.id, status: workingOrders.status, partyId: workingOrders.partyId })
     .from(workingOrders)
     .where(or(eq(workingOrders.id, intoTabId), eq(workingOrders.id, fromTabId)));
   const into = tabs.find((t) => t.id === intoTabId);
@@ -2995,10 +2995,10 @@ export async function mergeTabs(
     throw new AppError("tab.not_open", { tabId: fromTabId });
   }
   await refuseInconsistentMerge(tx, into, from);
-  await guardVisits(tx, into.visitId, from.visitId, options);
+  await guardParties(tx, into.partyId, from.partyId, options);
   const leavingParty =
-    options.freeSourceTable && from.visitId !== null && from.visitId === into.visitId
-      ? await refuseMergeLeavingNoTable(tx, from.visitId, fromTabId)
+    options.freeSourceTable && from.partyId !== null && from.partyId === into.partyId
+      ? await refuseMergeLeavingNoTable(tx, from.partyId, fromTabId)
       : [];
   // The source is abandoned below; money it holds never moves to another bill implicitly.
   await refuseBillHoldingMoney(tx, [fromTabId]);
@@ -3009,28 +3009,28 @@ export async function mergeTabs(
   await moveKitchenPrintLinks(tx, fromTabId, intoTabId);
   await bumpRevision(tx, [fromTabId, intoTabId]);
 
-  // Two parties becoming one (D2): the source visit is absorbed into the target's.
+  // Two parties becoming one (D2): the source party is absorbed into the target's.
   const absorbed =
-    into.visitId !== null && from.visitId !== null && from.visitId !== into.visitId
-      ? { from: from.visitId, into: into.visitId }
+    into.partyId !== null && from.partyId !== null && from.partyId !== into.partyId
+      ? { from: from.partyId, into: into.partyId }
       : null;
   const sourceTables = absorbed === null ? [] : await memberTables(tx, absorbed.from);
   if (absorbed !== null) {
-    await moveGroupsToVisit(tx, absorbed.from, absorbed.into);
-    await moveDraftsToVisit(tx, absorbed.from, absorbed.into, options.operatorId);
+    await moveGroupsToParty(tx, absorbed.from, absorbed.into);
+    await moveDraftsToParty(tx, absorbed.from, absorbed.into, options.operatorId);
     await leaveTables(tx, sourceTables);
     if (!options.freeSourceTable && sourceTables.length > 0) {
       await tx
-        .insert(visitTables)
-        .values(sourceTables.map((tableId) => ({ visitId: absorbed.into, tableId })));
+        .insert(partyTables)
+        .values(sourceTables.map((tableId) => ({ partyId: absorbed.into, tableId })));
     }
-    // Only an open bill may change visit; the rest stay on the source and count through its family.
+    // Only an open bill may change party; the rest stay on the source and count through its family.
     await tx
       .update(workingOrders)
-      .set({ visitId: absorbed.into })
+      .set({ partyId: absorbed.into })
       .where(
         and(
-          eq(workingOrders.visitId, absorbed.from),
+          eq(workingOrders.partyId, absorbed.from),
           eq(workingOrders.status, "open"),
           ne(workingOrders.id, fromTabId),
         ),
@@ -3049,17 +3049,17 @@ export async function mergeTabs(
     .update(workingOrders)
     .set({ status: "abandoned" })
     .where(eq(workingOrders.id, fromTabId));
-  // After its memberships have ended: closing a visit clears the status of every table it still holds.
+  // After its memberships have ended: closing a party clears the status of every table it still holds.
   if (absorbed !== null) {
     await tx
-      .update(visits)
+      .update(parties)
       .set({
         state: "closed",
         closedAt: nowIso(),
         closedBy: options.operatorId ?? null,
-        mergedIntoVisitId: absorbed.into,
+        mergedIntoPartyId: absorbed.into,
       })
-      .where(eq(visits.id, absorbed.from));
+      .where(eq(parties.id, absorbed.from));
   }
   await enqueueMovedSlips(tx, cfg, before, intoTabId);
 }
@@ -3098,11 +3098,11 @@ export async function transferLines(
   fromTabId: string,
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
-  command?: VisitCommand,
+  command?: PartyCommand,
 ): Promise<void> {
-  const toVisitId = await visitOfOrder(tx, toTabId);
-  const fromVisitId = await visitOfOrder(tx, fromTabId);
-  await guardVisits(tx, toVisitId, fromVisitId, command);
+  const toPartyId = await partyOfOrder(tx, toTabId);
+  const fromPartyId = await partyOfOrder(tx, fromTabId);
+  await guardParties(tx, toPartyId, fromPartyId, command);
   const before = await readSentWork(tx, cfg, fromTabId);
   const splitFrom = await carveBetweenTabs(
     tx,
@@ -3110,7 +3110,7 @@ export async function transferLines(
     fromTabId,
     toTabId,
     transfers,
-    fromVisitId !== toVisitId,
+    fromPartyId !== toPartyId,
   );
   await enqueueMovedSlips(tx, cfg, before, toTabId, splitFrom);
 }
@@ -3122,7 +3122,7 @@ async function carveBetweenTabs(
   fromTabId: string,
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
-  leavesVisit: boolean,
+  leavesParty: boolean,
 ): Promise<ReadonlyMap<string, string>> {
   if (fromTabId === toTabId) {
     throw new AppError("tab.transfer_self", { tabId: fromTabId });
@@ -3139,7 +3139,7 @@ async function carveBetweenTabs(
 
   const { splitFrom } = await carveOffLines(tx, cfg, fromTabId, toTabId, transfers, {
     refuseHeld: false,
-    leavesVisit,
+    leavesParty,
   });
   await bumpRevision(tx, [fromTabId, toTabId]);
   await assertBillInvariant(tx, [fromTabId]);
@@ -3158,8 +3158,8 @@ async function carveOffLines(
   fromTabId: string,
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
-  // `leavesVisit`: the two orders belong to different visits, or only one of them to a visit.
-  opts: { refuseHeld: boolean; leavesVisit: boolean },
+  // `leavesParty`: the two orders belong to different parties, or only one of them to a party.
+  opts: { refuseHeld: boolean; leavesParty: boolean },
 ): Promise<{ splitFrom: Map<string, string>; splitLines: Map<string, string> }> {
   // Every line, not only the named ones: which dishes carry modifiers needs the whole tab.
   const sourceRows = await tx
@@ -3267,9 +3267,9 @@ async function carveOffLines(
       partials.push({ line, quantity: t.quantity });
     }
   }
-  const { leavesVisit } = opts;
-  if (leavesVisit) {
-    await refuseHeldLeavingVisit(
+  const { leavesParty } = opts;
+  if (leavesParty) {
+    await refuseHeldLeavingParty(
       tx,
       fromTabId,
       transfers.map((t) => byLineNo.get(t.lineNo)!.id),
@@ -3349,7 +3349,7 @@ async function carveOffLines(
         courseId: line.courseId,
         note: line.note,
         extraListId: line.extraListId,
-        groupId: leavesVisit ? null : line.groupId,
+        groupId: leavesParty ? null : line.groupId,
         creditedTo: line.creditedTo,
       });
       splitLines.set(line.id, splitLineId);
@@ -3372,7 +3372,7 @@ async function carveOffLines(
   if (fromTabId !== toTabId) {
     await copyKitchenPrintLinks(tx, fromTabId, toTabId, movedLineIds);
   }
-  if (leavesVisit) {
+  if (leavesParty) {
     await clearGroups(
       tx,
       wholeLineNos.map((lineNo) => byLineNo.get(lineNo)!.id),
@@ -3382,10 +3382,10 @@ async function carveOffLines(
 }
 
 /**
- * Refuse `group.held_leaves_visit` for the lowest-numbered of these lines whose group is held: a
- * group belongs to its visit (D1), so held work leaves only once fired.
+ * Refuse `group.held_leaves_party` for the lowest-numbered of these lines whose group is held: a
+ * group belongs to its party (D1), so held work leaves only once fired.
  */
-async function refuseHeldLeavingVisit(
+async function refuseHeldLeavingParty(
   tx: Transaction,
   tabId: string,
   lineIds: readonly string[],
@@ -3399,11 +3399,11 @@ async function refuseHeldLeavingVisit(
     .orderBy(workingOrderLines.lineNo)
     .limit(1);
   if (held !== undefined) {
-    throw new AppError("group.held_leaves_visit", { tabId, lineNo: held.lineNo });
+    throw new AppError("group.held_leaves_party", { tabId, lineNo: held.lineNo });
   }
 }
 
-/** Take these lines, and their extras children, out of their group: they left its visit. */
+/** Take these lines, and their extras children, out of their group: they left its party. */
 async function clearGroups(tx: Transaction, lineIds: readonly string[]): Promise<void> {
   if (lineIds.length === 0) return;
   await tx
@@ -3430,7 +3430,7 @@ export async function splitLinesWithinOrder(
 ): Promise<Map<string, string>> {
   const { splitLines } = await carveOffLines(tx, cfg, orderId, orderId, splits, {
     refuseHeld: false,
-    leavesVisit: false,
+    leavesParty: false,
   });
   return splitLines;
 }
@@ -3475,7 +3475,7 @@ export async function splitOffCheck(
   cfg: TillConfig,
   fromTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
-  command?: VisitCommand,
+  command?: PartyCommand,
 ): Promise<{ checkId: string }> {
   // Without this an empty batch would succeed and leave an empty check behind.
   if (transfers.length === 0) {
@@ -3486,12 +3486,12 @@ export async function splitOffCheck(
 
   // The origin must be a TAB: a detached check minted by an earlier split is not a split origin.
   await assertAnchoredTabOpen(tx, cfg, fromTabId);
-  const visitId = await visitOfOrder(tx, fromTabId);
-  await guardVisits(tx, visitId, null, command);
+  const partyId = await partyOfOrder(tx, fromTabId);
+  await guardParties(tx, partyId, null, command);
 
   const { orderLabel } = await readReceiptOrder(tx, cfg, fromTabId);
   const checkId = randomUUID();
-  await createOpenOrder(tx, cfg, checkId, [], orderLabel, { visitId });
+  await createOpenOrder(tx, cfg, checkId, [], orderLabel, { partyId });
   // The check takes the origin's service mode (or, like it, has none), so `carveOffLines` needs no
   // mode check on this path.
   await VENUE_SERVICE.copyOrderContext(tx, cfg, fromTabId, checkId);
@@ -3499,7 +3499,7 @@ export async function splitOffCheck(
   // A check is paid, never sent, so held work moved onto it would never fire.
   await carveOffLines(tx, cfg, fromTabId, checkId, transfers, {
     refuseHeld: true,
-    leavesVisit: false,
+    leavesParty: false,
   });
   await bumpRevision(tx, [fromTabId, checkId]);
   await assertBillInvariant(tx, [fromTabId]);
@@ -3518,7 +3518,7 @@ export async function unjoinTable(
   tabId: string,
   tableId: string,
   transfers?: { lineNo: number; quantity?: string }[],
-  command?: VisitCommand,
+  command?: PartyCommand,
 ): Promise<{ tabId?: string }> {
   // Checked before the table, so a call wrong about both is refused `tab.not_open`.
   await assertTabOpen(tx, cfg, tabId);
@@ -3530,11 +3530,11 @@ export async function unjoinTable(
   if (table?.tabId !== tabId) {
     throw new AppError("table.not_joined", { tableId, tabId });
   }
-  const visitId = await visitOfOrder(tx, tabId);
-  await guardVisits(tx, visitId, null, command);
+  const partyId = await partyOfOrder(tx, tabId);
+  await guardParties(tx, partyId, null, command);
 
   if (transfers === undefined || transfers.length === 0) {
-    if (visitId !== null && (await memberTables(tx, visitId)).every((id) => id === tableId)) {
+    if (partyId !== null && (await memberTables(tx, partyId)).every((id) => id === tableId)) {
       throw new AppError("table.not_shared", { tableId, tabId });
     }
     await tx
@@ -3556,20 +3556,20 @@ export async function unjoinTable(
     throw new AppError("table.not_shared", { tableId, tabId });
   }
 
-  let newVisitId: string | null = null;
-  if (visitId !== null) {
-    // `guardVisits` has refused a party's tab sent without a command.
+  let newPartyId: string | null = null;
+  if (partyId !== null) {
+    // `guardParties` has refused a party's tab sent without a command.
     await leaveTables(tx, [tableId]);
-    const opened = await openVisit(tx, {
+    const opened = await openParty(tx, {
       guestCount: null,
       operatorId: command!.operatorId,
       tableId,
     });
-    newVisitId = opened.visitId;
+    newPartyId = opened.partyId;
   }
   // Repointed before the move, so `newTabId` is a tab when `carveBetweenTabs` checks it.
   const newTabId = randomUUID();
-  await createOpenOrder(tx, cfg, newTabId, [], null, { visitId: newVisitId });
+  await createOpenOrder(tx, cfg, newTabId, [], null, { partyId: newPartyId });
   await VENUE_SERVICE.copyOrderContext(tx, cfg, tabId, newTabId);
   if (table.zoneId !== null && (await VENUE_SERVICE.findOrderContext(tx, cfg, newTabId)) !== null) {
     await VENUE_SERVICE.retargetOrderContext(tx, cfg, newTabId, table.zoneId);
@@ -3585,7 +3585,7 @@ export async function unjoinTable(
     tabId,
     newTabId,
     transfers,
-    newVisitId !== visitId,
+    newPartyId !== partyId,
   );
   await enqueueMovedSlips(tx, cfg, before, newTabId, splitFrom);
   return { tabId: newTabId };
@@ -3915,8 +3915,8 @@ interface EditableParent extends EditableLine {
 }
 
 interface EditableOrder {
-  /** The visit the order belongs to; null for a counter order or a bill of no visit. */
-  visitId: string | null;
+  /** The party the order belongs to; null for a counter order or a bill of no party. */
+  partyId: string | null;
   lines: EditableLine[];
   parents: EditableParent[];
   maxLineNo: number;
@@ -4145,7 +4145,7 @@ async function readEditableOrder(
       children: lines.filter((child) => child.parentLineId === line.id),
     }));
   return {
-    visitId: await visitOfOrder(tx, orderId),
+    partyId: await partyOfOrder(tx, orderId),
     lines,
     parents,
     maxLineNo: Math.max(0, ...lines.map((line) => line.lineNo)),
@@ -4202,11 +4202,11 @@ async function assertProductsSellable(
  * number with its extras, so each dish is followed by its own extras in line order, as a ticket
  * groups them.
  *
- * On a visit: an added extra takes its dish's group and credit; a fired line's raised quantity
+ * On a party: an added extra takes its dish's group and credit; a fired line's raised quantity
  * goes in a new fired group, and a new dish in a new group fired or held as `newWork` says, both at
  * the end of the sequence and credited to `operatorId`, a held one printing its HOLD ticket where the
  * venue prints held work in advance; a held group the edit empties is removed;
- * the visit's revision moves on.
+ * the party's revision moves on.
  */
 async function applyLineEdits(
   tx: Transaction,
@@ -4437,18 +4437,18 @@ async function applyLineEdits(
     groups[groups.length - 1]!.contexts.push(priced.lineContexts[index]!);
   });
 
-  // On a visit, what the edit adds for the kitchen goes in a new group at the end of the sequence:
+  // On a party, what the edit adds for the kitchen goes in a new group at the end of the sequence:
   // one fired now, one held, as the lines' `kitchen` says. Its lines are credited to the editor.
   const newGroups = new Map<string, string>();
-  if (order.visitId !== null) {
+  if (order.partyId !== null) {
     let addedLater: boolean | undefined;
     for (const as of pricedAs) {
       if (as.kind !== "line" || as.kitchen === "none" || newGroups.has(as.kitchen)) continue;
       const actorId = requireOperator(operatorId);
-      addedLater ??= await visitHasGroup(tx, order.visitId);
-      const groupId = await startGroup(tx, order.visitId, as.kitchen, actorId, addedLater);
+      addedLater ??= await partyHasGroup(tx, order.partyId);
+      const groupId = await startGroup(tx, order.partyId, as.kitchen, actorId, addedLater);
       await recordGroupEvent(tx, {
-        visitId: order.visitId,
+        partyId: order.partyId,
         groupId,
         kind: "submitted",
         actorId,
@@ -4591,7 +4591,7 @@ async function applyLineEdits(
           note: row.note ?? null,
           quantity: row.quantity,
           hold: as.kitchen === "hold",
-          // A fired group releases every line in it, whatever its course. Off a visit, a changed
+          // A fired group releases every line in it, whatever its course. Off a party, a changed
           // line's old item is deleted above, so `fireLines` alone could no longer see that its
           // course had fired.
           release:
@@ -4628,7 +4628,7 @@ async function applyLineEdits(
   await assertBillInvariant(tx, [orderId]);
   const changed = changes.length > 0 || plan.removed.length > 0 || plan.fresh.length > 0;
   if (changed) {
-    await visitAfterEdit(
+    await partyAfterEdit(
       tx,
       orderId,
       plan.removed.flatMap((parent) => (parent.groupId === null ? [] : [parent.groupId])),
@@ -5247,12 +5247,12 @@ export interface QueueModifier {
 }
 
 /** The seated party a queue card's bill belongs to, at the revision a pass command must send. */
-export interface QueueVisit {
+export interface QueueParty {
   id: string;
   revision: number;
 }
 
-/** The group a queue item's dish was submitted in; absent for a bill of no visit, or a line moved
+/** The group a queue item's dish was submitted in; absent for a bill of no party, or a line moved
  *  in from another party's bill or from a bill with no party. */
 export interface QueueGroup {
   id: string;
@@ -5295,8 +5295,8 @@ export interface StationQueueGroup {
   queuedAt: string;
   /** The till reads COLLECTABLE off this alone: only a `settled` order awaits the counter handover. */
   status: WorkingOrderStatus;
-  /** Absent for a bill of no visit. */
-  visit?: QueueVisit;
+  /** Absent for a bill of no party. */
+  party?: QueueParty;
   /** Present only when one of this bill's tickets for the station was not printed after
    *  `JOBS_WAITING_MS`, or was given up on (`listPrintProblems`). */
   printProblem?: true;
@@ -5383,18 +5383,18 @@ async function readQueueSubItems(
 }
 
 const queueGroupColumns = {
-  visitId: visits.id,
-  visitRevision: visits.revision,
+  partyId: parties.id,
+  partyRevision: parties.revision,
   groupId: orderGroups.id,
   groupPosition: orderGroups.position,
   groupState: orderGroups.state,
 };
 
-function queueVisit(row: {
-  visitId: string | null;
-  visitRevision: number | null;
-}): QueueVisit | undefined {
-  return row.visitId === null ? undefined : { id: row.visitId, revision: row.visitRevision! };
+function queueParty(row: {
+  partyId: string | null;
+  partyRevision: number | null;
+}): QueueParty | undefined {
+  return row.partyId === null ? undefined : { id: row.partyId, revision: row.partyRevision! };
 }
 
 function queueGroup(row: {
@@ -5411,7 +5411,7 @@ function queueGroup(row: {
       };
 }
 
-/** `{ [key]: value }`, or nothing when there is no value: a queue leaves an absent visit or group out. */
+/** `{ [key]: value }`, or nothing when there is no value: a queue leaves an absent party or group out. */
 function optional<K extends string, V>(key: K, value: V | undefined): { [P in K]?: V } {
   return (value === undefined ? {} : { [key]: value }) as { [P in K]?: V };
 }
@@ -5461,7 +5461,7 @@ export async function listStationQueue(
     .innerJoin(kitchenStations, eq(ticketItems.stationId, kitchenStations.id))
     // Not filtered by `active`: a course deactivated after the item was fired still names its header.
     .leftJoin(kitchenCourses, eq(ticketItems.courseId, kitchenCourses.id))
-    .leftJoin(visits, eq(visits.id, workingOrders.visitId))
+    .leftJoin(parties, eq(parties.id, workingOrders.partyId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .where(
       and(
@@ -5505,7 +5505,7 @@ export async function listStationQueue(
         label: row.label,
         queuedAt: row.queuedAt,
         status: row.status,
-        ...optional("visit", queueVisit(row)),
+        ...optional("party", queueParty(row)),
         ...optional("printProblem", printProblems.has(row.orderId) ? true : undefined),
         items: [],
         thresholds,
@@ -5605,7 +5605,7 @@ export interface ExpoOrder {
   tableLabel?: string;
   orderNumber: number;
   openedMinutes: number;
-  visit?: QueueVisit;
+  party?: QueueParty;
   courses: ExpoCourse[];
   groups: ExpoGroup[];
   /** The worst age band over the UNSERVED lines: a served line has reached the guest. */
@@ -5676,7 +5676,7 @@ export async function listExpoQueue(
     .innerJoin(kitchenStations, eq(ticketItems.stationId, kitchenStations.id))
     // Not filtered by `active`, as in `listStationQueue`.
     .leftJoin(kitchenCourses, eq(ticketItems.courseId, kitchenCourses.id))
-    .leftJoin(visits, eq(visits.id, workingOrders.visitId))
+    .leftJoin(parties, eq(parties.id, workingOrders.partyId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .where(
       and(
@@ -5719,7 +5719,7 @@ export async function listExpoQueue(
         orderId: row.orderId,
         orderNumber: row.orderNumber,
         openedMinutes: minutesSince(row.openedAt, nowMs),
-        ...optional("visit", queueVisit(row)),
+        ...optional("party", queueParty(row)),
         courses: [],
         groups: [],
         ...(row.tableLabel === null ? {} : { tableLabel: row.tableLabel }),
@@ -5730,7 +5730,7 @@ export async function listExpoQueue(
     }
     const sections = sectionMaps.get(row.orderId)!;
     const group = queueGroup(row);
-    const byGroup = order.visit !== undefined;
+    const byGroup = order.party !== undefined;
     const sectionKey = (byGroup ? group?.id : row.courseId) ?? "__none__";
     let section = sections.get(sectionKey);
     if (section === undefined) {
@@ -5816,7 +5816,7 @@ export async function listExpoQueue(
 }
 
 /** The seated party a table belongs to, as the floor shows it. */
-export interface TableVisit {
+export interface TableParty {
   id: string;
   revision: number;
   guestCount: number | null;
@@ -5868,7 +5868,7 @@ export interface TableState {
   rotation: number | null;
   /** Merged from the enabled modules' floor annotators; `null` when none annotates the table. */
   nextReservation: { time: string } | null;
-  visit: TableVisit | null;
+  party: TableParty | null;
 }
 
 /**
@@ -6035,7 +6035,7 @@ export async function listTablesWithState(
       shape: r.shape,
       rotation: r.rotation,
       nextReservation: null as { time: string } | null,
-      visit: party?.visit ?? null,
+      party: party?.party ?? null,
       ...(hasOpenTab
         ? {
             tabId: r.tab_id!,
@@ -6066,49 +6066,49 @@ export async function listTablesWithState(
 async function readSeatedParties(
   tx: Transaction,
   locationId: string,
-): Promise<Map<string, { visit: TableVisit; tabId: string | null }>> {
+): Promise<Map<string, { party: TableParty; tabId: string | null }>> {
   const members = await tx
     .select({
-      tableId: visitTables.tableId,
+      tableId: partyTables.tableId,
       tabId: diningTables.tabId,
-      visitId: visits.id,
-      revision: visits.revision,
-      guestCount: visits.guestCount,
-      state: visits.state,
+      partyId: parties.id,
+      revision: parties.revision,
+      guestCount: parties.guestCount,
+      state: parties.state,
     })
-    .from(visitTables)
-    .innerJoin(visits, eq(visits.id, visitTables.visitId))
-    .innerJoin(diningTables, eq(diningTables.id, visitTables.tableId))
-    .where(and(isNull(visitTables.leftAt), eq(diningTables.locationId, locationId)))
-    .orderBy(visitTables.joinedAt, visitTables.id);
-  const visitIds = [...new Set(members.map((member) => member.visitId))];
-  const bills = await readBillsOfVisits(tx, visitIds);
-  const unsentDrafts = await readUnsentDrafts(tx, visitIds);
-  const reminders = await readReleaseReminders(tx, visitIds);
-  const partyOf = new Map<string, TableVisit>();
+    .from(partyTables)
+    .innerJoin(parties, eq(parties.id, partyTables.partyId))
+    .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
+    .where(and(isNull(partyTables.leftAt), eq(diningTables.locationId, locationId)))
+    .orderBy(partyTables.joinedAt, partyTables.id);
+  const partyIds = [...new Set(members.map((member) => member.partyId))];
+  const bills = await readBillsOfParties(tx, partyIds);
+  const unsentDrafts = await readUnsentDrafts(tx, partyIds);
+  const reminders = await readReleaseReminders(tx, partyIds);
+  const partyOf = new Map<string, TableParty>();
   for (const member of members) {
-    const known = partyOf.get(member.visitId);
+    const known = partyOf.get(member.partyId);
     if (known !== undefined) {
       known.tableIds.push(member.tableId);
       continue;
     }
-    const own = bills.get(member.visitId)!;
-    partyOf.set(member.visitId, {
-      id: member.visitId,
+    const own = bills.get(member.partyId)!;
+    partyOf.set(member.partyId, {
+      id: member.partyId,
       revision: member.revision,
       guestCount: member.guestCount,
       state: member.state,
       outstanding: toScale(sumDecimals(own.map((bill) => decimal(bill.outstanding))), MONEY_SCALE),
       billCount: own.filter((bill) => bill.status !== "abandoned").length,
       tableIds: [member.tableId],
-      unsentDrafts: unsentDrafts.get(member.visitId)!,
-      reminder: reminders.get(member.visitId)!,
+      unsentDrafts: unsentDrafts.get(member.partyId)!,
+      reminder: reminders.get(member.partyId)!,
     });
   }
   return new Map(
     members.map((member) => [
       member.tableId,
-      { visit: partyOf.get(member.visitId)!, tabId: member.tabId },
+      { party: partyOf.get(member.partyId)!, tabId: member.tabId },
     ]),
   );
 }

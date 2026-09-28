@@ -7,8 +7,8 @@ import {
   orderGroupEvents,
   orderGroups,
   ticketItems,
-  visitTables,
-  visits,
+  partyTables,
+  parties,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -20,11 +20,11 @@ import { VENUE_SERVICE } from "./modules.js";
 import { trimQuantityForDisplay } from "./receipt-lines.js";
 import type { TillConfig } from "./till-config.js";
 import {
-  checkAndBumpVisit,
+  checkAndBumpParty,
   runServiceCommand,
-  visitFamily,
-  visitRevisionOfOrder,
-} from "./visits.js";
+  partyFamily,
+  partyRevisionOfOrder,
+} from "./parties.js";
 import {
   advanceSet,
   bumpRevision,
@@ -46,16 +46,16 @@ export type GroupLine = Omit<TabRoundLine, "hold" | "release">;
 
 export interface SubmitGroupsInput {
   submissionId: string;
-  expectedVisitRevision: number;
+  expectedPartyRevision: number;
   groups: { lines: GroupLine[]; release: GroupRelease }[];
   /** Add to this HELD group instead of creating one: then `groups` holds one group, `hold`. */
   joinGroupId?: string;
   operatorId: string;
 }
 
-export interface VisitCommandArgs {
+export interface PartyCommandArgs {
   submissionId: string;
-  expectedVisitRevision: number;
+  expectedPartyRevision: number;
   operatorId: string;
 }
 
@@ -72,7 +72,7 @@ export interface OrderGroup {
   ready?: true;
   /** Present only when every fired kitchen item of the group has been sent away from the pass. */
   away?: true;
-  /** The group's dish lines, whichever of the visit's bills they sit on. */
+  /** The group's dish lines, whichever of the party's bills they sit on. */
   lineIds: string[];
   /** The dishes by staff name, e.g. "2 × Steak, 1 × Fish". */
   summary: string;
@@ -87,7 +87,7 @@ export interface SubmittedGroups {
 }
 
 /**
- * Put each submitted group's lines on the visit's tab, released to the kitchen now (`fire`) or held
+ * Put each submitted group's lines on the party's tab, released to the kitchen now (`fire`) or held
  * until {@link fireGroup}. Every line is credited to the operator. A group never matches another by
  * course; only `joinGroupId` adds to an existing one. A new held group prints its HOLD ticket where
  * the venue prints held work in advance ({@link printHoldTickets}); lines joining a group whose HOLD
@@ -96,36 +96,36 @@ export interface SubmittedGroups {
 export async function submitGroups(
   tx: Transaction,
   cfg: TillConfig,
-  visitId: string,
+  partyId: string,
   input: SubmitGroupsInput,
 ): Promise<SubmittedGroups> {
-  const { submissionId, expectedVisitRevision, operatorId, ...body } = input;
+  const { submissionId, expectedPartyRevision, operatorId, ...body } = input;
   return runServiceCommand(
     tx,
-    { kind: "visit", visitId },
+    { kind: "visit", partyId },
     submissionId,
     "group.submit",
-    { visitId, operatorId, ...body },
+    { partyId, operatorId, ...body },
     async () => {
-      await checkAndBumpVisit(tx, visitId, expectedVisitRevision, "open");
-      return placeGroups(tx, cfg, visitId, input);
+      await checkAndBumpParty(tx, partyId, expectedPartyRevision, "open");
+      return placeGroups(tx, cfg, partyId, input);
     },
   );
 }
 
 export type PlaceGroupsInput = Pick<SubmitGroupsInput, "groups" | "joinGroupId" | "operatorId"> & {
-  /** Whether the groups it starts are a later addition; by default, whether the visit had a group. */
+  /** Whether the groups it starts are a later addition; by default, whether the party had a group. */
   addedLater?: boolean;
 };
 
 /**
- * {@link submitGroups} without its replay record or visit revision check, for a command that makes
+ * {@link submitGroups} without its replay record or party revision check, for a command that makes
  * both itself.
  */
 export async function placeGroups(
   tx: Transaction,
   cfg: TillConfig,
-  visitId: string,
+  partyId: string,
   input: PlaceGroupsInput,
 ): Promise<SubmittedGroups> {
   const { operatorId } = input;
@@ -136,7 +136,7 @@ export async function placeGroups(
     if (input.groups.length !== 1 || input.groups[0]!.release !== "hold") {
       throw new AppError("management.request_invalid", { field: "joinGroupId" });
     }
-    await requireHeldGroup(tx, visitId, input.joinGroupId);
+    await requireHeldGroup(tx, partyId, input.joinGroupId);
   }
   const lines = input.groups.flatMap((group) =>
     group.lines.map((line) => ({
@@ -149,7 +149,7 @@ export async function placeGroups(
   const round = await priceTabRound(
     tx,
     cfg,
-    await visitTab(tx, visitId),
+    await partyTab(tx, partyId),
     input.groups[0]!.lines.length === 0 ? [] : lines,
   );
   if (input.groups.some((group) => group.lines.length === 0)) {
@@ -159,9 +159,9 @@ export async function placeGroups(
   const groupIds: string[] = [];
   if (input.joinGroupId !== undefined) groupIds.push(input.joinGroupId);
   else {
-    const addedLater = input.addedLater ?? (await visitHasGroup(tx, visitId));
+    const addedLater = input.addedLater ?? (await partyHasGroup(tx, partyId));
     for (const group of input.groups) {
-      groupIds.push(await startGroup(tx, visitId, group.release, operatorId, addedLater));
+      groupIds.push(await startGroup(tx, partyId, group.release, operatorId, addedLater));
     }
   }
   // The k-th parent row is input line k; an extras child goes with its dish.
@@ -198,7 +198,7 @@ export async function placeGroups(
     }
     await bumpRevision(tx, [tabId]);
     await recordGroupEvent(tx, {
-      visitId,
+      partyId,
       groupId,
       kind: input.joinGroupId === undefined ? "submitted" : "joined",
       actorId: operatorId,
@@ -206,11 +206,11 @@ export async function placeGroups(
     });
   }
   const listed = new Map(
-    (await readGroups(tx, visitId, groupIds)).map((group) => [group.id, group]),
+    (await readGroups(tx, partyId, groupIds)).map((group) => [group.id, group]),
   );
   return {
     tabId,
-    revision: await currentRevision(tx, visitId),
+    revision: await currentRevision(tx, partyId),
     groups: groupIds.map((id) => listed.get(id)!),
   };
 }
@@ -222,39 +222,39 @@ export async function placeGroups(
 export async function fireGroup(
   tx: Transaction,
   cfg: TillConfig,
-  visitId: string,
+  partyId: string,
   groupId: string,
-  args: VisitCommandArgs,
+  args: PartyCommandArgs,
 ): Promise<{ revision: number }> {
   return runServiceCommand(
     tx,
-    { kind: "visit", visitId },
+    { kind: "visit", partyId },
     args.submissionId,
     "group.fire",
-    { visitId, groupId, operatorId: args.operatorId },
+    { partyId, groupId, operatorId: args.operatorId },
     async () => {
-      const revision = await checkAndBumpVisit(tx, visitId, args.expectedVisitRevision, "open");
-      await requireHeldGroup(tx, visitId, groupId);
-      await releaseGroup(tx, cfg, visitId, groupId, args.operatorId, {});
+      const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
+      await requireHeldGroup(tx, partyId, groupId);
+      await releaseGroup(tx, cfg, partyId, groupId, args.operatorId, {});
       return { revision };
     },
   );
 }
 
 /**
- * The pass's Ready for a group: every fired kitchen item of its dishes, on every bill of the visit,
+ * The pass's Ready for a group: every fired kitchen item of its dishes, on every bill of the party,
  * goes straight to `ready`. A held group's items are unfired, so it changes none, yet the command is
- * recorded and the visit's revision moves on.
+ * recorded and the party's revision moves on.
  */
 export async function bumpGroupReady(
   tx: Transaction,
   cfg: TillConfig,
-  visitId: string,
+  partyId: string,
   groupId: string,
-  args: VisitCommandArgs,
+  args: PartyCommandArgs,
 ): Promise<{ revision: number }> {
   void cfg;
-  return passStep(tx, visitId, groupId, args, "group.ready", async () => {
+  return passStep(tx, partyId, groupId, args, "group.ready", async () => {
     await tx
       .update(ticketItems)
       .set(advanceSet("ready"))
@@ -272,12 +272,12 @@ export async function bumpGroupReady(
 export async function markGroupAway(
   tx: Transaction,
   cfg: TillConfig,
-  visitId: string,
+  partyId: string,
   groupId: string,
-  args: VisitCommandArgs,
+  args: PartyCommandArgs,
 ): Promise<{ revision: number }> {
   void cfg;
-  return passStep(tx, visitId, groupId, args, "group.away", async () => {
+  return passStep(tx, partyId, groupId, args, "group.away", async () => {
     await tx
       .update(ticketItems)
       .set({ awayAt: nowIso() })
@@ -293,21 +293,21 @@ export async function markGroupAway(
 
 async function passStep(
   tx: Transaction,
-  visitId: string,
+  partyId: string,
   groupId: string,
-  args: VisitCommandArgs,
+  args: PartyCommandArgs,
   kind: "group.ready" | "group.away",
   apply: () => Promise<void>,
 ): Promise<{ revision: number }> {
   return runServiceCommand(
     tx,
-    { kind: "visit", visitId },
+    { kind: "visit", partyId },
     args.submissionId,
     kind,
-    { visitId, groupId, operatorId: args.operatorId },
+    { partyId, groupId, operatorId: args.operatorId },
     async () => {
-      const revision = await checkAndBumpVisit(tx, visitId, args.expectedVisitRevision, "open");
-      await requireGroup(tx, visitId, groupId);
+      const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
+      await requireGroup(tx, partyId, groupId);
       await apply();
       return { revision };
     },
@@ -323,9 +323,9 @@ function dishLinesOf(tx: Transaction, groupId: string) {
 }
 
 /**
- * The course Fire: on an order of a visit, release every held group of the visit that holds a dish
+ * The course Fire: on an order of a party, release every held group of the party that holds a dish
  * of this course on this order, whole and in position order, as {@link fireGroup} does. It touches
- * nothing when the order is on no visit or no held group qualifies. It carries no submission id, so
+ * nothing when the order is on no party or no held group qualifies. It carries no submission id, so
  * it records no replay: each group's `fired` event names the course and the order.
  */
 export async function fireHeldGroupsOfCourse(
@@ -335,9 +335,9 @@ export async function fireHeldGroupsOfCourse(
   courseId: string,
   operatorId: string,
 ): Promise<void> {
-  const visit = await visitRevisionOfOrder(tx, orderId);
-  if (visit === null) return;
-  const visitId = visit.id;
+  const party = await partyRevisionOfOrder(tx, orderId);
+  if (party === null) return;
+  const partyId = party.id;
   const groups = await tx
     .selectDistinct({
       id: orderGroups.id,
@@ -348,7 +348,7 @@ export async function fireHeldGroupsOfCourse(
     .innerJoin(workingOrderLines, eq(workingOrderLines.groupId, orderGroups.id))
     .where(
       and(
-        eq(orderGroups.visitId, visitId),
+        eq(orderGroups.partyId, partyId),
         eq(orderGroups.state, "held"),
         eq(workingOrderLines.workingOrderId, orderId),
         eq(workingOrderLines.courseId, courseId),
@@ -357,9 +357,9 @@ export async function fireHeldGroupsOfCourse(
     )
     .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id));
   if (groups.length === 0) return;
-  await checkAndBumpVisit(tx, visitId, visit.revision, "open");
+  await checkAndBumpParty(tx, partyId, party.revision, "open");
   for (const group of groups) {
-    await releaseGroup(tx, cfg, visitId, group.id, operatorId, {
+    await releaseGroup(tx, cfg, partyId, group.id, operatorId, {
       courseId,
       workingOrderId: orderId,
     });
@@ -367,37 +367,37 @@ export async function fireHeldGroupsOfCourse(
 }
 
 /**
- * Give every group of `fromVisitId` to `intoVisitId`, after its last position and in their own
+ * Give every group of `fromPartyId` to `intoPartyId`, after its last position and in their own
  * order: a merge of two parties' bills, whose lines keep their groups.
  */
-export async function moveGroupsToVisit(
+export async function moveGroupsToParty(
   tx: Transaction,
-  fromVisitId: string,
-  intoVisitId: string,
+  fromPartyId: string,
+  intoPartyId: string,
 ): Promise<void> {
   const groups = await tx
     .select({ id: orderGroups.id })
     .from(orderGroups)
-    .where(eq(orderGroups.visitId, fromVisitId))
+    .where(eq(orderGroups.partyId, fromPartyId))
     .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id));
-  let position = await lastPosition(tx, intoVisitId);
+  let position = await lastPosition(tx, intoPartyId);
   for (const group of groups) {
     await tx
       .update(orderGroups)
-      .set({ visitId: intoVisitId, position: ++position })
+      .set({ partyId: intoPartyId, position: ++position })
       .where(eq(orderGroups.id, group.id));
   }
 }
 
 /**
  * Release a held group's lines bill by bill, in the order the bills were opened, as
- * {@link fireOrderLines} releases them, and record it fired. The caller has moved the visit's
+ * {@link fireOrderLines} releases them, and record it fired. The caller has moved the party's
  * revision on and checked the group is held.
  */
 async function releaseGroup(
   tx: Transaction,
   cfg: TillConfig,
-  visitId: string,
+  partyId: string,
   groupId: string,
   operatorId: string,
   detail: Record<string, unknown>,
@@ -425,31 +425,31 @@ async function releaseGroup(
     .update(orderGroups)
     .set({ state: "fired", firedAt: nowIso(), firedBy: operatorId, remindAt: null })
     .where(eq(orderGroups.id, groupId));
-  await recordGroupEvent(tx, { visitId, groupId, kind: "fired", actorId: operatorId, detail });
+  await recordGroupEvent(tx, { partyId, groupId, kind: "fired", actorId: operatorId, detail });
 }
 
 /**
- * Put the visit's held groups in this order. `heldGroupIds` names every held group once; they take
+ * Put the party's held groups in this order. `heldGroupIds` names every held group once; they take
  * the positions the held groups already hold, so a fired group never moves.
  */
 export async function reorderHeldGroups(
   tx: Transaction,
-  visitId: string,
+  partyId: string,
   heldGroupIds: string[],
-  args: VisitCommandArgs,
+  args: PartyCommandArgs,
 ): Promise<{ revision: number }> {
   return runServiceCommand(
     tx,
-    { kind: "visit", visitId },
+    { kind: "visit", partyId },
     args.submissionId,
     "group.reorder",
-    { visitId, heldGroupIds, operatorId: args.operatorId },
+    { partyId, heldGroupIds, operatorId: args.operatorId },
     async () => {
-      const revision = await checkAndBumpVisit(tx, visitId, args.expectedVisitRevision, "open");
+      const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
       const groups = await tx
         .select({ id: orderGroups.id, state: orderGroups.state, position: orderGroups.position })
         .from(orderGroups)
-        .where(and(eq(orderGroups.visitId, visitId), ne(orderGroups.state, "removed")));
+        .where(and(eq(orderGroups.partyId, partyId), ne(orderGroups.state, "removed")));
       const byId = new Map(groups.map((group) => [group.id, group]));
       for (const id of heldGroupIds) {
         const group = byId.get(id);
@@ -475,7 +475,7 @@ export async function reorderHeldGroups(
         }
       }
       await recordGroupEvent(tx, {
-        visitId,
+        partyId,
         groupId: null,
         kind: "reordered",
         actorId: args.operatorId,
@@ -493,24 +493,24 @@ export const MAX_SNOOZE_MINUTES = 120;
 export async function snoozeReminder(
   tx: Transaction,
   cfg: TillConfig,
-  visitId: string,
+  partyId: string,
   groupId: string,
   minutes: number,
-  args: VisitCommandArgs,
+  args: PartyCommandArgs,
 ): Promise<{ revision: number }> {
   void cfg;
   return runServiceCommand(
     tx,
-    { kind: "visit", visitId },
+    { kind: "visit", partyId },
     args.submissionId,
     "group.snooze",
-    { visitId, groupId, minutes, operatorId: args.operatorId },
+    { partyId, groupId, minutes, operatorId: args.operatorId },
     async () => {
-      const revision = await checkAndBumpVisit(tx, visitId, args.expectedVisitRevision, "open");
+      const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
       if (!Number.isInteger(minutes) || minutes < 1 || minutes > MAX_SNOOZE_MINUTES) {
         throw new AppError("management.request_invalid", { field: "minutes" });
       }
-      await requireHeldGroup(tx, visitId, groupId);
+      await requireHeldGroup(tx, partyId, groupId);
       await tx
         .update(orderGroups)
         .set({ remindAt: new Date(Date.now() + minutes * 60_000).toISOString() })
@@ -530,23 +530,23 @@ export async function snoozeReminder(
 export async function moveLinesToGroup(
   tx: Transaction,
   cfg: TillConfig,
-  visitId: string,
+  partyId: string,
   moves: { lineId: string; quantity: string }[],
   target: { groupId: string } | "new",
-  args: VisitCommandArgs,
+  args: PartyCommandArgs,
 ): Promise<{ revision: number }> {
   return runServiceCommand(
     tx,
-    { kind: "visit", visitId },
+    { kind: "visit", partyId },
     args.submissionId,
     "group.move",
-    { visitId, moves, target, operatorId: args.operatorId },
+    { partyId, moves, target, operatorId: args.operatorId },
     async () => {
-      const revision = await checkAndBumpVisit(tx, visitId, args.expectedVisitRevision, "open");
+      const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
       if (moves.length === 0 || new Set(moves.map((m) => m.lineId)).size !== moves.length) {
         throw new AppError("management.request_invalid", { field: "moves" });
       }
-      if (target !== "new") await requireHeldGroup(tx, visitId, target.groupId);
+      if (target !== "new") await requireHeldGroup(tx, partyId, target.groupId);
       const lines = await tx
         .select({
           id: workingOrderLines.id,
@@ -568,7 +568,7 @@ export async function moveLinesToGroup(
               moves.map((m) => m.lineId),
             ),
             isNull(workingOrderLines.parentLineId),
-            eq(orderGroups.visitId, visitId),
+            eq(orderGroups.partyId, partyId),
             ne(orderGroups.state, "removed"),
           ),
         );
@@ -597,7 +597,7 @@ export async function moveLinesToGroup(
         target === "new"
           ? await startGroup(
               tx,
-              visitId,
+              partyId,
               "hold",
               args.operatorId,
               lines.some((line) => line.groupAddedLater),
@@ -653,25 +653,25 @@ export async function moveLinesToGroup(
       if (target === "new") await printHoldTickets(tx, cfg, [targetId]);
       await bumpRevision(tx, [...splitsByBill.keys()]);
       await recordGroupEvent(tx, {
-        visitId,
+        partyId,
         groupId: targetId,
         kind: "lines_moved",
         actorId: args.operatorId,
         detail: { moves, from: [...sources] },
       });
-      await removeEmptiedHeldGroups(tx, visitId, [...sources], args.operatorId);
+      await removeEmptiedHeldGroups(tx, partyId, [...sources], args.operatorId);
       return { revision };
     },
   );
 }
 
 /**
- * A new group at the end of the visit's sequence, fired now or held, submitted by the operator. The
+ * A new group at the end of the party's sequence, fired now or held, submitted by the operator. The
  * caller puts its lines in it and records its event.
  */
 export async function startGroup(
   tx: Transaction,
-  visitId: string,
+  partyId: string,
   release: GroupRelease,
   operatorId: string,
   addedLater: boolean,
@@ -680,8 +680,8 @@ export async function startGroup(
   const [group] = await tx
     .insert(orderGroups)
     .values({
-      visitId,
-      position: (await lastPosition(tx, visitId)) + 1,
+      partyId,
+      position: (await lastPosition(tx, partyId)) + 1,
       state: fire ? "fired" : "held",
       firedAt: fire ? nowIso() : null,
       firedBy: fire ? operatorId : null,
@@ -698,7 +698,7 @@ export async function startGroup(
  */
 export async function removeEmptiedHeldGroups(
   tx: Transaction,
-  visitId: string,
+  partyId: string,
   groupIds: readonly string[],
   operatorId: string | undefined,
 ): Promise<void> {
@@ -730,16 +730,16 @@ export async function removeEmptiedHeldGroups(
     .where(inArray(orderGroups.id, [...emptied]));
   for (const groupId of new Set(groupIds)) {
     if (!emptied.has(groupId)) continue;
-    await recordGroupEvent(tx, { visitId, groupId, kind: "removed", actorId, detail: {} });
+    await recordGroupEvent(tx, { partyId, groupId, kind: "removed", actorId, detail: {} });
   }
 }
 
-/** Whether the visit has ever had a group, a removed one included. */
-export async function visitHasGroup(tx: Transaction, visitId: string): Promise<boolean> {
+/** Whether the party has ever had a group, a removed one included. */
+export async function partyHasGroup(tx: Transaction, partyId: string): Promise<boolean> {
   const [group] = await tx
     .select({ id: orderGroups.id })
     .from(orderGroups)
-    .where(eq(orderGroups.visitId, visitId))
+    .where(eq(orderGroups.partyId, partyId))
     .limit(1);
   return group !== undefined;
 }
@@ -752,18 +752,18 @@ export function requireOperator(operatorId: string | undefined): string {
   return operatorId;
 }
 
-/** The visit's groups in sequence, removed ones left out, with the visit's revision. */
+/** The party's groups in sequence, removed ones left out, with the party's revision. */
 export async function listOrderGroups(
   tx: Transaction,
-  visitId: string,
+  partyId: string,
 ): Promise<{ revision: number; groups: OrderGroup[] }> {
-  return { revision: await currentRevision(tx, visitId), groups: await readGroups(tx, visitId) };
+  return { revision: await currentRevision(tx, partyId), groups: await readGroups(tx, partyId) };
 }
 
-/** The visit's groups in sequence, removed ones left out; only those named, when `only` is given. */
+/** The party's groups in sequence, removed ones left out; only those named, when `only` is given. */
 async function readGroups(
   tx: Transaction,
-  visitId: string,
+  partyId: string,
   only?: readonly string[],
 ): Promise<OrderGroup[]> {
   const scope = only === undefined ? [] : [inArray(orderGroups.id, [...only])];
@@ -776,7 +776,7 @@ async function readGroups(
       remindAt: orderGroups.remindAt,
     })
     .from(orderGroups)
-    .where(and(eq(orderGroups.visitId, visitId), ne(orderGroups.state, "removed"), ...scope))
+    .where(and(eq(orderGroups.partyId, partyId), ne(orderGroups.state, "removed"), ...scope))
     .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id));
   const lines = await tx
     .select({
@@ -789,7 +789,7 @@ async function readGroups(
     .from(workingOrderLines)
     .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-    .where(and(eq(orderGroups.visitId, visitId), isNull(workingOrderLines.parentLineId), ...scope))
+    .where(and(eq(orderGroups.partyId, partyId), isNull(workingOrderLines.parentLineId), ...scope))
     .orderBy(asc(workingOrders.orderNumber), asc(workingOrderLines.lineNo));
   const kitchen = await tx
     .select({
@@ -801,7 +801,7 @@ async function readGroups(
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
-    .where(and(eq(orderGroups.visitId, visitId), isNotNull(ticketItems.firedAt), ...scope))
+    .where(and(eq(orderGroups.partyId, partyId), isNotNull(ticketItems.firedAt), ...scope))
     .groupBy(workingOrderLines.groupId);
   const readyGroups = new Set(
     kitchen.filter((row) => row.ready === row.fired).map((row) => row.groupId!),
@@ -846,7 +846,7 @@ export interface ReleaseReminder {
 }
 
 /**
- * The visit's release reminder (D11). `groups` are the visit's groups in sequence, removed ones left
+ * The party's release reminder (D11). `groups` are the party's groups in sequence, removed ones left
  * out; `lines` are dish lines, each fully served when its `servedAt` is set. The group waiting is the
  * first held one. While a fired group before it has a dish line unserved there is no time, a snooze
  * included; otherwise it is due at its snooze (`remindAt`), else `minutes` after the latest served
@@ -877,33 +877,33 @@ export function releaseReminder(
 }
 
 /**
- * Each of these visits' release reminders ({@link releaseReminder}), keyed by visit, from one read
- * of the setting and one each of the visits' groups and dish lines. A visit that is not open has
+ * Each of these parties' release reminders ({@link releaseReminder}), keyed by party, from one read
+ * of the setting and one each of the parties' groups and dish lines. A party that is not open has
  * none: it can no longer fire or snooze a group. A line on an abandoned bill is left out, as
  * {@link readCurrentOrders} leaves it out.
  */
 export async function readReleaseReminders(
   tx: Transaction,
-  visitIds: readonly string[],
+  partyIds: readonly string[],
 ): Promise<Map<string, ReleaseReminder | null>> {
-  const reminders = new Map<string, ReleaseReminder | null>(visitIds.map((id) => [id, null]));
-  if (visitIds.length === 0) return reminders;
+  const reminders = new Map<string, ReleaseReminder | null>(partyIds.map((id) => [id, null]));
+  if (partyIds.length === 0) return reminders;
   const minutes = await VENUE_SERVICE.readReleaseReminderMinutes(tx);
   if (minutes === null) return reminders;
   const groups = await tx
     .select({
       id: orderGroups.id,
-      visitId: orderGroups.visitId,
+      partyId: orderGroups.partyId,
       state: orderGroups.state,
       remindAt: orderGroups.remindAt,
     })
     .from(orderGroups)
-    .innerJoin(visits, eq(visits.id, orderGroups.visitId))
+    .innerJoin(parties, eq(parties.id, orderGroups.partyId))
     .where(
       and(
-        inArray(orderGroups.visitId, [...visitIds]),
+        inArray(orderGroups.partyId, [...partyIds]),
         ne(orderGroups.state, "removed"),
-        eq(visits.state, "open"),
+        eq(parties.state, "open"),
       ),
     )
     .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id));
@@ -922,11 +922,11 @@ export async function readReleaseReminders(
         onShownBill(),
       ),
     );
-  for (const visitId of new Set(groups.map((group) => group.visitId))) {
-    const own = groups.filter((group) => group.visitId === visitId);
+  for (const partyId of new Set(groups.map((group) => group.partyId))) {
+    const own = groups.filter((group) => group.partyId === partyId);
     const ids = new Set(own.map((group) => group.id));
     reminders.set(
-      visitId,
+      partyId,
       releaseReminder(
         own.map((group) => ({ ...group, state: group.state as "held" | "fired" })),
         lines.filter((line) => ids.has(line.groupId!)),
@@ -990,7 +990,7 @@ export interface CurrentOrderGroup {
 
 /** What the party has ordered and what is known of it (spec §4 Current orders). */
 export interface CurrentOrders {
-  /** The visit's revision, which the served and snooze commands send back. */
+  /** The party's revision, which the served and snooze commands send back. */
   revision: number;
   reminder: ReleaseReminder | null;
   /** In sequence, removed ones left out. */
@@ -1006,19 +1006,19 @@ export function onShownBill(): SQL {
 
 /**
  * The party's Current orders: its groups in sequence with their dish rows, and the rows in no
- * group, across every bill of the visit and of every visit merged into it, paid ones included; rows
+ * group, across every bill of the party and of every party merged into it, paid ones included; rows
  * bill by bill in the order the bills were opened. An abandoned bill's lines are left out, as the
  * kitchen's reads leave them out. A row whose group belongs to another party's sequence (on a party
- * merged away, whose groups moved on) is shown there, not here. Refused `visit.not_open` for an
- * unknown visit.
+ * merged away, whose groups moved on) is shown there, not here. Refused `party.not_open` for an
+ * unknown party.
  */
-export async function readCurrentOrders(tx: Transaction, visitId: string): Promise<CurrentOrders> {
-  const [visit] = await tx
-    .select({ revision: visits.revision, state: visits.state })
-    .from(visits)
-    .where(eq(visits.id, visitId));
-  if (visit === undefined) throw new AppError("visit.not_open", { visitId });
-  const family = await visitFamily(tx, visitId);
+export async function readCurrentOrders(tx: Transaction, partyId: string): Promise<CurrentOrders> {
+  const [party] = await tx
+    .select({ revision: parties.revision, state: parties.state })
+    .from(parties)
+    .where(eq(parties.id, partyId));
+  if (party === undefined) throw new AppError("party.not_open", { partyId });
+  const family = await partyFamily(tx, partyId);
   const groups = await tx
     .select({
       id: orderGroups.id,
@@ -1029,7 +1029,7 @@ export async function readCurrentOrders(tx: Transaction, visitId: string): Promi
       addedLater: orderGroups.addedLater,
     })
     .from(orderGroups)
-    .where(and(eq(orderGroups.visitId, visitId), ne(orderGroups.state, "removed")))
+    .where(and(eq(orderGroups.partyId, partyId), ne(orderGroups.state, "removed")))
     .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id));
   const lines = await tx
     .select({
@@ -1056,7 +1056,7 @@ export async function readCurrentOrders(tx: Transaction, visitId: string): Promi
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
-    .where(and(inArray(workingOrders.visitId, family), onShownBill()))
+    .where(and(inArray(workingOrders.partyId, family), onShownBill()))
     .orderBy(
       asc(workingOrders.openedAt),
       asc(workingOrders.orderNumber),
@@ -1108,9 +1108,9 @@ export async function readCurrentOrders(tx: Transaction, visitId: string): Promi
     (group?.rows ?? ungrouped).push(row);
   }
   const minutes =
-    visit.state === "open" ? await VENUE_SERVICE.readReleaseReminderMinutes(tx) : null;
+    party.state === "open" ? await VENUE_SERVICE.readReleaseReminderMinutes(tx) : null;
   return {
-    revision: visit.revision,
+    revision: party.revision,
     reminder: releaseReminder(shown, dishes, minutes),
     groups: shown,
     ungrouped,
@@ -1276,56 +1276,56 @@ async function billsOfGroups(tx: Transaction, groupIds: readonly string[]): Prom
   return rows.map((row) => row.workingOrderId);
 }
 
-async function requireHeldGroup(tx: Transaction, visitId: string, groupId: string): Promise<void> {
-  if ((await requireGroup(tx, visitId, groupId)) !== "held") {
+async function requireHeldGroup(tx: Transaction, partyId: string, groupId: string): Promise<void> {
+  if ((await requireGroup(tx, partyId, groupId)) !== "held") {
     throw new AppError("group.not_held", { groupId });
   }
 }
 
-/** The state of a group of this visit that is not removed, else `group.not_found`. */
+/** The state of a group of this party that is not removed, else `group.not_found`. */
 export async function requireGroup(
   tx: Transaction,
-  visitId: string,
+  partyId: string,
   groupId: string,
 ): Promise<"held" | "fired"> {
   const [group] = await tx
     .select({ state: orderGroups.state })
     .from(orderGroups)
-    .where(and(eq(orderGroups.id, groupId), eq(orderGroups.visitId, visitId)));
+    .where(and(eq(orderGroups.id, groupId), eq(orderGroups.partyId, partyId)));
   if (group === undefined || group.state === "removed") {
     throw new AppError("group.not_found", { groupId });
   }
   return group.state;
 }
 
-/** The tab the visit's tables point at, which may be a paid one the party can still order on. */
-export async function visitTab(tx: Transaction, visitId: string): Promise<string> {
+/** The tab the party's tables point at, which may be a paid one the party can still order on. */
+export async function partyTab(tx: Transaction, partyId: string): Promise<string> {
   const [table] = await tx
     .select({ tabId: diningTables.tabId })
-    .from(visitTables)
-    .innerJoin(diningTables, eq(diningTables.id, visitTables.tableId))
-    .where(and(eq(visitTables.visitId, visitId), isNull(visitTables.leftAt)))
-    .orderBy(asc(visitTables.joinedAt), asc(visitTables.id))
+    .from(partyTables)
+    .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
+    .where(and(eq(partyTables.partyId, partyId), isNull(partyTables.leftAt)))
+    .orderBy(asc(partyTables.joinedAt), asc(partyTables.id))
     .limit(1);
-  if (table?.tabId == null) throw new AppError("visit.not_open", { visitId });
+  if (table?.tabId == null) throw new AppError("party.not_open", { partyId });
   return table.tabId;
 }
 
-async function lastPosition(tx: Transaction, visitId: string): Promise<number> {
+async function lastPosition(tx: Transaction, partyId: string): Promise<number> {
   const [{ last }] = await tx
     .select({ last: sql<number>`cast(coalesce(max(${orderGroups.position}), 0) as int)` })
     .from(orderGroups)
-    .where(eq(orderGroups.visitId, visitId));
+    .where(eq(orderGroups.partyId, partyId));
   return last;
 }
 
-async function currentRevision(tx: Transaction, visitId: string): Promise<number> {
-  const [visit] = await tx
-    .select({ revision: visits.revision })
-    .from(visits)
-    .where(eq(visits.id, visitId));
-  if (visit === undefined) throw new AppError("visit.not_open", { visitId });
-  return visit.revision;
+async function currentRevision(tx: Transaction, partyId: string): Promise<number> {
+  const [party] = await tx
+    .select({ revision: parties.revision })
+    .from(parties)
+    .where(eq(parties.id, partyId));
+  if (party === undefined) throw new AppError("party.not_open", { partyId });
+  return party.revision;
 }
 
 export async function recordGroupEvent(

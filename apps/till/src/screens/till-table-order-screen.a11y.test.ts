@@ -11,10 +11,10 @@ import type {
   OfferedModifier,
   OrderGroup,
   TabLine,
-  TableVisit,
+  TableParty,
   TillProduct,
   TillZoneMenu,
-  VisitBill,
+  PartyBill,
 } from "../api/client.js";
 import type { TillMenuBrowser } from "../widgets/menu-browser.js";
 import type { TillModifierPicker } from "../widgets/modifier-picker.js";
@@ -93,7 +93,7 @@ const weightProduct: TillProduct = {
   pricingUnit: "weight",
 };
 
-const party: TableVisit = {
+const party: TableParty = {
   id: "v1",
   revision: 2,
   guestCount: 3,
@@ -105,10 +105,10 @@ const party: TableVisit = {
   reminder: null,
 };
 
-const partyBills: VisitBill[] = [
+const partyBills: PartyBill[] = [
   {
     workingOrderId: "wo-1",
-    visitId: "v1",
+    partyId: "v1",
     label: null,
     status: "settled",
     total: "14.00",
@@ -117,7 +117,7 @@ const partyBills: VisitBill[] = [
   },
   {
     workingOrderId: "wo-2",
-    visitId: "v1",
+    partyId: "v1",
     label: null,
     status: "open",
     total: "30.00",
@@ -298,7 +298,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
           lines: [],
           statuses,
           orderId: "wo-1",
-          visit: party,
+          party: party,
           bills: partyBills,
           finishRefused,
         },

@@ -1,7 +1,7 @@
-// A stand-in for boot's `core.seatTable` (apps/server/src/visits.ts), which a module cannot import.
+// A stand-in for boot's `core.seatTable` (apps/server/src/parties.ts), which a module cannot import.
 // It reproduces the table read, the `table.not_found`/`table.inactive`/`tab.already_open` guards on
 // an open tab, the `working_orders` insert whose id is the tab id, and the `dining_tables.tab_id`
-// back-pointer. It opens no visit, so its `visitId` names nothing. The order number is a counter; the
+// back-pointer. It opens no party, so its `partyId` names nothing. The order number is a counter; the
 // verbs ignore it.
 //
 // `table.inactive`/`tab.already_open` are apps/server's codes, declared here so the package's
@@ -56,7 +56,7 @@ export function fakeCore(cfg: FakeCoreConfig): CoreServices {
         .update(diningTables)
         .set({ tabId, statusId: null })
         .where(eq(diningTables.id, req.tableId));
-      return { tabId, visitId: randomUUID() };
+      return { tabId, partyId: randomUUID() };
     },
   };
 }

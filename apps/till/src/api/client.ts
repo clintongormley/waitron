@@ -472,7 +472,7 @@ export interface GroupLine extends SaleLine {
   courseId?: string;
 }
 
-/** A party's group of lines as `GET /api/visits/:id/groups` reads it. `lineIds` are the group's dish
+/** A party's group of lines as `GET /api/parties/:id/groups` reads it. `lineIds` are the group's dish
  * lines, on whichever of the party's bills they sit; `summary` names them by staff name, e.g.
  * "2 × Steak, 1 × Fish". A removed group is never listed. */
 export interface OrderGroup {
@@ -503,7 +503,7 @@ export interface CurrentOrderKitchen {
   awayAt: string | null;
 }
 
-/** A dish row of `GET /api/visits/:id/current-orders`, on any bill of the party but an abandoned
+/** A dish row of `GET /api/parties/:id/current-orders`, on any bill of the party but an abandoned
  * one, a paid one included. Only a `released` row can be marked served; its extras are served with it. */
 export interface CurrentOrderRow {
   lineId: string;
@@ -554,7 +554,7 @@ export interface PrintProblem {
 /** What every group command sends: its submission id, and the party's revision as last read. */
 export interface GroupCommand {
   submissionId: string;
-  expectedVisitRevision: number;
+  expectedPartyRevision: number;
 }
 
 /** A group submission: the groups in the order they go in the party's sequence, or one held group
@@ -601,7 +601,7 @@ export type DraftLineInput = Omit<DraftLine, "id" | "unavailable">;
 /** One person's unsent order on a party, at the revision a save or submit sends back. */
 export interface Draft {
   id: string;
-  visitId: string;
+  partyId: string;
   ownerId: string;
   ownerName: string;
   revision: number;
@@ -838,7 +838,7 @@ export interface AsServedAllergens {
 }
 
 /** The seated party a queue card's bill belongs to, at the revision the queue was read at. */
-export interface QueueVisit {
+export interface QueueParty {
   id: string;
   revision: number;
 }
@@ -941,7 +941,7 @@ export interface StationQueueGroup {
    *  order here is a pickup awaiting its counter handover ({@link TillApi.markCollected}). */
   status: WorkingOrderStatus;
   /** Absent on a bill with no party. */
-  visit?: QueueVisit;
+  party?: QueueParty;
   /** Present only when one of this bill's tickets for the station was not printed after the
    *  server's `JOBS_WAITING_MS`, or was given up on. */
   printProblem?: true;
@@ -1096,7 +1096,7 @@ export interface ExpoOrder {
   orderNumber: number;
   openedMinutes: number;
   /** Absent on a bill with no party. */
-  visit?: QueueVisit;
+  party?: QueueParty;
   /** Empty on a seated party's bill. */
   courses: ExpoCourse[];
   /** A seated party's bill's sections; absent or empty on any other bill. */
@@ -1169,12 +1169,12 @@ export interface FloorZone {
 }
 
 /**
- * The party seated at a table (`TableState.visit`). `outstanding` is what the party's open and placed
+ * The party seated at a table (`TableState.party`). `outstanding` is what the party's open and placed
  * bills still owe, merged parties' bills included, as a two-place decimal string; `billCount` leaves
  * out abandoned bills; `tableIds` lists every table the party sits at, in the order they joined it.
  * `revision` is what a command that changes the party's tables or bills sends back.
  */
-export interface TableVisit {
+export interface TableParty {
   id: string;
   revision: number;
   guestCount: number | null;
@@ -1189,11 +1189,11 @@ export interface TableVisit {
   reminder: ReleaseReminder | null;
 }
 
-/** One bill of a seated party from `GET /api/visits/:id/bills`. `outstanding` is zero on a settled or
+/** One bill of a seated party from `GET /api/parties/:id/bills`. `outstanding` is zero on a settled or
  * abandoned bill; `receiptAvailable` says a sale was filed for it, so its receipt can be printed again. */
-export interface VisitBill {
+export interface PartyBill {
   workingOrderId: string;
-  visitId: string;
+  partyId: string;
   label: string | null;
   status: "open" | "placed" | "settled" | "abandoned";
   total: string;
@@ -1203,9 +1203,9 @@ export interface VisitBill {
 
 /** The party revisions a table move sends (D19): the destination party's, and on a merge or transfer
  * between two parties, the source party's. An absent one is left out of the body. */
-export interface VisitRevisions {
-  expectedVisitRevision?: number;
-  expectedSourceVisitRevision?: number;
+export interface PartyRevisions {
+  expectedPartyRevision?: number;
+  expectedSourcePartyRevision?: number;
 }
 
 /**
@@ -1253,7 +1253,7 @@ export interface TableState {
   posY: number | null;
   shape: TableShape | null;
   rotation: number | null;
-  visit: TableVisit | null;
+  party: TableParty | null;
 }
 
 /** The rendered shape of a placed table; a server round-trip re-validates against the real vocabulary. */
@@ -1281,7 +1281,7 @@ export interface TableServiceStatus {
 
 /** `POST /api/tables/:id/seat` success — the new party, its tab and the tab's order number. */
 export interface SeatResult {
-  visitId: string;
+  partyId: string;
   tabId: string;
   revision: number;
   orderNumber: number;
@@ -1598,8 +1598,8 @@ export class TillApi {
     lineNo: number,
     patch: OrderLinePatch,
     revision: number,
-  ): Promise<{ revision: number; visit: BillParty }> {
-    return this.#request<{ revision: number; visit: BillParty }>(
+  ): Promise<{ revision: number; party: BillParty }> {
+    return this.#request<{ revision: number; party: BillParty }>(
       `/api/working-orders/${orderId}/lines/${lineNo}`,
       "PUT",
       { ...patch, revision },
@@ -1845,52 +1845,52 @@ export class TillApi {
   }
 
   /**
-   * Finish a party's table → `POST /api/visits/:visitId/finish`. Rejects `visit.bill_outstanding`
-   * while a bill is unpaid, `visit.not_open`, or `visit.out_of_date` when the party changed since
-   * `expectedVisitRevision` was read.
+   * Finish a party's table → `POST /api/parties/:partyId/finish`. Rejects `party.bill_outstanding`
+   * while a bill is unpaid, `party.not_open`, or `party.out_of_date` when the party changed since
+   * `expectedPartyRevision` was read.
    */
   finishTable(
-    visitId: string,
-    expectedVisitRevision: number,
+    partyId: string,
+    expectedPartyRevision: number,
   ): Promise<{ state: "closed" | "needs_clearing" }> {
-    return this.#request(`/api/visits/${visitId}/finish`, "POST", { expectedVisitRevision });
+    return this.#request(`/api/parties/${partyId}/finish`, "POST", { expectedPartyRevision });
   }
 
-  /** Free a finished party's tables → `POST /api/visits/:visitId/cleared`. Rejects `visit.not_open`
-   * unless the party needs clearing, and `visit.out_of_date`. */
-  async markCleared(visitId: string, expectedVisitRevision: number): Promise<void> {
-    await this.#request<void>(`/api/visits/${visitId}/cleared`, "POST", { expectedVisitRevision });
+  /** Free a finished party's tables → `POST /api/parties/:partyId/cleared`. Rejects `party.not_open`
+   * unless the party needs clearing, and `party.out_of_date`. */
+  async markCleared(partyId: string, expectedPartyRevision: number): Promise<void> {
+    await this.#request<void>(`/api/parties/${partyId}/cleared`, "POST", { expectedPartyRevision });
   }
 
-  /** Every bill of a party, merged parties' included → `GET /api/visits/:visitId/bills`. */
-  getVisitBills(visitId: string): Promise<VisitBill[]> {
-    return this.#request<VisitBill[]>(`/api/visits/${visitId}/bills`, "GET");
+  /** Every bill of a party, merged parties' included → `GET /api/parties/:partyId/bills`. */
+  getPartyBills(partyId: string): Promise<PartyBill[]> {
+    return this.#request<PartyBill[]>(`/api/parties/${partyId}/bills`, "GET");
   }
 
-  /** A party's order groups in sequence, with its revision → `GET /api/visits/:visitId/groups`. */
-  listGroups(visitId: string): Promise<{ revision: number; groups: OrderGroup[] }> {
-    return this.#request(`/api/visits/${visitId}/groups`, "GET");
+  /** A party's order groups in sequence, with its revision → `GET /api/parties/:partyId/groups`. */
+  listGroups(partyId: string): Promise<{ revision: number; groups: OrderGroup[] }> {
+    return this.#request(`/api/parties/${partyId}/groups`, "GET");
   }
 
   /**
-   * Put groups of lines on a party's tab → `POST /api/visits/:visitId/groups`, each released now or
+   * Put groups of lines on a party's tab → `POST /api/parties/:partyId/groups`, each released now or
    * held. Sent to a paid tab the party still points at, it opens the party's next tab: the answer
    * names the tab the lines landed on. A repeat with the same submission id answers as the first.
-   * Rejects `visit.out_of_date`, `visit.not_open`, `submission.id_reused`, `group.not_held` and
+   * Rejects `party.out_of_date`, `party.not_open`, `submission.id_reused`, `group.not_held` and
    * `group.not_found` as `{ code }`.
    */
   submitGroups(
-    visitId: string,
+    partyId: string,
     submission: GroupSubmission,
     options: ReadOptions = {},
   ): Promise<SubmittedGroups> {
-    return this.#request(`/api/visits/${visitId}/groups`, "POST", submission, options.signal);
+    return this.#request(`/api/parties/${partyId}/groups`, "POST", submission, options.signal);
   }
 
-  /** Every open draft on a party, whoever holds it, oldest first → `GET /api/visits/:visitId/drafts`. */
-  async listDrafts(visitId: string, options: ReadOptions = {}): Promise<Draft[]> {
+  /** Every open draft on a party, whoever holds it, oldest first → `GET /api/parties/:partyId/drafts`. */
+  async listDrafts(partyId: string, options: ReadOptions = {}): Promise<Draft[]> {
     const { drafts } = await this.#request<{ drafts: Draft[] }>(
-      `/api/visits/${visitId}/drafts`,
+      `/api/parties/${partyId}/drafts`,
       "GET",
       undefined,
       options.signal,
@@ -1899,28 +1899,28 @@ export class TillApi {
   }
 
   /**
-   * Replace every line of the signed-in person's draft → `PUT /api/visits/:visitId/drafts`. The
+   * Replace every line of the signed-in person's draft → `PUT /api/parties/:partyId/drafts`. The
    * server merges lines that order the same thing and answers the draft as saved. Rejects, among
    * others, `draft.out_of_date` (with the draft's `draftId` and `revision`), `draft.taken_over` (with
-   * `ownerId` and `ownerName`), `draft.not_found`, `draft.already_submitted` and `visit.not_open`.
+   * `ownerId` and `ownerName`), `draft.not_found`, `draft.already_submitted` and `party.not_open`.
    */
-  saveDraft(visitId: string, save: DraftSave, options: ReadOptions = {}): Promise<Draft> {
-    return this.#request(`/api/visits/${visitId}/drafts`, "PUT", save, options.signal);
+  saveDraft(partyId: string, save: DraftSave, options: ReadOptions = {}): Promise<Draft> {
+    return this.#request(`/api/parties/${partyId}/drafts`, "PUT", save, options.signal);
   }
 
   /**
    * Make another person's draft the signed-in person's →
-   * `POST /api/visits/:visitId/drafts/:draftId/take-over`. When they already hold a draft on the
+   * `POST /api/parties/:partyId/drafts/:draftId/take-over`. When they already hold a draft on the
    * party, the taken lines join it and the answer is THAT draft, under its own id.
    */
   takeOverDraft(
-    visitId: string,
+    partyId: string,
     draftId: string,
     revision: number,
     options: ReadOptions = {},
   ): Promise<Draft> {
     return this.#request(
-      `/api/visits/${visitId}/drafts/${draftId}/take-over`,
+      `/api/parties/${partyId}/drafts/${draftId}/take-over`,
       "POST",
       { revision },
       options.signal,
@@ -1929,135 +1929,135 @@ export class TillApi {
 
   /**
    * Send lines of the signed-in person's draft as groups →
-   * `POST /api/visits/:visitId/drafts/:draftId/submit`. A repeat with the same submission id answers
-   * as the first. Rejects, among others, the `draft.*` refusals, `visit.out_of_date`,
-   * `visit.not_open`, `submission.id_reused` and pricing refusals such as `menu.version_changed`.
+   * `POST /api/parties/:partyId/drafts/:draftId/submit`. A repeat with the same submission id answers
+   * as the first. Rejects, among others, the `draft.*` refusals, `party.out_of_date`,
+   * `party.not_open`, `submission.id_reused` and pricing refusals such as `menu.version_changed`.
    */
   submitDraft(
-    visitId: string,
+    partyId: string,
     draftId: string,
     submission: DraftSubmission,
     options: ReadOptions = {},
   ): Promise<SubmittedDraft> {
     return this.#request(
-      `/api/visits/${visitId}/drafts/${draftId}/submit`,
+      `/api/parties/${partyId}/drafts/${draftId}/submit`,
       "POST",
       submission,
       options.signal,
     );
   }
 
-  /** Send a held group to the kitchen → `POST /api/visits/:visitId/groups/:groupId/fire`. Rejects
+  /** Send a held group to the kitchen → `POST /api/parties/:partyId/groups/:groupId/fire`. Rejects
    * `group.not_held`, `group.not_found`, `product.unavailable` and the command refusals. */
   fireGroup(
-    visitId: string,
+    partyId: string,
     groupId: string,
     command: GroupCommand,
   ): Promise<{ revision: number }> {
-    return this.#request(`/api/visits/${visitId}/groups/${groupId}/fire`, "POST", command);
+    return this.#request(`/api/parties/${partyId}/groups/${groupId}/fire`, "POST", command);
   }
 
-  /** The pass marks a fired group's kitchen items ready → `POST /api/visits/:visitId/groups/:groupId/ready`.
+  /** The pass marks a fired group's kitchen items ready → `POST /api/parties/:partyId/groups/:groupId/ready`.
    * A held group is a no-op that still moves the revision. Rejects `group.not_found` and the command
    * refusals. */
   bumpGroupReady(
-    visitId: string,
+    partyId: string,
     groupId: string,
     command: GroupCommand,
   ): Promise<{ revision: number }> {
-    return this.#request(`/api/visits/${visitId}/groups/${groupId}/ready`, "POST", command);
+    return this.#request(`/api/parties/${partyId}/groups/${groupId}/ready`, "POST", command);
   }
 
-  /** The pass sends a group's ready items to the floor → `POST /api/visits/:visitId/groups/:groupId/away`.
+  /** The pass sends a group's ready items to the floor → `POST /api/parties/:partyId/groups/:groupId/away`.
    * Rejects `group.not_found` and the command refusals. */
   markGroupAway(
-    visitId: string,
+    partyId: string,
     groupId: string,
     command: GroupCommand,
   ): Promise<{ revision: number }> {
-    return this.#request(`/api/visits/${visitId}/groups/${groupId}/away`, "POST", command);
+    return this.#request(`/api/parties/${partyId}/groups/${groupId}/away`, "POST", command);
   }
 
   /**
-   * Mark part or all of each of a party's lines served → `POST /api/visits/:visitId/served`, on any
+   * Mark part or all of each of a party's lines served → `POST /api/parties/:partyId/served`, on any
    * of its bills but an abandoned one, a paid one included. `quantity` is how much THIS command serves. Rejects
    * `tab.serve_quantity_invalid` for more than is left to serve, `group.line_held` for a line not yet
    * released, `group.not_found`, `order.payment_in_flight` and the command refusals.
    */
   markServed(
-    visitId: string,
+    partyId: string,
     items: { lineId: string; quantity: string }[],
     command: GroupCommand,
   ): Promise<{ revision: number }> {
-    return this.#request(`/api/visits/${visitId}/served`, "POST", { ...command, items });
+    return this.#request(`/api/parties/${partyId}/served`, "POST", { ...command, items });
   }
 
-  /** Take back part or all of what was marked served on each line → `POST /api/visits/:visitId/unserved`;
+  /** Take back part or all of what was marked served on each line → `POST /api/parties/:partyId/unserved`;
    * more than is served rejects `tab.serve_quantity_invalid`. */
   unmarkServed(
-    visitId: string,
+    partyId: string,
     items: { lineId: string; quantity: string }[],
     command: GroupCommand,
   ): Promise<{ revision: number }> {
-    return this.#request(`/api/visits/${visitId}/unserved`, "POST", { ...command, items });
+    return this.#request(`/api/parties/${partyId}/unserved`, "POST", { ...command, items });
   }
 
-  /** Mark every line of a fired group served → `POST /api/visits/:visitId/groups/:groupId/served`.
+  /** Mark every line of a fired group served → `POST /api/parties/:partyId/groups/:groupId/served`.
    * A held group rejects `group.line_held`. */
   markGroupServed(
-    visitId: string,
+    partyId: string,
     groupId: string,
     command: GroupCommand,
   ): Promise<{ revision: number }> {
-    return this.#request(`/api/visits/${visitId}/groups/${groupId}/served`, "POST", command);
+    return this.#request(`/api/parties/${partyId}/groups/${groupId}/served`, "POST", command);
   }
 
-  /** Put off a held group's release reminder → `POST /api/visits/:visitId/groups/:groupId/snooze`: it
+  /** Put off a held group's release reminder → `POST /api/parties/:partyId/groups/:groupId/snooze`: it
    * becomes due `minutes` from now. A fired group rejects `group.not_held`. */
   snoozeGroup(
-    visitId: string,
+    partyId: string,
     groupId: string,
     minutes: number,
     command: GroupCommand,
   ): Promise<{ revision: number }> {
-    return this.#request(`/api/visits/${visitId}/groups/${groupId}/snooze`, "POST", {
+    return this.#request(`/api/parties/${partyId}/groups/${groupId}/snooze`, "POST", {
       ...command,
       minutes,
     });
   }
 
-  /** A party's Current orders → `GET /api/visits/:visitId/current-orders`. */
-  readCurrentOrders(visitId: string): Promise<CurrentOrders> {
-    return this.#request(`/api/visits/${visitId}/current-orders`, "GET");
+  /** A party's Current orders → `GET /api/parties/:partyId/current-orders`. */
+  readCurrentOrders(partyId: string): Promise<CurrentOrders> {
+    return this.#request(`/api/parties/${partyId}/current-orders`, "GET");
   }
 
-  /** A party's kitchen tickets that have not printed → `GET /api/visits/:visitId/print-problems`. */
-  listPrintProblems(visitId: string): Promise<{ problems: PrintProblem[] }> {
-    return this.#request(`/api/visits/${visitId}/print-problems`, "GET");
+  /** A party's kitchen tickets that have not printed → `GET /api/parties/:partyId/print-problems`. */
+  listPrintProblems(partyId: string): Promise<{ problems: PrintProblem[] }> {
+    return this.#request(`/api/parties/${partyId}/print-problems`, "GET");
   }
 
-  /** Put a party's held groups in a new order → `PUT /api/visits/:visitId/groups/order`, naming every
+  /** Put a party's held groups in a new order → `PUT /api/parties/:partyId/groups/order`, naming every
    * held group once. Fired groups keep their places. */
   reorderGroups(
-    visitId: string,
+    partyId: string,
     heldGroupIds: string[],
     command: GroupCommand,
   ): Promise<{ revision: number }> {
-    return this.#request(`/api/visits/${visitId}/groups/order`, "PUT", {
+    return this.#request(`/api/parties/${partyId}/groups/order`, "PUT", {
       ...command,
       heldGroupIds,
     });
   }
 
   /** Move lines, or part of one, between held groups, or into a new held group at the end →
-   * `POST /api/visits/:visitId/groups/move`. */
+   * `POST /api/parties/:partyId/groups/move`. */
   moveLinesToGroup(
-    visitId: string,
+    partyId: string,
     moves: { lineId: string; quantity: string }[],
     target: { groupId: string } | "new",
     command: GroupCommand,
   ): Promise<{ revision: number }> {
-    return this.#request(`/api/visits/${visitId}/groups/move`, "POST", {
+    return this.#request(`/api/parties/${partyId}/groups/move`, "POST", {
       ...command,
       moves,
       target,
@@ -2112,7 +2112,7 @@ export class TillApi {
    * only; absent voids all of it. Rejects `tab.not_open`, `tab.line_not_found`,
    * `tab.void_quantity_invalid` or `order.payment_in_flight`. Resolves the tab's party after the void.
    */
-  voidLine(orderId: string, lineNo: number, quantity?: string): Promise<{ visit: BillParty }> {
+  voidLine(orderId: string, lineNo: number, quantity?: string): Promise<{ party: BillParty }> {
     const part = quantity === undefined ? "" : `?quantity=${encodeURIComponent(quantity)}`;
     return this.#request(`/api/working-orders/${orderId}/lines/${lineNo}${part}`, "DELETE");
   }
@@ -2129,10 +2129,10 @@ export class TillApi {
   /**
    * Relocate this tab's party to a FREE table → `POST /api/tabs/:tabId/move`. No line moves;
    * PRE-FISCAL. Rejects `table.occupied`, `table.inactive`, `table.not_found`, `tab.not_open`, and
-   * on a party's tab `visit.not_open`, `visit.out_of_date`, or `management.request_invalid` for a
+   * on a party's tab `party.not_open`, `party.out_of_date`, or `management.request_invalid` for a
    * missing revision.
    */
-  async moveTab(orderId: string, toTableId: string, revisions: VisitRevisions = {}): Promise<void> {
+  async moveTab(orderId: string, toTableId: string, revisions: PartyRevisions = {}): Promise<void> {
     await this.#request<void>(`/api/tabs/${orderId}/move`, "POST", { toTableId, ...revisions });
   }
 
@@ -2141,7 +2141,7 @@ export class TillApi {
    * PRE-FISCAL. Same rejection codes as {@link moveTab}, and `tab.not_table_tab` or
    * `service_zone.join_mismatch`.
    */
-  async joinTable(orderId: string, tableId: string, revisions: VisitRevisions = {}): Promise<void> {
+  async joinTable(orderId: string, tableId: string, revisions: PartyRevisions = {}): Promise<void> {
     await this.#request<void>(`/api/tabs/${orderId}/join`, "POST", { tableId, ...revisions });
   }
 
@@ -2150,16 +2150,16 @@ export class TillApi {
    * DESTINATION tab and `fromTabId` the source, whose lines move here before it is abandoned.
    * `freeSourceTable` frees the vacated table, and takes it out of its party if it has one
    * (`true`), or re-points it at this tab (`false`).
-   * PRE-FISCAL. Rejects `tab.not_open`, `tab.merge_self`, `tab.not_table_tab`, `tab.visit_mismatch`,
-   * `tab.visit_has_other_open_bill`, `tab.merge_leaves_no_table` or `bill.payments_received`, and
-   * on a party's tab `visit.not_open`, `visit.out_of_date`, or `management.request_invalid` for a
+   * PRE-FISCAL. Rejects `tab.not_open`, `tab.merge_self`, `tab.not_table_tab`, `tab.party_mismatch`,
+   * `tab.party_has_other_open_bill`, `tab.merge_leaves_no_table` or `bill.payments_received`, and
+   * on a party's tab `party.not_open`, `party.out_of_date`, or `management.request_invalid` for a
    * missing revision.
    */
   async mergeTabs(
     orderId: string,
     fromTabId: string,
     freeSourceTable: boolean,
-    revisions: VisitRevisions = {},
+    revisions: PartyRevisions = {},
   ): Promise<void> {
     await this.#request<void>(`/api/tabs/${orderId}/merge`, "POST", {
       fromTabId,
@@ -2172,14 +2172,14 @@ export class TillApi {
    * Move SELECTED items OUT of this tab into another open tab → `POST /api/tabs/:tabId/transfer`, where
    * the path names the SOURCE tab (see {@link TabTransfer}). PRE-FISCAL. Rejects `tab.not_open`,
    * `tab.transfer_self`, `tab.line_not_found`, `tab.transfer_quantity_invalid` or
-   * `tab.transfer_duplicate_line`, and on a party's tab `visit.not_open`, `visit.out_of_date`, or
+   * `tab.transfer_duplicate_line`, and on a party's tab `party.not_open`, `party.out_of_date`, or
    * `management.request_invalid` for a missing revision.
    */
   async transferLines(
     orderId: string,
     toTabId: string,
     transfers: readonly TabTransfer[],
-    revisions: VisitRevisions = {},
+    revisions: PartyRevisions = {},
   ): Promise<void> {
     await this.#request<void>(`/api/tabs/${orderId}/transfer`, "POST", {
       toTabId,
@@ -2190,13 +2190,13 @@ export class TillApi {
 
   /**
    * Carve selected items from a table tab into a detached check, ready for the existing pay path.
-   * On a party's tab rejects `visit.not_open`, `visit.out_of_date`, or `management.request_invalid`
+   * On a party's tab rejects `party.not_open`, `party.out_of_date`, or `management.request_invalid`
    * for a missing revision.
    */
   splitTab(
     orderId: string,
     transfers: readonly TabTransfer[],
-    revisions: VisitRevisions = {},
+    revisions: PartyRevisions = {},
   ): Promise<{ checkId: string }> {
     return this.#request<{ checkId: string }>(`/api/tabs/${orderId}/split`, "POST", {
       transfers,

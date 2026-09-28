@@ -73,12 +73,12 @@ export type {
 } from "./order-amendment-hash.js";
 export { diningTables, floorTableShape } from "./schema/dining-tables.js";
 export {
+  parties,
+  partyState,
+  partyTables,
   serviceCommands,
   serviceCommandScope,
-  visitState,
-  visitTables,
-  visits,
-} from "./schema/visits.js";
+} from "./schema/parties.js";
 export {
   orderGroupEventKind,
   orderGroupEvents,

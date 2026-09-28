@@ -288,7 +288,7 @@ const partyGroups: StationQueueGroup[] = [
     queuedAt: "2026-08-17T10:00:00.000Z",
     status: "open",
     thresholds: DEFAULT_THRESHOLDS,
-    visit: { id: "v-4", revision: 12 },
+    party: { id: "v-4", revision: 12 },
     printProblem: true,
     items: [
       {

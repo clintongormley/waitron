@@ -253,6 +253,13 @@
       "when": 1790610360346,
       "tag": "0035_kitchen_print_job_lines",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1790621095836,
+      "tag": "0036_party_rename",
+      "breakpoints": true
     }
   ]
 }

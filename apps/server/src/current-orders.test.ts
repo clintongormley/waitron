@@ -12,7 +12,7 @@ import {
 import {
   orderGroups,
   serviceCommands,
-  visits,
+  parties,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -50,7 +50,7 @@ import { createTable } from "./tables.js";
 import type { TillConfig } from "./till-config.js";
 import { payWorkingOrder } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { finishTable, seatTable } from "./visits.js";
+import { finishTable, seatTable } from "./parties.js";
 import {
   addTabRound,
   listTablesWithState,
@@ -219,7 +219,7 @@ async function setupVenue(): Promise<Venue> {
 }
 
 interface Seated {
-  visitId: string;
+  partyId: string;
   tabId: string;
   tableId: string;
 }
@@ -230,12 +230,12 @@ async function seated(v: Venue): Promise<Seated> {
       label: `C-${randomUUID().slice(0, 6)}`,
       zoneId: v.zoneId,
     });
-    const { visitId, tabId } = await seatTable(tx, v.cfg, {
+    const { partyId, tabId } = await seatTable(tx, v.cfg, {
       tableId,
       guestCount: 2,
       operatorId: ALEX,
     });
-    return { visitId, tabId, tableId };
+    return { partyId, tabId, tableId };
   });
 }
 
@@ -243,11 +243,11 @@ function line(v: Venue, dish: Dish, quantity = "1"): GroupLine {
   return { menuItemId: v.offer(dish), quantity };
 }
 
-async function revisionOf(visitId: string): Promise<number> {
+async function revisionOf(partyId: string): Promise<number> {
   const [row] = await suite.db
-    .select({ revision: visits.revision })
-    .from(visits)
-    .where(eq(visits.id, visitId));
+    .select({ revision: parties.revision })
+    .from(parties)
+    .where(eq(parties.id, partyId));
   return row!.revision;
 }
 
@@ -256,10 +256,10 @@ interface CommandOptions {
   revision?: number;
 }
 
-async function args(visitId: string, opts: CommandOptions = {}) {
+async function args(partyId: string, opts: CommandOptions = {}) {
   return {
     submissionId: opts.submissionId ?? randomUUID(),
-    expectedVisitRevision: opts.revision ?? (await revisionOf(visitId)),
+    expectedPartyRevision: opts.revision ?? (await revisionOf(partyId)),
     operatorId: ALEX,
   };
 }
@@ -267,55 +267,55 @@ async function args(visitId: string, opts: CommandOptions = {}) {
 /** Submits one group; answers its id and its dish lines. */
 async function group(
   v: Venue,
-  visitId: string,
+  partyId: string,
   release: GroupRelease,
   lines: GroupLine[],
 ): Promise<{ id: string; lineIds: string[] }> {
-  const command = await args(visitId);
+  const command = await args(partyId);
   const { groups } = await inTx((tx) =>
-    submitGroups(tx, v.cfg, visitId, { ...command, groups: [{ release, lines }] }),
+    submitGroups(tx, v.cfg, partyId, { ...command, groups: [{ release, lines }] }),
   );
   return { id: groups[0]!.id, lineIds: groups[0]!.lineIds };
 }
 
-async function fire(v: Venue, visitId: string, groupId: string) {
-  const command = await args(visitId);
-  return inTx((tx) => fireGroup(tx, v.cfg, visitId, groupId, command));
+async function fire(v: Venue, partyId: string, groupId: string) {
+  const command = await args(partyId);
+  return inTx((tx) => fireGroup(tx, v.cfg, partyId, groupId, command));
 }
 
-async function serveGroup(v: Venue, visitId: string, groupId: string) {
-  const command = await args(visitId);
-  return inTx((tx) => markGroupServed(tx, v.cfg, visitId, groupId, command));
+async function serveGroup(v: Venue, partyId: string, groupId: string) {
+  const command = await args(partyId);
+  return inTx((tx) => markGroupServed(tx, v.cfg, partyId, groupId, command));
 }
 
-async function serve(v: Venue, visitId: string, items: { lineId: string; quantity: string }[]) {
-  const command = await args(visitId);
-  return inTx((tx) => markServed(tx, v.cfg, visitId, items, command));
+async function serve(v: Venue, partyId: string, items: { lineId: string; quantity: string }[]) {
+  const command = await args(partyId);
+  return inTx((tx) => markServed(tx, v.cfg, partyId, items, command));
 }
 
 async function snooze(
   v: Venue,
-  visitId: string,
+  partyId: string,
   groupId: string,
   minutes: number,
   opts: CommandOptions = {},
 ) {
-  const command = await args(visitId, opts);
-  return inTx((tx) => snoozeReminder(tx, v.cfg, visitId, groupId, minutes, command));
+  const command = await args(partyId, opts);
+  return inTx((tx) => snoozeReminder(tx, v.cfg, partyId, groupId, minutes, command));
 }
 
-async function reorder(visitId: string, heldGroupIds: string[]) {
-  const command = await args(visitId);
-  return inTx((tx) => reorderHeldGroups(tx, visitId, heldGroupIds, command));
+async function reorder(partyId: string, heldGroupIds: string[]) {
+  const command = await args(partyId);
+  return inTx((tx) => reorderHeldGroups(tx, partyId, heldGroupIds, command));
 }
 
 async function floorReminder(v: Venue, tableId: string) {
   const rows = await inTx((tx) => listTablesWithState(tx, v.cfg));
-  return rows.find((row) => row.id === tableId)!.visit!.reminder;
+  return rows.find((row) => row.id === tableId)!.party!.reminder;
 }
 
-async function currentOrders(visitId: string) {
-  return inTx((tx) => readCurrentOrders(tx, visitId));
+async function currentOrders(partyId: string) {
+  return inTx((tx) => readCurrentOrders(tx, partyId));
 }
 
 async function remindAtOf(groupId: string): Promise<string | null> {
@@ -352,52 +352,52 @@ async function at<R>(iso: string, fn: () => Promise<R>): Promise<R> {
 /** Groups 1–2 fired (Croquetas, Steak ×2), groups 3–4 held (Flan, then Water), on one party. */
 async function fourGroups(v: Venue) {
   const s = await seated(v);
-  const g1 = await group(v, s.visitId, "fire", [line(v, "croquetas")]);
-  const g2 = await group(v, s.visitId, "fire", [line(v, "steak", "2")]);
-  const g3 = await group(v, s.visitId, "hold", [line(v, "flan")]);
-  const g4 = await group(v, s.visitId, "hold", [line(v, "water")]);
+  const g1 = await group(v, s.partyId, "fire", [line(v, "croquetas")]);
+  const g2 = await group(v, s.partyId, "fire", [line(v, "steak", "2")]);
+  const g3 = await group(v, s.partyId, "hold", [line(v, "flan")]);
+  const g4 = await group(v, s.partyId, "hold", [line(v, "water")]);
   return { ...s, g1, g2, g3, g4 };
 }
 
 /** {@link fourGroups} with group 1 fully served at 20:00 and group 2 at 20:05. */
 async function servedUpToGroupTwo(v: Venue) {
   const s = await fourGroups(v);
-  await at(T(0), () => serveGroup(v, s.visitId, s.g1.id));
-  await at(T(5), () => serveGroup(v, s.visitId, s.g2.id));
+  await at(T(0), () => serveGroup(v, s.partyId, s.g1.id));
+  await at(T(5), () => serveGroup(v, s.partyId, s.g2.id));
   return s;
 }
 
 /** Every row a snooze could write. */
-async function snapshot(visitId: string) {
+async function snapshot(partyId: string) {
   return {
-    visit: await suite.db.select().from(visits).where(eq(visits.id, visitId)),
+    party: await suite.db.select().from(parties).where(eq(parties.id, partyId)),
     groups: await suite.db
       .select()
       .from(orderGroups)
-      .where(eq(orderGroups.visitId, visitId))
+      .where(eq(orderGroups.partyId, partyId))
       .orderBy(orderGroups.id),
     lines: await suite.db
       .select()
       .from(workingOrderLines)
       .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-      .where(eq(workingOrders.visitId, visitId))
+      .where(eq(workingOrders.partyId, partyId))
       .orderBy(workingOrderLines.id),
     commands: await suite.db
       .select()
       .from(serviceCommands)
-      .where(eq(serviceCommands.scopeId, visitId))
+      .where(eq(serviceCommands.scopeId, partyId))
       .orderBy(serviceCommands.id),
   };
 }
 
 async function expectRefusedWithNothingWritten(
-  visitId: string,
+  partyId: string,
   attempt: () => Promise<unknown>,
   expected: { code: string; params?: Record<string, unknown> },
 ): Promise<void> {
-  const before = await snapshot(visitId);
+  const before = await snapshot(partyId);
   await expect(attempt()).rejects.toMatchObject(expected);
-  expect(await snapshot(visitId)).toEqual(before);
+  expect(await snapshot(partyId)).toEqual(before);
 }
 
 describe("releaseReminder (pure; D11)", () => {
@@ -491,7 +491,7 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
     const s = await servedUpToGroupTwo(v);
 
     expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g3.id, dueAt: T(15) });
-    expect((await currentOrders(s.visitId)).reminder).toEqual({
+    expect((await currentOrders(s.partyId)).reminder).toEqual({
       groupId: s.g3.id,
       dueAt: T(15),
     });
@@ -500,23 +500,23 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
   it("shows group 3 without a time while group 2 is not fully served", async () => {
     const v = await setupVenue();
     const s = await fourGroups(v);
-    await at(T(0), () => serveGroup(v, s.visitId, s.g1.id));
+    await at(T(0), () => serveGroup(v, s.partyId, s.g1.id));
 
     expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g3.id, dueAt: null });
 
-    await at(T(5), () => serve(v, s.visitId, [{ lineId: s.g2.lineIds[0]!, quantity: "1" }]));
+    await at(T(5), () => serve(v, s.partyId, [{ lineId: s.g2.lineIds[0]!, quantity: "1" }]));
 
     expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g3.id, dueAt: null });
-    expect((await currentOrders(s.visitId)).reminder).toEqual({ groupId: s.g3.id, dueAt: null });
+    expect((await currentOrders(s.partyId)).reminder).toEqual({ groupId: s.g3.id, dueAt: null });
   });
 
   it("makes it due at 20:20 when snoozed 5 minutes at 20:15, leaving group 2's served time as it was", async () => {
     const v = await setupVenue();
     const s = await servedUpToGroupTwo(v);
     const servedBefore = await servedAtOf(s.g2.lineIds);
-    const revision = await revisionOf(s.visitId);
+    const revision = await revisionOf(s.partyId);
 
-    const answer = await at(T(15), () => snooze(v, s.visitId, s.g3.id, 5));
+    const answer = await at(T(15), () => snooze(v, s.partyId, s.g3.id, 5));
 
     expect(answer).toEqual({ revision: revision + 1 });
     expect(await remindAtOf(s.g3.id)).toBe(T(20));
@@ -528,23 +528,23 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
   it("clears the reminder when group 3 fires, and group 4 becomes the one waiting", async () => {
     const v = await setupVenue();
     const s = await servedUpToGroupTwo(v);
-    await at(T(15), () => snooze(v, s.visitId, s.g3.id, 5));
+    await at(T(15), () => snooze(v, s.partyId, s.g3.id, 5));
 
-    await fire(v, s.visitId, s.g3.id);
+    await fire(v, s.partyId, s.g3.id);
 
     expect(await remindAtOf(s.g3.id)).toBeNull();
     expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g4.id, dueAt: null });
-    await at(T(30), () => serveGroup(v, s.visitId, s.g3.id));
+    await at(T(30), () => serveGroup(v, s.partyId, s.g3.id));
     expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g4.id, dueAt: T(40) });
   });
 
   it("moves the reminder to group 4 when it is reordered ahead of group 3, clearing both snoozes", async () => {
     const v = await setupVenue();
     const s = await servedUpToGroupTwo(v);
-    await at(T(15), () => snooze(v, s.visitId, s.g3.id, 5));
-    await at(T(15), () => snooze(v, s.visitId, s.g4.id, 30));
+    await at(T(15), () => snooze(v, s.partyId, s.g3.id, 5));
+    await at(T(15), () => snooze(v, s.partyId, s.g4.id, 30));
 
-    await reorder(s.visitId, [s.g4.id, s.g3.id]);
+    await reorder(s.partyId, [s.g4.id, s.g3.id]);
 
     expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g4.id, dueAt: T(15) });
     expect(await remindAtOf(s.g3.id)).toBeNull();
@@ -554,9 +554,9 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
   it("keeps a snooze through a reorder that leaves its group where it was", async () => {
     const v = await setupVenue();
     const s = await servedUpToGroupTwo(v);
-    await at(T(15), () => snooze(v, s.visitId, s.g3.id, 5));
+    await at(T(15), () => snooze(v, s.partyId, s.g3.id, 5));
 
-    await reorder(s.visitId, [s.g3.id, s.g4.id]);
+    await reorder(s.partyId, [s.g3.id, s.g4.id]);
 
     expect(await remindAtOf(s.g3.id)).toBe(T(20));
     expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g3.id, dueAt: T(20) });
@@ -565,14 +565,14 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
   it("moves the reminder on when group 3 is emptied, which removes it and clears its snooze", async () => {
     const v = await setupVenue();
     const s = await servedUpToGroupTwo(v);
-    await at(T(15), () => snooze(v, s.visitId, s.g3.id, 5));
-    const command = await args(s.visitId);
+    await at(T(15), () => snooze(v, s.partyId, s.g3.id, 5));
+    const command = await args(s.partyId);
 
     await inTx((tx) =>
       moveLinesToGroup(
         tx,
         v.cfg,
-        s.visitId,
+        s.partyId,
         [{ lineId: s.g3.lineIds[0]!, quantity: "1" }],
         { groupId: s.g4.id },
         command,
@@ -585,7 +585,7 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
       .where(eq(orderGroups.id, s.g3.id));
     expect(removed).toEqual({ state: "removed", remindAt: null });
     expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g4.id, dueAt: T(15) });
-    expect((await currentOrders(s.visitId)).groups.map((g) => g.id)).toEqual([
+    expect((await currentOrders(s.partyId)).groups.map((g) => g.id)).toEqual([
       s.g1.id,
       s.g2.id,
       s.g4.id,
@@ -598,14 +598,14 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
     await inTx((tx) => writeReleaseReminderMinutes(tx, null));
 
     expect(await floorReminder(v, s.tableId)).toBeNull();
-    expect((await currentOrders(s.visitId)).reminder).toBeNull();
+    expect((await currentOrders(s.partyId)).reminder).toBeNull();
   });
 
   it("measures from the venue's interval, and shows none for a party with no held group", async () => {
     const v = await setupVenue();
     const s = await servedUpToGroupTwo(v);
     const bare = await seated(v);
-    await group(v, bare.visitId, "fire", [line(v, "croquetas")]);
+    await group(v, bare.partyId, "fire", [line(v, "croquetas")]);
     await inTx((tx) => writeReleaseReminderMinutes(tx, 25));
 
     expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g3.id, dueAt: T(30) });
@@ -619,11 +619,11 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
 
     const rows = await inTx((tx) => listTablesWithState(tx, v.cfg));
 
-    expect(rows.find((row) => row.id === a.tableId)!.visit!.reminder).toEqual({
+    expect(rows.find((row) => row.id === a.tableId)!.party!.reminder).toEqual({
       groupId: a.g3.id,
       dueAt: T(15),
     });
-    expect(rows.find((row) => row.id === b.tableId)!.visit!.reminder).toEqual({
+    expect(rows.find((row) => row.id === b.tableId)!.party!.reminder).toEqual({
       groupId: b.g3.id,
       dueAt: null,
     });
@@ -635,16 +635,16 @@ describe("snoozeReminder (D8, D11, D19)", () => {
     const v = await setupVenue();
     const s = await servedUpToGroupTwo(v);
     const submissionId = randomUUID();
-    const revision = await revisionOf(s.visitId);
-    const first = await at(T(15), () => snooze(v, s.visitId, s.g3.id, 5, { submissionId }));
-    const before = await snapshot(s.visitId);
+    const revision = await revisionOf(s.partyId);
+    const first = await at(T(15), () => snooze(v, s.partyId, s.g3.id, 5, { submissionId }));
+    const before = await snapshot(s.partyId);
 
     const again = await at(T(18), () =>
-      snooze(v, s.visitId, s.g3.id, 5, { submissionId, revision }),
+      snooze(v, s.partyId, s.g3.id, 5, { submissionId, revision }),
     );
 
     expect(again).toEqual(first);
-    expect(await snapshot(s.visitId)).toEqual(before);
+    expect(await snapshot(s.partyId)).toEqual(before);
     expect(await remindAtOf(s.g3.id)).toBe(T(20));
   });
 
@@ -652,24 +652,24 @@ describe("snoozeReminder (D8, D11, D19)", () => {
     const v = await setupVenue();
     const s = await servedUpToGroupTwo(v);
     const submissionId = randomUUID();
-    await at(T(15), () => snooze(v, s.visitId, s.g3.id, 5, { submissionId }));
+    await at(T(15), () => snooze(v, s.partyId, s.g3.id, 5, { submissionId }));
 
     await expectRefusedWithNothingWritten(
-      s.visitId,
-      () => snooze(v, s.visitId, s.g3.id, 10, { submissionId }),
+      s.partyId,
+      () => snooze(v, s.partyId, s.g3.id, 10, { submissionId }),
       { code: "submission.id_reused", params: { submissionId } },
     );
   });
 
-  it("refuses a stale revision (visit.out_of_date), writing nothing", async () => {
+  it("refuses a stale revision (party.out_of_date), writing nothing", async () => {
     const v = await setupVenue();
     const s = await servedUpToGroupTwo(v);
-    const revision = await revisionOf(s.visitId);
+    const revision = await revisionOf(s.partyId);
 
     await expectRefusedWithNothingWritten(
-      s.visitId,
-      () => snooze(v, s.visitId, s.g3.id, 5, { revision: revision - 1 }),
-      { code: "visit.out_of_date", params: { visitId: s.visitId, revision } },
+      s.partyId,
+      () => snooze(v, s.partyId, s.g3.id, 5, { revision: revision - 1 }),
+      { code: "party.out_of_date", params: { partyId: s.partyId, revision } },
     );
   });
 
@@ -677,7 +677,7 @@ describe("snoozeReminder (D8, D11, D19)", () => {
     const v = await setupVenue();
     const s = await fourGroups(v);
 
-    await expectRefusedWithNothingWritten(s.visitId, () => snooze(v, s.visitId, s.g1.id, 5), {
+    await expectRefusedWithNothingWritten(s.partyId, () => snooze(v, s.partyId, s.g1.id, 5), {
       code: "group.not_held",
       params: { groupId: s.g1.id },
     });
@@ -687,12 +687,12 @@ describe("snoozeReminder (D8, D11, D19)", () => {
     const v = await setupVenue();
     const s = await fourGroups(v);
     const other = await fourGroups(v);
-    const command = await args(s.visitId);
+    const command = await args(s.partyId);
     await inTx((tx) =>
       moveLinesToGroup(
         tx,
         v.cfg,
-        s.visitId,
+        s.partyId,
         [{ lineId: s.g3.lineIds[0]!, quantity: "1" }],
         { groupId: s.g4.id },
         command,
@@ -700,7 +700,7 @@ describe("snoozeReminder (D8, D11, D19)", () => {
     );
 
     for (const groupId of [other.g3.id, randomUUID(), s.g3.id]) {
-      await expectRefusedWithNothingWritten(s.visitId, () => snooze(v, s.visitId, groupId, 5), {
+      await expectRefusedWithNothingWritten(s.partyId, () => snooze(v, s.partyId, groupId, 5), {
         code: "group.not_found",
         params: { groupId },
       });
@@ -714,8 +714,8 @@ describe("snoozeReminder (D8, D11, D19)", () => {
       const s = await fourGroups(v);
 
       await expectRefusedWithNothingWritten(
-        s.visitId,
-        () => snooze(v, s.visitId, s.g3.id, minutes),
+        s.partyId,
+        () => snooze(v, s.partyId, s.g3.id, minutes),
         { code: "management.request_invalid", params: { field: "minutes" } },
       );
     },
@@ -725,8 +725,8 @@ describe("snoozeReminder (D8, D11, D19)", () => {
     const v = await setupVenue();
     const s = await fourGroups(v);
 
-    await at(T(0), () => snooze(v, s.visitId, s.g3.id, 1));
-    await at(T(0), () => snooze(v, s.visitId, s.g4.id, 120));
+    await at(T(0), () => snooze(v, s.partyId, s.g3.id, 1));
+    await at(T(0), () => snooze(v, s.partyId, s.g4.id, 120));
 
     expect(await remindAtOf(s.g3.id)).toBe(T(1));
     expect(await remindAtOf(s.g4.id)).toBe(T(0, 22));
@@ -752,7 +752,7 @@ function row(fields: Partial<RowShape> & Pick<RowShape, "lineId" | "name">): Row
   };
 }
 
-async function linesByName(visitId: string) {
+async function linesByName(partyId: string) {
   const rows = await suite.db
     .select({
       id: workingOrderLines.id,
@@ -763,7 +763,7 @@ async function linesByName(visitId: string) {
     })
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-    .where(eq(workingOrders.visitId, visitId));
+    .where(eq(workingOrders.partyId, partyId));
   return rows;
 }
 
@@ -771,33 +771,33 @@ describe("readCurrentOrders (spec §4)", () => {
   it("reads every group in sequence with each dish row's served count and kitchen state, across a paid bill, a split one and a later one", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const starters = await group(v, s.visitId, "fire", [
+    const starters = await group(v, s.partyId, "fire", [
       line(v, "croquetas", "3"),
       line(v, "water"),
     ]);
-    const [croqLine] = (await linesByName(s.visitId)).filter((l) => l.name === "croquetas");
+    const [croqLine] = (await linesByName(s.partyId)).filter((l) => l.name === "croquetas");
     const { checkId } = await inTx(async (tx) =>
       splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: croqLine!.lineNo, quantity: "1" }], {
-        expectedVisitRevision: await revisionOf(s.visitId),
+        expectedPartyRevision: await revisionOf(s.partyId),
         operatorId: MIA,
       }),
     );
-    await serve(v, s.visitId, [{ lineId: croqLine!.id, quantity: "1" }]);
+    await serve(v, s.partyId, [{ lineId: croqLine!.id, quantity: "1" }]);
     await payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
       id: s.tabId,
       lines: [],
       tender: { method: "cash", amount: "18.00" },
     });
-    const mains = await group(v, s.visitId, "hold", [
+    const mains = await group(v, s.partyId, "hold", [
       {
         ...line(v, "steak"),
         extras: [{ listId: v.extrasListId, picks: [{ productId: v.sauceId, quantity: 1 }] }],
       },
     ]);
-    const laterTab = (await linesByName(s.visitId)).find((l) => l.name === "steak")!.workingOrderId;
+    const laterTab = (await linesByName(s.partyId)).find((l) => l.name === "steak")!.workingOrderId;
     expect(laterTab).not.toBe(s.tabId);
     await inTx((tx) => addTabRound(tx, v.cfg, laterTab, [line(v, "flan")]));
-    const lines = await linesByName(s.visitId);
+    const lines = await linesByName(s.partyId);
     const named = (name: string, bill: string) =>
       lines.find((l) => l.name === name && l.workingOrderId === bill)!;
     const split = named("croquetas", checkId);
@@ -810,10 +810,10 @@ describe("readCurrentOrders (spec §4)", () => {
       .where(eq(workingOrders.id, s.tabId));
     expect(bill!.status).toBe("settled");
 
-    const read = await currentOrders(s.visitId);
+    const read = await currentOrders(s.partyId);
 
     expect(read).toEqual({
-      revision: await revisionOf(s.visitId),
+      revision: await revisionOf(s.partyId),
       reminder: { groupId: mains.id, dueAt: null },
       groups: [
         {
@@ -879,12 +879,12 @@ describe("readCurrentOrders (spec §4)", () => {
   it("reports a fired item at a station that never records ready as fired, with its fired time, and never ready", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const starters = await group(v, s.visitId, "fire", [line(v, "croquetas")]);
-    const mains = await group(v, s.visitId, "fire", [line(v, "steak")]);
-    const command = await args(s.visitId);
-    await inTx((tx) => bumpGroupReady(tx, v.cfg, s.visitId, mains.id, command));
+    const starters = await group(v, s.partyId, "fire", [line(v, "croquetas")]);
+    const mains = await group(v, s.partyId, "fire", [line(v, "steak")]);
+    const command = await args(s.partyId);
+    await inTx((tx) => bumpGroupReady(tx, v.cfg, s.partyId, mains.id, command));
 
-    const read = await currentOrders(s.visitId);
+    const read = await currentOrders(s.partyId);
 
     const [croq] = read.groups[0]!.rows;
     const [steak] = read.groups[1]!.rows;
@@ -897,13 +897,13 @@ describe("readCurrentOrders (spec §4)", () => {
   it("shows a served row fully served, and a recalled one no longer released", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const starters = await group(v, s.visitId, "fire", [line(v, "croquetas", "2")]);
-    await serveGroup(v, s.visitId, starters.id);
-    const mains = await group(v, s.visitId, "fire", [line(v, "steak")]);
-    const steak = (await linesByName(s.visitId)).find((l) => l.name === "steak")!;
+    const starters = await group(v, s.partyId, "fire", [line(v, "croquetas", "2")]);
+    await serveGroup(v, s.partyId, starters.id);
+    const mains = await group(v, s.partyId, "fire", [line(v, "steak")]);
+    const steak = (await linesByName(s.partyId)).find((l) => l.name === "steak")!;
     await inTx((tx) => recallLines(tx, v.cfg, s.tabId, [steak.lineNo]));
 
-    const read = await currentOrders(s.visitId);
+    const read = await currentOrders(s.partyId);
 
     expect(read.groups[0]!.rows[0]).toMatchObject({
       quantity: "2.000",
@@ -919,20 +919,20 @@ describe("readCurrentOrders (spec §4)", () => {
     });
   });
 
-  it("reads a party with nothing ordered as empty, and refuses an unknown one (visit.not_open)", async () => {
+  it("reads a party with nothing ordered as empty, and refuses an unknown one (party.not_open)", async () => {
     const v = await setupVenue();
     const s = await seated(v);
 
-    expect(await currentOrders(s.visitId)).toEqual({
-      revision: await revisionOf(s.visitId),
+    expect(await currentOrders(s.partyId)).toEqual({
+      revision: await revisionOf(s.partyId),
       reminder: null,
       groups: [],
       ungrouped: [],
     });
     const unknown = randomUUID();
     await expect(currentOrders(unknown)).rejects.toMatchObject({
-      code: "visit.not_open",
-      params: { visitId: unknown },
+      code: "party.not_open",
+      params: { partyId: unknown },
     });
   });
 });
@@ -941,26 +941,26 @@ describe("a party another was merged into", () => {
   it("reads the merged party's groups and its paid bill's rows as its own", async () => {
     const v = await setupVenue();
     const a = await seated(v);
-    const starters = await group(v, a.visitId, "fire", [line(v, "croquetas")]);
+    const starters = await group(v, a.partyId, "fire", [line(v, "croquetas")]);
     const b = await seated(v);
-    const dessert = await group(v, b.visitId, "fire", [line(v, "flan")]);
+    const dessert = await group(v, b.partyId, "fire", [line(v, "flan")]);
     await payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
       id: b.tabId,
       lines: [],
       tender: { method: "cash", amount: "5.00" },
     });
-    const drinks = await group(v, b.visitId, "fire", [line(v, "water")]);
-    const bNext = (await linesByName(b.visitId)).find((l) => l.name === "water")!.workingOrderId;
+    const drinks = await group(v, b.partyId, "fire", [line(v, "water")]);
+    const bNext = (await linesByName(b.partyId)).find((l) => l.name === "water")!.workingOrderId;
     const command = {
-      expectedVisitRevision: await revisionOf(a.visitId),
-      expectedSourceVisitRevision: await revisionOf(b.visitId),
+      expectedPartyRevision: await revisionOf(a.partyId),
+      expectedSourcePartyRevision: await revisionOf(b.partyId),
       operatorId: ALEX,
     };
     await inTx((tx) =>
       mergeTabs(tx, v.cfg, a.tabId, bNext, { freeSourceTable: false, ...command }),
     );
 
-    const read = await currentOrders(a.visitId);
+    const read = await currentOrders(a.partyId);
 
     expect(read.groups.map((g) => [g.id, g.rows.map((r) => [r.name, r.workingOrderId])])).toEqual([
       [starters.id, [["croquetas", a.tabId]]],
@@ -968,7 +968,7 @@ describe("a party another was merged into", () => {
       [drinks.id, [["water", a.tabId]]],
     ]);
 
-    const away = await currentOrders(b.visitId);
+    const away = await currentOrders(b.partyId);
     expect(away.groups).toEqual([]);
     expect(away.ungrouped).toEqual([]);
   });
@@ -978,17 +978,17 @@ describe("an abandoned bill", () => {
   it("neither holds up nor dates the reminder, and its rows are not shown", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const starters = await group(v, s.visitId, "fire", [line(v, "croquetas", "2")]);
-    const desserts = await group(v, s.visitId, "hold", [line(v, "flan")]);
-    const [croq] = (await linesByName(s.visitId)).filter((l) => l.name === "croquetas");
+    const starters = await group(v, s.partyId, "fire", [line(v, "croquetas", "2")]);
+    const desserts = await group(v, s.partyId, "hold", [line(v, "flan")]);
+    const [croq] = (await linesByName(s.partyId)).filter((l) => l.name === "croquetas");
     const { checkId } = await inTx(async (tx) =>
       splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: croq!.lineNo, quantity: "1" }], {
-        expectedVisitRevision: await revisionOf(s.visitId),
+        expectedPartyRevision: await revisionOf(s.partyId),
         operatorId: MIA,
       }),
     );
-    await at(T(0), () => serve(v, s.visitId, [{ lineId: croq!.id, quantity: "1" }]));
-    expect((await currentOrders(s.visitId)).reminder).toEqual({
+    await at(T(0), () => serve(v, s.partyId, [{ lineId: croq!.id, quantity: "1" }]));
+    expect((await currentOrders(s.partyId)).reminder).toEqual({
       groupId: desserts.id,
       dueAt: null,
     });
@@ -998,7 +998,7 @@ describe("an abandoned bill", () => {
       .set({ status: "abandoned" })
       .where(eq(workingOrders.id, checkId));
 
-    const read = await currentOrders(s.visitId);
+    const read = await currentOrders(s.partyId);
 
     expect(read.reminder).toEqual({ groupId: desserts.id, dueAt: T(10) });
     expect(await floorReminder(v, s.tableId)).toEqual({ groupId: desserts.id, dueAt: T(10) });
@@ -1011,10 +1011,10 @@ describe("a party that has left", () => {
   it("still reads its groups, with no reminder, since nothing can fire or snooze them now", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const starters = await group(v, s.visitId, "fire", [line(v, "croquetas")]);
-    const desserts = await group(v, s.visitId, "hold", [line(v, "flan")]);
-    await at(T(0), () => serveGroup(v, s.visitId, starters.id));
-    expect((await currentOrders(s.visitId)).reminder).toEqual({
+    const starters = await group(v, s.partyId, "fire", [line(v, "croquetas")]);
+    const desserts = await group(v, s.partyId, "hold", [line(v, "flan")]);
+    await at(T(0), () => serveGroup(v, s.partyId, starters.id));
+    expect((await currentOrders(s.partyId)).reminder).toEqual({
       groupId: desserts.id,
       dueAt: T(10),
     });
@@ -1023,17 +1023,17 @@ describe("a party that has left", () => {
       lines: [],
       tender: { method: "cash", amount: "13.00" },
     });
-    const expectedVisitRevision = await revisionOf(s.visitId);
+    const expectedPartyRevision = await revisionOf(s.partyId);
     await inTx((tx) =>
-      finishTable(tx, { visitId: s.visitId, expectedVisitRevision, operatorId: ALEX }),
+      finishTable(tx, { partyId: s.partyId, expectedPartyRevision, operatorId: ALEX }),
     );
-    const [visit] = await suite.db
-      .select({ state: visits.state })
-      .from(visits)
-      .where(eq(visits.id, s.visitId));
-    expect(visit!.state).not.toBe("open");
+    const [party] = await suite.db
+      .select({ state: parties.state })
+      .from(parties)
+      .where(eq(parties.id, s.partyId));
+    expect(party!.state).not.toBe("open");
 
-    const read = await currentOrders(s.visitId);
+    const read = await currentOrders(s.partyId);
 
     expect(read.reminder).toBeNull();
     expect(read.groups.map((g) => [g.id, g.state])).toEqual([
@@ -1056,28 +1056,28 @@ describe("which groups were added later (spec §4; recorded as order_groups.adde
     courseId: null,
     noMerge: false,
   });
-  const save = (v: Venue, visitId: string, operatorId: string, lines: LineInput[]) =>
-    inTx((tx) => saveDraft(tx, v.cfg, visitId, operatorId, { draftId: null, revision: 0, lines }));
+  const save = (v: Venue, partyId: string, operatorId: string, lines: LineInput[]) =>
+    inTx((tx) => saveDraft(tx, v.cfg, partyId, operatorId, { draftId: null, revision: 0, lines }));
   const submit = async (
     v: Venue,
-    visitId: string,
+    partyId: string,
     draft: Draft,
     groups: { lineIds: string[]; release: GroupRelease }[],
   ) => {
-    const expectedVisitRevision = await revisionOf(visitId);
+    const expectedPartyRevision = await revisionOf(partyId);
     return inTx((tx) =>
-      submitDraft(tx, v.cfg, visitId, draft.id, {
+      submitDraft(tx, v.cfg, partyId, draft.id, {
         operatorId: draft.ownerId,
         submissionId: randomUUID(),
         draftRevision: draft.revision,
-        expectedVisitRevision,
+        expectedPartyRevision,
         groups,
       }),
     );
   };
-  const later = async (visitId: string) =>
+  const later = async (partyId: string) =>
     Object.fromEntries(
-      (await currentOrders(visitId)).groups.map((g) => [g.position, g.addedLater]),
+      (await currentOrders(partyId)).groups.map((g) => [g.position, g.addedLater]),
     );
   const stored = async (groupId: string) => {
     const [row] = await suite.db
@@ -1090,9 +1090,9 @@ describe("which groups were added later (spec §4; recorded as order_groups.adde
   it("marks every group of the first submission as the order, and a later submission's as added", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const command = await args(s.visitId);
+    const command = await args(s.partyId);
     const { groups } = await inTx((tx) =>
-      submitGroups(tx, v.cfg, s.visitId, {
+      submitGroups(tx, v.cfg, s.partyId, {
         ...command,
         groups: [
           { release: "fire", lines: [line(v, "croquetas")] },
@@ -1101,9 +1101,9 @@ describe("which groups were added later (spec §4; recorded as order_groups.adde
         ],
       }),
     );
-    const drinks = await group(v, s.visitId, "fire", [line(v, "water")]);
+    const drinks = await group(v, s.partyId, "fire", [line(v, "water")]);
 
-    expect(await later(s.visitId)).toEqual({ 1: false, 2: false, 3: false, 4: true });
+    expect(await later(s.partyId)).toEqual({ 1: false, 2: false, 3: false, 4: true });
     expect(await Promise.all(groups.map((g) => stored(g.id)))).toEqual([false, false, false]);
     expect(await stored(drinks.id)).toBe(true);
   });
@@ -1112,31 +1112,31 @@ describe("which groups were added later (spec §4; recorded as order_groups.adde
     const v = await setupVenue();
     const s = await seated(v);
     const alex = await at(T(0), () =>
-      save(v, s.visitId, ALEX, [item(v, "croquetas"), item(v, "steak")]),
+      save(v, s.partyId, ALEX, [item(v, "croquetas"), item(v, "steak")]),
     );
-    const mia = await at(T(1), () => save(v, s.visitId, MIA, [item(v, "water")]));
+    const mia = await at(T(1), () => save(v, s.partyId, MIA, [item(v, "water")]));
     const { draft: rest } = await at(T(2), () =>
-      submit(v, s.visitId, alex, [{ lineIds: [alex.lines[0]!.id], release: "fire" }]),
+      submit(v, s.partyId, alex, [{ lineIds: [alex.lines[0]!.id], release: "fire" }]),
     );
     await at(T(3), () =>
-      submit(v, s.visitId, rest!, [{ lineIds: [rest!.lines[0]!.id], release: "hold" }]),
+      submit(v, s.partyId, rest!, [{ lineIds: [rest!.lines[0]!.id], release: "hold" }]),
     );
     await at(T(4), () =>
-      submit(v, s.visitId, mia, [{ lineIds: [mia.lines[0]!.id], release: "fire" }]),
+      submit(v, s.partyId, mia, [{ lineIds: [mia.lines[0]!.id], release: "fire" }]),
     );
-    const dessert = await at(T(20), () => save(v, s.visitId, ALEX, [item(v, "flan")]));
+    const dessert = await at(T(20), () => save(v, s.partyId, ALEX, [item(v, "flan")]));
     await at(T(21), () =>
-      submit(v, s.visitId, dessert, [{ lineIds: [dessert.lines[0]!.id], release: "hold" }]),
+      submit(v, s.partyId, dessert, [{ lineIds: [dessert.lines[0]!.id], release: "hold" }]),
     );
 
-    expect(await later(s.visitId)).toEqual({ 1: false, 2: false, 3: false, 4: true });
+    expect(await later(s.partyId)).toEqual({ 1: false, 2: false, 3: false, 4: true });
   });
 
   it("marks the group an edit adds for the kitchen as added", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    await group(v, s.visitId, "fire", [line(v, "croquetas")]);
-    const [croq] = await linesByName(s.visitId);
+    await group(v, s.partyId, "fire", [line(v, "croquetas")]);
+    const [croq] = await linesByName(s.partyId);
     const [bill] = await suite.db
       .select({ revision: workingOrders.revision })
       .from(workingOrders)
@@ -1146,7 +1146,7 @@ describe("which groups were added later (spec §4; recorded as order_groups.adde
       updateOrderLine(tx, v.cfg, s.tabId, croq!.lineNo, { quantity: "3" }, bill!.revision, MIA),
     );
 
-    const read = await currentOrders(s.visitId);
+    const read = await currentOrders(s.partyId);
     expect(
       read.groups.map((g) => [g.position, g.addedLater, g.rows.map((r) => r.quantity)]),
     ).toEqual([
@@ -1158,9 +1158,9 @@ describe("which groups were added later (spec §4; recorded as order_groups.adde
   it("keeps a group's own flag when a later submission adds to it", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const first = await args(s.visitId);
+    const first = await args(s.partyId);
     const { groups } = await inTx((tx) =>
-      submitGroups(tx, v.cfg, s.visitId, {
+      submitGroups(tx, v.cfg, s.partyId, {
         ...first,
         groups: [
           { release: "fire", lines: [line(v, "croquetas")] },
@@ -1169,40 +1169,40 @@ describe("which groups were added later (spec §4; recorded as order_groups.adde
       }),
     );
     const mains = groups[1]!;
-    const command = await args(s.visitId);
+    const command = await args(s.partyId);
     await inTx((tx) =>
-      submitGroups(tx, v.cfg, s.visitId, {
+      submitGroups(tx, v.cfg, s.partyId, {
         ...command,
         groups: [{ release: "hold", lines: [line(v, "flan")] }],
         joinGroupId: mains.id,
       }),
     );
 
-    expect(await later(s.visitId)).toEqual({ 1: false, 2: false });
+    expect(await later(s.partyId)).toEqual({ 1: false, 2: false });
   });
 
   it("gives a group a move starts the flag of the groups its lines left", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const first = await args(s.visitId);
+    const first = await args(s.partyId);
     const { groups } = await inTx((tx) =>
-      submitGroups(tx, v.cfg, s.visitId, {
+      submitGroups(tx, v.cfg, s.partyId, {
         ...first,
         groups: [{ release: "hold", lines: [line(v, "croquetas"), line(v, "steak")] }],
       }),
     );
-    const extra = await group(v, s.visitId, "hold", [line(v, "flan")]);
+    const extra = await group(v, s.partyId, "hold", [line(v, "flan")]);
     const move = async (lineId: string) => {
-      const command = await args(s.visitId);
+      const command = await args(s.partyId);
       await inTx((tx) =>
-        moveLinesToGroup(tx, v.cfg, s.visitId, [{ lineId, quantity: "1" }], "new", command),
+        moveLinesToGroup(tx, v.cfg, s.partyId, [{ lineId, quantity: "1" }], "new", command),
       );
     };
 
     await move(groups[0]!.lineIds[0]!);
     await move(extra.lineIds[0]!);
 
-    const read = await currentOrders(s.visitId);
+    const read = await currentOrders(s.partyId);
     expect(read.groups.map((g) => [g.rows.map((r) => r.name), g.addedLater])).toEqual([
       [["steak"], false],
       [["croquetas"], false],
@@ -1213,13 +1213,13 @@ describe("which groups were added later (spec §4; recorded as order_groups.adde
   it("keeps each group's flag when another party is merged in", async () => {
     const v = await setupVenue();
     const a = await seated(v);
-    const aFirst = await group(v, a.visitId, "fire", [line(v, "croquetas")]);
+    const aFirst = await group(v, a.partyId, "fire", [line(v, "croquetas")]);
     const b = await seated(v);
-    const bFirst = await group(v, b.visitId, "fire", [line(v, "flan")]);
-    const bLater = await group(v, b.visitId, "hold", [line(v, "water")]);
+    const bFirst = await group(v, b.partyId, "fire", [line(v, "flan")]);
+    const bLater = await group(v, b.partyId, "hold", [line(v, "water")]);
     const command = {
-      expectedVisitRevision: await revisionOf(a.visitId),
-      expectedSourceVisitRevision: await revisionOf(b.visitId),
+      expectedPartyRevision: await revisionOf(a.partyId),
+      expectedSourcePartyRevision: await revisionOf(b.partyId),
       operatorId: ALEX,
     };
 
@@ -1227,7 +1227,7 @@ describe("which groups were added later (spec §4; recorded as order_groups.adde
       mergeTabs(tx, v.cfg, a.tabId, b.tabId, { freeSourceTable: false, ...command }),
     );
 
-    const read = await currentOrders(a.visitId);
+    const read = await currentOrders(a.partyId);
     expect(read.groups.map((g) => [g.id, g.addedLater])).toEqual([
       [aFirst.id, false],
       [bFirst.id, false],

@@ -56,12 +56,12 @@ import type {
   TabLine,
   TableServiceStatus,
   TableState,
-  TableVisit,
+  TableParty,
   TabTransfer,
   TillCourse,
   TillProduct,
   TillZoneMenu,
-  VisitBill,
+  PartyBill,
 } from "../api/client.js";
 import type { ConfirmPaymentDetail } from "../widgets/tender-pay.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
@@ -979,9 +979,9 @@ export class TillTableOrderScreen extends LitElement {
   /** The target lists of the move/join/merge/transfer flow read this. */
   @property({ attribute: false }) tables: TableState[] = [];
   /** The party seated at this table, or null for a tab that belongs to none. */
-  @property({ attribute: false }) visit: TableVisit | null = null;
-  /** Every bill of {@link visit}, merged parties' included. */
-  @property({ attribute: false }) bills: VisitBill[] = [];
+  @property({ attribute: false }) party: TableParty | null = null;
+  /** Every bill of {@link party}, merged parties' included. */
+  @property({ attribute: false }) bills: PartyBill[] = [];
   /** Finish table was refused because a bill is unpaid. */
   @property({ type: Boolean }) finishRefused = false;
   /** A handheld form factor, whose menu browser shows fewer columns. */
@@ -2563,7 +2563,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** Abandoned bills are left out: nobody pays them. */
-  #shownBills(): VisitBill[] {
+  #shownBills(): PartyBill[] {
     return this.bills.filter((bill) => bill.status !== "abandoned");
   }
 
@@ -2572,7 +2572,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #billsSection(): TemplateResult | typeof nothing {
-    if (this.visit === null) return nothing;
+    if (this.party === null) return nothing;
     const bills = this.#shownBills();
     const unpaid = bills.filter((bill) => bill.status === "open");
     // Another bill first: the one on screen is charged from the section above.
@@ -2584,12 +2584,12 @@ export class TillTableOrderScreen extends LitElement {
       </ul>
       <div class="total-row">
         <span class="label">${t("table.still_to_pay")}</span>
-        <span class="amount" data-visit-outstanding>${this.#money(this.visit.outstanding)}</span>
+        <span class="amount" data-party-outstanding>${this.#money(this.party.outstanding)}</span>
       </div>
       ${
         this.finishRefused
           ? html`<div class="finish-refusal" role="alert" data-finish-refusal>
-              <span>${codeMessage("visit.bill_outstanding")}</span>
+              <span>${codeMessage("party.bill_outstanding")}</span>
               ${
                 firstUnpaid === undefined
                   ? nothing
@@ -2617,7 +2617,7 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
-  #billRow(bill: VisitBill, index: number): TemplateResult {
+  #billRow(bill: PartyBill, index: number): TemplateResult {
     const shown = bill.workingOrderId === this.orderId;
     const paid = bill.status === "settled";
     return html`<li
@@ -2661,7 +2661,7 @@ export class TillTableOrderScreen extends LitElement {
     </li>`;
   }
 
-  #takePayment(bill: VisitBill): void {
+  #takePayment(bill: PartyBill): void {
     this.#dispatch("take-payment", { workingOrderId: bill.workingOrderId });
   }
 

@@ -24,7 +24,7 @@ import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import type { ModuleRouteContext } from "@waitron/module";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { seatTable } from "./visits.js";
+import { seatTable } from "./parties.js";
 import "./errors.js";
 
 // The `seatBooking ↔ seatTable` edge with the REAL `apps/server` `seatTable` — the one seam the
@@ -156,12 +156,12 @@ describe("bookings seat route → real seatTable", () => {
         sql`select id, status from working_orders where id = ${tabId}`,
       );
       expect(order.rows[0]).toEqual({ id: tabId, status: "open" });
-      // The party is seated as a visit, opened by the manager who seated the booking, for its size.
-      const visit = await tx.execute<{ opened_by: string; guest_count: number; state: string }>(
-        sql`select v.opened_by, v.guest_count, v.state from visits v
-            join working_orders wo on wo.visit_id = v.id where wo.id = ${tabId}`,
+      // The party is seated as a party, opened by the manager who seated the booking, for its size.
+      const party = await tx.execute<{ opened_by: string; guest_count: number; state: string }>(
+        sql`select v.opened_by, v.guest_count, v.state from parties v
+            join working_orders wo on wo.party_id = v.id where wo.id = ${tabId}`,
       );
-      expect(visit.rows).toEqual([{ opened_by: v.managerId, guest_count: 4, state: "open" }]);
+      expect(party.rows).toEqual([{ opened_by: v.managerId, guest_count: 4, state: "open" }]);
     });
   });
 });

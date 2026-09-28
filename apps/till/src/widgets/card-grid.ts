@@ -26,14 +26,14 @@ import type {
   StationQueueGroup,
   TableServiceStatus,
   TableState,
-  TableVisit,
+  TableParty,
   TabLine,
   TillActiveReader,
   TillApi,
   TillCourse,
   TillProduct,
   TillZoneMenu,
-  VisitBill,
+  PartyBill,
 } from "../api/client.js";
 import type { BumpMode, FireControlMode } from "./station-queue.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
@@ -114,8 +114,8 @@ export class TillCardGrid extends LitElement {
   /** The other people's drafts on the order's party; see the table-order card's `otherDrafts`. */
   @property({ attribute: false }) otherDrafts: readonly OtherDraft[] = [];
   @property({ attribute: false }) takeOversAnswered = 0;
-  @property({ attribute: false }) visit: TableVisit | null = null;
-  @property({ attribute: false }) visitBills: VisitBill[] = [];
+  @property({ attribute: false }) party: TableParty | null = null;
+  @property({ attribute: false }) partyBills: PartyBill[] = [];
   @property({ type: Boolean }) finishRefused = false;
   @property({ type: Boolean }) groupCommandBusy = false;
   /** A handheld form factor, whose menu browser shows fewer columns unless its card sets them. */
@@ -257,8 +257,8 @@ export class TillCardGrid extends LitElement {
           .draftStore=${this.draftStore}
           .otherDrafts=${this.otherDrafts}
           .takeOversAnswered=${this.takeOversAnswered}
-          .visit=${this.visit}
-          .bills=${this.visitBills}
+          .party=${this.party}
+          .bills=${this.partyBills}
           .finishRefused=${this.finishRefused}
           .busy=${this.busy}
           .groupCommandBusy=${this.groupCommandBusy}

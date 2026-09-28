@@ -223,7 +223,7 @@ function asGroupLine(line: DraftLine): GroupLine {
  * revision, or wraps {@link apply} to refuse or to lose the reply.
  */
 export function draftServer(
-  answer: (visitId: string) => SubmittedGroups = () => ({
+  answer: (partyId: string) => SubmittedGroups = () => ({
     tabId: "wo-4",
     revision: 4,
     groups: [],
@@ -247,17 +247,17 @@ export function draftServer(
     /** The menu items the server reads as unavailable when it answers a line. */
     unavailable: new Set<string>(),
     answer,
-    listDrafts: vi.fn(async (visitId: string) =>
-      server.flagged(clone(server.drafts.filter((draft) => draft.visitId === visitId))),
+    listDrafts: vi.fn(async (partyId: string) =>
+      server.flagged(clone(server.drafts.filter((draft) => draft.partyId === partyId))),
     ),
-    saveDraft: vi.fn(async (visitId: string, save: DraftSave) =>
-      server.flagged(clone(server.save(visitId, save))),
+    saveDraft: vi.fn(async (partyId: string, save: DraftSave) =>
+      server.flagged(clone(server.save(partyId, save))),
     ),
-    submitDraft: vi.fn(async (visitId: string, draftId: string, submission: DraftSubmission) =>
-      clone(server.apply(visitId, draftId, submission)),
+    submitDraft: vi.fn(async (partyId: string, draftId: string, submission: DraftSubmission) =>
+      clone(server.apply(partyId, draftId, submission)),
     ),
-    takeOverDraft: vi.fn(async (visitId: string, draftId: string, revision: number) =>
-      server.flagged(clone(server.takeOver(visitId, draftId, revision))),
+    takeOverDraft: vi.fn(async (partyId: string, draftId: string, revision: number) =>
+      server.flagged(clone(server.takeOver(partyId, draftId, revision))),
     ),
     /** `unavailable` worked out on each answer, as the server does, never stored. */
     flagged<T extends Draft | Draft[] | null>(answer: T): T {
@@ -265,16 +265,16 @@ export function draftServer(
         for (const line of draft.lines) line.unavailable = server.unavailable.has(line.menuItemId);
       return answer;
     },
-    save(visitId: string, save: DraftSave): Draft {
+    save(partyId: string, save: DraftSave): Draft {
       const own = server.drafts.find(
-        (draft) => draft.visitId === visitId && draft.ownerId === server.personId,
+        (draft) => draft.partyId === partyId && draft.ownerId === server.personId,
       );
       let draft: Draft;
       if (save.draftId === null) {
         if (own !== undefined) throw refusal("draft.out_of_date", own);
         draft = {
           id: `draft-${++ids}`,
-          visitId,
+          partyId,
           ownerId: server.personId,
           ownerName: server.personName,
           revision: 0,
@@ -283,7 +283,7 @@ export function draftServer(
         };
         server.drafts.push(draft);
       } else {
-        draft = server.open(visitId, save.draftId, save.revision);
+        draft = server.open(partyId, save.draftId, save.revision);
       }
       draft.revision += 1;
       draft.lines = reidentify(save.lines);
@@ -291,15 +291,15 @@ export function draftServer(
     },
     /** A take-over as the server does it: the person's own draft answers as it is; another's
      * becomes theirs, or is added into the draft they already hold, which answers. */
-    takeOver(visitId: string, draftId: string, revision: number): Draft {
+    takeOver(partyId: string, draftId: string, revision: number): Draft {
       const draft = server.drafts.find(
-        (candidate) => candidate.id === draftId && candidate.visitId === visitId,
+        (candidate) => candidate.id === draftId && candidate.partyId === partyId,
       );
       if (draft === undefined) throw { code: "draft.not_found", status: 404, draftId };
       if (draft.ownerId === server.personId) return draft;
       if (draft.revision !== revision) throw refusal("draft.out_of_date", draft);
       const own = server.drafts.find(
-        (candidate) => candidate.visitId === visitId && candidate.ownerId === server.personId,
+        (candidate) => candidate.partyId === partyId && candidate.ownerId === server.personId,
       );
       if (own === undefined) {
         draft.takenOverFrom = { personId: draft.ownerId, name: draft.ownerName };
@@ -314,10 +314,10 @@ export function draftServer(
       return own;
     },
     /** A submission as the server takes it, whether or not its answer reaches the till. */
-    apply(visitId: string, draftId: string, submission: DraftSubmission): SubmittedDraft {
+    apply(partyId: string, draftId: string, submission: DraftSubmission): SubmittedDraft {
       const replay = replies.get(submission.submissionId);
       if (replay !== undefined) return replay;
-      const draft = server.open(visitId, draftId, submission.draftRevision);
+      const draft = server.open(partyId, draftId, submission.draftRevision);
       const named = submission.groups.flatMap((group) => group.lineIds);
       if (!named.every((id) => draft.lines.some((line) => line.id === id)))
         throw { code: "management.request_invalid", status: 400, field: "groups" };
@@ -325,15 +325,15 @@ export function draftServer(
       draft.revision += 1;
       if (draft.lines.length === 0) server.drafts.splice(server.drafts.indexOf(draft), 1);
       const reply = {
-        ...server.answer(visitId),
+        ...server.answer(partyId),
         draft: draft.lines.length === 0 ? null : server.flagged(clone(draft)),
       };
       replies.set(submission.submissionId, reply);
       return reply;
     },
-    open(visitId: string, draftId: string, revision: number): Draft {
+    open(partyId: string, draftId: string, revision: number): Draft {
       const draft = server.drafts.find(
-        (candidate) => candidate.id === draftId && candidate.visitId === visitId,
+        (candidate) => candidate.id === draftId && candidate.partyId === partyId,
       );
       if (draft === undefined) throw { code: "draft.not_found", status: 404 };
       if (draft.ownerId !== server.personId)

@@ -12,14 +12,14 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { diningTables } from "./dining-tables.js";
 import { workingOrders } from "./orders.js";
+import { parties, partyTables, serviceCommands } from "./parties.js";
 import { locations, tenants, tills } from "./tenants.js";
-import { serviceCommands, visits, visitTables } from "./visits.js";
 
 const LOCATION = "bbbbbbbb-0000-4000-8000-000000000001";
 const TILL = "bbbbbbbb-1111-4000-8000-000000000001";
 const OPERATOR = "bbbbbbbb-2222-4000-8000-000000000001";
 
-describe("visits, visit_tables and service_commands", () => {
+describe("parties, party_tables and service_commands", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
   let nodeId = "";
   let orderSeq = 0;
@@ -50,26 +50,26 @@ describe("visits, visit_tables and service_commands", () => {
     });
   }
 
-  async function visit(): Promise<string> {
+  async function party(): Promise<string> {
     return inTx(async (tx) => {
       const [row] = await tx
-        .insert(visits)
+        .insert(parties)
         .values({ openedBy: OPERATOR })
-        .returning({ id: visits.id });
+        .returning({ id: parties.id });
       return row!.id;
     });
   }
 
-  it("opens a visit with its defaults: open, revision 0, no guest count", async () => {
-    const id = await visit();
-    const [row] = await inTx((tx) => tx.select().from(visits).where(eq(visits.id, id)));
+  it("opens a party with its defaults: open, revision 0, no guest count", async () => {
+    const id = await party();
+    const [row] = await inTx((tx) => tx.select().from(parties).where(eq(parties.id, id)));
     expect(row).toMatchObject({
       state: "open",
       revision: 0,
       guestCount: null,
       closedAt: null,
       closedBy: null,
-      mergedIntoVisitId: null,
+      mergedIntoPartyId: null,
       billRequestedAt: null,
       openedBy: OPERATOR,
     });
@@ -77,105 +77,105 @@ describe("visits, visit_tables and service_commands", () => {
 
   it("refuses a second ACTIVE membership for one table by the partial unique index", async () => {
     const table4 = await table("Table 4");
-    const first = await visit();
-    const second = await visit();
-    await inTx((tx) => tx.insert(visitTables).values({ visitId: first, tableId: table4 }));
+    const first = await party();
+    const second = await party();
+    await inTx((tx) => tx.insert(partyTables).values({ partyId: first, tableId: table4 }));
 
     const error = await captureError(() =>
-      inTx((tx) => tx.insert(visitTables).values({ visitId: second, tableId: table4 })),
+      inTx((tx) => tx.insert(partyTables).values({ partyId: second, tableId: table4 })),
     );
     expect(
-      refusalOn(error, UNIQUE_VIOLATION, { table: "visit_tables", columns: ["table_id"] }),
+      refusalOn(error, UNIQUE_VIOLATION, { table: "party_tables", columns: ["table_id"] }),
     ).toBe(true);
   });
 
   it("accepts a new active membership once the old one has ended", async () => {
     const table5 = await table("Table 5");
-    const first = await visit();
-    const second = await visit();
+    const first = await party();
+    const second = await party();
     await inTx((tx) =>
       tx
-        .insert(visitTables)
-        .values({ visitId: first, tableId: table5, leftAt: new Date().toISOString() }),
+        .insert(partyTables)
+        .values({ partyId: first, tableId: table5, leftAt: new Date().toISOString() }),
     );
-    await inTx((tx) => tx.insert(visitTables).values({ visitId: second, tableId: table5 }));
+    await inTx((tx) => tx.insert(partyTables).values({ partyId: second, tableId: table5 }));
     const rows = await inTx((tx) =>
-      tx.select().from(visitTables).where(eq(visitTables.tableId, table5)),
+      tx.select().from(partyTables).where(eq(partyTables.tableId, table5)),
     );
     expect(rows).toHaveLength(2);
   });
 
   it("refuses a guest count below one", async () => {
     const error = await captureError(() =>
-      inTx((tx) => tx.insert(visits).values({ openedBy: OPERATOR, guestCount: 0 })),
+      inTx((tx) => tx.insert(parties).values({ openedBy: OPERATOR, guestCount: 0 })),
     );
     expect(checkFailed(error, "visits_guest_count_ck")).toBe(true);
   });
 
   it("refuses a state outside the vocabulary", async () => {
-    const id = await visit();
+    const id = await party();
     const error = await captureError(() =>
       inTx(async (tx) => {
-        await tx.execute(sql`update visits set state = 'paid' where id = ${id}`);
+        await tx.execute(sql`update parties set state = 'paid' where id = ${id}`);
       }),
     );
     expect(checkFailed(error, "visits_state_ck")).toBe(true);
   });
 
-  it("refuses a visit that has left open without a closing time, and an open one that has one", async () => {
-    const id = await visit();
+  it("refuses a party that has left open without a closing time, and an open one that has one", async () => {
+    const id = await party();
     const leftOpen = await captureError(() =>
-      inTx((tx) => tx.update(visits).set({ state: "needs_clearing" }).where(eq(visits.id, id))),
+      inTx((tx) => tx.update(parties).set({ state: "needs_clearing" }).where(eq(parties.id, id))),
     );
     expect(checkFailed(leftOpen, "visits_closed_at_ck")).toBe(true);
     const stamped = await captureError(() =>
       inTx((tx) =>
-        tx.update(visits).set({ closedAt: new Date().toISOString() }).where(eq(visits.id, id)),
+        tx.update(parties).set({ closedAt: new Date().toISOString() }).where(eq(parties.id, id)),
       ),
     );
     expect(checkFailed(stamped, "visits_closed_at_ck")).toBe(true);
   });
 
-  it("refuses a merge into itself, and a merged visit that is not closed", async () => {
-    const id = await visit();
-    const other = await visit();
+  it("refuses a merge into itself, and a merged party that is not closed", async () => {
+    const id = await party();
+    const other = await party();
     const self = await captureError(() =>
       inTx((tx) =>
         tx
-          .update(visits)
-          .set({ state: "closed", closedAt: new Date().toISOString(), mergedIntoVisitId: id })
-          .where(eq(visits.id, id)),
+          .update(parties)
+          .set({ state: "closed", closedAt: new Date().toISOString(), mergedIntoPartyId: id })
+          .where(eq(parties.id, id)),
       ),
     );
     expect(checkFailed(self, "visits_merged_into_ck")).toBe(true);
     const stillOpen = await captureError(() =>
-      inTx((tx) => tx.update(visits).set({ mergedIntoVisitId: other }).where(eq(visits.id, id))),
+      inTx((tx) => tx.update(parties).set({ mergedIntoPartyId: other }).where(eq(parties.id, id))),
     );
     expect(checkFailed(stillOpen, "visits_merged_into_ck")).toBe(true);
-    // Control: a closed visit merged into another is accepted.
+    // Control: a closed party merged into another is accepted.
     await inTx((tx) =>
       tx
-        .update(visits)
-        .set({ state: "closed", closedAt: new Date().toISOString(), mergedIntoVisitId: other })
-        .where(eq(visits.id, id)),
+        .update(parties)
+        .set({ state: "closed", closedAt: new Date().toISOString(), mergedIntoPartyId: other })
+        .where(eq(parties.id, id)),
     );
   });
 
-  it("keys a working order to its visit", async () => {
-    const id = await visit();
+  it("keys a working order to its party", async () => {
+    const id = await party();
     orderSeq += 1;
     const [order] = await inTx((tx) =>
       tx
         .insert(workingOrders)
-        .values({ tillId: TILL, nodeId, orderNumber: orderSeq, visitId: id })
-        .returning({ visitId: workingOrders.visitId }),
+        .values({ tillId: TILL, nodeId, orderNumber: orderSeq, partyId: id })
+        .returning({ partyId: workingOrders.partyId }),
     );
-    expect(order!.visitId).toBe(id);
+    expect(order!.partyId).toBe(id);
     const keys = suite.db.all<{ table: string; from: string; to: string }>(
       sql.raw(`select "table", "from", "to" from pragma_foreign_key_list('working_orders')`),
     );
-    expect(keys.filter((key) => key.from === "visit_id")).toEqual([
-      { table: "visits", from: "visit_id", to: "id" },
+    expect(keys.filter((key) => key.from === "party_id")).toEqual([
+      { table: "parties", from: "party_id", to: "id" },
     ]);
   });
 
@@ -199,5 +199,19 @@ describe("visits, visit_tables and service_commands", () => {
     ).toBe(true);
     await inTx((tx) => tx.insert(serviceCommands).values({ ...row, scopeKind: "bill" }));
     await inTx((tx) => tx.insert(serviceCommands).values({ ...row, scopeId: randomUUID() }));
+  });
+
+  it("names visit, on the migrated database, only in the two objects Task 13 renames", () => {
+    const named = suite.db.all<{ type: string; name: string }>(sql`
+      select type, name from sqlite_master
+      where lower(name) like '%visit%' or lower(sql) like '%visit%'
+      order by name
+    `);
+    // `parties` keeps its four CHECK constraint names and `service_commands` its stored scope
+    // value 'visit' until Task 13's rebuild (plan P1).
+    expect(named).toEqual([
+      { type: "table", name: "parties" },
+      { type: "table", name: "service_commands" },
+    ]);
   });
 });

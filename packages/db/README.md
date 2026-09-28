@@ -79,8 +79,11 @@ which keeps a variant one level deep, its parent fixed, and a product's id uncha
 `working_orders_enforce_transition` with the two `working_orders` columns `0014` added (`revision`
 and `payment_attempt_at`) in its list; `0019_settled_order_freeze_visit_id.sql`, which re-creates it
 again with `visit_id`; and `0020_visit_clears_table_status.sql`, which drops `0001`'s
-`working_orders_clear_table_status` and clears a table's service status when the party's visit
-leaves `open` instead of when a tab settles. No migration
+`working_orders_clear_table_status` and clears a table's service status when the party leaves
+`open` instead of when a tab settles. `0036_party_rename.sql` renames visits to parties: it is
+drizzle-kit's generated file replaced by a hand-written rename, and it re-creates `0020`'s trigger
+as `parties_clear_table_status`; SQLite rewrites `visit_id` to `party_id` in
+`working_orders_enforce_transition` itself. No migration
 contains a `GRANT`, a role or an `ENABLE ALWAYS`: there is no database role to grant anything to,
 and file permissions on the venue directory are the access control.
 

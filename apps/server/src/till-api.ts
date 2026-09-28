@@ -99,11 +99,11 @@ import { listCourses, listStations } from "./kitchen.js";
 import {
   finishTable,
   markCleared,
-  readVisitBills,
+  readPartyBills,
   seatTable,
-  visitRevisionOfOrder,
-} from "./visits.js";
-import type { VisitCommand } from "./visits.js";
+  partyRevisionOfOrder,
+} from "./parties.js";
+import type { PartyCommand } from "./parties.js";
 import {
   bumpGroupReady,
   fireGroup,
@@ -115,7 +115,7 @@ import {
   snoozeReminder,
   submitGroups,
 } from "./order-groups.js";
-import type { GroupLine, SubmitGroupsInput, VisitCommandArgs } from "./order-groups.js";
+import type { GroupLine, SubmitGroupsInput, PartyCommandArgs } from "./order-groups.js";
 import { readDrafts, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
 import type { SubmitDraftInput } from "./order-drafts.js";
 import { invalid } from "./bill-allocation.js";
@@ -334,8 +334,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "tab.already_open": 409,
   "tab.not_open": 409,
   "tab.not_table_tab": 409,
-  "tab.visit_mismatch": 409,
-  "tab.visit_has_other_open_bill": 409,
+  "tab.party_mismatch": 409,
+  "tab.party_has_other_open_bill": 409,
   "tab.merge_leaves_no_table": 409,
   "tab.line_not_found": 404,
   "table.occupied": 409,
@@ -349,9 +349,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "table.not_shared": 409,
   "tab.transfer_modifier_line": 400,
   "tab.split_held_line": 400,
-  "visit.not_open": 409,
-  "visit.out_of_date": 409,
-  "visit.bill_outstanding": 409,
+  "party.not_open": 409,
+  "party.out_of_date": 409,
+  "party.bill_outstanding": 409,
   "submission.id_reused": 409,
   "draft.taken_over": 409,
   "draft.already_submitted": 409,
@@ -359,7 +359,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "draft.not_found": 404,
   "group.not_held": 409,
   "group.not_found": 404,
-  "group.held_leaves_visit": 409,
+  "group.held_leaves_party": 409,
   "group.line_held": 409,
   "bill.nothing_outstanding": 409,
   "bill.tip_not_allowed": 422,
@@ -436,7 +436,7 @@ function requireTabParam(id: string): string {
 }
 
 /**
- * A revision as a body carries it, an order's or a visit's: a whole number from 0, else
+ * A revision as a body carries it, an order's or a party's: a whole number from 0, else
  * `management.request_invalid` naming `field`.
  */
 function requireRevision(
@@ -444,8 +444,8 @@ function requireRevision(
   field:
     | "revision"
     | "draftRevision"
-    | "expectedVisitRevision"
-    | "expectedSourceVisitRevision" = "revision",
+    | "expectedPartyRevision"
+    | "expectedSourcePartyRevision" = "revision",
 ): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
     throw new AppError("management.request_invalid", { field });
@@ -453,10 +453,10 @@ function requireRevision(
   return value;
 }
 
-/** A non-UUID names no visit, so it gets the absent visit's `visit.not_open`. */
-function requireVisitParam(id: string): string {
+/** A non-UUID names no party, so it gets the absent party's `party.not_open`. */
+function requirePartyParam(id: string): string {
   if (!isUuid(id)) {
-    throw new AppError("visit.not_open", { visitId: id });
+    throw new AppError("party.not_open", { partyId: id });
   }
   return id;
 }
@@ -471,35 +471,35 @@ function requireGuestCount(value: unknown): number | null {
 }
 
 /**
- * A tab route's visit revisions and the acting person. A revision may be absent here: the verb
+ * A tab route's party revisions and the acting person. A revision may be absent here: the verb
  * refuses its absence only where the tab belongs to a party.
  */
-function visitCommand(
+function partyCommand(
   personId: string,
-  body: { expectedVisitRevision?: unknown; expectedSourceVisitRevision?: unknown },
-  crossesVisits = false,
-): VisitCommand {
-  const command: VisitCommand = { operatorId: personId };
-  if (body.expectedVisitRevision !== undefined) {
-    command.expectedVisitRevision = requireRevision(
-      body.expectedVisitRevision,
-      "expectedVisitRevision",
+  body: { expectedPartyRevision?: unknown; expectedSourcePartyRevision?: unknown },
+  crossesParties = false,
+): PartyCommand {
+  const command: PartyCommand = { operatorId: personId };
+  if (body.expectedPartyRevision !== undefined) {
+    command.expectedPartyRevision = requireRevision(
+      body.expectedPartyRevision,
+      "expectedPartyRevision",
     );
   }
-  if (crossesVisits && body.expectedSourceVisitRevision !== undefined) {
-    command.expectedSourceVisitRevision = requireRevision(
-      body.expectedSourceVisitRevision,
-      "expectedSourceVisitRevision",
+  if (crossesParties && body.expectedSourcePartyRevision !== undefined) {
+    command.expectedSourcePartyRevision = requireRevision(
+      body.expectedSourcePartyRevision,
+      "expectedSourcePartyRevision",
     );
   }
   return command;
 }
 
-/** What every group command carries: its submission id, the visit revision read, and who acts. */
-function groupCommand(personId: string, body: Record<string, unknown>): VisitCommandArgs {
+/** What every group command carries: its submission id, the party revision read, and who acts. */
+function groupCommand(personId: string, body: Record<string, unknown>): PartyCommandArgs {
   return {
     submissionId: submissionIdOf(body),
-    expectedVisitRevision: requireRevision(body.expectedVisitRevision, "expectedVisitRevision"),
+    expectedPartyRevision: requireRevision(body.expectedPartyRevision, "expectedPartyRevision"),
     operatorId: personId,
   };
 }
@@ -534,9 +534,9 @@ function parseSubmittedGroups(value: unknown): SubmitGroupsInput["groups"] {
   });
 }
 
-/** A draft route's visit, in lower case as ids are stored, so a draft on it compares equal. */
-function requireDraftVisitParam(id: string): string {
-  return requireVisitParam(id).toLowerCase();
+/** A draft route's party, in lower case as ids are stored, so a draft on it compares equal. */
+function requireDraftPartyParam(id: string): string {
+  return requirePartyParam(id).toLowerCase();
 }
 
 /** A draft route's draft, in lower case as ids are stored: an id that is no UUID names none. */
@@ -1481,80 +1481,80 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  app.post("/api/visits/:id/finish", (c) =>
+  app.post("/api/parties/:id/finish", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      const visitId = requireVisitParam(c.req.param("id"));
-      const body = await readJsonBody<{ expectedVisitRevision?: unknown }>(c);
-      const expectedVisitRevision = requireRevision(
-        body.expectedVisitRevision,
-        "expectedVisitRevision",
+      const partyId = requirePartyParam(c.req.param("id"));
+      const body = await readJsonBody<{ expectedPartyRevision?: unknown }>(c);
+      const expectedPartyRevision = requireRevision(
+        body.expectedPartyRevision,
+        "expectedPartyRevision",
       );
       const result = await withTransaction(deps.db, async (tx) => {
-        return finishTable(tx, { visitId, expectedVisitRevision, operatorId: personId });
+        return finishTable(tx, { partyId, expectedPartyRevision, operatorId: personId });
       });
       return c.json(result);
     }),
   );
 
-  app.post("/api/visits/:id/cleared", (c) =>
+  app.post("/api/parties/:id/cleared", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const visitId = requireVisitParam(c.req.param("id"));
-      const body = await readJsonBody<{ expectedVisitRevision?: unknown }>(c);
-      const expectedVisitRevision = requireRevision(
-        body.expectedVisitRevision,
-        "expectedVisitRevision",
+      const partyId = requirePartyParam(c.req.param("id"));
+      const body = await readJsonBody<{ expectedPartyRevision?: unknown }>(c);
+      const expectedPartyRevision = requireRevision(
+        body.expectedPartyRevision,
+        "expectedPartyRevision",
       );
       await withTransaction(deps.db, async (tx) => {
-        await markCleared(tx, { visitId, expectedVisitRevision });
+        await markCleared(tx, { partyId, expectedPartyRevision });
       });
       return c.body(null, 204);
     }),
   );
 
-  app.get("/api/visits/:id/bills", (c) =>
+  app.get("/api/parties/:id/bills", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const visitId = requireVisitParam(c.req.param("id"));
+      const partyId = requirePartyParam(c.req.param("id"));
       const bills = await withTransaction(deps.db, async (tx) => {
-        return readVisitBills(tx, visitId);
+        return readPartyBills(tx, partyId);
       });
       return c.json(bills);
     }),
   );
 
-  app.get("/api/visits/:id/groups", (c) =>
+  app.get("/api/parties/:id/groups", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const visitId = requireVisitParam(c.req.param("id"));
-      const groups = await withTransaction(deps.db, (tx) => listOrderGroups(tx, visitId));
+      const partyId = requirePartyParam(c.req.param("id"));
+      const groups = await withTransaction(deps.db, (tx) => listOrderGroups(tx, partyId));
       return c.json(groups);
     }),
   );
 
-  app.get("/api/visits/:id/current-orders", (c) =>
+  app.get("/api/parties/:id/current-orders", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const visitId = requireVisitParam(c.req.param("id"));
-      const current = await withTransaction(deps.db, (tx) => readCurrentOrders(tx, visitId));
+      const partyId = requirePartyParam(c.req.param("id"));
+      const current = await withTransaction(deps.db, (tx) => readCurrentOrders(tx, partyId));
       return c.json(current);
     }),
   );
 
-  app.get("/api/visits/:id/print-problems", (c) =>
+  app.get("/api/parties/:id/print-problems", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const visitId = requireVisitParam(c.req.param("id"));
-      const problems = await withTransaction(deps.db, (tx) => listPrintProblems(tx, visitId));
+      const partyId = requirePartyParam(c.req.param("id"));
+      const problems = await withTransaction(deps.db, (tx) => listPrintProblems(tx, partyId));
       return c.json({ problems });
     }),
   );
 
-  app.post("/api/visits/:id/groups", (c) =>
+  app.post("/api/parties/:id/groups", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      const visitId = requireVisitParam(c.req.param("id"));
+      const partyId = requirePartyParam(c.req.param("id"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const input: SubmitGroupsInput = {
         ...groupCommand(personId, body),
@@ -1562,21 +1562,21 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         ...joinGroupOf(body),
       };
       const submitted = await withTransaction(deps.db, (tx) =>
-        submitGroups(tx, deps.cfg, visitId, input),
+        submitGroups(tx, deps.cfg, partyId, input),
       );
       return c.json(submitted);
     }),
   );
 
-  app.post("/api/visits/:id/groups/:gid/fire", (c) =>
+  app.post("/api/parties/:id/groups/:gid/fire", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      const visitId = requireVisitParam(c.req.param("id"));
+      const partyId = requirePartyParam(c.req.param("id"));
       const groupId = c.req.param("gid");
       if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
       const command = groupCommand(personId, asObject(await readRawJsonBody<unknown>(c)));
       const fired = await withTransaction(deps.db, (tx) =>
-        fireGroup(tx, deps.cfg, visitId, groupId, command),
+        fireGroup(tx, deps.cfg, partyId, groupId, command),
       );
       return c.json(fired);
     }),
@@ -1586,15 +1586,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     ["ready", bumpGroupReady],
     ["away", markGroupAway],
   ] as const) {
-    app.post(`/api/visits/:id/groups/:gid/${step}`, (c) =>
+    app.post(`/api/parties/:id/groups/:gid/${step}`, (c) =>
       run(c, log, async () => {
         const { personId } = await requireSession(deps, c);
-        const visitId = requireVisitParam(c.req.param("id"));
+        const partyId = requirePartyParam(c.req.param("id"));
         const groupId = c.req.param("gid");
         if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
         const args = groupCommand(personId, asObject(await readRawJsonBody<unknown>(c)));
         const answer = await withTransaction(deps.db, (tx) =>
-          command(tx, deps.cfg, visitId, groupId, args),
+          command(tx, deps.cfg, partyId, groupId, args),
         );
         return c.json(answer);
       }),
@@ -1606,39 +1606,39 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     ["served", markServed],
     ["unserved", unmarkServed],
   ] as const) {
-    app.post(`/api/visits/:id/${path}`, (c) =>
+    app.post(`/api/parties/:id/${path}`, (c) =>
       run(c, log, async () => {
         const { personId } = await requireSession(deps, c);
-        const visitId = requireVisitParam(c.req.param("id"));
+        const partyId = requirePartyParam(c.req.param("id"));
         const body = asObject(await readRawJsonBody<unknown>(c));
         const args = groupCommand(personId, body);
         const items = parseLineQuantities(body.items, "items");
         const answer = await withTransaction(deps.db, (tx) =>
-          command(tx, deps.cfg, visitId, items, args),
+          command(tx, deps.cfg, partyId, items, args),
         );
         return c.json(answer);
       }),
     );
   }
 
-  app.post("/api/visits/:id/groups/:gid/served", (c) =>
+  app.post("/api/parties/:id/groups/:gid/served", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      const visitId = requireVisitParam(c.req.param("id"));
+      const partyId = requirePartyParam(c.req.param("id"));
       const groupId = c.req.param("gid");
       if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
       const args = groupCommand(personId, asObject(await readRawJsonBody<unknown>(c)));
       const answer = await withTransaction(deps.db, (tx) =>
-        markGroupServed(tx, deps.cfg, visitId, groupId, args),
+        markGroupServed(tx, deps.cfg, partyId, groupId, args),
       );
       return c.json(answer);
     }),
   );
 
-  app.post("/api/visits/:id/groups/:gid/snooze", (c) =>
+  app.post("/api/parties/:id/groups/:gid/snooze", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      const visitId = requireVisitParam(c.req.param("id"));
+      const partyId = requirePartyParam(c.req.param("id"));
       const groupId = c.req.param("gid");
       if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
       const body = asObject(await readRawJsonBody<unknown>(c));
@@ -1646,16 +1646,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (typeof body.minutes !== "number") throw invalid("minutes");
       const minutes = body.minutes;
       const answer = await withTransaction(deps.db, (tx) =>
-        snoozeReminder(tx, deps.cfg, visitId, groupId, minutes, args),
+        snoozeReminder(tx, deps.cfg, partyId, groupId, minutes, args),
       );
       return c.json(answer);
     }),
   );
 
-  app.put("/api/visits/:id/groups/order", (c) =>
+  app.put("/api/parties/:id/groups/order", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      const visitId = requireVisitParam(c.req.param("id"));
+      const partyId = requirePartyParam(c.req.param("id"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const command = groupCommand(personId, body);
       const { heldGroupIds } = body;
@@ -1663,68 +1663,68 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         throw invalid("heldGroupIds");
       }
       const reordered = await withTransaction(deps.db, (tx) =>
-        reorderHeldGroups(tx, visitId, heldGroupIds as string[], command),
+        reorderHeldGroups(tx, partyId, heldGroupIds as string[], command),
       );
       return c.json(reordered);
     }),
   );
 
-  app.post("/api/visits/:id/groups/move", (c) =>
+  app.post("/api/parties/:id/groups/move", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      const visitId = requireVisitParam(c.req.param("id"));
+      const partyId = requirePartyParam(c.req.param("id"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const command = groupCommand(personId, body);
       const moves = parseLineQuantities(body.moves, "moves");
       const target = parseMoveTarget(body.target);
       const moved = await withTransaction(deps.db, (tx) =>
-        moveLinesToGroup(tx, deps.cfg, visitId, moves, target, command),
+        moveLinesToGroup(tx, deps.cfg, partyId, moves, target, command),
       );
       return c.json(moved);
     }),
   );
 
-  app.get("/api/visits/:id/drafts", (c) =>
+  app.get("/api/parties/:id/drafts", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const visitId = requireDraftVisitParam(c.req.param("id"));
-      const drafts = await withTransaction(deps.db, (tx) => readDrafts(tx, deps.cfg, visitId));
+      const partyId = requireDraftPartyParam(c.req.param("id"));
+      const drafts = await withTransaction(deps.db, (tx) => readDrafts(tx, deps.cfg, partyId));
       return c.json({ drafts });
     }),
   );
 
-  app.put("/api/visits/:id/drafts", (c) =>
+  app.put("/api/parties/:id/drafts", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      const visitId = requireDraftVisitParam(c.req.param("id"));
+      const partyId = requireDraftPartyParam(c.req.param("id"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const draftId = requireDraftId(body.draftId);
       const revision = requireRevision(body.revision);
       const draft = await withTransaction(deps.db, (tx) =>
-        saveDraft(tx, deps.cfg, visitId, personId, { draftId, revision, lines: body.lines }),
+        saveDraft(tx, deps.cfg, partyId, personId, { draftId, revision, lines: body.lines }),
       );
       return c.json(draft);
     }),
   );
 
-  app.post("/api/visits/:id/drafts/:did/take-over", (c) =>
+  app.post("/api/parties/:id/drafts/:did/take-over", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      const visitId = requireDraftVisitParam(c.req.param("id"));
+      const partyId = requireDraftPartyParam(c.req.param("id"));
       const draftId = requireDraftParam(c.req.param("did"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const revision = requireRevision(body.revision);
       const draft = await withTransaction(deps.db, (tx) =>
-        takeOverDraft(tx, deps.cfg, visitId, draftId, personId, revision),
+        takeOverDraft(tx, deps.cfg, partyId, draftId, personId, revision),
       );
       return c.json(draft);
     }),
   );
 
-  app.post("/api/visits/:id/drafts/:did/submit", (c) =>
+  app.post("/api/parties/:id/drafts/:did/submit", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      const visitId = requireDraftVisitParam(c.req.param("id"));
+      const partyId = requireDraftPartyParam(c.req.param("id"));
       const draftId = requireDraftParam(c.req.param("did"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const input: SubmitDraftInput = {
@@ -1734,7 +1734,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         ...joinGroupOf(body),
       };
       const submitted = await withTransaction(deps.db, (tx) =>
-        submitDraft(tx, deps.cfg, visitId, draftId, input),
+        submitDraft(tx, deps.cfg, partyId, draftId, input),
       );
       return c.json(submitted);
     }),
@@ -1749,14 +1749,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // Absent voids the whole line; `voidTabLine` validates a given one.
       const quantity = c.req.query("quantity");
       // The party's revision after the void, for the till's next command on the party.
-      const visit = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
+      const party = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
         withTransaction(deps.db, async (tx) => {
           await voidTabLine(tx, deps.cfg, id, lineNo, quantity, personId);
           await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
-          return visitRevisionOfOrder(tx, id);
+          return partyRevisionOfOrder(tx, id);
         }),
       );
-      return c.json({ visit });
+      return c.json({ party });
     }),
   );
 
@@ -1787,7 +1787,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         withTransaction(deps.db, async (tx) => {
           const revision = await updateOrderLine(tx, deps.cfg, id, lineNo, patch, copy, personId);
           await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
-          return { revision, visit: await visitRevisionOfOrder(tx, id) };
+          return { revision, party: await partyRevisionOfOrder(tx, id) };
         }),
       );
       return c.json(saved);
@@ -1909,10 +1909,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
       const tabId = requireTabParam(c.req.param("id"));
-      const body = await readJsonBody<{ toTableId: string; expectedVisitRevision?: unknown }>(c);
+      const body = await readJsonBody<{ toTableId: string; expectedPartyRevision?: unknown }>(c);
       if (!isUuid(body.toTableId))
         throw new AppError("table.not_found", { tableId: body.toTableId });
-      const command = visitCommand(personId, body);
+      const command = partyCommand(personId, body);
       await withTransaction(deps.db, async (tx) => {
         await moveTab(tx, deps.cfg, tabId, body.toTableId, command);
       });
@@ -1924,9 +1924,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
       const tabId = requireTabParam(c.req.param("id"));
-      const body = await readJsonBody<{ tableId: string; expectedVisitRevision?: unknown }>(c);
+      const body = await readJsonBody<{ tableId: string; expectedPartyRevision?: unknown }>(c);
       if (!isUuid(body.tableId)) throw new AppError("table.not_found", { tableId: body.tableId });
-      const command = visitCommand(personId, body);
+      const command = partyCommand(personId, body);
       await withTransaction(deps.db, async (tx) => {
         await joinTable(tx, deps.cfg, tabId, body.tableId, command);
       });
@@ -1941,11 +1941,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<{
         fromTabId: string;
         freeSourceTable: boolean;
-        expectedVisitRevision?: unknown;
-        expectedSourceVisitRevision?: unknown;
+        expectedPartyRevision?: unknown;
+        expectedSourcePartyRevision?: unknown;
       }>(c);
       if (!isUuid(body.fromTabId)) throw new AppError("tab.not_open", { tabId: body.fromTabId });
-      const command = visitCommand(personId, body, true);
+      const command = partyCommand(personId, body, true);
       await withTransaction(deps.db, async (tx) => {
         await mergeTabs(tx, deps.cfg, intoTabId, body.fromTabId, {
           freeSourceTable: body.freeSourceTable,
@@ -1963,11 +1963,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<{
         toTabId: string;
         transfers: { lineNo: number; quantity?: string }[];
-        expectedVisitRevision?: unknown;
-        expectedSourceVisitRevision?: unknown;
+        expectedPartyRevision?: unknown;
+        expectedSourcePartyRevision?: unknown;
       }>(c);
       if (!isUuid(body.toTabId)) throw new AppError("tab.not_open", { tabId: body.toTabId });
-      const command = visitCommand(personId, body, true);
+      const command = partyCommand(personId, body, true);
       await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
         withTransaction(deps.db, async (tx) => {
           await transferLines(tx, deps.cfg, fromTabId, body.toTabId, body.transfers, command);
@@ -1987,7 +1987,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // field "body", not coalesced to `{}`.
       const body = await readRawJsonBody<{
         transfers: { lineNo: number; quantity?: string }[];
-        expectedVisitRevision?: unknown;
+        expectedPartyRevision?: unknown;
       }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
@@ -1996,7 +1996,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (!Array.isArray(body.transfers)) {
         throw new AppError("management.request_invalid", { field: "transfers" });
       }
-      const command = visitCommand(personId, body);
+      const command = partyCommand(personId, body);
       const result = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
         withTransaction(deps.db, async (tx) => {
           const split = await splitOffCheck(tx, deps.cfg, fromTabId, body.transfers, command);
@@ -2016,7 +2016,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readRawJsonBody<{
         tableId: string;
         transfers?: { lineNo: number; quantity?: string }[];
-        expectedVisitRevision?: unknown;
+        expectedPartyRevision?: unknown;
       }>(c);
       // Body shape first: a missing body is a request-shape fault, not `table.not_joined`.
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
@@ -2028,7 +2028,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.transfers !== undefined && !Array.isArray(body.transfers)) {
         throw new AppError("management.request_invalid", { field: "transfers" });
       }
-      const command = visitCommand(personId, body);
+      const command = partyCommand(personId, body);
       const result = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
         withTransaction(deps.db, async (tx) => {
           const unjoined = await unjoinTable(

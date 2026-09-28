@@ -427,23 +427,23 @@ export class TillStationScreen extends LitElement {
     await this.#advance(() => this.api.fireCourse(orderId, courseId));
   }
 
-  /** Refused `visit.out_of_date`, the queue is read again and the cook decides; nothing is resent. */
+  /** Refused `party.out_of_date`, the queue is read again and the cook decides; nothing is resent. */
   async #onFireKitchenGroup(event: Event): Promise<void> {
     event.stopPropagation();
     if (this.deviceMode) return;
-    const { visitId, groupId, expectedVisitRevision } = (
+    const { partyId, groupId, expectedPartyRevision } = (
       event as CustomEvent<FireKitchenGroupDetail>
     ).detail;
-    const card = this.#cardOfGroup(visitId, groupId);
+    const card = this.#cardOfGroup(partyId, groupId);
     this.tableChanged = null;
     this.#tableChangedNext = null;
     try {
-      await this.api.fireGroup(visitId, groupId, {
+      await this.api.fireGroup(partyId, groupId, {
         submissionId: crypto.randomUUID(),
-        expectedVisitRevision,
+        expectedPartyRevision,
       });
     } catch (error) {
-      if ((error as { code?: string }).code === "visit.out_of_date") this.#tableChangedNext = card;
+      if ((error as { code?: string }).code === "party.out_of_date") this.#tableChangedNext = card;
     }
     await this.#reload();
   }
@@ -457,12 +457,12 @@ export class TillStationScreen extends LitElement {
   }
 
   /** What the card holding the group is called on screen: its label, else its order number. */
-  #cardOfGroup(visitId: string, groupId: string): string {
+  #cardOfGroup(partyId: string, groupId: string): string {
     const card =
       this.groups.find(
         (group) =>
-          group.visit?.id === visitId && group.items.some((item) => item.group?.id === groupId),
-      ) ?? this.groups.find((group) => group.visit?.id === visitId);
+          group.party?.id === partyId && group.items.some((item) => item.group?.id === groupId),
+      ) ?? this.groups.find((group) => group.party?.id === partyId);
     return card === undefined ? "" : (card.label ?? `#${card.orderNumber}`);
   }
 

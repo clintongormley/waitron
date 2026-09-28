@@ -68,21 +68,21 @@ import type { TillConfig } from "./till-config.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import "./errors.js";
 
-/** Sends `lines` to a seated party's tab as one group released now, at the visit's current revision. */
+/** Sends `lines` to a seated party's tab as one group released now, at the party's current revision. */
 async function sendRound(
   app: Hono,
   headers: Record<string, string>,
-  visitId: string,
+  partyId: string,
   lines: unknown[],
 ): Promise<Response> {
-  const read = await app.request(`/api/visits/${visitId}/groups`, { headers });
+  const read = await app.request(`/api/parties/${partyId}/groups`, { headers });
   const { revision } = (await read.json()) as { revision: number };
-  return app.request(`/api/visits/${visitId}/groups`, {
+  return app.request(`/api/parties/${partyId}/groups`, {
     method: "POST",
     headers: { ...headers, "content-type": "application/json" },
     body: JSON.stringify({
       submissionId: randomUUID(),
-      expectedVisitRevision: revision,
+      expectedPartyRevision: revision,
       groups: [{ lines, release: "fire" }],
     }),
   });
@@ -2031,7 +2031,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     });
 
     expect(edited.status).toBe(200);
-    expect(await edited.json()).toEqual({ revision: 1, visit: null });
+    expect(await edited.json()).toEqual({ revision: 1, party: null });
   });
 
   it("GET lists it, GET/:id retrieves its lines, PUT edits it, DELETE abandons it", async () => {
@@ -2793,21 +2793,21 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     return lines.find((line) => line.lineNo === lineNo)!.id;
   }
 
-  /** A served (or unserved) mark for the visit, at the revision its groups read answers. */
+  /** A served (or unserved) mark for the party, at the revision its groups read answers. */
   async function mark(
     app: Hono,
     cookie: string,
-    visitId: string,
+    partyId: string,
     path: "served" | "unserved",
     items: unknown,
   ): Promise<Response> {
-    const read = await app.request(`/api/visits/${visitId}/groups`, { headers: { cookie } });
+    const read = await app.request(`/api/parties/${partyId}/groups`, { headers: { cookie } });
     const { revision } =
       read.status === 200 ? ((await read.json()) as { revision: number }) : { revision: 0 };
-    return app.request(`/api/visits/${visitId}/${path}`, {
+    return app.request(`/api/parties/${partyId}/${path}`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ submissionId: randomUUID(), expectedVisitRevision: revision, items }),
+      body: JSON.stringify({ submissionId: randomUUID(), expectedPartyRevision: revision, items }),
     });
   }
 
@@ -2863,8 +2863,8 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       body: JSON.stringify({}),
     });
     expect(tabRes.status).toBe(200);
-    const { tabId, visitId } = (await tabRes.json()) as { tabId: string; visitId: string };
-    const round = await sendRound(app, { cookie }, visitId, [
+    const { tabId, partyId } = (await tabRes.json()) as { tabId: string; partyId: string };
+    const round = await sendRound(app, { cookie }, partyId, [
       { menuItemId: aguaOfferId, quantity: "1" },
       { menuItemId: aguaOfferId, quantity: "1" },
     ]);
@@ -2901,24 +2901,24 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
 
     // Serving line 1 drops pendingToServe to 1; the answer is the party's new revision.
     const lineId = await lineIdOf(app, cookie, tabId, 1);
-    const visitRevision = async () =>
+    const partyRevision = async () =>
       (
         (await (
-          await app.request(`/api/visits/${visitId}/groups`, { headers: { cookie } })
+          await app.request(`/api/parties/${partyId}/groups`, { headers: { cookie } })
         ).json()) as {
           revision: number;
         }
       ).revision;
-    const served = await mark(app, cookie, visitId, "served", [{ lineId, quantity: "1" }]);
+    const served = await mark(app, cookie, partyId, "served", [{ lineId, quantity: "1" }]);
     expect(served.status).toBe(200);
-    expect(await served.json()).toEqual({ revision: await visitRevision() });
+    expect(await served.json()).toEqual({ revision: await partyRevision() });
     state = await stateOf();
     expect(state.pendingToServe).toBe(1);
 
     // Unserving takes it back (the mis-tap inverse) — pendingToServe returns to 2.
-    const unserved = await mark(app, cookie, visitId, "unserved", [{ lineId, quantity: "1" }]);
+    const unserved = await mark(app, cookie, partyId, "unserved", [{ lineId, quantity: "1" }]);
     expect(unserved.status).toBe(200);
-    expect(await unserved.json()).toEqual({ revision: await visitRevision() });
+    expect(await unserved.json()).toEqual({ revision: await partyRevision() });
     state = await stateOf();
     expect(state.pendingToServe).toBe(2);
   });
@@ -2931,9 +2931,9 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     // all 401 with the one code.
     const cases = [
       app.request("/api/zones"),
-      app.request(`/api/visits/${id}/served`, { method: "POST" }),
-      app.request(`/api/visits/${id}/unserved`, { method: "POST" }),
-      app.request(`/api/visits/${id}/groups/${randomUUID()}/served`, { method: "POST" }),
+      app.request(`/api/parties/${id}/served`, { method: "POST" }),
+      app.request(`/api/parties/${id}/unserved`, { method: "POST" }),
+      app.request(`/api/parties/${id}/groups/${randomUUID()}/served`, { method: "POST" }),
     ];
     for (const res of await Promise.all(cases)) {
       expect(res.status).toBe(401);
@@ -2941,7 +2941,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     }
   });
 
-  it("served POST with a malformed :id is 409 visit.not_open, not an opaque 500", async () => {
+  it("served POST with a malformed :id is 409 party.not_open, not an opaque 500", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
@@ -2952,7 +2952,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     ]);
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({
-      error: { code: "visit.not_open", params: { visitId: "not-a-uuid" } },
+      error: { code: "party.not_open", params: { partyId: "not-a-uuid" } },
     });
   });
 
@@ -2974,8 +2974,8 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({}),
     });
-    const { tabId, visitId } = (await tabRes.json()) as { tabId: string; visitId: string };
-    const round = await sendRound(app, { cookie }, visitId, [
+    const { tabId, partyId } = (await tabRes.json()) as { tabId: string; partyId: string };
+    const round = await sendRound(app, { cookie }, partyId, [
       { menuItemId: tab.aguaOffer, quantity: "1" },
     ]);
     expect(round.status).toBe(200);
@@ -2990,7 +2990,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       [{ lineId: 7, quantity: "1" }],
     ]) {
       for (const path of ["served", "unserved"] as const) {
-        const res = await mark(app, cookie, visitId, path, items);
+        const res = await mark(app, cookie, partyId, path, items);
         expect(res.status).toBe(400);
         expect(await res.json()).toMatchObject({
           error: { code: "management.request_invalid", params: { field: "items" } },
@@ -3018,14 +3018,14 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({}),
     });
-    const { visitId } = (await tabRes.json()) as { tabId: string; visitId: string };
-    const round = await sendRound(app, { cookie }, visitId, [
+    const { partyId } = (await tabRes.json()) as { tabId: string; partyId: string };
+    const round = await sendRound(app, { cookie }, partyId, [
       { menuItemId: tab.aguaOffer, quantity: "1" },
     ]);
     expect(round.status).toBe(200);
 
     for (const lineId of [randomUUID(), "99"]) {
-      const res = await mark(app, cookie, visitId, "served", [{ lineId, quantity: "1" }]);
+      const res = await mark(app, cookie, partyId, "served", [{ lineId, quantity: "1" }]);
       expect(res.status).toBe(404);
       expect(await res.json()).toMatchObject({
         error: { code: "group.not_found", params: { lineId } },
@@ -3033,18 +3033,18 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     }
   });
 
-  it("served POST on a well-formed id that names no OPEN party is 409 visit.not_open (the command's own guard)", async () => {
+  it("served POST on a well-formed id that names no OPEN party is 409 party.not_open (the command's own guard)", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
 
     // A valid uuid naming no party: clears the route's isUuid screen and reaches the command, which
-    // finds no open visit.
+    // finds no open party.
     const res = await mark(app, cookie, randomUUID(), "served", [
       { lineId: randomUUID(), quantity: "1" },
     ]);
     expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: { code: "visit.not_open" } });
+    expect(await res.json()).toMatchObject({ error: { code: "party.not_open" } });
   });
 });
 
@@ -3680,9 +3680,9 @@ describe("canonical modifier HTTP serialization", () => {
       body: JSON.stringify({}),
     });
     expect(opened.status, await opened.clone().text()).toBe(200);
-    const { tabId, visitId } = (await opened.json()) as { tabId: string; visitId: string };
+    const { tabId, partyId } = (await opened.json()) as { tabId: string; partyId: string };
     for (let round = 0; round < 2; round++) {
-      const rung = await sendRound(f.app, f.headers, visitId, [line]);
+      const rung = await sendRound(f.app, f.headers, partyId, [line]);
       expect(rung.status, await rung.clone().text()).toBe(200);
     }
     const got = await f.app.request(`/api/working-orders/${tabId}`, { headers: f.headers });
