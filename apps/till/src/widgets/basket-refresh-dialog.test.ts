@@ -45,6 +45,28 @@ describe("till-basket-refresh-dialog", () => {
     ]);
   });
 
+  it("marks a part's row as a unit price, so it cannot be read as the line's total", async () => {
+    const parts = [
+      { lineNo: 1, name: "Burger", from: "9.00", to: "8.00", perUnit: true as const },
+      { lineNo: 1, name: "Cheese", from: "1.00", to: "2.00", perUnit: true as const },
+    ];
+    const rows = async (locale: string) => {
+      const { el } = await mount({ changed: parts, blocked: [] }, locale);
+      return [...el.shadowRoot!.querySelectorAll("[data-changed] li")].map((row) =>
+        row.textContent!.replace(/\s+/g, " ").trim(),
+      );
+    };
+    expect(await rows("en-GB")).toEqual([
+      "Burger €9.00 each → €8.00 each",
+      "Cheese €1.00 each → €2.00 each",
+    ]);
+    cleanupWidgets();
+    expect(await rows("es-ES")).toEqual([
+      "Burger 9,00 € c/u → 8,00 € c/u",
+      "Cheese 1,00 € c/u → 2,00 € c/u",
+    ]);
+  });
+
   it("formats the prices in the operator's language", async () => {
     const { el } = await mount({ changed, blocked: [] }, "es-ES");
     expect(text(el)).toContain("Lemonade 3,00 € → 2,50 €");

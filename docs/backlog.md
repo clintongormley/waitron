@@ -483,7 +483,9 @@ The comparison also looks only at each line's total, so dish and extra price cha
 are adopted without asking — see the campaign item A113 entry further down. _(#812, campaign item
 A113, branch `fix/retro-review-719-till`, 2026-09-28: no longer so — when a line's total is
 unchanged, `refreshBasket` lists the dish or variant and each extra whose price changed, each on its
-own row of the dialog.)_
+own row of the dialog. Campaign item C32, branch `fix/basket-refresh-unit-price-label`: those rows
+now read as unit prices, "€9.00 each → €8.00 each" / "9,00 € c/u → 8,00 € c/u"; a line-total row
+is unmarked.)_
 A table's round is also not marked by the poll's sold-out list, only when a send is refused.
 _(Task 8, 2026-09-28: no longer so — when the poll's sold-out list for the open table's zone
 changes, `#onMenuState` in `apps/till/src/till-app.ts` marks the draft again, `#markDraft(true)`.)_
@@ -3009,7 +3011,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   `publishedDefaultLabelId` (`applyLiveFields`, `packages/catalogue/src/menu-document.ts`), which
   `withUnavailable` (`apps/till/src/state/menu-refresh.ts`) reads. Of the review's other two
   findings, the deactivated menu still offered and sold from was fixed by `fix/retro-review-719`;
-  the other is the next entry.
+  the other is the next entry. The part rows read as unit prices ("€9.00 each", "9,00 € c/u") since
+  campaign item C32 (branch `fix/basket-refresh-unit-price-label`), on the owner's "label them".
 - **Unchecked since the service plan's Task 8 (#806): whether a round entered while the floor was
   being re-read is still hidden when the till follows the party onto its next tab** (the second
   finding of the retroactive Codex review of #719). The review's probe tested code since rewritten

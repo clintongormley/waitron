@@ -535,6 +535,7 @@ export const en = {
   // `t()` does not interpolate.
   "basket_refresh.title": "The menu has changed",
   "basket_refresh.changed": "New prices",
+  "basket_refresh.each": "{price} each",
   "basket_refresh.blocked": "Remove or replace before paying",
   "basket_refresh.blocked_send": "Not available now: these stay in the order and are not sent",
   "basket_refresh.removed": "{name} is no longer on this menu",
@@ -1045,6 +1046,7 @@ export const es: Record<StringKey, string> = {
   "service_zone.basket_active": "Vacía la cesta antes de cambiar de zona de servicio",
   "basket_refresh.title": "La carta ha cambiado",
   "basket_refresh.changed": "Precios nuevos",
+  "basket_refresh.each": "{price} c/u",
   "basket_refresh.blocked": "Quita o sustituye antes de cobrar",
   "basket_refresh.blocked_send": "No disponibles ahora: se quedan en el pedido y no se envían",
   "basket_refresh.removed": "{name} ya no está en esta carta",

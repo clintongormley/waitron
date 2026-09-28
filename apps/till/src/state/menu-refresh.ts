@@ -21,13 +21,14 @@ export interface LineBlock {
 }
 
 /** One line of the basket-refresh dialog; `lineNo` counts the basket from 1, and several rows may
- * share one. `from`/`to` are the line's total or, for a part row, that part's unit price. `from` is
- * absent for a line whose earlier price the till never held. */
+ * share one. `from`/`to` are the line's total or, on a `perUnit` row, one part's unit price. `from`
+ * is absent for a line whose earlier price the till never held. */
 export interface ChangedLine {
   lineNo: number;
   name: string;
   from?: string;
   to: string;
+  perUnit?: true;
 }
 
 export interface BlockedLine extends LineBlock {
@@ -252,5 +253,5 @@ function partsRepriced(line: OrderLine, adopted: OrderLine, lineNo: number): Cha
   );
   return parts
     .filter((part) => compareDecimal(decimal(part.from), decimal(part.to)) !== 0)
-    .map((part) => ({ lineNo, ...part }));
+    .map((part) => ({ lineNo, ...part, perUnit: true }));
 }

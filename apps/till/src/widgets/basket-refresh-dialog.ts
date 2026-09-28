@@ -70,8 +70,9 @@ export class TillBasketRefreshDialog extends LitElement {
     );
   }
 
-  #money(value: string): string {
-    return formatMoney(value, currentLocale());
+  #money(value: string, perUnit?: true): string {
+    const money = formatMoney(value, currentLocale());
+    return perUnit ? t("basket_refresh.each").replace("{price}", () => money) : money;
   }
 
   override render() {
@@ -97,8 +98,8 @@ export class TillBasketRefreshDialog extends LitElement {
                       <span class="price"
                         >${
                           line.from === undefined
-                            ? this.#money(line.to)
-                            : `${this.#money(line.from)} → ${this.#money(line.to)}`
+                            ? this.#money(line.to, line.perUnit)
+                            : `${this.#money(line.from, line.perUnit)} → ${this.#money(line.to, line.perUnit)}`
                         }</span
                       >
                     </li>`,

@@ -432,8 +432,8 @@ describe("refreshBasket", () => {
     };
     const outcome = refreshBasket([line], [offsetting], live);
     expect(outcome.changed).toEqual([
-      { lineNo: 1, name: "burger", from: "9.00", to: "8.00" },
-      { lineNo: 1, name: "cheese", from: "1.00", to: "2.00" },
+      { lineNo: 1, name: "burger", from: "9.00", to: "8.00", perUnit: true },
+      { lineNo: 1, name: "cheese", from: "1.00", to: "2.00", perUnit: true },
     ]);
     expect(outcome.adopted.get(0)!.product.unitPrice).toBe("8.00");
   });
@@ -462,8 +462,8 @@ describe("refreshBasket", () => {
     };
     const outcome = refreshBasket([line], [offsetting], live);
     expect(outcome.changed).toEqual([
-      { lineNo: 1, name: "bottle", from: "18.00", to: "17.00" },
-      { lineNo: 1, name: "cheese", from: "1.00", to: "2.00" },
+      { lineNo: 1, name: "bottle", from: "18.00", to: "17.00", perUnit: true },
+      { lineNo: 1, name: "cheese", from: "1.00", to: "2.00", perUnit: true },
     ]);
     expect(outcome.adopted.get(0)!.product.unitPrice).toBe("17.00");
   });
