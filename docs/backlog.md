@@ -2885,6 +2885,18 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   with `minPicks: 0` and `maxQuantity: 9` can be failing. The real-world shape is a parked line
   whose list had its cap reduced under it, the same family as the "list lost the product between the
   park and the edit" escape recorded under Task 8.
+- **After a line is cancelled, the table's bill figures stayed out of date until a reload** (seen by
+  lane B while checking B6a; campaign item A110). _Fixed 2026-09-28 by A110:_ run on the dev till
+  at `main` `53883ae7e`, cancelling a €2.80 drink from a €10.60 order left the bill's total, its
+  "to pay" and the party's "Still to pay" at €10.60 while the order total read €7.80, and the till
+  requested neither the bills nor the floor after the cancel. `#onVoidLine`
+  (`apps/till/src/till-app.ts`) now reads the floor's party and the bills again after a cancel that
+  landed or got no answer; a refused one reads the lines only, as before. **Still open:** a saved
+  line Change (`#onChangeLine`) also reads the lines only — seen on the dev till with a note, which
+  moves no amount. The dialog sends a dish's extras when it offers any (`#confirmChange`,
+  `apps/till/src/screens/till-table-order-screen.ts`), and an extra can carry a price, so a Change
+  can move an amount; the demo menu offers no priced extra, so a stale figure after one is read from
+  the code, not run.
 - **Two till menu-refresh defects the retroactive Codex review of #719 found (campaign item A108r,
   2026-09-28), both still present on `main` at `f5a186cd9`; fix them once lane B's drafts-on-the-till
   branch, which changes `apps/till/src/state/menu-refresh.ts`, has landed.** (1) After an option
