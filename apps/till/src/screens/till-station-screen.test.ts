@@ -1767,11 +1767,11 @@ describe("till-station-screen out-of-date banner", () => {
     expect(banner(el)).toBeNull();
     await tick(el); // 10:20:20, fails
     expect(banner(el)!.getAttribute("role")).toBe("status");
-    expect(banner(el)!.textContent!.trim()).toBe("Not up to date since 10:20");
+    expect(banner(el)!.textContent!.trim()).toBe("No updates since 10:20, less than a minute ago");
     expect(queueWidget(el)!.groups).toEqual(barraQueue);
     expect(queueWidget(el)!.notices).toEqual(later.notices);
     await tick(el, 45_000); // 10:21:05, still failing: the time is the last GOOD read's, not the latest failure's
-    expect(banner(el)!.textContent!.trim()).toBe("Not up to date since 10:20");
+    expect(banner(el)!.textContent!.trim()).toBe("No updates since 10:20, 1 minute ago");
   });
 
   it("the next good refresh clears the banner", async () => {
@@ -1797,7 +1797,7 @@ describe("till-station-screen out-of-date banner", () => {
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
     await flush(el);
-    expect(banner(el)!.textContent!.trim()).toBe("Not up to date since 10:19");
+    expect(banner(el)!.textContent!.trim()).toBe("No updates since 10:19, less than a minute ago");
   });
 
   it("a station list that answers 20 seconds late, in the next minute, still dates a failed first read from when the screen opened", async () => {
@@ -1812,7 +1812,7 @@ describe("till-station-screen out-of-date banner", () => {
     await tick(el, 20_000); // 10:20:10: the stations answer, and the first queue read fails
     expect(api.getStationQueue).toHaveBeenCalledWith("st-1");
     expect(api.getStationQueue).toHaveBeenCalledOnce();
-    expect(banner(el)!.textContent!.trim()).toBe("Not up to date since 10:19");
+    expect(banner(el)!.textContent!.trim()).toBe("No updates since 10:19, less than a minute ago");
   });
 
   it("a read cancelled by the 25-second limit shows the banner", async () => {
@@ -1832,7 +1832,7 @@ describe("till-station-screen out-of-date banner", () => {
     await tick(el, 39_999); // the read that set out at 15 s is still out
     expect(banner(el)).toBeNull();
     await tick(el, 1); // and is cancelled at 40 s
-    expect(banner(el)!.textContent!.trim()).toBe("Not up to date since 10:19");
+    expect(banner(el)!.textContent!.trim()).toBe("No updates since 10:19, less than a minute ago");
     expect(queueWidget(el)!.groups).toEqual(cocinaQueue);
   });
 
@@ -1871,7 +1871,7 @@ describe("till-station-screen out-of-date banner", () => {
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
     await flush(el);
-    expect(banner(el)!.textContent!.trim()).toBe("Not up to date since 10:19");
+    expect(banner(el)!.textContent!.trim()).toBe("No updates since 10:19, less than a minute ago");
     vi.advanceTimersByTime(20_000); // 10:20:10 — the 10:20:05 Cocina refresh also failed
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>('[data-station="st-2"]')!.click();
@@ -1879,7 +1879,7 @@ describe("till-station-screen out-of-date banner", () => {
     expect(banner(el)).toBeNull();
     failBarra({ code: "server.internal" });
     await flush(el);
-    expect(banner(el)!.textContent!.trim()).toBe("Not up to date since 10:20");
+    expect(banner(el)!.textContent!.trim()).toBe("No updates since 10:20, less than a minute ago");
   });
 
   it("shows the Spanish text under the Spanish locale", async () => {
@@ -1893,7 +1893,104 @@ describe("till-station-screen out-of-date banner", () => {
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
     await flush(el);
     await tick(el);
-    expect(banner(el)!.textContent!.trim()).toBe("Sin actualizar desde las 10:19");
+    expect(banner(el)!.textContent!.trim()).toBe(
+      "Sin actualizaciones desde las 10:19, hace menos de un minuto",
+    );
+  });
+
+  const failingAfterFirstRead = () =>
+    stubApi({
+      getStationQueue: vi
+        .fn()
+        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] }) // 10:19:50
+        .mockRejectedValue({ code: "server.internal" }),
+    });
+
+  const bannerText = (el: TillStationScreen) => banner(el)!.textContent!.trim();
+
+  it("says how long ago the last good list was, and keeps counting while every refresh fails", async () => {
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api: failingAfterFirstRead(),
+    });
+    await flush(el);
+    await tick(el); // 10:20:05, fails
+    expect(bannerText(el)).toBe("No updates since 10:19, less than a minute ago");
+    await tick(el, 44_999); // 10:20:49.999
+    expect(bannerText(el)).toBe("No updates since 10:19, less than a minute ago");
+    await tick(el, 1); // 10:20:50, a minute after the last good read
+    expect(bannerText(el)).toBe("No updates since 10:19, 1 minute ago");
+    await tick(el, 60_000); // 10:21:50
+    expect(bannerText(el)).toBe("No updates since 10:19, 2 minutes ago");
+    await tick(el, 180_000); // 10:24:50
+    expect(bannerText(el)).toBe("No updates since 10:19, 5 minutes ago");
+  });
+
+  it("counts the minutes in Spanish under the Spanish locale", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api: failingAfterFirstRead(),
+    });
+    await flush(el);
+    await tick(el); // 10:20:05, fails
+    expect(bannerText(el)).toBe("Sin actualizaciones desde las 10:19, hace menos de un minuto");
+    await tick(el, 45_000); // 10:20:50
+    expect(bannerText(el)).toBe("Sin actualizaciones desde las 10:19, hace 1 minuto");
+    await tick(el, 240_000); // 10:24:50
+    expect(bannerText(el)).toBe("Sin actualizaciones desde las 10:19, hace 5 minutos");
+  });
+
+  it("a station list that cannot be read on open shows the banner beside No stations, dated from when the screen opened", async () => {
+    const api = stubApi({ listStations: vi.fn().mockRejectedValue({ code: "server.internal" }) });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    expect(el.shadowRoot!.textContent).toContain(t("station.no_stations"));
+    expect(banner(el)!.getAttribute("role")).toBe("status");
+    expect(bannerText(el)).toBe("No updates since 10:19, less than a minute ago");
+    await tick(el, 60_000); // 10:20:50
+    expect(bannerText(el)).toBe("No updates since 10:19, 1 minute ago");
+    await tick(el, 240_000); // 10:24:50
+    expect(bannerText(el)).toBe("No updates since 10:19, 5 minutes ago");
+  });
+
+  it("a venue with no stations configured shows no banner", async () => {
+    const api = stubApi({ listStations: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    expect(el.shadowRoot!.textContent).toContain(t("station.no_stations"));
+    expect(banner(el)).toBeNull();
+    await tick(el, 60_000);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("the minute count runs only while the banner shows: a good read stops it", async () => {
+    const api = stubApi({
+      getStationQueue: vi
+        .fn()
+        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] })
+        .mockRejectedValueOnce({ code: "server.internal" })
+        .mockResolvedValue(later),
+    });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    const healthy = vi.getTimerCount();
+    await tick(el); // fails
+    expect(banner(el)).not.toBeNull();
+    expect(vi.getTimerCount()).toBe(healthy + 1);
+    await tick(el); // good
+    expect(banner(el)).toBeNull();
+    expect(vi.getTimerCount()).toBe(healthy);
+  });
+
+  it("removing the screen while the banner shows stops the minute count", async () => {
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api: failingAfterFirstRead(),
+    });
+    await flush(el);
+    const healthy = vi.getTimerCount();
+    await tick(el); // fails
+    expect(vi.getTimerCount()).toBe(healthy + 1);
+    el.remove();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   describe("device mode", () => {
@@ -1917,7 +2014,9 @@ describe("till-station-screen out-of-date banner", () => {
       await flush(el);
       await tick(el);
       await tick(el); // 10:20:20, fails
-      expect(banner(el)!.textContent!.trim()).toBe("Not up to date since 10:20");
+      expect(banner(el)!.textContent!.trim()).toBe(
+        "No updates since 10:20, less than a minute ago",
+      );
       expect(queueWidget(el)!.groups).toEqual(barraQueue);
       await tick(el);
       expect(banner(el)).toBeNull();
@@ -1935,7 +2034,9 @@ describe("till-station-screen out-of-date banner", () => {
       await flush(el);
       expect(banner(el)).toBeNull();
       await tick(el);
-      expect(banner(el)!.textContent!.trim()).toBe("Not up to date since 10:19");
+      expect(banner(el)!.textContent!.trim()).toBe(
+        "No updates since 10:19, less than a minute ago",
+      );
     });
 
     it("a bump whose reload fails shows the banner", async () => {
@@ -1960,7 +2061,9 @@ describe("till-station-screen out-of-date banner", () => {
       );
       await flush(el);
       expect(api.deviceAdvance).toHaveBeenCalledWith("ti-1", "preparing");
-      expect(banner(el)!.textContent!.trim()).toBe("Not up to date since 10:19");
+      expect(banner(el)!.textContent!.trim()).toBe(
+        "No updates since 10:19, less than a minute ago",
+      );
     });
 
     it("a 401 (the display was removed) shows no banner: the app re-boots instead", async () => {
