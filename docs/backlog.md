@@ -3392,10 +3392,14 @@ approved.
   `Test timed out in 120000ms` while every other root suite ran at its usual speed; the same test
   took 16 to 31 seconds in the `lint` jobs of the four `main` runs before it. Not reproduced
   locally: 25 runs of the file alone took 6 to 7 seconds each, and three
-  `pnpm vitest run --coverage` runs of the root project passed. The CI log shows nothing about
-  which step stalled. Next: have the test report how long each migration step takes, and which
-  step it was on, so the next stall says where it waited; then locate it before naming a cause.
-  First seen in the last 60 CI runs.
+  `pnpm vitest run --coverage` runs of the root project passed. The CI log showed nothing about
+  which step stalled. **The reporting half is DONE (lane A's A112, 2026-09-28):** the test now fails
+  at 110 seconds naming the migration step and phase it was on, the process's active resources
+  and how long every earlier phase took; a stall inside a synchronous call is reported by a second
+  thread one second after the deadline; and a healthy run prints its five slowest phases
+  ([ci-and-gates.md](developers/ci-and-gates.md#the-upgrade-test-names-the-phase-it-stalled-in)).
+  Next: when it stalls again, read that report and
+  locate the stalled operation before naming a cause. First seen in the last 60 CI runs.
 - **Dependabot, switched on by #760 (2026-09-27) — DONE: the 15 security alerts fixed by lane A's
   A107 (**PR #796**, 2026-09-28).** Config:
   `.github/dependabot.yml`; how to land one of its PRs: `docs/developers/workflow-guide.md` →

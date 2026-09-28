@@ -649,6 +649,22 @@ MD5-only checksums, eleven listening ports and three-second stop before swapping
 command starts with a Waitron checkout's `.bin/litestream` or `.bin/versitygw`
 (`scripts/reap-testcontainers.mjs`, `isTestBinaryProcess`).
 
+**What a test run prints**
+
+## Vitest hides a passing test's console output under an AI agent
+
+Measured 2026-09-28 with Vitest 4.1.11 on Node v26.7.0: a passing test's `console.log` printed with
+no agent variables set and with `CI=true`, and was hidden in two separate runs, one with
+`AI_AGENT=1` set and one with `CLAUDECODE=1`. Read from the installed source and not run: std-env's
+`isAgent`, true for `AI_AGENT`, `CLAUDECODE` and `CLAUDE_CODE` among others, makes Vitest pick its
+`agent` reporter, which prints nothing for a passed test. A report written to file descriptor 2 with
+`fs.writeSync` from a worker thread was not hidden (the upgrade test's second-thread report,
+[ci-and-gates.md](ci-and-gates.md#the-upgrade-test-names-the-phase-it-stalled-in)); a test thread's
+own `process.stderr.write` was not tried. To see a passing test's output from an agent session,
+unset `AI_AGENT` and `CLAUDECODE` for the run (std-env checks others too): the output was hidden
+with either set and shown with neither; passing
+`--reporter=default` instead has not been measured.
+
 **Shelling out to git from a test**
 
 ## A test that shells out to `git` must clear `GIT_DIR` and its family

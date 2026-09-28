@@ -728,6 +728,9 @@ browser test** — most of these rules exist because a test passed while proving
   `test-server-stream`. Guard: `scripts/ci-workflow.test.mjs`, which reads `ci.yml` as TEXT, so the
   install commands left only in a YAML comment, or in a step an `if:` switches off, pass it. See
   [testing-guide.md](docs/developers/testing-guide.md).
+- **Under an AI agent (`AI_AGENT` or `CLAUDECODE` set), Vitest hides a passing test's console
+  output**; unset both to see it. See
+  [testing-guide.md](docs/developers/testing-guide.md#vitest-hides-a-passing-tests-console-output-under-an-ai-agent).
 - **A container port-binding timeout needs Docker state as well as the container's own logs.** Save
   `docker inspect`'s `HostConfig.PortBindings` and `NetworkSettings.Ports` before removing the
   container. The live subjects are the two `bench/` rigs that start a container, both of which
