@@ -2888,15 +2888,22 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     the upgrade, can meet it.
   - **Task 2 built (feat/party-main-bill, PR to come): a party names its main bill, and new
     orders go to it.** What changes for a person using the till:
-    - A party's next order after its main bill is paid or presented starts a new main bill.
-      Before, that happened only after payment. No product path presents a party's bill until
+    - A party's next order after its main bill is paid, presented or abandoned starts a new main
+      bill. Before, after payment or abandonment. No product path presents a party's bill until
       Task 7, so today only payment reaches it.
     - A round can be sent to another open bill of the same party, such as a split check: the
       groups route and the draft-submit route take an optional `billId`. The till sends none yet;
-      Task 10 offers it.
-    - The server now accepts line changes on a party's split bill. The seven server commands that
-      called `assertAnchoredTabOpen` (send, recall, a round, void, a line's course, moving lines
-      between bills, and splitting) call `assertPartyBillOpen` instead. It lets through an open
+      Task 10 offers it. With `billId` a held round can now be sent straight to a party's split
+      check (the groups route accepts `release: "hold"` naming one,
+      `apps/server/src/till-api.groups.test.ts`), which the owner's 2026-09-26 ruling
+      (`tab.split_held_line`) covered only for splitting. **Open question for the owner:** should
+      that be refused too?
+    - The server now accepts line changes on a party's split bill. The seven call sites of
+      `assertAnchoredTabOpen` in `apps/server/src/working-order.ts` (send, recall, a round, void, a
+      line's course, moving lines between bills, and splitting) call `assertPartyBillOpen` instead.
+      The moving site serves both `transferLines` and un-joining a table with items. The round
+      site serves `addTabRound`; `placeGroups` skips it, because the bill it chose has already
+      been checked open and the party's. `assertPartyBillOpen` lets through an open
       bill that belongs to a party, whether or not a table points at it. An open order of no
       party that no table points at is still refused `tab.not_open`. Tests cover a void and a
       round on a split bill.
@@ -2954,7 +2961,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       at no tab" is retired. "puts a submission on the party's main bill even when its tables
       point at no tab" replaces it (spec decision 15, P4).
     - The cases the plan expected to retire as pinning a split bill as second-class (spec §3, P5)
-      still pass and are unchanged. "refuses a DETACHED CHECK as the split origin" uses a check
+      still pass and are unchanged, one of them renamed. "refuses a DETACHED CHECK as the split
+      origin", now "refuses a check of no party as the split origin (tab.not_open)", uses a check
       that belongs to no party, and "refuses a round sent to the check, and opens no next tab"
       uses a check that is paid.
   - **Task 6 DONE (#818, 2026-09-28):** collecting a presented bill
@@ -2975,7 +2983,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
   joined to it, but merging another table's bill into its paid bill, or moving items to or from
-  that paid bill, is refused with `tab.not_open` until a new round opens the party's next bill.
+  that paid bill, is refused with `tab.not_open` until the party's next order (sent through
+`placeGroups` naming no bill) starts a new main bill. A round sent with `addTabRound` to the paid
+bill is refused.
   Decide whether a paid party should be mergeable before the till offers it.
 - **An invoiced but unpaid bill on a party cannot be charged from the table screen (plan Task 2,
   2026-09-26).** In a venue that issues the invoice first, a party merged into another can bring a
