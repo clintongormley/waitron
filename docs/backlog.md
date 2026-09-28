@@ -3257,7 +3257,7 @@ ongoing overhaul listed at the top of Track A.
 - **Roles are something an admin can add and edit; the four built-ins are only defaults** (owner
   decision 2026-09-12, design not written). Detail under *Detail → Roles*: the ladder question decides
   the schema. The owner restated it on 2026-09-28 ("especially because I want roles to be definable
-  by the customer"), when asking for roles to be listed alphabetically. Since lane C's C36 the
+  by the customer"), when asking for roles to be listed alphabetically. Since lane C's C36 (#823) the
   dashboard's three role lists — the add-person and edit-person forms and the Staff screen's role
   filter — sort by the displayed name in the current language (`rolesByName`,
   `apps/dashboard/src/i18n/domain.ts`), so a custom role's name would take its place among them. The
