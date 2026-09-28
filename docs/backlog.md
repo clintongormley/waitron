@@ -2898,12 +2898,14 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   update straight away.** A cancel (A110) and a saved line Change, or one that got no answer while
   the waiter is still on the order (A115), read the floor's party, the order's lines and the
   party's bills again (`#rereadAmounts`, `apps/till/src/till-app.ts`); a refused one reads the
-  lines only. When the floor or the bills cannot be read again the till says so
-  (`table.reread_failed`), unless another message is already shown, the waiter has left the order,
-  a later re-read has started, or a later bills read has overtaken this one's and, when it was the
-  floor that failed, a floor read that worked has given the order its party since; with the floor
-  unread "Still to pay" is taken from the bills just read — the floor's figure is the sum of the
-  same bills (`readBillsOfVisits`, `apps/server/src/visits.ts`).
+  lines only. When the re-read's own floor or bills read fails, the till says so
+  (`table.reread_failed`) unless another message is already shown, the waiter has left the order,
+  or a later re-read has started; it says so even when another read has refreshed the order since,
+  because the message is still true of this re-read. "Still to pay" comes from the floor when the
+  floor read works and lists the party at a revision no older than the one shown; when the floor
+  read fails, from the re-read's own bills for the same party while that bills read is still the
+  latest — the floor's figure is the sum of the same bills (`readBillsOfVisits`,
+  `apps/server/src/visits.ts`) — and otherwise it is left alone.
   The priced-extra case was shown in the till's browser tests with a fixture adding a 1.50 extra;
   the demo menu offers no priced extra, so it was not run on the dev till.
 - **DONE (#812, campaign item A113, from the A108r retro review of #719, branch

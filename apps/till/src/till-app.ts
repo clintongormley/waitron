@@ -831,10 +831,6 @@ export class TillApp extends LitElement {
   /** Identifies the latest {@link #rereadAmounts}, so once a newer one has started, an older one
    * works out no "Still to pay" from its bills and says nothing. */
   #amountsReread = 0;
-  /** Counts the floor reads that worked. */
-  #floorReads = 0;
-  /** The {@link #floorReads} count of the floor the open order's party was last taken from. */
-  #partyFloorRead = 0;
   /** The last read of the party's groups failed, so {@link tabGroups} is empty for want of an answer. */
   #groupsUnread = false;
   /** The check {@link #onSplitLines} made and the tab it came from, cleared when a tab is paid, the
@@ -2314,7 +2310,6 @@ export class TillApp extends LitElement {
         this.api.listStatuses(),
       ]);
       this.tables = tables;
-      this.#floorReads++;
       this.zones = zones;
       this.statuses = statuses;
       this.#floorLoaded = true;
@@ -2364,7 +2359,6 @@ export class TillApp extends LitElement {
   async #refreshFloor(): Promise<boolean> {
     try {
       this.tables = await this.api.getTablesState();
-      this.#floorReads++;
       return true;
     } catch {
       return false;
@@ -2587,36 +2581,32 @@ export class TillApp extends LitElement {
       row?.visit?.id === partyId &&
       held?.id === partyId &&
       row.visit.revision >= held.revision
-    ) {
+    )
       this.orderParty = row.visit;
-      this.#partyFloorRead = this.#floorReads;
-    }
     return read;
   }
 
   /** After a cancel or Change to the order `orderId` that landed, or may have: the floor's party,
-   * then the order's lines and bills. A failed floor or bills read is said, unless the command's own
-   * failure already is. With the floor unread, what the party still owes is taken from the bills
-   * just read, which is the sum the floor would have answered (`readBillsOfVisits` in
-   * `apps/server/src/visits.ts` feeds both). When the order is no longer the open one once the floor
-   * answers, or a later re-read has started, nothing more is read or said. When the waiter has left
-   * the order since `visit` ({@link #hasLeftOrder}), or a later re-read has started, what the party
-   * owes is not taken from these bills and nothing is said. When only a later bills read has
-   * started, the bills are not used, and a failed floor read is still said unless a floor read that
-   * worked has given the order its party since. */
+   * then the order's lines and bills. When the order is no longer the open one once the floor
+   * answers, or a later re-read has started, nothing more is read or said. Otherwise, unless the
+   * waiter has left the order since `visit` ({@link #hasLeftOrder}) or a later re-read has started:
+   * this re-read's own failed floor or bills read is said, unless another message already is,
+   * whether or not another read has refreshed the order since; and with its floor read failed and
+   * its bills read still the latest, what the party still owes is taken from those bills, which is
+   * the sum the floor would have answered (`readBillsOfVisits` in `apps/server/src/visits.ts` feeds
+   * both). */
   async #rereadAmounts(orderId: string, visit: number): Promise<void> {
     const reread = ++this.#amountsReread;
     const floorRead = await this.#retakePartyFromFloor();
     if (this.activeTabId !== orderId || reread !== this.#amountsReread) return;
-    const floor = this.#floorReads;
     const [, bills] = await this.#loadLinesAndBills();
     if (this.#hasLeftOrder(orderId, visit) || reread !== this.#amountsReread) return;
-    if (bills.read !== this.#visitBillsRead) {
-      if (!floorRead && this.#partyFloorRead <= floor && this.errorKey === undefined)
-        this.errorKey = "table.reread_failed";
-      return;
-    }
-    if (!floorRead && bills.bills !== null && this.orderParty?.id === bills.visitId) {
+    if (
+      !floorRead &&
+      bills.read === this.#visitBillsRead &&
+      bills.bills !== null &&
+      this.orderParty?.id === bills.visitId
+    ) {
       const outstanding = sumDecimals(bills.bills.map((bill) => decimal(bill.outstanding)));
       this.orderParty = {
         ...this.orderParty,
@@ -2646,10 +2636,7 @@ export class TillApp extends LitElement {
    * after it. A floor that does not list the table, as after a failed read, keeps the party known. */
   #rememberOrderParty(): void {
     const row = this.tables.find((table) => table.id === this.activeTableId);
-    if (row !== undefined) {
-      this.orderParty = row.visit;
-      this.#partyFloorRead = this.#floorReads;
-    }
+    if (row !== undefined) this.orderParty = row.visit;
     this.#followPartyDraft();
   }
 
@@ -3356,7 +3343,6 @@ export class TillApp extends LitElement {
   async #reloadTables(): Promise<void> {
     try {
       this.tables = await this.api.getTablesState();
-      this.#floorReads++;
     } catch {
       this.tables = [];
     }

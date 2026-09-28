@@ -929,7 +929,7 @@ describe("till-app: the party's bills and Finish table", () => {
     await flush(el);
 
     expect(figures(el)).toEqual(figuresOf("18.50", "48.50"));
-    expect(banner(el)).toBeNull();
+    expect(banner(el)!.textContent).toContain(t("table.reread_failed"));
   });
 
   it("says so when the floor cannot be read after a Change and a refused Finish reads the bills first", async () => {
@@ -1942,10 +1942,11 @@ describe("till-app: the order's groups", () => {
     emit(
       tableOrder(el)!,
       "submit-draft",
-      roundDetail(tableOrder(el)!, [{ release: "fire", lineIndexes: [0, 1] }]),
+      roundDetail(tableOrder(el)!, [{ release: "fire", lineIndexes: [0] }], 1),
     );
     await flush(el);
     expect(api.submitDraft).toHaveBeenCalledOnce();
+    expect(tableOrder(el)).not.toBeNull();
 
     answerBills([tabBill, checkBill]);
     await flush(el);
