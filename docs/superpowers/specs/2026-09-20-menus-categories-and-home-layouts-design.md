@@ -785,6 +785,11 @@ records nothing, because the kitchen has not been sent it. An unjoin that takes 
 records one, because a joined tab's slips name its lowest-id table, which need not be the one its
 tickets printed._
 
+_2026-09-29: since table-actions Task 4, a party's slips name all its tables, and joining,
+unjoining, moving a table and merging bills send a MOVED notice for the sent dishes of each open,
+placed or settled bill of the parties involved whose tables changed; a table's bill of no party
+keeps the lowest-id rule and gets no notice on a join; see `docs/superpowers/specs/2026-09-28-table-actions-design.md` decision 9 and §8._
+
 ### 11.6 Staff edit a sent line from the till, not through an API call
 
 The table order screen offers Send, Recall and Cancel per line and nothing that changes a sent
