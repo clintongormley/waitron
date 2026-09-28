@@ -1624,9 +1624,10 @@ export class TillApi {
   }
 
   /**
-   * Collect and finalise a PLACED order → `POST /api/working-orders/:id/collect`. `invoice_first`
-   * settles the already-issued invoice with `tender`; `ticket_then_pay` files from the order's stored
-   * lines — never a client basket. A still-open or absent id rejects with `working_order.not_placed`.
+   * Collect and finalise a PLACED order → `POST /api/working-orders/:id/collect`. When an invoice was
+   * already issued for the order, collect settles it with `tender`; otherwise it files one from the
+   * order's stored lines — never a client basket. A still-open or absent id rejects with
+   * `working_order.not_placed`.
    */
   collectOrder(id: string, tender: Tender): Promise<TillSaleResult> {
     return this.#request<TillSaleResult>(`/api/working-orders/${id}/collect`, "POST", { tender });
