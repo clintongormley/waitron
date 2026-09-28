@@ -2893,7 +2893,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   with `minPicks: 0` and `maxQuantity: 9` can be failing. The real-world shape is a parked line
   whose list had its cap reduced under it, the same family as the "list lost the product between the
   park and the edit" escape recorded under Task 8.
-- **DONE (#809 for A110; campaign item A115, from the run-it review of #809, branch
+- **DONE (#809 for A110; #813 for campaign item A115, from the run-it review of #809, branch
   `fix/till-bill-figures-refresh`): after a line is cancelled or changed, the table's bill figures
   update straight away.** A cancel (A110) and a saved line Change, or one that got no answer while
   the waiter is still on the order (A115), read the floor's party, the order's lines and the
