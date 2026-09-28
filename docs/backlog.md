@@ -708,7 +708,7 @@ so after a join a MOVED slip's "from" can name the other table; recording each t
 table would fix it.
 
 **The owner decided a split check gets no Void; the server now allows one.** Since
-table-actions Task 2 (feat/party-main-bill, 2026-09-28), `voidTabLine`
+table-actions Task 2 (#825, 2026-09-28), `voidTabLine`
 (`apps/server/src/working-order.ts`) calls `assertPartyBillOpen`. It lets through an open bill
 that belongs to a party whether or not a table points at it, and a split check carries its party
 ("can have a line voided", `apps/server/src/party-main-bill.test.ts`). An open order of no party
@@ -2886,7 +2886,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `submission.id_reused`, because the stored fingerprint was taken over argument names that
     included `visitId` (found by #816's Codex review). Only a dev venue, on a retry that straddles
     the upgrade, can meet it.
-  - **Task 2 built (feat/party-main-bill, PR to come): a party names its main bill, and new
+  - **Task 2 landed as #825 (2026-09-28, main `6be030578`): a party names its main bill, and new
     orders go to it.** What changes for a person using the till:
     - A party's next order after its main bill is paid, presented or abandoned starts a new main
       bill. Before, after payment or abandonment. No till screen presents a party's bill until
