@@ -5,7 +5,10 @@ import { countText, currentLocale, t } from "../i18n/t.js";
 const MINUTE_MS = 60_000;
 
 /** "No updates since 10:19, 5 minutes ago". It redraws itself at each minute after `since`, so the
- * count moves on while nothing around it renders; its timer runs only while it is on the page. */
+ * count moves on while nothing around it renders; its timer runs only while it is on the page. It
+ * keeps its own timeout rather than the shared `TickingClock` because the count must change exactly
+ * on the minute boundary, which an interval clock (20 seconds by default) misses by up to its
+ * interval. */
 @customElement("till-stale-since")
 export class TillStaleSince extends LitElement {
   @property({ attribute: false }) since = new Date();
@@ -55,6 +58,7 @@ export class TillStaleSince extends LitElement {
   protected override updated(changed: PropertyValues<this>): void {
     super.updated(changed);
     clearTimeout(this.#timer);
+    if (!this.isConnected) return;
     const nextMinute = (this.#minutes() + 1) * MINUTE_MS - this.#elapsed();
     this.#timer = setTimeout(() => this.requestUpdate(), nextMinute);
   }

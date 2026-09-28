@@ -90,6 +90,22 @@ describe("till-stale-since", () => {
     expect(vi.getTimerCount()).toBe(1);
   });
 
+  it("a minute redraw still pending when it is removed starts no timer", async () => {
+    const { el } = await mountWidget<TillStaleSince>("till-stale-since", { since: new Date() });
+    vi.advanceTimersByTime(60_000);
+    el.remove();
+    await flush(el);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("a new `since` while removed starts no timer", async () => {
+    const { el } = await mountWidget<TillStaleSince>("till-stale-since", { since: new Date() });
+    el.remove();
+    el.since = new Date();
+    await flush(el);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("speaks Spanish under the Spanish locale", async () => {
     setLocale("es-ES");
     const { el } = await mountWidget<TillStaleSince>("till-stale-since", { since: new Date() });
