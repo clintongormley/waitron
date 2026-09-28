@@ -312,6 +312,9 @@ export class SetupApp extends LitElement {
   /** Cleared while a fresh check is in flight, so an answer never outlives the check it answered. */
   @state() private connectionFailure?: ConnectionFailure;
   @state() private connectionChecking = false;
+  /** Set when Continue on the connection step got an answer; see connection-screen.ts for why the
+   * wizard asks rather than checks. */
+  @state() private connectionAnswered = false;
   #connectionGeneration = 0;
   @state() private venueDefaults: VenueDefaults = {};
 
@@ -442,6 +445,7 @@ export class SetupApp extends LitElement {
       if (!this.isConnected || generation !== this.#connectionGeneration) return;
       this.environment = status.environment;
       this.developmentMode = status.developmentMode === true;
+      this.connectionAnswered = true;
       this.screen = "mode";
     } catch (error) {
       this.#recordConnectionFailure(error, generation);
@@ -1053,6 +1057,7 @@ export class SetupApp extends LitElement {
         return html`<setup-mode-screen
           data-test="screen-mode"
           .environment=${this.environment}
+          .certificateNote=${!this.connectionAnswered}
         ></setup-mode-screen>`;
       case "connect":
         return html`<setup-connect-screen
@@ -1112,6 +1117,7 @@ export class SetupApp extends LitElement {
         return html`<setup-mode-screen
           data-test="screen-mode"
           .environment=${this.environment}
+          .certificateNote=${!this.connectionAnswered}
         ></setup-mode-screen>`;
     }
   }

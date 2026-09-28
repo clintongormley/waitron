@@ -29,6 +29,24 @@ describe("setup-mode-screen", () => {
     expect(q(el, "[data-test=choose-existing]")).not.toBeNull();
   });
 
+  it("says nothing about certificates unless asked to", async () => {
+    const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {});
+    expect(q(el, "[data-test=cert-note]")).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain("certificate");
+  });
+
+  it("links to certificate help when asked to show the certificate note", async () => {
+    const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
+      certificateNote: true,
+    });
+    const note = q(el, "[data-test=cert-note]")!;
+    expect(note.textContent).toContain("If your browser shows a certificate warning");
+    const link = note.querySelector<HTMLAnchorElement>("[data-test=trust-help]")!;
+    expect(link.getAttribute("href")).toBe("/setup/trust");
+    expect(link.target).toBe("_blank");
+    expect(link.rel).toContain("noopener");
+  });
+
   it("opens the Join or recover subchooser without selecting a provision mode", async () => {
     const { el, host } = await mountWidget<SetupModeScreen>("setup-mode-screen", {});
     const events = collect(host);
