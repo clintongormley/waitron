@@ -3224,6 +3224,19 @@ phone, so the narrow-viewport banner and drawer are unverified on hardware; that
 the display walkthrough in [ui-review.md](ui-review.md). The rest of the dashboard's screens are the
 ongoing overhaul listed at the top of Track A.
 
+- **The sidebar's sections now open folded shut (C35, #822, owner decision 2026-09-28).** Two
+  leftovers from its review, not fixed:
+  (1) **Owner question:** the header of the section holding the current page stays clickable, but a
+  click changes nothing on screen until you open a page outside that section (the section shows open
+  because it holds the current page; the click only records a collapse for later). The old code had
+  the same no-op. `wt-disclosure` and `wt-data-table` instead hide or disable a collapse control that
+  would do nothing. Should this header do the same?
+  (2) **A test that guards nothing:** "keeps the clicked group header at the same on-screen position…"
+  in `apps/dashboard/src/dashboard-app.test.ts` still passes with the scroll correction in
+  `#toggleGroup` deleted — on `main` at 55504ee1b too, before C35. Making it catch a missing correction
+  needs a layout where the browser pulls the list back on its own, which may not be reachable; next
+  action is to find out whether it is, then either fix the test or drop the correction and its test.
+
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
   too fine-grained: one permission such as `node.manage` might cover what `mirror.create` and
