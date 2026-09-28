@@ -2858,7 +2858,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
 - **Tables, parties and bills — the till's table actions: planned (2026-09-28).**
   [plan](superpowers/plans/2026-09-28-table-actions.md), thirteen tasks; the service plan's B10
   onward wait until its Task 13 lands.
-  - **Task 1 built, pull request pending** (`refactor/party-rename`): "visit" renamed "party" in the
+  - **Task 1 built, in review as #816** (`refactor/party-rename`): "visit" renamed "party" in the
     code, the tables (`parties`, `party_tables`, the `party_id` columns, core migration `0036`), the
     routes (`/api/parties/...`) and the error codes (`party.*`, `tab.party_mismatch`,
     `tab.party_has_other_open_bill`, `group.held_leaves_party`), with no behaviour change. The four
