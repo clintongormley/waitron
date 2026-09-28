@@ -364,6 +364,7 @@ export class VenueOperationsScreen extends LitElement {
   }
   #table<T>(
     key: string,
+    viewKey: string,
     label: string,
     rows: readonly T[],
     columns: DataTableColumn<T>[],
@@ -371,6 +372,8 @@ export class VenueOperationsScreen extends LitElement {
   ) {
     return html`<wt-data-table
       data-test=${key}
+      viewKey=${viewKey}
+      columnsLabel=${t("venue.columns")}
       aria-label=${label}
       .rows=${rows}
       .columns=${columns}
@@ -431,6 +434,7 @@ export class VenueOperationsScreen extends LitElement {
       ${this.#toolbar(t("venue.departments"), [{ key: "new-department", label: t("venue.add_department"), run: () => this.#open({ kind: "department" }) }])}
       ${this.#table(
         "departments",
+        "waitron.venue.departments.table",
         t("venue.departments"),
         model.departments,
         [
@@ -440,15 +444,22 @@ export class VenueOperationsScreen extends LitElement {
             cell: (row) => row.name,
             sortValue: (row) => row.name,
           },
-          { key: "trading", label: t("venue.trading_name"), cell: (row) => row.tradingName },
+          {
+            key: "trading",
+            label: t("venue.trading_name"),
+            choosable: "shown",
+            cell: (row) => row.tradingName,
+          },
           {
             key: "mode",
             label: t("venue.service_style"),
+            choosable: "shown",
             cell: (row) => t(`venue.${row.defaultServiceMode}`),
           },
           {
             key: "state",
             label: t("venue.status"),
+            choosable: "shown",
             cell: (row) => t(row.active ? "venue.active" : "venue.inactive"),
           },
           {
@@ -475,6 +486,7 @@ export class VenueOperationsScreen extends LitElement {
       ${this.#toolbar(t("venue.hours"), [{ key: "new-hours", label: t("venue.add_hours"), disabled: model.departments.length === 0, run: () => this.#open({ kind: "hours" }) }])}
       ${this.#table(
         "hours",
+        "waitron.venue.hours.table",
         t("venue.hours"),
         model.hours,
         [
@@ -486,10 +498,21 @@ export class VenueOperationsScreen extends LitElement {
           {
             key: "day",
             label: t("venue.weekday"),
+            choosable: "shown",
             cell: (row) => t(`venue.day.${row.weekday as (typeof DAYS)[number]}`),
           },
-          { key: "opens", label: t("venue.opens"), cell: (row) => row.opensAt.slice(0, 5) },
-          { key: "closes", label: t("venue.closes"), cell: (row) => row.closesAt.slice(0, 5) },
+          {
+            key: "opens",
+            label: t("venue.opens"),
+            choosable: "shown",
+            cell: (row) => row.opensAt.slice(0, 5),
+          },
+          {
+            key: "closes",
+            label: t("venue.closes"),
+            choosable: "shown",
+            cell: (row) => row.closesAt.slice(0, 5),
+          },
           {
             key: "actions",
             label: t("venue.actions"),
@@ -525,6 +548,7 @@ export class VenueOperationsScreen extends LitElement {
       <h2>${t("venue.zones")}</h2>
       ${this.#table(
         "zones",
+        "waitron.venue.zones.table",
         t("venue.zones"),
         model.floorZones,
         [
@@ -537,12 +561,14 @@ export class VenueOperationsScreen extends LitElement {
           {
             key: "department",
             label: t("venue.department"),
+            choosable: "shown",
             cell: (row) =>
               model.zones.find((z) => z.id === row.id)?.departmentName ?? t("venue.unconfigured"),
           },
           {
             key: "mode",
             label: t("venue.service_style"),
+            choosable: "shown",
             cell: (row) => {
               const mode = model.zones.find((z) => z.id === row.id)?.serviceMode;
               return mode ? t(`venue.${mode}`) : t("venue.unconfigured");
@@ -551,6 +577,7 @@ export class VenueOperationsScreen extends LitElement {
           {
             key: "default",
             label: t("venue.default"),
+            choosable: "shown",
             cell: (row) =>
               model.menus.find(
                 (menu) =>
@@ -585,6 +612,7 @@ export class VenueOperationsScreen extends LitElement {
           ? html` ${this.#toolbar(`${zone.name}: ${t("venue.menus")}`, [{ key: `new-assignment-${zone.id}`, label: t("venue.make_available"), disabled: !model.zones.some((z) => z.id === zone.id), run: () => this.#open({ kind: "assignment", zoneId: zone.id }) }])}
             ${this.#table(
               "zone-menus",
+              "waitron.venue.zone-menus.table",
               t("venue.menus"),
               model.zoneMenus.filter((row) => row.zoneId === zone.id),
               [
@@ -596,11 +624,13 @@ export class VenueOperationsScreen extends LitElement {
                 {
                   key: "default",
                   label: t("venue.default"),
+                  choosable: "shown",
                   cell: (row) => t(row.isDefault ? "venue.yes" : "venue.no"),
                 },
                 {
                   key: "order",
                   label: t("venue.display_order"),
+                  choosable: "shown",
                   cell: (row) => String(row.displayOrder),
                 },
                 {
@@ -645,6 +675,7 @@ export class VenueOperationsScreen extends LitElement {
       ${this.#toolbar(t("venue.routing"), [{ key: "new-route", label: t("venue.add_route"), run: () => this.#open({ kind: "route" }) }])}
       ${this.#table(
         "preparation-routes",
+        "waitron.venue.routes.table",
         t("venue.routing"),
         model.routes,
         [
@@ -660,6 +691,7 @@ export class VenueOperationsScreen extends LitElement {
           {
             key: "zone",
             label: t("venue.zone"),
+            choosable: "shown",
             cell: (row) =>
               row.zoneId === null
                 ? t("venue.all_zones")
@@ -668,6 +700,7 @@ export class VenueOperationsScreen extends LitElement {
           {
             key: "station",
             label: t("venue.station"),
+            choosable: "shown",
             cell: (row) =>
               row.noPreparation
                 ? t("venue.no_preparation")

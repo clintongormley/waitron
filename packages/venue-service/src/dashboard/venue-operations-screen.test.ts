@@ -10,10 +10,14 @@ const hosts: HTMLElement[] = [];
 const originalUrl = location.href;
 const originalHistoryState: unknown = history.state;
 beforeEach(() => {
+  sessionStorage.clear();
+  localStorage.clear();
   setLocale("en");
   setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
 });
 afterEach(() => {
+  sessionStorage.clear();
+  localStorage.clear();
   setLocale("en");
   setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
   for (const host of hosts.splice(0)) host.remove();
@@ -442,7 +446,7 @@ it("shows four tabs, read-only tables, and creates departments in a cancellable 
   await selectTab(el, "departments");
   const table = el.shadowRoot!.querySelector('[data-test="departments"]')!;
   expect(table.tagName).toBe("WT-DATA-TABLE");
-  expect(table.shadowRoot!.querySelector("input")).toBeNull();
+  expect(table.shadowRoot!.querySelector("tbody input")).toBeNull();
   expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull();
   await action(el, "new-department");
   expect(el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!.open).toBe(
@@ -799,6 +803,66 @@ describe("the venue lists", () => {
     expect(api.allowMenu).toHaveBeenCalledWith("z1", "m2", { displayOrder: 4, makeDefault: true });
     expect(modal(el)).toBeNull();
     expect(api.load).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("the venue lists' column choosers", () => {
+  const chooser = (el: VenueOperationsScreen, name: string) =>
+    table(el, name).shadowRoot!.querySelector(".columns-trigger")!.textContent!.trim();
+  const choices = (el: VenueOperationsScreen, name: string) =>
+    [...table(el, name).shadowRoot!.querySelectorAll<HTMLInputElement>("input[data-column]")].map(
+      (box) => [box.dataset.column, box.checked],
+    );
+  const headers = (el: VenueOperationsScreen, name: string) =>
+    [...table(el, name).shadowRoot!.querySelectorAll("thead th")].map((th) =>
+      th.textContent!.trim(),
+    );
+
+  it.each([
+    ["departments", "departments", "waitron.venue.departments.table", ["trading", "mode", "state"]],
+    ["departments", "hours", "waitron.venue.hours.table", ["day", "opens", "closes"]],
+    ["zones", "zones", "waitron.venue.zones.table", ["department", "mode", "default"]],
+    ["zones", "zone-menus", "waitron.venue.zone-menus.table", ["default", "order"]],
+    ["routing", "preparation-routes", "waitron.venue.routes.table", ["zone", "station"]],
+  ] as const)(
+    "the %s tab's %s list offers every column but the first and the actions, and remembers a hidden one",
+    async (tab, name, viewKey, keys) => {
+      const el = await mount({
+        load: vi.fn().mockResolvedValue(model),
+      } as unknown as VenueServiceApi);
+      await selectTab(el, tab);
+      if (name === "zone-menus") await action(el, "zone-menus-z1");
+      expect(chooser(el, name)).toBe("Columns");
+      expect(choices(el, name)).toEqual(keys.map((key) => [key, true]));
+      const before = headers(el, name);
+      expect(before).toHaveLength(keys.length + 2);
+      expect(before.at(-1)).toBe("Actions");
+      const list = table(el, name) as Element & { updateComplete: Promise<unknown> };
+      const box = list.shadowRoot!.querySelector<HTMLInputElement>(
+        `input[data-column="${keys[0]}"]`,
+      )!;
+      box.checked = false;
+      box.dispatchEvent(new Event("change"));
+      await list.updateComplete;
+      expect(headers(el, name)).toEqual([before[0], ...before.slice(2)]);
+      expect(JSON.parse(localStorage.getItem(`${viewKey}:columns`)!)).toEqual({ [keys[0]]: false });
+    },
+  );
+
+  it("names every chooser in Spanish when the dashboard speaks it", async () => {
+    setLocale("es");
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "departments");
+    expect(chooser(el, "departments")).toBe("Columnas");
+    expect(chooser(el, "hours")).toBe("Columnas");
+    await selectTab(el, "zones");
+    await action(el, "zone-menus-z1");
+    expect(chooser(el, "zones")).toBe("Columnas");
+    expect(chooser(el, "zone-menus")).toBe("Columnas");
+    await selectTab(el, "routing");
+    expect(chooser(el, "preparation-routes")).toBe("Columnas");
   });
 });
 

@@ -9,6 +9,8 @@ import "./reasons-screen.js";
 
 afterEach(() => {
   cleanup();
+  sessionStorage.clear();
+  localStorage.clear();
   setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
 });
 

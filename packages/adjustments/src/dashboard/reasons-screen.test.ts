@@ -8,10 +8,14 @@ import "./reasons-screen.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => {
+  sessionStorage.clear();
+  localStorage.clear();
   setLocale("en");
   setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
 });
 afterEach(() => {
+  sessionStorage.clear();
+  localStorage.clear();
   setLocale("en");
   setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
   for (const host of hosts.splice(0)) host.remove();
@@ -269,6 +273,53 @@ describe("the reasons list", () => {
     expect(text).toContain("Hasta un 50% de un artículo");
     expect(text).toContain("Hasta 30,00\u00a0€ de una cuenta");
     expect(text).toContain("Aprueba: Encargado");
+  });
+});
+
+describe("the reasons list's column chooser", () => {
+  type Table = HTMLElement & { updateComplete: Promise<unknown> };
+  const chooser = (el: AdjustmentReasonsScreen) =>
+    table(el).shadowRoot!.querySelector(".columns-trigger")!.textContent!.trim();
+  const choices = (el: AdjustmentReasonsScreen) =>
+    [...table(el).shadowRoot!.querySelectorAll<HTMLInputElement>("input[data-column]")].map(
+      (box) => [box.dataset.column, box.checked],
+    );
+  const headers = (el: AdjustmentReasonsScreen) =>
+    [...table(el).shadowRoot!.querySelectorAll("thead th")].map((th) => th.textContent!.trim());
+
+  it("offers every column but the name and the row's controls, and remembers a hidden one", async () => {
+    const el = await mount(fakeApi());
+    expect(chooser(el)).toBe("Columns");
+    expect(choices(el)).toEqual([
+      ["actions", true],
+      ["limits", true],
+      ["roles", true],
+      ["status", true],
+    ]);
+    expect(headers(el)).toEqual([
+      "Name",
+      "Actions",
+      "Allows",
+      "Limits",
+      "Who applies it",
+      "Status",
+    ]);
+    const box = table(el).shadowRoot!.querySelector<HTMLInputElement>(
+      'input[data-column="limits"]',
+    )!;
+    box.checked = false;
+    box.dispatchEvent(new Event("change"));
+    await (table(el) as Table).updateComplete;
+    expect(headers(el)).toEqual(["Name", "Actions", "Allows", "Who applies it", "Status"]);
+    expect(JSON.parse(localStorage.getItem("waitron.adjustments.reasons.table:columns")!)).toEqual({
+      limits: false,
+    });
+  });
+
+  it("names the chooser in Spanish when the dashboard speaks it", async () => {
+    setLocale("es");
+    const el = await mount(fakeApi());
+    expect(chooser(el)).toBe("Columnas");
   });
 });
 
