@@ -1433,7 +1433,7 @@ exactly that case go red while the rest of the file stayed green.
 get them wrong. An extras list's `maxPicks` accepts an explicit null, because there null is the VALUE
 — it means uncapped — rather than a missing field (`row.maxPicks == null ? null : …`,
 `packages/catalogue/src/extra-contract.ts`). That is pinned by its own case, `keeps an explicit null
-maxPicks, because there null is the value`, so the exception cannot quietly spread. The seat-a-table
+maxPicks, because there null is the value`. The seat-a-table
 route's `guestCount` also accepts an explicit null as a value meaning no count; the absent field means
 the same thing (`requireGuestCount`, `apps/server/src/till-api.ts`). Its route case `seats without a
 guest count, absent or null` pins both inputs.
