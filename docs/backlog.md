@@ -127,13 +127,13 @@ Ranked 2026-09-27, after the specs still in `docs/superpowers/specs/` were check
 (each spec's state is under *Reference → Specs still in the tree*). Each item is its own brainstorm →
 spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
-1. **Finish table service and paying a bill in parts** (A4, lane B). Nine of the service plan's
-   eighteen tasks have landed (0–7 and 14). Left: drafts on the till (8), marking dishes served (9),
-   the attention signals (10), applying a cancellation, comp or discount to an order (11) and its
-   reports (12), standalone ordering (13), several payments on the till (15 — the server side landed
-   as #721 and nothing on the till calls it yet), counter handover (16) and a table that leaves
-   without paying (17). **Send asesor Q27–Q29 now:** Task 17 waits on Q28, how Task 11's discount
-   appears on the invoice on Q29, and printing the invoice before payment on Q27.
+1. **Finish table service and paying a bill in parts** (A4, lane B). Ten of the service plan's
+   eighteen tasks have landed (0–8 and 14). Left: marking dishes served (9), the attention signals
+   (10), applying a cancellation, comp or discount to an order (11) and its reports (12), standalone
+   ordering (13), several payments on the till (15 — the server side landed as #721 and nothing on
+   the till calls it yet), counter handover (16) and a table that leaves without paying (17).
+   **Send asesor Q27–Q29 now:** Task 17 waits on Q28, how Task 11's discount appears on the
+   invoice on Q29, and printing the invoice before payment on Q27.
 
 2. **Staff cannot clock in or out** (A10). The working-time record is a legal duty from the first day
    the deli employs anyone, and only its library is built: nothing in `apps/` calls `clockIn` or
@@ -2244,16 +2244,21 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     _(Task 5, 2026-09-27: no longer so — under `kitchen` the kitchen screen offers Fire on every
     held group of a party)_ — one-line gate in `#draftBar` if the owner wants it); whether a draft
     is a later addition is decided when its first line is rung, so a line rung before the groups
-    are read makes a first order; group summaries come from the server, so a weighed quantity
-    shows a dot decimal in Spanish; the draft shows its lines both in the course sections and in
-    the basket (the draft rebuild is Task 7/8) _(Task 7, 2026-09-27: the server now keeps each
-    person's draft; the till does not use it yet, so this stays until Task 8)_; the held-groups
+    are read makes a first order _(Task 8, 2026-09-28: the draft, and the menu that rings into it,
+    now show only once this party's groups have been read, on opening a table and after a merge or
+    move — `#tableDraft`, `apps/till/src/till-app.ts`)_; group summaries come from the server, so
+    a weighed quantity shows a dot decimal in Spanish; the draft shows its lines both in the course
+    sections and in the basket (the draft rebuild is Task 7/8) _(Task 7, 2026-09-27: the server now
+    keeps each person's draft; the till does not use it yet, so this stays until Task 8)_ _(Task 8,
+    2026-09-28: each line now shows once, inside its course section)_; the held-groups
     list shows each group's summary and then its lines; group numbers are the server's positions,
     so the list can read "Group 1, Group 3"; the preview gives counts, not contents; the screen's
     older small buttons are 32 px tall, under the 44 px tap target (this branch's new ones are
     44 px); per-line Send, Change and Cancel have no guard against a second press while the first is
     running (the group commands do); whether the floating language button covers the new draft bar
-    at 390 px has not been re-checked.
+    at 390 px has not been re-checked _(Task 8, 2026-09-28, looked at in screenshots at 390 px: it
+    does not cover the new last-added bar; on the new Review view it covers the corner of Fire all
+    now until the page is scrolled, which the page's bottom padding allows)_.
   - **Splitting a held line's quantity on the till takes one request per unit** (found on the
     Task 4 branch, 2026-09-27). Splitting a quantity of N sends N−1 move requests, each at the
     revision the one before it answered with (`#onSplitGroupLine`, `apps/till/src/till-app.ts`),
@@ -2462,7 +2467,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       submission with `course.not_found`; the draft does not flag it unavailable.
     - A line saved against a menu version that is no longer live (the menu was republished) is
       refused at submission with `menu.version_changed`, and the draft does not flag it unavailable
-      either. Whether the till re-saves such lines against the new version is Task 8's.
+      either. Whether the till re-saves such lines against the new version is Task 8's. _(Task 8,
+      2026-09-28: the till moves such a line to the live version and saves it — without asking
+      when a publish arrives and nothing on the line changed, otherwise once the person confirms
+      the new price; a line read back from the server under an older version (after a reload, say)
+      is always asked about, showing the new price alone, since the till never held the old one.)_
     - A retried submission of a draft a merge moved or discarded is answered as the tests in
       `apps/server/src/order-drafts.db.test.ts` pin: a draft discarded into its owner's draft on
       the other party, and a moved draft asked on the party it was sent from (the party a request
@@ -2475,7 +2484,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       The other visit routes only check that the visit or group id in the path is an id, and the
       group submission passes `joinGroupId` on as sent.
     - The till does not read or save drafts yet: nothing in `apps/till` calls these routes, and its
-      `TableVisit` type does not declare `unsentDrafts`. Task 8.
+      `TableVisit` type does not declare `unsentDrafts`. Task 8. _(Task 8, 2026-09-28: the till
+      reads, saves, takes over and sends drafts through these routes, and the floor shows
+      `unsentDrafts`.)_
     - After a takeover into the taker's existing draft, or a merge that discards a draft, the
       previous owner's next save of the old draft is answered `draft.not_found`, not
       `draft.taken_over`.
@@ -2494,6 +2505,142 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         while one is open;
       - taking over someone's draft when you already have one on the party adds their lines to
         yours (identical lines add together) and discards theirs, instead of refusing.
+  - **Task 8 landed as #PR** (lane B item B8, 2026-09-28, main `MAIN`): the till now works from
+    each person's unsent order kept on the server (Task 7's "draft"), so an order being rung up is
+    still there after leaving the table or reloading the till. What a person at the till sees:
+    - A tap adds the dish to their draft, and identical taps add together ("Beer ×3"), by one rule
+      the till and the server share (`packages/shared/src/draft-merge.ts`, which the server's
+      `normaliseDraftLines` now calls). A bar at the foot of the menu shows the dish last added,
+      with −1 and +1; −1 at one takes the line out. Each draft line shows once, in its course
+      section, and a line of several whole units can be split into rows of one that later taps do
+      not join back together. A weighed dish takes its weight through the counter's weight entry.
+    - Edits are saved about 0.4 s after the last one (`DRAFT_SAVE_DELAY_MS`,
+      `apps/till/src/state/draft-sync.ts`), and at once on going back to the floor, leaving the
+      Order tab, opening another table or signing out. Leaving sends nothing to the kitchen. A save
+      refused because the same person changed the draft on another device shows the server's
+      draft and says so. After a sign-out, the next person finds the table still open with the menu
+      and their own draft on it.
+    - Where the table screen is narrower than 720 px (its own measured width, not the kind of
+      device), the menu fills it and "Review (N)" opens the draft on a view of its own; Back
+      returns to the same place in the menu. Wider, the two sit side by side.
+    - The floor marks a table whose party has an unsent order: on the list, one line per person
+      ("Alex has an unsent order: 2 items"); on the map, an "Unsent" tag on the table, with the
+      names only in what a screen reader announces (`wt-table-token` in `packages/ui`).
+    - Other people's drafts on the table show read-only under "Alex has an unsent order", with
+      Take over draft behind a confirmation. The person it was taken from sees "Taken over by
+      Sam", still read-only, with Take over and no Send.
+    - A menu published while the draft is open moves the draft's lines to the new version without
+      asking when nothing on them changed, and otherwise opens the counter's "The menu has changed"
+      dialog.
+    - A line that cannot be sold now (sold out, off the menu, an extra or choice changed, a
+      quantity its unit no longer takes, or the server says so) shows its reason and offers Remove
+      and Keep. Every kind of send leaves such lines out, and the check before sending says which
+      ("1 line stays in the order, not sent because it is not available now: Beer ×2"). The
+      server's own refusal of a sold-out dish (`product.unavailable`) stays behind it.
+    - A send whose reply never arrives is sent again under the same submission id, up to twice
+      more, inside the 150-second limit the till already had; if none answers, the till re-reads
+      the draft and says to check the tab. Nothing is taken out of the draft on the till's side.
+    No migration. The one server change is read-only: every draft now carries `takenOverFrom`, the
+    person its latest take-over was from, read for all the drafts of an answer in one query of
+    `order_draft_events` (`apps/server/src/order-drafts.ts`). Six tests on `main` that pinned the
+    old behaviour (the table screen's draft kept per bill, and "no reply takes the dishes out")
+    were deleted; the tests that checked the old submission call now check the new one, keeping
+    their expected values except one call count; and the tests that measured the draft at phone
+    width now open Review first. The PR names each.
+    Left open:
+    - Saving and sending:
+      - An edit can be lost at sign-out without a message: one made after the session had
+        already ended (an inactivity sign-out), and one made while an earlier save was still
+        waiting for its answer when sign-out began.
+      - If someone else signs in while a sign-out is still waiting for its save, the till skips
+        signing the first person out on the server, so that session lasts until it expires.
+      - A send cut off by the 150-second limit is not sent again, and after a reply that never
+        came the draft can stay locked for up to two limits: the send, then the re-read.
+      - When a send is refused because the menu changed, the re-read of the table's menu runs
+        outside that limit (the reviewer recorded this as predating the branch).
+      - After a draft refusal whose re-read also fails, the till keeps the draft's old revision, so
+        the next Send is refused as out of date and re-reads first: a wasted round trip, nothing
+        lost.
+      - While the till follows a party onto its next bill, the screen can show no draft for a
+        moment; and when a merge or move coincides with a refused save, the save's message can
+        replace "another device changed this table".
+      - Drafts are not pushed to other tills: Sam's till sees Alex's latest draft only at its next
+        read. Taking over an older copy is refused and the table read again.
+    - Other people's drafts:
+      - When the take-over added Alex's lines into Sam's own draft, Alex sees "Sam has an unsent
+        order", not "Taken over by Sam": the take-over is recorded on the draft that was folded
+        away, so `takenOverFrom` on Sam's draft is empty.
+      - At phone width nothing on the menu view says other people have drafts on the table; the
+        button reads "Review (0)". The floor's mark does say so.
+      - Nothing counts the queries behind `takenOverFrom`; "one query" holds by how the code is
+        written.
+      - Three automatic changes to the draft (`adoptLines`, `removeLines` and `clear` on the
+        till's store) are not blocked while a take-over is out; none is a person's edit and the
+        take-over's answer replaces the draft. Read in the code, not run.
+      - The Spanish "has taken over this order" wording has no test.
+    - The floor:
+      - The map tag says "Unsent" but not whose; the names did not fit a table on the map.
+      - At 390 px the map already overlaps and clips crowded tables (a screenshot with no marks
+        showed the same), so a table's tag can hide under a neighbour.
+      - The map gives its "forgotten table" corner marker no spoken name. This predates the
+        branch: at `700ec7f70` `wt-floor-canvas` passes its tables no such label.
+    - The table screen:
+      - Seating a table whose answer arrives while a newer table is still opening shows the seated
+        table briefly before the newer one replaces it; a stricter check would have changed an
+        existing test ("does not put a tablet back on the tab when a table it was opening arrived
+        during the merge").
+      - A refused seat leaves the till pointing at the refused table. At `700ec7f70` the same code
+        sets the table before seating and does not undo it (read, not run).
+      - If the screen widens while Back on the Review view has focus, focus goes to the page.
+      - A dish no longer on the menu shows an empty name on its tick button in the person's own
+        draft, and in the spoken names of its course picker and Split quantity button, with "Not
+        offered now" beside it (read in the code, not run).
+      - The last-added bar is empty for a draft read back from the server until the next tap, and
+        does not follow a weighed line when the server's answer replaces the lines.
+      - While a weight is being entered, the weight entry covers the bottom of the menu and the
+        bar.
+      - "Review (N)" counts items (Beer ×2 counts 2), while the floor's mark counts lines and
+        calls them "items", so the two can differ for one draft.
+      - Keep lasts only until the server's answer rebuilds the lines; a kept line then asks Remove
+        or Keep again.
+      - A dish no longer on the menu, saved at a whole quantity, counts by that quantity on
+        Review; its unit is unknown, so a weighed one saved at exactly 2 kg counts 2.
+      - The counter's basket now also tracks its last-added line, which it does not use.
+    - Menu changes:
+      - The server's "cannot be sold" mark is dropped once the till's newer menu read passes the
+        line. That the two checks agree was read, not run; if they differ, one Send is refused
+        `product.unavailable` and the line is marked again, which a test covers.
+      - Every line priced under an older menu version is asked about whenever the server's draft
+        replaces the till's lines (a reload, a re-read, a take-over of such a draft), so the
+        question comes more often than it would for a person who watched the menu change.
+      - A line naming a version the till does not hold costs one more read of the table's menu,
+        and opening a table always compares the draft with the menu, finding nothing to ask when
+        every line is current.
+      - The "The menu has changed" dialog shows a focus ring round the whole dialog box, not
+        checked against `700ec7f70`.
+    - Tests: the accessibility test "has no violations with the round grid, the per-line course
+      picker and the open tab drawer" no longer scans the menu grid, which Review now hides (a new
+      phone test scans it); its name was kept. The new shared helper file
+      `apps/till/src/screens/till-table-order-screen.test-helpers.ts` counts towards the till's
+      coverage, unlike `apps/till/src/widgets/test-helpers.ts`. `repriceRebuilt`'s
+      `menuItemId ?? ""` fallback (`apps/till/src/state/menu-refresh.ts`) is not covered. Whether
+      a real till's browser ever paints the narrow layout for one frame before going side by side
+      was not measured; in the tests' headless Chromium the first painted frame was side by side
+      in each of 14 runs.
+    - Rulings made on the branch for the owner to confirm:
+      - after a reload the old price of a line is not known, so the till asks about every line on
+        an older menu version, showing the new price alone, instead of storing prices on the
+        server;
+      - the two layouts are chosen by the screen's width against 720 px, not by the kind of
+        device, so a tablet held upright shows the menu and the draft side by side;
+      - −1 on the last-added bar at one takes the line out;
+      - anyone may take a draft over, including the person it was taken from;
+      - while a check split off the party's bill is on screen, no draft shows (the party's draft
+        shows on the party's own tab);
+      - a line counts as unsellable when the till's check or the server's says so, and the
+        server's mark gives way to a newer menu read on the till;
+      - Cancel on the menu-change question holds until the next publish, re-read or Send, not
+        the next poll.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card
@@ -7068,7 +7215,7 @@ while it holds decisions still open.
 | [SQLite + Litestream topologies](superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md) | slices 1 and 2 built; 3 to 5 not started | *Afterwards* |
 | [Handheld and till hardware decisions](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md) | decisions; the reader dropdown exists | A6 (Slice 2) |
 | [Menus, sections and home layouts](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md) and its plan | built (#729 last); owner decisions still open | Track A (menus entries) |
-| [Service, ordering and billing](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) and its plan | 9 of 18 tasks landed | A4 |
+| [Service, ordering and billing](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) and its plan | 10 of 18 tasks landed | A4 |
 | [Sales classification](superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md) and its plan | built (#738 last); a code comment points at it | Track A (classification entries) |
 | [Bill payments](superpowers/specs/2026-09-26-bill-payments-design.md) | server built (#721); the till is service Task 15 | A4 |
 | [Print agent setup lockdown](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and its plan | first branch built (#732); two to go | A3 |
