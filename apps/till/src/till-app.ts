@@ -379,10 +379,13 @@ type CounterError =
   | { visitChanged: VisitChange }
   | { lateChange: LateChange; also?: StringKey };
 
-/** The bills a read found, and the party they were read for (null when there was none). */
+/** A read of the party's bills: the party it was for (null when there was none), the bills (null
+ * when the read failed), and its generation, current until a later read starts or the table is
+ * left. */
 interface ReadBills {
+  read: number;
   visitId: string | null;
-  bills: VisitBill[];
+  bills: VisitBill[] | null;
 }
 
 function errorText(error: CounterError): string | TemplateResult {
@@ -825,6 +828,8 @@ export class TillApp extends LitElement {
   #tabLinesRead = 0;
   /** The same for the party's bills. */
   #visitBillsRead = 0;
+  /** Identifies the latest {@link #rereadAmounts}. */
+  #amountsReread = 0;
   /** The last read of the party's groups failed, so {@link tabGroups} is empty for want of an answer. */
   #groupsUnread = false;
   /** The check {@link #onSplitLines} made and the tab it came from, cleared when a tab is paid, the
@@ -2580,22 +2585,44 @@ export class TillApp extends LitElement {
     return read;
   }
 
-  /** After a cancel or Change that landed, or may have: the floor's party, then the order's lines and
-   * bills. A failed floor or bills read is said, unless the command's own failure already is. With
-   * the floor unread, what the party still owes is taken from the bills just read, which is the sum
-   * the floor would have answered (`readBillsOfVisits` in `apps/server/src/visits.ts` feeds both). */
-  async #rereadAmounts(): Promise<void> {
+  /** After a cancel or Change to the order `orderId` that landed, or may have: the floor's party,
+   * then the order's lines and bills. A failed floor or bills read is said, unless the command's own
+   * failure already is. With the floor unread, what the party still owes is taken from the bills
+   * just read, which is the sum the floor would have answered (`readBillsOfVisits` in
+   * `apps/server/src/visits.ts` feeds both). When the order is no longer the open one once the floor
+   * answers, or a later re-read has started, nothing more is read. When the waiter has left the
+   * order since `visit` ({@link #hasLeftOrder}), or a later re-read or bills read has started, what
+   * the party owes is not taken from these bills and nothing is said. */
+  async #rereadAmounts(orderId: string, visit: number): Promise<void> {
+    const reread = ++this.#amountsReread;
     const floorRead = await this.#retakePartyFromFloor();
+    if (this.activeTabId !== orderId || reread !== this.#amountsReread) return;
     const [, bills] = await this.#loadLinesAndBills();
-    if (!floorRead && bills !== null && this.orderParty?.id === bills.visitId) {
+    if (
+      this.#hasLeftOrder(orderId, visit) ||
+      reread !== this.#amountsReread ||
+      bills.read !== this.#visitBillsRead
+    )
+      return;
+    if (!floorRead && bills.bills !== null && this.orderParty?.id === bills.visitId) {
       const outstanding = sumDecimals(bills.bills.map((bill) => decimal(bill.outstanding)));
       this.orderParty = {
         ...this.orderParty,
         outstanding: toScale(outstanding, MONEY_SCALE),
       };
     }
-    if ((!floorRead || bills === null) && this.errorKey === undefined)
+    if ((!floorRead || bills.bills === null) && this.errorKey === undefined)
       this.errorKey = "table.reread_failed";
+  }
+
+  /** The order `orderId` is no longer the open one, or {@link #orderVisit} has moved on from `visit`
+   * and the waiter has not come back to the order. */
+  #hasLeftOrder(orderId: string, visit: number): boolean {
+    return (
+      this.activeTabId !== orderId ||
+      (this.#orderVisit !== visit &&
+        (this.#shownOnVisit !== this.#orderVisit || this.#tableOpensPending > 0))
+    );
   }
 
   /** A void or line edit moves its bill's party on without a revision of its own to send. */
@@ -2771,7 +2798,7 @@ export class TillApp extends LitElement {
     await this.#loadLinesAndBills();
   }
 
-  async #loadLinesAndBills(): Promise<[void, ReadBills | null]> {
+  async #loadLinesAndBills(): Promise<[void, ReadBills]> {
     return Promise.all([this.#loadTabLines(), this.#loadVisitBills()]);
   }
 
@@ -2780,24 +2807,23 @@ export class TillApp extends LitElement {
     return this.tables.find((table) => table.tabId === tabId)?.visit ?? null;
   }
 
-  /** A failed read leaves the list empty rather than showing another party's bills, and answers
-   * null; so does a read overtaken by a later one. */
-  async #loadVisitBills(): Promise<ReadBills | null> {
+  /** A failed read leaves the list empty rather than showing another party's bills. A read
+   * overtaken by a later one leaves the list alone, and only its generation, compared with
+   * {@link #visitBillsRead}, tells a caller so. */
+  async #loadVisitBills(): Promise<ReadBills> {
     const read = ++this.#visitBillsRead;
     const visit = this.orderParty;
     if (visit === null) {
       this.visitBills = [];
-      return { visitId: null, bills: [] };
+      return { read, visitId: null, bills: [] };
     }
     try {
       const bills = await this.api.getVisitBills(visit.id);
-      if (read !== this.#visitBillsRead) return null;
-      this.visitBills = bills;
-      return { visitId: visit.id, bills };
+      if (read === this.#visitBillsRead) this.visitBills = bills;
+      return { read, visitId: visit.id, bills };
     } catch {
-      if (read !== this.#visitBillsRead) return null;
-      this.visitBills = [];
-      return null;
+      if (read === this.#visitBillsRead) this.visitBills = [];
+      return { read, visitId: visit.id, bills: null };
     }
   }
 
@@ -3210,12 +3236,14 @@ export class TillApp extends LitElement {
   async #onVoidLine(event: Event): Promise<void> {
     const { lineNo, quantity } = (event as CustomEvent<{ lineNo: number; quantity?: string }>)
       .detail;
-    if (this.activeTabId === undefined) return;
+    const orderId = this.activeTabId;
+    if (orderId === undefined) return;
+    const orderVisit = this.#orderVisit;
     this.errorKey = undefined;
     try {
       const { visit } = await (quantity === undefined
-        ? this.api.voidLine(this.activeTabId, lineNo)
-        : this.api.voidLine(this.activeTabId, lineNo, quantity));
+        ? this.api.voidLine(orderId, lineNo)
+        : this.api.voidLine(orderId, lineNo, quantity));
       this.#noteBillParty(visit);
     } catch (error) {
       this.errorKey = lineWriteError(error);
@@ -3224,7 +3252,7 @@ export class TillApp extends LitElement {
         return;
       }
     }
-    await this.#rereadAmounts();
+    await this.#rereadAmounts(orderId, orderVisit);
   }
 
   /**
@@ -3243,10 +3271,7 @@ export class TillApp extends LitElement {
     const orderId = this.activeTabId;
     if (orderId === undefined) return;
     const visit = this.#orderVisit;
-    const left = () =>
-      this.activeTabId !== orderId ||
-      (this.#orderVisit !== visit &&
-        (this.#shownOnVisit !== this.#orderVisit || this.#tableOpensPending > 0));
+    const left = () => this.#hasLeftOrder(orderId, visit);
     const tableId = this.activeTableId;
     this.errorKey = undefined;
     this.cancelOffer = null;
@@ -3260,7 +3285,7 @@ export class TillApp extends LitElement {
       this.#noteBillParty(outcome.saved.visit);
       if (this.activeTabId !== orderId) return;
       this.tabRevision = outcome.saved.revision;
-      await this.#rereadAmounts();
+      await this.#rereadAmounts(orderId, visit);
       return;
     }
     const code = (outcome.error as { code?: string } | undefined)?.code;
@@ -3280,7 +3305,7 @@ export class TillApp extends LitElement {
       code === "working_order.out_of_date"
         ? "held.changed_elsewhere"
         : lineWriteError(outcome.error);
-    if (isNetworkFailure(outcome.error)) await this.#rereadAmounts();
+    if (isNetworkFailure(outcome.error)) await this.#rereadAmounts(orderId, visit);
     else await this.#loadTabLines();
     if (code === "ticket.already_started" && !left()) this.cancelOffer = lineNo;
   }

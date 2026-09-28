@@ -704,6 +704,234 @@ describe("till-app: the party's bills and Finish table", () => {
     expect(api.getTablesState).toHaveBeenCalledTimes(floorReads);
   });
 
+  it("a Change's bills answering after another table opened leave that table's bills alone and say nothing", async () => {
+    const { el } = await mountApp(
+      cheeseServer(async () => ({ revision: 1, visit: { id: "v1", revision: 4 } })),
+    );
+    const order = await openMesa(el);
+    let answer!: (bills: VisitBill[]) => void;
+    vi.mocked(api.getVisitBills).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    emit(order, "change-line", cheese);
+    await flush(el);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    const other = [
+      { ...tabBill, workingOrderId: "wo-7", visitId: "v7", total: "70.00", outstanding: "70.00" },
+    ];
+    vi.mocked(api.getVisitBills).mockResolvedValue(other);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+    expect(tableOrder(el)!.bills).toEqual(other);
+    expect(banner(el)).toBeNull();
+
+    answer([{ ...tabBill, total: "15.50", outstanding: "15.50" }, checkBill]);
+    await flush(el);
+
+    expect(tableOrder(el)!.bills).toEqual(other);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("a slow line read after an earlier Change does not put back the older still to pay", async () => {
+    const { el } = await mountApp(
+      cheeseServer(async () => ({ revision: 1, visit: { id: "v1", revision: 4 } })),
+    );
+    const order = await openMesa(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await flush(el);
+    vi.mocked(api.getTablesState).mockRejectedValue(new TypeError("Failed to fetch"));
+    let answerLines!: (lines: Awaited<ReturnType<TillApi["getTabLines"]>>) => void;
+    vi.mocked(api.getTabLines).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answerLines = resolve;
+        }),
+    );
+    emit(order, "change-line", cheese);
+    await flush(el);
+    expect(tableOrder(el)!.bills[0]!.outstanding).toBe("15.50");
+    vi.mocked(api.getVisitBills).mockResolvedValue([
+      { ...tabBill, total: "18.50", outstanding: "18.50" },
+      checkBill,
+    ]);
+    emit(tableOrder(el)!, "change-line", { ...cheese, revision: 1 });
+    await flush(el);
+    expect(figures(el)).toEqual(figuresOf("18.50", "48.50"));
+
+    answerLines({ lines: [tabLine], revision: 1, editSentLines: true });
+    await flush(el);
+
+    expect(figures(el)).toEqual(figuresOf("18.50", "48.50"));
+  });
+
+  it("a Change's floor read failing after another table opened reads nothing more and says nothing", async () => {
+    const { el } = await mountApp(
+      cheeseServer(async () => ({ revision: 1, visit: { id: "v1", revision: 4 } })),
+    );
+    const order = await openMesa(el);
+    let rejectFloor!: (error: unknown) => void;
+    vi.mocked(api.getTablesState).mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectFloor = reject;
+        }),
+    );
+    emit(order, "change-line", cheese);
+    await flush(el);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+    const reads = vi.mocked(api.getVisitBills).mock.calls.length;
+
+    rejectFloor(new TypeError("Failed to fetch"));
+    await flush(el);
+
+    expect(banner(el)).toBeNull();
+    expect(api.getVisitBills).toHaveBeenCalledTimes(reads);
+  });
+
+  it("a Change's floor read failing once the waiter is back on the floor says nothing", async () => {
+    const { el } = await mountApp(
+      cheeseServer(async () => ({ revision: 1, visit: { id: "v1", revision: 4 } })),
+    );
+    const order = await openMesa(el);
+    let rejectFloor!: (error: unknown) => void;
+    vi.mocked(api.getTablesState).mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectFloor = reject;
+        }),
+    );
+    emit(order, "change-line", cheese);
+    await flush(el);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    expect(floor(el)).not.toBeNull();
+
+    rejectFloor(new TypeError("Failed to fetch"));
+    await flush(el);
+
+    expect(banner(el)).toBeNull();
+  });
+
+  it("an earlier Change's floor read failing after a later Change's re-read has finished changes nothing", async () => {
+    const { el } = await mountApp(
+      cheeseServer(async () => ({ revision: 1, visit: { id: "v1", revision: 4 } })),
+    );
+    const order = await openMesa(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await flush(el);
+    let rejectFloor!: (error: unknown) => void;
+    vi.mocked(api.getTablesState).mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectFloor = reject;
+        }),
+    );
+    emit(order, "change-line", cheese);
+    await flush(el);
+    emit(tableOrder(el)!, "change-line", { ...cheese, revision: 1 });
+    await flush(el);
+    expect(figures(el)).toEqual(figuresOf("15.50", "45.50"));
+    expect(banner(el)).toBeNull();
+    const reads = vi.mocked(api.getVisitBills).mock.calls.length;
+
+    rejectFloor(new TypeError("Failed to fetch"));
+    await flush(el);
+
+    expect(figures(el)).toEqual(figuresOf("15.50", "45.50"));
+    expect(banner(el)).toBeNull();
+    expect(api.getVisitBills).toHaveBeenCalledTimes(reads);
+  });
+
+  it("an earlier Change's bills answering while a later Change's re-read is under way say nothing", async () => {
+    const { el } = await mountApp(
+      cheeseServer(async () => ({ revision: 1, visit: { id: "v1", revision: 4 } })),
+    );
+    const order = await openMesa(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await flush(el);
+    vi.mocked(api.getTablesState).mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    let answerBills!: (bills: VisitBill[]) => void;
+    vi.mocked(api.getVisitBills).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answerBills = resolve;
+        }),
+    );
+    emit(order, "change-line", cheese);
+    await flush(el);
+    let answerFloor!: (tables: TableState[]) => void;
+    vi.mocked(api.getTablesState).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answerFloor = resolve;
+        }),
+    );
+    emit(tableOrder(el)!, "change-line", { ...cheese, revision: 1 });
+    await flush(el);
+
+    answerBills([{ ...tabBill, total: "15.50", outstanding: "15.50" }, checkBill]);
+    await flush(el);
+
+    expect(banner(el)).toBeNull();
+    answerFloor([
+      seated({ tabTotal: "15.50" }, { revision: 4, outstanding: "45.50" }),
+      mesa7,
+      mesa9,
+    ]);
+    await flush(el);
+    expect(figures(el)).toEqual(figuresOf("15.50", "45.50"));
+    expect(banner(el)).toBeNull();
+  });
+
+  it("a Change's bills answering after a table move read the order again keep the move's still to pay", async () => {
+    const { el } = await mountApp(
+      cheeseServer(async () => ({ revision: 1, visit: { id: "v1", revision: 4 } })),
+    );
+    const order = await openMesa(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await flush(el);
+    vi.mocked(api.getTablesState).mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    let answerBills!: (bills: VisitBill[]) => void;
+    vi.mocked(api.getVisitBills).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answerBills = resolve;
+        }),
+    );
+    emit(order, "change-line", cheese);
+    await flush(el);
+    vi.mocked(api.getTablesState).mockResolvedValueOnce([
+      table(),
+      mesa7,
+      seated(
+        { id: "t9", label: "9", tabTotal: "18.50" },
+        { revision: 5, outstanding: "48.50", tableIds: ["t9"] },
+      ),
+    ]);
+    vi.mocked(api.getVisitBills).mockResolvedValue([
+      { ...tabBill, total: "18.50", outstanding: "18.50" },
+      checkBill,
+    ]);
+    emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
+    await flush(el);
+    expect(figures(el)).toEqual(figuresOf("18.50", "48.50"));
+
+    answerBills([{ ...tabBill, total: "15.50", outstanding: "15.50" }, checkBill]);
+    await flush(el);
+
+    expect(figures(el)).toEqual(figuresOf("18.50", "48.50"));
+    expect(banner(el)).toBeNull();
+  });
+
   it("prints a copy of a paid bill's receipt", async () => {
     const { el } = await mountApp();
     const order = await openMesa(el);
