@@ -489,8 +489,8 @@ export interface OrderGroup {
   summary: string;
 }
 
-/** The party's first held group, and when staff are reminded to fire it; `dueAt` is null while work
- * fired before it is not fully served. */
+/** The party's first held group, and when staff are reminded to fire it; `dueAt` is null while a
+ * fired group before it has a dish line not fully served, or when nothing dates it. */
 export interface ReleaseReminder {
   groupId: string;
   dueAt: string | null;
@@ -503,8 +503,8 @@ export interface CurrentOrderKitchen {
   awayAt: string | null;
 }
 
-/** A dish row of `GET /api/visits/:id/current-orders`, on whichever bill of the party, a paid one
- * included. Only a `released` row can be marked served; its extras are served with it. */
+/** A dish row of `GET /api/visits/:id/current-orders`, on any bill of the party but an abandoned
+ * one, a paid one included. Only a `released` row can be marked served; its extras are served with it. */
 export interface CurrentOrderRow {
   lineId: string;
   workingOrderId: string;
@@ -1818,8 +1818,7 @@ export class TillApi {
     await this.#request<void>(`/api/working-orders/${id}/cancel`, "POST", { reason });
   }
 
-  // --- Live floor. `served_at` is a PRE-FISCAL operational field, so the served markers touch no
-  // fiscal path. ---
+  // --- Live floor. ---
 
   /** The venue's ACTIVE floor-plan zones, by display order → `GET /api/zones`. */
   listZones(): Promise<FloorZone[]> {
@@ -1981,7 +1980,7 @@ export class TillApi {
 
   /**
    * Mark part or all of each of a party's lines served → `POST /api/visits/:visitId/served`, on any
-   * of its bills, a paid one included. `quantity` is how much THIS command serves. Rejects
+   * of its bills but an abandoned one, a paid one included. `quantity` is how much THIS command serves. Rejects
    * `tab.serve_quantity_invalid` for more than is left to serve, `group.line_held` for a line not yet
    * released, `group.not_found`, `order.payment_in_flight` and the command refusals.
    */

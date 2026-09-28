@@ -60,8 +60,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Los artículos en espera no se pueden pasar a otra mesa hasta que se marche su grupo",
   },
   "group.line_held": {
-    en: "This item is on hold with others. Fire them together to send it",
-    es: "Este artículo está en espera con otros. Márchalos juntos para enviarlo",
+    en: "This item is on hold and cannot be sent or served yet",
+    es: "Este artículo está en espera y todavía no se puede enviar ni servir",
   },
   "submission.id_reused": {
     en: "This request could not be matched to what was sent before. Reload and try again",
