@@ -142,6 +142,7 @@ import {
   requireGroup,
   requireOperator,
   startGroup,
+  visitHasGroup,
   type HeldChange,
   type ReleaseReminder,
   type VisitCommandArgs,
@@ -4429,10 +4430,12 @@ async function applyLineEdits(
   // one fired now, one held, as the lines' `kitchen` says. Its lines are credited to the editor.
   const newGroups = new Map<string, string>();
   if (order.visitId !== null) {
+    let addedLater: boolean | undefined;
     for (const as of pricedAs) {
       if (as.kind !== "line" || as.kitchen === "none" || newGroups.has(as.kitchen)) continue;
       const actorId = requireOperator(operatorId);
-      const groupId = await startGroup(tx, order.visitId, as.kitchen, actorId);
+      addedLater ??= await visitHasGroup(tx, order.visitId);
+      const groupId = await startGroup(tx, order.visitId, as.kitchen, actorId, addedLater);
       await recordGroupEvent(tx, {
         visitId: order.visitId,
         groupId,
@@ -5815,7 +5818,10 @@ export interface TableVisit {
   tableIds: string[];
   /** Each open draft on the party holding a line, oldest first. */
   unsentDrafts: UnsentDraft[];
-  /** The held group waiting to be released and when it is due; null with none, or reminders off. */
+  /**
+   * The held group waiting to be released and when it is due; null with no held group, with
+   * reminders off, or once the party is no longer open.
+   */
   reminder: ReleaseReminder | null;
 }
 

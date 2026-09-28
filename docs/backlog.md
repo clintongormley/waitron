@@ -2682,6 +2682,20 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         server's mark gives way to a newer menu read on the till;
       - Cancel on the menu-change question holds until the next publish, re-read or Send, not
         the next poll.
+  - **Task 9 (served by quantity, release reminders, Current orders) is on its branch**,
+    `feat/service-served-and-reminders` (lane B item B9, 2026-09-28). Left open:
+    - Once a venue's invoice languages change, marking a line served on a paid bill is refused.
+      The two locale triggers on order lines (`working_order_lines_check_locales_update` and
+      `working_order_lines_check_variant_locales_update`, core migration `0027`) check a line's
+      descriptions against the venue's current languages on every update, a served mark included.
+      A Part 1 test pins the refusal ("refuses a served mark on a settled line once its venue's
+      invoice locales changed", `scripts/behavioural-triggers.test.ts`). No product route changes
+      a venue's invoice languages after setup today. **Next action:** limit both triggers to
+      updates of `descriptions` (and `variant_descriptions`) and `working_order_id`.
+    - The floor dashboard shows no reminder mark on a table yet. The floor data already carries
+      each party's `reminder` (the held group waiting and when it is due), and the table screen's
+      Current orders shows it (Task 9 Part 4). **Next action:** a mark on the table token when a
+      party's reminder is due.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card

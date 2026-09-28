@@ -112,7 +112,10 @@ export async function submitGroups(
   );
 }
 
-export type PlaceGroupsInput = Pick<SubmitGroupsInput, "groups" | "joinGroupId" | "operatorId">;
+export type PlaceGroupsInput = Pick<SubmitGroupsInput, "groups" | "joinGroupId" | "operatorId"> & {
+  /** Whether the groups it starts are a later addition; by default, whether the visit had a group. */
+  addedLater?: boolean;
+};
 
 /**
  * {@link submitGroups} without its replay record or visit revision check, for a command that makes
@@ -152,9 +155,12 @@ export async function placeGroups(
     throw new AppError("sale.empty_basket", {});
   }
   const { tabId } = round;
+  const addedLater = input.addedLater ?? (await visitHasGroup(tx, visitId));
   const groupIds: string[] = [];
   for (const group of input.groups) {
-    groupIds.push(input.joinGroupId ?? (await startGroup(tx, visitId, group.release, operatorId)));
+    groupIds.push(
+      input.joinGroupId ?? (await startGroup(tx, visitId, group.release, operatorId, addedLater)),
+    );
   }
   // The k-th parent row is input line k; an extras child goes with its dish.
   const groupOfLine = input.groups.flatMap((group, i) => group.lines.map(() => groupIds[i]!));
@@ -481,10 +487,7 @@ export async function reorderHeldGroups(
 /** The longest snooze, in whole minutes. */
 export const MAX_SNOOZE_MINUTES = 120;
 
-/**
- * Snooze a held group's release reminder: it is due `minutes` from now, whatever time the served
- * work before it would give. Nothing else changes, served times included (D11).
- */
+/** Snooze a held group's release reminder: its `remind_at` becomes now plus `minutes` (D11). */
 export async function snoozeReminder(
   tx: Transaction,
   cfg: TillConfig,
@@ -550,6 +553,7 @@ export async function moveLinesToGroup(
           quantity: workingOrderLines.quantity,
           groupId: workingOrderLines.groupId,
           groupState: orderGroups.state,
+          groupAddedLater: orderGroups.addedLater,
           billStatus: workingOrders.status,
         })
         .from(workingOrderLines)
@@ -588,7 +592,15 @@ export async function moveLinesToGroup(
         moves.map((m) => m.lineId),
       );
       const targetId =
-        target === "new" ? await startGroup(tx, visitId, "hold", args.operatorId) : target.groupId;
+        target === "new"
+          ? await startGroup(
+              tx,
+              visitId,
+              "hold",
+              args.operatorId,
+              lines.some((line) => line.groupAddedLater),
+            )
+          : target.groupId;
       const sources = new Set<string>();
       const splitsByBill = new Map<string, { lineNo: number; quantity: string }[]>();
       for (const { lineId, quantity } of moves) {
@@ -660,6 +672,7 @@ export async function startGroup(
   visitId: string,
   release: GroupRelease,
   operatorId: string,
+  addedLater: boolean,
 ): Promise<string> {
   const fire = release === "fire";
   const [group] = await tx
@@ -671,6 +684,7 @@ export async function startGroup(
       firedAt: fire ? nowIso() : null,
       firedBy: fire ? operatorId : null,
       submittedBy: operatorId,
+      addedLater,
     })
     .returning({ id: orderGroups.id });
   return group!.id;
@@ -716,6 +730,16 @@ export async function removeEmptiedHeldGroups(
     if (!emptied.has(groupId)) continue;
     await recordGroupEvent(tx, { visitId, groupId, kind: "removed", actorId, detail: {} });
   }
+}
+
+/** Whether the visit has ever had a group, a removed one included. */
+export async function visitHasGroup(tx: Transaction, visitId: string): Promise<boolean> {
+  const [group] = await tx
+    .select({ id: orderGroups.id })
+    .from(orderGroups)
+    .where(eq(orderGroups.visitId, visitId))
+    .limit(1);
+  return group !== undefined;
 }
 
 /** The operator a group write names, else `management.request_invalid`: an event needs one. */
@@ -853,7 +877,8 @@ export function releaseReminder(
 /**
  * Each of these visits' release reminders ({@link releaseReminder}), keyed by visit, from one read
  * of the setting and one each of the visits' groups and dish lines. A visit that is not open has
- * none: it can no longer fire or snooze a group.
+ * none: it can no longer fire or snooze a group. A line on an abandoned bill is left out, as
+ * {@link readCurrentOrders} leaves it out.
  */
 export async function readReleaseReminders(
   tx: Transaction,
@@ -884,14 +909,15 @@ export async function readReleaseReminders(
   const lines = await tx
     .select({ groupId: workingOrderLines.groupId, servedAt: workingOrderLines.servedAt })
     .from(workingOrderLines)
-    .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(
       and(
         inArray(
-          orderGroups.id,
+          workingOrderLines.groupId,
           groups.map((group) => group.id),
         ),
         isNull(workingOrderLines.parentLineId),
+        ne(workingOrders.status, "abandoned"),
       ),
     );
   for (const visitId of new Set(groups.map((group) => group.visitId))) {
@@ -955,7 +981,7 @@ export interface CurrentOrderGroup {
   firedAt: string | null;
   /** A snooze's time, until the group fires, empties or moves in a reorder. */
   remindAt: string | null;
-  /** Submitted as a later addition ({@link groupsAddedLater}), not with the party's order. */
+  /** Recorded when the group was started: the party already had a group (`order_groups.added_later`). */
   addedLater: boolean;
   rows: CurrentOrderRow[];
 }
@@ -974,10 +1000,17 @@ export interface CurrentOrders {
 /**
  * The party's Current orders: its groups in sequence with their dish rows, and the rows in no
  * group, across every bill of the visit and of every visit merged into it, paid ones included; rows
- * bill by bill in the order the bills were opened. Refused `visit.not_open` for an unknown visit.
+ * bill by bill in the order the bills were opened. An abandoned bill's lines are left out, as the
+ * kitchen's reads leave them out. A row whose group belongs to another party's sequence (on a party
+ * merged away, whose groups moved on) is shown there, not here. Refused `visit.not_open` for an
+ * unknown visit.
  */
 export async function readCurrentOrders(tx: Transaction, visitId: string): Promise<CurrentOrders> {
-  const revision = await currentRevision(tx, visitId);
+  const [visit] = await tx
+    .select({ revision: visits.revision, state: visits.state })
+    .from(visits)
+    .where(eq(visits.id, visitId));
+  if (visit === undefined) throw new AppError("visit.not_open", { visitId });
   const family = await visitFamily(tx, visitId);
   const groups = await tx
     .select({
@@ -986,6 +1019,7 @@ export async function readCurrentOrders(tx: Transaction, visitId: string): Promi
       state: orderGroups.state,
       firedAt: orderGroups.firedAt,
       remindAt: orderGroups.remindAt,
+      addedLater: orderGroups.addedLater,
     })
     .from(orderGroups)
     .where(and(eq(orderGroups.visitId, visitId), ne(orderGroups.state, "removed")))
@@ -1015,7 +1049,7 @@ export async function readCurrentOrders(tx: Transaction, visitId: string): Promi
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
-    .where(inArray(workingOrders.visitId, family))
+    .where(and(inArray(workingOrders.visitId, family), ne(workingOrders.status, "abandoned")))
     .orderBy(
       asc(workingOrders.openedAt),
       asc(workingOrders.orderNumber),
@@ -1034,17 +1068,19 @@ export async function readCurrentOrders(tx: Transaction, visitId: string): Promi
       },
     ]);
   }
-  const later = await groupsAddedLater(tx, visitId, family);
   const shown: CurrentOrderGroup[] = groups.map((group) => ({
     ...group,
     state: group.state as "held" | "fired",
-    addedLater: later.has(group.id),
     rows: [],
   }));
   const byId = new Map(shown.map((group) => [group.id, group]));
   const ungrouped: CurrentOrderRow[] = [];
+  const dishes: { groupId: string | null; servedAt: string | null }[] = [];
   for (const line of lines) {
     if (line.parentLineId !== null) continue;
+    const group = line.groupId === null ? undefined : byId.get(line.groupId);
+    if (line.groupId !== null && group === undefined) continue;
+    dishes.push(line);
     const row: CurrentOrderRow = {
       lineId: line.id,
       workingOrderId: line.workingOrderId,
@@ -1062,74 +1098,16 @@ export async function readCurrentOrders(tx: Transaction, visitId: string): Promi
       note: line.note,
       extras: extras.get(line.id) ?? [],
     };
-    const group = line.groupId === null ? undefined : byId.get(line.groupId);
     (group?.rows ?? ungrouped).push(row);
   }
+  const minutes =
+    visit.state === "open" ? await VENUE_SERVICE.readReleaseReminderMinutes(tx) : null;
   return {
-    revision,
-    reminder: (await readReleaseReminders(tx, [visitId])).get(visitId)!,
+    revision: visit.revision,
+    reminder: releaseReminder(shown, dishes, minutes),
     groups: shown,
     ungrouped,
   };
-}
-
-/**
- * The visit's groups added later, as the till's `laterAddition` means it: submitted from a draft
- * started after the visit's first group was submitted, or, without a draft, by a later command
- * than the one that submitted that first group. A group is dated by the first submission naming it,
- * so lines a later one adds to it do not count; a group no submission names, such as one a move of
- * held lines started, is not added later.
- */
-async function groupsAddedLater(
-  tx: Transaction,
-  visitId: string,
-  family: readonly string[],
-): Promise<Set<string>> {
-  const all = await tx
-    .select({ id: orderGroups.id, createdAt: orderGroups.createdAt })
-    .from(orderGroups)
-    .where(eq(orderGroups.visitId, visitId))
-    .orderBy(asc(orderGroups.createdAt), asc(orderGroups.position), asc(orderGroups.id));
-  const first = all[0];
-  if (first === undefined) return new Set();
-  const members = JSON.stringify(family);
-  const { rows: drafted } = await tx.execute<{
-    groupId: string;
-    at: string;
-    batch: string;
-    startedAt: string;
-  }>(sql`
-    select j.value as "groupId", e.created_at as "at", e.draft_id as "batch",
-           d.created_at as "startedAt"
-    from order_draft_events e
-    join order_drafts d on d.id = e.draft_id
-    join json_each(e.detail, '$.groupIds') j
-    where e.kind = 'submitted' and d.visit_id in (select value from json_each(${members}))
-  `);
-  const { rows: commanded } = await tx.execute<{ groupId: string; at: string; batch: string }>(sql`
-    select json_extract(j.value, '$.id') as "groupId", c.created_at as "at", c.id as "batch"
-    from service_commands c
-    join json_each(c.result, '$.value.groups') j
-    where c.scope_kind = 'visit' and c.kind = 'group.submit'
-      and c.scope_id in (select value from json_each(${members}))
-  `);
-  const ids = new Set(all.map((group) => group.id));
-  const creator = new Map<string, { at: string; batch: string; startedAt: string | null }>();
-  for (const row of [...drafted, ...commanded.map((row) => ({ ...row, startedAt: null }))]) {
-    if (!ids.has(row.groupId)) continue;
-    const known = creator.get(row.groupId);
-    if (known === undefined || row.at < known.at) creator.set(row.groupId, row);
-  }
-  const firstBatch = creator.get(first.id)?.batch;
-  const later = new Set<string>();
-  for (const group of all.slice(1)) {
-    const by = creator.get(group.id);
-    if (by === undefined) continue;
-    if (by.startedAt === null ? by.batch !== firstBatch : by.startedAt > first.createdAt) {
-      later.add(group.id);
-    }
-  }
-  return later;
 }
 
 /**

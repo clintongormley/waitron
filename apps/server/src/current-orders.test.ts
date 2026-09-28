@@ -59,6 +59,7 @@ import {
   mergeTabs,
   recallLines,
   splitOffCheck,
+  updateOrderLine,
 } from "./working-order.js";
 import "./errors.js";
 
@@ -963,6 +964,43 @@ describe("a party another was merged into", () => {
       [dessert.id, [["flan", b.tabId]]],
       [drinks.id, [["water", a.tabId]]],
     ]);
+
+    const away = await currentOrders(b.visitId);
+    expect(away.groups).toEqual([]);
+    expect(away.ungrouped).toEqual([]);
+  });
+});
+
+describe("an abandoned bill", () => {
+  it("neither holds up nor dates the reminder, and its rows are not shown", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const starters = await group(v, s.visitId, "fire", [line(v, "croquetas", "2")]);
+    const desserts = await group(v, s.visitId, "hold", [line(v, "flan")]);
+    const [croq] = (await linesByName(s.visitId)).filter((l) => l.name === "croquetas");
+    const { checkId } = await inTx(async (tx) =>
+      splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: croq!.lineNo, quantity: "1" }], {
+        expectedVisitRevision: await revisionOf(s.visitId),
+        operatorId: MIA,
+      }),
+    );
+    await at(T(0), () => serve(v, s.visitId, [{ lineId: croq!.id, quantity: "1" }]));
+    expect((await currentOrders(s.visitId)).reminder).toEqual({
+      groupId: desserts.id,
+      dueAt: null,
+    });
+    // What cancelling a bill leaves (`cancelPlacedOrder`): the bill abandoned with its lines.
+    await suite.db
+      .update(workingOrders)
+      .set({ status: "abandoned" })
+      .where(eq(workingOrders.id, checkId));
+
+    const read = await currentOrders(s.visitId);
+
+    expect(read.reminder).toEqual({ groupId: desserts.id, dueAt: T(10) });
+    expect(await floorReminder(v, s.tableId)).toEqual({ groupId: desserts.id, dueAt: T(10) });
+    expect(read.groups[0]!.id).toBe(starters.id);
+    expect(read.groups[0]!.rows.map((r) => r.workingOrderId)).toEqual([s.tabId]);
   });
 });
 
@@ -1002,7 +1040,7 @@ describe("a party that has left", () => {
   });
 });
 
-describe("which groups were added later (spec §4; the till's laterAddition)", () => {
+describe("which groups were added later (spec §4; recorded as order_groups.added_later)", () => {
   type LineInput = DraftLineInput;
   const item = (v: Venue, dish: Dish): LineInput => ({
     menuItemId: v.offer(dish),
@@ -1038,29 +1076,36 @@ describe("which groups were added later (spec §4; the till's laterAddition)", (
     Object.fromEntries(
       (await currentOrders(visitId)).groups.map((g) => [g.position, g.addedLater]),
     );
+  const stored = async (groupId: string) => {
+    const [row] = await suite.db
+      .select({ addedLater: orderGroups.addedLater })
+      .from(orderGroups)
+      .where(eq(orderGroups.id, groupId));
+    return row!.addedLater;
+  };
 
-  it("counts every group of the first submission as the order, and a later submission's as added", async () => {
+  it("marks every group of the first submission as the order, and a later submission's as added", async () => {
     const v = await setupVenue();
     const s = await seated(v);
     const command = await args(s.visitId);
-    await at(T(0), () =>
-      inTx((tx) =>
-        submitGroups(tx, v.cfg, s.visitId, {
-          ...command,
-          groups: [
-            { release: "fire", lines: [line(v, "croquetas")] },
-            { release: "hold", lines: [line(v, "steak")] },
-            { release: "hold", lines: [line(v, "flan")] },
-          ],
-        }),
-      ),
+    const { groups } = await inTx((tx) =>
+      submitGroups(tx, v.cfg, s.visitId, {
+        ...command,
+        groups: [
+          { release: "fire", lines: [line(v, "croquetas")] },
+          { release: "hold", lines: [line(v, "steak")] },
+          { release: "hold", lines: [line(v, "flan")] },
+        ],
+      }),
     );
-    await at(T(10), () => group(v, s.visitId, "fire", [line(v, "water")]));
+    const drinks = await group(v, s.visitId, "fire", [line(v, "water")]);
 
     expect(await later(s.visitId)).toEqual({ 1: false, 2: false, 3: false, 4: true });
+    expect(await Promise.all(groups.map((g) => stored(g.id)))).toEqual([false, false, false]);
+    expect(await stored(drinks.id)).toBe(true);
   });
 
-  it("counts a draft's partial submissions as the order, and a draft started after the first group as added, but not one started before it", async () => {
+  it("marks a draft's partial submissions as the order when the draft was started before any group, and a draft started after as added", async () => {
     const v = await setupVenue();
     const s = await seated(v);
     const alex = await at(T(0), () =>
@@ -1084,33 +1129,106 @@ describe("which groups were added later (spec §4; the till's laterAddition)", (
     expect(await later(s.visitId)).toEqual({ 1: false, 2: false, 3: false, 4: true });
   });
 
-  it("keeps a group's own first submission when a later one adds to it", async () => {
+  it("marks the group an edit adds for the kitchen as added", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    await group(v, s.visitId, "fire", [line(v, "croquetas")]);
+    const [croq] = await linesByName(s.visitId);
+    const [bill] = await suite.db
+      .select({ revision: workingOrders.revision })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, s.tabId));
+
+    await inTx((tx) =>
+      updateOrderLine(tx, v.cfg, s.tabId, croq!.lineNo, { quantity: "3" }, bill!.revision, MIA),
+    );
+
+    const read = await currentOrders(s.visitId);
+    expect(
+      read.groups.map((g) => [g.position, g.addedLater, g.rows.map((r) => r.quantity)]),
+    ).toEqual([
+      [1, false, ["1.000"]],
+      [2, true, ["2.000"]],
+    ]);
+  });
+
+  it("keeps a group's own flag when a later submission adds to it", async () => {
     const v = await setupVenue();
     const s = await seated(v);
     const first = await args(s.visitId);
-    const { groups } = await at(T(0), () =>
-      inTx((tx) =>
-        submitGroups(tx, v.cfg, s.visitId, {
-          ...first,
-          groups: [
-            { release: "fire", lines: [line(v, "croquetas")] },
-            { release: "hold", lines: [line(v, "steak")] },
-          ],
-        }),
-      ),
+    const { groups } = await inTx((tx) =>
+      submitGroups(tx, v.cfg, s.visitId, {
+        ...first,
+        groups: [
+          { release: "fire", lines: [line(v, "croquetas")] },
+          { release: "hold", lines: [line(v, "steak")] },
+        ],
+      }),
     );
     const mains = groups[1]!;
     const command = await args(s.visitId);
-    await at(T(10), () =>
-      inTx((tx) =>
-        submitGroups(tx, v.cfg, s.visitId, {
-          ...command,
-          groups: [{ release: "hold", lines: [line(v, "flan")] }],
-          joinGroupId: mains.id,
-        }),
-      ),
+    await inTx((tx) =>
+      submitGroups(tx, v.cfg, s.visitId, {
+        ...command,
+        groups: [{ release: "hold", lines: [line(v, "flan")] }],
+        joinGroupId: mains.id,
+      }),
     );
 
     expect(await later(s.visitId)).toEqual({ 1: false, 2: false });
+  });
+
+  it("gives a group a move starts the flag of the groups its lines left", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const first = await args(s.visitId);
+    const { groups } = await inTx((tx) =>
+      submitGroups(tx, v.cfg, s.visitId, {
+        ...first,
+        groups: [{ release: "hold", lines: [line(v, "croquetas"), line(v, "steak")] }],
+      }),
+    );
+    const extra = await group(v, s.visitId, "hold", [line(v, "flan")]);
+    const move = async (lineId: string) => {
+      const command = await args(s.visitId);
+      await inTx((tx) =>
+        moveLinesToGroup(tx, v.cfg, s.visitId, [{ lineId, quantity: "1" }], "new", command),
+      );
+    };
+
+    await move(groups[0]!.lineIds[0]!);
+    await move(extra.lineIds[0]!);
+
+    const read = await currentOrders(s.visitId);
+    expect(read.groups.map((g) => [g.rows.map((r) => r.name), g.addedLater])).toEqual([
+      [["steak"], false],
+      [["croquetas"], false],
+      [["flan"], true],
+    ]);
+  });
+
+  it("keeps each group's flag when another party is merged in", async () => {
+    const v = await setupVenue();
+    const a = await seated(v);
+    const aFirst = await group(v, a.visitId, "fire", [line(v, "croquetas")]);
+    const b = await seated(v);
+    const bFirst = await group(v, b.visitId, "fire", [line(v, "flan")]);
+    const bLater = await group(v, b.visitId, "hold", [line(v, "water")]);
+    const command = {
+      expectedVisitRevision: await revisionOf(a.visitId),
+      expectedSourceVisitRevision: await revisionOf(b.visitId),
+      operatorId: ALEX,
+    };
+
+    await inTx((tx) =>
+      mergeTabs(tx, v.cfg, a.tabId, b.tabId, { freeSourceTable: false, ...command }),
+    );
+
+    const read = await currentOrders(a.visitId);
+    expect(read.groups.map((g) => [g.id, g.addedLater])).toEqual([
+      [aFirst.id, false],
+      [bFirst.id, false],
+      [bLater.id, true],
+    ]);
   });
 });
