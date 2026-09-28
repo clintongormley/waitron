@@ -3014,17 +3014,21 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - At 390 px a pass card whose label wraps also wraps its "2 min" onto two lines (seen with a
       seven-table label, `apps/till/src/screens/till-expo-screen.ts`); nothing overflows.
     - Paying a named party's bill freezes its receipt label, "Ana · Mesa 4, 5", into
-      `working_orders.label` (`readReceiptOrder` at issuance, written in
-      `apps/server/src/till-sale.ts` and `apps/server/src/bill-payments.ts`), so reprints match.
-      Kept on purpose (spec §8: receipts show the name). Every other reader of that column then
-      shows the party's name with its tables for that bill: the station queue card
-      (`listStationQueue`, `apps/server/src/working-order.ts`), the order label on kitchen notices
-      recorded afterwards ("#N · label", `recordKitchenNotices`,
-      `packages/venue-service/src/kitchen-notices.ts`), the till's list of a party's bills
-      (`readBillsOfParties`, `apps/server/src/parties.ts`), the dashboard's stuck card payments,
-      bill payments and bill refunds lists (`apps/server/src/payments-api.ts`), and
-      `orderTableLabel`'s fallback once the party holds no table (slips, the pass and the overdue
-      report). Decide whether those should read the tables alone.
+      `working_orders.label` in the same update that sets the bill `settled` (`readReceiptOrder`
+      at issuance, in `apps/server/src/till-sale.ts` and `apps/server/src/bill-payments.ts`), so
+      reprints match. Kept on purpose (spec §8: receipts show the name). Before payment a party's
+      tab carries no label: in the review's probe (a party at Mesa 4 joins Mesa 5, is named Ana,
+      orders and pays cash) the bill went from `["open", null]` to
+      `["settled", "Ana · Mesa 4, 5"]`. Readers of that column that can meet a paid bill then show
+      the party's name with its tables: the station queue card (`listStationQueue`,
+      `apps/server/src/working-order.ts`), which shows no table name before payment and
+      "Ana · Mesa 4, 5" after it; the order label on kitchen notices recorded afterwards
+      ("#N · label", `recordKitchenNotices`, `packages/venue-service/src/kitchen-notices.ts`);
+      the till's list of a party's bills (`readBillsOfParties`, `apps/server/src/parties.ts`);
+      `orderTableLabel`'s fallback once the party holds no table (slips and the pass); and the
+      overdue report's own fallback to the order's label (`computeOverdueOrders`,
+      `packages/reporting/src/overdue-orders.ts`). Decide whether those should read the tables
+      alone.
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
   joined to it, but merging another table's bill into its paid bill, or moving items to or from
