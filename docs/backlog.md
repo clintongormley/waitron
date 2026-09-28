@@ -397,16 +397,19 @@ prints a dish sold in Each as "2.000 x Croqueta", while a weighed or other unit 
 ("0.500 kg x Pulpo", "200.000 g x Almendras"); and the expo board reads "2× Croqueta" through the
 same `dishLine` (`apps/till/src/widgets/dish-format.ts`) the station queue uses, from a `soldInEach`
 flag on each expo item. Both decide Each by the unit's identity through `readLinesSoldInEach`, so
-the known gap above applies to them too, and a line with no recorded context prints or shows its
-unit (`grep -rn "insert(workingOrderLines)" apps packages` finds four non-test sites, all in
+the known gap above applies to them too, and a line with no recorded context but a unit recorded on
+it prints or shows that unit (`grep -rn "insert(workingOrderLines)" apps packages` finds four
+non-test sites, all in
 `apps/server/src/working-order.ts`: `createOpenOrder`, `insertTabRound` and `applyLineEdits` each
 follow the insert with `recordLineContexts` (in `createOpenOrder` under a known zone, which its call
 to `priceOrderLines` requires for any line), and `carveOffLines` with `copyLineContext`; run
 2026-09-28). **Done since (2026-09-28, lane C's A114):** the merge-or-split check goes by
 the unit's identity too: a ticket entry is merged or split only when its unit does not print (sold
-in Each, or no unit recorded on the line), so a venue's own unit spelled like Each keeps its entries
-apart and a renamed stored Each unit's are merged or split. The known gap above applies to merging
-and splitting as well. **Kept as they are, by the owner's choice (2026-09-28):** the printed receipt
+in Each, or no unit recorded on the line), so a venue's own unit spelled like Each prints its
+entries as sold, never merged or split, and a renamed stored Each unit's are merged or split. The
+known gap above applies to merging and splitting as well, and so does a line with no recorded
+context but a unit recorded on it: it prints that unit, so its entries print as sold. **Kept as
+they are, by the owner's choice (2026-09-28):** the printed receipt
 (`apps/server/src/receipt-ticket.ts`) and the till's ticket view
 (`apps/till/src/screens/till-ticket-view.ts`), which still show the Each unit: the receipt's case
 "prints the unit abbreviation of the invoice language…" in `apps/server/src/receipt-ticket.test.ts`
@@ -2375,9 +2378,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       own Reprint should clear it once printed; not run). It errs toward showing a warning. Fixing
       it needs a record of which dishes each ticket carried, a new table and so a migration; open
       for the owner.)_
-    - Only dishes whose unit abbreviation reads as Each's are added together or split; a venue-made
-      unit that counts pieces (a "portion") prints line by line, because nothing records a unit's
-      kind (a unit field would need a migration).
+    - Only dishes whose unit does not print on the ticket — sold in Each by the unit's identity
+      (`readLinesSoldInEach`), or with no unit recorded on the line — are added together or split;
+      a venue-made unit that counts pieces (a "portion"), even one spelled like Each, prints line by
+      line, because nothing records a unit's kind (a unit field would need a migration).
     - The setting sits under "Changes after sending" on the Preparation routing tab; it may deserve
       a heading of its own. _(Task 6, 2026-09-27: so does "Print held groups in advance", which is
       not about sent work at all.)_

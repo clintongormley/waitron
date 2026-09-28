@@ -3526,7 +3526,7 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
   });
 
   // Fails if two portions sold by the gram are added together under combined, or one portion is
-  // split into single grams under separate; count-unit dishes must still merge and split.
+  // split into single grams under separate; dishes sold in Each must still merge and split.
   it("prints each portion sold by weight as sold, under combined and separate alike", async () => {
     const v = await setupVenue();
     const sold = await inTx(async (tx) => {

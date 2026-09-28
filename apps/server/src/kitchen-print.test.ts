@@ -946,20 +946,34 @@ describe("a dish sold by the piece prints no unit", () => {
     {
       grouping: "combined",
       dish: "pan",
+      name: "Pan",
       sold: ["1", "1"],
       printed: [at(1000, "ea x Pan"), at(1000, "ea x Pan")],
     },
-    { grouping: "separate", dish: "pan", sold: ["2"], printed: [at(2000, "ea x Pan")] },
-    { grouping: "combined", dish: "bomba", sold: ["1", "1"], printed: [at(2000, "x Bomba")] },
+    {
+      grouping: "separate",
+      dish: "pan",
+      name: "Pan",
+      sold: ["2"],
+      printed: [at(2000, "ea x Pan")],
+    },
+    {
+      grouping: "combined",
+      dish: "bomba",
+      name: "Bomba",
+      sold: ["1", "1"],
+      printed: [at(2000, "x Bomba")],
+    },
     {
       grouping: "separate",
       dish: "bomba",
+      name: "Bomba",
       sold: ["2"],
       printed: [at(1000, "x Bomba"), at(1000, "x Bomba")],
     },
   ] as const)(
     "merges or splits an entry only when its unit does not print ($dish, $grouping)",
-    async ({ grouping, dish, sold, printed }) => {
+    async ({ grouping, dish, name, sold, printed }) => {
       const { cfg, catalogueId } = await setupVenue();
       const jobs = await asApp(cfg, async (tx) => {
         await writeKitchenTicketGrouping(tx, grouping);
@@ -973,7 +987,6 @@ describe("a dish sold by the piece prints no unit", () => {
       });
 
       expect(jobs).toHaveLength(1);
-      const name = dish === "pan" ? "Pan" : "Bomba";
       expect(printedLines(jobs[0]!.payload).filter((text) => text.endsWith(` x ${name}`))).toEqual(
         printed,
       );
