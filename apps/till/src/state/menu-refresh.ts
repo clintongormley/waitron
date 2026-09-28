@@ -166,10 +166,9 @@ function adoptLine(line: OrderLine, offer: TillMenuOffer, menuVersionId: string)
  */
 export function repriceRebuilt(
   lines: readonly OrderLine[],
-  offers: readonly TillMenuOffer[],
+  offerById: ReadonlyMap<string, TillMenuOffer>,
   liveVersions: ReadonlyMap<string, string>,
 ): Map<number, OrderLine> {
-  const offerById = new Map(offers.map((offer) => [offer.id, offer]));
   const repriced = new Map<number, OrderLine>();
   lines.forEach((line, index) => {
     if (line.earlierPriceUnknown !== true || isStale(line, liveVersions)) return;

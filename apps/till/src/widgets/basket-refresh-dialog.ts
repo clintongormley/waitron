@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
+import { trackDialog } from "./track-dialog.js";
 import { baseStyles } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
@@ -74,6 +75,7 @@ export class TillBasketRefreshDialog extends LitElement {
 
   override render() {
     return html`<wt-dialog
+      ${trackDialog()}
       .open=${true}
       .heading=${t("basket_refresh.title")}
       @wt-close=${(event: Event) => {

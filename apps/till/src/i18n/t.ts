@@ -34,6 +34,12 @@ export function countText(n: number, many: StringKey, one: StringKey): string {
   return n === 1 ? t(one) : t(many).replace("{n}", String(n));
 }
 
+/** `withName` with the person's name in its `{name}`, or `unnamed` when the server has no name for
+ * them. */
+export function named(name: string, withName: string, unnamed: string): string {
+  return name === "" ? unnamed : withName.replace("{name}", () => name);
+}
+
 /** Strips the region subtag ("es-ES" → "es"); a missing language degrades to the English text. */
 export function pickLocale(entry: { en: string; es: string }, l: string = locale): string {
   const lang = l.replace(/-.*$/, "");

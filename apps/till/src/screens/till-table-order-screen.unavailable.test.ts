@@ -86,10 +86,8 @@ describe("till-table-order-screen: a draft line that cannot be sold now", () => 
     ]);
 
     expect(rowTexts(el)).toEqual([`Beer ×2 | ${t("basket.blocked.server")}`, "Flan ×1"]);
-    expect(removeButton(el, 0)!.textContent!.trim()).toBe(t("table.flag_remove"));
-    expect(removeButton(el, 0)!.getAttribute("aria-label")).toBe(
-      `${t("table.flag_remove")} · Beer`,
-    );
+    expect(removeButton(el, 0)!.textContent!.trim()).toBe(t("action.remove"));
+    expect(removeButton(el, 0)!.getAttribute("aria-label")).toBe(`${t("action.remove")} · Beer`);
     expect(keepButton(el, 0)!.getAttribute("aria-label")).toBe(`${t("table.flag_keep")} · Beer`);
     expect(removeButton(el, 1)).toBeNull();
     expect(keepButton(el, 1)).toBeNull();

@@ -1,6 +1,7 @@
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { trackDialog } from "../widgets/track-dialog.js";
 import type { PropertyValues } from "lit";
 import { baseStyles } from "@waitron/ui";
 import { FALLBACK_LOCALE } from "@waitron/shared";
@@ -317,6 +318,7 @@ export class TillAllergenScreen extends LitElement {
   #detail() {
     const product = this.selected;
     return html`<wt-dialog
+      ${trackDialog()}
       class="detail"
       .open=${product !== undefined}
       .heading=${product ? this.#productLabel(product) : ""}

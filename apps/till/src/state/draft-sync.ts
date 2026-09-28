@@ -62,8 +62,8 @@ export interface DraftSyncOptions {
   requestLimitMs: number;
 }
 
-/** A signal that aborts after `ms`, or with `also`. */
-function limited(ms: number, also?: AbortSignal): { signal: AbortSignal; done: () => void } {
+/** A signal that aborts after `ms`, or with `also`; `done` clears the timer. */
+export function limited(ms: number, also?: AbortSignal): { signal: AbortSignal; done: () => void } {
   const own = new AbortController();
   const timer = setTimeout(() => own.abort(), ms);
   return {
@@ -72,16 +72,27 @@ function limited(ms: number, also?: AbortSignal): { signal: AbortSignal; done: (
   };
 }
 
-/** Settles when `signal` aborts. */
-function aborted(signal: AbortSignal): Promise<void> {
+/** Settles when `signal` aborts, or after `ms` when given. */
+export function pause(signal: AbortSignal, ms?: number): Promise<void> {
   return new Promise((resolve) => {
-    if (signal.aborted) resolve();
-    else signal.addEventListener("abort", () => resolve(), { once: true });
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+    const timer = ms === undefined ? undefined : setTimeout(resolve, ms);
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
   });
 }
 
 /** A coded refusal, with the new owner's name when it carries one; undefined for no answer. */
-function asRefusal(error: unknown): DraftRefused | undefined {
+export function asRefusal(error: unknown): DraftRefused | undefined {
   const { code, ownerName } = (error ?? {}) as { code?: unknown; ownerName?: unknown };
   if (typeof code !== "string") return undefined;
   return typeof ownerName === "string" ? { refused: code, ownerName } : { refused: code };
@@ -199,7 +210,7 @@ export class DraftSync {
     this.#cancelTimer();
     const saved = this.#save(signal);
     if (signal === undefined) return saved;
-    return Promise.race([saved, aborted(signal).then((): DraftSaveOutcome => "failed")]);
+    return Promise.race([saved, pause(signal).then((): DraftSaveOutcome => "failed")]);
   }
 
   /** At sign-out. What is unsaved is sent now only when no save is out: one started after the next

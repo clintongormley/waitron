@@ -2773,6 +2773,131 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
     expect(refreshText(el)).toContain("Beer €5.00 → €6.00");
   });
 
+  it("asks nothing while the take-over question is open, and asks at the next poll once it is closed", async () => {
+    server.personId = "p-alex";
+    server.personName = "Alex";
+    server.save("v1", {
+      draftId: null,
+      revision: 0,
+      lines: [
+        {
+          menuItemId: "offer-flan",
+          variantId: null,
+          menuVersionId: "v1",
+          options: [],
+          extras: [],
+          note: null,
+          quantity: "1",
+          courseId: null,
+          noMerge: false,
+        },
+      ],
+    });
+    const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
+    await openMesa(el);
+    await tap(el, "Beer");
+    await saved(el);
+    const screen = tableOrder(el)!.shadowRoot!;
+    screen.querySelector<HTMLElement>("[data-review-open]")!.click();
+    await flush(el);
+    screen.querySelector<HTMLElement>("[data-take-over]")!.click();
+    await flush(el);
+
+    await publish(el, { Beer: "6.00" });
+    expect(refresh(el)).toBeNull();
+    screen.querySelector<HTMLElement>("[data-take-over-cancel]")!.click();
+    await flush(el);
+    await poll(el);
+
+    expect(refreshText(el)).toContain("Beer €5.00 → €6.00");
+  });
+
+  it("asks nothing while a dish's choices are open in the table's menu, and asks at the next poll once they are closed", async () => {
+    const withChoices = (each: ZoneOfferCatalogue): ZoneOfferCatalogue => ({
+      ...each,
+      offers: each.offers.map((dish) =>
+        dish.name !== "Steak"
+          ? dish
+          : {
+              ...dish,
+              offeredModifiers: [
+                {
+                  kind: "options" as const,
+                  id: "list-cooked",
+                  name: "Cooked",
+                  customerName: null,
+                  kitchenName: null,
+                  defaultLabelId: null,
+                  labels: [
+                    {
+                      id: "rare",
+                      name: "Rare",
+                      customerName: null,
+                      kitchenName: null,
+                      available: true,
+                    },
+                  ],
+                },
+              ],
+            },
+      ),
+    });
+    const { el } = await mountApp({
+      menuState: vi.fn().mockResolvedValue(state("v1")),
+      listZoneOffers: vi.fn().mockResolvedValue(withChoices(catalogue("v1"))),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+    await saved(el);
+    await tap(el, "Steak");
+    const picker = () => browser(el)!.shadowRoot!.querySelector("till-modifier-picker");
+    expect(picker()).not.toBeNull();
+
+    await publish(el, { Beer: "6.00" });
+    expect(refresh(el)).toBeNull();
+    picker()!.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
+    await flush(el);
+    await poll(el);
+
+    expect(refreshText(el)).toContain("Beer €5.00 → €6.00");
+  });
+
+  it("asks nothing while another card on the order's tab has a dialog open, and asks at the next poll once it is closed", async () => {
+    const withFloor: CanvasDef = {
+      ...orderTabCanvas,
+      tabs: [
+        orderTabCanvas.tabs[0]!,
+        {
+          ...orderTabCanvas.tabs[1]!,
+          cards: [
+            ...orderTabCanvas.tabs[1]!.cards,
+            { type: "floor-plan", colSpan: 12, rowSpan: 4, config: {} },
+          ],
+        },
+      ],
+    };
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(till(withFloor)),
+      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, table("t9", "9", null)]),
+      menuState: vi.fn().mockResolvedValue(state("v1")),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+    await saved(el);
+    floor(el)!.shadowRoot!.querySelector<HTMLElement>('[data-table="t9"]')!.click();
+    await flush(el);
+    const seat = floor(el)!.shadowRoot!.querySelector("till-seat-dialog");
+    expect(seat).not.toBeNull();
+
+    await publish(el, { Beer: "6.00" });
+    expect(refresh(el)).toBeNull();
+    seat!.shadowRoot!.querySelector<HTMLElement>("[data-seat-cancel]")!.click();
+    await flush(el);
+    await poll(el);
+
+    expect(refreshText(el)).toContain("Beer €5.00 → €6.00");
+  });
+
   it("asks nothing while a take-over is out, and asks at the next poll once it has answered", async () => {
     server.personId = "p-alex";
     server.personName = "Alex";

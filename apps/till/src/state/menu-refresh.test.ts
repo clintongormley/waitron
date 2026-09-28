@@ -491,6 +491,7 @@ describe("refreshBasket", () => {
 });
 
 describe("repriceRebuilt", () => {
+  const byId = (...offers: TillMenuOffer[]) => new Map(offers.map((each) => [each.id, each]));
   const lemonade = offer({ id: "offer-lemonade", productId: "Lemonade", unitPrice: "3.00" });
   const live = new Map([["lunch", "v2"]]);
   /** Rebuilt under v2 while the till still held v1's offers, at v1's price. */
@@ -502,7 +503,7 @@ describe("repriceRebuilt", () => {
   it("prices a rebuilt line whose version is now live from the live offer, and forgets the mark", () => {
     const repriced = repriceRebuilt(
       [rebuilt(lemonade)],
-      [{ ...lemonade, unitPrice: "3.50" }],
+      byId({ ...lemonade, unitPrice: "3.50" }),
       live,
     );
 
@@ -516,7 +517,7 @@ describe("repriceRebuilt", () => {
     const own = lineOf(lemonade, "v2");
     const gone = rebuilt(offer({ id: "offer-gone", productId: "Gone" }));
 
-    expect(repriceRebuilt([older, own, gone], [lemonade], live)).toEqual(new Map());
+    expect(repriceRebuilt([older, own, gone], byId(lemonade), live)).toEqual(new Map());
   });
 
   it("leaves a line whose variant or unit the live offer can no longer hold as it stands", () => {
@@ -533,6 +534,8 @@ describe("repriceRebuilt", () => {
     };
     const withoutGlass = { ...wine, variants: wine.variants.filter((each) => each.id !== "glass") };
 
-    expect(repriceRebuilt([variantGone, widened], [withoutGlass, burger], live)).toEqual(new Map());
+    expect(repriceRebuilt([variantGone, widened], byId(withoutGlass, burger), live)).toEqual(
+      new Map(),
+    );
   });
 });

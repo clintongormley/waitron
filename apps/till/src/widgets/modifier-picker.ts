@@ -1,6 +1,7 @@
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { trackDialog } from "./track-dialog.js";
 import { baseStyles } from "@waitron/ui";
 import type { OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { formatMoney } from "@waitron/shared";
@@ -392,6 +393,7 @@ export class TillModifierPicker extends LitElement {
     // wt-MODAL, not wt-dialog: the body scrolls inside the frame and the footer keeps its own row, so
     // Add and Cancel stay on screen however many lists a dish offers.
     return html`<wt-modal
+      ${trackDialog()}
       .open=${true}
       .heading=${productName(this.product)}
       @wt-close=${(event: Event) => this.#cancel(event)}

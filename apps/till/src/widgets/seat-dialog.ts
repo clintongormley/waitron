@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { trackDialog } from "./track-dialog.js";
 import { baseStyles, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -63,6 +64,7 @@ export class TillSeatDialog extends LitElement {
 
   override render() {
     return html`<wt-dialog
+      ${trackDialog()}
       .open=${true}
       .heading=${t("seat.title").replace("{table}", () => this.tableLabel)}
       @wt-close=${() => this.#cancel()}

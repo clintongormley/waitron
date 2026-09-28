@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { draftServer, type DraftServer } from "../widgets/test-helpers.js";
-import { DRAFT_SAVE_DELAY_MS, DraftSync } from "./draft-sync.js";
+import { DRAFT_SAVE_DELAY_MS, DraftSync, pause } from "./draft-sync.js";
 import type { OrderLine } from "./working-order.js";
 import type { Draft, DraftLine, TillProduct } from "../api/client.js";
 
@@ -878,5 +878,32 @@ describe("DraftSync: what the server says about each line", () => {
     answer();
     await settle();
     expect(draft.saving).toBe(false);
+  });
+});
+
+describe("pause", () => {
+  it("settles at once for a signal already aborted", async () => {
+    const settled = vi.fn();
+    void pause(AbortSignal.abort()).then(settled);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(settled).toHaveBeenCalledOnce();
+  });
+
+  it("settles after its time, or as soon as the signal aborts", async () => {
+    const timed = vi.fn();
+    const cut = vi.fn();
+    const abort = new AbortController();
+    void pause(new AbortController().signal, 20).then(timed);
+    void pause(abort.signal, 60_000).then(cut);
+
+    abort.abort();
+    await vi.advanceTimersByTimeAsync(19);
+    expect(cut).toHaveBeenCalledOnce();
+    expect(timed).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(timed).toHaveBeenCalledOnce();
   });
 });

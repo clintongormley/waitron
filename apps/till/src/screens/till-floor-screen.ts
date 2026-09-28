@@ -1,6 +1,7 @@
 import { tillPath } from "../navigation.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { trackDialog } from "../widgets/track-dialog.js";
 import type { TimingBand } from "@waitron/shared";
 // Importing the `@waitron/ui` barrel also registers `<wt-floor-canvas>` and `<wt-table-token>`, which
 // the map view and the tray use by tag.
@@ -22,7 +23,7 @@ import type {
   ZoneTab,
 } from "@waitron/ui";
 import { decimal, isZeroDecimal } from "@waitron/shared";
-import { countText, t } from "../i18n/t.js";
+import { countText, named, t } from "../i18n/t.js";
 import "../widgets/seat-dialog.js";
 import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
 import type { FloorZone, TableState, TableVisit, TillApi, UnsentDraft } from "../api/client.js";
@@ -32,10 +33,10 @@ function needsClearing(table: TableState): table is TableState & { visit: TableV
 }
 
 function unsentText({ ownerName, lineCount }: UnsentDraft): string {
-  if (ownerName === "") return countText(lineCount, "floor.unsent", "floor.unsent_one");
-  return countText(lineCount, "floor.unsent_owner", "floor.unsent_owner_one").replace(
-    "{name}",
-    () => ownerName,
+  return named(
+    ownerName,
+    countText(lineCount, "floor.unsent_owner", "floor.unsent_owner_one"),
+    countText(lineCount, "floor.unsent", "floor.unsent_one"),
   );
 }
 
@@ -690,6 +691,7 @@ export class TillFloorScreen extends LitElement {
     const table = this.clearing;
     if (table === null) return nothing;
     return html`<wt-dialog
+      ${trackDialog()}
       data-clear-dialog
       .open=${true}
       .heading=${t("floor.clear_title").replace("{table}", () => table.label)}

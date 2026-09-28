@@ -401,7 +401,6 @@ export const en = {
   "table.draft_title": "Unsent order",
   "table.review": "Review ({n})",
   "table.last_added": "Last added",
-  "table.flag_remove": "Remove",
   "table.flag_keep": "Keep",
   "table.flag_kept": "Stays in the order until it can be sent",
   // `{names}` and `{n}` are substituted at the call site.
@@ -906,7 +905,6 @@ export const es: Record<StringKey, string> = {
   "table.draft_title": "Pedido sin enviar",
   "table.review": "Revisar ({n})",
   "table.last_added": "Lo último añadido",
-  "table.flag_remove": "Quitar",
   "table.flag_keep": "Dejar",
   "table.flag_kept": "Se queda en el pedido hasta que se pueda enviar",
   "table.left_out_one":

@@ -2,6 +2,7 @@ import { optionAnswers } from "../widgets/option-snapshot.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { trackDialog } from "../widgets/track-dialog.js";
 import { keyed } from "lit/directives/keyed.js";
 import { repeat } from "lit/directives/repeat.js";
 import { baseStyles } from "@waitron/ui";
@@ -19,7 +20,7 @@ import {
   toScale,
   type Decimal,
 } from "@waitron/shared";
-import { countText, currentLocale, t } from "../i18n/t.js";
+import { countText, currentLocale, named, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { selectStyles } from "../select-styles.js";
@@ -154,11 +155,6 @@ function leftOutText(lines: readonly OrderLine[]): string {
 
 /** Beyond this many, the left-out message counts the lines without naming them. */
 const LEFT_OUT_NAMED = 3;
-
-/** "Alex …", or the no-name wording when the server has no name for the person. */
-function named(name: string, withName: StringKey, unnamed: StringKey): string {
-  return name === "" ? t(unnamed) : t(withName).replace("{name}", () => name);
-}
 
 /** Where a later addition goes: `add-to-held` is offered only while the party has a held group. */
 type Destination = "fire-now" | "add-to-held" | "add-as-new";
@@ -1465,6 +1461,7 @@ export class TillTableOrderScreen extends LitElement {
     const started = line !== null && this.#isStarted(line);
     const oneAtATime = line !== null && this.#moreThanOneWholeUnit(line);
     return html`<wt-dialog
+      ${trackDialog()}
       class="cancel-confirm"
       .open=${line !== null}
       .heading=${t("table.cancel_title")}
@@ -1764,9 +1761,10 @@ export class TillTableOrderScreen extends LitElement {
   #ordering(draft: WorkingOrderStore): TemplateResult {
     const separate = !this.wide;
     const reviewing = separate && this.reviewing;
+    const entries = this.#draftEntries(draft.lines);
     return html`<div class=${separate ? "ordering" : "ordering side-by-side"}>
       <div class="browsing" data-browsing ?hidden=${reviewing}>
-        ${this.#gridRegion(draft)} ${this.#bottomBar(draft, separate)}
+        ${this.#gridRegion(draft)} ${this.#bottomBar(draft, separate, entries)}
       </div>
       <section
         class="draft-pane"
@@ -1788,7 +1786,7 @@ export class TillTableOrderScreen extends LitElement {
               : nothing
           }
         </div>
-        ${this.#roundControl(draft)} ${this.#otherDraftPanels(draft)}
+        ${this.#roundControl(draft, entries)} ${this.#otherDraftPanels(draft)}
       </section>
     </div>`;
   }
@@ -1798,8 +1796,8 @@ export class TillTableOrderScreen extends LitElement {
     const busy = draft.sending || this.takeOverSent !== null;
     return this.otherDrafts.map((other, index) => {
       const title = other.takenFromYou
-        ? named(other.ownerName, "table.draft_taken_by", "table.draft_taken_by_unnamed")
-        : named(other.ownerName, "table.others_draft", "table.others_draft_unnamed");
+        ? named(other.ownerName, t("table.draft_taken_by"), t("table.draft_taken_by_unnamed"))
+        : named(other.ownerName, t("table.others_draft"), t("table.others_draft_unnamed"));
       return html`<section
         class="other-draft"
         data-other-draft=${other.id}
@@ -1831,15 +1829,16 @@ export class TillTableOrderScreen extends LitElement {
     const other = this.takeOverPending;
     const name = other?.ownerName ?? "";
     return html`<wt-dialog
+      ${trackDialog()}
       class="take-over-dialog"
       data-take-over-dialog
       .open=${other !== null}
       .dismissible=${this.takeOverSent === null}
-      .heading=${named(name, "table.take_over_title", "table.take_over_title_unnamed")}
+      .heading=${named(name, t("table.take_over_title"), t("table.take_over_title_unnamed"))}
       @wt-close=${() => void this.#takeOverClosed()}
     >
       <p data-take-over-body>
-        ${named(name, "table.take_over_body", "table.take_over_body_unnamed")}
+        ${named(name, t("table.take_over_body"), t("table.take_over_body_unnamed"))}
       </p>
       <div slot="footer" class="cancel-actions">
         <wt-button
@@ -1887,7 +1886,11 @@ export class TillTableOrderScreen extends LitElement {
 
   /** Under browsing: the line the last tap added or grew and, when the draft has its own view, the
    * way to it. */
-  #bottomBar(draft: WorkingOrderStore, separate: boolean): TemplateResult | typeof nothing {
+  #bottomBar(
+    draft: WorkingOrderStore,
+    separate: boolean,
+    entries: readonly DraftEntry[],
+  ): TemplateResult | typeof nothing {
     const lastAdded = this.#lastAdded(draft);
     if (lastAdded === nothing && !separate) return nothing;
     return html`<div class="bottom-bar">
@@ -1900,15 +1903,14 @@ export class TillTableOrderScreen extends LitElement {
               data-review-open
               @click=${() => void this.#openReview()}
             >
-              ${t("table.review").replace("{n}", String(this.#itemCount(draft)))}
+              ${t("table.review").replace(
+                "{n}",
+                String(entries.reduce((sum, entry) => sum + itemCount(entry), 0)),
+              )}
             </wt-button>`
           : nothing
       }
     </div>`;
-  }
-
-  #itemCount(store: WorkingOrderStore): number {
-    return this.#draftEntries(store.lines).reduce((sum, entry) => sum + itemCount(entry), 0);
   }
 
   /** −1 at one takes the line out, so a mis-tap is undone where it was made. */
@@ -2019,7 +2021,7 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
-  #roundControl(draft: WorkingOrderStore): TemplateResult {
+  #roundControl(draft: WorkingOrderStore, entries: readonly DraftEntry[]): TemplateResult {
     return html`${
         draft.sending
           ? html`<p class="round-sending" role="status" data-round-sending>
@@ -2033,7 +2035,7 @@ export class TillTableOrderScreen extends LitElement {
             this.orderId,
             draft.lineCount === 0
               ? html`<till-basket .store=${draft}></till-basket>`
-              : this.#draftSections(draft),
+              : this.#draftSections(draft, entries),
           )}
           ${this.#draftBar(draft)}
         </div>
@@ -2085,9 +2087,9 @@ export class TillTableOrderScreen extends LitElement {
    * basket shows it (quantity, note, remove, answers), with its selection toggle in place of its
    * name and, under it, its course picker when the venue has courses (whose `""` placeholder means
    * "use the product default", not "no course": no such option) and Split quantity. */
-  #draftSections(store: WorkingOrderStore): TemplateResult {
+  #draftSections(store: WorkingOrderStore, entries: readonly DraftEntry[]): TemplateResult {
     const lines = store.lines;
-    const sections = draftSections(this.#draftEntries(lines), this.courses);
+    const sections = draftSections(entries, this.courses);
     return html`<div class="draft-sections" data-draft-sections>
       ${repeat(
         sections,
@@ -2174,11 +2176,11 @@ export class TillTableOrderScreen extends LitElement {
       <wt-button
         variant="secondary"
         data-flag-remove=${index}
-        aria-label=${`${t("table.flag_remove")} · ${name}`}
+        aria-label=${`${t("action.remove")} · ${name}`}
         ?disabled=${busy}
         @click=${() => void this.#removeFlagged(store, line)}
       >
-        ${t("table.flag_remove")}
+        ${t("action.remove")}
       </wt-button>
       <wt-button
         variant="secondary"
@@ -2312,6 +2314,7 @@ export class TillTableOrderScreen extends LitElement {
     const pending = this.pendingDraft;
     const preview = pending?.preview;
     return html`<wt-dialog
+      ${trackDialog()}
       class="draft-preview"
       data-draft-preview
       .open=${pending !== null}
@@ -2739,6 +2742,7 @@ export class TillTableOrderScreen extends LitElement {
     const pending = this.movePending;
     const held = this.#heldInOrder;
     return html`<wt-dialog
+      ${trackDialog()}
       class="move-line-dialog"
       data-move-dialog
       .open=${pending !== null}
@@ -2790,6 +2794,7 @@ export class TillTableOrderScreen extends LitElement {
   #fireGroupDialog(): TemplateResult {
     const group = this.fireGroupPending;
     return html`<wt-dialog
+      ${trackDialog()}
       class="fire-group-dialog"
       data-fire-dialog
       .open=${group !== null}

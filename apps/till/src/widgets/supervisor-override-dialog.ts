@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { trackDialog } from "./track-dialog.js";
 import type { PropertyValues } from "lit";
 import { baseStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
@@ -117,6 +118,7 @@ export class TillSupervisorOverrideDialog extends LitElement {
 
   override render() {
     return html`<wt-dialog
+      ${trackDialog()}
       .open=${true}
       .heading=${t("override.title")}
       @wt-close=${() => this.#cancel()}
