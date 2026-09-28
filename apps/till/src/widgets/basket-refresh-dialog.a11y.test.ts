@@ -24,3 +24,18 @@ describe.each(["light", "dark"] as const)("till-basket-refresh-dialog a11y (%s t
     await expectNoA11yViolations(host);
   });
 });
+
+describe.each(["light", "dark"] as const)(
+  "till-basket-refresh-dialog a11y on a table's order (%s theme)",
+  (theme) => {
+    it("has no violations with a line shown at its new price alone and a line left unsent", async () => {
+      setLocale("es-ES");
+      const { host } = await mountWidget<TillBasketRefreshDialog>(
+        "till-basket-refresh-dialog",
+        { changed: [{ lineNo: 1, name: "Caña", to: "6.00" }], blocked, purpose: "send" },
+        theme,
+      );
+      await expectNoA11yViolations(host);
+    });
+  },
+);

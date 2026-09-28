@@ -1,5 +1,26 @@
+import { currentContentLanguages } from "@waitron/ui";
 import type { OfferedModifier, OfferedOptionsList } from "../api/client.js";
 import type { OptionSelection, OptionSnapshot } from "@waitron/shared";
+
+type Names = Pick<OfferedOptionsList, "name" | "customerName" | "kitchenName">;
+
+/**
+ * An answer frozen the way the order path freezes it (`buildLineExtras`,
+ * `apps/server/src/modifier-selection.ts`): the list's three names and the chosen label's three, and
+ * no ids at all. The two plain staff names widen under the venue's default content language, which
+ * is what the server widens them under too, so the map holds exactly one entry either way.
+ */
+export function optionSnapshotOf(list: Names, label: Names): OptionSnapshot {
+  const language = currentContentLanguages().defaultLanguage;
+  return {
+    listName: { [language]: list.name },
+    listCustomerName: list.customerName,
+    listKitchenName: list.kitchenName,
+    labelName: { [language]: label.name },
+    labelCustomerName: label.customerName,
+    labelKitchenName: label.kitchenName,
+  };
+}
 
 /**
  * A frozen staff name arrives as a single-entry locale → text map, keyed by a content language this

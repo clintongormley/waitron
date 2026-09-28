@@ -1,5 +1,6 @@
 import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { trackDialog } from "../widgets/track-dialog.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import { setDevDeviceId } from "../api/dev-device.js";
@@ -194,6 +195,7 @@ export class TillDeviceChooser extends LitElement {
       ${
         this.settingUp
           ? html`<wt-dialog
+              ${trackDialog()}
               .open=${true}
               aria-label="Set up a new device"
               @wt-close=${() => (this.settingUp = false)}

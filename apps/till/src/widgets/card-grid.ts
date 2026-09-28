@@ -36,6 +36,7 @@ import type {
 } from "../api/client.js";
 import type { BumpMode, FireControlMode } from "./station-queue.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
+import type { OtherDraft } from "../screens/till-table-order-screen.js";
 import type { CardOutcome, CardProvider } from "./tender-pay.js";
 
 /**
@@ -105,6 +106,11 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) statuses: TableServiceStatus[] = [];
   @property({ attribute: false }) courses: TillCourse[] = [];
   @property() orderId?: string;
+  /** The open order's draft, passed through to the table-order card; see its `draftStore`. */
+  @property({ attribute: false }) draftStore?: WorkingOrderStore | null;
+  /** The other people's drafts on the order's party; see the table-order card's `otherDrafts`. */
+  @property({ attribute: false }) otherDrafts: readonly OtherDraft[] = [];
+  @property({ attribute: false }) takeOversAnswered = 0;
   @property({ attribute: false }) visit: TableVisit | null = null;
   @property({ attribute: false }) visitBills: VisitBill[] = [];
   @property({ type: Boolean }) finishRefused = false;
@@ -243,6 +249,9 @@ export class TillCardGrid extends LitElement {
           .fireControl=${this.fireControl}
           .tables=${this.tables}
           .orderId=${this.orderId}
+          .draftStore=${this.draftStore}
+          .otherDrafts=${this.otherDrafts}
+          .takeOversAnswered=${this.takeOversAnswered}
           .visit=${this.visit}
           .bills=${this.visitBills}
           .finishRefused=${this.finishRefused}

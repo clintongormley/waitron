@@ -8,7 +8,13 @@ afterEach(cleanup);
 
 interface Token extends HTMLElement {
   table: FloorTable;
-  labels: { covers?: string; toServe?: string; reserved?: string; forgotten?: string };
+  labels: {
+    covers?: string;
+    toServe?: string;
+    reserved?: string;
+    forgotten?: string;
+    unsent?: string;
+  };
   updateComplete: Promise<unknown>;
 }
 
@@ -70,6 +76,32 @@ describe.each(["light", "dark"] as const)("wt-table-token a11y (%s theme)", (the
 
   test("a forgotten-band token with a DECORATIVE marker (no consumer label) is accessible", async () => {
     await mountToken(tableData({ state: "open-tab", timingBand: "forgotten" }), theme);
+    await expectNoA11yViolations(host);
+  });
+
+  test("a token with an unsent-order mark naming two people is accessible", async () => {
+    const el = await mountToken(
+      tableData({ state: "open-tab", tabTotal: "12.00", unsentDrafts: ["Alex", "Sam"] }),
+      theme,
+    );
+    el.labels = { ...el.labels, unsent: "Sin enviar" };
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  test("a token with an unsent-order mark naming people but given no label is accessible", async () => {
+    await mountToken(
+      tableData({ state: "open-tab", tabTotal: "12.00", unsentDrafts: ["Alex", "Sam"] }),
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  test("a token with a DECORATIVE unsent-order mark (no label, no names) is accessible", async () => {
+    await mountToken(
+      tableData({ state: "open-tab", tabTotal: "12.00", unsentDrafts: [""] }),
+      theme,
+    );
     await expectNoA11yViolations(host);
   });
 

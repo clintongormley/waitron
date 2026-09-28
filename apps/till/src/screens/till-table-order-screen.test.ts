@@ -135,6 +135,12 @@ const draftToggle = (el: TillTableOrderScreen, name: string) =>
     toggle.textContent!.includes(name),
   )!;
 
+/** Below the side-by-side width, as in Vitest's default frame, the draft is on its Review view. */
+async function openReview(el: TillTableOrderScreen): Promise<void> {
+  el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
+  await el.updateComplete;
+}
+
 const previewDialog = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("[data-draft-preview]")!;
 
@@ -259,63 +265,6 @@ describe("till-table-order-screen", () => {
     expect(captured!.detail.store).toBe(grid(el).store);
     expect(captured!.detail.sent).toEqual(grid(el).store.lines);
     expect(grid(el).store.lineCount).toBe(1);
-  });
-
-  it("keeps one round per order: another order starts empty, and the first comes back with its lines", async () => {
-    const { el } = await mount({ orderId: "wo-A" });
-    grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
-    await el.updateComplete;
-    expect(grid(el).store.lineCount).toBe(1);
-
-    el.orderId = "wo-B";
-    await el.updateComplete;
-    expect(grid(el).store.lineCount).toBe(0);
-    const basket = el.shadowRoot!.querySelector(".round-bar till-basket")!;
-    expect(basket.shadowRoot!.textContent).toContain(t("basket.empty"));
-    expect(draftAction(el, "fire-all")!.hasAttribute("disabled")).toBe(true);
-
-    el.orderId = "wo-A";
-    await el.updateComplete;
-    expect(grid(el).store.lineCount).toBe(1);
-    expect(draftAction(el, "fire-all")!.hasAttribute("disabled")).toBe(false);
-  });
-
-  it("carries the draft to the order it is told to keep it on, and leaves nothing on the old one", async () => {
-    const { el } = await mount({ orderId: "wo-A" });
-    grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
-    await el.updateComplete;
-    const draft = grid(el).store;
-    const captured = await submitDraft(el, "fire-all");
-
-    captured!.detail.carryTo("wo-B");
-    el.orderId = "wo-B";
-    await el.updateComplete;
-    expect(grid(el).store).toBe(draft);
-
-    el.orderId = "wo-A";
-    await el.updateComplete;
-    expect(grid(el).store.lineCount).toBe(0);
-  });
-
-  it("does not carry a draft over one already started on the order it lands on", async () => {
-    const { el } = await mount({ orderId: "wo-B" });
-    grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
-    await el.updateComplete;
-    const started = grid(el).store;
-    el.orderId = "wo-A";
-    await el.updateComplete;
-    grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
-    await el.updateComplete;
-    const draft = grid(el).store;
-    const captured = await submitDraft(el, "fire-all");
-
-    captured!.detail.carryTo("wo-B");
-    el.orderId = "wo-B";
-    await el.updateComplete;
-    expect(grid(el).store).toBe(started);
-    el.orderId = "wo-A";
-    await el.updateComplete;
-    expect(grid(el).store).toBe(draft);
   });
 
   it("says a round is being sent, and shuts its controls, until the app has the answer", async () => {
@@ -887,6 +836,7 @@ describe("till-table-order-screen", () => {
         host.style.width = "390px";
         await ring(el, [beer, "1"], [steak, "1"]);
         await toggle(el, "Beer");
+        await openReview(el);
         const edge = el.getBoundingClientRect().right;
         const actions = [...el.shadowRoot!.querySelectorAll("[data-draft-action]")];
         expect(actions.length).toBe(2);
@@ -1072,6 +1022,7 @@ describe("till-table-order-screen", () => {
         host.style.width = "390px";
         await ring(el, [croquetas, "1"]);
         await pickDestination(el, "add-to-held");
+        await openReview(el);
         const edge = el.getBoundingClientRect().right;
         const controls = [
           ...el.shadowRoot!.querySelectorAll(
@@ -1088,6 +1039,7 @@ describe("till-table-order-screen", () => {
         const { el } = await mount({ courses: serviceCourses, products: menu, groups: held });
         await ring(el, [croquetas, "1"], [steak, "1"]);
         await pickDestination(el, "add-to-held");
+        await openReview(el);
         const controls = el.shadowRoot!.querySelectorAll(
           "[data-draft-select], [data-destination], [data-held-group], [data-draft-action]",
         );
@@ -1124,24 +1076,6 @@ describe("till-table-order-screen", () => {
         grid(el).store.removeLines(grid(el).store.lines);
         await el.updateComplete;
         await ring(el, [croquetas, "1"]);
-        expect(actionKinds(el)).toEqual(["submit"]);
-      });
-
-      it("starts a table's next draft afresh when its last one emptied while another table's draft was shown", async () => {
-        const { el } = await mount({ courses: serviceCourses, products: menu, orderId: "wo-4" });
-        await ring(el, [steak, "1"]);
-        const first = grid(el).store;
-        el.orderId = "wo-7";
-        await el.updateComplete;
-        // The app takes the sent lines out once the answer comes, whichever table is on screen.
-        first.removeLines(first.lines);
-        el.groups = [heldGroup("g-mains", 1, "1 × Steak")];
-        el.orderId = "wo-4";
-        await el.updateComplete;
-        expect(grid(el).store).toBe(first);
-
-        await ring(el, [croquetas, "1"]);
-
         expect(actionKinds(el)).toEqual(["submit"]);
       });
     });

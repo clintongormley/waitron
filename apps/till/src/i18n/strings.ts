@@ -246,6 +246,12 @@ export const en = {
   // Prefixes the time: "Reserved 20:30".
   "floor.reserved": "Reserved",
   "floor.forgotten": "Forgotten",
+  "floor.unsent": "An unsent order: {n} items",
+  "floor.unsent_one": "An unsent order: 1 item",
+  "floor.unsent_owner": "{name} has an unsent order: {n} items",
+  "floor.unsent_owner_one": "{name} has an unsent order: 1 item",
+  // A map token's mark; its accessible name adds the names: "Unsent: Alex, Sam".
+  "floor.unsent_mark": "Unsent",
   // Spatial floor plan. The view toggles name the view they switch TO.
   "floor.view_map": "Map",
   "floor.view_list": "List",
@@ -387,6 +393,49 @@ export const en = {
   "table.submitted_close": "Close",
   "table.round_unconfirmed":
     "The server did not answer, so the items may have been added. Check the tab before sending them again.",
+  "table.draft_changed_elsewhere": "Your order on this table was changed on another device.",
+  "table.draft_recount": "The order on this table changed. Check it and send again.",
+  "table.draft_save_failed":
+    "Your last change to an order was not saved. Open its table to check it.",
+  "table.draft_read_failed": "The order on this table could not be read. Open the table again.",
+  "table.draft_title": "Unsent order",
+  "table.review": "Review ({n})",
+  "table.last_added": "Last added",
+  "table.flag_keep": "Keep",
+  "table.flag_kept": "Stays in the order until it can be sent",
+  // `{names}` and `{n}` are substituted at the call site.
+  "table.left_out_one":
+    "1 line stays in the order, not sent because it is not available now: {names}.",
+  "table.left_out":
+    "{n} lines stay in the order, not sent because they are not available now: {names}.",
+  "table.left_out_unnamed":
+    "{n} lines stay in the order, not sent because they are not available now.",
+  "table.nothing_sent": "Nothing is sent.",
+  // `{name}` is substituted at the call site; `t()` does not interpolate.
+  "table.others_draft": "{name} has an unsent order",
+  "table.others_draft_unnamed": "An unsent order",
+  "table.draft_taken_by": "Taken over by {name}",
+  "table.draft_taken_by_unnamed": "Taken over by someone else",
+  "table.take_over": "Take over draft",
+  "table.take_over_title": "Take over {name}'s order?",
+  "table.take_over_title_unnamed": "Take over this order?",
+  "table.take_over_body":
+    "It becomes yours to change and send; {name} can no longer change or send it.",
+  "table.take_over_body_unnamed":
+    "It becomes yours to change and send; the person who had it can no longer change or send it.",
+  "table.take_over_confirm": "Take over",
+  "table.take_over_changed":
+    "This order changed before you could take it over. Check it and try again.",
+  "table.draft_taken_over_unsaved":
+    "{name} has taken over this order. Your last change was not saved.",
+  "table.draft_taken_over_unsaved_unnamed":
+    "Someone else has taken over this order. Your last change was not saved.",
+  "table.draft_taken_over_unsent": "{name} has taken over this order, so nothing was sent.",
+  "table.draft_taken_over_unsent_unnamed":
+    "Someone else has taken over this order, so nothing was sent.",
+  "table.taking_over": "Taking over the order…",
+  "table.take_over_sent": "This order has just been sent. Here is the table as it is now.",
+  "table.take_over_gone": "This order is no longer on this table. Here is the table as it is now.",
   // Errors
   "pin.invalid": "Wrong PIN, try again",
   "person.suspended": "This account is disabled — ask a manager",
@@ -470,15 +519,19 @@ export const en = {
   "basket_refresh.title": "The menu has changed",
   "basket_refresh.changed": "New prices",
   "basket_refresh.blocked": "Remove or replace before paying",
+  "basket_refresh.blocked_send": "Not available now: these stay in the order and are not sent",
   "basket_refresh.removed": "{name} is no longer on this menu",
   "basket_refresh.unavailable": "{name} is not available",
   "basket_refresh.extra_removed": "{name} is no longer offered with this dish",
+  "basket_refresh.unit_changed": "{name}: the quantity no longer fits its unit",
   "basket_refresh.confirm": "Update the order",
   "basket_refresh.pending": "The menu has changed. Review the changes before paying.",
   "basket_refresh.review": "Review changes",
   "basket.blocked.removed": "No longer on the menu",
   "basket.blocked.unavailable": "Sold out",
   "basket.blocked.extra": "An extra or choice has changed",
+  "basket.blocked.unit": "The quantity no longer fits its unit",
+  "basket.blocked.server": "Not available now",
   // Server status
   "server.on": "On:",
   "server.unknown": "checking",
@@ -707,6 +760,11 @@ export const es: Record<StringKey, string> = {
   "floor.free": "Libre",
   "floor.reserved": "Reservada",
   "floor.forgotten": "Olvidada",
+  "floor.unsent": "Un pedido sin enviar: {n} artículos",
+  "floor.unsent_one": "Un pedido sin enviar: 1 artículo",
+  "floor.unsent_owner": "{name} tiene un pedido sin enviar: {n} artículos",
+  "floor.unsent_owner_one": "{name} tiene un pedido sin enviar: 1 artículo",
+  "floor.unsent_mark": "Sin enviar",
   "floor.view_map": "Mapa",
   "floor.view_list": "Lista",
   "floor.edit_plan": "Editar plano",
@@ -839,6 +897,47 @@ export const es: Record<StringKey, string> = {
   "table.submitted_close": "Cerrar",
   "table.round_unconfirmed":
     "El servidor no respondió, así que los artículos pueden haberse añadido. Revisa la cuenta antes de volver a enviarlos.",
+  "table.draft_changed_elsewhere": "Tu pedido de esta mesa se ha cambiado en otro dispositivo.",
+  "table.draft_recount": "El pedido de esta mesa ha cambiado. Revísalo y vuelve a enviarlo.",
+  "table.draft_save_failed":
+    "Tu último cambio en un pedido no se ha guardado. Abre su mesa para revisarlo.",
+  "table.draft_read_failed": "No se pudo leer el pedido de esta mesa. Vuelve a abrir la mesa.",
+  "table.draft_title": "Pedido sin enviar",
+  "table.review": "Revisar ({n})",
+  "table.last_added": "Lo último añadido",
+  "table.flag_keep": "Dejar",
+  "table.flag_kept": "Se queda en el pedido hasta que se pueda enviar",
+  "table.left_out_one":
+    "1 línea se queda en el pedido sin enviar porque no está disponible ahora: {names}.",
+  "table.left_out":
+    "{n} líneas se quedan en el pedido sin enviar porque no están disponibles ahora: {names}.",
+  "table.left_out_unnamed":
+    "{n} líneas se quedan en el pedido sin enviar porque no están disponibles ahora.",
+  "table.nothing_sent": "No se envía nada.",
+  "table.others_draft": "{name} tiene un pedido sin enviar",
+  "table.others_draft_unnamed": "Un pedido sin enviar",
+  "table.draft_taken_by": "Tomado por {name}",
+  "table.draft_taken_by_unnamed": "Tomado por otra persona",
+  "table.take_over": "Tomar el pedido",
+  "table.take_over_title": "¿Tomar el pedido de {name}?",
+  "table.take_over_title_unnamed": "¿Tomar este pedido?",
+  "table.take_over_body":
+    "Pasa a ser tuyo para cambiarlo y enviarlo; {name} ya no podrá cambiarlo ni enviarlo.",
+  "table.take_over_body_unnamed":
+    "Pasa a ser tuyo para cambiarlo y enviarlo; quien lo tenía ya no podrá cambiarlo ni enviarlo.",
+  "table.take_over_confirm": "Tomar",
+  "table.take_over_changed":
+    "Este pedido cambió antes de que pudieras tomarlo. Revísalo e inténtalo de nuevo.",
+  "table.draft_taken_over_unsaved":
+    "{name} ha tomado este pedido. Tu último cambio no se ha guardado.",
+  "table.draft_taken_over_unsaved_unnamed":
+    "Otra persona ha tomado este pedido. Tu último cambio no se ha guardado.",
+  "table.draft_taken_over_unsent": "{name} ha tomado este pedido, así que no se ha enviado nada.",
+  "table.draft_taken_over_unsent_unnamed":
+    "Otra persona ha tomado este pedido, así que no se ha enviado nada.",
+  "table.taking_over": "Tomando el pedido…",
+  "table.take_over_sent": "Este pedido se acaba de enviar. Así está ahora la mesa.",
+  "table.take_over_gone": "Este pedido ya no está en esta mesa. Así está ahora la mesa.",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "person.suspended": "Esta cuenta está desactivada. Avisa a un responsable",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",
@@ -913,15 +1012,19 @@ export const es: Record<StringKey, string> = {
   "basket_refresh.title": "La carta ha cambiado",
   "basket_refresh.changed": "Precios nuevos",
   "basket_refresh.blocked": "Quita o sustituye antes de cobrar",
+  "basket_refresh.blocked_send": "No disponibles ahora: se quedan en el pedido y no se envían",
   "basket_refresh.removed": "{name} ya no está en esta carta",
   "basket_refresh.unavailable": "{name} no está disponible",
   "basket_refresh.extra_removed": "{name} ya no se ofrece con este plato",
+  "basket_refresh.unit_changed": "{name}: la cantidad ya no encaja con su unidad",
   "basket_refresh.confirm": "Actualizar el pedido",
   "basket_refresh.pending": "La carta ha cambiado. Revisa los cambios antes de cobrar.",
   "basket_refresh.review": "Revisar cambios",
   "basket.blocked.removed": "Ya no está en la carta",
   "basket.blocked.unavailable": "Agotado",
   "basket.blocked.extra": "Ha cambiado un extra u opción",
+  "basket.blocked.unit": "La cantidad ya no encaja con su unidad",
+  "basket.blocked.server": "No disponible ahora",
   "server.on": "Activo:",
   "server.unknown": "comprobando",
   "server.unreachable": "sin conexión",

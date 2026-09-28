@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
+import { trackDialog } from "./track-dialog.js";
 import { baseStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 
@@ -85,6 +86,7 @@ export class TillReaderPicker extends LitElement {
 
   override render() {
     return html`<wt-dialog
+      ${trackDialog()}
       .open=${true}
       .heading=${t("reader_picker.heading")}
       @wt-close=${() => this.#cancel()}

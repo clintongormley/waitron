@@ -12,12 +12,13 @@ import { localToday } from "@waitron/catalogue/src/vat-rates.js";
 import { customerPresentationText } from "@waitron/catalogue/src/product-presentation.js";
 import { currentContentLanguages } from "@waitron/ui";
 import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.js";
-import { sumDecimals } from "@waitron/shared";
+import { addDecimal, decimal, sumDecimals } from "@waitron/shared";
 import type { Decimal, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { lineGross } from "./order-line.js";
+import { orderLineMergeKey } from "./draft-lines.js";
 import type { BlockReason } from "./menu-refresh.js";
 import type { HeldExtra, TillProduct } from "../api/client.js";
-import { productUnit, toPresentation } from "../widgets/product-name.js";
+import { productUnit, soldByTheUnit, toPresentation } from "../widgets/product-name.js";
 
 /**
  * One extras pick on a basket line. `name` and `price` are the client's copy of what the offer
@@ -50,8 +51,9 @@ export interface LineSelection {
   extras?: SelectedExtra[];
   options?: OptionSelection[];
   optionSnapshots?: OptionSnapshot[];
-  /** Read by {@link WorkingOrderStore.addProduct} alone; {@link WorkingOrderStore.setLineExtras} owns
-   * a line's note after that. */
+  /** Read when a line is created ({@link WorkingOrderStore.addProduct},
+   * {@link WorkingOrderStore.addMerging}); {@link WorkingOrderStore.setLineExtras} owns a line's note
+   * after that. */
   note?: string;
 }
 
@@ -77,6 +79,17 @@ export interface OrderLine {
   optionSnapshots?: OptionSnapshot[];
   /** A kitchen instruction; ABSENT (never `""`) when none. */
   note?: string;
+  /** The waiter's course override on a table draft; ABSENT means the product's default course. */
+  courseId?: string;
+  /** Never merged with another line, either way; Split quantity's rows carry it. */
+  noMerge?: true;
+  /** A table draft line the server said, at its last answer, cannot be sold now. Not part of the
+   * saved line. */
+  unavailableOnServer?: true;
+  /** A draft line rebuilt from the server under a menu version that is not the live one: the price
+   * shown is the live one, and what it cost under its own version is unknown. Not part of the saved
+   * line. */
+  earlierPriceUnknown?: true;
 }
 
 /** `"product-selected"` is a widget-to-widget broadcast that does NOT mutate the basket. */
@@ -102,6 +115,52 @@ function toPriceable(line: OrderLine): BasketItem {
       unit: productUnit(p),
     },
   };
+}
+
+/** Refuses a quantity the product's unit cannot take. */
+function newLine(product: TillProduct, quantity: string, selection?: LineSelection): OrderLine {
+  assertQuantityPrecision(quantity, productUnit(product).precision, { positive: true });
+  const line: OrderLine = { product, quantity };
+  applySelection(line, selection);
+  if (selection?.note !== undefined) {
+    line.note = selection.note;
+  }
+  return line;
+}
+
+/** A line of its own: its answers and picks are copied, never shared with `line`. */
+function copyLine(line: OrderLine): OrderLine {
+  const copy: OrderLine = { ...line };
+  if (line.extras !== undefined) copy.extras = line.extras.map((extra) => ({ ...extra }));
+  if (line.options !== undefined) copy.options = line.options.map((answer) => ({ ...answer }));
+  if (line.optionSnapshots !== undefined)
+    copy.optionSnapshots = line.optionSnapshots.map((snapshot) => ({ ...snapshot }));
+  return copy;
+}
+
+/** For {@link WorkingOrderStore.addMerging}. `added`'s key is taken once, and only once a kept line
+ * has a key to compare it with. */
+function mergeTarget(lines: readonly OrderLine[], added: OrderLine): OrderLine | undefined {
+  if (added.product.menuItemId === undefined) return undefined;
+  let addedKey: string | null | undefined;
+  return lines.find((kept) => {
+    if (kept.notOffered !== undefined || kept.blocked !== undefined) return false;
+    const keptKey = orderLineMergeKey(kept);
+    if (keptKey === null) return false;
+    if (addedKey === undefined) addedKey = orderLineMergeKey(added);
+    return keptKey === addedKey;
+  });
+}
+
+/** The first line of `lines` that would have added to `kept` by the draft merge rule (D10). */
+function mergingWith(lines: readonly OrderLine[], kept: OrderLine): OrderLine | undefined {
+  if (kept.product.menuItemId === undefined) return undefined;
+  let keptKey: string | null | undefined;
+  return lines.find((line) => {
+    if (line.product.menuItemId === undefined) return false;
+    if (keptKey === undefined) keptKey = orderLineMergeKey(kept);
+    return keptKey !== null && orderLineMergeKey(line) === keptKey;
+  });
 }
 
 /** An empty list is not an answer, so it leaves no key. */
@@ -135,6 +194,7 @@ export class WorkingOrderStore {
   /** The server revision the persisted order's copy is at; meaningless until {@link persisted}. */
   #revision = 0;
   #sending = false;
+  #lastAdded?: OrderLine;
 
   /** Changes only on {@link clear} and {@link loadFrom}. */
   get id(): string {
@@ -157,6 +217,12 @@ export class WorkingOrderStore {
 
   get lineCount(): number {
     return this.#lines.length;
+  }
+
+  /** The line the latest add made or grew, while that line is still in the order. */
+  get lastAdded(): OrderLine | undefined {
+    const line = this.#lastAdded;
+    return line !== undefined && this.#lines.includes(line) ? line : undefined;
   }
 
   get persisted(): boolean {
@@ -240,13 +306,28 @@ export class WorkingOrderStore {
 
   addProduct(product: TillProduct, quantity: string, selection?: LineSelection): void {
     if (this.#sending) return;
-    assertQuantityPrecision(quantity, productUnit(product).precision, { positive: true });
-    const line: OrderLine = { product, quantity };
-    applySelection(line, selection);
-    if (selection?.note !== undefined) {
-      line.note = selection.note;
-    }
+    const line = newLine(product, quantity, selection);
     this.#lines.push(line);
+    this.#lastAdded = line;
+    this.#changedLines();
+  }
+
+  /**
+   * As {@link addProduct}, except that a line ordering the same thing as an earlier one (the draft
+   * merge rule, D10) adds its quantity to the first such line, which keeps its place. A line marked
+   * not offered or blocked takes nothing: a fresh tap starts a line of its own beside it.
+   */
+  addMerging(product: TillProduct, quantity: string, selection?: LineSelection): void {
+    if (this.#sending) return;
+    const line = newLine(product, quantity, selection);
+    const into = mergeTarget(this.#lines, line);
+    if (into === undefined) this.#lines.push(line);
+    else into.quantity = addDecimal(decimal(into.quantity), decimal(quantity));
+    this.#lastAdded = into ?? line;
+    this.#changedLines();
+  }
+
+  #changedLines(): void {
     this.#invalidatePricing();
     this.#markDirty();
     this.emit("changed");
@@ -277,6 +358,33 @@ export class WorkingOrderStore {
     });
     this.#lines[index]!.quantity = quantity;
     this.#invalidatePricing();
+    this.#markDirty();
+    this.emit("changed");
+  }
+
+  /** Split quantity: a whole-unit line of N becomes N lines of one in its place, the first being the
+   * same line object. Each is marked `noMerge`, so no later add folds them back together. */
+  splitLine(index: number): void {
+    if (this.#sending) return;
+    const line = this.#lines[index];
+    if (line === undefined || !soldByTheUnit(line.product)) return;
+    const count = Number(line.quantity);
+    if (!Number.isInteger(count) || count < 2) return;
+    line.quantity = "1";
+    line.noMerge = true;
+    if (this.#lastAdded === line) this.#lastAdded = undefined;
+    const rest = Array.from({ length: count - 1 }, () => copyLine(line));
+    this.#lines.splice(index + 1, 0, ...rest);
+    this.#changedLines();
+  }
+
+  /** The waiter's course override on a table draft line; `undefined` goes back to the dish's own. */
+  setLineCourse(index: number, courseId: string | undefined): void {
+    if (this.#sending) return;
+    const line = this.#lines[index];
+    if (line === undefined) return;
+    if (courseId === undefined) delete line.courseId;
+    else line.courseId = courseId;
     this.#markDirty();
     this.emit("changed");
   }
@@ -368,8 +476,12 @@ export class WorkingOrderStore {
   }
 
   /** Adopts a RETRIEVED order's `id` verbatim, so paying it keys the same idempotency slot the server
-   * stored it under, and the `revision` its copy was read at. */
+   * stored it under, and the `revision` its copy was read at. The same order read again (a saved
+   * draft's answer rebuilds every line) keeps {@link lastAdded} on the line ordering the same thing,
+   * by the draft merge rule. */
   loadFrom(id: string, lines: OrderLine[], label?: string, revision = 0): void {
+    const last = id === this.#id ? this.lastAdded : undefined;
+    this.#lastAdded = last === undefined ? undefined : mergingWith(lines, last);
     this.#id = id;
     this.#revision = revision;
     this.#lines.length = 0;

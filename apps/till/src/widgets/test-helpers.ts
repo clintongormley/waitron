@@ -1,7 +1,18 @@
 import axe from "axe-core";
 import { commands } from "vitest/browser";
-import { beforeEach, expect } from "vitest";
+import { beforeEach, expect, vi } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
+import { normaliseDraftLines } from "@waitron/shared";
+import type {
+  Draft,
+  DraftLine,
+  DraftSave,
+  DraftSubmission,
+  GroupLine,
+  GroupRelease,
+  SubmittedDraft,
+  SubmittedGroups,
+} from "../api/client.js";
 import type { DocumentMember, ServedMenu } from "@waitron/catalogue/src/menu-document-types.js";
 
 declare module "vitest/browser" {
@@ -183,3 +194,172 @@ export function servedMenus<M extends { id: string; homeLayoutId?: string }>(
     };
   });
 }
+
+/** A submitted group with its lines read back from the drafts they were saved in, each in the shape
+ * a group submission carries: a null or empty field left out. */
+export interface SentGroup {
+  release: GroupRelease;
+  lines: GroupLine[];
+}
+
+function asGroupLine(line: DraftLine): GroupLine {
+  return {
+    menuItemId: line.menuItemId,
+    quantity: line.quantity,
+    ...(line.variantId === null ? {} : { variantId: line.variantId }),
+    ...(line.menuVersionId === null ? {} : { menuVersionId: line.menuVersionId }),
+    ...(line.options.length === 0 ? {} : { options: line.options }),
+    ...(line.extras.length === 0 ? {} : { extras: line.extras }),
+    ...(line.note === null ? {} : { note: line.note }),
+    ...(line.courseId === null ? {} : { courseId: line.courseId }),
+  };
+}
+
+/**
+ * The server's side of drafts for an app test's `TillApi` stub: each person's open draft per party,
+ * merged on save with the shared rule and re-identified on every save; a submission takes its lines
+ * out, and a repeat of a submission id answers as the first. Requests come from {@link personId}'s
+ * session. {@link answer} says what the placed groups were; a test replaces it for another tab or
+ * revision, or wraps {@link apply} to refuse or to lose the reply.
+ */
+export function draftServer(
+  answer: (visitId: string) => SubmittedGroups = () => ({
+    tabId: "wo-4",
+    revision: 4,
+    groups: [],
+  }),
+) {
+  let ids = 0;
+  const replies = new Map<string, SubmittedDraft>();
+  const clone = <T>(value: T): T => structuredClone(value);
+  /** Merges as the server does, and gives every line a new id, recorded by that id. */
+  const reidentify = (lines: DraftSave["lines"]): DraftLine[] =>
+    normaliseDraftLines(lines).map((line) => {
+      const saved = { ...line, id: `line-${++ids}`, unavailable: false };
+      server.linesById.set(saved.id, saved);
+      return saved;
+    });
+  const server = {
+    personId: "p1",
+    personName: "Ana",
+    drafts: [] as Draft[],
+    linesById: new Map<string, DraftLine>(),
+    /** The menu items the server reads as unavailable when it answers a line. */
+    unavailable: new Set<string>(),
+    answer,
+    listDrafts: vi.fn(async (visitId: string) =>
+      server.flagged(clone(server.drafts.filter((draft) => draft.visitId === visitId))),
+    ),
+    saveDraft: vi.fn(async (visitId: string, save: DraftSave) =>
+      server.flagged(clone(server.save(visitId, save))),
+    ),
+    submitDraft: vi.fn(async (visitId: string, draftId: string, submission: DraftSubmission) =>
+      clone(server.apply(visitId, draftId, submission)),
+    ),
+    takeOverDraft: vi.fn(async (visitId: string, draftId: string, revision: number) =>
+      server.flagged(clone(server.takeOver(visitId, draftId, revision))),
+    ),
+    /** `unavailable` worked out on each answer, as the server does, never stored. */
+    flagged<T extends Draft | Draft[] | null>(answer: T): T {
+      for (const draft of answer === null ? [] : Array.isArray(answer) ? answer : [answer])
+        for (const line of draft.lines) line.unavailable = server.unavailable.has(line.menuItemId);
+      return answer;
+    },
+    save(visitId: string, save: DraftSave): Draft {
+      const own = server.drafts.find(
+        (draft) => draft.visitId === visitId && draft.ownerId === server.personId,
+      );
+      let draft: Draft;
+      if (save.draftId === null) {
+        if (own !== undefined) throw refusal("draft.out_of_date", own);
+        draft = {
+          id: `draft-${++ids}`,
+          visitId,
+          ownerId: server.personId,
+          ownerName: server.personName,
+          revision: 0,
+          lines: [],
+          takenOverFrom: null,
+        };
+        server.drafts.push(draft);
+      } else {
+        draft = server.open(visitId, save.draftId, save.revision);
+      }
+      draft.revision += 1;
+      draft.lines = reidentify(save.lines);
+      return draft;
+    },
+    /** A take-over as the server does it: the person's own draft answers as it is; another's
+     * becomes theirs, or is added into the draft they already hold, which answers. */
+    takeOver(visitId: string, draftId: string, revision: number): Draft {
+      const draft = server.drafts.find(
+        (candidate) => candidate.id === draftId && candidate.visitId === visitId,
+      );
+      if (draft === undefined) throw { code: "draft.not_found", status: 404, draftId };
+      if (draft.ownerId === server.personId) return draft;
+      if (draft.revision !== revision) throw refusal("draft.out_of_date", draft);
+      const own = server.drafts.find(
+        (candidate) => candidate.visitId === visitId && candidate.ownerId === server.personId,
+      );
+      if (own === undefined) {
+        draft.takenOverFrom = { personId: draft.ownerId, name: draft.ownerName };
+        draft.ownerId = server.personId;
+        draft.ownerName = server.personName;
+        draft.revision += 1;
+        return draft;
+      }
+      server.drafts.splice(server.drafts.indexOf(draft), 1);
+      own.revision += 1;
+      own.lines = reidentify([...own.lines, ...draft.lines]);
+      return own;
+    },
+    /** A submission as the server takes it, whether or not its answer reaches the till. */
+    apply(visitId: string, draftId: string, submission: DraftSubmission): SubmittedDraft {
+      const replay = replies.get(submission.submissionId);
+      if (replay !== undefined) return replay;
+      const draft = server.open(visitId, draftId, submission.draftRevision);
+      const named = submission.groups.flatMap((group) => group.lineIds);
+      if (!named.every((id) => draft.lines.some((line) => line.id === id)))
+        throw { code: "management.request_invalid", status: 400, field: "groups" };
+      draft.lines = draft.lines.filter((line) => !named.includes(line.id));
+      draft.revision += 1;
+      if (draft.lines.length === 0) server.drafts.splice(server.drafts.indexOf(draft), 1);
+      const reply = {
+        ...server.answer(visitId),
+        draft: draft.lines.length === 0 ? null : server.flagged(clone(draft)),
+      };
+      replies.set(submission.submissionId, reply);
+      return reply;
+    },
+    open(visitId: string, draftId: string, revision: number): Draft {
+      const draft = server.drafts.find(
+        (candidate) => candidate.id === draftId && candidate.visitId === visitId,
+      );
+      if (draft === undefined) throw { code: "draft.not_found", status: 404 };
+      if (draft.ownerId !== server.personId)
+        throw {
+          code: "draft.taken_over",
+          status: 409,
+          draftId,
+          ownerId: draft.ownerId,
+          ownerName: draft.ownerName,
+        };
+      if (draft.revision !== revision) throw refusal("draft.out_of_date", draft);
+      return draft;
+    },
+    /** The groups a submission sent, their lines read back by id. */
+    sentGroups(submission: DraftSubmission): SentGroup[] {
+      return submission.groups.map((group) => ({
+        release: group.release,
+        lines: group.lineIds.map((id) => asGroupLine(server.linesById.get(id)!)),
+      }));
+    },
+  };
+  return server;
+}
+
+function refusal(code: string, draft: Draft) {
+  return { code, status: 409, draftId: draft.id, revision: draft.revision };
+}
+
+export type DraftServer = ReturnType<typeof draftServer>;

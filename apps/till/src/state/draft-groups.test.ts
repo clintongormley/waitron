@@ -208,3 +208,63 @@ describe("draftPreview", () => {
     });
   });
 });
+
+describe("draftSubmission: lines that cannot be sold now", () => {
+  // Beer ×2 (Drinks) and Steak ×2 (Mains) can be sent; Croquetas ×4 (Starters) cannot.
+  const flaggedDraft = [
+    entry("drinks", "2"),
+    { ...entry("starters", "4"), flagged: true },
+    entry("mains", "2"),
+  ];
+
+  it("leaves a flagged line out of Send all and Fire all, keeping it in the draft and naming it", () => {
+    expect(draftSubmission({ kind: "send-all" }, flaggedDraft, courses, new Set())).toEqual({
+      groups: [
+        { release: "hold", lineIndexes: [0] },
+        { release: "hold", lineIndexes: [2] },
+      ],
+      remaining: [1],
+      leftOut: [1],
+    });
+    expect(draftSubmission({ kind: "fire-all" }, flaggedDraft, courses, new Set())).toEqual({
+      groups: [{ release: "fire", lineIndexes: [0, 2] }],
+      remaining: [1],
+      leftOut: [1],
+    });
+  });
+
+  it("leaves a flagged line out of a selection and of a later addition the same way", () => {
+    const selected = new Set([1, 2]);
+    for (const kind of ["send-selected", "fire-selected", "fire-now", "add-as-new"] as const) {
+      const submission = draftSubmission({ kind }, flaggedDraft, courses, selected);
+      expect(submission.groups.flatMap((group) => group.lineIndexes)).toEqual([2]);
+      expect(submission.leftOut).toEqual([1]);
+      expect(submission.remaining).toEqual([0, 1]);
+    }
+    const joining = draftSubmission(
+      { kind: "add-to-held", groupId: "g-3" },
+      flaggedDraft,
+      courses,
+      new Set(),
+    );
+    expect(joining).toEqual({
+      groups: [{ release: "hold", lineIndexes: [0, 2] }],
+      joinGroupId: "g-3",
+      remaining: [1],
+      leftOut: [1],
+    });
+  });
+
+  it("names no flagged line outside the selection as left out", () => {
+    expect(draftSubmission({ kind: "fire-selected" }, flaggedDraft, courses, new Set([0]))).toEqual(
+      { groups: [{ release: "fire", lineIndexes: [0] }], remaining: [1, 2] },
+    );
+  });
+
+  it("sends nothing, and joins no group, when every line in scope is flagged", () => {
+    const allFlagged = flaggedDraft.map((each) => ({ ...each, flagged: true }));
+    expect(
+      draftSubmission({ kind: "add-to-held", groupId: "g-3" }, allFlagged, courses, new Set()),
+    ).toEqual({ groups: [], remaining: [0, 1, 2], leftOut: [0, 1, 2] });
+  });
+});

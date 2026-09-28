@@ -2,7 +2,9 @@ import { optionAnswers } from "../widgets/option-snapshot.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { trackDialog } from "../widgets/track-dialog.js";
 import { keyed } from "lit/directives/keyed.js";
+import { repeat } from "lit/directives/repeat.js";
 import { baseStyles } from "@waitron/ui";
 import "../widgets/fired-ago.js";
 import {
@@ -18,7 +20,7 @@ import {
   toScale,
   type Decimal,
 } from "@waitron/shared";
-import { countText, currentLocale, t } from "../i18n/t.js";
+import { countText, currentLocale, named, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { selectStyles } from "../select-styles.js";
@@ -66,6 +68,7 @@ import {
   draftPreview,
   draftSections,
   draftSubmission,
+  itemCount,
   type DraftAction,
   type DraftEntry,
   type DraftGroup,
@@ -75,10 +78,14 @@ import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
 
 export type { TableServiceStatus };
 
+/** The screen's own width, in CSS pixels, from which browsing and the draft show side by side.
+ * Narrower, the draft opens on its own Review view. */
+export const DRAFT_SIDE_BY_SIDE_MIN_WIDTH = 720;
+
 /**
  * `submit-draft`: the groups a confirmed preview named, each naming its lines by their place in
- * `lines`. The draft stays in `store` until the app has the server's answer: it takes out the `sent`
- * lines (the ones `lines` was built from, in order) once they are added, and a refused submission is
+ * `lines`. The draft stays in `store` until the app has the server's answer: the `sent` lines (the
+ * ones `lines` was built from, in order) leave it once they are added, and a refused submission is
  * kept (D9). `joinGroupId` adds the one held group's lines to that existing group.
  */
 export interface SubmitDraftDetail {
@@ -88,8 +95,6 @@ export interface SubmitDraftDetail {
   store: WorkingOrderStore;
   sent: readonly OrderLine[];
   draft: Draft;
-  /** Keeps what is left of the draft on `orderId`, the bill the same party's submission landed on. */
-  carryTo: (orderId: string) => void;
 }
 
 /** One draft, from its first line until its store is empty again, through its partial submissions.
@@ -100,14 +105,73 @@ export interface Draft {
   readonly tally: { fired: number; held: number; joined: number };
 }
 
+/** Another person's open draft on the party, shown read-only. `takenFromYou`: its latest take-over
+ * was from the signed-in person, so it is headed by who holds it now. */
+export interface OtherDraft {
+  id: string;
+  revision: number;
+  ownerName: string;
+  takenFromYou: boolean;
+  lines: readonly OrderLine[];
+}
+
+/** `take-over-draft`: another person's draft, at the revision the screen showed, the person
+ * confirmed taking over. */
+export interface TakeOverDraftDetail {
+  draftId: string;
+  revision: number;
+}
+
+/** A dish the table's offers no longer hold has no name to show, so it reads as not offered. */
+function shownName(product: TillProduct): string {
+  return lineProductName(product) || t("basket.not_offered");
+}
+
+/** A draft line no action sends: the till's own check, the server's last answer, or a dish the
+ * table's offers no longer hold says it cannot be sold now. */
+function flagged(line: OrderLine): boolean {
+  return (
+    line.blocked !== undefined || line.unavailableOnServer === true || line.notOffered === true
+  );
+}
+
+/** A dish no longer offered has no unit to read, so a whole quantity is counted as whole units. */
+function countsWholeUnits(line: OrderLine): boolean {
+  return soldByTheUnit(line.product) || (line.notOffered === true && /^\d+$/.test(line.quantity));
+}
+
+/** How many lines an action leaves in the draft, naming them when there are only a few. */
+function leftOutText(lines: readonly OrderLine[]): string {
+  if (lines.length > LEFT_OUT_NAMED)
+    return t("table.left_out_unnamed").replace("{n}", String(lines.length));
+  const names = lines
+    .map((line) => `${shownName(line.product)}\u00a0×${trimQuantity(line.quantity)}`)
+    .join(", ");
+  return countText(lines.length, "table.left_out", "table.left_out_one").replace(
+    "{names}",
+    () => names,
+  );
+}
+
+/** Beyond this many, the left-out message counts the lines without naming them. */
+const LEFT_OUT_NAMED = 3;
+
 /** Where a later addition goes: `add-to-held` is offered only while the party has a held group. */
 type Destination = "fire-now" | "add-to-held" | "add-as-new";
 
-/** An action's preview, and the submission its Confirm sends. */
+/** An action's preview, and the submission its Confirm sends. `leftOut`: the flagged lines it
+ * leaves in the draft. */
 interface PendingDraft {
   preview: DraftPreview;
   join?: { group: OrderGroup; index: number };
   detail: SubmitDraftDetail;
+  leftOut: readonly OrderLine[];
+}
+
+/** The element `node` renders inside: its slot, its parent, or the host of its shadow root. */
+function composedParent(node: Element): Element | null {
+  const root = node.getRootNode();
+  return node.assignedSlot ?? node.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
 }
 
 /** A held group as the picker names it: `index` is its place among the party's held groups. */
@@ -202,6 +266,10 @@ export class TillTableOrderScreen extends LitElement {
         display: block;
       }
 
+      .width-probe {
+        height: 0;
+      }
+
       .screen {
         display: flex;
         flex-direction: column;
@@ -282,7 +350,6 @@ export class TillTableOrderScreen extends LitElement {
       }
 
       .grid-region {
-        flex: 1 1 20rem;
         min-width: 0;
       }
 
@@ -511,13 +578,6 @@ export class TillTableOrderScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      .draft-line {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--wt-space-3);
-      }
-
       /* A native button, not a wt-button: wt-button does not pass aria-pressed to its inner button. */
       .draft-select {
         min-width: var(--wt-tap-min);
@@ -598,11 +658,158 @@ export class TillTableOrderScreen extends LitElement {
 
       .round-bar {
         display: flex;
-        flex-wrap: wrap;
-        align-items: flex-end;
+        flex-direction: column;
         gap: var(--wt-space-3);
-        padding-top: var(--wt-space-3);
-        border-top: 1px solid var(--wt-color-border);
+      }
+
+      .draft-line-tools {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-end;
+        gap: var(--wt-space-2);
+        padding-bottom: var(--wt-space-2);
+      }
+
+      .flag-choice {
+        display: flex;
+        gap: var(--wt-space-2);
+      }
+
+      .flag-kept {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+
+      .ordering {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-4);
+      }
+
+      .ordering.side-by-side {
+        flex-direction: row;
+        align-items: flex-start;
+      }
+
+      .browsing {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-3);
+        min-width: 0;
+      }
+
+      .side-by-side .browsing {
+        flex: 3 1 0;
+      }
+
+      .draft-pane {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-3);
+        min-width: 0;
+      }
+
+      .side-by-side .draft-pane {
+        flex: 2 1 0;
+        padding-inline-start: var(--wt-space-4);
+        border-inline-start: 1px solid var(--wt-color-border);
+      }
+
+      .browsing[hidden],
+      .draft-pane[hidden] {
+        display: none;
+      }
+
+      .draft-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wt-space-3);
+      }
+
+      .draft-title {
+        margin: 0;
+        font-size: var(--wt-font-size-lg);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      /* Kept in view at the bottom while the menu scrolls, clear of the column the till's floating
+         language button takes at the bottom right: a tap target and two gaps wide. */
+      .bottom-bar {
+        position: sticky;
+        bottom: 0;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        padding-block: var(--wt-space-2);
+        padding-inline-end: calc(var(--wt-tap-min) + 2 * var(--wt-space-3));
+        background: var(--wt-color-bg);
+      }
+
+      .last-added {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wt-space-3);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+      }
+
+      .last-added-line {
+        margin: 0;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .last-added-name {
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .other-draft {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--wt-space-2);
+        padding: var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+      }
+
+      .other-draft-title {
+        margin: 0;
+        font-size: var(--wt-font-size-md);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .other-draft-lines {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        overflow-wrap: anywhere;
+      }
+
+      .other-draft-name {
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .last-added-steps {
+        display: flex;
+        flex: 0 0 auto;
+        gap: var(--wt-space-2);
+      }
+
+      .review-open {
+        align-self: stretch;
       }
 
       /* A draft being sent takes no edit until the answer comes back; the status line says why. */
@@ -621,11 +828,6 @@ export class TillTableOrderScreen extends LitElement {
          remove button stay on screen. */
       .round-bar till-basket::part(name) {
         overflow-wrap: anywhere;
-      }
-
-      .round-bar till-basket {
-        flex: 1 1 auto;
-        min-width: 0;
       }
     `,
     segmentedOptionStyles,
@@ -674,6 +876,13 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Boolean }) groupCommandBusy = false;
 
   @state() private drawerOpen = false;
+  /** The screen is at least {@link DRAFT_SIDE_BY_SIDE_MIN_WIDTH} wide. */
+  @state() private wide = false;
+  /** Below that width, the draft is open on its Review view in place of browsing. */
+  @state() private reviewing = false;
+  #resizing?: ResizeObserver;
+  /** Where browsing was scrolled when Review opened, put back on Back. */
+  #browsingScroll?: { scroller: Element; top: number };
 
   /** null shows every dish in the selected menu. */
   @property({ attribute: false }) selectedDiet: DietPredicate | null = null;
@@ -713,41 +922,45 @@ export class TillTableOrderScreen extends LitElement {
   @state() private splitQuantities = new Map<number, string>();
   @state() private splitAttempted = false;
 
-  /** One draft per order, kept only as long as this screen is: another order shown here starts its
-   * own draft. */
-  readonly #draftStores = new Map<string, WorkingOrderStore>();
+  /** The party's draft for the signed-in person, owned by the app; null for an order that takes no
+   * draft, such as a check split off the party's bill. Unset, the screen keeps a draft of its own. */
+  @property({ attribute: false }) draftStore?: WorkingOrderStore | null;
 
-  get #draftStore(): WorkingOrderStore {
-    const key = this.orderId ?? "";
-    let store = this.#draftStores.get(key);
-    if (store === undefined) {
-      store = new WorkingOrderStore();
-      this.#draftStores.set(key, store);
-    }
-    return store;
+  readonly #ownDraft = new WorkingOrderStore();
+
+  /** The other people's open drafts on the party, oldest first. */
+  @property({ attribute: false }) otherDrafts: readonly OtherDraft[] = [];
+  /** Moved on by the app each time a take-over it was asked for has answered, or failed. */
+  @property({ attribute: false }) takeOversAnswered = 0;
+  /** The draft whose take-over has just answered, until its dialog has closed. */
+  #takeOverAnswered?: string;
+  /** The draft whose take-over is being asked about. */
+  @state() private takeOverPending: OtherDraft | null = null;
+  /** {@link takeOversAnswered} when a take-over was sent; unset while none is out. */
+  @state() private takeOverSent: number | null = null;
+
+  get #draftStore(): WorkingOrderStore | null {
+    return this.draftStore === undefined ? this.#ownDraft : this.draftStore;
   }
 
-  /** A draft already started on `orderId` is left where it is rather than replaced. */
-  #carryDraft(store: WorkingOrderStore, orderId: string): void {
-    if ((this.#draftStores.get(orderId)?.lineCount ?? 0) > 0) return;
-    for (const [from, kept] of this.#draftStores)
-      if (kept === store) this.#draftStores.delete(from);
-    this.#draftStores.set(orderId, store);
-    this.#carried = { orderId, destination: this.destination, joinTarget: this.joinTarget };
-  }
-
-  /** Restored when the screen switches to the order the draft was carried to: the switch resets the
-   * destination, and so can a render on the order it leaves, whose draft is now empty. */
-  #carried?: { orderId: string; destination: Destination; joinTarget: string | null };
-
-  /** The draft this screen re-renders on; it follows {@link orderId}. */
-  #watchedDraft?: { store: WorkingOrderStore; stop: () => void };
+  /** The draft this screen re-renders on. */
+  #watchedDraft?: { store: WorkingOrderStore | null; stop: () => void };
+  /** The last draft shown. A later addition's destination belongs to it, so it survives an order
+   * that shows no draft for a moment, as while the app follows the party onto its next bill. */
+  #shownDraft?: WorkingOrderStore;
 
   #watchDraft(): void {
     const store = this.#draftStore;
-    if (this.#watchedDraft?.store === store) return;
+    if (this.#watchedDraft !== undefined && this.#watchedDraft.store === store) return;
     this.#watchedDraft?.stop();
-    // A draft can be emptied while another is shown, when the app takes out what it sent.
+    if (store !== null && store !== this.#shownDraft) {
+      if (this.#shownDraft !== undefined) this.#resetDestination();
+      this.#shownDraft = store;
+    }
+    if (store === null) {
+      this.#watchedDraft = { store, stop: () => {} };
+      return;
+    }
     this.#noteDraftStart(store);
     this.#watchedDraft = {
       store,
@@ -786,21 +999,43 @@ export class TillTableOrderScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.#watchDraft();
+    this.#measure(this.getBoundingClientRect().width);
+    if (this.hasUpdated) this.#observeWidth();
+  }
+
+  override firstUpdated(): void {
+    this.#observeWidth();
+  }
+
+  /** Watches a line of no height across the screen, not the screen itself: re-rendering for a new
+   * width changes the screen's height, which a watch on the screen would report again in the same
+   * frame. */
+  #observeWidth(): void {
+    this.#resizing = new ResizeObserver((entries) => {
+      this.#measure(entries.at(-1)!.contentRect.width);
+    });
+    this.#resizing.observe(this.renderRoot.querySelector(".width-probe")!);
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.#watchedDraft?.stop();
     this.#watchedDraft = undefined;
+    this.#resizing?.disconnect();
+    this.#resizing = undefined;
   }
-  /**
-   * Keyed by the draft line's object identity: a store line is kept by reference until the draft
-   * clears, so a `WeakMap` survives re-renders and drops its entries once the draft is sent. A line
-   * ABSENT here takes its product's default course server-side.
-   */
-  #draftCourses = new WeakMap<OrderLine, string>();
-  /** The draft lines the waiter checked; same lifecycle as {@link #draftCourses}. */
+
+  /** Side by side has no Review view, so one left open is closed rather than kept for a later
+   * narrowing. */
+  #measure(width: number): void {
+    this.wide = width >= DRAFT_SIDE_BY_SIDE_MIN_WIDTH;
+    if (this.wide && this.reviewing) void this.#closeReview();
+  }
+  /** The draft lines the waiter checked, by the line's object identity, which a store keeps until the
+   * line leaves it. */
   #selected = new WeakSet<OrderLine>();
+  /** Flagged lines the person chose to keep, which no longer ask Remove or Keep. */
+  #kept = new WeakSet<OrderLine>();
   @state() private destination: Destination = "fire-now";
   /** The held group Add to held group joins; the first held group when unset or gone. */
   @state() private joinTarget: string | null = null;
@@ -827,6 +1062,11 @@ export class TillTableOrderScreen extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     this.#watchDraft();
+    if (this.takeOverSent !== null && this.takeOversAnswered !== this.takeOverSent) {
+      this.#takeOverAnswered = this.takeOverPending?.id;
+      this.takeOverSent = null;
+      this.takeOverPending = null;
+    }
     // The gross map is filled BEFORE `#tabTotal` sums it below.
     if (changed.has("lines") || this.#payStore === undefined) {
       this.#lineGrossByLineNo = new Map(
@@ -844,14 +1084,8 @@ export class TillTableOrderScreen extends LitElement {
       this.fireGroupPending = null;
       this.movePending = null;
       this.pendingDraft = null;
-      const carried = this.#carried;
-      this.#carried = undefined;
-      if (carried !== undefined && carried.orderId === this.orderId) {
-        this.destination = carried.destination;
-        this.joinTarget = carried.joinTarget;
-      } else {
-        this.#resetDestination();
-      }
+      this.reviewing = false;
+      this.#browsingScroll = undefined;
     }
     if (changed.has("groups") || this.#heldGroupIds === undefined) {
       this.#heldGroupIds = heldGroupIds(this.groups);
@@ -930,7 +1164,8 @@ export class TillTableOrderScreen extends LitElement {
     return lines.map((line) => ({
       courseId: this.#selectedCourseId(line) || null,
       quantity: line.quantity,
-      wholeUnits: soldByTheUnit(line.product),
+      wholeUnits: countsWholeUnits(line),
+      flagged: flagged(line),
     }));
   }
 
@@ -945,8 +1180,8 @@ export class TillTableOrderScreen extends LitElement {
     this.requestUpdate();
   }
 
-  #isLaterAddition(): boolean {
-    return this.#drafts.get(this.#draftStore)?.laterAddition === true;
+  #isLaterAddition(store: WorkingOrderStore): boolean {
+    return this.#drafts.get(store)?.laterAddition === true;
   }
 
   #effectiveDestination(): Destination {
@@ -977,8 +1212,7 @@ export class TillTableOrderScreen extends LitElement {
    * `courseId`, so the server applies the product's default course. The answers name lists, products
    * and labels by id alone: the server takes every price, VAT class and name from the published offer.
    */
-  #openPreview(action: DraftAction): void {
-    const store = this.#draftStore;
+  #openPreview(store: WorkingOrderStore, action: DraftAction): void {
     const lines = store.lines;
     const entries = this.#draftEntries(lines);
     const selected = this.#selectedIndexes(lines);
@@ -995,8 +1229,7 @@ export class TillTableOrderScreen extends LitElement {
           ...toWireLineExtras(line),
           ...toWireModifiers(line),
         };
-        const courseId = this.#draftCourses.get(line);
-        if (courseId !== undefined) wire.courseId = courseId;
+        if (line.courseId !== undefined) wire.courseId = line.courseId;
         return wire;
       }),
       groups: submission.groups.map((group) => ({
@@ -1007,7 +1240,6 @@ export class TillTableOrderScreen extends LitElement {
       store,
       sent,
       draft: this.#draftOf(store),
-      carryTo: (orderId) => this.#carryDraft(store, orderId),
     };
     const held = this.#heldInOrder;
     const index = held.findIndex((group) => group.id === submission.joinGroupId);
@@ -1015,6 +1247,7 @@ export class TillTableOrderScreen extends LitElement {
       preview,
       ...(index < 0 ? {} : { join: { group: held[index]!, index } }),
       detail,
+      leftOut: (submission.leftOut ?? []).map((at) => lines[at]!),
     };
   }
 
@@ -1030,7 +1263,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #selectedCourseId(line: OrderLine): string {
-    return this.#draftCourses.get(line) ?? line.product.courseId ?? "";
+    return line.courseId ?? line.product.courseId ?? "";
   }
 
   /** The placeholder's meaning is the CALLER's: "use the product default" for a draft line (never sent
@@ -1045,11 +1278,9 @@ export class TillTableOrderScreen extends LitElement {
       )}`;
   }
 
-  /** `requestUpdate` because {@link #draftCourses} is a `WeakMap`, not a reactive property. */
-  #pickCourse(line: OrderLine, courseId: string): void {
-    if (courseId === "") this.#draftCourses.delete(line);
-    else this.#draftCourses.set(line, courseId);
-    this.requestUpdate();
+  /** The course goes on the line, so the draft saves it. */
+  #pickCourse(store: WorkingOrderStore, line: OrderLine, courseId: string): void {
+    store.setLineCourse(store.lines.indexOf(line), courseId === "" ? undefined : courseId);
   }
 
   #serve(lineNo: number): void {
@@ -1230,6 +1461,7 @@ export class TillTableOrderScreen extends LitElement {
     const started = line !== null && this.#isStarted(line);
     const oneAtATime = line !== null && this.#moreThanOneWholeUnit(line);
     return html`<wt-dialog
+      ${trackDialog()}
       class="cancel-confirm"
       .open=${line !== null}
       .heading=${t("table.cancel_title")}
@@ -1440,15 +1672,16 @@ export class TillTableOrderScreen extends LitElement {
 
   /** Only the shown menu's products reach the browser; a tab line's name still resolves against the
    * FULL set ({@link #nameFor}), so a filtered grid never blanks a line. */
-  #menuBrowser(): TemplateResult {
+  #menuBrowser(store: WorkingOrderStore): TemplateResult {
     const menu = shownMenu(this.menus, this.selectedMenuId);
     return html`<till-menu-browser
       class="round-control"
-      ?inert=${this.#draftStore.sending}
+      ?inert=${store.sending}
       .menu=${menu}
       .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedDiet)}
-      .store=${this.#draftStore}
+      .store=${store}
       .columns=${this.handheld ? HANDHELD_COLUMNS : TILL_COLUMNS}
+      weighs
     ></till-menu-browser>`;
   }
 
@@ -1468,7 +1701,9 @@ export class TillTableOrderScreen extends LitElement {
 
   override render() {
     const pending = this.#pending();
+    const draft = this.#draftStore;
     return html`
+      <div class="width-probe"></div>
       <section
         class="screen"
         data-order-id=${this.orderId ?? nothing}
@@ -1511,44 +1746,300 @@ export class TillTableOrderScreen extends LitElement {
         </div>
         ${this.#printProblem()}
         <div class="layout">
-          <div class="grid-region">
-            <till-menu-switcher
-              class="menu-switcher"
-              .menus=${this.menus}
-              .selectedId=${this.selectedMenuId}
-            ></till-menu-switcher>
-            ${
-              this.#hasDietData()
-                ? html`<till-diet-filter
-                    class="diet-filter"
-                    .selected=${this.selectedDiet}
-                    @diet-filter-selected=${(e: CustomEvent<{ predicate: DietPredicate | null }>) =>
-                      this.#pickDiet(e.detail.predicate)}
-                  ></till-diet-filter>`
-                : nothing
-            }
-            ${keyed(this.orderId, this.#menuBrowser())}
-          </div>
+          ${draft === null ? nothing : this.#ordering(draft)}
           ${this.drawerOpen ? this.#drawer(pending) : nothing}
         </div>
-        ${
-          this.#draftStore.sending
-            ? html`<p class="round-sending" role="status" data-round-sending>
-                ${t("table.round_sending")}
-              </p>`
-            : nothing
-        }
-        <div class="round-control" data-round-controls ?inert=${this.#draftStore.sending}>
-          ${this.#draftSections()}
-          <div class="round-bar">
-            ${keyed(this.orderId, html`<till-basket .store=${this.#draftStore}></till-basket>`)}
-            ${this.#draftBar()}
-          </div>
-        </div>
         ${this.#previewDialog()} ${this.#cancelDialog()} ${this.#fireGroupDialog()}
-        ${this.#moveDialog()} ${this.#changeEditor()}
+        ${this.#moveDialog()} ${this.#changeEditor()} ${this.#takeOverDialog()}
       </section>
     `;
+  }
+
+  /** Browsing and the draft: side by side when the screen is wide enough, otherwise browsing, with
+   * the draft on its own Review view. Browsing is hidden, never removed, while Review is open, so
+   * the menu keeps its open section. */
+  #ordering(draft: WorkingOrderStore): TemplateResult {
+    const separate = !this.wide;
+    const reviewing = separate && this.reviewing;
+    const entries = this.#draftEntries(draft.lines);
+    return html`<div class=${separate ? "ordering" : "ordering side-by-side"}>
+      <div class="browsing" data-browsing ?hidden=${reviewing}>
+        ${this.#gridRegion(draft)} ${this.#bottomBar(draft, separate, entries)}
+      </div>
+      <section
+        class="draft-pane"
+        data-draft-pane
+        aria-labelledby="draft-title"
+        ?hidden=${separate && !reviewing}
+      >
+        <div class="draft-head">
+          <h2 class="draft-title" id="draft-title" tabindex="-1">${t("table.draft_title")}</h2>
+          ${
+            separate
+              ? html`<wt-button
+                  variant="secondary"
+                  data-review-back
+                  @click=${() => void this.#closeReview()}
+                >
+                  ${t("action.back")}
+                </wt-button>`
+              : nothing
+          }
+        </div>
+        ${this.#roundControl(draft, entries)} ${this.#otherDraftPanels(draft)}
+      </section>
+    </div>`;
+  }
+
+  /** Read-only: nothing in a panel changes or sends another person's lines but taking them over. */
+  #otherDraftPanels(draft: WorkingOrderStore): TemplateResult[] {
+    const busy = draft.sending || this.takeOverSent !== null;
+    return this.otherDrafts.map((other, index) => {
+      const title = other.takenFromYou
+        ? named(other.ownerName, t("table.draft_taken_by"), t("table.draft_taken_by_unnamed"))
+        : named(other.ownerName, t("table.others_draft"), t("table.others_draft_unnamed"));
+      return html`<section
+        class="other-draft"
+        data-other-draft=${other.id}
+        aria-labelledby=${`other-draft-${index}`}
+      >
+        <h3 class="other-draft-title" id=${`other-draft-${index}`}>${title}</h3>
+        <ul class="other-draft-lines">
+          ${other.lines.map(
+            (line) =>
+              html`<li class="other-draft-line" data-other-draft-line>
+                ${this.#lineSummary(line, "other-draft-name")}
+              </li>`,
+          )}
+        </ul>
+        <wt-button
+          variant="secondary"
+          data-take-over=${other.id}
+          aria-label=${`${t("table.take_over")} · ${title}`}
+          ?disabled=${busy}
+          @click=${() => (this.takeOverPending = other)}
+        >
+          ${t("table.take_over")}
+        </wt-button>
+      </section>`;
+    });
+  }
+
+  #takeOverDialog(): TemplateResult {
+    const other = this.takeOverPending;
+    const name = other?.ownerName ?? "";
+    return html`<wt-dialog
+      ${trackDialog()}
+      class="take-over-dialog"
+      data-take-over-dialog
+      .open=${other !== null}
+      .dismissible=${this.takeOverSent === null}
+      .heading=${named(name, t("table.take_over_title"), t("table.take_over_title_unnamed"))}
+      @wt-close=${() => void this.#takeOverClosed()}
+    >
+      <p data-take-over-body>
+        ${named(name, t("table.take_over_body"), t("table.take_over_body_unnamed"))}
+      </p>
+      <div slot="footer" class="cancel-actions">
+        <wt-button
+          variant="secondary"
+          data-take-over-cancel
+          ?disabled=${this.takeOverSent !== null}
+          @click=${() => (this.takeOverPending = null)}
+        >
+          ${t("action.cancel")}
+        </wt-button>
+        <wt-button
+          variant="primary"
+          data-take-over-confirm
+          ?disabled=${this.takeOverSent !== null}
+          @click=${() => this.#confirmTakeOver()}
+        >
+          ${t("table.take_over_confirm")}
+        </wt-button>
+      </div>
+    </wt-dialog>`;
+  }
+
+  /** Once answered, focus goes to the draft's Take over when the draft is still there, and
+   * otherwise to the person's own order, which now holds it. */
+  async #takeOverClosed(): Promise<void> {
+    this.takeOverPending = null;
+    const taken = this.#takeOverAnswered;
+    this.#takeOverAnswered = undefined;
+    if (taken === undefined) return;
+    await this.updateComplete;
+    const still = this.otherDrafts.some((other) => other.id === taken);
+    this.renderRoot
+      .querySelector<HTMLElement>(still ? `[data-take-over="${taken}"]` : "#draft-title")
+      ?.focus();
+  }
+
+  /** One request per press: Confirm stays off until the app says this one has answered. */
+  #confirmTakeOver(): void {
+    const other = this.takeOverPending;
+    if (other === null || this.takeOverSent !== null) return;
+    this.takeOverSent = this.takeOversAnswered;
+    const detail: TakeOverDraftDetail = { draftId: other.id, revision: other.revision };
+    this.#dispatch("take-over-draft", detail);
+  }
+
+  /** Under browsing: the line the last tap added or grew and, when the draft has its own view, the
+   * way to it. */
+  #bottomBar(
+    draft: WorkingOrderStore,
+    separate: boolean,
+    entries: readonly DraftEntry[],
+  ): TemplateResult | typeof nothing {
+    const lastAdded = this.#lastAdded(draft);
+    if (lastAdded === nothing && !separate) return nothing;
+    return html`<div class="bottom-bar">
+      ${lastAdded}
+      ${
+        separate
+          ? html`<wt-button
+              class="review-open"
+              variant="primary"
+              data-review-open
+              @click=${() => void this.#openReview()}
+            >
+              ${t("table.review").replace(
+                "{n}",
+                String(entries.reduce((sum, entry) => sum + itemCount(entry), 0)),
+              )}
+            </wt-button>`
+          : nothing
+      }
+    </div>`;
+  }
+
+  /** −1 at one takes the line out, so a mis-tap is undone where it was made. */
+  #lastAdded(store: WorkingOrderStore): TemplateResult | typeof nothing {
+    const line = store.lastAdded;
+    if (line === undefined) return nothing;
+    const index = store.lines.indexOf(line);
+    const name = shownName(line.product);
+    const count = Number(line.quantity);
+    const step = (by: -1 | 1, key: StringKey, text: string) =>
+      html`<wt-button
+        variant="secondary"
+        data-last-added-step=${by}
+        aria-label=${`${t(key)} · ${name}`}
+        @click=${() =>
+          count + by < 1
+            ? store.removeLine(index)
+            : store.setLineQuantity(index, String(count + by))}
+      >
+        ${text}
+      </wt-button>`;
+    return html`<div
+      class="last-added"
+      data-last-added
+      role="group"
+      aria-label=${t("table.last_added")}
+      ?inert=${store.sending}
+    >
+      <p class="last-added-line">${this.#lineSummary(line, "last-added-name")}</p>
+      ${
+        soldByTheUnit(line.product)
+          ? html`<span class="last-added-steps">
+              ${step(-1, "basket.decrease", "−1")} ${step(1, "basket.increase", "+1")}
+            </span>`
+          : nothing
+      }
+    </div>`;
+  }
+
+  /** A line's name and quantity, its staff answers, its extras and its note. A dish or pick the
+   * table's offers no longer hold has no name to show, so it reads as not offered. */
+  #lineSummary(line: OrderLine, nameClass: string): TemplateResult {
+    const name = shownName(line.product);
+    return html`<span class=${nameClass}>${name} ×${this.#displayQty(line.quantity)}</span>
+      ${optionAnswers(line.optionSnapshots, { reads: "staff" }).map(
+        (answer) => html`<span class="modifier-answer">${answer}</span>`,
+      )}
+      ${(line.extras ?? []).map((extra) => {
+        const extraName = extra.name || t("basket.not_offered");
+        return html`<span class="modifier-answer"
+          >${extra.quantity > 1 ? `${extraName} ×${extra.quantity}` : extraName}</span
+        >`;
+      })}
+      ${
+        line.note === undefined
+          ? nothing
+          : html`<span class="line-note">${t("line.note.label")}: ${line.note}</span>`
+      }`;
+  }
+
+  /** Focus follows the view: the control pressed is hidden by what it opens. */
+  async #openReview(): Promise<void> {
+    const scroller = this.#scroller();
+    this.#browsingScroll = { scroller, top: scroller.scrollTop };
+    this.reviewing = true;
+    scroller.scrollTop = 0;
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLElement>("[data-review-back]")?.focus();
+  }
+
+  async #closeReview(): Promise<void> {
+    const saved = this.#browsingScroll;
+    this.#browsingScroll = undefined;
+    this.reviewing = false;
+    await this.updateComplete;
+    if (saved !== undefined) saved.scroller.scrollTop = saved.top;
+    this.renderRoot.querySelector<HTMLElement>("[data-review-open]")?.focus();
+  }
+
+  /** The nearest ancestor that scrolls, across shadow roots, else the page. */
+  #scroller(): Element {
+    for (let node = composedParent(this); node !== null; node = composedParent(node)) {
+      const { overflowY } = getComputedStyle(node);
+      if ((overflowY === "auto" || overflowY === "scroll") && node.scrollHeight > node.clientHeight)
+        return node;
+    }
+    return document.scrollingElement ?? document.documentElement;
+  }
+
+  #gridRegion(draft: WorkingOrderStore): TemplateResult {
+    return html`<div class="grid-region">
+      <till-menu-switcher
+        class="menu-switcher"
+        .menus=${this.menus}
+        .selectedId=${this.selectedMenuId}
+      ></till-menu-switcher>
+      ${
+        this.#hasDietData()
+          ? html`<till-diet-filter
+              class="diet-filter"
+              .selected=${this.selectedDiet}
+              @diet-filter-selected=${(e: CustomEvent<{ predicate: DietPredicate | null }>) =>
+                this.#pickDiet(e.detail.predicate)}
+            ></till-diet-filter>`
+          : nothing
+      }
+      ${keyed(this.orderId, this.#menuBrowser(draft))}
+    </div>`;
+  }
+
+  #roundControl(draft: WorkingOrderStore, entries: readonly DraftEntry[]): TemplateResult {
+    return html`${
+        draft.sending
+          ? html`<p class="round-sending" role="status" data-round-sending>
+              ${this.takeOverSent === null ? t("table.round_sending") : t("table.taking_over")}
+            </p>`
+          : nothing
+      }
+      <div class="round-control" data-round-controls ?inert=${draft.sending}>
+        <div class="round-bar">
+          ${keyed(
+            this.orderId,
+            draft.lineCount === 0
+              ? html`<till-basket .store=${draft}></till-basket>`
+              : this.#draftSections(draft, entries),
+          )}
+          ${this.#draftBar(draft)}
+        </div>
+      </div>`;
   }
 
   #printProblem(): TemplateResult | typeof nothing {
@@ -1592,15 +2083,17 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
-  /** One section per course present, in the venue's course order; each line with its selection
-   * toggle and, when the venue has courses, its course picker, whose `""` placeholder means "use the
-   * product default", not "no course" (no such option). */
-  #draftSections(): TemplateResult | typeof nothing {
-    const lines = this.#draftStore.lines;
-    if (lines.length === 0) return nothing;
-    const sections = draftSections(this.#draftEntries(lines), this.courses);
+  /** One section per course present, in the venue's course order. Each line shows once, as the
+   * basket shows it (quantity, note, remove, answers), with its selection toggle in place of its
+   * name and, under it, its course picker when the venue has courses (whose `""` placeholder means
+   * "use the product default", not "no course": no such option) and Split quantity. */
+  #draftSections(store: WorkingOrderStore, entries: readonly DraftEntry[]): TemplateResult {
+    const lines = store.lines;
+    const sections = draftSections(entries, this.courses);
     return html`<div class="draft-sections" data-draft-sections>
-      ${sections.map(
+      ${repeat(
+        sections,
+        (section) => section.course?.id ?? "",
         (section) =>
           html`<section
             class="draft-section"
@@ -1612,17 +2105,50 @@ export class TillTableOrderScreen extends LitElement {
                 ? nothing
                 : html`<h3 class="draft-section-name">${section.course.name}</h3>`
             }
-            ${section.lineIndexes.map((index) => this.#draftLine(lines[index]!, index))}
+            <till-basket stacked .store=${store} .lineIndexes=${section.lineIndexes}>
+              ${section.lineIndexes.map((index) => this.#draftLine(store, lines[index]!, index))}
+            </till-basket>
           </section>`,
       )}
     </div>`;
   }
 
-  #draftLine(line: OrderLine, index: number): TemplateResult {
+  /** A draft line's slotted controls in its basket row. */
+  #draftLine(store: WorkingOrderStore, line: OrderLine, index: number): TemplateResult {
     const name = lineProductName(line.product);
     const selected = this.#selected.has(line);
-    return html`<div class="draft-line">
-      <button
+    const splits = soldByTheUnit(line.product) && Number(line.quantity) > 1;
+    const isFlagged = flagged(line);
+    if (!isFlagged) this.#kept.delete(line);
+    const tools = [
+      ...(this.courses.length === 0
+        ? []
+        : [
+            html`<select
+              data-round-course=${index}
+              aria-label=${`${t("table.course_label")} · ${name}`}
+              @change=${(event: Event) =>
+                this.#pickCourse(store, line, (event.target as HTMLSelectElement).value)}
+            >
+              ${this.#courseOptions(this.#selectedCourseId(line), t("table.course_default"))}
+            </select>`,
+          ]),
+      ...(splits
+        ? [
+            html`<wt-button
+              variant="secondary"
+              data-split-draft-line=${index}
+              aria-label=${`${t("table.split_group_line")} · ${name}`}
+              @click=${() => store.splitLine(index)}
+            >
+              ${t("table.split_group_line")}
+            </wt-button>`,
+          ]
+        : []),
+      ...(isFlagged ? [this.#flagChoice(store, line, index)] : []),
+    ];
+    return html`<button
+        slot=${`lead-${index}`}
         type="button"
         class="option draft-select"
         data-draft-select=${index}
@@ -1633,26 +2159,63 @@ export class TillTableOrderScreen extends LitElement {
         <span class="draft-line-name">${name} ×${this.#displayQty(line.quantity)}</span>
       </button>
       ${
-        this.courses.length === 0
+        tools.length === 0
           ? nothing
-          : html`<select
-              data-round-course=${index}
-              aria-label=${`${t("table.course_label")} · ${name}`}
-              @change=${(event: Event) =>
-                this.#pickCourse(line, (event.target as HTMLSelectElement).value)}
-            >
-              ${this.#courseOptions(this.#selectedCourseId(line), t("table.course_default"))}
-            </select>`
-      }
-    </div>`;
+          : html`<span slot=${`after-${index}`} class="draft-line-tools">${tools}</span>`
+      }`;
+  }
+
+  /** A line that cannot be sold now asks whether it goes or stays; kept, it says it stays. Its
+   * reason shows beside its name, in the basket's words. */
+  #flagChoice(store: WorkingOrderStore, line: OrderLine, index: number): TemplateResult {
+    if (this.#kept.has(line))
+      return html`<span class="flag-kept" data-flag-kept>${t("table.flag_kept")}</span>`;
+    const name = shownName(line.product);
+    const busy = store.sending || this.takeOverSent !== null;
+    return html`<span class="flag-choice" role="group" aria-label=${name}>
+      <wt-button
+        variant="secondary"
+        data-flag-remove=${index}
+        aria-label=${`${t("action.remove")} · ${name}`}
+        ?disabled=${busy}
+        @click=${() => void this.#removeFlagged(store, line)}
+      >
+        ${t("action.remove")}
+      </wt-button>
+      <wt-button
+        variant="secondary"
+        data-flag-keep=${index}
+        aria-label=${`${t("table.flag_keep")} · ${name}`}
+        ?disabled=${busy}
+        @click=${() => void this.#keepFlagged(store, line)}
+      >
+        ${t("table.flag_keep")}
+      </wt-button>
+    </span>`;
+  }
+
+  /** The line's row goes with it, so focus goes to the order's heading. */
+  async #removeFlagged(store: WorkingOrderStore, line: OrderLine): Promise<void> {
+    store.removeLine(store.lines.indexOf(line));
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLElement>("#draft-title")?.focus();
+  }
+
+  /** The buttons go, so focus goes to the line itself. */
+  async #keepFlagged(store: WorkingOrderStore, line: OrderLine): Promise<void> {
+    this.#kept.add(line);
+    this.requestUpdate();
+    await this.updateComplete;
+    this.renderRoot
+      .querySelector<HTMLElement>(`[data-draft-select="${store.lines.indexOf(line)}"]`)
+      ?.focus();
   }
 
   /** A first-order draft: Send all and Fire all now with nothing checked, Send selected and Fire
    * selected now with a selection. A later addition: its destination, then one Send. Firing now is
    * offered under every `fireControl`: the kitchen and the pass cannot fire a held group of lines
    * with no course. */
-  #draftBar(): TemplateResult {
-    const store = this.#draftStore;
+  #draftBar(store: WorkingOrderStore): TemplateResult {
     const disabled = store.lineCount === 0 || store.sending;
     const button = (
       action: DraftAction,
@@ -1666,11 +2229,11 @@ export class TillTableOrderScreen extends LitElement {
         variant=${variant}
         size="lg"
         ?disabled=${disabled}
-        @click=${() => this.#openPreview(action)}
+        @click=${() => this.#openPreview(store, action)}
       >
         ${t(key)}
       </wt-button>`;
-    if (this.#isLaterAddition()) {
+    if (this.#isLaterAddition(store)) {
       return html`<div class="draft-bar">
         ${this.#destinationChoice()}
         <div class="draft-actions" role="group" aria-label=${t("table.draft_actions")}>
@@ -1751,6 +2314,7 @@ export class TillTableOrderScreen extends LitElement {
     const pending = this.pendingDraft;
     const preview = pending?.preview;
     return html`<wt-dialog
+      ${trackDialog()}
       class="draft-preview"
       data-draft-preview
       .open=${pending !== null}
@@ -1758,6 +2322,11 @@ export class TillTableOrderScreen extends LitElement {
       @wt-close=${() => this.#dismissPreview()}
     >
       <div class="preview-body" data-preview-body>
+        ${
+          pending !== null && pending.detail.sent.length === 0
+            ? html`<p data-preview-nothing>${t("table.nothing_sent")}</p>`
+            : nothing
+        }
         ${
           preview === undefined
             ? nothing
@@ -1786,6 +2355,11 @@ export class TillTableOrderScreen extends LitElement {
                     : nothing
               }`
         }
+        ${
+          pending === null || pending.leftOut.length === 0
+            ? nothing
+            : html`<p data-preview-left-out>${leftOutText(pending.leftOut)}</p>`
+        }
       </div>
       <div slot="footer" class="cancel-actions">
         <wt-button
@@ -1796,14 +2370,18 @@ export class TillTableOrderScreen extends LitElement {
         >
           ${t("action.back")}
         </wt-button>
-        <wt-button
-          class="preview-confirm"
-          variant="primary"
-          data-draft-confirm
-          @click=${() => this.#confirmPreview()}
-        >
-          ${t("table.preview_confirm")}
-        </wt-button>
+        ${
+          pending !== null && pending.detail.sent.length === 0
+            ? nothing
+            : html`<wt-button
+                class="preview-confirm"
+                variant="primary"
+                data-draft-confirm
+                @click=${() => this.#confirmPreview()}
+              >
+                ${t("table.preview_confirm")}
+              </wt-button>`
+        }
       </div>
     </wt-dialog>`;
   }
@@ -2164,6 +2742,7 @@ export class TillTableOrderScreen extends LitElement {
     const pending = this.movePending;
     const held = this.#heldInOrder;
     return html`<wt-dialog
+      ${trackDialog()}
       class="move-line-dialog"
       data-move-dialog
       .open=${pending !== null}
@@ -2215,6 +2794,7 @@ export class TillTableOrderScreen extends LitElement {
   #fireGroupDialog(): TemplateResult {
     const group = this.fireGroupPending;
     return html`<wt-dialog
+      ${trackDialog()}
       class="fire-group-dialog"
       data-fire-dialog
       .open=${group !== null}

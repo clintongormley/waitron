@@ -39,6 +39,8 @@ export interface FloorTable {
   /** The wall-clock "HH:MM" of the table's next reservation. */
   reservedTime?: string | null;
   timingBand?: TimingBand;
+  /** Who has an order on this table not yet sent, one name per order; "" for an unknown person. */
+  unsentDrafts?: readonly string[];
 }
 
 /** A table's spatial placement — the mutable subset an edit-mode gesture produces. */
@@ -144,6 +146,7 @@ export interface FloorOccupancyInput {
   status?: TableServiceStatus | null;
   reservedTime?: string | null;
   timingBand?: TimingBand;
+  unsentDrafts?: readonly string[];
 }
 
 export function toFloorTable(
@@ -165,5 +168,6 @@ export function toFloorTable(
     pendingToServe: occupancy.pendingToServe,
     status: occupancy.status,
     reservedTime: occupancy.reservedTime ?? null,
+    unsentDrafts: occupancy.unsentDrafts,
   };
 }

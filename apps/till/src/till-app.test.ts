@@ -2,7 +2,14 @@ import { page } from "vitest/browser";
 import { currentContentLanguages } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatMoney } from "@waitron/shared";
-import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  draftServer,
+  mountWidget,
+  servedMenus,
+  type DraftServer,
+} from "./widgets/test-helpers.js";
+import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import { productUnit } from "./widgets/product-name.js";
 import { TillApp } from "./till-app.js";
 import { ServerRouter } from "./api/server-router.js";
@@ -136,6 +143,7 @@ const seatedTable: TableState = {
     outstanding: "12.00",
     billCount: 1,
     tableIds: ["t2"],
+    unsentDrafts: [],
   },
 };
 
@@ -412,7 +420,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listZones: vi.fn().mockResolvedValue([]),
     seatTable: vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 }),
     getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
-    submitGroups: vi.fn().mockResolvedValue({ tabId: "wo-7", revision: 4, groups: [] }),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
     fireGroup: vi.fn().mockResolvedValue({ revision: 4 }),
     fireCourse: vi.fn().mockResolvedValue(undefined),
@@ -429,6 +436,9 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     splitTab: vi.fn().mockResolvedValue({ checkId: "wo-check" }),
     listStatuses: vi.fn().mockResolvedValue([]),
     logout: vi.fn().mockResolvedValue(undefined),
+    listDrafts: drafts.listDrafts,
+    saveDraft: drafts.saveDraft,
+    submitDraft: drafts.submitDraft,
     setServiceZone: vi.fn(),
     // `getDevDevices` rejects by default, so the default boot is not the dev chooser; `getDeviceIdentity`
     // resolves an enrolled `till`, so the default boot lands on the login (lock) screen.
@@ -571,7 +581,55 @@ async function mountApp(overrides: Record<string, unknown> = {}) {
 // Force a deterministic es-ES baseline before each test — DELIBERATELY not the module default (en-GB),
 // so the boot/login switches to en-GB below are observable against a Spanish starting point rather than
 // a no-op against an already-English default (a switch you cannot observe proves nothing).
-beforeEach(() => setLocale("es-ES"));
+/** The server's side of the party's drafts, fresh for each test. */
+let drafts: DraftServer;
+type SubmitArgs = Parameters<DraftServer["apply"]>;
+/** A draft submission the server takes, answering `value` about the groups it placed. */
+const answering = (value: object) =>
+  vi.fn(async (...args: SubmitArgs) => ({ ...drafts.apply(...args), ...value }));
+
+/** Rings a café into the open table's draft, with the course `courseId` when given, and gives the
+ * `submit-draft` a confirmed preview sends for it as one group released `release`. */
+async function ringCafe(
+  el: TillApp,
+  screen: TillTableOrderScreen,
+  release: "fire" | "hold" = "fire",
+  courseId?: string,
+) {
+  const store = screen.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!.store;
+  store.addProduct(
+    {
+      id: "cafe",
+      menuItemId: "menu-item-cafe-0",
+      name: "Café",
+      pricingUnit: "each",
+      unitPrice: "1.50",
+      vatClass: "general",
+      category: null,
+      allergens: null,
+    },
+    "1",
+  );
+  if (courseId !== undefined) store.setLineCourse(0, courseId);
+  await flush(el);
+  return {
+    lines: [
+      {
+        menuItemId: "menu-item-cafe-0",
+        quantity: "1",
+        ...(courseId === undefined ? {} : { courseId }),
+      },
+    ],
+    groups: [{ release, lineIndexes: [0] }],
+    store,
+    sent: store.lines,
+  };
+}
+
+beforeEach(() => {
+  setLocale("es-ES");
+  drafts = draftServer(() => ({ tabId: "wo-7", revision: 4, groups: [] }));
+});
 const initialUrl = location.href;
 afterEach(() => {
   cleanupWidgets();
@@ -3904,53 +3962,50 @@ describe("till-app", () => {
       });
 
       it("submit-draft submits the round to the table's party then reloads its lines", async () => {
-        const submitGroups = vi.fn().mockResolvedValue({ tabId: "wo-7", revision: 4, groups: [] });
+        const submitDraft = answering({ tabId: "wo-7", revision: 4, groups: [] });
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([seatedTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
-          submitGroups,
+          submitDraft,
           getTabLines,
         });
         const screen = await toTableOrder(el, seatedTable);
         expect(getTabLines).toHaveBeenCalledTimes(1);
 
-        emit(screen, "submit-draft", {
-          lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }],
-          groups: [{ release: "fire", lineIndexes: [0] }],
-        });
+        emit(screen, "submit-draft", await ringCafe(el, screen));
         await flush(el);
 
         // Put on the party's tab, then re-read so the drawer reflects the new round.
-        expect(submitGroups).toHaveBeenCalledWith(
+        expect(submitDraft).toHaveBeenCalledWith(
           "v-2",
+          "draft-1",
           {
             submissionId: expect.any(String),
             expectedVisitRevision: 3,
-            groups: [
-              { release: "fire", lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }] },
-            ],
+            draftRevision: 1,
+            groups: [{ release: "fire", lineIds: [expect.any(String)] }],
           },
           { signal: expect.any(AbortSignal) },
         );
+        expect(drafts.sentGroups(submitDraft.mock.calls[0]![2])).toEqual([
+          { release: "fire", lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }] },
+        ]);
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 
-      it("submit-draft forwards a per-line course OVERRIDE verbatim to submitGroups (KDS-2 §5b)", async () => {
-        const submitGroups = vi.fn().mockResolvedValue({ tabId: "wo-7", revision: 4, groups: [] });
+      it("submit-draft forwards a per-line course OVERRIDE verbatim with the draft (KDS-2 §5b)", async () => {
+        const submitDraft = answering({ tabId: "wo-7", revision: 4, groups: [] });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([seatedTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
-          submitGroups,
+          submitDraft,
           getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
         });
         const screen = await toTableOrder(el, seatedTable);
-        emit(screen, "submit-draft", {
-          lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1", courseId: "postres" }],
-          groups: [{ release: "fire", lineIndexes: [0] }],
-        });
+        emit(screen, "submit-draft", await ringCafe(el, screen, "fire", "postres"));
         await flush(el);
-        expect(submitGroups.mock.calls[0]![1].groups).toEqual([
+        expect(drafts.sentGroups(submitDraft.mock.calls[0]![2])).toEqual([
           {
             release: "fire",
             lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1", courseId: "postres" }],
@@ -3959,20 +4014,17 @@ describe("till-app", () => {
       });
 
       it("submit-draft sends a held line's group held (coursing A3)", async () => {
-        const submitGroups = vi.fn().mockResolvedValue({ tabId: "wo-7", revision: 4, groups: [] });
+        const submitDraft = answering({ tabId: "wo-7", revision: 4, groups: [] });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([seatedTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
-          submitGroups,
+          submitDraft,
           getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
         });
         const screen = await toTableOrder(el, seatedTable);
-        emit(screen, "submit-draft", {
-          lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }],
-          groups: [{ release: "hold", lineIndexes: [0] }],
-        });
+        emit(screen, "submit-draft", await ringCafe(el, screen, "hold"));
         await flush(el);
-        expect(submitGroups.mock.calls[0]![1].groups).toEqual([
+        expect(drafts.sentGroups(submitDraft.mock.calls[0]![2])).toEqual([
           { release: "hold", lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }] },
         ]);
       });
@@ -4125,7 +4177,7 @@ describe("till-app", () => {
           getTablesState: vi.fn().mockResolvedValue([seatedTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
-          submitGroups: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
+          submitDraft: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
           markLineServed: vi.fn().mockRejectedValue({ code: "tab.line_not_found" }),
           setLineCourse: vi.fn().mockRejectedValue({ code: "course.not_found" }),
           setTableStatus: vi.fn().mockRejectedValue({ code: "status.not_found" }),
@@ -4133,13 +4185,7 @@ describe("till-app", () => {
         const screen = await toTableOrder(el, seatedTable);
 
         for (const [type, detail] of [
-          [
-            "submit-draft",
-            {
-              lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }],
-              groups: [{ release: "fire", lineIndexes: [0] }],
-            },
-          ],
+          ["submit-draft", await ringCafe(el, screen)],
           ["serve-line", { lineNo: 1 }],
           ["set-line-course", { lineNo: 1, courseId: "c2" }],
           ["set-status", { statusId: "s1" }],

@@ -1,6 +1,7 @@
 import { tillPath } from "../navigation.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { trackDialog } from "../widgets/track-dialog.js";
 import type { TimingBand } from "@waitron/shared";
 // Importing the `@waitron/ui` barrel also registers `<wt-floor-canvas>` and `<wt-table-token>`, which
 // the map view and the tray use by tag.
@@ -22,13 +23,21 @@ import type {
   ZoneTab,
 } from "@waitron/ui";
 import { decimal, isZeroDecimal } from "@waitron/shared";
-import { t } from "../i18n/t.js";
+import { countText, named, t } from "../i18n/t.js";
 import "../widgets/seat-dialog.js";
 import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
-import type { FloorZone, TableState, TableVisit, TillApi } from "../api/client.js";
+import type { FloorZone, TableState, TableVisit, TillApi, UnsentDraft } from "../api/client.js";
 
 function needsClearing(table: TableState): table is TableState & { visit: TableVisit } {
   return table.visit?.state === "needs_clearing";
+}
+
+function unsentText({ ownerName, lineCount }: UnsentDraft): string {
+  return named(
+    ownerName,
+    countText(lineCount, "floor.unsent_owner", "floor.unsent_owner_one"),
+    countText(lineCount, "floor.unsent", "floor.unsent_one"),
+  );
 }
 
 /** Nothing of the party is left to pay, and no tab is open that could still take a round. */
@@ -103,6 +112,12 @@ export class TillFloorScreen extends LitElement {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-3);
+      }
+
+      /* A token's unsent-order mark hangs below it, into the row gap and the tray's padding. */
+      .tray {
+        row-gap: var(--wt-space-4);
+        padding-bottom: var(--wt-space-4);
       }
 
       /* A responsive grid: cards flow to fill the width, wrapping onto new rows on a narrow till. */
@@ -295,6 +310,19 @@ export class TillFloorScreen extends LitElement {
         color: var(--wt-color-text);
       }
 
+      .unsent {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--wt-space-1);
+      }
+
+      .badge.unsent {
+        background: var(--wt-color-surface-raised);
+        color: var(--wt-color-text);
+        border: 1px dashed var(--wt-color-warning);
+      }
+
       .dot {
         display: inline-block;
         width: var(--wt-space-2);
@@ -459,6 +487,7 @@ export class TillFloorScreen extends LitElement {
       tabTotal,
       status,
       reservedTime: table.nextReservation?.time ?? null,
+      unsentDrafts: table.visit?.unsentDrafts.map((draft) => draft.ownerName),
     });
   }
 
@@ -469,6 +498,7 @@ export class TillFloorScreen extends LitElement {
       covers: t("floor.capacity"),
       toServe: t("floor.to_serve"),
       reserved: t("floor.reserved"),
+      unsent: t("floor.unsent_mark"),
       zone: t("floor.zone"),
       rotate: t("floor.rotate"),
       remove: t("floor.remove"),
@@ -589,6 +619,7 @@ export class TillFloorScreen extends LitElement {
           covers: t("floor.capacity"),
           toServe: t("floor.to_serve"),
           reserved: t("floor.reserved"),
+          unsent: t("floor.unsent_mark"),
         }}
       ></wt-table-token>
     </button>`;
@@ -660,6 +691,7 @@ export class TillFloorScreen extends LitElement {
     const table = this.clearing;
     if (table === null) return nothing;
     return html`<wt-dialog
+      ${trackDialog()}
       data-clear-dialog
       .open=${true}
       .heading=${t("floor.clear_title").replace("{table}", () => table.label)}
@@ -698,6 +730,7 @@ export class TillFloorScreen extends LitElement {
         }
       </span>
       <span class="occupancy" data-needs-clearing>${t("floor.needs_clearing")}</span>
+      ${this.#unsent(table.visit)}
       <wt-button
         size="sm"
         variant="secondary"
@@ -724,7 +757,7 @@ export class TillFloorScreen extends LitElement {
             : nothing
         }
       </span>
-      ${this.#occupancy(table)}
+      ${this.#occupancy(table)} ${this.#unsent(table.visit)}
       <span class="badges">
         ${this.#hint(table)}
         ${
@@ -753,6 +786,14 @@ export class TillFloorScreen extends LitElement {
         }
       </span>
     </button>`;
+  }
+
+  #unsent(visit: TableVisit | null): TemplateResult | typeof nothing {
+    const drafts = visit?.unsentDrafts ?? [];
+    if (drafts.length === 0) return nothing;
+    return html`<span class="unsent">
+      ${drafts.map((draft) => html`<span class="badge unsent" data-unsent>${unsentText(draft)}</span>`)}
+    </span>`;
   }
 
   #party(visit: TableVisit | null): TemplateResult | typeof nothing {

@@ -101,6 +101,7 @@ const party: TableVisit = {
   outstanding: "30.00",
   billCount: 2,
   tableIds: ["t4"],
+  unsentDrafts: [],
 };
 
 const partyBills: VisitBill[] = [
@@ -126,6 +127,12 @@ const partyBills: VisitBill[] = [
 
 afterEach(cleanupWidgets);
 
+/** Below the side-by-side width, as in Vitest's default frame, the draft is on its Review view. */
+async function openReview(el: TillTableOrderScreen): Promise<void> {
+  el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
+  await el.updateComplete;
+}
+
 describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s theme)", (theme) => {
   it("has no violations with the round grid, the per-line course picker and the open tab drawer", async () => {
     const { el, host } = await mountWidget<TillTableOrderScreen>(
@@ -141,6 +148,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     // pay widget and the status picker — is included in the scan, not just the grid.
     el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await el.updateComplete;
+    await openReview(el);
     // The reused basket re-renders on its OWN store subscription (a separate Lit update cycle), and its
     // freshly-created remove `wt-button`s render their inner focusable `<button>` on a following tick — so
     // let the nested widgets fully settle before axe runs, or it scans a half-upgraded control.
@@ -327,10 +335,12 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     }
 
     it("has no violations in the action bar, with nothing and with a line checked", async () => {
-      const { host } = await withDraft({}, false);
+      const { el, host } = await withDraft({}, false);
+      await openReview(el);
       await expectNoA11yViolations(host);
       cleanupWidgets();
       const selected = await withDraft({}, true);
+      await openReview(selected.el);
       await expectNoA11yViolations(selected.host);
     });
 
@@ -359,6 +369,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       );
       el.shadowRoot!.querySelector<HTMLElement>('[data-destination="add-to-held"]')!.click();
       await el.updateComplete;
+      await openReview(el);
       await expectNoA11yViolations(host);
     });
   });
@@ -510,3 +521,53 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     await expectNoA11yViolations(host);
   });
 });
+
+describe.each(["light", "dark"] as const)(
+  "till-table-order-screen a11y: the draft on a phone (%s theme)",
+  (theme) => {
+    /** A 390 px screen with a café rung three times, split, and the course picker shown. */
+    async function phoneDraft() {
+      const mounted = await mountWidget<TillTableOrderScreen>(
+        "till-table-order-screen",
+        { products, menus, lines: [], statuses, courses, orderId: "wo-1" },
+        theme,
+      );
+      const { el, host } = mounted;
+      host.style.width = "390px";
+      for (let frame = 0; frame < 2; frame++)
+        await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+      const store = el.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!.store;
+      store.addProduct(products[0]!, "3", { note: "sin azúcar" });
+      store.addProduct(products[0]!, "1");
+      await el.updateComplete;
+      return mounted;
+    }
+
+    async function settled(el: TillTableOrderScreen): Promise<void> {
+      for (const basket of el.shadowRoot!.querySelectorAll<
+        HTMLElement & { updateComplete: Promise<unknown> }
+      >("till-basket"))
+        await basket.updateComplete;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await el.updateComplete;
+    }
+
+    it("has no violations while browsing, with the last-added bar and Review", async () => {
+      const { el, host } = await phoneDraft();
+      await settled(el);
+      if (!el.shadowRoot!.querySelector("[data-last-added]")?.checkVisibility())
+        throw new Error("the scan must include the last-added bar");
+      await expectNoA11yViolations(host);
+    });
+
+    it("has no violations on the Review view, with Split quantity offered", async () => {
+      const { el, host } = await phoneDraft();
+      el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
+      await el.updateComplete;
+      await settled(el);
+      if (!el.shadowRoot!.querySelector("[data-split-draft-line]")?.checkVisibility())
+        throw new Error("the scan must include the Review view's lines");
+      await expectNoA11yViolations(host);
+    });
+  },
+);

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   cleanupWidgets,
+  draftServer,
   expectNoA11yViolations,
   mountWidget,
   servedMenus,
@@ -64,6 +65,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
           grossPrice: products[0]!.unitPrice,
           unitPrice: products[0]!.unitPrice,
           active: true,
+          available: true,
           menuName: defaultMenu.name,
           placements: [[]],
           name: products[0]!.name,
@@ -339,7 +341,9 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
       getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
       listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
       getVisitBills: vi.fn().mockResolvedValue([]),
-      submitGroups: vi.fn().mockResolvedValue({ tabId: "wo-4", revision: 4, groups: [] }),
+      ...(({ listDrafts, saveDraft, submitDraft }) => ({ listDrafts, saveDraft, submitDraft }))(
+        draftServer(),
+      ),
     });
     const { el, host } = await mountWidget<TillApp>("till-app", { api }, theme);
     await flush(el);

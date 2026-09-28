@@ -12,14 +12,11 @@ import { readExtraSelections, readOptionSelections } from "@waitron/catalogue";
 import { persons } from "@waitron/identity";
 import type { ZoneMenuOffer } from "@waitron/module";
 import {
-  addDecimal,
   AppError,
-  decimal,
   isUuid,
-  QUANTITY_SCALE,
+  normaliseDraftLines,
   stringToThousandths,
   thousandthsToDecimal,
-  toScale,
 } from "@waitron/shared";
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
@@ -52,57 +49,11 @@ export interface Draft {
   ownerName: string;
   revision: number;
   lines: DraftLine[];
+  /** The owner before the draft's latest `taken_over` event; null when it was never taken over. */
+  takenOverFrom: { personId: string; name: string } | null;
 }
 
-/**
- * Adds each line into the first earlier line that orders the same thing (plan D10), which keeps its
- * id and position. Options compare as a set and extras picks as a multiset, never by order.
- *
- * A fractional quantity never merges: 0.5 kg and 0.3 kg of fish are two portions the kitchen cooks
- * separately, and one 0.8 kg row would lose that.
- */
-export function normaliseDraftLines(lines: DraftLine[]): DraftLine[] {
-  const merged: DraftLine[] = [];
-  const byKey = new Map<string, number>();
-  for (const line of lines) {
-    const key = mergeKey(line);
-    const into = key === null ? undefined : byKey.get(key);
-    if (into === undefined) {
-      if (key !== null) byKey.set(key, merged.length);
-      merged.push(line);
-      continue;
-    }
-    const kept = merged[into]!;
-    const total = addDecimal(decimal(kept.quantity), decimal(line.quantity));
-    merged[into] = { ...kept, quantity: toScale(total, QUANTITY_SCALE) };
-  }
-  return merged;
-}
-
-/** Null for a line that never merges. */
-function mergeKey(line: DraftLine): string | null {
-  if (line.noMerge || stringToThousandths(line.quantity) % 1000 !== 0) return null;
-  const options = [
-    ...new Set(line.options.map(({ listId, labelId }) => JSON.stringify([listId, labelId]))),
-  ].sort();
-  const picks = new Map<string, number>();
-  for (const { listId, picks: listPicks } of line.extras) {
-    for (const { productId, quantity } of listPicks) {
-      const pick = JSON.stringify([listId, productId]);
-      picks.set(pick, (picks.get(pick) ?? 0) + quantity);
-    }
-  }
-  const extras = [...picks].map((entry) => JSON.stringify(entry)).sort();
-  return JSON.stringify([
-    line.menuItemId,
-    line.variantId,
-    line.menuVersionId,
-    line.courseId,
-    line.note,
-    options,
-    extras,
-  ]);
-}
+export { normaliseDraftLines };
 
 /** A line as the till saves it: without the id a save gives it or the flag a read works out. */
 export type DraftLineInput = Omit<DraftLine, "id" | "unavailable">;
@@ -712,9 +663,14 @@ async function readOpenDrafts(
     visitId,
     lines.map(({ line }) => line.menuItemId),
   );
+  const takenFrom = await takenOverFrom(
+    tx,
+    drafts.map((draft) => draft.id),
+  );
   return drafts.map((draft) => ({
     ...draft,
     ownerName: draft.ownerName ?? "",
+    takenOverFrom: takenFrom.get(draft.id) ?? null,
     lines: lines
       .filter((stored) => stored.draftId === draft.id)
       .map(({ line }) => ({
@@ -722,6 +678,36 @@ async function readOpenDrafts(
         unavailable: unavailable(line, offers.get(line.menuItemId)),
       })),
   }));
+}
+
+/**
+ * Each draft's owner before its latest `taken_over` event, named as the floor names an owner. The
+ * latest is the last by `rowid`, not `created_at`, which a clock stepped back can put out of order:
+ * SQLite gives a new row one more than the table's largest `rowid`, and this table is append-only.
+ * `VACUUM` and `VACUUM INTO` kept that order when measured (node:sqlite, Node v26.7.0, 2026-09-28).
+ */
+async function takenOverFrom(
+  tx: Transaction,
+  draftIds: readonly string[],
+): Promise<Map<string, { personId: string; name: string }>> {
+  const rows = await tx
+    .select({
+      draftId: orderDraftEvents.draftId,
+      personId: orderDraftEvents.fromPerson,
+      name: persons.displayName,
+    })
+    .from(orderDraftEvents)
+    .leftJoin(persons, eq(persons.id, orderDraftEvents.fromPerson))
+    .where(
+      and(
+        inArray(orderDraftEvents.draftId, [...draftIds]),
+        eq(orderDraftEvents.kind, "taken_over"),
+      ),
+    )
+    .orderBy(sql`${orderDraftEvents}.rowid`);
+  return new Map(
+    rows.map((row) => [row.draftId, { personId: row.personId!, name: row.name ?? "" }] as const),
+  );
 }
 
 /** The zone's live offers for the menu items, from the source `priceOrderLines` refuses from. */

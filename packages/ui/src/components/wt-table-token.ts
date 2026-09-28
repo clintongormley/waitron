@@ -12,6 +12,8 @@ export interface TableTokenLabels {
   reserved?: string;
   /** The forgotten marker's accessible name; without one the marker is `aria-hidden`. */
   forgotten?: string;
+  /** The unsent-order mark's text; its accessible name adds the names: "Unsent: Alex, Sam". */
+  unsent?: string;
 }
 
 /**
@@ -114,6 +116,21 @@ export class WtTableToken extends LitElement {
         border-left: var(--wt-space-2) solid transparent;
         border-right: var(--wt-space-2) solid transparent;
         border-bottom: var(--wt-space-3) solid var(--wt-color-danger);
+      }
+
+      .unsent-mark {
+        position: absolute;
+        bottom: 0;
+        left: 50%;
+        transform: translate(-50%, 50%);
+        width: max-content;
+        padding: 0 var(--wt-space-1);
+        border: 1px dashed var(--wt-color-warning);
+        border-radius: var(--wt-radius-sm);
+        background: var(--wt-color-surface-raised);
+        color: var(--wt-color-text);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
       }
 
       /* The stored table SHAPE renders distinctly through the corner radius — a round table reads as a
@@ -247,7 +264,7 @@ export class WtTableToken extends LitElement {
           t.timingBand,
         )}"
       >
-        ${this.#forgottenMarker(t)}
+        ${this.#forgottenMarker(t)} ${this.#unsentMark(t)}
         <span class="card-head">
           <span class="label">${t.label}</span>
           ${
@@ -284,6 +301,19 @@ export class WtTableToken extends LitElement {
         </span>
       </div>
     `;
+  }
+
+  #unsentMark(t: FloorTable): TemplateResult | typeof nothing {
+    const owners = t.unsentDrafts ?? [];
+    if (owners.length === 0) return nothing;
+    const label = this.labels.unsent;
+    const names = owners.filter((name) => name !== "").join(", ");
+    const name = [label, names].filter((part) => part).join(": ");
+    return name
+      ? html`<span class="unsent-mark" data-unsent role="img" aria-label=${name}
+          >${label || names}</span
+        >`
+      : html`<span class="unsent-mark" data-unsent aria-hidden="true"></span>`;
   }
 
   #occupancy(t: FloorTable): TemplateResult | typeof nothing {

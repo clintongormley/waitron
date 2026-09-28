@@ -35,6 +35,7 @@ const BLOCKED_WORDS: Record<BlockReason, StringKey> = {
   unavailable: "basket.blocked.unavailable",
   extra_removed: "basket.blocked.extra",
   extra_unavailable: "basket.blocked.extra",
+  unit_changed: "basket.blocked.unit",
 };
 
 /** A line a menu change stops being paid until it is removed or replaced (D9). */
@@ -71,6 +72,26 @@ export class TillBasket extends LitElement {
         gap: var(--wt-space-3);
         padding: var(--wt-space-2) 0;
         border-bottom: 1px solid var(--wt-color-border);
+      }
+
+      /* The name, or what is slotted in its place, on a row of its own above the line's controls. */
+      :host([stacked]) .line {
+        grid-template-columns: auto 1fr auto auto;
+      }
+
+      :host([stacked]) .line .name {
+        grid-column: 1 / -1;
+      }
+
+      :host([stacked]) .line-total {
+        justify-self: end;
+      }
+
+      .line-after {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: var(--wt-space-2);
       }
 
       /* The per-line note editor (order-line customisation) — an inline expander opened by the line's
@@ -212,10 +233,19 @@ export class TillBasket extends LitElement {
   /** The order this basket shows and mutates. Set before the widget connects (its lifecycle subscribes). */
   @property({ attribute: false }) store!: WorkingOrderStore;
 
-  /** A POSITIONAL index into `store.lines`, so it must follow any change that shifts positions:
-   * {@link #removeLine} adjusts it and a whole-basket swap closes it. Otherwise a note, which can carry
-   * allergy information, would reattach to whatever line slid into the edited line's slot. */
-  @state() private editingIndex: number | null = null;
+  /**
+   * The lines shown, by their place in {@link store}; unset shows every line. Each shown line has two
+   * slots named by that place: `lead-<n>` replaces the line's name, and `after-<n>` sits under the
+   * line's row.
+   */
+  @property({ attribute: false }) lineIndexes?: readonly number[];
+
+  @property({ type: Boolean, reflect: true }) stacked = false;
+
+  /** The line whose note editor is open, by the line itself rather than its place: other lines move
+   * under it (a remove elsewhere, another basket showing the same order), and a note, which can
+   * carry allergy information, must never reattach to the line that slid into its place. */
+  @state() private editingLine: OrderLine | null = null;
 
   /** Assigned only through {@link #openModifierPicker} / {@link #closeModifierPicker}, which keep
    * {@link #modifierSelection} in step with it. */
@@ -261,23 +291,12 @@ export class TillBasket extends LitElement {
   #onStoreChanged(): void {
     if (this.store.id !== this.#lastStoreId) {
       this.#lastStoreId = this.store.id;
-      this.editingIndex = null;
+      this.editingLine = null;
       this.#closeModifierPicker();
     }
     if (this.modifierLine !== null && !this.store.lines.includes(this.modifierLine))
       this.#closeModifierPicker();
     this.requestUpdate();
-  }
-
-  #removeLine(index: number): void {
-    if (this.editingIndex !== null) {
-      if (index === this.editingIndex) {
-        this.editingIndex = null;
-      } else if (index < this.editingIndex) {
-        this.editingIndex -= 1;
-      }
-    }
-    this.store.removeLine(index);
   }
 
   #lineName(line: OrderLine): string {
@@ -317,13 +336,25 @@ export class TillBasket extends LitElement {
     if (lines.length === 0) {
       return html`<p class="empty">${t("basket.empty")}</p>`;
     }
+    // The owner of `lineIndexes` hears of a change after this basket does, so a place the store no
+    // longer has is skipped until it catches up.
+    const shown = (this.lineIndexes ?? lines.map((_line, index) => index)).flatMap((index) => {
+      const line = lines[index];
+      return line === undefined ? [] : [[line, index] as const];
+    });
     return html`
-      ${lines.map(
-        (line, index) => html`
+      ${shown.map(
+        ([line, index]) => html`
           <div class="line">
             <span class="name" part="name"
-              >${this.#lineName(line)}${line.notOffered ? notOfferedMarker() : nothing}${
-                line.blocked === undefined ? nothing : blockedMarker(line.blocked)
+              ><slot name=${`lead-${index}`}>${this.#lineName(line)}</slot>${
+                line.notOffered ? notOfferedMarker() : nothing
+              }${line.blocked === undefined ? nothing : blockedMarker(line.blocked)}${
+                line.unavailableOnServer === true &&
+                line.blocked === undefined &&
+                line.notOffered === undefined
+                  ? html` <span class="not-offered">${t("basket.blocked.server")}</span>`
+                  : nothing
               }</span
             >
             ${this.#quantityCell(line, index)}
@@ -333,9 +364,9 @@ export class TillBasket extends LitElement {
               variant="ghost"
               size="md"
               data-test=${`line-note-button-${index}`}
-              aria-expanded=${this.editingIndex === index}
+              aria-expanded=${this.editingLine === line}
               aria-label=${`${t("line.note.button")} ${this.#lineName(line)}`}
-              @click=${() => this.#toggleEditor(index)}
+              @click=${() => this.#toggleEditor(line)}
             >
               ${t("line.note.button")}
             </wt-button>
@@ -344,7 +375,7 @@ export class TillBasket extends LitElement {
               variant="ghost"
               size="md"
               aria-label=${`${t("action.remove")} ${this.#lineName(line)}`}
-              @click=${() => this.#removeLine(index)}
+              @click=${() => this.store.removeLine(index)}
             >
               <span aria-hidden="true">×</span>
             </wt-button>
@@ -365,7 +396,7 @@ export class TillBasket extends LitElement {
                 >`
               : nothing
           }
-          ${this.#extrasRow(line, index)} ${this.#extrasEditor(line, index)}
+          ${this.#extrasRow(line, index)} ${this.#extrasEditor(line)}
           ${(line.extras ?? []).map(
             // No remove control: a pick goes only with its dish. Its own allergens and diet sit
             // beside the dish's rows, never folded into them.
@@ -396,6 +427,7 @@ export class TillBasket extends LitElement {
           )}
           ${this.#answers(line).map((answer) => html`<div class="option modifier-answer"><span class="name">${answer}</span></div>`)}
           ${this.#allergenRow(line, index)} ${this.#dietRow(line, index)}
+          <div class="line-after"><slot name=${`after-${index}`}></slot></div>
         `,
       )}
       ${
@@ -421,8 +453,8 @@ export class TillBasket extends LitElement {
     `;
   }
 
-  #toggleEditor(index: number): void {
-    this.editingIndex = this.editingIndex === index ? null : index;
+  #toggleEditor(line: OrderLine): void {
+    this.editingLine = this.editingLine === line ? null : line;
   }
 
   #extrasRow(line: OrderLine, index: number) {
@@ -436,13 +468,14 @@ export class TillBasket extends LitElement {
     `;
   }
 
-  #extrasEditor(line: OrderLine, index: number) {
-    if (this.editingIndex !== index) return nothing;
+  #extrasEditor(line: OrderLine) {
+    if (this.editingLine !== line) return nothing;
     return html`
       <div class="line-extras-editor">
         ${renderLineExtrasEditor({
           note: line.note ?? "",
-          onNoteChange: (note) => this.store.setLineExtras(index, { note }),
+          onNoteChange: (note) =>
+            this.store.setLineExtras(this.store.lines.indexOf(line), { note }),
         })}
       </div>
     `;

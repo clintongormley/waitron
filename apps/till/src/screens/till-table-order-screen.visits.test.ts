@@ -17,6 +17,7 @@ const party: TableVisit = {
   outstanding: "30.00",
   billCount: 2,
   tableIds: ["t4"],
+  unsentDrafts: [],
 };
 
 const paidTab: VisitBill = {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { lineBlock, refreshBasket, withUnavailable } from "./menu-refresh.js";
+import { lineBlock, refreshBasket, repriceRebuilt, withUnavailable } from "./menu-refresh.js";
 import { menuOfferToTillProduct, type TillMenuOffer } from "../api/client.js";
-import type { OrderLine } from "./working-order.js";
+import { WorkingOrderStore, type OrderLine } from "./working-order.js";
 
 type LiveModifier = TillMenuOffer["offeredModifiers"][number];
 type LiveVariant = TillMenuOffer["variants"][number];
@@ -308,6 +308,35 @@ describe("lineBlock", () => {
       name: "rare",
     });
   });
+  it("says the quantity no longer fits when the offer's unit now takes fewer places than the line holds", () => {
+    const widened = menuOfferToTillProduct(burger, "v1");
+    const line: OrderLine = {
+      product: { ...widened, unit: { ...unit, precision: 3 } },
+      quantity: "0.500",
+    };
+    expect(lineBlock(line, burger)).toEqual({ reason: "unit_changed", name: "burger" });
+    expect(lineBlock({ ...line, quantity: "2.000" }, burger)).toBeUndefined();
+  });
+
+  it("reads the places a variant line may hold from the variant's own unit, not the dish's", () => {
+    const weighed = { ...unit, id: "unit-kg", precision: 3 };
+    const byWeight = offer({
+      id: "offer-cheese",
+      productId: "cheese",
+      variants: [variant("wedge", "4.00"), variant("loose", "20.00", { unit: weighed })],
+    });
+    const line = (variantId: string): OrderLine => ({
+      product: { ...menuOfferToTillProduct(byWeight, "v1"), variantId },
+      quantity: "0.250",
+    });
+
+    expect(lineBlock(line("loose"), byWeight)).toBeUndefined();
+    expect(lineBlock(line("wedge"), { ...byWeight, unit: weighed })).toEqual({
+      reason: "unit_changed",
+      name: "cheese",
+    });
+  });
+
   it("names an answer by its id when the line was never offered its label", () => {
     const line: OrderLine = {
       product: { ...menuOfferToTillProduct(burger, "v1"), offeredModifiers: [] },
@@ -428,10 +457,85 @@ describe("refreshBasket", () => {
     expect(outcome.adopted.get(0)!.extras).toEqual([bacon]);
   });
 
+  it("keeps a line whose quantity the live unit cannot hold out of adoption, so the preview still reads it", () => {
+    const widened = menuOfferToTillProduct(burger, "v1");
+    const line: OrderLine = {
+      product: { ...widened, unit: { ...unit, precision: 3 } },
+      quantity: "0.500",
+      blocked: "unit_changed",
+    };
+    const outcome = refreshBasket([line], [burger], live);
+    const store = new WorkingOrderStore();
+    store.loadFrom("draft-1", [line]);
+    store.adoptLines(outcome.adopted);
+
+    expect(() => store.vatBreakdown).not.toThrow();
+    expect(outcome.blocked).toEqual([{ lineNo: 1, name: "burger", reason: "unit_changed" }]);
+    expect(outcome.adopted.has(0)).toBe(false);
+  });
+
+  it("asks about a line rebuilt from a saved draft at its new price alone, since its earlier price was never held", () => {
+    const line: OrderLine = { ...lineOf(lemonade, "v1"), earlierPriceUnknown: true };
+    const outcome = refreshBasket([line], [lemonade], live);
+    expect(outcome.changed).toEqual([{ lineNo: 1, name: "Lemonade", to: "3.00" }]);
+    expect(outcome.adopted.get(0)!.product.menuVersionId).toBe("v2");
+    expect(outcome.adopted.get(0)!.earlierPriceUnknown).toBeUndefined();
+  });
+
   it("leaves saved lines, and lines already on the live version, alone", () => {
     const saved = { ...lineOf(lemonade, "v1"), workingOrderLineId: "wol-1" };
     const current = lineOf(lemonade, "v2");
     const outcome = refreshBasket([saved, current], [{ ...lemonade, unitPrice: "2.50" }], live);
     expect(outcome).toEqual({ changed: [], blocked: [], adopted: new Map() });
+  });
+});
+
+describe("repriceRebuilt", () => {
+  const byId = (...offers: TillMenuOffer[]) => new Map(offers.map((each) => [each.id, each]));
+  const lemonade = offer({ id: "offer-lemonade", productId: "Lemonade", unitPrice: "3.00" });
+  const live = new Map([["lunch", "v2"]]);
+  /** Rebuilt under v2 while the till still held v1's offers, at v1's price. */
+  const rebuilt = (source: TillMenuOffer): OrderLine => ({
+    ...lineOf(source, "v2"),
+    earlierPriceUnknown: true,
+  });
+
+  it("prices a rebuilt line whose version is now live from the live offer, and forgets the mark", () => {
+    const repriced = repriceRebuilt(
+      [rebuilt(lemonade)],
+      byId({ ...lemonade, unitPrice: "3.50" }),
+      live,
+    );
+
+    expect(repriced.get(0)!.product.unitPrice).toBe("3.50");
+    expect(repriced.get(0)!.product.menuVersionId).toBe("v2");
+    expect(repriced.get(0)!.earlierPriceUnknown).toBeUndefined();
+  });
+
+  it("leaves a line still not on the live version, one the till built itself, and one no longer offered", () => {
+    const older = { ...lineOf(lemonade, "v1"), earlierPriceUnknown: true as const };
+    const own = lineOf(lemonade, "v2");
+    const gone = rebuilt(offer({ id: "offer-gone", productId: "Gone" }));
+
+    expect(repriceRebuilt([older, own, gone], byId(lemonade), live)).toEqual(new Map());
+  });
+
+  it("leaves a line whose variant or unit the live offer can no longer hold as it stands", () => {
+    const glass = menuOfferToTillProduct(wine, "v2");
+    const variantGone: OrderLine = {
+      product: { ...glass, variantId: "glass" },
+      quantity: "1",
+      earlierPriceUnknown: true,
+    };
+    const widened: OrderLine = {
+      product: { ...menuOfferToTillProduct(burger, "v2"), unit: { ...unit, precision: 3 } },
+      quantity: "0.500",
+      earlierPriceUnknown: true,
+    };
+    const withoutGlass = { ...wine, variants: wine.variants.filter((each) => each.id !== "glass") };
+
+    expect(repriceRebuilt([variantGone, widened], byId(withoutGlass, burger), live)).toEqual(
+      new Map(),
+    );
   });
 });

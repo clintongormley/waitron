@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   dishGross,
+  displayQuantity,
   extraGross,
   lineGross,
   needsModifierPicker,
   quantityLabel,
+  quantityPlaces,
   toWireLineExtras,
   toWireModifiers,
   toWireProductIdentity,
@@ -121,6 +123,31 @@ describe("order-line pricing", () => {
     it("labels every line with its selected unit", () => {
       expect(quantityLabel({ product: jamon, quantity: "0.320" })).toBe("0.320 kg");
       expect(quantityLabel({ product: cafe, quantity: "2" })).toBe("2 ea");
+    });
+
+    it("reads the quantity alone when the unit has no name to show", () => {
+      const nameless = {
+        ...cafe,
+        unit: { id: "", name: {}, abbreviation: {}, precision: 3, hardwareUnit: null },
+      };
+      expect(quantityLabel({ product: nameless, quantity: "2" })).toBe("2");
+    });
+  });
+
+  describe("displayQuantity", () => {
+    it("shortens a whole-count unit's quantity and leaves a weighed one as it came", () => {
+      expect(displayQuantity(cafe, "2.000")).toBe("2");
+      expect(displayQuantity(jamon, "0.350")).toBe("0.350");
+    });
+  });
+
+  describe("quantityPlaces", () => {
+    it("counts the places after the point, trailing zeros aside", () => {
+      expect(quantityPlaces("0.350")).toBe(2);
+      expect(quantityPlaces("2.000")).toBe(0);
+      expect(quantityPlaces("2.")).toBe(0);
+      expect(quantityPlaces("10")).toBe(0);
+      expect(quantityPlaces("1.005")).toBe(3);
     });
   });
 

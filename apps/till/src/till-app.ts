@@ -5,16 +5,30 @@ import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { UrlStateController, baseStyles, registerIcons } from "@waitron/ui";
 import { formatMoney, resolveActiveLocale } from "@waitron/shared";
-import { countText, currentLocale, setLocale, t } from "./i18n/t.js";
+import { countText, currentLocale, named, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { diag } from "./diagnostics.js";
 import { LocaleChangeController } from "./state/locale-controller.js";
 import { TillApi, isNetworkFailure } from "./api/client.js";
 import type { ServerRouter } from "./api/server-router.js";
 import { WorkingOrderStore } from "./state/working-order.js";
-import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "./state/order-line.js";
+import {
+  displayQuantity,
+  toWireLineExtras,
+  toWireModifiers,
+  toWireProductIdentity,
+} from "./state/order-line.js";
 import { deriveExtraSelections } from "./state/held-extras.js";
 import { deriveOptionSelections } from "./state/held-options.js";
+import {
+  DRAFT_REFUSALS,
+  DraftSync,
+  asRefusal,
+  limited,
+  pause,
+  type DraftRefused,
+} from "./state/draft-sync.js";
+import { fromDraftLine, rebuildReturned } from "./state/draft-lines.js";
 import "./screens/till-lock-screen.js";
 import "./screens/till-counter-screen.js";
 import "./screens/till-ticket-view.js";
@@ -26,9 +40,11 @@ import type {
   Draft,
   FireGroupDetail,
   MoveGroupLineDetail,
+  OtherDraft,
   ReorderGroupsDetail,
   SplitGroupLineDetail,
   SubmitDraftDetail,
+  TakeOverDraftDetail,
 } from "./screens/till-table-order-screen.js";
 import type { DraftGroup } from "./state/draft-groups.js";
 import "@waitron/ui/src/components/wt-toast.js";
@@ -41,6 +57,7 @@ import "./screens/till-expo-screen.js";
 import "./screens/till-allergen-screen.js";
 import "./widgets/supervisor-override-dialog.js";
 import "./widgets/basket-refresh-dialog.js";
+import { dialogOpenUnder } from "./widgets/track-dialog.js";
 import "./widgets/tab-shell.js";
 import "./widgets/card-grid.js";
 import type { StringKey } from "./i18n/strings.js";
@@ -48,19 +65,20 @@ import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
 import type {
   BillParty,
   DeviceStation,
+  DraftSubmission,
   FloorZone,
   HeldOrderSummary,
   OrderFlow,
   ServiceZoneSummary,
   PayOutcome,
   GroupCommand,
-  GroupLine,
   OrderGroup,
   PrintProblem,
   SaleLine,
   Station,
   StationQueueGroup,
   StaffMember,
+  SubmittedDraft,
   TabLine,
   TabTransfer,
   TableServiceStatus,
@@ -81,7 +99,6 @@ import type {
   ZoneOfferCatalogue,
 } from "./api/client.js";
 import { menuOfferToTillProduct } from "./api/client.js";
-import { productUnit } from "./widgets/product-name.js";
 import { kindOfFormFactor } from "./layout.js";
 import type { CanvasDef, CapabilityFlag, DeviceKind, ReceiptConfig, TabDef } from "./layout.js";
 import { SessionActivity } from "./session-activity.js";
@@ -97,6 +114,7 @@ import {
   isStale,
   lineBlock,
   refreshBasket,
+  repriceRebuilt,
   withUnavailable,
 } from "./state/menu-refresh.js";
 import type { ShellAffordance } from "./widgets/tab-shell.js";
@@ -142,12 +160,21 @@ const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
 registerIcons({ close: CROSS_ICON_PATH });
 
 /**
- * How long a round's send, or a reload of the table's offers, may stay out before it is cancelled.
- * It is above the server watchdog's kill bound (`WATCHDOG_KILL_MS` plus `STACK_CAPTURE_MS`,
- * `packages/store/src/venue-liveness.ts`), so a server whose main thread had stopped when the request
- * went out is killed before the till gives up.
+ * How long the till waits on a re-read of the table's offers, a draft read, save or take-over, or a
+ * submission (from the save before it to its last retry) before cancelling it. It is above the
+ * server watchdog's kill bound (`WATCHDOG_KILL_MS` plus `STACK_CAPTURE_MS`,
+ * `packages/store/src/venue-liveness.ts`), so a server whose main thread had stopped when the wait
+ * began is killed before the till gives up.
  */
 const TABLE_REQUEST_LIMIT_MS = 150_000;
+
+/** How many times a draft submission that got no answer is sent again under the same submission id,
+ * within {@link TABLE_REQUEST_LIMIT_MS}; the server answers a repeat as it answered the first (D8). A
+ * send cut off by that limit is not sent again. */
+const SUBMIT_RETRIES = 2;
+
+/** The wait before a submission that got no answer is sent again. */
+export const SUBMIT_RETRY_PAUSE_MS = 500;
 
 /**
  * What a draft's submission leaves to do once the draft is open for edits again. `find-tab`, after a
@@ -158,11 +185,9 @@ const TABLE_REQUEST_LIMIT_MS = 150_000;
  */
 type DraftFollowUp = "read-tab" | "find-tab" | "mark-sold-out" | { landedOn: string } | undefined;
 
-/** A whole-count unit's three-place server quantity reads "2", not "2.000". */
-function displayQuantity(product: TillProduct, quantity: string): string {
-  if (productUnit(product).precision !== 0 || !quantity.includes(".")) return quantity;
-  return quantity.replace(/0+$/, "").replace(/\.$/, "");
-}
+/** A draft opened for the order: `sync` is undefined for an order with no party, and `read` false
+ * when its read failed. Undefined when the operator session it was opened in has ended. */
+type OpenedDraft = { sync: DraftSync | undefined; read: boolean } | undefined;
 
 /**
  * Sale refusals a retry can never clear: the same basket files the same refused record. Every handler
@@ -196,6 +221,25 @@ function isVisitOutOfDate(error: unknown): boolean {
 function tableWriteError(error: unknown): CounterError {
   const code = (error as { code?: string } | undefined)?.code;
   return code !== undefined && TABLE_REFUSALS.has(code) ? { code } : "table.error";
+}
+
+/** A refusal of the person's draft save, or with `unsent` of its submission. Taken over, it names
+ * who holds the draft now, and says the refused change is lost: the till never sends it again. */
+function draftRefusalError({ refused, ownerName }: DraftRefused, unsent = false): CounterError {
+  if (refused === "draft.taken_over")
+    return unsent ? { takenOver: ownerName ?? "", unsent } : { takenOver: ownerName ?? "" };
+  if (refused === "draft.out_of_date") return "table.draft_changed_elsewhere";
+  return DRAFT_REFUSALS.has(refused) || refused === "session.required"
+    ? { code: refused }
+    : tableWriteError({ code: refused });
+}
+
+/** A refused take-over: the drafts have been read again, so each says what changed. */
+function takeOverRefusalError(code: string): CounterError {
+  if (code === "draft.out_of_date" || code === "draft.taken_over") return "table.take_over_changed";
+  if (code === "draft.not_found") return "table.take_over_gone";
+  if (code === "draft.already_submitted") return "table.take_over_sent";
+  return tableWriteError({ code });
 }
 
 /** What another device changed about a party, worked out by comparing the floor before and after.
@@ -318,17 +362,31 @@ function lateChangeMessage(late: LateChange): string {
   return text.replace("{reason}", () => codeMessage(late.code ?? "server.internal"));
 }
 
-/** A banner's string key, a refusal shown through its code's own message, or a change that failed
- * after its order left the screen, with a second message when something else failed since. */
+/** A banner's string key, a refusal shown through its code's own message, a save refused because
+ * someone took the draft over (naming them), or a change that failed after its order left the
+ * screen, with a second message when something else failed since. */
 type CounterError =
   | StringKey
   | { code: string }
+  | { takenOver: string; unsent?: true }
   | { visitChanged: VisitChange }
   | { lateChange: LateChange; also?: StringKey };
 
 function errorText(error: CounterError): string | TemplateResult {
   if (typeof error === "string") return t(error);
   if ("code" in error) return codeMessage(error.code);
+  if ("takenOver" in error)
+    return error.unsent === true
+      ? named(
+          error.takenOver,
+          t("table.draft_taken_over_unsent"),
+          t("table.draft_taken_over_unsent_unnamed"),
+        )
+      : named(
+          error.takenOver,
+          t("table.draft_taken_over_unsaved"),
+          t("table.draft_taken_over_unsaved_unnamed"),
+        );
   if ("visitChanged" in error) return visitChangeMessage(error.visitChanged);
   const late = lateChangeMessage(error.lateChange);
   return error.also === undefined
@@ -552,6 +610,7 @@ export class TillApp extends LitElement {
     this.operatorName = "";
     this.canEdit = false;
     this.#endOperatorSession();
+    this.#dropDraft();
     this.errorKey = "server.switched";
     this.#setScreen("lock");
     void this.#boot();
@@ -604,6 +663,7 @@ export class TillApp extends LitElement {
 
   override disconnectedCallback(): void {
     this.#menuPoll.stop();
+    this.#draftSync?.drop();
     this.#abandonListRefreshes();
     this.#contentLanguageGeneration++;
     clearTimeout(this.#contentLanguageTimer);
@@ -688,7 +748,10 @@ export class TillApp extends LitElement {
   #tableZoneId?: string;
   /** The basket-refresh dialog's contents while it is open (D9): the counter's basket or a table's
    * round, and the lines it would re-price. */
-  @state() private basketRefresh?: BasketRefresh & { store: WorkingOrderStore };
+  @state() private basketRefresh?: BasketRefresh & {
+    store: WorkingOrderStore;
+    lines: readonly OrderLine[];
+  };
   /** Whether an unsaved basket line keeps Pay shut: it cannot be sold as it stands, or it was priced
    * against a menu version staff have not yet reviewed. */
   @state() private basketHeld = false;
@@ -703,6 +766,21 @@ export class TillApp extends LitElement {
   /** Rounds whose lines carry a mark from a refused send, marked again whenever their table's offers
    * change, so a dish that can be sold again is not left marked. */
   #markedRounds = new Set<WorkingOrderStore>();
+  /** The signed-in person's draft on the open order's party. */
+  #draftSync?: DraftSync;
+  /** Moved on by each sign-in, so a sign-out still saving its draft leaves a later session alone. */
+  #signIns = 0;
+  /** The draft of an order with no party, which is never saved. */
+  #partylessDraft = new WorkingOrderStore();
+  /** {@link #draftSync} has been read, so the screen may show it. */
+  #draftReady = false;
+  /** The draft may hold lines priced against a menu version that is not the live one, and has not
+   * been compared with the live version since (D9). */
+  #draftRefreshDue = false;
+  /** A read of the table's offers made before comparing the draft is out. */
+  #draftRereading = false;
+  /** The party whose groups {@link tabGroups} holds, once a read of them has finished. */
+  #groupsReadFor: string | null = null;
   readonly #menuPoll = new MenuStatePoll({
     read: (zoneId, signal) => this.api.menuState(zoneId, { signal }),
     // A table's zone only while its order is on screen: each read takes a turn of the write lock.
@@ -718,6 +796,8 @@ export class TillApp extends LitElement {
   @state() private tableSelectedCatalogueId = "";
   /** Identifies the latest table-selection offer request so a slower prior selection cannot win. */
   #tableOfferRequest = 0;
+  /** The {@link #tableOfferRequest} of the latest table open that has made its table the active one. */
+  #openClaimed = 0;
   /** Bumped when the waiter goes back to the floor, starts opening a table, selects a tab that hides
    * the order, or logs out, so an answer to a request sent before can tell the order has been left
    * while {@link activeTabId} still names it. Paying the tab does not bump it. */
@@ -789,6 +869,8 @@ export class TillApp extends LitElement {
    * does not move it, so a glance at the floor cannot lend the order view a revision it never showed. */
   @state() private orderParty: TableVisit | null = null;
   @state() private groupCommandBusy = false;
+  /** Moved on each time a take-over the table screen asked for has answered, or failed. */
+  @state() private takeOversAnswered = 0;
   /** Finish table was refused because a bill of the party is unpaid. */
   @state() private finishRefused = false;
   /** The venue's setting for changing sent lines, read with {@link tabLines}. */
@@ -1042,6 +1124,7 @@ export class TillApp extends LitElement {
       event as CustomEvent<LoggedInDetail>
     ).detail;
     setLocale(resolveActiveLocale(locale, this.#venueLocale));
+    this.#signIns++;
     // Refresh restores regular destinations only after login; sale context remains local.
     this.drill = undefined;
     this.#floorLoaded = false;
@@ -1066,6 +1149,7 @@ export class TillApp extends LitElement {
     this.#selectDiet(null);
     this.operatorName = displayName;
     this.operatorPersonId = personId;
+    this.#resumeOrderDraft();
     this.canEdit = canConfigureTill;
     this.errorKey = offerLoadFailed ? "service_zone.load_error" : undefined;
     this.#configureSessionActivity();
@@ -1363,18 +1447,36 @@ export class TillApp extends LitElement {
     this.#evaluateBasket();
   }
 
-  /** With `loaded` false (a failed load, or a table with no zone) no remembered round is marked. */
+  /**
+   * With `loaded` false (a failed load, or a table with no zone) no remembered round is marked.
+   * Offers of another version make the draft's comparison due, whichever read loaded them: a read
+   * that overtakes a poll's own read discards the poll's answer.
+   */
   #loadTableOffers(
     zoneId: string | undefined,
     catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus">,
     loaded = true,
   ): void {
+    const before = this.#tableOffers.versions;
     this.#tableZoneId = zoneId;
     this.#tableOffers.load(catalogue, loaded);
     this.#reportRemovedLayouts(this.tableMenus, catalogue.menus);
     this.tableMenus = catalogue.menus;
     this.tableProducts = this.#tableOffers.products();
-    if (loaded) this.#markRounds(true);
+    if (!loaded) return;
+    const { versions, byId } = this.#tableOffers;
+    if (versions.size !== before.size || [...versions].some(([id, v]) => before.get(id) !== v))
+      this.#draftRefreshDue = true;
+    const sync = this.#draftSync;
+    if (sync !== undefined)
+      sync.reshow(
+        new Map([
+          ...repriceRebuilt(sync.store.lines, byId, versions),
+          ...rebuildReturned(sync.store.lines, byId, versions),
+        ]),
+      );
+    this.#markRounds(true);
+    this.#markDraft(true);
   }
 
   #reportRemovedLayouts(shown: readonly TillZoneMenu[], next: readonly TillZoneMenu[]): void {
@@ -1401,6 +1503,63 @@ export class TillApp extends LitElement {
     }
   }
 
+  /**
+   * Marks each line of the person's draft that cannot be sold as it stands against the table's
+   * offers. With `newer`, the offers are fresher than the server's last answer, so a line the offers
+   * say can be sold loses the server's flag; the next answer brings it back if the server still
+   * disagrees. Nothing is marked while the offers could not be read.
+   */
+  #markDraft(newer = false, notify = true): void {
+    const store = this.#draftSync?.store;
+    if (store === undefined || !this.#tableOffers.loaded) return;
+    const reasons = this.#tableOffers.blocks(store.lines);
+    store.setBlocked(reasons, notify);
+    if (newer)
+      store.setUnavailableOnServer(
+        store.lines.map(
+          (line, index) => line.unavailableOnServer === true && reasons[index] !== undefined,
+        ),
+      );
+  }
+
+  /**
+   * D9 on the table: the person's draft is compared with the table's live offers, as the counter's
+   * basket is, when it is due — offers of another version were loaded, or the server's draft
+   * replaced what the screen held. With `reread`, a line rebuilt under a version the till does not
+   * hold as live has the offers read once more first, and only a version still not live after that
+   * is asked about. Nothing relevant changed: the lines take the live version silently. Otherwise
+   * the refresh dialog asks. Either way the adopted lines are saved as any edit is. It waits while
+   * a send or take-over holds the draft, a save is out, or any dialog is open; the next poll asks
+   * again. Another person's draft is never compared.
+   */
+  #reconcileDraft(reread = true): void {
+    const sync = this.#draftSync;
+    if (!this.#draftRefreshDue || sync === undefined || !this.#draftReady) return;
+    if (!this.#tableOffers.loaded || sync.store.sending || sync.saving) return;
+    if (this.basketRefresh !== undefined || dialogOpenUnder(this.renderRoot)) return;
+    const zoneId = this.#tableZoneId;
+    if (reread && zoneId !== undefined && this.#rebuiltUnknown(sync.store)) {
+      if (this.#draftRereading) return;
+      this.#draftRereading = true;
+      void this.#reloadTableOffers(zoneId).then((read) => {
+        this.#draftRereading = false;
+        if (read) this.#reconcileDraft(false);
+      });
+      return;
+    }
+    this.#draftRefreshDue = false;
+    if (sync.store.lineCount > 0) this.#reconcileBasket(sync.store, this.#tableOffers);
+  }
+
+  /** Whether a line rebuilt from the server names a version the till does not hold as live. It may
+   * be a version newer than the till's offers (another device of the person's saved it first), which
+   * only a fresh read of the offers tells apart from an older one. */
+  #rebuiltUnknown(store: WorkingOrderStore): boolean {
+    return store.lines.some(
+      (line) => line.earlierPriceUnknown === true && isStale(line, this.#tableOffers.versions),
+    );
+  }
+
   /** Marks each unsaved basket line that cannot be sold as it stands against the counter's offers,
    * and works out whether Pay is held. */
   #evaluateBasket(notify = true): void {
@@ -1419,7 +1578,8 @@ export class TillApp extends LitElement {
    * a layout the answer says was removed added, once, to the removed-layout notice. On the counter's
    * zone a version other than the one loaded runs the basket refresh — unless a sale, hold or place
    * is in flight or the dialog is already open, when the next poll asks again. On the open table's
-   * zone it only reloads that zone's offers.
+   * zone a new version reloads that zone's offers and then compares the person's draft
+   * ({@link #reconcileDraft}); a comparison put off earlier is tried again at each poll.
    */
   #onMenuState(zoneId: string, state: MenuState): void {
     if (zoneId === this.counterServiceZoneId) {
@@ -1438,8 +1598,13 @@ export class TillApp extends LitElement {
       if (this.#tableOffers.setUnavailable(state.unavailable)) {
         this.tableProducts = this.#tableOffers.products();
         this.#markRounds();
+        this.#markDraft(true);
       }
-      if (versionsMoved(this.tableMenus, state.menus)) void this.#reloadTableOffers(zoneId);
+      if (!versionsMoved(this.tableMenus, state.menus)) this.#reconcileDraft();
+      else
+        void this.#reloadTableOffers(zoneId).then((read) => {
+          if (read) this.#reconcileDraft(false);
+        });
     }
   }
 
@@ -1506,15 +1671,24 @@ export class TillApp extends LitElement {
       if (outcome.adopted.size > 0) store.adoptLines(outcome.adopted);
       return "adopted";
     }
-    this.basketRefresh = { ...outcome, store };
+    this.basketRefresh = { ...outcome, store, lines: store.lines };
     return "confirming";
   }
 
+  /** Each adopted line is found by the line it was compared as: a draft's lines can move, or be
+   * replaced by the server's, while the dialog is open, and a line no longer there is not adopted. */
   #onBasketRefreshConfirmed(): void {
     const refresh = this.basketRefresh;
     this.basketRefresh = undefined;
     if (refresh === undefined) return;
-    if (refresh.adopted.size > 0) refresh.store.adoptLines(refresh.adopted);
+    const lines = refresh.store.lines;
+    const adopted = new Map(
+      [...refresh.adopted].flatMap(([index, line]) => {
+        const now = lines.indexOf(refresh.lines[index]!);
+        return now < 0 ? [] : [[now, line] as const];
+      }),
+    );
+    if (adopted.size > 0) refresh.store.adoptLines(adopted);
     // The counter's basket is marked again on every change; a round is marked here.
     if (refresh.store !== this.#store) this.#markRounds();
   }
@@ -1527,6 +1701,7 @@ export class TillApp extends LitElement {
   async #refreshRound(round: WorkingOrderStore): Promise<"adopted" | "confirming" | "failed"> {
     const zoneId = this.#tableZoneId;
     if (zoneId === undefined || !(await this.#reloadTableOffers(zoneId))) return "failed";
+    if (round === this.#draftSync?.store) this.#draftRefreshDue = false;
     const outcome = this.#reconcileBasket(round, this.#tableOffers);
     this.#markedRounds.add(round);
     this.#markRounds(true);
@@ -2145,9 +2320,15 @@ export class TillApp extends LitElement {
     const leftOrder = wasShowingOrder && !this.#tableCatalogueActive();
     if (leftOrder) this.#orderVisit++;
     if (!wasShowingOrder && this.#tableCatalogueActive()) this.#shownOnVisit = this.#orderVisit;
-    const returned = leftOrder ? this.#returnSplitCheck() : Promise.resolve(false);
+    const session = this.#operatorSession;
+    const returned = leftOrder
+      ? this.#flushDraft().then(() =>
+          session === this.#operatorSession ? this.#returnSplitCheck() : false,
+        )
+      : Promise.resolve(false);
     if (this.#tabNeedsFloorData(tab)) {
       void returned.then((floorRead) => {
+        if (session !== this.#operatorSession) return;
         if (!this.#floorLoaded) return this.#loadFloorData();
         return floorRead ? undefined : this.#refreshFloor();
       });
@@ -2174,8 +2355,12 @@ export class TillApp extends LitElement {
     this.#clearErrorKeepingLateChange();
     this.cancelOffer = null;
     this.#tableOpensPending++;
+    const session = this.#operatorSession;
     try {
+      await this.#flushDraft();
+      if (session !== this.#operatorSession) return;
       await this.#returnSplitCheck();
+      if (session !== this.#operatorSession) return;
       await this.#openTable(tableId, seated ? undefined : (guestCount ?? null), offerRequest);
     } finally {
       this.#tableOpensPending--;
@@ -2188,12 +2373,13 @@ export class TillApp extends LitElement {
     guestCount: number | null | undefined,
     offerRequest: number,
   ): Promise<void> {
+    const session = this.#operatorSession;
     const table = this.tables.find((candidate) => candidate.id === tableId);
     if (table?.zoneId !== null && table?.zoneId !== undefined) {
       try {
         const catalogue = await this.api.listZoneOffers(table.zoneId);
         const { menus, defaultMenuId } = catalogue;
-        if (offerRequest !== this.#tableOfferRequest) return;
+        if (offerRequest !== this.#tableOfferRequest || session !== this.#operatorSession) return;
         this.#loadTableOffers(table.zoneId, catalogue);
         this.tableSelectedCatalogueId = defaultMenuId ?? this.#defaultCatalogueId(menus);
       } catch {
@@ -2213,15 +2399,24 @@ export class TillApp extends LitElement {
     }
     // `set-status` is keyed by table id, so it is remembered alongside the tab's order id.
     this.activeTableId = tableId;
+    this.#openClaimed = Math.max(this.#openClaimed, offerRequest);
     this.finishRefused = false;
     this.reprintSent = [];
     if (guestCount === undefined) {
       this.activeTabId = table?.tabId;
       this.orderParty = table?.visit ?? null;
-      await this.#loadLinesAndBills();
+      const [, opened] = await Promise.all([
+        this.#loadLinesAndBills(),
+        this.#openDraft(true, session),
+      ]);
+      if (session !== this.#operatorSession) return;
+      this.#showDraft(opened);
     } else {
       try {
         const { tabId, visitId, revision } = await this.api.seatTable(tableId, guestCount);
+        // A table opened after this one has made its own table the active one, so this answer
+        // would put this table's order beside that table.
+        if (session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
         this.activeTabId = tabId;
         this.orderParty = {
           id: visitId,
@@ -2231,17 +2426,19 @@ export class TillApp extends LitElement {
           outstanding: "0.00",
           billCount: 1,
           tableIds: [tableId],
+          unsentDrafts: [],
         };
+        this.#showDraft(await this.#openDraft(false, session));
       } catch (error) {
         this.errorKey = tableWriteError(error);
         await this.#refreshFloor();
         return;
       }
       await this.#reloadOrder();
+      if (session !== this.#operatorSession) return;
     }
     // A canvas that authors a `table-order` card (handheld, tablet) switches to that tab; a till drills
-    // in over the floor tab. Off the shell, only the lock screen is reached here, by a logout that lands
-    // while the tab is opening.
+    // in over the floor tab.
     if (this.#inShell()) {
       const orderTabKey = this.#tableOrderTabKey();
       if (orderTabKey !== undefined)
@@ -2257,11 +2454,13 @@ export class TillApp extends LitElement {
   /** A failed read, or no tab id, leaves an empty tab rather than blocking the operator. */
   async #loadTabLines(): Promise<void> {
     const read = ++this.#tabLinesRead;
+    const partyId = this.orderParty?.id ?? null;
     if (this.activeTabId === undefined) {
       this.tabLines = [];
       this.tabGroups = [];
       this.printProblems = [];
       this.#groupsUnread = false;
+      this.#groupsReadFor = partyId;
       return;
     }
     const groups = this.#readGroups();
@@ -2281,6 +2480,7 @@ export class TillApp extends LitElement {
     if (read !== this.#tabLinesRead) return;
     this.tabGroups = partyGroups ?? [];
     this.#groupsUnread = partyGroups === null;
+    this.#groupsReadFor = partyId;
     this.printProblems = partyProblems;
   }
 
@@ -2374,6 +2574,160 @@ export class TillApp extends LitElement {
   #rememberOrderParty(): void {
     const row = this.tables.find((table) => table.id === this.activeTableId);
     if (row !== undefined) this.orderParty = row.visit;
+    this.#followPartyDraft();
+  }
+
+  /** The draft the open order shows: the person's on its party, and none on a check. A floor that
+   * does not yet name the table's own tab cannot tell a check, so the draft shows. It waits for the
+   * party's own groups, since the screen decides from them whether its first line is a later
+   * addition. */
+  #tableDraft(): WorkingOrderStore | null {
+    const row = this.tables.find((table) => table.id === this.activeTableId);
+    if (row?.tabId !== undefined && this.#showsCheck()) return null;
+    if (this.orderParty === null) return this.#partylessDraft;
+    const sync = this.#draftSync;
+    const party = this.orderParty.id;
+    return this.#draftReady && sync?.visitId === party && this.#groupsReadFor === party
+      ? sync.store
+      : null;
+  }
+
+  /** Starts the person's draft on the order's party, read from the server unless `read` is false.
+   * The screen shows it only once {@link #showDraft} says so. Nothing is started for a table opened
+   * in an operator session that has since ended. */
+  async #openDraft(read: boolean, session: number): Promise<OpenedDraft> {
+    this.#dropDraft();
+    this.#partylessDraft = new WorkingOrderStore();
+    if (session !== this.#operatorSession) return undefined;
+    const party = this.orderParty;
+    if (party === null) return { sync: undefined, read: true };
+    const sync: DraftSync = new DraftSync({
+      api: this.api,
+      visitId: party.id,
+      personId: this.operatorPersonId,
+      rebuild: (lines) =>
+        lines.map((line) =>
+          fromDraftLine(line, this.#tableOffers.byId, this.#tableOffers.versions),
+        ),
+      onReplaced: () => {
+        if (sync !== this.#draftSync) return;
+        this.#draftRefreshDue = true;
+        this.#reconcileDraft();
+      },
+      onRefused: (code, ownerName) =>
+        this.#onDraftRefused(sync, {
+          refused: code,
+          ...(ownerName === undefined ? {} : { ownerName }),
+        }),
+      requestLimitMs: TABLE_REQUEST_LIMIT_MS,
+    });
+    this.#draftSync = sync;
+    // Subscribed before any screen, so a line's mark is set before the draft is drawn.
+    sync.store.subscribe(() => {
+      if (sync === this.#draftSync) this.#markDraft(false, false);
+    });
+    return { sync, read: read ? await sync.load() : true };
+  }
+
+  /** A sign-out leaves the order on the table-order screen, but its draft went with the session: the
+   * person signing in gets their own draft on that party. */
+  #resumeOrderDraft(): void {
+    const session = this.#operatorSession;
+    void this.#openDraft(true, session).then((opened) => this.#showDraft(opened));
+  }
+
+  /** A draft that could not be read is not shown, so an empty one never stands in for it. A draft
+   * another open has since replaced is left alone. */
+  #showDraft(opened: OpenedDraft): void {
+    if (opened === undefined || opened.sync !== this.#draftSync) return;
+    this.#draftReady = opened.read;
+    this.requestUpdate();
+    if (!opened.read) this.errorKey = "table.draft_read_failed";
+    else this.#reconcileDraft();
+  }
+
+  #dropDraft(): void {
+    this.#draftSync?.drop();
+    this.#draftSync = undefined;
+    this.#draftReady = false;
+    this.requestUpdate();
+  }
+
+  /** At a point the person leaves the draft: an edit no save reached is said, unless the operator
+   * session has ended by the time the save answers, since the next person may have signed in. */
+  async #flushDraft(): Promise<void> {
+    if (this.#draftSync === undefined) return;
+    const session = this.#operatorSession;
+    const saved = await this.#draftSync.flush();
+    if (saved === "failed" && session === this.#operatorSession)
+      this.errorKey = "table.draft_save_failed";
+  }
+
+  /** An order that moved to another party, by a merge or a move, takes that party's draft; the
+   * person's edits are saved to the party they were made on first. */
+  #followPartyDraft(): void {
+    const sync = this.#draftSync;
+    if (sync === undefined || sync.visitId === this.orderParty?.id) return;
+    const session = this.#operatorSession;
+    void this.#flushDraft().then(async () => {
+      if (this.#draftSync !== sync) return;
+      this.#showDraft(await this.#openDraft(true, session));
+    });
+  }
+
+  /** A save refused. An edit made after the session ended is lost: nothing can send it now. */
+  #onDraftRefused(sync: DraftSync, refusal: DraftRefused): void {
+    if (sync !== this.#draftSync || refusal.refused === "session.required") return;
+    this.errorKey = draftRefusalError(refusal);
+  }
+
+  /** The other people's drafts on the party of the draft shown, `shown` being what
+   * {@link #tableDraft} answered; read-only, built again only when they or the table's offers change. */
+  #otherDrafts(shown: WorkingOrderStore | null): readonly OtherDraft[] {
+    const sync = this.#draftSync;
+    if (sync === undefined || shown !== sync.store) return [];
+    const key = { others: sync.others, offers: this.tableProducts };
+    const cached = this.#otherDraftViews;
+    if (
+      cached !== undefined &&
+      cached.key.others === key.others &&
+      cached.key.offers === key.offers
+    )
+      return cached.views;
+    const views = sync.others.map((other) => ({
+      id: other.id,
+      revision: other.revision,
+      ownerName: other.ownerName,
+      takenFromYou: other.takenOverFrom?.personId === sync.personId,
+      lines: other.lines.map((line) => fromDraftLine(line, this.#tableOffers.byId)),
+    }));
+    this.#otherDraftViews = { key, views };
+    return views;
+  }
+
+  #otherDraftViews?: {
+    key: { others: unknown; offers: unknown };
+    views: readonly OtherDraft[];
+  };
+
+  /** The person's own unsaved edits go first; the answer's draft becomes theirs to change. */
+  async #onTakeOverDraft(event: Event): Promise<void> {
+    const { draftId, revision } = (event as CustomEvent<TakeOverDraftDetail>).detail;
+    const sync = this.#draftSync;
+    try {
+      if (sync === undefined) {
+        this.errorKey = "table.error";
+        return;
+      }
+      this.errorKey = undefined;
+      const outcome = await sync.takeOver(draftId, revision);
+      if (sync !== this.#draftSync || outcome === "taken") return;
+      if (outcome === "unsaved") this.errorKey ??= "table.error";
+      else if (outcome === "failed") this.errorKey = "table.error";
+      else this.errorKey = takeOverRefusalError(outcome.refused);
+    } finally {
+      this.takeOversAnswered += 1;
+    }
   }
 
   /** The floor, then the order's party from it, then the order's lines and bills. */
@@ -2425,9 +2779,9 @@ export class TillApp extends LitElement {
   /**
    * Another device changed a party this screen was acting on. The floor, the order and the bills are
    * read again and the message says what changed; the command is not sent again on its own, because
-   * the person has to see the new state and decide.
+   * the person has to see the new state and decide. Nothing is said once `live` is false.
    */
-  async #onVisitOutOfDate(error: unknown): Promise<void> {
+  async #onVisitOutOfDate(error: unknown, live: () => boolean = () => true): Promise<void> {
     const named = (error as { visitId?: unknown }).visitId;
     const before = this.tables;
     const shown = this.#tableCatalogueActive() ? this.orderParty : null;
@@ -2437,6 +2791,7 @@ export class TillApp extends LitElement {
         : (shown ?? undefined);
     if (this.#tableCatalogueActive()) await this.#reloadOrder();
     else await this.#reloadTables();
+    if (!live()) return;
     this.errorKey =
       was === undefined
         ? { code: "visit.out_of_date" }
@@ -2454,12 +2809,11 @@ export class TillApp extends LitElement {
 
   /** A draft sent to a seated party's settled or abandoned tab lands on the party's next tab, which
    * the screen follows. Once a submission leaves the draft empty, the till goes back to the floor
-   * and says what the draft's submissions filed. */
+   * and says what the draft's submissions filed. Once the operator's session ends, the submission
+   * sends nothing more, says nothing and does not move the next person's screen. */
   async #onSubmitDraft(event: Event): Promise<void> {
-    const { lines, groups, joinGroupId, store, sent, draft, carryTo } = (
-      event as CustomEvent<
-        Pick<SubmitDraftDetail, "lines" | "groups" | "joinGroupId"> & Partial<SubmitDraftDetail>
-      >
+    const { groups, joinGroupId, store, sent, draft } = (
+      event as CustomEvent<Partial<SubmitDraftDetail>>
     ).detail;
     const tabId = this.activeTabId;
     const tableId = this.activeTableId;
@@ -2474,44 +2828,53 @@ export class TillApp extends LitElement {
       return;
     }
     if (joinGroupId !== undefined && (await this.#refuseWithGroupsUnread())) return;
+    const sync = this.#draftSync;
+    if (sync === undefined || store !== sync.store || groups === undefined || sent === undefined) {
+      this.errorKey = "table.error";
+      return;
+    }
     const partyId = party.id;
-    // The draft is shut to edits until the answer, so a retry sends what the screen shows and success
-    // takes out exactly what was sent.
-    if (store !== undefined) store.sending = true;
+    const session = this.#operatorSession;
+    const live = () => session === this.#operatorSession;
+    // The draft is shut to edits until the answer, so what is sent is what the screen shows.
+    store.sending = true;
     let followUp: DraftFollowUp;
     try {
       followUp = await this.#submitDraft(
         tabId,
         party,
-        { lines, groups, joinGroupId },
-        store,
-        sent ?? [],
+        sync,
+        { groups, joinGroupId },
+        sent,
+        live,
         false,
       );
     } finally {
-      if (store !== undefined) store.sending = false;
+      store.sending = false;
     }
     if (followUp === undefined) return;
     if (followUp === "mark-sold-out") {
-      if (store !== undefined) await this.#markSoldOut(store);
+      await this.#markSoldOut(store);
       return;
     }
     const onSentTable = () => this.activeTabId === tabId && this.activeTableId === tableId;
     if (followUp !== "find-tab" && draft !== undefined) this.#tally(draft, groups, joinGroupId);
     if (followUp === "find-tab" && onSentTable()) {
       await this.#retakePartyFromFloor();
+      if (!live()) return;
       // The server moves a draft only onto its own party's next tab, so the table is followed only
       // while it still holds the party the screen showed when the draft was sent.
       const now = this.tables.find((row) => row.id === tableId);
       if (now?.tabId !== undefined && now.visit?.id === partyId && onSentTable())
-        this.#followDraft(tabId, now.tabId, carryTo);
+        this.#followDraft(tabId, now.tabId);
     } else if (typeof followUp === "object" && this.activeTabId === tabId) {
       await this.#reloadTables();
-      this.#followDraft(tabId, followUp.landedOn, carryTo);
+      if (!live()) return;
+      this.#followDraft(tabId, followUp.landedOn);
     }
     await this.#loadTabLines();
     if (this.orderParty !== null) await this.#loadVisitBills();
-    if (store === undefined || store.lineCount > 0 || draft === undefined) return;
+    if (!live() || store.lineCount > 0 || draft === undefined) return;
     if (followUp === "find-tab" || this.activeTableId !== tableId) return;
     this.submittedNotice = submittedText(draft.tally);
     this.renderRoot.querySelector<WtToast>("wt-toast[data-submitted-toast]")?.show();
@@ -2527,84 +2890,115 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * A refused submission stays on the table screen. One the server may have added — no answer came —
-   * is taken out, because sending it again could put it on the tab twice.
+   * Saves the draft, then sends the `sent` lines under the ids that save answered. A refused
+   * submission stays in the draft. One that got no answer is sent again as it was; if none answers,
+   * the draft is read again, because the server may have taken the lines.
    */
   async #submitDraft(
     tabId: string,
     party: TableVisit,
-    submission: { lines: GroupLine[]; groups: readonly DraftGroup[]; joinGroupId?: string },
-    store: WorkingOrderStore | undefined,
+    sync: DraftSync,
+    submission: { groups: readonly DraftGroup[]; joinGroupId?: string },
     sent: readonly OrderLine[],
+    live: () => boolean,
     retried: boolean,
   ): Promise<DraftFollowUp> {
-    const { lines, groups, joinGroupId } = submission;
+    const { groups, joinGroupId } = submission;
     this.errorKey = undefined;
-    let landedOn: string;
-    const send = new AbortController();
-    const limit = setTimeout(() => send.abort(), TABLE_REQUEST_LIMIT_MS);
+    // One limit covers the save before the send and the send with its retries.
+    const send = limited(TABLE_REQUEST_LIMIT_MS);
+    let submitted: SubmittedDraft;
     try {
-      const submitted = await this.api.submitGroups(
-        party.id,
-        {
-          submissionId: crypto.randomUUID(),
-          expectedVisitRevision: party.revision,
-          ...(joinGroupId === undefined ? {} : { joinGroupId }),
-          groups: groups.map((group) => ({
-            release: group.release,
-            lines: group.lineIndexes.map((index) => lines[index]!),
-          })),
-        },
-        { signal: send.signal },
-      );
-      landedOn = submitted.tabId;
-      this.#noteVisitRevision(party.id, submitted.revision);
+      const saved = await sync.flush(send.signal);
+      if (!live()) return;
+      if (saved !== "saved") {
+        this.errorKey = saved === "failed" ? "table.error" : draftRefusalError(saved);
+        return;
+      }
+      const positions = sent.map((line) => sync.store.lines.indexOf(line));
+      const ids = positions.includes(-1) ? null : sync.lineIds(positions);
+      if (ids === null || sync.draftId === null) {
+        await sync.load();
+        if (!live()) return;
+        this.errorKey = "table.draft_recount";
+        return;
+      }
+      const command: DraftSubmission = {
+        submissionId: crypto.randomUUID(),
+        expectedVisitRevision: party.revision,
+        draftRevision: sync.revision,
+        groups: groups.map((group) => ({
+          release: group.release,
+          lineIds: group.lineIndexes.map((index) => ids[index]!),
+        })),
+        ...(joinGroupId === undefined ? {} : { joinGroupId }),
+      };
+      submitted = await this.#sendDraft(party.id, sync.draftId, command, send.signal, live);
     } catch (error) {
-      if (isVersionRefusal(error) && store !== undefined) {
-        const outcome = await this.#refreshRound(store);
-        if (outcome === "adopted" && !retried) {
-          const reasserted = lines.map((line, index) => {
-            const own = sent[index];
-            return own === undefined ? line : { ...line, ...toWireProductIdentity(own.product) };
-          });
-          return this.#submitDraft(
-            tabId,
-            party,
-            { ...submission, lines: reasserted },
-            store,
-            sent,
-            true,
-          );
-        }
+      if (!live()) return;
+      if (isVersionRefusal(error)) {
+        const outcome = await this.#refreshRound(sync.store);
+        if (!live()) return;
+        // The adopted lines are saved under their new versions, and so under new ids: another request.
+        if (outcome === "adopted" && !retried)
+          return this.#submitDraft(tabId, party, sync, submission, sent, live, true);
         if (outcome !== "confirming") this.errorKey = { code: "menu.version_changed" };
         return;
       }
       if (isNetworkFailure(error)) {
+        await sync.load();
+        if (!live()) return;
         this.errorKey = "table.round_unconfirmed";
-        store?.removeLines(sent);
         return "find-tab";
       }
       if (isVisitOutOfDate(error)) {
-        await this.#onVisitOutOfDate(error);
+        await this.#onVisitOutOfDate(error, live);
+        return;
+      }
+      const refusal = asRefusal(error);
+      if (refusal !== undefined && DRAFT_REFUSALS.has(refusal.refused)) {
+        await sync.load();
+        if (!live()) return;
+        this.errorKey = draftRefusalError(refusal, true);
         return;
       }
       if (isGroupGone(error)) await this.#loadTabLines();
+      if (!live()) return;
       this.errorKey = lineWriteError(error);
-      return (error as { code?: string }).code === "product.unavailable"
-        ? "mark-sold-out"
-        : undefined;
+      return refusal?.refused === "product.unavailable" ? "mark-sold-out" : undefined;
     } finally {
-      clearTimeout(limit);
+      send.done();
     }
-    store?.removeLines(sent);
-    return landedOn === tabId ? "read-tab" : { landedOn };
+    this.#noteVisitRevision(party.id, submitted.revision);
+    if (!live()) return;
+    sync.submitted(submitted.draft, sent);
+    return submitted.tabId === tabId ? "read-tab" : { landedOn: submitted.tabId };
+  }
+
+  /** A request that got no answer is sent again unchanged after a pause, until the time limit ends
+   * the wait or the session it was first sent in ends: the next person may have signed in by then. */
+  async #sendDraft(
+    visitId: string,
+    draftId: string,
+    command: DraftSubmission,
+    signal: AbortSignal,
+    live: () => boolean,
+  ): Promise<SubmittedDraft> {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await this.api.submitDraft(visitId, draftId, command, { signal });
+      } catch (error) {
+        if (!isNetworkFailure(error) || signal.aborted || attempt === SUBMIT_RETRIES) throw error;
+        await pause(signal, SUBMIT_RETRY_PAUSE_MS);
+        if (signal.aborted || !live()) throw error;
+      }
+    }
   }
 
   /** Moves the screen from the tab a draft was sent to onto the tab it went to, only while the
    * operator is still on the first; the floor has already been read after the send. */
-  #followDraft(sentTo: string, landedOn: string, carryTo?: (orderId: string) => void): void {
+  #followDraft(sentTo: string, landedOn: string): void {
     if (landedOn === sentTo || this.activeTabId !== sentTo) return;
-    carryTo?.(landedOn);
     this.activeTabId = landedOn;
     this.#rememberOrderParty();
   }
@@ -3238,14 +3632,18 @@ export class TillApp extends LitElement {
   #onBackToFloor(): void {
     this.#orderVisit++;
     this.cancelOffer = null;
+    const session = this.#operatorSession;
+    const flushed = this.#flushDraft();
     if (this.#inShell()) {
       this.#clearErrorKeepingLateChange();
       this.#popDrill();
-      void this.#returnSplitCheck().then((floorRead) =>
-        floorRead ? undefined : this.#refreshFloor(),
-      );
+      void flushed
+        .then(() => (session === this.#operatorSession ? this.#returnSplitCheck() : false))
+        .then((floorRead) =>
+          floorRead || session !== this.#operatorSession ? undefined : this.#refreshFloor(),
+        );
     } else {
-      void this.#onShowFloor();
+      void flushed.then(() => this.#onShowFloor());
     }
   }
 
@@ -3266,6 +3664,16 @@ export class TillApp extends LitElement {
     this.#abandonListRefreshes();
     this.#setScreen("lock");
     this.#configureSessionActivity();
+    // The server takes the person from the session, so the draft is saved before the session ends.
+    const signIns = this.#signIns;
+    const sync = this.#draftSync;
+    if (sync !== undefined) {
+      this.#draftSync = undefined;
+      this.#draftReady = false;
+      await sync.close();
+      sync.drop();
+    }
+    if (signIns !== this.#signIns) return;
     try {
       await this.api.logout();
     } catch {
@@ -3355,12 +3763,14 @@ export class TillApp extends LitElement {
         .handheld=${this.handheldMode}
       ></till-counter-screen>`;
     }
+    const tableTab = tab.key === this.#tableOrderTabKey();
+    const draft = tableTab ? this.#tableDraft() : undefined;
     return html`<till-card-grid
       .tab=${tab}
       .store=${this.#store}
       .capabilities=${this.capabilities}
       .canConfigureTill=${this.canEdit}
-      .products=${tab.key === this.#tableOrderTabKey() ? this.tableProducts : this.products}
+      .products=${tableTab ? this.tableProducts : this.products}
       .heldOrders=${this.heldOrders}
       .stationQueue=${this.stationQueue}
       .defaultStationId=${this.#defaultStationId()}
@@ -3380,12 +3790,8 @@ export class TillApp extends LitElement {
       .bumpMode=${this.bumpMode}
       .deviceMode=${this.deviceMode}
       .initialDeviceStation=${this.initialDeviceStation}
-      .menus=${tab.key === this.#tableOrderTabKey() ? this.tableMenus : this.menus}
-      .selectedMenuId=${
-        tab.key === this.#tableOrderTabKey()
-          ? this.tableSelectedCatalogueId
-          : this.selectedCatalogueId
-      }
+      .menus=${tableTab ? this.tableMenus : this.menus}
+      .selectedMenuId=${tableTab ? this.tableSelectedCatalogueId : this.selectedCatalogueId}
       .selectedDiet=${this.selectedDiet}
       .statuses=${this.statuses}
       .courses=${this.courses}
@@ -3397,6 +3803,9 @@ export class TillApp extends LitElement {
       .editSentLines=${this.editSentLines}
       .cancelOffer=${this.cancelOffer}
       .orderId=${this.activeTabId}
+      .draftStore=${draft}
+      .otherDrafts=${draft === undefined ? [] : this.#otherDrafts(draft)}
+      .takeOversAnswered=${this.takeOversAnswered}
       .visit=${this.orderParty}
       .visitBills=${this.visitBills}
       .finishRefused=${this.finishRefused}
@@ -3414,7 +3823,8 @@ export class TillApp extends LitElement {
    * the user with no way out. */
   #drillBody(): TemplateResult | typeof nothing {
     switch (this.drill?.kind) {
-      case "table-order":
+      case "table-order": {
+        const draft = this.#tableDraft();
         return html`<till-table-order-screen
           slot="drill"
           .lines=${this.tabLines}
@@ -3433,6 +3843,9 @@ export class TillApp extends LitElement {
           .fireControl=${this.fireControl}
           .tables=${this.tables}
           .orderId=${this.activeTabId}
+          .draftStore=${draft}
+          .otherDrafts=${this.#otherDrafts(draft)}
+          .takeOversAnswered=${this.takeOversAnswered}
           .visit=${this.orderParty}
           .bills=${this.visitBills}
           .finishRefused=${this.finishRefused}
@@ -3440,6 +3853,7 @@ export class TillApp extends LitElement {
           .groupCommandBusy=${this.groupCommandBusy}
           .handheld=${this.handheldMode}
         ></till-table-order-screen>`;
+      }
       case "ticket":
         return html`<till-ticket-view
           slot="drill"
@@ -3519,6 +3933,7 @@ export class TillApp extends LitElement {
         @floor-refresh=${() => void this.#refreshFloor()}
         @open-table=${(event: Event) => void this.#onOpenTable(event)}
         @submit-draft=${(event: Event) => void this.#onSubmitDraft(event)}
+        @take-over-draft=${(event: Event) => void this.#onTakeOverDraft(event)}
         @fire-group=${(event: Event) => void this.#onFireGroup(event)}
         @reorder-groups=${(event: Event) => void this.#onReorderGroups(event)}
         @move-group-line=${(event: Event) => void this.#onMoveGroupLine(event)}
@@ -3601,6 +4016,7 @@ export class TillApp extends LitElement {
             : html`<till-basket-refresh-dialog
                 .changed=${this.basketRefresh.changed}
                 .blocked=${this.basketRefresh.blocked}
+                .purpose=${this.basketRefresh.store === this.#store ? "pay" : "send"}
                 @wt-basket-refresh-confirmed=${() => this.#onBasketRefreshConfirmed()}
                 @wt-basket-refresh-cancelled=${() => (this.basketRefresh = undefined)}
               ></till-basket-refresh-dialog>`
