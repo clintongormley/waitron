@@ -4,14 +4,16 @@ import { describe, expect, it } from "vitest";
 import { workspaceMembers } from "./workspace-members.mjs";
 
 /**
- * No workspace package may reach itself through other workspace packages. pnpm counts every
- * dependency kind when it looks for a loop, so a test-only (`devDependencies`) link closes one as
- * surely as a runtime link, and `pnpm install` prints "There are cyclic workspace dependencies".
+ * No workspace package may reach itself, by listing itself or through other workspace packages.
+ * pnpm counts every dependency kind when it looks for a loop, so a test-only (`devDependencies`)
+ * link closes one as surely as a runtime link, and `pnpm install` prints "There are cyclic
+ * workspace dependencies". For a package that lists itself it prints no such warning (measured
+ * on pnpm 9.15.0).
  * A test that needs packages from both ends of such a loop belongs in a package nothing else
  * depends on, so that its own dependencies close nothing.
  *
  * Reads each member's `package.json` rather than pnpm's own graph, and counts a dependency as a link
- * when its name is another workspace member, whatever its version range.
+ * when its name is a workspace member, itself included, whatever its version range.
  */
 
 const REPO_ROOT = join(import.meta.dirname, "..");
@@ -24,7 +26,10 @@ const DEPENDENCY_FIELDS = [
 
 type Graph = Map<string, string[]>;
 
-/** Every group of two or more packages that reach one another, each group sorted by name. */
+/**
+ * Every group of packages that reach one another, each sorted by name: two or more, or one
+ * package that lists itself.
+ */
 function dependencyLoops(graph: Graph): string[][] {
   let counter = 0;
   const order = new Map<string, number>();
@@ -56,7 +61,7 @@ function dependencyLoops(graph: Graph): string[][] {
       onStack.delete(member);
       group.push(member);
     } while (member !== name);
-    if (group.length > 1) loops.push(group.sort());
+    if (group.length > 1 || graph.get(name)!.includes(name)) loops.push(group.sort());
   };
 
   for (const name of graph.keys()) if (!order.has(name)) visit(name);
@@ -157,6 +162,14 @@ describe("the workspace dependency graph", () => {
       expect(dependencyLoops(graph)).toEqual([]);
     });
 
+    it("finds a package that lists itself", () => {
+      expect(dependencyLoops(graphOf({ a: ["a", "b"], b: [] }))).toEqual([["a"]]);
+    });
+
+    it("does not call a package a loop for linking only to others", () => {
+      expect(dependencyLoops(graphOf({ a: ["b"], b: [] }))).toEqual([]);
+    });
+
     it("ignores a link to a package outside the graph", () => {
       expect(dependencyLoops(graphOf({ a: ["outside"] }))).toEqual([]);
     });
@@ -213,6 +226,14 @@ describe("the workspace dependency graph", () => {
         "a → b (dependencies) → a (dependencies)",
         "c → d (dependencies) → c (devDependencies)",
       ]);
+    });
+
+    it("names a package that lists itself, and the field that lists it", () => {
+      const members = [
+        { name: "a", manifest: { devDependencies: { a: "workspace:*" } } },
+        { name: "b", manifest: { dependencies: { a: "workspace:*" } } },
+      ];
+      expect(loopPaths(members)).toEqual(["a → a (devDependencies)"]);
     });
 
     it("prints nothing for a graph with no loop", () => {
