@@ -74,6 +74,42 @@ describe.each(["light", "dark"] as const)("wt-price-input a11y (%s theme)", (the
     await expectNoA11yViolations(host);
   });
 
+  test("English currency sign, before the amount", async () => {
+    await mountThemed(
+      '<wt-price-input label="Price" name="price" unit="kg" locale="en-GB" value="9.90"></wt-price-input>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  test("Spanish currency sign, after the amount, with a fixed unit and an error", async () => {
+    await mountThemed(
+      '<wt-price-input label="Precio" name="precio" unit="kg" fixed-unit locale="es-ES" value="9,90" error="Introduce un precio"></wt-price-input>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  test("currency sign beside a placeholder, with a hidden label", async () => {
+    await mountThemed(
+      '<wt-price-input label="Price" name="price" unit="ea" locale="en-GB" placeholder="4.50" hide-label></wt-price-input>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+    const shadow = host.querySelector("wt-price-input")!.shadowRoot!;
+    const sign = getComputedStyle(shadow.querySelector('[part~="currency"]')!).color;
+    const field = getComputedStyle(shadow.querySelector("input")!).backgroundColor;
+    expect(contrastRatio(sign, field)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  test("disabled currency sign", async () => {
+    await mountThemed(
+      '<wt-price-input label="Precio" name="precio" unit="ud" locale="es-ES" value="9,90" disabled></wt-price-input>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   test("disabled", async () => {
     await mountThemed(
       '<wt-price-input label="Price" name="price" unit="ea" value="9.90" disabled></wt-price-input>',

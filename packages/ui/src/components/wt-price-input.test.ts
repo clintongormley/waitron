@@ -364,3 +364,232 @@ test("exposes the amount and a fixed unit as parts, so a host can move the unit 
     outer.remove();
   }
 });
+
+// The sign is measured after layout, so a test reads positions two frames after mounting.
+const settled = () =>
+  new Promise<void>((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+  );
+
+async function mountPrice(html: string) {
+  const el = await mount(html);
+  await settled();
+  const input = el.shadowRoot!.querySelector("input")!;
+  const currency = el.shadowRoot!.querySelector<HTMLElement>('[part~="currency"]');
+  return { el, input, currency };
+}
+
+/** The input's content box, where it lays out the typed text. */
+function contentBox(input: HTMLInputElement) {
+  const box = input.getBoundingClientRect();
+  const s = getComputedStyle(input);
+  const px = (v: string) => Number.parseFloat(v);
+  return {
+    left: box.left + px(s.borderLeftWidth) + px(s.paddingLeft),
+    right: box.right - px(s.borderRightWidth) - px(s.paddingRight),
+    top: box.top,
+    bottom: box.bottom,
+  };
+}
+
+/** The typed value's box: the text's measured width, placed where the input aligns it. */
+function typedTextBox(input: HTMLInputElement) {
+  const s = getComputedStyle(input);
+  const ctx = document.createElement("canvas").getContext("2d")!;
+  ctx.font = s.font;
+  const width = ctx.measureText(input.value).width;
+  const content = contentBox(input);
+  const alignedEnd = s.textAlign === "end" || s.textAlign === "right";
+  return alignedEnd
+    ? { left: content.right - width, right: content.right }
+    : { left: content.left, right: content.left + width };
+}
+
+function expectInsideField(currency: HTMLElement, input: HTMLInputElement) {
+  const sign = currency.getBoundingClientRect();
+  const box = input.getBoundingClientRect();
+  expect(sign.width).toBeGreaterThan(0);
+  expect(sign.left).toBeGreaterThanOrEqual(box.left);
+  expect(sign.right).toBeLessThanOrEqual(box.right);
+  expect(sign.top).toBeGreaterThanOrEqual(box.top);
+  expect(sign.bottom).toBeLessThanOrEqual(box.bottom);
+}
+
+test("with an English locale the euro sign sits inside the field, before the typed amount", async () => {
+  const { input, currency } = await mountPrice(
+    '<wt-price-input label="Price" unit="kg" value="9.00" locale="en-GB"></wt-price-input>',
+  );
+  expect(currency!.textContent!.trim()).toBe("€");
+  expectInsideField(currency!, input);
+  expect(currency!.getBoundingClientRect().right).toBeLessThanOrEqual(typedTextBox(input).left);
+});
+
+test("with a Spanish locale the euro sign sits inside the field, after the typed amount", async () => {
+  const { input, currency } = await mountPrice(
+    '<wt-price-input label="Precio" unit="kg" value="9,00" locale="es-ES"></wt-price-input>',
+  );
+  expect(currency!.textContent!.trim()).toBe("€");
+  expectInsideField(currency!, input);
+  expect(currency!.getBoundingClientRect().left).toBeGreaterThanOrEqual(typedTextBox(input).right);
+});
+
+test("with no locale the field draws no currency sign", async () => {
+  const { input, currency } = await mountPrice(
+    '<wt-price-input label="Price" unit="kg" value="9.00"></wt-price-input>',
+  );
+  expect(currency).toBeNull();
+  expect(input.hasAttribute("aria-describedby")).toBe(false);
+});
+
+test.each(["en-GB", "es-ES"])(
+  "a %s sign never sits over the typed amount, however long the amount runs",
+  async (locale) => {
+    const { input, currency } = await mountPrice(
+      `<wt-price-input unit="kg" fixed-unit locale="${locale}" value="123456789012345678,00"></wt-price-input>`,
+    );
+    const sign = currency!.getBoundingClientRect();
+    const content = contentBox(input);
+    expect(sign.right <= content.left || sign.left >= content.right).toBe(true);
+  },
+);
+
+test.each([
+  ["en-GB", "before", "a unit button"],
+  ["es-ES", "after", "a unit button"],
+  ["es-ES", "after", "a fixed unit"],
+])(
+  "in a wide %s field the amount sits against the sign %s it, --wt-space-1 away, beside %s",
+  async (locale, side, unit) => {
+    const fixed = unit === "a fixed unit" ? "fixed-unit" : "";
+    const { input, currency } = await mountPrice(
+      `<wt-price-input unit="kg" ${fixed} locale="${locale}" value="9,00" style="width: 400px"></wt-price-input>`,
+    );
+    host.style.setProperty("--wt-space-1", "5px");
+    await settled();
+    const sign = currency!.getBoundingClientRect();
+    const text = typedTextBox(input);
+    const gap = side === "before" ? text.left - sign.right : sign.left - text.right;
+    expect(gap).toBeCloseTo(5, 0);
+  },
+);
+
+test("the currency sign paints from the muted-text token", async () => {
+  const { currency } = await mountPrice('<wt-price-input locale="en-GB"></wt-price-input>');
+  host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+  expect(getComputedStyle(currency!).color).toBe("rgb(7, 8, 9)");
+});
+
+test("a disabled field dims its currency sign via the disabled-opacity token", async () => {
+  const { currency } = await mountPrice(
+    '<wt-price-input locale="en-GB" disabled></wt-price-input>',
+  );
+  host.style.setProperty("--wt-opacity-disabled", "0.3");
+  expect(getComputedStyle(currency!).opacity).toBe("0.3");
+});
+
+test("pressing the currency sign reaches the amount box beneath it", async () => {
+  const { el, input, currency } = await mountPrice(
+    '<wt-price-input locale="es-ES" value="9,00"></wt-price-input>',
+  );
+  const sign = currency!.getBoundingClientRect();
+  const hit = el.shadowRoot!.elementFromPoint(
+    sign.left + sign.width / 2,
+    sign.top + sign.height / 2,
+  );
+  expect(hit).toBe(input);
+});
+
+test("the currency is read out with the field, after any error and before a fixed unit", async () => {
+  const { el, input, currency } = await mountPrice(
+    '<wt-price-input label="Price" unit="kg" fixed-unit locale="en-GB" error="Enter a price"></wt-price-input>',
+  );
+  const unit = el.shadowRoot!.querySelector<HTMLElement>(".unit")!;
+  const error = el.shadowRoot!.querySelector<HTMLElement>("[data-error]")!;
+  expect(currency!.id).toMatch(/^wt-price-input-currency-\d+$/);
+  expect(input.getAttribute("aria-describedby")).toBe(`${error.id} ${currency!.id} ${unit.id}`);
+});
+
+test("changing the locale moves the sign to the side the new locale writes it, and clearing it removes the sign", async () => {
+  const { el } = await mountPrice(
+    '<wt-price-input unit="kg" value="9.00" locale="en-GB"></wt-price-input>',
+  );
+  const price = el as HTMLElementTagNameMap["wt-price-input"];
+  const input = el.shadowRoot!.querySelector("input")!;
+  price.locale = "es-ES";
+  await price.updateComplete;
+  await settled();
+  const sign = el.shadowRoot!.querySelector<HTMLElement>('[part~="currency"]')!;
+  expect(sign.getBoundingClientRect().left).toBeGreaterThanOrEqual(typedTextBox(input).right);
+
+  price.locale = "";
+  await price.updateComplete;
+  expect(el.shadowRoot!.querySelector('[part~="currency"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector("input")!.hasAttribute("aria-describedby")).toBe(false);
+});
+
+test("with a locale the amount part is still the input, and a fixed unit still joins the field's trailing edge", async () => {
+  const { el, input } = await mountPrice(
+    '<wt-price-input unit="kg" fixed-unit locale="es-ES" style="display: inline-block"></wt-price-input>',
+  );
+  host.style.setProperty("--wt-radius-md", "7px");
+  host.style.setProperty("--wt-price-field-width", "91px");
+  expect(el.shadowRoot!.querySelector('[part~="amount"]')).toBe(input);
+  const box = input.getBoundingClientRect();
+  const unit = el.shadowRoot!.querySelector(".unit")!.getBoundingClientRect();
+  expect(box.width).toBe(91);
+  expect([unit.top, unit.left]).toEqual([box.top, box.right]);
+  expect([
+    getComputedStyle(input).borderInlineEndWidth,
+    getComputedStyle(input).borderStartEndRadius,
+  ]).toEqual(["1px", "0px"]);
+});
+
+test("with a locale and a unit button, the amount box fills a wider field and meets the button", async () => {
+  const { el, input } = await mountPrice(
+    '<wt-price-input unit="kg" locale="en-GB" style="width: 400px"></wt-price-input>',
+  );
+  const box = input.getBoundingClientRect();
+  const unit = el.shadowRoot!.querySelector(".unit")!.getBoundingClientRect();
+  expect(box.width + unit.width).toBe(400);
+  expect(getComputedStyle(input).borderInlineEndWidth).toBe("0px");
+});
+
+test("with a locale and no unit, the amount box keeps its own trailing edge", async () => {
+  const { input } = await mountPrice('<wt-price-input fixed-unit locale="en-GB"></wt-price-input>');
+  host.style.setProperty("--wt-radius-md", "7px");
+  expect(getComputedStyle(input).borderInlineEndWidth).toBe("1px");
+  expect(getComputedStyle(input).borderStartEndRadius).toBe("7px");
+});
+
+function expectSignClearOfText(currency: HTMLElement, input: HTMLInputElement) {
+  const sign = currency.getBoundingClientRect();
+  const content = contentBox(input);
+  expect(sign.width).toBeGreaterThan(0);
+  expect(sign.right <= content.left || sign.left >= content.right).toBe(true);
+}
+
+test("a field hidden when it renders measures its sign once it is shown", async () => {
+  const hidden = await mount(
+    '<div style="display: none"><wt-price-input locale="en-GB" value="9.00"></wt-price-input></div>',
+  );
+  const el = hidden.querySelector("wt-price-input")!;
+  await el.updateComplete;
+  await settled();
+  hidden.style.display = "";
+  await settled();
+  expectSignClearOfText(
+    el.shadowRoot!.querySelector<HTMLElement>('[part~="currency"]')!,
+    el.shadowRoot!.querySelector("input")!,
+  );
+});
+
+test("a field moved elsewhere in the page re-measures its sign", async () => {
+  const { el, input, currency } = await mountPrice(
+    '<wt-price-input locale="es-ES" value="9,00"></wt-price-input>',
+  );
+  el.remove();
+  host.style.setProperty("--wt-font-size-md", "40px");
+  host.append(el);
+  await settled();
+  expectSignClearOfText(currency!, input);
+});
