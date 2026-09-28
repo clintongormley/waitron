@@ -1,4 +1,4 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./mode-screen.js";
 import type { SetupModeScreen } from "./mode-screen.js";
@@ -12,6 +12,18 @@ describe.each(["light", "dark"] as const)("setup-mode-screen a11y (%s theme)", (
       { environment: "production" },
       theme,
     );
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with the certificate note shown", async () => {
+    const { el, host } = await mountWidget<SetupModeScreen>(
+      "setup-mode-screen",
+      { certificateNote: true },
+      theme,
+    );
+    expect(
+      el.shadowRoot!.querySelector("[data-test=cert-note] [data-test=trust-help]"),
+    ).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

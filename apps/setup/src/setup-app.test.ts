@@ -323,6 +323,28 @@ describe("setup-app", () => {
     expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).not.toBeNull();
   });
 
+  it("does not repeat the certificate note once the connection question has been answered", async () => {
+    const el = await mountSetupApp(
+      stubApi({ getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: true }) }),
+    );
+    await flush(el);
+    (await screenHost(el, "connection"))
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!
+      .click();
+    await flush(el);
+    const mode = await screenHost(el, "mode");
+    expect(mode.shadowRoot!.querySelector("[data-test=cert-note]")).toBeNull();
+  });
+
+  it("keeps the certificate note when the connection question was never asked", async () => {
+    const el = await mountSetupApp(
+      stubApi({ getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: false }) }),
+    );
+    await flush(el);
+    const mode = await screenHost(el, "mode");
+    expect(mode.shadowRoot!.querySelector("[data-test=cert-note]")).not.toBeNull();
+  });
+
   it("keeps the connection step open when the check fails and allows a fresh check", async () => {
     const getStatus = vi.fn().mockRejectedValue(new TypeError("network"));
     const el = await mountSetupApp(
