@@ -750,6 +750,8 @@ export interface StationQueueItem {
   /** Unit values frozen with the line. Absent/null only on older payloads. */
   unitName?: Record<string, string> | null;
   unitPrecision?: number | null;
+  /** Counted in Each, whose unit the kitchen screen leaves out; absent reads as not. */
+  soldInEach?: boolean;
   /** The dish's selected options, in selection order; absent reads as none. */
   modifiers?: QueueModifier[];
   /** The dish's OWN allergen profile; absent renders nothing. */
@@ -780,8 +782,8 @@ export type KitchenNoticeKind = "recalled" | "void" | "changed" | "moved";
 
 /**
  * A correction to work a station was sent, until a cook acknowledges it. `lineName` is the kitchen
- * name. `orderLabel` is the order's, and `unitName` and `note` are the line's, each copied as it
- * stood when the notice was recorded.
+ * name. `orderLabel` is the order's, and `unitName`, `soldInEach` and `note` are the line's, each
+ * copied as it stood when the notice was recorded.
  */
 export interface KitchenNotice {
   id: string;
@@ -792,6 +794,8 @@ export interface KitchenNotice {
   lineName: string;
   /** The line's unit snapshot, keyed by locale; null when the line recorded none. */
   unitName: Record<string, string> | null;
+  /** Counted in Each, whose unit the kitchen screen leaves out. */
+  soldInEach: boolean;
   quantity: string;
   note: string | null;
   wasStarted: boolean;

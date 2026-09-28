@@ -1,6 +1,11 @@
 import { MAX_QUANTITY_INTEGER_DIGITS } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
-import { assertQuantityPrecision, validateUnitPrecision } from "./units.js";
+import {
+  EACH_UNIT_ID,
+  assertQuantityPrecision,
+  isEachUnit,
+  validateUnitPrecision,
+} from "./units.js";
 
 describe("unit validation", () => {
   it.each([0, 1, 2, 3])("accepts precision %s", (precision) => {
@@ -51,5 +56,20 @@ describe("unit validation", () => {
     expect(() => assertQuantityPrecision(tooWide, 3, { positive: true })).toThrowError(
       expect.objectContaining({ code: "quantity.invalid", params: { reason: "limit" } }),
     );
+  });
+});
+
+describe("isEachUnit", () => {
+  const stored = "5a3c0e0e-1f7e-4c55-9d52-4d7b3f1c2a10";
+
+  it("answers Each for the unit a product with no stored unit reads as, and for the stored unit seeded as each", () => {
+    expect(isEachUnit({ id: EACH_UNIT_ID, seedKey: null })).toBe(true);
+    expect(isEachUnit({ id: stored, seedKey: "each" })).toBe(true);
+  });
+
+  it("answers not Each for any other unit, a seeded measure or one a venue created", () => {
+    expect(isEachUnit({ id: stored, seedKey: "kg" })).toBe(false);
+    expect(isEachUnit({ id: stored, seedKey: "g" })).toBe(false);
+    expect(isEachUnit({ id: stored, seedKey: null })).toBe(false);
   });
 });

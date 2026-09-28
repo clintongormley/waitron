@@ -750,6 +750,7 @@ describe("TillApi", () => {
         kind: "void",
         lineName: "Paella kitchen",
         unitName: null,
+        soldInEach: false,
         quantity: "1",
         note: "sin gambas",
         wasStarted: true,

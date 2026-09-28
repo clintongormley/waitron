@@ -16,7 +16,7 @@ import {
   thousandthsToDecimal,
   type Decimal,
 } from "@waitron/shared";
-import type { VenueScope } from "./operations.js";
+import { readLinesSoldInEach, type VenueScope } from "./operations.js";
 import {
   KITCHEN_NOTICE_DIRECTIONS,
   kitchenNoticeKind,
@@ -36,6 +36,7 @@ export interface KitchenNotice {
   kind: KitchenNoticeKind;
   lineName: string;
   unitName: Record<string, string> | null;
+  soldInEach: boolean;
   quantity: Decimal;
   note: string | null;
   wasStarted: boolean;
@@ -58,12 +59,14 @@ const NOTICE_LIMIT = 50;
 const INSERTION_ORDER = sql`"kitchen_notices"."rowid"`;
 
 /**
- * Records one notice per item, copying the order's label and each line's kitchen name, unit and
- * note as they stand now, so a void calls it BEFORE deleting the line. The order and every station
- * must be at the caller's location (`working_order.not_found`, `station.not_found`) and every
- * quantity positive (`quantity.invalid`). An item whose line is not on the order is the caller's
- * fault and throws a plain `Error`. `movedTo` is for a `moved` notice only, and `direction` for a
- * `changed` one only (`kitchen_notice.invalid` otherwise, or for a value outside the two).
+ * Records one notice per item, copying the order's label and each line's kitchen name, unit, note
+ * and whether it was sold in Each as they stand now, so a void calls it BEFORE deleting the line.
+ * The order and every station must be at the caller's location (`working_order.not_found`,
+ * `station.not_found`) and every quantity positive (`quantity.invalid`). An item whose line is not
+ * on the order is the caller's fault and throws a plain `Error`. `movedTo` is for a `moved` notice
+ * only; on another kind only the table's check constraint `kitchen_notices_moved_to_ck` refuses
+ * it, as the engine's constraint error rather than an `AppError`. `direction` is for a `changed`
+ * one only (`kitchen_notice.invalid` otherwise, or for a value outside the two).
  */
 export async function recordKitchenNotices(
   tx: Transaction,
@@ -126,6 +129,10 @@ export async function recordKitchenNotices(
       ),
     );
   const lineById = new Map(lines.map((line) => [line.id, line]));
+  const soldInEach = await readLinesSoldInEach(
+    tx,
+    lines.map((line) => line.id),
+  );
   // The label the station screen shows for an order: its number, then its label when it has one.
   const orderLabel =
     order.label === null ? `#${order.orderNumber}` : `#${order.orderNumber} · ${order.label}`;
@@ -145,6 +152,7 @@ export async function recordKitchenNotices(
         kind,
         lineName: kitchenPresentationName(line),
         unitName: line.unitName,
+        soldInEach: soldInEach.has(line.id),
         quantity: quantities[index]!,
         note: line.note,
         wasStarted: item.wasStarted,
@@ -182,6 +190,7 @@ export async function listStationNotices(
       kind: kitchenNotices.kind,
       lineName: kitchenNotices.lineName,
       unitName: kitchenNotices.unitName,
+      soldInEach: kitchenNotices.soldInEach,
       quantity: kitchenNotices.quantity,
       note: kitchenNotices.note,
       wasStarted: kitchenNotices.wasStarted,

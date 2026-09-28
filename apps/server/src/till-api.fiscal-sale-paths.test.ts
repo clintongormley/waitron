@@ -1357,6 +1357,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
               gl: "u",
             },
             unitPrecision: 0,
+            soldInEach: true,
             // No course, so the item fires immediately: a null course is treated as earliest.
             course: null,
             firedAt: expect.any(String),

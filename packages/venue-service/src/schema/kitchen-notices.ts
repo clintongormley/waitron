@@ -35,6 +35,8 @@ export const kitchenNotices = table(
     kind: kitchenNoticeKind("kind").notNull(),
     lineName: label("line_name").notNull(),
     unitName: json<Record<string, string>>("unit_name"),
+    /** A flag rather than the unit's id: it must still answer after the unit is deleted. */
+    soldInEach: flag("sold_in_each").notNull().default(false),
     quantity: quantity("quantity").notNull(),
     note: label("note"),
     wasStarted: flag("was_started").notNull().default(false),

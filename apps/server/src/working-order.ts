@@ -4972,6 +4972,8 @@ export interface StationQueueItem {
   quantity: string;
   unitName: Record<string, string> | null;
   unitPrecision: number | null;
+  /** Counted in Each, whose unit the kitchen screen leaves out. */
+  soldInEach: boolean;
   modifiers: QueueModifier[];
   /** The dish's OWN allergens, no modifier contribution. `pending` when they are unreviewed. */
   asServed: { allergens: ProductAllergens; pending: boolean };
@@ -5177,6 +5179,10 @@ export async function listStationQueue(
     tx,
     rows.map((row) => row.workingOrderLineId),
   );
+  const soldInEach = await VENUE_SERVICE.readLinesSoldInEach(
+    tx,
+    rows.map((row) => row.workingOrderLineId),
+  );
 
   const nowMs = Date.now();
   const printProblems = await ordersWithPrintProblem(
@@ -5217,6 +5223,7 @@ export async function listStationQueue(
       quantity: thousandthsToDecimal(row.quantity),
       unitName: row.unitName,
       unitPrecision: row.unitPrecision,
+      soldInEach: soldInEach.has(row.workingOrderLineId),
       modifiers: modifiersByParent.get(row.workingOrderLineId) ?? [],
       asServed: asServedByParent.get(row.workingOrderLineId)?.asServed ?? {
         allergens: {},
