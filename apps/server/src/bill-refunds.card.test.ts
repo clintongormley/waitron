@@ -1715,7 +1715,7 @@ describe("a refund the provider here cannot answer for", () => {
 });
 
 describe("a paid bill", () => {
-  it("takes no refund of its card payment (working_order.not_open), so no refund is ever pending on it", async () => {
+  it("refuses a new refund of its card payment (working_order.not_open), writing no refund row", async () => {
     const billId = await bill("Pulpo");
     const card = await pay(billId, "card", "20.00");
     expect(card.answer.status).toBe(200);

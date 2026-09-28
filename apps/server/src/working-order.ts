@@ -2211,14 +2211,20 @@ async function servableLines(
     );
 }
 
-/** Serving needs released work: a line never sent, of a held group, or whose kitchen item is
- * unreleased, is refused `group.line_held`. */
+/**
+ * Serving needs released work, else `group.line_held`: a line in a held group, or whose kitchen item
+ * has not fired, is not released, nor is a line with neither an item nor a group that was never
+ * sent. `sent_at` is read only for that last kind, because a group fired after its bill was paid
+ * releases its lines without stamping them (`stampSent` writes only while the bill is open).
+ */
 function refuseUnreleased(line: ServableLine): void {
-  if (
-    line.sentAt === null ||
-    line.groupState === "held" ||
-    (line.ticketItemId !== null && line.ticketFiredAt === null)
-  ) {
+  const released =
+    line.groupState === "held"
+      ? false
+      : line.ticketItemId !== null
+        ? line.ticketFiredAt !== null
+        : line.groupState !== null || line.sentAt !== null;
+  if (!released) {
     throw new AppError("group.line_held", { tabId: line.workingOrderId, lineNo: line.lineNo });
   }
 }

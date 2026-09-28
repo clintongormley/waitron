@@ -976,6 +976,50 @@ describe("served on a settled bill (D18)", () => {
   });
 });
 
+describe("served on a bill paid before its group was fired (D18)", () => {
+  it("serves the Flan and the Water of a group fired after the bill was paid", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    await group(v, s.visitId, "fire", [line(v, "croquetas", "2")]);
+    const desserts = await group(v, s.visitId, "hold", [line(v, "flan"), line(v, "water")]);
+    await pay(v, s.tabId, "23.00");
+    await fire(v, s.visitId, desserts);
+    const flan = await lineNamed(s.visitId, "flan");
+    const water = await lineNamed(s.visitId, "water");
+    const [bill] = await suite.db
+      .select({ status: workingOrders.status })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, s.tabId));
+    expect(bill!.status).toBe("settled");
+    // Firing on the paid bill released the Flan to the kitchen; nothing stamps a settled line sent.
+    const [ticket] = await suite.db
+      .select({ firedAt: ticketItems.firedAt })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderLineId, flan.id));
+    expect(ticket!.firedAt).not.toBeNull();
+    const [sent] = await suite.db
+      .select({ sentAt: workingOrderLines.sentAt })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.id, water.id));
+    expect(sent!.sentAt).toBeNull();
+    const before = await snapshot(s.visitId);
+
+    await serve(v, s.visitId, [{ lineId: flan.id, quantity: "1" }]);
+    await serveGroup(v, s.visitId, desserts);
+
+    for (const row of [flan, water]) {
+      expect(await lineById(s.visitId, row.id)).toMatchObject({
+        servedQuantity: 1000,
+        servedAt: expect.any(String),
+      });
+    }
+    const after = await snapshot(s.visitId);
+    expect(after.sales).toEqual(before.sales);
+    expect(after.saleLines).toEqual(before.saleLines);
+    expect(after.registros).toEqual(before.registros);
+  });
+});
+
 describe("a card refund pending on a bill (ruling 3 is for an OPEN bill only)", () => {
   /** A received card payment of the bill, and a refund of it the provider has not answered. */
   async function pendingRefund(v: Venue, billId: string): Promise<void> {
