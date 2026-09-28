@@ -113,6 +113,12 @@ export class TillFloorScreen extends LitElement {
         gap: var(--wt-space-3);
       }
 
+      /* A token's unsent-order mark hangs below it, into the row gap and the tray's padding. */
+      .tray {
+        row-gap: var(--wt-space-4);
+        padding-bottom: var(--wt-space-4);
+      }
+
       /* A responsive grid: cards flow to fill the width, wrapping onto new rows on a narrow till. */
       .grid {
         display: grid;
@@ -303,7 +309,6 @@ export class TillFloorScreen extends LitElement {
         color: var(--wt-color-text);
       }
 
-      /* One line per person; the dashed warning border matches wt-table-token's unsent mark. */
       .unsent {
         display: flex;
         flex-direction: column;

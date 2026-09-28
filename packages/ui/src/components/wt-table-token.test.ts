@@ -153,6 +153,13 @@ describe("the unsent-order mark", () => {
     expect(shown(el)).toEqual({ text: "Alex", role: "img", name: "Alex", hidden: null });
   });
 
+  test("shows the names, as its accessible name says, when the consumer's label is empty", async () => {
+    const el = await mountToken(table({ state: "open-tab", unsentDrafts: ["Alex"] }), {
+      unsent: "",
+    });
+    expect(shown(el)).toEqual({ text: "Alex", role: "img", name: "Alex", hidden: null });
+  });
+
   test("is decorative when it has neither a label nor a name to give", async () => {
     const el = await mountToken(table({ state: "open-tab", unsentDrafts: [""] }));
     expect(shown(el)).toEqual({ text: "", role: null, name: null, hidden: "true" });
@@ -195,6 +202,15 @@ describe("the unsent-order mark", () => {
     const mark = unsent(el)!;
     expect(getComputedStyle(mark).borderTopColor).toBe("rgb(4, 5, 6)");
     expect(getComputedStyle(mark).borderTopStyle).toBe("dashed");
+  });
+
+  test("the mark's background and text paint from the raised-surface and text tokens", async () => {
+    const el = await mountToken(table({ state: "open-tab", unsentDrafts: ["Alex"] }));
+    host.style.setProperty("--wt-color-surface-raised", "rgb(7, 8, 9)");
+    host.style.setProperty("--wt-color-text", "rgb(10, 11, 12)");
+    const mark = unsent(el)!;
+    expect(getComputedStyle(mark).backgroundColor).toBe("rgb(7, 8, 9)");
+    expect(getComputedStyle(mark).color).toBe("rgb(10, 11, 12)");
   });
 });
 

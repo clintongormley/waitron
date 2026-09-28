@@ -118,8 +118,6 @@ export class WtTableToken extends LitElement {
         border-bottom: var(--wt-space-3) solid var(--wt-color-danger);
       }
 
-      /* Hangs off the bottom edge so a map-sized token grows no taller for it. The dashed warning
-         border matches the till's list card. */
       .unsent-mark {
         position: absolute;
         bottom: 0;
@@ -313,7 +311,7 @@ export class WtTableToken extends LitElement {
     const name = [label, names].filter((part) => part).join(": ");
     return name
       ? html`<span class="unsent-mark" data-unsent role="img" aria-label=${name}
-          >${label ?? names}</span
+          >${label || names}</span
         >`
       : html`<span class="unsent-mark" data-unsent aria-hidden="true"></span>`;
   }

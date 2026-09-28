@@ -483,6 +483,41 @@ describe("till-floor-screen: a table's unsent orders", () => {
     ).toBe("Sin enviar: Alex");
   });
 
+  it("leaves room in the tray for a hanging mark, above the next row and the tray's edge", async () => {
+    const unplaced = Array.from({ length: 6 }, (_, i) =>
+      seated(
+        { id: `u${i}`, label: `${i + 10}` },
+        { id: `vu${i}`, unsentDrafts: [{ ownerName: "Alex", lineCount: 2 }] },
+      ),
+    );
+    const el = await mountFloor([table({ id: "t5", label: "5", ...onMap }), ...unplaced]);
+    el.style.display = "block";
+    el.style.width = "300px";
+    await el.updateComplete;
+
+    const tray = el.shadowRoot!.querySelector<HTMLElement>(".tray")!;
+    const items = [...tray.querySelectorAll<HTMLElement>(".tray-item")];
+    const rowTops = [...new Set(items.map((item) => item.getBoundingClientRect().top))];
+    expect(rowTops.length).toBeGreaterThan(1);
+    const clearances: number[] = [];
+    for (const item of items) {
+      const token = item.querySelector<Token>("wt-table-token")!;
+      await token.updateComplete;
+      const tagBottom = token
+        .shadowRoot!.querySelector("[data-unsent]")!
+        .getBoundingClientRect().bottom;
+      const top = item.getBoundingClientRect().top;
+      const nextRow = rowTops.filter((rowTop) => rowTop > top);
+      const limit =
+        nextRow.length > 0
+          ? Math.min(...nextRow)
+          : tray.getBoundingClientRect().bottom -
+            Number.parseFloat(getComputedStyle(tray).borderBottomWidth);
+      clearances.push(limit - tagBottom);
+    }
+    expect(Math.min(...clearances)).toBeGreaterThan(0);
+  });
+
   it("marks an unplaced table's token in the map's tray", async () => {
     const el = await mountFloor([
       table({ id: "t5", label: "5", ...onMap }),
