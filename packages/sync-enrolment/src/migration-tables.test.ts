@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { tablesCreatedBy } from "./migration-tables.js";
+import { dropLineComments, tablesCreatedBy } from "./migration-tables.js";
+import { migrationSets, migrationSqlFiles } from "./testing/migration-sets.js";
 
 describe("tablesCreatedBy", () => {
   it("collects created tables, quoted or bare, schema-qualified or not", () => {
@@ -124,9 +127,82 @@ describe("tablesCreatedBy", () => {
     );
   });
 
+  it.each([
+    ["a carriage return", "\r"],
+    ["U+2028", "\u2028"],
+    ["U+2029", "\u2029"],
+  ])("ignores a CREATE TABLE in a comment on a line ending in %s", (_name, end) => {
+    expect(
+      tablesCreatedBy([
+        `-- CREATE TABLE ghost (id int);${end}\nCREATE TABLE real (id int);${end}\n`,
+      ]),
+    ).toEqual(new Set(["real"]));
+  });
+
+  it("reads a crafted 200,000-dash line ending in a carriage return within one second", () => {
+    const started = performance.now();
+    expect(tablesCreatedBy([`${"-".repeat(200_000)}\r`])).toEqual(new Set());
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
   it("reads a crafted 600,000-character unclosed comment within one second", () => {
     const started = performance.now();
     expect(tablesCreatedBy([`/*${"a/*".repeat(200_000)}`])).toEqual(new Set());
     expect(performance.now() - started).toBeLessThan(1000);
+  });
+});
+
+describe("dropLineComments", () => {
+  const oldPattern = (source: string): string =>
+    source
+      .split("\n")
+      .map((line) => line.replace(/--.*$/, ""))
+      .join("\n");
+
+  it("drops what the old `/--.*$/` pattern dropped, on lines holding no \\r, U+2028 or U+2029", () => {
+    const inputs = [
+      "",
+      "no comment",
+      "-- whole line",
+      "CREATE TABLE a (id int); -- trailing",
+      "a -- one -- two",
+      "a - b",
+      "a ---",
+      "--> statement-breakpoint\nCREATE TABLE b (id int);--> statement-breakpoint",
+      "x\n-- y\nz -- w\n",
+    ];
+    for (const input of inputs) expect(dropLineComments(input), input).toBe(oldPattern(input));
+
+    const alphabet = ["-", "-", "-", "a", " ", "\n", "'", "/", "*"];
+    let seed = 1;
+    const next = (): number => {
+      seed = (seed * 1_103_515_245 + 12_345) % 2 ** 31;
+      return seed;
+    };
+    for (let i = 0; i < 20_000; i += 1) {
+      let input = "";
+      for (let n = next() % 24; n > 0; n -= 1) input += alphabet[next() % alphabet.length];
+      expect(dropLineComments(input), JSON.stringify(input)).toBe(oldPattern(input));
+    }
+  });
+
+  // Line by line, and only on lines where the old pattern's `.` reaches the end of the line: a
+  // migration correctly holding a Windows line ending and a `--` comment must not fail this.
+  it("drops what the old pattern dropped from every migration file in the repository", () => {
+    const repoRoot = join(import.meta.dirname, "..", "..", "..");
+    const files = migrationSets(repoRoot).flatMap((set) => migrationSqlFiles(repoRoot, set));
+    expect(files.length, "guards against a vacuous pass over an empty listing").toBeGreaterThan(10);
+    let compared = 0;
+    let commented = 0;
+    for (const file of files) {
+      for (const line of readFileSync(join(repoRoot, file), "utf8").split("\n")) {
+        if (/[\r\u2028\u2029]/.test(line)) continue;
+        expect(dropLineComments(line), `${file}: ${line}`).toBe(oldPattern(line));
+        compared += 1;
+        if (line.includes("--")) commented += 1;
+      }
+    }
+    expect(compared).toBeGreaterThan(1000);
+    expect(commented).toBeGreaterThan(100);
   });
 });

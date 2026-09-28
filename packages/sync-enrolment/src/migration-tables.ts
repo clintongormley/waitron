@@ -33,14 +33,23 @@ function blankBlockComments(source: string): string {
   return out + source.slice(from);
 }
 
+/** Drops everything from each line's first `--`, a carriage return before the line break included. */
+export function dropLineComments(source: string): string {
+  return source
+    .split("\n")
+    .map((line) => {
+      const at = line.indexOf("--");
+      return at === -1 ? line : line.slice(0, at);
+    })
+    .join("\n");
+}
+
 /** Blanks comments and string literals, so a CREATE/DROP TABLE mentioned in prose or a literal is
  * ignored. Naive by design. */
 function stripSql(source: string): string {
-  return blankBlockComments(source)
-    .split("\n")
-    .map((line) => line.replace(/--.*$/, ""))
-    .join("\n")
-    .replace(/'(?:[^']|'')*'/g, (literal) => literal.replace(/[^\n]/g, " "));
+  return dropLineComments(blankBlockComments(source)).replace(/'(?:[^']|'')*'/g, (literal) =>
+    literal.replace(/[^\n]/g, " "),
+  );
 }
 
 interface Statement {

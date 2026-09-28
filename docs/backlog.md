@@ -3477,26 +3477,33 @@ approved.
   Settings → Advanced Security page, by the owner's report, unconfirmed: GitHub's docs
   (`content/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/configure-malware-alerts.md`)
   give only that page's **Enable** button, so the setting was not read back.
-- **`stripSql`'s line-comment pattern `/--.*$/` also grows with the square of its input — OPEN.**
-  Found by A105 in `packages/sync-enrolment/src/migration-tables.ts`, beside the block-comment
-  pattern it replaced; CodeQL did not flag it. A line of 100,000 `-` followed by a carriage return
-  took 3.2 s (10,000: 35 ms), because `.` stops at `\r` and `$` then fails at every dash. It reads
-  only the repository's migration SQL, where no `packages/*/drizzle/*.sql` file holds a carriage
-  return (`grep -l $'\r' packages/*/drizzle/*.sql` printed nothing over 71 files on 2026-09-28; the
-  same grep on a file holding `a\r\n` printed its name). Fix the same way (`indexOf("--")` and
-  `slice`), with a timing case and one pinning a `\r` line. The twins this branch left standing,
-  each OPEN: the same two SQL patterns (the block-comment one this branch replaced, and `/--.*$/`)
-  are copied in `scripts/module-graph-honesty.test.ts` (lines 67 and 69), a guard reading the
-  repository's own SQL; `apps/till/src/i18n/t.ts` still strips the region with `/-.*$/` on the
-  till's locale (CodeQL did not flag it); and `/\/+$/` (written `/\/+$/u` in `mailpit-client.ts`) is
-  still used in `apps/server/src/boot.ts` (a peer relay URL from `mirror_config`, owner-written
-  config), `apps/server/src/mailpit-client.ts` (the loopback Mailpit base URL) and
-  `apps/server/src/mirror-bundle-fetch.ts` (a URL already parsed by `assertSafePrimaryUrl`) — none
-  of the three timed; and the email pattern itself is still copied six times in `apps/dashboard`
-  (`login-preference.ts` twice, `screens/login-screen.ts`, `screens/profile-screen.ts`,
-  `widgets/person-edit.ts`, `widgets/person-form.ts`), run in the browser on an address the person
-  typed or the browser saved (CodeQL did not flag them either). See also the OPEN bullet "The two
-  SQL scanners named `stripSql`…": a fix to one touches the other's code.
+- **`stripSql`'s line-comment pattern `/--.*$/` also grew with the square of its input — DONE (C27,
+  2026-09-28).** Found by A105 in `packages/sync-enrolment/src/migration-tables.ts`; CodeQL did not
+  flag it. It is now `dropLineComments` (`indexOf("--")` and `slice`). Measured on Node v26.7.0: a line
+  of 200,000 `-` followed by a carriage return took 12.8 s through `tablesCreatedBy` with the old
+  pattern, and a case now holds it under one second. One behaviour changed: JavaScript's `.` stops
+  at a carriage return, U+2028 and U+2029, so when one of those followed a `--` comment on its line
+  the old pattern left the comment in place, and a commented-out `CREATE TABLE` ending in any of the
+  three was counted; the new code drops it, and three cases pin that. On lines holding none of those
+  three characters the two agree: one case compares them over a hand list and 20,000 random strings,
+  another line by line over every migration file the package's helpers list (72 on 2026-09-28, none
+  holding any of the three), and both go red when `indexOf` is swapped for `lastIndexOf`. The order
+  of blanking is unchanged, so the bullet "The two SQL scanners named `stripSql`…" is neither better
+  nor worse.
+- **Copies of the patterns A105 and C27 replaced — OPEN.** The twins A105 and C27 left standing,
+  each OPEN: the same two SQL patterns (the block-comment one A105 replaced, and `/--.*$/`, the one
+  C27 replaced) are copied in `scripts/module-graph-honesty.test.ts` (lines 67 and 69), a guard
+  reading the repository's own SQL; `apps/till/src/i18n/t.ts` still strips the region with `/-.*$/`
+  on the till's locale (CodeQL did not flag it); and `/\/+$/` (written `/\/+$/u` in
+  `mailpit-client.ts`) is still used in `apps/server/src/boot.ts` (a peer relay URL from
+  `mirror_config`, owner-written config), `apps/server/src/mailpit-client.ts` (the loopback Mailpit
+  base URL) and `apps/server/src/mirror-bundle-fetch.ts` (a URL already parsed by
+  `assertSafePrimaryUrl`) — none of the three timed; and the email pattern itself is still copied
+  six times in `apps/dashboard` (`login-preference.ts` twice, `screens/login-screen.ts`,
+  `screens/profile-screen.ts`, `widgets/person-edit.ts`, `widgets/person-form.ts`), run in the
+  browser on an address the person typed or the browser saved (CodeQL did not flag them either). See
+  also the OPEN bullet "The two SQL scanners named `stripSql`…": a fix to one touches the other's
+  code.
 - **`apps/server/src/stream-host.test.ts` passes only in file order — DONE (lane A's A88, **PR
   #775**).** Found by #752's review: under Vitest's shuffled order (`--sequence.shuffle`) cases
   expecting no bucket credential, or no membership document, failed when a nested `describe`'s
@@ -4453,8 +4460,9 @@ approved.
   `--` comments and `'…'` strings, the same ordering the six TypeScript guards had. Read, not run;
   whether any file they scan has a `/*` inside a `--` comment or a string is not measured. The
   TypeScript reader in `packages/shared/src/source-comments.ts` knows nothing of `--` comments, so
-  it is not a drop-in fix. See also the OPEN bullet "`stripSql`'s line-comment pattern `/--.*$/`…":
-  a fix to one touches the other's code.
+  it is not a drop-in fix. See also the OPEN bullet "Copies of the patterns A105 and C27
+  replaced…", which holds the copy of `/--.*$/` in `scripts/module-graph-honesty.test.ts`: a fix to
+  one touches the other's code.
 
 - **Four more guards handle comments on their own — OPEN (found 2026-09-27 reviewing A95; read, not
   run, except the `write-path-tables` shapes, run on one small input each).** `scripts/spawn-timeout-budget.test.ts` has its own `withoutComments` (line 32), which
