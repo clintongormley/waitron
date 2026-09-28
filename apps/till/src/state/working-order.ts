@@ -264,7 +264,7 @@ export class WorkingOrderStore {
   /**
    * As {@link addProduct}, except that a line ordering the same thing as an earlier one (the draft
    * merge rule, D10) adds its quantity to the first such line, which keeps its place. A line marked
-   * not offered or blocked takes nothing, so a fresh tap never joins a line that cannot be sent.
+   * not offered or blocked takes nothing: a fresh tap starts a line of its own beside it.
    */
   addMerging(product: TillProduct, quantity: string, selection?: LineSelection): void {
     if (this.#sending) return;
@@ -309,6 +309,17 @@ export class WorkingOrderStore {
     });
     this.#lines[index]!.quantity = quantity;
     this.#invalidatePricing();
+    this.#markDirty();
+    this.emit("changed");
+  }
+
+  /** The waiter's course override on a table draft line; `undefined` goes back to the dish's own. */
+  setLineCourse(index: number, courseId: string | undefined): void {
+    if (this.#sending) return;
+    const line = this.#lines[index];
+    if (line === undefined) return;
+    if (courseId === undefined) delete line.courseId;
+    else line.courseId = courseId;
     this.#markDirty();
     this.emit("changed");
   }

@@ -105,6 +105,8 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) statuses: TableServiceStatus[] = [];
   @property({ attribute: false }) courses: TillCourse[] = [];
   @property() orderId?: string;
+  /** The open order's draft, passed through to the table-order card; see its `draftStore`. */
+  @property({ attribute: false }) draftStore?: WorkingOrderStore | null;
   @property({ attribute: false }) visit: TableVisit | null = null;
   @property({ attribute: false }) visitBills: VisitBill[] = [];
   @property({ type: Boolean }) finishRefused = false;
@@ -243,6 +245,7 @@ export class TillCardGrid extends LitElement {
           .fireControl=${this.fireControl}
           .tables=${this.tables}
           .orderId=${this.orderId}
+          .draftStore=${this.draftStore}
           .visit=${this.visit}
           .bills=${this.visitBills}
           .finishRefused=${this.finishRefused}

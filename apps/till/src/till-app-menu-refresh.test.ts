@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
-import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  draftServer,
+  mountWidget,
+  type DraftServer,
+} from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
 import { setLocale } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
@@ -301,9 +306,12 @@ async function pay(el: TillApp): Promise<void> {
   await flush(el);
 }
 
+let drafts: DraftServer;
+
 beforeEach(() => {
   setLocale("en-GB");
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  drafts = draftServer(() => landed("wo-7"));
 });
 afterEach(() => {
   cleanupWidgets();
@@ -845,9 +853,30 @@ const table = {
 /** What a round's submission answers when its lines went on `tabId`. */
 const landed = (tabId: string) => ({ tabId, revision: 2, groups: [] });
 type Landed = ReturnType<typeof landed>;
-/** The lines a round's submission sent, whichever group each went in. */
+/** The lines a round's submission sent, whichever group each went in, read back from the draft. */
 const sentLines = (call: unknown[]) =>
-  (call[1] as { groups: { lines: unknown[] }[] }).groups.flatMap((group) => group.lines);
+  drafts
+    .sentGroups(call[2] as Parameters<DraftServer["sentGroups"]>[0])
+    .flatMap((group) => group.lines);
+
+type SubmitArgs = Parameters<DraftServer["apply"]>;
+/** A draft submission whose reply waits: `hold` is given the function that has the server take the
+ * submission and answer `value`. */
+const replyLater = (hold: (reply: (value: Landed) => void) => void) =>
+  vi.fn(
+    (...args: SubmitArgs) =>
+      new Promise((resolve) => hold((value) => resolve({ ...drafts.apply(...args), ...value }))),
+  );
+/** A draft submission the server takes, answering `value`. */
+const answering = (value: Landed) =>
+  vi.fn(async (...args: SubmitArgs) => ({ ...drafts.apply(...args), ...value }));
+/** A draft submission that gets no answer until `hold`'s function is called, and then fails each
+ * time it is sent. */
+const failLater = (hold: (fail: (error: unknown) => void) => void) => {
+  const failure = new Promise<never>((_resolve, reject) => hold(reject));
+  failure.catch(() => {});
+  return vi.fn(() => failure);
+};
 
 const tabLemonade = {
   lineNo: 1,
@@ -883,7 +912,9 @@ function tableStubs(
     getTabLines: vi
       .fn()
       .mockResolvedValue({ lines: [tabLemonade], revision: 0, editSentLines: true }),
-    submitGroups: vi.fn().mockResolvedValue(landed("wo-7")),
+    listDrafts: drafts.listDrafts,
+    saveDraft: drafts.saveDraft,
+    submitDraft: drafts.submitDraft,
     _dining: diningOffers,
     ...overrides,
   };
@@ -945,17 +976,14 @@ describe("a table round refused because the menu changed", () => {
   it("re-sends the round once, asserting v2, when nothing in it changed", async () => {
     const { el } = await mountApp(
       tableStubs(catalogue("v2", V1.offers), {
-        submitGroups: vi
-          .fn()
-          .mockRejectedValueOnce(versionRefusal)
-          .mockResolvedValueOnce(landed("wo-7")),
+        submitDraft: vi.fn(drafts.submitDraft).mockRejectedValueOnce(versionRefusal),
       }),
     );
     await toTable(el);
     const round = roundGrid(el).store;
     await sendLemonadeRound(el);
 
-    expect(api.submitGroups.mock.calls.map(sentLines)).toEqual([
+    expect(api.submitDraft.mock.calls.map(sentLines)).toEqual([
       [{ menuItemId: "offer-lemonade", menuVersionId: "v1", quantity: "1" }],
       [{ menuItemId: "offer-lemonade", menuVersionId: "v2", quantity: "1" }],
     ]);
@@ -985,10 +1013,7 @@ describe("a table round refused because the menu changed", () => {
         listZoneOffers: vi.fn((zoneId: string) =>
           Promise.resolve(zoneId === "zone-dining" ? dining("v1") : V1),
         ),
-        submitGroups: vi
-          .fn()
-          .mockRejectedValueOnce(versionRefusal)
-          .mockResolvedValueOnce(landed("wo-7")),
+        submitDraft: vi.fn(drafts.submitDraft).mockRejectedValueOnce(versionRefusal),
       }),
     );
     await toTable(el);
@@ -1003,7 +1028,7 @@ describe("a table round refused because the menu changed", () => {
     confirmPreview(el);
     await flush(el);
 
-    expect(api.submitGroups.mock.calls.map(sentLines)).toEqual([
+    expect(api.submitDraft.mock.calls.map(sentLines)).toEqual([
       [
         { menuItemId: "offer-water", menuVersionId: "v1", quantity: "1" },
         { menuItemId: "offer-lemonade", menuVersionId: "v1", quantity: "1" },
@@ -1018,26 +1043,26 @@ describe("a table round refused because the menu changed", () => {
   it("keeps the round and shows the dialog when a price in it changed, sending nothing more", async () => {
     const { el } = await mountApp(
       tableStubs(catalogue("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]), {
-        submitGroups: vi.fn().mockRejectedValue(versionRefusal),
+        submitDraft: vi.fn().mockRejectedValue(versionRefusal),
       }),
     );
     await toTable(el);
     await sendLemonadeRound(el);
 
-    expect(api.submitGroups).toHaveBeenCalledOnce();
+    expect(api.submitDraft).toHaveBeenCalledOnce();
     expect(dialogText(el)).toContain("Lemonade €3.00 → €2.50");
     expect(roundGrid(el).store.lineCount).toBe(1);
 
     dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!.click();
     await flush(el);
     expect(roundGrid(el).store.lineCount).toBe(1);
-    expect(api.submitGroups).toHaveBeenCalledOnce();
+    expect(api.submitDraft).toHaveBeenCalledOnce();
   });
 
   it("keeps a round whose line the new version removed, marked, and sends nothing", async () => {
     const { el } = await mountApp(
       tableStubs(catalogue("v2", [burgerOffer()]), {
-        submitGroups: vi.fn().mockRejectedValue(versionRefusal),
+        submitDraft: vi.fn().mockRejectedValue(versionRefusal),
       }),
     );
     await toTable(el);
@@ -1047,7 +1072,7 @@ describe("a table round refused because the menu changed", () => {
     dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!.click();
     await flush(el);
     expect(roundGrid(el).store.lines.map((line) => line.blocked)).toEqual(["removed"]);
-    expect(api.submitGroups).toHaveBeenCalledOnce();
+    expect(api.submitDraft).toHaveBeenCalledOnce();
   });
 
   it("empties the round once the server has taken it", async () => {
@@ -1055,7 +1080,7 @@ describe("a table round refused because the menu changed", () => {
     await toTable(el);
     const round = roundGrid(el).store;
     await sendLemonadeRound(el);
-    expect(api.submitGroups).toHaveBeenCalledOnce();
+    expect(api.submitDraft).toHaveBeenCalledOnce();
     expect(round.lineCount).toBe(0);
     expect(banner(el)?.textContent ?? null).toBeNull();
   });
@@ -1184,7 +1209,7 @@ describe("a table round while it is being sent", () => {
     let answer!: (value: Landed) => void;
     const { el } = await mountApp(
       tableStubs(DINING, {
-        submitGroups: vi.fn(() => new Promise<Landed>((resolve) => (answer = resolve))),
+        submitDraft: replyLater((reply) => (answer = reply)),
       }),
     );
     await toTable(el);
@@ -1198,7 +1223,7 @@ describe("a table round while it is being sent", () => {
 
     answer(landed("wo-7"));
     await flush(el);
-    expect(sentLines(api.submitGroups.mock.calls[0]!)).toEqual([
+    expect(sentLines(api.submitDraft.mock.calls[0]!)).toEqual([
       { menuItemId: "offer-lemonade", menuVersionId: "v1", quantity: "1" },
     ]);
     expect(round.lineCount).toBe(0);
@@ -1210,10 +1235,7 @@ describe("a table round while it is being sent", () => {
     let answerReload!: (value: ZoneOfferCatalogue) => void;
     const { el } = await mountApp(
       tableStubs(DINING, {
-        submitGroups: vi
-          .fn()
-          .mockRejectedValueOnce(versionRefusal)
-          .mockResolvedValueOnce(landed("wo-7")),
+        submitDraft: vi.fn(drafts.submitDraft).mockRejectedValueOnce(versionRefusal),
       }),
     );
     await toTable(el);
@@ -1231,7 +1253,7 @@ describe("a table round while it is being sent", () => {
 
     answerReload(catalogue("v2", V1.offers));
     await flush(el);
-    expect(api.submitGroups).toHaveBeenCalledTimes(2);
+    expect(api.submitDraft).toHaveBeenCalledTimes(2);
     expect(round.lineCount).toBe(0);
   });
 });
@@ -1240,7 +1262,7 @@ describe("a table round refused for another reason", () => {
   it("says a sold-out dish in its own words, and keeps the round", async () => {
     const { el } = await mountApp(
       tableStubs(DINING, {
-        submitGroups: vi
+        submitDraft: vi
           .fn()
           .mockRejectedValue({ code: "product.unavailable", status: 409, productId: "Lemonade" }),
       }),
@@ -1260,7 +1282,7 @@ describe("a round line's mark", () => {
       burgerOffer(),
     ]);
     const { el } = await mountApp(
-      tableStubs(soldOut, { submitGroups: vi.fn().mockRejectedValue(versionRefusal) }),
+      tableStubs(soldOut, { submitDraft: vi.fn().mockRejectedValue(versionRefusal) }),
     );
     await toTable(el);
     await sendLemonadeRound(el);
@@ -1347,7 +1369,7 @@ describe("a kept round and another table", () => {
       tableStubs(DINING, {
         getTill: vi.fn().mockResolvedValue({ ...till, canvas: sideBySide }),
         getTablesState: vi.fn().mockResolvedValue([table, tableB]),
-        submitGroups: vi
+        submitDraft: vi
           .fn()
           .mockRejectedValue({ code: "product.unavailable", status: 409, productId: "Lemonade" }),
       }),
@@ -1378,57 +1400,6 @@ describe("a kept round and another table", () => {
   });
 });
 
-describe("a round send that gets no answer", () => {
-  it("gives up after 150 seconds, takes the round out, re-reads the tab and says to check it", async () => {
-    let signal: AbortSignal | undefined;
-    const { el } = await mountApp(
-      tableStubs(DINING, {
-        submitGroups: vi.fn(
-          (_visitId: string, _submission: unknown, options?: { signal?: AbortSignal }) =>
-            new Promise<void>((_resolve, reject) => {
-              signal = options?.signal;
-              signal?.addEventListener("abort", () =>
-                reject(new DOMException("The operation was aborted.", "AbortError")),
-              );
-            }),
-        ),
-      }),
-    );
-    await toTable(el);
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
-    const settle = async () => {
-      await vi.advanceTimersByTimeAsync(0);
-      await el.updateComplete;
-    };
-    const tileButton = [
-      ...roundGrid(el).shadowRoot!.querySelectorAll<HTMLElement>("wt-button"),
-    ].find((button) => button.querySelector(".name")!.textContent === "Lemonade")!;
-    tileButton.click();
-    await settle();
-    pressFireAll(el);
-    await settle();
-    confirmPreview(el);
-    await settle();
-    const tabReads = api.getTabLines.mock.calls.length;
-
-    await vi.advanceTimersByTimeAsync(149_999);
-    await el.updateComplete;
-    expect(signal?.aborted).toBe(false);
-    expect(roundStore(el).lineCount).toBe(1);
-
-    await vi.advanceTimersByTimeAsync(1);
-    await settle();
-    await settle();
-    expect(signal?.aborted).toBe(true);
-    expect(roundStore(el).lineCount).toBe(0);
-    expect(api.getTabLines.mock.calls.length).toBe(tabReads + 1);
-    expect(banner(el)!.textContent).toContain(
-      "The server did not answer, so the items may have been added. Check the tab before sending them again.",
-    );
-    expect(api.submitGroups).toHaveBeenCalledOnce();
-  });
-});
-
 describe("a round refused because a dish in it sold out", () => {
   it("marks the sold-out line", async () => {
     const soldOut = {
@@ -1437,7 +1408,7 @@ describe("a round refused because a dish in it sold out", () => {
     };
     const { el } = await mountApp(
       tableStubs(soldOut, {
-        submitGroups: vi
+        submitDraft: vi
           .fn()
           .mockRejectedValue({ code: "product.unavailable", status: 409, productId: "Lemonade" }),
       }),
@@ -1465,7 +1436,7 @@ describe("a round's lock once its send is decided", () => {
     api.getTabLines.mockImplementation(() => new Promise(() => {}));
     await sendLemonadeRound(el);
 
-    expect(api.submitGroups).toHaveBeenCalledOnce();
+    expect(api.submitDraft).toHaveBeenCalledOnce();
     expect(roundStore(el).lineCount).toBe(0);
     expect(roundSending(el)).toBeNull();
     lemonadeTile(el).click();
@@ -1475,7 +1446,7 @@ describe("a round's lock once its send is decided", () => {
 
   it("opens a round refused sold out for edits while the table's offers are read again", async () => {
     const { el } = await mountApp(
-      tableStubs(DINING, { submitGroups: vi.fn().mockRejectedValue(soldOutRefusal) }),
+      tableStubs(DINING, { submitDraft: vi.fn().mockRejectedValue(soldOutRefusal) }),
     );
     await toTable(el);
     api.listZoneOffers.mockImplementation((zoneId: string) =>
@@ -1493,7 +1464,7 @@ describe("a round's lock once its send is decided", () => {
   it("gives up on a menu-change refusal's offers read after 150 seconds, keeping the round", async () => {
     let signal: AbortSignal | undefined;
     const { el } = await mountApp(
-      tableStubs(DINING, { submitGroups: vi.fn().mockRejectedValue(versionRefusal) }),
+      tableStubs(DINING, { submitDraft: vi.fn().mockRejectedValue(versionRefusal) }),
     );
     await toTable(el);
     api.listZoneOffers.mockImplementation((zoneId: string, options?: { signal?: AbortSignal }) =>
@@ -1530,14 +1501,14 @@ describe("a round's lock once its send is decided", () => {
     expect(roundSending(el)).toBeNull();
     expect(roundStore(el).lineCount).toBe(1);
     expect(banner(el)!.textContent).toContain(codeMessage("menu.version_changed"));
-    expect(api.submitGroups).toHaveBeenCalledOnce();
+    expect(api.submitDraft).toHaveBeenCalledOnce();
   });
 });
 
 describe("a round refused sold out whose offers could not be read again", () => {
   it("is marked by the next read of the table's offers that succeeds", async () => {
     const { el } = await mountApp(
-      tableStubs(DINING, { submitGroups: vi.fn().mockRejectedValue(soldOutRefusal) }),
+      tableStubs(DINING, { submitDraft: vi.fn().mockRejectedValue(soldOutRefusal) }),
     );
     await toTable(el);
     api.listZoneOffers.mockImplementation((zoneId: string) =>
@@ -1575,7 +1546,7 @@ describe("a remembered round when another table's menu cannot be loaded", () => 
     const { el } = await mountApp(
       tableStubs(soldOut, {
         getTablesState: vi.fn().mockResolvedValue([table, tableC]),
-        submitGroups: vi.fn().mockRejectedValue(soldOutRefusal),
+        submitDraft: vi.fn().mockRejectedValue(soldOutRefusal),
       }),
     );
     await toTable(el);
@@ -1621,14 +1592,15 @@ const seated = table;
 describe("a round the server adds to another tab", () => {
   it("moves the screen to that tab and takes the sent lines out of the round", async () => {
     const { el } = await mountApp(
-      tableStubs(DINING, { submitGroups: vi.fn().mockResolvedValue(landed("wo-next")) }),
+      tableStubs(DINING, { submitDraft: answering(landed("wo-next")) }),
     );
     await toTable(el);
     const round = roundStore(el);
     await sendLemonadeRound(el);
 
-    expect(api.submitGroups).toHaveBeenCalledWith(
+    expect(api.submitDraft).toHaveBeenCalledWith(
       "visit-a",
+      "draft-1",
       expect.objectContaining({ expectedVisitRevision: 1 }),
       expect.anything(),
     );
@@ -1646,7 +1618,7 @@ describe("a round the server adds to another tab", () => {
     const { el } = await mountApp(
       tableStubs(DINING, {
         getTablesState: vi.fn().mockResolvedValue([table, tableB]),
-        submitGroups: vi.fn(() => new Promise<Landed>((resolve) => (answer = resolve))),
+        submitDraft: replyLater((reply) => (answer = reply)),
       }),
     );
     await toTable(el);
@@ -1679,7 +1651,10 @@ describe("a round that got no answer while the party moved on to its next tab", 
       tableStubs(DINING, {
         getTablesState: vi.fn().mockResolvedValue([seated]),
         getVisitBills: vi.fn().mockResolvedValue([]),
-        submitGroups: vi.fn().mockRejectedValue(new TypeError("offline")),
+        submitDraft: vi.fn(async (...args: SubmitArgs) => {
+          drafts.apply(...args);
+          throw new TypeError("offline");
+        }),
       }),
     );
     await toTable(el);
@@ -1703,7 +1678,7 @@ describe("a round that got no answer while the party moved on to its next tab", 
       tableStubs(DINING, {
         getTablesState: vi.fn().mockResolvedValue([seated]),
         getVisitBills: vi.fn().mockResolvedValue([]),
-        submitGroups: vi.fn().mockRejectedValue(new TypeError("offline")),
+        submitDraft: vi.fn().mockRejectedValue(new TypeError("offline")),
       }),
     );
     await toTable(el);
@@ -1732,7 +1707,7 @@ describe("a round that got no answer while the party moved on to its next tab", 
     await sendLemonadeRound(el);
     await flush(el);
 
-    expect(api.submitGroups).not.toHaveBeenCalled();
+    expect(api.submitDraft).not.toHaveBeenCalled();
     expect(shownTab(el)).toBe("wo-7");
     expect(api.getTabLines).not.toHaveBeenCalledWith("wo-other");
     expect(roundStore(el).lineCount).toBe(1);
@@ -1744,7 +1719,7 @@ describe("a round that got no answer while the party moved on to its next tab", 
       tableStubs(DINING, {
         getTablesState: vi.fn().mockResolvedValue([seated, tableB]),
         getVisitBills: vi.fn().mockResolvedValue([]),
-        submitGroups: vi.fn(() => new Promise((_resolve, reject) => (fail = reject))),
+        submitDraft: failLater((reject) => (fail = reject)),
       }),
     );
     await toTable(el);
@@ -1790,13 +1765,20 @@ describe("a round send that timed out while the floor cannot be read either", ()
   it("opens the round for edits without waiting for the floor", async () => {
     const { el } = await mountApp(
       tableStubs(DINING, {
-        submitGroups: vi.fn(
-          (_visitId: string, _submission: unknown, options?: { signal?: AbortSignal }) =>
-            new Promise<void>((_resolve, reject) => {
+        submitDraft: vi.fn(
+          (
+            visitId: string,
+            draftId: string,
+            submission: SubmitArgs[2],
+            options?: { signal?: AbortSignal },
+          ) => {
+            drafts.apply(visitId, draftId, submission);
+            return new Promise<void>((_resolve, reject) => {
               options?.signal?.addEventListener("abort", () =>
                 reject(new DOMException("The operation was aborted.", "AbortError")),
               );
-            }),
+            });
+          },
         ),
       }),
     );
@@ -1828,7 +1810,7 @@ describe("a round send that timed out while the floor cannot be read either", ()
 describe("a round the server adds to another tab while the floor cannot be read", () => {
   it("opens the round for edits without waiting for the floor", async () => {
     const { el } = await mountApp(
-      tableStubs(DINING, { submitGroups: vi.fn().mockResolvedValue(landed("wo-next")) }),
+      tableStubs(DINING, { submitDraft: answering(landed("wo-next")) }),
     );
     await toTable(el);
     api.getTablesState.mockImplementation(() => new Promise(() => {}));
@@ -1849,7 +1831,7 @@ describe("a round that got no answer while its tab moved to another table", () =
       tableStubs(DINING, {
         getTablesState: vi.fn().mockResolvedValue([seated]),
         getVisitBills: vi.fn().mockResolvedValue([]),
-        submitGroups: vi.fn(() => new Promise((_resolve, reject) => (fail = reject))),
+        submitDraft: failLater((reject) => (fail = reject)),
         moveTab: vi.fn().mockResolvedValue(undefined),
       }),
     );

@@ -1,8 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
+import type { TillMenuBrowser } from "./widgets/menu-browser.js";
+import {
+  cleanupWidgets,
+  draftServer,
+  mountWidget,
+  servedMenus,
+  type DraftServer,
+} from "./widgets/test-helpers.js";
 import { productUnit } from "./widgets/product-name.js";
 import { TillApp } from "./till-app.js";
-import { WorkingOrderStore } from "./state/working-order.js";
 import { ServerRouter } from "./api/server-router.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
@@ -265,8 +271,40 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     splitTab: vi.fn().mockResolvedValue({ checkId: "wo-check" }),
     recordSale: vi.fn().mockResolvedValue(saleResult),
     logout: vi.fn().mockResolvedValue(undefined),
+    listDrafts: drafts.listDrafts,
+    saveDraft: drafts.saveDraft,
+    submitDraft: drafts.submitDraft,
     ...overrides,
   } as unknown as TillApi;
+}
+
+/** The server's side of the party's drafts, fresh for each test. */
+let drafts: DraftServer;
+
+/** Rings a café into the open table's draft, and gives the `submit-draft` a confirmed Fire all now
+ * sends for it. */
+async function ringCafe(el: TillApp, screen: TillTableOrderScreen) {
+  const store = screen.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!.store;
+  store.addProduct(
+    {
+      id: "cafe",
+      menuItemId: "menu-item-cafe-0",
+      name: "Café",
+      pricingUnit: "each",
+      unitPrice: "1.50",
+      vatClass: "general",
+      category: null,
+      allergens: null,
+    },
+    "1",
+  );
+  await flush(el);
+  return {
+    lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }],
+    groups: [{ release: "fire", lineIndexes: [0] }],
+    store,
+    sent: store.lines,
+  };
 }
 
 async function mountApp(overrides: Record<string, unknown> = {}) {
@@ -316,7 +354,10 @@ async function toTableOrder(el: TillApp): Promise<TillTableOrderScreen> {
   return tableOrder(el)!;
 }
 
-beforeEach(() => setLocale("es-ES"));
+beforeEach(() => {
+  setLocale("es-ES");
+  drafts = draftServer(() => ({ tabId: "wo-7", revision: 4, groups: [] }));
+});
 const initialUrl = location.href;
 afterEach(() => {
   cleanupWidgets();
@@ -465,7 +506,7 @@ describe("till-app table ordering: a handheld's Order tab with no table opened",
         lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }],
         groups: [{ release: "fire", lineIndexes: [0] }],
       },
-      "submitGroups",
+      "submitDraft",
     ],
     ["serve-line", { lineNo: 1 }, "markLineServed"],
     ["set-line-course", { lineNo: 1, courseId: null }, "setLineCourse"],
@@ -507,7 +548,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
         lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }],
         groups: [{ release: "fire", lineIndexes: [0] }],
       },
-      "submitGroups",
+      "submitDraft",
     ],
     ["recall-lines", { lineNos: [1] }, "recallLines"],
     ["void-line", { lineNo: 1 }, "voidLine"],
@@ -528,7 +569,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
       });
       const screen = await toTableOrder(el);
 
-      emit(screen, type, detail);
+      emit(screen, type, type === "submit-draft" ? await ringCafe(el, screen) : detail);
       await flush(el);
 
       expect(banner(el)!.textContent).toContain(
@@ -606,13 +647,10 @@ describe("till-app table ordering: refused and failed table actions", () => {
     const screen = await toTableOrder(el);
     expect(screen.lines).toEqual([tabLine]);
 
-    emit(screen, "submit-draft", {
-      lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }],
-      groups: [{ release: "fire", lineIndexes: [0] }],
-    });
+    emit(screen, "submit-draft", await ringCafe(el, screen));
     await flush(el);
 
-    expect(api.submitGroups).toHaveBeenCalledOnce();
+    expect(api.submitDraft).toHaveBeenCalledOnce();
     expect(tableOrder(el)!.lines).toEqual([]);
     expect(banner(el)).toBeNull();
   });
@@ -2235,7 +2273,7 @@ describe("till-app table ordering: a menu published while a table is open", () =
   it("reloads the table's offers, sends the round again once, and says why when that is refused too", async () => {
     const { el } = await mountApp({
       ...seatedFloor(),
-      submitGroups: vi.fn().mockRejectedValue({
+      submitDraft: vi.fn().mockRejectedValue({
         code: "menu.version_changed",
         status: 409,
         menus: [{ menuId: "menu-lunch", liveVersionId: "v2" }],
@@ -2244,17 +2282,22 @@ describe("till-app table ordering: a menu published while a table is open", () =
     const screen = await toTableOrder(el);
     expect(api.listZoneOffers).toHaveBeenCalledTimes(1);
 
-    const round = new WorkingOrderStore();
+    const round = screen.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!.store;
+    round.addProduct(
+      screen.products.find((product) => product.menuItemId === "menu-item-sopa-0")!,
+      "1",
+    );
+    await flush(el);
     emit(screen, "submit-draft", {
       lines: [{ menuItemId: "menu-item-sopa-0", quantity: "1" }],
       groups: [{ release: "fire", lineIndexes: [0] }],
       store: round,
-      sent: [],
+      sent: round.lines,
     });
     await flush(el);
     await flush(el);
 
-    expect(api.submitGroups).toHaveBeenCalledTimes(2);
+    expect(api.submitDraft).toHaveBeenCalledTimes(2);
     expect(api.listZoneOffers).toHaveBeenCalledTimes(3);
     expect(api.listZoneOffers).toHaveBeenLastCalledWith(floorZone.id, {
       signal: expect.any(AbortSignal),

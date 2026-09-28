@@ -77,8 +77,8 @@ export type { TableServiceStatus };
 
 /**
  * `submit-draft`: the groups a confirmed preview named, each naming its lines by their place in
- * `lines`. The draft stays in `store` until the app has the server's answer: it takes out the `sent`
- * lines (the ones `lines` was built from, in order) once they are added, and a refused submission is
+ * `lines`. The draft stays in `store` until the app has the server's answer: the `sent` lines (the
+ * ones `lines` was built from, in order) leave it once they are added, and a refused submission is
  * kept (D9). `joinGroupId` adds the one held group's lines to that existing group.
  */
 export interface SubmitDraftDetail {
@@ -88,8 +88,6 @@ export interface SubmitDraftDetail {
   store: WorkingOrderStore;
   sent: readonly OrderLine[];
   draft: Draft;
-  /** Keeps what is left of the draft on `orderId`, the bill the same party's submission landed on. */
-  carryTo: (orderId: string) => void;
 }
 
 /** One draft, from its first line until its store is empty again, through its partial submissions.
@@ -713,41 +711,34 @@ export class TillTableOrderScreen extends LitElement {
   @state() private splitQuantities = new Map<number, string>();
   @state() private splitAttempted = false;
 
-  /** One draft per order, kept only as long as this screen is: another order shown here starts its
-   * own draft. */
-  readonly #draftStores = new Map<string, WorkingOrderStore>();
+  /** The party's draft for the signed-in person, owned by the app; null for an order that takes no
+   * draft, such as a check split off the party's bill. Unset, the screen keeps a draft of its own. */
+  @property({ attribute: false }) draftStore?: WorkingOrderStore | null;
 
-  get #draftStore(): WorkingOrderStore {
-    const key = this.orderId ?? "";
-    let store = this.#draftStores.get(key);
-    if (store === undefined) {
-      store = new WorkingOrderStore();
-      this.#draftStores.set(key, store);
-    }
-    return store;
+  readonly #ownDraft = new WorkingOrderStore();
+
+  get #draftStore(): WorkingOrderStore | null {
+    return this.draftStore === undefined ? this.#ownDraft : this.draftStore;
   }
 
-  /** A draft already started on `orderId` is left where it is rather than replaced. */
-  #carryDraft(store: WorkingOrderStore, orderId: string): void {
-    if ((this.#draftStores.get(orderId)?.lineCount ?? 0) > 0) return;
-    for (const [from, kept] of this.#draftStores)
-      if (kept === store) this.#draftStores.delete(from);
-    this.#draftStores.set(orderId, store);
-    this.#carried = { orderId, destination: this.destination, joinTarget: this.joinTarget };
-  }
-
-  /** Restored when the screen switches to the order the draft was carried to: the switch resets the
-   * destination, and so can a render on the order it leaves, whose draft is now empty. */
-  #carried?: { orderId: string; destination: Destination; joinTarget: string | null };
-
-  /** The draft this screen re-renders on; it follows {@link orderId}. */
-  #watchedDraft?: { store: WorkingOrderStore; stop: () => void };
+  /** The draft this screen re-renders on. */
+  #watchedDraft?: { store: WorkingOrderStore | null; stop: () => void };
+  /** The last draft shown. A later addition's destination belongs to it, so it survives an order
+   * that shows no draft for a moment, as while the app follows the party onto its next bill. */
+  #shownDraft?: WorkingOrderStore;
 
   #watchDraft(): void {
     const store = this.#draftStore;
-    if (this.#watchedDraft?.store === store) return;
+    if (this.#watchedDraft !== undefined && this.#watchedDraft.store === store) return;
     this.#watchedDraft?.stop();
-    // A draft can be emptied while another is shown, when the app takes out what it sent.
+    if (store !== null && store !== this.#shownDraft) {
+      if (this.#shownDraft !== undefined) this.#resetDestination();
+      this.#shownDraft = store;
+    }
+    if (store === null) {
+      this.#watchedDraft = { store, stop: () => {} };
+      return;
+    }
     this.#noteDraftStart(store);
     this.#watchedDraft = {
       store,
@@ -793,13 +784,8 @@ export class TillTableOrderScreen extends LitElement {
     this.#watchedDraft?.stop();
     this.#watchedDraft = undefined;
   }
-  /**
-   * Keyed by the draft line's object identity: a store line is kept by reference until the draft
-   * clears, so a `WeakMap` survives re-renders and drops its entries once the draft is sent. A line
-   * ABSENT here takes its product's default course server-side.
-   */
-  #draftCourses = new WeakMap<OrderLine, string>();
-  /** The draft lines the waiter checked; same lifecycle as {@link #draftCourses}. */
+  /** The draft lines the waiter checked, by the line's object identity, which a store keeps until the
+   * line leaves it. */
   #selected = new WeakSet<OrderLine>();
   @state() private destination: Destination = "fire-now";
   /** The held group Add to held group joins; the first held group when unset or gone. */
@@ -844,14 +830,6 @@ export class TillTableOrderScreen extends LitElement {
       this.fireGroupPending = null;
       this.movePending = null;
       this.pendingDraft = null;
-      const carried = this.#carried;
-      this.#carried = undefined;
-      if (carried !== undefined && carried.orderId === this.orderId) {
-        this.destination = carried.destination;
-        this.joinTarget = carried.joinTarget;
-      } else {
-        this.#resetDestination();
-      }
     }
     if (changed.has("groups") || this.#heldGroupIds === undefined) {
       this.#heldGroupIds = heldGroupIds(this.groups);
@@ -945,8 +923,8 @@ export class TillTableOrderScreen extends LitElement {
     this.requestUpdate();
   }
 
-  #isLaterAddition(): boolean {
-    return this.#drafts.get(this.#draftStore)?.laterAddition === true;
+  #isLaterAddition(store: WorkingOrderStore): boolean {
+    return this.#drafts.get(store)?.laterAddition === true;
   }
 
   #effectiveDestination(): Destination {
@@ -977,8 +955,7 @@ export class TillTableOrderScreen extends LitElement {
    * `courseId`, so the server applies the product's default course. The answers name lists, products
    * and labels by id alone: the server takes every price, VAT class and name from the published offer.
    */
-  #openPreview(action: DraftAction): void {
-    const store = this.#draftStore;
+  #openPreview(store: WorkingOrderStore, action: DraftAction): void {
     const lines = store.lines;
     const entries = this.#draftEntries(lines);
     const selected = this.#selectedIndexes(lines);
@@ -995,8 +972,7 @@ export class TillTableOrderScreen extends LitElement {
           ...toWireLineExtras(line),
           ...toWireModifiers(line),
         };
-        const courseId = this.#draftCourses.get(line);
-        if (courseId !== undefined) wire.courseId = courseId;
+        if (line.courseId !== undefined) wire.courseId = line.courseId;
         return wire;
       }),
       groups: submission.groups.map((group) => ({
@@ -1007,7 +983,6 @@ export class TillTableOrderScreen extends LitElement {
       store,
       sent,
       draft: this.#draftOf(store),
-      carryTo: (orderId) => this.#carryDraft(store, orderId),
     };
     const held = this.#heldInOrder;
     const index = held.findIndex((group) => group.id === submission.joinGroupId);
@@ -1030,7 +1005,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #selectedCourseId(line: OrderLine): string {
-    return this.#draftCourses.get(line) ?? line.product.courseId ?? "";
+    return line.courseId ?? line.product.courseId ?? "";
   }
 
   /** The placeholder's meaning is the CALLER's: "use the product default" for a draft line (never sent
@@ -1045,11 +1020,9 @@ export class TillTableOrderScreen extends LitElement {
       )}`;
   }
 
-  /** `requestUpdate` because {@link #draftCourses} is a `WeakMap`, not a reactive property. */
-  #pickCourse(line: OrderLine, courseId: string): void {
-    if (courseId === "") this.#draftCourses.delete(line);
-    else this.#draftCourses.set(line, courseId);
-    this.requestUpdate();
+  /** The course goes on the line, so the draft saves it. */
+  #pickCourse(store: WorkingOrderStore, line: OrderLine, courseId: string): void {
+    store.setLineCourse(store.lines.indexOf(line), courseId === "" ? undefined : courseId);
   }
 
   #serve(lineNo: number): void {
@@ -1440,14 +1413,14 @@ export class TillTableOrderScreen extends LitElement {
 
   /** Only the shown menu's products reach the browser; a tab line's name still resolves against the
    * FULL set ({@link #nameFor}), so a filtered grid never blanks a line. */
-  #menuBrowser(): TemplateResult {
+  #menuBrowser(store: WorkingOrderStore): TemplateResult {
     const menu = shownMenu(this.menus, this.selectedMenuId);
     return html`<till-menu-browser
       class="round-control"
-      ?inert=${this.#draftStore.sending}
+      ?inert=${store.sending}
       .menu=${menu}
       .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedDiet)}
-      .store=${this.#draftStore}
+      .store=${store}
       .columns=${this.handheld ? HANDHELD_COLUMNS : TILL_COLUMNS}
     ></till-menu-browser>`;
   }
@@ -1468,6 +1441,7 @@ export class TillTableOrderScreen extends LitElement {
 
   override render() {
     const pending = this.#pending();
+    const draft = this.#draftStore;
     return html`
       <section
         class="screen"
@@ -1511,44 +1485,52 @@ export class TillTableOrderScreen extends LitElement {
         </div>
         ${this.#printProblem()}
         <div class="layout">
-          <div class="grid-region">
-            <till-menu-switcher
-              class="menu-switcher"
-              .menus=${this.menus}
-              .selectedId=${this.selectedMenuId}
-            ></till-menu-switcher>
-            ${
-              this.#hasDietData()
-                ? html`<till-diet-filter
-                    class="diet-filter"
-                    .selected=${this.selectedDiet}
-                    @diet-filter-selected=${(e: CustomEvent<{ predicate: DietPredicate | null }>) =>
-                      this.#pickDiet(e.detail.predicate)}
-                  ></till-diet-filter>`
-                : nothing
-            }
-            ${keyed(this.orderId, this.#menuBrowser())}
-          </div>
+          ${draft === null ? nothing : this.#gridRegion(draft)}
           ${this.drawerOpen ? this.#drawer(pending) : nothing}
         </div>
-        ${
-          this.#draftStore.sending
-            ? html`<p class="round-sending" role="status" data-round-sending>
-                ${t("table.round_sending")}
-              </p>`
-            : nothing
-        }
-        <div class="round-control" data-round-controls ?inert=${this.#draftStore.sending}>
-          ${this.#draftSections()}
-          <div class="round-bar">
-            ${keyed(this.orderId, html`<till-basket .store=${this.#draftStore}></till-basket>`)}
-            ${this.#draftBar()}
-          </div>
-        </div>
-        ${this.#previewDialog()} ${this.#cancelDialog()} ${this.#fireGroupDialog()}
-        ${this.#moveDialog()} ${this.#changeEditor()}
+        ${draft === null ? nothing : this.#roundControl(draft)} ${this.#previewDialog()}
+        ${this.#cancelDialog()} ${this.#fireGroupDialog()} ${this.#moveDialog()}
+        ${this.#changeEditor()}
       </section>
     `;
+  }
+
+  #gridRegion(draft: WorkingOrderStore): TemplateResult {
+    return html`<div class="grid-region">
+      <till-menu-switcher
+        class="menu-switcher"
+        .menus=${this.menus}
+        .selectedId=${this.selectedMenuId}
+      ></till-menu-switcher>
+      ${
+        this.#hasDietData()
+          ? html`<till-diet-filter
+              class="diet-filter"
+              .selected=${this.selectedDiet}
+              @diet-filter-selected=${(e: CustomEvent<{ predicate: DietPredicate | null }>) =>
+                this.#pickDiet(e.detail.predicate)}
+            ></till-diet-filter>`
+          : nothing
+      }
+      ${keyed(this.orderId, this.#menuBrowser(draft))}
+    </div>`;
+  }
+
+  #roundControl(draft: WorkingOrderStore): TemplateResult {
+    return html`${
+        draft.sending
+          ? html`<p class="round-sending" role="status" data-round-sending>
+              ${t("table.round_sending")}
+            </p>`
+          : nothing
+      }
+      <div class="round-control" data-round-controls ?inert=${draft.sending}>
+        ${this.#draftSections(draft)}
+        <div class="round-bar">
+          ${keyed(this.orderId, html`<till-basket .store=${draft}></till-basket>`)}
+          ${this.#draftBar(draft)}
+        </div>
+      </div>`;
   }
 
   #printProblem(): TemplateResult | typeof nothing {
@@ -1595,8 +1577,8 @@ export class TillTableOrderScreen extends LitElement {
   /** One section per course present, in the venue's course order; each line with its selection
    * toggle and, when the venue has courses, its course picker, whose `""` placeholder means "use the
    * product default", not "no course" (no such option). */
-  #draftSections(): TemplateResult | typeof nothing {
-    const lines = this.#draftStore.lines;
+  #draftSections(store: WorkingOrderStore): TemplateResult | typeof nothing {
+    const lines = store.lines;
     if (lines.length === 0) return nothing;
     const sections = draftSections(this.#draftEntries(lines), this.courses);
     return html`<div class="draft-sections" data-draft-sections>
@@ -1612,13 +1594,13 @@ export class TillTableOrderScreen extends LitElement {
                 ? nothing
                 : html`<h3 class="draft-section-name">${section.course.name}</h3>`
             }
-            ${section.lineIndexes.map((index) => this.#draftLine(lines[index]!, index))}
+            ${section.lineIndexes.map((index) => this.#draftLine(store, lines[index]!, index))}
           </section>`,
       )}
     </div>`;
   }
 
-  #draftLine(line: OrderLine, index: number): TemplateResult {
+  #draftLine(store: WorkingOrderStore, line: OrderLine, index: number): TemplateResult {
     const name = lineProductName(line.product);
     const selected = this.#selected.has(line);
     return html`<div class="draft-line">
@@ -1639,7 +1621,7 @@ export class TillTableOrderScreen extends LitElement {
               data-round-course=${index}
               aria-label=${`${t("table.course_label")} · ${name}`}
               @change=${(event: Event) =>
-                this.#pickCourse(line, (event.target as HTMLSelectElement).value)}
+                this.#pickCourse(store, line, (event.target as HTMLSelectElement).value)}
             >
               ${this.#courseOptions(this.#selectedCourseId(line), t("table.course_default"))}
             </select>`
@@ -1651,8 +1633,7 @@ export class TillTableOrderScreen extends LitElement {
    * selected now with a selection. A later addition: its destination, then one Send. Firing now is
    * offered under every `fireControl`: the kitchen and the pass cannot fire a held group of lines
    * with no course. */
-  #draftBar(): TemplateResult {
-    const store = this.#draftStore;
+  #draftBar(store: WorkingOrderStore): TemplateResult {
     const disabled = store.lineCount === 0 || store.sending;
     const button = (
       action: DraftAction,
@@ -1666,11 +1647,11 @@ export class TillTableOrderScreen extends LitElement {
         variant=${variant}
         size="lg"
         ?disabled=${disabled}
-        @click=${() => this.#openPreview(action)}
+        @click=${() => this.#openPreview(store, action)}
       >
         ${t(key)}
       </wt-button>`;
-    if (this.#isLaterAddition()) {
+    if (this.#isLaterAddition(store)) {
       return html`<div class="draft-bar">
         ${this.#destinationChoice()}
         <div class="draft-actions" role="group" aria-label=${t("table.draft_actions")}>

@@ -1,7 +1,18 @@
 import axe from "axe-core";
 import { commands } from "vitest/browser";
-import { beforeEach, expect } from "vitest";
+import { beforeEach, expect, vi } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
+import { normaliseDraftLines } from "@waitron/shared";
+import type {
+  Draft,
+  DraftLine,
+  DraftSave,
+  DraftSubmission,
+  GroupLine,
+  GroupRelease,
+  SubmittedDraft,
+  SubmittedGroups,
+} from "../api/client.js";
 import type { DocumentMember, ServedMenu } from "@waitron/catalogue/src/menu-document-types.js";
 
 declare module "vitest/browser" {
@@ -183,3 +194,131 @@ export function servedMenus<M extends { id: string; homeLayoutId?: string }>(
     };
   });
 }
+
+/** A submitted group with its lines read back from the drafts they were saved in, each in the shape
+ * a group submission carries: a null or empty field left out. */
+export interface SentGroup {
+  release: GroupRelease;
+  lines: GroupLine[];
+}
+
+function asGroupLine(line: DraftLine): GroupLine {
+  return {
+    menuItemId: line.menuItemId,
+    quantity: line.quantity,
+    ...(line.variantId === null ? {} : { variantId: line.variantId }),
+    ...(line.menuVersionId === null ? {} : { menuVersionId: line.menuVersionId }),
+    ...(line.options.length === 0 ? {} : { options: line.options }),
+    ...(line.extras.length === 0 ? {} : { extras: line.extras }),
+    ...(line.note === null ? {} : { note: line.note }),
+    ...(line.courseId === null ? {} : { courseId: line.courseId }),
+  };
+}
+
+/**
+ * The server's side of drafts for an app test's `TillApi` stub: each person's open draft per party,
+ * merged on save with the shared rule and re-identified on every save; a submission takes its lines
+ * out, and a repeat of a submission id answers as the first. Requests come from {@link personId}'s
+ * session. {@link answer} says what the placed groups were; a test replaces it for another tab or
+ * revision, or wraps {@link apply} to refuse or to lose the reply.
+ */
+export function draftServer(
+  answer: (visitId: string) => SubmittedGroups = () => ({
+    tabId: "wo-4",
+    revision: 4,
+    groups: [],
+  }),
+) {
+  let ids = 0;
+  const replies = new Map<string, SubmittedDraft>();
+  const clone = <T>(value: T): T => structuredClone(value);
+  const server = {
+    personId: "p1",
+    personName: "Ana",
+    drafts: [] as Draft[],
+    linesById: new Map<string, DraftLine>(),
+    answer,
+    listDrafts: vi.fn(async (visitId: string) =>
+      clone(server.drafts.filter((draft) => draft.visitId === visitId)),
+    ),
+    saveDraft: vi.fn(async (visitId: string, save: DraftSave) => clone(server.save(visitId, save))),
+    submitDraft: vi.fn(async (visitId: string, draftId: string, submission: DraftSubmission) =>
+      clone(server.apply(visitId, draftId, submission)),
+    ),
+    save(visitId: string, save: DraftSave): Draft {
+      const own = server.drafts.find(
+        (draft) => draft.visitId === visitId && draft.ownerId === server.personId,
+      );
+      let draft: Draft;
+      if (save.draftId === null) {
+        if (own !== undefined) throw refusal("draft.out_of_date", own);
+        draft = {
+          id: `draft-${++ids}`,
+          visitId,
+          ownerId: server.personId,
+          ownerName: server.personName,
+          revision: 0,
+          lines: [],
+        };
+        server.drafts.push(draft);
+      } else {
+        draft = server.open(visitId, save.draftId, save.revision);
+      }
+      draft.revision += 1;
+      draft.lines = normaliseDraftLines(save.lines).map((line) => {
+        const saved = { ...line, id: `line-${++ids}`, unavailable: false };
+        server.linesById.set(saved.id, saved);
+        return saved;
+      });
+      return draft;
+    },
+    /** A submission as the server takes it, whether or not its answer reaches the till. */
+    apply(visitId: string, draftId: string, submission: DraftSubmission): SubmittedDraft {
+      const replay = replies.get(submission.submissionId);
+      if (replay !== undefined) return replay;
+      const draft = server.open(visitId, draftId, submission.draftRevision);
+      const named = submission.groups.flatMap((group) => group.lineIds);
+      if (!named.every((id) => draft.lines.some((line) => line.id === id)))
+        throw { code: "management.request_invalid", status: 400, field: "groups" };
+      draft.lines = draft.lines.filter((line) => !named.includes(line.id));
+      draft.revision += 1;
+      if (draft.lines.length === 0) server.drafts.splice(server.drafts.indexOf(draft), 1);
+      const reply = {
+        ...server.answer(visitId),
+        draft: draft.lines.length === 0 ? null : clone(draft),
+      };
+      replies.set(submission.submissionId, reply);
+      return reply;
+    },
+    open(visitId: string, draftId: string, revision: number): Draft {
+      const draft = server.drafts.find(
+        (candidate) => candidate.id === draftId && candidate.visitId === visitId,
+      );
+      if (draft === undefined) throw { code: "draft.not_found", status: 404 };
+      if (draft.ownerId !== server.personId)
+        throw {
+          code: "draft.taken_over",
+          status: 409,
+          draftId,
+          ownerId: draft.ownerId,
+          ownerName: draft.ownerName,
+        };
+      if (draft.revision !== revision) throw refusal("draft.out_of_date", draft);
+      return draft;
+    },
+    /** The groups a submission sent, their lines read back by id. */
+    sentGroups(submission: DraftSubmission): SentGroup[] {
+      return submission.groups.map((group) => ({
+        release: group.release,
+        lines: group.lineIds.map((id) => asGroupLine(server.linesById.get(id)!)),
+      }));
+    },
+  };
+  return server;
+}
+
+function refusal(code: string, draft: Draft) {
+  return { code, status: 409, draftId: draft.id, revision: draft.revision };
+}
+
+export type DraftServer = ReturnType<typeof draftServer>;

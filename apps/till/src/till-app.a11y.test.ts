@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   cleanupWidgets,
+  draftServer,
   expectNoA11yViolations,
   mountWidget,
   servedMenus,
@@ -339,7 +340,9 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
       getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
       listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
       getVisitBills: vi.fn().mockResolvedValue([]),
-      submitGroups: vi.fn().mockResolvedValue({ tabId: "wo-4", revision: 4, groups: [] }),
+      ...(({ listDrafts, saveDraft, submitDraft }) => ({ listDrafts, saveDraft, submitDraft }))(
+        draftServer(),
+      ),
     });
     const { el, host } = await mountWidget<TillApp>("till-app", { api }, theme);
     await flush(el);

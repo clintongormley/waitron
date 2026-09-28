@@ -816,3 +816,37 @@ describe("WorkingOrderStore.addMerging (D10)", () => {
     expect(calls).toBe(2);
   });
 });
+
+describe("WorkingOrderStore.setLineCourse", () => {
+  it("sets and clears a line's course override, marking the line changed", () => {
+    const s = new WorkingOrderStore();
+    s.addProduct(cafe, "1");
+    s.markPersisted();
+    let notified = 0;
+    s.subscribe(() => (notified += 1));
+
+    s.setLineCourse(0, "mains");
+    expect(s.lines[0]!.courseId).toBe("mains");
+    expect(s.dirty).toBe(true);
+
+    s.setLineCourse(0, undefined);
+    expect("courseId" in s.lines[0]!).toBe(false);
+    expect(notified).toBe(2);
+  });
+
+  it("takes no change while the order is being sent, or for a line that is not there", () => {
+    const s = new WorkingOrderStore();
+    s.addProduct(cafe, "1");
+    s.markPersisted();
+    let notified = 0;
+    s.subscribe(() => (notified += 1));
+    s.setLineCourse(3, "mains");
+    expect(notified).toBe(0);
+    s.sending = true;
+    notified = 0;
+    s.setLineCourse(0, "mains");
+    expect(s.lines[0]!.courseId).toBeUndefined();
+    expect(s.dirty).toBe(false);
+    expect(notified).toBe(0);
+  });
+});
