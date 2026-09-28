@@ -41,7 +41,6 @@ import {
   type PlacementMenu,
 } from "../widgets/add-to-menus.js";
 import { categoryRefusalErrors } from "../widgets/category-form.js";
-import "../widgets/content-languages.js";
 import "../widgets/extra-list-form.js";
 import "../widgets/option-list-form.js";
 import "../widgets/product-editor.js";
@@ -110,7 +109,6 @@ export class CatalogueScreen extends LitElement {
   @state() private busy = false;
   @state() private errorKey: string | null = null;
   @state() private refusedLists: string[] = [];
-  @state() private languageSettingsOpen = false;
   @state() private deletingProduct: { id: string; name: string; isVariant: boolean } | null = null;
   @state() private deleteErrorKey: string | null = null;
   /** The list the nested form is EDITING, or null while it is creating one: this decides which write
@@ -570,15 +568,6 @@ export class CatalogueScreen extends LitElement {
       <div class="header">
         <h1>${t("nav.catalogue")}</h1>
         <div class="actions">
-          <wt-button
-            variant="secondary"
-            data-test="edit-languages"
-            ?disabled=${this.contentLanguages === null}
-            @click=${() => {
-              this.languageSettingsOpen = true;
-            }}
-            >${t("content_languages.title")}</wt-button
-          >
           ${
             this.catalogues.length
               ? html`<wt-button
@@ -756,24 +745,6 @@ export class CatalogueScreen extends LitElement {
                 @wt-submit=${this.#submitOptionList}
                 @wt-cancel=${() => this.#cancelChild("options")}
               ></dashboard-option-list-form>`
-          : nothing
-      }
-      ${
-        this.contentLanguages
-          ? html`<dashboard-content-languages
-              .open=${this.languageSettingsOpen}
-              .config=${this.contentLanguages}
-              .api=${this.api}
-              @languages-closed=${() => {
-                this.languageSettingsOpen = false;
-              }}
-              @languages-saved=${(event: CustomEvent<ContentLanguages>) => {
-                event.stopPropagation();
-                this.languageSettingsOpen = false;
-                this.contentLanguages = event.detail;
-                setContentLanguages(event.detail);
-              }}
-            ></dashboard-content-languages>`
           : nothing
       }
     `;

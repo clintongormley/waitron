@@ -244,6 +244,7 @@ export const en = {
   "extras.duplicate_product": "This product is already on the list. Remove one of the two rows.",
 
   "nav.location_settings": "Location invoices",
+  "nav.content_languages": "Content languages",
   "location_settings.title": "Location invoices",
   "location_settings.description": "Invoice operation description",
   "location_settings.help":
@@ -2131,6 +2132,7 @@ export const es: Record<StringKey, string> = {
   "extras.duplicate_product": "Este producto ya está en la lista. Quita una de las dos filas.",
 
   "nav.location_settings": "Facturación del local",
+  "nav.content_languages": "Idiomas del contenido",
   "location_settings.title": "Facturación del local",
   "location_settings.description": "Descripción de la operación",
   "location_settings.help":

@@ -45,6 +45,7 @@ import "./screens/menus-screen.js";
 import "./screens/units-screen.js";
 import "./screens/receipt-screen.js";
 import "./screens/location-settings-screen.js";
+import "./screens/content-languages-screen.js";
 import "./screens/service-status-screen.js";
 import "./screens/floor-screen.js";
 import "./screens/kitchen-screen.js";
@@ -95,6 +96,7 @@ type CoreScreen =
   | "units"
   | "receipt"
   | "location-settings"
+  | "content-languages"
   | "statuses"
   | "floor"
   | "kitchen"
@@ -184,6 +186,11 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { screen: "receipt", labelKey: "nav.receipt" },
       { screen: "location-settings", labelKey: "nav.location_settings", requiresManager: true },
+      {
+        screen: "content-languages",
+        labelKey: "nav.content_languages",
+        requiresPermission: "person.manage",
+      },
       { screen: "devices", labelKey: "nav.devices" },
       { screen: "printers", labelKey: "nav.printers" },
       { screen: "printing-rules", labelKey: "nav.printing_rules" },
@@ -1488,6 +1495,10 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-location-settings-screen
           .api=${this.api}
         ></dashboard-location-settings-screen>`;
+      case "content-languages":
+        return html`<dashboard-content-languages-screen
+          .api=${this.api}
+        ></dashboard-content-languages-screen>`;
       case "receipt":
         return html`<dashboard-receipt-screen .api=${this.api}></dashboard-receipt-screen>`;
       case "statuses":

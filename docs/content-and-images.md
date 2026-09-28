@@ -11,9 +11,10 @@ its own, and takes the product's.
 
 A new venue starts with its content languages already chosen. A venue in Spain starts with Spanish
 as the default and Catalan and English alongside; a venue anywhere else starts with one language,
-worked out from where it is. To add another, open **Products**, then **Content languages**, keep
-your default, choose the language and select **Add**. Save the settings to make its translation
-fields available throughout your content editors.
+worked out from where it is. To add another, open **Settings**, then **Content languages**, which
+shows your default and the languages you have now. Select **Edit**, keep your default, choose the
+language and select **Add language**. Save the settings to make its translation fields available
+throughout your content editors.
 
 For example, with Spanish as the default and English alongside, a product whose customer-facing name
 reads **Pan de verano** in Spanish can leave its English one empty while you prepare the translation.
