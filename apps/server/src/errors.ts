@@ -398,7 +398,7 @@ declare module "@waitron/shared" {
     "bill.presented": { workingOrderId: string };
     /** The bill is paid, so it takes no new order. */
     "bill.paid": { workingOrderId: string };
-    /** An order named a bill that is not the party's: another party's, or a counter order. */
+    /** An order named a bill that is not the party's: a bill of another party, or of none. */
     "bill.other_party": { workingOrderId: string };
     /** No bill payment with this id; `paymentId` is the id the caller sent. */
     "bill.payment_not_found": { paymentId: string };
@@ -507,7 +507,8 @@ declare module "@waitron/shared" {
     // The four `booking.*` codes are declared in @waitron/bookings/src/errors.ts.
     /**
      * A tab verb found the order it was asked to modify is not open, or is absent; or, for a verb
-     * on a party's bills, is a counter order no table points at. `moveTab` and `joinTable` also
+     * on a party's bills, is an open order of no party that no table points at: a counter order, or
+     * a check split from a table's bill of no party. `moveTab` and `joinTable` also
      * accept the settled or abandoned tab a seated party's tables still point at.
      */
     "tab.not_open": { tabId: string };

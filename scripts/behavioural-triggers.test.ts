@@ -46,7 +46,7 @@ import {
  * `packages/db/drizzle/0019_settled_order_freeze_visit_id.sql`, and
  * `working_order_lines_require_open_parent_update` by `0027_line_vat_class_triggers.sql` and again,
  * with its served exception and a refusal to move a line off an order that is not open, by
- * `packages/db/drizzle/0033_line_served_exception.sql`. Three triggers ACT rather than refuse.
+ * `packages/db/drizzle/0033_line_served_exception.sql`. Some triggers ACT rather than refuse.
  * `parties_clear_table_status` (`packages/db/drizzle/0020_visit_clears_table_status.sql`,
  * re-created under this name by `packages/db/drizzle/0036_party_rename.sql`):
  * a table's service status comes off when the party leaves `open`, on every table still a

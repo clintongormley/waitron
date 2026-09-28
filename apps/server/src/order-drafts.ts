@@ -737,7 +737,7 @@ async function takenOverFrom(
   );
 }
 
-/** The zone's live offers for the menu items, from the source `priceOrderLines` refuses from. */
+/** The live offers for the menu items in the zone of {@link partyZone}; none when there is no zone. */
 async function offersFor(
   tx: Transaction,
   cfg: TillConfig,

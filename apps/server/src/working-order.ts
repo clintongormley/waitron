@@ -3476,6 +3476,8 @@ export async function splitOffCheck(
   // mode check on this path.
   await VENUE_SERVICE.copyOrderContext(tx, cfg, fromTabId, checkId);
 
+  // Owner ruling 2026-09-26 (`tab.split_held_line`): no held work is split onto a check until the
+  // service plan's Tasks 14 and 15.
   await carveOffLines(tx, cfg, fromTabId, checkId, transfers, {
     refuseHeld: true,
     leavesParty: false,

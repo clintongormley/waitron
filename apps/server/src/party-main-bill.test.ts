@@ -238,7 +238,7 @@ describe("a party at a table in no service zone", () => {
   });
 });
 
-describe("an order sent to a named bill (P5)", () => {
+describe("an order sent to a named bill", () => {
   it("lands on another open bill of the party, and the main bill stays", async () => {
     const mesa9 = await v.table("Mesa 9");
     const { partyId, tabId } = await seat(v, mesa9);
@@ -360,8 +360,6 @@ describe("the party's name", () => {
   });
 });
 
-// Moved from `parties.test.ts`, where these rounds went through `addTabRound` on the paid tab; a
-// round now reaches the party's main bill through `placeGroups`.
 describe("pay, then order dessert", () => {
   it("opens a new tab on the same party and leaves the earlier sale untouched", async () => {
     const mesa20 = await v.table("Mesa 20");
