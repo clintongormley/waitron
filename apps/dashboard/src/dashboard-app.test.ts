@@ -1653,13 +1653,18 @@ describe("dashboard-app", () => {
     expect(navItem(el, "catalogue")!.textContent).toContain(t("nav.catalogue"));
   });
 
-  it("collapses and expands a nav group's items from its header toggle", async () => {
+  it("expands and collapses a nav group's items from its header toggle", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
     await flush(el);
     const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-team"]')!;
     const panel = el.shadowRoot!.querySelector<HTMLElement>("#nav-group-panel-team")!;
+    expect(header.getAttribute("aria-expanded")).toBe("false");
+    expect(panel.hidden).toBe(true);
+
+    header.click();
+    await flush(el);
     expect(header.getAttribute("aria-expanded")).toBe("true");
     expect(panel.hidden).toBe(false);
     expect(navItem(el, "staff")).toBeTruthy();
@@ -1668,11 +1673,34 @@ describe("dashboard-app", () => {
     await flush(el);
     expect(header.getAttribute("aria-expanded")).toBe("false");
     expect(panel.hidden).toBe(true);
+  });
 
-    header.click();
+  it("starts with every headed nav group collapsed", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
     await flush(el);
-    expect(header.getAttribute("aria-expanded")).toBe("true");
-    expect(panel.hidden).toBe(false);
+    const headers = [...el.shadowRoot!.querySelectorAll<HTMLElement>("button.nav-group")];
+    expect(headers.length).toBe(NAV_GROUP_KEYS.length);
+    for (const header of headers) {
+      expect(header.getAttribute("aria-expanded")).toBe("false");
+      const panel = el.shadowRoot!.getElementById(header.getAttribute("aria-controls")!)!;
+      expect(panel.hidden).toBe(true);
+    }
+    expect(navItem(el, "overview")!.checkVisibility()).toBe(true);
+  });
+
+  it("starts with only the group holding the opened page expanded", async () => {
+    history.replaceState(null, "", "/manage/catalogue");
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    const expanded = [...el.shadowRoot!.querySelectorAll<HTMLElement>("button.nav-group")]
+      .filter((h) => h.getAttribute("aria-expanded") === "true")
+      .map((h) => h.dataset.test);
+    expect(expanded).toEqual(["nav-group-menu"]);
+    expect(navItem(el, "catalogue")!.checkVisibility()).toBe(true);
   });
 
   it.each([
@@ -1694,19 +1722,41 @@ describe("dashboard-app", () => {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
     await flush(el);
-    // "catalogue" lives in the (collapsible) "menu" group; navigate there first.
-    navItem(el, "catalogue")!.click();
-    await flush(el);
     const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-menu"]')!;
     const panel = el.shadowRoot!.querySelector<HTMLElement>("#nav-group-panel-menu")!;
+    header.click();
+    await flush(el);
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+    navItem(el, "catalogue")!.click();
+    await flush(el);
 
-    header.click(); // user collapses the group its own current page lives in
+    header.click();
     await flush(el);
     expect(header.getAttribute("aria-expanded")).toBe("true");
     expect(panel.hidden).toBe(false);
-    expect(navItem(el, "catalogue")).toBeTruthy();
+    expect(navItem(el, "catalogue")!.checkVisibility()).toBe(true);
 
-    // Navigating away, the group now honours the collapse the user asked for.
+    // The collapse recorded while on catalogue applies once the current screen is elsewhere.
+    navItem(el, "overview")!.click();
+    await flush(el);
+    expect(header.getAttribute("aria-expanded")).toBe("false");
+    expect(panel.hidden).toBe(true);
+  });
+
+  it("does not clear a group's collapse when its header is clicked while it shows open only for holding the current page", async () => {
+    history.replaceState(null, "", "/manage/catalogue");
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-menu"]')!;
+    const panel = el.shadowRoot!.querySelector<HTMLElement>("#nav-group-panel-menu")!;
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+
+    header.click();
+    await flush(el);
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+
     navItem(el, "overview")!.click();
     await flush(el);
     expect(header.getAttribute("aria-expanded")).toBe("false");
@@ -1724,9 +1774,14 @@ describe("dashboard-app", () => {
         api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
       });
       await flush(el);
+      for (const group of el.shadowRoot!.querySelectorAll<HTMLElement>("button.nav-group"))
+        group.click();
+      await flush(el);
       const sidebar = el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
       const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-team"]')!;
+      expect(header.getAttribute("aria-expanded")).toBe("true");
       sidebar.scrollTop = 100;
+      expect(sidebar.scrollTop).toBe(100);
       await new Promise((r) => requestAnimationFrame(r));
       const before = header.getBoundingClientRect().top;
 

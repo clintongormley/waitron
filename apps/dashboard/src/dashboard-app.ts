@@ -539,14 +539,18 @@ export class DashboardApp extends LitElement {
   @state() private profileReady = false;
 
   /** A group in this set still renders expanded if it holds the CURRENT screen. */
-  @state() private collapsedGroups = new Set<NavGroupId>();
+  @state() private collapsedGroups = new Set<NavGroupId>(
+    NAV_GROUPS.filter((group) => group.headerKey).map((group) => group.id),
+  );
   // Collapsing a group shrinks the sidebar, and the browser clamps scrollTop, snapping the list
   // upward. Correcting scrollTop by how far the clicked header moved keeps it where it was clicked.
   #toggleGroup(id: NavGroupId, trigger: HTMLElement): void {
     const before = trigger.getBoundingClientRect().top;
     const next = new Set(this.collapsedGroups);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
+    // What the header shows, not set membership: the current screen's group shows open whatever
+    // the set holds.
+    if (trigger.getAttribute("aria-expanded") === "true") next.add(id);
+    else next.delete(id);
     this.collapsedGroups = next;
     void this.updateComplete.then(() => {
       const sidebar = trigger.closest<HTMLElement>(".sidebar");
