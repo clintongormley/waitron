@@ -393,10 +393,10 @@ expo board (`apps/till/src/screens/till-expo-screen.ts` `#item`), the printed re
 them should follow is the owner's call; the ticket and the expo board could share
 `readLinesSoldInEach`. **Done since (2026-09-27, lane A's A72, #727):** while the
 kitchen screen's queue reads fail (including a read cancelled at 25 seconds), a banner above the
-list says "Not up to date since 10:20" ("Sin actualizar desde las 10:20"), giving the time of the
-last read it showed, or, if none has succeeded, the time the screen opened, or the time the
-operator switched to this station; the list stays on screen beneath it and the next good read
-clears it. A late failure of an older read after a newer answer is on screen raises nothing, and
+list said "Not up to date since 10:20" ("Sin actualizar desde las 10:20"; reworded by A79,
+below), giving the time of the last read it showed, or, if none has succeeded, the time the
+screen opened, or the time the operator switched to this station; the list stays on screen
+beneath it and the next good read clears it. A late failure of an older read after a newer answer is on screen raises nothing, and
 neither does an enrolled display's 15-second refresh answered `device.unauthorized`, which
 re-boots the app. A 401 answering the reload after a bump does show the banner, and re-boots
 nothing until the next refresh, as before. **Done since (2026-09-28, lane A's A79):** the banner

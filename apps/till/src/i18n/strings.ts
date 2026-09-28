@@ -119,7 +119,8 @@ export const en = {
   "station.notice.moved_to": "Moved to {table}",
   "station.notice.acknowledge": "Got it",
   "station.acknowledge_error": "Could not clear the notice, try again",
-  // `{time}`, `{ago}` and `{n}` are substituted at the call site.
+  // `{time}` and `{ago}` are substituted at the call site, `{n}` by `countText`; `t()` does not
+  // interpolate.
   "station.stale": "No updates since {time}, {ago}",
   "station.stale_ago_under_minute": "less than a minute ago",
   "station.stale_ago_one": "1 minute ago",
