@@ -202,10 +202,10 @@ export function isStale(line: OrderLine, liveVersions: ReadonlyMap<string, strin
  * offers (D9): what the line would cost now, and whether it can still be sold as it stands. Saved
  * lines are never re-priced (D10), and a line with no version is priced by the server from the live
  * version already. A line whose earlier price is unknown is always named, at its new price alone. A
- * line whose total is unchanged while its parts' prices moved, or whose dish is now sold by another
- * unit, names each part that moved — the dish or variant, then each extra — at its unit price; a
- * line total cannot show a change of unit. A line whose quantity the live unit cannot hold is not
- * adopted: the live unit would refuse it.
+ * line whose total is unchanged while its parts' prices moved, or whose dish or variant is now sold
+ * by another unit, names each part that moved — the dish or variant, then each extra — at its unit
+ * price; a line total cannot show a change of unit. A line whose quantity the live unit cannot hold
+ * is not adopted: the live unit would refuse it.
  */
 export function refreshBasket(
   lines: readonly OrderLine[],
@@ -249,9 +249,10 @@ function unitChanged(line: OrderLine, adopted: OrderLine): boolean {
   return productUnit(line.product).id !== productUnit(adopted.product).id;
 }
 
-/** Each part of `line` whose unit price `adopted` changes: the dish or variant, then each extra. The
- * dish or variant is named too when its unit changed, as the unit is the dish's and its extras are
- * billed by it. */
+/**
+ * Each part of `line` whose unit price `adopted` changes: the dish or variant, then each extra. The
+ * dish or variant is named too when its unit changed.
+ */
 function partsRepriced(line: OrderLine, adopted: OrderLine, lineNo: number): ChangedLine[] {
   const units = { from: productUnit(line.product), to: productUnit(adopted.product) };
   const parts = [

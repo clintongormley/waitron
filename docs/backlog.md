@@ -489,7 +489,9 @@ unchanged, `refreshBasket` lists the dish or variant and each extra whose price 
 own row of the dialog. Campaign item C32 (#817), branch `fix/basket-refresh-unit-price-label`, 2026-09-28:
 those rows now read as unit prices, "€9.00 each → €8.00 each" / "9,00 € c/u → 8,00 € c/u", or, for a
 dish not counted in whole units, per the dish's unit as the menu grid shows it, "€20.00/kg"; a
-line-total row is unmarked.)_
+line-total row is unmarked. Campaign item C49, branch `fix/price-change-dialog-unit-only`,
+2026-09-29: a dish or variant now sold by another unit gets a row even when no price changed, and a
+change of unit and price together shows as that row instead of the line's total.)_
 A table's round is also not marked by the poll's sold-out list, only when a send is refused.
 _(Task 8, 2026-09-28: no longer so — when the poll's sold-out list for the open table's zone
 changes, `#onMenuState` in `apps/till/src/till-app.ts` marks the draft again, `#markDraft(true)`.)_
@@ -3125,11 +3127,15 @@ bill is refused.
   `publishedDefaultLabelId` (`applyLiveFields`, `packages/catalogue/src/menu-document.ts`), which
   `withUnavailable` (`apps/till/src/state/menu-refresh.ts`) reads. Of the review's other two
   findings, the deactivated menu still offered and sold from was fixed by `fix/retro-review-719`;
-  the other is the next entry. The part rows read as unit prices ("€9.00 each", "9,00 € c/u", or
-  "€20.00/kg" for a weighed dish) since campaign item C32 (#817, branch
-  `fix/basket-refresh-unit-price-label`, 2026-09-28), on the owner's "label them".
+  the other is the "Unchecked since the service plan's Task 8" entry below. The part rows read as
+  unit prices ("€9.00 each", "9,00 € c/u", or "€20.00/kg" for a weighed dish) since campaign item
+  C32 (#817, branch `fix/basket-refresh-unit-price-label`, 2026-09-28), on the owner's "label
+  them". Since campaign item C49 (branch `fix/price-change-dialog-unit-only`, 2026-09-29), a dish or
+  variant now sold by another unit is named too, even when no price changed, and a change of unit
+  and price together shows as that one row instead of the line's total.
 - **DONE (campaign item C49, branch `fix/price-change-dialog-unit-only`, 2026-09-29, on the owner's
-  "b"): both leftovers from C32 (#817)'s review.** (2) When a publish sells a dish by another unit
+  choice to have the dialog ask): the till's price-change dialog names a dish now sold by another
+  unit, even at the same price, and C32 (#817)'s two review leftovers are closed.** (2) When a publish sells a dish by another unit
   (say each to kg), the till's price-change dialog now gives the dish a row at its unit price on
   each side, "Hake €20.00 each → €20.00/kg", even when every price stayed the same. Before, the
   till took the new menu without opening the dialog at all: the new case in
