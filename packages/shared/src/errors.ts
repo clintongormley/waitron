@@ -34,6 +34,11 @@ export interface ErrorParams {
   "shared.invalid_thousandths": { value: string };
   "shared.invalid_basis_points": { value: string };
   "locale.unsupported": { locale: string };
+  /**
+   * Co-declared, with identical params, with `@waitron/server-kit`, which also throws it; identical
+   * declarations merge. Names the FIELD, never its value.
+   */
+  "management.request_invalid": { field: string };
 }
 
 export type ErrorCode = keyof ErrorParams;
