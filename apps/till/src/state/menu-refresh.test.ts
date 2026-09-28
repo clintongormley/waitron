@@ -179,7 +179,7 @@ describe("withUnavailable", () => {
   });
 
   describe("the default label", () => {
-    const defaultWith = (unavailable: string[], loadedDefault: string | null = "rare") => {
+    const defaultWith = (unavailable: string[], publishedDefault: string | null = "rare") => {
       const steak = offer({
         id: "offer-steak",
         productId: "steak",
@@ -187,7 +187,7 @@ describe("withUnavailable", () => {
           optionsList(
             "list-cooked",
             [label("rare"), label("medium"), label("well-done")],
-            loadedDefault,
+            publishedDefault,
           ),
         ],
       });
@@ -197,15 +197,15 @@ describe("withUnavailable", () => {
       return cooked.defaultLabelId;
     };
 
-    it("stays the loaded default while it is available", () => {
+    it("stays the published default while it is available", () => {
       expect(defaultWith(["medium"])).toBe("rare");
     });
 
-    it("is the first available label while the loaded default is not", () => {
+    it("is the first available label while the published default is not", () => {
       expect(defaultWith(["rare"])).toBe("medium");
     });
 
-    it("skips every unavailable label, not only the loaded default", () => {
+    it("skips every unavailable label, not only the published default", () => {
       expect(defaultWith(["rare", "medium"])).toBe("well-done");
     });
 
@@ -213,7 +213,7 @@ describe("withUnavailable", () => {
       expect(defaultWith(["rare", "medium", "well-done"])).toBeNull();
     });
 
-    it("is the first available label while the loaded offer names no default", () => {
+    it("is the first available label while the published version names no default", () => {
       expect(defaultWith(["rare"], null)).toBe("medium");
     });
 
@@ -438,7 +438,7 @@ describe("refreshBasket", () => {
     expect(outcome.adopted.get(0)!.product.unitPrice).toBe("8.00");
   });
 
-  it("names a variant whose price an extra's offsets, under the variant's name", () => {
+  it("names the variant, under its own name, when an extra's change offsets its price", () => {
     const withCheese = {
       ...wine,
       offeredModifiers: [extrasList("list-extras", [extraItem("cheese", "1.00")])],
@@ -460,10 +460,12 @@ describe("refreshBasket", () => {
       variants: [variant("glass", "4.00"), variant("bottle", "17.00")],
       offeredModifiers: [extrasList("list-extras", [extraItem("cheese", "2.00")])],
     };
-    expect(refreshBasket([line], [offsetting], live).changed).toEqual([
+    const outcome = refreshBasket([line], [offsetting], live);
+    expect(outcome.changed).toEqual([
       { lineNo: 1, name: "bottle", from: "18.00", to: "17.00" },
       { lineNo: 1, name: "cheese", from: "1.00", to: "2.00" },
     ]);
+    expect(outcome.adopted.get(0)!.product.unitPrice).toBe("17.00");
   });
 
   it("keeps a variant line on its variant, at the variant's new price", () => {

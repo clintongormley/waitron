@@ -20,8 +20,9 @@ export interface LineBlock {
   name: string;
 }
 
-/** One line of the basket-refresh dialog; `lineNo` counts the basket from 1. `from` is absent for a
- * line whose earlier price the till never held. */
+/** One line of the basket-refresh dialog; `lineNo` counts the basket from 1, and several rows may
+ * share one. `from`/`to` are the line's total or, for a part row, that part's unit price. `from` is
+ * absent for a line whose earlier price the till never held. */
 export interface ChangedLine {
   lineNo: number;
   name: string;

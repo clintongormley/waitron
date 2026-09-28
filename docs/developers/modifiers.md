@@ -315,8 +315,9 @@ Six things it is worth knowing about that payload:
   available now is served, and no default only when none is (`effectiveDefaultLabelId`,
   `packages/catalogue/src/option-default.ts`, which `applyLiveFields` applies on every read). The
   till's menu-state poll applies the same rule (`withUnavailable`,
-  `apps/till/src/state/menu-refresh.ts`) to the default the offers were served with when it loaded
-  them, not to the published one. The lists and the labels marked available are the set
+  `apps/till/src/state/menu-refresh.ts`) to the published default, which the served list carries as
+  `publishedDefaultLabelId`, so a till that polls and one that reloads preselect the same label once
+  both hold the same sold-out list. The lists and the labels marked available are the set
   `validateExtraSelections` (`extra-contract.ts`) and `validateOptionSelections`
   (`option-contract.ts`) will accept an answer from. That agreement is the reason a till and the
   order path read the same lists: both take them from the menu's published version, which
