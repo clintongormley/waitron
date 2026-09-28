@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import type { ContentLanguages } from "@waitron/shared";
 import { baseStyles, setContentLanguages } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-card.js";
 import type { DashboardApi } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { currentLocale, t } from "../i18n/t.js";
@@ -20,24 +21,40 @@ export class ContentLanguagesScreen extends LitElement {
         max-width: 60ch;
         color: var(--wt-color-text-muted);
       }
-      dl {
+      wt-card {
         max-width: 60ch;
-        margin: var(--wt-space-4) 0;
-        padding: var(--wt-space-3) var(--wt-space-4);
-        background: var(--wt-color-surface);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
+        margin-top: var(--wt-space-4);
+      }
+      dl {
+        margin: 0;
       }
       dt {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-normal);
       }
       dd {
         margin: var(--wt-space-1) 0 var(--wt-space-3);
         color: var(--wt-color-text);
+        font-size: var(--wt-font-size-md);
+        font-weight: var(--wt-font-weight-bold);
       }
       dd:last-of-type {
         margin-bottom: 0;
+      }
+      .card-footer {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: var(--wt-space-3);
+        padding-top: var(--wt-space-3);
+        border-top: 1px solid var(--wt-color-border);
+      }
+      .card-action {
+        min-width: 12ch;
+      }
+      .card-action.accent-primary::part(button):hover {
+        border-color: var(--wt-color-primary);
+        color: var(--wt-color-primary);
       }
       ul {
         list-style: none;
@@ -79,23 +96,29 @@ export class ContentLanguagesScreen extends LitElement {
 
   #renderConfig(config: ContentLanguages) {
     const names = new Intl.DisplayNames([currentLocale()], { type: "language" });
-    return html`<dl>
-        <dt>${t("content_languages.default")}</dt>
-        <dd data-test="default-language">${names.of(config.defaultLanguage)}</dd>
-        <dt>${t("content_languages.enabled")}</dt>
-        <dd>
-          <ul data-test="enabled-languages">
-            ${config.languages.map((code) => html`<li>${names.of(code)}</li>`)}
-          </ul>
-        </dd>
-      </dl>
-      <wt-button
-        data-test="edit-languages"
-        @click=${() => {
-          this.editing = true;
-        }}
-        >${t("action.edit")}</wt-button
-      >
+    return html`<wt-card>
+        <dl>
+          <dt>${t("content_languages.default")}</dt>
+          <dd data-test="default-language">${names.of(config.defaultLanguage)}</dd>
+          <dt>${t("content_languages.enabled")}</dt>
+          <dd>
+            <ul data-test="enabled-languages">
+              ${config.languages.map((code) => html`<li>${names.of(code)}</li>`)}
+            </ul>
+          </dd>
+        </dl>
+        <div class="card-footer">
+          <wt-button
+            data-test="edit-languages"
+            variant="secondary"
+            class="card-action accent-primary"
+            @click=${() => {
+              this.editing = true;
+            }}
+            >${t("action.edit")}</wt-button
+          >
+        </div>
+      </wt-card>
       <dashboard-content-languages
         .open=${this.editing}
         .config=${config}

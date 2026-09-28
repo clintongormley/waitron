@@ -55,6 +55,26 @@ describe("content languages screen", () => {
     expect(dialog(el).open).toBe(false);
   });
 
+  it("shows the values in one card, bold, with Edit in the card's footer after them", async () => {
+    const el = await mount(api());
+    const card = q(el, "wt-card")!;
+    const values = card.querySelector("dl")!;
+    const edit = q(el, "[data-test=edit-languages]")!;
+    const footer = edit.parentElement!;
+    expect(values.contains(q(el, "[data-test=default-language]"))).toBe(true);
+    expect(values.contains(q(el, "[data-test=enabled-languages]"))).toBe(true);
+    expect(footer.parentElement).toBe(card);
+    expect(values.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(getComputedStyle(footer).justifyContent).toBe("flex-end");
+    expect(getComputedStyle(footer).borderTopStyle).toBe("solid");
+    expect(edit.getAttribute("variant")).toBe("secondary");
+    expect(edit.classList).toContain("card-action");
+    expect(edit.classList).toContain("accent-primary");
+    const bold = getComputedStyle(el).getPropertyValue("--wt-font-weight-bold").trim();
+    expect(getComputedStyle(q(el, "[data-test=default-language]")!).fontWeight).toBe(bold);
+    expect(getComputedStyle(q(el, "[data-test=enabled-languages] li")!).fontWeight).toBe(bold);
+  });
+
   it("shows a loading status, and no Edit, until the languages arrive", async () => {
     const el = await mount(api({ getContentLanguages: vi.fn(() => new Promise(() => {})) }));
     expect(q(el, "[role=status]")!.textContent!.trim()).toBe(t("content_languages.loading"));
