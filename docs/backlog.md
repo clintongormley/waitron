@@ -3394,9 +3394,11 @@ approved.
   locally: 25 runs of the file alone took 6 to 7 seconds each, and three
   `pnpm vitest run --coverage` runs of the root project passed. The CI log showed nothing about
   which step stalled. **The reporting half is DONE (lane A's A112, 2026-09-28):** the test now fails
-  at 110 seconds naming the migration step and phase it was on, what the process was waiting on,
-  and how long every earlier phase took, and a healthy run prints its five slowest phases
-  ([ci-and-gates.md](developers/ci-and-gates.md)). Next: when it stalls again, read that report and
+  at 110 seconds naming the migration step and phase it was on, the process's active resources
+  and how long every earlier phase took; a stall inside a synchronous call is reported by a second
+  thread one second after the deadline; and a healthy run prints its five slowest phases
+  ([ci-and-gates.md](developers/ci-and-gates.md#the-upgrade-test-names-the-phase-it-stalled-in)).
+  Next: when it stalls again, read that report and
   locate the stalled operation before naming a cause. First seen in the last 60 CI runs.
 - **Dependabot, switched on by #760 (2026-09-27) — DONE: the 15 security alerts fixed by lane A's
   A107 (**PR #796**, 2026-09-28).** Config:

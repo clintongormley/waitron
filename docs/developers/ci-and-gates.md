@@ -981,18 +981,53 @@ The guard applies everything up to `0003` together for that reason; a future reb
 another set's trigger BODY reads fails it. It seeds no rows, so a migration that fails only on data
 passes it.
 
-It also says where it waited. Each step is timed in four phases — migrate, open, change feed,
-close — by `scripts/step-watch.mjs`, and at `STALL_DEADLINE_MS` (110 seconds, under the test's own
-120) it fails with the phase still running, what the process was waiting on
-(`process.getActiveResourcesInfo()`) and every finished phase's duration. The deadline does not
-stop the stalled work; it only names it. Measured 2026-09-28 with the deadline set to one second:
-the test failed `Still running after 1000 ms. Stalled in step core/0009_node_sealed_state: migrate
-after 36 ms. Waiting on: PipeWrap, PipeWrap, PipeWrap, PipeWrap, MessagePort, Timeout.`, then
-listed the phases before it. A healthy run prints the step count, the total and the five slowest
-phases. Vitest hides a passing test's console output when it runs under an AI agent (`AI_AGENT`
-set, as in a Claude Code session), so that line shows in CI's log but not in an agent's local run:
-measured 2026-09-28 with a one-line probe suite, whose `console.log` printed only once `CLAUDECODE`
-and `AI_AGENT` were unset.
+### The upgrade test names the phase it stalled in
+
+`scripts/migration-upgrade.test.ts` times each migration step in four phases — migrate, open,
+change feed, close — through `scripts/step-watch.mjs` (`watch.phase`), and runs the whole walk under
+`reportStallAfter`. At `STALL_DEADLINE_MS` (`TEST_BOUND_MS - 10_000`: 110 seconds, under the test's
+own 120) it fails with the phase still running, the process's active resources
+(`process.getActiveResourcesInfo()`) and every finished phase's duration. The deadline does not stop
+the stalled work; it only names it. The active resources are resource TYPES, not a cause: an
+unresolved promise with no I/O behind it still lists `PipeWrap, PipeWrap, Timeout`, the report's own
+timer among them. A walk that finishes past the deadline fails too, with
+`Finished after N ms, past the M ms deadline.` and the summary.
+
+Measured 2026-09-28 (Vitest 4.1.11, Node v26.7.0) with the deadline set to one second, `CI=true`
+and the agent variables unset, the test failed:
+
+```text
+Error: Still running after 1006 ms, past the 1000 ms deadline. Stalled in phase core/0009_node_sealed_state: migrate after 0 ms. Active resources: FSReqPromise, PipeWrap, PipeWrap, PipeWrap, PipeWrap, Timeout.
+Phases finished before it:
+```
+
+followed by the list.
+
+**A synchronous hold.** The database engine is synchronous, so a stall inside one call also holds
+the test thread's timers, and the deadline cannot fire until the call returns. A second thread (a
+worker) therefore watches too: if the test's thread has not answered `graceMs` (one second) after
+the deadline, the worker writes its own report straight to standard error with `fs.writeSync`,
+because a worker's `process.stderr` is relayed through the held thread. Measured 2026-09-28 with a
+temporary six-second `Atomics.wait` in the `core/0007_node_roles: change feed` phase and a temporary
+3000 ms deadline, the worker printed
+`The test's thread has not run its 3000 ms deadline timer 1000 ms after it fell due: something synchronous is holding it. Stalled in phase core/0007_node_roles: change feed after 3361 ms.`
+followed by the finished phases. Its limits: the worker's report has no `Active resources:` line,
+because it cannot read the held thread's; and once the hold ends, the test's own error names
+wherever that thread got to next, with the held phase in its finished list at its long duration — in
+the same run,
+`Still running after 6776 ms, past the 3000 ms deadline. Stalled in phase core/0008_node_keyed_rows: migrate after 0 ms.`
+with `core/0007_node_roles: change feed: 6130 ms` in the list. Whether SQLite's own lock-wait sleep
+holds the thread the same way was not measured.
+
+A healthy run prints the number of timed phases, their summed time and the five slowest. Measured
+2026-09-28 with `CI=true`: `224 phases, 4976 ms in all; the slowest:`, then five lines, the first
+`payments/0001_payment_resolutions: migrate: 84 ms`. The total covers the timed phases only; copying
+the migration folders and rewriting their journals are not timed. That summary is a passing test's
+`console.log`, which Vitest hides under an AI agent: see
+[testing-guide.md](testing-guide.md#vitest-hides-a-passing-tests-console-output-under-an-ai-agent).
+The worker's report is written to standard error directly and was visible with `CLAUDECODE=1` and
+with `AI_AGENT=1` set: Vitest 4 starts the root project's test process with `stdio: "pipe"` and
+passes its standard error through past the reporter.
 
 ## Check every command's exit status
 
