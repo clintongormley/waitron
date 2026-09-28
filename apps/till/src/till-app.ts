@@ -2592,9 +2592,9 @@ export class TillApp extends LitElement {
    * waiter has left the order since `visit` ({@link #hasLeftOrder}) or a later re-read has started:
    * this re-read's own failed floor or bills read is said, unless another message already is,
    * whether or not another read has refreshed the order since; and with its floor read failed and
-   * its bills read still the latest, what the party still owes is taken from those bills, which is
-   * the sum the floor would have answered (`readBillsOfVisits` in `apps/server/src/visits.ts` feeds
-   * both). */
+   * its bills read still the latest, what the party still owes is taken from those bills when they
+   * are the party's, which is the sum the floor would have answered (`readBillsOfVisits` in
+   * `apps/server/src/visits.ts` feeds both). */
   async #rereadAmounts(orderId: string, visit: number): Promise<void> {
     const reread = ++this.#amountsReread;
     const floorRead = await this.#retakePartyFromFloor();

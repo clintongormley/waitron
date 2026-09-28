@@ -2904,8 +2904,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   because the message is still true of this re-read. "Still to pay" comes from the floor when the
   floor read works and lists the party at a revision no older than the one shown; when the floor
   read fails, from the re-read's own bills for the same party while that bills read is still the
-  latest — the floor's figure is the sum of the same bills (`readBillsOfVisits`,
-  `apps/server/src/visits.ts`) — and otherwise it is left alone.
+  latest, the waiter is still on the order and no later re-read has started — the floor's figure is
+  the sum of the same bills (`readBillsOfVisits`, `apps/server/src/visits.ts`) — and otherwise it
+  is left alone.
   The priced-extra case was shown in the till's browser tests with a fixture adding a 1.50 extra;
   the demo menu offers no priced extra, so it was not run on the dev till.
 - **DONE (#812, campaign item A113, from the A108r retro review of #719, branch

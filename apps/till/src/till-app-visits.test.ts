@@ -1939,11 +1939,10 @@ describe("till-app: the order's groups", () => {
       revision: 0,
     });
     await flush(el);
-    emit(
-      tableOrder(el)!,
-      "submit-draft",
-      roundDetail(tableOrder(el)!, [{ release: "fire", lineIndexes: [0] }], 1),
-    );
+    emit(tableOrder(el)!, "submit-draft", {
+      ...roundDetail(tableOrder(el)!, [{ release: "fire", lineIndexes: [0] }], 1),
+      draft: { laterAddition: false, tally: { fired: 0, held: 0, joined: 0 } },
+    });
     await flush(el);
     expect(api.submitDraft).toHaveBeenCalledOnce();
     expect(tableOrder(el)).not.toBeNull();
