@@ -198,6 +198,7 @@ const party = {
   billCount: 2,
   tableIds: ["t5", "t6"],
   unsentDrafts: [],
+  reminder: null,
 };
 
 /** A party still owing, a paid party, and a finished party waiting to be cleared at two tables. */

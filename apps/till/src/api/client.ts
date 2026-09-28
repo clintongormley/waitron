@@ -489,6 +489,59 @@ export interface OrderGroup {
   summary: string;
 }
 
+/** The party's first held group, and when staff are reminded to fire it; `dueAt` is null while a
+ * fired group before it has a dish line not fully served, or when nothing dates it. */
+export interface ReleaseReminder {
+  groupId: string;
+  dueAt: string | null;
+}
+
+/** Only what the kitchen recorded for a dish: a station that records nothing leaves `queued`. */
+export interface CurrentOrderKitchen {
+  state: TicketState;
+  firedAt: string | null;
+  awayAt: string | null;
+}
+
+/** A dish row of `GET /api/visits/:id/current-orders`, on any bill of the party but an abandoned
+ * one, a paid one included. Only a `released` row can be marked served; its extras are served with it. */
+export interface CurrentOrderRow {
+  lineId: string;
+  workingOrderId: string;
+  lineNo: number;
+  /** The staff name. */
+  name: string;
+  quantity: string;
+  /** Decimal places the line's unit takes (0 = sold by the unit). */
+  unitPrecision: number | null;
+  servedQuantity: string;
+  /** Set once the whole quantity is served. */
+  servedAt: string | null;
+  released: boolean;
+  kitchen: CurrentOrderKitchen | null;
+  note: string | null;
+  extras: { lineId: string; name: string; quantity: string }[];
+}
+
+export interface CurrentOrderGroup {
+  id: string;
+  position: number;
+  state: "held" | "fired";
+  firedAt: string | null;
+  remindAt: string | null;
+  addedLater: boolean;
+  rows: CurrentOrderRow[];
+}
+
+/** What the party has ordered and what is known of it, groups in sequence. */
+export interface CurrentOrders {
+  revision: number;
+  reminder: ReleaseReminder | null;
+  groups: CurrentOrderGroup[];
+  /** Dish rows in no group. */
+  ungrouped: CurrentOrderRow[];
+}
+
 /** A kitchen ticket of a party's bill not printed after the server's `JOBS_WAITING_MS`, or given up
  * on; `since` is when the oldest such ticket was queued. */
 export interface PrintProblem {
@@ -1132,6 +1185,8 @@ export interface TableVisit {
   /** Every open draft on the party that holds a line, oldest first; `ownerName` is "" for an
    * unknown person. */
   unsentDrafts: UnsentDraft[];
+  /** Null when the venue has reminders off, no group is held, or the party is not open. */
+  reminder: ReleaseReminder | null;
 }
 
 /** One bill of a seated party from `GET /api/visits/:id/bills`. `outstanding` is zero on a settled or
@@ -1763,8 +1818,7 @@ export class TillApi {
     await this.#request<void>(`/api/working-orders/${id}/cancel`, "POST", { reason });
   }
 
-  // --- Live floor. `served_at` is a PRE-FISCAL operational field, so the served markers touch no
-  // fiscal path. ---
+  // --- Live floor. ---
 
   /** The venue's ACTIVE floor-plan zones, by display order → `GET /api/zones`. */
   listZones(): Promise<FloorZone[]> {
@@ -1779,19 +1833,6 @@ export class TillApi {
   /** The live-floor occupancy read-model → `GET /api/tables/state`, one row per active table. */
   getTablesState(): Promise<TableState[]> {
     return this.#request<TableState[]>("/api/tables/state", "GET");
-  }
-
-  /**
-   * Mark ONE line of an open tab as delivered → `POST /api/working-orders/:orderId/lines/:lineNo/served`.
-   * PRE-FISCAL: it never enters `registros`/`computeHuella`.
-   */
-  async markLineServed(orderId: string, lineNo: number): Promise<void> {
-    await this.#request<void>(`/api/working-orders/${orderId}/lines/${lineNo}/served`, "POST");
-  }
-
-  /** Clear ONE line's delivered marker, for a mis-tap — the inverse of {@link markLineServed}. */
-  async unmarkLineServed(orderId: string, lineNo: number): Promise<void> {
-    await this.#request<void>(`/api/working-orders/${orderId}/lines/${lineNo}/served`, "DELETE");
   }
 
   /**
@@ -1935,6 +1976,59 @@ export class TillApi {
     command: GroupCommand,
   ): Promise<{ revision: number }> {
     return this.#request(`/api/visits/${visitId}/groups/${groupId}/away`, "POST", command);
+  }
+
+  /**
+   * Mark part or all of each of a party's lines served → `POST /api/visits/:visitId/served`, on any
+   * of its bills but an abandoned one, a paid one included. `quantity` is how much THIS command serves. Rejects
+   * `tab.serve_quantity_invalid` for more than is left to serve, `group.line_held` for a line not yet
+   * released, `group.not_found`, `order.payment_in_flight` and the command refusals.
+   */
+  markServed(
+    visitId: string,
+    items: { lineId: string; quantity: string }[],
+    command: GroupCommand,
+  ): Promise<{ revision: number }> {
+    return this.#request(`/api/visits/${visitId}/served`, "POST", { ...command, items });
+  }
+
+  /** Take back part or all of what was marked served on each line → `POST /api/visits/:visitId/unserved`;
+   * more than is served rejects `tab.serve_quantity_invalid`. */
+  unmarkServed(
+    visitId: string,
+    items: { lineId: string; quantity: string }[],
+    command: GroupCommand,
+  ): Promise<{ revision: number }> {
+    return this.#request(`/api/visits/${visitId}/unserved`, "POST", { ...command, items });
+  }
+
+  /** Mark every line of a fired group served → `POST /api/visits/:visitId/groups/:groupId/served`.
+   * A held group rejects `group.line_held`. */
+  markGroupServed(
+    visitId: string,
+    groupId: string,
+    command: GroupCommand,
+  ): Promise<{ revision: number }> {
+    return this.#request(`/api/visits/${visitId}/groups/${groupId}/served`, "POST", command);
+  }
+
+  /** Put off a held group's release reminder → `POST /api/visits/:visitId/groups/:groupId/snooze`: it
+   * becomes due `minutes` from now. A fired group rejects `group.not_held`. */
+  snoozeGroup(
+    visitId: string,
+    groupId: string,
+    minutes: number,
+    command: GroupCommand,
+  ): Promise<{ revision: number }> {
+    return this.#request(`/api/visits/${visitId}/groups/${groupId}/snooze`, "POST", {
+      ...command,
+      minutes,
+    });
+  }
+
+  /** A party's Current orders → `GET /api/visits/:visitId/current-orders`. */
+  readCurrentOrders(visitId: string): Promise<CurrentOrders> {
+    return this.#request(`/api/visits/${visitId}/current-orders`, "GET");
   }
 
   /** A party's kitchen tickets that have not printed → `GET /api/visits/:visitId/print-problems`. */

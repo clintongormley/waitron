@@ -174,3 +174,59 @@ describe.each(["light", "dark"] as const)("print held work setting accessibility
     await expectNoA11yViolations(host);
   });
 });
+
+describe.each(["light", "dark"] as const)(
+  "release reminder setting accessibility (%s)",
+  (theme) => {
+    test.each([
+      ["stored", undefined],
+      ["refused", new Error("offline")],
+    ] as const)("the select and its hint, %s", async (_state, refusal) => {
+      setLocale("en");
+      await mountThemed("<div></div>", theme);
+      const el = document.createElement(
+        "dashboard-venue-operations-screen",
+      ) as VenueOperationsScreen;
+      el.api = {
+        load: vi.fn().mockResolvedValue({
+          readiness: [],
+          departments: [],
+          zones: [],
+          routes: [],
+          hours: [],
+          zoneMenus: [],
+          menus: [],
+          categories: [],
+          stations: [],
+          floorZones: [],
+          products: [],
+          settings: { editSentLines: true },
+          kitchenTicketGrouping: "combined",
+          printHeldWork: false,
+          releaseReminderMinutes: 10,
+        }),
+        saveReleaseReminderMinutes: refusal ? vi.fn().mockRejectedValue(refusal) : vi.fn(),
+      } as unknown as VenueServiceApi;
+      host.append(el);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await el.updateComplete;
+      const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+      tabs.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="routing"]')!.click();
+      await el.updateComplete;
+      const select = el.shadowRoot!.querySelector<HTMLSelectElement>(
+        'select[name="releaseReminderMinutes"]',
+      )!;
+      expect(select).not.toBeNull();
+      if (refusal) {
+        select.value = "5";
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await el.updateComplete;
+        expect(
+          el.shadowRoot!.querySelector('[data-field-error="releaseReminderMinutes"]'),
+        ).not.toBeNull();
+      }
+      await expectNoA11yViolations(host);
+    });
+  },
+);

@@ -18,6 +18,7 @@ const party: TableVisit = {
   billCount: 2,
   tableIds: ["t4"],
   unsentDrafts: [],
+  reminder: null,
 };
 
 const paidTab: VisitBill = {

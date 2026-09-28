@@ -74,7 +74,8 @@ import {
   listTablesWithState,
   markCollected,
   markCourseAway,
-  markLineServed,
+  markGroupServed,
+  markServed,
   mergeTabs,
   moveTab,
   parkOrder,
@@ -87,7 +88,7 @@ import {
   splitOffCheck,
   transferLines,
   unjoinTable,
-  unmarkLineServed,
+  unmarkServed,
   readOrderRevision,
   updateHeldOrder,
   updateOrderLine,
@@ -109,7 +110,9 @@ import {
   listOrderGroups,
   markGroupAway,
   moveLinesToGroup,
+  readCurrentOrders,
   reorderHeldGroups,
+  snoozeReminder,
   submitGroups,
 } from "./order-groups.js";
 import type { GroupLine, SubmitGroupsInput, VisitCommandArgs } from "./order-groups.js";
@@ -340,6 +343,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "tab.transfer_self": 400,
   "tab.transfer_quantity_invalid": 400,
   "tab.void_quantity_invalid": 400,
+  "tab.serve_quantity_invalid": 400,
   "tab.transfer_duplicate_line": 400,
   "table.not_joined": 409,
   "table.not_shared": 409,
@@ -564,15 +568,19 @@ function parseDraftGroups(value: unknown): SubmitDraftInput["groups"] {
   });
 }
 
-function parseGroupMoves(value: unknown): { lineId: string; quantity: string }[] {
-  if (!Array.isArray(value)) throw invalid("moves");
+/** A list of `{ lineId, quantity }`, both strings; anything else is refused naming `field`. */
+function parseLineQuantities(
+  value: unknown,
+  field: string,
+): { lineId: string; quantity: string }[] {
+  if (!Array.isArray(value)) throw invalid(field);
   return value.map((entry: unknown) => {
-    const move =
+    const item =
       typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : null;
-    if (move === null || typeof move.lineId !== "string" || typeof move.quantity !== "string") {
-      throw invalid("moves");
+    if (item === null || typeof item.lineId !== "string" || typeof item.quantity !== "string") {
+      throw invalid(field);
     }
-    return { lineId: move.lineId, quantity: move.quantity };
+    return { lineId: item.lineId, quantity: item.quantity };
   });
 }
 
@@ -1525,6 +1533,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
+  app.get("/api/visits/:id/current-orders", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const visitId = requireVisitParam(c.req.param("id"));
+      const current = await withTransaction(deps.db, (tx) => readCurrentOrders(tx, visitId));
+      return c.json(current);
+    }),
+  );
+
   app.get("/api/visits/:id/print-problems", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1584,6 +1601,57 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     );
   }
 
+  // Serving is an operational fact: nothing here reaches a filed sale.
+  for (const [path, command] of [
+    ["served", markServed],
+    ["unserved", unmarkServed],
+  ] as const) {
+    app.post(`/api/visits/:id/${path}`, (c) =>
+      run(c, log, async () => {
+        const { personId } = await requireSession(deps, c);
+        const visitId = requireVisitParam(c.req.param("id"));
+        const body = asObject(await readRawJsonBody<unknown>(c));
+        const args = groupCommand(personId, body);
+        const items = parseLineQuantities(body.items, "items");
+        const answer = await withTransaction(deps.db, (tx) =>
+          command(tx, deps.cfg, visitId, items, args),
+        );
+        return c.json(answer);
+      }),
+    );
+  }
+
+  app.post("/api/visits/:id/groups/:gid/served", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const visitId = requireVisitParam(c.req.param("id"));
+      const groupId = c.req.param("gid");
+      if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
+      const args = groupCommand(personId, asObject(await readRawJsonBody<unknown>(c)));
+      const answer = await withTransaction(deps.db, (tx) =>
+        markGroupServed(tx, deps.cfg, visitId, groupId, args),
+      );
+      return c.json(answer);
+    }),
+  );
+
+  app.post("/api/visits/:id/groups/:gid/snooze", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const visitId = requireVisitParam(c.req.param("id"));
+      const groupId = c.req.param("gid");
+      if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const args = groupCommand(personId, body);
+      if (typeof body.minutes !== "number") throw invalid("minutes");
+      const minutes = body.minutes;
+      const answer = await withTransaction(deps.db, (tx) =>
+        snoozeReminder(tx, deps.cfg, visitId, groupId, minutes, args),
+      );
+      return c.json(answer);
+    }),
+  );
+
   app.put("/api/visits/:id/groups/order", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
@@ -1607,7 +1675,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const visitId = requireVisitParam(c.req.param("id"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const command = groupCommand(personId, body);
-      const moves = parseGroupMoves(body.moves);
+      const moves = parseLineQuantities(body.moves, "moves");
       const target = parseMoveTarget(body.target);
       const moved = await withTransaction(deps.db, (tx) =>
         moveLinesToGroup(tx, deps.cfg, visitId, moves, target, command),
@@ -1723,31 +1791,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         }),
       );
       return c.json(saved);
-    }),
-  );
-
-  // Pre-fiscal: `served_at` never enters a filed record.
-  app.post("/api/working-orders/:id/lines/:lineNo/served", (c) =>
-    run(c, log, async () => {
-      await requireSession(deps, c);
-      const id = requireTabParam(c.req.param("id"));
-      const lineNo = requireLineNo(id, c.req.param("lineNo"));
-      await withTransaction(deps.db, async (tx) => {
-        await markLineServed(tx, deps.cfg, id, lineNo);
-      });
-      return c.body(null, 200);
-    }),
-  );
-
-  app.delete("/api/working-orders/:id/lines/:lineNo/served", (c) =>
-    run(c, log, async () => {
-      await requireSession(deps, c);
-      const id = requireTabParam(c.req.param("id"));
-      const lineNo = requireLineNo(id, c.req.param("lineNo"));
-      await withTransaction(deps.db, async (tx) => {
-        await unmarkLineServed(tx, deps.cfg, id, lineNo);
-      });
-      return c.body(null, 200);
     }),
   );
 

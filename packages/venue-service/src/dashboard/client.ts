@@ -72,6 +72,9 @@ export interface VenueServiceModel {
   settings: VenueServiceSettings;
   kitchenTicketGrouping: KitchenTicketGrouping;
   printHeldWork: boolean;
+  /** Minutes after the work fired before it is served that staff are reminded to fire the next
+   * held group; null when reminders are off. */
+  releaseReminderMinutes: number | null;
 }
 export interface VenueServiceSettings {
   editSentLines: boolean;
@@ -219,6 +222,12 @@ export class VenueServiceApi {
   savePrintHeldWork(printHeldWork: boolean): Promise<void> {
     return this.request("/management-api/venue-service/settings/print-held-work", "PUT", {
       printHeldWork,
+    });
+  }
+
+  saveReleaseReminderMinutes(releaseReminderMinutes: number | null): Promise<void> {
+    return this.request("/management-api/venue-service/settings/release-reminder-minutes", "PUT", {
+      releaseReminderMinutes,
     });
   }
 

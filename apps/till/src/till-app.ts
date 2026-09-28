@@ -49,6 +49,9 @@ import type {
   MoveGroupLineDetail,
   OtherDraft,
   ReorderGroupsDetail,
+  ServeGroupDetail,
+  ServeLinesDetail,
+  SnoozeGroupDetail,
   SplitGroupLineDetail,
   SubmitDraftDetail,
   TakeOverDraftDetail,
@@ -79,6 +82,7 @@ import type {
   ServiceZoneSummary,
   PayOutcome,
   GroupCommand,
+  CurrentOrders,
   OrderGroup,
   PrintProblem,
   SaleLine,
@@ -317,6 +321,7 @@ const LINE_REFUSALS = new Set([
   "ticket.already_started",
   "ticket.already_fired",
   "tab.void_quantity_invalid",
+  "tab.serve_quantity_invalid",
   "group.not_held",
   "group.not_found",
   "group.line_held",
@@ -876,6 +881,11 @@ export class TillApp extends LitElement {
   @state() private tabGroups: OrderGroup[] = [];
   /** The kitchen tickets of {@link orderParty} that have not printed, read with {@link tabGroups}. */
   @state() private printProblems: PrintProblem[] = [];
+  /** {@link orderParty}'s Current orders, read with {@link tabGroups}; null with no party, or when
+   * the read failed. */
+  @state() private currentOrders: CurrentOrders | null = null;
+  /** The last read of {@link currentOrders} failed. */
+  @state() private currentOrdersUnread = false;
   /** The bills whose kitchen tickets Reprint sent again since the table was opened. The server
    * reports a problem until the reprint prints, so the next opening of the table is the read that
    * shows a problem still there. */
@@ -2448,6 +2458,7 @@ export class TillApp extends LitElement {
           billCount: 1,
           tableIds: [tableId],
           unsentDrafts: [],
+          reminder: null,
         };
         this.#showDraft(await this.#openDraft(false, session));
       } catch (error) {
@@ -2480,12 +2491,15 @@ export class TillApp extends LitElement {
       this.tabLines = [];
       this.tabGroups = [];
       this.printProblems = [];
+      this.currentOrders = null;
+      this.currentOrdersUnread = false;
       this.#groupsUnread = false;
       this.#groupsReadFor = partyId;
       return;
     }
     const groups = this.#readGroups();
     const problems = this.#readPrintProblems();
+    const orders = this.#readCurrentOrders();
     try {
       const tab = await this.api.getTabLines(this.activeTabId);
       if (read !== this.#tabLinesRead) return;
@@ -2498,11 +2512,25 @@ export class TillApp extends LitElement {
     }
     const partyGroups = await groups;
     const partyProblems = await problems;
+    const partyOrders = await orders;
     if (read !== this.#tabLinesRead) return;
     this.tabGroups = partyGroups ?? [];
     this.#groupsUnread = partyGroups === null;
     this.#groupsReadFor = partyId;
     this.printProblems = partyProblems;
+    this.currentOrders = partyOrders;
+    this.currentOrdersUnread = partyId !== null && partyOrders === null;
+  }
+
+  /** A failed read answers null: the screen then offers nothing to mark served. */
+  async #readCurrentOrders(): Promise<CurrentOrders | null> {
+    const party = this.orderParty;
+    if (party === null) return null;
+    try {
+      return await this.api.readCurrentOrders(party.id);
+    } catch {
+      return null;
+    }
   }
 
   /** A failed read shows no problem: the notice is advice, and ordering never waits on it. */
@@ -3172,17 +3200,39 @@ export class TillApp extends LitElement {
     });
   }
 
-  async #onServeLine(event: Event): Promise<void> {
-    const { lineNo } = (event as CustomEvent<{ lineNo: number }>).detail;
+  /** Serving, its undo and a reminder's snooze are commands on the party whose order is open; with
+   * no order open they send nothing. */
+  async #onServiceRequest(
+    request: (party: TableVisit, command: GroupCommand) => Promise<{ revision: number }>,
+  ): Promise<void> {
     if (this.activeTabId === undefined) return;
-    this.errorKey = undefined;
-    try {
-      await this.api.markLineServed(this.activeTabId, lineNo);
-    } catch (error) {
-      this.errorKey = tableWriteError(error);
-      return;
-    }
-    await this.#loadTabLines();
+    await this.#onGroupRequest(request);
+  }
+
+  async #onServeLines(event: Event): Promise<void> {
+    const { items } = (event as CustomEvent<ServeLinesDetail>).detail;
+    await this.#onServiceRequest((party, command) => this.api.markServed(party.id, items, command));
+  }
+
+  async #onUnserveLines(event: Event): Promise<void> {
+    const { items } = (event as CustomEvent<ServeLinesDetail>).detail;
+    await this.#onServiceRequest((party, command) =>
+      this.api.unmarkServed(party.id, items, command),
+    );
+  }
+
+  async #onServeGroup(event: Event): Promise<void> {
+    const { groupId } = (event as CustomEvent<ServeGroupDetail>).detail;
+    await this.#onServiceRequest((party, command) =>
+      this.api.markGroupServed(party.id, groupId, command),
+    );
+  }
+
+  async #onSnoozeGroup(event: Event): Promise<void> {
+    const { groupId, minutes } = (event as CustomEvent<SnoozeGroupDetail>).detail;
+    await this.#onServiceRequest((party, command) =>
+      this.api.snoozeGroup(party.id, groupId, minutes, command),
+    );
   }
 
   /** The reload runs on both paths: after a raced `ticket.already_fired` the line is fired, and
@@ -3469,6 +3519,8 @@ export class TillApp extends LitElement {
     this.tabLines = [];
     this.tabGroups = [];
     this.printProblems = [];
+    this.currentOrders = null;
+    this.currentOrdersUnread = false;
     this.reprintSent = [];
     this.#groupsUnread = false;
     this.visitBills = [];
@@ -3867,6 +3919,8 @@ export class TillApp extends LitElement {
       .courses=${this.courses}
       .tabLines=${this.tabLines}
       .tabGroups=${this.tabGroups}
+      .currentOrders=${this.currentOrders}
+      .currentOrdersUnread=${this.currentOrdersUnread}
       .printProblems=${this.printProblems}
       .reprintSent=${this.reprintSent}
       .tabRevision=${this.tabRevision}
@@ -3899,6 +3953,8 @@ export class TillApp extends LitElement {
           slot="drill"
           .lines=${this.tabLines}
           .groups=${this.tabGroups}
+          .currentOrders=${this.currentOrders}
+          .currentOrdersUnread=${this.currentOrdersUnread}
           .printProblems=${this.printProblems}
           .reprintSent=${this.reprintSent}
           .revision=${this.tabRevision}
@@ -4008,7 +4064,10 @@ export class TillApp extends LitElement {
         @reorder-groups=${(event: Event) => void this.#onReorderGroups(event)}
         @move-group-line=${(event: Event) => void this.#onMoveGroupLine(event)}
         @split-group-line=${(event: Event) => void this.#onSplitGroupLine(event)}
-        @serve-line=${(event: Event) => void this.#onServeLine(event)}
+        @serve-lines=${(event: Event) => void this.#onServeLines(event)}
+        @unserve-lines=${(event: Event) => void this.#onUnserveLines(event)}
+        @serve-group=${(event: Event) => void this.#onServeGroup(event)}
+        @snooze-group=${(event: Event) => void this.#onSnoozeGroup(event)}
         @set-line-course=${(event: Event) => void this.#onSetLineCourse(event)}
         @send-lines=${(event: Event) => void this.#onSendLines(event)}
         @recall-lines=${(event: Event) => void this.#onRecallLines(event)}

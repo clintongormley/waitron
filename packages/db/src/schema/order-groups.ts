@@ -1,6 +1,17 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
-import { count, enumCheck, enumType, id, json, newId, nowIso, table, tsString } from "./columns.js";
+import {
+  count,
+  enumCheck,
+  enumType,
+  flag,
+  id,
+  json,
+  newId,
+  nowIso,
+  table,
+  tsString,
+} from "./columns.js";
 import { visits } from "./visits.js";
 
 export const orderGroupState = enumType(["held", "fired", "removed"]);
@@ -28,6 +39,8 @@ export const orderGroups = table(
     remindAt: tsString("remind_at"),
     // When this group's advance HOLD ticket was queued for a printer; null if none was.
     holdPrintedAt: tsString("hold_printed_at"),
+    // A later addition to the party's order (spec §4).
+    addedLater: flag("added_later").notNull().default(false),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [

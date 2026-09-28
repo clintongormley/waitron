@@ -1714,6 +1714,23 @@ describe("a refund the provider here cannot answer for", () => {
   });
 });
 
+describe("a paid bill", () => {
+  it("refuses a new refund of its card payment (working_order.not_open), writing no refund row", async () => {
+    const billId = await bill("Pulpo");
+    const card = await pay(billId, "card", "20.00");
+    expect(card.answer.status).toBe(200);
+
+    const { answer } = await refund(billId, card.id, { applied: "10.00" });
+
+    expect(answer.status).toBe(409);
+    expect(answer.json).toEqual({
+      code: "working_order.not_open",
+      params: { workingOrderId: billId },
+    });
+    expect(await refundRowsOf(card.id)).toEqual([]);
+  });
+});
+
 describe("design §8 test 23: the invoice waits for the refund", () => {
   it("refuses the reduction that would issue it while the refund is pending, then issues one invoice once it completes", async () => {
     const billId = await bill("Botella tinto", "Pulpo", "Croquetas");

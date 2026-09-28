@@ -1147,3 +1147,84 @@ describe("the print-held-work setting", () => {
     expect(body.kitchenTicketGrouping).toBe("combined");
   });
 });
+
+describe("the release-reminder setting", () => {
+  const RELEASE_REMINDER = "/management-api/venue-service/settings/release-reminder-minutes";
+  async function stored(fx: Fixture): Promise<unknown> {
+    return (
+      (await (
+        await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+      ).json()) as { releaseReminderMinutes: unknown }
+    ).releaseReminderMinutes;
+  }
+
+  it("reads 10 minutes until a manager changes it, and can be switched off and back on", async () => {
+    const fx = await fixture();
+    expect(await stored(fx)).toBe(10);
+    for (const minutes of [15, 1, 120, null, 10]) {
+      expect(
+        (
+          await send(fx.app, "PUT", RELEASE_REMINDER, fx.managerCookie, {
+            releaseReminderMinutes: minutes,
+          })
+        ).status,
+      ).toBe(204);
+      expect(await stored(fx)).toBe(minutes);
+    }
+  });
+
+  it("refuses anything but whole minutes from 1 to 120 or null, naming the field, and keeps the stored value", async () => {
+    const fx = await fixture();
+    expect(
+      (
+        await send(fx.app, "PUT", RELEASE_REMINDER, fx.managerCookie, {
+          releaseReminderMinutes: 20,
+        })
+      ).status,
+    ).toBe(204);
+    for (const body of [
+      {},
+      { releaseReminderMinutes: 0 },
+      { releaseReminderMinutes: -5 },
+      { releaseReminderMinutes: 121 },
+      { releaseReminderMinutes: 2.5 },
+      { releaseReminderMinutes: "10" },
+      { releaseReminderMinutes: true },
+      { releaseReminderMinutes: [10] },
+    ]) {
+      const rejected = await send(fx.app, "PUT", RELEASE_REMINDER, fx.managerCookie, body);
+      expect(rejected.status).toBe(400);
+      expect(await rejected.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "releaseReminderMinutes" } },
+      });
+    }
+    expect(await stored(fx)).toBe(20);
+  });
+
+  it("lets only a signed-in manager change it", async () => {
+    const fx = await fixture();
+    const body = { releaseReminderMinutes: null };
+    expect((await send(fx.app, "PUT", RELEASE_REMINDER, undefined, body)).status).toBe(401);
+    const refused = await send(fx.app, "PUT", RELEASE_REMINDER, fx.staffCookie, body);
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    expect(await stored(fx)).toBe(10);
+  });
+
+  it("leaves the other settings as they were", async () => {
+    const fx = await fixture();
+    expect(
+      (
+        await send(fx.app, "PUT", RELEASE_REMINDER, fx.managerCookie, {
+          releaseReminderMinutes: null,
+        })
+      ).status,
+    ).toBe(204);
+    const body = (await (
+      await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+    ).json()) as { settings: unknown; kitchenTicketGrouping: unknown; printHeldWork: unknown };
+    expect(body.settings).toEqual({ editSentLines: true });
+    expect(body.kitchenTicketGrouping).toBe("combined");
+    expect(body.printHeldWork).toBe(false);
+  });
+});

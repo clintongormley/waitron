@@ -47,6 +47,8 @@ import "../widgets/diet-filter.js";
 import "../widgets/modifier-picker.js";
 import type { ModifierConfirmDetail } from "../widgets/modifier-picker.js";
 import type {
+  CurrentOrderRow,
+  CurrentOrders,
   GroupLine,
   OrderGroup,
   OrderLinePatch,
@@ -168,6 +170,22 @@ interface PendingDraft {
   leftOut: readonly OrderLine[];
 }
 
+/** A held row whose Move to… is open, on whichever bill of the party it sits. */
+interface MovePending {
+  lineId: string;
+  name: string;
+  quantity: string;
+  group: OrderGroup;
+}
+
+/** What a group's row offers while its group is held: Move always, Split only for `splits`. */
+interface HeldRow {
+  lineId: string;
+  name: string;
+  quantity: string;
+  splits: boolean;
+}
+
 /** The element `node` renders inside: its slot, its parent, or the host of its shadow root. */
 function composedParent(node: Element): Element | null {
   const root = node.getRootNode();
@@ -206,6 +224,29 @@ export interface SplitGroupLineDetail {
   groupId: string;
   quantity: string;
 }
+
+/** `serve-lines` and `unserve-lines`: how much of each of the party's rows this press marks served,
+ * or takes back. */
+export interface ServeLinesDetail {
+  items: { lineId: string; quantity: string }[];
+}
+
+/** `serve-group`: every row of a fired group, marked served. */
+export interface ServeGroupDetail {
+  groupId: string;
+}
+
+/** `snooze-group`: a held group's release reminder, put off by `minutes`. */
+export interface SnoozeGroupDetail {
+  groupId: string;
+  minutes: number;
+}
+
+/** How far one press of Snooze puts a release reminder off. */
+export const SNOOZE_MINUTES = 5;
+
+/** The longest delay `setTimeout` holds: 2^31 − 1 ms, about 24.8 days. */
+const LONGEST_TIMER_MS = 2 ** 31 - 1;
 
 /** `change-line`: one sent line's edit, from the copy of the order read at `revision`. */
 export interface ChangeLineDetail {
@@ -381,10 +422,9 @@ export class TillTableOrderScreen extends LitElement {
 
       .line {
         display: grid;
-        /* A pending line's first row: name, qty, line-total, #lineCourse (nothing when the venue has no
-           courses; its track then collapses) and the serve button. The narrower .served-line overrides
-           this below. */
-        grid-template-columns: 1fr auto auto auto auto;
+        /* A line's first row: name, qty, line-total and #lineCourse (nothing when the venue has no
+           courses; its track then collapses). */
+        grid-template-columns: 1fr auto auto auto;
         align-items: center;
         gap: var(--wt-space-3);
         padding: var(--wt-space-2) 0;
@@ -411,7 +451,6 @@ export class TillTableOrderScreen extends LitElement {
       }
 
       .served-line {
-        grid-template-columns: 1fr auto auto auto;
         color: var(--wt-color-text-muted);
       }
 
@@ -656,6 +695,76 @@ export class TillTableOrderScreen extends LitElement {
         overflow-wrap: anywhere;
       }
 
+      .group-tag {
+        margin-inline-end: auto;
+        padding: 0 var(--wt-space-2);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-sm);
+        font-size: var(--wt-font-size-sm);
+      }
+
+      .ungrouped {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        padding-top: var(--wt-space-3);
+      }
+
+      .ungrouped h3 {
+        margin: 0;
+        font-size: var(--wt-font-size-md);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      /* A name is never broken to fit the buttons beside it: they wrap to a line of their own,
+         still at the row's end. */
+      .row-what {
+        flex: 1 1 auto;
+        max-width: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .row-what .group-line-name {
+        overflow-wrap: break-word;
+      }
+
+      .current-row .group-line-actions {
+        margin-inline-start: auto;
+      }
+
+      .row-extra,
+      .current-row .line-note,
+      .row-facts {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+
+      .row-facts {
+        display: flex;
+        flex-wrap: wrap;
+        column-gap: var(--wt-space-3);
+      }
+
+      /* Words first, so the reminder never rests on the warning colour. */
+      .group-reminder {
+        margin: 0;
+        font-size: var(--wt-font-size-sm);
+      }
+
+      .group-reminder.due {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wt-space-2);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-warning);
+        color: var(--wt-color-on-warning);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
       .round-bar {
         display: flex;
         flex-direction: column;
@@ -846,6 +955,11 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) courses: TillCourse[] = [];
   /** The party's order groups, read with {@link lines}. */
   @property({ attribute: false }) groups: OrderGroup[] = [];
+  /** The party's Current orders; null until read, or when the read failed, which leaves the groups
+   * showing this bill's rows and nothing to mark served. */
+  @property({ attribute: false }) currentOrders: CurrentOrders | null = null;
+  /** The read of Current orders failed, which the screen says where the list would be. */
+  @property({ type: Boolean }) currentOrdersUnread = false;
   /** The party's kitchen tickets that have not printed; they never hold up ordering. */
   @property({ attribute: false }) printProblems: PrintProblem[] = [];
   /** The bills whose kitchen tickets were sent to print again since the table was opened: their
@@ -903,7 +1017,10 @@ export class TillTableOrderScreen extends LitElement {
   /** The held group whose Fire waits for confirmation. */
   @state() private fireGroupPending: OrderGroup | null = null;
   /** The held line whose Move to… picker is open, with the group it is in. */
-  @state() private movePending: { line: TabLine; group: OrderGroup } | null = null;
+  @state() private movePending: MovePending | null = null;
+  /** A row whose Mark served, or its undo, asks how many; `count` is what is chosen so far. */
+  @state() private servePending: { row: CurrentOrderRow; undo: boolean; count: Decimal } | null =
+    null;
 
   /** The line open in the Change editor. */
   @state() private changeLine: TabLine | null = null;
@@ -1000,7 +1117,11 @@ export class TillTableOrderScreen extends LitElement {
     super.connectedCallback();
     this.#watchDraft();
     this.#measure(this.getBoundingClientRect().width);
-    if (this.hasUpdated) this.#observeWidth();
+    if (this.hasUpdated) {
+      this.#observeWidth();
+      // Its reminder's timer stopped while it was off the page; a time already past fires at once.
+      this.#watchReminder();
+    }
   }
 
   override firstUpdated(): void {
@@ -1023,6 +1144,7 @@ export class TillTableOrderScreen extends LitElement {
     this.#watchedDraft = undefined;
     this.#resizing?.disconnect();
     this.#resizing = undefined;
+    clearTimeout(this.#reminderTimer);
   }
 
   /** Side by side has no Review view, so one left open is closed rather than kept for a later
@@ -1083,6 +1205,7 @@ export class TillTableOrderScreen extends LitElement {
       this.cancelLine = null;
       this.fireGroupPending = null;
       this.movePending = null;
+      this.servePending = null;
       this.pendingDraft = null;
       this.reviewing = false;
       this.#browsingScroll = undefined;
@@ -1101,6 +1224,7 @@ export class TillTableOrderScreen extends LitElement {
         if (!this.#productsById.has(product.id)) this.#productsById.set(product.id, product);
       }
     }
+    this.#reminderDue = this.#reminderDueAt() <= (this.now ?? Date.now());
     if (changed.has("cancelOffer") && this.cancelOffer !== null) {
       const offered = this.lines.find(
         (line) => line.lineNo === this.cancelOffer && !this.#isChild(line),
@@ -1113,6 +1237,7 @@ export class TillTableOrderScreen extends LitElement {
   /** The app clears its offer on this event, so a screen mounted later (a handheld's Order tab coming
    * back) does not open it again. Taken even when the line is gone, for the same reason. */
   override updated(): void {
+    this.#watchReminder();
     if (!this.#offerTaken) return;
     this.#offerTaken = false;
     this.dispatchEvent(
@@ -1121,6 +1246,29 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #offerTaken = false;
+
+  /** Whether the party's release reminder is due, as of this render. */
+  #reminderDue = false;
+  #reminderTimer?: ReturnType<typeof setTimeout>;
+
+  /** When the party's release reminder falls due; never, while it has no time. */
+  #reminderDueAt(): number {
+    const dueAt = Date.parse(this.currentOrders?.reminder?.dueAt ?? "");
+    return Number.isNaN(dueAt) ? Number.POSITIVE_INFINITY : dueAt;
+  }
+
+  /** On the screen's own clock, a reminder not yet due is drawn again the moment it falls due. */
+  #watchReminder(): void {
+    clearTimeout(this.#reminderTimer);
+    const dueAt = this.#reminderDueAt();
+    if (this.now !== undefined || this.#reminderDue || dueAt === Number.POSITIVE_INFINITY) return;
+    // A longer delay overflows the browser's timer, which then fires at once, and again on every
+    // redraw.
+    this.#reminderTimer = setTimeout(
+      () => this.requestUpdate(),
+      Math.min(dueAt - Date.now(), LONGEST_TIMER_MS),
+    );
+  }
 
   #lineGross(line: TabLine): Decimal {
     return this.#lineGrossByLineNo.get(line.lineNo)!;
@@ -1281,12 +1429,6 @@ export class TillTableOrderScreen extends LitElement {
   /** The course goes on the line, so the draft saves it. */
   #pickCourse(store: WorkingOrderStore, line: OrderLine, courseId: string): void {
     store.setLineCourse(store.lines.indexOf(line), courseId === "" ? undefined : courseId);
-  }
-
-  #serve(lineNo: number): void {
-    this.dispatchEvent(
-      new CustomEvent("serve-line", { detail: { lineNo }, bubbles: true, composed: true }),
-    );
   }
 
   #setLineCourse(lineNo: number, courseId: string | null): void {
@@ -1750,7 +1892,8 @@ export class TillTableOrderScreen extends LitElement {
           ${this.drawerOpen ? this.#drawer(pending) : nothing}
         </div>
         ${this.#previewDialog()} ${this.#cancelDialog()} ${this.#fireGroupDialog()}
-        ${this.#moveDialog()} ${this.#changeEditor()} ${this.#takeOverDialog()}
+        ${this.#moveDialog()} ${this.#serveDialog()} ${this.#changeEditor()}
+        ${this.#takeOverDialog()}
       </section>
     `;
   }
@@ -2549,18 +2692,7 @@ export class TillTableOrderScreen extends LitElement {
       >
       <span class="qty">${this.#displayQty(line.quantity)}</span>
       <span class="line-total">${formatMoney(this.#lineGross(line), currentLocale())}</span>
-      ${this.#lineCourse(line)}
-      <wt-button
-        class="serve"
-        size="sm"
-        variant="primary"
-        data-serve=${line.lineNo}
-        aria-label=${`${t("table.serve")} ${name}`}
-        @click=${() => this.#serve(line.lineNo)}
-      >
-        <span aria-hidden="true">✓</span>
-      </wt-button>
-      ${this.#lineActions(line)}
+      ${this.#lineCourse(line)} ${this.#lineActions(line)}
     </li>`;
   }
 
@@ -2590,37 +2722,76 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
-  /** Every group of the party in position order. A held group can be moved among the held ones,
-   * have its lines moved or split, and be fired where `fireControl` gives the waiter the release. Its
-   * line rows are this bill's: a line on another bill of the party shows only in the summary. */
+  /**
+   * Current orders: every group of the party in position order, then the rows in no group. A held
+   * group can be moved among the held ones, have its rows moved or split, and be fired where
+   * `fireControl` gives the waiter the release. With {@link currentOrders} read, each group lists the
+   * party's rows on every bill, with what is known of each, and released rows can be marked served;
+   * without it, a group lists only this bill's lines and the server's summary.
+   */
   #groupsSection(): TemplateResult | typeof nothing {
-    if (this.groups.length === 0) return nothing;
+    const ungrouped = this.currentOrders?.ungrouped ?? [];
+    if (this.groups.length === 0 && ungrouped.length === 0 && !this.currentOrdersUnread)
+      return nothing;
     return html`<section class="groups" data-groups>
       <h2>${t("table.groups_title")}</h2>
+      ${
+        this.currentOrdersUnread
+          ? html`<p class="empty" data-current-orders-unread>
+              ${t("table.current_orders_unread")}
+            </p>`
+          : nothing
+      }
       <ol class="group-list">
-        ${this.#groupsInOrder.map((group) => {
-          const lines = group.lineIds.flatMap((id) => {
-            const line = this.#lineById.get(id);
-            return line === undefined || this.#isChild(line) ? [] : [line];
-          });
-          return this.#groupRow(group, lines);
-        })}
+        ${this.#groupsInOrder.map((group) => this.#groupRow(group))}
       </ol>
+      ${
+        ungrouped.length === 0
+          ? nothing
+          : html`<section class="ungrouped" data-ungrouped>
+              <h3>${t("table.ungrouped_title")}</h3>
+              <ul class="group-lines">
+                ${ungrouped.map((row) => this.#currentRow(row, null))}
+              </ul>
+            </section>`
+      }
     </section>`;
   }
 
-  #groupRow(group: OrderGroup, lines: TabLine[]): TemplateResult {
+  #groupRow(group: OrderGroup): TemplateResult {
     const held = this.#heldInOrder;
     const isHeld = group.state === "held";
     const name = t("table.group_n").replace("{n}", String(group.position));
     const label = (key: StringKey) => `${t(key)} · ${name}`;
     const place = held.indexOf(group);
+    const shown = this.currentOrders?.groups.find((candidate) => candidate.id === group.id);
+    const current = this.currentOrders === null ? null : (shown?.rows ?? []);
+    const reminder = isHeld ? this.#reminderOf(group) : nothing;
+    // A due reminder brings its own Fire.
+    const fires = this.fireControl === "waiter" && !(reminder !== nothing && this.#reminderDue);
+    const servesWhole =
+      !isHeld &&
+      current !== null &&
+      current.every((row) => row.released) &&
+      current.some((row) => row.servedAt === null);
     return html`<li class="group" data-group=${group.id} data-group-state=${group.state}>
       <div class="group-head">
         <span class="group-name" data-group-position>${name}</span>
-        <span class="group-state" data-group-kitchen>${this.#groupProgress(group)}</span>
+        ${
+          shown?.addedLater === true
+            ? html`<span class="group-tag" data-group-added-later
+                >${t("table.group_added_later")}</span
+              >`
+            : nothing
+        }
+        <span class="group-state" data-group-kitchen>${this.#groupProgress(group, current)}</span>
       </div>
-      <p class="group-summary" data-group-summary>${group.summary}</p>
+      ${
+        current === null
+          ? html`<p class="group-summary" data-group-summary>${group.summary}</p>`
+          : nothing
+      }
+      ${reminder}
       ${
         isHeld
           ? html`<div class="group-actions">
@@ -2643,7 +2814,7 @@ export class TillTableOrderScreen extends LitElement {
                 <span aria-hidden="true">↓</span>
               </wt-button>
               ${
-                this.fireControl === "waiter"
+                fires
                   ? html`<wt-button
                       variant="primary"
                       data-group-fire=${group.id}
@@ -2656,21 +2827,315 @@ export class TillTableOrderScreen extends LitElement {
                   : nothing
               }
             </div>`
-          : nothing
+          : servesWhole
+            ? html`<div class="group-actions">
+                <wt-button
+                  variant="secondary"
+                  data-serve-group=${group.id}
+                  aria-label=${label("table.serve_group")}
+                  ?disabled=${this.groupCommandBusy}
+                  @click=${() =>
+                    this.#dispatch("serve-group", { groupId: group.id } satisfies ServeGroupDetail)}
+                >
+                  ${t("table.serve_group")}
+                </wt-button>
+              </div>`
+            : nothing
       }
       <ul class="group-lines">
-        ${lines.map((line) => this.#groupLine(line, isHeld ? group : null))}
+        ${
+          current === null
+            ? this.#billLinesOf(group).map((line) => this.#groupLine(line, isHeld ? group : null))
+            : current.map((row) => this.#currentRow(row, isHeld ? group : null))
+        }
       </ul>
     </li>`;
   }
 
-  /** Only what a person recorded: a group nobody marked ready reads how long ago it was fired. */
-  #groupProgress(group: OrderGroup): string | TemplateResult {
+  /** This bill's dish lines of `group`, for want of Current orders. */
+  #billLinesOf(group: OrderGroup): TabLine[] {
+    return group.lineIds.flatMap((id) => {
+      const line = this.#lineById.get(id);
+      return line === undefined || this.#isChild(line) ? [] : [line];
+    });
+  }
+
+  /** Only what a person recorded: a group nobody marked ready reads how long ago it was fired, and
+   * one reads served only once every row of it was marked served. */
+  #groupProgress(group: OrderGroup, rows: CurrentOrderRow[] | null): string | TemplateResult {
     if (group.state === "held") return t("table.group_held");
+    if (rows !== null && rows.length > 0 && rows.every((row) => row.servedAt !== null))
+      return t("table.row_served");
     if (group.away) return t("table.group_away");
     if (group.ready) return t("table.group_ready");
     if (group.firedAt === null) return t("table.group_fired");
     return html`<till-fired-ago .firedAt=${group.firedAt} .now=${this.now}></till-fired-ago>`;
+  }
+
+  /** The held group waiting for release: when it is to be fired, and once that time has come,
+   * Snooze and (where the waiter fires) Fire. Nothing while it has no time. */
+  #reminderOf(group: OrderGroup): TemplateResult | typeof nothing {
+    const reminder = this.currentOrders?.reminder;
+    // A time that cannot be read is no time.
+    if (reminder?.groupId !== group.id || this.#reminderDueAt() === Number.POSITIVE_INFINITY)
+      return nothing;
+    const name = t("table.group_n").replace("{n}", String(group.position));
+    if (!this.#reminderDue) {
+      const time = new Intl.DateTimeFormat(currentLocale(), {
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date(this.#reminderDueAt()));
+      return html`<p class="group-reminder" data-group-reminder="waiting">
+        ${t("table.reminder_at").replace("{time}", () => time)}
+      </p>`;
+    }
+    return html`<div class="group-reminder due" data-group-reminder="due">
+      <span class="group-reminder-text">${t("table.reminder_due")}</span>
+      <span class="group-actions">
+        <wt-button
+          variant="secondary"
+          data-reminder-snooze
+          aria-label=${`${t("table.reminder_snooze").replace("{n}", String(SNOOZE_MINUTES))} · ${name}`}
+          ?disabled=${this.groupCommandBusy}
+          @click=${() =>
+            this.#dispatch("snooze-group", {
+              groupId: group.id,
+              minutes: SNOOZE_MINUTES,
+            } satisfies SnoozeGroupDetail)}
+        >
+          ${t("table.reminder_snooze").replace("{n}", String(SNOOZE_MINUTES))}
+        </wt-button>
+        ${
+          this.fireControl === "waiter"
+            ? html`<wt-button
+                variant="primary"
+                data-reminder-fire
+                aria-label=${`${t("table.group_fire")} · ${name}`}
+                ?disabled=${this.groupCommandBusy}
+                @click=${() => (this.fireGroupPending = group)}
+              >
+                ${t("table.group_fire")}
+              </wt-button>`
+            : nothing
+        }
+      </span>
+    </div>`;
+  }
+
+  /** A row of Current orders. `held` is its group while that group is held, when the row offers Move
+   * and Split; otherwise it says what is known of it and, once released, offers Mark served. */
+  #currentRow(row: CurrentOrderRow, held: OrderGroup | null): TemplateResult {
+    const state = held === null ? this.#rowState(row) : nothing;
+    const served = decimal(row.servedQuantity);
+    const partly = compareDecimal(served, decimal("0")) > 0 && row.servedAt === null;
+    return html`<li class="group-line current-row" data-group-line=${row.lineId}>
+      <span class="row-what">
+        <span class="group-line-name">${row.name} ×${this.#displayQty(row.quantity)}</span>
+        ${row.extras.map(
+          (extra) =>
+            html`<span class="row-extra">${extra.name} ×${this.#displayQty(extra.quantity)}</span>`,
+        )}
+        ${
+          row.note === null
+            ? nothing
+            : html`<span class="line-note">${t("line.note.label")}: ${row.note}</span>`
+        }
+        ${
+          state === nothing && !partly
+            ? nothing
+            : html`<span class="row-facts">
+                ${state === nothing ? nothing : html`<span data-row-state>${state}</span>`}
+                ${partly ? html`<span data-row-served>${this.#servedOf(row)}</span>` : nothing}
+              </span>`
+        }
+      </span>
+      ${
+        held === null
+          ? this.#serveActions(row)
+          : !this.#billOpen(row.workingOrderId)
+            ? nothing
+            : this.#heldRowActions(
+                {
+                  lineId: row.lineId,
+                  name: row.name,
+                  quantity: row.quantity,
+                  splits:
+                    row.unitPrecision === 0 &&
+                    compareDecimal(decimal(row.quantity), decimal("1")) > 0 &&
+                    row.extras.length === 0,
+                },
+                held,
+              )
+      }
+    </li>`;
+  }
+
+  /** A bill the party's bills name as open, or the bill on screen when they do not name it. Held
+   * work moves only between open bills: the server refuses a line on a paid one. */
+  #billOpen(workingOrderId: string): boolean {
+    const bill = this.bills.find((candidate) => candidate.workingOrderId === workingOrderId);
+    return bill === undefined ? workingOrderId === this.orderId : bill.status === "open";
+  }
+
+  /** What was recorded of a row, and nothing more: no kitchen item means no kitchen state. */
+  #rowState(row: CurrentOrderRow): string | TemplateResult | typeof nothing {
+    if (row.servedAt !== null) return t("table.row_served");
+    if (!row.released) return t("table.group_held");
+    const kitchen = row.kitchen;
+    if (kitchen === null || kitchen.firedAt === null) return nothing;
+    if (kitchen.awayAt !== null) return t("table.group_away");
+    if (kitchen.state === "ready") return t("table.group_ready");
+    if (kitchen.state === "preparing") return t("table.row_preparing");
+    return html`<till-fired-ago .firedAt=${kitchen.firedAt} .now=${this.now}></till-fired-ago>`;
+  }
+
+  #servedOf(row: CurrentOrderRow): string {
+    return t("table.row_served_of")
+      .replace("{served}", this.#displayQty(row.servedQuantity))
+      .replace("{quantity}", this.#displayQty(row.quantity));
+  }
+
+  #serveActions(row: CurrentOrderRow): TemplateResult | typeof nothing {
+    const serves = row.released && row.servedAt === null;
+    const undoes = compareDecimal(decimal(row.servedQuantity), decimal("0")) > 0;
+    if (!serves && !undoes) return nothing;
+    const label = (key: StringKey) => `${t(key)} · ${row.name}`;
+    return html`<span class="group-line-actions">
+      ${
+        undoes
+          ? html`<wt-button
+              variant="secondary"
+              data-unserve-row=${row.lineId}
+              aria-label=${label("table.unserve")}
+              ?disabled=${this.groupCommandBusy}
+              @click=${() => this.#requestServe(row, true)}
+            >
+              ${t("table.unserve")}
+            </wt-button>`
+          : nothing
+      }
+      ${
+        serves
+          ? html`<wt-button
+              variant="primary"
+              data-serve-row=${row.lineId}
+              aria-label=${label("table.serve")}
+              ?disabled=${this.groupCommandBusy}
+              @click=${() => this.#requestServe(row, false)}
+            >
+              ${t("table.serve")}
+            </wt-button>`
+          : nothing
+      }
+    </span>`;
+  }
+
+  /** The most a press can mark served (what is left), or take back (what is served). */
+  #mostToServe(row: CurrentOrderRow, undo: boolean): Decimal {
+    const served = decimal(row.servedQuantity);
+    return decimal(trimQuantity(undo ? served : subtractDecimal(decimal(row.quantity), served)));
+  }
+
+  /** More than one whole unit asks how many; anything else, a weighed dish included, goes whole. */
+  #requestServe(row: CurrentOrderRow, undo: boolean): void {
+    const most = this.#mostToServe(row, undo);
+    if (row.unitPrecision === 0 && compareDecimal(most, decimal("1")) > 0) {
+      this.servePending = { row, undo, count: most };
+      return;
+    }
+    this.#sendServe(row, undo, most);
+  }
+
+  #sendServe(row: CurrentOrderRow, undo: boolean, quantity: Decimal): void {
+    this.#dispatch(undo ? "unserve-lines" : "serve-lines", {
+      items: [{ lineId: row.lineId, quantity: trimQuantity(quantity) }],
+    } satisfies ServeLinesDetail);
+  }
+
+  #stepServe(delta: -1 | 1): void {
+    const pending = this.servePending!;
+    const count =
+      delta === -1
+        ? subtractDecimal(pending.count, decimal("1"))
+        : addDecimal(pending.count, decimal("1"));
+    this.servePending = { ...pending, count };
+  }
+
+  #confirmServe(): void {
+    const pending = this.servePending;
+    if (pending === null) return;
+    this.servePending = null;
+    this.#sendServe(pending.row, pending.undo, pending.count);
+  }
+
+  /** Always present, driven by {@link servePending}, so an Escape close flows back through
+   * `wt-close` into the state. */
+  #serveDialog(): TemplateResult {
+    const pending = this.servePending;
+    const count = pending === null ? 0 : Number.parseInt(pending.count, 10);
+    return html`<wt-dialog
+      ${trackDialog()}
+      class="serve-dialog"
+      data-serve-dialog
+      .open=${pending !== null}
+      .heading=${t(pending?.undo === true ? "table.unserve" : "table.serve")}
+      @wt-close=${() => (this.servePending = null)}
+    >
+      ${
+        pending === null
+          ? nothing
+          : html`<p class="move-dish">
+                ${pending.row.name} ×${this.#displayQty(pending.row.quantity)}
+              </p>
+              ${
+                compareDecimal(decimal(pending.row.servedQuantity), decimal("0")) > 0
+                  ? html`<p class="serve-so-far">${this.#servedOf(pending.row)}</p>`
+                  : nothing
+              }
+              <div class="split-stepper">
+                <span>${t("table.split_quantity")}</span>
+                <wt-button
+                  variant="ghost"
+                  size="sm"
+                  data-serve-dec
+                  aria-label=${`${t("basket.decrease")} ${pending.row.name}`}
+                  ?disabled=${count <= 1}
+                  @click=${() => this.#stepServe(-1)}
+                >
+                  <span aria-hidden="true">−</span>
+                </wt-button>
+                <span class="split-count" data-serve-count>${count}</span>
+                <wt-button
+                  variant="ghost"
+                  size="sm"
+                  data-serve-inc
+                  aria-label=${`${t("basket.increase")} ${pending.row.name}`}
+                  ?disabled=${
+                    compareDecimal(pending.count, this.#mostToServe(pending.row, pending.undo)) >= 0
+                  }
+                  @click=${() => this.#stepServe(1)}
+                >
+                  <span aria-hidden="true">+</span>
+                </wt-button>
+              </div>`
+      }
+      <div slot="footer" class="cancel-actions">
+        <wt-button
+          variant="secondary"
+          data-serve-dismiss
+          @click=${() => (this.servePending = null)}
+        >
+          ${t("action.back")}
+        </wt-button>
+        <wt-button variant="primary" data-serve-confirm @click=${() => this.#confirmServe()}>
+          ${
+            pending?.undo === true
+              ? t("table.unserve_n").replace("{n}", String(count))
+              : countText(count, "table.serve_n", "table.serve_n_one")
+          }
+        </wt-button>
+      </div>
+    </wt-dialog>`;
   }
 
   /** `group` is null for a fired group's line, which offers nothing. Split quantity is offered on a
@@ -2678,47 +3143,62 @@ export class TillTableOrderScreen extends LitElement {
    * extras. */
   #groupLine(line: TabLine, group: OrderGroup | null): TemplateResult {
     const name = this.#nameForLine(line);
-    const label = (key: StringKey) => `${t(key)} · ${name}`;
-    const splits =
-      group !== null &&
-      this.#moreThanOneWholeUnit(line) &&
-      !this.#dishesWithExtras.has(line.lineNo);
     return html`<li class="group-line" data-group-line=${line.id}>
       <span class="group-line-name">${name} ×${this.#displayQty(line.quantity)}</span>
       ${
         group === null
           ? nothing
-          : html`<span class="group-line-actions">
-              <wt-button
-                variant="secondary"
-                data-move-line=${line.id}
-                aria-label=${label("table.move_line")}
-                ?disabled=${this.groupCommandBusy}
-                @click=${() => (this.movePending = { line, group })}
-              >
-                ${t("table.move_line")}
-              </wt-button>
-              ${
-                splits
-                  ? html`<wt-button
-                      variant="secondary"
-                      data-split-group-line=${line.id}
-                      aria-label=${label("table.split_group_line")}
-                      ?disabled=${this.groupCommandBusy}
-                      @click=${() =>
-                        this.#dispatch("split-group-line", {
-                          lineId: line.id,
-                          groupId: group.id,
-                          quantity: line.quantity,
-                        } satisfies SplitGroupLineDetail)}
-                    >
-                      ${t("table.split_group_line")}
-                    </wt-button>`
-                  : nothing
-              }
-            </span>`
+          : this.#heldRowActions(
+              {
+                lineId: line.id,
+                name,
+                quantity: line.quantity,
+                splits:
+                  this.#moreThanOneWholeUnit(line) && !this.#dishesWithExtras.has(line.lineNo),
+              },
+              group,
+            )
       }
     </li>`;
+  }
+
+  #heldRowActions(row: HeldRow, group: OrderGroup): TemplateResult {
+    const label = (key: StringKey) => `${t(key)} · ${row.name}`;
+    return html`<span class="group-line-actions">
+      <wt-button
+        variant="secondary"
+        data-move-line=${row.lineId}
+        aria-label=${label("table.move_line")}
+        ?disabled=${this.groupCommandBusy}
+        @click=${() =>
+          (this.movePending = {
+            lineId: row.lineId,
+            name: row.name,
+            quantity: row.quantity,
+            group,
+          })}
+      >
+        ${t("table.move_line")}
+      </wt-button>
+      ${
+        row.splits
+          ? html`<wt-button
+              variant="secondary"
+              data-split-group-line=${row.lineId}
+              aria-label=${label("table.split_group_line")}
+              ?disabled=${this.groupCommandBusy}
+              @click=${() =>
+                this.#dispatch("split-group-line", {
+                  lineId: row.lineId,
+                  groupId: group.id,
+                  quantity: row.quantity,
+                } satisfies SplitGroupLineDetail)}
+            >
+              ${t("table.split_group_line")}
+            </wt-button>`
+          : nothing
+      }
+    </span>`;
   }
 
   #reorderHeld(held: OrderGroup[], from: number, to: number): void {
@@ -2732,8 +3212,8 @@ export class TillTableOrderScreen extends LitElement {
     if (pending === null) return;
     this.movePending = null;
     this.#dispatch("move-group-line", {
-      lineId: pending.line.id,
-      quantity: pending.line.quantity,
+      lineId: pending.lineId,
+      quantity: pending.quantity,
       target,
     } satisfies MoveGroupLineDetail);
   }
@@ -2752,9 +3232,7 @@ export class TillTableOrderScreen extends LitElement {
       ${
         pending === null
           ? nothing
-          : html`<p class="move-dish">
-                ${this.#nameForLine(pending.line)} ×${this.#displayQty(pending.line.quantity)}
-              </p>
+          : html`<p class="move-dish">${pending.name} ×${this.#displayQty(pending.quantity)}</p>
               <div class="action-options">
                 ${held.map((group, index) =>
                   group.id === pending.group.id

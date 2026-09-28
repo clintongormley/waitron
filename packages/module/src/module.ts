@@ -451,6 +451,8 @@ export interface VenueServiceContribution {
   readKitchenTicketGrouping(tx: Transaction): Promise<"combined" | "separate">;
   /** Whether held groups print in advance, marked HOLD. */
   readPrintHeldWork(tx: Transaction): Promise<boolean>;
+  /** Minutes after the work ahead is served that a held group is due to be released; null is off. */
+  readReleaseReminderMinutes(tx: Transaction): Promise<number | null>;
 }
 
 /** A reference to non-DB state a module owns, resolved to a path by the composition root. */

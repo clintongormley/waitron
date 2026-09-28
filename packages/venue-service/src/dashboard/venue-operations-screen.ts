@@ -30,6 +30,7 @@ import { t } from "./strings.js";
 
 const MODES: ServiceMode[] = ["table_tab", "prepay", "invoice_first", "ticket_then_pay"];
 const GROUPINGS: KitchenTicketGrouping[] = ["combined", "separate"];
+const REMINDER_MINUTES = [5, 10, 15, 20, 30];
 const DAYS = [0, 1, 2, 3, 4, 5, 6] as const;
 const VIEWS = ["status", "departments", "zones", "routing"] as const;
 type View = (typeof VIEWS)[number];
@@ -244,6 +245,21 @@ export class VenueOperationsScreen extends LitElement {
       await this.#load();
     } catch {
       this.fieldErrors = { kitchenTicketGrouping: t("venue.save_error") };
+    } finally {
+      this.busy = false;
+    }
+  }
+  async #saveReleaseReminderMinutes(releaseReminderMinutes: number | null): Promise<void> {
+    if (this.busy) return;
+    this.busy = true;
+    this.error = undefined;
+    this.fieldErrors = {};
+    try {
+      await this.api.saveReleaseReminderMinutes(releaseReminderMinutes);
+      this.model = { ...this.model!, releaseReminderMinutes };
+      await this.#load();
+    } catch {
+      this.fieldErrors = { releaseReminderMinutes: t("venue.save_error") };
     } finally {
       this.busy = false;
     }
@@ -706,8 +722,47 @@ export class VenueOperationsScreen extends LitElement {
         }}
       ></wt-switch>
       <p class="hint" data-test="print-held-work-hint">${t("venue.print_held_work_hint")}</p>
-      ${this.#fieldError("printHeldWork")}
+      ${this.#fieldError("printHeldWork")} ${this.#releaseReminder()}
     </section>`;
+  }
+  /** Blank is off. A stored value the list does not offer, which setup can bring in, is offered too
+   * so the select never shows another. */
+  #releaseReminder() {
+    const stored = this.model!.releaseReminderMinutes;
+    const choices =
+      stored === null || REMINDER_MINUTES.includes(stored)
+        ? REMINDER_MINUTES
+        : [...REMINDER_MINUTES, stored].sort((a, b) => a - b);
+    const invalid = !!this.fieldErrors.releaseReminderMinutes;
+    return html`<label class="setting"
+        ><span>${t("venue.release_reminder")}</span
+        ><select
+          name="releaseReminderMinutes"
+          ?disabled=${this.busy}
+          aria-invalid=${invalid}
+          aria-describedby=${
+            invalid ? "release-reminder-hint error-releaseReminderMinutes" : "release-reminder-hint"
+          }
+          @change=${(event: Event) => {
+            const value = (event.target as HTMLSelectElement).value;
+            void this.#saveReleaseReminderMinutes(value === "" ? null : Number(value));
+          }}
+        >
+          <option value="" .selected=${live(stored === null)}>
+            ${t("venue.release_reminder.off")}
+          </option>
+          ${choices.map(
+            (minutes) =>
+              html`<option value=${minutes} .selected=${live(minutes === stored)}>
+                ${t("venue.release_reminder.minutes").replace("{n}", String(minutes))}
+              </option>`,
+          )}
+        </select></label
+      >
+      <p class="hint" id="release-reminder-hint" data-test="release-reminder-hint">
+        ${t("venue.release_reminder_hint")}
+      </p>
+      ${this.#fieldError("releaseReminderMinutes")}`;
   }
   #kitchenTicketGrouping() {
     const stored = this.model!.kitchenTicketGrouping;

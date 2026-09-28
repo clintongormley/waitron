@@ -7,6 +7,7 @@ import {
   printJobs,
   ticketItems,
   tills,
+  visits,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -43,6 +44,7 @@ import type { TillConfig } from "./till-config.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import { fireAll, openPartyTab, serveLine, unserveLine } from "./testing/serve-line.js";
 import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
 import { createTable, createZone, updateTable } from "./tables.js";
 import {
@@ -54,7 +56,7 @@ import {
   listExpoQueue,
   listStationQueue,
   listTablesWithState,
-  markLineServed,
+  markServed,
   mergeTabs,
   moveTabLines,
   openTab,
@@ -64,7 +66,7 @@ import {
   setLineCourse,
   splitOffCheck,
   transferLines,
-  unmarkLineServed,
+  unmarkServed,
   updateHeldOrder,
   updateOrderLine,
   voidTabLine,
@@ -552,7 +554,7 @@ describe("voidTabLine", () => {
   });
 });
 
-describe("markLineServed / unmarkLineServed", () => {
+describe("markServed / unmarkServed", () => {
   async function servedAtByLine(tabId: string): Promise<Map<number, string | null>> {
     const rows = await db
       .select({ lineNo: workingOrderLines.lineNo, servedAt: workingOrderLines.servedAt })
@@ -562,10 +564,18 @@ describe("markLineServed / unmarkLineServed", () => {
     return new Map(rows.map((r) => [r.lineNo, r.servedAt]));
   }
 
-  it("marks one line served, unmarks it, and refuses an unknown line (tab.line_not_found)", async () => {
+  async function visitRevision(visitId: string): Promise<number> {
+    const [row] = await db
+      .select({ revision: visits.revision })
+      .from(visits)
+      .where(eq(visits.id, visitId));
+    return row!.revision;
+  }
+
+  it("marks one line served, unmarks it, and refuses an unknown line (group.not_found)", async () => {
     const { cfg, tableId, cafeOffer, aguaOffer } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, {
+    const { tabId, visitId } = await asApp(cfg, (tx) =>
+      openPartyTab(tx, cfg, {
         tableId,
         lines: [
           { menuItemId: cafeOffer, quantity: "1" },
@@ -574,53 +584,71 @@ describe("markLineServed / unmarkLineServed", () => {
       }),
     );
 
-    await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1));
+    // Only released work can be served.
+    await asApp(cfg, (tx) => fireAll(tx, cfg, tabId));
+    await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
     let served = await servedAtByLine(tabId);
     expect(served.get(1)).not.toBeNull();
     expect(served.get(2)).toBeNull();
 
-    await asApp(cfg, (tx) => unmarkLineServed(tx, cfg, tabId, 1));
+    await asApp(cfg, (tx) => unserveLine(tx, cfg, tabId, 1));
     served = await servedAtByLine(tabId);
     expect(served.get(1)).toBeNull();
 
-    await expect(asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 99))).rejects.toMatchObject({
-      code: "tab.line_not_found",
-      params: { tabId, lineNo: 99 },
+    const lineId = randomUUID();
+    const command = async () => ({
+      submissionId: randomUUID(),
+      expectedVisitRevision: await visitRevision(visitId),
+      operatorId: OPERATOR,
     });
-    await expect(asApp(cfg, (tx) => unmarkLineServed(tx, cfg, tabId, 99))).rejects.toMatchObject({
-      code: "tab.line_not_found",
-      params: { tabId, lineNo: 99 },
+    const items = [{ lineId, quantity: "1" }];
+    await expect(
+      asApp(cfg, async (tx) => markServed(tx, cfg, visitId, items, await command())),
+    ).rejects.toMatchObject({ code: "group.not_found", params: { lineId } });
+    await expect(
+      asApp(cfg, async (tx) => unmarkServed(tx, cfg, visitId, items, await command())),
+    ).rejects.toMatchObject({ code: "group.not_found", params: { lineId } });
+  });
+
+  it("refuses a party that has left (visit.not_open)", async () => {
+    const { cfg, tableId, cafeOffer } = await setupVenue();
+    const { tabId, visitId } = await asApp(cfg, (tx) =>
+      openPartyTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
+    );
+    // A paid bill's line can still be marked served (plan D18); a party that has gone cannot.
+    await db
+      .update(visits)
+      .set({ state: "closed", closedAt: nowIso() })
+      .where(eq(visits.id, visitId));
+    await expect(asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1))).rejects.toMatchObject({
+      code: "visit.not_open",
+      params: { visitId },
     });
   });
 
-  it("refuses a settled tab (tab.not_open — the require_open_parent trigger is the DB backstop)", async () => {
+  it("refuses a line on a bill of no party, carrying a real line — the party is the sole gate (group.not_found)", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
-    // The `require_open_parent` trigger would also refuse this, so this case does not isolate the
-    // status check; the next case isolates the back-pointer check.
-    await db.execute(
-      sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
-    );
-    await expect(asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1))).rejects.toMatchObject({
-      code: "tab.not_open",
-      params: { tabId },
+    const other = await asApp(cfg, async (tx) => {
+      const { zoneId } = await offerProducts(tx, cfg, { zone: "tables" });
+      const { id } = await createTable(tx, cfg, { label: "T-party", zoneId });
+      return seatTable(tx, cfg, { tableId: id, guestCount: null, operatorId: OPERATOR });
     });
-  });
-
-  it("refuses an open order no table points at, carrying a real line — the back-pointer check is the sole gate (tab.not_open)", async () => {
-    const { cfg, tableId, cafeOffer } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
-    );
-    // The order stays open with a real line, so no trigger fires and the update would match a row:
-    // only assertAnchoredTabOpen's back-pointer check can refuse it.
-    await db.execute(sql`update dining_tables set tab_id = null where id = ${tableId}`);
-    await expect(asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1))).rejects.toMatchObject({
-      code: "tab.not_open",
-      params: { tabId },
-    });
+    const [line] = await db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId));
+    await expect(
+      asApp(cfg, (tx) =>
+        markServed(tx, cfg, other.visitId, [{ lineId: line!.id, quantity: "1" }], {
+          submissionId: randomUUID(),
+          expectedVisitRevision: other.revision,
+          operatorId: OPERATOR,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "group.not_found", params: { lineId: line!.id } });
   });
 });
 
@@ -628,7 +656,7 @@ describe("readTabLines", () => {
   it("reads an open tab's lines in line_no order with locked gross price, quantity and served state", async () => {
     const { cfg, cafeId, aguaId, tableId, cafeOffer, aguaOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, {
+      openPartyTab(tx, cfg, {
         tableId,
         lines: [
           { menuItemId: cafeOffer, quantity: "1" },
@@ -636,7 +664,8 @@ describe("readTabLines", () => {
         ],
       }),
     );
-    await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1));
+    await asApp(cfg, (tx) => fireAll(tx, cfg, tabId));
+    await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
 
     const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
     expect(lines).toHaveLength(2);
@@ -981,7 +1010,7 @@ describe("listTablesWithState (occupancy)", () => {
     await asApp(cfg, (tx) => updateTable(tx, cfg, tableId, { zoneId: zone.id }));
 
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, {
+      openPartyTab(tx, cfg, {
         tableId,
         lines: [
           { menuItemId: cafeMenuItemId, quantity: "1" },
@@ -1000,11 +1029,12 @@ describe("listTablesWithState (occupancy)", () => {
       pendingToServe: 0,
     });
 
-    await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1));
+    await asApp(cfg, (tx) => fireAll(tx, cfg, tabId));
+    await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
     rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
     expect(rows.find((t) => t.id === tableId)!.pendingToServe).toBe(1);
 
-    await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 2));
+    await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 2));
     rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
     expect(rows.find((t) => t.id === tableId)!.pendingToServe).toBe(0);
   });
@@ -2390,6 +2420,17 @@ async function twoTabs() {
 }
 type Tabs = Awaited<ReturnType<typeof twoTabs>>;
 
+/** A party's tab at a table of its own, with a café line of 3 fired. */
+async function partyTab() {
+  const venue = await setupVenue();
+  const { cfg, tableId, cafeOffer } = venue;
+  const { tabId } = await asApp(cfg, (tx) =>
+    seatTable(tx, cfg, { tableId, guestCount: null, operatorId: OPERATOR }),
+  );
+  await asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "3" }]));
+  return { ...venue, tabId };
+}
+
 describe("every write to an open order's lines counts on its revision (plan D10)", () => {
   it.each<[string, (tx: Transaction, tabs: Tabs) => Promise<unknown>, ("tab" | "other")[]]>([
     [
@@ -2402,8 +2443,6 @@ describe("every write to an open order's lines counts on its revision (plan D10)
     ["a send", (tx, t) => sendLines(tx, t.cfg, t.tabId, [2]), ["tab"]],
     ["a course fired", (tx, t) => fireCourse(tx, t.cfg, t.tabId, t.courseId, OPERATOR), ["tab"]],
     ["a course change", (tx, t) => setLineCourse(tx, t.cfg, t.tabId, 2, null), ["tab"]],
-    ["a served mark", (tx, t) => markLineServed(tx, t.cfg, t.tabId, 1), ["tab"]],
-    ["a served mark cleared", (tx, t) => unmarkLineServed(tx, t.cfg, t.tabId, 1), ["tab"]],
     [
       "a transfer",
       (tx, t) => transferLines(tx, t.cfg, t.tabId, t.otherId, [{ lineNo: 1, quantity: "1" }]),
@@ -2436,6 +2475,18 @@ describe("every write to an open order's lines counts on its revision (plan D10)
       const id = which === "tab" ? tabs.tabId : tabs.otherId;
       expect(await revisionOf(id)).toBe(before[which] + 1);
     }
+  });
+
+  // Serving is a command on a party, and `twoTabs`' tabs have none.
+  it("a served mark, and a served mark cleared", async () => {
+    const { cfg, tabId } = await partyTab();
+    const before = await revisionOf(tabId);
+
+    await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
+    expect(await revisionOf(tabId)).toBe(before + 1);
+
+    await asApp(cfg, (tx) => unserveLine(tx, cfg, tabId, 1));
+    expect(await revisionOf(tabId)).toBe(before + 2);
   });
 
   it("does not count a write refused as out of date, nor one that changes nothing", async () => {
@@ -2504,7 +2555,7 @@ describe("a line write on an order whose card payment is in flight is refused (p
   }
 
   /** Everything a refused write could have changed on either tab. */
-  async function snapshot(t: Tabs) {
+  async function snapshot(t: Pick<Tabs, "tabId" | "otherId">) {
     const lines = await db
       .select({
         orderId: workingOrderLines.workingOrderId,
@@ -2545,7 +2596,6 @@ describe("a line write on an order whose card payment is in flight is refused (p
     ["a send", (tx, t) => sendLines(tx, t.cfg, t.tabId, [2]), ["tab"]],
     ["a course fired", (tx, t) => fireCourse(tx, t.cfg, t.tabId, t.courseId, OPERATOR), ["tab"]],
     ["a course change", (tx, t) => setLineCourse(tx, t.cfg, t.tabId, 2, null), ["tab"]],
-    ["a served mark", (tx, t) => markLineServed(tx, t.cfg, t.tabId, 1), ["tab"]],
     [
       "a transfer",
       (tx, t) => transferLines(tx, t.cfg, t.tabId, t.otherId, [{ lineNo: 1, quantity: "1" }]),
@@ -2582,6 +2632,21 @@ describe("a line write on an order whose card payment is in flight is refused (p
       expect(await snapshot(tabs)).toEqual(before);
       await markPaying(paying, null);
     }
+  });
+
+  it("a served mark", async () => {
+    const tab = await partyTab();
+    const tabs = { tabId: tab.tabId, otherId: tab.tabId };
+    await markPaying(tab.tabId, MARK);
+    const before = await snapshot(tabs);
+
+    await expect(
+      asApp(tab.cfg, (tx) => serveLine(tx, tab.cfg, tab.tabId, 1)),
+    ).rejects.toMatchObject({
+      code: "order.payment_in_flight",
+      params: { workingOrderId: tab.tabId },
+    });
+    expect(await snapshot(tabs)).toEqual(before);
   });
 
   it("refuses even an edit that changes nothing, one line or the whole order", async () => {

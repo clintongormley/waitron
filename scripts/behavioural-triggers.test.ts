@@ -43,7 +43,10 @@ import {
  * variant is one level deep, keeps the parent it was created with, and no product's id changes.
  * `working_orders_enforce_transition` is re-created, with the same name, by
  * `packages/db/drizzle/0015_settled_order_freeze_new_columns.sql` and again by
- * `packages/db/drizzle/0019_settled_order_freeze_visit_id.sql`. The one trigger that ACTS rather
+ * `packages/db/drizzle/0019_settled_order_freeze_visit_id.sql`, and
+ * `working_order_lines_require_open_parent_update` by `0027_line_vat_class_triggers.sql` and again,
+ * with its served exception and a refusal to move a line off an order that is not open, by
+ * `packages/db/drizzle/0033_line_served_exception.sql`. The one trigger that ACTS rather
  * than refuses is `visits_clear_table_status` (`packages/db/drizzle/0020_visit_clears_table_status.sql`):
  * a table's service status comes off when the party's visit leaves `open`, on every table still a
  * member of it. It replaced `working_orders_clear_table_status`, which cleared it when a tab settled.
@@ -380,6 +383,31 @@ function seed(connection) {
       `values ('dp-drift', 'Caja que deriva', 'till', '${STAMP}', '${STAMP}')`,
     `insert into devices (id, location_id, device_profile_id, till_id, label, token_hash, active, enrolled_at, created_at) ` +
       `values ('dev-off', 'loc', 'dp-drift', 'till', 'Caja 4', 'hash', 0, '${STAMP}', '${STAMP}')`,
+
+    // Lines for the served exception, written while their orders are open; the orders leave open
+    // below. `loc-relocale` is a venue of its own so its invoice locales can change without moving
+    // what any other case reads.
+    `insert into locations (id, name, invoice_locales, operation_description) ` +
+      `values ('loc-relocale', 'Venue 2', '["es","ca"]', 'Restaurante')`,
+    `insert into tills (id, location_id, name, created_at) ` +
+      `values ('till-relocale', 'loc-relocale', 'Till 3', '${STAMP}')`,
+    workingOrder("wo-served-placed", "open"),
+    workingOrder("wo-served-settled", "open"),
+    workingOrder("wo-served-orphan", "open"),
+    workingOrder("wo-served-open", "open"),
+    workingOrder("wo-served-relocale", "open", { tillId: "till-relocale" }),
+    line("line-served-placed", "wo-served-placed", '{"es":"Plato","ca":"Plat"}'),
+    line("line-served-settled", "wo-served-settled", '{"es":"Plato","ca":"Plat"}'),
+    line("line-served-frozen", "wo-served-settled", '{"es":"Plato","ca":"Plat"}'),
+    line("line-served-unchanged", "wo-served-settled", '{"es":"Plato","ca":"Plat"}'),
+    line("line-served-reparent", "wo-served-settled", '{"es":"Plato","ca":"Plat"}'),
+    line("line-served-orphan", "wo-served-orphan", '{"es":"Plato","ca":"Plat"}'),
+    line("line-served-open", "wo-served-open", '{"es":"Plato","ca":"Plat"}'),
+    line("line-open-moves", "wo-served-open", '{"es":"Plato","ca":"Plat"}'),
+    line("line-served-relocale", "wo-served-relocale", '{"es":"Plato","ca":"Plat"}'),
+    `update working_orders set status = 'placed' where id = 'wo-served-placed'`,
+    `update working_orders set status = 'settled', settled_at = '${STAMP}' ` +
+      `where id in ('wo-served-settled', 'wo-served-orphan', 'wo-served-relocale')`,
   ];
   for (const statement of statements) connection.exec(statement);
 }
@@ -607,6 +635,179 @@ describe("working_order_lines_require_open_parent", () => {
     expect(refusalFor(connection, `delete from working_order_lines where id = 'line-delete'`)).toBe(
       OPEN_PARENT_REFUSAL,
     );
+  });
+});
+
+/**
+ * Every column of the line except the two a served mark moves, read from the migrated table rather
+ * than listed here, so a column added later is tried the day it lands. Each value differs from the
+ * seeded one; the two description maps keep the venue's exact locales so the locale triggers accept
+ * them and only the open-parent rule is left to refuse.
+ */
+const SERVED_COLUMNS = new Set(["served_quantity", "served_at"]);
+const FROZEN_LINE_COLUMNS = connection
+  .prepare(`select name from pragma_table_info('working_order_lines') order by cid`)
+  .all()
+  .map((row) => String(row.name))
+  .filter((name) => !SERVED_COLUMNS.has(name));
+const CHANGED_VALUE = {
+  // Another order that is not open and resolves to the same venue, so the locale triggers accept it.
+  working_order_id: `'wo-placed'`,
+  descriptions: `'{"ca":"Plat nou","es":"Plato nuevo"}'`,
+  variant_descriptions: `'{"ca":"Variant","es":"Variante"}'`,
+};
+
+describe("working_order_lines_require_open_parent_update's served exception", () => {
+  it("reads the table's columns, so the per-column cases below are not vacuous", () => {
+    expect(FROZEN_LINE_COLUMNS).toEqual(
+      expect.arrayContaining(["id", "working_order_id", "group_id", "credited_to", "note"]),
+    );
+  });
+
+  it("accepts a served mark, and its undo, on a line whose order is placed", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set served_quantity = 1000, served_at = '${STAMP}' ` +
+          `where id = 'line-served-placed'`,
+      ),
+    ).toBeUndefined();
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set served_quantity = 0, served_at = null ` +
+          `where id = 'line-served-placed'`,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("accepts part of a line served on a settled order, with served_at left empty", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set served_quantity = 500 where id = 'line-served-settled'`,
+      ),
+    ).toBeUndefined();
+    expect(
+      connection
+        .prepare(
+          `select served_quantity, served_at from working_order_lines where id = 'line-served-settled'`,
+        )
+        .get(),
+    ).toEqual({ served_quantity: 500, served_at: null });
+  });
+
+  it("accepts served_at changed on its own on a settled order", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set served_at = '${STAMP}' where id = 'line-served-settled'`,
+      ),
+    ).toBeUndefined();
+  });
+
+  it.each(FROZEN_LINE_COLUMNS)(
+    "refuses a served mark on a settled order that also changes %s",
+    (column) => {
+      const value = CHANGED_VALUE[column] ?? `'changed'`;
+      expect(
+        refusalFor(
+          connection,
+          `update working_order_lines set served_quantity = 1000, served_at = '${STAMP}', ` +
+            `${column} = ${value} where id = 'line-served-frozen'`,
+        ),
+      ).toBe(OPEN_PARENT_REFUSAL);
+    },
+  );
+
+  it("refuses an update of a settled order's line that changes no served column", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set served_quantity = served_quantity, served_at = served_at ` +
+          `where id = 'line-served-unchanged'`,
+      ),
+    ).toBe(OPEN_PARENT_REFUSAL);
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set note = 'x' where id = 'line-served-unchanged'`,
+      ),
+    ).toBe(OPEN_PARENT_REFUSAL);
+  });
+
+  // An order that does not exist resolves to no venue, so the locale check refuses this write too;
+  // it is set aside for the one statement, so the answer is this rule's alone.
+  it("refuses a served mark on a line whose order row disappeared", () => {
+    connection.exec(`delete from working_orders where id = 'wo-served-orphan'`);
+    const localeCheck = connection
+      .prepare(
+        `select sql from sqlite_master where name = 'working_order_lines_check_locales_update'`,
+      )
+      .get().sql;
+    connection.exec(`drop trigger working_order_lines_check_locales_update`);
+    try {
+      expect(
+        refusalFor(
+          connection,
+          `update working_order_lines set served_quantity = 1000, served_at = '${STAMP}' ` +
+            `where id = 'line-served-orphan'`,
+        ),
+      ).toBe(OPEN_PARENT_REFUSAL);
+    } finally {
+      connection.exec(localeCheck);
+    }
+  });
+
+  it("leaves a line on an open order writable in every column, served ones included", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set served_quantity = 1000, served_at = '${STAMP}', ` +
+          `note = 'x', group_id = 'group', credited_to = 'person', unit_price_gross = 200 ` +
+          `where id = 'line-served-open'`,
+      ),
+    ).toBeUndefined();
+  });
+
+  // The locale triggers have no `UPDATE OF`, so they re-read `descriptions` against the venue's
+  // CURRENT invoice locales on any update, a served mark on a settled order's line included.
+  it("refuses a served mark on a settled line once its venue's invoice locales changed", () => {
+    connection.exec(`update locations set invoice_locales = '["es"]' where id = 'loc-relocale'`);
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set served_quantity = 1000, served_at = '${STAMP}' ` +
+          `where id = 'line-served-relocale'`,
+      ),
+    ).toBe(LOCALES_REFUSAL);
+  });
+});
+
+describe("working_order_lines_require_open_parent_update moving a line between orders", () => {
+  it("refuses moving a settled order's line onto an open order, alone or with other changes", () => {
+    for (const also of [
+      "",
+      ", name = 'changed', unit_price_gross = 1",
+      ", served_quantity = 1000",
+    ]) {
+      expect(
+        refusalFor(
+          connection,
+          `update working_order_lines set working_order_id = 'wo-open'${also} ` +
+            `where id = 'line-served-reparent'`,
+        ),
+      ).toBe(OPEN_PARENT_REFUSAL);
+    }
+  });
+
+  it("accepts moving a line from one open order to another", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set working_order_id = 'wo-open' where id = 'line-open-moves'`,
+      ),
+    ).toBeUndefined();
   });
 });
 

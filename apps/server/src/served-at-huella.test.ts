@@ -42,13 +42,13 @@ import {
   addTabRound,
   advanceTicketItem,
   fireLines,
-  markLineServed,
   openTab,
   type TicketState,
 } from "./working-order.js";
 import { payWorkingOrder } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
+import { fireAll, openPartyTab, serveLine } from "./testing/serve-line.js";
 import "./errors.js";
 
 // The fiscal firewall (CLAUDE.md §5): our own metadata never enters `computeHuella`. `served_at` is
@@ -247,10 +247,11 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
 async function openServeAndPay(
   shop: Shop,
   serveEveryLine: boolean,
+  options: { fire?: boolean } = {},
 ): Promise<{ tabId: string; huella: string }> {
   const { db, backend, cfg, aguaMenuItemId, cafeMenuItemId, tableId } = shop;
   const { tabId } = await withTransaction(db, async (tx) => {
-    return openTab(tx, cfg, {
+    return openPartyTab(tx, cfg, {
       tableId,
       lines: [
         { menuItemId: aguaMenuItemId, quantity: "1" },
@@ -259,10 +260,15 @@ async function openServeAndPay(
     });
   });
 
+  // Only released work can be served. Both tabs of a comparison are fired, so
+  // `served_at` stays the one difference between them.
+  if (options.fire) {
+    await withTransaction(db, (tx) => fireAll(tx, cfg, tabId));
+  }
   if (serveEveryLine) {
     await withTransaction(db, async (tx) => {
-      await markLineServed(tx, cfg, tabId, 1);
-      await markLineServed(tx, cfg, tabId, 2);
+      await serveLine(tx, cfg, tabId, 1);
+      await serveLine(tx, cfg, tabId, 2);
     });
   }
 
@@ -303,8 +309,8 @@ describe("served_at is not part of the huella", () => {
     const shopServed = await seedShop(suite.db, emisorNif);
     const shopUnserved = await seedShop(suiteB.db, emisorNif);
 
-    const served = await openServeAndPay(shopServed, true); // every line served
-    const unserved = await openServeAndPay(shopUnserved, false); // no line served
+    const served = await openServeAndPay(shopServed, true, { fire: true }); // every line served
+    const unserved = await openServeAndPay(shopUnserved, false, { fire: true }); // no line served
 
     // A FAILURE means `served_at` leaked into the filed record: fix the leak, never the test.
     expect(served.huella).toBe(unserved.huella);

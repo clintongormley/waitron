@@ -16,6 +16,7 @@ import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import type { CanvasDef, CapabilityFlag } from "./layout.js";
 import { WorkingOrderStore } from "./state/working-order.js";
 import type {
+  CurrentOrders,
   FloorZone,
   OrderGroup,
   PrintProblem,
@@ -65,6 +66,7 @@ function party(over: Partial<TableVisit> = {}): TableVisit {
     billCount: 1,
     tableIds: ["t4"],
     unsentDrafts: [],
+    reminder: null,
     ...over,
   };
 }
@@ -213,6 +215,10 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0, editSentLines: true }),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
     fireGroup: vi.fn().mockResolvedValue({ revision: 4 }),
+    markServed: vi.fn().mockResolvedValue({ revision: 4 }),
+    unmarkServed: vi.fn().mockResolvedValue({ revision: 4 }),
+    markGroupServed: vi.fn().mockResolvedValue({ revision: 4 }),
+    snoozeGroup: vi.fn().mockResolvedValue({ revision: 4 }),
     sendLines: vi.fn().mockResolvedValue(undefined),
     moveTab: vi.fn().mockResolvedValue(undefined),
     joinTable: vi.fn().mockResolvedValue(undefined),
@@ -3583,5 +3589,264 @@ describe("till-app: a party's kitchen tickets that have not printed", () => {
     emit(order, "reprint-kitchen-tickets", { workingOrderIds: ["wo-4"] });
     await flush(el);
     expect(banner(el)!.textContent).toContain(codeMessage("server.internal"));
+  });
+});
+
+// The shared stub has no `readCurrentOrders`, so every other suite here sees the read fail and the
+// groups fall back to this bill's lines.
+describe("till-app: Current orders", () => {
+  const noCurrentOrders = () => ({
+    readCurrentOrders: vi
+      .fn()
+      .mockResolvedValue({ revision: 3, reminder: null, groups: [], ungrouped: [] }),
+  });
+  const orders: CurrentOrders = {
+    revision: 3,
+    reminder: { groupId: "g2", dueAt: "2026-09-28T20:15:00.000Z" },
+    groups: [
+      {
+        id: "g1",
+        position: 1,
+        state: "fired",
+        firedAt: "2026-09-28T19:50:00.000Z",
+        remindAt: null,
+        addedLater: false,
+        rows: [
+          {
+            lineId: "line-1",
+            workingOrderId: "wo-4",
+            lineNo: 1,
+            name: "Vino",
+            quantity: "1.000",
+            unitPrecision: 0,
+            servedQuantity: "0.000",
+            servedAt: null,
+            released: true,
+            kitchen: null,
+            note: null,
+            extras: [],
+          },
+        ],
+      },
+    ],
+    ungrouped: [],
+  };
+
+  it("reads the party's Current orders with its order and hands them to the screen", async () => {
+    const { el } = await mountApp({ readCurrentOrders: vi.fn().mockResolvedValue(orders) });
+    const order = await openMesa(el);
+
+    expect(api.readCurrentOrders).toHaveBeenCalledWith("v1");
+    expect(order.currentOrders).toEqual(orders);
+  });
+
+  it("opens the order with no Current orders when their read fails", async () => {
+    const { el } = await mountApp({
+      readCurrentOrders: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    const order = await openMesa(el);
+
+    expect(order.currentOrders).toBeNull();
+    expect(order.lines).toEqual([tabLine]);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("hands them to an order card on a tablet too", async () => {
+    const { el } = await mountApp({
+      ...onTablet(),
+      readCurrentOrders: vi.fn().mockResolvedValue(orders),
+    });
+    const screen = await toFloor(el);
+    emit(screen, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+
+    expect(tabletOrderCard(el)!.currentOrders).toEqual(orders);
+  });
+
+  it("tells a tablet's order card when Current orders could not be read", async () => {
+    const { el } = await mountApp({
+      ...onTablet(),
+      readCurrentOrders: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    const screen = await toFloor(el);
+    emit(screen, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+
+    expect(tabletOrderCard(el)!.currentOrdersUnread).toBe(true);
+  });
+
+  it.each([
+    [
+      "serve-lines",
+      { items: [{ lineId: "line-1", quantity: "1" }] },
+      "markServed",
+      [[{ lineId: "line-1", quantity: "1" }]],
+    ],
+    [
+      "unserve-lines",
+      { items: [{ lineId: "line-1", quantity: "1" }] },
+      "unmarkServed",
+      [[{ lineId: "line-1", quantity: "1" }]],
+    ],
+    ["serve-group", { groupId: "g1" }, "markGroupServed", ["g1"]],
+    ["snooze-group", { groupId: "g2", minutes: 5 }, "snoozeGroup", ["g2", 5]],
+  ] as const)(
+    "%s goes to the party under a fresh submission id at the revision shown, then reads Current orders again",
+    async (type, detail, method, args) => {
+      const { el } = await mountApp(noCurrentOrders());
+      const order = await openMesa(el);
+      const reads = vi.mocked(api.readCurrentOrders).mock.calls.length;
+
+      emit(order, type, detail);
+      await flush(el);
+      emit(order, type, detail);
+      await flush(el);
+
+      const sent = (api as unknown as Record<string, ReturnType<typeof vi.fn>>)[method]!;
+      const command = { submissionId: expect.any(String), expectedVisitRevision: 3 };
+      expect(sent.mock.calls[0]).toEqual(["v1", ...args, command]);
+      // The second press carries the revision the first one answered, under an id of its own.
+      expect(sent.mock.calls[1]).toEqual(["v1", ...args, { ...command, expectedVisitRevision: 4 }]);
+      expect(sent.mock.calls[1]![args.length + 1].submissionId).not.toBe(
+        sent.mock.calls[0]![args.length + 1].submissionId,
+      );
+      expect(api.readCurrentOrders).toHaveBeenCalledTimes(reads + 2);
+      expect(banner(el)).toBeNull();
+    },
+  );
+
+  it("reloads Current orders and says what changed when another device changed the party first, never sending the press again", async () => {
+    const markServed = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "visit.out_of_date", visitId: "v1", revision: 5 })
+      .mockResolvedValue({ revision: 6 });
+    const { other, getTablesState } = floorThat(
+      [mesa4, mesa9],
+      [seated({}, { revision: 5 }), mesa9],
+    );
+    const { el } = await mountApp({ ...noCurrentOrders(), markServed, getTablesState });
+    const order = await openMesa(el);
+    other.acted = true;
+    const reads = vi.mocked(api.readCurrentOrders).mock.calls.length;
+    const items = [{ lineId: "line-1", quantity: "1" }];
+
+    emit(order, "serve-lines", { items });
+    await flush(el);
+
+    expect(markServed).toHaveBeenCalledOnce();
+    expect(api.readCurrentOrders).toHaveBeenCalledTimes(reads + 1);
+    const text = banner(el)!.textContent!;
+    expect(text).toContain(t("visit.changed").replace("{table}", "4"));
+    expect(text).toContain(t("visit.changed_other"));
+    expect(text).toContain(t("visit.try_again"));
+
+    emit(tableOrder(el)!, "serve-lines", { items });
+    await flush(el);
+    expect(markServed).toHaveBeenLastCalledWith("v1", items, {
+      submissionId: expect.any(String),
+      expectedVisitRevision: 5,
+    });
+  });
+
+  it("tells the screen when Current orders could not be read, and when they could", async () => {
+    const readCurrentOrders = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "server.internal" })
+      .mockResolvedValue(orders);
+    const { el } = await mountApp({ readCurrentOrders });
+    const order = await openMesa(el);
+    expect(order.currentOrdersUnread).toBe(true);
+
+    emit(order, "serve-lines", { items: [{ lineId: "line-1", quantity: "1" }] });
+    await flush(el);
+
+    expect(tableOrder(el)!.currentOrdersUnread).toBe(false);
+    expect(tableOrder(el)!.currentOrders).toEqual(orders);
+  });
+
+  it("moves a held row on another open bill of the party from Current orders", async () => {
+    const heldOnCheck: CurrentOrders = {
+      revision: 3,
+      reminder: null,
+      groups: [
+        {
+          id: "g1",
+          position: 1,
+          state: "held",
+          firedAt: null,
+          remindAt: null,
+          addedLater: false,
+          rows: [
+            {
+              lineId: "line-9",
+              workingOrderId: "wo-check",
+              lineNo: 1,
+              name: "Pulpo",
+              quantity: "1.000",
+              unitPrecision: 0,
+              servedQuantity: "0.000",
+              servedAt: null,
+              released: false,
+              kitchen: null,
+              note: null,
+              extras: [],
+            },
+          ],
+        },
+      ],
+      ungrouped: [],
+    };
+    const moveLinesToGroup = vi.fn().mockResolvedValue({ revision: 4 });
+    const { el } = await mountApp({
+      readCurrentOrders: vi.fn().mockResolvedValue(heldOnCheck),
+      listGroups: vi.fn().mockResolvedValue({
+        revision: 3,
+        groups: [
+          {
+            id: "g1",
+            position: 1,
+            state: "held",
+            firedAt: null,
+            remindAt: null,
+            lineIds: ["line-9"],
+            summary: "1 × Pulpo",
+          },
+        ],
+      }),
+      moveLinesToGroup,
+    });
+    const order = await openMesa(el);
+    const reads = vi.mocked(api.readCurrentOrders).mock.calls.length;
+    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await flush(el);
+
+    order.shadowRoot!.querySelector<HTMLElement>('[data-move-line="line-9"]')!.click();
+    await flush(el);
+    order.shadowRoot!.querySelector<HTMLElement>('[data-move-target="new"]')!.click();
+    await flush(el);
+
+    expect(moveLinesToGroup).toHaveBeenCalledExactlyOnceWith(
+      "v1",
+      [{ lineId: "line-9", quantity: "1.000" }],
+      "new",
+      { submissionId: expect.any(String), expectedVisitRevision: 3 },
+    );
+    expect(api.readCurrentOrders).toHaveBeenCalledTimes(reads + 1);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("says a refused serve in its own words and reads Current orders again", async () => {
+    const { el } = await mountApp({
+      ...noCurrentOrders(),
+      markGroupServed: vi.fn().mockRejectedValue({ code: "group.line_held" }),
+    });
+    const order = await openMesa(el);
+    const reads = vi.mocked(api.readCurrentOrders).mock.calls.length;
+
+    emit(order, "serve-group", { groupId: "g1" });
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("group.line_held"));
+    expect(api.readCurrentOrders).toHaveBeenCalledTimes(reads + 1);
   });
 });

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   orderGroupEvents,
@@ -8,12 +8,14 @@ import {
   ticketItems,
   visits,
   workingOrderLines,
+  workingOrders,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createCourse, deactivateCourse, setProductCourse } from "./kitchen.js";
 import { createTable } from "./tables.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
+import { addTabRound } from "./working-order.js";
 import "./errors.js";
 
 // The HTTP layer of the order-group routes: body parsing, the operator taken from the session, the
@@ -993,6 +995,313 @@ describe("the line-editing routes act as the session's operator", () => {
   });
 });
 
+/** How much of a line is served, and whether all of it. */
+async function servedOf(lineId: string) {
+  const [row] = await inTx(venue, (tx) =>
+    tx
+      .select({
+        servedQuantity: workingOrderLines.servedQuantity,
+        servedAt: workingOrderLines.servedAt,
+      })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.id, lineId)),
+  );
+  return row!;
+}
+
+describe("POST /api/visits/:id/served, /unserved and /groups/:gid/served", () => {
+  it("serves a line, takes it back, then serves its group, answering the visit's revision each time", async () => {
+    const visit = await withGroups();
+    const lineId = visit.fired.lineIds[0]!;
+    const revision = await revisionOf(visit.visitId);
+    const items = [{ lineId, quantity: "1" }];
+
+    const served = await call("POST", `/api/visits/${visit.visitId}/served`, {
+      submissionId: randomUUID(),
+      expectedVisitRevision: revision,
+      items,
+    });
+    expect(served.status).toBe(200);
+    expect(served.json).toEqual({ revision: revision + 1 });
+    expect(await servedOf(lineId)).toEqual({ servedQuantity: 1000, servedAt: expect.any(String) });
+
+    const unserved = await call("POST", `/api/visits/${visit.visitId}/unserved`, {
+      submissionId: randomUUID(),
+      expectedVisitRevision: revision + 1,
+      items,
+    });
+    expect(unserved.status).toBe(200);
+    expect(unserved.json).toEqual({ revision: revision + 2 });
+    expect(await servedOf(lineId)).toEqual({ servedQuantity: 0, servedAt: null });
+
+    const whole = await call(
+      "POST",
+      `/api/visits/${visit.visitId}/groups/${visit.fired.id}/served`,
+      { submissionId: randomUUID(), expectedVisitRevision: revision + 2 },
+    );
+    expect(whole.status).toBe(200);
+    expect(whole.json).toEqual({ revision: revision + 3 });
+    expect(await servedOf(lineId)).toEqual({ servedQuantity: 1000, servedAt: expect.any(String) });
+  });
+
+  it("answers a repeat with the first answer and writes nothing, even at a revision since moved on", async () => {
+    const visit = await withGroups();
+    const lineId = visit.fired.lineIds[0]!;
+    const body = {
+      submissionId: randomUUID(),
+      expectedVisitRevision: await revisionOf(visit.visitId),
+      items: [{ lineId, quantity: "1" }],
+    };
+    const first = await call("POST", `/api/visits/${visit.visitId}/served`, body);
+    const before = { ...(await snapshot(visit)), served: await servedOf(lineId) };
+
+    const again = await call("POST", `/api/visits/${visit.visitId}/served`, body);
+
+    expect(first.status).toBe(200);
+    expect(again.status).toBe(200);
+    expect(again.json).toEqual(first.json);
+    expect({ ...(await snapshot(visit)), served: await servedOf(lineId) }).toEqual(before);
+  });
+
+  it("answers each refusal with its status, writing nothing", async () => {
+    const visit = await withGroups();
+    const lineId = visit.fired.lineIds[0]!;
+    const held = visit.tarta.lineIds[0]!;
+    const [tartaLine] = await inTx(venue, (tx) =>
+      tx
+        .select({ lineNo: workingOrderLines.lineNo, tabId: workingOrderLines.workingOrderId })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, held)),
+    );
+    const [canaLine] = await inTx(venue, (tx) =>
+      tx
+        .select({ lineNo: workingOrderLines.lineNo })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, lineId)),
+    );
+    const used = randomUUID();
+    await call("POST", `/api/visits/${visit.visitId}/served`, {
+      submissionId: used,
+      expectedVisitRevision: await revisionOf(visit.visitId),
+      items: [{ lineId, quantity: "1" }],
+    });
+    const before = { ...(await snapshot(visit)), served: await servedOf(lineId) };
+    const revision = await revisionOf(visit.visitId);
+    const at = (extra: Record<string, unknown>) => ({
+      submissionId: randomUUID(),
+      expectedVisitRevision: revision,
+      ...extra,
+    });
+    const base = `/api/visits/${visit.visitId}`;
+
+    const cases: [string, unknown, number, unknown][] = [
+      [
+        `${base}/served`,
+        at({ items: [{ lineId, quantity: "1" }] }),
+        400,
+        refusal("tab.serve_quantity_invalid", {
+          tabId: visit.tabId,
+          lineNo: canaLine!.lineNo,
+          quantity: "1",
+        }),
+      ],
+      [
+        `${base}/unserved`,
+        at({ items: [{ lineId, quantity: "2" }] }),
+        400,
+        refusal("tab.serve_quantity_invalid", {
+          tabId: visit.tabId,
+          lineNo: canaLine!.lineNo,
+          quantity: "2",
+        }),
+      ],
+      [
+        `${base}/served`,
+        at({ items: [{ lineId: held, quantity: "1" }] }),
+        409,
+        refusal("group.line_held", { tabId: tartaLine!.tabId, lineNo: tartaLine!.lineNo }),
+      ],
+      [
+        `${base}/groups/${visit.tarta.id}/served`,
+        at({}),
+        409,
+        refusal("group.line_held", { tabId: tartaLine!.tabId, lineNo: tartaLine!.lineNo }),
+      ],
+      [
+        `${base}/served`,
+        at({ items: [{ lineId: randomUUID(), quantity: "1" }] }),
+        404,
+        refusal("group.not_found"),
+      ],
+      [
+        `${base}/groups/not-a-uuid/served`,
+        at({}),
+        404,
+        refusal("group.not_found", { groupId: "not-a-uuid" }),
+      ],
+      [
+        `${base}/served`,
+        { submissionId: randomUUID(), expectedVisitRevision: revision - 1, items: [] },
+        409,
+        refusal("visit.out_of_date", { visitId: visit.visitId, revision }),
+      ],
+      [
+        `${base}/unserved`,
+        { submissionId: used, expectedVisitRevision: revision, items: [{ lineId, quantity: "1" }] },
+        409,
+        refusal("submission.id_reused", { submissionId: used }),
+      ],
+      [
+        `${base}/served`,
+        { expectedVisitRevision: revision, items: [] },
+        400,
+        refusal("management.request_invalid", { field: "submissionId" }),
+      ],
+      [
+        `${base}/groups/${visit.fired.id}/served`,
+        { submissionId: randomUUID() },
+        400,
+        refusal("management.request_invalid", { field: "expectedVisitRevision" }),
+      ],
+      [
+        `${base}/served`,
+        at({ items: {} }),
+        400,
+        refusal("management.request_invalid", { field: "items" }),
+      ],
+      [
+        `${base}/served`,
+        at({ items: [] }),
+        400,
+        refusal("management.request_invalid", { field: "items" }),
+      ],
+    ];
+    for (const [path, body, status, error] of cases) {
+      const answer = await call("POST", path, body);
+      expect([path, answer.status, answer.json]).toEqual([path, status, error]);
+    }
+    expect({ ...(await snapshot(visit)), served: await servedOf(lineId) }).toEqual(before);
+  });
+});
+
+describe("POST /api/visits/:id/served refusals that need their own setup", () => {
+  it("refuses 409 group.line_held for a held line outside any group that needs no kitchen", async () => {
+    const visit = await seated();
+    const [pulpo] = await inTx(venue, (tx) =>
+      tx.select({ id: products.id }).from(products).where(eq(products.name, "Pulpo")),
+    );
+    const route = sql`from preparation_routes where product_id = ${pulpo!.id} and zone_id is null`;
+    const [before] = (
+      await inTx(venue, async (tx) =>
+        tx.execute<{ station_id: string | null; no_preparation: number }>(
+          sql`select station_id, no_preparation ${route}`,
+        ),
+      )
+    ).rows;
+    // The suite shares one venue, so the Pulpo's route is put back whatever happens.
+    try {
+      await inTx(venue, async (tx) =>
+        tx.run(sql`update preparation_routes set station_id = null, no_preparation = 1
+                   where product_id = ${pulpo!.id} and zone_id is null`),
+      );
+      await inTx(venue, (tx) =>
+        addTabRound(tx, venue.cfg, visit.tabId, [{ ...dish("Pulpo"), hold: true }]),
+      );
+    } finally {
+      await inTx(venue, async (tx) =>
+        tx.run(sql`update preparation_routes
+                   set station_id = ${before!.station_id}, no_preparation = ${before!.no_preparation}
+                   where product_id = ${pulpo!.id} and zone_id is null`),
+      );
+    }
+    const [line] = await inTx(venue, (tx) =>
+      tx
+        .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, visit.tabId)),
+    );
+    const beforeServe = await snapshot(visit);
+
+    const refused = await call("POST", `/api/visits/${visit.visitId}/served`, {
+      submissionId: randomUUID(),
+      expectedVisitRevision: await revisionOf(visit.visitId),
+      items: [{ lineId: line!.id, quantity: "1" }],
+    });
+
+    expect(refused.status).toBe(409);
+    expect(refused.json).toEqual(
+      refusal("group.line_held", { tabId: visit.tabId, lineNo: line!.lineNo }),
+    );
+    expect(await snapshot(visit)).toEqual(beforeServe);
+  });
+
+  it("refuses 409 order.payment_in_flight on each served route while a card payment runs on the bill", async () => {
+    const visit = await seated();
+    const submitted = await submit(visit.visitId, [
+      { lines: [dish("Caña", "2")], release: "fire" },
+    ]);
+    const fired = (submitted.json as unknown as SubmitAnswer).groups[0]!;
+    const lineId = fired.lineIds[0]!;
+    // One of the two served, so a serve, an undo and the group's serve are each valid but for the
+    // payment.
+    await call("POST", `/api/visits/${visit.visitId}/served`, {
+      submissionId: randomUUID(),
+      expectedVisitRevision: await revisionOf(visit.visitId),
+      items: [{ lineId, quantity: "1" }],
+    });
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ paymentAttemptAt: new Date().toISOString() })
+        .where(eq(workingOrders.id, visit.tabId)),
+    );
+    try {
+      const before = { ...(await snapshot(visit)), served: await servedOf(lineId) };
+      const base = `/api/visits/${visit.visitId}`;
+      for (const [path, extra] of [
+        [`${base}/served`, { items: [{ lineId, quantity: "1" }] }],
+        [`${base}/unserved`, { items: [{ lineId, quantity: "1" }] }],
+        [`${base}/groups/${fired.id}/served`, {}],
+      ] as const) {
+        const refused = await call("POST", path, {
+          submissionId: randomUUID(),
+          expectedVisitRevision: await revisionOf(visit.visitId),
+          ...extra,
+        });
+        expect([path, refused.status, refused.json]).toEqual([
+          path,
+          409,
+          refusal("order.payment_in_flight", { workingOrderId: visit.tabId }),
+        ]);
+      }
+      expect({ ...(await snapshot(visit)), served: await servedOf(lineId) }).toEqual(before);
+    } finally {
+      await inTx(venue, (tx) =>
+        tx
+          .update(workingOrders)
+          .set({ paymentAttemptAt: null })
+          .where(eq(workingOrders.id, visit.tabId)),
+      );
+    }
+  });
+
+  it("refuses 404 group.not_found for another party's group", async () => {
+    const visit = await withGroups();
+    const other = await withGroups();
+    const before = await snapshot(visit);
+
+    const refused = await call(
+      "POST",
+      `/api/visits/${visit.visitId}/groups/${other.fired.id}/served`,
+      { submissionId: randomUUID(), expectedVisitRevision: await revisionOf(visit.visitId) },
+    );
+
+    expect(refused.status).toBe(404);
+    expect(refused.json).toEqual(refusal("group.not_found", { groupId: other.fired.id }));
+    expect(await snapshot(visit)).toEqual(before);
+  });
+});
+
 describe("the group routes without a session", () => {
   it("refuse every route 401 session.required, writing nothing", async () => {
     const visit = await withGroups();
@@ -1190,5 +1499,184 @@ describe("the pass routes, one after the other", () => {
     expect(sent.status).toBe(200);
     expect(sent.json).toEqual({ revision: visit.revision + 3 });
     expect((await groupTickets(visit.fired.id)).every((item) => item.awayAt !== null)).toBe(true);
+  });
+});
+
+/** The held or fired groups' reminders, as the groups read shows them. */
+async function remindAts(visitId: string) {
+  const listed = (await call("GET", `/api/visits/${visitId}/groups`)).json as unknown as {
+    groups: { id: string; remindAt: string | null }[];
+  };
+  return Object.fromEntries(listed.groups.map((group) => [group.id, group.remindAt]));
+}
+
+describe("POST /api/visits/:id/groups/:gid/snooze and GET /api/visits/:id/current-orders", () => {
+  it("snoozes a held group by whole minutes, answering the visit's revision, and Current orders shows the reminder once the work ahead is served", async () => {
+    const visit = await withGroups();
+    const revision = await revisionOf(visit.visitId);
+    const from = Date.now();
+
+    const snoozed = await call(
+      "POST",
+      `/api/visits/${visit.visitId}/groups/${visit.tarta.id}/snooze`,
+      { submissionId: randomUUID(), expectedVisitRevision: revision, minutes: 5 },
+    );
+
+    expect(snoozed.status).toBe(200);
+    expect(snoozed.json).toEqual({ revision: revision + 1 });
+    const remindAt = (await remindAts(visit.visitId))[visit.tarta.id]!;
+    const ahead = Date.parse(remindAt) - from;
+    expect(ahead).toBeGreaterThanOrEqual(5 * 60_000);
+    expect(ahead).toBeLessThanOrEqual(5 * 60_000 + (Date.now() - from));
+
+    const waiting = await call("GET", `/api/visits/${visit.visitId}/current-orders`);
+    expect(waiting.status).toBe(200);
+    expect(waiting.json).toMatchObject({
+      revision: revision + 1,
+      reminder: { groupId: visit.tarta.id, dueAt: null },
+      groups: [
+        { id: visit.fired.id, state: "fired", addedLater: false },
+        { id: visit.tarta.id, state: "held", remindAt, addedLater: false },
+        { id: visit.croquetas.id, state: "held", remindAt: null, addedLater: false },
+      ],
+      ungrouped: [],
+    });
+
+    const served = await call(
+      "POST",
+      `/api/visits/${visit.visitId}/groups/${visit.fired.id}/served`,
+      { submissionId: randomUUID(), expectedVisitRevision: revision + 1 },
+    );
+    expect(served.status).toBe(200);
+    const due = await call("GET", `/api/visits/${visit.visitId}/current-orders`);
+    expect(due.json).toMatchObject({
+      revision: revision + 2,
+      reminder: { groupId: visit.tarta.id, dueAt: remindAt },
+    });
+  });
+
+  it("answers each snooze refusal with its status, writing nothing", async () => {
+    const visit = await withGroups();
+    const used = randomUUID();
+    await call("POST", `/api/visits/${visit.visitId}/groups/${visit.tarta.id}/snooze`, {
+      submissionId: used,
+      expectedVisitRevision: await revisionOf(visit.visitId),
+      minutes: 5,
+    });
+    const before = { ...(await snapshot(visit)), remindAts: await remindAts(visit.visitId) };
+    const revision = await revisionOf(visit.visitId);
+    const at = (extra: Record<string, unknown>) => ({
+      submissionId: randomUUID(),
+      expectedVisitRevision: revision,
+      ...extra,
+    });
+    const base = `/api/visits/${visit.visitId}/groups`;
+    const tarta = `${base}/${visit.tarta.id}/snooze`;
+    const unknown = randomUUID();
+    const minutesInvalid = refusal("management.request_invalid", { field: "minutes" });
+
+    const cases: [string, unknown, number, unknown][] = [
+      [
+        `${base}/not-a-uuid/snooze`,
+        at({ minutes: 5 }),
+        404,
+        refusal("group.not_found", { groupId: "not-a-uuid" }),
+      ],
+      [
+        `${base}/${unknown}/snooze`,
+        at({ minutes: 5 }),
+        404,
+        refusal("group.not_found", { groupId: unknown }),
+      ],
+      [
+        `${base}/${visit.fired.id}/snooze`,
+        at({ minutes: 5 }),
+        409,
+        refusal("group.not_held", { groupId: visit.fired.id }),
+      ],
+      [tarta, at({ minutes: 0 }), 400, minutesInvalid],
+      [tarta, at({ minutes: 121 }), 400, minutesInvalid],
+      [tarta, at({ minutes: 2.5 }), 400, minutesInvalid],
+      [tarta, at({ minutes: "5" }), 400, minutesInvalid],
+      [tarta, at({ minutes: null }), 400, minutesInvalid],
+      [tarta, at({}), 400, minutesInvalid],
+      [
+        tarta,
+        { submissionId: randomUUID(), expectedVisitRevision: revision - 1, minutes: 5 },
+        409,
+        refusal("visit.out_of_date", { visitId: visit.visitId, revision }),
+      ],
+      [
+        tarta,
+        { submissionId: used, expectedVisitRevision: revision, minutes: 10 },
+        409,
+        refusal("submission.id_reused", { submissionId: used }),
+      ],
+      [
+        tarta,
+        { expectedVisitRevision: revision, minutes: 5 },
+        400,
+        refusal("management.request_invalid", { field: "submissionId" }),
+      ],
+      [
+        tarta,
+        { submissionId: randomUUID(), minutes: 5 },
+        400,
+        refusal("management.request_invalid", { field: "expectedVisitRevision" }),
+      ],
+      [
+        `/api/visits/not-a-visit/groups/${visit.tarta.id}/snooze`,
+        at({ minutes: 5 }),
+        409,
+        refusal("visit.not_open", { visitId: "not-a-visit" }),
+      ],
+    ];
+    for (const [path, body, status, error] of cases) {
+      const answer = await call("POST", path, body);
+      expect([path, body, answer.status, answer.json]).toEqual([path, body, status, error]);
+    }
+    expect({ ...(await snapshot(visit)), remindAts: await remindAts(visit.visitId) }).toEqual(
+      before,
+    );
+  });
+
+  it("refuses 409 visit.not_open for Current orders of a visit that does not exist, and of an id that is not one", async () => {
+    const unknown = randomUUID();
+
+    const absent = await call("GET", `/api/visits/${unknown}/current-orders`);
+    const malformed = await call("GET", `/api/visits/not-a-visit/current-orders`);
+
+    expect(absent.status).toBe(409);
+    expect(absent.json).toEqual(refusal("visit.not_open", { visitId: unknown }));
+    expect(malformed.status).toBe(409);
+    expect(malformed.json).toEqual(refusal("visit.not_open", { visitId: "not-a-visit" }));
+  });
+
+  it("refuses both routes 401 session.required without a session, writing nothing", async () => {
+    const visit = await withGroups();
+    const before = { ...(await snapshot(visit)), remindAts: await remindAts(visit.visitId) };
+
+    const answers = [
+      await send(venue.app, "", "GET", `/api/visits/${visit.visitId}/current-orders`),
+      await send(
+        venue.app,
+        "",
+        "POST",
+        `/api/visits/${visit.visitId}/groups/${visit.tarta.id}/snooze`,
+        {
+          submissionId: randomUUID(),
+          expectedVisitRevision: await revisionOf(visit.visitId),
+          minutes: 5,
+        },
+      ),
+    ];
+
+    for (const answer of answers) {
+      expect(answer.status).toBe(401);
+      expect(answer.json).toMatchObject({ code: "session.required" });
+    }
+    expect({ ...(await snapshot(visit)), remindAts: await remindAts(visit.visitId) }).toEqual(
+      before,
+    );
   });
 });

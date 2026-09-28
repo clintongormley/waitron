@@ -1282,11 +1282,14 @@ the tree (`packages/db/drizzle/0001_behavioural_triggers.sql`,
 `packages/db/drizzle/0019_settled_order_freeze_visit_id.sql`,
 `packages/db/drizzle/0020_visit_clears_table_status.sql`,
 `packages/db/drizzle/0024_bill_payment_triggers.sql`,
+`packages/db/drizzle/0027_line_vat_class_triggers.sql`,
+`packages/db/drizzle/0033_line_served_exception.sql`,
 `packages/media/drizzle/0001_image_references.sql`,
 `packages/media/drizzle/0002_section_image_references.sql` and
 `packages/media/drizzle/0003_published_image_references.sql`) each carry their own
 `meta/000N_snapshot.json`, so they are not snapshot-less; but on 2026-09-26 (2026-09-27 for
-`0024_bill_payment_triggers.sql`) each of those files equalled the one before it once `id` and `prevId` were removed and keys sorted, so the
+`0024_bill_payment_triggers.sql`, 2026-09-28 for `0027_line_vat_class_triggers.sql` and
+`0033_line_served_exception.sql`) each of those files equalled the one before it once `id` and `prevId` were removed and keys sorted, so the
 snapshot chain records none of the hand-written SQL, which is why regenerating from the TypeScript
 does not reproduce it.
 

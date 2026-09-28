@@ -843,6 +843,7 @@ describe("pay, then order dessert", () => {
       billCount: 1,
       tableIds: [mesa4],
       unsentDrafts: [],
+      reminder: null,
     });
   });
 
