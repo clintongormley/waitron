@@ -4,7 +4,13 @@ import { visitTables, visits, workingOrderLines, workingOrders } from "@waitron/
 import type { Transaction } from "@waitron/db";
 import { thousandthsToDecimal } from "@waitron/shared";
 import type { TillConfig } from "../till-config.js";
-import { markServed, openTab, unmarkServed } from "../working-order.js";
+import {
+  fireLines,
+  fireableLineColumns,
+  markServed,
+  openTab,
+  unmarkServed,
+} from "../working-order.js";
 
 const OPERATOR = "cccccccc-0000-4000-8000-0000000000f1";
 
@@ -24,6 +30,17 @@ export async function openPartyTab(
   const opened = await openTab(tx, cfg, { ...req, visitId: visit!.id });
   await tx.insert(visitTables).values({ visitId: visit!.id, tableId: req.tableId });
   return { ...opened, visitId: visit!.id };
+}
+
+/** Fire every line of the bill, as `tables.test.ts` fires `openTab`'s lines: only released work can be
+ * served. */
+export async function fireAll(tx: Transaction, cfg: TillConfig, orderId: string): Promise<void> {
+  const lines = await tx
+    .select(fireableLineColumns)
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, orderId))
+    .orderBy(workingOrderLines.lineNo);
+  await fireLines(tx, cfg, orderId, lines);
 }
 
 async function partyLine(tx: Transaction, orderId: string, lineNo: number) {

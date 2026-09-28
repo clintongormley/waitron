@@ -44,7 +44,7 @@ import type { TillConfig } from "./till-config.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { openPartyTab, serveLine, unserveLine } from "./testing/serve-line.js";
+import { fireAll, openPartyTab, serveLine, unserveLine } from "./testing/serve-line.js";
 import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
 import { createTable, createZone, updateTable } from "./tables.js";
 import {
@@ -584,6 +584,8 @@ describe("markServed / unmarkServed", () => {
       }),
     );
 
+    // Only released work can be served (Task 9 ruling 1).
+    await asApp(cfg, (tx) => fireAll(tx, cfg, tabId));
     await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
     let served = await servedAtByLine(tabId);
     expect(served.get(1)).not.toBeNull();
@@ -662,6 +664,7 @@ describe("readTabLines", () => {
         ],
       }),
     );
+    await asApp(cfg, (tx) => fireAll(tx, cfg, tabId));
     await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
 
     const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
@@ -1026,6 +1029,7 @@ describe("listTablesWithState (occupancy)", () => {
       pendingToServe: 0,
     });
 
+    await asApp(cfg, (tx) => fireAll(tx, cfg, tabId));
     await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
     rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
     expect(rows.find((t) => t.id === tableId)!.pendingToServe).toBe(1);

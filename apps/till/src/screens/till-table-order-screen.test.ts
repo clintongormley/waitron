@@ -343,6 +343,21 @@ describe("till-table-order-screen", () => {
     expect(text).toContain(t("table.served_title"));
   });
 
+  it("offers Servido on a dish and not on its extras, which are served with it", async () => {
+    const extra = { ...pendingLine, lineNo: 2, parentLineNo: 1, quantity: "2.000" };
+    const { el } = await mount({ lines: [pendingLine, extra] });
+    await openDrawer(el);
+    const pending = [...el.shadowRoot!.querySelectorAll(".pending-line")];
+    expect(pending).toHaveLength(2);
+    expect(el.shadowRoot!.querySelector('[data-serve="1"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-serve="2"]')).toBeNull();
+    expect(pending[1]!.querySelector("[data-serve]")).toBeNull();
+    // The extras row's figures stay in the dish's columns.
+    const totalRight = (row: Element) =>
+      Math.round(row.querySelector(".line-total")!.getBoundingClientRect().right);
+    expect(totalRight(pending[1]!)).toBe(totalRight(pending[0]!));
+  });
+
   it("emits serve-line { lineNo } when a Servido tick is tapped", async () => {
     const { el } = await mount({ lines: [pendingLine] });
     await openDrawer(el);

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   orderGroupEvents,
@@ -8,12 +8,14 @@ import {
   ticketItems,
   visits,
   workingOrderLines,
+  workingOrders,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createCourse, deactivateCourse, setProductCourse } from "./kitchen.js";
 import { createTable } from "./tables.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
+import { addTabRound } from "./working-order.js";
 import "./errors.js";
 
 // The HTTP layer of the order-group routes: body parsing, the operator taken from the session, the
@@ -1179,6 +1181,124 @@ describe("POST /api/visits/:id/served, /unserved and /groups/:gid/served", () =>
       expect([path, answer.status, answer.json]).toEqual([path, status, error]);
     }
     expect({ ...(await snapshot(visit)), served: await servedOf(lineId) }).toEqual(before);
+  });
+});
+
+describe("POST /api/visits/:id/served refusals that need their own setup", () => {
+  it("refuses 409 group.line_held for a held line outside any group that needs no kitchen", async () => {
+    const visit = await seated();
+    const [pulpo] = await inTx(venue, (tx) =>
+      tx.select({ id: products.id }).from(products).where(eq(products.name, "Pulpo")),
+    );
+    const route = sql`from preparation_routes where product_id = ${pulpo!.id} and zone_id is null`;
+    const [before] = (
+      await inTx(venue, async (tx) =>
+        tx.execute<{ station_id: string | null; no_preparation: number }>(
+          sql`select station_id, no_preparation ${route}`,
+        ),
+      )
+    ).rows;
+    // The suite shares one venue, so the Pulpo's route is put back whatever happens.
+    try {
+      await inTx(venue, async (tx) =>
+        tx.run(sql`update preparation_routes set station_id = null, no_preparation = 1
+                   where product_id = ${pulpo!.id} and zone_id is null`),
+      );
+      await inTx(venue, (tx) =>
+        addTabRound(tx, venue.cfg, visit.tabId, [{ ...dish("Pulpo"), hold: true }]),
+      );
+    } finally {
+      await inTx(venue, async (tx) =>
+        tx.run(sql`update preparation_routes
+                   set station_id = ${before!.station_id}, no_preparation = ${before!.no_preparation}
+                   where product_id = ${pulpo!.id} and zone_id is null`),
+      );
+    }
+    const [line] = await inTx(venue, (tx) =>
+      tx
+        .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, visit.tabId)),
+    );
+    const beforeServe = await snapshot(visit);
+
+    const refused = await call("POST", `/api/visits/${visit.visitId}/served`, {
+      submissionId: randomUUID(),
+      expectedVisitRevision: await revisionOf(visit.visitId),
+      items: [{ lineId: line!.id, quantity: "1" }],
+    });
+
+    expect(refused.status).toBe(409);
+    expect(refused.json).toEqual(
+      refusal("group.line_held", { tabId: visit.tabId, lineNo: line!.lineNo }),
+    );
+    expect(await snapshot(visit)).toEqual(beforeServe);
+  });
+
+  it("refuses 409 order.payment_in_flight on each served route while a card payment runs on the bill", async () => {
+    const visit = await seated();
+    const submitted = await submit(visit.visitId, [
+      { lines: [dish("Caña", "2")], release: "fire" },
+    ]);
+    const fired = (submitted.json as unknown as SubmitAnswer).groups[0]!;
+    const lineId = fired.lineIds[0]!;
+    // One of the two served, so a serve, an undo and the group's serve are each valid but for the
+    // payment.
+    await call("POST", `/api/visits/${visit.visitId}/served`, {
+      submissionId: randomUUID(),
+      expectedVisitRevision: await revisionOf(visit.visitId),
+      items: [{ lineId, quantity: "1" }],
+    });
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ paymentAttemptAt: new Date().toISOString() })
+        .where(eq(workingOrders.id, visit.tabId)),
+    );
+    try {
+      const before = { ...(await snapshot(visit)), served: await servedOf(lineId) };
+      const base = `/api/visits/${visit.visitId}`;
+      for (const [path, extra] of [
+        [`${base}/served`, { items: [{ lineId, quantity: "1" }] }],
+        [`${base}/unserved`, { items: [{ lineId, quantity: "1" }] }],
+        [`${base}/groups/${fired.id}/served`, {}],
+      ] as const) {
+        const refused = await call("POST", path, {
+          submissionId: randomUUID(),
+          expectedVisitRevision: await revisionOf(visit.visitId),
+          ...extra,
+        });
+        expect([path, refused.status, refused.json]).toEqual([
+          path,
+          409,
+          refusal("order.payment_in_flight", { workingOrderId: visit.tabId }),
+        ]);
+      }
+      expect({ ...(await snapshot(visit)), served: await servedOf(lineId) }).toEqual(before);
+    } finally {
+      await inTx(venue, (tx) =>
+        tx
+          .update(workingOrders)
+          .set({ paymentAttemptAt: null })
+          .where(eq(workingOrders.id, visit.tabId)),
+      );
+    }
+  });
+
+  it("refuses 404 group.not_found for another party's group", async () => {
+    const visit = await withGroups();
+    const other = await withGroups();
+    const before = await snapshot(visit);
+
+    const refused = await call(
+      "POST",
+      `/api/visits/${visit.visitId}/groups/${other.fired.id}/served`,
+      { submissionId: randomUUID(), expectedVisitRevision: await revisionOf(visit.visitId) },
+    );
+
+    expect(refused.status).toBe(404);
+    expect(refused.json).toEqual(refusal("group.not_found", { groupId: other.fired.id }));
+    expect(await snapshot(visit)).toEqual(before);
   });
 });
 

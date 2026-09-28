@@ -10,6 +10,8 @@ import {
   writeProductModifiers,
 } from "@waitron/catalogue";
 import {
+  billPaymentRefunds,
+  billPayments,
   devices,
   saleLines,
   sales,
@@ -730,6 +732,42 @@ describe("refusals, each writing nothing", () => {
     );
   });
 
+  it("refuses a held line outside any group that needs no kitchen (group.line_held)", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    await inTx((tx) => addTabRound(tx, v.cfg, s.tabId, [{ ...line(v, "water"), hold: true }]));
+    const water = await lineNamed(s.visitId, "water");
+    expect(water.groupId).toBeNull();
+    const tickets = await suite.db
+      .select()
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderLineId, water.id));
+    expect(tickets).toEqual([]);
+
+    await expectRefusedWithNothingWritten(
+      s.visitId,
+      () => serve(v, s.visitId, [{ lineId: water.id, quantity: "1" }]),
+      { code: "group.line_held", params: { tabId: s.tabId, lineNo: water.lineNo } },
+    );
+  });
+
+  it("refuses a held group with no line left on the party's bills as gone (group.not_found)", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const held = await group(v, s.visitId, "hold", [line(v, "flan")]);
+    const flan = await lineNamed(s.visitId, "flan");
+    // What a removal would leave, before the group itself is marked removed.
+    await suite.db
+      .update(workingOrderLines)
+      .set({ groupId: null })
+      .where(eq(workingOrderLines.id, flan.id));
+
+    await expectRefusedWithNothingWritten(s.visitId, () => serveGroup(v, s.visitId, held), {
+      code: "group.not_found",
+      params: { groupId: held },
+    });
+  });
+
   it("refuses a group of another party, or none (group.not_found)", async () => {
     const v = await setupVenue();
     const s = await croquetas(v);
@@ -935,6 +973,68 @@ describe("served on a settled bill (D18)", () => {
     expect(last.sales).toEqual(before.sales);
     expect(last.saleLines).toEqual(before.saleLines);
     expect(last.registros).toEqual(before.registros);
+  });
+});
+
+describe("a card refund pending on a bill (ruling 3 is for an OPEN bill only)", () => {
+  /** A received card payment of the bill, and a refund of it the provider has not answered. */
+  async function pendingRefund(v: Venue, billId: string): Promise<void> {
+    const [payment] = await suite.db
+      .insert(billPayments)
+      .values({
+        workingOrderId: billId,
+        submissionId: randomUUID(),
+        fingerprint: "f",
+        kind: "contribution",
+        method: "card",
+        applied: 100,
+        state: "received",
+        receivedAt: new Date().toISOString(),
+        requestedBy: ALEX,
+        tillId: v.cfg.tillId,
+      })
+      .returning({ id: billPayments.id });
+    await suite.db.insert(billPaymentRefunds).values({
+      billPaymentId: payment!.id,
+      submissionId: randomUUID(),
+      fingerprint: "f",
+      appliedAmount: 100,
+      reason: "r",
+      authorizedBy: ALEX,
+      requestedBy: ALEX,
+      tillId: v.cfg.tillId,
+      state: "pending",
+    });
+  }
+
+  it("does not hold up a served mark on a paid bill", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const desserts = await group(v, s.visitId, "fire", [line(v, "flan")]);
+    await pay(v, s.tabId, "5.00");
+    await pendingRefund(v, s.tabId);
+    const flan = await lineNamed(s.visitId, "flan");
+
+    await serve(v, s.visitId, [{ lineId: flan.id, quantity: "1" }]);
+    await unserve(v, s.visitId, [{ lineId: flan.id, quantity: "1" }]);
+    await serveGroup(v, s.visitId, desserts);
+
+    expect(await lineById(s.visitId, flan.id)).toMatchObject({
+      servedQuantity: 1000,
+      servedAt: expect.any(String),
+    });
+  });
+
+  it("still refuses a served mark on an open bill while its refund is pending (bill.refund_in_progress)", async () => {
+    const v = await setupVenue();
+    const s = await croquetas(v);
+    await pendingRefund(v, s.tabId);
+
+    await expectRefusedWithNothingWritten(
+      s.visitId,
+      () => serve(v, s.visitId, [{ lineId: s.croq.id, quantity: "1" }]),
+      { code: "bill.refund_in_progress", params: { workingOrderId: s.tabId } },
+    );
   });
 });
 

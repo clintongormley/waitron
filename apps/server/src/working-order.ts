@@ -2165,6 +2165,8 @@ interface ServableLine {
   quantity: number;
   servedQuantity: number;
   unitPrecision: number | null;
+  sentAt: string | null;
+  billStatus: string;
   groupState: "held" | "fired" | "removed" | null;
   ticketItemId: string | null;
   ticketFiredAt: string | null;
@@ -2188,6 +2190,8 @@ async function servableLines(
       quantity: workingOrderLines.quantity,
       servedQuantity: workingOrderLines.servedQuantity,
       unitPrecision: workingOrderLines.unitPrecision,
+      sentAt: workingOrderLines.sentAt,
+      billStatus: workingOrders.status,
       groupState: orderGroups.state,
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
@@ -2207,10 +2211,14 @@ async function servableLines(
     );
 }
 
-/** Serving needs released work: a line of a held group, or whose kitchen item is unreleased, is
- * refused `group.line_held`. */
+/** Serving needs released work: a line never sent, of a held group, or whose kitchen item is
+ * unreleased, is refused `group.line_held`. */
 function refuseUnreleased(line: ServableLine): void {
-  if (line.groupState === "held" || (line.ticketItemId !== null && line.ticketFiredAt === null)) {
+  if (
+    line.sentAt === null ||
+    line.groupState === "held" ||
+    (line.ticketItemId !== null && line.ticketFiredAt === null)
+  ) {
     throw new AppError("group.line_held", { tabId: line.workingOrderId, lineNo: line.lineNo });
   }
 }
@@ -2240,15 +2248,17 @@ function servedAmount(line: ServableLine, quantity: string, limit: number): numb
 /**
  * Give each line its new served count, and its extras children theirs in step; `served_at` is set
  * when a row is fully served and cleared when it is not. Each OPEN bill written counts one more
- * write, and one whose card payment is running refuses (`bumpRevision`). A paid bill's lines are
- * written too: serving is an operational fact, never billing, and the filed sale does not read it.
+ * write, and one whose card payment or refund is running refuses (`bumpRevision`). A paid bill's
+ * lines are written too, and nothing moving on it holds them up: serving is an operational fact,
+ * never billing, and the filed sale does not read it.
  */
 async function writeServed(
   tx: Transaction,
   changes: readonly { line: ServableLine; served: number }[],
 ): Promise<void> {
   if (changes.length === 0) return;
-  await bumpRevision(tx, [...new Set(changes.map(({ line }) => line.workingOrderId))]);
+  const openBills = changes.filter(({ line }) => line.billStatus === "open");
+  await bumpRevision(tx, [...new Set(openBills.map(({ line }) => line.workingOrderId))]);
   const at = nowIso();
   const children = await tx
     .select({
@@ -2379,8 +2389,9 @@ export async function markGroupServed(
       const revision = await checkAndBumpVisit(tx, visitId, args.expectedVisitRevision, "open");
       const state = await requireGroup(tx, visitId, groupId);
       const lines = await servableLines(tx, visitId, eq(workingOrderLines.groupId, groupId));
+      // A held group left with no line is on its way to `removed`.
       if (state === "held" && lines.length === 0) {
-        throw new AppError("group.not_held", { groupId });
+        throw new AppError("group.not_found", { groupId });
       }
       lines.forEach(refuseUnreleased);
       await writeServed(

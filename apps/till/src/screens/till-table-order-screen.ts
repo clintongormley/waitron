@@ -410,6 +410,10 @@ export class TillTableOrderScreen extends LitElement {
         gap: var(--wt-space-2);
       }
 
+      .serve-spacer {
+        visibility: hidden;
+      }
+
       .served-line {
         grid-template-columns: 1fr auto auto auto;
         color: var(--wt-color-text-muted);
@@ -2550,16 +2554,24 @@ export class TillTableOrderScreen extends LitElement {
       <span class="qty">${this.#displayQty(line.quantity)}</span>
       <span class="line-total">${formatMoney(this.#lineGross(line), currentLocale())}</span>
       ${this.#lineCourse(line)}
-      <wt-button
-        class="serve"
-        size="sm"
-        variant="primary"
-        data-serve=${line.lineNo}
-        aria-label=${`${t("table.serve")} ${name}`}
-        @click=${() => this.#serve(line.lineNo)}
-      >
-        <span aria-hidden="true">✓</span>
-      </wt-button>
+      ${
+        // An extras line is served with its dish. It keeps a hidden button of the same size, so its
+        // figures line up with the dish's.
+        this.#isChild(line)
+          ? html`<wt-button class="serve serve-spacer" size="sm" aria-hidden="true" tabindex="-1"
+              ><span>✓</span></wt-button
+            >`
+          : html`<wt-button
+              class="serve"
+              size="sm"
+              variant="primary"
+              data-serve=${line.lineNo}
+              aria-label=${`${t("table.serve")} ${name}`}
+              @click=${() => this.#serve(line.lineNo)}
+            >
+              <span aria-hidden="true">✓</span>
+            </wt-button>`
+      }
       ${this.#lineActions(line)}
     </li>`;
   }
