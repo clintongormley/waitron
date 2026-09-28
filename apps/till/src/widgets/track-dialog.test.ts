@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { LitElement, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
+import { blankComments } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-dialog.js";
 import { dialogOpenUnder, trackDialog } from "./track-dialog.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -84,12 +85,20 @@ describe("dialogOpenUnder", () => {
   });
 });
 
+// Weaker than its name: it reads text, so it sees only the literal tags `<wt-dialog`, `<wt-modal`
+// and `<dialog`; it scans `apps/till/src` alone, so a dialog inside a shared `@waitron/ui` component
+// the till renders is not seen; and it blanks only TypeScript comments, found as `mapComments`
+// guesses, so a tag inside an HTML comment in a template still counts.
 describe("every dialog the till draws is tracked", () => {
-  const sources = import.meta.glob(["../**/*.ts", "!../**/*.test.ts"], {
-    query: "?raw",
-    import: "default",
-    eager: true,
-  }) as Record<string, string>;
+  const sources = Object.fromEntries(
+    Object.entries(
+      import.meta.glob(["../**/*.ts", "!../**/*.test.ts"], {
+        query: "?raw",
+        import: "default",
+        eager: true,
+      }) as Record<string, string>,
+    ).map(([path, text]) => [path, blankComments(text)]),
+  );
 
   it("reads the till's sources, dialogs among them", () => {
     const withDialogs = Object.entries(sources).filter(([, text]) => text.includes("<wt-dialog"));

@@ -2699,6 +2699,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     field was focused before the save and is disabled during it, so where focus was when the key
     arrived was not recorded. That screen's `wt-close` handler closed the editor without checking
     whether a save was running. It now sets `wt-modal`'s `dismissible` to false while busy instead.
+    _(Task 8, 2026-09-28: until 64f285494, `dismissible` held for one Escape only — measured in
+    Playwright's Chromium 153 and WebKit (Safari 26.6), a second Escape's `cancel` arrived
+    uncancelable and closed a plain `<dialog>` — so the reasons editor's guard held for one press.
+    `wt-modal` extends `wt-dialog`, so since that commit it holds through repeated presses. Whether
+    this was the cause of the Escape close recorded here has not been tested.)_
     The same keydown guard is on other dashboard forms. The tests of six of them press a real Escape
     during a save and pass with the dialog still open: "keeps the editor open when Escape is pressed
     during a save" (`apps/dashboard/src/widgets/category-form.test.ts`), "saves once and stays open
