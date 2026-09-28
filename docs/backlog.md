@@ -2274,7 +2274,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       station it covered, even where that station's own printer printed. _(B6a, 2026-09-28: it
       stops showing at a station once a Reprint of the bill would not link that pass printer to
       that station, for instance when nothing is left at the pass printer's own stations.)_
-    - _Fixed by lane B item B6a (2026-09-28, branch `feat/service-print-problem-clears`):_
+    - _Fixed by lane B item B6a (2026-09-28, landed as #795, main `4c340ace1`):_
       transfer, unjoin and split left a printing problem on the bill the ticket named, and the
       moved dishes' bill showed none. Transferring lines, splitting off a check, unjoining a table
       and moving whole lines now copy the source bill's unprinted tickets that no printed reprint
@@ -2361,7 +2361,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       dish from another station joined to the group, say, or a printer switched back on after the
       HOLD ticket went out. Reprint reads the same per-group marker, so it too can print a REPRINT
       and HOLD section at such a station.
-    - _Fixed by lane B item B6a (2026-09-28, branch `feat/service-print-problem-clears`):_ a failed
+    - _Fixed by lane B item B6a (2026-09-28, landed as #795, main `4c340ace1`):_ a failed
       kitchen ticket, fire or HOLD, whose dishes at that station were then all cancelled stayed a
       "Printing problem" that Reprint could not clear, and so did a pass printer's failed ticket at
       a station the pass printer is not attached to once the station that brought it in was
