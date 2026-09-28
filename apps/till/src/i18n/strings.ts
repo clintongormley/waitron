@@ -531,8 +531,8 @@ export const en = {
   "service_zone.refresh": "Refresh menus",
   "service_zone.load_error": "Could not load menus for this service area",
   "service_zone.basket_active": "Clear the basket before changing service area",
-  // A basket refreshed against a newly published menu. `{name}` is substituted at the call site;
-  // `t()` does not interpolate.
+  // A basket refreshed against a newly published menu. `{name}` and `{price}` are substituted at
+  // the call site; `t()` does not interpolate.
   "basket_refresh.title": "The menu has changed",
   "basket_refresh.changed": "New prices",
   "basket_refresh.each": "{price} each",

@@ -380,6 +380,14 @@ describe("lineBlock", () => {
 describe("refreshBasket", () => {
   const lemonade = offer({ id: "offer-lemonade", productId: "Lemonade", unitPrice: "3.00" });
   const live = new Map([["lunch", "v2"]]);
+  const eachSide = { from: unit, to: unit };
+  const kg = {
+    id: "unit-kg",
+    name: { es: "kilo" },
+    abbreviation: { es: "kg" },
+    precision: 3,
+    hardwareUnit: "kg" as const,
+  };
 
   it("adopts a line silently when nothing it holds changed, asserting the new version", () => {
     const line = lineOf(lemonade, "v1");
@@ -432,8 +440,8 @@ describe("refreshBasket", () => {
     };
     const outcome = refreshBasket([line], [offsetting], live);
     expect(outcome.changed).toEqual([
-      { lineNo: 1, name: "burger", from: "9.00", to: "8.00", perUnit: true },
-      { lineNo: 1, name: "cheese", from: "1.00", to: "2.00", perUnit: true },
+      { lineNo: 1, name: "burger", from: "9.00", to: "8.00", units: eachSide },
+      { lineNo: 1, name: "cheese", from: "1.00", to: "2.00", units: eachSide },
     ]);
     expect(outcome.adopted.get(0)!.product.unitPrice).toBe("8.00");
   });
@@ -462,10 +470,56 @@ describe("refreshBasket", () => {
     };
     const outcome = refreshBasket([line], [offsetting], live);
     expect(outcome.changed).toEqual([
-      { lineNo: 1, name: "bottle", from: "18.00", to: "17.00", perUnit: true },
-      { lineNo: 1, name: "cheese", from: "1.00", to: "2.00", perUnit: true },
+      { lineNo: 1, name: "bottle", from: "18.00", to: "17.00", units: eachSide },
+      { lineNo: 1, name: "cheese", from: "1.00", to: "2.00", units: eachSide },
     ]);
     expect(outcome.adopted.get(0)!.product.unitPrice).toBe("17.00");
+  });
+
+  it("gives a weighed line's dish and extra rows the dish's unit, which its extras are billed by too", () => {
+    const ham = offer({
+      id: "offer-ham",
+      productId: "ham",
+      unitPrice: "20.00",
+      unit: kg,
+      offeredModifiers: [extrasList("list-extras", [extraItem("cheese", "2.00")])],
+    });
+    const line = lineOf(ham, "v1", {
+      quantity: "0.500",
+      extras: [
+        { listId: "list-extras", productId: "cheese", name: "cheese", price: "2.00", quantity: 1 },
+      ],
+    });
+    const offsetting = {
+      ...ham,
+      unitPrice: "18.00",
+      offeredModifiers: [extrasList("list-extras", [extraItem("cheese", "4.00")])],
+    };
+    const outcome = refreshBasket([line], [offsetting], live);
+    expect(outcome.changed).toEqual([
+      { lineNo: 1, name: "ham", from: "20.00", to: "18.00", units: { from: kg, to: kg } },
+      { lineNo: 1, name: "cheese", from: "2.00", to: "4.00", units: { from: kg, to: kg } },
+    ]);
+  });
+
+  it("gives each side of a part row its own unit when the live version sells the dish by another", () => {
+    const line = lineOf(burger, "v1", {
+      quantity: "2",
+      extras: [
+        { listId: "list-extras", productId: "cheese", name: "cheese", price: "1.00", quantity: 1 },
+      ],
+    });
+    const byWeight = {
+      ...burger,
+      unit: kg,
+      unitPrice: "8.00",
+      offeredModifiers: [extrasList("list-extras", [extraItem("cheese", "2.00")])],
+    };
+    const outcome = refreshBasket([line], [byWeight], live);
+    expect(outcome.changed).toEqual([
+      { lineNo: 1, name: "burger", from: "9.00", to: "8.00", units: { from: unit, to: kg } },
+      { lineNo: 1, name: "cheese", from: "1.00", to: "2.00", units: { from: unit, to: kg } },
+    ]);
   });
 
   it("keeps a variant line on its variant, at the variant's new price", () => {

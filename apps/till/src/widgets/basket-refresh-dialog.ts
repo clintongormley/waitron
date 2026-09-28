@@ -5,7 +5,9 @@ import { baseStyles } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
+import type { TillProduct } from "../api/client.js";
 import type { BlockReason, BlockedLine, ChangedLine } from "../state/menu-refresh.js";
+import { soldByTheUnit, unitName } from "./product-name.js";
 
 export interface BasketRefreshDetail {
   changed: ChangedLine[];
@@ -70,9 +72,12 @@ export class TillBasketRefreshDialog extends LitElement {
     );
   }
 
-  #money(value: string, perUnit?: true): string {
+  #money(value: string, unit?: NonNullable<TillProduct["unit"]>): string {
     const money = formatMoney(value, currentLocale());
-    return perUnit ? t("basket_refresh.each").replace("{price}", () => money) : money;
+    if (unit === undefined) return money;
+    return soldByTheUnit({ unit })
+      ? t("basket_refresh.each").replace("{price}", () => money)
+      : `${money}/${unitName({ unit })}`;
   }
 
   override render() {
@@ -98,8 +103,8 @@ export class TillBasketRefreshDialog extends LitElement {
                       <span class="price"
                         >${
                           line.from === undefined
-                            ? this.#money(line.to, line.perUnit)
-                            : `${this.#money(line.from, line.perUnit)} → ${this.#money(line.to, line.perUnit)}`
+                            ? this.#money(line.to, line.units?.to)
+                            : `${this.#money(line.from, line.units?.from)} → ${this.#money(line.to, line.units?.to)}`
                         }</span
                       >
                     </li>`,

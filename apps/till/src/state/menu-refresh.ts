@@ -1,6 +1,11 @@
 import { effectiveDefaultLabelId } from "@waitron/catalogue/src/option-default.js";
 import { compareDecimal, decimal } from "@waitron/shared";
-import { menuOfferToTillProduct, type MenuUnavailable, type TillMenuOffer } from "../api/client.js";
+import {
+  menuOfferToTillProduct,
+  type MenuUnavailable,
+  type TillMenuOffer,
+  type TillProduct,
+} from "../api/client.js";
 import { lineProductName, productUnit } from "../widgets/product-name.js";
 import { lineGross, productAsVariant, quantityPlaces } from "./order-line.js";
 import type { OrderLine } from "./working-order.js";
@@ -21,14 +26,15 @@ export interface LineBlock {
 }
 
 /** One line of the basket-refresh dialog; `lineNo` counts the basket from 1, and several rows may
- * share one. `from`/`to` are the line's total or, on a `perUnit` row, one part's unit price. `from`
- * is absent for a line whose earlier price the till never held. */
+ * share one. `from`/`to` are the line's total or, on a row with `units`, one part's price per the
+ * dish's unit on that side, which an extra is billed by too. `from` is absent for a line whose
+ * earlier price the till never held. */
 export interface ChangedLine {
   lineNo: number;
   name: string;
   from?: string;
   to: string;
-  perUnit?: true;
+  units?: { from: NonNullable<TillProduct["unit"]>; to: NonNullable<TillProduct["unit"]> };
 }
 
 export interface BlockedLine extends LineBlock {
@@ -240,6 +246,7 @@ export function refreshBasket(
 
 /** Each part of `line` whose unit price `adopted` changes: the dish or variant, then each extra. */
 function partsRepriced(line: OrderLine, adopted: OrderLine, lineNo: number): ChangedLine[] {
+  const units = { from: productUnit(line.product), to: productUnit(adopted.product) };
   const parts = [
     {
       name: lineProductName(line.product),
@@ -253,5 +260,5 @@ function partsRepriced(line: OrderLine, adopted: OrderLine, lineNo: number): Cha
   );
   return parts
     .filter((part) => compareDecimal(decimal(part.from), decimal(part.to)) !== 0)
-    .map((part) => ({ lineNo, ...part, perUnit: true }));
+    .map((part) => ({ lineNo, ...part, units }));
 }
