@@ -368,6 +368,27 @@ it("finds a product by its name", async () => {
   expect(shown(el)).toEqual(["mi-lemonade"]);
 });
 
+// A term typed from the keyboard carries an ordinary space where Spanish shows a no-break one.
+it.each([
+  { locale: "es-ES", term: "12,00", want: ["mi-burger"] },
+  { locale: "es-ES", term: "12,00 €", want: ["mi-burger"] },
+  { locale: "en-GB", term: "€12.00", want: ["mi-burger"] },
+  { locale: "es-ES", term: "12.00", want: ["mi-burger"] },
+  { locale: "es-ES", term: "3,40", want: ["mi-lemonade"] },
+])("finds a product in $locale by the price as shown, or as its raw amount: $term", async (c) => {
+  setLocale(c.locale);
+  try {
+    const el = await mount();
+    const search = table(el).shadowRoot.querySelector<HTMLInputElement>('input[name="search"]')!;
+    search.value = c.term;
+    search.dispatchEvent(new Event("input"));
+    await table(el).updateComplete;
+    expect(shown(el)).toEqual(c.want);
+  } finally {
+    setLocale("es-ES");
+  }
+});
+
 it("filters by a section, keeping every product reached through it, and offers the sections by internal name", async () => {
   const el = await mount();
   expect(options(el, "placements")).toEqual([

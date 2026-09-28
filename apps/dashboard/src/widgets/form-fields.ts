@@ -31,6 +31,11 @@ export const priceLabel = (unitLabel: string) =>
 export const priceText = (value: string) =>
   isProductPrice(value) ? formatMoney(value, currentLocale()) : value;
 
+/** What a table's search finds a price by: the text shown, again with the no-break space Spanish
+ * writes before the sign read as the space a keyboard types, and the raw amounts. */
+export const priceSearchText = (shown: string, raw: readonly string[]) =>
+  [shown, shown.replace(/\u00a0/g, " "), ...raw].join(" ");
+
 export const nonBlankNames = (value: Record<string, string>) =>
   Object.fromEntries(Object.entries(value).filter(([, text]) => text.trim()));
 

@@ -243,6 +243,95 @@ describe("product-list", () => {
     expect(rowKeys(root)).toEqual(["nine", "range", "ten"]);
   });
 
+  // Sorted as text, English puts €1,000.00 before €999.00 and Spanish puts 10.000,00 € before
+  // 9500,00 €, so only a numeric sort passes in either language.
+  it.each(["en-GB", "es-ES"])(
+    "sorts amounts of a thousand and more as amounts in %s",
+    async (locale) => {
+      setLocale(locale);
+      try {
+        const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+          products: [
+            product({ id: "10000", name: "A", unitPrice: "10000.00" }),
+            product({ id: "1000", name: "B", unitPrice: "1000.00" }),
+            product({ id: "9500", name: "C", unitPrice: "9500.00" }),
+            product({ id: "999", name: "D", unitPrice: "999.00" }),
+          ],
+        });
+        const table = el.shadowRoot!.querySelector("wt-data-table")!;
+        const root = await tableRoot(el);
+        root.querySelector<HTMLElement>('button[data-sort="price"]')!.click();
+        await table.updateComplete;
+        expect(rowKeys(root)).toEqual(["999", "1000", "9500", "10000"]);
+      } finally {
+        setLocale("es-ES");
+      }
+    },
+  );
+
+  // A term typed from the keyboard carries an ordinary space where Spanish shows a no-break one.
+  it.each([
+    { locale: "es-ES", term: "12,00", want: ["twelve"] },
+    { locale: "es-ES", term: "12,00 €", want: ["twelve"] },
+    { locale: "en-GB", term: "€12.00", want: ["twelve"] },
+    { locale: "es-ES", term: "12.00", want: ["twelve"] },
+    { locale: "es-ES", term: "7,50", want: ["sized"] },
+    { locale: "es-ES", term: "7.50", want: ["sized"] },
+  ])(
+    "finds a product in $locale by the price as shown, or as its raw amount: $term",
+    async ({ locale, term, want }) => {
+      setLocale(locale);
+      try {
+        const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+          products: [
+            product({ id: "twelve", name: "Tortilla", unitPrice: "12.00" }),
+            product({ id: "other", name: "Pan", unitPrice: "8.50" }),
+            product({
+              id: "sized",
+              name: "Café",
+              variants: [
+                { ...bunVariant, id: "small", name: "Pequeño", unitPrice: "4.00" },
+                { ...bunVariant, id: "large", name: "Grande", unitPrice: "7.50" },
+              ],
+            }),
+          ],
+        });
+        const table = el.shadowRoot!.querySelector("wt-data-table")!;
+        const root = await tableRoot(el);
+        const search = root.querySelector<HTMLInputElement>('input[name="search"]')!;
+        search.value = term;
+        search.dispatchEvent(new Event("input", { bubbles: true }));
+        await table.updateComplete;
+        expect(rowKeys(root)).toEqual(want);
+      } finally {
+        setLocale("es-ES");
+      }
+    },
+  );
+
+  it("finds a middle variant's price on the variant, not on its product's range", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({
+          id: "sized",
+          name: "Café",
+          variants: [
+            { ...bunVariant, id: "small", name: "Pequeño", unitPrice: "4.00" },
+            { ...bunVariant, id: "mid", name: "Mediano", unitPrice: "5.50" },
+            { ...bunVariant, id: "large", name: "Grande", unitPrice: "7.50" },
+          ],
+        }),
+      ],
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    const search = root.querySelector<HTMLInputElement>('input[name="search"]')!;
+    search.value = "5.50";
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["sized", "sized:mid"]);
+  });
+
   it("prices a variant with no price of its own at its product's price", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [

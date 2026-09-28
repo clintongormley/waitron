@@ -22,7 +22,13 @@ import type {
 } from "../api/client.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { byLabel, categoryAncestors, categoryPath } from "./category-form.js";
-import { priceField, priceText, switchField, type FieldContext } from "./form-fields.js";
+import {
+  priceField,
+  priceSearchText,
+  priceText,
+  switchField,
+  type FieldContext,
+} from "./form-fields.js";
 
 /** What saving one product's settings on the menu asks the host to write. `item` is null when the
  * menu's price and switch are unchanged, and `variants` is null when no variant changed, which
@@ -380,7 +386,9 @@ export class MenuPricesTable extends LitElement {
       searchValue: (line: Line) => {
         const value = read(line);
         if (value === null) return "";
-        return typeof value === "string" ? value : `${value.low} ${value.high}`;
+        return typeof value === "string"
+          ? priceSearchText(priceText(value), [value])
+          : priceSearchText(spanText(value), [value.low, value.high]);
       },
     });
     return [

@@ -9,6 +9,7 @@ import { t, currentLocale } from "../i18n/t.js";
 import { allergenState, allergenStateName, vatClassName } from "../i18n/domain.js";
 import { categoryPath } from "./category-form.js";
 import { labelsText } from "./classification-fields.js";
+import { priceSearchText } from "./form-fields.js";
 import {
   modifierListName,
   modifierListNames,
@@ -148,15 +149,14 @@ export class ProductList extends LitElement {
 
   /** A product with an Active variant is sold only as one of them, and one with none sells as
    * itself. */
-  #prices({ product, variant }: ProductRow): { low: number; high: number } {
-    if (variant) {
-      const price = Number(variant.effective.unitPrice);
-      return { low: price, high: price };
-    }
+  #amounts({ product, variant }: ProductRow): string[] {
+    if (variant) return [variant.effective.unitPrice];
     const sold = product.variants.filter(({ active }) => active);
-    const prices = sold.length
-      ? sold.map(({ effective }) => Number(effective.unitPrice))
-      : [Number(product.unitPrice)];
+    return sold.length ? sold.map(({ effective }) => effective.unitPrice) : [product.unitPrice];
+  }
+
+  #prices(row: ProductRow): { low: number; high: number } {
+    const prices = this.#amounts(row).map(Number);
     return { low: Math.min(...prices), high: Math.max(...prices) };
   }
 
@@ -221,6 +221,11 @@ export class ProductList extends LitElement {
             }`;
         },
         sortValue: (row) => this.#prices(row).low,
+        searchValue: (row) => {
+          const { low, high } = this.#prices(row);
+          const ends = this.#amounts(row).filter((raw) => [low, high].includes(Number(raw)));
+          return priceSearchText(this.#price(row), ends);
+        },
       },
       {
         key: "modifiers",
