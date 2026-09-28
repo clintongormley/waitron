@@ -2,8 +2,9 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { UrlStateController, baseStyles } from "@waitron/ui";
 import { tillPath } from "../navigation.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
+import "../widgets/stale-since.js";
 import "../widgets/station-queue.js";
 import type {
   BumpMode,
@@ -265,6 +266,7 @@ export class TillStationScreen extends LitElement {
       this.#stationsLoaded = true;
     } catch {
       this.stations = [];
+      this.stale = true;
       return;
     }
     if (!this.isConnected) return;
@@ -553,7 +555,11 @@ export class TillStationScreen extends LitElement {
             ${this.view === "kanban" ? t("station.view_rail") : t("station.view_kanban")}
           </wt-button>
           <p class="stale" role="status" ?data-stale=${this.stale}>
-            ${this.stale ? this.#staleMessage() : nothing}
+            ${
+              this.stale
+                ? html`<till-stale-since .since=${this.#lastGoodAt}></till-stale-since>`
+                : nothing
+            }
           </p>
           ${
             this.tableChanged === null
@@ -576,14 +582,6 @@ export class TillStationScreen extends LitElement {
         ${opts.body}
       </section>
     `;
-  }
-
-  #staleMessage(): string {
-    const time = new Intl.DateTimeFormat(currentLocale(), {
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(this.#lastGoodAt);
-    return t("station.stale").replace("{time}", () => time);
   }
 
   #noStations(): TemplateResult {
