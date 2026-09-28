@@ -232,6 +232,13 @@ export function draftServer(
   let ids = 0;
   const replies = new Map<string, SubmittedDraft>();
   const clone = <T>(value: T): T => structuredClone(value);
+  /** Merges as the server does, and gives every line a new id, recorded by that id. */
+  const reidentify = (lines: DraftSave["lines"]): DraftLine[] =>
+    normaliseDraftLines(lines).map((line) => {
+      const saved = { ...line, id: `line-${++ids}`, unavailable: false };
+      server.linesById.set(saved.id, saved);
+      return saved;
+    });
   const server = {
     personId: "p1",
     personName: "Ana",
@@ -279,11 +286,7 @@ export function draftServer(
         draft = server.open(visitId, save.draftId, save.revision);
       }
       draft.revision += 1;
-      draft.lines = normaliseDraftLines(save.lines).map((line) => {
-        const saved = { ...line, id: `line-${++ids}`, unavailable: false };
-        server.linesById.set(saved.id, saved);
-        return saved;
-      });
+      draft.lines = reidentify(save.lines);
       return draft;
     },
     /** A take-over as the server does it: the person's own draft answers as it is; another's
@@ -307,11 +310,7 @@ export function draftServer(
       }
       server.drafts.splice(server.drafts.indexOf(draft), 1);
       own.revision += 1;
-      own.lines = normaliseDraftLines([...own.lines, ...draft.lines]).map((line) => {
-        const saved = { ...line, id: `line-${++ids}`, unavailable: false };
-        server.linesById.set(saved.id, saved);
-        return saved;
-      });
+      own.lines = reidentify([...own.lines, ...draft.lines]);
       return own;
     },
     /** A submission as the server takes it, whether or not its answer reaches the till. */
