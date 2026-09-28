@@ -1737,7 +1737,7 @@ export async function addTabRound(
   lines: TabRoundLine[],
   // Written on every row the round inserts, extras children included.
   stamp: { groupId?: string; creditedTo?: string } = {},
-): Promise<{ tabId: string }> {
+): Promise<void> {
   const round = await priceTabRound(tx, cfg, tabId, lines);
   const appendedLines = await insertTabRound(
     tx,
@@ -1763,7 +1763,6 @@ export async function addTabRound(
   }));
   await fireLines(tx, cfg, tabId, withHold);
   await bumpRevision(tx, [tabId]);
-  return { tabId };
 }
 
 /** A round priced for an open tab and numbered after its last line, not yet written. */
@@ -1778,6 +1777,8 @@ export interface PricedTabRound {
 
 /**
  * Price a round for the bill and number its rows after the bill's last line, writing no line.
+ * `"checked"` skips the check that the bill is open, for a caller that read it open in this
+ * transaction.
  *
  * The `max(line_no)+1` read-then-insert cannot interleave with another append, because
  * `withTransaction` IS the venue file's write lock.
@@ -1787,8 +1788,9 @@ export async function priceTabRound(
   cfg: TillConfig,
   tabId: string,
   lines: TabRoundLine[],
+  bill: "check" | "checked" = "check",
 ): Promise<PricedTabRound> {
-  await assertPartyBillOpen(tx, cfg, tabId);
+  if (bill === "check") await assertPartyBillOpen(tx, cfg, tabId);
   if (lines.length === 0) {
     throw new AppError("sale.empty_basket", {});
   }
@@ -1832,16 +1834,17 @@ export async function insertTabRound(
 }
 
 /**
- * A settled or abandoned tab that tables of its party still point at: its party. Null for any other
- * order, so a screen that has not seen the party's next bill cannot act on it.
+ * Whether the order is a settled or abandoned bill that a table of its own party still points at.
+ * A closed bill no table points at any more does not qualify, so a screen that has not seen the
+ * party's next bill cannot act on it.
  */
-async function closedPartyTab(tx: Transaction, tabId: string): Promise<{ partyId: string } | null> {
+async function partyStillShowsClosedTab(tx: Transaction, tabId: string): Promise<boolean> {
   const [order] = await tx
     .select({ status: workingOrders.status, partyId: workingOrders.partyId })
     .from(workingOrders)
     .where(eq(workingOrders.id, tabId));
   if (order?.partyId == null || (order.status !== "settled" && order.status !== "abandoned")) {
-    return null;
+    return false;
   }
   const [pointed] = await tx
     .select({ id: diningTables.id })
@@ -1855,7 +1858,7 @@ async function closedPartyTab(tx: Transaction, tabId: string): Promise<{ partyId
       ),
     )
     .limit(1);
-  return pointed === undefined ? null : { partyId: order.partyId };
+  return pointed !== undefined;
 }
 
 /**
@@ -1867,7 +1870,7 @@ async function assertTabOpenOrPartyCurrent(
   cfg: TillConfig,
   tabId: string,
 ): Promise<void> {
-  if ((await closedPartyTab(tx, tabId)) === null) {
+  if (!(await partyStillShowsClosedTab(tx, tabId))) {
     await assertTabOpen(tx, cfg, tabId);
   }
 }

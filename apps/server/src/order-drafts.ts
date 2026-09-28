@@ -304,6 +304,7 @@ export async function submitDraft(
         joinGroupId,
         operatorId,
         billId: input.billId,
+        revisionMoved: true,
         ...(joinGroupId === undefined
           ? { addedLater: await startedAfterAGroup(tx, partyId, draft.createdAt) }
           : {}),

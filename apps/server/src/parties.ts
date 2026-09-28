@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, notExists, sql } from "drizzle-orm";
 import {
   diningTables,
   nowIso,
@@ -85,27 +85,42 @@ export async function seatTable(
 }
 
 /**
- * The party's main bill, where an order that names no bill goes. When the party has none, an empty
- * one is made on the party and becomes its main bill.
+ * The party's main bill, where an order that names no bill goes: always an open bill of the party.
+ * When the party has none, an empty one is made on the party and becomes its main bill, moving the
+ * party's revision on unless the caller's command already has (`"moved"`). A main bill that is not
+ * an open bill of the party is refused `tab.not_open`, so a caller may write to the answer without
+ * checking it again.
  */
 export async function partyMainBill(
   tx: Transaction,
   cfg: TillConfig,
   partyId: string,
+  revision: "move" | "moved" = "move",
 ): Promise<string> {
   const [party] = await tx
-    .select({ state: parties.state, mainBillId: parties.mainBillId })
+    .select({
+      state: parties.state,
+      mainBillId: parties.mainBillId,
+      billStatus: workingOrders.status,
+      billPartyId: workingOrders.partyId,
+    })
     .from(parties)
+    .leftJoin(workingOrders, eq(workingOrders.id, parties.mainBillId))
     .where(eq(parties.id, partyId));
   if (party?.state !== "open") {
     throw new AppError("party.not_open", { partyId });
   }
-  if (party.mainBillId !== null) return party.mainBillId;
+  if (party.mainBillId !== null) {
+    if (party.billStatus !== "open" || party.billPartyId !== partyId) {
+      throw new AppError("tab.not_open", { tabId: party.mainBillId });
+    }
+    return party.mainBillId;
+  }
   const billId = randomUUID();
   const zoneId = await partyZone(tx, cfg, partyId);
   await createOpenOrder(tx, cfg, billId, [], null, { zoneId: zoneId ?? undefined, partyId });
   await setMainBill(tx, partyId, billId);
-  await bumpPartyRevision(tx, partyId);
+  if (revision === "move") await bumpPartyRevision(tx, partyId);
   return billId;
 }
 
@@ -122,16 +137,26 @@ export async function setMainBill(
 ): Promise<void> {
   await tx.update(parties).set({ mainBillId: billId }).where(eq(parties.id, partyId));
   if (billId === null) return;
-  const members = await tx
-    .select({ id: diningTables.id, status: workingOrders.status })
-    .from(partyTables)
-    .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
-    .leftJoin(workingOrders, eq(workingOrders.id, diningTables.tabId))
-    .where(and(eq(partyTables.partyId, partyId), isNull(partyTables.leftAt)));
-  const unpointed = members.filter((table) => table.status !== "open").map((table) => table.id);
-  if (unpointed.length > 0) {
-    await tx.update(diningTables).set({ tabId: billId }).where(inArray(diningTables.id, unpointed));
-  }
+  await tx
+    .update(diningTables)
+    .set({ tabId: billId })
+    .where(
+      and(
+        inArray(
+          diningTables.id,
+          tx
+            .select({ id: partyTables.tableId })
+            .from(partyTables)
+            .where(and(eq(partyTables.partyId, partyId), isNull(partyTables.leftAt))),
+        ),
+        notExists(
+          tx
+            .select({ id: workingOrders.id })
+            .from(workingOrders)
+            .where(and(eq(workingOrders.id, diningTables.tabId), eq(workingOrders.status, "open"))),
+        ),
+      ),
+    );
 }
 
 /** The service zone of the party's earliest active table; null when it holds none, or no zone. */

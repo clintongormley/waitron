@@ -110,7 +110,7 @@ export async function submitGroups(
     { partyId, operatorId, ...body },
     async () => {
       await checkAndBumpParty(tx, partyId, expectedPartyRevision, "open");
-      return placeGroups(tx, cfg, partyId, input);
+      return placeGroups(tx, cfg, partyId, { ...input, revisionMoved: true });
     },
   );
 }
@@ -121,6 +121,8 @@ export type PlaceGroupsInput = Pick<
 > & {
   /** Whether the groups it starts are a later addition; by default, whether the party had a group. */
   addedLater?: boolean;
+  /** The command has already moved the party's revision on, so making a main bill does not. */
+  revisionMoved?: boolean;
 };
 
 /**
@@ -150,21 +152,18 @@ export async function placeGroups(
       release: group.release === "fire",
     })),
   );
-  const billId =
-    input.billId === undefined
-      ? await partyMainBill(tx, cfg, partyId)
-      : (await requireBillOfParty(tx, partyId, input.billId), input.billId);
   // A first group with no lines prices nothing, as the bill is checked before the empty basket.
+  const tabId = await resolveOrderBill(tx, cfg, partyId, input);
   const round = await priceTabRound(
     tx,
     cfg,
-    billId,
+    tabId,
     input.groups[0]!.lines.length === 0 ? [] : lines,
+    "checked",
   );
   if (input.groups.some((group) => group.lines.length === 0)) {
     throw new AppError("sale.empty_basket", {});
   }
-  const { tabId } = round;
   const groupIds: string[] = [];
   if (input.joinGroupId !== undefined) groupIds.push(input.joinGroupId);
   else {
@@ -222,6 +221,22 @@ export async function placeGroups(
     revision: await currentRevision(tx, partyId),
     groups: groupIds.map((id) => listed.get(id)!),
   };
+}
+
+/** The bill a submission goes on: the open bill of the party it names, or else the main bill. */
+async function resolveOrderBill(
+  tx: Transaction,
+  cfg: TillConfig,
+  partyId: string,
+  input: Pick<PlaceGroupsInput, "billId" | "revisionMoved">,
+): Promise<string> {
+  const { billId } = input;
+  if (billId === undefined) {
+    return partyMainBill(tx, cfg, partyId, input.revisionMoved === true ? "moved" : "move");
+  } else {
+    await requireBillOfParty(tx, partyId, billId);
+    return billId;
+  }
 }
 
 /**
