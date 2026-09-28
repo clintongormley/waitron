@@ -707,13 +707,16 @@ slips name a joined tab's lowest-id table (`readOrderHeader`, `apps/server/src/k
 so after a join a MOVED slip's "from" can name the other table; recording each ticket's printed
 table would fix it.
 
-**A line moved onto a split CHECK cannot be voided from the check.** `voidTabLine`
-(`apps/server/src/working-order.ts`) calls `assertAnchoredTabOpen`, which refuses `tab.not_open`
-for an open order no table points at, and a check is exactly that; `voidTabLine` did the same on
-`main` before menus Task 7b. What Task 7b adds (owner decision 2026-09-26): a part of a line the
-kitchen has started can now be split onto a check, so the kitchen's made-but-cancelled part cannot
-be voided there. A check can be merged back into its tab (`mergeTabs`, "tells the kitchen nothing
-when a check merges back into the tab it was split from" in `apps/server/src/split-bill.test.ts`).
+**The owner decided a split check gets no Void; the server now allows one.** Since
+table-actions Task 2 (feat/party-main-bill, 2026-09-28), `voidTabLine`
+(`apps/server/src/working-order.ts`) calls `assertPartyBillOpen`. It lets through an open bill
+that belongs to a party whether or not a table points at it, and a split check carries its party
+("can have a line voided", `apps/server/src/party-main-bill.test.ts`). An open order of no party
+that no table points at is still refused `tab.not_open`. Before Task 2 the server refused a void
+on a check no table pointed at (`assertAnchoredTabOpen`). Since menus Task 7b (owner decision
+2026-09-26), a part of a line the kitchen has started can be split onto a check. A check can be
+merged back into its tab (`mergeTabs`, "tells the kitchen nothing when a check merges back into
+the tab it was split from" in `apps/server/src/split-bill.test.ts`).
 **Decided (owner, 2026-09-26):** a check gets no Void. The till pays a check straight after
 "Create bill", so a dish being cancelled is voided on the TAB first; a change of mind in between is
 covered by merging the check back. Since menus M7b3 the originating till does that merge itself when
@@ -2265,7 +2268,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     Tab-drawer Send all now; the waiter fires one held group at a time, one request each, from the
     list of the party's groups in the Tab drawer, whose Fire button appears only when the venue's
     `fire_control` is `waiter`)_; the till, not the server, refuses a round aimed at a split-off
-    check, because the route names the party, not the bill; a whole-order save replacing a held dish with another
+    check, because the route names the party, not the bill _(table-actions Task 2, 2026-09-28:
+    the groups and draft-submit routes now take an optional `billId`, and a round naming a split
+    check of the party goes onto it; the till sends none yet)_; a whole-order save replacing a held dish with another
     variant moves it to a new held group at the end; the counter's whole-order save does not answer
     the party's revision; a held no-route dish outside any group gets no Send all button (whether
     one can occur on a party's tab is not established) _(Task 4, 2026-09-27: the till has no
@@ -2881,6 +2886,77 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `submission.id_reused`, because the stored fingerprint was taken over argument names that
     included `visitId` (found by #816's Codex review). Only a dev venue, on a retry that straddles
     the upgrade, can meet it.
+  - **Task 2 built (feat/party-main-bill, PR to come): a party names its main bill, and new
+    orders go to it.** What changes for a person using the till:
+    - A party's next order after its main bill is paid or presented starts a new main bill.
+      Before, that happened only after payment. No product path presents a party's bill until
+      Task 7, so today only payment reaches it.
+    - A round can be sent to another open bill of the same party, such as a split check: the
+      groups route and the draft-submit route take an optional `billId`. The till sends none yet;
+      Task 10 offers it.
+    - The server now accepts line changes on a party's split bill. The seven server commands that
+      called `assertAnchoredTabOpen` (send, recall, a round, void, a line's course, moving lines
+      between bills, and splitting) call `assertPartyBillOpen` instead. It lets through an open
+      bill that belongs to a party, whether or not a table points at it. An open order of no
+      party that no table points at is still refused `tab.not_open`. Tests cover a void and a
+      round on a split bill.
+    - A party can be given a name (`PUT /api/parties/:id/name`). The floor read carries `name`,
+      `mainBillId` and `displayName` for each party; `displayName` is the name, or else the
+      party's tables' labels. No till screen uses them yet.
+
+    New codes, each 409 and named in English and Spanish on the till: `bill.presented`,
+    `bill.paid` and `bill.other_party`, for an order naming a presented bill, a paid bill or
+    another party's bill. Migrations: core `0037_party_main_bill` adds the two `parties` columns
+    `name` and `main_bill_id`, and `0038_main_bill_release` adds two triggers on
+    `working_orders`. They clear a party's main bill when that bill stops being open, or when it
+    moves to another party. Nothing is rebuilt.
+
+    Upgrade measured 2026-09-28. A scratch venue in `/tmp` was migrated and seeded on main
+    `e15dcb6d0` with its own code: a party with an open tab holding a dish, a party whose tab was
+    paid, a party with a split check, and two joined tables. It was then migrated to the branch
+    in one go through `applyMigrations`. Every row was kept, and the only row change was two more
+    rows in `__drizzle_migrations_db`. Counted from `sqlite_master` without SQLite's own
+    `sqlite_` entries, tables stayed at 149 and indexes at 155, and triggers went from 72 to 74.
+    The only schema changes were the two triggers and the two columns.
+    `pragma foreign_key_check` found nothing. Every party's `main_bill_id` read null (no data
+    migration, CLAUDE.md §3). The branch's `placeGroups` was then called for each party:
+    - The party whose tab was paid got a new main bill, and its table now pointed at that bill,
+      as before the change.
+    - A party whose tab was still open did NOT order onto that tab. Its dish went onto a new,
+      second open bill, which became the main bill. Its table still pointed at the old tab, and
+      the floor read still showed the old tab with its one dish, with `billCount` 2. The party's
+      bills listed both as open and unpaid. A second order went onto the same new bill.
+    - The same happened to the party with a split check (three open bills) and to the joined
+      tables, both of which still showed the old tab. An order naming the split check went onto
+      the check.
+
+    So a party seated before the upgrade and ordering after it has two bills to pay. After Send,
+    the till moves to the bill the order went on (`#followDraft`, `apps/till/src/till-app.ts`).
+    Opening the table again from the floor shows the old tab, and the new order is listed only
+    among the party's bills. That part was read from the till's code, not run. Only a dev venue
+    can meet it; `wa-wt reset demo <name>` gives a clean one. The server was not booted on the
+    upgraded venue.
+
+    Tests moved or changed, and the decision behind each:
+    - The "pay, then order dessert" block moved from `apps/server/src/parties.test.ts` to
+      `apps/server/src/party-main-bill.test.ts`. Its rounds go through `placeGroups`, because
+      `addTabRound` no longer opens a next bill (plan Task 2 Step 4). In that block, naming a
+      paid bill now answers `bill.paid` where it answered `tab.not_open` (P5, and P3's order).
+      "refuses a round sent to the settled tab of a finished party" became "refuses a round for
+      a finished party", answering `party.not_open` (P4).
+    - Four other `parties.test.ts` cases send their next round through `placeGroups` instead of
+      `addTabRound` on the paid tab, with their assertions unchanged (plan Task 2 Step 4). They
+      are "keeps both tables seated after payment, and a dessert round lands on the same party for
+      both", "joins Mesa 5, and the next round opens the party's next tab on both tables",
+      "refuses moving or joining with a settled tab the party has moved on from", and "points only
+      Mesa 4 at the next tab when a round follows the paid tab".
+    - `apps/server/src/order-groups.test.ts` "refuses a submission when the party's tables point
+      at no tab" is retired. "puts a submission on the party's main bill even when its tables
+      point at no tab" replaces it (spec decision 15, P4).
+    - The cases the plan expected to retire as pinning a split bill as second-class (spec §3, P5)
+      still pass and are unchanged. "refuses a DETACHED CHECK as the split origin" uses a check
+      that belongs to no party, and "refuses a round sent to the check, and opens no next tab"
+      uses a check that is paid.
   - **Task 6 DONE (#818, 2026-09-28):** collecting a presented bill
     settles the sale already recorded for it, and issues one only when there is none; it no longer
     reads the zone's service mode (`collectOrder`, `apps/server/src/till-sale.ts`). A bill placed in
