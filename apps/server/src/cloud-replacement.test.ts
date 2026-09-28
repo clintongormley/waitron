@@ -524,7 +524,7 @@ it("saves a recorded stop and refuses a saved stop that is not true", async () =
   });
 });
 
-it("does not let a corrupt replacement file block Stop access, since nothing can be re-imported from it", async () => {
+it("does not let a corrupt replacement file block Stop access, while start-up and Check reconnection refuse the unreadable file too", async () => {
   const { f, client, sent } = await connectedReplacement();
   const path = join(f.stateDir, "cloud-replacement.json");
   await chmod(path, 0o640);

@@ -88,9 +88,10 @@ remote-access integration covers venue-owned staff certificate keys, CSR/install
 reload and the minimal public availability endpoint; the serving-primary test installation schedules
 signed, encrypted daily snapshots and uploads them to Cloud; the setup wizard guides a fresh
 replacement through Cloud owner approval of one verified snapshot for a test venue; and the restored
-test-server Cloud replacement path has landed (#638). Observations are synthetic until service
-adapters exist. Cloud owns the two-server WireGuard/HAProxy proof, bot gate, DNS override, gateway
-replacement and revocation.
+test-server Cloud replacement path has landed (#638); a stopped replacement stays stopped when
+`cloud-connection.json` is lost, because Stop access also records the stop in
+`cloud-replacement.json`. Observations are synthetic until service adapters exist. Cloud owns the
+two-server WireGuard/HAProxy proof, bot gate, DNS override, gateway replacement and revocation.
 
 Open:
 
@@ -102,13 +103,11 @@ Open:
 - After a Cloud replacement (#638), installing the new tunnel and TLS certificate remains an
   operator step. Continuous complete-server recovery, planned final-write handover and production
   recovery remain open. Cloud owns route placement and fencing in its backlog.
-- **DONE (lane C's C29): a stopped replacement stays stopped after `cloud-connection.json` is
-  deleted.** Stop access now also records the stop in `cloud-replacement.json` (`recordStop`,
-  `apps/server/src/cloud-replacement.ts`, called by the route after the permission recheck), and
-  an import from that file — `resume()` on start, or Check reconnection — writes the connection
-  with the stop waiting, so the next check with Cloud (`refresh`) sends the stop again rather than
-  a renewal on the retired key. Cases in `apps/server/src/cloud-replacement.test.ts`; the start-up
-  one runs with Cloud having heard the stop and not having heard it.
+- A stop made while `cloud-replacement.json` is unreadable is not recorded in it. If that file is
+  later repaired and `cloud-connection.json` lost, the next start restores the connection without
+  the stop and the next check sends `renew` (reproduced by the review of lane C's C29,
+  2026-09-28). Owner to choose: refuse Stop access while the replacement file is unreadable, or
+  record the stop somewhere that survives the repair.
 
 The Litestream stream's sealed-state restore and activation still need integration with Cloud
 storage and owner recovery. Connected does

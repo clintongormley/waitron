@@ -384,14 +384,14 @@ export function createCloudReplacement(options: ReplacementOptions) {
         await importInto(saved, saved.view);
       });
     },
-    /** Called once Stop access is authorised: `cloud-connection.json` alone cannot keep the stop if it is deleted. */
+    /** `cloud-connection.json` alone cannot keep the stop if it is deleted. */
     async recordStop(): Promise<void> {
       await locked(async () => {
         let saved: SavedReplacement | undefined;
         try {
           saved = await read();
         } catch {
-          // Resume and check refuse this file too, so no connection can be re-imported from it.
+          // Resume and check refuse the file while it stays unreadable; a repaired file comes back without the stop (docs/backlog.md).
           return;
         }
         if (!saved || (await options.connection.status()).requestId !== saved.requestId) return;
