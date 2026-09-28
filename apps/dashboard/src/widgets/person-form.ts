@@ -11,10 +11,8 @@ import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-input.js";
 import type { PersonRole } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
-import { roleName } from "../i18n/domain.js";
+import { roleName, rolesByName } from "../i18n/domain.js";
 import { t } from "../i18n/t.js";
-
-const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"];
 
 type Field = "firstNames" | "lastNames" | "displayName" | "email";
 
@@ -160,7 +158,7 @@ export class PersonForm extends LitElement {
               this.selectedRole = (event.target as HTMLSelectElement).value as PersonRole;
             }}
           >
-            ${ROLES.map((role) => html`<option value=${role}>${roleName(role)}</option>`)}
+            ${rolesByName().map((role) => html`<option value=${role}>${roleName(role)}</option>`)}
           </select>
         </label>
         <wt-form-actions slot="footer">

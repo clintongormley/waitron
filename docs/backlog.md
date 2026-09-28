@@ -2225,9 +2225,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `evaluateAdjustment` counts a cancel's reduction against the reason's euro limit, and it
     throws a `RangeError` on a malformed request (a negative amount, or a percentage discount
     without a percentage from 1 to 10000) rather than returning a verdict. Left from the review:
-    the reasons screen repeats the role list in `apps/dashboard/src/widgets/person-edit.ts` and the
-    placeholder-filling helper in `apps/dashboard/src/widgets/menu-preview.ts`; sharing them means moving both into `@waitron/dashboard-kit`. **Next
-    action:** do that move if a third module screen needs them.
+    the reasons screen keeps its own copy of the role list and role names (in seniority order,
+    where the dashboard's `rolesByName` sorts by name) and of the placeholder-filling helper in
+    `apps/dashboard/src/widgets/menu-preview.ts`; sharing them means moving both into
+    `@waitron/dashboard-kit`. **Next action:** do that move if a third module screen needs them.
   - **Task 2 landed as #715** (2026-09-27): a record per seated party. Core tables `parties`,
     `party_tables` (one active membership per table) and `service_commands`, and
     `working_orders.party_id` (core migrations `0018`–`0020`, where they were named after visits;
@@ -3255,7 +3256,16 @@ ongoing overhaul listed at the top of Track A.
   has to rewrite those rows as well.
 - **Roles are something an admin can add and edit; the four built-ins are only defaults** (owner
   decision 2026-09-12, design not written). Detail under *Detail → Roles*: the ladder question decides
-  the schema.
+  the schema. The owner restated it on 2026-09-28 ("especially because I want roles to be definable
+  by the customer"), when asking for roles to be listed alphabetically. Since lane C's C36 the
+  dashboard's three role lists — the add-person and edit-person forms and the Staff screen's role
+  filter — sort by the displayed name in the current language (`rolesByName`,
+  `apps/dashboard/src/i18n/domain.ts`), so a custom role's name would take its place among them. The
+  adjustments module's reasons screen (`packages/adjustments/src/dashboard/reasons-screen.ts`) still
+  lists its two role dropdowns lowest to highest: that list's order also drives the screen's own
+  check that the approving role is at least as senior as the applying one (the server checks
+  separately, with `roleAtLeast`), and a custom role has no place in that order until the ladder
+  question is answered.
 - **`wt-select` in `packages/ui`** (owner decision 2026-09-12): every screen writes its own raw
   `<select>`, so a rule alone could not be guarded. Sorts by the label the person reads with
   `Intl.Collator`; lists in a lifecycle order say so; then migrate the screens, including the filter
@@ -7104,7 +7114,7 @@ a role (`person.admin` plus nobody mints or widens beyond what they hold, and a 
 with nobody who can administer roles); a role in use (deleting or narrowing one changes live
 sessions on their next request); storage (a table in identity's own migration set with a
 classification entry — never an enum, CLAUDE.md §2); names (built-ins are translated from
-`roleName`, `apps/dashboard/src/i18n/domain.ts:180`, custom ones will not be).
+`roleName`, `apps/dashboard/src/i18n/domain.ts:135`, custom ones will not be).
 
 ### Incidents — the producers, and why the surface is separate from A1 (A5)
 

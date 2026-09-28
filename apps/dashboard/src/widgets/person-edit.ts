@@ -9,10 +9,9 @@ import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-input.js";
 import type { PersonEditDetails, PersonRole, PersonSummary } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
-import { roleName, statusName } from "../i18n/domain.js";
+import { roleName, rolesByName, statusName } from "../i18n/domain.js";
 import { t } from "../i18n/t.js";
 
-const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"];
 type EditableField = "displayName" | "firstNames" | "lastNames" | "email";
 
 @customElement("dashboard-person-edit")
@@ -233,7 +232,7 @@ export class PersonEdit extends LitElement {
                           role: (event.target as HTMLSelectElement).value as PersonRole,
                         })}
                     >
-                      ${ROLES.map(
+                      ${rolesByName().map(
                         (role) =>
                           html`<option value=${role} .selected=${this.details.role === role}>
                             ${roleName(role)}

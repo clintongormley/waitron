@@ -10,6 +10,7 @@ import {
   printModeName,
   regimeName,
   roleName,
+  rolesByName,
   statusName,
   swapDirectionName,
   swapStatusName,
@@ -32,6 +33,13 @@ it("resolves a role token to Spanish, to English, and passes an unknown value th
   expect(roleName("supervisor", "es")).toBe("Supervisor");
   expect(roleName("admin", "es")).toBe("Administrador");
   expect(roleName("wizard", "es")).toBe("wizard");
+});
+
+it("lists the roles alphabetically by the name shown in the language asked for", () => {
+  expect(rolesByName("en-GB")).toEqual(["admin", "manager", "staff", "supervisor"]);
+  expect(rolesByName("es-ES")).toEqual(["admin", "staff", "manager", "supervisor"]);
+  setLocale("en-GB");
+  expect(rolesByName()).toEqual(["admin", "manager", "staff", "supervisor"]);
 });
 
 it("resolves a status token to Spanish and English, unknown value raw", () => {
