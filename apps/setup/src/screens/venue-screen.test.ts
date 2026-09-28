@@ -122,6 +122,7 @@ describe("setup-venue-screen", () => {
       ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[data-test=country] option"),
     ];
     expect(countries.map(({ value }) => value)).toEqual(["ES"]);
+    expect(countries.map((option) => option.textContent?.trim())).toEqual(["Spain"]);
     const provinces = [
       ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[data-test=province] option"),
     ];
