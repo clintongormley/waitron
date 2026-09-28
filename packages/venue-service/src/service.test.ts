@@ -20,6 +20,7 @@ describe("VENUE_SERVICE", () => {
       "readKitchenTicketGrouping",
       "readLinesSoldInEach",
       "readPrintHeldWork",
+      "readReleaseReminderMinutes",
       "recordKitchenNotices",
       "recordLineContexts",
       "recordOrderContext",

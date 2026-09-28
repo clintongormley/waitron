@@ -35,9 +35,11 @@ import {
   readEditSentLines,
   readKitchenTicketGrouping,
   readPrintHeldWork,
+  readReleaseReminderMinutes,
   writeEditSentLines,
   writeKitchenTicketGrouping,
   writePrintHeldWork,
+  writeReleaseReminderMinutes,
 } from "./kitchen-notices.js";
 import { KITCHEN_TICKET_GROUPINGS, type KitchenTicketGrouping } from "./schema/settings.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
@@ -75,6 +77,21 @@ function requireMode(value: unknown, field: string): ServiceMode {
 function requireDisplayOrder(value: unknown): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
     throw new AppError("management.request_invalid", { field: "displayOrder" });
+  }
+  return value;
+}
+
+const MAX_RELEASE_REMINDER_MINUTES = 120;
+
+function requireReleaseReminderMinutes(value: unknown): number | null {
+  if (value === null) return null;
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 1 ||
+    value > MAX_RELEASE_REMINDER_MINUTES
+  ) {
+    throw new AppError("management.request_invalid", { field: "releaseReminderMinutes" });
   }
   return value;
 }
@@ -137,6 +154,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           settings: { editSentLines: await readEditSentLines(tx) },
           kitchenTicketGrouping: await readKitchenTicketGrouping(tx),
           printHeldWork: await readPrintHeldWork(tx),
+          releaseReminderMinutes: await readReleaseReminderMinutes(tx),
         }));
         return c.json(result);
       }),
@@ -179,6 +197,16 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           throw new AppError("management.request_invalid", { field: "printHeldWork" });
         }
         await gated(sessionId, (tx) => writePrintHeldWork(tx, printHeldWork));
+        return c.body(null, 204);
+      }),
+    );
+
+    app.put("/management-api/venue-service/settings/release-reminder-minutes", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        const minutes = requireReleaseReminderMinutes(body.releaseReminderMinutes);
+        await gated(sessionId, (tx) => writeReleaseReminderMinutes(tx, minutes));
         return c.body(null, 204);
       }),
     );

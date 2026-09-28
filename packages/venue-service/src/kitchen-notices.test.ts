@@ -36,11 +36,13 @@ import {
   readEditSentLines,
   readKitchenTicketGrouping,
   readPrintHeldWork,
+  readReleaseReminderMinutes,
   recordKitchenNotices,
   writeClearingWorkflow,
   writeEditSentLines,
   writeKitchenTicketGrouping,
   writePrintHeldWork,
+  writeReleaseReminderMinutes,
   type KitchenNoticeItem,
 } from "./kitchen-notices.js";
 
@@ -865,6 +867,7 @@ describe("the edit-sent-lines setting", () => {
         clearingWorkflow: false,
         kitchenTicketGrouping: "combined",
         printHeldWork: false,
+        releaseReminderMinutes: 10,
       },
     ]);
     // Raw SQL, so the stored value is read without the column's boolean mapping.
@@ -898,6 +901,7 @@ describe("the clearing-workflow setting", () => {
         clearingWorkflow: true,
         kitchenTicketGrouping: "combined",
         printHeldWork: false,
+        releaseReminderMinutes: 10,
       },
     ]);
   });
@@ -929,6 +933,7 @@ describe("the kitchen ticket grouping setting", () => {
         clearingWorkflow: false,
         kitchenTicketGrouping: "separate",
         printHeldWork: false,
+        releaseReminderMinutes: 10,
       },
     ]);
   });
@@ -971,7 +976,45 @@ describe("the print-held-work setting", () => {
         clearingWorkflow: false,
         kitchenTicketGrouping: "combined",
         printHeldWork: true,
+        releaseReminderMinutes: 10,
       },
     ]);
+  });
+});
+
+describe("the release-reminder setting", () => {
+  it("reads 10 minutes when the venue has no settings row", async () => {
+    expect(await inTx((tx) => readReleaseReminderMinutes(tx))).toBe(10);
+  });
+
+  it("reads what was written, off included, and leaves the other settings alone", async () => {
+    await inTx((tx) => writeEditSentLines(tx, false));
+    await inTx((tx) => writeReleaseReminderMinutes(tx, 15));
+    expect(await inTx((tx) => readReleaseReminderMinutes(tx))).toBe(15);
+    expect(await inTx((tx) => readEditSentLines(tx))).toBe(false);
+    expect(await inTx((tx) => readPrintHeldWork(tx))).toBe(false);
+    await inTx((tx) => writeReleaseReminderMinutes(tx, null));
+    expect(await inTx((tx) => readReleaseReminderMinutes(tx))).toBeNull();
+    await db.execute(sql`update service_settings set release_reminder_minutes = 7`);
+    expect(await inTx((tx) => readReleaseReminderMinutes(tx))).toBe(7);
+  });
+
+  it("stores off as null, not as the default, when it is the first setting written", async () => {
+    await inTx((tx) => writeReleaseReminderMinutes(tx, null));
+    expect(await db.select().from(serviceSettings)).toEqual([
+      {
+        id: 1,
+        editSentLines: true,
+        clearingWorkflow: false,
+        kitchenTicketGrouping: "combined",
+        printHeldWork: false,
+        releaseReminderMinutes: null,
+      },
+    ]);
+  });
+
+  it("gives a row another setting created the 10-minute default", async () => {
+    await inTx((tx) => writePrintHeldWork(tx, true));
+    expect(await inTx((tx) => readReleaseReminderMinutes(tx))).toBe(10);
   });
 });
