@@ -2683,19 +2683,58 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       - Cancel on the menu-change question holds until the next publish, re-read or Send, not
         the next poll.
   - **Task 9 (served by quantity, release reminders, Current orders) is on its branch**,
-    `feat/service-served-and-reminders` (lane B item B9, 2026-09-28). Left open:
-    - Once a venue's invoice languages change, marking a line served on a paid bill is refused.
-      The two locale triggers on order lines (`working_order_lines_check_locales_update` and
-      `working_order_lines_check_variant_locales_update`, core migration `0027`) check a line's
-      descriptions against the venue's current languages on every update, a served mark included.
-      A Part 1 test pins the refusal ("refuses a served mark on a settled line once its venue's
-      invoice locales changed", `scripts/behavioural-triggers.test.ts`). No product route changes
-      a venue's invoice languages after setup today. **Next action:** limit both triggers to
-      updates of `descriptions` (and `variant_descriptions`) and `working_order_id`.
-    - The floor dashboard shows no reminder mark on a table yet. The floor data already carries
-      each party's `reminder` (the held group waiting and when it is due). The table screen's
-      Current orders shows it on the waiting group: the time it falls due, then Snooze and Fire once
-      it has. **Next action:** a mark on the table token when a party's reminder is due.
+    `feat/service-served-and-reminders` (lane B item B9, 2026-09-28). What it does:
+    - Staff mark dishes served by quantity ("2 of 4 served"), row by row or a whole fired group at
+      once, and can take a mark back. The marks are commands on the party (`markServed`,
+      `unmarkServed`, `markGroupServed`, `apps/server/src/working-order.ts`), replacing the old
+      whole-line mark, and they work on a bill already paid without touching its filed sale. Only
+      released work can be marked: a line in a held group, or whose kitchen ticket has not fired,
+      is refused `group.line_held`.
+    - The server works out when the party's next held group should be fired: once every dish of
+      the fired groups ahead of it is served, a set number of minutes after the last of them.
+      Staff can put it off by five minutes. A manager sets the minutes, or turns the reminder off,
+      on the dashboard's operations screen (Off, or 5 to 30 minutes; the route takes any whole
+      number from 1 to 120).
+    - The table screen's tab drawer is now Current orders: every group of the party in order, with
+      each dish's recorded kitchen state, from every bill of the party that was not abandoned, a
+      paid one included.
+    - Migrations, none of which rebuilds a table: core `0032_line_served_quantity` and
+      `0034_order_group_added_later` each add one column; core `0033_line_served_exception`
+      re-creates `working_order_lines_require_open_parent_update` so a paid bill's line may still
+      change its two served columns and nothing else; venue-service `0010_release_reminder_minutes`
+      adds one column. Upgrade measured 2026-09-28: a scratch venue migrated to main `582fd221b`,
+      seeded with two parties, five groups (fired, held, removed), three bills (one paid) and seven
+      lines, then migrated to the branch in one go, and on a second venue in two steps (`0033`, then
+      `0034`). Every row was kept; tables (148), triggers (72) and indexes (291) were the same
+      before and after, with only that trigger's text changed; `pragma foreign_key_check` found
+      nothing. Existing groups read `added_later` false and existing lines `served_quantity` 0, so a
+      line marked served before the upgrade keeps `served_at` with a served count of 0 (no
+      backfill, by the pre-live rule).
+    - Left open:
+      - Once a venue's invoice languages change, marking a line served on a paid bill is refused.
+        The two locale triggers on order lines (`working_order_lines_check_locales_update` and
+        `working_order_lines_check_variant_locales_update`, core migration `0027`) check a line's
+        descriptions against the venue's current languages on every update, a served mark included.
+        A Part 1 test pins the refusal ("refuses a served mark on a settled line once its venue's
+        invoice locales changed", `scripts/behavioural-triggers.test.ts`). No product route changes
+        a venue's invoice languages after setup today: a grep finds them written only by setup and
+        the configuration import setup runs. **Next action:** limit both triggers to updates of
+        `descriptions` (and `variant_descriptions`) and `working_order_id`.
+      - A line outside any group that needs no kitchen, held, and first released after its bill was
+        paid cannot be marked served: `sent_at` is its only record of release, and `stampSent`
+        writes it only on an open bill, so the mark is refused `group.line_held` (read in the code,
+        not run). **Next action:** decide whether a paid bill's line may take `sent_at`, which would
+        widen `0033`'s exception.
+      - The till's floor shows no reminder mark on a table yet. The floor data already carries each
+        party's `reminder` (the held group waiting and when it is due). The table screen's Current
+        orders shows it on the waiting group once it has a time: the time it falls due, then Snooze
+        and, where waiters fire held groups, Fire. **Next action:** a mark on the table's token when
+        a party's reminder is due.
+      - A snooze may be put on any held group, not only the one waiting. It stays until that group
+        becomes the one waiting and then replaces the worked-out time, so snoozing group 4 by 120
+        minutes while group 3 waits makes group 4 due two hours later even after group 3 is served
+        (read in the code, not run). The till offers Snooze only on the waiting group. **Next
+        action:** the owner decides whether the server should refuse it on any other group.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card
