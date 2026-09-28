@@ -2989,7 +2989,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - In the till's table screen, the check that treats an unreadable reminder time as "never due"
       (`#reminderDueAt`, `apps/till/src/screens/till-table-order-screen.ts`) has no test of its own:
       the review removed it and no test failed. **Next action:** a case with a malformed `dueAt`.
-  - **Task 4 DONE (PR to follow, 2026-09-29): kitchen slips, the pass, receipts and the overdue
+  - **Task 4 DONE (#832, 2026-09-29): kitchen slips, the pass, receipts and the overdue
     report name all of a party's tables.** What changes for a person:
     - A joined party's kitchen slips, pass cards and overdue-report rows read "Mesa 4, 5" (the
       tables in the order they joined, `partyTablesName`), where they read the table with the
