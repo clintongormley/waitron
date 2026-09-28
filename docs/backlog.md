@@ -419,7 +419,10 @@ refused as a pick the list does not offer), while whether a menu has switched a 
 from the published version; the VAT class, kitchen course and reporting category the served offer carries,
 and each extras item's VAT class (`applyLiveFields`, `packages/catalogue/src/menu-document.ts`), so
 a VAT change still reaches a new line and a new extra without a publish, which menus M7v changes next (_2026-09-27: it has; the VAT class and rate are now read from the published version, see M7v's note_); and whether a picked extra has since gained
-an Active variant, which refuses the pick `product.variant_required`.
+an Active variant, which refuses the pick `product.variant_required`. (_2026-09-28: whether the
+menu itself is active is now read from the current row too, so a menu deactivated after publishing
+is no longer offered or sold from; #719 had dropped that check. Branch `fix/retro-review-719`, from
+the retroactive Codex review of #719._)
 Each unsaved line a till sends may name the version it was priced against (`menuVersionId`); a
 request naming one that is no longer live is refused `menu.version_changed` (409), listing each
 affected menu's live version, before anything is priced or written. A held or tab line records the
@@ -441,6 +444,9 @@ until the server has added it). Follow-up: the comparison does not notice a publ
 required options list to a dish in the basket, or lowers a list's picks limit, so the till takes the
 new version silently and the server then refuses the request `options.label_required` (or
 `extras.limit_exceeded`, per `validateExtraSelections`); nothing wrong is filed, but staff see a refusal where the dialog should have asked.
+The comparison also looks only at each line's total, so dish and extra price changes that cancel out
+are adopted without asking — see the entry "Two till menu-refresh defects the retroactive Codex
+review of #719 found" further down.
 A table's round is also not marked by the poll's sold-out list, only when a send is refused.
 Follow-up: a round the waiter has built but not yet sent belongs to the order it was built on, so
 when a split moves the table screen to the split-off check, the round is not shown on the check
@@ -2667,6 +2673,30 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   with `minPicks: 0` and `maxQuantity: 9` can be failing. The real-world shape is a parked line
   whose list had its cap reduced under it, the same family as the "list lost the product between the
   park and the edit" escape recorded under Task 8.
+- **Two till menu-refresh defects the retroactive Codex review of #719 found (campaign item A108r,
+  2026-09-28), both still present on `main` at `f5a186cd9`; fix them once lane B's drafts-on-the-till
+  branch, which changes `apps/till/src/state/menu-refresh.ts`, has landed.** (1) After an option
+  comes back into stock, the till's menu-state poll keeps the fallback default it was served, while a fresh read
+  from the server returns the published default: `withUnavailable`
+  (`apps/till/src/state/menu-refresh.ts`) starts from the default the till LOADED, which was already
+  a fallback, so two tills can preselect different answers for the same menu and stock until one of
+  them reloads. Run on `main` 2026-09-28: the review's probe test (a published default and a null
+  default, each loaded while its label was out of stock, then restored) failed both cases. Fix:
+  serve the published default in a field of its own and recompute from it on every poll. (2) The
+  basket refresh compares each line's total only (`lineGross`, `refreshBasket`), so a dish going
+  from €9 to €8 while its extra goes from €1 to €2 is adopted silently, with `changed: []`; the menus
+  plan's D9 asks to compare "the line's price (dish, variant, each extra)". Run on `main`
+  2026-09-28: the review's probe test printed `{ changed: [], adoptedDish: '8.00', adoptedExtra:
+  '2.00' }`. The probes are the files `retro719-default.test.ts` (1) and `retro719-prices.test.ts`
+  (2) in the campaign's `retro-reports/retro719-review/probes/` folder, outside this repository;
+  the fixing branch will need them, or rewritten ones, as its failing tests. The review's other two
+  findings: a deactivated menu was still offered and sold from, fixed by the A108r branch
+  `fix/retro-review-719`; and a round entered while the floor was being re-read was hidden when
+  the till followed the party onto its next tab. #748 rewrote that path so the unsent draft is
+  carried to the next tab first (`#followDraft` in `apps/till/src/till-app.ts` calls `#carryDraft`
+  in `apps/till/src/screens/till-table-order-screen.ts`, which keeps a draft already started on
+  that tab instead), but the review's probe tested the old code and was not re-run against the
+  new.
 - **The till does not load its menu until a manual refresh**, and a dashboard menu change does not
   appear live on it. A till-app fix.
 - **The three displays walked end to end** — [ui-review.md](ui-review.md)'s areas, at the real box.
