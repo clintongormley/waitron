@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { OrderLine } from "../state/working-order.js";
@@ -66,6 +67,10 @@ const dialog = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("[data-take-over-dialog]")!;
 const confirmButton = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-take-over-confirm]")!;
+
+/** Settles once the dialog reports it has closed, which the browser does a task after closing. */
+const closing = (el: TillTableOrderScreen) =>
+  new Promise((resolve) => dialog(el).addEventListener("wt-close", resolve, { once: true }));
 
 /** A screen wide enough to show the draft beside browsing. */
 async function wide(over: Partial<TillTableOrderScreen> = {}) {
@@ -252,6 +257,89 @@ describe("till-table-order-screen: Take over draft", () => {
     expect(confirmButton(el).disabled).toBe(false);
     confirmButton(el).click();
     expect(heard).toHaveLength(2);
+  });
+
+  it("keeps the dialog open on Escape while the take-over is out, and lets Escape close it before", async () => {
+    const { el } = await wide({ otherDrafts: [alexs()] });
+    const heard = vi.fn();
+    el.addEventListener("take-over-draft", heard);
+    takeOverButton(panels(el)[0]!).click();
+    await el.updateComplete;
+
+    confirmButton(el).click();
+    await el.updateComplete;
+    await userEvent.keyboard("{Escape}");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await el.updateComplete;
+
+    expect(dialog(el).open).toBe(true);
+    expect(heard).toHaveBeenCalledOnce();
+    el.takeOversAnswered += 1;
+    await el.updateComplete;
+    takeOverButton(panels(el)[0]!).click();
+    await el.updateComplete;
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(dialog(el).open).toBe(false));
+    expect(heard).toHaveBeenCalledOnce();
+  });
+
+  it("puts focus on the person's own order once the taken draft has left the panels", async () => {
+    const { el } = await wide({ otherDrafts: [alexs()] });
+    takeOverButton(panels(el)[0]!).click();
+    await el.updateComplete;
+    confirmButton(el).click();
+    await el.updateComplete;
+
+    const closed = closing(el);
+    el.otherDrafts = [];
+    el.takeOversAnswered += 1;
+    await closed;
+    await el.updateComplete;
+
+    expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("#draft-title"));
+  });
+
+  it("leaves focus on Take over when the draft is still there after the answer", async () => {
+    const { el } = await wide({ otherDrafts: [alexs()] });
+    takeOverButton(panels(el)[0]!).click();
+    await el.updateComplete;
+    confirmButton(el).click();
+    await el.updateComplete;
+
+    const closed = closing(el);
+    el.takeOversAnswered += 1;
+    await closed;
+    await el.updateComplete;
+
+    expect(el.shadowRoot!.activeElement).not.toBe(el.shadowRoot!.querySelector("#draft-title"));
+  });
+
+  it("names the last-added bar's steps for a dish no longer offered", async () => {
+    const { el } = await wide();
+    el.draftStore!.addProduct({ ...beer, id: "gone", menuItemId: "offer-gone", name: "" }, "2");
+    await el.updateComplete;
+
+    const steps = [...el.shadowRoot!.querySelectorAll("[data-last-added-step]")].map((step) =>
+      step.getAttribute("aria-label"),
+    );
+    expect(steps).toEqual([
+      `${t("basket.decrease")} · ${t("basket.not_offered")}`,
+      `${t("basket.increase")} · ${t("basket.not_offered")}`,
+    ]);
+  });
+
+  it("says a take-over is out, not a send, while it locks the person's own order", async () => {
+    const { el } = await wide({ otherDrafts: [alexs()] });
+    await tap(el, "Flan");
+    takeOverButton(panels(el)[0]!).click();
+    await el.updateComplete;
+    confirmButton(el).click();
+    el.draftStore!.sending = true;
+    await el.updateComplete;
+
+    expect(el.shadowRoot!.querySelector("[data-round-sending]")!.textContent!.trim()).toBe(
+      t("table.taking_over"),
+    );
   });
 
   it("offers no Take over while the person's own draft is being sent", async () => {

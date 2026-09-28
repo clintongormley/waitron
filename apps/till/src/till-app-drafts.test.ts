@@ -2003,8 +2003,23 @@ describe("till-app: other people's drafts and taking one over", () => {
   const panels = (el: TillApp) => [
     ...screen(el).querySelectorAll<HTMLElement>("[data-other-draft]"),
   ];
+  /** At the default frame the draft pane is the Review view, so it is opened to read a panel. */
+  async function reviewed(el: TillApp): Promise<void> {
+    if (screen(el).querySelector("[data-draft-pane]")!.checkVisibility()) return;
+    screen(el).querySelector<HTMLElement>("[data-review-open]")!.click();
+    await flush(el);
+  }
+
+  /** Back from Review to browsing, where the dishes are tapped. */
+  async function browsing(el: TillApp): Promise<void> {
+    if (screen(el).querySelector("[data-browsing]")!.checkVisibility()) return;
+    screen(el).querySelector<HTMLElement>("[data-review-back]")!.click();
+    await flush(el);
+  }
+
   const panelOf = (el: TillApp) => {
     const [panel] = panels(el);
+    if (!panel!.checkVisibility()) throw new Error("the panel read must be on screen");
     return {
       heading: panel!.querySelector(".other-draft-title")!.textContent!.trim(),
       lines: [...panel!.querySelectorAll("[data-other-draft-line]")].map((one) =>
@@ -2018,6 +2033,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     screen(el).querySelector<HTMLElement & { open: boolean }>("[data-take-over-dialog]")!.open;
 
   async function takeOver(el: TillApp): Promise<void> {
+    await reviewed(el);
     panelOf(el).takeOver!.click();
     await flush(el);
     screen(el).querySelector<HTMLElement>("[data-take-over-confirm]")!.click();
@@ -2039,12 +2055,14 @@ describe("till-app: other people's drafts and taking one over", () => {
     await openAs(el, SAM, "Sam");
 
     expect(rows(el)).toEqual([]);
+    await reviewed(el);
     expect(panelOf(el)).toMatchObject({
       heading: "Alex has an unsent order",
       lines: ["Beer ×1"],
       sends: false,
     });
 
+    await reviewed(el);
     panelOf(el).takeOver!.click();
     await flush(el);
     expect(dialogOpen(el)).toBe(true);
@@ -2064,6 +2082,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     expect(dialogOpen(el)).toBe(false);
     expect(panels(el)).toEqual([]);
     expect(rows(el)).toEqual(["Beer ×1"]);
+    await browsing(el);
     await tap(el, "Flan");
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
     expect(api.saveDraft).toHaveBeenLastCalledWith(
@@ -2080,11 +2099,13 @@ describe("till-app: other people's drafts and taking one over", () => {
     await openAs(el, ALEX, "Alex");
 
     expect(rows(el)).toEqual([]);
+    await reviewed(el);
     expect(panelOf(el)).toMatchObject({
       heading: "Taken over by Sam",
       lines: ["Beer ×1", "Flan ×1"],
       sends: false,
     });
+    await reviewed(el);
     expect(panelOf(el).takeOver).not.toBeNull();
   });
 
@@ -2105,6 +2126,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     );
     expect(rows(el)).toEqual(["Flan ×2", "Steak ×1", "Beer ×1"]);
     expect(panels(el)).toEqual([]);
+    await browsing(el);
     await tap(el, "Steak");
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
     expect(api.saveDraft).toHaveBeenLastCalledWith(
@@ -2126,6 +2148,8 @@ describe("till-app: other people's drafts and taking one over", () => {
     server.personId = ALEX;
     server.personName = "Alex";
 
+    await browsing(el);
+
     await tap(el, "Flan");
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
     await flush(el);
@@ -2134,9 +2158,12 @@ describe("till-app: other people's drafts and taking one over", () => {
     expect(banner(el)!.textContent).toContain(codeMessage("draft.taken_over"));
     expect(banner(el)!.textContent).toContain("Sam has it now. Your last change was not saved.");
     expect(rows(el)).toEqual([]);
+    await reviewed(el);
     expect(panelOf(el)).toMatchObject({ heading: "Taken over by Sam", lines: ["Beer ×1"] });
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
     expect(api.saveDraft).toHaveBeenCalledTimes(2);
+
+    await browsing(el);
 
     await tap(el, "Steak");
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
@@ -2154,6 +2181,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     });
     savedBy(ALEX, "Alex", "offer-beer");
     await openAs(el, SAM, "Sam");
+    await browsing(el);
     press(el, "Flan");
 
     await takeOver(el);
@@ -2171,6 +2199,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     });
     savedBy(ALEX, "Alex", "offer-beer");
     await openAs(el, SAM, "Sam");
+    await browsing(el);
     press(el, "Flan");
 
     await takeOver(el);
@@ -2195,8 +2224,8 @@ describe("till-app: other people's drafts and taking one over", () => {
   });
 
   it.each([
-    ["draft.not_found", codeMessage("draft.not_found")],
-    ["draft.already_submitted", codeMessage("draft.already_submitted")],
+    ["draft.not_found", t("table.take_over_gone")],
+    ["draft.already_submitted", t("table.take_over_sent")],
     ["draft.taken_over", t("table.take_over_changed")],
     ["visit.not_open", codeMessage("visit.not_open")],
   ])("says a take-over refused %s in words for what changed", async (code, words) => {
@@ -2276,12 +2305,14 @@ describe("till-app: other people's drafts and taking one over", () => {
     server.takeOver("v1", alexs.id, alexs.revision);
     server.personId = ALEX;
     server.personName = "Alex";
+    await browsing(el);
     press(el, "Flan");
 
     await act(el, "fire-all");
 
     expect(api.submitDraft).not.toHaveBeenCalled();
     expect(banner(el)!.textContent).toContain("Sam has it now. Your last change was not saved.");
+    await reviewed(el);
     expect(panelOf(el).heading).toBe("Taken over by Sam");
   });
 
@@ -2291,6 +2322,8 @@ describe("till-app: other people's drafts and taking one over", () => {
     await openAs(el, SAM, "Sam");
     emit(shell(el), "tab-select", { key: "order" });
     await flush(el);
+
+    await reviewed(el);
 
     expect(panelOf(el).heading).toBe("Alex has an unsent order");
     await takeOver(el);
@@ -2310,6 +2343,7 @@ describe("till-app: other people's drafts and taking one over", () => {
       const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
       savedBy(ALEX, "Alex", "offer-beer");
       await openAs(el, SAM, "Sam");
+      await reviewed(el);
       expect(panelOf(el).lines).toEqual(["Beer ×1"]);
       const v2 = catalogue("v2");
       api.listZoneOffers.mockResolvedValue({
@@ -2322,6 +2356,8 @@ describe("till-app: other people's drafts and taking one over", () => {
 
       vi.advanceTimersByTime(15_000);
       await flush(el, 6);
+
+      await reviewed(el);
 
       expect(panelOf(el).lines).toEqual(["Caña ×1"]);
     } finally {
@@ -2348,6 +2384,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     expect(api.listDrafts.mock.calls.length).toBe(reads + 1);
     expect(banner(el)!.textContent).toContain(t("table.take_over_changed"));
     expect(dialogOpen(el)).toBe(false);
+    await reviewed(el);
     expect(panelOf(el)).toMatchObject({ heading: "Alex has an unsent order", lines: ["Beer ×2"] });
     expect(rows(el)).toEqual([]);
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));

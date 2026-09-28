@@ -684,6 +684,7 @@ async function readOpenDrafts(
  * Each draft's owner before its latest `taken_over` event, named as the floor names an owner. The
  * latest is the last by `rowid`, not `created_at`, which a clock stepped back can put out of order:
  * SQLite gives a new row one more than the table's largest `rowid`, and this table is append-only.
+ * `VACUUM` and `VACUUM INTO` kept that order when measured (node:sqlite, Node v26.7.0, 2026-09-28).
  */
 async function takenOverFrom(
   tx: Transaction,

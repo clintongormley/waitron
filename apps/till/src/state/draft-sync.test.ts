@@ -720,6 +720,42 @@ describe("DraftSync: taking over another person's draft", () => {
     expect(server.listDrafts).toHaveBeenCalledTimes(reads);
   });
 
+  it("takes no edit while the take-over is out, so none is lost to the answer", async () => {
+    const theirs = structuredClone(seed("p2", steak));
+    const draft = sync();
+    await draft.load();
+    let answer!: (value: Draft) => void;
+    server.takeOverDraft.mockImplementationOnce(
+      () => new Promise<Draft>((resolve) => (answer = resolve)),
+    );
+
+    const outcome = draft.takeOver(theirs.id, theirs.revision);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(draft.store.sending).toBe(true);
+    draft.store.addProduct(beer, "1");
+    answer(structuredClone(server.takeOver("v1", theirs.id, theirs.revision)));
+
+    expect(await outcome).toBe("taken");
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(rows(draft)).toEqual(["Steak ×1"]);
+    expect(server.saveDraft).not.toHaveBeenCalled();
+    expect(draft.store.sending).toBe(false);
+    draft.store.addProduct(beer, "1");
+    await settle();
+    expect(server.saveDraft).toHaveBeenCalledOnce();
+  });
+
+  it("leaves a send's lock in place when a take-over ends during it", async () => {
+    const theirs = seed("p2", steak);
+    const draft = sync();
+    await draft.load();
+    draft.store.sending = true;
+
+    await draft.takeOver(theirs.id, theirs.revision);
+
+    expect(draft.store.sending).toBe(true);
+  });
+
   it("passes the new owner's name on with a save refused as taken over", async () => {
     const names: (string | undefined)[] = [];
     const draft = new DraftSync({

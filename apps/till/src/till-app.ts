@@ -232,9 +232,9 @@ function saveRefusalError({ refused, ownerName }: DraftRefused): CounterError {
 /** A refused take-over: the drafts have been read again, so each says what changed. */
 function takeOverRefusalError(code: string): CounterError {
   if (code === "draft.out_of_date" || code === "draft.taken_over") return "table.take_over_changed";
-  return code === "draft.not_found" || code === "draft.already_submitted"
-    ? { code }
-    : tableWriteError({ code });
+  if (code === "draft.not_found") return "table.take_over_gone";
+  if (code === "draft.already_submitted") return "table.take_over_sent";
+  return tableWriteError({ code });
 }
 
 /** Settles after `ms`, or as soon as `signal` aborts. */

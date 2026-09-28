@@ -203,10 +203,21 @@ export class DraftSync {
   /**
    * Makes another person's draft this person's, once their own edits are saved: a take-over is
    * never sent over an edit the server has not got. The answer, which is the person's own draft
-   * with the taken lines added when they already held one, replaces what the store shows. A
-   * refused take-over, or one with no answer, reads the drafts again and sends nothing more.
+   * with the taken lines added when they already held one, replaces what the store shows, so the
+   * store takes no edit until then. A refused take-over, or one with no answer, reads the drafts
+   * again and sends nothing more.
    */
   async takeOver(draftId: string, revision: number): Promise<TakeOverOutcome> {
+    const locked = this.store.sending;
+    this.store.sending = true;
+    try {
+      return await this.#takeOver(draftId, revision);
+    } finally {
+      this.store.sending = locked;
+    }
+  }
+
+  async #takeOver(draftId: string, revision: number): Promise<TakeOverOutcome> {
     if ((await this.flush()) !== "saved") return "unsaved";
     const read = this.#reads;
     const limit = limited(this.#options.requestLimitMs);

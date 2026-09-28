@@ -121,6 +121,11 @@ export interface TakeOverDraftDetail {
   revision: number;
 }
 
+/** A dish the table's offers no longer hold has no name to show, so it reads as not offered. */
+function shownName(product: TillProduct): string {
+  return lineProductName(product) || t("basket.not_offered");
+}
+
 /** "Alex …", or the no-name wording when the server has no name for the person. */
 function named(name: string, withName: StringKey, unnamed: StringKey): string {
   return name === "" ? t(unnamed) : t(withName).replace("{name}", () => name);
@@ -890,6 +895,8 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) otherDrafts: readonly OtherDraft[] = [];
   /** Moved on by the app each time a take-over it was asked for has answered, or failed. */
   @property({ attribute: false }) takeOversAnswered = 0;
+  /** The draft whose take-over has just answered, until its dialog has closed. */
+  #takeOverAnswered?: string;
   /** The draft whose take-over is being asked about. */
   @state() private takeOverPending: OtherDraft | null = null;
   /** {@link takeOversAnswered} when a take-over was sent; unset while none is out. */
@@ -1017,6 +1024,7 @@ export class TillTableOrderScreen extends LitElement {
   override willUpdate(changed: PropertyValues<this>): void {
     this.#watchDraft();
     if (this.takeOverSent !== null && this.takeOversAnswered !== this.takeOverSent) {
+      this.#takeOverAnswered = this.takeOverPending?.id;
       this.takeOverSent = null;
       this.takeOverPending = null;
     }
@@ -1722,7 +1730,7 @@ export class TillTableOrderScreen extends LitElement {
         ?hidden=${separate && !reviewing}
       >
         <div class="draft-head">
-          <h2 class="draft-title" id="draft-title">${t("table.draft_title")}</h2>
+          <h2 class="draft-title" id="draft-title" tabindex="-1">${t("table.draft_title")}</h2>
           ${
             separate
               ? html`<wt-button
@@ -1781,8 +1789,9 @@ export class TillTableOrderScreen extends LitElement {
       class="take-over-dialog"
       data-take-over-dialog
       .open=${other !== null}
+      .dismissible=${this.takeOverSent === null}
       .heading=${named(name, "table.take_over_title", "table.take_over_title_unnamed")}
-      @wt-close=${() => (this.takeOverPending = null)}
+      @wt-close=${() => void this.#takeOverClosed()}
     >
       <p data-take-over-body>
         ${named(name, "table.take_over_body", "table.take_over_body_unnamed")}
@@ -1805,6 +1814,17 @@ export class TillTableOrderScreen extends LitElement {
         </wt-button>
       </div>
     </wt-dialog>`;
+  }
+
+  /** The panel whose button opened the dialog is gone once its draft was taken, and the browser
+   * cannot hand focus back to it: focus goes to the person's own order, which now holds it. */
+  async #takeOverClosed(): Promise<void> {
+    this.takeOverPending = null;
+    const taken = this.#takeOverAnswered;
+    this.#takeOverAnswered = undefined;
+    if (taken === undefined || this.otherDrafts.some((other) => other.id === taken)) return;
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLElement>("#draft-title")?.focus();
   }
 
   /** One request per press: Confirm stays off until the app says this one has answered. */
@@ -1847,7 +1867,7 @@ export class TillTableOrderScreen extends LitElement {
     const line = store.lastAdded;
     if (line === undefined) return nothing;
     const index = store.lines.indexOf(line);
-    const name = lineProductName(line.product);
+    const name = shownName(line.product);
     const count = Number(line.quantity);
     const step = (by: -1 | 1, key: StringKey, text: string) =>
       html`<wt-button
@@ -1882,7 +1902,7 @@ export class TillTableOrderScreen extends LitElement {
   /** A line's name and quantity, its staff answers, its extras and its note. A dish or pick the
    * table's offers no longer hold has no name to show, so it reads as not offered. */
   #lineSummary(line: OrderLine, nameClass: string): TemplateResult {
-    const name = lineProductName(line.product) || t("basket.not_offered");
+    const name = shownName(line.product);
     return html`<span class=${nameClass}>${name} ×${this.#displayQty(line.quantity)}</span>
       ${optionAnswers(line.optionSnapshots, { reads: "staff" }).map(
         (answer) => html`<span class="modifier-answer">${answer}</span>`,
@@ -1954,7 +1974,7 @@ export class TillTableOrderScreen extends LitElement {
     return html`${
         draft.sending
           ? html`<p class="round-sending" role="status" data-round-sending>
-              ${t("table.round_sending")}
+              ${this.takeOverSent === null ? t("table.round_sending") : t("table.taking_over")}
             </p>`
           : nothing
       }
