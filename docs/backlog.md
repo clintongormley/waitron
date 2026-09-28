@@ -3699,6 +3699,14 @@ approved.
   ([ci-and-gates.md](developers/ci-and-gates.md#the-upgrade-test-names-the-phase-it-stalled-in)).
   Next: when it stalls again, read that report and
   locate the stalled operation before naming a cause. First seen in the last 60 CI runs.
+  _(Second failure, 2026-09-28: run 36471580455, the `lint` job on #817, a till-only branch. The
+  report named `core/0031_order_drafts: close after 7 ms` with active resources `PipeWrap` ×4,
+  `MessagePort` and `Timeout`. It does not read as one stalled operation: the migrate and
+  change-feed phases listed before it took 200 to 4,979 ms each, all the way from the first
+  baseline, while `main`'s healthy run 36466135605 took 21,969 ms for all 244 phases with its
+  slowest at 263 ms. The other root suites in the failing job ran at their usual speed
+  (`ci-workflow.test.mjs` 11.9 s there, 21.1 s in the healthy run). So this one suite ran several
+  times slower from its start and reached the deadline partway through; why is still unknown.)_
 - **Dependabot, switched on by #760 (2026-09-27) — DONE: the 15 security alerts fixed by lane A's
   A107 (**PR #796**, 2026-09-28).** Config:
   `.github/dependabot.yml`; how to land one of its PRs: `docs/developers/workflow-guide.md` →
