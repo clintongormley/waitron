@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -15,7 +16,17 @@ import {
   voidTabLine,
 } from "./working-order.js";
 import { placeGroups } from "./order-groups.js";
-import { finishTable, readPartyBills, setPartyName } from "./parties.js";
+import {
+  finishTable,
+  partyMainBill,
+  partyZone,
+  readPartyBills,
+  setMainBill,
+  setPartyName,
+} from "./parties.js";
+import { readDrafts, saveDraft } from "./order-drafts.js";
+import { VENUE_SERVICE } from "./modules.js";
+import { createTable } from "./tables.js";
 import {
   OPERATOR,
   activeTablesOf,
@@ -136,11 +147,52 @@ describe("the main bill", () => {
     expect((await billRow(v, tabId)).status).toBe("placed");
   });
 
+  it("is cleared by setMainBill naming none, which moves no table, even one showing a closed bill", async () => {
+    const mesa14 = await v.table("Mesa 14");
+    const { partyId, tabId } = await seat(v, mesa14);
+    await abandon(tabId);
+
+    await inTx(v, (tx) => setMainBill(tx, partyId, null));
+
+    expect((await partyRow(v, partyId)).mainBillId).toBeNull();
+    expect((await tableRow(v, mesa14)).tabId).toBe(tabId);
+  });
+
   it("is cleared when it is abandoned", async () => {
     const mesa8 = await v.table("Mesa 8");
     const { partyId, tabId } = await seat(v, mesa8);
     await abandon(tabId);
     expect((await partyRow(v, partyId)).mainBillId).toBeNull();
+  });
+});
+
+describe("a party at a table in no service zone", () => {
+  it("gets a main bill with no service context, and reads a saved draft's lines as unavailable", async () => {
+    const { id: bare } = await inTx(v, (tx) => createTable(tx, v.cfg, { label: "Mesa sin zona" }));
+    const { partyId, tabId } = await seat(v, bare);
+    await abandon(tabId);
+    expect(await inTx(v, (tx) => partyZone(tx, v.cfg, partyId))).toBeNull();
+
+    const main = await inTx(v, (tx) => partyMainBill(tx, v.cfg, partyId));
+
+    expect(main).not.toBe(tabId);
+    expect((await partyRow(v, partyId)).mainBillId).toBe(main);
+    expect((await billRow(v, main)).partyId).toBe(partyId);
+    expect(await inTx(v, (tx) => VENUE_SERVICE.findOrderContext(tx, v.cfg, main))).toBeNull();
+
+    await inTx(v, (tx) =>
+      saveDraft(tx, v.cfg, partyId, OPERATOR, {
+        draftId: null,
+        revision: 0,
+        lines: [{ menuItemId: v.item("Agua"), quantity: "1" }],
+      }),
+    );
+    const [draft] = await inTx(v, (tx) => readDrafts(tx, v.cfg, partyId));
+    expect(draft!.lines.map((line) => line.unavailable)).toEqual([true]);
+  });
+
+  it("names no zone for a party that does not exist", async () => {
+    expect(await inTx(v, (tx) => partyZone(tx, v.cfg, randomUUID()))).toBeNull();
   });
 });
 
@@ -163,6 +215,7 @@ describe("an order sent to a named bill (P5)", () => {
     ["a paid bill", "bill.paid"],
     ["an abandoned bill", "tab.not_open"],
     ["another party's bill", "bill.other_party"],
+    ["a bill that does not exist", "tab.not_open"],
   ])("refuses %s with its own code, writing no line", async (kind, code) => {
     const mesa = await v.table(`Mesa ${kind}`);
     const { partyId, tabId } = await seat(v, mesa);
@@ -174,6 +227,7 @@ describe("an order sent to a named bill (P5)", () => {
     if (kind === "another party's bill") {
       target = (await seat(v, await v.table(`Mesa other ${kind}`))).tabId;
     }
+    if (kind === "a bill that does not exist") target = randomUUID();
     const linesBefore = await linesOf(v, target);
     const revisionBefore = await revisionOf(v, partyId);
 

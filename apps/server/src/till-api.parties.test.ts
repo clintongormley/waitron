@@ -335,6 +335,19 @@ describe("PUT /api/parties/:id/name", () => {
     expect(await partyRow(partyId)).toMatchObject({ name: null, revision });
   });
 
+  it.each([undefined, 7])("refuses the name %j as a bad field, changing nothing", async (name) => {
+    const { partyId, revision } = await seat();
+    const res = await put(`/api/parties/${partyId}/name`, {
+      name,
+      expectedPartyRevision: revision,
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "name" } },
+    });
+    expect(await partyRow(partyId)).toMatchObject({ name: null, revision });
+  });
+
   it("401s without a session", async () => {
     const { partyId, revision } = await seat();
     const res = await put(
