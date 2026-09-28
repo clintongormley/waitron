@@ -329,8 +329,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   axe accessibility test in a sibling `*.a11y.test.ts` covering each distinct state in both themes.
 - **A shared `wt-*` component's custom events are named `wt-*`, carry `detail`, and are dispatched
   `bubbles: true, composed: true` — and the triggering event is stopped with
-  `event.stopPropagation()` before re-emitting**, or the consumer observes the change twice. App
-  screens and app-owned components may name their own events plainly.
+  `event.stopPropagation()` before re-emitting**, or, for a composed trigger such as `input`, the
+  consumer observes the change twice. App screens and app-owned components may name their own
+  events plainly.
 - **A retained hardware registration must remain re-addable after deactivation.** Discovery matches
   disabled records too; the dashboard offers them as Add again and reactivates the existing id.
 - **A narrower roll in a wider receipt printer needs an explicit print area before native centring.**

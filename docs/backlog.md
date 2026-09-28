@@ -560,9 +560,10 @@ the spec found, are the entries after this block.
 **M7b2 landed (#702, 2026-09-26): a manager can clear a card payment a crash left running.** The
 Payments screen lists open orders locked by a card payment nothing is finishing any more, and "Check
 with the card provider" files the sale once if the card was charged, marks the payment failed and
-unlocks the order if it was not, and refuses if the provider is unreachable or unclear; each
-resolution is recorded in the append-only `payment_resolutions` table. What it leaves open is under
-"What M7b2 left open" in the payments section.
+unlocks the order if it was not (unless another payment of the order could still be captured or
+waits to be filed, or a newer attempt has replaced the lock), and refuses if the provider is
+unreachable or unclear; each resolution is recorded in the append-only `payment_resolutions`
+table. What it leaves open is under "What M7b2 left open" in the payments section.
 Classification Task 3 has landed and menus Task 9 landed as #729, so both the menus plan and the
 sales classification plan are complete. The
 owner lifted the wait: the dependency upgrades are
