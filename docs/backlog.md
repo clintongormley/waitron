@@ -3131,10 +3131,10 @@ bill is refused.
 - **DONE (campaign item C49, branch `fix/price-change-dialog-unit-only`, 2026-09-29, on the owner's
   "b"): both leftovers from C32 (#817)'s review.** (2) When a publish sells a dish by another unit
   (say each to kg), the till's price-change dialog now gives the dish a row at its unit price on
-  each side, "Hake €20.00 each → €20.00/kg", even when every price stayed the same. Before,
-  `refreshBasket` returned no row for such a line (the new test's first run), and with no row at
-  all `#reconcileBasket` in `apps/till/src/till-app.ts` takes the new menu without opening the
-  dialog (read, not run).
+  each side, "Hake €20.00 each → €20.00/kg", even when every price stayed the same. Before, the
+  till took the new menu without opening the dialog at all: the new case in
+  `apps/till/src/till-app-menu-refresh.test.ts` found no dialog when run against the old
+  `refreshBasket`.
   When the unit and the price both change, it is still one row, "Burger €9.00 each → €8.00/kg",
   shown instead of the line's total, which cannot show a unit. An extra whose price stayed the
   same gets no row of its own. (1) The dialog test "lists each re-priced part of one line on a row

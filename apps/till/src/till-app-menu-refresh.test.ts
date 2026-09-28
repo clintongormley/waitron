@@ -487,6 +487,40 @@ describe("a basket that spans a publish", () => {
     ]);
   });
 
+  it("shows Lemonade €3.00 each → €3.00/kg and waits when v2 sells it by the kilo at the same price", async () => {
+    const kg = {
+      id: "unit-kg",
+      name: { es: "kilo", en: "kilogram" },
+      abbreviation: { es: "kg", en: "kg" },
+      precision: 3,
+      hardwareUnit: "kg" as const,
+    };
+    const { el } = await mountApp({
+      listZoneOffers: vi
+        .fn()
+        .mockResolvedValue(
+          catalogue("v2", [
+            offer("offer-lemonade", "Lemonade", "3.00", { unit: kg }),
+            burgerOffer(),
+          ]),
+        ),
+    });
+    await toCounter(el);
+    add(el, "Lemonade");
+    api.menuState.mockResolvedValue(menuState("v2"));
+    await poll(el);
+
+    expect(dialog(el)).not.toBeNull();
+    expect(dialogText(el)).toContain("Lemonade €3.00 each → €3.00/kg");
+    expect(counter(el).store.lines[0]!.product.unit).toEqual(unit);
+    expect(payButton(el).disabled).toBe(true);
+
+    dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!.click();
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+    expect(counter(el).store.lines[0]!.product.unit).toEqual(kg);
+  });
+
   it("keeps the basket as it was and Pay disabled when the dialog is cancelled, until the changes are reviewed", async () => {
     const { el } = await mountApp({
       listZoneOffers: vi
