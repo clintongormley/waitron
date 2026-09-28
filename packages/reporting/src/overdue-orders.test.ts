@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { eq } from "drizzle-orm";
@@ -271,9 +272,18 @@ describe("computeOverdueOrders", () => {
       stationId,
     };
     const { orderId } = await seedFiredOrder(suite.db, seed, { orderNumber: 1, ageMinutes: 11 });
+    // Mesa 5 joined first: sorting by table id or by label would both put Mesa 4 first.
     await seedPartyAt(suite.db, { locationId: venue.locationId, orderId }, [
-      { label: "Mesa 4", joinedAt: "2026-09-28T20:02:00.000Z" },
-      { label: "Mesa 5", joinedAt: "2026-09-28T20:00:00.000Z" },
+      {
+        id: `00000000-${randomUUID().slice(9)}`,
+        label: "Mesa 4",
+        joinedAt: "2026-09-28T20:02:00.000Z",
+      },
+      {
+        id: `ffffffff-${randomUUID().slice(9)}`,
+        label: "Mesa 5",
+        joinedAt: "2026-09-28T20:00:00.000Z",
+      },
       {
         label: "Mesa 3",
         joinedAt: "2026-09-28T20:01:00.000Z",

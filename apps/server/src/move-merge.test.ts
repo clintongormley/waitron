@@ -837,6 +837,13 @@ async function noticesOf(billIds: string[]) {
     .orderBy(kitchenNotices.createdAt, sql`rowid`);
 }
 
+/** Each notice as its dish, bill and destination, sorted by dish, a duplicate kept. */
+function byDish(notices: Awaited<ReturnType<typeof noticesOf>>): [string, string, string | null][] {
+  return notices
+    .map((n): [string, string, string | null] => [n.lineName, n.workingOrderId, n.movedTo])
+    .sort(([a], [b]) => a.localeCompare(b));
+}
+
 /** One held dish added to the bill: the kitchen has not been sent it. */
 async function holdOne(v: PartyVenue, billId: string, name: string): Promise<void> {
   await inTx(v, (tx) =>
@@ -913,13 +920,11 @@ describe("a table action tells the kitchen of every bill of the party", () => {
     );
 
     const notices = await noticesOf([tabId, checkId, newTabId!]);
-    expect(
-      Object.fromEntries(notices.map((n) => [n.lineName, [n.workingOrderId, n.movedTo]])),
-    ).toEqual({
-      BURG: [newTabId, "Mesa 5"],
-      TINTO: [checkId, "Mesa 4"],
-      FLAN: [tabId, "Mesa 4"],
-    });
+    expect(byDish(notices)).toEqual([
+      ["BURG", newTabId, "Mesa 5"],
+      ["FLAN", tabId, "Mesa 4"],
+      ["TINTO", checkId, "Mesa 4"],
+    ]);
     const slips = (await printedBy(printerId)).filter((slip) => slip.includes("MOVED"));
     expect(slips).toHaveLength(3);
     expect(slips.filter((slip) => slip.includes("Mesa 4, 5 -> Mesa 5"))).toHaveLength(1);
@@ -956,9 +961,10 @@ describe("a table action tells the kitchen of every bill of the party", () => {
     await inTx(v, (tx) => moveTab(tx, v.cfg, tabId, mesa9, command));
 
     const notices = await noticesOf([tabId, checkId]);
-    expect(
-      Object.fromEntries(notices.map((n) => [n.lineName, [n.workingOrderId, n.movedTo]])),
-    ).toEqual({ BURG: [tabId, "Mesa 9"], TINTO: [checkId, "Mesa 9"] });
+    expect(byDish(notices)).toEqual([
+      ["BURG", tabId, "Mesa 9"],
+      ["TINTO", checkId, "Mesa 9"],
+    ]);
   });
 
   it("tells the kitchen of every bill of the party that takes in another party's table", async () => {
@@ -985,13 +991,11 @@ describe("a table action tells the kitchen of every bill of the party", () => {
     );
 
     const notices = await noticesOf([ana.tabId, checkId, other.tabId]);
-    expect(
-      Object.fromEntries(notices.map((n) => [n.lineName, [n.workingOrderId, n.movedTo]])),
-    ).toEqual({
-      BURG: [ana.tabId, "Mesa 4, 7"],
-      TINTO: [checkId, "Mesa 4, 7"],
-      FLAN: [ana.tabId, "Mesa 4, 7"],
-    });
+    expect(byDish(notices)).toEqual([
+      ["BURG", ana.tabId, "Mesa 4, 7"],
+      ["FLAN", ana.tabId, "Mesa 4, 7"],
+      ["TINTO", checkId, "Mesa 4, 7"],
+    ]);
   });
 
   it("tells the kitchen of a split bill of the party taken in, which joins the receiving party", async () => {
@@ -1017,11 +1021,9 @@ describe("a table action tells the kitchen of every bill of the party", () => {
     );
 
     const notices = await noticesOf([ana.tabId, other.tabId, otherCheckId]);
-    expect(
-      Object.fromEntries(notices.map((n) => [n.lineName, [n.workingOrderId, n.movedTo]])),
-    ).toEqual({
-      FLAN: [ana.tabId, "Mesa 4, 7"],
-      TARTA: [otherCheckId, "Mesa 4, 7"],
-    });
+    expect(byDish(notices)).toEqual([
+      ["FLAN", ana.tabId, "Mesa 4, 7"],
+      ["TARTA", otherCheckId, "Mesa 4, 7"],
+    ]);
   });
 });

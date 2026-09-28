@@ -286,6 +286,12 @@ export async function orderTableLabels(
             ),
           )
           .orderBy(diningTables.id);
+  const seatedTable = new Map<string, (typeof tables)[number]>();
+  const tableById = new Map<string, (typeof tables)[number]>();
+  for (const table of tables) {
+    if (table.tabId !== null && !seatedTable.has(table.tabId)) seatedTable.set(table.tabId, table);
+    tableById.set(table.id, table);
+  }
   const labels = new Map<string, string | null>();
   for (const order of orders) {
     if (order.partyId !== null) {
@@ -294,8 +300,8 @@ export async function orderTableLabels(
       continue;
     }
     const table =
-      tables.find((each) => each.tabId === order.id) ??
-      tables.find((each) => each.id === order.deliveryTableId);
+      seatedTable.get(order.id) ??
+      (order.deliveryTableId === null ? undefined : tableById.get(order.deliveryTableId));
     labels.set(order.id, table?.label ?? order.label);
   }
   return labels;
@@ -740,7 +746,7 @@ export interface SentWork {
   ticketItemIds: ReadonlySet<string>;
 }
 
-/** Read before a path moves an order's lines, or the order itself, to another table. */
+/** Read before a path moves an order's lines to another table. */
 export async function readSentWork(
   tx: Transaction,
   cfg: TillConfig,
@@ -871,15 +877,20 @@ export async function readPartiesSentWork(
   const ofParties = partyIds.filter((partyId): partyId is string => partyId !== null);
   const work = new Map<string, SentWork>();
   if (ofParties.length === 0 && orderIds.length === 0) return work;
-  const bills = await tx
+  const rows = await tx
     .select({
       id: workingOrders.id,
       orderNumber: workingOrders.orderNumber,
       partyId: workingOrders.partyId,
       deliveryTableId: workingOrders.deliveryTableId,
       label: workingOrders.label,
+      ticketItemId: ticketItems.id,
     })
     .from(workingOrders)
+    .innerJoin(
+      ticketItems,
+      and(eq(ticketItems.workingOrderId, workingOrders.id), isNotNull(ticketItems.firedAt)),
+    )
     .where(
       and(
         inArray(workingOrders.status, ["open", "placed", "settled"]),
@@ -889,32 +900,25 @@ export async function readPartiesSentWork(
         ),
       ),
     );
-  if (bills.length === 0) return work;
-  const fired = await tx
-    .select({ id: ticketItems.id, workingOrderId: ticketItems.workingOrderId })
-    .from(ticketItems)
-    .where(
-      and(
-        inArray(
-          ticketItems.workingOrderId,
-          bills.map((bill) => bill.id),
-        ),
-        isNotNull(ticketItems.firedAt),
-      ),
-    );
-  const firedByBill = new Map<string, Set<string>>();
-  for (const item of fired) {
-    const ids = firedByBill.get(item.workingOrderId) ?? new Set<string>();
-    ids.add(item.id);
-    firedByBill.set(item.workingOrderId, ids);
+  const sent = new Map<
+    string,
+    { bill: Omit<(typeof rows)[number], "ticketItemId">; fired: Set<string> }
+  >();
+  for (const { ticketItemId, ...bill } of rows) {
+    const entry = sent.get(bill.id) ?? { bill, fired: new Set<string>() };
+    entry.fired.add(ticketItemId);
+    sent.set(bill.id, entry);
   }
-  const sent = bills.filter((bill) => firedByBill.has(bill.id));
-  const labels = await orderTableLabels(tx, cfg.locationId, sent);
-  for (const bill of sent) {
+  const labels = await orderTableLabels(
+    tx,
+    cfg.locationId,
+    [...sent.values()].map(({ bill }) => bill),
+  );
+  for (const { bill, fired } of sent.values()) {
     work.set(bill.id, {
       tableLabel: labels.get(bill.id)!,
       orderNumber: String(bill.orderNumber),
-      ticketItemIds: firedByBill.get(bill.id)!,
+      ticketItemIds: fired,
     });
   }
   return work;

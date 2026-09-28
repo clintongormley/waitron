@@ -12,6 +12,7 @@ import {
   tills,
   withTransaction,
   workingOrderLines,
+  workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -68,6 +69,7 @@ import {
   seat,
   setupPartyVenue,
   split,
+  tableAt,
 } from "./testing/party-venue.js";
 import "./errors.js";
 
@@ -1410,10 +1412,11 @@ it("falls back to the product's staff name when it has no kitchen name", async (
 });
 
 describe("the table a slip names (spec decision 9)", () => {
-  it("names every table of the party on the slip, in the order they joined", async () => {
+  it("names every table of the party, in the order they joined", async () => {
     const v = await setupPartyVenue(db);
-    const mesa4 = await v.table("Mesa 4");
-    const mesa5 = await v.table("Mesa 5");
+    // Joined Mesa 5 first: sorting by id or by label would both put Mesa 4 first.
+    const mesa4 = await tableAt(v, `00000000-${randomUUID().slice(9)}`, "Mesa 4");
+    const mesa5 = await tableAt(v, `ffffffff-${randomUUID().slice(9)}`, "Mesa 5");
     const { partyId, tabId } = await seat(v, mesa5);
     await join(v, partyId, tabId, mesa4);
     await orderForParty(v, partyId, ["Burger"], tabId);
@@ -1454,11 +1457,15 @@ describe("the table a slip names (spec decision 9)", () => {
     const { partyId, tabId } = await seat(v, mesa4);
     await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
     const checkId = await split(v, partyId, tabId, [2]);
-    await inTx(v, (tx) =>
-      tx.update(partyTables).set({ leftAt: nowIso() }).where(eq(partyTables.partyId, partyId)),
-    );
+    await inTx(v, async (tx) => {
+      await tx
+        .update(partyTables)
+        .set({ leftAt: nowIso() })
+        .where(eq(partyTables.partyId, partyId));
+      await tx.update(workingOrders).set({ label: "Ana" }).where(eq(workingOrders.id, checkId));
+    });
 
-    expect(await inTx(v, (tx) => orderTableLabel(tx, v.cfg, checkId))).toBe("Mesa 4");
+    expect(await inTx(v, (tx) => orderTableLabel(tx, v.cfg, checkId))).toBe("Ana");
   });
 
   it("names a counter order's delivery table, and an unlabelled walk-up nothing", async () => {

@@ -95,14 +95,18 @@ export async function computeOverdueOrders(
     // Lines fired together can share a `queued_at`, so `line_no` breaks the tie; without it, the
     // station named for a tied order could change from one read of the same data to the next.
     .orderBy(ticketItems.queuedAt, workingOrderLines.lineNo);
-  const partyLabels = await readPartyTableLabels(tx, [
-    ...new Set(rows.flatMap((row) => row.partyId ?? [])),
-  ]);
 
+  interface Line {
+    stationName: string;
+    ageMinutes: number;
+    band: TimingBand;
+  }
   interface Candidate {
     orderNumber: number;
+    partyId: string | null;
+    label: string | null;
     tableLabel: string | null;
-    lines: { stationName: string; ageMinutes: number; band: TimingBand }[];
+    lines: Line[];
   }
   const byOrder = new Map<string, Candidate>();
   for (const row of rows) {
@@ -117,16 +121,11 @@ export async function computeOverdueOrders(
     const band = classifyBand(nowMs - ageMinutes * 60_000, nowMs, thresholds);
     let order = byOrder.get(row.orderId);
     if (order === undefined) {
-      const tables = row.partyId === null ? null : partyLabels.get(row.partyId)!;
       order = {
         orderNumber: row.orderNumber,
-        // A party bill names the party's active tables, or its own label once the party holds none.
-        tableLabel:
-          tables === null
-            ? row.tableLabel
-            : tables.length === 0
-              ? row.label
-              : partyTablesName(tables),
+        partyId: row.partyId,
+        label: row.label,
+        tableLabel: row.tableLabel,
         lines: [],
       };
       byOrder.set(row.orderId, order);
@@ -134,28 +133,41 @@ export async function computeOverdueOrders(
     order.lines.push({ stationName: row.stationName, ageMinutes, band });
   }
 
-  const results: OverdueOrder[] = [];
+  const late: { orderId: string; order: Candidate; band: TimingBand; worstLine: Line }[] = [];
   for (const [orderId, order] of byOrder) {
     const band = worstBand(order.lines.map((line) => line.band));
     if (band !== "overdue" && band !== "forgotten") continue;
     // A tie on band AND age keeps the first such line in the query's `queued_at, line_no` order.
     // `band` is computed from `order.lines`, so at least one line matches and `worstLine` is set.
-    let worstLine: { stationName: string; ageMinutes: number; band: TimingBand } | undefined;
+    let worstLine: Line | undefined;
     for (const line of order.lines) {
       if (line.band !== band) continue;
       if (worstLine === undefined || line.ageMinutes > worstLine.ageMinutes) {
         worstLine = line;
       }
     }
-    results.push({
+    late.push({ orderId, order, band, worstLine: worstLine! });
+  }
+
+  const partyLabels = await readPartyTableLabels(tx, [
+    ...new Set(late.flatMap(({ order }) => order.partyId ?? [])),
+  ]);
+  const results: OverdueOrder[] = late.map(({ orderId, order, band, worstLine }) => {
+    const tables = order.partyId === null ? null : partyLabels.get(order.partyId)!;
+    return {
       orderId,
       orderNumber: order.orderNumber,
-      tableLabel: order.tableLabel,
-      stationName: worstLine!.stationName,
-      ageMinutes: worstLine!.ageMinutes,
+      tableLabel:
+        tables === null
+          ? order.tableLabel
+          : tables.length === 0
+            ? order.label
+            : partyTablesName(tables),
+      stationName: worstLine.stationName,
+      ageMinutes: worstLine.ageMinutes,
       band,
-    });
-  }
+    };
+  });
 
   // Worst-first: band rank desc, then age desc, then order number for a deterministic tiebreak.
   results.sort(
