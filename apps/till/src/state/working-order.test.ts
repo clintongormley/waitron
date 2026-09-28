@@ -902,6 +902,61 @@ describe("WorkingOrderStore.lastAdded", () => {
   });
 });
 
+describe("WorkingOrderStore.lastAdded when the order's lines are replaced", () => {
+  const product = (menuItemId: string): TillProduct => ({
+    ...cafe,
+    id: `p-${menuItemId}`,
+    name: menuItemId,
+    menuItemId,
+    menuVersionId: "version-7",
+  });
+  const beer = product("beer");
+  const flan = product("flan");
+
+  it("follows the line to the new line that orders the same thing, for the same order", () => {
+    const s = new WorkingOrderStore();
+    s.addMerging(flan, "1");
+    s.addMerging(beer, "2", { note: "no ice" });
+    const again = [
+      { product: flan, quantity: "1" },
+      { product: beer, quantity: "1" },
+      { product: beer, quantity: "2", note: "no ice" },
+    ];
+    s.loadFrom(s.id, again);
+    expect(s.lastAdded).toBe(s.lines[2]);
+  });
+
+  it("follows nothing into another order, into a line kept apart, or when no line matches", () => {
+    const s = new WorkingOrderStore();
+    s.addMerging(beer, "1");
+    s.loadFrom("another-order", [{ product: beer, quantity: "1" }]);
+    expect(s.lastAdded).toBeUndefined();
+
+    s.addMerging(beer, "1");
+    s.loadFrom(s.id, [{ product: beer, quantity: "1", noMerge: true }]);
+    expect(s.lastAdded).toBeUndefined();
+
+    s.addMerging(beer, "1");
+    s.loadFrom(s.id, [{ product: flan, quantity: "1" }]);
+    expect(s.lastAdded).toBeUndefined();
+  });
+
+  it("is nothing once Split quantity has split its line", () => {
+    const s = new WorkingOrderStore();
+    s.addMerging(beer, "3");
+    s.splitLine(0);
+    expect(s.lastAdded).toBeUndefined();
+  });
+
+  it("stays on its line when another line is split", () => {
+    const s = new WorkingOrderStore();
+    s.addMerging(flan, "3");
+    s.addMerging(beer, "1");
+    s.splitLine(0);
+    expect(s.lastAdded).toBe(s.lines[3]);
+  });
+});
+
 describe("WorkingOrderStore.splitLine (Split quantity)", () => {
   const product = (menuItemId: string, over: Partial<TillProduct> = {}): TillProduct => ({
     ...cafe,

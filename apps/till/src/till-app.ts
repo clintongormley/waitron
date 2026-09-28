@@ -1117,6 +1117,7 @@ export class TillApp extends LitElement {
     this.#selectDiet(null);
     this.operatorName = displayName;
     this.operatorPersonId = personId;
+    this.#resumeOrderDraft();
     this.canEdit = canConfigureTill;
     this.errorKey = offerLoadFailed ? "service_zone.load_error" : undefined;
     this.#configureSessionActivity();
@@ -2479,6 +2480,13 @@ export class TillApp extends LitElement {
     });
     this.#draftSync = sync;
     return { sync, read: read ? await sync.load() : true };
+  }
+
+  /** A sign-out leaves the order on the table-order screen, but its draft went with the session: the
+   * person signing in gets their own draft on that party. */
+  #resumeOrderDraft(): void {
+    const session = this.#operatorSession;
+    void this.#openDraft(true, session).then((opened) => this.#showDraft(opened));
   }
 
   /** A draft that could not be read is not shown, so an empty one never stands in for it. A draft

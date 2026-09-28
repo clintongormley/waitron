@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import {
   cleanupWidgets,
   draftServer,
@@ -1599,5 +1600,145 @@ describe("till-app: Split quantity on a draft line", () => {
       ["offer-beer", 1, true],
       ["offer-beer", 1, false],
     ]);
+  });
+});
+
+// Vitest's own default frame, which every other case in this file runs in.
+const DEFAULT_FRAME = [414, 896] as const;
+
+describe("till-app: the draft beside browsing, or on its own Review view", () => {
+  const phoneCanvas: CanvasDef = { ...orderTabCanvas, formFactor: "phone-portrait" };
+  const visible = (el: TillApp, selector: string) =>
+    tableOrder(el)!.shadowRoot!.querySelector(selector)?.checkVisibility() ?? false;
+
+  it("on a 390 px phone, opens the whole draft on Review and comes Back to browsing with it kept", async () => {
+    await page.viewport(390, 844);
+    try {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue(till(phoneCanvas)),
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          deviceId: "phone-1",
+          name: "Phone",
+          formFactor: "phone-portrait",
+          stationId: null,
+        }),
+      });
+      await openMesa(el);
+      await tap(el, "Beer");
+      await tap(el, "Beer");
+      await tap(el, "Flan");
+      expect(visible(el, "[data-draft-pane]")).toBe(false);
+      const review = tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!;
+      expect(review.textContent!.trim()).toBe("Review (3)");
+
+      review.click();
+      await flush(el);
+      expect(visible(el, "[data-draft-pane]")).toBe(true);
+      expect(visible(el, "[data-browsing]")).toBe(false);
+      expect(visible(el, '[data-draft-action="send-all"]')).toBe(true);
+
+      tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-review-back]")!.click();
+      await flush(el);
+      expect(visible(el, "[data-browsing]")).toBe(true);
+      expect(rows(el)).toEqual(["Beer ×2", "Flan ×1"]);
+    } finally {
+      await page.viewport(...DEFAULT_FRAME);
+    }
+  });
+
+  it("on a 1280 px till, shows browsing and the draft together, with no Review", async () => {
+    await page.viewport(1280, 720);
+    try {
+      const { el } = await mountApp();
+      await openMesa(el);
+      await tap(el, "Beer");
+
+      expect(visible(el, "[data-browsing]")).toBe(true);
+      expect(visible(el, "[data-draft-pane]")).toBe(true);
+      expect(tableOrder(el)!.shadowRoot!.querySelector("[data-review-open]")).toBeNull();
+    } finally {
+      await page.viewport(...DEFAULT_FRAME);
+    }
+  });
+});
+
+describe("till-app: the next person after an ordinary sign-out", () => {
+  it("finds the table left open with its menu and their own draft on it", async () => {
+    const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(till(orderTabCanvas)) });
+    server.personId = "p2";
+    server.personName = "Sam";
+    server.save("v1", {
+      draftId: null,
+      revision: 0,
+      lines: [
+        {
+          menuItemId: "offer-flan",
+          variantId: null,
+          menuVersionId: "v1",
+          options: [],
+          extras: [],
+          note: null,
+          quantity: "1",
+          courseId: null,
+          noMerge: false,
+        },
+      ],
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "logout");
+    await flush(el, 6);
+
+    await signIn(el, "p2", "Sam");
+    emit(shell(el), "tab-select", { key: "order" });
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+    expect(browser(el)).not.toBeNull();
+    expect(rows(el)).toEqual(["Flan ×1"]);
+  });
+});
+
+describe("till-app: the last-added bar across a save", () => {
+  const bar = (el: TillApp) =>
+    tableOrder(el)!
+      .shadowRoot!.querySelector<HTMLElement>("[data-last-added]")
+      ?.textContent?.replace(/\s+/g, " ")
+      .trim();
+
+  it("still shows the line after the save answers, and +1 on it is saved", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    await tap(el, "Beer");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await flush(el);
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+    expect(bar(el)).toContain("Beer ×2");
+
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-last-added-step="1"]')!.click();
+    await back(el);
+
+    expect(savedLines()).toEqual(["offer-beer ×3"]);
+  });
+
+  it("follows its line when the save's answer replaces the lines", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    draft(el).setLineExtras(0, { note: "no ice" });
+    await tap(el, "Beer");
+    draft(el).setLineExtras(1, { note: "no ice" });
+    await flush(el);
+    expect(rows(el)).toEqual(["Beer ×1", "Beer ×1"]);
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await flush(el);
+    expect(rows(el)).toEqual(["Beer ×2"]);
+    expect(bar(el)).toContain("Beer ×2");
+
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-last-added-step="1"]')!.click();
+    await back(el);
+
+    expect(savedLines()).toEqual(["offer-beer ×3"]);
   });
 });

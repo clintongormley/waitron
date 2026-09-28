@@ -333,6 +333,7 @@ export class WorkingOrderStore {
     if (!Number.isInteger(count) || count < 2) return;
     line.quantity = "1";
     line.noMerge = true;
+    if (this.#lastAdded === line) this.#lastAdded = undefined;
     const rest = Array.from({ length: count - 1 }, (): OrderLine => ({ ...line }));
     this.#lines.splice(index + 1, 0, ...rest);
     this.#changedLines();
@@ -436,8 +437,13 @@ export class WorkingOrderStore {
   }
 
   /** Adopts a RETRIEVED order's `id` verbatim, so paying it keys the same idempotency slot the server
-   * stored it under, and the `revision` its copy was read at. */
+   * stored it under, and the `revision` its copy was read at. The same order read again (a saved
+   * draft's answer rebuilds every line) keeps {@link lastAdded} on the line ordering the same thing,
+   * by the draft merge rule. */
   loadFrom(id: string, lines: OrderLine[], label?: string, revision = 0): void {
+    const last = id === this.#id ? this.lastAdded : undefined;
+    this.#lastAdded =
+      last === undefined ? undefined : lines.find((line) => orderLinesMerge(last, line));
     this.#id = id;
     this.#revision = revision;
     this.#lines.length = 0;

@@ -135,6 +135,12 @@ const draftToggle = (el: TillTableOrderScreen, name: string) =>
     toggle.textContent!.includes(name),
   )!;
 
+/** Below the side-by-side width, as in Vitest's default frame, the draft is on its Review view. */
+async function openReview(el: TillTableOrderScreen): Promise<void> {
+  el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
+  await el.updateComplete;
+}
+
 const previewDialog = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("[data-draft-preview]")!;
 
@@ -830,6 +836,7 @@ describe("till-table-order-screen", () => {
         host.style.width = "390px";
         await ring(el, [beer, "1"], [steak, "1"]);
         await toggle(el, "Beer");
+        await openReview(el);
         const edge = el.getBoundingClientRect().right;
         const actions = [...el.shadowRoot!.querySelectorAll("[data-draft-action]")];
         expect(actions.length).toBe(2);
@@ -1015,6 +1022,7 @@ describe("till-table-order-screen", () => {
         host.style.width = "390px";
         await ring(el, [croquetas, "1"]);
         await pickDestination(el, "add-to-held");
+        await openReview(el);
         const edge = el.getBoundingClientRect().right;
         const controls = [
           ...el.shadowRoot!.querySelectorAll(
@@ -1031,6 +1039,7 @@ describe("till-table-order-screen", () => {
         const { el } = await mount({ courses: serviceCourses, products: menu, groups: held });
         await ring(el, [croquetas, "1"], [steak, "1"]);
         await pickDestination(el, "add-to-held");
+        await openReview(el);
         const controls = el.shadowRoot!.querySelectorAll(
           "[data-draft-select], [data-destination], [data-held-group], [data-draft-action]",
         );

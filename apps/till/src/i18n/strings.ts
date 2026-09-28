@@ -399,6 +399,7 @@ export const en = {
     "Your last change to an order was not saved. Open its table to check it.",
   "table.draft_read_failed": "The order on this table could not be read. Open the table again.",
   "table.draft_title": "Unsent order",
+  "table.review": "Review ({n})",
   "table.last_added": "Last added",
   // Errors
   "pin.invalid": "Wrong PIN, try again",
@@ -865,6 +866,7 @@ export const es: Record<StringKey, string> = {
     "Tu último cambio en un pedido no se ha guardado. Abre su mesa para revisarlo.",
   "table.draft_read_failed": "No se pudo leer el pedido de esta mesa. Vuelve a abrir la mesa.",
   "table.draft_title": "Pedido sin enviar",
+  "table.review": "Revisar ({n})",
   "table.last_added": "Lo último añadido",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "person.suspended": "Esta cuenta está desactivada. Avisa a un responsable",

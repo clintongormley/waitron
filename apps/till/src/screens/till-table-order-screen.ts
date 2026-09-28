@@ -66,6 +66,7 @@ import {
   draftPreview,
   draftSections,
   draftSubmission,
+  itemCount,
   type DraftAction,
   type DraftEntry,
   type DraftGroup,
@@ -74,6 +75,10 @@ import {
 import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
 
 export type { TableServiceStatus };
+
+/** The screen's own width, in CSS pixels, from which browsing and the draft show side by side.
+ * Narrower, the draft opens on its own Review view. */
+export const DRAFT_SIDE_BY_SIDE_MIN_WIDTH = 720;
 
 /**
  * `submit-draft`: the groups a confirmed preview named, each naming its lines by their place in
@@ -106,6 +111,12 @@ interface PendingDraft {
   preview: DraftPreview;
   join?: { group: OrderGroup; index: number };
   detail: SubmitDraftDetail;
+}
+
+/** The element `node` renders inside: its slot, its parent, or the host of its shadow root. */
+function composedParent(node: Element): Element | null {
+  const root = node.getRootNode();
+  return node.assignedSlot ?? node.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
 }
 
 /** A held group as the picker names it: `index` is its place among the party's held groups. */
@@ -198,6 +209,10 @@ export class TillTableOrderScreen extends LitElement {
     css`
       :host {
         display: block;
+      }
+
+      .width-probe {
+        height: 0;
       }
 
       .screen {
@@ -609,6 +624,11 @@ export class TillTableOrderScreen extends LitElement {
         gap: var(--wt-space-4);
       }
 
+      .ordering.side-by-side {
+        flex-direction: row;
+        align-items: flex-start;
+      }
+
       .browsing {
         display: flex;
         flex-direction: column;
@@ -616,11 +636,33 @@ export class TillTableOrderScreen extends LitElement {
         min-width: 0;
       }
 
+      .side-by-side .browsing {
+        flex: 3 1 0;
+      }
+
       .draft-pane {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-3);
         min-width: 0;
+      }
+
+      .side-by-side .draft-pane {
+        flex: 2 1 0;
+        padding-inline-start: var(--wt-space-4);
+        border-inline-start: 1px solid var(--wt-color-border);
+      }
+
+      .browsing[hidden],
+      .draft-pane[hidden] {
+        display: none;
+      }
+
+      .draft-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wt-space-3);
       }
 
       .draft-title {
@@ -668,6 +710,10 @@ export class TillTableOrderScreen extends LitElement {
         display: flex;
         flex: 0 0 auto;
         gap: var(--wt-space-2);
+      }
+
+      .review-open {
+        align-self: stretch;
       }
 
       /* A draft being sent takes no edit until the answer comes back; the status line says why. */
@@ -734,6 +780,13 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Boolean }) groupCommandBusy = false;
 
   @state() private drawerOpen = false;
+  /** The screen is at least {@link DRAFT_SIDE_BY_SIDE_MIN_WIDTH} wide. */
+  @state() private wide = false;
+  /** Below that width, the draft is open on its Review view in place of browsing. */
+  @state() private reviewing = false;
+  #resizing?: ResizeObserver;
+  /** Where browsing was scrolled when Review opened, put back on Back. */
+  #browsingScroll?: { scroller: Element; top: number };
 
   /** null shows every dish in the selected menu. */
   @property({ attribute: false }) selectedDiet: DietPredicate | null = null;
@@ -839,12 +892,34 @@ export class TillTableOrderScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.#watchDraft();
+    this.#measure(this.getBoundingClientRect().width);
+    if (this.hasUpdated) this.#observeWidth();
+  }
+
+  override firstUpdated(): void {
+    this.#observeWidth();
+  }
+
+  /** Watches a line of no height across the screen, not the screen itself: re-rendering for a new
+   * width changes the screen's height, which a watch on the screen would report again in the same
+   * frame. */
+  #observeWidth(): void {
+    this.#resizing = new ResizeObserver((entries) => {
+      this.#measure(entries.at(-1)!.contentRect.width);
+    });
+    this.#resizing.observe(this.renderRoot.querySelector(".width-probe")!);
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.#watchedDraft?.stop();
     this.#watchedDraft = undefined;
+    this.#resizing?.disconnect();
+    this.#resizing = undefined;
+  }
+
+  #measure(width: number): void {
+    this.wide = width >= DRAFT_SIDE_BY_SIDE_MIN_WIDTH;
   }
   /** The draft lines the waiter checked, by the line's object identity, which a store keeps until the
    * line leaves it. */
@@ -892,6 +967,8 @@ export class TillTableOrderScreen extends LitElement {
       this.fireGroupPending = null;
       this.movePending = null;
       this.pendingDraft = null;
+      this.reviewing = false;
+      this.#browsingScroll = undefined;
     }
     if (changed.has("groups") || this.#heldGroupIds === undefined) {
       this.#heldGroupIds = heldGroupIds(this.groups);
@@ -1506,6 +1583,7 @@ export class TillTableOrderScreen extends LitElement {
     const pending = this.#pending();
     const draft = this.#draftStore;
     return html`
+      <div class="width-probe"></div>
       <section
         class="screen"
         data-order-id=${this.orderId ?? nothing}
@@ -1557,22 +1635,65 @@ export class TillTableOrderScreen extends LitElement {
     `;
   }
 
-  /** Browsing, then the draft. */
+  /** Browsing and the draft: side by side when the screen is wide enough, otherwise browsing, with
+   * the draft on its own Review view. Browsing is hidden, never removed, while Review is open, so
+   * the menu keeps its open section. */
   #ordering(draft: WorkingOrderStore): TemplateResult {
-    return html`<div class="ordering">
-      <div class="browsing" data-browsing>${this.#gridRegion(draft)} ${this.#bottomBar(draft)}</div>
-      <section class="draft-pane" data-draft-pane aria-labelledby="draft-title">
-        <h2 class="draft-title" id="draft-title">${t("table.draft_title")}</h2>
+    const separate = !this.wide;
+    const reviewing = separate && this.reviewing;
+    return html`<div class=${separate ? "ordering" : "ordering side-by-side"}>
+      <div class="browsing" data-browsing ?hidden=${reviewing}>
+        ${this.#gridRegion(draft)} ${this.#bottomBar(draft, separate)}
+      </div>
+      <section
+        class="draft-pane"
+        data-draft-pane
+        aria-labelledby="draft-title"
+        ?hidden=${separate && !reviewing}
+      >
+        <div class="draft-head">
+          <h2 class="draft-title" id="draft-title">${t("table.draft_title")}</h2>
+          ${
+            separate
+              ? html`<wt-button
+                  variant="secondary"
+                  data-review-back
+                  @click=${() => void this.#closeReview()}
+                >
+                  ${t("action.back")}
+                </wt-button>`
+              : nothing
+          }
+        </div>
         ${this.#roundControl(draft)}
       </section>
     </div>`;
   }
 
-  /** Under browsing: the line the last tap added or grew. */
-  #bottomBar(draft: WorkingOrderStore): TemplateResult | typeof nothing {
+  /** Under browsing: the line the last tap added or grew and, when the draft has its own view, the
+   * way to it. */
+  #bottomBar(draft: WorkingOrderStore, separate: boolean): TemplateResult | typeof nothing {
     const lastAdded = this.#lastAdded(draft);
-    if (lastAdded === nothing) return nothing;
-    return html`<div class="bottom-bar">${lastAdded}</div>`;
+    if (lastAdded === nothing && !separate) return nothing;
+    return html`<div class="bottom-bar">
+      ${lastAdded}
+      ${
+        separate
+          ? html`<wt-button
+              class="review-open"
+              variant="primary"
+              data-review-open
+              @click=${() => this.#openReview()}
+            >
+              ${t("table.review").replace("{n}", String(this.#itemCount(draft)))}
+            </wt-button>`
+          : nothing
+      }
+    </div>`;
+  }
+
+  #itemCount(store: WorkingOrderStore): number {
+    return this.#draftEntries(store.lines).reduce((sum, entry) => sum + itemCount(entry), 0);
   }
 
   /** −1 at one takes the line out, so a mis-tap is undone where it was made. */
@@ -1626,6 +1747,31 @@ export class TillTableOrderScreen extends LitElement {
           : nothing
       }
     </div>`;
+  }
+
+  #openReview(): void {
+    const scroller = this.#scroller();
+    this.#browsingScroll = { scroller, top: scroller.scrollTop };
+    this.reviewing = true;
+    scroller.scrollTop = 0;
+  }
+
+  async #closeReview(): Promise<void> {
+    const saved = this.#browsingScroll;
+    this.#browsingScroll = undefined;
+    this.reviewing = false;
+    await this.updateComplete;
+    if (saved !== undefined) saved.scroller.scrollTop = saved.top;
+  }
+
+  /** The nearest ancestor that scrolls, across shadow roots, else the page. */
+  #scroller(): Element {
+    for (let node = composedParent(this); node !== null; node = composedParent(node)) {
+      const { overflowY } = getComputedStyle(node);
+      if ((overflowY === "auto" || overflowY === "scroll") && node.scrollHeight > node.clientHeight)
+        return node;
+    }
+    return document.scrollingElement ?? document.documentElement;
   }
 
   #gridRegion(draft: WorkingOrderStore): TemplateResult {
