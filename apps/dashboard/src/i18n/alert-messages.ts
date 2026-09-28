@@ -1,6 +1,6 @@
 // English and Spanish sentences for every alert code. `{name}` slots are filled from the alert's
-// params, and a `{name:money}` slot writes its amount as euros. Kept free of imports so the root
-// guard (`scripts/alert-codes.test.ts`) can load it.
+// params, and a `{name:money}` slot writes a decimal-string amount as euros. Kept free of imports so
+// the root guard (`scripts/alert-codes.test.ts`) can load it.
 //
 // No sentence promises a later check by the server: the daily payments check looks at each day once,
 // and the fiscal reconciliation sweep has no production caller. Only `alert.source_unavailable`

@@ -65,8 +65,9 @@
      --wt-font-size-md), with its 8px padding on each side. */
   --wt-stepper-field-width-wide: 96px;
 
-  /* A price field's amount box where nothing stretches it: "9999.99" at --wt-font-size-md, with
-     its 12px padding on each side. */
+  /* The room a price field leaves for its amount where nothing stretches it: "9999.99" at
+     --wt-font-size-md, with its 12px padding on each side. A sign drawn by `locale` widens the box
+     beyond this. */
   --wt-price-field-width: 96px;
 
   --wt-shadow-1: 0 1px 2px rgb(0 0 0 / 0.08);

@@ -3350,16 +3350,22 @@ ongoing overhaul listed at the top of Track A.
   owner request 2026-09-28).** Every amount the dashboard shows goes through `formatMoney`
   (`packages/shared/src/money-format.ts`): catalogue and menu prices, the overview's takings, the
   sales screen's tables, top sellers, purchases, and the payment alerts, whose wording marks a money
-  slot `{amount:money}` (`packages/dashboard-kit/src/alert-messages.ts`). Every money field is a
-  `wt-price-input` given `locale`, which draws the sign inside the field (`€ 9.00` in English,
-  `9.00 €` in Spanish) and, where nothing stretches the box, widens it by the sign so an amount
-  that fitted before still fits. EUR is the only currency; there is no currency setting. Left open,
-  not fixed: (1) the price fields accept and show a dot decimal only, so a Spanish field reads
-  `9.00 €` while the same amount displayed beside it reads `9,00 €` (the adjustments limit field
-  already shows its saved value with a comma); (2) the purchase form's inputs carry no semantic
-  `name`, which the form rule in [design-system.md](developers/design-system.md) asks for; (3) the alert check that every money slot
-  is marked looks only at slots named `amount`, `captured` and `expected`, so a new money slot under
-  another name is seen by nothing.
+  slot `{amount:money}` (the wording is in `apps/dashboard/src/i18n/alert-messages.ts`, and
+  `packages/dashboard-kit/src/alert-messages.ts` formats the slot). Every money field is a
+  `wt-price-input` given `locale`, which draws the sign inside the field, before the amount in
+  English and after it in Spanish, and, where nothing stretches the box, widens it by the sign so an
+  amount that fitted before still fits. EUR is the only currency; there is no currency setting. The
+  payments screen, the menu preview and the adjustments reasons screen's limit summary already
+  wrote their amounts with `formatMoney`, and the image library, bookings, venue-service, Stripe
+  and SumUp dashboard screens show no money. Left open, not fixed: (1) the catalogue, menu and purchase price fields accept and show a dot decimal only,
+  so a Spanish field shows `9.00` with the sign after it while the same amount displayed beside it
+  reads `9,00 €` (the adjustments limit field shows its saved value with a comma); (2) the alert
+  check that every money slot is marked looks only at slots named `amount`, `captured` and
+  `expected`, so a new money slot under another name is seen by nothing; (3) the purchase form's
+  VAT line still lets its other fields shrink to `min-width: 5rem`
+  (`apps/dashboard/src/widgets/purchase-form.ts`), a `rem` the design-token rule forbids; it
+  predates this change.
+
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
   too fine-grained: one permission such as `node.manage` might cover what `mirror.create` and
