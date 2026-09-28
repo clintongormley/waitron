@@ -9,7 +9,10 @@ import { setLocale, t } from "../i18n/t.js";
 afterEach(cleanupWidgets);
 // The table remembers its sort and filter choices in sessionStorage under waitron.products.table, so
 // a choice one test makes would otherwise be restored into the next one.
-beforeEach(() => sessionStorage.clear());
+beforeEach(() => {
+  sessionStorage.clear();
+  localStorage.removeItem("waitron.products.table:columns");
+});
 
 async function tableRoot(el: ProductList): Promise<ShadowRoot> {
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
@@ -129,6 +132,43 @@ describe("product-list", () => {
     expect(row.textContent).not.toContain("Croquetas caseras");
     expect(row.textContent).not.toContain("Ham croquettes");
     expect(row.textContent).not.toContain(products[0]!.id);
+  });
+
+  it("offers every column but the name and the actions in a translated column chooser, and remembers a hidden one", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product()],
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    expect(root.querySelector(".columns-trigger")?.textContent?.trim()).toBe(t("table.columns"));
+    expect(
+      [...root.querySelectorAll<HTMLInputElement>("input[data-column]")].map((box) => [
+        box.dataset.column,
+        box.checked,
+      ]),
+    ).toEqual([
+      ["reporting-category", true],
+      ["labels", true],
+      ["price", true],
+      ["modifiers", true],
+      ["sold-alone", true],
+      ["active", true],
+      ["allergens", true],
+    ]);
+    const headerLabels = () =>
+      [...root.querySelectorAll("thead th")].map((th) =>
+        th.textContent!.replace(/[▲▼]/g, "").trim(),
+      );
+    const before = headerLabels();
+    expect(before).toContain(t("labels.field"));
+    const box = root.querySelector<HTMLInputElement>('input[data-column="labels"]')!;
+    box.checked = false;
+    box.dispatchEvent(new Event("change"));
+    await table.updateComplete;
+    expect(headerLabels()).toEqual(before.filter((text) => text !== t("labels.field")));
+    expect(JSON.parse(localStorage.getItem("waitron.products.table:columns")!)).toEqual({
+      labels: false,
+    });
   });
 
   it("uses a named kebab menu containing Edit and Delete", async () => {

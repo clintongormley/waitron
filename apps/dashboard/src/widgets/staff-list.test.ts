@@ -1,10 +1,17 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { roleName, statusName } from "../i18n/domain.js";
+import { t } from "../i18n/t.js";
 import type { PersonSummary } from "../api/client.js";
 import { StaffList } from "./staff-list.js";
 
 afterEach(cleanupWidgets);
+function forgetStaffView() {
+  localStorage.removeItem("waitron.staff.table:columns");
+  sessionStorage.removeItem("waitron.staff.table");
+}
+beforeEach(forgetStaffView);
+afterEach(forgetStaffView);
 const people: PersonSummary[] = [
   {
     personId: "p1",
@@ -108,6 +115,40 @@ describe("staff-list", () => {
     const text = table.shadowRoot!.querySelector("tbody tr")!.textContent!;
     expect(text).toContain("Lovelace, Ada Augusta");
     expect(text).toContain("+44 20 1234");
+  });
+
+  it("offers every column but the display name and the actions in a translated column chooser, and remembers a hidden one", async () => {
+    const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const root = table.shadowRoot!;
+    expect(root.querySelector(".columns-trigger")?.textContent?.trim()).toBe(t("table.columns"));
+    expect(
+      [...root.querySelectorAll<HTMLInputElement>("input[data-column]")].map((box) => [
+        box.dataset.column,
+        box.checked,
+      ]),
+    ).toEqual([
+      ["legalName", true],
+      ["role", true],
+      ["email", true],
+      ["telephone", true],
+      ["status", true],
+    ]);
+    const headerLabels = () =>
+      [...root.querySelectorAll("thead th")].map((th) =>
+        th.textContent!.replace(/[▲▼]/g, "").trim(),
+      );
+    const before = headerLabels();
+    expect(before).toContain(t("staff.field_email"));
+    const box = root.querySelector<HTMLInputElement>('input[data-column="email"]')!;
+    box.checked = false;
+    box.dispatchEvent(new Event("change"));
+    await table.updateComplete;
+    expect(headerLabels()).toEqual(before.filter((text) => text !== t("staff.field_email")));
+    expect(JSON.parse(localStorage.getItem("waitron.staff.table:columns")!)).toEqual({
+      email: false,
+    });
   });
 
   it("renders no rows for an empty people list", async () => {

@@ -194,18 +194,21 @@ export class ProductList extends LitElement {
       },
       {
         key: "reporting-category",
+        choosable: "shown",
         label: t("editor.main_category"),
         cell: (row) => this.#category(this.#values(row).primaryCategoryId),
         searchValue: (row) => this.#category(this.#values(row).primaryCategoryId),
       },
       {
         key: "labels",
+        choosable: "shown",
         label: t("labels.field"),
         cell: (row) => this.#labels(row),
         searchValue: (row) => this.#labels(row),
       },
       {
         key: "price",
+        choosable: "shown",
         label: t("product.price"),
         align: "end",
         // The list has no VAT column; a variant whose VAT differs from its product's notes it under
@@ -229,6 +232,7 @@ export class ProductList extends LitElement {
       },
       {
         key: "modifiers",
+        choosable: "shown",
         label: t("editor.modifiers"),
         cell: ({ product, variant }) =>
           variant ? html`<span part="variant-muted">—</span>` : this.#modifierNames(product),
@@ -236,6 +240,7 @@ export class ProductList extends LitElement {
       },
       {
         key: "sold-alone",
+        choosable: "shown",
         label: t("product.sold_alone"),
         // A variant is a way of buying its product, so the filter reads the PRODUCT's answer on
         // every row and a variant is shown or hidden together with its product.
@@ -269,6 +274,7 @@ export class ProductList extends LitElement {
       },
       {
         key: "active",
+        choosable: "shown",
         label: t("product.status"),
         // A variant of an Inactive product answers Inactive (see rowActive), so it moves with its
         // product and never leaves it behind as an empty context row; its badge still shows its OWN
@@ -297,6 +303,7 @@ export class ProductList extends LitElement {
       },
       {
         key: "allergens",
+        choosable: "shown",
         label: t("product.allergens"),
         cell: ({ product, variant }) => {
           if (variant) return html`<span part="variant-muted">—</span>`;
@@ -352,6 +359,7 @@ export class ProductList extends LitElement {
       searchLabel=${t("product.search")}
       noMatchesMessage=${t("product.no_matches")}
       viewKey="waitron.products.table"
+      columnsLabel=${t("table.columns")}
       sortKey="name"
       sortDirection="ascending"
       collapseLabel=${t("categories.collapse")}
