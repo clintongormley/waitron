@@ -2900,9 +2900,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   party's bills again (`#rereadAmounts`, `apps/till/src/till-app.ts`); a refused one reads the
   lines only. When the floor or the bills cannot be read again the till says so
   (`table.reread_failed`), unless another message is already shown, the waiter has left the order,
-  or a later read has overtaken the failed one (for the floor, the party shown being replaced since
-  counts too), and with the floor unread "Still to pay" is taken from the bills just read — the
-  floor's figure is the sum of the same bills (`readBillsOfVisits`, `apps/server/src/visits.ts`).
+  a later re-read has started, or a later bills read has overtaken this one's and, when it was the
+  floor that failed, a floor read that worked has given the order its party since; with the floor
+  unread "Still to pay" is taken from the bills just read — the floor's figure is the sum of the
+  same bills (`readBillsOfVisits`, `apps/server/src/visits.ts`).
   The priced-extra case was shown in the till's browser tests with a fixture adding a 1.50 extra;
   the demo menu offers no priced extra, so it was not run on the dev till.
 - **DONE (#812, campaign item A113, from the A108r retro review of #719, branch

@@ -1917,6 +1917,42 @@ describe("till-app: the order's groups", () => {
     expect(first).not.toBe(second);
   });
 
+  it("says so when the floor cannot be read after a Change and a sent round reads the bills first", async () => {
+    const { el } = await mountApp({
+      updateOrderLine: vi.fn().mockResolvedValue({ revision: 1, visit: { id: "v1", revision: 4 } }),
+      submitDraft: answering({ tabId: "wo-4", revision: 5, groups: [] }),
+    });
+    const order = await openMesa(el);
+    await ringRound(el, order);
+    vi.mocked(api.getTablesState).mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    let answerBills!: (bills: VisitBill[]) => void;
+    vi.mocked(api.getVisitBills).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answerBills = resolve;
+        }),
+    );
+    emit(order, "change-line", {
+      lineNo: 1,
+      lineName: "Hamburguesa",
+      patch: { extras: [{ listId: "toppings", picks: [{ productId: "cheese", quantity: 1 }] }] },
+      revision: 0,
+    });
+    await flush(el);
+    emit(
+      tableOrder(el)!,
+      "submit-draft",
+      roundDetail(tableOrder(el)!, [{ release: "fire", lineIndexes: [0, 1] }]),
+    );
+    await flush(el);
+    expect(api.submitDraft).toHaveBeenCalledOnce();
+
+    answerBills([tabBill, checkBill]);
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(t("table.reread_failed"));
+  });
+
   it("sends the revision the submission answered with on the party's next command", async () => {
     const { el } = await mountApp({
       submitDraft: answering({ tabId: "wo-4", revision: 4, groups: [] }),
