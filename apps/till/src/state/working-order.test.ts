@@ -850,3 +850,129 @@ describe("WorkingOrderStore.setLineCourse", () => {
     expect(notified).toBe(0);
   });
 });
+
+describe("WorkingOrderStore.lastAdded", () => {
+  const product = (menuItemId: string): TillProduct => ({
+    ...cafe,
+    id: `p-${menuItemId}`,
+    name: menuItemId,
+    menuItemId,
+    menuVersionId: "version-7",
+  });
+  const beer = product("beer");
+  const burger = product("burger");
+
+  it("is nothing before any add", () => {
+    expect(new WorkingOrderStore().lastAdded).toBeUndefined();
+  });
+
+  it("is the line the latest add made, or the line it grew", () => {
+    const s = new WorkingOrderStore();
+    s.addMerging(beer, "1");
+    s.addMerging(burger, "1");
+    expect(s.lastAdded).toBe(s.lines[1]);
+    s.addMerging(beer, "1");
+    expect(s.lastAdded).toBe(s.lines[0]);
+    expect(s.lastAdded!.quantity).toBe("2");
+    s.addProduct(cafe, "1");
+    expect(s.lastAdded).toBe(s.lines[2]);
+  });
+
+  it("stays the same line when its quantity is stepped", () => {
+    const s = new WorkingOrderStore();
+    s.addMerging(beer, "1");
+    s.setLineQuantity(0, "4");
+    expect(s.lastAdded).toBe(s.lines[0]);
+  });
+
+  it("is nothing once its line has left the order, and an earlier add does not come back", () => {
+    const s = new WorkingOrderStore();
+    s.addMerging(beer, "1");
+    s.addMerging(burger, "1");
+    s.removeLine(1);
+    expect(s.lastAdded).toBeUndefined();
+
+    s.addMerging(burger, "1");
+    s.removeLines([s.lines[1]!]);
+    expect(s.lastAdded).toBeUndefined();
+
+    s.addMerging(burger, "1");
+    s.loadFrom("draft", [{ product: burger, quantity: "1" }]);
+    expect(s.lastAdded).toBeUndefined();
+  });
+});
+
+describe("WorkingOrderStore.splitLine (Split quantity)", () => {
+  const product = (menuItemId: string, over: Partial<TillProduct> = {}): TillProduct => ({
+    ...cafe,
+    id: `p-${menuItemId}`,
+    name: menuItemId,
+    menuItemId,
+    menuVersionId: "version-7",
+    ...over,
+  });
+  const beer = product("beer");
+  const burger = product("burger");
+  const fish = product("fish", { pricingUnit: "weight", unitPrice: "30.00" });
+  const rows = (s: WorkingOrderStore) =>
+    s.lines.map(
+      (line) => `${line.product.name} ×${line.quantity}${line.noMerge === true ? " apart" : ""}`,
+    );
+
+  it("turns Burger ×3 into three rows of one in its place, each kept apart, with its answers", () => {
+    const s = new WorkingOrderStore();
+    s.addMerging(beer, "1");
+    s.addMerging(burger, "3", { note: "no salt" });
+    s.addMerging(beer, "1");
+    s.setLineCourse(1, "mains");
+    const burgerLine = s.lines[1];
+    s.markPersisted();
+    let notified = 0;
+    s.subscribe(() => (notified += 1));
+
+    s.splitLine(1);
+
+    expect(rows(s)).toEqual(["beer ×2", "burger ×1 apart", "burger ×1 apart", "burger ×1 apart"]);
+    expect(s.lines[1]).toBe(burgerLine);
+    expect(s.lines.slice(1).map((line) => [line.note, line.courseId])).toEqual([
+      ["no salt", "mains"],
+      ["no salt", "mains"],
+      ["no salt", "mains"],
+    ]);
+    expect(s.total).toBe("7.50");
+    expect(s.dirty).toBe(true);
+    expect(notified).toBe(1);
+  });
+
+  it("is not regrouped by a later tap, which starts a line of its own and grows that", () => {
+    const s = new WorkingOrderStore();
+    s.addMerging(burger, "3");
+    s.splitLine(0);
+    s.addMerging(burger, "1");
+    s.addMerging(burger, "1");
+    expect(rows(s)).toEqual(["burger ×1 apart", "burger ×1 apart", "burger ×1 apart", "burger ×2"]);
+  });
+
+  it("leaves a line of one, a weighed line and a missing line alone", () => {
+    const s = new WorkingOrderStore();
+    s.addMerging(burger, "1");
+    s.addMerging(fish, "2");
+    s.markPersisted();
+    let notified = 0;
+    s.subscribe(() => (notified += 1));
+    s.splitLine(0);
+    s.splitLine(1);
+    s.splitLine(5);
+    expect(rows(s)).toEqual(["burger ×1", "fish ×2"]);
+    expect(s.dirty).toBe(false);
+    expect(notified).toBe(0);
+  });
+
+  it("takes no split while the order is being sent", () => {
+    const s = new WorkingOrderStore();
+    s.addMerging(burger, "2");
+    s.sending = true;
+    s.splitLine(0);
+    expect(rows(s)).toEqual(["burger ×2"]);
+  });
+});

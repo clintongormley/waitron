@@ -129,3 +129,19 @@ it("a second confirm from the picker before it closes rings the weighed dish onc
   expect(store.lines[0]!.product.variantId).toBe("v-iberico");
   expect(store.lines[0]!.quantity).toBe("0.250");
 });
+
+it("weighing only, shows nothing until a weighed dish is selected, then weighs it and adds it", async () => {
+  const store = new WorkingOrderStore();
+  const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store, weighOnly: true });
+  expect(el.shadowRoot!.textContent!.trim()).toBe("");
+  expect(query(el, "wt-button")).toBeNull();
+
+  store.emit("product-selected", jamon);
+  await el.updateComplete;
+  await type(el, "0.250");
+  click(el, ".add");
+  await el.updateComplete;
+
+  expect(store.lines).toEqual([{ product: jamon, quantity: "0.250" }]);
+  expect(query(el, "wt-button")).toBeNull();
+});

@@ -511,3 +511,32 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     await expectNoA11yViolations(host);
   });
 });
+
+describe.each(["light", "dark"] as const)(
+  "till-table-order-screen a11y: the last-added bar and the draft's lines (%s theme)",
+  (theme) => {
+    it("has no violations with the last-added bar and Split quantity offered", async () => {
+      const { el, host } = await mountWidget<TillTableOrderScreen>(
+        "till-table-order-screen",
+        { products, menus, lines: [], statuses, courses, orderId: "wo-1" },
+        theme,
+      );
+      const store = el.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!.store;
+      store.addProduct(products[0]!, "3", { note: "sin azúcar" });
+      store.addProduct(products[0]!, "1");
+      await el.updateComplete;
+      for (const basket of el.shadowRoot!.querySelectorAll<
+        HTMLElement & { updateComplete: Promise<unknown> }
+      >("till-basket"))
+        await basket.updateComplete;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await el.updateComplete;
+      if (
+        !el.shadowRoot!.querySelector("[data-last-added]")?.checkVisibility() ||
+        !el.shadowRoot!.querySelector("[data-split-draft-line]")?.checkVisibility()
+      )
+        throw new Error("the scan must include the last-added bar and Split quantity");
+      await expectNoA11yViolations(host);
+    });
+  },
+);

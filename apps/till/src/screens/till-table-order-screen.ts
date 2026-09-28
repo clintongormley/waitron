@@ -280,7 +280,6 @@ export class TillTableOrderScreen extends LitElement {
       }
 
       .grid-region {
-        flex: 1 1 20rem;
         min-width: 0;
       }
 
@@ -509,13 +508,6 @@ export class TillTableOrderScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      .draft-line {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--wt-space-3);
-      }
-
       /* A native button, not a wt-button: wt-button does not pass aria-pressed to its inner button. */
       .draft-select {
         min-width: var(--wt-tap-min);
@@ -596,11 +588,86 @@ export class TillTableOrderScreen extends LitElement {
 
       .round-bar {
         display: flex;
-        flex-wrap: wrap;
-        align-items: flex-end;
+        flex-direction: column;
         gap: var(--wt-space-3);
-        padding-top: var(--wt-space-3);
-        border-top: 1px solid var(--wt-color-border);
+      }
+
+      .draft-line-tools {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-end;
+        gap: var(--wt-space-2);
+        padding-bottom: var(--wt-space-2);
+      }
+
+      .ordering {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-4);
+      }
+
+      .browsing {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-3);
+        min-width: 0;
+      }
+
+      .draft-pane {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-3);
+        min-width: 0;
+      }
+
+      .draft-title {
+        margin: 0;
+        font-size: var(--wt-font-size-lg);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      /* Kept in view at the bottom while the menu scrolls, clear of the column the till's floating
+         language button takes at the bottom right: a tap target and two gaps wide. */
+      .bottom-bar {
+        position: sticky;
+        bottom: 0;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        padding-block: var(--wt-space-2);
+        padding-inline-end: calc(var(--wt-tap-min) + 2 * var(--wt-space-3));
+        background: var(--wt-color-bg);
+      }
+
+      .last-added {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wt-space-3);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+      }
+
+      .last-added-line {
+        margin: 0;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .last-added-name {
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .last-added-steps {
+        display: flex;
+        flex: 0 0 auto;
+        gap: var(--wt-space-2);
       }
 
       /* A draft being sent takes no edit until the answer comes back; the status line says why. */
@@ -619,11 +686,6 @@ export class TillTableOrderScreen extends LitElement {
          remove button stay on screen. */
       .round-bar till-basket::part(name) {
         overflow-wrap: anywhere;
-      }
-
-      .round-bar till-basket {
-        flex: 1 1 auto;
-        min-width: 0;
       }
     `,
     segmentedOptionStyles,
@@ -1422,6 +1484,7 @@ export class TillTableOrderScreen extends LitElement {
       .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedDiet)}
       .store=${store}
       .columns=${this.handheld ? HANDHELD_COLUMNS : TILL_COLUMNS}
+      weighs
     ></till-menu-browser>`;
   }
 
@@ -1485,14 +1548,84 @@ export class TillTableOrderScreen extends LitElement {
         </div>
         ${this.#printProblem()}
         <div class="layout">
-          ${draft === null ? nothing : this.#gridRegion(draft)}
+          ${draft === null ? nothing : this.#ordering(draft)}
           ${this.drawerOpen ? this.#drawer(pending) : nothing}
         </div>
-        ${draft === null ? nothing : this.#roundControl(draft)} ${this.#previewDialog()}
-        ${this.#cancelDialog()} ${this.#fireGroupDialog()} ${this.#moveDialog()}
-        ${this.#changeEditor()}
+        ${this.#previewDialog()} ${this.#cancelDialog()} ${this.#fireGroupDialog()}
+        ${this.#moveDialog()} ${this.#changeEditor()}
       </section>
     `;
+  }
+
+  /** Browsing, then the draft. */
+  #ordering(draft: WorkingOrderStore): TemplateResult {
+    return html`<div class="ordering">
+      <div class="browsing" data-browsing>${this.#gridRegion(draft)} ${this.#bottomBar(draft)}</div>
+      <section class="draft-pane" data-draft-pane aria-labelledby="draft-title">
+        <h2 class="draft-title" id="draft-title">${t("table.draft_title")}</h2>
+        ${this.#roundControl(draft)}
+      </section>
+    </div>`;
+  }
+
+  /** Under browsing: the line the last tap added or grew. */
+  #bottomBar(draft: WorkingOrderStore): TemplateResult | typeof nothing {
+    const lastAdded = this.#lastAdded(draft);
+    if (lastAdded === nothing) return nothing;
+    return html`<div class="bottom-bar">${lastAdded}</div>`;
+  }
+
+  /** −1 at one takes the line out, so a mis-tap is undone where it was made. */
+  #lastAdded(store: WorkingOrderStore): TemplateResult | typeof nothing {
+    const line = store.lastAdded;
+    if (line === undefined) return nothing;
+    const index = store.lines.indexOf(line);
+    const name = lineProductName(line.product);
+    const count = Number(line.quantity);
+    const step = (by: -1 | 1, key: StringKey, text: string) =>
+      html`<wt-button
+        variant="secondary"
+        data-last-added-step=${by}
+        aria-label=${`${t(key)} · ${name}`}
+        @click=${() =>
+          count + by < 1
+            ? store.removeLine(index)
+            : store.setLineQuantity(index, String(count + by))}
+      >
+        ${text}
+      </wt-button>`;
+    return html`<div
+      class="last-added"
+      data-last-added
+      role="group"
+      aria-label=${t("table.last_added")}
+      ?inert=${store.sending}
+    >
+      <p class="last-added-line">
+        <span class="last-added-name">${name} ×${this.#displayQty(line.quantity)}</span>
+        ${optionAnswers(line.optionSnapshots, { reads: "staff" }).map(
+          (answer) => html`<span class="modifier-answer">${answer}</span>`,
+        )}
+        ${(line.extras ?? []).map(
+          (extra) =>
+            html`<span class="modifier-answer"
+              >${extra.quantity > 1 ? `${extra.name} ×${extra.quantity}` : extra.name}</span
+            >`,
+        )}
+        ${
+          line.note === undefined
+            ? nothing
+            : html`<span class="line-note">${t("line.note.label")}: ${line.note}</span>`
+        }
+      </p>
+      ${
+        soldByTheUnit(line.product)
+          ? html`<span class="last-added-steps">
+              ${step(-1, "basket.decrease", "−1")} ${step(1, "basket.increase", "+1")}
+            </span>`
+          : nothing
+      }
+    </div>`;
   }
 
   #gridRegion(draft: WorkingOrderStore): TemplateResult {
@@ -1525,9 +1658,13 @@ export class TillTableOrderScreen extends LitElement {
           : nothing
       }
       <div class="round-control" data-round-controls ?inert=${draft.sending}>
-        ${this.#draftSections(draft)}
         <div class="round-bar">
-          ${keyed(this.orderId, html`<till-basket .store=${draft}></till-basket>`)}
+          ${keyed(
+            this.orderId,
+            draft.lineCount === 0
+              ? html`<till-basket .store=${draft}></till-basket>`
+              : this.#draftSections(draft),
+          )}
           ${this.#draftBar(draft)}
         </div>
       </div>`;
@@ -1574,12 +1711,12 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
-  /** One section per course present, in the venue's course order; each line with its selection
-   * toggle and, when the venue has courses, its course picker, whose `""` placeholder means "use the
-   * product default", not "no course" (no such option). */
-  #draftSections(store: WorkingOrderStore): TemplateResult | typeof nothing {
+  /** One section per course present, in the venue's course order. Each line shows once, as the
+   * basket shows it (quantity, note, remove, answers), with its selection toggle in place of its
+   * name and, under it, its course picker when the venue has courses (whose `""` placeholder means
+   * "use the product default", not "no course": no such option) and Split quantity. */
+  #draftSections(store: WorkingOrderStore): TemplateResult {
     const lines = store.lines;
-    if (lines.length === 0) return nothing;
     const sections = draftSections(this.#draftEntries(lines), this.courses);
     return html`<div class="draft-sections" data-draft-sections>
       ${sections.map(
@@ -1594,17 +1731,21 @@ export class TillTableOrderScreen extends LitElement {
                 ? nothing
                 : html`<h3 class="draft-section-name">${section.course.name}</h3>`
             }
-            ${section.lineIndexes.map((index) => this.#draftLine(store, lines[index]!, index))}
+            <till-basket stacked .store=${store} .lineIndexes=${section.lineIndexes}>
+              ${section.lineIndexes.map((index) => this.#draftLine(store, lines[index]!, index))}
+            </till-basket>
           </section>`,
       )}
     </div>`;
   }
 
+  /** A draft line's slotted controls in its basket row. */
   #draftLine(store: WorkingOrderStore, line: OrderLine, index: number): TemplateResult {
     const name = lineProductName(line.product);
     const selected = this.#selected.has(line);
-    return html`<div class="draft-line">
-      <button
+    const splits = soldByTheUnit(line.product) && Number(line.quantity) > 1;
+    return html`<button
+        slot=${`lead-${index}`}
         type="button"
         class="option draft-select"
         data-draft-select=${index}
@@ -1615,18 +1756,38 @@ export class TillTableOrderScreen extends LitElement {
         <span class="draft-line-name">${name} ×${this.#displayQty(line.quantity)}</span>
       </button>
       ${
-        this.courses.length === 0
+        this.courses.length === 0 && !splits
           ? nothing
-          : html`<select
-              data-round-course=${index}
-              aria-label=${`${t("table.course_label")} · ${name}`}
-              @change=${(event: Event) =>
-                this.#pickCourse(store, line, (event.target as HTMLSelectElement).value)}
-            >
-              ${this.#courseOptions(this.#selectedCourseId(line), t("table.course_default"))}
-            </select>`
-      }
-    </div>`;
+          : html`<span slot=${`after-${index}`} class="draft-line-tools">
+              ${
+                this.courses.length === 0
+                  ? nothing
+                  : html`<select
+                      data-round-course=${index}
+                      aria-label=${`${t("table.course_label")} · ${name}`}
+                      @change=${(event: Event) =>
+                        this.#pickCourse(store, line, (event.target as HTMLSelectElement).value)}
+                    >
+                      ${this.#courseOptions(
+                        this.#selectedCourseId(line),
+                        t("table.course_default"),
+                      )}
+                    </select>`
+              }
+              ${
+                splits
+                  ? html`<wt-button
+                      variant="secondary"
+                      data-split-draft-line=${index}
+                      aria-label=${`${t("table.split_group_line")} · ${name}`}
+                      @click=${() => store.splitLine(index)}
+                    >
+                      ${t("table.split_group_line")}
+                    </wt-button>`
+                  : nothing
+              }
+            </span>`
+      }`;
   }
 
   /** A first-order draft: Send all and Fire all now with nothing checked, Send selected and Fire

@@ -1577,3 +1577,27 @@ describe("till-app: seating a free table while something else happens", () => {
     expect(api.getTabLines).not.toHaveBeenCalledWith("wo-new");
   });
 });
+
+describe("till-app: Split quantity on a draft line", () => {
+  it("saves the rows kept apart, and a later tap of the same dish as a line of its own", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    await tap(el, "Beer");
+    await tap(el, "Beer");
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-split-draft-line="0"]')!.click();
+    await flush(el);
+    await tap(el, "Beer");
+
+    await back(el);
+
+    expect(
+      server.drafts[0]!.lines.map((line) => [line.menuItemId, Number(line.quantity), line.noMerge]),
+    ).toEqual([
+      ["offer-beer", 1, true],
+      ["offer-beer", 1, true],
+      ["offer-beer", 1, true],
+      ["offer-beer", 1, false],
+    ]);
+  });
+});

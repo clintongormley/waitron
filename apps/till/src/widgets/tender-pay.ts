@@ -159,6 +159,8 @@ export class TillTenderPay extends LitElement {
    */
   @property({ type: Boolean }) busy = false;
   @property() mode: OrderFlow = "prepay";
+  /** Only a weighed dish's weight entry, for a screen that takes payment elsewhere. */
+  @property({ type: Boolean }) weighOnly = false;
   /** Ignored when {@link mode} is `"prepay"`, which has no separate collect stage. */
   @property() stage: "order" | "collect" = "order";
   @property() cardProvider: CardProvider = "none";
@@ -448,8 +450,9 @@ export class TillTenderPay extends LitElement {
   }
 
   #renderView() {
-    if (this.view === "paying") return this.#renderPaying();
     if (this.view === "weighing") return this.#renderWeighing();
+    if (this.weighOnly) return nothing;
+    if (this.view === "paying") return this.#renderPaying();
     if (this.view === "holding") return this.#renderHolding();
     if (this.view === "card") return this.#renderCard();
     if (this.view === "collecting") return this.#renderCollecting();

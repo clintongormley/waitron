@@ -74,6 +74,26 @@ export class TillBasket extends LitElement {
         border-bottom: 1px solid var(--wt-color-border);
       }
 
+      /* The name, or what is slotted in its place, on a row of its own above the line's controls. */
+      :host([stacked]) .line {
+        grid-template-columns: auto 1fr auto auto;
+      }
+
+      :host([stacked]) .line .name {
+        grid-column: 1 / -1;
+      }
+
+      :host([stacked]) .line-total {
+        justify-self: end;
+      }
+
+      .line-after {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: var(--wt-space-2);
+      }
+
       /* The per-line note editor (order-line customisation) — an inline expander opened by the line's
          Note button, indented under the dish like its option/allergen/diet sub-rows. */
       .line-extras-editor {
@@ -213,6 +233,15 @@ export class TillBasket extends LitElement {
   /** The order this basket shows and mutates. Set before the widget connects (its lifecycle subscribes). */
   @property({ attribute: false }) store!: WorkingOrderStore;
 
+  /**
+   * The lines shown, by their place in {@link store}; unset shows every line. Each shown line has two
+   * slots named by that place: `lead-<n>` replaces the line's name, and `after-<n>` sits under the
+   * line's row.
+   */
+  @property({ attribute: false }) lineIndexes?: readonly number[];
+
+  @property({ type: Boolean, reflect: true }) stacked = false;
+
   /** A POSITIONAL index into `store.lines`, so it must follow any change that shifts positions:
    * {@link #removeLine} adjusts it and a whole-basket swap closes it. Otherwise a note, which can carry
    * allergy information, would reattach to whatever line slid into the edited line's slot. */
@@ -318,14 +347,20 @@ export class TillBasket extends LitElement {
     if (lines.length === 0) {
       return html`<p class="empty">${t("basket.empty")}</p>`;
     }
+    // The owner of `lineIndexes` hears of a change after this basket does, so a place the store no
+    // longer has is skipped until it catches up.
+    const shown = (this.lineIndexes ?? lines.map((_line, index) => index)).flatMap((index) => {
+      const line = lines[index];
+      return line === undefined ? [] : [[line, index] as const];
+    });
     return html`
-      ${lines.map(
-        (line, index) => html`
+      ${shown.map(
+        ([line, index]) => html`
           <div class="line">
             <span class="name" part="name"
-              >${this.#lineName(line)}${line.notOffered ? notOfferedMarker() : nothing}${
-                line.blocked === undefined ? nothing : blockedMarker(line.blocked)
-              }</span
+              ><slot name=${`lead-${index}`}>${this.#lineName(line)}</slot>${
+                line.notOffered ? notOfferedMarker() : nothing
+              }${line.blocked === undefined ? nothing : blockedMarker(line.blocked)}</span
             >
             ${this.#quantityCell(line, index)}
             <span class="line-total">${formatMoney(dishGross(line), currentLocale())}</span>
@@ -397,6 +432,7 @@ export class TillBasket extends LitElement {
           )}
           ${this.#answers(line).map((answer) => html`<div class="option modifier-answer"><span class="name">${answer}</span></div>`)}
           ${this.#allergenRow(line, index)} ${this.#dietRow(line, index)}
+          <div class="line-after"><slot name=${`after-${index}`}></slot></div>
         `,
       )}
       ${

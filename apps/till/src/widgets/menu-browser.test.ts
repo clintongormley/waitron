@@ -628,6 +628,30 @@ describe("till-menu-browser", () => {
       expect(store.lines).toEqual([]);
     });
 
+    it("has no weight entry of its own unless asked to weigh", async () => {
+      const { el } = await mount({ menu: lunch({ homeLayoutId: "lay-counter" }) });
+      await tap(el, entry(el, "shortcuts", "Jamón"));
+      expect(root(el).querySelector("till-tender-pay")).toBeNull();
+    });
+
+    it("asked to weigh, takes a weighed product's quantity itself and adds it", async () => {
+      const { el, store } = await mount({
+        menu: lunch({ homeLayoutId: "lay-counter" }),
+        weighs: true,
+      });
+      await tap(el, entry(el, "shortcuts", "Jamón"));
+      const weigh = root(el).querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+        "till-tender-pay",
+      )!;
+      await weigh.updateComplete;
+      weigh
+        .shadowRoot!.querySelector("till-numeric-pad")!
+        .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "0.5" } }));
+      await weigh.updateComplete;
+      weigh.shadowRoot!.querySelector<HTMLElement>("wt-button.add")!.click();
+      expect(store.lines).toEqual([{ product: jamon, quantity: "0.5" }]);
+    });
+
     it("a fractional custom unit asks for its quantity without touching the basket", async () => {
       const portion = product("portion", "Ración", {
         unit: {

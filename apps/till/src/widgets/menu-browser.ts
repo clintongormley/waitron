@@ -5,6 +5,7 @@ import { formatMoney } from "@waitron/shared";
 import { TILL_COLUMNS } from "@waitron/catalogue/src/home-layout-columns.js";
 import type { DocumentMember, DocumentTile } from "@waitron/catalogue/src/menu-document-types.js";
 import "./modifier-picker.js";
+import "./tender-pay.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import type { TillProduct, TillZoneMenu } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
@@ -193,6 +194,16 @@ export class TillMenuBrowser extends LitElement {
       .sep {
         color: var(--wt-color-text-muted);
       }
+
+      /* Held at the bottom of the view while a weight is entered, clear of the column the till's
+         floating language button takes at the bottom right: a tap target and two gaps wide. */
+      .weigh {
+        position: sticky;
+        bottom: 0;
+        z-index: 2;
+        padding-inline-end: calc(var(--wt-tap-min) + 2 * var(--wt-space-3));
+        background: var(--wt-color-bg);
+      }
     `,
   ];
 
@@ -207,6 +218,10 @@ export class TillMenuBrowser extends LitElement {
 
   /** The most columns a grid shows. */
   @property({ type: Number }) columns = TILL_COLUMNS;
+
+  /** Asks a weighed dish's weight itself, with the pay widget's weight entry, for a screen whose own
+   * pay widget does not take the dish. */
+  @property({ type: Boolean }) weighs = false;
 
   /** The open section's path of section ids: its first found anywhere in the menu, each next among
    * the previous one's members. Empty is home. */
@@ -424,6 +439,11 @@ export class TillMenuBrowser extends LitElement {
       </div>
       ${this.notFound ? html`<p class="notice" role="alert">${t("menu.not_found")}</p>` : nothing}
       ${view}
+      ${
+        this.weighs
+          ? html`<till-tender-pay class="weigh" weighOnly .store=${this.store}></till-tender-pay>`
+          : nothing
+      }
       ${
         this.pickerProduct
           ? html`<till-modifier-picker

@@ -1077,3 +1077,84 @@ it("shows a retrieved line's frozen options answers in the STAFF wording", async
     [...el.shadowRoot!.querySelectorAll(".modifier-answer")].map((answer) => answer.textContent),
   ).toEqual(["Punto personal: Poco personal"]);
 });
+
+describe("till-basket: a subset of the order's lines", () => {
+  const flan: TillProduct = { ...cafe, id: "flan", name: "Flan" };
+
+  it("shows only the lines it is given, each by its place in the order", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1");
+    store.addProduct(jamon, "0.100");
+    store.addProduct(flan, "2");
+    const { el } = await mountWidget<TillBasket>("till-basket", { store, lineIndexes: [2, 0] });
+    const names = [...el.shadowRoot!.querySelectorAll(".line .name")].map((name) =>
+      name.textContent!.trim(),
+    );
+    expect(names).toEqual(["Flan", "Café"]);
+    expect(
+      [...el.shadowRoot!.querySelectorAll("[data-test^='line-note-button-']")].map((button) =>
+        button.getAttribute("data-test"),
+      ),
+    ).toEqual(["line-note-button-2", "line-note-button-0"]);
+
+    el.shadowRoot!.querySelectorAll<HTMLElement>(".remove")[0]!.click();
+    await el.updateComplete;
+    expect(store.lines.map((line) => line.product.name)).toEqual(["Café", "Jamón"]);
+  });
+
+  it("skips a place the order no longer has", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1");
+    const { el } = await mountWidget<TillBasket>("till-basket", { store, lineIndexes: [0, 3] });
+    expect(el.shadowRoot!.querySelectorAll(".line")).toHaveLength(1);
+  });
+
+  it("puts what is slotted as lead-<n> in place of line n's name, and after-<n> under line n", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1");
+    store.addProduct(flan, "1");
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    const lead = document.createElement("button");
+    lead.slot = "lead-1";
+    lead.textContent = "Flan, ticked";
+    const after = document.createElement("span");
+    after.slot = "after-0";
+    after.textContent = "Course";
+    el.append(lead, after);
+    await el.updateComplete;
+
+    const rows = el.shadowRoot!.querySelectorAll(".line");
+    const leadSlot = rows[1]!.querySelector<HTMLSlotElement>(".name slot")!;
+    expect(leadSlot.assignedElements()).toEqual([lead]);
+    expect(rows[0]!.querySelector<HTMLSlotElement>(".name slot")!.assignedElements()).toEqual([]);
+    const afterSlot = el.shadowRoot!.querySelector<HTMLSlotElement>("slot[name='after-0']")!;
+    expect(afterSlot.assignedElements()).toEqual([after]);
+    const order = [rows[0]!, afterSlot, rows[1]!];
+    expect(
+      [...el.shadowRoot!.querySelectorAll(".line, slot[name='after-0']")].map((node) =>
+        order.indexOf(node as HTMLElement),
+      ),
+    ).toEqual([0, 1, 2]);
+  });
+});
+
+describe("till-basket: stacked", () => {
+  async function rowOf(stacked: boolean) {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el } = await mountWidget<TillBasket>("till-basket", { store, stacked });
+    const name = el.shadowRoot!.querySelector(".line .name")!.getBoundingClientRect();
+    const stepper = el.shadowRoot!.querySelector(".line .stepper")!.getBoundingClientRect();
+    return { name, stepper };
+  }
+
+  it("puts the name on a row of its own above the line's controls", async () => {
+    const { name, stepper } = await rowOf(true);
+    expect(name.bottom).toBeLessThanOrEqual(stepper.top);
+  });
+
+  it("keeps the name beside the controls when not stacked", async () => {
+    const { name, stepper } = await rowOf(false);
+    expect(name.bottom).toBeGreaterThan(stepper.top);
+  });
+});
