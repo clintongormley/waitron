@@ -3437,6 +3437,25 @@ ongoing overhaul listed at the top of Track A.
   (`apps/dashboard/src/widgets/purchase-form.ts`), a `rem` the design-token rule forbids; it
   predates this change.
 
+- **Every dashboard list lets each person choose its columns (C45, owner request 2026-09-28).** The
+  main list on the products, staff, categories, labels, units, modifiers, sections, menus, printers
+  (agents, printers and print queue), card readers, alerts (open and handled), adjustment reasons
+  and venue operations (departments, hours, zones, zone menus, routes) screens offers a Columns
+  chooser, as the menu Prices tab already did. The column naming the row and the column holding the
+  row's buttons are never offered; every other column starts shown, so each screen looks as it did
+  until someone hides a column. Each table has its own `viewKey`; the ones that had none (alerts,
+  print queue, card readers, staff, reasons, venue operations) now also remember their sort and
+  filter in the tab. `docs/developers/design-system.md` states the rule. Left open, not done: (1)
+  tables inside a dialog or picker (a unit's products, a category's members and its add picker, the
+  delete dialogs, a modifier list's usage, discovered printers) offer no chooser, by choice; (2) the
+  servers list has only its name and its buttons, so nothing to offer; (3)
+  `apps/dashboard/src/widgets/category-manager.ts` renders a table that no screen mounts (only its
+  own tests do), and was left alone; (4) nothing checks that a NEW dashboard table offers the
+  chooser; (5) where a screen keeps its search and filters outside the table (staff, card readers)
+  or the table has none (alerts, venue operations), the Columns button sits alone on a row above
+  the table rather than beside those controls — seen in real Chromium at 1280 px; moving a screen's
+  own controls into the table's toolbar would fix it.
+
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
   too fine-grained: one permission such as `node.manage` might cover what `mirror.create` and
