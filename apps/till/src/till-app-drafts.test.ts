@@ -947,6 +947,18 @@ describe("till-app: sending the draft", () => {
     expect(rows(el)).toEqual([]);
   });
 
+  it("says someone else took it over when the refusal names no one", async () => {
+    const { el } = await mountApp({
+      submitDraft: vi.fn().mockRejectedValue({ code: "draft.taken_over", status: 409 }),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+
+    await act(el, "fire-all");
+
+    expect(banner(el)!.textContent).toContain(t("table.draft_taken_over_unsent_unnamed"));
+  });
+
   it("reloads the draft, sends nothing and says so when the saved draft no longer lines up", async () => {
     const { el } = await mountApp();
     await openMesa(el);
@@ -2581,6 +2593,51 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
 
     expect(rows(el)).toEqual(["Flan ×2", "Beer ×1"]);
     expect(draft(el).lines.map((line) => line.product.menuVersionId)).toEqual(["v1", "v1"]);
+  });
+
+  it("asks nothing, and keeps the draft as it was, when the new offers cannot be read", async () => {
+    const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
+    await openMesa(el);
+    await tap(el, "Beer");
+    await saved(el);
+    api.listZoneOffers.mockRejectedValue({ code: "server.internal", status: 500 });
+    api.menuState.mockResolvedValue(state("v2"));
+
+    await poll(el);
+    await saved(el);
+
+    expect(refresh(el)).toBeNull();
+    expect(versions()).toEqual(["offer-beer v1"]);
+  });
+
+  it("does not ask again about a line put aside when a publish's offers cannot be read", async () => {
+    server.save("v1", {
+      draftId: null,
+      revision: 0,
+      lines: [
+        {
+          menuItemId: "offer-beer",
+          variantId: null,
+          menuVersionId: "v0",
+          options: [],
+          extras: [],
+          note: null,
+          quantity: "1",
+          courseId: null,
+          noMerge: false,
+        },
+      ],
+    });
+    const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
+    await openMesa(el);
+    await answerRefresh(el, "cancel");
+    api.listZoneOffers.mockRejectedValue({ code: "server.internal", status: 500 });
+    api.menuState.mockResolvedValue(state("v2"));
+
+    await poll(el);
+
+    expect(refresh(el)).toBeNull();
+    expect(versions()).toEqual(["offer-beer v0"]);
   });
 
   it("heads a line the publish took off the menu as staying unsent", async () => {

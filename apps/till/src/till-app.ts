@@ -1526,8 +1526,8 @@ export class TillApp extends LitElement {
 
   /**
    * D9 on the table: the person's draft is compared with the table's live offers, as the counter's
-   * basket is, when it is due — a publish reloaded the offers, or the server's draft replaced what
-   * the screen held. Nothing relevant changed: the lines take the live version silently. Otherwise
+   * basket is, when it is due — a poll named a new version and the offers were read again, or the
+   * server's draft replaced what the screen held. Nothing relevant changed: the lines take the live version silently. Otherwise
    * the refresh dialog asks. Either way the adopted lines are saved as any edit is. It waits while
    * a send or take-over holds the draft, a save is out, or any dialog is open; the next poll asks
    * again. Another person's draft is never compared.
