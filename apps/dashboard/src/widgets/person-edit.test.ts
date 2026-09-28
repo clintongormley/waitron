@@ -218,6 +218,35 @@ describe("person-edit", () => {
   });
 });
 
+describe("person-edit server refusals", () => {
+  const summaryErrors = (el: PersonEdit): readonly string[] =>
+    el.shadowRoot!.querySelector("wt-form-error-summary")!.errors;
+  const fieldError = (el: PersonEdit, testId: string): string | null =>
+    el.shadowRoot!.querySelector(`[data-test=${testId}]`)!.getAttribute("error");
+
+  it("puts a taken display name beside its field and once in the summary, until it is edited", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    el.error = "person.display_name_taken";
+    await el.updateComplete;
+    const message = codeMessage("person.display_name_taken");
+    expect(fieldError(el, "edit-display-name")).toBe(message);
+    expect(summaryErrors(el)).toEqual([message]);
+
+    change(el, "edit-display-name", "Ada L");
+    await el.updateComplete;
+    expect(fieldError(el, "edit-display-name")).toBe("");
+    expect(summaryErrors(el)).toEqual([]);
+  });
+
+  it("keeps any other server refusal in the summary alone", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    el.error = "person.email_taken";
+    await el.updateComplete;
+    expect(fieldError(el, "edit-display-name")).toBe("");
+    expect(summaryErrors(el)).toEqual([codeMessage("person.email_taken")]);
+  });
+});
+
 describe("person-edit validation and keyboard submit", () => {
   it("names every blank required field under its own message and does not save", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });

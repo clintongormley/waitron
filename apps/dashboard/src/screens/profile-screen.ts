@@ -530,11 +530,13 @@ export class ProfileScreen extends LitElement {
             ? "totp"
             : code === "person.email_taken" || code === "person.email_invalid"
               ? "email"
-              : code === "password.too_short"
-                ? "password"
-                : code === "pin.too_short"
-                  ? "pin"
-                  : undefined;
+              : code === "person.display_name_taken"
+                ? "displayName"
+                : code === "password.too_short"
+                  ? "password"
+                  : code === "pin.too_short"
+                    ? "pin"
+                    : undefined;
       if (field) this.errors = { [field]: this.error };
     } finally {
       this.busy = false;

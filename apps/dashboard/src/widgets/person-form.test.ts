@@ -113,7 +113,7 @@ describe("person-form", () => {
     change(el, "first-names", "Alex Maria");
     change(el, "last-names", "Ramos");
     await el.updateComplete;
-    expect(displayName(el)).toBe("Alex Maria Ramos");
+    expect(displayName(el)).toBe("Alex Ramos");
     change(el, "display-name", "Lex");
     change(el, "first-names", "Alexandra");
     await el.updateComplete;
@@ -234,6 +234,37 @@ describe("person-form", () => {
     expect(
       el.shadowRoot!.querySelector<HTMLElement & { value: string }>("[data-test=email]")!.value,
     ).toBe("");
+  });
+});
+
+describe("person-form server refusals", () => {
+  const summaryErrors = (el: PersonForm): readonly string[] =>
+    el.shadowRoot!.querySelector("wt-form-error-summary")!.errors;
+  const fieldError = (el: PersonForm, testId: string): string | null =>
+    el.shadowRoot!.querySelector(`[data-test=${testId}]`)!.getAttribute("error");
+
+  it("puts a taken display name beside its field and once in the summary, until it is edited", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    await fillRequired(el);
+    el.error = "person.display_name_taken";
+    await el.updateComplete;
+    const message = codeMessage("person.display_name_taken");
+    expect(fieldError(el, "display-name")).toBe(message);
+    expect(summaryErrors(el)).toEqual([message]);
+
+    change(el, "display-name", "Ada L");
+    await el.updateComplete;
+    expect(fieldError(el, "display-name")).toBe("");
+    expect(summaryErrors(el)).toEqual([]);
+  });
+
+  it("keeps any other server refusal in the summary alone", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    await fillRequired(el);
+    el.error = "person.email_taken";
+    await el.updateComplete;
+    expect(fieldError(el, "display-name")).toBe("");
+    expect(summaryErrors(el)).toEqual([codeMessage("person.email_taken")]);
   });
 });
 

@@ -1,4 +1,4 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { createRef, ref } from "lit/directives/ref.js";
 import { deriveDisplayName, isValidTelephone } from "@waitron/shared";
@@ -15,6 +15,9 @@ import { roleName, rolesByName } from "../i18n/domain.js";
 import { t } from "../i18n/t.js";
 
 type Field = "firstNames" | "lastNames" | "displayName" | "email";
+
+/** Moved beside the display-name field, so the summary does not list it a second time. */
+const DISPLAY_NAME_TAKEN = "person.display_name_taken";
 
 @customElement("dashboard-person-form")
 export class PersonForm extends LitElement {
@@ -52,6 +55,12 @@ export class PersonForm extends LitElement {
   @state() private fieldErrors: Partial<Record<Field | "telephone", string>> = {};
 
   #roleSelect = createRef<HTMLSelectElement>();
+
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("error") && this.error === DISPLAY_NAME_TAKEN) {
+      this.fieldErrors = { ...this.fieldErrors, displayName: codeMessage(DISPLAY_NAME_TAKEN) };
+    }
+  }
 
   override updated(): void {
     if (this.#roleSelect.value) this.#roleSelect.value.value = this.selectedRole;
@@ -139,7 +148,10 @@ export class PersonForm extends LitElement {
       >
         <wt-form-error-summary
           heading=${t("form.error_heading")}
-          .errors=${[...errors, ...(this.error ? [codeMessage(this.error)] : [])]}
+          .errors=${[
+            ...errors,
+            ...(this.error && this.error !== DISPLAY_NAME_TAKEN ? [codeMessage(this.error)] : []),
+          ]}
         ></wt-form-error-summary>
         ${this.#input("first-names", "given-name", t("person.first_names"), this.firstNames, true)}
         ${this.#input("last-names", "family-name", t("person.last_names"), this.lastNames, true)}
