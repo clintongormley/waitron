@@ -2477,16 +2477,17 @@ describe("every write to an open order's lines counts on its revision (plan D10)
     }
   });
 
-  // Serving is a command on a party, and `twoTabs`' tabs have none.
-  it("a served mark, and a served mark cleared", async () => {
+  // Serving is a command on a party, and `twoTabs`' tabs have none. It is not a write to the bill:
+  // the party's revision counts it.
+  it("except a served mark, and a served mark cleared", async () => {
     const { cfg, tabId } = await partyTab();
     const before = await revisionOf(tabId);
 
     await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
-    expect(await revisionOf(tabId)).toBe(before + 1);
+    expect(await revisionOf(tabId)).toBe(before);
 
     await asApp(cfg, (tx) => unserveLine(tx, cfg, tabId, 1));
-    expect(await revisionOf(tabId)).toBe(before + 2);
+    expect(await revisionOf(tabId)).toBe(before);
   });
 
   it("does not count a write refused as out of date, nor one that changes nothing", async () => {
@@ -2634,19 +2635,18 @@ describe("a line write on an order whose card payment is in flight is refused (p
     }
   });
 
-  it("a served mark", async () => {
+  it("takes a served mark, which is not a write to the bill, leaving the bill as it was", async () => {
     const tab = await partyTab();
     const tabs = { tabId: tab.tabId, otherId: tab.tabId };
     await markPaying(tab.tabId, MARK);
     const before = await snapshot(tabs);
 
-    await expect(
-      asApp(tab.cfg, (tx) => serveLine(tx, tab.cfg, tab.tabId, 1)),
-    ).rejects.toMatchObject({
-      code: "order.payment_in_flight",
-      params: { workingOrderId: tab.tabId },
-    });
-    expect(await snapshot(tabs)).toEqual(before);
+    await asApp(tab.cfg, (tx) => serveLine(tx, tab.cfg, tab.tabId, 1));
+
+    const after = await snapshot(tabs);
+    expect(after.orders).toEqual(before.orders);
+    expect(after.lines.map((line) => line.servedAt !== null)).toEqual([true]);
+    expect(before.lines.map((line) => line.servedAt !== null)).toEqual([false]);
   });
 
   it("refuses even an edit that changes nothing, one line or the whole order", async () => {

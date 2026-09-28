@@ -544,8 +544,9 @@ describe("table + tab routes", () => {
       }[];
       revision: number;
     };
-    // The tab's revision rides with its lines: the round and the served mark each counted one.
-    expect(revision).toBe(2);
+    // The tab's revision rides with its lines: the round counted one, and a served mark, which is
+    // not a write to the bill, none.
+    expect(revision).toBe(1);
     expect(lines).toHaveLength(2);
     // Seeded product is 1.50; the locked gross unit rides back verbatim, and the quantity at the
     // three places `thousandthsToDecimal` renders.

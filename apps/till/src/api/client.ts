@@ -1983,7 +1983,7 @@ export class TillApi {
    * Mark part or all of each of a party's lines served → `POST /api/parties/:partyId/served`, on any
    * of its bills but an abandoned one, a paid one included. `quantity` is how much THIS command serves. Rejects
    * `tab.serve_quantity_invalid` for more than is left to serve, `group.line_held` for a line not yet
-   * released, `group.not_found`, `order.payment_in_flight` and the command refusals.
+   * released, `group.not_found`, `bill.refund_in_progress` and the command refusals.
    */
   markServed(
     partyId: string,

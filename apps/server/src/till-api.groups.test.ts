@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   orderGroupEvents,
   products,
@@ -1000,6 +1000,20 @@ describe("the line-editing routes act as the session's operator", () => {
 });
 
 /** How much of a line is served, and whether all of it. */
+/** What a bill-level write would move: the bill's revision, and the card payment's mark on it. */
+async function billOf(tabId: string) {
+  const [row] = await inTx(venue, (tx) =>
+    tx
+      .select({
+        revision: workingOrders.revision,
+        paymentAttemptAt: workingOrders.paymentAttemptAt,
+      })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, tabId)),
+  );
+  return row!;
+}
+
 async function servedOf(lineId: string) {
   const [row] = await inTx(venue, (tx) =>
     tx
@@ -1239,7 +1253,7 @@ describe("POST /api/parties/:id/served refusals that need their own setup", () =
     expect(await snapshot(party)).toEqual(beforeServe);
   });
 
-  it("refuses 409 order.payment_in_flight on each served route while a card payment runs on the bill", async () => {
+  it("takes each served route while a card payment runs on the bill, moving the party's revision and never the bill's", async () => {
     const party = await seated();
     const submitted = await submit(party.partyId, [
       { lines: [dish("Caña", "2")], release: "fire" },
@@ -1260,25 +1274,23 @@ describe("POST /api/parties/:id/served refusals that need their own setup", () =
         .where(eq(workingOrders.id, party.tabId)),
     );
     try {
-      const before = { ...(await snapshot(party)), served: await servedOf(lineId) };
+      const bill = await billOf(party.tabId);
       const base = `/api/parties/${party.partyId}`;
-      for (const [path, extra] of [
-        [`${base}/served`, { items: [{ lineId, quantity: "1" }] }],
-        [`${base}/unserved`, { items: [{ lineId, quantity: "1" }] }],
-        [`${base}/groups/${fired.id}/served`, {}],
+      for (const [path, extra, servedAfter] of [
+        [`${base}/served`, { items: [{ lineId, quantity: "1" }] }, true],
+        [`${base}/unserved`, { items: [{ lineId, quantity: "1" }] }, false],
+        [`${base}/groups/${fired.id}/served`, {}, true],
       ] as const) {
-        const refused = await call("POST", path, {
+        const revision = await revisionOf(party.partyId);
+        const taken = await call("POST", path, {
           submissionId: randomUUID(),
-          expectedPartyRevision: await revisionOf(party.partyId),
+          expectedPartyRevision: revision,
           ...extra,
         });
-        expect([path, refused.status, refused.json]).toEqual([
-          path,
-          409,
-          refusal("order.payment_in_flight", { workingOrderId: party.tabId }),
-        ]);
+        expect([path, taken.status, taken.json]).toEqual([path, 200, { revision: revision + 1 }]);
+        expect([path, (await servedOf(lineId)).servedAt !== null]).toEqual([path, servedAfter]);
       }
-      expect({ ...(await snapshot(party)), served: await servedOf(lineId) }).toEqual(before);
+      expect(await billOf(party.tabId)).toEqual(bill);
     } finally {
       await inTx(venue, (tx) =>
         tx
@@ -1287,6 +1299,42 @@ describe("POST /api/parties/:id/served refusals that need their own setup", () =
           .where(eq(workingOrders.id, party.tabId)),
       );
     }
+  });
+
+  it("takes a served mark while a card is at the reader for the bill, and the card then completes on it", async () => {
+    const party = await seated();
+    const submitted = await submit(party.partyId, [
+      { lines: [dish("Caña", "2")], release: "fire" },
+    ]);
+    const fired = (submitted.json as unknown as SubmitAnswer).groups[0]!;
+    const release = venue.card.holdNextCollect();
+    const calls = venue.card.collectCalls.length;
+    const paying = call("POST", `/api/working-orders/${party.tabId}/payments`, {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "3.00",
+      method: "card",
+      entry: "reader",
+      applied: "3.00",
+      tip: "0.00",
+    });
+    await vi.waitFor(() => expect(venue.card.collectCalls.length).toBe(calls + 1));
+
+    const served = await call("POST", `/api/parties/${party.partyId}/groups/${fired.id}/served`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: await revisionOf(party.partyId),
+    });
+    release();
+    const paid = await paying;
+
+    expect(served.status).toBe(200);
+    expect((await servedOf(fired.lineIds[0]!)).servedAt).not.toBeNull();
+    expect(paid.status).toBe(200);
+    expect(paid.json).toMatchObject({
+      outcome: "received",
+      payment: { state: "received", applied: "3.00" },
+      balance: { received: "3.00", reserved: "0.00", outstanding: "3.00" },
+    });
   });
 
   it("refuses 404 group.not_found for another party's group", async () => {

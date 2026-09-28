@@ -2269,10 +2269,10 @@ function servedAmount(line: ServableLine, quantity: string, limit: number): numb
 
 /**
  * Give each line its new served count, and its extras children theirs in step; `served_at` is set
- * when a row is fully served and cleared when it is not. Each OPEN bill written counts one more
- * write, and one whose card payment or refund is running refuses (`bumpRevision`). A paid bill's
- * lines are written too, and nothing moving on it holds them up: serving is an operational fact,
- * never billing, and the filed sale does not read it.
+ * when a row is fully served and cleared when it is not. Serving is an operational fact, never
+ * billing, and the filed sale does not read it, so no bill's revision moves and a card payment
+ * running on the bill does not hold it up; the party's revision counts it. A pending card refund of
+ * an OPEN bill still refuses it (`bill.refund_in_progress`).
  */
 async function writeServed(
   tx: Transaction,
@@ -2280,7 +2280,7 @@ async function writeServed(
 ): Promise<void> {
   if (changes.length === 0) return;
   const openBills = changes.filter(({ line }) => line.billStatus === "open");
-  await bumpRevision(tx, [...new Set(openBills.map(({ line }) => line.workingOrderId))]);
+  await refuseRefundInProgress(tx, [...new Set(openBills.map(({ line }) => line.workingOrderId))]);
   const at = nowIso();
   const children = await tx
     .select({
