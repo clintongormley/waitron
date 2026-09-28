@@ -5258,6 +5258,17 @@ three branches bookings' coverage still leaves uncovered. **Next action:** decid
 does when its tables change under it (re-pick the first, or close) and fix it test-first; the fix
 may make one or both of those branches reachable, or show they can go.
 
+**The content-languages dialog keeps the languages it opened with — OPEN (found 2026-09-29,
+reviewing C44's content-languages page).** `apps/dashboard/src/widgets/content-languages.ts` copies
+the settings it is given when the dialog opens and does not take a newer copy while it is open. A
+throwaway browser test opened Edit with Spanish and English enabled, then delivered a live update
+adding French (as a change saved from another tab would), then saved without touching anything: the
+dialog submitted Spanish and English only, so the save removed French. The same test failed the
+same way with the Products page's code from before C44 restored, so this is older than the move to
+the Settings page; C44 left the dialog unchanged on purpose. **Next action:** decide what the open
+dialog does when the saved languages change under it (take the new list if nothing was edited, or
+warn and let the person reload), and fix it test-first in the widget.
+
 **The till reports a failed list refresh after a SUCCESSFUL write as a failed write — DONE
 (PR #641; comment fixes from the #621 review landed as #632).** The park, cash-sale, card-sale and
 place handlers in `apps/till/src/till-app.ts` hand the refresh behind a successful write to
