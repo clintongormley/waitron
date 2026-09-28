@@ -973,6 +973,8 @@ export interface ExpoItem {
   /** Unit values frozen with the line. Absent/null only on older payloads. */
   unitName?: Record<string, string> | null;
   unitPrecision?: number | null;
+  /** Counted in Each, whose unit the expo board leaves out; absent reads as not. */
+  soldInEach?: boolean;
   stationName: string;
   state: TicketState;
   /** `null` while the item's course is HELD; a timestamp once fired. */

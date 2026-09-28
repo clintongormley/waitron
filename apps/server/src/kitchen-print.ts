@@ -70,12 +70,11 @@ function ticketName(text: Record<string, string>, locale: string): string {
 }
 
 /**
- * Whether a line was sold in Each, the one unit known to count pieces. A product with no stored unit
- * sells in Each and its line freezes Each's abbreviations; every stored unit is either a measure
- * (the seeded g, kg, mg, ml and l) or one whose kind nothing records. A line older than the unit
- * snapshot carries none.
+ * Whether a line's frozen unit abbreviations equal Each's. This decides only whether a ticket entry
+ * may be merged or split (`measured`); whether the unit prints is decided by the unit's identity,
+ * through `readLinesSoldInEach`.
  */
-function soldInEach(unitName: Record<string, string> | null): boolean {
+function abbreviatedLikeEach(unitName: Record<string, string> | null): boolean {
   if (unitName === null) return true;
   const each: Record<string, string> = EACH_UNIT.abbreviation;
   const locales = Object.keys(unitName);
@@ -152,9 +151,9 @@ function groupByLayout<T extends KitchenPrinterLayout>(printers: readonly T[]): 
 
 /**
  * Each line's printed item, keyed by line id and carrying its `line_no` and the position of the
- * party's group it is in (null in none). The fire and correction paths share it, so a correction
- * slip prints a line exactly as the original ticket did. `lineIds` are parent dish lines; a child
- * modifier line prints as sub-text of its parent.
+ * party's group it is in (null in none). The fire and correction paths share it, so a slip lays out
+ * a line's item the way its ticket did, from the line as it stands when the slip prints. `lineIds`
+ * are parent dish lines; a child modifier line prints as sub-text of its parent.
  */
 async function buildTicketItems(
   tx: Transaction,
@@ -185,6 +184,7 @@ async function buildTicketItems(
     quantity: thousandthsToDecimal(row.quantity),
   }));
   const lineById = new Map(lineRows.map((row) => [row.id, row]));
+  const eachByIdentity = await VENUE_SERVICE.readLinesSoldInEach(tx, lineIds);
 
   // Ordered by `line_no` so the picks print in the order they were offered.
   const storedChildRows = await tx
@@ -225,10 +225,13 @@ async function buildTicketItems(
       group: row.group,
       item: {
         qty: row.quantity,
-        unit: row.unitName == null ? undefined : ticketName(row.unitName, cfg.locale),
+        unit:
+          row.unitName == null || eachByIdentity.has(row.id)
+            ? undefined
+            : ticketName(row.unitName, cfg.locale),
         name: kitchenPresentationName(row),
         note: row.note ?? undefined,
-        ...(soldInEach(row.unitName) ? {} : { measured: true }),
+        ...(abbreviatedLikeEach(row.unitName) ? {} : { measured: true }),
         modifiers: [
           ...optionSnapshotLabels(row.optionSnapshots),
           ...(modifiersByParent.get(row.id) ?? []),
@@ -531,8 +534,8 @@ export type HoldCorrection =
  * of a line that had already fired, then enqueue a correction slip per item where its station has
  * an active printer; callers pass only fired lines. The notice is recorded whether or not a printer
  * exists, so a station screen sees every correction. Each slip goes to every active printer on the
- * line's station, whatever its scope, and prints the item as the original ticket did, at the item's
- * quantity. The header's never-block argument applies unchanged.
+ * line's station, whatever its scope, and prints the item through {@link buildTicketItems}, at the
+ * item's quantity. The header's never-block argument applies unchanged.
  *
  * A void must call this before deleting the line: the delete cascades its ticket item away, and both
  * the notice and the slip re-read the line from `working_order_lines`.

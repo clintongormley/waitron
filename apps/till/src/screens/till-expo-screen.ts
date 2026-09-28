@@ -8,7 +8,7 @@ import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { dietBadgeStyles, dietBadges, extraNutrition } from "../widgets/diet-badges.js";
-import { snapshotDescriptionFor, trimQuantity } from "../widgets/dish-format.js";
+import { dishLine, snapshotDescriptionFor } from "../widgets/dish-format.js";
 import type {
   ExpoCourse,
   ExpoGroup,
@@ -648,8 +648,10 @@ export class TillExpoScreen extends LitElement {
   #item(item: ExpoItem): TemplateResult {
     const held = item.firedAt === null;
     const forgotten = this.#itemBand(item) === "forgotten";
-    const unit = item.unitName == null ? "" : ` ${snapshotDescriptionFor(item.unitName, "")}`;
-    const label = `${trimQuantity(item.qty)}${unit}× ${item.name}`;
+    const label = dishLine(
+      { quantity: item.qty, unitName: item.unitName, soldInEach: item.soldInEach },
+      item.name,
+    );
     return html`<span class="item state-${item.state} ${held ? "held" : ""}" data-item=${item.id}>
       <span class="item-main">
         <span class="item-name">${label}</span>

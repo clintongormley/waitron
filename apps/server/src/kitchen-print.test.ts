@@ -15,11 +15,14 @@ import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
+  EACH_UNIT,
   assignCatalogueToLocation,
   createCatalogue,
   createExtraList,
   createProduct,
   readContentLanguages,
+  units,
+  updateUnit,
   writeProductModifiers,
 } from "@waitron/catalogue";
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
@@ -816,7 +819,124 @@ describe("every correction reaches the station as a notice, printer or not", () 
 
     expect(slips).toHaveLength(1);
     const slip = decodeTicket(slips[0]!.payload);
-    expect(slip).toContain(`${thousandthsToDecimal(2000)} ea x Chuleton`);
+    expect(slip).toContain(`${thousandthsToDecimal(2000)} x Chuleton`);
+  });
+});
+
+describe("a dish sold by the piece prints no unit", () => {
+  /**
+   * Five dishes at Cocina, each sold in a different unit: Croqueta in Each as a product with no
+   * stored unit, Bomba in the stored unit seeded "each", renamed so only its identity marks it Each,
+   * Pulpo in the kg seed, Almendras in grams, and Pan in a stored unit spelled exactly like Each but
+   * not seeded as it.
+   */
+  async function sellInEveryUnit(tx: Transaction, cfg: TillConfig, catalogueId: string) {
+    const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+    const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
+    await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+    const [seededEach] = await tx
+      .select({ id: units.id })
+      .from(units)
+      .where(eq(units.seedKey, "each"));
+    await updateUnit(tx, seededEach!.id, { abbreviation: { es: "pz" } }, "es");
+    const grams = { en: "g", es: "g", ca: "g", gl: "g", eu: "g" };
+    const [gram, lookAlike] = await tx
+      .insert(units)
+      .values([
+        { name: grams, abbreviation: grams, precision: 0, hardwareUnit: "g" },
+        {
+          name: { en: "piece", es: "pieza", ca: "peça", gl: "peza", eu: "pieza" },
+          abbreviation: EACH_UNIT.abbreviation,
+          precision: 0,
+          hardwareUnit: null,
+        },
+      ])
+      .returning({ id: units.id });
+    const dish = async (
+      name: string,
+      unit: { unitId: string } | { pricingUnit: "each" | "weight" },
+    ) => {
+      const { id } = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        name,
+        ...unit,
+        unitPrice: "1.50",
+        vatClass: "general",
+      });
+      await setProductStation(tx, cfg, id, cocina.id);
+      return id;
+    };
+    return {
+      printerId,
+      croqueta: await dish("Croqueta", { pricingUnit: "each" }),
+      bomba: await dish("Bomba", { unitId: seededEach!.id }),
+      pulpo: await dish("Pulpo", { pricingUnit: "weight" }),
+      almendras: await dish("Almendras", { unitId: gram!.id }),
+      pan: await dish("Pan", { unitId: lookAlike!.id }),
+    };
+  }
+
+  it("leaves the unit out for a dish sold in Each, and keeps it for every other unit", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const jobs = await asApp(cfg, async (tx) => {
+      const sold = await sellInEveryUnit(tx, cfg, catalogueId);
+      await fireNewOrder(tx, cfg, [
+        { productId: sold.croqueta, quantity: "2" },
+        { productId: sold.bomba, quantity: "3" },
+        { productId: sold.pulpo, quantity: "0.5" },
+        { productId: sold.almendras, quantity: "200" },
+        { productId: sold.pan, quantity: "1" },
+      ]);
+      return printJobsFor(tx);
+    });
+
+    expect(jobs).toHaveLength(1);
+    const lines = printedLines(jobs[0]!.payload);
+    expect(lines).toContain(`${thousandthsToDecimal(2000)} x Croqueta`);
+    expect(lines).toContain(`${thousandthsToDecimal(3000)} x Bomba`);
+    expect(lines).toContain(`${thousandthsToDecimal(500)} kg x Pulpo`);
+    expect(lines).toContain(`${thousandthsToDecimal(200_000)} g x Almendras`);
+    // Spelled like Each, but a unit of the venue's own: its abbreviation still prints.
+    expect(lines).toContain(`${thousandthsToDecimal(1000)} ea x Pan`);
+  });
+
+  it("a correction slip also leaves out the Each unit", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const slips = await asApp(cfg, async (tx) => {
+      const sold = await sellInEveryUnit(tx, cfg, catalogueId);
+      const orderId = await fireNewOrder(tx, cfg, [
+        { productId: sold.croqueta, quantity: "2" },
+        { productId: sold.pulpo, quantity: "0.5" },
+      ]);
+      const fired = await tx
+        .select({
+          workingOrderLineId: ticketItems.workingOrderLineId,
+          stationId: ticketItems.stationId,
+          quantity: ticketItems.quantity,
+        })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, orderId));
+      const before = new Set((await printJobsFor(tx)).map((job) => job.id));
+      await enqueueCorrectionSlips(
+        tx,
+        cfg,
+        orderId,
+        fired.map((item) => ({
+          workingOrderLineId: item.workingOrderLineId,
+          stationId: item.stationId!,
+          quantity: item.quantity!,
+          wasStarted: false,
+        })),
+        "VOID",
+      );
+      return (await printJobsFor(tx)).filter((job) => !before.has(job.id));
+    });
+
+    expect(slips).toHaveLength(2);
+    const printed = slips.flatMap((slip) => printedLines(slip.payload));
+    expect(printed).toContain(`${thousandthsToDecimal(2000)} x Croqueta`);
+    expect(printed).toContain(`${thousandthsToDecimal(500)} kg x Pulpo`);
   });
 });
 
@@ -1077,12 +1197,12 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
 
     expect(released).toHaveLength(1);
     expect(decodeTicket(released[0]!.payload)).toContain(
-      `${thousandthsToDecimal(2000)} ea x Chuleton`,
+      `${thousandthsToDecimal(2000)} x Chuleton`,
     );
     expect(reprinted).toHaveLength(1);
     const reprint = decodeTicket(reprinted[0]!.payload);
-    expect(reprint).toContain(`${thousandthsToDecimal(3000)} ea x Sopa`);
-    expect(reprint).toContain(`${thousandthsToDecimal(2000)} ea x Chuleton`);
+    expect(reprint).toContain(`${thousandthsToDecimal(3000)} x Sopa`);
+    expect(reprint).toContain(`${thousandthsToDecimal(2000)} x Chuleton`);
   });
 
   it("enqueues nothing (and does NOT throw) for an order with no fired items", async () => {
