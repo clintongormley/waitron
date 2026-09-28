@@ -443,6 +443,8 @@ checks are the ones below.
   the bill's total must not move under a capture, because the final capture issues the invoice from
   it (§7), and M7b's single helper is where every line write already stops. Letting new rounds
   through while a card is at the reader is open point §11.3.
+  _(2026-09-28: a served mark is no longer refused while a card payment is pending; owner ruling,
+  campaign item A118.)_
 - **Allowed while a card payment on the bill is pending:** a cash payment, and a second card payment
   on another reader, each against what is still available after the pending one's reservation
   (§3.1). So a second device may take cash while a card is at the terminal. **Why:** at a large

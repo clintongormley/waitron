@@ -523,7 +523,8 @@ The ones worth grepping for:
   `accepted_offline` one no sale records (`releaseStalePaymentAttempts`, `src/till-sale.ts`, run by
   `withStalePaymentRelease`, `src/boot.ts`). The loop's first pass runs at start, before any sleep;
   after that, the sleep between passes is at most `WAITRON_MAX_TICK_MS`. Until its mark is cleared,
-  the till refuses changes to that order with `order.payment_in_flight`.
+  the server refuses changes to that order with `order.payment_in_flight`, except marking its lines
+  served or taking that back.
 - **`payment_attempt.release_failed`** (`warn`) — `{ error }`, plus `workingOrderId` when it is the
   clear that follows a card attempt which filed nothing (`releasePaymentAttempt`,
   `src/till-sale.ts`). That clear threw; the till still gets the attempt's own outcome, and the

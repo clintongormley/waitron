@@ -862,7 +862,11 @@ describe("refusals, each writing nothing", () => {
   });
 });
 
-describe("the bill's revision and a card payment (menus plan D10, D22)", () => {
+/**
+ * The owner's decision of 2026-09-28, overturning menus plan D10 and D22 where they conflict: a served
+ * mark does not move the open bill's revision, so it is taken while a card payment runs on the bill.
+ */
+describe("the bill's revision and a card payment (menus plan D10, D22; owner 2026-09-28)", () => {
   it("counts a served mark and its undo on the party's revision, never the open bill's", async () => {
     const v = await setupVenue();
     const s = await croquetas(v);

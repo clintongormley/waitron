@@ -1983,7 +1983,8 @@ export class TillApi {
    * Mark part or all of each of a party's lines served → `POST /api/parties/:partyId/served`, on any
    * of its bills but an abandoned one, a paid one included. `quantity` is how much THIS command serves. Rejects
    * `tab.serve_quantity_invalid` for more than is left to serve, `group.line_held` for a line not yet
-   * released, `group.not_found`, `bill.refund_in_progress` and the command refusals.
+   * released, `group.not_found`, `bill.refund_in_progress` for a pending card refund of an open
+   * bill, and the command refusals.
    */
   markServed(
     partyId: string,
@@ -1994,7 +1995,8 @@ export class TillApi {
   }
 
   /** Take back part or all of what was marked served on each line → `POST /api/parties/:partyId/unserved`;
-   * more than is served rejects `tab.serve_quantity_invalid`. */
+   * more than is served rejects `tab.serve_quantity_invalid`, and a pending card refund of an open
+   * bill `bill.refund_in_progress`. */
   unmarkServed(
     partyId: string,
     items: { lineId: string; quantity: string }[],
@@ -2004,7 +2006,8 @@ export class TillApi {
   }
 
   /** Mark every line of a fired group served → `POST /api/parties/:partyId/groups/:groupId/served`.
-   * A held group rejects `group.line_held`. */
+   * A held group rejects `group.line_held`, and a pending card refund of an open bill
+   * `bill.refund_in_progress`. */
   markGroupServed(
     partyId: string,
     groupId: string,

@@ -999,7 +999,6 @@ describe("the line-editing routes act as the session's operator", () => {
   });
 });
 
-/** How much of a line is served, and whether all of it. */
 /** What a bill-level write would move: the bill's revision, and the card payment's mark on it. */
 async function billOf(tabId: string) {
   const [row] = await inTx(venue, (tx) =>
@@ -1014,6 +1013,7 @@ async function billOf(tabId: string) {
   return row!;
 }
 
+/** How much of a line is served, and whether all of it. */
 async function servedOf(lineId: string) {
   const [row] = await inTx(venue, (tx) =>
     tx
@@ -1253,6 +1253,24 @@ describe("POST /api/parties/:id/served refusals that need their own setup", () =
     expect(await snapshot(party)).toEqual(beforeServe);
   });
 
+  it("refuses 404 group.not_found for another party's group", async () => {
+    const party = await withGroups();
+    const other = await withGroups();
+    const before = await snapshot(party);
+
+    const refused = await call(
+      "POST",
+      `/api/parties/${party.partyId}/groups/${other.fired.id}/served`,
+      { submissionId: randomUUID(), expectedPartyRevision: await revisionOf(party.partyId) },
+    );
+
+    expect(refused.status).toBe(404);
+    expect(refused.json).toEqual(refusal("group.not_found", { groupId: other.fired.id }));
+    expect(await snapshot(party)).toEqual(before);
+  });
+});
+
+describe("the served routes while a card payment runs on the bill", () => {
   it("takes each served route while a card payment runs on the bill, moving the party's revision and never the bill's", async () => {
     const party = await seated();
     const submitted = await submit(party.partyId, [
@@ -1260,8 +1278,9 @@ describe("POST /api/parties/:id/served refusals that need their own setup", () =
     ]);
     const fired = (submitted.json as unknown as SubmitAnswer).groups[0]!;
     const lineId = fired.lineIds[0]!;
-    // One of the two served, so a serve, an undo and the group's serve are each valid but for the
-    // payment.
+    // Taken before the setup serve, so a stray write every served mark makes alike still shows.
+    const before = await snapshot(party);
+    // One of the two served, so a serve, an undo and the group's serve are each valid.
     await call("POST", `/api/parties/${party.partyId}/served`, {
       submissionId: randomUUID(),
       expectedPartyRevision: await revisionOf(party.partyId),
@@ -1291,6 +1310,15 @@ describe("POST /api/parties/:id/served refusals that need their own setup", () =
         expect([path, (await servedOf(lineId)).servedAt !== null]).toEqual([path, servedAfter]);
       }
       expect(await billOf(party.tabId)).toEqual(bill);
+      // The setup serve and the three routes each record a command and bump the party, whose
+      // revision the groups answer carries.
+      expect({ ...(await snapshot(party)), served: await servedOf(lineId) }).toEqual({
+        ...before,
+        revision: before.revision + 4,
+        commands: before.commands + 4,
+        groups: { ...before.groups, revision: before.revision + 4 },
+        served: { servedQuantity: 2000, servedAt: expect.any(String) },
+      });
     } finally {
       await inTx(venue, (tx) =>
         tx
@@ -1335,22 +1363,6 @@ describe("POST /api/parties/:id/served refusals that need their own setup", () =
       payment: { state: "received", applied: "3.00" },
       balance: { received: "3.00", reserved: "0.00", outstanding: "3.00" },
     });
-  });
-
-  it("refuses 404 group.not_found for another party's group", async () => {
-    const party = await withGroups();
-    const other = await withGroups();
-    const before = await snapshot(party);
-
-    const refused = await call(
-      "POST",
-      `/api/parties/${party.partyId}/groups/${other.fired.id}/served`,
-      { submissionId: randomUUID(), expectedPartyRevision: await revisionOf(party.partyId) },
-    );
-
-    expect(refused.status).toBe(404);
-    expect(refused.json).toEqual(refusal("group.not_found", { groupId: other.fired.id }));
-    expect(await snapshot(party)).toEqual(before);
   });
 });
 

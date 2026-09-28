@@ -2272,7 +2272,8 @@ function servedAmount(line: ServableLine, quantity: string, limit: number): numb
  * when a row is fully served and cleared when it is not. Serving is an operational fact, never
  * billing, and the filed sale does not read it, so no bill's revision moves and a card payment
  * running on the bill does not hold it up; the party's revision counts it. A pending card refund of
- * an OPEN bill still refuses it (`bill.refund_in_progress`).
+ * an OPEN bill refuses it (`bill.refund_in_progress`); the owner's ruling of 2026-09-28 named card
+ * payments, not refunds.
  */
 async function writeServed(
   tx: Transaction,
@@ -4001,8 +4002,9 @@ export async function refuseRefundInProgress(
  * Refuse while money on any of these OPEN orders is moving: `bill.refund_in_progress` for a pending
  * card refund, else `order.payment_in_flight` for a card at the reader — a payment of the whole
  * order between pricing and filing (plan D22's mark), or a pending card payment of part of the bill
- * (bill payments design §5.2). Every line write stops here, because the capture that completes the
- * bill invoices it from its total.
+ * (bill payments design §5.2). Every line write that can change the bill's total stops here,
+ * because the capture that completes the bill invoices it from that total; a served mark
+ * (`writeServed`) does not.
  */
 export async function refusePaymentInFlight(
   tx: Transaction,
@@ -4057,9 +4059,9 @@ export async function refuseOrderPaymentMarked(
 }
 
 /**
- * Count one more write on each OPEN order named; a settled or placed order's revision stays. Every
- * write to an open order's lines ends here, so this is also where a write to an order being paid is
- * refused, rolling back what the write did before it.
+ * Count one more write on each OPEN order named; a settled or placed order's revision stays. It
+ * refuses first (`refusePaymentInFlight`), so a write that ends here is refused on an order being
+ * paid, rolling back what it did before. A served mark does not end here (`writeServed`).
  */
 export async function bumpRevision(tx: Transaction, orderIds: readonly string[]): Promise<void> {
   await refusePaymentInFlight(tx, orderIds);
@@ -4697,8 +4699,8 @@ function paidLineParts(parent: EditableParent): { id: string; lineNo: number; ke
 /**
  * Count a write on the order's revision only when it changed something, and answer the revision the
  * order is at after it: `copy` is the one {@link requireEditableOrder} matched in this transaction.
- * One that changes nothing is still refused while a card payment of the order is in flight, as every
- * other line write is.
+ * One that changes nothing is still refused while a card payment of the order is in flight, as a
+ * write that changes something is.
  */
 async function countEdit(
   tx: Transaction,
