@@ -146,6 +146,16 @@ it("explains each refusal of an unsent order, in both languages", () => {
   ]);
 });
 
+it("explains a merge refused for leaving the party without a table, in both languages", () => {
+  expect([
+    codeMessage("tab.merge_leaves_no_table", "en"),
+    codeMessage("tab.merge_leaves_no_table", "es"),
+  ]).toEqual([
+    "That would leave these guests without a table, so these bills cannot be merged this way",
+    "Así estos clientes se quedarían sin mesa, así que estas cuentas no se pueden combinar de esta forma",
+  ]);
+});
+
 it("explains each refusal of joining or merging bills that belong together differently, in both languages", () => {
   expect(
     ["tab.not_table_tab", "tab.visit_mismatch", "tab.visit_has_other_open_bill"].map((code) => [

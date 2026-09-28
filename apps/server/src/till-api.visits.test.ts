@@ -537,6 +537,25 @@ describe("join and merge refuse bills that would leave a table, a bill and a par
     });
   });
 
+  it("409 tab.merge_leaves_no_table freeing the party's only table by merging its tab into its check", async () => {
+    const a = await seat();
+    const checkId = randomUUID();
+    await withTransaction(suite.db, (tx) =>
+      createOpenOrder(tx, cfg, checkId, [], null, { visitId: a.visitId }),
+    );
+
+    const res = await post(`/api/tabs/${checkId}/merge`, {
+      fromTabId: a.tabId,
+      freeSourceTable: true,
+      expectedVisitRevision: 0,
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "tab.merge_leaves_no_table", params: { tabId: a.tabId } },
+    });
+  });
+
   it("409 tab.visit_has_other_open_bill merging another party's separate bill while its tab is open", async () => {
     const a = await seat();
     const b = await seat();

@@ -39,6 +39,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That separate bill's guests still have another open bill. Merge their table's bill instead",
     es: "Los clientes de esa cuenta separada aún tienen otra cuenta abierta. Combina en su lugar la cuenta de su mesa",
   },
+  "tab.merge_leaves_no_table": {
+    en: "That would leave these guests without a table, so these bills cannot be merged this way",
+    es: "Así estos clientes se quedarían sin mesa, así que estas cuentas no se pueden combinar de esta forma",
+  },
   "table.not_shared": {
     en: "This is the party's only table, so it cannot be separated from its bill",
     es: "Es la única mesa de estos clientes, así que no se puede separar de su cuenta",

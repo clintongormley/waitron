@@ -2632,6 +2632,27 @@ async function refuseInconsistentMerge(
 }
 
 /**
+ * Refuse a merge within the party that would free every table the party holds; otherwise return the
+ * party's tables that point at the source bill, which the merge frees and takes out of the party.
+ */
+async function refuseMergeLeavingNoTable(
+  tx: Transaction,
+  visitId: string,
+  fromTabId: string,
+): Promise<string[]> {
+  const members = await memberTables(tx, visitId);
+  const freed = await tx
+    .select({ id: diningTables.id })
+    .from(diningTables)
+    .where(and(eq(diningTables.tabId, fromTabId), inArray(diningTables.id, members)));
+  const leaving = freed.map((table) => table.id);
+  if (leaving.length > 0 && leaving.length === members.length) {
+    throw new AppError("tab.merge_leaves_no_table", { tabId: fromTabId });
+  }
+  return leaving;
+}
+
+/**
  * Join an active, free table to an open tab, or to the settled or abandoned tab a seated party's
  * tables point at.
  * The existing tab lines remain in place.
@@ -2684,8 +2705,8 @@ export async function joinTable(
  * Combine two tabs onto one bill: move ALL of `fromTab`'s lines onto `intoTab`, re-point `fromTab`'s
  * tables, and abandon the now-empty `fromTab`, which files nothing.
  *
- * `freeSourceTable = true` frees the source table (it turns over); `false` re-points it at `intoTab`,
- * and the joined table KEEPS its status.
+ * `freeSourceTable = true` frees the source table (it turns over, and leaves the party);
+ * `false` re-points it at `intoTab`, and the joined table KEEPS its status.
  *
  * The kitchen is told of moved sent work only after the re-point, which can change the table its
  * slips name for `intoTab`.
@@ -2716,6 +2737,10 @@ export async function mergeTabs(
   }
   await refuseInconsistentMerge(tx, into, from);
   await guardVisits(tx, into.visitId, from.visitId, options);
+  const leavingParty =
+    options.freeSourceTable && from.visitId !== null && from.visitId === into.visitId
+      ? await refuseMergeLeavingNoTable(tx, from.visitId, fromTabId)
+      : [];
   // The source is abandoned below; money it holds never moves to another bill implicitly.
   await refuseBillHoldingMoney(tx, [fromTabId]);
   const before = await readSentWork(tx, cfg, fromTabId);
@@ -2757,6 +2782,9 @@ export async function mergeTabs(
     .update(diningTables)
     .set(options.freeSourceTable ? { tabId: null, statusId: null } : { tabId: intoTabId })
     .where(or(eq(diningTables.tabId, fromTabId), inArray(diningTables.id, sourceTables)));
+  if (leavingParty.length > 0) {
+    await leaveTables(tx, leavingParty);
+  }
 
   await tx
     .update(workingOrders)

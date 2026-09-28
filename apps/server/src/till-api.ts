@@ -333,6 +333,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "tab.not_table_tab": 409,
   "tab.visit_mismatch": 409,
   "tab.visit_has_other_open_bill": 409,
+  "tab.merge_leaves_no_table": 409,
   "tab.line_not_found": 404,
   "table.occupied": 409,
   "tab.merge_self": 400,

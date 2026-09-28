@@ -1926,10 +1926,12 @@ export class TillApi {
   /**
    * Combine ANOTHER open tab onto this one → `POST /api/tabs/:tabId/merge`, where the path names the
    * DESTINATION tab and `fromTabId` the source, whose lines move here before it is abandoned.
-   * `freeSourceTable` frees the vacated table (`true`) or re-points it at this tab (`false`).
+   * `freeSourceTable` frees the vacated table, and takes it out of its party if it has one
+   * (`true`), or re-points it at this tab (`false`).
    * PRE-FISCAL. Rejects `tab.not_open`, `tab.merge_self`, `tab.not_table_tab`, `tab.visit_mismatch`,
-   * `tab.visit_has_other_open_bill` or `bill.payments_received`, and on a party's tab
-   * `visit.not_open`, `visit.out_of_date`, or `management.request_invalid` for a missing revision.
+   * `tab.visit_has_other_open_bill`, `tab.merge_leaves_no_table` or `bill.payments_received`, and
+   * on a party's tab `visit.not_open`, `visit.out_of_date`, or `management.request_invalid` for a
+   * missing revision.
    */
   async mergeTabs(
     orderId: string,

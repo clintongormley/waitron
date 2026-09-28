@@ -184,6 +184,7 @@ const TABLE_REFUSALS = new Set([
   "tab.not_table_tab",
   "tab.visit_mismatch",
   "tab.visit_has_other_open_bill",
+  "tab.merge_leaves_no_table",
   "visit.not_open",
   "visit.bill_outstanding",
 ]);

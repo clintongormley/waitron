@@ -517,6 +517,11 @@ declare module "@waitron/shared" {
      * party still has another open bill.
      */
     "tab.visit_has_other_open_bill": { tabId: string };
+    /**
+     * `mergeTabs`, asked to free the source bill's tables within one party, would free every table
+     * the party holds; `tabId` is the source bill.
+     */
+    "tab.merge_leaves_no_table": { tabId: string };
     /** A per-line void named no line on the open tab. Pre-fiscal: a void of an open tab files nothing. */
     "tab.line_not_found": { tabId: string; lineNo: number };
     /**
