@@ -1,6 +1,7 @@
--- Every writer sets `parties.main_bill_id` to an open bill of that party, or null (`setMainBill`,
--- apps/server/src/parties.ts). These two triggers clear it when that bill leaves `open` (paid,
--- presented or abandoned) or moves to another party.
+-- `setMainBill` (apps/server/src/parties.ts) is the only writer of `parties.main_bill_id` in
+-- apps/server. The database checks only that it names an existing order; nothing checks that the
+-- bill is open or the party's. These two triggers only clear it, when that bill leaves `open`
+-- (paid, presented or abandoned) or moves to another party.
 CREATE TRIGGER working_orders_release_main_bill
 AFTER UPDATE OF status ON working_orders
 FOR EACH ROW
