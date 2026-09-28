@@ -49,6 +49,8 @@ export interface Draft {
   ownerName: string;
   revision: number;
   lines: DraftLine[];
+  /** The owner before the draft's latest `taken_over` event; null when it was never taken over. */
+  takenOverFrom: { personId: string; name: string } | null;
 }
 
 export { normaliseDraftLines };
@@ -661,9 +663,14 @@ async function readOpenDrafts(
     visitId,
     lines.map(({ line }) => line.menuItemId),
   );
+  const takenFrom = await takenOverFrom(
+    tx,
+    drafts.map((draft) => draft.id),
+  );
   return drafts.map((draft) => ({
     ...draft,
     ownerName: draft.ownerName ?? "",
+    takenOverFrom: takenFrom.get(draft.id) ?? null,
     lines: lines
       .filter((stored) => stored.draftId === draft.id)
       .map(({ line }) => ({
@@ -671,6 +678,35 @@ async function readOpenDrafts(
         unavailable: unavailable(line, offers.get(line.menuItemId)),
       })),
   }));
+}
+
+/**
+ * Each draft's owner before its latest `taken_over` event, named as the floor names an owner. The
+ * latest is the last by `rowid`, not `created_at`, which a clock stepped back can put out of order:
+ * SQLite gives a new row one more than the table's largest `rowid`, and this table is append-only.
+ */
+async function takenOverFrom(
+  tx: Transaction,
+  draftIds: readonly string[],
+): Promise<Map<string, { personId: string; name: string }>> {
+  const rows = await tx
+    .select({
+      draftId: orderDraftEvents.draftId,
+      personId: orderDraftEvents.fromPerson,
+      name: persons.displayName,
+    })
+    .from(orderDraftEvents)
+    .leftJoin(persons, eq(persons.id, orderDraftEvents.fromPerson))
+    .where(
+      and(
+        inArray(orderDraftEvents.draftId, [...draftIds]),
+        eq(orderDraftEvents.kind, "taken_over"),
+      ),
+    )
+    .orderBy(sql`${orderDraftEvents}.rowid`);
+  return new Map(
+    rows.map((row) => [row.draftId, { personId: row.personId!, name: row.name ?? "" }] as const),
+  );
 }
 
 /** The zone's live offers for the menu items, from the source `priceOrderLines` refuses from. */

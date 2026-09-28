@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   kitchenCourses,
   locations,
@@ -1131,6 +1131,87 @@ describe("taking over a draft (D5, spec §2)", () => {
     await expect(save(v, mesa4.visitId, ALEX, alex.id, 1, [])).rejects.toMatchObject({
       code: "draft.not_found",
     });
+  });
+});
+
+describe("who a draft was taken over from", () => {
+  it("names no one on a draft never taken over, on a read, a save and a submission's rest", async () => {
+    const v = await setupVenue();
+    const { visitId } = await seated(v);
+    const draft = await save(v, visitId, ALEX, null, 0, [item(v, "beer"), item(v, "fish")]);
+    expect(draft.takenOverFrom).toBeNull();
+    expect((await draftsOf(v, visitId)).map((read) => read.takenOverFrom)).toEqual([null]);
+    const { draft: rest } = await submit(v, visitId, draft, ALEX, [
+      { lineIds: [draft.lines[0]!.id], release: "fire" },
+    ]);
+    expect(rest!.takenOverFrom).toBeNull();
+  });
+
+  it("names Alex once Sam takes Alex's draft, on the takeover, a read, Sam's save and a submission's rest", async () => {
+    const v = await setupVenue();
+    const { visitId } = await seated(v);
+    const alex = await save(v, visitId, ALEX, null, 0, [item(v, "beer"), item(v, "fish")]);
+    const fromAlex = { personId: ALEX, name: "Alex" };
+
+    const taken = await takeOver(v, visitId, alex.id, SAM, 0);
+    expect(taken.takenOverFrom).toEqual(fromAlex);
+    expect((await draftsOf(v, visitId)).map((read) => read.takenOverFrom)).toEqual([fromAlex]);
+    const sams = await save(v, visitId, SAM, alex.id, 1, taken.lines);
+    expect(sams.takenOverFrom).toEqual(fromAlex);
+    const { draft: rest } = await submit(v, visitId, sams, SAM, [
+      { lineIds: [sams.lines[0]!.id], release: "fire" },
+    ]);
+    expect(rest!.takenOverFrom).toEqual(fromAlex);
+  });
+
+  it("names Sam once Alex takes it back, even when the clock stepped back between the two", async () => {
+    const v = await setupVenue();
+    const { visitId } = await seated(v);
+    const alex = await save(v, visitId, ALEX, null, 0, [item(v, "beer")]);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-09-28T12:00:00.500Z"));
+      await takeOver(v, visitId, alex.id, SAM, 0);
+      vi.setSystemTime(new Date("2026-09-28T12:00:00.100Z"));
+      const back = await takeOver(v, visitId, alex.id, ALEX, 1);
+      expect(back).toMatchObject({ ownerId: ALEX, takenOverFrom: { personId: SAM, name: "Sam" } });
+    } finally {
+      vi.useRealTimers();
+    }
+    expect((await draftsOf(v, visitId)).map((read) => read.takenOverFrom)).toEqual([
+      { personId: SAM, name: "Sam" },
+    ]);
+  });
+
+  it("names each draft's own taker in one read of several drafts", async () => {
+    const v = await setupVenue();
+    const { visitId } = await seated(v);
+    const alex = await save(v, visitId, ALEX, null, 0, [item(v, "beer")]);
+    const nobody = randomUUID();
+    const nobodys = await save(v, visitId, nobody, null, 0, [item(v, "fish")]);
+    const mia = randomUUID();
+    await db.insert(persons).values({ id: mia, displayName: "Mia" });
+    await save(v, visitId, mia, null, 0, [item(v, "wine", { variantId: v.glass })]);
+    await takeOver(v, visitId, alex.id, SAM, 0);
+    await takeOver(v, visitId, nobodys.id, ALEX, 0);
+
+    const read = byOwner(await draftsOf(v, visitId));
+    expect(read.map(({ ownerId, takenOverFrom }) => ({ ownerId, takenOverFrom }))).toEqual([
+      { ownerId: ALEX, takenOverFrom: { personId: nobody, name: "" } },
+      { ownerId: mia, takenOverFrom: null },
+      { ownerId: SAM, takenOverFrom: { personId: ALEX, name: "Alex" } },
+    ]);
+  });
+
+  it("answers the taker's own draft, naming no one, when the taken draft is added into it", async () => {
+    const v = await setupVenue();
+    const { visitId } = await seated(v);
+    const alex = await save(v, visitId, ALEX, null, 0, [item(v, "beer")]);
+    const sam = await save(v, visitId, SAM, null, 0, [item(v, "fish")]);
+
+    const merged = await takeOver(v, visitId, alex.id, SAM, 0);
+    expect(merged).toMatchObject({ id: sam.id, takenOverFrom: null });
+    expect((await draftsOf(v, visitId)).map((read) => read.takenOverFrom)).toEqual([null]);
   });
 });
 
