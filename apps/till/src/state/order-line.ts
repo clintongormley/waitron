@@ -82,8 +82,12 @@ export function productAsVariant(
 
 /** A whole-count unit's three-place server quantity reads "2", not "2.000". */
 export function displayQuantity(product: TillProduct, quantity: string): string {
-  if (productUnit(product).precision !== 0 || !quantity.includes(".")) return quantity;
-  return quantity.replace(/0+$/, "").replace(/\.$/, "");
+  return productUnit(product).precision !== 0 ? quantity : shortestQuantity(quantity);
+}
+
+/** "2.000" reads "2" and "0.350" "0.35". Not `trimQuantity`, which leaves "1.x0" as it is. */
+export function shortestQuantity(quantity: string): string {
+  return quantity.includes(".") ? quantity.replace(/0+$/, "").replace(/\.$/, "") : quantity;
 }
 
 export function quantityLabel(line: OrderLine): string {

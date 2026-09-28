@@ -18,7 +18,7 @@ import type { OrderFlow, PayOutcome, TillActiveReader, TillProduct } from "../ap
 import type { WorkingOrderStore } from "../state/working-order.js";
 import type { PropertyValues } from "lit";
 import { productUnit, soldByTheUnit, unitName } from "./product-name.js";
-import { needsModifierPicker } from "../state/order-line.js";
+import { needsModifierPicker, quantityPlaces } from "../state/order-line.js";
 
 /**
  * For `cash`, `amount` is the FULL operator-entered tendered amount, never the total — the
@@ -421,9 +421,7 @@ export class TillTenderPay extends LitElement {
 
   /** Ignore insignificant zeroes, matching the server's exact decimal-string check. */
   #quantityFitsUnit(product: TillProduct): boolean {
-    const literal = this.entry.endsWith(".") ? this.entry.slice(0, -1) : this.entry;
-    const significantFraction = (literal.split(".")[1] ?? "").replace(/0+$/, "");
-    return significantFraction.length <= productUnit(product).precision;
+    return quantityPlaces(this.entry) <= productUnit(product).precision;
   }
 
   override render() {
