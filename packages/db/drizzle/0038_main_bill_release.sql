@@ -1,5 +1,6 @@
--- `parties.main_bill_id` names an open bill of that party (spec decision 15). These two triggers
--- clear it when that bill leaves `open` (paid, presented or abandoned) or moves to another party.
+-- Every writer sets `parties.main_bill_id` to an open bill of that party, or null (`setMainBill`,
+-- apps/server/src/parties.ts). These two triggers clear it when that bill leaves `open` (paid,
+-- presented or abandoned) or moves to another party.
 CREATE TRIGGER working_orders_release_main_bill
 AFTER UPDATE OF status ON working_orders
 FOR EACH ROW
