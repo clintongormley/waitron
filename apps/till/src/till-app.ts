@@ -2322,7 +2322,9 @@ export class TillApp extends LitElement {
     if (!wasShowingOrder && this.#tableCatalogueActive()) this.#shownOnVisit = this.#orderVisit;
     const session = this.#operatorSession;
     const returned = leftOrder
-      ? this.#flushDraft().then(() => this.#returnSplitCheck())
+      ? this.#flushDraft().then(() =>
+          session === this.#operatorSession ? this.#returnSplitCheck() : false,
+        )
       : Promise.resolve(false);
     if (this.#tabNeedsFloorData(tab)) {
       void returned.then((floorRead) => {
@@ -2356,6 +2358,7 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     try {
       await this.#flushDraft();
+      if (session !== this.#operatorSession) return;
       await this.#returnSplitCheck();
       if (session !== this.#operatorSession) return;
       await this.#openTable(tableId, seated ? undefined : (guestCount ?? null), offerRequest);
@@ -3635,7 +3638,7 @@ export class TillApp extends LitElement {
       this.#clearErrorKeepingLateChange();
       this.#popDrill();
       void flushed
-        .then(() => this.#returnSplitCheck())
+        .then(() => (session === this.#operatorSession ? this.#returnSplitCheck() : false))
         .then((floorRead) =>
           floorRead || session !== this.#operatorSession ? undefined : this.#refreshFloor(),
         );

@@ -1429,6 +1429,84 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
     expect(banner(el)).toBeNull();
     expect(api.getTablesState.mock.calls.length).toBe(floorReads);
   });
+
+  describe("when the next person has split a check off before the save answers", () => {
+    const splitting = () => ({
+      splitTab: vi.fn().mockResolvedValue({ checkId: "wo-check" }),
+      mergeTabs: vi.fn().mockResolvedValue(undefined),
+    });
+
+    /** Sam signs in, opens Mesa 7 from `floorTab` and splits a check off it; then the held save
+     * answers. */
+    async function samSplitsBeforeTheSaveAnswers(
+      el: TillApp,
+      answer: () => void,
+      floorTab: string,
+    ): Promise<void> {
+      emit(shell(el), "logout");
+      await flush(el);
+      await signIn(el, "p2", "Sam");
+      emit(shell(el), "tab-select", { key: floorTab });
+      await flush(el);
+      emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+      await flush(el);
+      emit(tableOrder(el)!, "split-lines", { transfers: [{ lineNo: 1 }] });
+      await flush(el);
+      expect(api.splitTab).toHaveBeenCalledOnce();
+      expect(tableOrder(el)!.orderId).toBe("wo-check");
+      answer();
+      await flush(el, 8);
+    }
+
+    it("leaves the check alone when Back to floor waited on the save", async () => {
+      const { el } = await mountApp(splitting());
+      await openMesa(el);
+      const answer = await editBehindHeldSave(el);
+      await back(el);
+
+      await samSplitsBeforeTheSaveAnswers(el, answer, "floor");
+
+      expect(api.mergeTabs).not.toHaveBeenCalled();
+      expect(banner(el)).toBeNull();
+      expect(tableOrder(el)!.orderId).toBe("wo-check");
+    });
+
+    it("leaves the check alone when choosing another tab waited on the save", async () => {
+      const { el } = await mountApp(splitting());
+      await openMesa(el);
+      const answer = await editBehindHeldSave(el);
+      emit(shell(el), "tab-select", { key: "floor" });
+      await flush(el);
+
+      await samSplitsBeforeTheSaveAnswers(el, answer, "floor");
+
+      expect(api.mergeTabs).not.toHaveBeenCalled();
+      expect(banner(el)).toBeNull();
+      expect(tableOrder(el)!.orderId).toBe("wo-check");
+    });
+
+    it("leaves the check alone when opening another table waited on the save", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue(till(sideBySide)),
+        ...splitting(),
+      });
+      await flush(el);
+      await signIn(el);
+      emit(shell(el), "tab-select", { key: "service" });
+      await flush(el);
+      emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+      await flush(el);
+      const answer = await editBehindHeldSave(el);
+      emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+      await flush(el);
+
+      await samSplitsBeforeTheSaveAnswers(el, answer, "service");
+
+      expect(api.mergeTabs).not.toHaveBeenCalled();
+      expect(banner(el)).toBeNull();
+      expect(tableOrder(el)!.orderId).toBe("wo-check");
+    });
+  });
 });
 
 describe("till-app: how long a send may take", () => {
