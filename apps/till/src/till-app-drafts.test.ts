@@ -18,6 +18,7 @@ import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import type { CanvasDef, CapabilityFlag } from "./layout.js";
 import type {
+  DraftLineInput,
   OrderGroup,
   TableState,
   TableVisit,
@@ -3401,5 +3402,145 @@ describe("till-app: a draft line that cannot be sold now", () => {
     expect(await pressAndRead(el, "send-all")).toContain(t("table.nothing_sent"));
     expect(screen(el).querySelector("[data-draft-confirm]")).toBeNull();
     expect(api.submitDraft).not.toHaveBeenCalled();
+  });
+
+  describe("a line kept while its menu was off the zone", () => {
+    const menuOff = (): ZoneOfferCatalogue => ({
+      ...catalogue("v1"),
+      menus: [],
+      offers: [],
+      defaultMenuId: null,
+    });
+    const at = (versionId: string) => ({
+      menus: [{ menuId: "lunch", versionId, homeLayoutId: "layout-home", layoutFallback: null }],
+      unavailable: { products: [], optionLabels: [], extraItems: [] },
+    });
+    const refresh = (el: TillApp) => el.shadowRoot!.querySelector("till-basket-refresh-dialog");
+
+    function savedBeer(over: Partial<DraftLineInput> = {}): void {
+      server.save("v1", {
+        draftId: null,
+        revision: 0,
+        lines: [
+          {
+            menuItemId: "offer-beer",
+            variantId: null,
+            menuVersionId: "v1",
+            options: [],
+            extras: [],
+            note: null,
+            quantity: "1",
+            courseId: null,
+            noMerge: false,
+            ...over,
+          },
+        ],
+      });
+    }
+
+    async function answerRefresh(el: TillApp, button: "confirm" | "cancel"): Promise<void> {
+      refresh(el)!.shadowRoot!.querySelector<HTMLElement>(`[data-${button}]`)!.click();
+      await flush(el);
+    }
+
+    /** Opens Mesa 4 while the zone offers no menu; the question that raises is still open. */
+    async function openWithMenuOff(): Promise<TillApp> {
+      const { el } = await mountApp({ listZoneOffers: vi.fn().mockResolvedValue(menuOff()) });
+      await openMesa(el);
+      expect(draft(el).lines.map((line) => line.notOffered)).toEqual([true]);
+      expect(refresh(el)).not.toBeNull();
+      return el;
+    }
+
+    async function poll(el: TillApp, offers: ZoneOfferCatalogue, version: string): Promise<void> {
+      api.listZoneOffers.mockResolvedValue(offers);
+      api.menuState.mockResolvedValue(at(version));
+      vi.advanceTimersByTime(15_000);
+      await flush(el, 8);
+    }
+
+    /** Opens Mesa 4 while the zone offers no menu, puts that question aside, and then lets a poll
+     * find `back` offered. */
+    async function menuComesBack(back: ZoneOfferCatalogue, version: string): Promise<TillApp> {
+      const el = await openWithMenuOff();
+      await answerRefresh(el, "cancel");
+      await poll(el, back, version);
+      expect(tableOrder(el)!.products.map((product) => product.name)).toContain("Beer");
+      return el;
+    }
+
+    const changedLines = (el: TillApp) =>
+      [...refresh(el)!.shadowRoot!.querySelectorAll("[data-changed] li")].map((line) =>
+        line.textContent!.replace(/\s+/g, " ").trim(),
+      );
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("names it and sends it as saved, asking nothing, when the menu is back under the version it was saved at", async () => {
+      savedBeer({ quantity: "2", note: "no ice", courseId: "mains" });
+      const el = await menuComesBack(catalogue("v1"), "v1");
+
+      expect(rows(el)).toEqual(["Beer ×2"]);
+      expect(flagText(el)).toEqual([]);
+      expect(refresh(el)).toBeNull();
+      await act(el, "fire-all");
+
+      expect(
+        server.sentGroups(api.submitDraft.mock.calls[0]![2]).flatMap((group) => group.lines),
+      ).toEqual([
+        {
+          menuItemId: "offer-beer",
+          quantity: "2",
+          menuVersionId: "v1",
+          note: "no ice",
+          courseId: "mains",
+        },
+      ]);
+    });
+
+    it("asks its price when the menu is back under a newer version, and sends it under that version once confirmed", async () => {
+      savedBeer();
+      const el = await menuComesBack(catalogue("v2", { Beer: "6.00" }), "v2");
+
+      expect(rows(el)).toEqual(["Beer ×1"]);
+      expect(changedLines(el)).toEqual(["Beer €6.00"]);
+      await answerRefresh(el, "confirm");
+      await saved(el);
+      await act(el, "fire-all");
+
+      expect(sentNames()).toEqual(["offer-beer"]);
+      expect(server.sentGroups(api.submitDraft.mock.calls[0]![2])[0]!.lines[0]!.menuVersionId).toBe(
+        "v2",
+      );
+    });
+
+    it("asks its price at the next poll when the menu came back under a newer version while the question raised at opening was still open", async () => {
+      savedBeer();
+      const el = await openWithMenuOff();
+      await poll(el, catalogue("v2", { Beer: "6.00" }), "v2");
+      expect(rows(el)).toEqual(["Beer ×1"]);
+
+      await answerRefresh(el, "cancel");
+      await poll(el, catalogue("v2", { Beer: "6.00" }), "v2");
+
+      expect(changedLines(el)).toEqual(["Beer €6.00"]);
+    });
+
+    it("stays flagged, and is not sent, when an extra it was saved with is no longer offered with the dish", async () => {
+      savedBeer({
+        extras: [{ listId: "toppings", picks: [{ productId: "p-olives", quantity: 1 }] }],
+      });
+      const el = await menuComesBack(catalogue("v1"), "v1");
+
+      expect(rows(el)).toEqual(["Beer ×1"]);
+      expect(flagText(el)).toEqual([t("basket.blocked.extra")]);
+      expect(await pressAndRead(el, "fire-all")).toContain(t("table.nothing_sent"));
+      expect(api.submitDraft).not.toHaveBeenCalled();
+    });
   });
 });

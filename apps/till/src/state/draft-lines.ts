@@ -61,7 +61,7 @@ export function orderLinesMerge(kept: OrderLine, added: OrderLine): boolean {
  * quantity scale, so pricing the preview does not refuse it.
  */
 export function fromDraftLine(
-  line: DraftLine,
+  line: Omit<DraftLine, "id">,
   offers: ReadonlyMap<string, TillMenuOffer>,
   liveVersions?: ReadonlyMap<string, string>,
 ): OrderLine {
@@ -99,6 +99,24 @@ export function fromDraftLine(
   };
 }
 
+/**
+ * By index, each line kept as no longer offered whose menu item `offers` holds again, rebuilt as
+ * {@link fromDraftLine} would build it from the saved line now. The saved line is unchanged.
+ */
+export function rebuildReturned(
+  lines: readonly OrderLine[],
+  offers: ReadonlyMap<string, TillMenuOffer>,
+  liveVersions: ReadonlyMap<string, string>,
+): Map<number, OrderLine> {
+  const rebuilt = new Map<number, OrderLine>();
+  lines.forEach((line, index) => {
+    if (line.notOffered !== true || !offers.has(line.product.menuItemId ?? "")) return;
+    const saved = { ...toDraftLineInput(line), unavailable: line.unavailableOnServer === true };
+    rebuilt.set(index, fromDraftLine(saved, offers, liveVersions));
+  });
+  return rebuilt;
+}
+
 /** "2.000" reads "2" and "0.350" "0.35": the unit, and so its places, are unknown. */
 function shortest(quantity: string): string {
   return quantity.includes(".") ? quantity.replace(/0+$/, "").replace(/\.$/, "") : quantity;
@@ -113,7 +131,7 @@ function asVariant(dish: TillProduct, variantId: string | null): TillProduct {
 
 /** The zero price, general rate and unit are placeholders: a draft line sends no price, and the
  * server prices it at submit. The unit takes every quantity the server stores. */
-function unofferedProduct(line: DraftLine): TillProduct {
+function unofferedProduct(line: DraftLineInput): TillProduct {
   return {
     id: line.menuItemId,
     menuItemId: line.menuItemId,

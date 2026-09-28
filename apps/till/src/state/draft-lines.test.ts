@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { fromDraftLine, orderLinesMerge, toDraftLineInput } from "./draft-lines.js";
+import {
+  fromDraftLine,
+  orderLinesMerge,
+  rebuildReturned,
+  toDraftLineInput,
+} from "./draft-lines.js";
+import { lineBlock } from "./menu-refresh.js";
 import { productAsVariant } from "./order-line.js";
 import { WorkingOrderStore, type OrderLine } from "./working-order.js";
 import {
@@ -421,6 +427,69 @@ describe("fromDraftLine: a saved quantity the offered unit cannot hold", () => {
     const rebuilt = fromDraftLine(saved(toDraftLineInput(burgerLine()), "2.000"), offers);
     expect(rebuilt.blocked).toBeUndefined();
     expect(rebuilt.product.unit?.precision).toBe(0);
+  });
+});
+
+describe("rebuildReturned: a line kept while its dish was not offered", () => {
+  const live = (version: string) => new Map([["dinner", version]]);
+  const kept = (input: DraftLineInput, unavailable = false) =>
+    fromDraftLine({ ...saved(input, "2.000"), unavailable }, new Map());
+
+  it("rebuilds the line from the offer once it is back, keeping every id and selection", () => {
+    const input = toDraftLineInput(burgerLine());
+
+    const rebuilt = rebuildReturned([kept(input)], offers, live(VERSION));
+
+    expect([...rebuilt]).toEqual([[0, burgerLine()]]);
+    expect(toDraftLineInput(rebuilt.get(0)!)).toEqual(input);
+  });
+
+  it("marks the line as holding no earlier price when the offer is back under another version", () => {
+    const rebuilt = rebuildReturned(
+      [kept(toDraftLineInput(burgerLine()))],
+      offers,
+      live("mv-8"),
+    ).get(0);
+
+    expect(rebuilt).toEqual({ ...burgerLine(), earlierPriceUnknown: true });
+  });
+
+  it("keeps a pick the returned offer no longer holds, which still stops the line", () => {
+    const input: DraftLineInput = {
+      ...toDraftLineInput(burgerLine()),
+      extras: [{ listId: "toppings", picks: [{ productId: "p-gone", quantity: 1 }] }],
+    };
+
+    const rebuilt = rebuildReturned([kept(input)], offers, live(VERSION)).get(0)!;
+
+    expect(toDraftLineInput(rebuilt)).toEqual(input);
+    expect(rebuilt.notOffered).toBeUndefined();
+    expect(lineBlock(rebuilt, burger)?.reason).toBe("extra_removed");
+  });
+
+  it("carries the server's flag that the line cannot be sold now", () => {
+    const rebuilt = rebuildReturned(
+      [kept(toDraftLineInput(burgerLine()), true)],
+      offers,
+      live(VERSION),
+    ).get(0);
+
+    expect(rebuilt?.unavailableOnServer).toBe(true);
+  });
+
+  it("leaves out a line still not offered, and a line that is offered already", () => {
+    const offered = fromDraftLine(saved(toDraftLineInput(burgerLine()), "2.000"), offers);
+    const fishGone = kept(
+      toDraftLineInput({ product: menuOfferToTillProduct(fish, VERSION), quantity: "1" }),
+    );
+
+    const rebuilt = rebuildReturned(
+      [offered, fishGone],
+      new Map([[burger.id, burger]]),
+      live(VERSION),
+    );
+
+    expect(rebuilt.size).toBe(0);
   });
 });
 

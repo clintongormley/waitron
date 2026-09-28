@@ -21,7 +21,7 @@ import {
 import { deriveExtraSelections } from "./state/held-extras.js";
 import { deriveOptionSelections } from "./state/held-options.js";
 import { DRAFT_REFUSALS, DraftSync, type DraftRefused } from "./state/draft-sync.js";
-import { fromDraftLine } from "./state/draft-lines.js";
+import { fromDraftLine, rebuildReturned } from "./state/draft-lines.js";
 import "./screens/till-lock-screen.js";
 import "./screens/till-counter-screen.js";
 import "./screens/till-ticket-view.js";
@@ -1488,7 +1488,13 @@ export class TillApp extends LitElement {
     if (versions.size !== before.size || [...versions].some(([id, v]) => before.get(id) !== v))
       this.#draftRefreshDue = true;
     const sync = this.#draftSync;
-    sync?.reshow(repriceRebuilt(sync.store.lines, live, versions));
+    if (sync !== undefined)
+      sync.reshow(
+        new Map([
+          ...repriceRebuilt(sync.store.lines, live, versions),
+          ...rebuildReturned(sync.store.lines, this.#tableOffers.byId, versions),
+        ]),
+      );
     this.#markRounds(true);
     this.#markDraft(true);
   }
