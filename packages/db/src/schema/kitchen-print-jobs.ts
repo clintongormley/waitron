@@ -6,11 +6,13 @@ import { printJobs } from "./print-jobs.js";
 
 /**
  * Which bill and station each kitchen ticket's print job carried: one row per (job, bill, station),
- * written by `enqueueKitchenTickets` and `reprintOrderTickets` (`apps/server/src/kitchen-print.ts`),
- * and written again by `moveKitchenPrintLinks` there when a merge carries a bill's tickets onto
- * another. An order-scope printer's job gets a row for every station whose dishes its ticket lists;
- * after a reprint merges a fired and a HOLD section onto one printer, both sections' stations. A job
- * no kitchen ticket made (a receipt, a correction slip, a drawer pulse) has none.
+ * written by `enqueueKitchenTickets` and `reprintOrderTickets`
+ * (`apps/server/src/kitchen-print.ts`), written again by `moveKitchenPrintLinks` there when a merge
+ * carries a bill's tickets onto another, and copied by `copyKitchenPrintLinks` there onto a bill
+ * some of its dishes move to, so one job can be linked to several bills. An order-scope printer's
+ * job gets a row for every station whose dishes its ticket lists; after a reprint merges a fired
+ * and a HOLD section onto one printer, both sections' stations. A job no kitchen ticket made (a
+ * receipt, a correction slip, a drawer pulse) has none.
  */
 export const kitchenPrintJobs = table(
   "kitchen_print_jobs",

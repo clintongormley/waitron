@@ -2,10 +2,12 @@
 // enqueued on its caller's transaction so it rolls back with it.
 //
 // A printer never blocks a fire (CLAUDE.md §5): `enqueuePrintJob` is an outbox insert that opens no
-// socket. Its one throw, `printer.not_found` for an inactive printer, cannot happen here: the mapping
-// read keeps active printers only, and no other write transaction can run between that read and the
-// enqueue, because one write transaction runs on the venue file at a time (`withTransaction`,
-// `packages/db/src/tenancy.ts`). Receipt: `assertExtraListForWrite` in `packages/catalogue/src/extras.ts`.
+// socket. Its one throw, `printer.not_found` for an inactive printer, cannot happen here: the
+// mapping read the enqueue paths use (`printerMappings` without `switchedOffToo`) keeps active
+// printers only, and no other write transaction can run between that read and the enqueue, because
+// one write transaction runs on the venue file at a time (`withTransaction`,
+// `packages/db/src/tenancy.ts`). Receipt: `assertExtraListForWrite` in
+// `packages/catalogue/src/extras.ts`.
 import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import {
@@ -83,23 +85,25 @@ function soldInEach(unitName: Record<string, string> | null): boolean {
   );
 }
 
+interface PrinterMapping {
+  stationId: string;
+  printerId: string;
+  ticketScope: "station" | "order";
+  paperWidth: PaperWidth;
+  characterSet: CharacterSet;
+  characterTable: number;
+}
+
 /**
- * The station→printer mappings for `stationIds`, ACTIVE printers only. The fire and correction paths
- * both resolve printers here, so the header's never-block argument covers both.
+ * The station→printer mappings for `stationIds`, ACTIVE printers only unless `switchedOffToo`. The
+ * fire and correction paths both resolve printers here without it, so the header's never-block
+ * argument covers both.
  */
-async function activePrinterMappings(
+async function printerMappings(
   tx: Transaction,
   stationIds: string[],
-): Promise<
-  {
-    stationId: string;
-    printerId: string;
-    ticketScope: "station" | "order";
-    paperWidth: PaperWidth;
-    characterSet: CharacterSet;
-    characterTable: number;
-  }[]
-> {
+  { switchedOffToo = false }: { switchedOffToo?: boolean } = {},
+): Promise<PrinterMapping[]> {
   return tx
     .select({
       stationId: stationPrinters.stationId,
@@ -111,7 +115,12 @@ async function activePrinterMappings(
     })
     .from(stationPrinters)
     .innerJoin(printers, eq(stationPrinters.printerId, printers.id))
-    .where(and(inArray(stationPrinters.stationId, stationIds), eq(printers.active, true)));
+    .where(
+      and(
+        inArray(stationPrinters.stationId, stationIds),
+        switchedOffToo ? undefined : eq(printers.active, true),
+      ),
+    );
 }
 
 /** The settings that change a kitchen ticket's bytes. Resolution does not: kitchen paper has no QR. */
@@ -269,23 +278,73 @@ async function readOrderHeader(
   return { orderNumber: String(order.orderNumber), tableLabel: order.tableLabel };
 }
 
-/** One kitchen print job: its printer, the stations its paper carries, and its bytes. */
-interface KitchenJob {
-  printerId: string;
-  /** A `station`-scope printer's job names the one station; an `order`-scope printer's is null. */
+/** A kitchen ticket's printers, all of one layout so they share its bytes. */
+interface KitchenRoute {
+  /** A `station`-scope printer's route names the one station; an `order`-scope printer's is null. */
   station: string | null;
   stationIds: string[];
-  bytes: Uint8Array;
+  printers: PrinterMapping[];
+}
+
+/** One kitchen print job: its printer, the stations its paper carries, and its bytes. */
+type KitchenJob = Omit<KitchenRoute, "printers"> & { printerId: string; bytes: Uint8Array };
+
+/** Each station's printer mappings, in the order of the list they came from, with their place in it. */
+type MappingsByStation = ReadonlyMap<string, readonly (PrinterMapping & { at: number })[]>;
+
+function mappingsByStation(mappings: readonly PrinterMapping[]): MappingsByStation {
+  const byStation = new Map<string, (PrinterMapping & { at: number })[]>();
+  mappings.forEach((mapping, at) => {
+    const bucket = byStation.get(mapping.stationId) ?? [];
+    bucket.push({ ...mapping, at });
+    byStation.set(mapping.stationId, bucket);
+  });
+  return byStation;
 }
 
 /**
- * The kitchen tickets for a set of just-fired lines. For each INVOLVED station (one with ≥1 fired line), each attached `station`-scope printer gets a
- * ticket of that station's own items; every attached `order`-scope (group) printer gets ONE consolidated
- * ticket of the WHOLE event — deduped by printer id, so a group printer attached to N involved stations
- * prints a single ticket carrying all their items, not N. A `HOLD` ticket's `firedItems` are the held
- * items printed in advance. An `order`-scope printer attached to one of `orderScopeAlsoAt`'s
- * stations also gets the consolidated ticket, which still lists, and is linked to, only the involved
- * stations.
+ * Which printers get a ticket for which stations, in job order. For each INVOLVED station, in the
+ * order given, each attached `station`-scope printer gets a ticket of that station's own items;
+ * every `order`-scope (group) printer attached to an involved station, or to one of
+ * `orderScopeAlsoAt`'s, gets ONE consolidated ticket of the whole event, deduped by printer id,
+ * which lists, and is linked to, only the involved stations. `mappings` may name other stations.
+ */
+function routeKitchenTickets(
+  stationIds: readonly string[],
+  orderScopeAlsoAt: readonly string[],
+  mappings: MappingsByStation,
+): KitchenRoute[] {
+  if (stationIds.length === 0) return [];
+  const routes: KitchenRoute[] = [];
+  const groupPrinters = new Map<string, PrinterMapping>();
+  for (const stationId of stationIds) {
+    const attached = mappings.get(stationId) ?? [];
+    for (const printer of attached) {
+      if (printer.ticketScope === "order") groupPrinters.set(printer.printerId, printer);
+    }
+    const stationScope = attached.filter((printer) => printer.ticketScope === "station");
+    for (const printers of groupByLayout(stationScope)) {
+      routes.push({ station: stationId, stationIds: [stationId], printers });
+    }
+  }
+  // Back in the list's order, as walking the whole list would add them.
+  const orderScope = [...new Set([...stationIds, ...orderScopeAlsoAt])]
+    .flatMap((stationId) => mappings.get(stationId) ?? [])
+    .filter((mapping) => mapping.ticketScope === "order")
+    .sort((a, b) => a.at - b.at);
+  for (const mapping of orderScope) {
+    if (!groupPrinters.has(mapping.printerId)) groupPrinters.set(mapping.printerId, mapping);
+  }
+  for (const printers of groupByLayout([...groupPrinters.values()])) {
+    routes.push({ station: null, stationIds: [...stationIds], printers });
+  }
+  return routes;
+}
+
+/**
+ * The kitchen tickets for a set of just-fired lines, routed by {@link routeKitchenTickets} over the
+ * involved stations in name order. A `HOLD` ticket's `firedItems` are the held items printed in
+ * advance.
  */
 async function planKitchenTickets(
   tx: Transaction,
@@ -302,9 +361,7 @@ async function planKitchenTickets(
 
   const stationIds = [...new Set(firedItems.map((f) => f.stationId))];
 
-  const mappingRows = await activePrinterMappings(tx, [
-    ...new Set([...stationIds, ...orderScopeAlsoAt]),
-  ]);
+  const mappingRows = await printerMappings(tx, [...new Set([...stationIds, ...orderScopeAlsoAt])]);
 
   if (mappingRows.length === 0) return [];
 
@@ -343,89 +400,42 @@ async function planKitchenTickets(
       ),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
+  const stationById = new Map(stations.map((station) => [station.id, station]));
 
-  interface AttachedPrinter extends KitchenPrinterLayout {
-    printerId: string;
-    ticketScope: "station" | "order";
-  }
-  const printersByStation = new Map<string, AttachedPrinter[]>();
-  for (const mapping of mappingRows) {
-    const bucket = printersByStation.get(mapping.stationId) ?? [];
-    bucket.push({
-      printerId: mapping.printerId,
-      ticketScope: mapping.ticketScope,
-      paperWidth: mapping.paperWidth,
-      characterSet: mapping.characterSet,
-      characterTable: mapping.characterTable,
-    });
-    printersByStation.set(mapping.stationId, bucket);
-  }
-
-  const firedAt = new Date();
-  const tableLabel = order.tableLabel ?? "";
-  const orderNumber = order.orderNumber;
   const jobs: KitchenJob[] = [];
-
-  const groupPrinters = new Map<string, AttachedPrinter>();
-  for (const station of stations) {
-    const attached = printersByStation.get(station.id) ?? [];
-    for (const printer of attached) {
-      if (printer.ticketScope === "order") groupPrinters.set(printer.printerId, printer);
-    }
-    const stationScope = attached.filter((printer) => printer.ticketScope === "station");
-    for (const group of groupByLayout(stationScope)) {
-      const stationTicket = formatKitchenTicket(
-        {
-          reprint,
-          mark,
-          scope: "station",
-          stationName: station.name,
-          tableLabel,
-          orderNumber,
-          firedAt,
-          items: station.items,
-        },
-        layoutOf(group[0]!),
-      );
-      for (const printer of group) {
-        jobs.push({
-          printerId: printer.printerId,
-          station: station.id,
-          stationIds: [station.id],
-          bytes: stationTicket,
-        });
-      }
-    }
-  }
-
-  for (const mapping of mappingRows) {
-    if (mapping.ticketScope === "order" && !groupPrinters.has(mapping.printerId)) {
-      groupPrinters.set(mapping.printerId, mapping);
-    }
-  }
-
-  for (const group of groupByLayout([...groupPrinters.values()])) {
-    const consolidated = formatKitchenTicket(
-      {
-        reprint,
-        mark,
-        scope: "order",
-        tableLabel,
-        orderNumber,
-        firedAt,
-        stations: stations.map((station): KitchenTicketStation => ({
-          stationName: station.name,
-          items: station.items,
-        })),
-      },
-      layoutOf(group[0]!),
+  const routes = routeKitchenTickets(
+    stations.map((station) => station.id),
+    orderScopeAlsoAt,
+    mappingsByStation(mappingRows),
+  );
+  const head = {
+    reprint,
+    mark,
+    tableLabel: order.tableLabel ?? "",
+    orderNumber: order.orderNumber,
+    firedAt: new Date(),
+  };
+  for (const route of routes) {
+    const station = route.station === null ? null : stationById.get(route.station)!;
+    const bytes = formatKitchenTicket(
+      station === null
+        ? {
+            ...head,
+            scope: "order",
+            stations: stations.map((each): KitchenTicketStation => ({
+              stationName: each.name,
+              items: each.items,
+            })),
+          }
+        : { ...head, scope: "station", stationName: station.name, items: station.items },
+      layoutOf(route.printers[0]!),
     );
-    for (const printer of group) {
+    for (const printer of route.printers) {
       jobs.push({
         printerId: printer.printerId,
-        station: null,
-        stationIds: stations.map((station) => station.id),
-        bytes: consolidated,
+        station: route.station,
+        stationIds: route.stationIds,
+        bytes,
       });
     }
   }
@@ -589,7 +599,7 @@ async function printCorrectionSlips(
   knownHeader?: { orderNumber: string; tableLabel: string | null },
 ): Promise<void> {
   const stationIds = [...new Set(items.map((i) => i.stationId))];
-  const mappingRows = await activePrinterMappings(tx, stationIds);
+  const mappingRows = await printerMappings(tx, stationIds);
   if (mappingRows.length === 0) return;
 
   const lineIds = [...new Set(items.map((i) => i.workingOrderLineId))];
@@ -721,30 +731,34 @@ export async function enqueueMovedSlips(
   );
 }
 
+interface ReprintPart {
+  items: FiredItem[];
+  mark?: "HOLD";
+  orderScopeAlsoAt: string[];
+}
+
 /**
- * Reprint an order's kitchen tickets: every fired item across every round, unlike the fire path,
- * which prints only its own round, and the held items of each still-held group whose HOLD ticket was
- * queued, on a ticket marked HOLD. Each ticket is marked REPRINT and stamped with the reprint time,
- * not the original fire time. Both tickets for one printer and station, or for one pass printer, go
- * as ONE job: as two, the later one's printing would clear every earlier failure for that bill and
- * station on that printer, including tickets it does not carry ({@link readPrintProblems}). It
- * changes no line, ticket item or group event. An order with neither is a no-op.
+ * What a Reprint of each of `orderIds` prints: every fired item across every round, and the held
+ * items of each still-held group whose HOLD ticket was queued, marked HOLD. Pass printers are chosen
+ * over both parts: a pass printer's failed ticket can name a station it is not attached to, and no
+ * print but a reprint on that printer linked to that station clears it.
  */
-export async function reprintOrderTickets(
+async function readReprintParts(
   tx: Transaction,
-  cfg: TillConfig,
-  orderId: string,
-): Promise<void> {
+  orderIds: readonly string[],
+): Promise<Map<string, readonly [fired: ReprintPart, held: ReprintPart]>> {
   const fired = await tx
     .select({
+      workingOrderId: ticketItems.workingOrderId,
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
       quantity: ticketItems.quantity,
     })
     .from(ticketItems)
-    .where(and(eq(ticketItems.workingOrderId, orderId), isNotNull(ticketItems.firedAt)));
+    .where(and(inArray(ticketItems.workingOrderId, [...orderIds]), isNotNull(ticketItems.firedAt)));
   const held = await tx
     .select({
+      workingOrderId: ticketItems.workingOrderId,
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
       quantity: ticketItems.quantity,
@@ -754,22 +768,94 @@ export async function reprintOrderTickets(
     .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .where(
       and(
-        eq(ticketItems.workingOrderId, orderId),
+        inArray(ticketItems.workingOrderId, [...orderIds]),
         isNull(ticketItems.firedAt),
         eq(orderGroups.state, "held"),
         isNotNull(orderGroups.holdPrintedAt),
       ),
     );
-  // Pass printers are chosen over both parts: a pass printer's failed ticket can name a station it is
-  // not attached to, and no print but a reprint on that printer linked to that station clears it.
-  const jobs = await planKitchenTickets(tx, cfg, orderId, fired, {
+  const byOrder = (rows: typeof fired) => {
+    const items = new Map<string, FiredItem[]>(orderIds.map((id) => [id, []]));
+    for (const { workingOrderId, ...item } of rows) items.get(workingOrderId)!.push(item);
+    return items;
+  };
+  const firedByOrder = byOrder(fired);
+  const heldByOrder = byOrder(held);
+  return new Map(
+    orderIds.map((id) => {
+      const firedItems = firedByOrder.get(id)!;
+      const heldItems = heldByOrder.get(id)!;
+      const parts = [
+        { items: firedItems, orderScopeAlsoAt: heldItems.map((item) => item.stationId) },
+        {
+          items: heldItems,
+          mark: "HOLD",
+          orderScopeAlsoAt: firedItems.map((item) => item.stationId),
+        },
+      ] as const;
+      return [id, parts];
+    }),
+  );
+}
+
+/**
+ * Each of `orderIds`' `printer|station` pairs a Reprint of it would link a ticket to were every
+ * printer switched on ({@link readReprintParts}, {@link routeKitchenTickets}).
+ */
+async function readReprintTargets(
+  tx: Transaction,
+  orderIds: readonly string[],
+): Promise<Map<string, Set<string>>> {
+  const partsByOrder = await readReprintParts(tx, orderIds);
+  const stationIds = new Set<string>();
+  for (const parts of partsByOrder.values()) {
+    for (const part of parts) for (const item of part.items) stationIds.add(item.stationId);
+  }
+  // A switched-off printer's failed ticket still names unprinted dishes: once it is back on, a
+  // Reprint prints them there.
+  const mappings = mappingsByStation(
+    stationIds.size === 0
+      ? []
+      : await printerMappings(tx, [...stationIds], { switchedOffToo: true }),
+  );
+  const targets = new Map<string, Set<string>>();
+  for (const [orderId, parts] of partsByOrder) {
+    const pairs = new Set<string>();
+    for (const part of parts) {
+      const involved = [...new Set(part.items.map((item) => item.stationId))];
+      for (const route of routeKitchenTickets(involved, part.orderScopeAlsoAt, mappings)) {
+        for (const printer of route.printers) {
+          for (const stationId of route.stationIds) pairs.add(`${printer.printerId}|${stationId}`);
+        }
+      }
+    }
+    targets.set(orderId, pairs);
+  }
+  return targets;
+}
+
+/**
+ * Reprint an order's kitchen tickets ({@link readReprintParts}). Each ticket is marked REPRINT and
+ * stamped with the reprint time, not the original fire time. Both tickets for one printer and
+ * station, or for one pass printer, go as ONE job: as two, the later one's printing would clear
+ * every earlier failure for that bill and station on that printer, including tickets it does not
+ * carry ({@link readPrintProblems}). It changes no line, ticket item or group event. An order with
+ * nothing to print is a no-op.
+ */
+export async function reprintOrderTickets(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+): Promise<void> {
+  const [fired, held] = (await readReprintParts(tx, [orderId])).get(orderId)!;
+  const jobs = await planKitchenTickets(tx, cfg, orderId, fired.items, {
     reprint: true,
-    orderScopeAlsoAt: held.map((item) => item.stationId),
+    orderScopeAlsoAt: fired.orderScopeAlsoAt,
   });
-  const holdJobs = await planKitchenTickets(tx, cfg, orderId, held, {
+  const holdJobs = await planKitchenTickets(tx, cfg, orderId, held.items, {
     reprint: true,
-    mark: "HOLD",
-    orderScopeAlsoAt: fired.map((item) => item.stationId),
+    mark: held.mark,
+    orderScopeAlsoAt: held.orderScopeAlsoAt,
   });
   for (const hold of holdJobs) {
     const same = jobs.find(
@@ -807,11 +893,12 @@ export interface PrintProblem {
  * bill and station, on the same printer, queued after it has printed: only a reprint carries every
  * dish still fired on the bill, and the held dishes of each still-held group whose HOLD ticket was
  * queued, so a later round's ticket printing clears nothing, and another printer's paper says
- * nothing of this one's.
+ * nothing of this one's. It is no problem either once a Reprint of the bill would link nothing on
+ * that printer to that station, were the printer switched on ({@link readReprintTargets}), as when
+ * its dishes there are voided or the printer is detached from the station.
  * "After" is the link row's `rowid`, not `created_at`, which two jobs can share to the millisecond:
  * SQLite gives a new row one more than the table's largest `rowid`, and a link row goes only when
- * its job or its bill is deleted, or when {@link moveKitchenPrintLinks} writes it again. Oldest
- * first.
+ * its job or its bill is deleted, or when {@link writeLinksAfter} writes it again. Oldest first.
  */
 async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promise<PrintProblem[]> {
   const troubled = printJobInTrouble(now);
@@ -847,11 +934,18 @@ async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promis
     const seen = lastReprinted.get(printerKey(row));
     if (seen === undefined || row.queued > seen) lastReprinted.set(printerKey(row), row.queued);
   }
-  const problems = new Map<string, PrintProblem>();
-  for (const row of rows) {
-    if (!row.troubled) continue;
+  const uncleared = rows.filter((row) => {
+    if (!row.troubled) return false;
     const reprinted = lastReprinted.get(printerKey(row));
-    if (reprinted !== undefined && reprinted > row.queued) continue;
+    return reprinted === undefined || reprinted <= row.queued;
+  });
+  if (uncleared.length === 0) return [];
+  const targets = await readReprintTargets(tx, [
+    ...new Set(uncleared.map((row) => row.workingOrderId)),
+  ]);
+  const problems = new Map<string, PrintProblem>();
+  for (const row of uncleared) {
+    if (!targets.get(row.workingOrderId)!.has(`${row.printerId}|${row.stationId}`)) continue;
     const known = problems.get(key(row));
     if (known === undefined || row.createdAt < known.since) {
       problems.set(key(row), {
@@ -871,17 +965,10 @@ async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promis
 }
 
 /**
- * Carry `fromOrderId`'s kitchen tickets onto `intoOrderId` when its dishes move there whole. A
- * ticket a printed reprint already covered stays behind with its reprint, since nothing is left
- * missing. The rest are written again, oldest first, so they come after every reprint `intoOrderId`
- * made before this move, which never carried these dishes; and none of them counts as a reprint, as
- * none carried `intoOrderId`'s own dishes.
+ * `orderId`'s link rows that no printed reprint for the same station, on the same printer, queued
+ * after them, has covered: the ones still able to name a missing dish. Oldest first.
  */
-export async function moveKitchenPrintLinks(
-  tx: Transaction,
-  fromOrderId: string,
-  intoOrderId: string,
-): Promise<void> {
+async function readUncoveredLinks(tx: Transaction, orderId: string) {
   const rows = await tx
     .select({
       id: kitchenPrintJobs.id,
@@ -895,7 +982,7 @@ export async function moveKitchenPrintLinks(
     })
     .from(kitchenPrintJobs)
     .innerJoin(printJobs, eq(printJobs.id, kitchenPrintJobs.printJobId))
-    .where(eq(kitchenPrintJobs.workingOrderId, fromOrderId))
+    .where(eq(kitchenPrintJobs.workingOrderId, orderId))
     .orderBy(sql`${kitchenPrintJobs}.rowid`);
 
   const printerKey = (row: { stationId: string; printerId: string }) =>
@@ -904,25 +991,95 @@ export async function moveKitchenPrintLinks(
   for (const row of rows) {
     if (row.reprint && row.status === "done") lastReprinted.set(printerKey(row), row.queued);
   }
-  const moving = rows.filter((row) => row.queued > (lastReprinted.get(printerKey(row)) ?? 0));
-  if (moving.length === 0) return;
+  return rows.filter((row) => row.queued > (lastReprinted.get(printerKey(row)) ?? 0));
+}
 
+/**
+ * Write `rows` onto `orderId` in order, after every link row it already has, replacing its own row
+ * for the same job and station, so none of its earlier reprints, which never carried the dishes
+ * that brought them, covers them. None counts as a reprint, as none carried `orderId`'s own dishes.
+ */
+async function writeLinksAfter(
+  tx: Transaction,
+  orderId: string,
+  rows: readonly { id?: string; printJobId: string; stationId: string; createdAt: string }[],
+): Promise<void> {
+  if (rows.length === 0) return;
+  await tx
+    .delete(kitchenPrintJobs)
+    .where(
+      and(
+        eq(kitchenPrintJobs.workingOrderId, orderId),
+        or(
+          ...rows.map((row) =>
+            and(
+              eq(kitchenPrintJobs.printJobId, row.printJobId),
+              eq(kitchenPrintJobs.stationId, row.stationId),
+            ),
+          ),
+        ),
+      ),
+    );
+  await tx.insert(kitchenPrintJobs).values(
+    rows.map((row) => ({
+      ...(row.id === undefined ? {} : { id: row.id }),
+      printJobId: row.printJobId,
+      workingOrderId: orderId,
+      stationId: row.stationId,
+      reprint: false,
+      createdAt: row.createdAt,
+    })),
+  );
+}
+
+/**
+ * Carry `fromOrderId`'s kitchen tickets onto `intoOrderId` when its dishes move there whole. A
+ * ticket a printed reprint already covered stays behind with its reprint, since nothing is left
+ * missing. The rest are written again ({@link writeLinksAfter}).
+ */
+export async function moveKitchenPrintLinks(
+  tx: Transaction,
+  fromOrderId: string,
+  intoOrderId: string,
+): Promise<void> {
+  const moving = await readUncoveredLinks(tx, fromOrderId);
+  if (moving.length === 0) return;
   await tx.delete(kitchenPrintJobs).where(
     inArray(
       kitchenPrintJobs.id,
       moving.map((row) => row.id),
     ),
   );
-  await tx.insert(kitchenPrintJobs).values(
-    moving.map((row) => ({
-      id: row.id,
-      printJobId: row.printJobId,
-      workingOrderId: intoOrderId,
-      stationId: row.stationId,
-      reprint: false,
-      createdAt: row.createdAt,
-    })),
-  );
+  await writeLinksAfter(tx, intoOrderId, moving);
+}
+
+/**
+ * Give `toOrderId` a link to each of `fromOrderId`'s unprinted kitchen tickets that no printed
+ * reprint has covered, at the stations of the ticket items of `lineIds`, which have just moved there
+ * off `fromOrderId`, some or all of them. Both bills then show the problem, each until its own
+ * Reprint prints, or until a Reprint of it would print nothing there ({@link readPrintProblems}).
+ * The new links are written as {@link writeLinksAfter} writes them.
+ *
+ * A link records a job, a bill and a station, not which dishes the ticket carried, so the copy takes
+ * every such ticket at a moved dish's station, including one that carried only dishes that stayed
+ * behind: the destination can show a problem that is not its own until its Reprint prints.
+ */
+export async function copyKitchenPrintLinks(
+  tx: Transaction,
+  fromOrderId: string,
+  toOrderId: string,
+  lineIds: readonly string[],
+): Promise<void> {
+  if (lineIds.length === 0) return;
+  const moved = await tx
+    .selectDistinct({ stationId: ticketItems.stationId })
+    .from(ticketItems)
+    .where(inArray(ticketItems.workingOrderLineId, [...lineIds]));
+  const stationIds = new Set(moved.map((row) => row.stationId));
+  const copies = (await readUncoveredLinks(tx, fromOrderId))
+    .filter((row) => row.status !== "done" && stationIds.has(row.stationId))
+    .map(({ printJobId, stationId, createdAt }) => ({ printJobId, stationId, createdAt }));
+  await writeLinksAfter(tx, toOrderId, copies);
 }
 
 /**
