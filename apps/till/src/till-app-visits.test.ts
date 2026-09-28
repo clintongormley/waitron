@@ -1136,6 +1136,12 @@ describe("till-app: another device changed the table first", () => {
       { fromTabId: "wo-7", freeSourceTable: false },
       "mergeTabs",
     ],
+    [
+      "tab.merge_leaves_no_table",
+      "merge-tabs",
+      { fromTabId: "wo-7", freeSourceTable: true },
+      "mergeTabs",
+    ],
   ] as const)("shows %s in its own words after %s", async (code, type, detail, method) => {
     const { el } = await mountApp({ [method]: vi.fn().mockRejectedValue({ code }) });
     const order = await openMesa(el);
