@@ -46,7 +46,10 @@ export function customerProductName(product: TillProduct, locale: string): strin
   return descriptionFor(text, product.name, locale);
 }
 
-export function unitName(product: TillProduct, locale: string = currentLocale()): string {
+export function unitName(
+  product: Pick<TillProduct, "unit" | "pricingUnit">,
+  locale: string = currentLocale(),
+): string {
   const unit = productUnit(product);
   return descriptionFor(unit.abbreviation, unit.id, locale);
 }
@@ -75,7 +78,7 @@ export function productUnit(
 }
 
 /** Counted in whole units, never weighed or measured. */
-export function soldByTheUnit(product: TillProduct): boolean {
+export function soldByTheUnit(product: Pick<TillProduct, "unit" | "pricingUnit">): boolean {
   const unit = productUnit(product);
   return unit.hardwareUnit === null && unit.precision === 0;
 }
