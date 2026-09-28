@@ -483,7 +483,7 @@ The comparison also looks only at each line's total, so dish and extra price cha
 are adopted without asking — see the campaign item A113 entry further down. _(#812, campaign item
 A113, branch `fix/retro-review-719-till`, 2026-09-28: no longer so — when a line's total is
 unchanged, `refreshBasket` lists the dish or variant and each extra whose price changed, each on its
-own row of the dialog. Campaign item C32, branch `fix/basket-refresh-unit-price-label`, 2026-09-28:
+own row of the dialog. Campaign item C32 (#817), branch `fix/basket-refresh-unit-price-label`, 2026-09-28:
 those rows now read as unit prices, "€9.00 each → €8.00 each" / "9,00 € c/u → 8,00 € c/u", or, for a
 dish not counted in whole units, per the dish's unit as the menu grid shows it, "€20.00/kg"; a
 line-total row is unmarked.)_
@@ -3013,8 +3013,17 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   `withUnavailable` (`apps/till/src/state/menu-refresh.ts`) reads. Of the review's other two
   findings, the deactivated menu still offered and sold from was fixed by `fix/retro-review-719`;
   the other is the next entry. The part rows read as unit prices ("€9.00 each", "9,00 € c/u", or
-  "€20.00/kg" for a weighed dish) since campaign item C32 (branch
+  "€20.00/kg" for a weighed dish) since campaign item C32 (#817, branch
   `fix/basket-refresh-unit-price-label`, 2026-09-28), on the owner's "label them".
+- **Two leftovers from C32 (#817)'s review, not fixed.** (1) The dialog test "lists each re-priced
+  part of one line on a row of its own" (`apps/till/src/widgets/basket-refresh-dialog.test.ts`)
+  still feeds part rows without `units`, so it checks an unlabelled display `refreshBasket` no
+  longer produces for a part row; updating it changes an existing assertion, which C32 was not
+  allowed to do. (2) Predates C32 (from A113, #812), found by reading, not run: when a publish
+  changes only a dish's unit (say each to kg) and every price stays the same, the line's total and
+  every part price are unchanged, so `refreshBasket` adds no row and the dialog does not mention
+  the line. Next action: an owner call on whether (2) should ask; (1) rides along with any change
+  to that test file.
 - **Unchecked since the service plan's Task 8 (#806): whether a round entered while the floor was
   being re-read is still hidden when the till follows the party onto its next tab** (the second
   finding of the retroactive Codex review of #719). The review's probe tested code since rewritten
