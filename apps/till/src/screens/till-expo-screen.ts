@@ -648,7 +648,10 @@ export class TillExpoScreen extends LitElement {
   #item(item: ExpoItem): TemplateResult {
     const held = item.firedAt === null;
     const forgotten = this.#itemBand(item) === "forgotten";
-    const label = dishLine({ ...item, quantity: item.qty }, item.name);
+    const label = dishLine(
+      { quantity: item.qty, unitName: item.unitName, soldInEach: item.soldInEach },
+      item.name,
+    );
     return html`<span class="item state-${item.state} ${held ? "held" : ""}" data-item=${item.id}>
       <span class="item-main">
         <span class="item-name">${label}</span>

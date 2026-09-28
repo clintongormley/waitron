@@ -22,6 +22,7 @@ import {
   createProduct,
   readContentLanguages,
   units,
+  updateUnit,
   writeProductModifiers,
 } from "@waitron/catalogue";
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
@@ -825,8 +826,9 @@ describe("every correction reaches the station as a notice, printer or not", () 
 describe("a dish sold by the piece prints no unit", () => {
   /**
    * Five dishes at Cocina, each sold in a different unit: Croqueta in Each as a product with no
-   * stored unit, Bomba in the stored unit seeded "each", Pulpo in the kg seed, Almendras in grams,
-   * and Pan in a stored unit spelled exactly like Each but not seeded as it.
+   * stored unit, Bomba in the stored unit seeded "each", renamed so only its identity marks it Each,
+   * Pulpo in the kg seed, Almendras in grams, and Pan in a stored unit spelled exactly like Each but
+   * not seeded as it.
    */
   async function sellInEveryUnit(tx: Transaction, cfg: TillConfig, catalogueId: string) {
     const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -836,6 +838,7 @@ describe("a dish sold by the piece prints no unit", () => {
       .select({ id: units.id })
       .from(units)
       .where(eq(units.seedKey, "each"));
+    await updateUnit(tx, seededEach!.id, { abbreviation: { es: "pz" } }, "es");
     const grams = { en: "g", es: "g", ca: "g", gl: "g", eu: "g" };
     const [gram, lookAlike] = await tx
       .insert(units)
@@ -898,7 +901,7 @@ describe("a dish sold by the piece prints no unit", () => {
     expect(lines).toContain(`${thousandthsToDecimal(1000)} ea x Pan`);
   });
 
-  it("a correction slip prints the line as its ticket did", async () => {
+  it("a correction slip also leaves out the Each unit", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const slips = await asApp(cfg, async (tx) => {
       const sold = await sellInEveryUnit(tx, cfg, catalogueId);

@@ -12,9 +12,7 @@ export function trimQuantity(quantity: string): string {
   return quantity.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
 }
 
-/** One format for a dish on every kitchen surface — a station's queue row and notice, and the expo
- *  board — so a cook reads the same line the same way on each. A line counted in Each shows no
- *  unit: "2× Croqueta". */
+/** A line counted in Each shows no unit: "2× Croqueta". */
 export function dishLine(
   line: {
     quantity: string;

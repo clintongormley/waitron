@@ -395,23 +395,29 @@ or the unit deleted). One known gap: while a line is still open, deleting the st
 as `each` it was sold in makes its queue row, and any notice recorded after, read as not Each,
 because `readLinesSoldInEach` looks the seed key up on the live unit row (reproduced by the
 finish-branch run-it review, 2026-09-28); the unit a product with no stored unit reads as cannot be
-deleted, so only such a stored unit is affected. **Done since (2026-09-28, owner's request):**
-the printed kitchen ticket, and everything that shares its item builder (`buildTicketItems`,
-`apps/server/src/kitchen-print.ts`: HOLD tickets, correction slips, reprints), prints a dish sold
-in Each as "2.000 x Croqueta", while a weighed or other unit keeps its unit ("0.500 kg x Pulpo",
-"200.000 g x Almendras"); and the expo board reads "2× Croqueta" through the same `dishLine`
-(`apps/till/src/widgets/dish-format.ts`) the station queue uses, from a `soldInEach` flag on each
-expo item. Both decide Each by the unit's identity through `readLinesSoldInEach`, so the known gap
-above applies to them too, and a line with no recorded context prints or shows its unit (from
-reading the code, every product path that writes a line also records or copies its context). The merge-or-split check by
-abbreviation text (`soldInEach` in `kitchen-print.ts`) is unchanged. **Kept as they are, by the
-owner's choice (2026-09-28):** the printed receipt (`apps/server/src/receipt-ticket.ts`) and the
-till's ticket view (`apps/till/src/screens/till-ticket-view.ts`), which, from reading the code only, still show the Each
-unit. **Done since (2026-09-27, lane A's A72, #727):** while the
-kitchen screen's queue reads fail (including a read cancelled at 25 seconds), a banner above the
-list said "Not up to date since 10:20" ("Sin actualizar desde las 10:20"; reworded by A79,
-below), giving the time of the last read it showed, or, if none has succeeded, the time the
-screen opened, or the time the operator switched to this station; the list stays on screen
+deleted, so only such a stored unit is affected. **Done since (2026-09-28, lane A's A109, owner's
+request):** the printed kitchen ticket, and everything that shares its item builder
+(`buildTicketItems`, `apps/server/src/kitchen-print.ts`: HOLD tickets, correction slips, reprints),
+prints a dish sold in Each as "2.000 x Croqueta", while a weighed or other unit keeps its unit
+("0.500 kg x Pulpo", "200.000 g x Almendras"); and the expo board reads "2× Croqueta" through the
+same `dishLine` (`apps/till/src/widgets/dish-format.ts`) the station queue uses, from a `soldInEach`
+flag on each expo item. Both decide Each by the unit's identity through `readLinesSoldInEach`, so
+the known gap above applies to them too, and a line with no recorded context prints or shows its
+unit (`grep -rn "insert(workingOrderLines)" apps packages` finds four non-test sites, all in
+`apps/server/src/working-order.ts`: `createOpenOrder`, `insertTabRound` and `applyLineEdits` each
+follow the insert with `recordLineContexts` (in `createOpenOrder` under a known zone, which its call
+to `priceOrderLines` requires for any line), and `carveOffLines` with `copyLineContext`; run
+2026-09-28). The merge-or-split check still compares abbreviation text (`abbreviatedLikeEach` in
+`kitchen-print.ts`). **Kept as they are, by the owner's choice (2026-09-28):** the printed receipt
+(`apps/server/src/receipt-ticket.ts`) and the till's ticket view
+(`apps/till/src/screens/till-ticket-view.ts`), which still show the Each unit: the receipt's case
+"prints the unit abbreviation of the invoice language…" in `apps/server/src/receipt-ticket.test.ts`
+expects "2 ud" on a line frozen with Each's abbreviations; the till's ticket view from reading the
+code only. **Done since (2026-09-27, lane A's A72, #727):** while the kitchen screen's queue reads
+fail (including a read cancelled at 25 seconds), a banner above the list said "Not up to date since
+10:20" ("Sin actualizar desde las 10:20"; reworded by A79, below), giving the time of the last read
+it showed, or, if none has succeeded, the time the screen opened, or the time the operator switched
+to this station; the list stays on screen
 beneath it and the next good read clears it. A late failure of an older read after a newer answer is on screen raises nothing, and
 neither does an enrolled display's 15-second refresh answered `device.unauthorized`, which
 re-boots the app. A 401 answering the reload after a bump does show the banner, and re-boots
@@ -1687,7 +1693,9 @@ and a unit's name and precision are frozen onto sold lines.
 
 **Update — unit abbreviations and screen rebuild.** Every unit has a short translatable
 abbreviation (`kg`, `ml`), which is what prints on sold lines, receipts, kitchen tickets and the till;
-the frozen `unit_name` column is presentation only and does not enter the fiscal hash.
+the frozen `unit_name` column is presentation only and does not enter the fiscal hash. (2026-09-28:
+a dish sold in Each shows no unit on the kitchen ticket, the kitchen screen and the expo board; see
+the kitchen entry above.)
 
 **Update — a product's unit is optional, and a unit lists its products — LANDED #375.** A product no
 longer needs a unit (Each stores nothing), and the units screen can bulk-reassign a unit's products to
@@ -2365,9 +2373,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       own Reprint should clear it once printed; not run). It errs toward showing a warning. Fixing
       it needs a record of which dishes each ticket carried, a new table and so a migration; open
       for the owner.)_
-    - Only dishes sold in Each are added together or split; a venue-made unit that counts pieces (a
-      "portion") prints line by line, because nothing records a unit's kind (a unit field would
-      need a migration).
+    - Only dishes whose unit abbreviation reads as Each's are added together or split; a venue-made
+      unit that counts pieces (a "portion") prints line by line, because nothing records a unit's
+      kind (a unit field would need a migration).
     - The setting sits under "Changes after sending" on the Preparation routing tab; it may deserve
       a heading of its own. _(Task 6, 2026-09-27: so does "Print held groups in advance", which is
       not about sent work at all.)_

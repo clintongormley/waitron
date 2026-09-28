@@ -2626,13 +2626,14 @@ describe("a line write on an order whose card payment is in flight is refused (p
 });
 
 /**
- * The owner's decision of 2026-09-27 (A78): a dish counted in Each reads "2× Croqueta" on the kitchen
- * screen, while every other unit keeps its text. Five dishes, each sold in its own unit: Each as a
- * product with no stored unit reads it; the stored unit seeded as each, after its abbreviation was
- * renamed; kg; the seeded g, a second unit counted in whole numbers; and a unit the venue created
- * with Each's own abbreviations, so an answer read from the text would call it Each.
+ * The owner's decision of 2026-09-27 (A78): a dish counted in Each reads "2× Croqueta" on the
+ * kitchen screen, while every other unit keeps its text. The expo board followed on 2026-09-28
+ * (A109). Five dishes, each sold in its own unit: Each as a product with no stored unit reads it;
+ * the stored unit seeded as each, after its abbreviation was renamed; kg; the seeded g, a second
+ * unit counted in whole numbers; and a unit the venue created with Each's own abbreviations, so an
+ * answer read from the text would call it Each.
  */
-describe("the kitchen screen is told which lines were sold in Each, by the unit's identity", () => {
+describe("the kitchen screen and the expo board are told which lines were sold in Each, by the unit's identity", () => {
   async function fiveDishesOnATab() {
     const seeded = await setupVenue();
     const { cfg, tableId } = seeded;
