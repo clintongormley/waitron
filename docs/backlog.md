@@ -403,7 +403,7 @@ non-test sites, all in
 `apps/server/src/working-order.ts`: `createOpenOrder`, `insertTabRound` and `applyLineEdits` each
 follow the insert with `recordLineContexts` (in `createOpenOrder` under a known zone, which its call
 to `priceOrderLines` requires for any line), and `carveOffLines` with `copyLineContext`; run
-2026-09-28). **Done since (2026-09-28, lane C's A114):** the merge-or-split check goes by
+2026-09-28). **Done since (2026-09-28, lane C's A114, #811):** the merge-or-split check goes by
 the unit's identity too: a ticket entry is merged or split only when its unit does not print (sold
 in Each, or no unit recorded on the line), so a venue's own unit spelled like Each prints its
 entries as sold, never merged or split, and a renamed stored Each unit's are merged or split. The
