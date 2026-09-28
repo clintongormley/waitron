@@ -63,8 +63,8 @@ import {
 } from "./working-order.js";
 import "./errors.js";
 
-// The release reminder (spec §4 "Remind staff to release the next group"; plan D11, rulings 4 and
-// 5), its snooze, and the Current orders read a waiter serves from (spec §4; D8, D18, D19).
+// The release reminder (spec §4 "Remind staff to release the next group"; plan D11), its snooze,
+// and the Current orders read a waiter serves from (spec §4; D8, D18, D19).
 const LOCALE = "es-ES";
 const ALEX = "cccccccc-0000-4000-8000-00000000000a";
 const MIA = "cccccccc-0000-4000-8000-00000000000b";
@@ -173,12 +173,15 @@ async function setupVenue(): Promise<Venue> {
     const catalogue = await createCatalogue(tx, { name: "Carta" });
     const category = await createCategory(tx, { name: { [LOCALE]: "Platos" } });
     const productId = {} as Record<Dish, string>;
+    // Three different names, so a row showing the customer's or the kitchen's name fails.
     for (const [dish, unitPrice] of Object.entries(DISHES) as [Dish, string][]) {
       productId[dish] = (
         await createProduct(tx, {
           catalogueId: catalogue.id,
           categoryId: category.id,
           name: dish,
+          customerName: { [LOCALE]: `menu ${dish}` },
+          kitchenName: `KITCHEN ${dish}`,
           pricingUnit: "each",
           unitPrice,
           vatClass: "general",
@@ -397,7 +400,7 @@ async function expectRefusedWithNothingWritten(
   expect(await snapshot(visitId)).toEqual(before);
 }
 
-describe("releaseReminder (pure; D11, rulings 4 and 5a–b)", () => {
+describe("releaseReminder (pure; D11)", () => {
   const fired = (id: string) => ({ id, state: "fired" as const, remindAt: null });
   const held = (id: string, remindAt: string | null = null) => ({
     id,
@@ -432,7 +435,7 @@ describe("releaseReminder (pure; D11, rulings 4 and 5a–b)", () => {
     ).toEqual({ groupId: "g3", dueAt: null });
   });
 
-  it("keeps no time for a snooze while an earlier fired group is unserved (ruling 5a)", () => {
+  it("keeps no time for a snooze while an earlier fired group is unserved", () => {
     expect(
       releaseReminder([fired("g1"), held("g2", T(30))], [{ groupId: "g1", servedAt: null }], 10),
     ).toEqual({ groupId: "g2", dueAt: null });
@@ -444,7 +447,7 @@ describe("releaseReminder (pure; D11, rulings 4 and 5a–b)", () => {
     ).toEqual({ groupId: "g2", dueAt: T(40) });
   });
 
-  it("lets a fired group with no dish line neither hold the reminder up nor date it (ruling 5b)", () => {
+  it("lets a fired group with no dish line neither hold the reminder up nor date it", () => {
     expect(
       releaseReminder(
         [fired("g1"), fired("empty"), held("g3")],
@@ -627,7 +630,7 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
   });
 });
 
-describe("snoozeReminder (D8, D11, D19; ruling 5d)", () => {
+describe("snoozeReminder (D8, D11, D19)", () => {
   it("answers a repeat of the same submission with the first answer and moves nothing", async () => {
     const v = await setupVenue();
     const s = await servedUpToGroupTwo(v);

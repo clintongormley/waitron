@@ -584,7 +584,7 @@ describe("markServed / unmarkServed", () => {
       }),
     );
 
-    // Only released work can be served (Task 9 ruling 1).
+    // Only released work can be served.
     await asApp(cfg, (tx) => fireAll(tx, cfg, tabId));
     await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
     let served = await servedAtByLine(tabId);
