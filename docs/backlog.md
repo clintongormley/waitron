@@ -480,8 +480,10 @@ required options list to a dish in the basket, or lowers a list's picks limit, s
 new version silently and the server then refuses the request `options.label_required` (or
 `extras.limit_exceeded`, per `validateExtraSelections`); nothing wrong is filed, but staff see a refusal where the dialog should have asked.
 The comparison also looks only at each line's total, so dish and extra price changes that cancel out
-are adopted without asking — see the entry "Two till menu-refresh defects the retroactive Codex
-review of #719 found" further down.
+are adopted without asking — see the campaign item A113 entry further down. _(#812, campaign item
+A113, branch `fix/retro-review-719-till`, 2026-09-28: no longer so — when a line's total is
+unchanged, `refreshBasket` lists the dish or variant and each extra whose price changed, each on its
+own row of the dialog.)_
 A table's round is also not marked by the poll's sold-out list, only when a send is refused.
 _(Task 8, 2026-09-28: no longer so — when the poll's sold-out list for the open table's zone
 changes, `#onMenuState` in `apps/till/src/till-app.ts` marks the draft again, `#markDraft(true)`.)_
@@ -2911,34 +2913,19 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     reads the bills after a cancel that landed or got no answer, and reads the floor's party after
     one that landed as well as one that got no answer; a refused one reads the lines only, as
     before.
-- **Two till menu-refresh defects the retroactive Codex review of #719 found (campaign item A108r,
-  2026-09-28), both still present on `main` at `f5a186cd9`; fix them once lane B's drafts-on-the-till
-  branch, which changes `apps/till/src/state/menu-refresh.ts`, has landed.** (1) After an option
-  comes back into stock, the till's menu-state poll keeps the fallback default it was served, while a fresh read
-  from the server returns the published default: `withUnavailable`
-  (`apps/till/src/state/menu-refresh.ts`) starts from the default the till LOADED, which was already
-  a fallback, so two tills can preselect different answers for the same menu and stock until one of
-  them reloads. Run on `main` 2026-09-28: the review's probe test (a published default and a null
-  default, each loaded while its label was out of stock, then restored) failed both cases. Fix:
-  serve the published default in a field of its own and recompute from it on every poll. (2) The
-  basket refresh compares each line's total only (`lineGross`, `refreshBasket`), so a dish going
-  from €9 to €8 while its extra goes from €1 to €2 is adopted silently, with `changed: []`; the menus
-  plan's D9 asks to compare "the line's price (dish, variant, each extra)". Run on `main`
-  2026-09-28: the review's probe test printed `{ changed: [], adoptedDish: '8.00', adoptedExtra:
-  '2.00' }`. The probes are the files `retro719-default.test.ts` (1) and `retro719-prices.test.ts`
-  (2) in the campaign's `retro-reports/retro719-review/probes/` folder, outside this repository;
-  the fixing branch will need them, or rewritten ones, as its failing tests. The review's other two
-  findings: a deactivated menu was still offered and sold from, fixed by the A108r branch
-  `fix/retro-review-719`; and a round entered while the floor was being re-read was hidden when
-  the till followed the party onto its next tab. #748 rewrote that path so the unsent draft is
-  carried to the next tab first (`#followDraft` in `apps/till/src/till-app.ts` calls `#carryDraft`
-  in `apps/till/src/screens/till-table-order-screen.ts`, which keeps a draft already started on
-  that tab instead), but the review's probe tested the old code and was not re-run against the
-  new. _(Task 8, 2026-09-28: `#carryDraft` is gone; the draft now lives on the party, on the server
-  and in `DraftSync`, so nothing is carried between tabs, and `#followDraft` only moves the screen
-  to the next tab. Read, not run: (1) still reads as present — `withUnavailable` still takes each
-  options list's default from the offers the till loaded; (2) too — `refreshBasket` still compares
-  each line's total, `lineGross`, alone; both in `apps/till/src/state/menu-refresh.ts`.)_
+- **DONE (#812, campaign item A113, from the A108r retro review of #719, branch
+  `fix/retro-review-719-till`): the till's option default returns to the published one once it is
+  back in stock, and when a line's total is unchanged the basket refresh names each dish, variant
+  or extra whose price changed.** The served options list carries the published default as
+  `publishedDefaultLabelId` (`applyLiveFields`, `packages/catalogue/src/menu-document.ts`), which
+  `withUnavailable` (`apps/till/src/state/menu-refresh.ts`) reads. Of the review's other two
+  findings, the deactivated menu still offered and sold from was fixed by `fix/retro-review-719`;
+  the other is the next entry.
+- **Unchecked since the service plan's Task 8 (#806): whether a round entered while the floor was
+  being re-read is still hidden when the till follows the party onto its next tab** (the second
+  finding of the retroactive Codex review of #719). The review's probe tested code since rewritten
+  — the draft now lives on the party, on the server and in `DraftSync`, so nothing is carried
+  between tabs — and was not re-run against the new code.
 - **The till does not load its menu until a manual refresh**, and a dashboard menu change does not
   appear live on it. A till-app fix.
 - **The three displays walked end to end** — [ui-review.md](ui-review.md)'s areas, at the real box.

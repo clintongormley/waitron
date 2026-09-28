@@ -88,11 +88,13 @@ export type LiveOptionsList = Omit<OfferedOptionsList, "labels" | "defaultLabelI
   /** Every label, each with its current availability. */
   labels: OptionLabel[];
   /**
-   * An available label, or null only when no label is available now (`effectiveDefaultLabelId`:
-   * `applyLiveFields` applies it to the published default, the till's `withUnavailable` to the
-   * default it loaded).
+   * An available label, or null only when no label is available now: `effectiveDefaultLabelId`
+   * applied to `publishedDefaultLabelId`, by `applyLiveFields` and again by the till's
+   * `withUnavailable` whenever it applies a newer unavailable set.
    */
   defaultLabelId: string | null;
+  /** The default the version published, whether or not it is available now. */
+  publishedDefaultLabelId: string | null;
 };
 
 export type LiveOfferedModifier =

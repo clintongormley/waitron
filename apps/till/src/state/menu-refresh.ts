@@ -1,5 +1,5 @@
 import { effectiveDefaultLabelId } from "@waitron/catalogue/src/option-default.js";
-import { compareDecimal } from "@waitron/shared";
+import { compareDecimal, decimal } from "@waitron/shared";
 import { menuOfferToTillProduct, type MenuUnavailable, type TillMenuOffer } from "../api/client.js";
 import { lineProductName, productUnit } from "../widgets/product-name.js";
 import { lineGross, productAsVariant, quantityPlaces } from "./order-line.js";
@@ -20,8 +20,9 @@ export interface LineBlock {
   name: string;
 }
 
-/** One line of the basket-refresh dialog; `lineNo` counts the basket from 1. `from` is absent for a
- * line whose earlier price the till never held. */
+/** One line of the basket-refresh dialog; `lineNo` counts the basket from 1, and several rows may
+ * share one. `from`/`to` are the line's total or, for a part row, that part's unit price. `from` is
+ * absent for a line whose earlier price the till never held. */
 export interface ChangedLine {
   lineNo: number;
   name: string;
@@ -81,7 +82,7 @@ export function withUnavailable(
       return {
         ...entry,
         labels: withLabels,
-        defaultLabelId: effectiveDefaultLabelId(withLabels, entry.defaultLabelId),
+        defaultLabelId: effectiveDefaultLabelId(withLabels, entry.publishedDefaultLabelId),
       };
     }),
   }));
@@ -194,7 +195,9 @@ export function isStale(line: OrderLine, liveVersions: ReadonlyMap<string, strin
  * offers (D9): what the line would cost now, and whether it can still be sold as it stands. Saved
  * lines are never re-priced (D10), and a line with no version is priced by the server from the live
  * version already. A line whose earlier price is unknown is always named, at its new price alone. A
- * line whose quantity the live unit cannot hold is not adopted: the live unit would refuse it.
+ * line whose total is unchanged while its parts' prices moved names each part that moved — the dish
+ * or variant, then each extra — at its unit price. A line whose quantity the live unit cannot hold is
+ * not adopted: the live unit would refuse it.
  */
 export function refreshBasket(
   lines: readonly OrderLine[],
@@ -229,6 +232,25 @@ export function refreshBasket(
     const from = lineGross(line);
     if (compareDecimal(from, to) !== 0)
       outcome.changed.push({ lineNo, name: lineProductName(product), from, to });
+    else outcome.changed.push(...partsRepriced(line, adopted, lineNo));
   });
   return outcome;
+}
+
+/** Each part of `line` whose unit price `adopted` changes: the dish or variant, then each extra. */
+function partsRepriced(line: OrderLine, adopted: OrderLine, lineNo: number): ChangedLine[] {
+  const parts = [
+    {
+      name: lineProductName(line.product),
+      from: line.product.unitPrice,
+      to: adopted.product.unitPrice,
+    },
+  ];
+  // `adoptLine` maps the picks in place, so the same index is the same pick.
+  (line.extras ?? []).forEach((pick, index) =>
+    parts.push({ name: pick.name, from: pick.price, to: adopted.extras![index]!.price }),
+  );
+  return parts
+    .filter((part) => compareDecimal(decimal(part.from), decimal(part.to)) !== 0)
+    .map((part) => ({ lineNo, ...part }));
 }

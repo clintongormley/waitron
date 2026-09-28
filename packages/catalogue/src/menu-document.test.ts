@@ -535,7 +535,7 @@ describe("applyLiveFields", () => {
      * The published list is No ice, With ice, Crushed ice, in that order; after publishing, Crushed
      * ice is moved first in the list's current order, which the served default must not follow.
      */
-    const servedDefault = async (
+    const servedOptions = async (
       unavailable: readonly string[],
       publishedDefault: string | null = NO_ICE,
     ) => {
@@ -567,8 +567,12 @@ describe("applyLiveFields", () => {
       const options = lemonade!.offeredModifiers[1]!;
       if (options.kind !== "options") throw new Error("options");
       expect(options.labels.map((label) => label.id)).toEqual([NO_ICE, WITH_ICE, CRUSHED_ICE]);
-      return options.defaultLabelId;
+      return options;
     };
+    const servedDefault = async (
+      unavailable: readonly string[],
+      publishedDefault: string | null = NO_ICE,
+    ) => (await servedOptions(unavailable, publishedDefault)).defaultLabelId;
 
     it("is the published default while it is available", async () => {
       expect(await servedDefault([WITH_ICE])).toBe(NO_ICE);
@@ -589,6 +593,15 @@ describe("applyLiveFields", () => {
     it("is the first available label while the published version names no default", async () => {
       expect(await servedDefault([NO_ICE], null)).toBe(WITH_ICE);
     });
+
+    it.each([NO_ICE, null])(
+      "carries the published default %s beside the fallback it serves while that default is unavailable",
+      async (publishedDefault) => {
+        const options = await servedOptions([NO_ICE], publishedDefault);
+        expect(options.defaultLabelId).toBe(WITH_ICE);
+        expect(options.publishedDefaultLabelId).toBe(publishedDefault);
+      },
+    );
   });
 
   it("leaves out an offer, a variant or an extra whose product row is gone", async () => {

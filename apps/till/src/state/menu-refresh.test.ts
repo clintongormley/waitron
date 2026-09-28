@@ -81,6 +81,7 @@ function optionsList(
   id: string,
   labels: ReturnType<typeof label>[],
   defaultLabelId: string | null,
+  publishedDefaultLabelId: string | null = defaultLabelId,
 ) {
   return {
     kind: "options" as const,
@@ -89,6 +90,7 @@ function optionsList(
     customerName: null,
     kitchenName: null,
     defaultLabelId,
+    publishedDefaultLabelId,
     labels,
   };
 }
@@ -177,7 +179,7 @@ describe("withUnavailable", () => {
   });
 
   describe("the default label", () => {
-    const defaultWith = (unavailable: string[], loadedDefault: string | null = "rare") => {
+    const defaultWith = (unavailable: string[], publishedDefault: string | null = "rare") => {
       const steak = offer({
         id: "offer-steak",
         productId: "steak",
@@ -185,7 +187,7 @@ describe("withUnavailable", () => {
           optionsList(
             "list-cooked",
             [label("rare"), label("medium"), label("well-done")],
-            loadedDefault,
+            publishedDefault,
           ),
         ],
       });
@@ -195,15 +197,15 @@ describe("withUnavailable", () => {
       return cooked.defaultLabelId;
     };
 
-    it("stays the loaded default while it is available", () => {
+    it("stays the published default while it is available", () => {
       expect(defaultWith(["medium"])).toBe("rare");
     });
 
-    it("is the first available label while the loaded default is not", () => {
+    it("is the first available label while the published default is not", () => {
       expect(defaultWith(["rare"])).toBe("medium");
     });
 
-    it("skips every unavailable label, not only the loaded default", () => {
+    it("skips every unavailable label, not only the published default", () => {
       expect(defaultWith(["rare", "medium"])).toBe("well-done");
     });
 
@@ -211,8 +213,36 @@ describe("withUnavailable", () => {
       expect(defaultWith(["rare", "medium", "well-done"])).toBeNull();
     });
 
-    it("is the first available label while the loaded offer names no default", () => {
+    it("is the first available label while the published version names no default", () => {
       expect(defaultWith(["rare"], null)).toBe("medium");
+    });
+
+    /** Loaded while "rare", the first label, was unavailable, so the served default was a fallback. */
+    const loadedDuringWithdrawal = (published: string | null) =>
+      offer({
+        id: "offer-steak",
+        productId: "steak",
+        offeredModifiers: [
+          optionsList(
+            "list-cooked",
+            [label("rare", false), label("medium"), label("well-done")],
+            "medium",
+            published,
+          ),
+        ],
+      });
+    const polledDefault = (loaded: TillMenuOffer) => {
+      const [cooked] = withUnavailable([loaded], NOTHING)[0]!.offeredModifiers;
+      if (cooked?.kind !== "options") throw new Error("options");
+      return cooked.defaultLabelId;
+    };
+
+    it("returns to the published default once it is available again, not the fallback it was loaded with", () => {
+      expect(polledDefault(loadedDuringWithdrawal("rare"))).toBe("rare");
+    });
+
+    it("is the first available label, not the loaded fallback, once available again when the published version names no default", () => {
+      expect(polledDefault(loadedDuringWithdrawal(null))).toBe("rare");
     });
   });
 
@@ -384,6 +414,58 @@ describe("refreshBasket", () => {
     expect(outcome.adopted.get(0)!.extras).toEqual([
       { listId: "list-extras", productId: "bacon", name: "bacon", price: "2.00", quantity: 1 },
     ]);
+  });
+
+  it("names the dish and each extra whose price changed when the line's total did not", () => {
+    const line = lineOf(burger, "v1", {
+      extras: [
+        { listId: "list-extras", productId: "cheese", name: "cheese", price: "1.00", quantity: 1 },
+        { listId: "list-extras", productId: "bacon", name: "bacon", price: "1.50", quantity: 1 },
+      ],
+    });
+    const offsetting = {
+      ...burger,
+      unitPrice: "8.00",
+      offeredModifiers: [
+        extrasList("list-extras", [extraItem("cheese", "2.00"), extraItem("bacon", "1.50")]),
+      ],
+    };
+    const outcome = refreshBasket([line], [offsetting], live);
+    expect(outcome.changed).toEqual([
+      { lineNo: 1, name: "burger", from: "9.00", to: "8.00" },
+      { lineNo: 1, name: "cheese", from: "1.00", to: "2.00" },
+    ]);
+    expect(outcome.adopted.get(0)!.product.unitPrice).toBe("8.00");
+  });
+
+  it("names the variant, under its own name, when an extra's change offsets its price", () => {
+    const withCheese = {
+      ...wine,
+      offeredModifiers: [extrasList("list-extras", [extraItem("cheese", "1.00")])],
+    };
+    const line: OrderLine = {
+      product: {
+        ...menuOfferToTillProduct(withCheese, "v1"),
+        variantId: "bottle",
+        variantName: "bottle",
+        unitPrice: "18.00",
+      },
+      quantity: "1",
+      extras: [
+        { listId: "list-extras", productId: "cheese", name: "cheese", price: "1.00", quantity: 1 },
+      ],
+    };
+    const offsetting = {
+      ...withCheese,
+      variants: [variant("glass", "4.00"), variant("bottle", "17.00")],
+      offeredModifiers: [extrasList("list-extras", [extraItem("cheese", "2.00")])],
+    };
+    const outcome = refreshBasket([line], [offsetting], live);
+    expect(outcome.changed).toEqual([
+      { lineNo: 1, name: "bottle", from: "18.00", to: "17.00" },
+      { lineNo: 1, name: "cheese", from: "1.00", to: "2.00" },
+    ]);
+    expect(outcome.adopted.get(0)!.product.unitPrice).toBe("17.00");
   });
 
   it("keeps a variant line on its variant, at the variant's new price", () => {

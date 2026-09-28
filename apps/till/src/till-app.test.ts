@@ -326,7 +326,7 @@ function fixtureOffers(catalogue: ProductCatalogue): ZoneOfferCatalogue {
               available: true,
             })),
           }
-        : entry,
+        : { ...entry, publishedDefaultLabelId: entry.defaultLabelId },
     ),
     variants: (product.variants ?? []).map(
       (variant): ZoneOfferCatalogue["offers"][number]["variants"][number] => ({

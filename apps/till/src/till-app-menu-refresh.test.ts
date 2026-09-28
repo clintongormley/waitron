@@ -106,6 +106,7 @@ function burgerOffer(cheesePrice = "1.00"): TillMenuOffer {
         customerName: null,
         kitchenName: null,
         defaultLabelId: null,
+        publishedDefaultLabelId: null,
         labels: [
           { id: "rare", name: "Rare", customerName: null, kitchenName: null, available: true },
           { id: "medium", name: "Medium", customerName: null, kitchenName: null, available: true },
