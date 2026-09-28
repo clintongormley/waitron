@@ -349,7 +349,13 @@ export class TillBasket extends LitElement {
             <span class="name" part="name"
               ><slot name=${`lead-${index}`}>${this.#lineName(line)}</slot>${
                 line.notOffered ? notOfferedMarker() : nothing
-              }${line.blocked === undefined ? nothing : blockedMarker(line.blocked)}</span
+              }${line.blocked === undefined ? nothing : blockedMarker(line.blocked)}${
+                line.unavailableOnServer === true &&
+                line.blocked === undefined &&
+                line.notOffered === undefined
+                  ? html` <span class="not-offered">${t("basket.blocked.server")}</span>`
+                  : nothing
+              }</span
             >
             ${this.#quantityCell(line, index)}
             <span class="line-total">${formatMoney(dishGross(line), currentLocale())}</span>

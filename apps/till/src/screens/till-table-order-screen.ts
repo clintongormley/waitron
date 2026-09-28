@@ -126,6 +126,35 @@ function shownName(product: TillProduct): string {
   return lineProductName(product) || t("basket.not_offered");
 }
 
+/** A draft line no action sends: the till's own check, the server's last answer, or a dish the
+ * table's offers no longer hold says it cannot be sold now. */
+function flagged(line: OrderLine): boolean {
+  return (
+    line.blocked !== undefined || line.unavailableOnServer === true || line.notOffered === true
+  );
+}
+
+/** A dish no longer offered has no unit to read, so a whole quantity is counted as whole units. */
+function countsWholeUnits(line: OrderLine): boolean {
+  return soldByTheUnit(line.product) || (line.notOffered === true && /^\d+$/.test(line.quantity));
+}
+
+/** How many lines an action leaves in the draft, naming them when there are only a few. */
+function leftOutText(lines: readonly OrderLine[]): string {
+  if (lines.length > LEFT_OUT_NAMED)
+    return t("table.left_out_unnamed").replace("{n}", String(lines.length));
+  const names = lines
+    .map((line) => `${shownName(line.product)} ×${trimQuantity(line.quantity)}`)
+    .join(", ");
+  return countText(lines.length, "table.left_out", "table.left_out_one").replace(
+    "{names}",
+    () => names,
+  );
+}
+
+/** Beyond this many, the left-out message counts the lines without naming them. */
+const LEFT_OUT_NAMED = 3;
+
 /** "Alex …", or the no-name wording when the server has no name for the person. */
 function named(name: string, withName: StringKey, unnamed: StringKey): string {
   return name === "" ? t(unnamed) : t(withName).replace("{name}", () => name);
@@ -134,11 +163,13 @@ function named(name: string, withName: StringKey, unnamed: StringKey): string {
 /** Where a later addition goes: `add-to-held` is offered only while the party has a held group. */
 type Destination = "fire-now" | "add-to-held" | "add-as-new";
 
-/** An action's preview, and the submission its Confirm sends. */
+/** An action's preview, and the submission its Confirm sends. `leftOut`: the flagged lines it
+ * leaves in the draft. */
 interface PendingDraft {
   preview: DraftPreview;
   join?: { group: OrderGroup; index: number };
   detail: SubmitDraftDetail;
+  leftOut: readonly OrderLine[];
 }
 
 /** The element `node` renders inside: its slot, its parent, or the host of its shadow root. */
@@ -644,6 +675,16 @@ export class TillTableOrderScreen extends LitElement {
         padding-bottom: var(--wt-space-2);
       }
 
+      .flag-choice {
+        display: flex;
+        gap: var(--wt-space-2);
+      }
+
+      .flag-kept {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+
       .ordering {
         flex: 1 1 auto;
         min-width: 0;
@@ -997,6 +1038,8 @@ export class TillTableOrderScreen extends LitElement {
   /** The draft lines the waiter checked, by the line's object identity, which a store keeps until the
    * line leaves it. */
   #selected = new WeakSet<OrderLine>();
+  /** Flagged lines the person chose to keep, which no longer ask Remove or Keep. */
+  #kept = new WeakSet<OrderLine>();
   @state() private destination: Destination = "fire-now";
   /** The held group Add to held group joins; the first held group when unset or gone. */
   @state() private joinTarget: string | null = null;
@@ -1125,7 +1168,8 @@ export class TillTableOrderScreen extends LitElement {
     return lines.map((line) => ({
       courseId: this.#selectedCourseId(line) || null,
       quantity: line.quantity,
-      wholeUnits: soldByTheUnit(line.product),
+      wholeUnits: countsWholeUnits(line),
+      flagged: flagged(line),
     }));
   }
 
@@ -1207,12 +1251,13 @@ export class TillTableOrderScreen extends LitElement {
       preview,
       ...(index < 0 ? {} : { join: { group: held[index]!, index } }),
       detail,
+      leftOut: (submission.leftOut ?? []).map((at) => lines[at]!),
     };
   }
 
   #confirmPreview(): void {
     const pending = this.pendingDraft;
-    if (pending === null) return;
+    if (pending === null || pending.detail.sent.length === 0) return;
     this.pendingDraft = null;
     this.#dispatch("submit-draft", pending.detail);
   }
@@ -1791,7 +1836,7 @@ export class TillTableOrderScreen extends LitElement {
       .open=${other !== null}
       .dismissible=${this.takeOverSent === null}
       .heading=${named(name, "table.take_over_title", "table.take_over_title_unnamed")}
-      @wt-close=${() => void this.#takeOverClosed()}
+      @wt-close=${(event: Event) => void this.#takeOverClosed(event)}
     >
       <p data-take-over-body>
         ${named(name, "table.take_over_body", "table.take_over_body_unnamed")}
@@ -1800,6 +1845,7 @@ export class TillTableOrderScreen extends LitElement {
         <wt-button
           variant="secondary"
           data-take-over-cancel
+          ?disabled=${this.takeOverSent !== null}
           @click=${() => (this.takeOverPending = null)}
         >
           ${t("action.cancel")}
@@ -1816,15 +1862,26 @@ export class TillTableOrderScreen extends LitElement {
     </wt-dialog>`;
   }
 
-  /** The panel whose button opened the dialog is gone once its draft was taken, and the browser
-   * cannot hand focus back to it: focus goes to the person's own order, which now holds it. */
-  async #takeOverClosed(): Promise<void> {
+  /**
+   * While the take-over is out the dialog is shown again, however it was closed: Chromium lets a
+   * repeated Escape close a modal dialog without a cancelable `cancel`, so refusing the cancel alone
+   * does not keep it open. Once answered, focus goes to the draft's Take over when the draft is still
+   * there, and otherwise to the person's own order, which now holds it.
+   */
+  async #takeOverClosed(event: Event): Promise<void> {
+    if (this.takeOverSent !== null && this.takeOverPending !== null) {
+      (event.target as HTMLElement & { open: boolean }).open = true;
+      return;
+    }
     this.takeOverPending = null;
     const taken = this.#takeOverAnswered;
     this.#takeOverAnswered = undefined;
-    if (taken === undefined || this.otherDrafts.some((other) => other.id === taken)) return;
+    if (taken === undefined) return;
     await this.updateComplete;
-    this.renderRoot.querySelector<HTMLElement>("#draft-title")?.focus();
+    const still = this.otherDrafts.some((other) => other.id === taken);
+    this.renderRoot
+      .querySelector<HTMLElement>(still ? `[data-take-over="${taken}"]` : "#draft-title")
+      ?.focus();
   }
 
   /** One request per press: Confirm stays off until the app says this one has answered. */
@@ -2067,6 +2124,35 @@ export class TillTableOrderScreen extends LitElement {
     const name = lineProductName(line.product);
     const selected = this.#selected.has(line);
     const splits = soldByTheUnit(line.product) && Number(line.quantity) > 1;
+    const isFlagged = flagged(line);
+    if (!isFlagged) this.#kept.delete(line);
+    const tools = [
+      ...(this.courses.length === 0
+        ? []
+        : [
+            html`<select
+              data-round-course=${index}
+              aria-label=${`${t("table.course_label")} · ${name}`}
+              @change=${(event: Event) =>
+                this.#pickCourse(store, line, (event.target as HTMLSelectElement).value)}
+            >
+              ${this.#courseOptions(this.#selectedCourseId(line), t("table.course_default"))}
+            </select>`,
+          ]),
+      ...(splits
+        ? [
+            html`<wt-button
+              variant="secondary"
+              data-split-draft-line=${index}
+              aria-label=${`${t("table.split_group_line")} · ${name}`}
+              @click=${() => store.splitLine(index)}
+            >
+              ${t("table.split_group_line")}
+            </wt-button>`,
+          ]
+        : []),
+      ...(isFlagged ? [this.#flagChoice(store, line, index)] : []),
+    ];
     return html`<button
         slot=${`lead-${index}`}
         type="button"
@@ -2079,38 +2165,53 @@ export class TillTableOrderScreen extends LitElement {
         <span class="draft-line-name">${name} ×${this.#displayQty(line.quantity)}</span>
       </button>
       ${
-        this.courses.length === 0 && !splits
+        tools.length === 0
           ? nothing
-          : html`<span slot=${`after-${index}`} class="draft-line-tools">
-              ${
-                this.courses.length === 0
-                  ? nothing
-                  : html`<select
-                      data-round-course=${index}
-                      aria-label=${`${t("table.course_label")} · ${name}`}
-                      @change=${(event: Event) =>
-                        this.#pickCourse(store, line, (event.target as HTMLSelectElement).value)}
-                    >
-                      ${this.#courseOptions(
-                        this.#selectedCourseId(line),
-                        t("table.course_default"),
-                      )}
-                    </select>`
-              }
-              ${
-                splits
-                  ? html`<wt-button
-                      variant="secondary"
-                      data-split-draft-line=${index}
-                      aria-label=${`${t("table.split_group_line")} · ${name}`}
-                      @click=${() => store.splitLine(index)}
-                    >
-                      ${t("table.split_group_line")}
-                    </wt-button>`
-                  : nothing
-              }
-            </span>`
+          : html`<span slot=${`after-${index}`} class="draft-line-tools">${tools}</span>`
       }`;
+  }
+
+  /** A line that cannot be sold now asks whether it goes or stays; kept, it says it stays. Its
+   * reason shows beside its name, in the basket's words. */
+  #flagChoice(store: WorkingOrderStore, line: OrderLine, index: number): TemplateResult {
+    if (this.#kept.has(line))
+      return html`<span class="flag-kept" data-flag-kept>${t("table.flag_kept")}</span>`;
+    const name = shownName(line.product);
+    return html`<span class="flag-choice" role="group" aria-label=${name}>
+      <wt-button
+        variant="secondary"
+        data-flag-remove=${index}
+        aria-label=${`${t("table.flag_remove")} · ${name}`}
+        @click=${() => void this.#removeFlagged(store, line)}
+      >
+        ${t("table.flag_remove")}
+      </wt-button>
+      <wt-button
+        variant="secondary"
+        data-flag-keep=${index}
+        aria-label=${`${t("table.flag_keep")} · ${name}`}
+        @click=${() => void this.#keepFlagged(store, line)}
+      >
+        ${t("table.flag_keep")}
+      </wt-button>
+    </span>`;
+  }
+
+  /** The line's row goes with it, so focus goes to the order's heading. */
+  async #removeFlagged(store: WorkingOrderStore, line: OrderLine): Promise<void> {
+    store.removeLine(store.lines.indexOf(line));
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLElement>("#draft-title")?.focus();
+  }
+
+  /** The buttons go, so focus goes to the line itself. */
+  async #keepFlagged(store: WorkingOrderStore, line: OrderLine): Promise<void> {
+    this.#kept.add(line);
+    this.requestUpdate();
+    await this.updateComplete;
+    this.renderRoot
+      .querySelector<HTMLElement>(`[data-draft-select="${store.lines.indexOf(line)}"]`)
+      ?.focus();
   }
 
   /** A first-order draft: Send all and Fire all now with nothing checked, Send selected and Fire
@@ -2224,6 +2325,11 @@ export class TillTableOrderScreen extends LitElement {
     >
       <div class="preview-body" data-preview-body>
         ${
+          pending !== null && pending.detail.sent.length === 0
+            ? html`<p data-preview-nothing>${t("table.nothing_sent")}</p>`
+            : nothing
+        }
+        ${
           preview === undefined
             ? nothing
             : html`${
@@ -2251,6 +2357,11 @@ export class TillTableOrderScreen extends LitElement {
                     : nothing
               }`
         }
+        ${
+          pending === null || pending.leftOut.length === 0
+            ? nothing
+            : html`<p data-preview-left-out>${leftOutText(pending.leftOut)}</p>`
+        }
       </div>
       <div slot="footer" class="cancel-actions">
         <wt-button
@@ -2261,14 +2372,18 @@ export class TillTableOrderScreen extends LitElement {
         >
           ${t("action.back")}
         </wt-button>
-        <wt-button
-          class="preview-confirm"
-          variant="primary"
-          data-draft-confirm
-          @click=${() => this.#confirmPreview()}
-        >
-          ${t("table.preview_confirm")}
-        </wt-button>
+        ${
+          pending !== null && pending.detail.sent.length === 0
+            ? nothing
+            : html`<wt-button
+                class="preview-confirm"
+                variant="primary"
+                data-draft-confirm
+                @click=${() => this.#confirmPreview()}
+              >
+                ${t("table.preview_confirm")}
+              </wt-button>`
+        }
       </div>
     </wt-dialog>`;
   }

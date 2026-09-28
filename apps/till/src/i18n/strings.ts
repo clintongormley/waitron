@@ -401,6 +401,17 @@ export const en = {
   "table.draft_title": "Unsent order",
   "table.review": "Review ({n})",
   "table.last_added": "Last added",
+  "table.flag_remove": "Remove",
+  "table.flag_keep": "Keep",
+  "table.flag_kept": "Stays in the order until it can be sent",
+  // `{names}` and `{n}` are substituted at the call site.
+  "table.left_out_one":
+    "1 line stays in the order, not sent because it is not available now: {names}.",
+  "table.left_out":
+    "{n} lines stay in the order, not sent because they are not available now: {names}.",
+  "table.left_out_unnamed":
+    "{n} lines stay in the order, not sent because they are not available now.",
+  "table.nothing_sent": "Nothing is sent.",
   // `{name}` is substituted at the call site; `t()` does not interpolate.
   "table.others_draft": "{name} has an unsent order",
   "table.others_draft_unnamed": "An unsent order",
@@ -518,6 +529,7 @@ export const en = {
   "basket.blocked.unavailable": "Sold out",
   "basket.blocked.extra": "An extra or choice has changed",
   "basket.blocked.unit": "The quantity no longer fits its unit",
+  "basket.blocked.server": "Not available now",
   // Server status
   "server.on": "On:",
   "server.unknown": "checking",
@@ -891,6 +903,16 @@ export const es: Record<StringKey, string> = {
   "table.draft_title": "Pedido sin enviar",
   "table.review": "Revisar ({n})",
   "table.last_added": "Lo último añadido",
+  "table.flag_remove": "Quitar",
+  "table.flag_keep": "Dejar",
+  "table.flag_kept": "Se queda en el pedido hasta que se pueda enviar",
+  "table.left_out_one":
+    "1 línea se queda en el pedido sin enviar porque no está disponible ahora: {names}.",
+  "table.left_out":
+    "{n} líneas se quedan en el pedido sin enviar porque no están disponibles ahora: {names}.",
+  "table.left_out_unnamed":
+    "{n} líneas se quedan en el pedido sin enviar porque no están disponibles ahora.",
+  "table.nothing_sent": "No se envía nada.",
   "table.others_draft": "{name} tiene un pedido sin enviar",
   "table.others_draft_unnamed": "Un pedido sin enviar",
   "table.draft_taken_by": "Tomado por {name}",
@@ -998,6 +1020,7 @@ export const es: Record<StringKey, string> = {
   "basket.blocked.unavailable": "Agotado",
   "basket.blocked.extra": "Ha cambiado un extra u opción",
   "basket.blocked.unit": "La cantidad ya no encaja con su unidad",
+  "basket.blocked.server": "No disponible ahora",
   "server.on": "Activo:",
   "server.unknown": "comprobando",
   "server.unreachable": "sin conexión",

@@ -311,7 +311,33 @@ describe("till-table-order-screen: Take over draft", () => {
     await closed;
     await el.updateComplete;
 
-    expect(el.shadowRoot!.activeElement).not.toBe(el.shadowRoot!.querySelector("#draft-title"));
+    expect(el.shadowRoot!.activeElement).toBe(takeOverButton(panels(el)[0]!));
+  });
+
+  it("stays open through three Escapes while the take-over is out, and moves focus when it answers", async () => {
+    const { el } = await wide({ otherDrafts: [alexs()] });
+    takeOverButton(panels(el)[0]!).click();
+    await el.updateComplete;
+    confirmButton(el).click();
+    await el.updateComplete;
+    const cancel = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      "[data-take-over-cancel]",
+    )!;
+
+    for (let press = 0; press < 3; press += 1) {
+      await userEvent.keyboard("{Escape}");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await el.updateComplete;
+      expect(dialog(el).open).toBe(true);
+    }
+    expect(cancel.disabled).toBe(true);
+
+    const closed = closing(el);
+    el.otherDrafts = [];
+    el.takeOversAnswered += 1;
+    await closed;
+    await el.updateComplete;
+    expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("#draft-title"));
   });
 
   it("names the last-added bar's steps for a dish no longer offered", async () => {
