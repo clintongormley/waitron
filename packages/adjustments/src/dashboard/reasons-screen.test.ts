@@ -191,9 +191,11 @@ function noteSwitch(el: AdjustmentReasonsScreen): HTMLInputElement {
   return field(el, "noteRequired").shadowRoot!.querySelector("input")!;
 }
 
-/** The message shown beside a field: a `wt-input`'s own error, or the line under a group. */
+/** The message shown beside a field: a text or price field's own error, or the line under a group. */
 function besideField(el: AdjustmentReasonsScreen, key: string): string {
-  const input = el.shadowRoot!.querySelector<Named>(`wt-input[name="${key}"]`);
+  const input = el.shadowRoot!.querySelector<Named>(
+    `wt-input[name="${key}"], wt-price-input[name="${key}"]`,
+  );
   if (input) return input.error ?? "";
   return el.shadowRoot!.querySelector(`[data-field-error="${key}"]`)?.textContent?.trim() ?? "";
 }
@@ -363,7 +365,9 @@ describe("the editor", () => {
     expect((field(el, "applyRole") as unknown as HTMLSelectElement).value).toBe("supervisor");
     expect((field(el, "approverRole") as unknown as HTMLSelectElement).value).toBe("manager");
     expect(noteSwitch(el).checked).toBe(true);
-    for (const input of modal(el)!.querySelectorAll("wt-input, select, input, wt-switch")) {
+    for (const input of modal(el)!.querySelectorAll(
+      "wt-input, wt-price-input, select, input, wt-switch",
+    )) {
       expect(input.getAttribute("name"), input.outerHTML).toMatch(/^[a-zA-Z]+(-[a-z]+)?$/);
     }
   });
@@ -663,6 +667,41 @@ describe("the editor", () => {
       maxAmount: "30.00",
     });
   });
+
+  it.each([
+    ["en", "Most taken off a bill", "30.00", "before"],
+    ["es", "Máximo por cuenta", "30,00", "after"],
+  ])(
+    "shows the %s limit on a bill as a money field, the euro sign in it and not in its label",
+    async (locale, label, value, side) => {
+      setLocale(locale);
+      const el = await mount(fakeApi());
+      await press(el, "edit-c");
+      const money = field(el, "maxAmount") as Named & {
+        label: string;
+        updateComplete: Promise<unknown>;
+      };
+      await money.updateComplete;
+      expect(money.tagName).toBe("WT-PRICE-INPUT");
+      expect(money.label).toBe(label);
+      expect(money.value).toBe(value);
+      const sign = money.shadowRoot!.querySelector("[part=currency]");
+      expect(sign?.textContent).toBe("€");
+      expect(money.shadowRoot!.querySelector("button")).toBeNull();
+      const amount = money.shadowRoot!.querySelector("[part=amount]")!;
+      const box = amount.getBoundingClientRect();
+      const signLeft = sign!.getBoundingClientRect().left;
+      expect(signLeft < box.left + box.width / 2 ? "before" : "after").toBe(side);
+      const described = (amount.getAttribute("aria-describedby") ?? "")
+        .split(" ")
+        .map((id) => money.shadowRoot!.getElementById(id)?.textContent?.trim());
+      expect(described).toContain(
+        locale === "en"
+          ? "Everything this reason takes off one bill, added together. Leave it empty for no limit."
+          : "Todo lo que este motivo descuenta de una cuenta, sumado. Déjalo vacío para no poner límite.",
+      );
+    },
+  );
 
   it("closes on Escape without saving", async () => {
     const api = fakeApi();

@@ -42,7 +42,7 @@ const en = {
   "adjustments.field.max_percent": "Most taken off an item (%)",
   "adjustments.field.max_percent_hint":
     "Counts percentage discounts only. Leave it empty for no limit.",
-  "adjustments.field.max_amount": "Most taken off a bill (€)",
+  "adjustments.field.max_amount": "Most taken off a bill",
   "adjustments.field.max_amount_hint":
     "Everything this reason takes off one bill, added together. Leave it empty for no limit.",
   "adjustments.field.apply_role": "Lowest role that applies it without approval",
@@ -103,7 +103,7 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.field.max_percent": "Máximo por artículo (%)",
   "adjustments.field.max_percent_hint":
     "Solo cuenta los descuentos en porcentaje. Déjalo vacío para no poner límite.",
-  "adjustments.field.max_amount": "Máximo por cuenta (€)",
+  "adjustments.field.max_amount": "Máximo por cuenta",
   "adjustments.field.max_amount_hint":
     "Todo lo que este motivo descuenta de una cuenta, sumado. Déjalo vacío para no poner límite.",
   "adjustments.field.apply_role": "Rol mínimo que lo aplica sin aprobación",
