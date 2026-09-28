@@ -646,8 +646,7 @@ declare module "@waitron/shared" {
      * of range, or an unknown shape. `field` carries the field NAME only, never the value.
      */
     "placement.invalid": { field: string };
-    // `management.request_invalid` is declared in `@waitron/server-kit` (`src/errors.ts`) with the
-    // request screens that throw it, and reaches this program through their package barrel.
+    // `management.request_invalid` is declared in `@waitron/shared` (`src/errors.ts`).
     /**
      * A request to a device-authenticated route carried no usable device identity — the
      * `waitron_device` cookie was absent, malformed, named no device, carried a wrong token, or

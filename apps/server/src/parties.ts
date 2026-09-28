@@ -125,9 +125,10 @@ export async function partyMainBill(
 }
 
 /**
- * Name the party's main bill. This is the only writer of `parties.main_bill_id` in apps/server; the
- * database refuses no value there, it only clears one (`0038_main_bill_release.sql`). While tables still point at bills, each table of
- * the party that points at no open bill is pointed at this one, so the old tab paths and the till
+ * Name the party's main bill. This is the only writer of `parties.main_bill_id` in apps/server. The
+ * database checks only that it names an existing order; nothing checks that the bill is open or the
+ * party's, and the triggers in `0038_main_bill_release.sql` only clear it. While tables still point
+ * at bills, each table of the party that points at no open bill is pointed at this one, so the old tab paths and the till
  * read the bill the party orders on; a table showing another open bill of the party keeps it.
  */
 export async function setMainBill(

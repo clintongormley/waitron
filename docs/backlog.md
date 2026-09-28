@@ -2889,8 +2889,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   - **Task 2 built (feat/party-main-bill, PR to come): a party names its main bill, and new
     orders go to it.** What changes for a person using the till:
     - A party's next order after its main bill is paid, presented or abandoned starts a new main
-      bill. Before, after payment or abandonment. No product path presents a party's bill until
-      Task 7, so today only payment reaches it.
+      bill. Before, after payment or abandonment. No till screen presents a party's bill until
+      Task 7, so the difference cannot be met from the till today.
     - A round can be sent to another open bill of the same party, such as a split check: the
       groups route and the draft-submit route take an optional `billId`. The till sends none yet;
       Task 10 offers it. With `billId` a held round can now be sent straight to a party's split
