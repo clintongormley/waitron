@@ -2868,6 +2868,12 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `submission.id_reused`, because the stored fingerprint was taken over argument names that
     included `visitId` (found by #816's Codex review). Only a dev venue, on a retry that straddles
     the upgrade, can meet it.
+  - **Task 6 built, in review** (`feat/party-collect-by-invoice`): collecting a presented bill
+    settles the sale already recorded for it, and issues one only when there is none; it no longer
+    reads the zone's service mode (`collectOrder`, `apps/server/src/till-sale.ts`). A bill placed in
+    an invoice-first zone and moved to a pay-first zone is settled with its one invoice, and the
+    reverse issues one; before the change the first was refused by `sales_working_order_id_key` and
+    the second threw "has no sale" (`apps/server/src/collect-by-invoice.test.ts`).
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
   joined to it, but merging another table's bill into its paid bill, or moving items to or from
