@@ -399,8 +399,14 @@ operator switched to this station; the list stays on screen beneath it and the n
 clears it. A late failure of an older read after a newer answer is on screen raises nothing, and
 neither does an enrolled display's 15-second refresh answered `device.unauthorized`, which
 re-boots the app. A 401 answering the reload after a bump does show the banner, and re-boots
-nothing until the next refresh, as before. Still open: when the operator screen's list of
-stations cannot be read it shows "No stations", with no banner.
+nothing until the next refresh, as before. **Done since (2026-09-28, lane A's A79):** the banner
+reads "No updates since 10:20, 5 minutes ago" ("Sin actualizaciones desde las 10:20, hace 5
+minutos"), with "less than a minute ago" and "1 minute ago" for the short cases, and the count
+moves on each minute while the banner shows (`apps/till/src/widgets/stale-since.ts`); and when the
+operator screen's list of stations cannot be read on open, the banner shows beside "No stations",
+dated from when the screen opened. Still open: the list of stations is read only when the screen
+opens, so after that failure the banner stays, counting, until the screen is opened again; long
+outages are counted in minutes, never hours.
 **Menus M7b3 landed (#713, 2026-09-26): an unpaid split bill goes back on its tab.** When the
 waiter leaves a separate bill made with "Split by item" without paying it, the till that made it
 merges it back into the table's tab (`mergeTabs`; the kitchen is told nothing). Every other case
