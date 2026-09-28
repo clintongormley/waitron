@@ -7,7 +7,7 @@ import { BAND_RANK, type TimingBand, classifyBand } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
-import { snapshotDescriptionFor, trimQuantity } from "./dish-format.js";
+import { dishLine, snapshotDescriptionFor } from "./dish-format.js";
 import type {
   KitchenNotice,
   KitchenNoticeKind,
@@ -77,23 +77,6 @@ export interface FireKitchenGroupDetail {
 /** Courseless lines sort first: the server fires them at once unless the send asks to hold them. */
 function courseOrder(course: StationQueueCourse | null): number {
   return course === null ? Number.NEGATIVE_INFINITY : course.displayOrder;
-}
-
-/** One format for a queue row and a notice, so a cook reads the same line the same way in both.
- *  A line counted in Each shows no unit: "2× Croqueta". */
-function dishLine(
-  line: {
-    quantity: string;
-    unitName?: Record<string, string> | null;
-    soldInEach?: boolean;
-  },
-  name: string,
-): string {
-  const unit =
-    line.unitName == null || line.soldInEach === true
-      ? ""
-      : ` ${snapshotDescriptionFor(line.unitName, "")}`;
-  return `${trimQuantity(line.quantity)}${unit}× ${name}`;
 }
 
 /**

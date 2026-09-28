@@ -788,9 +788,9 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       ...hold!.lines.slice(0, 4),
       TIME,
       "GROUP 1",
-      `2.000 ea x ${DISHES.burger.kitchen}`,
+      `2.000 x ${DISHES.burger.kitchen}`,
     ]);
-    expect(hold!.lines.slice(5)).toEqual(["GROUP 1", `2.000 ea x ${DISHES.burger.kitchen}`]);
+    expect(hold!.lines.slice(5)).toEqual(["GROUP 1", `2.000 x ${DISHES.burger.kitchen}`]);
     expect(await problemsOf(mesa4.visitId)).toHaveLength(1);
 
     await setJob(reprint!.id, { status: "done" });
@@ -823,12 +823,12 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
         "*** REPRINT ***",
         ...head("Cocina"),
         "GROUP 1",
-        `1.000 ea x ${DISHES.burger.kitchen}`,
+        `1.000 x ${DISHES.burger.kitchen}`,
         "*** REPRINT ***",
         "*** HOLD ***",
         ...head("Cocina"),
         "GROUP 2",
-        `1.000 ea x ${DISHES.fish.kitchen}`,
+        `1.000 x ${DISHES.fish.kitchen}`,
       ],
     ]);
     const barra = (await jobsAt(v.barraPrinter)).slice(1);
@@ -838,7 +838,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
         "*** HOLD ***",
         ...head("Barra"),
         "GROUP 2",
-        `1.000 ea x ${DISHES.beer.kitchen}`,
+        `1.000 x ${DISHES.beer.kitchen}`,
       ],
     ]);
     expect(
@@ -877,13 +877,13 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
         ...head,
         "GROUP 1",
         "Cocina",
-        `1.000 ea x ${DISHES.burger.kitchen}`,
+        `1.000 x ${DISHES.burger.kitchen}`,
         "*** REPRINT ***",
         "*** HOLD ***",
         ...head,
         "GROUP 2",
         "Barra",
-        `1.000 ea x ${DISHES.beer.kitchen}`,
+        `1.000 x ${DISHES.beer.kitchen}`,
       ],
     ]);
     const added = (await links()).slice(before);
@@ -906,7 +906,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       { release: "hold", lines: [line(v, "burger"), line(v, "beer")] },
     ]);
     const [hold] = await jobsAt(pase);
-    expect(hold!.lines).toContain(`1.000 ea x ${DISHES.beer.kitchen}`);
+    expect(hold!.lines).toContain(`1.000 x ${DISHES.beer.kitchen}`);
     await setJob(hold!.id, exhausted);
     const [burger] = await db
       .select({ id: workingOrderLines.id })
@@ -943,13 +943,13 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
         ...head,
         "GROUP 2",
         "Cocina",
-        `1.000 ea x ${DISHES.burger.kitchen}`,
+        `1.000 x ${DISHES.burger.kitchen}`,
         "*** REPRINT ***",
         "*** HOLD ***",
         ...head,
         "GROUP 1",
         "Barra",
-        `1.000 ea x ${DISHES.beer.kitchen}`,
+        `1.000 x ${DISHES.beer.kitchen}`,
       ],
     ]);
     const added = (await links()).slice(before);
@@ -972,7 +972,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       { release: "hold", lines: [line(v, "burger"), line(v, "beer")] },
     ]);
     const [hold] = await jobsAt(pase);
-    expect(hold!.lines).toContain(`1.000 ea x ${DISHES.burger.kitchen}`);
+    expect(hold!.lines).toContain(`1.000 x ${DISHES.burger.kitchen}`);
     await setJob(hold!.id, exhausted);
     const [burger] = await db
       .select({ id: workingOrderLines.id })
@@ -1009,13 +1009,13 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
         ...head,
         "GROUP 2",
         "Cocina",
-        `1.000 ea x ${DISHES.burger.kitchen}`,
+        `1.000 x ${DISHES.burger.kitchen}`,
         "*** REPRINT ***",
         "*** HOLD ***",
         ...head,
         "GROUP 1",
         "Barra",
-        `1.000 ea x ${DISHES.beer.kitchen}`,
+        `1.000 x ${DISHES.beer.kitchen}`,
       ],
     ]);
     const added = (await links()).slice(before);
@@ -1091,7 +1091,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       TIME,
       ...fire!.lines.slice(4),
     ]);
-    expect(fire!.lines.at(-1)).toBe(`1.000 ea x ${DISHES.burger.kitchen}`);
+    expect(fire!.lines.at(-1)).toBe(`1.000 x ${DISHES.burger.kitchen}`);
   });
 
   it("reprints a fired group as fired work, not under HOLD, and that clears its failed HOLD ticket", async () => {
@@ -1144,7 +1144,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
         expect.any(String),
         TIME,
         "GROUP 1",
-        `1.000 ea x ${DISHES.burger.kitchen}`,
+        `1.000 x ${DISHES.burger.kitchen}`,
       ],
     ]);
   });
@@ -1180,7 +1180,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       expect.any(String),
       TIME,
       "GROUP 1",
-      `1.000 ea x ${DISHES.fish.kitchen}`,
+      `1.000 x ${DISHES.fish.kitchen}`,
       "*** REPRINT ***",
       "*** HOLD ***",
       "Cocina",
@@ -1188,7 +1188,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       expect.any(String),
       TIME,
       "GROUP 2",
-      `1.000 ea x ${DISHES.burger.kitchen}`,
+      `1.000 x ${DISHES.burger.kitchen}`,
     ]);
     await setJob(reprint.id, { status: "done" });
     expect(await problemsOf(mesa5.visitId)).toEqual([]);
@@ -1363,8 +1363,8 @@ describe("a printing problem a Reprint would print nothing for", () => {
     const [paseTicket] = await jobsAt(pase);
     expect(paseTicket!.id).toBe(paseHold);
     expect(paseTicket!.lines[0]).toBe("*** HOLD ***");
-    expect(paseTicket!.lines).toContain(`1.000 ea x ${DISHES.burger.kitchen}`);
-    expect(paseTicket!.lines).toContain(`1.000 ea x ${DISHES.beer.kitchen}`);
+    expect(paseTicket!.lines).toContain(`1.000 x ${DISHES.burger.kitchen}`);
+    expect(paseTicket!.lines).toContain(`1.000 x ${DISHES.beer.kitchen}`);
     for (const row of rows) {
       await setJob(row.printJobId, row.printJobId === paseHold ? exhausted : { status: "done" });
     }

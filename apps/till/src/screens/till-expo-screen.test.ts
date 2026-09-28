@@ -362,6 +362,46 @@ describe("till-expo-screen", () => {
     expect(el.shadowRoot!.querySelector(".item-name")!.textContent).toBe("0.375 kg× Pan");
   });
 
+  it("leaves the unit out for a dish sold in Each, and keeps it for every other unit", async () => {
+    const base = threeCourseOrder.courses[0]!.items[0]!;
+    const items: ExpoItem[] = [
+      {
+        ...base,
+        id: "ti-each",
+        name: "Croqueta",
+        qty: "2.000",
+        unitName: { "es-ES": "ud" },
+        unitPrecision: 0,
+        soldInEach: true,
+      },
+      {
+        ...base,
+        id: "ti-kg",
+        name: "Pulpo",
+        qty: "0.500",
+        unitName: { "es-ES": "kg" },
+        unitPrecision: 3,
+        soldInEach: false,
+      },
+      {
+        ...base,
+        id: "ti-g",
+        name: "Almendras",
+        qty: "200.000",
+        unitName: { "es-ES": "g" },
+        unitPrecision: 0,
+        soldInEach: false,
+      },
+    ];
+    const order: ExpoOrder = {
+      ...threeCourseOrder,
+      courses: [{ ...threeCourseOrder.courses[0]!, items }],
+    };
+    const el = await mount({ api: stubApi([order]) });
+    const names = [...el.shadowRoot!.querySelectorAll(".item-name")].map((n) => n.textContent);
+    expect(names).toEqual(["2× Croqueta", "0.5 kg× Pulpo", "200 g× Almendras"]);
+  });
+
   describe("ordering modifiers (Task 14): selected options as indented sub-text under the item", () => {
     const orderWithModifiers: ExpoOrder = {
       orderId: "wo-9",

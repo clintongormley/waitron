@@ -12,6 +12,24 @@ export function trimQuantity(quantity: string): string {
   return quantity.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
 }
 
+/** One format for a dish on every kitchen surface — a station's queue row and notice, and the expo
+ *  board — so a cook reads the same line the same way on each. A line counted in Each shows no
+ *  unit: "2× Croqueta". */
+export function dishLine(
+  line: {
+    quantity: string;
+    unitName?: Record<string, string> | null;
+    soldInEach?: boolean;
+  },
+  name: string,
+): string {
+  const unit =
+    line.unitName == null || line.soldInEach === true
+      ? ""
+      : ` ${snapshotDescriptionFor(line.unitName, "")}`;
+  return `${trimQuantity(line.quantity)}${unit}× ${name}`;
+}
+
 /** Resolve live catalogue text against enabled languages and the configured content default. */
 export function descriptionFor(
   descriptions: Record<string, string>,

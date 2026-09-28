@@ -185,6 +185,7 @@ async function buildTicketItems(
     quantity: thousandthsToDecimal(row.quantity),
   }));
   const lineById = new Map(lineRows.map((row) => [row.id, row]));
+  const soldInEachUnit = await VENUE_SERVICE.readLinesSoldInEach(tx, lineIds);
 
   // Ordered by `line_no` so the picks print in the order they were offered.
   const storedChildRows = await tx
@@ -225,7 +226,10 @@ async function buildTicketItems(
       group: row.group,
       item: {
         qty: row.quantity,
-        unit: row.unitName == null ? undefined : ticketName(row.unitName, cfg.locale),
+        unit:
+          row.unitName == null || soldInEachUnit.has(row.id)
+            ? undefined
+            : ticketName(row.unitName, cfg.locale),
         name: kitchenPresentationName(row),
         note: row.note ?? undefined,
         ...(soldInEach(row.unitName) ? {} : { measured: true }),

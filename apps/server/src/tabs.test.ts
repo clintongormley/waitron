@@ -2698,6 +2698,23 @@ describe("the kitchen screen is told which lines were sold in Each, by the unit'
     ]);
   });
 
+  it("marks each expo board item the same way", async () => {
+    const { cfg } = await fiveDishesOnATab();
+
+    const orders = await asApp(cfg, (tx) => listExpoQueue(tx, cfg));
+
+    const items = orders
+      .flatMap((order) => [...order.courses, ...order.groups])
+      .flatMap((section) => section.items);
+    expect(items.map((item) => [item.name, item.soldInEach])).toEqual([
+      ["Croqueta", true],
+      ["Gilda", true],
+      ["Pulpo", false],
+      ["Almendras", false],
+      ["Pan", false],
+    ]);
+  });
+
   it("marks each void notice the same way, after the line it describes is gone", async () => {
     const { cfg, tabId, stationId } = await fiveDishesOnATab();
 

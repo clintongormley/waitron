@@ -5287,6 +5287,8 @@ export interface ExpoItem {
   qty: string;
   unitName: Record<string, string> | null;
   unitPrecision: number | null;
+  /** Counted in Each, whose unit the expo board leaves out. */
+  soldInEach: boolean;
   stationName: string;
   state: TicketState;
   firedAt: string | null;
@@ -5429,6 +5431,10 @@ export async function listExpoQueue(
     tx,
     rows.map((row) => row.lineId),
   );
+  const soldInEach = await VENUE_SERVICE.readLinesSoldInEach(
+    tx,
+    rows.map((row) => row.lineId),
+  );
 
   const nowMs = Date.now();
   // Maps keep insertion order, so the SQL order survives the grouping.
@@ -5501,6 +5507,7 @@ export async function listExpoQueue(
       qty: thousandthsToDecimal(row.quantity),
       unitName: row.unitName,
       unitPrecision: row.unitPrecision,
+      soldInEach: soldInEach.has(row.lineId),
       stationName: row.stationName,
       state: row.state,
       firedAt: row.firedAt,
