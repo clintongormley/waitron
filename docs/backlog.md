@@ -293,9 +293,7 @@ inputs.
 the owner's answers to #670's FYI):** each product's Active variants are rows under it, a product
 sold only as its variants shows price ranges, #541's struck-out "Price on this menu" column is kept
 but hidden by default, and `wt-data-table` gains a column chooser remembered per browser in
-`localStorage` under `<viewKey>:columns`. Left,
-none blocking: the stored key uses a colon (`waitron.menus.prices:columns`) where every other stored
-key uses dots or dashes — cheap to change until a venue is live; a variant row is announced by its
+`localStorage` under `<viewKey>:columns`. Left, none blocking: a variant row is announced by its
 name alone ("Glass"), not with its product's, relying on the tree's level; and, from reading only, a
 Columns panel wider than a very narrow screen would not shrink to fit, and is not re-placed if the
 window is resized while it is open.
@@ -3437,24 +3435,38 @@ ongoing overhaul listed at the top of Track A.
   (`apps/dashboard/src/widgets/purchase-form.ts`), a `rem` the design-token rule forbids; it
   predates this change.
 
-- **Every dashboard list lets each person choose its columns (C45, owner request 2026-09-28).** The
-  main list on the products, staff, categories, labels, units, modifiers, sections, menus, printers
-  (agents, printers and print queue), card readers, alerts (open and handled), adjustment reasons
-  and venue operations (departments, hours, zones, zone menus, routes) screens offers a Columns
-  chooser, as the menu Prices tab already did. The column naming the row and the column holding the
-  row's buttons are never offered; every other column starts shown, so each screen looks as it did
-  until someone hides a column. Each table has its own `viewKey`; the ones that had none (alerts,
-  print queue, card readers, staff, reasons, venue operations) now also remember their sort and
-  filter in the tab. `docs/developers/design-system.md` states the rule. Left open, not done: (1)
-  tables inside a dialog or picker (a unit's products, a category's members and its add picker, the
-  delete dialogs, a modifier list's usage, discovered printers) offer no chooser, by choice; (2) the
-  servers list has only its name and its buttons, so nothing to offer; (3)
+- **Every dashboard list shown with `wt-data-table` lets each person choose its columns (C45, owner
+  request 2026-09-28).** The main list on the products, staff, categories, labels, units, modifiers,
+  sections, menus, printers (agents, printers and print queue), card readers, alerts (open and
+  handled), adjustment reasons and venue operations (departments, hours, zones, zone menus, routes)
+  screens offers a Columns chooser, as the menu Prices tab already did. The column naming the row
+  and the column holding the row's buttons are never offered; every other column starts shown, so
+  each screen looks as it did until someone hides a column. Each table has its own `viewKey`; the
+  ones that had none (alerts, print queue, card readers, staff, reasons, venue operations) now also
+  remember their sort and filter in the tab. `docs/developers/design-system.md` states the rule.
+  Left open, not done: (1) tables inside a dialog or picker (a unit's products, a category's members
+  and its add picker, the delete dialogs, a modifier list's usage, discovered printers) offer no
+  chooser, by choice; (2) the servers list (`apps/dashboard/src/screens/servers-screen.ts`) offers
+  no chooser: its one column beside the buttons holds the address, the machine id, the role and, on
+  its own row, "this server" together, so there is nothing to offer unless that cell is split into
+  separate columns — whether to split it is the owner's call; (3)
   `apps/dashboard/src/widgets/category-manager.ts` renders a table that no screen mounts (only its
   own tests do), and was left alone; (4) nothing checks that a NEW dashboard table offers the
   chooser; (5) where a screen keeps its search and filters outside the table (staff, card readers)
-  or the table has none (alerts, venue operations), the Columns button sits alone on a row above
-  the table rather than beside those controls — seen in real Chromium at 1280 px; moving a screen's
-  own controls into the table's toolbar would fix it.
+  or the table has none (alerts, venue operations), the Columns button sits alone on a row above the
+  table rather than beside those controls — seen in real Chromium at 1280 px; moving a screen's own
+  controls into the table's toolbar would fix it; (6) the read-only tables a few screens draw as
+  plain HTML tables rather than `wt-data-table`s have no chooser: planned against actual
+  (`apps/dashboard/src/screens/planned-actual-screen.ts`), the roster
+  (`apps/dashboard/src/screens/roster-screen.ts`), the four report tables on the sales screen
+  (`apps/dashboard/src/screens/dashboard-sales-screen.ts`), the overdue table on the overview
+  (`apps/dashboard/src/screens/dashboard-overview-screen.ts`) and the top-sellers table both of
+  those screens show (`apps/dashboard/src/widgets/top-sellers-table.ts`). The plain tables inside
+  editing forms (`variant-table.ts`, `member-list-editor.ts`, `option-list-form.ts`,
+  `extra-list-form.ts`, `product-editor.ts`) are not counted here; (7) the printers screen's view
+  keys (`printers:agents`, `printers:table`, and `printers:jobs`, which this change added to match
+  them) are the only dashboard view keys that use a colon and lack the `waitron.` prefix — cheap to
+  rename until a venue is live.
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
