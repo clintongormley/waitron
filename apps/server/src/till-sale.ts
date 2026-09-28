@@ -1463,12 +1463,11 @@ export function toPayOutcome(
 }
 
 /**
- * Collect and settle a PLACED order, in one transaction, by its service mode:
- *  - `invoice_first`: the invoice was issued at placing, so collect SETTLES it and files NO second
- *    fiscal record. A `card` tender also writes the manual-card `payments` row, so reconciliation
- *    sees it.
- *  - `ticket_then_pay`: no fiscal document exists yet, so collect files the sale from the order's
- *    stored locked lines (`fileImmediateSale`).
+ * Collect and settle a PLACED order, in one transaction, by whether a sale already names it, not by
+ * its zone's service mode:
+ *  - a sale exists: collect SETTLES it and files NO second fiscal record. A `card` tender also
+ *    writes the manual-card `payments` row, so reconciliation sees it.
+ *  - no sale: collect files one from the order's stored locked lines (`fileImmediateSale`).
  *
  * No duplicate backstop is needed: a concurrent collect's whole transaction runs after the winner
  * committed, reads the order `settled`, and replays. `sales_working_order_id_key` and
@@ -1501,22 +1500,12 @@ export async function collectOrder(
     if (req.tender.method !== "cash" && req.tender.method !== "card") {
       throw new AppError("sale.unsupported_tender", { method: req.tender.method });
     }
-    const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, req.id);
-    const orderFlow = serviceContext?.serviceMode ?? cfg.orderFlow;
+    const [sale] = await tx
+      .select({ id: sales.id, total: sales.total })
+      .from(sales)
+      .where(eq(sales.workingOrderId, req.id));
 
-    if (orderFlow === "invoice_first") {
-      const [sale] = await tx
-        .select({ id: sales.id, total: sales.total })
-        .from(sales)
-        .where(eq(sales.workingOrderId, req.id));
-      /* v8 ignore start */
-      if (sale === undefined) {
-        // `placeOrder` files the invoice-first sale in the transaction that places the order, so this
-        // is corruption.
-        throw new Error(`collectOrder: placed invoice-first order ${req.id} has no sale`);
-      }
-      /* v8 ignore stop */
-
+    if (sale !== undefined) {
       const { settledAmount } = settlementFor(req.tender, centsToDecimal(sale.total));
       const settledAt = deps.clock.now().instant;
 
