@@ -102,6 +102,18 @@ Open:
 - After a Cloud replacement (#638), installing the new tunnel and TLS certificate remains an
   operator step. Continuous complete-server recovery, planned final-write handover and production
   recovery remain open. Cloud owns route placement and fencing in its backlog.
+- **A stopped replacement's key comes back if `cloud-connection.json` is deleted and the server
+  restarts** (found reviewing the guide fix after the retroactive Codex review of #640,
+  2026-09-28). The stop record lives only in `cloud-connection.json`; on start, `resume()`
+  (`apps/server/src/cloud-replacement.ts`) re-imports a `complete` replacement from
+  `cloud-replacement.json`, and `importReplacement` (`apps/server/src/cloud-client.ts`) writes a
+  fresh connection file with no stop record. Run on `main` at `81dbda46f` with the replacement
+  suite's Cloud fake, calling the same objects in the order `boot.ts` does (not a whole-server
+  start): after Stop access and the delete, the file came back on the retired key as `pending` and
+  the next check sent `renew`; when Cloud had not yet heard the stop, the saved stop request was
+  lost too. With the file kept, the stop survived. It needs the file deleted by hand, which
+  `docs/developers/cloud-connection.md` tells the operator not to do. Next: record the stop in
+  `cloud-replacement.json` too, or have `resume()` refuse once access was stopped.
 
 The Litestream stream's sealed-state restore and activation still need integration with Cloud
 storage and owner recovery. Connected does
