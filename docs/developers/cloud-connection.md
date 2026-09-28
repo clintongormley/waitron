@@ -204,9 +204,9 @@ records the stop in `cloud-replacement.json`, unless that file cannot be read. W
 recorded, if `cloud-connection.json` is lost, the import on the next start or **Check
 reconnection** restores the connection with the stop still waiting, and the next check with
 Cloud, once a minute or **Refresh status**, sends the stop again. A stop pressed while **Check
-reconnection** is running is refused as busy; press it again once the check finishes. On a server
-that was not restored from a Cloud snapshot, the screen offers **Connect to Cloud** instead of
-**Request reconnection**. Keep the previous server out of service throughout.
+reconnection** is running may be refused as busy; if it is, press it again once the check
+finishes. On a server that was not restored from a Cloud snapshot, the screen offers **Connect to
+Cloud** instead of **Request reconnection**. Keep the previous server out of service throughout.
 
 Reconnecting registers the replacement with Cloud. Installing the new WireGuard tunnel and a
 new TLS certificate remain operator steps, and Cloud access and backups need their own checks

@@ -397,6 +397,7 @@ it("keeps a stop request already waiting, with its operation id, when the replac
   await expect(f.connection.revoke(() => client.recordStop())).rejects.toMatchObject({
     code: "cloud.unavailable",
   });
+  expect((await saved("cloud-replacement.json")).stopped).toBe(true);
   const waiting = (await saved("cloud-connection.json")).lifecycle.pending;
   expect(waiting.action).toBe("revoke");
   const { connection, replacement } = restart();
@@ -410,8 +411,9 @@ it("keeps a stop request already waiting, with its operation id, when the replac
 });
 
 it("leaves a connection Cloud has already revoked unchanged when the replacement is re-imported", async () => {
-  const { f, cloud, client, restart } = await connectedReplacement();
+  const { f, cloud, client, restart, saved } = await connectedReplacement();
   await f.connection.revoke(() => client.recordStop());
+  expect((await saved("cloud-replacement.json")).stopped).toBe(true);
   const path = join(f.stateDir, "cloud-connection.json");
   const before = await readFile(path, "utf8");
   const { connection, replacement } = restart();
