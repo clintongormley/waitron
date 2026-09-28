@@ -304,6 +304,8 @@ export const en = {
   "table.group_away": "En route",
   "table.group_added_later": "Added later",
   "table.ungrouped_title": "Not in a group",
+  "table.current_orders_unread":
+    "Current orders could not be read, so nothing can be marked served. Open the table again to retry.",
   "table.row_served": "Served",
   "table.row_preparing": "Preparing",
   "table.row_served_of": "{served} of {quantity} served",
@@ -827,6 +829,8 @@ export const es: Record<StringKey, string> = {
   "table.group_away": "En camino",
   "table.group_added_later": "Añadido después",
   "table.ungrouped_title": "Sin grupo",
+  "table.current_orders_unread":
+    "No se pudieron leer los pedidos en curso, así que no se puede marcar nada como servido. Vuelve a abrir la mesa para reintentarlo.",
   "table.row_served": "Servido",
   "table.row_preparing": "En preparación",
   "table.row_served_of": "{served} de {quantity} servidos",

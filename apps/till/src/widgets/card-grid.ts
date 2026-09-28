@@ -97,6 +97,7 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) tabLines: TabLine[] = [];
   @property({ attribute: false }) tabGroups: OrderGroup[] = [];
   @property({ attribute: false }) currentOrders: CurrentOrders | null = null;
+  @property({ type: Boolean }) currentOrdersUnread = false;
   @property({ attribute: false }) printProblems: PrintProblem[] = [];
   @property({ attribute: false }) reprintSent: string[] = [];
   @property({ attribute: false }) tabRevision = 0;
@@ -238,6 +239,7 @@ export class TillCardGrid extends LitElement {
           .lines=${this.tabLines}
           .groups=${this.tabGroups}
           .currentOrders=${this.currentOrders}
+          .currentOrdersUnread=${this.currentOrdersUnread}
           .printProblems=${this.printProblems}
           .reprintSent=${this.reprintSent}
           .revision=${this.tabRevision}

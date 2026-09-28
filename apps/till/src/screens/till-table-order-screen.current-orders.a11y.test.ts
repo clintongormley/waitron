@@ -46,6 +46,11 @@ describe.each(["light", "dark"] as const)("Current orders a11y (%s theme)", (the
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations saying Current orders could not be read", async () => {
+    const { host } = await mountDrawer({ currentOrders: null, currentOrdersUnread: true });
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations while a group command runs", async () => {
     const { host } = await mountDrawer({ groupCommandBusy: true });
     await expectNoA11yViolations(host);

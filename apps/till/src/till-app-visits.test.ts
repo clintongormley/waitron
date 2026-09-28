@@ -18,6 +18,7 @@ import { WorkingOrderStore } from "./state/working-order.js";
 import type {
   CurrentOrders,
   FloorZone,
+  GroupCommand,
   OrderGroup,
   PrintProblem,
   TabLine,
@@ -3663,6 +3664,18 @@ describe("till-app: Current orders", () => {
     expect(tabletOrderCard(el)!.currentOrders).toEqual(orders);
   });
 
+  it("tells a tablet's order card when Current orders could not be read", async () => {
+    const { el } = await mountApp({
+      ...onTablet(),
+      readCurrentOrders: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    const screen = await toFloor(el);
+    emit(screen, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+
+    expect(tabletOrderCard(el)!.currentOrdersUnread).toBe(true);
+  });
+
   it.each([
     [
       "serve-lines",
@@ -3734,6 +3747,132 @@ describe("till-app: Current orders", () => {
       submissionId: expect.any(String),
       expectedVisitRevision: 5,
     });
+  });
+
+  it("tells the screen when Current orders could not be read, and when they could", async () => {
+    const readCurrentOrders = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "server.internal" })
+      .mockResolvedValue(orders);
+    const { el } = await mountApp({ readCurrentOrders });
+    const order = await openMesa(el);
+    expect(order.currentOrdersUnread).toBe(true);
+
+    emit(order, "serve-lines", { items: [{ lineId: "line-1", quantity: "1" }] });
+    await flush(el);
+
+    expect(tableOrder(el)!.currentOrdersUnread).toBe(false);
+    expect(tableOrder(el)!.currentOrders).toEqual(orders);
+  });
+
+  it("sends the revision Current orders were read at when a reload read them and not the floor", async () => {
+    // Another device served first. The till's press is refused on its quantity, which reads the
+    // order and Current orders again but not the floor.
+    const server = { revision: 3 };
+    const markServed = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        server.revision = 5;
+        throw { code: "tab.serve_quantity_invalid" };
+      })
+      .mockImplementation(async (_visit: string, _items: unknown, command: GroupCommand) => {
+        if (command.expectedVisitRevision !== server.revision)
+          throw { code: "visit.out_of_date", visitId: "v1", revision: server.revision };
+        server.revision += 1;
+        return { revision: server.revision };
+      });
+    const { el } = await mountApp({
+      markServed,
+      readCurrentOrders: vi.fn(async () => ({ ...orders, revision: server.revision })),
+    });
+    const order = await openMesa(el);
+    const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
+    const items = [{ lineId: "line-1", quantity: "1" }];
+
+    emit(order, "serve-lines", { items });
+    await flush(el);
+    expect(banner(el)!.textContent).toContain(codeMessage("tab.serve_quantity_invalid"));
+    expect(api.getTablesState).toHaveBeenCalledTimes(floorReads);
+
+    emit(tableOrder(el)!, "serve-lines", { items });
+    await flush(el);
+
+    expect(markServed).toHaveBeenLastCalledWith("v1", items, {
+      submissionId: expect.any(String),
+      expectedVisitRevision: 5,
+    });
+    expect(banner(el)).toBeNull();
+  });
+
+  it("moves a held row on another open bill of the party from Current orders", async () => {
+    const heldOnCheck: CurrentOrders = {
+      revision: 3,
+      reminder: null,
+      groups: [
+        {
+          id: "g1",
+          position: 1,
+          state: "held",
+          firedAt: null,
+          remindAt: null,
+          addedLater: false,
+          rows: [
+            {
+              lineId: "line-9",
+              workingOrderId: "wo-check",
+              lineNo: 1,
+              name: "Pulpo",
+              quantity: "1.000",
+              unitPrecision: 0,
+              servedQuantity: "0.000",
+              servedAt: null,
+              released: false,
+              kitchen: null,
+              note: null,
+              extras: [],
+            },
+          ],
+        },
+      ],
+      ungrouped: [],
+    };
+    const moveLinesToGroup = vi.fn().mockResolvedValue({ revision: 4 });
+    const { el } = await mountApp({
+      readCurrentOrders: vi.fn().mockResolvedValue(heldOnCheck),
+      listGroups: vi.fn().mockResolvedValue({
+        revision: 3,
+        groups: [
+          {
+            id: "g1",
+            position: 1,
+            state: "held",
+            firedAt: null,
+            remindAt: null,
+            lineIds: ["line-9"],
+            summary: "1 × Pulpo",
+          },
+        ],
+      }),
+      moveLinesToGroup,
+    });
+    const order = await openMesa(el);
+    const reads = vi.mocked(api.readCurrentOrders).mock.calls.length;
+    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await flush(el);
+
+    order.shadowRoot!.querySelector<HTMLElement>('[data-move-line="line-9"]')!.click();
+    await flush(el);
+    order.shadowRoot!.querySelector<HTMLElement>('[data-move-target="new"]')!.click();
+    await flush(el);
+
+    expect(moveLinesToGroup).toHaveBeenCalledExactlyOnceWith(
+      "v1",
+      [{ lineId: "line-9", quantity: "1.000" }],
+      "new",
+      { submissionId: expect.any(String), expectedVisitRevision: 3 },
+    );
+    expect(api.readCurrentOrders).toHaveBeenCalledTimes(reads + 1);
+    expect(banner(el)).toBeNull();
   });
 
   it("says a refused serve in its own words and reads Current orders again", async () => {

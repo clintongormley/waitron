@@ -884,6 +884,8 @@ export class TillApp extends LitElement {
   /** {@link orderParty}'s Current orders, read with {@link tabGroups}; null with no party, or when
    * the read failed. */
   @state() private currentOrders: CurrentOrders | null = null;
+  /** The last read of {@link currentOrders} failed. */
+  @state() private currentOrdersUnread = false;
   /** The bills whose kitchen tickets Reprint sent again since the table was opened. The server
    * reports a problem until the reprint prints, so the next opening of the table is the read that
    * shows a problem still there. */
@@ -2490,6 +2492,7 @@ export class TillApp extends LitElement {
       this.tabGroups = [];
       this.printProblems = [];
       this.currentOrders = null;
+      this.currentOrdersUnread = false;
       this.#groupsUnread = false;
       this.#groupsReadFor = partyId;
       return;
@@ -2516,6 +2519,11 @@ export class TillApp extends LitElement {
     this.#groupsReadFor = partyId;
     this.printProblems = partyProblems;
     this.currentOrders = partyOrders;
+    this.currentOrdersUnread = partyId !== null && partyOrders === null;
+    // A reload that read Current orders but not the floor must not leave the next command on the
+    // older revision the floor gave.
+    if (partyId !== null && partyOrders !== null)
+      this.#noteVisitRevision(partyId, partyOrders.revision);
   }
 
   /** A failed read answers null: the screen then offers nothing to mark served. */
@@ -3516,6 +3524,7 @@ export class TillApp extends LitElement {
     this.tabGroups = [];
     this.printProblems = [];
     this.currentOrders = null;
+    this.currentOrdersUnread = false;
     this.reprintSent = [];
     this.#groupsUnread = false;
     this.visitBills = [];
@@ -3915,6 +3924,7 @@ export class TillApp extends LitElement {
       .tabLines=${this.tabLines}
       .tabGroups=${this.tabGroups}
       .currentOrders=${this.currentOrders}
+      .currentOrdersUnread=${this.currentOrdersUnread}
       .printProblems=${this.printProblems}
       .reprintSent=${this.reprintSent}
       .tabRevision=${this.tabRevision}
@@ -3948,6 +3958,7 @@ export class TillApp extends LitElement {
           .lines=${this.tabLines}
           .groups=${this.tabGroups}
           .currentOrders=${this.currentOrders}
+          .currentOrdersUnread=${this.currentOrdersUnread}
           .printProblems=${this.printProblems}
           .reprintSent=${this.reprintSent}
           .revision=${this.tabRevision}

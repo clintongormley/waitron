@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
-import type { TabLine } from "../api/client.js";
+import type { TabLine, VisitBill } from "../api/client.js";
 import { mount } from "./till-table-order-screen.test-helpers.js";
 import {
   croquetas,
@@ -21,6 +21,18 @@ import {
 } from "./till-table-order-screen.current-orders.test-helpers.js";
 
 afterEach(cleanupWidgets);
+
+function bill(workingOrderId: string, status: VisitBill["status"]): VisitBill {
+  return {
+    workingOrderId,
+    visitId: "v1",
+    label: null,
+    status,
+    total: "10.00",
+    outstanding: status === "open" ? "10.00" : "0.00",
+    receiptAvailable: status === "settled",
+  };
+}
 
 async function mountCurrent(over: Partial<TillTableOrderScreen> = {}) {
   const mounted = await mount({ groups, currentOrders: current(), now, ...over });
@@ -271,7 +283,7 @@ describe("Current orders in the Tab drawer", () => {
     expect(rowOf(el, "l-fish").querySelector("[data-serve-row]")).toBeNull();
   });
 
-  it("moves a held row on any bill of the party, and splits one sold by the unit with no extras", async () => {
+  it("moves a held row on any open bill of the party, and splits one sold by the unit with no extras", async () => {
     const steaks = row("l-steak", "Steak", "2.000", {
       workingOrderId: "wo-check",
       released: false,
@@ -279,6 +291,7 @@ describe("Current orders in the Tab drawer", () => {
     });
     const { el } = await mountCurrent({
       currentOrders: current({ groups: [currentGroup("g3", 3, "held", [steaks, flan])] }),
+      bills: [bill("wo-4", "open"), bill("wo-check", "open")],
     });
     const moves = capture(el, "move-group-line");
     const splits = capture(el, "split-group-line");
@@ -296,6 +309,45 @@ describe("Current orders in the Tab drawer", () => {
     expect(moves.map((event) => event.detail)).toEqual([
       { lineId: "l-steak", quantity: "2.000", target: { groupId: "g4" } },
     ]);
+  });
+
+  it("offers Move and Split only on a held row whose bill is open, as the server moves nothing off a paid bill", async () => {
+    const held = { released: false, kitchen: null };
+    const onCheck = row("l-check", "Steak", "2.000", { ...held, workingOrderId: "wo-check" });
+    const onPaid = row("l-paid", "Steak", "2.000", { ...held, workingOrderId: "wo-paid" });
+    const unlisted = row("l-unlisted", "Steak", "2.000", { ...held, workingOrderId: "wo-gone" });
+    const onShown = row("l-shown", "Steak", "2.000", { ...held, workingOrderId: "wo-4" });
+    const { el } = await mountCurrent({
+      currentOrders: current({
+        groups: [currentGroup("g3", 3, "held", [onCheck, onPaid, unlisted, onShown])],
+      }),
+      bills: [bill("wo-check", "open"), bill("wo-paid", "settled")],
+    });
+    const offered = (selector: string, attribute: string) =>
+      all(el, selector).map((button) => button.getAttribute(attribute));
+    // The bill on screen is open even when the party's bills have not been read.
+    expect(offered("[data-move-line]", "data-move-line")).toEqual(["l-check", "l-shown"]);
+    expect(offered("[data-split-group-line]", "data-split-group-line")).toEqual([
+      "l-check",
+      "l-shown",
+    ]);
+    expect(text(rowOf(el, "l-paid"))).toBe("Steak ×2");
+  });
+
+  it("says Current orders could not be read, where the list would be", async () => {
+    const { el } = await mountCurrent({ currentOrders: null, currentOrdersUnread: true });
+    expect(text(q(el, "[data-groups] [data-current-orders-unread]")!)).toBe(
+      t("table.current_orders_unread"),
+    );
+    const none = await mountCurrent({
+      groups: [],
+      currentOrders: null,
+      currentOrdersUnread: true,
+    });
+    expect(q(none.el, "[data-current-orders-unread]")).not.toBeNull();
+    el.currentOrdersUnread = false;
+    await el.updateComplete;
+    expect(q(el, "[data-current-orders-unread]")).toBeNull();
   });
 
   it("lists rows in no group under their own heading, each with Mark served", async () => {
@@ -431,6 +483,22 @@ describe("the release reminder in Current orders", () => {
       await el.updateComplete;
       expect(reminder(el)!.dataset.groupReminder).toBe("due");
       expect(q(el, "[data-reminder-snooze]")).not.toBeNull();
+    });
+
+    it.each([
+      ["cannot be read", "not a time"],
+      ["is beyond the longest timer a browser keeps", "2100-01-01T00:00:00.000Z"],
+    ])("does not keep redrawing for a reminder time that %s", async (_why, dueAt) => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+      vi.setSystemTime(now);
+      const { el } = await mountCurrent({
+        now: undefined,
+        currentOrders: current({ reminder: { groupId: "g3", dueAt } }),
+      });
+      const redraws = vi.spyOn(el, "requestUpdate");
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(redraws).not.toHaveBeenCalled();
+      expect(q(el, "[data-reminder-snooze]")).toBeNull();
     });
 
     it("shows Snooze and Fire on coming back to the page after the reminder fell due", async () => {

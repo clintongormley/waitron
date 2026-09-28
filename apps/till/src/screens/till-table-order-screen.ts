@@ -245,6 +245,9 @@ export interface SnoozeGroupDetail {
 /** How far one press of Snooze puts a release reminder off. */
 export const SNOOZE_MINUTES = 5;
 
+/** The longest delay `setTimeout` holds: 2^31 − 1 ms, about 24.8 days. */
+const LONGEST_TIMER_MS = 2 ** 31 - 1;
+
 /** `change-line`: one sent line's edit, from the copy of the order read at `revision`. */
 export interface ChangeLineDetail {
   lineNo: number;
@@ -955,6 +958,8 @@ export class TillTableOrderScreen extends LitElement {
   /** The party's Current orders; null until read, or when the read failed, which leaves the groups
    * showing this bill's rows and nothing to mark served. */
   @property({ attribute: false }) currentOrders: CurrentOrders | null = null;
+  /** The read of Current orders failed, which the screen says where the list would be. */
+  @property({ type: Boolean }) currentOrdersUnread = false;
   /** The party's kitchen tickets that have not printed; they never hold up ordering. */
   @property({ attribute: false }) printProblems: PrintProblem[] = [];
   /** The bills whose kitchen tickets were sent to print again since the table was opened: their
@@ -1248,8 +1253,8 @@ export class TillTableOrderScreen extends LitElement {
 
   /** When the party's release reminder falls due; never, while it has no time. */
   #reminderDueAt(): number {
-    const dueAt = this.currentOrders?.reminder?.dueAt ?? null;
-    return dueAt === null ? Number.POSITIVE_INFINITY : Date.parse(dueAt);
+    const dueAt = Date.parse(this.currentOrders?.reminder?.dueAt ?? "");
+    return Number.isNaN(dueAt) ? Number.POSITIVE_INFINITY : dueAt;
   }
 
   /** On the screen's own clock, a reminder not yet due is drawn again the moment it falls due. */
@@ -1257,7 +1262,12 @@ export class TillTableOrderScreen extends LitElement {
     clearTimeout(this.#reminderTimer);
     const dueAt = this.#reminderDueAt();
     if (this.now !== undefined || this.#reminderDue || dueAt === Number.POSITIVE_INFINITY) return;
-    this.#reminderTimer = setTimeout(() => this.requestUpdate(), dueAt - Date.now());
+    // A longer delay overflows the browser's timer, which then fires at once, and again on every
+    // redraw.
+    this.#reminderTimer = setTimeout(
+      () => this.requestUpdate(),
+      Math.min(dueAt - Date.now(), LONGEST_TIMER_MS),
+    );
   }
 
   #lineGross(line: TabLine): Decimal {
@@ -2721,9 +2731,17 @@ export class TillTableOrderScreen extends LitElement {
    */
   #groupsSection(): TemplateResult | typeof nothing {
     const ungrouped = this.currentOrders?.ungrouped ?? [];
-    if (this.groups.length === 0 && ungrouped.length === 0) return nothing;
+    if (this.groups.length === 0 && ungrouped.length === 0 && !this.currentOrdersUnread)
+      return nothing;
     return html`<section class="groups" data-groups>
       <h2>${t("table.groups_title")}</h2>
+      ${
+        this.currentOrdersUnread
+          ? html`<p class="empty" data-current-orders-unread>
+              ${t("table.current_orders_unread")}
+            </p>`
+          : nothing
+      }
       <ol class="group-list">
         ${this.#groupsInOrder.map((group) => this.#groupRow(group))}
       </ol>
@@ -2746,10 +2764,8 @@ export class TillTableOrderScreen extends LitElement {
     const name = t("table.group_n").replace("{n}", String(group.position));
     const label = (key: StringKey) => `${t(key)} · ${name}`;
     const place = held.indexOf(group);
-    const current =
-      this.currentOrders === null
-        ? null
-        : (this.currentOrders.groups.find((shown) => shown.id === group.id)?.rows ?? []);
+    const shown = this.currentOrders?.groups.find((candidate) => candidate.id === group.id);
+    const current = this.currentOrders === null ? null : (shown?.rows ?? []);
     const reminder = isHeld ? this.#reminderOf(group) : nothing;
     // A due reminder brings its own Fire.
     const fires = this.fireControl === "waiter" && !(reminder !== nothing && this.#reminderDue);
@@ -2762,7 +2778,7 @@ export class TillTableOrderScreen extends LitElement {
       <div class="group-head">
         <span class="group-name" data-group-position>${name}</span>
         ${
-          this.currentOrders?.groups.find((shown) => shown.id === group.id)?.addedLater === true
+          shown?.addedLater === true
             ? html`<span class="group-tag" data-group-added-later
                 >${t("table.group_added_later")}</span
               >`
@@ -2860,13 +2876,15 @@ export class TillTableOrderScreen extends LitElement {
    * Snooze and (where the waiter fires) Fire. Nothing while it has no time. */
   #reminderOf(group: OrderGroup): TemplateResult | typeof nothing {
     const reminder = this.currentOrders?.reminder;
-    if (reminder?.groupId !== group.id || reminder.dueAt === null) return nothing;
+    // A time that cannot be read is no time.
+    if (reminder?.groupId !== group.id || this.#reminderDueAt() === Number.POSITIVE_INFINITY)
+      return nothing;
     const name = t("table.group_n").replace("{n}", String(group.position));
     if (!this.#reminderDue) {
       const time = new Intl.DateTimeFormat(currentLocale(), {
         hour: "2-digit",
         minute: "2-digit",
-      }).format(new Date(reminder.dueAt));
+      }).format(new Date(this.#reminderDueAt()));
       return html`<p class="group-reminder" data-group-reminder="waiting">
         ${t("table.reminder_at").replace("{time}", () => time)}
       </p>`;
@@ -2934,20 +2952,29 @@ export class TillTableOrderScreen extends LitElement {
       ${
         held === null
           ? this.#serveActions(row)
-          : this.#heldRowActions(
-              {
-                lineId: row.lineId,
-                name: row.name,
-                quantity: row.quantity,
-                splits:
-                  row.unitPrecision === 0 &&
-                  compareDecimal(decimal(row.quantity), decimal("1")) > 0 &&
-                  row.extras.length === 0,
-              },
-              held,
-            )
+          : !this.#billOpen(row.workingOrderId)
+            ? nothing
+            : this.#heldRowActions(
+                {
+                  lineId: row.lineId,
+                  name: row.name,
+                  quantity: row.quantity,
+                  splits:
+                    row.unitPrecision === 0 &&
+                    compareDecimal(decimal(row.quantity), decimal("1")) > 0 &&
+                    row.extras.length === 0,
+                },
+                held,
+              )
       }
     </li>`;
+  }
+
+  /** A bill the party's bills name as open, or the bill on screen when they do not name it. Held
+   * work moves only between open bills: the server refuses a line on a paid one. */
+  #billOpen(workingOrderId: string): boolean {
+    const bill = this.bills.find((candidate) => candidate.workingOrderId === workingOrderId);
+    return bill === undefined ? workingOrderId === this.orderId : bill.status === "open";
   }
 
   /** What was recorded of a row, and nothing more: no kitchen item means no kitchen state. */
