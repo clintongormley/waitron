@@ -3020,6 +3020,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
                   customerName: null,
                   kitchenName: null,
                   defaultLabelId: null,
+                  publishedDefaultLabelId: null,
                   labels: [
                     {
                       id: "rare",

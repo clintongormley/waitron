@@ -475,7 +475,9 @@ new version silently and the server then refuses the request `options.label_requ
 `extras.limit_exceeded`, per `validateExtraSelections`); nothing wrong is filed, but staff see a refusal where the dialog should have asked.
 The comparison also looks only at each line's total, so dish and extra price changes that cancel out
 are adopted without asking — see the entry "Two till menu-refresh defects the retroactive Codex
-review of #719 found" further down.
+review of #719 found" further down. _(2026-09-28: no longer so — when a line's total is unchanged,
+`refreshBasket` lists the dish or variant and each extra whose price changed, each on its own row
+of the dialog.)_
 A table's round is also not marked by the poll's sold-out list, only when a send is refused.
 _(Task 8, 2026-09-28: no longer so — when the poll's sold-out list for the open table's zone
 changes, `#onMenuState` in `apps/till/src/till-app.ts` marks the draft again, `#markDraft(true)`.)_
@@ -2904,7 +2906,16 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     reads the bills after a cancel that landed or got no answer, and reads the floor's party after
     one that landed as well as one that got no answer; a refused one reads the lines only, as
     before.
-- **Two till menu-refresh defects the retroactive Codex review of #719 found (campaign item A108r,
+- **DONE (2026-09-28, branch `fix/retro-review-719-till`): both defects below are fixed.** (1) The
+  served options list carries the published default in a field of its own, `publishedDefaultLabelId`
+  (`applyLiveFields`, `packages/catalogue/src/menu-document.ts`), and the till's `withUnavailable`
+  works out the default from it each time it applies a changed sold-out list from the poll. (2)
+  When a line's total is unchanged, `refreshBasket` lists the dish or variant and each extra whose
+  price changed, each as its own row with its unit price before and after; a line whose total
+  changed still shows one row with the totals. Both review probes were run before and after the
+  fix: the default probe failed both cases before and passed both after; the price probe printed
+  `changed: []` before and the two rows after.
+  **Two till menu-refresh defects the retroactive Codex review of #719 found (campaign item A108r,
   2026-09-28), both still present on `main` at `f5a186cd9`; fix them once lane B's drafts-on-the-till
   branch, which changes `apps/till/src/state/menu-refresh.ts`, has landed.** (1) After an option
   comes back into stock, the till's menu-state poll keeps the fallback default it was served, while a fresh read

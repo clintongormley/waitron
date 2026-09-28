@@ -2711,6 +2711,7 @@ describe("menuOfferToTillProduct", () => {
       customerName: { es: "Punto carta" },
       kitchenName: "Punto KDS",
       defaultLabelId: null,
+      publishedDefaultLabelId: null,
       labels: [],
     };
     const offer = {
@@ -3065,6 +3066,7 @@ describe("menuOfferToTillProduct", () => {
           customerName: null,
           kitchenName: null,
           defaultLabelId: "label-medium",
+          publishedDefaultLabelId: "label-medium",
           labels: [label("label-rare", false), label("label-medium", true)],
         },
       ],

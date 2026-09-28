@@ -589,6 +589,29 @@ describe("applyLiveFields", () => {
     it("is the first available label while the published version names no default", async () => {
       expect(await servedDefault([NO_ICE], null)).toBe(WITH_ICE);
     });
+
+    it.each([NO_ICE, null])(
+      "carries the published default %s beside the fallback it serves while that default is unavailable",
+      async (publishedDefault) => {
+        const f = await menusFixture(fx.db);
+        await app((tx) =>
+          tx
+            .update(optionLists)
+            .set({ defaultLabelId: publishedDefault })
+            .where(eq(optionLists.id, f.iceList)),
+        );
+        const document = await build(f.lunch);
+        await app((tx) =>
+          tx.update(optionLabels).set({ available: false }).where(eq(optionLabels.id, NO_ICE)),
+        );
+        const [lemonade] = (await app((tx) => applyLiveFields(tx, [document]))).get(f.lunch)!;
+        const options = lemonade!.offeredModifiers[1]!;
+        if (options.kind !== "options") throw new Error("options");
+        expect(options.labels.map((label) => label.id)).toEqual([NO_ICE, WITH_ICE]);
+        expect(options.defaultLabelId).toBe(WITH_ICE);
+        expect(options.publishedDefaultLabelId).toBe(publishedDefault);
+      },
+    );
   });
 
   it("leaves out an offer, a variant or an extra whose product row is gone", async () => {

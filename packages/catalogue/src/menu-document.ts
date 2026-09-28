@@ -531,6 +531,7 @@ export async function applyLiveFields(
                   ...entry,
                   labels: withAvailability,
                   defaultLabelId: effectiveDefaultLabelId(withAvailability, entry.defaultLabelId),
+                  publishedDefaultLabelId: entry.defaultLabelId,
                 };
               }
               return {

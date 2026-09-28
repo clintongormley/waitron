@@ -30,6 +30,21 @@ describe("till-basket-refresh-dialog", () => {
     expect(el.shadowRoot!.querySelector("[data-blocked]")).toBeNull();
   });
 
+  it("lists each re-priced part of one line on a row of its own", async () => {
+    const { el } = await mount({
+      changed: [
+        { lineNo: 1, name: "Burger", from: "9.00", to: "8.00" },
+        { lineNo: 1, name: "Cheese", from: "1.00", to: "2.00" },
+      ],
+      blocked: [],
+    });
+    const rows = [...el.shadowRoot!.querySelectorAll("[data-changed] li[data-line='1']")];
+    expect(rows.map((row) => row.textContent!.replace(/\s+/g, " ").trim())).toEqual([
+      "Burger €9.00 → €8.00",
+      "Cheese €1.00 → €2.00",
+    ]);
+  });
+
   it("formats the prices in the operator's language", async () => {
     const { el } = await mount({ changed, blocked: [] }, "es-ES");
     expect(text(el)).toContain("Lemonade 3,00 € → 2,50 €");

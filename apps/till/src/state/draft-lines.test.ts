@@ -135,6 +135,7 @@ function optionsList(id: string, labels: ReturnType<typeof label>[]): LiveModifi
     customerName: null,
     kitchenName: `${id} KDS`,
     defaultLabelId: null,
+    publishedDefaultLabelId: null,
     labels,
   };
 }
