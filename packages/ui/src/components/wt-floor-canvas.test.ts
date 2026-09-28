@@ -558,6 +558,22 @@ test("a consumer's own words replace every default the tokens carry", async () =
   );
 });
 
+test("labels a token's unsent-order mark from its default copy, or the consumer's word", async () => {
+  const el = await mountCanvas([oneTable("t1", { state: "open-tab", unsentDrafts: ["Alex"] })]);
+  const mark = () =>
+    tokenEl(el, "t1")
+      .querySelector("wt-table-token")!
+      .shadowRoot!.querySelector("[data-unsent]")!
+      .getAttribute("aria-label");
+  expect(mark()).toBe("Unsent: Alex");
+  el.copy = { unsent: "Sin enviar" };
+  await el.updateComplete;
+  await tokenEl(el, "t1").querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+    "wt-table-token",
+  )!.updateComplete;
+  expect(mark()).toBe("Sin enviar: Alex");
+});
+
 test("the palette offers the three shapes in order, each under its own name", async () => {
   const el = await mountCanvas([oneTable("t1")], { editable: true });
   tokenEl(el, "t1").click();

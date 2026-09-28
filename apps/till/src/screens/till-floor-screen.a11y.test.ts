@@ -265,6 +265,49 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations with unsent orders marked, on the list and on the map", async () => {
+    const withUnsent = (table: TableState): TableState => ({
+      ...table,
+      visit: {
+        ...table.visit!,
+        unsentDrafts: [
+          { ownerName: "Alex", lineCount: 2 },
+          { ownerName: "", lineCount: 1 },
+        ],
+      },
+    });
+    const marked = partyTables.map(withUnsent);
+    const list = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      { zones, tables: marked },
+      theme,
+    );
+    expect(list.el.shadowRoot!.querySelectorAll("[data-unsent]").length).toBeGreaterThan(0);
+    await expectNoA11yViolations(list.host);
+    cleanupWidgets();
+
+    const onMap = marked.map((table, index) => ({
+      ...table,
+      posX: 100 + index * 200,
+      posY: 300,
+      shape: "round" as const,
+      rotation: 0,
+    }));
+    const map = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      { zones, tables: onMap },
+      theme,
+    );
+    const canvas = map.el.shadowRoot!.querySelector("wt-floor-canvas")!;
+    await canvas.updateComplete;
+    const token = canvas.shadowRoot!.querySelector<
+      HTMLElement & { updateComplete: Promise<unknown> }
+    >("wt-table-token")!;
+    await token.updateComplete;
+    expect(token.shadowRoot!.querySelector("[data-unsent]")).not.toBeNull();
+    await expectNoA11yViolations(map.host);
+  });
+
   it("has no violations with the seat dialog open", async () => {
     const { el, host } = await mountWidget<TillFloorScreen>(
       "till-floor-screen",

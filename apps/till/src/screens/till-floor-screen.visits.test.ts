@@ -339,3 +339,157 @@ describe("till-floor-screen: a table needing clearing", () => {
     expect(el.shadowRoot!.querySelector("[data-clear-dialog]")).toBeNull();
   });
 });
+
+describe("till-floor-screen: a table's unsent orders", () => {
+  const onMap = { posX: 200, posY: 200, shape: "round" as const, rotation: 0 };
+  const marks = (el: TillFloorScreen, id: string) =>
+    [...card(el, id).querySelectorAll<HTMLElement>("[data-unsent]")].map((mark) =>
+      mark.textContent!.replace(/\s+/g, " ").trim(),
+    );
+  type Token = HTMLElement & { updateComplete: Promise<unknown> };
+  async function tokenMark(token: Token): Promise<string | undefined> {
+    await token.updateComplete;
+    return (
+      token.shadowRoot!.querySelector("[data-unsent]")?.getAttribute("aria-label") ?? undefined
+    );
+  }
+
+  it("shows Mesa 4 with a mark naming who has an unsent order and how many items", async () => {
+    const el = await mountFloor([
+      seated({}, { unsentDrafts: [{ ownerName: "Alex", lineCount: 2 }] }),
+    ]);
+
+    expect(marks(el, "t4")).toEqual(["Alex has an unsent order: 2 items"]);
+  });
+
+  it("says one item in the singular", async () => {
+    const el = await mountFloor([
+      seated({}, { unsentDrafts: [{ ownerName: "Alex", lineCount: 1 }] }),
+    ]);
+
+    expect(marks(el, "t4")).toEqual(["Alex has an unsent order: 1 item"]);
+  });
+
+  it("gives each person with an unsent order a line of their own, oldest first", async () => {
+    const el = await mountFloor([
+      seated(
+        {},
+        {
+          unsentDrafts: [
+            { ownerName: "Alex", lineCount: 2 },
+            { ownerName: "Sam", lineCount: 1 },
+          ],
+        },
+      ),
+    ]);
+
+    expect(marks(el, "t4")).toEqual([
+      "Alex has an unsent order: 2 items",
+      "Sam has an unsent order: 1 item",
+    ]);
+  });
+
+  it("names no one when the person is unknown", async () => {
+    const el = await mountFloor([
+      seated(
+        {},
+        {
+          unsentDrafts: [
+            { ownerName: "", lineCount: 3 },
+            { ownerName: "", lineCount: 1 },
+          ],
+        },
+      ),
+    ]);
+
+    expect(marks(el, "t4")).toEqual(["An unsent order: 3 items", "An unsent order: 1 item"]);
+  });
+
+  it("says it in Spanish", async () => {
+    setLocale("es");
+    const el = await mountFloor([
+      seated(
+        {},
+        {
+          unsentDrafts: [
+            { ownerName: "Alex", lineCount: 2 },
+            { ownerName: "Sam", lineCount: 1 },
+            { ownerName: "", lineCount: 4 },
+            { ownerName: "", lineCount: 1 },
+          ],
+        },
+      ),
+    ]);
+
+    expect(marks(el, "t4")).toEqual([
+      "Alex tiene un pedido sin enviar: 2 artículos",
+      "Sam tiene un pedido sin enviar: 1 artículo",
+      "Un pedido sin enviar: 4 artículos",
+      "Un pedido sin enviar: 1 artículo",
+    ]);
+  });
+
+  it("shows no mark when the party has no unsent order", async () => {
+    const el = await mountFloor([seated()]);
+
+    expect(marks(el, "t4")).toEqual([]);
+  });
+
+  it("marks a table needing clearing too, so the list and the map agree", async () => {
+    const el = await mountFloor([
+      seated(
+        { hasOpenTab: false, tabId: undefined, tabLineCount: undefined, tabTotal: undefined },
+        {
+          state: "needs_clearing",
+          outstanding: "0.00",
+          unsentDrafts: [{ ownerName: "Alex", lineCount: 2 }],
+        },
+      ),
+    ]);
+
+    expect(card(el, "t4").querySelector("[data-needs-clearing]")).not.toBeNull();
+    expect(marks(el, "t4")).toEqual(["Alex has an unsent order: 2 items"]);
+  });
+
+  it("marks Mesa 4's token on the map with everyone's name", async () => {
+    const el = await mountFloor([
+      seated(onMap, {
+        unsentDrafts: [
+          { ownerName: "Alex", lineCount: 2 },
+          { ownerName: "Sam", lineCount: 1 },
+        ],
+      }),
+      table({ id: "t5", label: "5", ...onMap, posX: 600 }),
+    ]);
+
+    const canvas = el.shadowRoot!.querySelector("wt-floor-canvas")!;
+    await canvas.updateComplete;
+    const token = (id: string) =>
+      canvas.shadowRoot!.querySelector<Token>(`[data-table="${id}"] wt-table-token`)!;
+    expect(await tokenMark(token("t4"))).toBe("Unsent: Alex, Sam");
+    expect(await tokenMark(token("t5"))).toBeUndefined();
+  });
+
+  it("marks the token in Spanish on the map", async () => {
+    setLocale("es");
+    const el = await mountFloor([
+      seated(onMap, { unsentDrafts: [{ ownerName: "Alex", lineCount: 2 }] }),
+    ]);
+
+    const canvas = el.shadowRoot!.querySelector("wt-floor-canvas")!;
+    await canvas.updateComplete;
+    expect(
+      await tokenMark(canvas.shadowRoot!.querySelector<Token>('[data-table="t4"] wt-table-token')!),
+    ).toBe("Sin enviar: Alex");
+  });
+
+  it("marks an unplaced table's token in the map's tray", async () => {
+    const el = await mountFloor([
+      table({ id: "t5", label: "5", ...onMap }),
+      seated({}, { unsentDrafts: [{ ownerName: "Alex", lineCount: 2 }] }),
+    ]);
+
+    const tray = el.shadowRoot!.querySelector<Token>('[data-tray-table="t4"] wt-table-token')!;
+    expect(await tokenMark(tray)).toBe("Unsent: Alex");
+  });
+});

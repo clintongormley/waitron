@@ -321,6 +321,43 @@ const savedLines = () =>
     each.lines.map((line) => `${line.menuItemId} ×${Number(line.quantity)}`),
   );
 
+/**
+ * A floor read from what the draft server holds when it is asked, and saves that answer late, so a
+ * floor read made before a save lands shows no unsent-order mark.
+ */
+function lateSaveLiveFloor() {
+  const save = server.saveDraft.getMockImplementation()!;
+  return {
+    getTablesState: vi.fn(async () =>
+      [mesa4, mesa7].map((each) => ({
+        ...each,
+        visit: {
+          ...each.visit!,
+          unsentDrafts: server.drafts
+            .filter((one) => one.visitId === each.visit!.id && one.lines.length > 0)
+            .map((one) => ({ ownerName: one.ownerName, lineCount: one.lines.length })),
+        },
+      })),
+    ),
+    saveDraft: vi.fn(async (...args: Parameters<typeof save>) => {
+      await new Promise((resolve) => setTimeout(resolve, SLOW_SAVE_MS));
+      return save(...args);
+    }),
+  };
+}
+
+const SLOW_SAVE_MS = 30;
+
+async function settle(el: TillApp): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, SLOW_SAVE_MS * 2));
+  await flush(el);
+}
+
+const unsentMark = (el: TillApp, tableId: string) =>
+  floor(el)!
+    .shadowRoot!.querySelector(`[data-table="${tableId}"] [data-unsent]`)
+    ?.textContent?.trim();
+
 beforeEach(() => {
   setLocale("en");
   server = draftServer();
@@ -342,6 +379,33 @@ describe("till-app: a table's draft is kept on the server", () => {
     expect(api.submitDraft).not.toHaveBeenCalled();
     expect(api.submitGroups).not.toHaveBeenCalled();
     expect(tableOrder(el)).toBeNull();
+  });
+
+  it("shows Mesa 4 on the floor with an unsent-order mark once the save has landed", async () => {
+    const { el } = await mountApp(lateSaveLiveFloor());
+    await openMesa(el);
+    await tap(el, "Beer");
+    await tap(el, "Steak");
+
+    await back(el);
+    await settle(el);
+
+    expect(unsentMark(el, "t4")).toBe("Ana has an unsent order: 2 items");
+    expect(unsentMark(el, "t7")).toBeUndefined();
+  });
+
+  it("shows the mark when the Order tab is left for the floor, once the save has landed", async () => {
+    const { el } = await mountApp({
+      ...lateSaveLiveFloor(),
+      getTill: vi.fn().mockResolvedValue(till(orderTabCanvas)),
+    });
+    await openMesa(el);
+    await tap(el, "Flan");
+
+    emit(shell(el), "tab-select", { key: "floor" });
+    await settle(el);
+
+    expect(unsentMark(el, "t4")).toBe("Ana has an unsent order: 1 item");
   });
 
   it("restores the draft from the server on coming back to the table", async () => {

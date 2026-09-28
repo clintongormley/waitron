@@ -246,6 +246,12 @@ export const en = {
   // Prefixes the time: "Reserved 20:30".
   "floor.reserved": "Reserved",
   "floor.forgotten": "Forgotten",
+  "floor.unsent": "An unsent order: {n} items",
+  "floor.unsent_one": "An unsent order: 1 item",
+  "floor.unsent_owner": "{name} has an unsent order: {n} items",
+  "floor.unsent_owner_one": "{name} has an unsent order: 1 item",
+  // A map token's mark; its accessible name adds the names: "Unsent: Alex, Sam".
+  "floor.unsent_mark": "Unsent",
   // Spatial floor plan. The view toggles name the view they switch TO.
   "floor.view_map": "Map",
   "floor.view_list": "List",
@@ -714,6 +720,11 @@ export const es: Record<StringKey, string> = {
   "floor.free": "Libre",
   "floor.reserved": "Reservada",
   "floor.forgotten": "Olvidada",
+  "floor.unsent": "Un pedido sin enviar: {n} artículos",
+  "floor.unsent_one": "Un pedido sin enviar: 1 artículo",
+  "floor.unsent_owner": "{name} tiene un pedido sin enviar: {n} artículos",
+  "floor.unsent_owner_one": "{name} tiene un pedido sin enviar: 1 artículo",
+  "floor.unsent_mark": "Sin enviar",
   "floor.view_map": "Mapa",
   "floor.view_list": "Lista",
   "floor.edit_plan": "Editar plano",

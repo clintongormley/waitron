@@ -110,6 +110,94 @@ test("shows the reserved chip (label + time) only when a reservation time is set
   expect(none.shadowRoot!.querySelector(".badge.reserved")).toBeNull();
 });
 
+describe("the unsent-order mark", () => {
+  const unsent = (el: HTMLElement) => el.shadowRoot!.querySelector<HTMLElement>("[data-unsent]");
+  const shown = (el: HTMLElement) => {
+    const mark = unsent(el)!;
+    return {
+      text: mark.textContent!.trim(),
+      role: mark.getAttribute("role"),
+      name: mark.getAttribute("aria-label"),
+      hidden: mark.getAttribute("aria-hidden"),
+    };
+  };
+
+  test("shows the consumer's label and names everyone with an unsent order to assistive technology", async () => {
+    const el = await mountToken(table({ state: "open-tab", unsentDrafts: ["Alex", "Sam"] }), {
+      unsent: "Sin enviar",
+    });
+    expect(shown(el)).toEqual({
+      text: "Sin enviar",
+      role: "img",
+      name: "Sin enviar: Alex, Sam",
+      hidden: null,
+    });
+  });
+
+  test("is named by the label alone when nobody's name is known", async () => {
+    const el = await mountToken(table({ state: "open-tab", unsentDrafts: [""] }), {
+      unsent: "Unsent",
+    });
+    expect(shown(el).name).toBe("Unsent");
+  });
+
+  test("leaves out an unknown person's name beside a known one", async () => {
+    const el = await mountToken(table({ state: "open-tab", unsentDrafts: ["", "Alex"] }), {
+      unsent: "Unsent",
+    });
+    expect(shown(el).name).toBe("Unsent: Alex");
+  });
+
+  test("shows and is named by the names alone when the consumer gives no label", async () => {
+    const el = await mountToken(table({ state: "open-tab", unsentDrafts: ["Alex"] }));
+    expect(shown(el)).toEqual({ text: "Alex", role: "img", name: "Alex", hidden: null });
+  });
+
+  test("is decorative when it has neither a label nor a name to give", async () => {
+    const el = await mountToken(table({ state: "open-tab", unsentDrafts: [""] }));
+    expect(shown(el)).toEqual({ text: "", role: null, name: null, hidden: "true" });
+  });
+
+  test("shows no mark when nobody has an unsent order", async () => {
+    const empty = await mountToken(table({ state: "open-tab", unsentDrafts: [] }), {
+      unsent: "Unsent",
+    });
+    const absent = await mountToken(table({ state: "open-tab" }), { unsent: "Unsent" });
+    expect(unsent(empty)).toBeNull();
+    expect(unsent(absent)).toBeNull();
+  });
+
+  test("hangs off the token's edge, so the token is no taller with it", async () => {
+    const labels = { unsent: "Sin enviar" };
+    const plain = await mountToken(table({ state: "open-tab", tabTotal: "12.00" }), labels);
+    const marked = await mountToken(
+      table({ state: "open-tab", tabTotal: "12.00", unsentDrafts: ["Alexandra", "Samantha"] }),
+      labels,
+    );
+    const height = (el: HTMLElement) => el.shadowRoot!.querySelector(".card")!.clientHeight;
+    expect(height(marked)).toBe(height(plain));
+  });
+
+  test("keeps its words on one line on a token narrower than they are", async () => {
+    const markHeight = async (label: string) => {
+      const el = await mountToken(table({ state: "open-tab", unsentDrafts: ["Alex"] }), {
+        unsent: label,
+      });
+      el.style.width = "60px";
+      return unsent(el)!.getBoundingClientRect().height;
+    };
+    expect(await markHeight("Sin enviar todavía")).toBe(await markHeight("Sin"));
+  });
+
+  test("the mark's border paints from the warning token", async () => {
+    const el = await mountToken(table({ state: "open-tab", unsentDrafts: ["Alex"] }));
+    host.style.setProperty("--wt-color-warning", "rgb(4, 5, 6)");
+    const mark = unsent(el)!;
+    expect(getComputedStyle(mark).borderTopColor).toBe("rgb(4, 5, 6)");
+    expect(getComputedStyle(mark).borderTopStyle).toBe("dashed");
+  });
+});
+
 test("renders the covers count, with an optional localisable suffix", async () => {
   const bare = await mountToken(table({ capacity: 6 }));
   expect(bare.shadowRoot!.querySelector(".capacity")?.textContent?.trim()).toBe("6");

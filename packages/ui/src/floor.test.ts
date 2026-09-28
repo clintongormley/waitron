@@ -280,3 +280,20 @@ test("toFloorTable leaves timingBand undefined when the occupancy input omits it
   );
   expect(table.timingBand).toBeUndefined();
 });
+
+test("toFloorTable carries the names of the people with an unsent order through the occupancy half", () => {
+  const table = toFloorTable(
+    {
+      id: "t4",
+      label: "4",
+      capacity: 4,
+      posX: 200,
+      posY: 300,
+      shape: "round",
+      rotation: 0,
+      zoneId: "z1",
+    },
+    { state: "open-tab", pendingToServe: 0, status: null, unsentDrafts: ["Alex", "Sam"] },
+  );
+  expect(table.unsentDrafts).toEqual(["Alex", "Sam"]);
+});
