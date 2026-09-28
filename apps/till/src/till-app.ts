@@ -2354,7 +2354,7 @@ export class TillApp extends LitElement {
   }
 
   /** Tables only: a placement write changes neither the zones nor the statuses. A failed read keeps
-   * the last-known floor and answers false. */
+   * the last-known floor. */
   async #refreshFloor(): Promise<boolean> {
     try {
       this.tables = await this.api.getTablesState();
@@ -2569,7 +2569,7 @@ export class TillApp extends LitElement {
 
   /** After a command that moved the party on, or may have: the floor is read again, and its party
    * taken while the open table still holds that party and the floor's revision is not lower than
-   * the one held. A failed read leaves the last floor, which can be older, and answers false. */
+   * the one held. A failed read leaves the last floor, which can be older. */
   async #retakePartyFromFloor(): Promise<boolean> {
     const partyId = this.orderParty?.id;
     const read = await this.#refreshFloor();
@@ -3259,7 +3259,8 @@ export class TillApp extends LitElement {
    * A saved change stores the new revision and reads the order, its bills and what the party owes
    * again whenever that order is still the open one, wherever the waiter is, so the next change is
    * not refused as out of date and an extra's price shows at once. A refusal reads the order again
-   * too, and one because the kitchen has started the line offers to cancel it.
+   * too, and one because the kitchen has started the line offers to cancel it. A change that got
+   * no answer also reads the order, its bills and what the party owes again.
    * When the order is no longer the open one, or {@link #orderVisit} says the waiter started leaving
    * it and did not come back to it, a refusal changes nothing on screen but the message, which names
    * the line, and its table while the floor lists it, because the waiter may believe a note (an

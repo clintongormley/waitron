@@ -2893,14 +2893,14 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   with `minPicks: 0` and `maxQuantity: 9` can be failing. The real-world shape is a parked line
   whose list had its cap reduced under it, the same family as the "list lost the product between the
   park and the edit" escape recorded under Task 8.
-- **DONE (campaign items A110 and A115, branch `fix/till-bill-figures-refresh` for A115): after a
-  line is cancelled or changed, the table's bill figures update straight away.** A cancel (A110)
-  and a saved line Change, or one that got no answer (A115), read the floor's party, the order's
-  lines and the party's bills again (`#rereadAmounts`, `apps/till/src/till-app.ts`); a refused one
-  reads the lines only. When the floor or the bills cannot be read again the till says so
-  (`table.reread_failed`), unless the command's own failure is already said, and with the floor
-  unread "Still to pay" is taken from the bills just read — the floor's figure is the sum of the
-  same bills (`readBillsOfVisits`, `apps/server/src/visits.ts`). The priced-extra case was shown
+- **DONE (#809 for A110; campaign item A115, from the run-it review of #809, branch
+  `fix/till-bill-figures-refresh`): after a line is cancelled or changed, the table's bill figures
+  update straight away.** A cancel (A110) and a saved line Change, or one that got no answer
+  (A115), read the floor's party, the order's lines and the party's bills again (`#rereadAmounts`,
+  `apps/till/src/till-app.ts`); a refused one reads the lines only. When the floor or the bills
+  cannot be read again the till says so (`table.reread_failed`), unless the command's own failure
+  is already said or the waiter has left the order, and with the floor unread "Still to pay" is
+  taken from the bills just read — the floor's figure is the sum of the same bills (`readBillsOfVisits`, `apps/server/src/visits.ts`). The priced-extra case was shown
   in the till's browser tests with a fixture adding a 1.50 extra; the demo menu offers no priced
   extra, so it was not run on the dev till.
 - **DONE (#812, campaign item A113, from the A108r retro review of #719, branch
