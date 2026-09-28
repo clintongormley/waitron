@@ -110,7 +110,9 @@ import {
   listOrderGroups,
   markGroupAway,
   moveLinesToGroup,
+  readCurrentOrders,
   reorderHeldGroups,
+  snoozeReminder,
   submitGroups,
 } from "./order-groups.js";
 import type { GroupLine, SubmitGroupsInput, VisitCommandArgs } from "./order-groups.js";
@@ -1531,6 +1533,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
+  app.get("/api/visits/:id/current-orders", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const visitId = requireVisitParam(c.req.param("id"));
+      const current = await withTransaction(deps.db, (tx) => readCurrentOrders(tx, visitId));
+      return c.json(current);
+    }),
+  );
+
   app.get("/api/visits/:id/print-problems", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1619,6 +1630,23 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const args = groupCommand(personId, asObject(await readRawJsonBody<unknown>(c)));
       const answer = await withTransaction(deps.db, (tx) =>
         markGroupServed(tx, deps.cfg, visitId, groupId, args),
+      );
+      return c.json(answer);
+    }),
+  );
+
+  app.post("/api/visits/:id/groups/:gid/snooze", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const visitId = requireVisitParam(c.req.param("id"));
+      const groupId = c.req.param("gid");
+      if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const args = groupCommand(personId, body);
+      if (typeof body.minutes !== "number") throw invalid("minutes");
+      const minutes = body.minutes;
+      const answer = await withTransaction(deps.db, (tx) =>
+        snoozeReminder(tx, deps.cfg, visitId, groupId, minutes, args),
       );
       return c.json(answer);
     }),

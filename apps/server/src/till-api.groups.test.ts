@@ -1501,3 +1501,182 @@ describe("the pass routes, one after the other", () => {
     expect((await groupTickets(visit.fired.id)).every((item) => item.awayAt !== null)).toBe(true);
   });
 });
+
+/** The held or fired groups' reminders, as the groups read shows them. */
+async function remindAts(visitId: string) {
+  const listed = (await call("GET", `/api/visits/${visitId}/groups`)).json as unknown as {
+    groups: { id: string; remindAt: string | null }[];
+  };
+  return Object.fromEntries(listed.groups.map((group) => [group.id, group.remindAt]));
+}
+
+describe("POST /api/visits/:id/groups/:gid/snooze and GET /api/visits/:id/current-orders", () => {
+  it("snoozes a held group by whole minutes, answering the visit's revision, and Current orders shows the reminder once the work ahead is served", async () => {
+    const visit = await withGroups();
+    const revision = await revisionOf(visit.visitId);
+    const from = Date.now();
+
+    const snoozed = await call(
+      "POST",
+      `/api/visits/${visit.visitId}/groups/${visit.tarta.id}/snooze`,
+      { submissionId: randomUUID(), expectedVisitRevision: revision, minutes: 5 },
+    );
+
+    expect(snoozed.status).toBe(200);
+    expect(snoozed.json).toEqual({ revision: revision + 1 });
+    const remindAt = (await remindAts(visit.visitId))[visit.tarta.id]!;
+    const ahead = Date.parse(remindAt) - from;
+    expect(ahead).toBeGreaterThanOrEqual(5 * 60_000);
+    expect(ahead).toBeLessThanOrEqual(5 * 60_000 + (Date.now() - from));
+
+    const waiting = await call("GET", `/api/visits/${visit.visitId}/current-orders`);
+    expect(waiting.status).toBe(200);
+    expect(waiting.json).toMatchObject({
+      revision: revision + 1,
+      reminder: { groupId: visit.tarta.id, dueAt: null },
+      groups: [
+        { id: visit.fired.id, state: "fired", addedLater: false },
+        { id: visit.tarta.id, state: "held", remindAt, addedLater: false },
+        { id: visit.croquetas.id, state: "held", remindAt: null, addedLater: false },
+      ],
+      ungrouped: [],
+    });
+
+    const served = await call(
+      "POST",
+      `/api/visits/${visit.visitId}/groups/${visit.fired.id}/served`,
+      { submissionId: randomUUID(), expectedVisitRevision: revision + 1 },
+    );
+    expect(served.status).toBe(200);
+    const due = await call("GET", `/api/visits/${visit.visitId}/current-orders`);
+    expect(due.json).toMatchObject({
+      revision: revision + 2,
+      reminder: { groupId: visit.tarta.id, dueAt: remindAt },
+    });
+  });
+
+  it("answers each snooze refusal with its status, writing nothing", async () => {
+    const visit = await withGroups();
+    const used = randomUUID();
+    await call("POST", `/api/visits/${visit.visitId}/groups/${visit.tarta.id}/snooze`, {
+      submissionId: used,
+      expectedVisitRevision: await revisionOf(visit.visitId),
+      minutes: 5,
+    });
+    const before = { ...(await snapshot(visit)), remindAts: await remindAts(visit.visitId) };
+    const revision = await revisionOf(visit.visitId);
+    const at = (extra: Record<string, unknown>) => ({
+      submissionId: randomUUID(),
+      expectedVisitRevision: revision,
+      ...extra,
+    });
+    const base = `/api/visits/${visit.visitId}/groups`;
+    const tarta = `${base}/${visit.tarta.id}/snooze`;
+    const unknown = randomUUID();
+    const minutesInvalid = refusal("management.request_invalid", { field: "minutes" });
+
+    const cases: [string, unknown, number, unknown][] = [
+      [
+        `${base}/not-a-uuid/snooze`,
+        at({ minutes: 5 }),
+        404,
+        refusal("group.not_found", { groupId: "not-a-uuid" }),
+      ],
+      [
+        `${base}/${unknown}/snooze`,
+        at({ minutes: 5 }),
+        404,
+        refusal("group.not_found", { groupId: unknown }),
+      ],
+      [
+        `${base}/${visit.fired.id}/snooze`,
+        at({ minutes: 5 }),
+        409,
+        refusal("group.not_held", { groupId: visit.fired.id }),
+      ],
+      [tarta, at({ minutes: 0 }), 400, minutesInvalid],
+      [tarta, at({ minutes: 121 }), 400, minutesInvalid],
+      [tarta, at({ minutes: 2.5 }), 400, minutesInvalid],
+      [tarta, at({ minutes: "5" }), 400, minutesInvalid],
+      [tarta, at({ minutes: null }), 400, minutesInvalid],
+      [tarta, at({}), 400, minutesInvalid],
+      [
+        tarta,
+        { submissionId: randomUUID(), expectedVisitRevision: revision - 1, minutes: 5 },
+        409,
+        refusal("visit.out_of_date", { visitId: visit.visitId, revision }),
+      ],
+      [
+        tarta,
+        { submissionId: used, expectedVisitRevision: revision, minutes: 10 },
+        409,
+        refusal("submission.id_reused", { submissionId: used }),
+      ],
+      [
+        tarta,
+        { expectedVisitRevision: revision, minutes: 5 },
+        400,
+        refusal("management.request_invalid", { field: "submissionId" }),
+      ],
+      [
+        tarta,
+        { submissionId: randomUUID(), minutes: 5 },
+        400,
+        refusal("management.request_invalid", { field: "expectedVisitRevision" }),
+      ],
+      [
+        `/api/visits/not-a-visit/groups/${visit.tarta.id}/snooze`,
+        at({ minutes: 5 }),
+        409,
+        refusal("visit.not_open", { visitId: "not-a-visit" }),
+      ],
+    ];
+    for (const [path, body, status, error] of cases) {
+      const answer = await call("POST", path, body);
+      expect([path, body, answer.status, answer.json]).toEqual([path, body, status, error]);
+    }
+    expect({ ...(await snapshot(visit)), remindAts: await remindAts(visit.visitId) }).toEqual(
+      before,
+    );
+  });
+
+  it("refuses 409 visit.not_open for Current orders of a visit that does not exist, and of an id that is not one", async () => {
+    const unknown = randomUUID();
+
+    const absent = await call("GET", `/api/visits/${unknown}/current-orders`);
+    const malformed = await call("GET", `/api/visits/not-a-visit/current-orders`);
+
+    expect(absent.status).toBe(409);
+    expect(absent.json).toEqual(refusal("visit.not_open", { visitId: unknown }));
+    expect(malformed.status).toBe(409);
+    expect(malformed.json).toEqual(refusal("visit.not_open", { visitId: "not-a-visit" }));
+  });
+
+  it("refuses both routes 401 session.required without a session, writing nothing", async () => {
+    const visit = await withGroups();
+    const before = { ...(await snapshot(visit)), remindAts: await remindAts(visit.visitId) };
+
+    const answers = [
+      await send(venue.app, "", "GET", `/api/visits/${visit.visitId}/current-orders`),
+      await send(
+        venue.app,
+        "",
+        "POST",
+        `/api/visits/${visit.visitId}/groups/${visit.tarta.id}/snooze`,
+        {
+          submissionId: randomUUID(),
+          expectedVisitRevision: await revisionOf(visit.visitId),
+          minutes: 5,
+        },
+      ),
+    ];
+
+    for (const answer of answers) {
+      expect(answer.status).toBe(401);
+      expect(answer.json).toMatchObject({ code: "session.required" });
+    }
+    expect({ ...(await snapshot(visit)), remindAts: await remindAts(visit.visitId) }).toEqual(
+      before,
+    );
+  });
+});

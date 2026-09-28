@@ -136,12 +136,14 @@ import {
   moveGroupsToVisit,
   printedHeldGroups,
   printHoldTickets,
+  readReleaseReminders,
   recordGroupEvent,
   removeEmptiedHeldGroups,
   requireGroup,
   requireOperator,
   startGroup,
   type HeldChange,
+  type ReleaseReminder,
   type VisitCommandArgs,
 } from "./order-groups.js";
 import {
@@ -2212,19 +2214,24 @@ async function servableLines(
 }
 
 /**
- * Serving needs released work, else `group.line_held`: a line in a held group, or whose kitchen item
- * has not fired, is not released, nor is a line with neither an item nor a group that was never
- * sent. `sent_at` is read only for that last kind, because a group fired after its bill was paid
- * releases its lines without stamping them (`stampSent` writes only while the bill is open).
+ * Whether a dish line is released work, which is what serving needs: a line in a held group, or
+ * whose kitchen item has not fired, is not, nor is a line with neither an item nor a group that was
+ * never sent. `sent_at` is read only for that last kind, because a group fired after its bill was
+ * paid releases its lines without stamping them (`stampSent` writes only while the bill is open).
  */
+export function isReleased(
+  line: Pick<ServableLine, "groupState" | "ticketItemId" | "ticketFiredAt" | "sentAt">,
+): boolean {
+  return line.groupState === "held"
+    ? false
+    : line.ticketItemId !== null
+      ? line.ticketFiredAt !== null
+      : line.groupState !== null || line.sentAt !== null;
+}
+
+/** Serving needs released work ({@link isReleased}), else `group.line_held`. */
 function refuseUnreleased(line: ServableLine): void {
-  const released =
-    line.groupState === "held"
-      ? false
-      : line.ticketItemId !== null
-        ? line.ticketFiredAt !== null
-        : line.groupState !== null || line.sentAt !== null;
-  if (!released) {
+  if (!isReleased(line)) {
     throw new AppError("group.line_held", { tabId: line.workingOrderId, lineNo: line.lineNo });
   }
 }
@@ -5808,6 +5815,8 @@ export interface TableVisit {
   tableIds: string[];
   /** Each open draft on the party holding a line, oldest first. */
   unsentDrafts: UnsentDraft[];
+  /** The held group waiting to be released and when it is due; null with none, or reminders off. */
+  reminder: ReleaseReminder | null;
 }
 
 /** One row of the occupancy read-model. */
@@ -6058,6 +6067,7 @@ async function readSeatedParties(
   const visitIds = [...new Set(members.map((member) => member.visitId))];
   const bills = await readBillsOfVisits(tx, visitIds);
   const unsentDrafts = await readUnsentDrafts(tx, visitIds);
+  const reminders = await readReleaseReminders(tx, visitIds);
   const partyOf = new Map<string, TableVisit>();
   for (const member of members) {
     const known = partyOf.get(member.visitId);
@@ -6075,6 +6085,7 @@ async function readSeatedParties(
       billCount: own.filter((bill) => bill.status !== "abandoned").length,
       tableIds: [member.tableId],
       unsentDrafts: unsentDrafts.get(member.visitId)!,
+      reminder: reminders.get(member.visitId)!,
     });
   }
   return new Map(
