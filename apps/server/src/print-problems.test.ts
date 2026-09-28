@@ -1200,8 +1200,9 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
 
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa5.tabId));
     const reprint = (await jobsAt(v.cocinaPrinter)).at(-1)!;
-    // Both tables now seat the merged bill; which one the header names is not this test's subject.
-    const table = expect.stringMatching(/^Mesa [45]$/);
+    // Both tables now seat the merged bill and the header names them together (spec decision 9);
+    // their order is not this test's subject.
+    const table = expect.stringMatching(/^Mesa (4, 5|5, 4)$/);
     expect(reprint.lines).toEqual([
       "*** REPRINT ***",
       "Cocina",

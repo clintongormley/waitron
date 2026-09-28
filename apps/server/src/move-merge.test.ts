@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  kitchenStations,
   locations,
   nowIso,
+  printJobs,
   tills,
   withTransaction,
   workingOrderLines,
@@ -39,7 +41,25 @@ import {
   moveTab,
   moveTabLines,
   openTab,
+  unjoinTable,
 } from "./working-order.js";
+import { createPrinter } from "@waitron/printing";
+import { kitchenNotices } from "@waitron/venue-service";
+import { attachPrinterToStation } from "./station-printers.js";
+import { printedLines } from "./testing/decode-ticket.js";
+import {
+  OPERATOR,
+  commandFor,
+  inTx,
+  join,
+  nextMillisecond,
+  orderForParty,
+  revisionOf,
+  seat,
+  setupPartyVenue,
+  split,
+  type PartyVenue,
+} from "./testing/party-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { republishMenus } from "./testing/publish-menu.js";
 import "./errors.js";
@@ -800,5 +820,210 @@ describe("mergeTabs guards", () => {
     await expect(
       asApp(cfg, (tx) => mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: true })),
     ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId: fromTab } });
+  });
+});
+
+/** The kitchen notices recorded against the bills, oldest first. */
+async function noticesOf(billIds: string[]) {
+  return db
+    .select({
+      workingOrderId: kitchenNotices.workingOrderId,
+      kind: kitchenNotices.kind,
+      lineName: kitchenNotices.lineName,
+      movedTo: kitchenNotices.movedTo,
+    })
+    .from(kitchenNotices)
+    .where(inArray(kitchenNotices.workingOrderId, billIds))
+    .orderBy(kitchenNotices.createdAt, sql`rowid`);
+}
+
+/** Each notice as its dish, bill and destination, sorted by dish, a duplicate kept. */
+function byDish(notices: Awaited<ReturnType<typeof noticesOf>>): [string, string, string | null][] {
+  return notices
+    .map((n): [string, string, string | null] => [n.lineName, n.workingOrderId, n.movedTo])
+    .sort(([a], [b]) => a.localeCompare(b));
+}
+
+/** One held dish added to the bill: the kitchen has not been sent it. */
+async function holdOne(v: PartyVenue, billId: string, name: string): Promise<void> {
+  await inTx(v, (tx) =>
+    addTabRound(tx, v.cfg, billId, [{ menuItemId: v.item(name), quantity: "1", hold: true }]),
+  );
+}
+
+/** A printer on the venue's default station; returns its id. */
+async function kitchenPrinter(v: PartyVenue): Promise<string> {
+  return inTx(v, async (tx) => {
+    const [station] = await tx
+      .select({ id: kitchenStations.id })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.locationId, v.cfg.locationId));
+    const { id } = await createPrinter(
+      tx,
+      { locationId: v.cfg.locationId },
+      { name: "Cocina", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
+    );
+    await attachPrinterToStation(tx, { stationId: station!.id, printerId: id });
+    return id;
+  });
+}
+
+/** Each job the printer was sent, as its printed lines joined, oldest first. */
+async function printedBy(printerId: string): Promise<string[]> {
+  const jobs = await db
+    .select({ payload: printJobs.payload })
+    .from(printJobs)
+    .where(eq(printJobs.printerId, printerId))
+    .orderBy(sql`rowid`);
+  return jobs.map((job) => printedLines(job.payload).join("\n"));
+}
+
+/**
+ * Spec decision 9 and §8: a party's slips name its tables together, so a table action that changes
+ * them changes the destination of the sent dishes on every bill of the party.
+ */
+describe("a table action tells the kitchen of every bill of the party", () => {
+  it("tells the kitchen of sent dishes on every bill of a party that joins a table, and only those", async () => {
+    const v = await setupPartyVenue(db);
+    const mesa4 = await v.table("Mesa 4");
+    const mesa5 = await v.table("Mesa 5");
+    const { partyId, tabId } = await seat(v, mesa4);
+    await orderForParty(v, partyId, ["Burger"], tabId);
+    await orderForParty(v, partyId, ["Vino"], tabId);
+    const checkId = await split(v, partyId, tabId, [2]);
+    await holdOne(v, tabId, "Agua");
+    const before = await noticesOf([tabId, checkId]);
+
+    await join(v, partyId, tabId, mesa5);
+
+    const added = (await noticesOf([tabId, checkId])).slice(before.length);
+    expect(added).toHaveLength(2);
+    expect(added.map((n) => n.kind)).toEqual(["moved", "moved"]);
+    expect(added.map((n) => n.movedTo)).toEqual(["Mesa 4, 5", "Mesa 4, 5"]);
+    expect(added.map((n) => n.workingOrderId).sort()).toEqual([tabId, checkId].sort());
+    expect(added.map((n) => n.lineName).sort()).toEqual(["BURG", "TINTO"]);
+  });
+
+  it("tells the kitchen of every bill when a table leaves the party, naming the tables the dishes had", async () => {
+    const v = await setupPartyVenue(db);
+    const printerId = await kitchenPrinter(v);
+    const mesa4 = await v.table("Mesa 4");
+    const mesa5 = await v.table("Mesa 5");
+    const { partyId, tabId } = await seat(v, mesa4);
+    await join(v, partyId, tabId, mesa5);
+    await orderForParty(v, partyId, ["Burger", "Vino", "Flan"], tabId);
+    const checkId = await split(v, partyId, tabId, [2]);
+    const command = await commandFor(v, partyId);
+
+    const { tabId: newTabId } = await inTx(v, (tx) =>
+      unjoinTable(tx, v.cfg, tabId, mesa5, [{ lineNo: 1 }], command),
+    );
+
+    const notices = await noticesOf([tabId, checkId, newTabId!]);
+    expect(byDish(notices)).toEqual([
+      ["BURG", newTabId, "Mesa 5"],
+      ["FLAN", tabId, "Mesa 4"],
+      ["TINTO", checkId, "Mesa 4"],
+    ]);
+    const slips = (await printedBy(printerId)).filter((slip) => slip.includes("MOVED"));
+    expect(slips).toHaveLength(3);
+    expect(slips.filter((slip) => slip.includes("Mesa 4, 5 -> Mesa 5"))).toHaveLength(1);
+    expect(slips.filter((slip) => slip.includes("Mesa 4, 5 -> Mesa 4"))).toHaveLength(2);
+  });
+
+  it("tells the kitchen of the party's sent dishes when an empty table leaves it", async () => {
+    const v = await setupPartyVenue(db);
+    const mesa4 = await v.table("Mesa 4");
+    const mesa5 = await v.table("Mesa 5");
+    const { partyId, tabId } = await seat(v, mesa4);
+    await join(v, partyId, tabId, mesa5);
+    await orderForParty(v, partyId, ["Burger"], tabId);
+    const command = await commandFor(v, partyId);
+
+    await inTx(v, (tx) => unjoinTable(tx, v.cfg, tabId, mesa5, undefined, command));
+
+    expect(await noticesOf([tabId])).toEqual([
+      { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 4" },
+    ]);
+  });
+
+  it("tells the kitchen of every bill of a party whose tab moves to another table", async () => {
+    const v = await setupPartyVenue(db);
+    const mesa4 = await v.table("Mesa 4");
+    const mesa5 = await v.table("Mesa 5");
+    const mesa9 = await v.table("Mesa 9");
+    const { partyId, tabId } = await seat(v, mesa4);
+    await join(v, partyId, tabId, mesa5);
+    await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
+    const checkId = await split(v, partyId, tabId, [2]);
+    const command = await commandFor(v, partyId);
+
+    await inTx(v, (tx) => moveTab(tx, v.cfg, tabId, mesa9, command));
+
+    const notices = await noticesOf([tabId, checkId]);
+    expect(byDish(notices)).toEqual([
+      ["BURG", tabId, "Mesa 9"],
+      ["TINTO", checkId, "Mesa 9"],
+    ]);
+  });
+
+  it("tells the kitchen of every bill of the party that takes in another party's table", async () => {
+    const v = await setupPartyVenue(db);
+    const mesa4 = await v.table("Mesa 4");
+    const mesa7 = await v.table("Mesa 7");
+    const ana = await seat(v, mesa4);
+    await orderForParty(v, ana.partyId, ["Burger", "Vino"], ana.tabId);
+    const checkId = await split(v, ana.partyId, ana.tabId, [2]);
+    await nextMillisecond();
+    const other = await seat(v, mesa7);
+    await orderForParty(v, other.partyId, ["Flan"], other.tabId);
+    const expectedPartyRevision = await revisionOf(v, ana.partyId);
+    const expectedSourcePartyRevision = await revisionOf(v, other.partyId);
+    await nextMillisecond();
+
+    await inTx(v, (tx) =>
+      mergeTabs(tx, v.cfg, ana.tabId, other.tabId, {
+        freeSourceTable: false,
+        expectedPartyRevision,
+        expectedSourcePartyRevision,
+        operatorId: OPERATOR,
+      }),
+    );
+
+    const notices = await noticesOf([ana.tabId, checkId, other.tabId]);
+    expect(byDish(notices)).toEqual([
+      ["BURG", ana.tabId, "Mesa 4, 7"],
+      ["FLAN", ana.tabId, "Mesa 4, 7"],
+      ["TINTO", checkId, "Mesa 4, 7"],
+    ]);
+  });
+
+  it("tells the kitchen of a split bill of the party taken in, which joins the receiving party", async () => {
+    const v = await setupPartyVenue(db);
+    const mesa4 = await v.table("Mesa 4");
+    const mesa7 = await v.table("Mesa 7");
+    const ana = await seat(v, mesa4);
+    await nextMillisecond();
+    const other = await seat(v, mesa7);
+    await orderForParty(v, other.partyId, ["Flan", "Tarta"], other.tabId);
+    const otherCheckId = await split(v, other.partyId, other.tabId, [2]);
+    const expectedPartyRevision = await revisionOf(v, ana.partyId);
+    const expectedSourcePartyRevision = await revisionOf(v, other.partyId);
+    await nextMillisecond();
+
+    await inTx(v, (tx) =>
+      mergeTabs(tx, v.cfg, ana.tabId, other.tabId, {
+        freeSourceTable: false,
+        expectedPartyRevision,
+        expectedSourcePartyRevision,
+        operatorId: OPERATOR,
+      }),
+    );
+
+    const notices = await noticesOf([ana.tabId, other.tabId, otherCheckId]);
+    expect(byDish(notices)).toEqual([
+      ["FLAN", ana.tabId, "Mesa 4, 7"],
+      ["TARTA", otherCheckId, "Mesa 4, 7"],
+    ]);
   });
 });

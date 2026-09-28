@@ -95,6 +95,7 @@ import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { VENUE_SERVICE } from "./modules.js";
 import { openPartyTab, serveLine } from "./testing/serve-line.js";
+import { inTx, join, orderForParty, seat, setupPartyVenue, split } from "./testing/party-venue.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
@@ -4875,6 +4876,23 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       expect(tab.openedMinutes).toBeGreaterThanOrEqual(0);
       const walk = expo.find((o) => o.orderId === walkup)!;
       expect(walk.tableLabel).toBeUndefined();
+    });
+  });
+
+  it("names a joined party's tables together on every bill of the party (spec decision 9)", async () => {
+    const v = await setupPartyVenue(db);
+    const mesa4 = await v.table("Mesa 4");
+    const mesa5 = await v.table("Mesa 5");
+    const { partyId, tabId } = await seat(v, mesa4);
+    await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
+    const checkId = await split(v, partyId, tabId, [2]);
+    await join(v, partyId, tabId, mesa5);
+
+    const board = await inTx(v, (tx) => listExpoQueue(tx, v.cfg));
+
+    expect(Object.fromEntries(board.map((order) => [order.orderId, order.tableLabel]))).toEqual({
+      [tabId]: "Mesa 4, 5",
+      [checkId]: "Mesa 4, 5",
     });
   });
 

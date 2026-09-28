@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { eq } from "drizzle-orm";
@@ -9,6 +10,7 @@ import {
   seedKitchenStation,
   seedNodeAndSeries,
   seedOpenOrder,
+  seedPartyAt,
   seedVenue,
 } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
@@ -260,6 +262,60 @@ describe("computeOverdueOrders", () => {
       [check.orderId]: "T1",
       [tab.orderId]: "12",
     });
+  });
+
+  it("names a party's bill after the party's active tables, in the order they joined (spec decision 9)", async () => {
+    const seed = {
+      tillId: venue.tillId,
+      nodeId: venue.nodeId,
+      locationId: venue.locationId,
+      stationId,
+    };
+    const { orderId } = await seedFiredOrder(suite.db, seed, { orderNumber: 1, ageMinutes: 11 });
+    // Mesa 5 joined first: sorting by table id or by label would both put Mesa 4 first.
+    await seedPartyAt(suite.db, { locationId: venue.locationId, orderId }, [
+      {
+        id: `00000000-${randomUUID().slice(9)}`,
+        label: "Mesa 4",
+        joinedAt: "2026-09-28T20:02:00.000Z",
+      },
+      {
+        id: `ffffffff-${randomUUID().slice(9)}`,
+        label: "Mesa 5",
+        joinedAt: "2026-09-28T20:00:00.000Z",
+      },
+      {
+        label: "Mesa 3",
+        joinedAt: "2026-09-28T20:01:00.000Z",
+        leftAt: "2026-09-28T20:03:00.000Z",
+      },
+    ]);
+
+    const rows = await run();
+
+    expect(rows).toEqual([expect.objectContaining({ orderId, tableLabel: "Mesa 5, 4" })]);
+  });
+
+  it("names a party's bill by its own label once the party holds no table", async () => {
+    const seed = {
+      tillId: venue.tillId,
+      nodeId: venue.nodeId,
+      locationId: venue.locationId,
+      stationId,
+    };
+    const { orderId } = await seedFiredOrder(suite.db, seed, { orderNumber: 1, ageMinutes: 11 });
+    await seedPartyAt(suite.db, { locationId: venue.locationId, orderId }, [
+      {
+        label: "Mesa 4",
+        joinedAt: "2026-09-28T20:00:00.000Z",
+        leftAt: "2026-09-28T20:30:00.000Z",
+      },
+    ]);
+    await suite.db.update(workingOrders).set({ label: "Ana" }).where(eq(workingOrders.id, orderId));
+
+    const rows = await run();
+
+    expect(rows).toEqual([expect.objectContaining({ orderId, tableLabel: "Ana" })]);
   });
 
   it("a bare walk-up (no table) carries a null tableLabel", async () => {

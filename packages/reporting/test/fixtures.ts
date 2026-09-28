@@ -20,6 +20,8 @@ import {
   diningTables,
   invoiceSeries,
   locations,
+  parties,
+  partyTables,
   products,
   purchaseInvoiceVat,
   purchaseInvoices,
@@ -516,6 +518,37 @@ export async function seedFiredOrder(
     });
   }
   return { orderId };
+}
+
+/**
+ * Puts the order on a new party seated at a new table per entry, each joined at its own `joinedAt`,
+ * and left at `leftAt` where one is given; a table gets a random id unless the entry names one.
+ */
+export async function seedPartyAt(
+  db: Database,
+  seed: { locationId: string; orderId: string },
+  tables: { id?: string; label: string; joinedAt: string; leftAt?: string }[],
+): Promise<void> {
+  const [party] = await db
+    .insert(parties)
+    .values({ openedBy: randomUUID() })
+    .returning({ id: parties.id });
+  for (const table of tables) {
+    const [row] = await db
+      .insert(diningTables)
+      .values({ id: table.id, locationId: seed.locationId, label: table.label })
+      .returning({ id: diningTables.id });
+    await db.insert(partyTables).values({
+      partyId: party!.id,
+      tableId: row!.id,
+      joinedAt: table.joinedAt,
+      leftAt: table.leftAt ?? null,
+    });
+  }
+  await db
+    .update(workingOrders)
+    .set({ partyId: party!.id })
+    .where(eq(workingOrders.id, seed.orderId));
 }
 
 /** Re-exported so `overdue-orders.test.ts` needs no second import path into

@@ -1,7 +1,14 @@
-import { and, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { kitchenStations, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
-import { BAND_RANK, classifyBand, worstBand } from "@waitron/shared";
+import {
+  diningTables,
+  kitchenStations,
+  partyTables,
+  ticketItems,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
+import { BAND_RANK, classifyBand, partyTablesName, worstBand } from "@waitron/shared";
 import type { StationThresholds, TimingBand } from "@waitron/shared";
 import type { OverdueOrder, OverdueOrdersInput } from "./types.js";
 
@@ -11,6 +18,26 @@ import type { OverdueOrder, OverdueOrdersInput } from "./types.js";
  */
 function minutesSince(stamp: string, nowMs: number): number {
   return Math.floor((nowMs - Date.parse(stamp)) / 60_000);
+}
+
+/**
+ * Each party's active tables' labels, in the order the tables joined it. A copy of
+ * `apps/server/src/parties.ts`'s `partyTableLabels`, which this package cannot import.
+ */
+async function readPartyTableLabels(
+  tx: Transaction,
+  partyIds: readonly string[],
+): Promise<Map<string, string[]>> {
+  const labels = new Map(partyIds.map((id) => [id, [] as string[]]));
+  if (partyIds.length === 0) return labels;
+  const rows = await tx
+    .select({ partyId: partyTables.partyId, label: diningTables.label })
+    .from(partyTables)
+    .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
+    .where(and(inArray(partyTables.partyId, [...partyIds]), isNull(partyTables.leftAt)))
+    .orderBy(partyTables.joinedAt, partyTables.id);
+  for (const row of rows) labels.get(row.partyId)!.push(row.label);
+  return labels;
 }
 
 /**
@@ -41,12 +68,13 @@ export async function computeOverdueOrders(
       warmAfterMinutes: kitchenStations.warmAfterMinutes,
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
-      // A scalar subquery, not a LEFT JOIN, which could multiply rows if two tables pointed at this
-      // order: a seated tab (`dt.tab_id` back-points here) or a counter delivery
-      // (`working_orders.delivery_table_id` points at `dt`). With no table, the order's own label
-      // (a check split off a tab carries the tab's table label as its own); `null` for an
-      // unlabelled walk-up. `workingOrders` is JOINed, never this query's `.from()` base, so
-      // CLAUDE.md §3's correlated-subquery trap does not apply.
+      partyId: workingOrders.partyId,
+      label: workingOrders.label,
+      // For an order of no party. A scalar subquery, not a LEFT JOIN, which could multiply rows if
+      // two tables pointed at this order: a seated tab (`dt.tab_id` back-points here) or a counter
+      // delivery (`working_orders.delivery_table_id` points at `dt`). With no table, the order's own
+      // label; `null` for an unlabelled walk-up. `workingOrders` is JOINed, never this query's
+      // `.from()` base, so CLAUDE.md §3's correlated-subquery trap does not apply.
       tableLabel: sql<string | null>`coalesce((
         select dt.label from dining_tables dt
         where (dt.tab_id = ${workingOrders.id} or ${workingOrders.deliveryTableId} = dt.id)
@@ -68,10 +96,17 @@ export async function computeOverdueOrders(
     // station named for a tied order could change from one read of the same data to the next.
     .orderBy(ticketItems.queuedAt, workingOrderLines.lineNo);
 
+  interface Line {
+    stationName: string;
+    ageMinutes: number;
+    band: TimingBand;
+  }
   interface Candidate {
     orderNumber: number;
+    partyId: string | null;
+    label: string | null;
     tableLabel: string | null;
-    lines: { stationName: string; ageMinutes: number; band: TimingBand }[];
+    lines: Line[];
   }
   const byOrder = new Map<string, Candidate>();
   for (const row of rows) {
@@ -86,34 +121,53 @@ export async function computeOverdueOrders(
     const band = classifyBand(nowMs - ageMinutes * 60_000, nowMs, thresholds);
     let order = byOrder.get(row.orderId);
     if (order === undefined) {
-      order = { orderNumber: row.orderNumber, tableLabel: row.tableLabel, lines: [] };
+      order = {
+        orderNumber: row.orderNumber,
+        partyId: row.partyId,
+        label: row.label,
+        tableLabel: row.tableLabel,
+        lines: [],
+      };
       byOrder.set(row.orderId, order);
     }
     order.lines.push({ stationName: row.stationName, ageMinutes, band });
   }
 
-  const results: OverdueOrder[] = [];
+  const late: { orderId: string; order: Candidate; band: TimingBand; worstLine: Line }[] = [];
   for (const [orderId, order] of byOrder) {
     const band = worstBand(order.lines.map((line) => line.band));
     if (band !== "overdue" && band !== "forgotten") continue;
     // A tie on band AND age keeps the first such line in the query's `queued_at, line_no` order.
     // `band` is computed from `order.lines`, so at least one line matches and `worstLine` is set.
-    let worstLine: { stationName: string; ageMinutes: number; band: TimingBand } | undefined;
+    let worstLine: Line | undefined;
     for (const line of order.lines) {
       if (line.band !== band) continue;
       if (worstLine === undefined || line.ageMinutes > worstLine.ageMinutes) {
         worstLine = line;
       }
     }
-    results.push({
+    late.push({ orderId, order, band, worstLine: worstLine! });
+  }
+
+  const partyLabels = await readPartyTableLabels(tx, [
+    ...new Set(late.flatMap(({ order }) => order.partyId ?? [])),
+  ]);
+  const results: OverdueOrder[] = late.map(({ orderId, order, band, worstLine }) => {
+    const tables = order.partyId === null ? null : partyLabels.get(order.partyId)!;
+    return {
       orderId,
       orderNumber: order.orderNumber,
-      tableLabel: order.tableLabel,
-      stationName: worstLine!.stationName,
-      ageMinutes: worstLine!.ageMinutes,
+      tableLabel:
+        tables === null
+          ? order.tableLabel
+          : tables.length === 0
+            ? order.label
+            : partyTablesName(tables),
+      stationName: worstLine.stationName,
+      ageMinutes: worstLine.ageMinutes,
       band,
-    });
-  }
+    };
+  });
 
   // Worst-first: band rank desc, then age desc, then order number for a deterministic tiebreak.
   results.sort(

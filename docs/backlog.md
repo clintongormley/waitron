@@ -705,10 +705,14 @@ the products inside it are. Spec §5 wants buttons in predictable positions duri
 action:** the owner decides whether either kind of empty section should keep its place, for example
 greyed.
 
-**A joined tab's kitchen slips can name a table its ticket did not print.** Correction and MOVED
-slips name a joined tab's lowest-id table (`readOrderHeader`, `apps/server/src/kitchen-print.ts`),
-so after a join a MOVED slip's "from" can name the other table; recording each ticket's printed
-table would fix it.
+**A joined tab of no party can have kitchen slips naming a table its ticket did not print.**
+Correction and MOVED slips name such a tab's lowest-id table (`orderTableLabels`,
+`apps/server/src/kitchen-print.ts`), so after a join a MOVED slip's "from" can name the other
+table; recording each ticket's printed table would fix it. A party's bill names all its tables
+instead (the table-actions "Task 4 DONE" entry below). Outside tests, `openTab`'s one caller is
+`seatTable` (`apps/server/src/parties.ts`), which opens the tab on a new party. Whether a tab of no
+party can reach a join in production is not established: `moveTab` of an open parked order onto a
+table is an unchecked path to one.
 
 **The owner decided a split check gets no Void; the server now allows one.** Since
 table-actions Task 2 (#825, 2026-09-28), `voidTabLine`
@@ -2985,6 +2989,62 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - In the till's table screen, the check that treats an unreadable reminder time as "never due"
       (`#reminderDueAt`, `apps/till/src/screens/till-table-order-screen.ts`) has no test of its own:
       the review removed it and no test failed. **Next action:** a case with a malformed `dueAt`.
+  - **Task 4 DONE (PR to follow, 2026-09-29): kitchen slips, the pass, receipts and the overdue
+    report name all of a party's tables.** What changes for a person:
+    - A joined party's kitchen slips, pass cards and overdue-report rows read "Mesa 4, 5" (the
+      tables in the order they joined, `partyTablesName`), where they read the table with the
+      lowest id. A bill split off the tab names the party's tables too, not the label it was split
+      with. When a bill is split off, the new bill's own label is set to the party's tables
+      (`orderTableLabel`), not to the receipt label with the party's name; paying a bill later
+      replaces its label (see the open point below). Once a party holds no table, its bills fall
+      back to their own label.
+    - A party's receipt and payment slip read "Ana · Mesa 4, 5" for a named party and "Mesa 4, 5"
+      for an unnamed one (`partyReceiptLabel`). A receipt already issued keeps the label frozen at
+      issuance. A counter order still names its delivery table.
+    - Joining, unjoining and moving a table, and merging bills, send a MOVED notice and slip for
+      the sent dishes on every open, placed or settled bill of the parties involved whose tables
+      changed (`readPartiesSentWork`, `enqueueMovedSlipsFor` in
+      `apps/server/src/kitchen-print.ts`). Before, a join sent none, and a move, unjoin or merge
+      compared only the bill acted on.
+      Moving lines between bills and transferring lines keep their one-bill comparison.
+    - A table's bill that belongs to no party keeps the old rule: the lowest-id table seated at
+      it, and no notice on a join. Outside tests, `openTab`'s one caller is `seatTable`, which
+      opens the tab on a new party. Whether a tab of no party can reach a join in production is
+      not established: `moveTab` of an open parked order onto a table is an unchecked path to one.
+    Tests changed by spec decision 9: `apps/server/src/print-problems.test.ts` "follows the held
+    dishes when their bill is merged into another table's, and clears by that bill's reprint"
+    matched one table in the reprint header and now matches the party's two.
+    `apps/server/src/order-groups.test.ts` "takes a fired-group line to the table's own new bill
+    on an unjoin with no group, and prints the MOVED slip" expected one new print job; it now
+    expects two, the taken dish's MOVED slip and one for the beer left on the tab, whose tables
+    went from two to one (spec §8).
+    Left open:
+    - At 390 px a pass card whose label wraps also wraps its "2 min" onto two lines (seen with a
+      seven-table label, `apps/till/src/screens/till-expo-screen.ts`); nothing overflows.
+    - Paying a named party's bill freezes its receipt label, "Ana · Mesa 4, 5", into
+      `working_orders.label` in the same update that sets the bill `settled` (`readReceiptOrder`
+      at issuance, in `apps/server/src/till-sale.ts` and `apps/server/src/bill-payments.ts`), so
+      reprints match. Kept on purpose (spec §8: receipts show the name). `placeOrder`
+      (`apps/server/src/working-order.ts`) writes the receipt label too when it places an order
+      whose service mode is `invoice_first`. By reading, not tested: a party seated at a table
+      with no zone, in a venue whose order flow is `invoice_first`, appears to have its bill
+      placed invoice-first and its label written at placing — `openTab` checks the service mode
+      only for a table in a zone, and `placeOrder` then falls back to the location's order flow.
+      Its one caller outside tests, the till's `/api/working-orders/:id/place` route
+      (`apps/server/src/till-api.ts`), adds no party check. In the review's probe (a party at Mesa 4
+      joins Mesa 5, is named Ana, orders and pays cash) the bill went from `["open", null]` to
+      `["settled", "Ana · Mesa 4, 5"]`. Of the readers of that column checked, these can meet a
+      paid bill and then show the party's name with its tables: the station queue card (`listStationQueue`,
+      `apps/server/src/working-order.ts`), which shows no table name before payment and
+      "Ana · Mesa 4, 5" after it; the order label on kitchen notices recorded afterwards
+      ("#N · label", `recordKitchenNotices`, `packages/venue-service/src/kitchen-notices.ts`);
+      the till's list of a party's bills (`readBillsOfParties`, `apps/server/src/parties.ts`);
+      `orderTableLabel`'s fallback once the party holds no table (slips and the pass); and the
+      overdue report's own fallback to the order's label (`computeOverdueOrders`,
+      `packages/reporting/src/overdue-orders.ts`). Not yet checked: the payment API's
+      `/management-api/payments/stuck`, `/management-api/payments/bill-payments` and
+      `/management-api/payments/bill-refunds` queries (`apps/server/src/payments-api.ts`), which
+      read the same column. Decide whether those should read the tables alone.
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
   joined to it, but merging another table's bill into its paid bill, or moving items to or from

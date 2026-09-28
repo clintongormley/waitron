@@ -2061,7 +2061,7 @@ receipts show the name and tables); P7, P17. Branch `feat/party-kitchen-names`. 
   ```ts
   // apps/server/src/kitchen-print.ts
   export async function orderTableLabel(tx, cfg, orderId: string): Promise<string | null>; // a party bill: its active tables (partyTablesName), else its label; a counter order: its delivery table, else its label
-  export async function readPartiesSentWork(tx, cfg, partyIds: readonly (string | null)[]): Promise<Map<string, SentWork>>; // every open, placed or settled bill of those parties with fired items, keyed by bill
+  export async function readPartiesSentWork(tx, cfg, partyIds: readonly (string | null)[], orderIds: readonly string[] = []): Promise<Map<string, SentWork>>; // every open, placed or settled bill of those parties with fired items, keyed by bill; moveTab and mergeTabs pass orderIds for bills of no party
   export async function enqueueMovedSlipsFor(tx, cfg, before: ReadonlyMap<string, SentWork>, mergedInto?: ReadonlyMap<string, string>): Promise<void>; // enqueueMovedSlips(before.get(bill), mergedInto.get(bill) ?? bill) for each; Task 8 passes mergedInto
   ```
 

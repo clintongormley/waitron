@@ -1077,8 +1077,9 @@ async function orderNumberOf(orderId: string): Promise<number> {
 }
 
 /**
- * A table in the venue's tables zone at a chosen id. A joined tab's kitchen slips name its table with
- * the lowest id (`readOrderHeader`), so a test that joins tables picks the ids to say which.
+ * A table in the venue's tables zone at a chosen id. A joined tab of no party (`openTabWith` opens
+ * one) has kitchen slips naming its table with the lowest id (`orderTableLabels`), so a test that
+ * joins tables picks the ids to say which.
  */
 async function tableAt(cfg: TillConfig, id: string, label: string): Promise<string> {
   await db
