@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -508,6 +509,59 @@ describe("purchase-form — money fields", () => {
       }
       for (const id of ["line-rate-0", "deductible-proportion"]) {
         expect(el.shadowRoot!.querySelector(`[data-test=${id}]`)!.tagName, id).toBe("WT-INPUT");
+      }
+    },
+  );
+
+  it.each(["en-GB", "es-ES"])(
+    "on a phone in %s, a VAT line wraps its fields rather than overlapping or cutting them",
+    async (locale) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      try {
+        setLocale(locale);
+        await page.viewport(390, 844);
+        const big = { rate: "21.00", base: "10000.00", tax: "10000.00", kind: "capital" as const };
+        const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", {
+          open: true,
+          invoice: { ...EDIT_INVOICE, lines: [big] },
+        });
+        // The field measures its sign after layout, and sizes its amount box then.
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const line = el.shadowRoot!.querySelector<HTMLElement>("[data-test=line-0]")!;
+        const row = line.getBoundingClientRect();
+        const boxes = (Array.from(line.children) as HTMLElement[]).map((child) => {
+          const amount = child.shadowRoot?.querySelector("[part=amount]");
+          return { child, box: (amount ?? child).getBoundingClientRect() };
+        });
+        for (const [i, { child, box }] of boxes.entries()) {
+          const at = `${locale} ${child.dataset.test ?? child.tagName}`;
+          expect(box.right, `${at} runs past the line`).toBeLessThanOrEqual(row.right + 0.5);
+          for (const { child: other, box: next } of boxes.slice(i + 1)) {
+            const apart =
+              next.left >= box.right - 0.5 ||
+              next.right <= box.left + 0.5 ||
+              next.top >= box.bottom - 0.5 ||
+              next.bottom <= box.top + 0.5;
+            expect(apart, `${at} overlaps ${other.dataset.test ?? other.tagName}`).toBe(true);
+          }
+        }
+        for (const id of ["line-base-0", "line-tax-0"]) {
+          const input = el
+            .shadowRoot!.querySelector(`[data-test=${id}]`)!
+            .shadowRoot!.querySelector("input")!;
+          expect(input.scrollWidth, `${locale} ${id} is cut off`).toBeLessThanOrEqual(
+            input.clientWidth,
+          );
+        }
+        const kind = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=line-kind-0]")!;
+        const shown = kind.getBoundingClientRect().width;
+        kind.style.width = "max-content";
+        const needed = kind.getBoundingClientRect().width;
+        kind.style.width = "";
+        expect(shown, `${locale} the VAT type is cut off`).toBeGreaterThanOrEqual(needed);
+      } finally {
+        await page.viewport(width, height);
       }
     },
   );

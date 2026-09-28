@@ -71,7 +71,12 @@ export class WtPriceInput extends LitElement {
         flex: none;
       }
 
-      /* The sign is measured into --currency-width, so the typed amount is padded clear of it. */
+      /* The sign is measured into --currency-width, so the typed amount is padded clear of it, and
+         an unstretched box grows by that padding so the amount keeps the room it had without it. */
+      .amount-box input {
+        width: calc(var(--wt-price-field-width) + var(--currency-width, 0px) + var(--wt-space-1));
+      }
+
       .amount-box.before input {
         padding-inline-start: calc(
           var(--wt-space-3) + var(--currency-width, 0px) + var(--wt-space-1)

@@ -89,6 +89,14 @@ export class PurchaseForm extends LitElement {
         flex: 1;
         min-width: 5rem;
       }
+      /* A money field's amount box never shrinks below its amount and sign, and the VAT type never
+         below its longest name, so a narrow line wraps them rather than overlapping or cutting. */
+      wt-price-input.line-field {
+        min-width: min-content;
+      }
+      label.line-field {
+        min-width: max-content;
+      }
       .error {
         color: var(--wt-color-danger);
         margin-top: var(--wt-space-3);

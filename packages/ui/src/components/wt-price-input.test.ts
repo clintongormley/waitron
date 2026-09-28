@@ -527,16 +527,17 @@ test("changing the locale moves the sign to the side the new locale writes it, a
   expect(el.shadowRoot!.querySelector("input")!.hasAttribute("aria-describedby")).toBe(false);
 });
 
-test("with a locale the amount part is still the input, and a fixed unit still joins the field's trailing edge", async () => {
-  const { el, input } = await mountPrice(
+test("with a locale the amount part is still the input, wider by its sign, and a fixed unit still joins the field's trailing edge", async () => {
+  const { el, input, currency } = await mountPrice(
     '<wt-price-input unit="kg" fixed-unit locale="es-ES" style="display: inline-block"></wt-price-input>',
   );
   host.style.setProperty("--wt-radius-md", "7px");
   host.style.setProperty("--wt-price-field-width", "91px");
+  host.style.setProperty("--wt-space-1", "5px");
   expect(el.shadowRoot!.querySelector('[part~="amount"]')).toBe(input);
   const box = input.getBoundingClientRect();
   const unit = el.shadowRoot!.querySelector(".unit")!.getBoundingClientRect();
-  expect(box.width).toBe(91);
+  expect(box.width).toBeCloseTo(91 + currency!.getBoundingClientRect().width + 5, 1);
   expect([unit.top, unit.left]).toEqual([box.top, box.right]);
   expect([
     getComputedStyle(input).borderInlineEndWidth,
@@ -560,6 +561,56 @@ test("with a locale and no unit, the amount box keeps its own trailing edge", as
   expect(getComputedStyle(input).borderInlineEndWidth).toBe("1px");
   expect(getComputedStyle(input).borderStartEndRadius).toBe("7px");
 });
+
+const unstretched = [
+  ["en-GB", "a unit button", ""],
+  ["en-GB", "a fixed unit", "fixed-unit"],
+  ["es-ES", "a unit button", ""],
+  ["es-ES", "a fixed unit", "fixed-unit"],
+] as const;
+
+test.each(unstretched)(
+  "an unstretched %s field beside %s grows by its sign, so its amount has the room it had without one",
+  async (locale, _unit, fixed) => {
+    const plain = await mountPrice(
+      `<wt-price-input unit="kg" ${fixed} style="display: inline-block"></wt-price-input>`,
+    );
+    const signed = await mountPrice(
+      `<wt-price-input unit="kg" ${fixed} locale="${locale}" style="display: inline-block"></wt-price-input>`,
+    );
+    const room = (input: HTMLInputElement) => {
+      const content = contentBox(input);
+      return content.right - content.left;
+    };
+    expect(room(signed.input)).toBeCloseTo(room(plain.input), 1);
+  },
+);
+
+test.each(
+  unstretched.flatMap(([locale, unit, fixed]) =>
+    ["9999.99", "10000.00"].map((value) => [locale, unit, value, fixed] as const),
+  ),
+)("an unstretched %s field beside %s shows %s whole", async (locale, _unit, value, fixed) => {
+  const typed = locale === "es-ES" ? value.replace(".", ",") : value;
+  const { input } = await mountPrice(
+    `<wt-price-input unit="kg" ${fixed} locale="${locale}" value="${typed}" style="display: inline-block"></wt-price-input>`,
+  );
+  expect(input.scrollWidth).toBeLessThanOrEqual(input.clientWidth);
+});
+
+test.each([
+  ["a unit button", ""],
+  ["a fixed unit", "fixed-unit"],
+])(
+  "with no locale an unstretched field beside %s is exactly --wt-price-field-width wide",
+  async (_unit, fixed) => {
+    const { input } = await mountPrice(
+      `<wt-price-input unit="kg" ${fixed} style="display: inline-block"></wt-price-input>`,
+    );
+    host.style.setProperty("--wt-price-field-width", "91px");
+    expect(input.getBoundingClientRect().width).toBe(91);
+  },
+);
 
 function expectSignClearOfText(currency: HTMLElement, input: HTMLInputElement) {
   const sign = currency.getBoundingClientRect();
