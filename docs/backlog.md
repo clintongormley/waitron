@@ -2193,7 +2193,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   [Design](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md), Revision 2,
   approved by the owner and merged as #693 (§14 lists every change from Revision 1);
   [plan](superpowers/plans/2026-09-26-service-ordering-and-billing.md), Revision 2, eighteen tasks,
-  reviewed three times before the merge. What stays open:
+  reviewed three times before the merge. _(2026-09-28: table actions Task 1 renamed "visit" to
+  "party" — the tables and columns by core migration `0036`, and the routes and error codes in
+  code — and the entries below use the new names; the four `visits_*_ck` CHECK names and the
+  stored scope value `'visit'` stay until Task 13.)_ What stays open:
   - **Task 0's [bill payments design](superpowers/specs/2026-09-26-bill-payments-design.md) is
     approved** (owner, 2026-09-26, PR #698), with the owner's answers to its open points (its §11):
     the cash-up counts money on the day it moves, in Task 14 (§9a), and a card refund is a durable

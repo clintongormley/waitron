@@ -1,7 +1,8 @@
--- Hand-written in place of drizzle-kit's output, which rebuilt the six tables whose columns or keys
--- the rename touches and failed on a fresh database. SQLite's RENAME rewrites the foreign keys, CHECK
--- bodies and trigger bodies naming what it renames; the CHECK names and the stored scope value
--- 'visit' stay until a rebuild of those two tables.
+-- Hand-written: drizzle-kit's generated SQL for this rename rebuilt every table whose columns or
+-- keys the rename touches and failed on a fresh database, so a regeneration must paste this file
+-- back rather than keep drizzle's. SQLite's RENAME rewrites the foreign keys, CHECK bodies and
+-- trigger bodies naming what it renames; the CHECK names and the stored scope value 'visit' stay
+-- until a rebuild of `parties` and `service_commands`.
 DROP TRIGGER visits_clear_table_status;--> statement-breakpoint
 ALTER TABLE `visits` RENAME TO `parties`;--> statement-breakpoint
 ALTER TABLE `visit_tables` RENAME TO `party_tables`;--> statement-breakpoint

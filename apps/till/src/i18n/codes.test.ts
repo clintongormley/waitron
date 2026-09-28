@@ -187,12 +187,30 @@ it("explains each refusal of joining or merging bills that belong together diffe
   ]);
 });
 
-it.each([
-  "party.not_open",
-  "party.out_of_date",
-  "party.bill_outstanding",
-  "group.held_leaves_party",
-])("has English and Spanish wording for %s", (code) => {
-  expect(codeMessage(code, "en")).not.toBe(codeMessage("server.internal", "en"));
-  expect(codeMessage(code, "es")).not.toBe(codeMessage("server.internal", "es"));
+it("explains each refusal about a table's party, in both languages", () => {
+  expect(
+    [
+      "party.not_open",
+      "party.out_of_date",
+      "party.bill_outstanding",
+      "group.held_leaves_party",
+    ].map((code) => [codeMessage(code, "en"), codeMessage(code, "es")]),
+  ).toEqual([
+    [
+      "This table has changed since you opened it. Reload the floor and try again",
+      "Esta mesa ha cambiado desde que la abriste. Vuelve a cargar el plano e inténtalo de nuevo",
+    ],
+    [
+      "Someone else changed this table. Reload it and try again",
+      "Otra persona ha cambiado esta mesa. Vuelve a cargarla e inténtalo de nuevo",
+    ],
+    [
+      "A bill for this table is still unpaid. Take payment before finishing the table",
+      "Hay una cuenta de esta mesa sin pagar. Cóbrala antes de cerrar la mesa",
+    ],
+    [
+      "Items still on hold cannot move to another table until their group is fired",
+      "Los artículos en espera no se pueden pasar a otra mesa hasta que se marche su grupo",
+    ],
+  ]);
 });

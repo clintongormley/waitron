@@ -48,7 +48,8 @@ export const workingOrderStatus = enumType([
  *
  * That trigger names every column of this table except `status` and
  * `collected_at`, so a column added here goes into its list too, by a migration
- * that re-creates it (the latest: `drizzle/0019_settled_order_freeze_visit_id.sql`).
+ * that re-creates it. The latest text is `drizzle/0019_settled_order_freeze_visit_id.sql`'s with
+ * `visit_id` renamed `party_id` by `drizzle/0036_party_rename.sql`, so a re-creation uses `party_id`.
  */
 export const workingOrders = table(
   "working_orders",

@@ -12,8 +12,8 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { diningTables } from "./dining-tables.js";
 import { workingOrders } from "./orders.js";
+import { parties, partyTables, serviceCommands } from "./parties.js";
 import { locations, tenants, tills } from "./tenants.js";
-import { serviceCommands, parties, partyTables } from "./parties.js";
 
 const LOCATION = "bbbbbbbb-0000-4000-8000-000000000001";
 const TILL = "bbbbbbbb-1111-4000-8000-000000000001";
