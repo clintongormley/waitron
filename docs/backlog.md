@@ -458,7 +458,9 @@ live-update route accepts the management cookie only — a till-session branch o
 the server tell tills instead (plan D11), a later refinement. The till polls it every 15 seconds while
 signed in, greys what is sold out in place, and runs the basket refresh flow (D9) for the counter's
 basket and for a table's round refused `menu.version_changed` (the table screen keeps the round
-until the server has added it). Follow-up: the comparison does not notice a publish that adds a
+until the server has added it) _(Task 8, 2026-09-28: the round is now each person's draft,
+held by the app's `DraftSync`, `apps/till/src/state/draft-sync.ts`, and saved on the server)_.
+Follow-up: the comparison does not notice a publish that adds a
 required options list to a dish in the basket, or lowers a list's picks limit, so the till takes the
 new version silently and the server then refuses the request `options.label_required` (or
 `extras.limit_exceeded`, per `validateExtraSelections`); nothing wrong is filed, but staff see a refusal where the dialog should have asked.
@@ -466,19 +468,30 @@ The comparison also looks only at each line's total, so dish and extra price cha
 are adopted without asking — see the entry "Two till menu-refresh defects the retroactive Codex
 review of #719 found" further down.
 A table's round is also not marked by the poll's sold-out list, only when a send is refused.
+_(Task 8, 2026-09-28: no longer so — when the poll's sold-out list for the open table's zone
+changes, `#onMenuState` in `apps/till/src/till-app.ts` marks the draft again, `#markDraft(true)`.)_
 Follow-up: a round the waiter has built but not yet sent belongs to the order it was built on, so
 when a split moves the table screen to the split-off check, the round is not shown on the check
 (before this branch the screen's one round went with it); when a split answers, move the unsent
 round to the check. Likewise a round built on a tab that is then merged into another tab stays
-under the merged-away tab's order id and can no longer be reached.
+under the merged-away tab's order id and can no longer be reached. _(Task 8, 2026-09-28: the draft
+now belongs to the party, not to an order: while a check split off the party's bill is on screen
+no draft shows, and the party's draft shows on the party's own tab — `#tableDraft`,
+`apps/till/src/till-app.ts`.)_
 Follow-up: every remembered round (one refused sold out or after a menu change) is marked again
 against the open table's menu, so opening a table in another service zone can mark another table's
 round wrongly or clear its mark. Remember each round's zone and re-mark only that zone's rounds, or
-keep rounds on the app, one per order.
+keep rounds on the app, one per order. _(Task 8, 2026-09-28, read, not run: `#markedRounds` in
+`apps/till/src/till-app.ts` still holds every store refused sold out or after a menu change,
+drafts included, and drops one only at sign-out or when a re-mark after the offers are read
+again leaves it unmarked; `#markRounds` marks each against the open table's offers. Whether a
+store from an earlier table is ever shown again was not checked.)_
 Follow-up: a round kept after a refused send survives leaving the table only on a canvas that shows
 the floor and the order side by side, because the table screen holds it; on the till's drill view
 and a handheld's separate order tab, leaving destroys the screen and the round. Keeping rounds on
-the app, one per order, would keep them on every layout.
+the app, one per order, would keep them on every layout. _(Task 8, 2026-09-28: done that way —
+each person's draft is saved on the server and read back by `DraftSync` when the table is opened
+again, so it no longer depends on the table screen.)_
 **Menus M7v landed (#720, 2026-09-27): a line keeps the VAT rate its published menu froze.** the owner's
 decision of 2026-09-26 replaces menus Task 7a's rule. Each published menu version now freezes the
 VAT class and rate of each dish, variant and extras item, and a till is served those. A line
@@ -2462,7 +2475,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - An options list a line leaves unanswered (one added to the dish after the draft was saved,
       say) is refused at submission with `options.label_required`, but the draft does not flag the
       line unavailable. Nor does it flag a fractional quantity of a dish sold whole, refused at
-      submission with `quantity.invalid`.
+      submission with `quantity.invalid`. _(Task 8, 2026-09-28: the till now marks such a line
+      `unit_changed` once the table's offers are read — `lineBlock`,
+      `apps/till/src/state/menu-refresh.ts`; the server's own flag, `unavailable` in
+      `apps/server/src/order-drafts.ts`, still checks neither case.)_
     - A line whose course is switched off after it was saved is kept by later saves and refused at
       submission with `course.not_found`; the draft does not flag it unavailable.
     - A line saved against a menu version that is no longer live (the menu was republished) is
@@ -2495,7 +2511,12 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       UUID is refused `options.invalid` at save, where pricing answers `options.label_required`.
       An options or extras refusal at save names only the field, as pricing does (`labelId`,
       `quantity`), not the line (`lines.<n>.…`) as the save's other line refusals do, so with
-      several lines the till cannot tell which line was refused.
+      several lines the till cannot tell which line was refused. _(Task 8, 2026-09-28, read, not
+      run: the till reads only a save refusal's code (`asRefusal`,
+      `apps/till/src/state/draft-sync.ts`), keeps the edits unsaved to send again, and shows one
+      message for the whole draft, so it still names no line. A Send refused
+      `product.unavailable` reads the table's offers again and marks the draft's lines against
+      them (`#markSoldOut`, `apps/till/src/till-app.ts`).)_
     - A merge that names no operator records the draft's owner as the one who discarded it; the one
       product caller, the merge route, always names one.
     - Three rulings made on the branch for the owner to confirm:
@@ -2509,11 +2530,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     each person's unsent order kept on the server (Task 7's "draft"), so an order being rung up is
     still there after leaving the table or reloading the till. What a person at the till sees:
     - A tap adds the dish to their draft, and identical taps add together ("Beer ×3"), by one rule
-      the till and the server share (`packages/shared/src/draft-merge.ts`, which the server's
-      `normaliseDraftLines` now calls). A bar at the foot of the menu shows the dish last added,
-      with −1 and +1; −1 at one takes the line out. Each draft line shows once, in its course
-      section, and a line of several whole units can be split into rows of one that later taps do
-      not join back together. A weighed dish takes its weight through the counter's weight entry.
+      the till and the server share (`packages/shared/src/draft-merge.ts`; the server's
+      `apps/server/src/order-drafts.ts` imports its `normaliseDraftLines` from `@waitron/shared`).
+      A bar at the foot of the menu shows the dish last added, with −1 and +1; −1 at one takes the
+      line out. Each draft line shows once, in its course section, and a line of several whole
+      units can be split into rows of one that later taps do not join back together. A weighed dish takes its weight through the counter's weight entry.
     - Edits are saved about 0.4 s after the last one (`DRAFT_SAVE_DELAY_MS`,
       `apps/till/src/state/draft-sync.ts`), and at once on going back to the floor, leaving the
       Order tab, opening another table or signing out. Leaving sends nothing to the kitchen. A save
@@ -2867,7 +2888,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   carried to the next tab first (`#followDraft` in `apps/till/src/till-app.ts` calls `#carryDraft`
   in `apps/till/src/screens/till-table-order-screen.ts`, which keeps a draft already started on
   that tab instead), but the review's probe tested the old code and was not re-run against the
-  new.
+  new. _(Task 8, 2026-09-28: `#carryDraft` is gone; the draft now lives on the party, on the server
+  and in `DraftSync`, so nothing is carried between tabs, and `#followDraft` only moves the screen
+  to the next tab. Read, not run: (1) still reads as present — `withUnavailable` still takes each
+  options list's default from the offers the till loaded; (2) too — `refreshBasket` still compares
+  each line's total, `lineGross`, alone; both in `apps/till/src/state/menu-refresh.ts`.)_
 - **The till does not load its menu until a manual refresh**, and a dashboard menu change does not
   appear live on it. A till-app fix.
 - **The three displays walked end to end** — [ui-review.md](ui-review.md)'s areas, at the real box.
