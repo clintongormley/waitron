@@ -1,10 +1,12 @@
 # Tables, parties and bills: the till's table actions — design
 
-**Status:** draft for review, revision 2 (2026-09-28). Section 4 holds the owner's decisions, made in
+**Status:** draft for review, revision 3 (2026-09-28). Section 4 holds the owner's decisions, made in
 design sessions on 2026-09-28; everything else is this document's proposal and is open to review.
 Section 13 lists the points the reviewers should look at hardest. Revision 2 folds in the first
 outside review (payment identity, paid items, kitchen groups, the main bill's life, MOVED notices,
-the service area of later orders) and the owner's answers to it.
+the service area of later orders) and the owner's answers to it. Revision 3 folds in the second
+review: a presented bill keeps its invoice and its service area when it moves, its contents cannot
+change in this build, the main bill may be absent, and paid bills do not move.
 
 ## 1. Why
 
@@ -93,8 +95,15 @@ not run.
   invoice-first flow, before payment (`apps/server/src/till-sale.ts:207`, `:703-756`).
 - **"Pay, then order dessert"** is settled by the service design: the new charge goes on a new bill of
   the same party with its own invoice (`docs/superpowers/specs/2026-09-20-service-ordering-and-billing-design.md:387-390`).
-- **An issued invoice is corrected through the fiscal correction workflow**: an anulación
-  (`recordVoid`) or a rectificativa (`recordRectificativa`, `packages/fiscal-verifactu/src/backend.ts:332-390`).
+- **Nothing reopens a presented bill.** The fiscal backend can record an anulación (`recordVoid`)
+  or a rectificativa (`recordRectificativa`, `packages/fiscal-verifactu/src/backend.ts:332-390`). The
+  void is called from the card-reversal path (`packages/payments-stripe/src/reverse.ts`); nothing in
+  `apps/` or `packages/` outside the backends calls the rectificativa (grep, 2026-09-28). Neither
+  returns a bill to `open`, and the bill status trigger refuses `placed → open`
+  (`packages/db/drizzle/0001_behavioural_triggers.sql`, around line 318; the second review ran its
+  eight transition-guard tests).
+- **Collecting a bill picks its path from the service mode**: in invoice-first mode it settles the
+  invoice already issued, otherwise it issues a sale (`collectOrder`, `apps/server/src/till-sale.ts:1504-1512`).
 
 ## 4. The owner's decisions (2026-09-28)
 
@@ -106,9 +115,9 @@ not run.
    "Mesa 4, 5, 7". A party split off onto a new table is named after that table.
 4. **Merging bills works only inside one party.** Combining two parties is a table action.
 5. **Only an untouched bill merges.** A bill that has been presented to the table for payment, or
-   has received any payment, or is paid, can no longer be merged with another bill. It can still
-   move, whole, to another party. (This replaces revision 1's "a partly paid bill can merge, taking
-   its payments".)
+   has received any payment, can no longer be merged with another bill, but it can still move, whole,
+   to another party. A paid bill is done: it neither merges nor moves. (This replaces revision 1's
+   "a partly paid bill can merge, taking its payments".)
 6. **A table the guests have left needs cleaning before it is free.**
 7. **After tables are joined, new orders go to the main bill by default**; the waiter can send them
    to another bill of the party.
@@ -125,18 +134,21 @@ not run.
     model must leave room for it.
 14. **"Visit" is renamed "party"** in the code: the tables, the code names and the `visit.*` error
     codes.
-15. **An open party always has exactly one main bill.** If the main bill is paid, presented or moved
-    away, the party's next order starts a new, empty main bill ("pay, then order dessert"). When
-    parties combine and the receiving party's main bill can no longer take orders, the incoming main
-    bill becomes the main bill instead of being merged.
+15. **An open party has one main bill, or none until its next order.** If the main bill is paid,
+    presented or moved away, the party's next order starts a new, empty main bill ("pay, then order
+    dessert"). When parties combine and the receiving party's main bill can no longer take orders,
+    the incoming main bill becomes the main bill instead of being merged, if it can take orders
+    itself. (Wording revised in revision 3 so that "none until the next order" is stated; the owner
+    approved the substance.)
 
 ## 5. The model
 
 - **Party** (`visits`, renamed `parties` by decision 14) gains:
   - `name` — optional text set by staff.
   - `main_bill_id` — the party's main bill, replacing the "earliest-joined table's bill" rule.
-    It always names an open bill that can take new orders (decision 15), or is empty until the next
-    order creates one.
+    When set, it names an open bill that can take new orders: not presented, not paid (decision 15).
+    It is empty when no bill of the party can take orders; the next order then creates a new main
+    bill and sets it.
   - Its display name is `name`, or else its tables' names joined (proposal: tables sharing a first
     word are shortened — "Mesa 4, 5, 7"; otherwise listed in full — "Mesa 4, Terraza 2"), in the
     order they joined.
@@ -175,9 +187,11 @@ Every table action below runs in one transaction and checks the revision of ever
   - Tables in different service areas: refused, as today (`service_zone.join_mismatch`).
 - **The bill choice after combining parties** — by default the incoming party's main bill is merged
   into the receiving party's main bill; the waiter can keep it separate. The merge happens only when
-  both main bills are untouched (decision 5); otherwise they stay separate, and if the receiving main
-  bill can no longer take orders, the incoming main bill becomes the main bill (decision 15). The
-  incoming party's other bills always stay separate.
+  both main bills are untouched (decision 5); otherwise they stay separate. The receiving party's main
+  bill stays main if it can take orders; if not, the incoming main bill becomes main if IT can take
+  orders; if neither can, the party has no main bill until its next order (decision 15). The incoming
+  party's other open bills move across and stay separate; its paid bills stay recorded on the
+  absorbed party and count through the family, as today.
 - **Split a table** (today's unjoin, now on the till) — the table leaves the party and a new party
   starts on it, named after the table. The waiter chooses one of the party's open bills to go with
   the new party, other than the main bill; if they choose none, the new party starts with an empty
@@ -189,9 +203,8 @@ Every table action below runs in one transaction and checks the revision of ever
 ## 7. Bill actions
 
 - **Split a bill** — chosen items go onto a new bill in the same party. It no longer needs the bill
-  to have a table. Items already paid for stay where they are, and a presented bill cannot be split
-  (its issued invoice would no longer match; it is corrected through the fiscal correction workflow
-  first).
+  to have a table. Items already paid for stay where they are. A presented bill cannot be split: its
+  invoice is issued, and no workflow in this build reopens it (section 9).
 - **Merge bills** — inside one party only, and only between two untouched bills: neither may be
   presented, partly paid or paid (decision 5). Every item moves to the bill merged into; the other bill
   is abandoned and files nothing, as today. No payment ever moves. If the merged-away bill was the main
@@ -202,15 +215,16 @@ Every table action below runs in one transaction and checks the revision of ever
   - **from the deli into a party** ("I'll pay it with my meal"), where the receiving party then makes
     the bill choice, merge (default, only if both bills are untouched) or keep separate.
   The bill keeps its id, so its payments, a pending card payment's retry, refunds and its invoice are
-  untouched by the move. A paid bill does not move. A party's main bill cannot move away while the
+  untouched by the move. A paid bill does not move (decision 5). A party's main bill cannot move away while the
   party holds other open bills (proposal; section 13); when it moves, decision 15 applies.
 - **Kitchen groups when a bill leaves its party** (Move a bill, Split a table) — today's rule stays:
   a bill holding dishes that are still held for the kitchen cannot leave the party (refused, as
   `group.held_leaves_visit` is today); dishes already sent leave their kitchen group and keep their
   preparation and service state. Combining two parties keeps whole kitchen groups, as today.
-- **Service area of a moved bill** — the bill takes the receiving side's service area (the party's,
-  or the deli's) for everything added to it afterwards: menu, prices, preparation routing and service
-  mode. Items already on it keep the price and VAT class they were ordered at (decision 12), so a move
+- **Service area of a moved bill** — an unpresented bill takes the receiving side's service area
+  (the party's, or the deli's) for everything added to it afterwards: menu, prices, preparation
+  routing and service mode. A **presented** bill keeps its own service area when it moves: it takes no
+  new orders, and its collection must settle the invoice it already has (section 9). Items already on it keep the price and VAT class they were ordered at (decision 12), so a move
   between a counter area and a table area is allowed (today refused as `service_zone.mode_incompatible`).
 - **Transfer items** between two existing bills: kept **inside one party only** (proposal; it is a
   split followed by a merge in one step), between untouched bills only, like Merge. Across parties
@@ -241,11 +255,16 @@ This touches money and fiscal records, so the build takes the full review path.
 - **No payment ever moves between bills.** A merge is refused for any bill that is presented, partly
   paid or paid (decision 5), and a moved bill keeps its id (section 5), so a payment's frozen bill id,
   its card retries (found by bill and submission id) and its refunds stay valid.
-- **A presented bill's contents never change without a correction.** It cannot be merged, split or
-  have items transferred; if its contents must change, it is corrected first through the existing
-  fiscal correction workflow (anulación or rectificativa). Moving it whole to another party changes
-  no fiscal content. Whether a presented bill can still take new orders: it cannot (its invoice is
-  issued), so decision 15 starts a new main bill.
+- **A presented bill's contents do not change in this build.** It cannot be merged, split, have
+  items transferred or take new orders. Nothing in the code reopens a presented bill today (section
+  3): a fiscal void or rectificativa records a correction but does not make the original bill
+  editable. A correction-and-replacement flow is out of scope (section 14). Moving a presented bill
+  whole to another party changes no fiscal content.
+- **Collection follows the bill's issuance history, not its current area.** A bill whose invoice was
+  issued before payment is collected by settling that invoice, whichever party or area it has moved
+  to: one invoice, one sale, one fiscal record. Keeping a presented bill's own service area on a move
+  (section 7) keeps today's `collectOrder` choice correct; the plan must also make collection check
+  for an already-issued invoice rather than rely on the mode alone.
 - **Items keep their price and VAT class** when moved, split, merged or transferred. Since A68 (#726) a
   line keeps its VAT class and the invoice takes the rate of the day it is issued, so a deli item paid
   on a table bill is taxed by its own class.
@@ -308,15 +327,16 @@ change the design most:
 7. **Moving a deli order into a party defaults to merging it** into the main bill (when both are
    untouched).
 8. **Kitchen slips show only the tables**, not the party's name.
-9. **A moved bill takes the receiving side's service area** for later additions.
+9. **An unpresented moved bill takes the receiving side's service area** for later additions; a
+   presented one keeps its own.
 10. **Build order:** the rename, then this design, after B9 and before B10.
 
 ## 14. Out of scope
 
 - Reservations (decision 13 only asks that the table state leaves room).
 - One-step shortcuts, such as moving chosen items straight to another party.
-- Changing a presented bill's contents automatically (with its correction) as part of a merge or
-  split; a presented bill is corrected first through the existing workflow.
+- Changing a presented bill's contents at all: a correction-and-replacement flow (void or rectify
+  the issued invoice, then carry the items to a new bill) is a separate project.
 - A printed pre-bill (it would count as presenting a bill once it exists).
 - Recording which guest ordered which item (the owner's "later" item of 2026-09-20).
 
@@ -334,7 +354,11 @@ change the design most:
   One case uses a payment made for one specific item, not only a payment towards the total.
 - The main bill: after paying the main bill, the next order starts a new main bill; after moving the
   main bill away, likewise; when a party whose main bill is presented absorbs another, the incoming
-  main bill becomes main.
+  main bill becomes main; when both parties' main bills are paid or presented, the combined party has
+  no main bill and its next order creates one.
+- A presented (invoice-first) bill moved to a party in a different service area and then paid:
+  the same invoice is settled, with one sale and one fiscal record.
+- A paid bill is refused by Move a bill, and stays on its original party when parties combine.
 - Kitchen groups: a bill holding held dishes cannot leave its party; a bill whose dishes were sent
   leaves with them outside any group, keeping their preparation and service state.
 - MOVED notices: after a bill move, a deli move and a table action, only the dishes whose destination
