@@ -346,6 +346,33 @@ describe("fromDraftLine", () => {
   });
 });
 
+describe("fromDraftLine: what the server and the live menu say about the line", () => {
+  it("carries the server's flag that the line cannot be sold now, and nothing when it can", () => {
+    const input = toDraftLineInput(burgerLine());
+    expect(
+      fromDraftLine({ ...saved(input, "2.000"), unavailable: true }, offers).unavailableOnServer,
+    ).toBe(true);
+    expect(fromDraftLine(saved(input, "2.000"), offers)).not.toHaveProperty("unavailableOnServer");
+  });
+
+  it("marks a line priced against a version other than the live one as holding no earlier price", () => {
+    const input = toDraftLineInput(burgerLine());
+    const live = (version: string) => new Map([["dinner", version]]);
+
+    const stale = fromDraftLine(saved(input, "2.000"), offers, live("mv-8"));
+    expect(stale.earlierPriceUnknown).toBe(true);
+    expect(stale.product.menuVersionId).toBe(VERSION);
+    expect(fromDraftLine(saved(input, "2.000"), offers, live(VERSION))).toEqual(burgerLine());
+    const unversioned = { ...input, menuVersionId: null };
+    expect(
+      fromDraftLine(saved(unversioned, "2.000"), offers, live("mv-8")).earlierPriceUnknown,
+    ).toBeUndefined();
+    expect(fromDraftLine(saved(input, "2.000"), new Map(), live("mv-8")).earlierPriceUnknown).toBe(
+      undefined,
+    );
+  });
+});
+
 describe("fromDraftLine: a saved quantity the offered unit cannot hold", () => {
   const preview = (line: OrderLine) => {
     const store = new WorkingOrderStore();

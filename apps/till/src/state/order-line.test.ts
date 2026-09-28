@@ -122,6 +122,14 @@ describe("order-line pricing", () => {
       expect(quantityLabel({ product: jamon, quantity: "0.320" })).toBe("0.320 kg");
       expect(quantityLabel({ product: cafe, quantity: "2" })).toBe("2 ea");
     });
+
+    it("reads the quantity alone when the unit has no name to show", () => {
+      const nameless = {
+        ...cafe,
+        unit: { id: "", name: {}, abbreviation: {}, precision: 3, hardwareUnit: null },
+      };
+      expect(quantityLabel({ product: nameless, quantity: "2" })).toBe("2");
+    });
   });
 
   describe("toWireLineExtras", () => {

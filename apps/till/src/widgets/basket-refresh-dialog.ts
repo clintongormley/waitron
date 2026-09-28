@@ -55,6 +55,9 @@ export class TillBasketRefreshDialog extends LitElement {
 
   @property({ attribute: false }) blocked: BlockedLine[] = [];
 
+  /** `send`: a table's order, where a blocked line stays unsent rather than holding up payment. */
+  @property() purpose: "pay" | "send" = "pay";
+
   #emit(type: "wt-basket-refresh-confirmed" | "wt-basket-refresh-cancelled"): void {
     this.dispatchEvent(
       new CustomEvent<BasketRefreshDetail>(type, {
@@ -88,7 +91,13 @@ export class TillBasketRefreshDialog extends LitElement {
                   (line) =>
                     html`<li data-line=${line.lineNo}>
                       ${line.name}
-                      <span class="price">${this.#money(line.from)} → ${this.#money(line.to)}</span>
+                      <span class="price"
+                        >${
+                          line.from === undefined
+                            ? this.#money(line.to)
+                            : `${this.#money(line.from)} → ${this.#money(line.to)}`
+                        }</span
+                      >
                     </li>`,
                 )}
               </ul>
@@ -98,7 +107,9 @@ export class TillBasketRefreshDialog extends LitElement {
         this.blocked.length === 0
           ? nothing
           : html`<section data-blocked>
-              <h3>${t("basket_refresh.blocked")}</h3>
+              <h3>
+                ${t(this.purpose === "send" ? "basket_refresh.blocked_send" : "basket_refresh.blocked")}
+              </h3>
               <ul>
                 ${this.blocked.map(
                   (line) =>

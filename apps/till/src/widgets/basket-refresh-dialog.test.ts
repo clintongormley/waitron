@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { TillBasketRefreshDialog, type BasketRefreshDetail } from "./basket-refresh-dialog.js";
 
 afterEach(cleanupWidgets);
@@ -84,5 +84,22 @@ describe("till-basket-refresh-dialog", () => {
     dialog.close();
     await vi.waitFor(() => expect(cancelled).toHaveBeenCalledOnce());
     expect(closed).not.toHaveBeenCalled();
+  });
+});
+
+describe("till-basket-refresh-dialog on a table's order", () => {
+  it("lists a line whose earlier price the till never held with its new price alone", async () => {
+    const { el } = await mount({
+      changed: [{ lineNo: 1, name: "Beer", to: "6.00" }],
+      blocked: [],
+    });
+    const line = el.shadowRoot!.querySelector("[data-changed] li")!;
+    expect(line.textContent!.replace(/\s+/g, " ").trim()).toBe("Beer €6.00");
+  });
+
+  it("heads the lines it cannot re-price as left unsent, not as waiting for payment", async () => {
+    const { el } = await mount({ changed: [], blocked, purpose: "send" });
+    expect(text(el)).toContain(t("basket_refresh.blocked_send"));
+    expect(text(el)).not.toContain(t("basket_refresh.blocked"));
   });
 });

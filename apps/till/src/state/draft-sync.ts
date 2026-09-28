@@ -19,6 +19,19 @@ export class DraftStore extends WorkingOrderStore {
   override addProduct(product: TillProduct, quantity: string, selection?: LineSelection): void {
     this.addMerging(product, quantity, selection);
   }
+
+  /** The server's `unavailable`, one per line in order. Display and sending only: not an edit. */
+  setUnavailableOnServer(flags: readonly boolean[]): void {
+    let changed = false;
+    this.lines.forEach((line, index) => {
+      const flagged = flags[index] === true;
+      if ((line.unavailableOnServer === true) === flagged) return;
+      changed = true;
+      if (flagged) line.unavailableOnServer = true;
+      else delete line.unavailableOnServer;
+    });
+    if (changed) this.emit("changed");
+  }
 }
 
 /** `failed`: no answer, and the edits stay unsaved. `refused` names the refusal, and a
@@ -43,6 +56,8 @@ export interface DraftSyncOptions {
   rebuild: (lines: readonly DraftLine[]) => OrderLine[];
   /** A save was refused. When the draft itself was, the drafts have been read again first. */
   onRefused: (code: string, ownerName?: string) => void;
+  /** The server's draft has replaced what the store held. */
+  onReplaced?: () => void;
   /** How long one read or save may stay out before it is cut off. */
   requestLimitMs: number;
 }
@@ -147,6 +162,11 @@ export class DraftSync {
     return this.#revision;
   }
 
+  /** A save is out. */
+  get saving(): boolean {
+    return this.#saving;
+  }
+
   /** The saved ids of the lines at `positions`, or null while the store holds edits not saved. */
   lineIds(positions: readonly number[]): string[] | null {
     if (this.#unsaved || this.#lineIds.length !== this.store.lineCount) return null;
@@ -196,7 +216,7 @@ export class DraftSync {
   submitted(draft: Draft | null, sent: readonly OrderLine[]): void {
     this.#quietly(() => this.store.removeLines(sent));
     const kept = this.store.lines.map((line) => toDraftLineInput(line));
-    if (draft !== null && sameLines(kept, draft.lines)) this.#take(draft);
+    if (draft !== null && sameLines(kept, draft.lines)) this.#keep(draft);
     else this.#show(draft);
   }
 
@@ -294,8 +314,9 @@ export class DraftSync {
       limit.done();
     }
     if (this.#dropped || read !== this.#reads) return "failed";
-    if (!this.#unsaved && !sameLines(lines, saved.lines)) this.#show(saved);
-    else this.#take(saved);
+    if (this.#unsaved) this.#take(saved);
+    else if (sameLines(lines, saved.lines)) this.#keep(saved);
+    else this.#show(saved);
     return "saved";
   }
 
@@ -319,12 +340,21 @@ export class DraftSync {
     this.#lineIds = draft?.lines.map((line) => line.id) ?? [];
   }
 
+  /** The server's draft is the store's lines, which stay, with the server's flag on each. */
+  #keep(draft: Draft): void {
+    this.#take(draft);
+    this.#quietly(() =>
+      this.store.setUnavailableOnServer(draft.lines.map((line) => line.unavailable)),
+    );
+  }
+
   /** The server's draft replaces what the store holds. */
   #show(draft: Draft | null): void {
     this.#take(draft);
     this.#unsaved = false;
     const lines = draft === null ? [] : this.#options.rebuild(draft.lines);
     this.#quietly(() => this.store.loadFrom(this.store.id, lines));
+    this.#options.onReplaced?.();
   }
 
   #quietly(change: () => void): void {

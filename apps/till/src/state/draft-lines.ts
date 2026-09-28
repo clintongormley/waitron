@@ -8,7 +8,12 @@ import {
   type TillProduct,
 } from "../api/client.js";
 import { optionSnapshotOf } from "./held-options.js";
-import { displayQuantity, productAsVariant, toWireModifiers } from "./order-line.js";
+import {
+  displayQuantity,
+  productAsVariant,
+  quantityPlaces,
+  toWireModifiers,
+} from "./order-line.js";
 import type { OrderLine, SelectedExtra } from "./working-order.js";
 import { productUnit } from "../widgets/product-name.js";
 
@@ -45,7 +50,9 @@ export function orderLinesMerge(kept: OrderLine, added: OrderLine): boolean {
 /**
  * A saved draft line as the till shows it, named and priced from `offers` (the table zone's live
  * offers, by menu item id) the way a tap builds a line. The product keeps the line's own menu
- * version, so a line priced against an earlier one is still seen as stale.
+ * version, so a line priced against an earlier one is still seen as stale; with `liveVersions` (the
+ * version each menu's offers come from) such a line is marked as holding no earlier price, since the
+ * price shown is the live one.
  *
  * Nothing the offer no longer holds is dropped: the ids go back on the next save as they came. A
  * dish no longer offered at all is marked, and has no name, because the server sends none. A saved
@@ -55,14 +62,20 @@ export function orderLinesMerge(kept: OrderLine, added: OrderLine): boolean {
 export function fromDraftLine(
   line: DraftLine,
   offers: ReadonlyMap<string, TillMenuOffer>,
+  liveVersions?: ReadonlyMap<string, string>,
 ): OrderLine {
   const offer = offers.get(line.menuItemId);
+  const earlierPrice =
+    offer !== undefined &&
+    line.menuVersionId !== null &&
+    liveVersions !== undefined &&
+    liveVersions.get(offer.menuId) !== line.menuVersionId;
   const offered =
     offer === undefined
       ? unofferedProduct(line)
       : asVariant(menuOfferToTillProduct(offer, line.menuVersionId ?? undefined), line.variantId);
   const unit = productUnit(offered);
-  const fits = placesOf(line.quantity) <= unit.precision;
+  const fits = quantityPlaces(line.quantity) <= unit.precision;
   const product = fits ? offered : { ...offered, unit: { ...unit, precision: QUANTITY_SCALE } };
   const extras = line.extras.flatMap(({ listId, picks }) =>
     picks.map((pick) => extraOf(offer, listId, pick)),
@@ -80,17 +93,14 @@ export function fromDraftLine(
     ...(line.note === null ? {} : { note: line.note }),
     ...(line.courseId === null ? {} : { courseId: line.courseId }),
     ...(line.noMerge ? { noMerge: true as const } : {}),
+    ...(line.unavailable ? { unavailableOnServer: true as const } : {}),
+    ...(earlierPrice ? { earlierPriceUnknown: true as const } : {}),
   };
 }
 
 /** "2.000" reads "2" and "0.350" "0.35": the unit, and so its places, are unknown. */
 function shortest(quantity: string): string {
   return quantity.includes(".") ? quantity.replace(/0+$/, "").replace(/\.$/, "") : quantity;
-}
-
-/** The decimal places a quantity uses, trailing zeros aside. */
-function placesOf(quantity: string): number {
-  return (quantity.split(".")[1] ?? "").replace(/0+$/, "").length;
 }
 
 /** A variant the offer no longer holds keeps its id, sold under the dish's own names. */

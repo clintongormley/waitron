@@ -237,17 +237,27 @@ export function draftServer(
     personName: "Ana",
     drafts: [] as Draft[],
     linesById: new Map<string, DraftLine>(),
+    /** The menu items the server reads as unavailable when it answers a line. */
+    unavailable: new Set<string>(),
     answer,
     listDrafts: vi.fn(async (visitId: string) =>
-      clone(server.drafts.filter((draft) => draft.visitId === visitId)),
+      server.flagged(clone(server.drafts.filter((draft) => draft.visitId === visitId))),
     ),
-    saveDraft: vi.fn(async (visitId: string, save: DraftSave) => clone(server.save(visitId, save))),
+    saveDraft: vi.fn(async (visitId: string, save: DraftSave) =>
+      server.flagged(clone(server.save(visitId, save))),
+    ),
     submitDraft: vi.fn(async (visitId: string, draftId: string, submission: DraftSubmission) =>
       clone(server.apply(visitId, draftId, submission)),
     ),
     takeOverDraft: vi.fn(async (visitId: string, draftId: string, revision: number) =>
-      clone(server.takeOver(visitId, draftId, revision)),
+      server.flagged(clone(server.takeOver(visitId, draftId, revision))),
     ),
+    /** `unavailable` worked out on each answer, as the server does, never stored. */
+    flagged<T extends Draft | Draft[] | null>(answer: T): T {
+      for (const draft of answer === null ? [] : Array.isArray(answer) ? answer : [answer])
+        for (const line of draft.lines) line.unavailable = server.unavailable.has(line.menuItemId);
+      return answer;
+    },
     save(visitId: string, save: DraftSave): Draft {
       const own = server.drafts.find(
         (draft) => draft.visitId === visitId && draft.ownerId === server.personId,
@@ -317,7 +327,7 @@ export function draftServer(
       if (draft.lines.length === 0) server.drafts.splice(server.drafts.indexOf(draft), 1);
       const reply = {
         ...server.answer(visitId),
-        draft: draft.lines.length === 0 ? null : clone(draft),
+        draft: draft.lines.length === 0 ? null : server.flagged(clone(draft)),
       };
       replies.set(submission.submissionId, reply);
       return reply;

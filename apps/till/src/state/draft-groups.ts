@@ -7,6 +7,8 @@ export interface DraftEntry {
   quantity: string;
   /** Sold by the whole unit. A weighed or fractional line is one item, whatever it weighs. */
   wholeUnits: boolean;
+  /** Cannot be sold now: no action sends it, and it stays in the draft. */
+  flagged?: boolean;
 }
 
 /** One section of the draft: its course (null when no line has a course the till lists) and the
@@ -33,11 +35,13 @@ export type DraftAction =
   | { kind: "add-to-held"; groupId: string }
   | { kind: "add-as-new" };
 
-/** The groups an action submits, in the party's sequence order, and the draft lines it leaves. */
+/** The groups an action submits, in the party's sequence order, and the draft lines it leaves.
+ * `leftOut`: the flagged lines the action would have sent, present only when there are some. */
 export interface DraftSubmission {
   groups: DraftGroup[];
   joinGroupId?: string;
   remaining: number[];
+  leftOut?: number[];
 }
 
 /** What an action's confirmation names before it is sent. */
@@ -81,7 +85,7 @@ export function itemCount(entry: Pick<DraftEntry, "quantity" | "wholeUnits">): n
   return entry.wholeUnits ? Number(entry.quantity) : 1;
 }
 
-/** The groups `action` submits. */
+/** The groups `action` submits. A flagged line is never among them. */
 export function draftSubmission(
   action: DraftAction,
   entries: readonly DraftEntry[],
@@ -92,30 +96,39 @@ export function draftSubmission(
   const shown = sections.flatMap((section) => section.lineIndexes);
   const chosen = shown.filter((index) => selected.has(index));
   const scope = chosen.length > 0 ? chosen : shown;
-  const one = (release: GroupRelease, lineIndexes: number[]): DraftGroup[] =>
-    lineIndexes.length === 0 ? [] : [{ release, lineIndexes }];
-  const groups = ((): DraftGroup[] => {
+  const sendable = (index: number) => entries[index]!.flagged !== true;
+  const one = (release: GroupRelease, lineIndexes: number[]): DraftGroup[] => {
+    const sent = lineIndexes.filter(sendable);
+    return sent.length === 0 ? [] : [{ release, lineIndexes: sent }];
+  };
+  const [groups, reached] = ((): [DraftGroup[], number[]] => {
     switch (action.kind) {
       case "send-all":
-        return sections.map((section) => ({ release: "hold", lineIndexes: section.lineIndexes }));
+        return [sections.flatMap((section) => one("hold", section.lineIndexes)), shown];
       case "fire-all":
-        return one("fire", shown);
+        return [one("fire", shown), shown];
       case "send-selected":
-        return one("hold", chosen);
+        return [one("hold", chosen), chosen];
       case "fire-selected":
-        return one("fire", chosen);
+        return [one("fire", chosen), chosen];
       case "fire-now":
-        return one("fire", scope);
+        return [one("fire", scope), scope];
       case "add-to-held":
       case "add-as-new":
-        return one("hold", scope);
+        return [one("hold", scope), scope];
     }
   })();
   const joinGroupId =
     action.kind === "add-to-held" && groups.length > 0 ? action.groupId : undefined;
   const sent = new Set(groups.flatMap((group) => group.lineIndexes));
   const remaining = entries.flatMap((_, index) => (sent.has(index) ? [] : [index]));
-  return joinGroupId === undefined ? { groups, remaining } : { groups, joinGroupId, remaining };
+  const leftOut = reached.filter((index) => !sendable(index)).sort((a, b) => a - b);
+  return {
+    groups,
+    ...(joinGroupId === undefined ? {} : { joinGroupId }),
+    remaining,
+    ...(leftOut.length === 0 ? {} : { leftOut }),
+  };
 }
 
 /** What the confirmation of `submission` names, counted from the groups it sends. */

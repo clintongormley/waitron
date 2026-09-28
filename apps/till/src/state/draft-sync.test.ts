@@ -44,6 +44,8 @@ const noAnswer = (...args: unknown[]) =>
 let server: DraftServer;
 let refused: string[];
 
+let replaced: number;
+
 function sync(personId = "p1"): DraftSync {
   return new DraftSync({
     api: server,
@@ -51,6 +53,7 @@ function sync(personId = "p1"): DraftSync {
     personId,
     rebuild,
     onRefused: (code) => refused.push(code),
+    onReplaced: () => (replaced += 1),
     requestLimitMs: LIMIT,
   });
 }
@@ -87,6 +90,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   server = draftServer();
   refused = [];
+  replaced = 0;
 });
 afterEach(() => vi.useRealTimers());
 
@@ -777,5 +781,77 @@ describe("DraftSync: taking over another person's draft", () => {
 
     expect(await draft.flush()).toEqual({ refused: "draft.taken_over", ownerName: "Sam" });
     expect(names).toEqual(["Sam"]);
+  });
+});
+
+describe("DraftSync: what the server says about each line", () => {
+  const flags = (draft: DraftSync) => draft.store.lines.map((line) => line.unavailableOnServer);
+
+  it("takes the server's flag onto the till's own lines from a save answer that matches them", async () => {
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+    const [tapped] = draft.store.lines;
+    server.unavailable.add("offer-beer");
+
+    await draft.flush();
+
+    expect(draft.store.lines[0]).toBe(tapped);
+    expect(flags(draft)).toEqual([true]);
+    server.unavailable.clear();
+    draft.store.addProduct(steak, "1");
+    await draft.flush();
+    expect(flags(draft)).toEqual([undefined, undefined]);
+    await settle();
+    expect(server.saveDraft).toHaveBeenCalledTimes(2);
+  });
+
+  it("takes the flag from a submission's answer onto the lines it keeps", async () => {
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+    draft.store.addProduct(steak, "1");
+    await draft.flush();
+    const [sentLine] = draft.store.lines;
+    server.unavailable.add("offer-steak");
+    const answered = server.apply("v1", draft.draftId!, {
+      submissionId: "s1",
+      expectedVisitRevision: 3,
+      draftRevision: draft.revision,
+      groups: [{ lineIds: draft.lineIds([0])!, release: "fire" }],
+    });
+
+    draft.submitted(answered.draft, [sentLine!]);
+
+    expect(flags(draft)).toEqual([true]);
+  });
+
+  it("says when the server's draft has replaced what the store held, and not when a save matched it", async () => {
+    seed("p1", beer);
+    const draft = sync();
+    await draft.load();
+    expect(replaced).toBe(1);
+
+    draft.store.addProduct(steak, "1");
+    await draft.flush();
+    expect(replaced).toBe(1);
+  });
+
+  it("says whether a save is out", async () => {
+    let answer!: () => void;
+    const draft = sync();
+    await draft.load();
+    server.saveDraft.mockImplementationOnce(async (visitId, save) => {
+      await new Promise<void>((resolve) => (answer = resolve));
+      return structuredClone(server.save(visitId, save));
+    });
+    draft.store.addProduct(beer, "1");
+    expect(draft.saving).toBe(false);
+    await settle();
+    expect(draft.saving).toBe(true);
+
+    answer();
+    await settle();
+    expect(draft.saving).toBe(false);
   });
 });

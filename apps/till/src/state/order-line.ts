@@ -87,7 +87,13 @@ export function displayQuantity(product: TillProduct, quantity: string): string 
 }
 
 export function quantityLabel(line: OrderLine): string {
-  return `${line.quantity} ${unitName(line.product)}`;
+  const unit = unitName(line.product);
+  return unit === "" ? line.quantity : `${line.quantity} ${unit}`;
+}
+
+/** The decimal places a quantity uses, trailing zeros aside. */
+export function quantityPlaces(quantity: string): number {
+  return (quantity.split(".")[1] ?? "").replace(/0+$/, "").length;
 }
 
 export function toWireLineExtras(line: { note?: string }): { note?: string } {
