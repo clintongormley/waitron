@@ -16,13 +16,13 @@ import {
   tsString,
 } from "./columns.js";
 import { kitchenCourses } from "./kitchen-courses.js";
-import { visits } from "./visits.js";
+import { parties } from "./parties.js";
 
 export const orderDraftState = enumType(["open", "submitted", "discarded"]);
 
 /**
- * One operator's unsent order on a visit (`apps/server/src/order-drafts.ts`). The partial unique
- * index allows each person one OPEN draft per visit. Drafts are never deleted, because their events
+ * One operator's unsent order on a party (`apps/server/src/order-drafts.ts`). The partial unique
+ * index allows each person one OPEN draft per party. Drafts are never deleted, because their events
  * point at them.
  *
  * `owner_id` is a plain person id with no key: `persons` is in @waitron/identity's migration set,
@@ -32,7 +32,7 @@ export const orderDrafts = table(
   "order_drafts",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    visitId: id("visit_id").notNull(),
+    partyId: id("party_id").notNull(),
     ownerId: id("owner_id").notNull(),
     revision: count("revision").notNull().default(0),
     state: orderDraftState("state").notNull().default("open"),
@@ -41,13 +41,13 @@ export const orderDrafts = table(
   },
   (t) => [
     foreignKey({
-      columns: [t.visitId],
-      foreignColumns: [visits.id],
-      name: "order_drafts_visit_fk",
+      columns: [t.partyId],
+      foreignColumns: [parties.id],
+      name: "order_drafts_party_fk",
     }),
-    index("order_drafts_visit_idx").on(t.visitId),
+    index("order_drafts_party_idx").on(t.partyId),
     uniqueIndex("order_drafts_open_owner_uq")
-      .on(t.visitId, t.ownerId)
+      .on(t.partyId, t.ownerId)
       .where(sql`${t.state} = 'open'`),
     check("order_drafts_state_ck", enumCheck(t.state)),
   ],

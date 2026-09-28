@@ -8,7 +8,7 @@ import {
   printJobs,
   products,
   tills,
-  visits,
+  parties,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -54,7 +54,7 @@ import {
   unjoinTable,
   voidTabLine,
 } from "./working-order.js";
-import { readVisitBills, seatTable } from "./visits.js";
+import { readPartyBills, seatTable } from "./parties.js";
 import {
   fireGroup,
   listOrderGroups,
@@ -177,19 +177,19 @@ async function setupVenue(): Promise<Venue> {
 }
 
 interface Seated {
-  visitId: string;
+  partyId: string;
   tabId: string;
 }
 
 async function seated(v: Venue, label: string): Promise<Seated> {
   return inTx(async (tx) => {
     const { id: tableId } = await createTable(tx, v.cfg, { label, zoneId: v.zoneId });
-    const { visitId, tabId } = await seatTable(tx, v.cfg, {
+    const { partyId, tabId } = await seatTable(tx, v.cfg, {
       tableId,
       guestCount: 2,
       operatorId: ALEX,
     });
-    return { visitId, tabId };
+    return { partyId, tabId };
   });
 }
 
@@ -198,27 +198,27 @@ const line = (v: Venue, dish: Dish, quantity = "1"): GroupLine => ({
   quantity,
 });
 
-async function command(visitId: string) {
+async function command(partyId: string) {
   const [row] = await db
-    .select({ revision: visits.revision })
-    .from(visits)
-    .where(eq(visits.id, visitId));
-  return { submissionId: randomUUID(), expectedVisitRevision: row!.revision, operatorId: ALEX };
+    .select({ revision: parties.revision })
+    .from(parties)
+    .where(eq(parties.id, partyId));
+  return { submissionId: randomUUID(), expectedPartyRevision: row!.revision, operatorId: ALEX };
 }
 
 async function submit(
   v: Venue,
-  visitId: string,
+  partyId: string,
   groups: { lines: GroupLine[]; release: GroupRelease }[],
 ) {
-  const args = await command(visitId);
-  return inTx((tx) => submitGroups(tx, v.cfg, visitId, { ...args, groups }));
+  const args = await command(partyId);
+  return inTx((tx) => submitGroups(tx, v.cfg, partyId, { ...args, groups }));
 }
 
-/** Seats `label` and fires one group of `dishes`, answering the visit, its tab and the group. */
+/** Seats `label` and fires one group of `dishes`, answering the party, its tab and the group. */
 async function firedTable(v: Venue, label: string, dishes: Dish[] = ["burger"]) {
   const seat = await seated(v, label);
-  const { groups } = await submit(v, seat.visitId, [
+  const { groups } = await submit(v, seat.partyId, [
     { release: "fire", lines: dishes.map((dish) => line(v, dish)) },
   ]);
   return { ...seat, groupId: groups[0]!.id };
@@ -297,8 +297,8 @@ async function createdAtOf(jobId: string): Promise<string> {
   return row!.createdAt;
 }
 
-const problemsOf = (visitId: string, now?: Date) =>
-  inTx((tx) => listPrintProblems(tx, visitId, now));
+const problemsOf = (partyId: string, now?: Date) =>
+  inTx((tx) => listPrintProblems(tx, partyId, now));
 
 async function stationCard(stationId: string, orderId: string) {
   const cards = await inTx((tx) => listStationQueue(tx, stationId));
@@ -312,8 +312,8 @@ async function orderAsRead(v: Venue, s: Seated) {
   const card = { ...(await stationCard(v.cocina, s.tabId)) };
   delete card.printProblem;
   return {
-    bills: await inTx((tx) => readVisitBills(tx, s.visitId)),
-    groups: await inTx((tx) => listOrderGroups(tx, s.visitId)),
+    bills: await inTx((tx) => readPartyBills(tx, s.partyId)),
+    groups: await inTx((tx) => listOrderGroups(tx, s.partyId)),
     lines: await db
       .select()
       .from(workingOrderLines)
@@ -370,7 +370,7 @@ describe("the link from a kitchen ticket to its bill and station", () => {
     const lineNo = await lineNoOf(s.tabId, "fish");
     const { checkId } = await inTx(async (tx) =>
       splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo, quantity: "1" }], {
-        expectedVisitRevision: (await command(s.visitId)).expectedVisitRevision,
+        expectedPartyRevision: (await command(s.partyId)).expectedPartyRevision,
         operatorId: ALEX,
       }),
     );
@@ -405,7 +405,7 @@ describe("the link from a kitchen ticket to its bill and station", () => {
   it("records a Reprint's fired and held lines on the one job that prints both", async () => {
     const v = await holdingVenue();
     const s = await seated(v, "Mesa 4");
-    await submit(v, s.visitId, [
+    await submit(v, s.partyId, [
       { release: "fire", lines: [line(v, "burger")] },
       { release: "hold", lines: [line(v, "fish")] },
     ]);
@@ -436,7 +436,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     const job = await jobFor(mesa4.tabId, v.cocinaPrinter);
     await setJob(job, exhausted);
 
-    expect(await problemsOf(mesa4.visitId)).toEqual([
+    expect(await problemsOf(mesa4.partyId)).toEqual([
       {
         workingOrderId: mesa4.tabId,
         stationId: v.cocina,
@@ -457,7 +457,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
       attempts: MAX_DELIVERY_ATTEMPTS - 1,
     });
 
-    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
     expect("printProblem" in (await stationCard(v.cocina, mesa4.tabId))).toBe(false);
   });
 
@@ -467,11 +467,11 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     const job = await jobFor(mesa4.tabId, v.cocinaPrinter);
     const created = Date.parse(await createdAtOf(job));
 
-    expect(await problemsOf(mesa4.visitId, new Date(created + JOBS_WAITING_MS - 1_000))).toEqual(
+    expect(await problemsOf(mesa4.partyId, new Date(created + JOBS_WAITING_MS - 1_000))).toEqual(
       [],
     );
     expect(
-      await problemsOf(mesa4.visitId, new Date(created + JOBS_WAITING_MS + 1_000)),
+      await problemsOf(mesa4.partyId, new Date(created + JOBS_WAITING_MS + 1_000)),
     ).toMatchObject([{ workingOrderId: mesa4.tabId, stationId: v.cocina }]);
 
     // The station card reads the real clock: age the job instead.
@@ -489,9 +489,9 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
 
     expect(await orderAsRead(v, mesa4)).toEqual(before);
 
-    const next = await submit(v, mesa4.visitId, [{ release: "fire", lines: [line(v, "fish")] }]);
+    const next = await submit(v, mesa4.partyId, [{ release: "fire", lines: [line(v, "fish")] }]);
     expect(next.groups).toMatchObject([{ state: "fired" }]);
-    expect(await problemsOf(mesa4.visitId)).toMatchObject([
+    expect(await problemsOf(mesa4.partyId)).toMatchObject([
       { workingOrderId: mesa4.tabId, stationId: v.cocina, since: await createdAtOf(job) },
     ]);
   });
@@ -503,10 +503,10 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
 
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa4.tabId));
     const reprint = (await links()).find((row) => row.reprint)!.printJobId;
-    expect(await problemsOf(mesa4.visitId)).toHaveLength(1);
+    expect(await problemsOf(mesa4.partyId)).toHaveLength(1);
 
     await setJob(reprint, { status: "done" });
-    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
     expect("printProblem" in (await stationCard(v.cocina, mesa4.tabId))).toBe(false);
   });
 
@@ -514,11 +514,11 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     const v = await setupVenue();
     const mesa4 = await firedTable(v, "Mesa 4");
     await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), exhausted);
-    await submit(v, mesa4.visitId, [{ release: "fire", lines: [line(v, "fish")] }]);
+    await submit(v, mesa4.partyId, [{ release: "fire", lines: [line(v, "fish")] }]);
     const later = (await links()).at(-1)!.printJobId;
 
     await setJob(later, { status: "done" });
-    expect(await problemsOf(mesa4.visitId)).toHaveLength(1);
+    expect(await problemsOf(mesa4.partyId)).toHaveLength(1);
   });
 
   it("is not cleared by the pass printer's reprint printing while the station printer's reprint failed again", async () => {
@@ -539,7 +539,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
       createdAt: new Date(Date.parse(await createdAtOf(cocinaReprint)) + 1).toISOString(),
     });
 
-    expect(await problemsOf(mesa4.visitId)).toMatchObject([
+    expect(await problemsOf(mesa4.partyId)).toMatchObject([
       { workingOrderId: mesa4.tabId, stationId: v.cocina },
     ]);
     expect((await stationCard(v.cocina, mesa4.tabId)).printProblem).toBe(true);
@@ -554,7 +554,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     const reprint = (await links()).find((row) => row.reprint)!.printJobId;
 
     await setJob(reprint, { status: "done", createdAt: await createdAtOf(job) });
-    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
   });
 
   it("decides which ticket came later by the order they were queued, not by their clock stamps", async () => {
@@ -569,7 +569,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     await setJob(first!, { status: "done", createdAt: "2030-01-01T00:00:00.000Z" });
     await setJob(second!, exhausted);
 
-    expect(await problemsOf(mesa4.visitId)).toMatchObject([
+    expect(await problemsOf(mesa4.partyId)).toMatchObject([
       { workingOrderId: mesa4.tabId, stationId: v.cocina, since: await createdAtOf(second!) },
     ]);
 
@@ -577,7 +577,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa4.tabId));
     const third = (await links()).at(-1)!.printJobId;
     await setJob(third, { status: "done", createdAt: "2000-01-01T00:00:00.000Z" });
-    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
   });
 
   it("follows the dishes when the bill whose ticket failed is merged into another table's bill", async () => {
@@ -589,13 +589,13 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
 
     const merge = {
       freeSourceTable: false,
-      expectedVisitRevision: (await command(mesa5.visitId)).expectedVisitRevision,
-      expectedSourceVisitRevision: (await command(mesa4.visitId)).expectedVisitRevision,
+      expectedPartyRevision: (await command(mesa5.partyId)).expectedPartyRevision,
+      expectedSourcePartyRevision: (await command(mesa4.partyId)).expectedPartyRevision,
       operatorId: ALEX,
     };
     await inTx((tx) => mergeTabs(tx, v.cfg, mesa5.tabId, mesa4.tabId, merge));
 
-    expect(await problemsOf(mesa5.visitId)).toEqual([
+    expect(await problemsOf(mesa5.partyId)).toEqual([
       {
         workingOrderId: mesa5.tabId,
         stationId: v.cocina,
@@ -608,7 +608,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     // Mesa 5's bill now carries Mesa 4's dishes, so its reprint printing clears the problem.
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa5.tabId));
     await setJob((await links()).at(-1)!.printJobId, { status: "done" });
-    expect(await problemsOf(mesa5.visitId)).toEqual([]);
+    expect(await problemsOf(mesa5.partyId)).toEqual([]);
   });
 
   it("keeps a failure merged in from another bill when the receiving bill was reprinted before the merge", async () => {
@@ -619,11 +619,11 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     await setJob(failed, exhausted);
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, destination.tabId));
     await setJob((await links()).at(-1)!.printJobId, { status: "done" });
-    expect(await problemsOf(source.visitId)).toHaveLength(1);
+    expect(await problemsOf(source.partyId)).toHaveLength(1);
 
     await mergeBills(v, source, destination);
 
-    expect(await problemsOf(destination.visitId)).toEqual([
+    expect(await problemsOf(destination.partyId)).toEqual([
       {
         workingOrderId: destination.tabId,
         stationId: v.cocina,
@@ -645,7 +645,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
 
     await mergeBills(v, source, destination);
 
-    expect(await problemsOf(destination.visitId)).toEqual([
+    expect(await problemsOf(destination.partyId)).toEqual([
       {
         workingOrderId: destination.tabId,
         stationId: v.cocina,
@@ -668,7 +668,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     await mergeBills(v, source, destination);
     await setJob(waiting, { status: "done" });
 
-    expect(await problemsOf(destination.visitId)).toEqual([
+    expect(await problemsOf(destination.partyId)).toEqual([
       {
         workingOrderId: destination.tabId,
         stationId: v.cocina,
@@ -686,11 +686,11 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     await setJob(await jobFor(source.tabId, v.cocinaPrinter), exhausted);
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, source.tabId));
     await setJob((await links()).at(-1)!.printJobId, { status: "done" });
-    expect(await problemsOf(source.visitId)).toEqual([]);
+    expect(await problemsOf(source.partyId)).toEqual([]);
 
     await mergeBills(v, source, destination);
 
-    expect(await problemsOf(destination.visitId)).toEqual([]);
+    expect(await problemsOf(destination.partyId)).toEqual([]);
     expect("printProblem" in (await stationCard(v.cocina, destination.tabId))).toBe(false);
   });
 
@@ -719,13 +719,13 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
       stationName: "Cocina",
       since: await createdAtOf(cocinaFailed),
     };
-    expect(await problemsOf(source.visitId)).toEqual([
+    expect(await problemsOf(source.partyId)).toEqual([
       { workingOrderId: source.tabId, ...cocinaProblem },
     ]);
 
     await mergeBills(v, source, destination);
 
-    expect(await problemsOf(destination.visitId)).toEqual([
+    expect(await problemsOf(destination.partyId)).toEqual([
       { workingOrderId: destination.tabId, ...cocinaProblem },
     ]);
     expect((await stationCard(v.cocina, destination.tabId)).printProblem).toBe(true);
@@ -754,7 +754,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     );
     await setJob(jobId, { ...exhausted, createdAt: "2026-01-01T00:00:00.000Z" });
 
-    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
     expect("printProblem" in (await stationCard(v.cocina, mesa4.tabId))).toBe(false);
   });
 
@@ -764,18 +764,18 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     const mesa5 = await firedTable(v, "Mesa 5");
     await setJob(await jobFor(mesa5.tabId, v.cocinaPrinter), exhausted);
 
-    expect(await problemsOf(mesa4.visitId)).toEqual([]);
-    expect(await problemsOf(mesa5.visitId)).toMatchObject([{ workingOrderId: mesa5.tabId }]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
+    expect(await problemsOf(mesa5.partyId)).toMatchObject([{ workingOrderId: mesa5.tabId }]);
     expect("printProblem" in (await stationCard(v.cocina, mesa4.tabId))).toBe(false);
     expect((await stationCard(v.cocina, mesa5.tabId)).printProblem).toBe(true);
   });
 
-  it("refuses visit.not_open for a visit that does not exist", async () => {
+  it("refuses party.not_open for a party that does not exist", async () => {
     await setupVenue();
-    const visitId = randomUUID();
-    await expect(problemsOf(visitId)).rejects.toMatchObject({
-      code: "visit.not_open",
-      params: { visitId },
+    const partyId = randomUUID();
+    await expect(problemsOf(partyId)).rejects.toMatchObject({
+      code: "party.not_open",
+      params: { partyId },
     });
   });
 });
@@ -786,12 +786,12 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
   it("shows on Mesa 4 and on its station's card, as a failed fire ticket does", async () => {
     const v = await holdingVenue();
     const mesa4 = await seated(v, "Mesa 4");
-    await submit(v, mesa4.visitId, [{ release: "hold", lines: [line(v, "burger")] }]);
+    await submit(v, mesa4.partyId, [{ release: "hold", lines: [line(v, "burger")] }]);
     const [hold] = await jobsAt(v.cocinaPrinter);
     expect(hold!.lines[0]).toBe("*** HOLD ***");
     await setJob(hold!.id, exhausted);
 
-    expect(await problemsOf(mesa4.visitId)).toEqual([
+    expect(await problemsOf(mesa4.partyId)).toEqual([
       {
         workingOrderId: mesa4.tabId,
         stationId: v.cocina,
@@ -805,7 +805,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
   it("is reprinted under REPRINT and HOLD on a party with nothing fired, and clears once that prints", async () => {
     const v = await holdingVenue();
     const mesa4 = await seated(v, "Mesa 4");
-    await submit(v, mesa4.visitId, [{ release: "hold", lines: [line(v, "burger", "2")] }]);
+    await submit(v, mesa4.partyId, [{ release: "hold", lines: [line(v, "burger", "2")] }]);
     const [hold] = await jobsAt(v.cocinaPrinter);
     await setJob(hold!.id, exhausted);
 
@@ -820,10 +820,10 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       `2.000 x ${DISHES.burger.kitchen}`,
     ]);
     expect(hold!.lines.slice(5)).toEqual(["GROUP 1", `2.000 x ${DISHES.burger.kitchen}`]);
-    expect(await problemsOf(mesa4.visitId)).toHaveLength(1);
+    expect(await problemsOf(mesa4.partyId)).toHaveLength(1);
 
     await setJob(reprint!.id, { status: "done" });
-    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
     expect("printProblem" in (await stationCard(v.cocina, mesa4.tabId))).toBe(false);
   });
 
@@ -832,7 +832,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
   it("reprints fired and held work as one job per printer, the held work alone under HOLD", async () => {
     const v = await holdingVenue();
     const mesa4 = await seated(v, "Mesa 4");
-    await submit(v, mesa4.visitId, [
+    await submit(v, mesa4.partyId, [
       { release: "fire", lines: [line(v, "burger")] },
       { release: "hold", lines: [line(v, "fish"), line(v, "beer")] },
     ]);
@@ -879,14 +879,14 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
 
     await setJob(cocina[0]!.id, { status: "done" });
     await setJob(barra[0]!.id, { status: "done" });
-    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
   });
 
   it("reprints a pass printer's fired and held work as one job linked to both stations", async () => {
     const v = await holdingVenue();
     const pase = await passPrinter(v);
     const mesa4 = await seated(v, "Mesa 4");
-    await submit(v, mesa4.visitId, [
+    await submit(v, mesa4.partyId, [
       { release: "fire", lines: [line(v, "burger")] },
       { release: "hold", lines: [line(v, "beer")] },
     ]);
@@ -924,14 +924,14 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
     ).toEqual([v.cocina, v.barra].sort());
 
     for (const row of added) await setJob(row.printJobId, { status: "done" });
-    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
   });
 
   it("reprints a pass printer attached to one station with the other station's held dishes its failed HOLD ticket carried", async () => {
     const v = await holdingVenue();
     const pase = await passPrinter(v, [v.cocina]);
     const mesa4 = await seated(v, "Mesa 4");
-    await submit(v, mesa4.visitId, [
+    await submit(v, mesa4.partyId, [
       { release: "hold", lines: [line(v, "burger"), line(v, "beer")] },
     ]);
     const [hold] = await jobsAt(pase);
@@ -941,12 +941,12 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       .select({ id: workingOrderLines.id })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.name, DISHES.burger.staff));
-    const moved = await command(mesa4.visitId);
+    const moved = await command(mesa4.partyId);
     await inTx((tx) =>
       moveLinesToGroup(
         tx,
         v.cfg,
-        mesa4.visitId,
+        mesa4.partyId,
         [{ lineId: burger!.id, quantity: "1" }],
         "new",
         moved,
@@ -957,7 +957,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.id, burger!.id));
     await inTx(async (tx) =>
-      fireGroup(tx, v.cfg, mesa4.visitId, newGroup!.id!, await command(mesa4.visitId)),
+      fireGroup(tx, v.cfg, mesa4.partyId, newGroup!.id!, await command(mesa4.partyId)),
     );
     const earlier = await jobsAt(pase);
     const before = (await links()).length;
@@ -990,14 +990,14 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
     ).toEqual([v.cocina, v.barra].sort());
 
     for (const row of added) await setJob(row.printJobId, { status: "done" });
-    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
   });
 
   it("reprints a pass printer attached only to the held dishes' station with the other station's fired dishes too", async () => {
     const v = await holdingVenue();
     const pase = await passPrinter(v, [v.barra]);
     const mesa4 = await seated(v, "Mesa 4");
-    await submit(v, mesa4.visitId, [
+    await submit(v, mesa4.partyId, [
       { release: "hold", lines: [line(v, "burger"), line(v, "beer")] },
     ]);
     const [hold] = await jobsAt(pase);
@@ -1007,12 +1007,12 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       .select({ id: workingOrderLines.id })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.name, DISHES.burger.staff));
-    const moved = await command(mesa4.visitId);
+    const moved = await command(mesa4.partyId);
     await inTx((tx) =>
       moveLinesToGroup(
         tx,
         v.cfg,
-        mesa4.visitId,
+        mesa4.partyId,
         [{ lineId: burger!.id, quantity: "1" }],
         "new",
         moved,
@@ -1023,7 +1023,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.id, burger!.id));
     await inTx(async (tx) =>
-      fireGroup(tx, v.cfg, mesa4.visitId, newGroup!.id!, await command(mesa4.visitId)),
+      fireGroup(tx, v.cfg, mesa4.partyId, newGroup!.id!, await command(mesa4.partyId)),
     );
     const earlier = await jobsAt(pase);
     const before = (await links()).length;
@@ -1056,7 +1056,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
     ).toEqual([v.cocina, v.barra].sort());
 
     for (const row of added) await setJob(row.printJobId, { status: "done" });
-    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
   });
 
   // The printer list is read through station_printers' key, so it comes back in station-id order.
@@ -1079,7 +1079,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       { stationId: postres, dish: "fish" as const, pase: await passPrinter(v, [postres]) },
     ].sort((a, b) => (a.stationId < b.stationId ? -1 : 1));
     const mesa4 = await seated(v, "Mesa 4");
-    await submit(v, mesa4.visitId, [
+    await submit(v, mesa4.partyId, [
       { release: "fire", lines: [line(v, "burger")] },
       { release: "hold", lines: [line(v, second!.dish), line(v, first!.dish)] },
     ]);
@@ -1105,7 +1105,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
   it("does not reprint a held group whose HOLD ticket was never queued", async () => {
     const v = await setupVenue();
     const mesa4 = await seated(v, "Mesa 4");
-    await submit(v, mesa4.visitId, [
+    await submit(v, mesa4.partyId, [
       { release: "fire", lines: [line(v, "burger")] },
       { release: "hold", lines: [line(v, "fish")] },
     ]);
@@ -1126,12 +1126,12 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
   it("reprints a fired group as fired work, not under HOLD, and that clears its failed HOLD ticket", async () => {
     const v = await holdingVenue();
     const mesa4 = await seated(v, "Mesa 4");
-    const { groups } = await submit(v, mesa4.visitId, [
+    const { groups } = await submit(v, mesa4.partyId, [
       { release: "hold", lines: [line(v, "burger")] },
     ]);
     await setJob((await jobsAt(v.cocinaPrinter))[0]!.id, exhausted);
     await inTx(async (tx) =>
-      fireGroup(tx, v.cfg, mesa4.visitId, groups[0]!.id, await command(mesa4.visitId)),
+      fireGroup(tx, v.cfg, mesa4.partyId, groups[0]!.id, await command(mesa4.partyId)),
     );
     const [hold, fireSlip] = await jobsAt(v.cocinaPrinter);
     expect(fireSlip!.lines[0]).toBe("*** FIRE ***");
@@ -1146,17 +1146,17 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       ...hold!.lines.slice(5),
     ]);
     await setJob(reprint!.id, { status: "done" });
-    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
   });
 
   it("does not reprint under HOLD a line recalled from a fired group whose HOLD ticket was queued", async () => {
     const v = await holdingVenue();
     const mesa4 = await seated(v, "Mesa 4");
-    const { groups } = await submit(v, mesa4.visitId, [
+    const { groups } = await submit(v, mesa4.partyId, [
       { release: "hold", lines: [line(v, "burger"), line(v, "fish")] },
     ]);
     await inTx(async (tx) =>
-      fireGroup(tx, v.cfg, mesa4.visitId, groups[0]!.id, await command(mesa4.visitId)),
+      fireGroup(tx, v.cfg, mesa4.partyId, groups[0]!.id, await command(mesa4.partyId)),
     );
     const fish = await lineNoOf(mesa4.tabId, "fish");
     await inTx((tx) => recallLines(tx, v.cfg, mesa4.tabId, [fish]));
@@ -1181,14 +1181,14 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
   it("follows the held dishes when their bill is merged into another table's, and clears by that bill's reprint", async () => {
     const v = await holdingVenue();
     const mesa4 = await seated(v, "Mesa 4");
-    await submit(v, mesa4.visitId, [{ release: "hold", lines: [line(v, "burger")] }]);
+    await submit(v, mesa4.partyId, [{ release: "hold", lines: [line(v, "burger")] }]);
     const [hold] = await jobsAt(v.cocinaPrinter);
     await setJob(hold!.id, exhausted);
     const mesa5 = await firedTable(v, "Mesa 5", ["fish"]);
 
     await mergeBills(v, mesa4, mesa5);
 
-    expect(await problemsOf(mesa5.visitId)).toEqual([
+    expect(await problemsOf(mesa5.partyId)).toEqual([
       {
         workingOrderId: mesa5.tabId,
         stationId: v.cocina,
@@ -1220,13 +1220,13 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       `1.000 x ${DISHES.burger.kitchen}`,
     ]);
     await setJob(reprint.id, { status: "done" });
-    expect(await problemsOf(mesa5.visitId)).toEqual([]);
+    expect(await problemsOf(mesa5.partyId)).toEqual([]);
   });
 
   it("raises no problem for a failed HOLD correction slip, as for every correction slip", async () => {
     const v = await holdingVenue();
     const mesa4 = await seated(v, "Mesa 4");
-    await submit(v, mesa4.visitId, [
+    await submit(v, mesa4.partyId, [
       { release: "hold", lines: [line(v, "burger"), line(v, "fish")] },
     ]);
     await voidDish(v, mesa4, "fish");
@@ -1237,7 +1237,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
     await setJob(slip!.id, exhausted);
 
     expect(linked).not.toContain(slip!.id);
-    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
     expect("printProblem" in (await stationCard(v.cocina, mesa4.tabId))).toBe(false);
   });
 });
@@ -1247,12 +1247,12 @@ describe("a printing problem a Reprint would print nothing for", () => {
     const v = await setupVenue();
     const mesa4 = await firedTable(v, "Mesa 4", ["burger", "beer"]);
     await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), exhausted);
-    expect(await problemsOf(mesa4.visitId)).toMatchObject([{ stationId: v.cocina }]);
+    expect(await problemsOf(mesa4.partyId)).toMatchObject([{ stationId: v.cocina }]);
     expect(await stationSees(v.cocina, mesa4.tabId)).toBe(true);
 
     await voidDish(v, mesa4, "burger");
 
-    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
     expect(await stationSees(v.cocina, mesa4.tabId)).toBe(false);
     // What the rule stands on: a Reprint of the bill prints nothing on the Cocina printer now.
     const before = (await links()).length;
@@ -1265,14 +1265,14 @@ describe("a printing problem a Reprint would print nothing for", () => {
   it("clears a failed HOLD ticket once every held dish it carried for that station is voided", async () => {
     const v = await holdingVenue();
     const mesa4 = await seated(v, "Mesa 4");
-    await submit(v, mesa4.visitId, [{ release: "hold", lines: [line(v, "burger")] }]);
+    await submit(v, mesa4.partyId, [{ release: "hold", lines: [line(v, "burger")] }]);
     await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), exhausted);
-    expect(await problemsOf(mesa4.visitId)).toMatchObject([{ stationId: v.cocina }]);
+    expect(await problemsOf(mesa4.partyId)).toMatchObject([{ stationId: v.cocina }]);
     expect(await stationSees(v.cocina, mesa4.tabId)).toBe(true);
 
     await voidDish(v, mesa4, "burger");
 
-    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
     expect(await stationSees(v.cocina, mesa4.tabId)).toBe(false);
     // What the rule stands on: a Reprint of the bill prints nothing at all now.
     const before = (await links()).length;
@@ -1289,13 +1289,13 @@ describe("a printing problem a Reprint would print nothing for", () => {
     await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), { status: "done" });
     await setJob(barraFailed, exhausted);
     await setJob(paseFailed, exhausted);
-    expect((await problemsOf(mesa4.visitId)).map((p) => p.stationId).sort()).toEqual(
+    expect((await problemsOf(mesa4.partyId)).map((p) => p.stationId).sort()).toEqual(
       [v.cocina, v.barra].sort(),
     );
 
     await voidDish(v, mesa4, "burger");
 
-    expect(await problemsOf(mesa4.visitId)).toEqual([
+    expect(await problemsOf(mesa4.partyId)).toEqual([
       {
         workingOrderId: mesa4.tabId,
         stationId: v.barra,
@@ -1312,10 +1312,10 @@ describe("a printing problem a Reprint would print nothing for", () => {
     expect(reprints.map((row) => [row.printerId, row.stationId])).toEqual([
       [v.barraPrinter, v.barra],
     ]);
-    expect(await problemsOf(mesa4.visitId)).toMatchObject([{ stationId: v.barra }]);
+    expect(await problemsOf(mesa4.partyId)).toMatchObject([{ stationId: v.barra }]);
 
     await setJob(reprints[0]!.printJobId, { status: "done" });
-    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
     expect("printProblem" in (await stationCard(v.barra, mesa4.tabId))).toBe(false);
   });
 
@@ -1328,7 +1328,7 @@ describe("a printing problem a Reprint would print nothing for", () => {
     await voidDish(v, mesa4, "fish");
     await voidDish(v, mesa4, "beer");
 
-    expect(await problemsOf(mesa4.visitId)).toEqual([
+    expect(await problemsOf(mesa4.partyId)).toEqual([
       {
         workingOrderId: mesa4.tabId,
         stationId: v.cocina,
@@ -1339,7 +1339,7 @@ describe("a printing problem a Reprint would print nothing for", () => {
     expect((await stationCard(v.cocina, mesa4.tabId)).printProblem).toBe(true);
 
     await reprintPrinted(v, mesa4.tabId);
-    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
   });
 
   it("keeps a pass printer's failed ticket at a station it is not attached to while its own station has a dish", async () => {
@@ -1351,7 +1351,7 @@ describe("a printing problem a Reprint would print nothing for", () => {
     await setJob(await jobFor(mesa4.tabId, v.barraPrinter), { status: "done" });
     await setJob(paseFailed, exhausted);
 
-    expect((await problemsOf(mesa4.visitId)).map((p) => p.stationId).sort()).toEqual(
+    expect((await problemsOf(mesa4.partyId)).map((p) => p.stationId).sort()).toEqual(
       [v.cocina, v.barra].sort(),
     );
     expect((await stationCard(v.barra, mesa4.tabId)).printProblem).toBe(true);
@@ -1361,19 +1361,19 @@ describe("a printing problem a Reprint would print nothing for", () => {
     const v = await holdingVenue();
     const pase = await passPrinter(v, [v.barra]);
     const mesa4 = await seated(v, "Mesa 4");
-    await submit(v, mesa4.visitId, [
+    await submit(v, mesa4.partyId, [
       { release: "hold", lines: [line(v, "burger"), line(v, "beer")] },
     ]);
     const [burger] = await db
       .select({ id: workingOrderLines.id })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.name, DISHES.burger.staff));
-    const moved = await command(mesa4.visitId);
+    const moved = await command(mesa4.partyId);
     await inTx((tx) =>
       moveLinesToGroup(
         tx,
         v.cfg,
-        mesa4.visitId,
+        mesa4.partyId,
         [{ lineId: burger!.id, quantity: "1" }],
         "new",
         moved,
@@ -1384,7 +1384,7 @@ describe("a printing problem a Reprint would print nothing for", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.id, burger!.id));
     await inTx(async (tx) =>
-      fireGroup(tx, v.cfg, mesa4.visitId, newGroup!.id!, await command(mesa4.visitId)),
+      fireGroup(tx, v.cfg, mesa4.partyId, newGroup!.id!, await command(mesa4.partyId)),
     );
     // Every ticket printed but the pass printer's HOLD ticket, which carried the burger and the beer.
     const rows = await links();
@@ -1398,7 +1398,7 @@ describe("a printing problem a Reprint would print nothing for", () => {
       await setJob(row.printJobId, row.printJobId === paseHold ? exhausted : { status: "done" });
     }
 
-    expect((await problemsOf(mesa4.visitId)).map((p) => p.stationId).sort()).toEqual(
+    expect((await problemsOf(mesa4.partyId)).map((p) => p.stationId).sort()).toEqual(
       [v.cocina, v.barra].sort(),
     );
     expect((await stationCard(v.cocina, mesa4.tabId)).printProblem).toBe(true);
@@ -1421,7 +1421,7 @@ describe("a printing problem on a printer switched off or detached", () => {
       stationName: "Cocina",
       since: await createdAtOf(failed),
     };
-    expect(await problemsOf(mesa4.visitId)).toEqual([problem]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([problem]);
     expect(await stationSees(v.cocina, mesa4.tabId)).toBe(true);
 
     // A Reprint prints on switched-on printers only, so it cannot clear the problem yet.
@@ -1432,11 +1432,11 @@ describe("a printing problem on a printer switched off or detached", () => {
       [v.barraPrinter, v.barra],
     ]);
     await setJob(whileOff[0]!.printJobId, { status: "done" });
-    expect(await problemsOf(mesa4.visitId)).toEqual([problem]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([problem]);
 
     await inTx((tx) => updatePrinter(tx, printerCfg, v.cocinaPrinter, { active: true }));
     await reprintPrinted(v, mesa4.tabId);
-    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
     expect(await stationSees(v.cocina, mesa4.tabId)).toBe(false);
   });
 
@@ -1444,7 +1444,7 @@ describe("a printing problem on a printer switched off or detached", () => {
     const v = await setupVenue();
     const mesa4 = await firedTable(v, "Mesa 4", ["burger", "beer"]);
     await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), exhausted);
-    expect(await problemsOf(mesa4.visitId)).toMatchObject([{ stationId: v.cocina }]);
+    expect(await problemsOf(mesa4.partyId)).toMatchObject([{ stationId: v.cocina }]);
 
     await inTx((tx) =>
       detachPrinterFromStation(
@@ -1454,7 +1454,7 @@ describe("a printing problem on a printer switched off or detached", () => {
       ),
     );
 
-    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
     expect(await stationSees(v.cocina, mesa4.tabId)).toBe(false);
   });
 });
@@ -1463,8 +1463,8 @@ describe("a printing problem whose dishes move to another bill", () => {
   async function transferDish(v: Venue, from: Seated, to: Seated, dish: Dish, quantity?: string) {
     const lineNo = await lineNoOf(from.tabId, dish);
     const args = {
-      expectedVisitRevision: (await command(to.visitId)).expectedVisitRevision,
-      expectedSourceVisitRevision: (await command(from.visitId)).expectedVisitRevision,
+      expectedPartyRevision: (await command(to.partyId)).expectedPartyRevision,
+      expectedSourcePartyRevision: (await command(from.partyId)).expectedPartyRevision,
       operatorId: ALEX,
     };
     await inTx((tx) =>
@@ -1481,12 +1481,12 @@ describe("a printing problem whose dishes move to another bill", () => {
     const lineNo = await lineNoOf(mesa4.tabId, "burger");
     const { checkId } = await inTx(async (tx) =>
       splitOffCheck(tx, v.cfg, mesa4.tabId, [{ lineNo }], {
-        expectedVisitRevision: (await command(mesa4.visitId)).expectedVisitRevision,
+        expectedPartyRevision: (await command(mesa4.partyId)).expectedPartyRevision,
         operatorId: ALEX,
       }),
     );
 
-    expect(await problemsOf(mesa4.visitId)).toEqual([
+    expect(await problemsOf(mesa4.partyId)).toEqual([
       {
         workingOrderId: checkId,
         stationId: v.cocina,
@@ -1498,7 +1498,7 @@ describe("a printing problem whose dishes move to another bill", () => {
     expect(await stationSees(v.cocina, mesa4.tabId)).toBe(false);
 
     await reprintPrinted(v, checkId);
-    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
     expect(await stationSees(v.cocina, checkId)).toBe(false);
   });
 
@@ -1515,7 +1515,7 @@ describe("a printing problem whose dishes move to another bill", () => {
 
     await transferDish(v, mesa4, mesa5, "burger");
 
-    expect(await problemsOf(mesa5.visitId)).toEqual([
+    expect(await problemsOf(mesa5.partyId)).toEqual([
       {
         workingOrderId: mesa5.tabId,
         stationId: v.cocina,
@@ -1524,10 +1524,10 @@ describe("a printing problem whose dishes move to another bill", () => {
       },
     ]);
     expect(await stationSees(v.cocina, mesa5.tabId)).toBe(true);
-    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
 
     await reprintPrinted(v, mesa5.tabId);
-    expect(await problemsOf(mesa5.visitId)).toEqual([]);
+    expect(await problemsOf(mesa5.partyId)).toEqual([]);
     expect(await stationSees(v.cocina, mesa5.tabId)).toBe(false);
   });
 
@@ -1541,7 +1541,7 @@ describe("a printing problem whose dishes move to another bill", () => {
 
     await inTx((tx) => moveTabLines(tx, v.cfg, mesa4.tabId, mesa5.tabId, [lineNo]));
 
-    expect(await problemsOf(mesa5.visitId)).toEqual([
+    expect(await problemsOf(mesa5.partyId)).toEqual([
       {
         workingOrderId: mesa5.tabId,
         stationId: v.cocina,
@@ -1550,11 +1550,11 @@ describe("a printing problem whose dishes move to another bill", () => {
       },
     ]);
     expect(await stationSees(v.cocina, mesa5.tabId)).toBe(true);
-    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
     expect(await stationSees(v.cocina, mesa4.tabId)).toBe(false);
 
     await reprintPrinted(v, mesa5.tabId);
-    expect(await problemsOf(mesa5.visitId)).toEqual([]);
+    expect(await problemsOf(mesa5.partyId)).toEqual([]);
     expect(await stationSees(v.cocina, mesa5.tabId)).toBe(false);
   });
 
@@ -1566,7 +1566,7 @@ describe("a printing problem whose dishes move to another bill", () => {
     const tableId = await inTx(async (tx) => {
       const { id } = await createTable(tx, v.cfg, { label: "Mesa 6", zoneId: v.zoneId });
       await joinTable(tx, v.cfg, mesa4.tabId, id, {
-        expectedVisitRevision: (await command(mesa4.visitId)).expectedVisitRevision,
+        expectedPartyRevision: (await command(mesa4.partyId)).expectedPartyRevision,
         operatorId: ALEX,
       });
       return id;
@@ -1575,17 +1575,17 @@ describe("a printing problem whose dishes move to another bill", () => {
 
     const { tabId } = await inTx(async (tx) =>
       unjoinTable(tx, v.cfg, mesa4.tabId, tableId, [{ lineNo }], {
-        expectedVisitRevision: (await command(mesa4.visitId)).expectedVisitRevision,
+        expectedPartyRevision: (await command(mesa4.partyId)).expectedPartyRevision,
         operatorId: ALEX,
       }),
     );
     const [bill] = await db
-      .select({ visitId: workingOrders.visitId })
+      .select({ partyId: workingOrders.partyId })
       .from(workingOrders)
       .where(eq(workingOrders.id, tabId!));
-    const mesa6 = { tabId: tabId!, visitId: bill!.visitId! };
+    const mesa6 = { tabId: tabId!, partyId: bill!.partyId! };
 
-    expect(await problemsOf(mesa6.visitId)).toEqual([
+    expect(await problemsOf(mesa6.partyId)).toEqual([
       {
         workingOrderId: mesa6.tabId,
         stationId: v.cocina,
@@ -1594,16 +1594,16 @@ describe("a printing problem whose dishes move to another bill", () => {
       },
     ]);
     expect(await stationSees(v.cocina, mesa6.tabId)).toBe(true);
-    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
 
     await reprintPrinted(v, mesa6.tabId);
-    expect(await problemsOf(mesa6.visitId)).toEqual([]);
+    expect(await problemsOf(mesa6.partyId)).toEqual([]);
   });
 
   it("keeps the failure on both bills when part of the dish moves, and each bill's Reprint clears only its own", async () => {
     const v = await setupVenue();
     const mesa4 = await seated(v, "Mesa 4");
-    await submit(v, mesa4.visitId, [{ release: "fire", lines: [line(v, "burger", "2")] }]);
+    await submit(v, mesa4.partyId, [{ release: "fire", lines: [line(v, "burger", "2")] }]);
     const mesa5 = await seated(v, "Mesa 5");
     const failed = await jobFor(mesa4.tabId, v.cocinaPrinter);
     await setJob(failed, exhausted);
@@ -1615,12 +1615,12 @@ describe("a printing problem whose dishes move to another bill", () => {
       stationName: "Cocina",
       since: await createdAtOf(failed),
     };
-    expect(await problemsOf(mesa4.visitId)).toEqual([{ workingOrderId: mesa4.tabId, ...problem }]);
-    expect(await problemsOf(mesa5.visitId)).toEqual([{ workingOrderId: mesa5.tabId, ...problem }]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([{ workingOrderId: mesa4.tabId, ...problem }]);
+    expect(await problemsOf(mesa5.partyId)).toEqual([{ workingOrderId: mesa5.tabId, ...problem }]);
 
     await reprintPrinted(v, mesa5.tabId);
-    expect(await problemsOf(mesa5.visitId)).toEqual([]);
-    expect(await problemsOf(mesa4.visitId)).toEqual([{ workingOrderId: mesa4.tabId, ...problem }]);
+    expect(await problemsOf(mesa5.partyId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([{ workingOrderId: mesa4.tabId, ...problem }]);
     expect(await stationSees(v.cocina, mesa4.tabId)).toBe(true);
   });
 
@@ -1633,8 +1633,8 @@ describe("a printing problem whose dishes move to another bill", () => {
 
     await transferDish(v, mesa4, mesa5, "burger");
 
-    expect(await problemsOf(mesa5.visitId)).toEqual([]);
-    expect(await problemsOf(mesa4.visitId)).toMatchObject([
+    expect(await problemsOf(mesa5.partyId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toMatchObject([
       { workingOrderId: mesa4.tabId, stationId: v.barra },
     ]);
   });
@@ -1644,7 +1644,7 @@ describe("a printing problem whose dishes move to another bill", () => {
     const mesa4 = await firedTable(v, "Mesa 4", ["burger"]);
     const mesa5 = await seated(v, "Mesa 5");
     await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), { status: "done" });
-    await submit(v, mesa4.visitId, [{ release: "fire", lines: [line(v, "fish")] }]);
+    await submit(v, mesa4.partyId, [{ release: "fire", lines: [line(v, "fish")] }]);
     const fishTicket = (await links()).at(-1)!;
     expect([fishTicket.workingOrderId, fishTicket.printerId]).toEqual([
       mesa4.tabId,
@@ -1654,9 +1654,9 @@ describe("a printing problem whose dishes move to another bill", () => {
 
     await transferDish(v, mesa4, mesa5, "burger");
 
-    expect(await problemsOf(mesa5.visitId)).toEqual([]);
+    expect(await problemsOf(mesa5.partyId)).toEqual([]);
     expect(await stationSees(v.cocina, mesa5.tabId)).toBe(false);
-    expect(await problemsOf(mesa4.visitId)).toEqual([
+    expect(await problemsOf(mesa4.partyId)).toEqual([
       {
         workingOrderId: mesa4.tabId,
         stationId: v.cocina,
@@ -1671,13 +1671,13 @@ describe("a printing problem whose dishes move to another bill", () => {
     const mesa4 = await firedTable(v, "Mesa 4", ["burger"]);
     const mesa5 = await seated(v, "Mesa 5");
     await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), { status: "done" });
-    await submit(v, mesa4.visitId, [{ release: "fire", lines: [line(v, "fish")] }]);
+    await submit(v, mesa4.partyId, [{ release: "fire", lines: [line(v, "fish")] }]);
     const fishTicket = (await links()).at(-1)!;
     await setJob(fishTicket.printJobId, exhausted);
 
     await transferDish(v, mesa4, mesa5, "fish");
 
-    expect(await problemsOf(mesa5.visitId)).toEqual([
+    expect(await problemsOf(mesa5.partyId)).toEqual([
       {
         workingOrderId: mesa5.tabId,
         stationId: v.cocina,
@@ -1701,14 +1701,14 @@ describe("a printing problem whose dishes move to another bill", () => {
       stationName: "Cocina",
       since: await createdAtOf(failed),
     };
-    expect(await problemsOf(mesa4.visitId)).toEqual([{ workingOrderId: mesa4.tabId, ...problem }]);
-    expect(await problemsOf(mesa5.visitId)).toEqual([{ workingOrderId: mesa5.tabId, ...problem }]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([{ workingOrderId: mesa4.tabId, ...problem }]);
+    expect(await problemsOf(mesa5.partyId)).toEqual([{ workingOrderId: mesa5.tabId, ...problem }]);
   });
 
   it("carries a failure on with the part of a dish split off to another bill when that part moves again", async () => {
     const v = await setupVenue();
     const mesa4 = await seated(v, "Mesa 4");
-    await submit(v, mesa4.visitId, [{ release: "fire", lines: [line(v, "burger", "2")] }]);
+    await submit(v, mesa4.partyId, [{ release: "fire", lines: [line(v, "burger", "2")] }]);
     const mesa5 = await seated(v, "Mesa 5");
     const mesa6 = await seated(v, "Mesa 6");
     const failed = await jobFor(mesa4.tabId, v.cocinaPrinter);
@@ -1717,7 +1717,7 @@ describe("a printing problem whose dishes move to another bill", () => {
     await transferDish(v, mesa4, mesa5, "burger", "1");
     await transferDish(v, mesa5, mesa6, "burger");
 
-    expect(await problemsOf(mesa6.visitId)).toEqual([
+    expect(await problemsOf(mesa6.partyId)).toEqual([
       {
         workingOrderId: mesa6.tabId,
         stationId: v.cocina,
@@ -1739,7 +1739,7 @@ describe("a printing problem whose dishes move to another bill", () => {
 
     await transferDish(v, mesa4, mesa5, "burger");
 
-    expect(await problemsOf(mesa5.visitId)).toEqual([
+    expect(await problemsOf(mesa5.partyId)).toEqual([
       {
         workingOrderId: mesa5.tabId,
         stationId: v.cocina,
@@ -1752,7 +1752,7 @@ describe("a printing problem whose dishes move to another bill", () => {
   it("clears by a Reprint queued before some of the held dishes moved to a new group of the same bill", async () => {
     const v = await holdingVenue();
     const mesa4 = await seated(v, "Mesa 4");
-    await submit(v, mesa4.visitId, [{ release: "hold", lines: [line(v, "burger", "2")] }]);
+    await submit(v, mesa4.partyId, [{ release: "hold", lines: [line(v, "burger", "2")] }]);
     await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), exhausted);
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa4.tabId));
     const reprint = (await links()).at(-1)!;
@@ -1765,22 +1765,22 @@ describe("a printing problem whose dishes move to another bill", () => {
       .select({ id: workingOrderLines.id })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.name, DISHES.burger.staff));
-    const moved = await command(mesa4.visitId);
+    const moved = await command(mesa4.partyId);
 
     await inTx((tx) =>
       moveLinesToGroup(
         tx,
         v.cfg,
-        mesa4.visitId,
+        mesa4.partyId,
         [{ lineId: burger!.id, quantity: "1" }],
         "new",
         moved,
       ),
     );
 
-    expect(await problemsOf(mesa4.visitId)).toMatchObject([{ stationId: v.cocina }]);
+    expect(await problemsOf(mesa4.partyId)).toMatchObject([{ stationId: v.cocina }]);
     await setJob(reprint.printJobId, { status: "done" });
-    expect(await problemsOf(mesa4.visitId)).toEqual([]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
     expect(await stationSees(v.cocina, mesa4.tabId)).toBe(false);
   });
 
@@ -1798,14 +1798,14 @@ describe("a printing problem whose dishes move to another bill", () => {
 
     await transferDish(v, mesa4, mesa5, "burger");
     await transferDish(v, mesa5, mesa4, "burger");
-    expect(await problemsOf(mesa4.visitId)).toEqual([{ workingOrderId: mesa4.tabId, ...problem }]);
+    expect(await problemsOf(mesa4.partyId)).toEqual([{ workingOrderId: mesa4.tabId, ...problem }]);
 
     await transferDish(v, mesa4, mesa5, "burger");
     await mergeBills(v, mesa4, mesa5);
-    expect(await problemsOf(mesa5.visitId)).toEqual([{ workingOrderId: mesa5.tabId, ...problem }]);
+    expect(await problemsOf(mesa5.partyId)).toEqual([{ workingOrderId: mesa5.tabId, ...problem }]);
 
     await reprintPrinted(v, mesa5.tabId);
-    expect(await problemsOf(mesa5.visitId)).toEqual([]);
+    expect(await problemsOf(mesa5.partyId)).toEqual([]);
   });
 });
 
@@ -1866,8 +1866,8 @@ async function reprintPrinted(v: Venue, orderId: string): Promise<void> {
 async function mergeBills(v: Venue, source: Seated, destination: Seated): Promise<void> {
   const merge = {
     freeSourceTable: false,
-    expectedVisitRevision: (await command(destination.visitId)).expectedVisitRevision,
-    expectedSourceVisitRevision: (await command(source.visitId)).expectedVisitRevision,
+    expectedPartyRevision: (await command(destination.partyId)).expectedPartyRevision,
+    expectedSourcePartyRevision: (await command(source.partyId)).expectedPartyRevision,
     operatorId: ALEX,
   };
   await inTx((tx) => mergeTabs(tx, v.cfg, destination.tabId, source.tabId, merge));

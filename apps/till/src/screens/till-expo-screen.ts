@@ -15,7 +15,7 @@ import type {
   ExpoItem,
   ExpoOrder,
   GroupCommand,
-  QueueVisit,
+  QueueParty,
   TillApi,
 } from "../api/client.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
@@ -449,19 +449,19 @@ export class TillExpoScreen extends LitElement {
     await this.#reload();
   }
 
-  /** Refused `visit.out_of_date`, the board is read again and the expediter decides; nothing is
+  /** Refused `party.out_of_date`, the board is read again and the expediter decides; nothing is
    * resent. Any other refusal is swallowed like a course lever's. */
   async #groupAct(
     order: ExpoOrder,
-    visit: QueueVisit,
+    party: QueueParty,
     call: (command: GroupCommand) => Promise<{ revision: number }>,
   ): Promise<void> {
     this.tableChanged = null;
     this.#tableChangedNext = null;
     try {
-      await call({ submissionId: crypto.randomUUID(), expectedVisitRevision: visit.revision });
+      await call({ submissionId: crypto.randomUUID(), expectedPartyRevision: party.revision });
     } catch (error) {
-      if ((error as { code?: string }).code === "visit.out_of_date")
+      if ((error as { code?: string }).code === "party.out_of_date")
         this.#tableChangedNext = order.tableLabel ?? `#${order.orderNumber}`;
     }
     await this.#reload();
@@ -529,10 +529,10 @@ export class TillExpoScreen extends LitElement {
         <span class="age">${order.openedMinutes} ${t("station.min")}</span>
       </div>
       ${
-        order.visit === undefined
+        order.party === undefined
           ? this.#visibleCourses(order).map((course) => this.#courseSection(order, course))
           : this.#visibleGroups(order).map((group) =>
-              this.#groupSection(order, order.visit!, group),
+              this.#groupSection(order, order.party!, group),
             )
       }
       ${this.#reprintAction(order)}
@@ -562,7 +562,7 @@ export class TillExpoScreen extends LitElement {
       .sort((a, b) => groupOrder(a) - groupOrder(b));
   }
 
-  #groupSection(order: ExpoOrder, visit: QueueVisit, group: ExpoGroup): TemplateResult {
+  #groupSection(order: ExpoOrder, party: QueueParty, group: ExpoGroup): TemplateResult {
     const name =
       group.position === null ? "" : t("table.group_n").replace("{n}", String(group.position));
     return html`<div class="course" data-group-section=${group.groupId ?? "none"}>
@@ -581,14 +581,14 @@ export class TillExpoScreen extends LitElement {
       <ul class="items">
         ${group.items.map((item) => html`<li>${this.#item(item)}</li>`)}
       </ul>
-      ${group.groupId === null ? nothing : this.#groupLever(order, visit, group, group.groupId, name)}
+      ${group.groupId === null ? nothing : this.#groupLever(order, party, group, group.groupId, name)}
     </div>`;
   }
 
   /** The course lever's shape, one group at a time, through the group verbs. */
   #groupLever(
     order: ExpoOrder,
-    visit: QueueVisit,
+    party: QueueParty,
     group: ExpoGroup,
     groupId: string,
     name: string,
@@ -600,8 +600,8 @@ export class TillExpoScreen extends LitElement {
         data-group-fire=${groupId}
         aria-label=${`${t("expo.fire")} ${name}`}
         @click=${() =>
-          void this.#groupAct(order, visit, (command) =>
-            this.api.fireGroup(visit.id, groupId, command),
+          void this.#groupAct(order, party, (command) =>
+            this.api.fireGroup(party.id, groupId, command),
           )}
       >
         ${t("expo.fire")}
@@ -613,8 +613,8 @@ export class TillExpoScreen extends LitElement {
         data-group-away=${groupId}
         aria-label=${`${t("expo.away")} ${name}`}
         @click=${() =>
-          void this.#groupAct(order, visit, (command) =>
-            this.api.markGroupAway(visit.id, groupId, command),
+          void this.#groupAct(order, party, (command) =>
+            this.api.markGroupAway(party.id, groupId, command),
           )}
       >
         ${t("expo.away")}
@@ -625,8 +625,8 @@ export class TillExpoScreen extends LitElement {
       data-group-ready=${groupId}
       aria-label=${`${t("expo.group_ready")} ${name}`}
       @click=${() =>
-        void this.#groupAct(order, visit, (command) =>
-          this.api.bumpGroupReady(visit.id, groupId, command),
+        void this.#groupAct(order, party, (command) =>
+          this.api.bumpGroupReady(party.id, groupId, command),
         )}
     >
       ${t("expo.group_ready")}
@@ -772,7 +772,7 @@ export class TillExpoScreen extends LitElement {
 
   #orderBand(order: ExpoOrder): TimingBand {
     const sections =
-      order.visit === undefined ? this.#visibleCourses(order) : this.#visibleGroups(order);
+      order.party === undefined ? this.#visibleCourses(order) : this.#visibleGroups(order);
     return worstBand(
       sections.flatMap((section) => section.items.map((item) => this.#itemBand(item))),
     );

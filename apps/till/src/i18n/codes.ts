@@ -7,15 +7,15 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Someone else changed this order. Reload it and make your change again",
     es: "Otra persona ha cambiado este pedido. Vuelve a cargarlo y repite el cambio",
   },
-  "visit.out_of_date": {
+  "party.out_of_date": {
     en: "Someone else changed this table. Reload it and try again",
     es: "Otra persona ha cambiado esta mesa. Vuelve a cargarla e inténtalo de nuevo",
   },
-  "visit.not_open": {
+  "party.not_open": {
     en: "This table has changed since you opened it. Reload the floor and try again",
     es: "Esta mesa ha cambiado desde que la abriste. Vuelve a cargar el plano e inténtalo de nuevo",
   },
-  "visit.bill_outstanding": {
+  "party.bill_outstanding": {
     en: "A bill for this table is still unpaid. Take payment before finishing the table",
     es: "Hay una cuenta de esta mesa sin pagar. Cóbrala antes de cerrar la mesa",
   },
@@ -31,11 +31,11 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That order is not a table's bill, so it cannot be joined to a table or merged with one",
     es: "Ese pedido no es la cuenta de una mesa, así que no se puede unir a una mesa ni combinar con una",
   },
-  "tab.visit_mismatch": {
+  "tab.party_mismatch": {
     en: "One of these bills belongs to seated guests and the other does not, so they cannot be merged",
     es: "Una de estas cuentas es de clientes sentados y la otra no, así que no se pueden combinar",
   },
-  "tab.visit_has_other_open_bill": {
+  "tab.party_has_other_open_bill": {
     en: "That separate bill's guests still have another open bill. Merge their table's bill instead",
     es: "Los clientes de esa cuenta separada aún tienen otra cuenta abierta. Combina en su lugar la cuenta de su mesa",
   },
@@ -55,7 +55,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Those items are no longer on this table. Check the table before trying again",
     es: "Esos artículos ya no están en esta mesa. Revisa la mesa antes de volver a intentarlo",
   },
-  "group.held_leaves_visit": {
+  "group.held_leaves_party": {
     en: "Items still on hold cannot move to another table until their group is fired",
     es: "Los artículos en espera no se pueden pasar a otra mesa hasta que se marche su grupo",
   },

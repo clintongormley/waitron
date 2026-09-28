@@ -49,7 +49,7 @@ let replaced: number;
 function sync(personId = "p1"): DraftSync {
   return new DraftSync({
     api: server,
-    visitId: "v1",
+    partyId: "v1",
     personId,
     rebuild,
     onRefused: (code) => refused.push(code),
@@ -173,9 +173,9 @@ describe("DraftSync: saving", () => {
     let answer!: () => void;
     const draft = sync();
     await draft.load();
-    server.saveDraft.mockImplementationOnce(async (visitId, save) => {
+    server.saveDraft.mockImplementationOnce(async (partyId, save) => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return structuredClone(server.save(visitId, save));
+      return structuredClone(server.save(partyId, save));
     });
     draft.store.addProduct(beer, "1");
     await settle();
@@ -263,8 +263,8 @@ describe("DraftSync: saving", () => {
       await draft.load();
       draft.store.loadFrom(draft.store.id, [structuredClone(answered)]);
       draft.store.setLineExtras(0, { note: "no ice" });
-      server.saveDraft.mockImplementationOnce(async (visitId, save) => {
-        const saved = structuredClone(server.save(visitId, save));
+      server.saveDraft.mockImplementationOnce(async (partyId, save) => {
+        const saved = structuredClone(server.save(partyId, save));
         saved.lines[0]!.options.reverse();
         saved.lines[0]!.extras[0]!.picks.reverse();
         change(saved.lines[0]!);
@@ -289,9 +289,9 @@ describe("DraftSync: saving", () => {
     let answer!: () => void;
     const draft = sync();
     await draft.load();
-    server.saveDraft.mockImplementationOnce(async (visitId, save) => {
+    server.saveDraft.mockImplementationOnce(async (partyId, save) => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return structuredClone(server.save(visitId, save));
+      return structuredClone(server.save(partyId, save));
     });
     draft.store.addProduct(beer, "1");
     await settle();
@@ -361,23 +361,23 @@ describe("DraftSync: a refused save", () => {
   it("says any other refusal without reading the drafts again", async () => {
     const draft = sync();
     await draft.load();
-    server.saveDraft.mockRejectedValueOnce({ code: "visit.not_open", status: 409 });
+    server.saveDraft.mockRejectedValueOnce({ code: "party.not_open", status: 409 });
     draft.store.addProduct(beer, "1");
 
-    expect(await draft.flush()).toEqual({ refused: "visit.not_open" });
+    expect(await draft.flush()).toEqual({ refused: "party.not_open" });
 
     expect(server.listDrafts).toHaveBeenCalledOnce();
     expect(rows(draft)).toEqual(["Beer ×1"]);
-    expect(refused).toEqual(["visit.not_open"]);
+    expect(refused).toEqual(["party.not_open"]);
   });
 
   it("ignores a save answer overtaken by a read", async () => {
     let answer!: () => void;
     const draft = sync();
     await draft.load();
-    server.saveDraft.mockImplementationOnce(async (visitId, save) => {
+    server.saveDraft.mockImplementationOnce(async (partyId, save) => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return structuredClone(server.save(visitId, save));
+      return structuredClone(server.save(partyId, save));
     });
     draft.store.addProduct(beer, "1");
     const saving = draft.flush();
@@ -397,10 +397,10 @@ describe("DraftSync: a save or read that does not come back", () => {
   it("sends the edits again at the next flush after a refusal that is not about the draft", async () => {
     const draft = sync();
     await draft.load();
-    server.saveDraft.mockRejectedValueOnce({ code: "visit.not_open", status: 409 });
+    server.saveDraft.mockRejectedValueOnce({ code: "party.not_open", status: 409 });
     draft.store.addProduct(beer, "1");
 
-    expect(await draft.flush()).toEqual({ refused: "visit.not_open" });
+    expect(await draft.flush()).toEqual({ refused: "party.not_open" });
     expect(await draft.flush()).toBe("saved");
 
     expect(server.saveDraft).toHaveBeenCalledTimes(2);
@@ -476,9 +476,9 @@ describe("DraftSync: signing out", () => {
     let answer!: () => void;
     const draft = sync();
     await draft.load();
-    server.saveDraft.mockImplementationOnce(async (visitId, save) => {
+    server.saveDraft.mockImplementationOnce(async (partyId, save) => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return structuredClone(server.save(visitId, save));
+      return structuredClone(server.save(partyId, save));
     });
     draft.store.addProduct(beer, "1");
     await settle();
@@ -505,7 +505,7 @@ describe("DraftSync: after a submission", () => {
     const [sentLine, kept] = draft.store.lines;
     const answered = server.apply("v1", draft.draftId!, {
       submissionId: "s1",
-      expectedVisitRevision: 3,
+      expectedPartyRevision: 3,
       draftRevision: draft.revision,
       groups: [{ lineIds: draft.lineIds([0])!, release: "fire" }],
     });
@@ -640,13 +640,13 @@ describe("DraftSync: taking over another person's draft", () => {
     const theirs = seed("p2", steak);
     const draft = sync();
     await draft.load();
-    server.saveDraft.mockRejectedValueOnce({ code: "visit.not_open", status: 409 });
+    server.saveDraft.mockRejectedValueOnce({ code: "party.not_open", status: 409 });
     draft.store.addProduct(beer, "1");
 
     expect(await draft.takeOver(theirs.id, theirs.revision)).toBe("unsaved");
 
     expect(server.takeOverDraft).not.toHaveBeenCalled();
-    expect(refused).toEqual(["visit.not_open"]);
+    expect(refused).toEqual(["party.not_open"]);
   });
 
   it("reads the drafts again, and sends nothing more, when the draft moved on since it was read", async () => {
@@ -764,7 +764,7 @@ describe("DraftSync: taking over another person's draft", () => {
     const names: (string | undefined)[] = [];
     const draft = new DraftSync({
       api: server,
-      visitId: "v1",
+      partyId: "v1",
       personId: "p1",
       rebuild,
       onRefused: (_code, ownerName) => names.push(ownerName),
@@ -816,7 +816,7 @@ describe("DraftSync: what the server says about each line", () => {
     server.unavailable.add("offer-steak");
     const answered = server.apply("v1", draft.draftId!, {
       submissionId: "s1",
-      expectedVisitRevision: 3,
+      expectedPartyRevision: 3,
       draftRevision: draft.revision,
       groups: [{ lineIds: draft.lineIds([0])!, release: "fire" }],
     });
@@ -866,9 +866,9 @@ describe("DraftSync: what the server says about each line", () => {
     let answer!: () => void;
     const draft = sync();
     await draft.load();
-    server.saveDraft.mockImplementationOnce(async (visitId, save) => {
+    server.saveDraft.mockImplementationOnce(async (partyId, save) => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return structuredClone(server.save(visitId, save));
+      return structuredClone(server.save(partyId, save));
     });
     draft.store.addProduct(beer, "1");
     expect(draft.saving).toBe(false);

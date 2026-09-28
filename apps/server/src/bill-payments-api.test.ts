@@ -903,12 +903,12 @@ describe("an item already paid for (design §8 test 5)", () => {
     const seated = await request("POST", `/api/tables/${table.id}/seat`, {});
     const {
       tabId: billId,
-      visitId,
+      partyId,
       revision,
-    } = seated.json as { tabId: string; visitId: string; revision: number };
-    const round = await request("POST", `/api/visits/${visitId}/groups`, {
+    } = seated.json as { tabId: string; partyId: string; revision: number };
+    const round = await request("POST", `/api/parties/${partyId}/groups`, {
       submissionId: randomUUID(),
-      expectedVisitRevision: revision,
+      expectedPartyRevision: revision,
       groups: [
         { lines: [{ menuItemId: offer("Paella"), quantity: "1" }], release: "fire" },
         { lines: [{ menuItemId: offer("Tarta"), quantity: "1" }], release: "hold" },
@@ -940,7 +940,7 @@ describe("an item already paid for (design §8 test 5)", () => {
     expect((await balance(billId)).json).toMatchObject({
       paidLines: [{ lineNo: held.lineNo, paidQuantity: "1.000" }],
     });
-    const groups = await request("GET", `/api/visits/${visitId}/groups`);
+    const groups = await request("GET", `/api/parties/${partyId}/groups`);
     expect(
       (groups.json.groups as { state: string; summary: string }[]).map(({ state, summary }) => ({
         state,

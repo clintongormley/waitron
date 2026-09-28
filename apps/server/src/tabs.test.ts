@@ -7,7 +7,7 @@ import {
   printJobs,
   ticketItems,
   tills,
-  visits,
+  parties,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -71,7 +71,7 @@ import {
   updateOrderLine,
   voidTabLine,
 } from "./working-order.js";
-import { finishTable, seatTable } from "./visits.js";
+import { finishTable, seatTable } from "./parties.js";
 import "./errors.js";
 
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
@@ -564,17 +564,17 @@ describe("markServed / unmarkServed", () => {
     return new Map(rows.map((r) => [r.lineNo, r.servedAt]));
   }
 
-  async function visitRevision(visitId: string): Promise<number> {
+  async function partyRevision(partyId: string): Promise<number> {
     const [row] = await db
-      .select({ revision: visits.revision })
-      .from(visits)
-      .where(eq(visits.id, visitId));
+      .select({ revision: parties.revision })
+      .from(parties)
+      .where(eq(parties.id, partyId));
     return row!.revision;
   }
 
   it("marks one line served, unmarks it, and refuses an unknown line (group.not_found)", async () => {
     const { cfg, tableId, cafeOffer, aguaOffer } = await setupVenue();
-    const { tabId, visitId } = await asApp(cfg, (tx) =>
+    const { tabId, partyId } = await asApp(cfg, (tx) =>
       openPartyTab(tx, cfg, {
         tableId,
         lines: [
@@ -598,31 +598,31 @@ describe("markServed / unmarkServed", () => {
     const lineId = randomUUID();
     const command = async () => ({
       submissionId: randomUUID(),
-      expectedVisitRevision: await visitRevision(visitId),
+      expectedPartyRevision: await partyRevision(partyId),
       operatorId: OPERATOR,
     });
     const items = [{ lineId, quantity: "1" }];
     await expect(
-      asApp(cfg, async (tx) => markServed(tx, cfg, visitId, items, await command())),
+      asApp(cfg, async (tx) => markServed(tx, cfg, partyId, items, await command())),
     ).rejects.toMatchObject({ code: "group.not_found", params: { lineId } });
     await expect(
-      asApp(cfg, async (tx) => unmarkServed(tx, cfg, visitId, items, await command())),
+      asApp(cfg, async (tx) => unmarkServed(tx, cfg, partyId, items, await command())),
     ).rejects.toMatchObject({ code: "group.not_found", params: { lineId } });
   });
 
-  it("refuses a party that has left (visit.not_open)", async () => {
+  it("refuses a party that has left (party.not_open)", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
-    const { tabId, visitId } = await asApp(cfg, (tx) =>
+    const { tabId, partyId } = await asApp(cfg, (tx) =>
       openPartyTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     // A paid bill's line can still be marked served (plan D18); a party that has gone cannot.
     await db
-      .update(visits)
+      .update(parties)
       .set({ state: "closed", closedAt: nowIso() })
-      .where(eq(visits.id, visitId));
+      .where(eq(parties.id, partyId));
     await expect(asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1))).rejects.toMatchObject({
-      code: "visit.not_open",
-      params: { visitId },
+      code: "party.not_open",
+      params: { partyId },
     });
   });
 
@@ -642,9 +642,9 @@ describe("markServed / unmarkServed", () => {
       .where(eq(workingOrderLines.workingOrderId, tabId));
     await expect(
       asApp(cfg, (tx) =>
-        markServed(tx, cfg, other.visitId, [{ lineId: line!.id, quantity: "1" }], {
+        markServed(tx, cfg, other.partyId, [{ lineId: line!.id, quantity: "1" }], {
           submissionId: randomUUID(),
-          expectedVisitRevision: other.revision,
+          expectedPartyRevision: other.revision,
           operatorId: OPERATOR,
         }),
       ),
@@ -922,7 +922,7 @@ describe("listTablesWithState (occupancy)", () => {
       }),
     ]);
 
-    const { tabId, visitId } = await asApp(cfg, (tx) =>
+    const { tabId, partyId } = await asApp(cfg, (tx) =>
       seatTable(tx, cfg, { tableId, guestCount: null, operatorId }),
     );
     await asApp(cfg, (tx) =>
@@ -944,9 +944,9 @@ describe("listTablesWithState (occupancy)", () => {
     const paid = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
     expect(paid[0]).toMatchObject({ state: "open-tab", hasOpenTab: false });
 
-    await asApp(cfg, (tx) => finishTable(tx, { visitId, expectedVisitRevision: 0, operatorId }));
+    await asApp(cfg, (tx) => finishTable(tx, { partyId, expectedPartyRevision: 0, operatorId }));
     const freed = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
-    expect(freed[0]).toMatchObject({ state: "free", hasOpenTab: false, visit: null });
+    expect(freed[0]).toMatchObject({ state: "free", hasOpenTab: false, party: null });
   });
 
   it("shows delivery-pending while a fired delivery is uncollected, and free once collected", async () => {

@@ -5,11 +5,11 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
-import type { TabLine, TableVisit, VisitBill } from "../api/client.js";
+import type { TabLine, TableParty, PartyBill } from "../api/client.js";
 
 const money = (amount: string) => formatMoney(decimal(amount), currentLocale());
 
-const party: TableVisit = {
+const party: TableParty = {
   id: "v1",
   revision: 4,
   guestCount: 3,
@@ -21,27 +21,27 @@ const party: TableVisit = {
   reminder: null,
 };
 
-const paidTab: VisitBill = {
+const paidTab: PartyBill = {
   workingOrderId: "wo-tab",
-  visitId: "v1",
+  partyId: "v1",
   label: null,
   status: "settled",
   total: "14.00",
   outstanding: "0.00",
   receiptAvailable: true,
 };
-const check: VisitBill = {
+const check: PartyBill = {
   workingOrderId: "wo-check",
-  visitId: "v1",
+  partyId: "v1",
   label: null,
   status: "open",
   total: "30.00",
   outstanding: "30.00",
   receiptAvailable: false,
 };
-const abandoned: VisitBill = {
+const abandoned: PartyBill = {
   workingOrderId: "wo-gone",
-  visitId: "v1",
+  partyId: "v1",
   label: null,
   status: "abandoned",
   total: "0.00",
@@ -74,7 +74,7 @@ async function mountScreen(over: Partial<TillTableOrderScreen> = {}) {
     lines: [],
     statuses: [],
     orderId: "wo-tab",
-    visit: party,
+    party: party,
     bills: [paidTab, check, abandoned],
     ...over,
   });
@@ -110,7 +110,7 @@ describe("till-table-order-screen: the party's bills", () => {
     expect(open.querySelector("[data-bill-state]")!.textContent).toBe(
       t("table.bill_to_pay").replace("{amount}", money("30.00")),
     );
-    expect(bills(el).querySelector("[data-visit-outstanding]")!.textContent).toBe(money("30.00"));
+    expect(bills(el).querySelector("[data-party-outstanding]")!.textContent).toBe(money("30.00"));
   });
 
   it("leaves out a bill that was abandoned, which nobody pays", async () => {
@@ -154,7 +154,7 @@ describe("till-table-order-screen: the party's bills", () => {
   });
 
   it("shows no bills section for a tab that belongs to no party", async () => {
-    const el = await mountScreen({ visit: null, bills: [] });
+    const el = await mountScreen({ party: null, bills: [] });
 
     expect(el.shadowRoot!.querySelector("[data-bills]")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
@@ -177,14 +177,14 @@ describe("till-table-order-screen: Finish table", () => {
 
     const refusal = bills(el).querySelector<HTMLElement>("[data-finish-refusal]")!;
     expect(refusal.getAttribute("role")).toBe("alert");
-    expect(refusal.textContent).toContain(codeMessage("visit.bill_outstanding"));
+    expect(refusal.textContent).toContain(codeMessage("party.bill_outstanding"));
     refusal.querySelector<HTMLElement>("[data-take-payment]")!.click();
 
     expect(asked).toEqual([{ workingOrderId: "wo-check" }]);
   });
 
   it("offers no Take payment beside the refusal when no unpaid bill is open to charge here", async () => {
-    const placed: VisitBill = { ...check, status: "placed" };
+    const placed: PartyBill = { ...check, status: "placed" };
     const el = await mountScreen({ finishRefused: true, bills: [paidTab, placed] });
 
     const refusal = bills(el).querySelector<HTMLElement>("[data-finish-refusal]")!;

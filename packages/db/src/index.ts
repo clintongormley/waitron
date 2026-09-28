@@ -75,10 +75,10 @@ export { diningTables, floorTableShape } from "./schema/dining-tables.js";
 export {
   serviceCommands,
   serviceCommandScope,
-  visitState,
-  visitTables,
-  visits,
-} from "./schema/visits.js";
+  partyState,
+  partyTables,
+  parties,
+} from "./schema/parties.js";
 export {
   orderGroupEventKind,
   orderGroupEvents,

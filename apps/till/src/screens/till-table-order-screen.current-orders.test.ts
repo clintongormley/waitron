@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
-import type { TabLine, VisitBill } from "../api/client.js";
+import type { TabLine, PartyBill } from "../api/client.js";
 import { mount } from "./till-table-order-screen.test-helpers.js";
 import {
   croquetas,
@@ -22,10 +22,10 @@ import {
 
 afterEach(cleanupWidgets);
 
-function bill(workingOrderId: string, status: VisitBill["status"]): VisitBill {
+function bill(workingOrderId: string, status: PartyBill["status"]): PartyBill {
   return {
     workingOrderId,
-    visitId: "v1",
+    partyId: "v1",
     label: null,
     status,
     total: "10.00",

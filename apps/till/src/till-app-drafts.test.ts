@@ -21,7 +21,7 @@ import type {
   DraftLineInput,
   OrderGroup,
   TableState,
-  TableVisit,
+  TableParty,
   TillApi,
   TillMenuOffer,
   ZoneOfferCatalogue,
@@ -105,7 +105,7 @@ const courses = [
   { id: "desserts", name: "Desserts", displayOrder: 2 },
 ];
 
-function party(over: Partial<TableVisit> = {}): TableVisit {
+function party(over: Partial<TableParty> = {}): TableParty {
   return {
     id: "v1",
     revision: 3,
@@ -120,14 +120,19 @@ function party(over: Partial<TableVisit> = {}): TableVisit {
   };
 }
 
-function table(id: string, label: string, visit: TableVisit | null, tabId?: string): TableState {
+function table(
+  id: string,
+  label: string,
+  tableParty: TableParty | null,
+  tabId?: string,
+): TableState {
   return {
     id,
     label,
     zoneId: "z1",
     capacity: 4,
-    state: visit === null ? "free" : "open-tab",
-    hasOpenTab: visit !== null,
+    state: tableParty === null ? "free" : "open-tab",
+    hasOpenTab: tableParty !== null,
     ...(tabId === undefined ? {} : { tabId }),
     pendingDeliveries: 0,
     pendingToServe: 0,
@@ -140,7 +145,7 @@ function table(id: string, label: string, visit: TableVisit | null, tabId?: stri
     posY: null,
     shape: null,
     rotation: null,
-    visit,
+    party: tableParty,
   };
 }
 
@@ -227,7 +232,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
       .fn()
       .mockResolvedValue([{ id: "z1", name: "Comedor", displayOrder: 0, active: true }]),
     listStatuses: vi.fn().mockResolvedValue([]),
-    getVisitBills: vi.fn().mockResolvedValue([]),
+    getPartyBills: vi.fn().mockResolvedValue([]),
     getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
     listPrintProblems: vi.fn().mockResolvedValue({ problems: [] }),
@@ -336,10 +341,10 @@ function lateSaveLiveFloor() {
     getTablesState: vi.fn(async () =>
       [mesa4, mesa7].map((each) => ({
         ...each,
-        visit: {
-          ...each.visit!,
+        party: {
+          ...each.party!,
           unsentDrafts: server.drafts
-            .filter((one) => one.visitId === each.visit!.id && one.lines.length > 0)
+            .filter((one) => one.partyId === each.party!.id && one.lines.length > 0)
             .map((one) => ({ ownerName: one.ownerName, lineCount: one.lines.length })),
         },
       })),
@@ -363,12 +368,12 @@ async function settle(el: TillApp): Promise<void> {
 function holdNextSave(): () => void {
   let answer!: () => void;
   const held = new Promise<void>((resolve) => (answer = resolve));
-  server.saveDraft.mockImplementationOnce(async (visitId, save) => {
+  server.saveDraft.mockImplementationOnce(async (partyId, save) => {
     const sentBy = server.personId;
     await held;
     const now = server.personId;
     server.personId = sentBy;
-    const saved = server.save(visitId, save);
+    const saved = server.save(partyId, save);
     server.personId = now;
     return structuredClone(saved);
   });
@@ -500,7 +505,7 @@ describe("till-app: a table's draft is kept on the server", () => {
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
     await flush(el);
 
-    expect(server.drafts.map((each) => [each.visitId, each.lines.length])).toEqual([
+    expect(server.drafts.map((each) => [each.partyId, each.lines.length])).toEqual([
       ["v1", 1],
       ["v7", 1],
     ]);
@@ -573,7 +578,7 @@ describe("till-app: a table's draft is kept on the server", () => {
 describe("till-app: an order that moves to another party", () => {
   it("saves the person's edits to the party they were made on, then shows the new party's draft", async () => {
     const { el } = await mountApp({
-      moveTab: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v1" }),
+      moveTab: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
     });
     await openMesa(el);
     server.save("v9", {
@@ -602,7 +607,7 @@ describe("till-app: an order that moves to another party", () => {
     emit(tableOrder(el)!, "move-tab", { toTableId: "t7" });
     await flush(el, 6);
 
-    expect(server.drafts.map((each) => [each.visitId, each.lines.length])).toEqual([
+    expect(server.drafts.map((each) => [each.partyId, each.lines.length])).toEqual([
       ["v9", 1],
       ["v1", 1],
     ]);
@@ -632,12 +637,12 @@ describe("till-app: signing out with a draft", () => {
     let answer!: () => void;
     const { el } = await mountApp();
     await openMesa(el);
-    server.saveDraft.mockImplementationOnce(async (visitId, save) => {
+    server.saveDraft.mockImplementationOnce(async (partyId, save) => {
       const sentBy = server.personId;
       await new Promise<void>((resolve) => (answer = resolve));
       const now = server.personId;
       server.personId = sentBy;
-      const saved = server.save(visitId, save);
+      const saved = server.save(partyId, save);
       server.personId = now;
       return structuredClone(saved);
     });
@@ -716,14 +721,14 @@ describe("till-app: a save the server refuses", () => {
 
   it("says a closed party in its own words", async () => {
     const { el } = await mountApp({
-      saveDraft: vi.fn().mockRejectedValue({ code: "visit.not_open", status: 409 }),
+      saveDraft: vi.fn().mockRejectedValue({ code: "party.not_open", status: 409 }),
     });
     await openMesa(el);
     await tap(el, "Beer");
 
     await back(el);
 
-    expect(banner(el)!.textContent).toContain(codeMessage("visit.not_open"));
+    expect(banner(el)!.textContent).toContain(codeMessage("party.not_open"));
   });
 
   it("says nothing when the session had already ended", async () => {
@@ -749,11 +754,11 @@ describe("till-app: sending the draft", () => {
     await act(el, "send-all");
 
     expect(api.submitDraft).toHaveBeenCalledOnce();
-    const [visitId, draftId, submission] = api.submitDraft.mock.calls[0]!;
-    expect([visitId, draftId]).toEqual(["v1", "draft-1"]);
+    const [partyId, draftId, submission] = api.submitDraft.mock.calls[0]!;
+    expect([partyId, draftId]).toEqual(["v1", "draft-1"]);
     expect(submission).toEqual({
       submissionId: expect.any(String),
-      expectedVisitRevision: 3,
+      expectedPartyRevision: 3,
       draftRevision: 1,
       groups: [
         { release: "hold", lineIds: ["line-2"] },
@@ -1043,7 +1048,7 @@ describe("till-app: sending the draft", () => {
 
   it("says a refused save and sends nothing", async () => {
     const { el } = await mountApp({
-      saveDraft: vi.fn().mockRejectedValue({ code: "visit.not_open", status: 409 }),
+      saveDraft: vi.fn().mockRejectedValue({ code: "party.not_open", status: 409 }),
     });
     await openMesa(el);
     await tap(el, "Beer");
@@ -1051,7 +1056,7 @@ describe("till-app: sending the draft", () => {
     await act(el, "fire-all");
 
     expect(api.submitDraft).not.toHaveBeenCalled();
-    expect(banner(el)!.textContent).toContain(codeMessage("visit.not_open"));
+    expect(banner(el)!.textContent).toContain(codeMessage("party.not_open"));
   });
 });
 
@@ -1070,7 +1075,7 @@ const sending = (el: TillApp) =>
 describe("till-app: a refused save when the draft is sent", () => {
   it("sends the refused edits again at Send, and says the refusal", async () => {
     const { el } = await mountApp({
-      saveDraft: vi.fn().mockRejectedValue({ code: "visit.not_open", status: 409 }),
+      saveDraft: vi.fn().mockRejectedValue({ code: "party.not_open", status: 409 }),
     });
     await openMesa(el);
     await tap(el, "Beer");
@@ -1082,7 +1087,7 @@ describe("till-app: a refused save when the draft is sent", () => {
 
     expect(api.saveDraft).toHaveBeenCalledTimes(2);
     expect(api.submitDraft).not.toHaveBeenCalled();
-    expect(banner(el)!.textContent).toContain(codeMessage("visit.not_open"));
+    expect(banner(el)!.textContent).toContain(codeMessage("party.not_open"));
     expect(tableOrder(el)).not.toBeNull();
   });
 
@@ -1101,7 +1106,7 @@ describe("till-app: a refused save when the draft is sent", () => {
 
   it("says a closed party in its own words when the submission is refused, and stays on the table", async () => {
     const { el } = await mountApp({
-      submitDraft: vi.fn().mockRejectedValue({ code: "visit.not_open", status: 409 }),
+      submitDraft: vi.fn().mockRejectedValue({ code: "party.not_open", status: 409 }),
     });
     await openMesa(el);
     await tap(el, "Beer");
@@ -1109,7 +1114,7 @@ describe("till-app: a refused save when the draft is sent", () => {
 
     await act(el, "fire-all");
 
-    expect(banner(el)!.textContent).toContain(codeMessage("visit.not_open"));
+    expect(banner(el)!.textContent).toContain(codeMessage("party.not_open"));
     expect(tableOrder(el)).not.toBeNull();
     expect(api.getTablesState.mock.calls.length).toBe(floorReads);
     expect(rows(el)).toEqual(["Beer ×1"]);
@@ -1147,9 +1152,9 @@ describe("till-app: signing out while a save is out", () => {
     let answer!: () => void;
     const { el } = await mountApp();
     await openMesa(el);
-    server.saveDraft.mockImplementationOnce(async (visitId, save) => {
+    server.saveDraft.mockImplementationOnce(async (partyId, save) => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return structuredClone(server.save(visitId, save));
+      return structuredClone(server.save(partyId, save));
     });
     await tap(el, "Beer");
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
@@ -1220,9 +1225,9 @@ describe("till-app: a Send the session outlives", () => {
     });
     await openMesa(el);
     const read = server.listDrafts.getMockImplementation()!;
-    server.listDrafts.mockImplementationOnce(async (visitId: string) => {
+    server.listDrafts.mockImplementationOnce(async (partyId: string) => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return read(visitId);
+      return read(partyId);
     });
     await tap(el, "Beer");
     await act(el, "fire-all");
@@ -1242,7 +1247,7 @@ describe("till-app: a Send the session outlives", () => {
   it("says nothing to the next person when the floor read after a party changed elsewhere answers after sign-out", async () => {
     let answer!: () => void;
     const { el } = await mountApp({
-      submitDraft: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v1" }),
+      submitDraft: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
     });
     await openMesa(el);
     api.getTablesState.mockImplementationOnce(async () => {
@@ -1362,7 +1367,7 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
       getTill: vi.fn().mockResolvedValue(till(sideBySide)),
       getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
       seatTable: vi.fn().mockResolvedValue({
-        visitId: "v-new",
+        partyId: "v-new",
         tabId: "wo-new",
         revision: 0,
         orderNumber: 12,
@@ -1695,8 +1700,8 @@ describe("till-app: a later addition is decided from the table's own groups", ()
     let answerGroups!: () => void;
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue(till(sideBySide)),
-      listGroups: vi.fn(async (visitId: string) => {
-        if (visitId === "v7") return { revision: 9, groups: [held] };
+      listGroups: vi.fn(async (partyId: string) => {
+        if (partyId === "v7") return { revision: 9, groups: [held] };
         await new Promise<void>((resolve) => (answerGroups = resolve));
         return { revision: 3, groups: [] };
       }),
@@ -1769,9 +1774,9 @@ describe("till-app: a table open that another overtakes", () => {
     let answerMesa7!: () => void;
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue(till(sideBySide)),
-      listDrafts: vi.fn(async (visitId: string) => {
-        if (visitId === "v7") await new Promise<void>((resolve) => (answerMesa7 = resolve));
-        return server.listDrafts(visitId);
+      listDrafts: vi.fn(async (partyId: string) => {
+        if (partyId === "v7") await new Promise<void>((resolve) => (answerMesa7 = resolve));
+        return server.listDrafts(partyId);
       }),
     });
     server.save("v1", { draftId: null, revision: 0, lines: [beerLine] });
@@ -1835,9 +1840,9 @@ describe("till-app: an order that moves to a party whose groups answer late", ()
     };
     let answerGroups!: () => void;
     const { el } = await mountApp({
-      moveTab: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v1" }),
-      listGroups: vi.fn(async (visitId: string) => {
-        if (visitId !== "v9") return { revision: 3, groups: [] };
+      moveTab: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
+      listGroups: vi.fn(async (partyId: string) => {
+        if (partyId !== "v9") return { revision: 3, groups: [] };
         await new Promise<void>((resolve) => (answerGroups = resolve));
         return { revision: 1, groups: [held] };
       }),
@@ -1915,7 +1920,7 @@ describe("till-app: seating a free table while something else happens", () => {
     let answer!: () => void;
     const seatTable = vi.fn(async () => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return { visitId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 };
+      return { partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 };
     });
     return { seatTable, answer: () => answer() };
   }
@@ -2189,7 +2194,7 @@ describe("till-app: two table opens overlapping", () => {
       orderId: tableOrder(el)!.orderId,
       tableId: own.activeTableId,
       tabId: own.activeTabId,
-      party: tableOrder(el)!.visit?.id,
+      party: tableOrder(el)!.party?.id,
     };
   };
 
@@ -2201,7 +2206,7 @@ describe("till-app: two table opens overlapping", () => {
       getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
       seatTable: vi.fn(async () => {
         await new Promise<void>((resolve) => (answerSeat = resolve));
-        return { visitId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 };
+        return { partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 };
       }),
       getTabLines: vi.fn(async (tabId: string) => {
         if (tabId === "wo-7") await new Promise<void>((resolve) => (answerLines = resolve));
@@ -2265,7 +2270,7 @@ describe("till-app: a table open whose last wait outlives the session", () => {
       getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
       seatTable: vi
         .fn()
-        .mockResolvedValue({ visitId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 }),
+        .mockResolvedValue({ partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 }),
       getTabLines: vi.fn(async (tabId: string) => {
         if (tabId === "wo-new") await new Promise<void>((resolve) => (answerLines = resolve));
         return { lines: [], revision: 0, editSentLines: true };
@@ -2587,7 +2592,7 @@ describe("till-app: other people's drafts and taking one over", () => {
 
   it("keeps the words of a refusal of Sam's own change, and takes nothing over", async () => {
     const { el } = await mountApp({
-      saveDraft: vi.fn().mockRejectedValue({ code: "visit.not_open", status: 409 }),
+      saveDraft: vi.fn().mockRejectedValue({ code: "party.not_open", status: 409 }),
     });
     savedBy(ALEX, "Alex", "offer-beer");
     await openAs(el, SAM, "Sam");
@@ -2597,7 +2602,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     await takeOver(el);
 
     expect(api.takeOverDraft).not.toHaveBeenCalled();
-    expect(banner(el)!.textContent).toContain(codeMessage("visit.not_open"));
+    expect(banner(el)!.textContent).toContain(codeMessage("party.not_open"));
   });
 
   it("says a take-over that got no answer, having read the drafts again", async () => {
@@ -2619,7 +2624,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     ["draft.not_found", t("table.take_over_gone")],
     ["draft.already_submitted", t("table.take_over_sent")],
     ["draft.taken_over", t("table.take_over_changed")],
-    ["visit.not_open", codeMessage("visit.not_open")],
+    ["party.not_open", codeMessage("party.not_open")],
   ])("says a take-over refused %s in words for what changed", async (code, words) => {
     const { el } = await mountApp({
       takeOverDraft: vi.fn().mockRejectedValue({ code, status: 409 }),
@@ -3259,8 +3264,8 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
     await saved(el);
     await publish(el, { Beer: "6.00" });
     expect(refreshText(el)).toContain("Beer €5.00 → €6.00");
-    server.saveDraft.mockImplementationOnce(async (visitId, save) => {
-      const answer = server.flagged(structuredClone(server.save(visitId, save)));
+    server.saveDraft.mockImplementationOnce(async (partyId, save) => {
+      const answer = server.flagged(structuredClone(server.save(partyId, save)));
       answer.lines.reverse();
       return answer;
     });

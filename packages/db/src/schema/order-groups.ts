@@ -12,13 +12,13 @@ import {
   table,
   tsString,
 } from "./columns.js";
-import { visits } from "./visits.js";
+import { parties } from "./parties.js";
 
 export const orderGroupState = enumType(["held", "fired", "removed"]);
 
 /**
- * One group of a visit's order, released to the kitchen together (`apps/server/src/order-groups.ts`).
- * A line names its group in `working_order_lines.group_id`, whichever of the visit's bills it sits
+ * One group of a party's order, released to the kitchen together (`apps/server/src/order-groups.ts`).
+ * A line names its group in `working_order_lines.group_id`, whichever of the party's bills it sits
  * on. A group emptied while held is `removed`, never deleted, because its events point at it.
  *
  * `fired_by` and `submitted_by` are plain person ids with no key: `persons` is in
@@ -28,7 +28,7 @@ export const orderGroups = table(
   "order_groups",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    visitId: id("visit_id").notNull(),
+    partyId: id("party_id").notNull(),
     // No unique index: a reorder rewrites the positions one row at a time, and a unique index would
     // refuse a midway state that the final one satisfies.
     position: count("position").notNull(),
@@ -45,11 +45,11 @@ export const orderGroups = table(
   },
   (t) => [
     foreignKey({
-      columns: [t.visitId],
-      foreignColumns: [visits.id],
-      name: "order_groups_visit_fk",
+      columns: [t.partyId],
+      foreignColumns: [parties.id],
+      name: "order_groups_party_fk",
     }),
-    index("order_groups_visit_idx").on(t.visitId),
+    index("order_groups_party_idx").on(t.partyId),
     check("order_groups_state_ck", enumCheck(t.state)),
     check("order_groups_fired_at_ck", sql`(${t.state} = 'fired') = (${t.firedAt} is not null)`),
   ],
@@ -65,7 +65,7 @@ export const orderGroupEventKind = enumType([
 ]);
 
 /**
- * What happened to a visit's groups, and who did it. Declared `appendOnly()` in
+ * What happened to a party's groups, and who did it. Declared `appendOnly()` in
  * `../classification.ts`. A retried command is answered from `service_commands` and writes no
  * second event.
  *
@@ -76,7 +76,7 @@ export const orderGroupEvents = table(
   "order_group_events",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    visitId: id("visit_id").notNull(),
+    partyId: id("party_id").notNull(),
     groupId: id("group_id"),
     kind: orderGroupEventKind("kind").notNull(),
     actorId: id("actor_id").notNull(),
@@ -85,16 +85,16 @@ export const orderGroupEvents = table(
   },
   (t) => [
     foreignKey({
-      columns: [t.visitId],
-      foreignColumns: [visits.id],
-      name: "order_group_events_visit_fk",
+      columns: [t.partyId],
+      foreignColumns: [parties.id],
+      name: "order_group_events_party_fk",
     }),
     foreignKey({
       columns: [t.groupId],
       foreignColumns: [orderGroups.id],
       name: "order_group_events_group_fk",
     }),
-    index("order_group_events_visit_idx").on(t.visitId),
+    index("order_group_events_party_idx").on(t.partyId),
     index("order_group_events_group_idx").on(t.groupId),
     check("order_group_events_kind_ck", enumCheck(t.kind)),
   ],

@@ -1037,7 +1037,7 @@ describe("till-expo-screen — a seated party's groups", () => {
     tableLabel: "Mesa 4",
     openedMinutes: 20,
     worstBand: "fresh",
-    visit: { id: "v-4", revision: 7 },
+    party: { id: "v-4", revision: 7 },
     courses: [],
     groups: [
       section("g-4", 4, "held", [passItem("it-steak", "Solomillo", { firedAt: null })]),
@@ -1140,8 +1140,8 @@ describe("till-expo-screen — a seated party's groups", () => {
       await flush(el);
       const calls = (api as unknown as Record<string, ReturnType<typeof vi.fn>>)[verb]!.mock.calls;
       expect(calls).toEqual([
-        ["v-4", groupId, { submissionId: expect.any(String), expectedVisitRevision: 7 }],
-        ["v-4", groupId, { submissionId: expect.any(String), expectedVisitRevision: 7 }],
+        ["v-4", groupId, { submissionId: expect.any(String), expectedPartyRevision: 7 }],
+        ["v-4", groupId, { submissionId: expect.any(String), expectedPartyRevision: 7 }],
       ]);
       expect(calls[0]![2].submissionId).not.toBe(calls[1]![2].submissionId);
       expect(api.getExpoQueue).toHaveBeenCalledTimes(3);
@@ -1151,9 +1151,9 @@ describe("till-expo-screen — a seated party's groups", () => {
     },
   );
 
-  it("on visit.out_of_date it reloads and says the table changed, and never sends again on its own", async () => {
+  it("on party.out_of_date it reloads and says the table changed, and never sends again on its own", async () => {
     const api = partyApi({
-      markGroupAway: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v-4" }),
+      markGroupAway: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v-4" }),
     });
     const el = await mount({ api, fireControl: "expo" });
     expect(tableChanged(el)).toBeNull();
@@ -1170,7 +1170,7 @@ describe("till-expo-screen — a seated party's groups", () => {
     const api = partyApi({
       bumpGroupReady: vi
         .fn()
-        .mockRejectedValueOnce({ code: "visit.out_of_date" })
+        .mockRejectedValueOnce({ code: "party.out_of_date" })
         .mockRejectedValue({ code: "group.not_found" }),
     });
     const el = await mount({ api, fireControl: "expo" });
@@ -1188,7 +1188,7 @@ describe("till-expo-screen — a seated party's groups", () => {
 
   it("names the table that changed, and never says where it changed", async () => {
     const api = partyApi({
-      markGroupAway: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v-4" }),
+      markGroupAway: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v-4" }),
     });
     const el = await mount({ api, fireControl: "expo" });
     el.shadowRoot!.querySelector<HTMLElement>('[data-group-away="g-3"]')!.click();
@@ -1202,7 +1202,7 @@ describe("till-expo-screen — a seated party's groups", () => {
     const unlabelled: ExpoOrder = { ...partyOrder };
     delete unlabelled.tableLabel;
     const api = partyApi({
-      markGroupAway: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v-4" }),
+      markGroupAway: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v-4" }),
     });
     (api.getExpoQueue as ReturnType<typeof vi.fn>).mockResolvedValue([unlabelled]);
     const el = await mount({ api, fireControl: "expo" });
@@ -1213,7 +1213,7 @@ describe("till-expo-screen — a seated party's groups", () => {
 
   it("the next successful read after the one that showed it clears the notice", async () => {
     const api = partyApi({
-      markGroupAway: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v-4" }),
+      markGroupAway: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v-4" }),
     });
     (api.getExpoQueue as ReturnType<typeof vi.fn>).mockResolvedValue([
       threeCourseOrder,

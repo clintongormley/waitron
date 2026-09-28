@@ -167,7 +167,7 @@ it("explains a merge refused for leaving the party without a table, in both lang
 
 it("explains each refusal of joining or merging bills that belong together differently, in both languages", () => {
   expect(
-    ["tab.not_table_tab", "tab.visit_mismatch", "tab.visit_has_other_open_bill"].map((code) => [
+    ["tab.not_table_tab", "tab.party_mismatch", "tab.party_has_other_open_bill"].map((code) => [
       codeMessage(code, "en"),
       codeMessage(code, "es"),
     ]),
@@ -185,4 +185,14 @@ it("explains each refusal of joining or merging bills that belong together diffe
       "Los clientes de esa cuenta separada aún tienen otra cuenta abierta. Combina en su lugar la cuenta de su mesa",
     ],
   ]);
+});
+
+it.each([
+  "party.not_open",
+  "party.out_of_date",
+  "party.bill_outstanding",
+  "group.held_leaves_party",
+])("has English and Spanish wording for %s", (code) => {
+  expect(codeMessage(code, "en")).not.toBe(codeMessage("server.internal", "en"));
+  expect(codeMessage(code, "es")).not.toBe(codeMessage("server.internal", "es"));
 });

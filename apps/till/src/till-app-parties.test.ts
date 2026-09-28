@@ -22,11 +22,11 @@ import type {
   PrintProblem,
   TabLine,
   TableState,
-  TableVisit,
+  TableParty,
   TillApi,
   TillProduct,
   TillSaleResult,
-  VisitBill,
+  PartyBill,
   ZoneOfferCatalogue,
 } from "./api/client.js";
 
@@ -51,12 +51,12 @@ function table(over: Partial<TableState> = {}): TableState {
     posY: null,
     shape: null,
     rotation: null,
-    visit: null,
+    party: null,
     ...over,
   };
 }
 
-function party(over: Partial<TableVisit> = {}): TableVisit {
+function party(over: Partial<TableParty> = {}): TableParty {
   return {
     id: "v1",
     revision: 3,
@@ -71,14 +71,14 @@ function party(over: Partial<TableVisit> = {}): TableVisit {
   };
 }
 
-function seated(over: Partial<TableState> = {}, visit: Partial<TableVisit> = {}): TableState {
+function seated(over: Partial<TableState> = {}, partyOver: Partial<TableParty> = {}): TableState {
   return table({
     state: "open-tab",
     hasOpenTab: true,
     tabId: "wo-4",
     tabLineCount: 3,
     tabTotal: "44.00",
-    visit: party(visit),
+    party: party(partyOver),
     ...over,
   });
 }
@@ -90,18 +90,18 @@ const mesa7 = seated(
 );
 const mesa9 = table({ id: "t9", label: "9" });
 
-const tabBill: VisitBill = {
+const tabBill: PartyBill = {
   workingOrderId: "wo-4",
-  visitId: "v1",
+  partyId: "v1",
   label: null,
   status: "open",
   total: "14.00",
   outstanding: "14.00",
   receiptAvailable: false,
 };
-const checkBill: VisitBill = {
+const checkBill: PartyBill = {
   workingOrderId: "wo-check",
-  visitId: "v1",
+  partyId: "v1",
   label: null,
   status: "open",
   total: "30.00",
@@ -208,8 +208,8 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listStatuses: vi.fn().mockResolvedValue([]),
     seatTable: vi
       .fn()
-      .mockResolvedValue({ visitId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 }),
-    getVisitBills: vi.fn().mockResolvedValue([tabBill, checkBill]),
+      .mockResolvedValue({ partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 }),
+    getPartyBills: vi.fn().mockResolvedValue([tabBill, checkBill]),
     finishTable: vi.fn().mockResolvedValue({ state: "closed" }),
     markCleared: vi.fn().mockResolvedValue(undefined),
     getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0, editSentLines: true }),
@@ -317,7 +317,7 @@ describe("till-app: seating a party", () => {
       .fn()
       .mockResolvedValueOnce([mesa4, mesa7, mesa9])
       .mockResolvedValue([mesa4, mesa7, seatedMesa9]);
-    const { el } = await mountApp({ getTablesState, getVisitBills: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountApp({ getTablesState, getPartyBills: vi.fn().mockResolvedValue([]) });
     const screen = await toFloor(el);
 
     screen.shadowRoot!.querySelector<HTMLElement>('[data-table="t9"]')!.click();
@@ -336,8 +336,8 @@ describe("till-app: seating a party", () => {
     expect(api.seatTable).toHaveBeenCalledWith("t9", 3);
     const order = tableOrder(el)!;
     expect(order.orderId).toBe("wo-new");
-    expect(order.visit).toEqual(seatedMesa9.visit);
-    expect(api.getVisitBills).toHaveBeenCalledWith("v-new");
+    expect(order.party).toEqual(seatedMesa9.party);
+    expect(api.getPartyBills).toHaveBeenCalledWith("v-new");
   });
 
   it("acts on the party the seat answered with when the floor cannot be read after seating", async () => {
@@ -347,8 +347,8 @@ describe("till-app: seating a party", () => {
       .mockRejectedValue(new TypeError("Failed to fetch"));
     const { el } = await mountApp({
       getTablesState,
-      getVisitBills: vi.fn().mockResolvedValue([]),
-      finishTable: vi.fn().mockRejectedValue({ code: "visit.bill_outstanding" }),
+      getPartyBills: vi.fn().mockResolvedValue([]),
+      finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
     });
     const screen = await toFloor(el);
 
@@ -356,7 +356,7 @@ describe("till-app: seating a party", () => {
     await flush(el);
     const order = tableOrder(el)!;
     expect(order.orderId).toBe("wo-new");
-    expect(api.getVisitBills).toHaveBeenCalledWith("v-new");
+    expect(api.getPartyBills).toHaveBeenCalledWith("v-new");
 
     emit(order, "finish-table", {});
     await flush(el);
@@ -364,7 +364,7 @@ describe("till-app: seating a party", () => {
 
     emit(tableOrder(el)!, "join-table", { tableId: "t4" });
     await flush(el);
-    expect(api.joinTable).toHaveBeenCalledWith("wo-new", "t4", { expectedVisitRevision: 0 });
+    expect(api.joinTable).toHaveBeenCalledWith("wo-new", "t4", { expectedPartyRevision: 0 });
   });
 
   it("says why when another device seated the table first, and re-reads the floor", async () => {
@@ -391,7 +391,7 @@ function figures(el: TillApp) {
   return {
     total: shown.querySelector("[data-bill-total]")?.textContent,
     toPay: shown.querySelector("[data-bill-state]")?.textContent,
-    stillToPay: screen.querySelector("[data-visit-outstanding]")?.textContent,
+    stillToPay: screen.querySelector("[data-party-outstanding]")?.textContent,
   };
 }
 
@@ -410,8 +410,8 @@ describe("till-app: the party's bills and Finish table", () => {
 
     const order = await openMesa(el);
 
-    expect(api.getVisitBills).toHaveBeenCalledWith("v1");
-    expect(order.visit).toEqual(mesa4.visit);
+    expect(api.getPartyBills).toHaveBeenCalledWith("v1");
+    expect(order.party).toEqual(mesa4.party);
     expect(order.bills).toEqual([tabBill, checkBill]);
   });
 
@@ -430,7 +430,7 @@ describe("till-app: the party's bills and Finish table", () => {
 
   it("shows the refusal when a bill is unpaid, and Take payment opens that bill to charge", async () => {
     const { el } = await mountApp({
-      finishTable: vi.fn().mockRejectedValue({ code: "visit.bill_outstanding" }),
+      finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
     });
     const order = await openMesa(el);
 
@@ -459,9 +459,9 @@ describe("till-app: the party's bills and Finish table", () => {
     const { el } = await mountApp({
       voidLine: vi.fn(async () => {
         server.voided = true;
-        return { visit: { id: "v1", revision: 4 } };
+        return { party: { id: "v1", revision: 4 } };
       }),
-      getVisitBills: vi.fn(async () =>
+      getPartyBills: vi.fn(async () =>
         server.voided ? [cancelled, checkBill] : [tabBill, checkBill],
       ),
       getTablesState: vi.fn(async () =>
@@ -489,7 +489,7 @@ describe("till-app: the party's bills and Finish table", () => {
         server.voided = true;
         throw new TypeError("Failed to fetch");
       }),
-      getVisitBills: vi.fn(async () =>
+      getPartyBills: vi.fn(async () =>
         server.voided ? [cancelled, checkBill] : [tabBill, checkBill],
       ),
       getTablesState: vi.fn(async () =>
@@ -513,7 +513,7 @@ describe("till-app: the party's bills and Finish table", () => {
       voidLine: vi.fn().mockRejectedValue({ code: "tab.void_quantity_invalid" }),
     });
     const order = await openMesa(el);
-    const billReads = vi.mocked(api.getVisitBills).mock.calls.length;
+    const billReads = vi.mocked(api.getPartyBills).mock.calls.length;
     const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
     const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
 
@@ -521,7 +521,7 @@ describe("till-app: the party's bills and Finish table", () => {
     await flush(el);
 
     expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
-    expect(api.getVisitBills).toHaveBeenCalledTimes(billReads);
+    expect(api.getPartyBills).toHaveBeenCalledTimes(billReads);
     expect(api.getTablesState).toHaveBeenCalledTimes(floorReads);
   });
 
@@ -531,9 +531,9 @@ describe("till-app: the party's bills and Finish table", () => {
     const { el } = await mountApp({
       voidLine: vi.fn(async () => {
         server.voided = true;
-        return { visit: { id: "v1", revision: 4 } };
+        return { party: { id: "v1", revision: 4 } };
       }),
-      getVisitBills: vi.fn(async () =>
+      getPartyBills: vi.fn(async () =>
         server.voided ? [cancelled, checkBill] : [tabBill, checkBill],
       ),
       getTablesState: vi.fn(async () => {
@@ -557,9 +557,9 @@ describe("till-app: the party's bills and Finish table", () => {
     const { el } = await mountApp({
       voidLine: vi.fn(async () => {
         server.voided = true;
-        return { visit: { id: "v1", revision: 4 } };
+        return { party: { id: "v1", revision: 4 } };
       }),
-      getVisitBills: vi.fn(async () => {
+      getPartyBills: vi.fn(async () => {
         if (server.voided) throw new TypeError("Failed to fetch");
         return [tabBill, checkBill];
       }),
@@ -590,7 +590,7 @@ describe("till-app: the party's bills and Finish table", () => {
         server.changed = true;
         return updateOrderLine();
       }),
-      getVisitBills: vi.fn(async () =>
+      getPartyBills: vi.fn(async () =>
         server.changed ? [withCheese, checkBill] : [tabBill, checkBill],
       ),
       getTablesState: vi.fn(async () =>
@@ -603,7 +603,7 @@ describe("till-app: the party's bills and Finish table", () => {
 
   it("shows the bill's new figures right after a Change adds a priced extra", async () => {
     const { el } = await mountApp(
-      cheeseServer(async () => ({ revision: 1, visit: { id: "v1", revision: 4 } })),
+      cheeseServer(async () => ({ revision: 1, party: { id: "v1", revision: 4 } })),
     );
     const order = await openMesa(el);
     order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
@@ -633,7 +633,7 @@ describe("till-app: the party's bills and Finish table", () => {
   });
 
   it("says so when the floor cannot be read after a Change, and still to pay follows the new bills", async () => {
-    const server = cheeseServer(async () => ({ revision: 1, visit: { id: "v1", revision: 4 } }));
+    const server = cheeseServer(async () => ({ revision: 1, party: { id: "v1", revision: 4 } }));
     let changed = false;
     const { el } = await mountApp({
       ...server,
@@ -677,19 +677,19 @@ describe("till-app: the party's bills and Finish table", () => {
   it("an order with no party gets no still to pay when the floor cannot be read after a cancel", async () => {
     const partyless = table({ state: "open-tab", hasOpenTab: true, tabId: "wo-4" });
     const { el } = await mountApp({
-      voidLine: vi.fn().mockResolvedValue({ visit: null }),
+      voidLine: vi.fn().mockResolvedValue({ party: null }),
       getTablesState: vi
         .fn()
         .mockResolvedValueOnce([partyless, mesa7, mesa9])
         .mockRejectedValue(new TypeError("Failed to fetch")),
     });
     const order = await openMesa(el);
-    expect(order.visit).toBeNull();
+    expect(order.party).toBeNull();
 
     emit(order, "void-line", { lineNo: 1 });
     await flush(el);
 
-    expect(tableOrder(el)!.visit).toBeNull();
+    expect(tableOrder(el)!.party).toBeNull();
     expect(banner(el)!.textContent).toContain(t("table.reread_failed"));
   });
 
@@ -698,7 +698,7 @@ describe("till-app: the party's bills and Finish table", () => {
       updateOrderLine: vi.fn().mockRejectedValue({ code: "tab.line_not_found" }),
     });
     const order = await openMesa(el);
-    const billReads = vi.mocked(api.getVisitBills).mock.calls.length;
+    const billReads = vi.mocked(api.getPartyBills).mock.calls.length;
     const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
     const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
 
@@ -706,17 +706,17 @@ describe("till-app: the party's bills and Finish table", () => {
     await flush(el);
 
     expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
-    expect(api.getVisitBills).toHaveBeenCalledTimes(billReads);
+    expect(api.getPartyBills).toHaveBeenCalledTimes(billReads);
     expect(api.getTablesState).toHaveBeenCalledTimes(floorReads);
   });
 
   it("a Change's bills answering after another table opened leave that table's bills alone and say nothing", async () => {
     const { el } = await mountApp(
-      cheeseServer(async () => ({ revision: 1, visit: { id: "v1", revision: 4 } })),
+      cheeseServer(async () => ({ revision: 1, party: { id: "v1", revision: 4 } })),
     );
     const order = await openMesa(el);
-    let answer!: (bills: VisitBill[]) => void;
-    vi.mocked(api.getVisitBills).mockImplementationOnce(
+    let answer!: (bills: PartyBill[]) => void;
+    vi.mocked(api.getPartyBills).mockImplementationOnce(
       () =>
         new Promise((resolve) => {
           answer = resolve;
@@ -727,9 +727,9 @@ describe("till-app: the party's bills and Finish table", () => {
     emit(tableOrder(el)!, "back-to-floor");
     await flush(el);
     const other = [
-      { ...tabBill, workingOrderId: "wo-7", visitId: "v7", total: "70.00", outstanding: "70.00" },
+      { ...tabBill, workingOrderId: "wo-7", partyId: "v7", total: "70.00", outstanding: "70.00" },
     ];
-    vi.mocked(api.getVisitBills).mockResolvedValue(other);
+    vi.mocked(api.getPartyBills).mockResolvedValue(other);
     emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
     await flush(el);
     expect(tableOrder(el)!.orderId).toBe("wo-7");
@@ -745,7 +745,7 @@ describe("till-app: the party's bills and Finish table", () => {
 
   it("a slow line read after an earlier Change does not put back the older still to pay", async () => {
     const { el } = await mountApp(
-      cheeseServer(async () => ({ revision: 1, visit: { id: "v1", revision: 4 } })),
+      cheeseServer(async () => ({ revision: 1, party: { id: "v1", revision: 4 } })),
     );
     const order = await openMesa(el);
     order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
@@ -761,7 +761,7 @@ describe("till-app: the party's bills and Finish table", () => {
     emit(order, "change-line", cheese);
     await flush(el);
     expect(tableOrder(el)!.bills[0]!.outstanding).toBe("15.50");
-    vi.mocked(api.getVisitBills).mockResolvedValue([
+    vi.mocked(api.getPartyBills).mockResolvedValue([
       { ...tabBill, total: "18.50", outstanding: "18.50" },
       checkBill,
     ]);
@@ -777,7 +777,7 @@ describe("till-app: the party's bills and Finish table", () => {
 
   it("a Change's floor read failing after another table opened reads nothing more and says nothing", async () => {
     const { el } = await mountApp(
-      cheeseServer(async () => ({ revision: 1, visit: { id: "v1", revision: 4 } })),
+      cheeseServer(async () => ({ revision: 1, party: { id: "v1", revision: 4 } })),
     );
     const order = await openMesa(el);
     let rejectFloor!: (error: unknown) => void;
@@ -794,18 +794,18 @@ describe("till-app: the party's bills and Finish table", () => {
     emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
     await flush(el);
     expect(tableOrder(el)!.orderId).toBe("wo-7");
-    const reads = vi.mocked(api.getVisitBills).mock.calls.length;
+    const reads = vi.mocked(api.getPartyBills).mock.calls.length;
 
     rejectFloor(new TypeError("Failed to fetch"));
     await flush(el);
 
     expect(banner(el)).toBeNull();
-    expect(api.getVisitBills).toHaveBeenCalledTimes(reads);
+    expect(api.getPartyBills).toHaveBeenCalledTimes(reads);
   });
 
   it("a Change's floor read failing once the waiter is back on the floor says nothing", async () => {
     const { el } = await mountApp(
-      cheeseServer(async () => ({ revision: 1, visit: { id: "v1", revision: 4 } })),
+      cheeseServer(async () => ({ revision: 1, party: { id: "v1", revision: 4 } })),
     );
     const order = await openMesa(el);
     let rejectFloor!: (error: unknown) => void;
@@ -829,7 +829,7 @@ describe("till-app: the party's bills and Finish table", () => {
 
   it("an earlier Change's floor read failing after a later Change's re-read has finished changes nothing", async () => {
     const { el } = await mountApp(
-      cheeseServer(async () => ({ revision: 1, visit: { id: "v1", revision: 4 } })),
+      cheeseServer(async () => ({ revision: 1, party: { id: "v1", revision: 4 } })),
     );
     const order = await openMesa(el);
     order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
@@ -847,26 +847,26 @@ describe("till-app: the party's bills and Finish table", () => {
     await flush(el);
     expect(figures(el)).toEqual(figuresOf("15.50", "45.50"));
     expect(banner(el)).toBeNull();
-    const reads = vi.mocked(api.getVisitBills).mock.calls.length;
+    const reads = vi.mocked(api.getPartyBills).mock.calls.length;
 
     rejectFloor(new TypeError("Failed to fetch"));
     await flush(el);
 
     expect(figures(el)).toEqual(figuresOf("15.50", "45.50"));
     expect(banner(el)).toBeNull();
-    expect(api.getVisitBills).toHaveBeenCalledTimes(reads);
+    expect(api.getPartyBills).toHaveBeenCalledTimes(reads);
   });
 
   it("an earlier Change's bills answering while a later Change's re-read is under way say nothing", async () => {
     const { el } = await mountApp(
-      cheeseServer(async () => ({ revision: 1, visit: { id: "v1", revision: 4 } })),
+      cheeseServer(async () => ({ revision: 1, party: { id: "v1", revision: 4 } })),
     );
     const order = await openMesa(el);
     order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await flush(el);
     vi.mocked(api.getTablesState).mockRejectedValueOnce(new TypeError("Failed to fetch"));
-    let answerBills!: (bills: VisitBill[]) => void;
-    vi.mocked(api.getVisitBills).mockImplementationOnce(
+    let answerBills!: (bills: PartyBill[]) => void;
+    vi.mocked(api.getPartyBills).mockImplementationOnce(
       () =>
         new Promise((resolve) => {
           answerBills = resolve;
@@ -900,14 +900,14 @@ describe("till-app: the party's bills and Finish table", () => {
 
   it("a Change's bills answering after a table move read the order again keep the move's still to pay", async () => {
     const { el } = await mountApp(
-      cheeseServer(async () => ({ revision: 1, visit: { id: "v1", revision: 4 } })),
+      cheeseServer(async () => ({ revision: 1, party: { id: "v1", revision: 4 } })),
     );
     const order = await openMesa(el);
     order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await flush(el);
     vi.mocked(api.getTablesState).mockRejectedValueOnce(new TypeError("Failed to fetch"));
-    let answerBills!: (bills: VisitBill[]) => void;
-    vi.mocked(api.getVisitBills).mockImplementationOnce(
+    let answerBills!: (bills: PartyBill[]) => void;
+    vi.mocked(api.getPartyBills).mockImplementationOnce(
       () =>
         new Promise((resolve) => {
           answerBills = resolve;
@@ -923,7 +923,7 @@ describe("till-app: the party's bills and Finish table", () => {
         { revision: 5, outstanding: "48.50", tableIds: ["t9"] },
       ),
     ]);
-    vi.mocked(api.getVisitBills).mockResolvedValue([
+    vi.mocked(api.getPartyBills).mockResolvedValue([
       { ...tabBill, total: "18.50", outstanding: "18.50" },
       checkBill,
     ]);
@@ -940,13 +940,13 @@ describe("till-app: the party's bills and Finish table", () => {
 
   it("says so when the floor cannot be read after a Change and a refused Finish reads the bills first", async () => {
     const { el } = await mountApp({
-      ...cheeseServer(async () => ({ revision: 1, visit: { id: "v1", revision: 4 } })),
-      finishTable: vi.fn().mockRejectedValue({ code: "visit.bill_outstanding" }),
+      ...cheeseServer(async () => ({ revision: 1, party: { id: "v1", revision: 4 } })),
+      finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
     });
     const order = await openMesa(el);
     vi.mocked(api.getTablesState).mockRejectedValueOnce(new TypeError("Failed to fetch"));
-    let answerBills!: (bills: VisitBill[]) => void;
-    vi.mocked(api.getVisitBills).mockImplementationOnce(
+    let answerBills!: (bills: PartyBill[]) => void;
+    vi.mocked(api.getPartyBills).mockImplementationOnce(
       () =>
         new Promise((resolve) => {
           answerBills = resolve;
@@ -965,7 +965,7 @@ describe("till-app: the party's bills and Finish table", () => {
   });
 
   it("a cancel answering once the waiter is back on the floor, with the floor unread, says nothing", async () => {
-    let answerVoid!: (answer: { visit: { id: string; revision: number } }) => void;
+    let answerVoid!: (answer: { party: { id: string; revision: number } }) => void;
     const { el } = await mountApp({
       voidLine: vi.fn(
         () =>
@@ -982,7 +982,7 @@ describe("till-app: the party's bills and Finish table", () => {
     expect(floor(el)).not.toBeNull();
     vi.mocked(api.getTablesState).mockRejectedValue(new TypeError("Failed to fetch"));
 
-    answerVoid({ visit: { id: "v1", revision: 4 } });
+    answerVoid({ party: { id: "v1", revision: 4 } });
     await flush(el);
 
     expect(banner(el)).toBeNull();
@@ -1048,7 +1048,7 @@ describe("till-app: the party on a handheld", () => {
     await flush(el);
 
     const card = orderCard(el)!;
-    expect(card.visit).toEqual(mesa4.visit);
+    expect(card.party).toEqual(mesa4.party);
     expect(card.bills).toEqual([tabBill, checkBill]);
 
     emit(card, "finish-table", {});
@@ -1062,8 +1062,8 @@ describe("till-app: the party on a handheld", () => {
    * refused. */
   function currentRevisionOnly<R>(current: number, answer: R) {
     return vi.fn(async (...args: unknown[]) => {
-      const sent = (args.at(-1) as { expectedVisitRevision?: number }).expectedVisitRevision;
-      if (sent !== current) throw { code: "visit.out_of_date", visitId: "v1", revision: current };
+      const sent = (args.at(-1) as { expectedPartyRevision?: number }).expectedPartyRevision;
+      if (sent !== current) throw { code: "party.out_of_date", partyId: "v1", revision: current };
       return answer;
     });
   }
@@ -1093,7 +1093,7 @@ describe("till-app: the party on a handheld", () => {
       emit(shell(el), "open-table", { tableId: "t4", seated: true });
       await flush(el);
       const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
-      const billReads = vi.mocked(api.getVisitBills).mock.calls.length;
+      const billReads = vi.mocked(api.getPartyBills).mock.calls.length;
 
       reads.other.acted = true;
       emit(shell(el), "tab-select", { key: "floor" });
@@ -1106,15 +1106,15 @@ describe("till-app: the party on a handheld", () => {
 
       expect(command).toHaveBeenCalledOnce();
       await expect(command.mock.results[0]!.value).rejects.toMatchObject({
-        code: "visit.out_of_date",
+        code: "party.out_of_date",
       });
       expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
-      expect(api.getVisitBills).toHaveBeenCalledTimes(billReads + 1);
-      expect(orderCard(el)!.visit).toEqual(splitElsewhere.visit);
+      expect(api.getPartyBills).toHaveBeenCalledTimes(billReads + 1);
+      expect(orderCard(el)!.party).toEqual(splitElsewhere.party);
       const text = banner(el)!.textContent!;
-      expect(text).toContain(t("visit.changed").replace("{table}", "4"));
+      expect(text).toContain(t("party.changed").replace("{table}", "4"));
       expect(text).toContain(
-        t("visit.changed_bills").replace("{amount}", formatMoney("44.00", "en")),
+        t("party.changed_bills").replace("{amount}", formatMoney("44.00", "en")),
       );
     },
   );
@@ -1122,14 +1122,14 @@ describe("till-app: the party on a handheld", () => {
 
 /** The party's bills read left unanswered until the test settles it. */
 interface LateBills {
-  resolve: (bills: VisitBill[]) => void;
+  resolve: (bills: PartyBill[]) => void;
   reject: (error: unknown) => void;
 }
 
 describe("till-app: reads and refusals around the party", () => {
   it("shows no bills rather than stale ones when the party's bills cannot be read", async () => {
     const { el } = await mountApp({
-      getVisitBills: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      getPartyBills: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
 
     const order = await openMesa(el);
@@ -1143,15 +1143,15 @@ describe("till-app: reads and refusals around the party", () => {
   ] as const)(
     "keeps the next table's bills when the last table's bills read %s after them",
     async (_outcome, settle) => {
-      const bill7: VisitBill = { ...tabBill, workingOrderId: "wo-7", visitId: "v7" };
+      const bill7: PartyBill = { ...tabBill, workingOrderId: "wo-7", partyId: "v7" };
       const late = {} as LateBills;
       let v1Reads = 0;
       const { el } = await mountApp({
-        getVisitBills: vi.fn((visitId: string) => {
-          if (visitId !== "v1") return Promise.resolve([bill7]);
+        getPartyBills: vi.fn((partyId: string) => {
+          if (partyId !== "v1") return Promise.resolve([bill7]);
           v1Reads++;
           if (v1Reads === 1) return Promise.resolve([tabBill, checkBill]);
-          return new Promise<VisitBill[]>((resolve, reject) =>
+          return new Promise<PartyBill[]>((resolve, reject) =>
             Object.assign(late, { resolve, reject }),
           );
         }),
@@ -1177,28 +1177,28 @@ describe("till-app: reads and refusals around the party", () => {
 
   it("offers no Finish command for a tab that belongs to no party", async () => {
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([{ ...mesa4, visit: null }]),
+      getTablesState: vi.fn().mockResolvedValue([{ ...mesa4, party: null }]),
     });
     const order = await openMesa(el);
 
     emit(order, "finish-table", {});
     await flush(el);
 
-    expect(api.getVisitBills).not.toHaveBeenCalled();
+    expect(api.getPartyBills).not.toHaveBeenCalled();
     expect(api.finishTable).not.toHaveBeenCalled();
   });
 
   it("says why Mark cleared was refused and re-reads the floor", async () => {
     const { el } = await mountApp({
-      markCleared: vi.fn().mockRejectedValue({ code: "visit.not_open", visitId: "v1" }),
+      markCleared: vi.fn().mockRejectedValue({ code: "party.not_open", partyId: "v1" }),
     });
     const screen = await toFloor(el);
     const reads = vi.mocked(api.getTablesState).mock.calls.length;
 
-    emit(screen, "mark-cleared", { visitId: "v1", expectedVisitRevision: 6 });
+    emit(screen, "mark-cleared", { partyId: "v1", expectedPartyRevision: 6 });
     await flush(el);
 
-    expect(banner(el)!.textContent).toContain(codeMessage("visit.not_open"));
+    expect(banner(el)!.textContent).toContain(codeMessage("party.not_open"));
     expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
   });
 
@@ -1206,7 +1206,7 @@ describe("till-app: reads and refusals around the party", () => {
     const reads = floorThat([mesa4], [seated({}, { revision: 5, tableIds: ["t4", "t9"] }), mesa9]);
     const { el } = await mountApp({
       getTablesState: reads.getTablesState,
-      moveTab: vi.fn().mockRejectedValue({ code: "visit.out_of_date" }),
+      moveTab: vi.fn().mockRejectedValue({ code: "party.out_of_date" }),
     });
     const order = await openMesa(el);
     reads.other.acted = true;
@@ -1214,23 +1214,23 @@ describe("till-app: reads and refusals around the party", () => {
     emit(order, "move-tab", { toTableId: "t9" });
     await flush(el);
 
-    expect(banner(el)!.textContent).toContain(t("visit.changed").replace("{table}", "4"));
+    expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "4"));
     expect(banner(el)!.textContent).toContain(
-      t("visit.changed_tables").replace("{tables}", "4, 9"),
+      t("party.changed_tables").replace("{tables}", "4, 9"),
     );
   });
 
   it("says the table changed, in general words, when a stale refusal names no party", async () => {
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([{ ...mesa4, visit: null }]),
-      moveTab: vi.fn().mockRejectedValue({ code: "visit.out_of_date" }),
+      getTablesState: vi.fn().mockResolvedValue([{ ...mesa4, party: null }]),
+      moveTab: vi.fn().mockRejectedValue({ code: "party.out_of_date" }),
     });
     const order = await openMesa(el);
 
     emit(order, "move-tab", { toTableId: "t9" });
     await flush(el);
 
-    expect(banner(el)!.textContent).toContain(codeMessage("visit.out_of_date"));
+    expect(banner(el)!.textContent).toContain(codeMessage("party.out_of_date"));
   });
 });
 
@@ -1240,7 +1240,7 @@ describe("till-app: a table needing clearing", () => {
     const screen = await toFloor(el);
     const reads = vi.mocked(api.getTablesState).mock.calls.length;
 
-    emit(screen, "mark-cleared", { visitId: "v1", expectedVisitRevision: 6 });
+    emit(screen, "mark-cleared", { partyId: "v1", expectedPartyRevision: 6 });
     await flush(el);
 
     expect(api.markCleared).toHaveBeenCalledWith("v1", 6);
@@ -1250,13 +1250,13 @@ describe("till-app: a table needing clearing", () => {
 
 describe("till-app: every table move sends the party revision it last read", () => {
   it.each([
-    ["move-tab", { toTableId: "t9" }, "moveTab", ["wo-4", "t9", { expectedVisitRevision: 3 }]],
-    ["join-table", { tableId: "t9" }, "joinTable", ["wo-4", "t9", { expectedVisitRevision: 3 }]],
+    ["move-tab", { toTableId: "t9" }, "moveTab", ["wo-4", "t9", { expectedPartyRevision: 3 }]],
+    ["join-table", { tableId: "t9" }, "joinTable", ["wo-4", "t9", { expectedPartyRevision: 3 }]],
     [
       "merge-tabs",
       { fromTabId: "wo-7", freeSourceTable: true },
       "mergeTabs",
-      ["wo-4", "wo-7", true, { expectedVisitRevision: 3, expectedSourceVisitRevision: 9 }],
+      ["wo-4", "wo-7", true, { expectedPartyRevision: 3, expectedSourcePartyRevision: 9 }],
     ],
     [
       "transfer-lines",
@@ -1266,14 +1266,14 @@ describe("till-app: every table move sends the party revision it last read", () 
         "wo-4",
         "wo-7",
         [{ lineNo: 1 }],
-        { expectedVisitRevision: 9, expectedSourceVisitRevision: 3 },
+        { expectedPartyRevision: 9, expectedSourcePartyRevision: 3 },
       ],
     ],
     [
       "split-lines",
       { transfers: [{ lineNo: 1 }] },
       "splitTab",
-      ["wo-4", [{ lineNo: 1 }], { expectedVisitRevision: 3 }],
+      ["wo-4", [{ lineNo: 1 }], { expectedPartyRevision: 3 }],
     ],
   ] as const)("%s", async (type, detail, method, args) => {
     const { el } = await mountApp();
@@ -1298,7 +1298,7 @@ describe("till-app: every table move sends the party revision it last read", () 
     await flush(el);
 
     expect(api.mergeTabs).toHaveBeenCalledWith("wo-4", "wo-check", true, {
-      expectedVisitRevision: 3,
+      expectedPartyRevision: 3,
     });
   });
 
@@ -1318,7 +1318,7 @@ describe("till-app: every table move sends the party revision it last read", () 
     emit(order, "move-tab", { toTableId: "t9" });
     await flush(el);
 
-    expect(api.moveTab).toHaveBeenCalledWith("wo-paid", "t9", { expectedVisitRevision: 3 });
+    expect(api.moveTab).toHaveBeenCalledWith("wo-paid", "t9", { expectedPartyRevision: 3 });
     expect(banner(el)).toBeNull();
   });
 });
@@ -1376,7 +1376,7 @@ describe("till-app: a party's split-off bill left unpaid goes back with the part
     await flush(el);
 
     expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-4", "wo-check", false, {
-      expectedVisitRevision: 4,
+      expectedPartyRevision: 4,
     });
     expect(banner(el)).toBeNull();
   });
@@ -1413,7 +1413,7 @@ describe("till-app: a party's split-off bill left unpaid goes back with the part
     await flush(el);
 
     expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-4", "wo-check", false, {
-      expectedVisitRevision: 4,
+      expectedPartyRevision: 4,
     });
     expect(orderCard(el)!.orderId).toBe("wo-7");
   });
@@ -1537,7 +1537,7 @@ describe("till-app: a party's split-off bill left unpaid goes back with the part
       ...floorAcrossSplit(),
       mergeTabs: vi
         .fn()
-        .mockRejectedValue({ code: "visit.out_of_date", visitId: "v1", revision: 6 }),
+        .mockRejectedValue({ code: "party.out_of_date", partyId: "v1", revision: 6 }),
     });
     const order = await openMesa(el);
     emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
@@ -1568,30 +1568,30 @@ describe("till-app: another device changed the table first", () => {
   it("reloads, says what changed, and sends the new revision only when the person acts again", async () => {
     const moveTab = vi
       .fn()
-      .mockRejectedValueOnce({ code: "visit.out_of_date", visitId: "v1", revision: 5 })
+      .mockRejectedValueOnce({ code: "party.out_of_date", partyId: "v1", revision: 5 })
       .mockResolvedValue(undefined);
     const { other, getTablesState } = floorThat([mesa4, mesa9], [moved, mesa5, mesa9]);
     const { el } = await mountApp({ moveTab, getTablesState });
     const order = await openMesa(el);
     other.acted = true;
-    const billReads = vi.mocked(api.getVisitBills).mock.calls.length;
+    const billReads = vi.mocked(api.getPartyBills).mock.calls.length;
     const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
 
     emit(order, "move-tab", { toTableId: "t9" });
     await flush(el);
 
     expect(moveTab).toHaveBeenCalledOnce();
-    expect(tableOrder(el)!.visit).toEqual(moved.visit);
-    expect(api.getVisitBills).toHaveBeenCalledTimes(billReads + 1);
+    expect(tableOrder(el)!.party).toEqual(moved.party);
+    expect(api.getPartyBills).toHaveBeenCalledTimes(billReads + 1);
     expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
     const text = banner(el)!.textContent!;
-    expect(text).toContain(t("visit.changed").replace("{table}", "4"));
-    expect(text).toContain(t("visit.changed_tables").replace("{tables}", "4, 5"));
-    expect(text).toContain(t("visit.try_again"));
+    expect(text).toContain(t("party.changed").replace("{table}", "4"));
+    expect(text).toContain(t("party.changed_tables").replace("{tables}", "4, 5"));
+    expect(text).toContain(t("party.try_again"));
 
     emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
     await flush(el);
-    expect(moveTab).toHaveBeenLastCalledWith("wo-4", "t9", { expectedVisitRevision: 5 });
+    expect(moveTab).toHaveBeenLastCalledWith("wo-4", "t9", { expectedPartyRevision: 5 });
   });
 
   it("names the bills and what is left to pay when those are what changed", async () => {
@@ -1600,7 +1600,7 @@ describe("till-app: another device changed the table first", () => {
     const { el } = await mountApp({
       splitTab: vi
         .fn()
-        .mockRejectedValue({ code: "visit.out_of_date", visitId: "v1", revision: 5 }),
+        .mockRejectedValue({ code: "party.out_of_date", partyId: "v1", revision: 5 }),
       getTablesState: reads.getTablesState,
     });
     const order = await openMesa(el);
@@ -1610,7 +1610,7 @@ describe("till-app: another device changed the table first", () => {
     await flush(el);
 
     expect(banner(el)!.textContent).toContain(
-      t("visit.changed_bills").replace("{amount}", formatMoney("44.00", "en")),
+      t("party.changed_bills").replace("{amount}", formatMoney("44.00", "en")),
     );
   });
 
@@ -1619,7 +1619,7 @@ describe("till-app: another device changed the table first", () => {
     const { el } = await mountApp({
       finishTable: vi
         .fn()
-        .mockRejectedValue({ code: "visit.out_of_date", visitId: "v1", revision: 5 }),
+        .mockRejectedValue({ code: "party.out_of_date", partyId: "v1", revision: 5 }),
       getTablesState: reads.getTablesState,
     });
     const order = await openMesa(el);
@@ -1628,7 +1628,7 @@ describe("till-app: another device changed the table first", () => {
     emit(order, "finish-table", {});
     await flush(el);
 
-    expect(banner(el)!.textContent).toContain(t("visit.changed_gone"));
+    expect(banner(el)!.textContent).toContain(t("party.changed_gone"));
   });
 
   it("says something else changed when its tables and bills read the same", async () => {
@@ -1636,7 +1636,7 @@ describe("till-app: another device changed the table first", () => {
     const { el } = await mountApp({
       joinTable: vi
         .fn()
-        .mockRejectedValue({ code: "visit.out_of_date", visitId: "v1", revision: 5 }),
+        .mockRejectedValue({ code: "party.out_of_date", partyId: "v1", revision: 5 }),
       getTablesState: reads.getTablesState,
     });
     const order = await openMesa(el);
@@ -1645,7 +1645,7 @@ describe("till-app: another device changed the table first", () => {
     emit(order, "join-table", { tableId: "t9" });
     await flush(el);
 
-    expect(banner(el)!.textContent).toContain(t("visit.changed_other"));
+    expect(banner(el)!.textContent).toContain(t("party.changed_other"));
   });
 
   it("names the other table when it is the other party that changed", async () => {
@@ -1662,7 +1662,7 @@ describe("till-app: another device changed the table first", () => {
     const { el } = await mountApp({
       transferLines: vi
         .fn()
-        .mockRejectedValue({ code: "visit.out_of_date", visitId: "v7", revision: 10 }),
+        .mockRejectedValue({ code: "party.out_of_date", partyId: "v7", revision: 10 }),
       getTablesState: reads.getTablesState,
     });
     const order = await openMesa(el);
@@ -1671,37 +1671,37 @@ describe("till-app: another device changed the table first", () => {
     emit(order, "transfer-lines", { toTabId: "wo-7", transfers: [{ lineNo: 1 }] });
     await flush(el);
 
-    expect(banner(el)!.textContent).toContain(t("visit.changed").replace("{table}", "7"));
+    expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "7"));
   });
 
   it("reloads the floor and says so when Mark cleared was stale", async () => {
     const { el } = await mountApp({
       markCleared: vi
         .fn()
-        .mockRejectedValue({ code: "visit.out_of_date", visitId: "v1", revision: 7 }),
+        .mockRejectedValue({ code: "party.out_of_date", partyId: "v1", revision: 7 }),
     });
     const screen = await toFloor(el);
     const reads = vi.mocked(api.getTablesState).mock.calls.length;
 
-    emit(screen, "mark-cleared", { visitId: "v1", expectedVisitRevision: 6 });
+    emit(screen, "mark-cleared", { partyId: "v1", expectedPartyRevision: 6 });
     await flush(el);
 
     expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
-    expect(banner(el)!.textContent).toContain(t("visit.changed").replace("{table}", "4"));
+    expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "4"));
   });
 
   it.each([
     ["table.occupied", "move-tab", { toTableId: "t9" }, "moveTab"],
     ["table.occupied", "join-table", { tableId: "t9" }, "joinTable"],
-    ["visit.not_open", "split-lines", { transfers: [{ lineNo: 1 }] }, "splitTab"],
+    ["party.not_open", "split-lines", { transfers: [{ lineNo: 1 }] }, "splitTab"],
     [
-      "group.held_leaves_visit",
+      "group.held_leaves_party",
       "transfer-lines",
       { toTabId: "wo-7", transfers: [{ lineNo: 1 }] },
       "transferLines",
     ],
     [
-      "group.held_leaves_visit",
+      "group.held_leaves_party",
       "merge-tabs",
       { fromTabId: "wo-7", freeSourceTable: false },
       "mergeTabs",
@@ -1709,13 +1709,13 @@ describe("till-app: another device changed the table first", () => {
     ["tab.not_table_tab", "join-table", { tableId: "t9" }, "joinTable"],
     ["tab.not_table_tab", "merge-tabs", { fromTabId: "wo-7", freeSourceTable: false }, "mergeTabs"],
     [
-      "tab.visit_mismatch",
+      "tab.party_mismatch",
       "merge-tabs",
       { fromTabId: "wo-7", freeSourceTable: false },
       "mergeTabs",
     ],
     [
-      "tab.visit_has_other_open_bill",
+      "tab.party_has_other_open_bill",
       "merge-tabs",
       { fromTabId: "wo-7", freeSourceTable: false },
       "mergeTabs",
@@ -1740,7 +1740,7 @@ describe("till-app: another device changed the table first", () => {
 describe("till-app: leaving a finished party", () => {
   it("keeps the finished party's lines and bills off the screen when their read answers late", async () => {
     let answerLines!: (tab: unknown) => void;
-    let answerBills!: (bills: VisitBill[]) => void;
+    let answerBills!: (bills: PartyBill[]) => void;
     const { el } = await mountApp(onTablet());
     const screen = await toFloor(el);
     emit(screen, "open-table", { tableId: "t4", seated: true });
@@ -1748,7 +1748,7 @@ describe("till-app: leaving a finished party", () => {
     vi.mocked(api.getTabLines).mockImplementationOnce(
       () => new Promise((resolve) => (answerLines = resolve as (tab: unknown) => void)),
     );
-    vi.mocked(api.getVisitBills).mockImplementationOnce(
+    vi.mocked(api.getPartyBills).mockImplementationOnce(
       () => new Promise((resolve) => (answerBills = resolve)),
     );
     emit(tabletOrderCard(el)!, "join-table", { tableId: "t9" });
@@ -1795,9 +1795,9 @@ describe("till-app: the order's groups", () => {
   function chainedFire(start: number) {
     let current = start;
     return vi.fn(
-      async (_visitId: string, _groupId: string, command: { expectedVisitRevision: number }) => {
-        if (command.expectedVisitRevision !== current)
-          throw { code: "visit.out_of_date", visitId: "v1" };
+      async (_partyId: string, _groupId: string, command: { expectedPartyRevision: number }) => {
+        if (command.expectedPartyRevision !== current)
+          throw { code: "party.out_of_date", partyId: "v1" };
         current += 1;
         return { revision: current };
       },
@@ -1889,7 +1889,7 @@ describe("till-app: the order's groups", () => {
       "draft-1",
       {
         submissionId: expect.any(String),
-        expectedVisitRevision: 3,
+        expectedPartyRevision: 3,
         draftRevision: 1,
         groups: [
           { release: "fire", lineIds: [expect.any(String)] },
@@ -1925,14 +1925,14 @@ describe("till-app: the order's groups", () => {
 
   it("says so when the floor cannot be read after a Change and a sent round reads the bills first", async () => {
     const { el } = await mountApp({
-      updateOrderLine: vi.fn().mockResolvedValue({ revision: 1, visit: { id: "v1", revision: 4 } }),
+      updateOrderLine: vi.fn().mockResolvedValue({ revision: 1, party: { id: "v1", revision: 4 } }),
       submitDraft: answering({ tabId: "wo-4", revision: 5, groups: [] }),
     });
     const order = await openMesa(el);
     await ringRound(el, order);
     vi.mocked(api.getTablesState).mockRejectedValueOnce(new TypeError("Failed to fetch"));
-    let answerBills!: (bills: VisitBill[]) => void;
-    vi.mocked(api.getVisitBills).mockImplementationOnce(
+    let answerBills!: (bills: PartyBill[]) => void;
+    vi.mocked(api.getPartyBills).mockImplementationOnce(
       () =>
         new Promise((resolve) => {
           answerBills = resolve;
@@ -1970,7 +1970,7 @@ describe("till-app: the order's groups", () => {
 
     emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
     await flush(el);
-    expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 4 });
+    expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedPartyRevision: 4 });
   });
 
   it("follows the round onto the party's next tab after its tab was paid", async () => {
@@ -1991,7 +1991,7 @@ describe("till-app: the order's groups", () => {
 
   it("reloads the table and says so when another device changed the party first, keeping the round", async () => {
     const { el } = await mountApp({
-      submitDraft: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v1" }),
+      submitDraft: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
     });
     const order = await openMesa(el);
     const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
@@ -2007,7 +2007,7 @@ describe("till-app: the order's groups", () => {
     await flush(el);
 
     expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
-    expect(banner(el)!.textContent).toContain(t("visit.changed").replace("{table}", "4"));
+    expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "4"));
     expect(round.lineCount).toBe(1);
   });
 
@@ -2043,7 +2043,7 @@ describe("till-app: the order's groups", () => {
 
     emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
     await flush(el);
-    expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 4 });
+    expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedPartyRevision: 4 });
   });
 
   it("keeps another party's revision when a round's answer arrives after the screen opened its table", async () => {
@@ -2070,7 +2070,7 @@ describe("till-app: the order's groups", () => {
     await flush(el);
     emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
     await flush(el);
-    expect(api.moveTab).toHaveBeenCalledWith("wo-7", "t9", { expectedVisitRevision: 9 });
+    expect(api.moveTab).toHaveBeenCalledWith("wo-7", "t9", { expectedPartyRevision: 9 });
   });
 
   it("sends no round while a split-off check is the order on screen, and says what a refused round said", async () => {
@@ -2102,7 +2102,7 @@ describe("till-app: the order's groups", () => {
         .fn()
         .mockResolvedValueOnce([mesa4, mesa7, mesa9])
         .mockRejectedValue(new TypeError("Failed to fetch")),
-      getVisitBills: vi.fn().mockResolvedValue([]),
+      getPartyBills: vi.fn().mockResolvedValue([]),
       submitDraft: answering({ tabId: "wo-new", revision: 1, groups: [] }),
     });
     const screen = await toFloor(el);
@@ -2121,14 +2121,14 @@ describe("till-app: the order's groups", () => {
     expect(api.submitDraft).toHaveBeenCalledWith(
       "v-new",
       expect.any(String),
-      expect.objectContaining({ expectedVisitRevision: 0 }),
+      expect.objectContaining({ expectedPartyRevision: 0 }),
       expect.anything(),
     );
     expect(banner(el)).toBeNull();
   });
 
   it("keeps the higher revision when two answers about the party arrive out of order", async () => {
-    const answers: ((value: { visit: { id: string; revision: number } }) => void)[] = [];
+    const answers: ((value: { party: { id: string; revision: number } }) => void)[] = [];
     const { el } = await mountApp({
       voidLine: vi.fn(
         () =>
@@ -2143,14 +2143,14 @@ describe("till-app: the order's groups", () => {
     await flush(el);
     expect(answers).toHaveLength(2);
 
-    answers[1]!({ visit: { id: "v1", revision: 5 } });
+    answers[1]!({ party: { id: "v1", revision: 5 } });
     await flush(el);
-    answers[0]!({ visit: { id: "v1", revision: 4 } });
+    answers[0]!({ party: { id: "v1", revision: 4 } });
     await flush(el);
 
     emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
     await flush(el);
-    expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 5 });
+    expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedPartyRevision: 5 });
   });
 
   describe("editing held groups", () => {
@@ -2212,9 +2212,9 @@ describe("till-app: the order's groups", () => {
               summary: own.map((line) => `${Number(line.quantity)} × ${line.name}`).join(", "),
             };
           });
-      const check = (command: { expectedVisitRevision: number }) => {
-        if (command.expectedVisitRevision !== revision)
-          throw { code: "visit.out_of_date", visitId: "v1" };
+      const check = (command: { expectedPartyRevision: number }) => {
+        if (command.expectedPartyRevision !== revision)
+          throw { code: "party.out_of_date", partyId: "v1" };
       };
       const held = (id: string) => {
         const group = groups.find((each) => each.id === id)!;
@@ -2232,14 +2232,14 @@ describe("till-app: the order's groups", () => {
         })),
         listGroups: vi.fn(async () => ({ revision, groups: listed() })),
         fireGroup: vi.fn(
-          async (_visitId: string, groupId: string, command: { expectedVisitRevision: number }) => {
+          async (_partyId: string, groupId: string, command: { expectedPartyRevision: number }) => {
             check(command);
             held(groupId).state = "fired";
             return { revision: ++revision };
           },
         ),
         reorderGroups: vi.fn(
-          async (_visitId: string, ids: string[], command: { expectedVisitRevision: number }) => {
+          async (_partyId: string, ids: string[], command: { expectedPartyRevision: number }) => {
             check(command);
             const positions = ids.map((id) => held(id).position).sort((a, b) => a - b);
             ids.forEach((id, index) => (held(id).position = positions[index]!));
@@ -2248,10 +2248,10 @@ describe("till-app: the order's groups", () => {
         ),
         moveLinesToGroup: vi.fn(
           async (
-            _visitId: string,
+            _partyId: string,
             moves: { lineId: string; quantity: string }[],
             target: { groupId: string } | "new",
-            command: { submissionId: string; expectedVisitRevision: number },
+            command: { submissionId: string; expectedPartyRevision: number },
           ) => {
             check(command);
             let targetId: string;
@@ -2296,7 +2296,7 @@ describe("till-app: the order's groups", () => {
 
     const command = (revision: number) => ({
       submissionId: expect.any(String),
-      expectedVisitRevision: revision,
+      expectedPartyRevision: revision,
     });
 
     it("fires a held group once the waiter confirms, then reads the order again and carries its revision on", async () => {
@@ -2323,7 +2323,7 @@ describe("till-app: the order's groups", () => {
 
       emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
       await flush(el);
-      expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 4 });
+      expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedPartyRevision: 4 });
     });
 
     it("moves a held group down by sending the whole held order, then shows the order the server kept", async () => {
@@ -2415,7 +2415,7 @@ describe("till-app: the order's groups", () => {
 
       emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
       await flush(el);
-      expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 5 });
+      expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedPartyRevision: 5 });
     });
 
     it("a split refused part-way keeps the rows already split, reads the order again, says so and sends no more", async () => {
@@ -2477,7 +2477,7 @@ describe("till-app: the order's groups", () => {
       await flush(el);
 
       expect(api.fireGroup).toHaveBeenCalledOnce();
-      expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 4 });
+      expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedPartyRevision: 4 });
     });
 
     it("a split whose request gets no answer stops, reads the floor again, and the next command carries the server's revision", async () => {
@@ -2502,14 +2502,14 @@ describe("till-app: the order's groups", () => {
 
       emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
       await flush(el);
-      expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 5 });
+      expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedPartyRevision: 5 });
     });
 
     it("a split refused part-way because another device changed the party stops, reloads the table, says so and never sends again", async () => {
       const server = editServer("4.000");
       const split = server.moveLinesToGroup;
       split.mockImplementationOnce(split.getMockImplementation()!);
-      split.mockRejectedValueOnce({ code: "visit.out_of_date", visitId: "v1" });
+      split.mockRejectedValueOnce({ code: "party.out_of_date", partyId: "v1" });
       const { el } = await mountApp(server);
       await openGroups(el);
       const floorReads = server.getTablesState.mock.calls.length;
@@ -2520,7 +2520,7 @@ describe("till-app: the order's groups", () => {
       expect(split.mock.calls.map((call) => call[3])).toEqual([command(3), command(4)]);
       expect(server.getTablesState).toHaveBeenCalledTimes(floorReads + 1);
       expect(server.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
-      expect(banner(el)!.textContent).toContain(t("visit.changed").replace("{table}", "4"));
+      expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "4"));
       expect(heldGroupsList(el)[2]!.lines).toEqual(["Steak ×3", "Steak ×1", "Fish ×1"]);
     });
 
@@ -2647,7 +2647,7 @@ describe("till-app: the order's groups", () => {
     it.each(commands)(
       "%s refused because another device changed the party reloads the table, says so and never sends again",
       async (type, detail, method) => {
-        const refused = vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v1" });
+        const refused = vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" });
         const { el } = await mountApp({ ...editServer(), [method]: refused });
         const order = await openMesa(el);
         const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
@@ -2660,7 +2660,7 @@ describe("till-app: the order's groups", () => {
         expect(refused.mock.calls[0]!.at(-1)).toEqual(command(3));
         expect(api.getTablesState).toHaveBeenCalledTimes(floorReads + 1);
         expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
-        expect(banner(el)!.textContent).toContain(t("visit.changed").replace("{table}", "4"));
+        expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "4"));
       },
     );
 
@@ -2688,7 +2688,7 @@ describe("till-app: the order's groups", () => {
       async (type, detail, method) => {
         const { el } = await mountApp({
           ...editServer(),
-          getTablesState: vi.fn().mockResolvedValue([seated({ visit: null }), mesa7, mesa9]),
+          getTablesState: vi.fn().mockResolvedValue([seated({ party: null }), mesa7, mesa9]),
         });
         const order = await openMesa(el);
 
@@ -2757,15 +2757,15 @@ describe("till-app: the order's groups", () => {
       /** The server's side of D19 for a submission: refused unless it carries `current`. */
       const submitAt = (current: number) =>
         vi.fn(async (...args: SubmitArgs) => {
-          if (args[2].expectedVisitRevision !== current)
-            throw { code: "visit.out_of_date", visitId: "v1" };
+          if (args[2].expectedPartyRevision !== current)
+            throw { code: "party.out_of_date", partyId: "v1" };
           return { ...drafts.apply(...args), tabId: "wo-4", revision: current + 1, groups: [] };
         });
 
       it("a round sent after a void carries the revision the void answered", async () => {
         const { el } = await mountApp(
           withGroups({
-            voidLine: vi.fn().mockResolvedValue({ visit: { id: "v1", revision: 4 } }),
+            voidLine: vi.fn().mockResolvedValue({ party: { id: "v1", revision: 4 } }),
             submitDraft: submitAt(4),
           }),
         );
@@ -2782,7 +2782,7 @@ describe("till-app: the order's groups", () => {
         await flush(el);
 
         expect(api.voidLine).toHaveBeenCalledWith("wo-4", 1);
-        expect(vi.mocked(api.submitDraft).mock.calls[0]![2].expectedVisitRevision).toBe(4);
+        expect(vi.mocked(api.submitDraft).mock.calls[0]![2].expectedPartyRevision).toBe(4);
         expect(banner(el)).toBeNull();
       });
 
@@ -2791,7 +2791,7 @@ describe("till-app: the order's groups", () => {
           withGroups({
             updateOrderLine: vi
               .fn()
-              .mockResolvedValue({ revision: 1, visit: { id: "v1", revision: 4 } }),
+              .mockResolvedValue({ revision: 1, party: { id: "v1", revision: 4 } }),
             fireGroup: chainedFire(4),
           }),
         );
@@ -2808,7 +2808,7 @@ describe("till-app: the order's groups", () => {
         await flush(el);
 
         expect(vi.mocked(api.fireGroup).mock.calls).toEqual([
-          ["v1", "g3", { submissionId: expect.any(String), expectedVisitRevision: 4 }],
+          ["v1", "g3", { submissionId: expect.any(String), expectedPartyRevision: 4 }],
         ]);
         expect(banner(el)).toBeNull();
       });
@@ -2845,7 +2845,7 @@ describe("till-app: the order's groups", () => {
         );
         await flush(el);
 
-        expect(vi.mocked(api.submitDraft).mock.calls[0]![2].expectedVisitRevision).toBe(4);
+        expect(vi.mocked(api.submitDraft).mock.calls[0]![2].expectedPartyRevision).toBe(4);
         expect(banner(el)).toBeNull();
       });
 
@@ -2863,7 +2863,7 @@ describe("till-app: the order's groups", () => {
         emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
         await flush(el);
 
-        expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 4 });
+        expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedPartyRevision: 4 });
       });
 
       /** The floor lists the party at revision 3, and cannot be read once `request` has been
@@ -2894,7 +2894,7 @@ describe("till-app: the order's groups", () => {
 
       it("a void that got no answer, with the floor unread, keeps the revision an earlier void answered", async () => {
         const { el } = await mountApp(
-          withGroups(offlineAfterOneAnswer("voidLine", { visit: { id: "v1", revision: 4 } })),
+          withGroups(offlineAfterOneAnswer("voidLine", { party: { id: "v1", revision: 4 } })),
         );
         const order = await openMesa(el);
 
@@ -2906,7 +2906,7 @@ describe("till-app: the order's groups", () => {
         await flush(el);
 
         expect(api.voidLine).toHaveBeenCalledTimes(2);
-        expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 4 });
+        expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedPartyRevision: 4 });
       });
 
       it("a round that got no answer, with the floor unread, keeps the revision an earlier round answered", async () => {
@@ -2934,7 +2934,7 @@ describe("till-app: the order's groups", () => {
         // A retry after no answer keeps its round's submission id, so two ids are two rounds.
         const rounds = vi.mocked(api.submitDraft).mock.calls.map((call) => call[2].submissionId);
         expect(new Set(rounds).size).toBe(2);
-        expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 4 });
+        expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedPartyRevision: 4 });
       });
 
       it.each([
@@ -2942,7 +2942,7 @@ describe("till-app: the order's groups", () => {
         ["another party", { id: "v7", revision: 10 }],
       ])("a void answering %s leaves the revision the screen showed", async (_name, answered) => {
         const { el } = await mountApp(
-          withGroups({ voidLine: vi.fn().mockResolvedValue({ visit: answered }) }),
+          withGroups({ voidLine: vi.fn().mockResolvedValue({ party: answered }) }),
         );
         const order = await openMesa(el);
 
@@ -2951,7 +2951,7 @@ describe("till-app: the order's groups", () => {
         emit(tableOrder(el)!, "move-tab", { toTableId: "t9" });
         await flush(el);
 
-        expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedVisitRevision: 3 });
+        expect(api.moveTab).toHaveBeenCalledWith("wo-4", "t9", { expectedPartyRevision: 3 });
       });
     });
   });
@@ -2994,10 +2994,10 @@ describe("till-app: submitting the draft", () => {
       /** The floor lists the party at the revision the server holds. */
       getTablesState: vi.fn(async () => [seated({}, { revision }), mesa7, mesa9]),
       listGroups: vi.fn(async () => ({ revision, groups: groups.map((group) => ({ ...group })) })),
-      submitDraft: vi.fn(async (visitId: string, draftId: string, submission: SubmitArgs[2]) => {
-        if (submission.expectedVisitRevision !== revision)
-          throw { code: "visit.out_of_date", visitId: "v1" };
-        const taken = drafts.apply(visitId, draftId, submission);
+      submitDraft: vi.fn(async (partyId: string, draftId: string, submission: SubmitArgs[2]) => {
+        if (submission.expectedPartyRevision !== revision)
+          throw { code: "party.out_of_date", partyId: "v1" };
+        const taken = drafts.apply(partyId, draftId, submission);
         for (const group of drafts.sentGroups(submission)) {
           const ids = group.lines.map(() => `line-${++lineIds}`);
           const joined = groups.find((held) => held.id === submission.joinGroupId);
@@ -3322,7 +3322,7 @@ describe("till-app: submitting the draft", () => {
 
     expect(vi.mocked(api.submitDraft).mock.calls[1]![2]).toEqual({
       submissionId: expect.any(String),
-      expectedVisitRevision: 4,
+      expectedPartyRevision: 4,
       draftRevision: expect.any(Number),
       joinGroupId: "g1",
       groups: [{ release: "hold", lineIds: [expect.any(String)] }],
@@ -3366,7 +3366,7 @@ describe("till-app: submitting the draft", () => {
   it("reloads and says so when another device changed the party first, and never sends again", async () => {
     const { el } = await mountApp({
       ...withCourses(),
-      submitDraft: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v1" }),
+      submitDraft: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
     });
     const order = await openMesa(el);
     await ring(el, order, beer);
@@ -3379,7 +3379,7 @@ describe("till-app: submitting the draft", () => {
     expect(api.submitDraft).toHaveBeenCalledOnce();
     expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
     expect(api.getTablesState).toHaveBeenCalledTimes(floorReads + 1);
-    expect(banner(el)!.textContent).toContain(t("visit.changed").replace("{table}", "4"));
+    expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "4"));
     expect(draftOf(order).lineCount).toBe(1);
     expect(tableOrder(el)).toBe(order);
     expect(toast(el)?.open ?? false).toBe(false);
@@ -3703,10 +3703,10 @@ describe("till-app: Current orders", () => {
       await flush(el);
 
       const sent = (api as unknown as Record<string, ReturnType<typeof vi.fn>>)[method]!;
-      const command = { submissionId: expect.any(String), expectedVisitRevision: 3 };
+      const command = { submissionId: expect.any(String), expectedPartyRevision: 3 };
       expect(sent.mock.calls[0]).toEqual(["v1", ...args, command]);
       // The second press carries the revision the first one answered, under an id of its own.
-      expect(sent.mock.calls[1]).toEqual(["v1", ...args, { ...command, expectedVisitRevision: 4 }]);
+      expect(sent.mock.calls[1]).toEqual(["v1", ...args, { ...command, expectedPartyRevision: 4 }]);
       expect(sent.mock.calls[1]![args.length + 1].submissionId).not.toBe(
         sent.mock.calls[0]![args.length + 1].submissionId,
       );
@@ -3718,7 +3718,7 @@ describe("till-app: Current orders", () => {
   it("reloads Current orders and says what changed when another device changed the party first, never sending the press again", async () => {
     const markServed = vi
       .fn()
-      .mockRejectedValueOnce({ code: "visit.out_of_date", visitId: "v1", revision: 5 })
+      .mockRejectedValueOnce({ code: "party.out_of_date", partyId: "v1", revision: 5 })
       .mockResolvedValue({ revision: 6 });
     const { other, getTablesState } = floorThat(
       [mesa4, mesa9],
@@ -3736,15 +3736,15 @@ describe("till-app: Current orders", () => {
     expect(markServed).toHaveBeenCalledOnce();
     expect(api.readCurrentOrders).toHaveBeenCalledTimes(reads + 1);
     const text = banner(el)!.textContent!;
-    expect(text).toContain(t("visit.changed").replace("{table}", "4"));
-    expect(text).toContain(t("visit.changed_other"));
-    expect(text).toContain(t("visit.try_again"));
+    expect(text).toContain(t("party.changed").replace("{table}", "4"));
+    expect(text).toContain(t("party.changed_other"));
+    expect(text).toContain(t("party.try_again"));
 
     emit(tableOrder(el)!, "serve-lines", { items });
     await flush(el);
     expect(markServed).toHaveBeenLastCalledWith("v1", items, {
       submissionId: expect.any(String),
-      expectedVisitRevision: 5,
+      expectedPartyRevision: 5,
     });
   });
 
@@ -3829,7 +3829,7 @@ describe("till-app: Current orders", () => {
       "v1",
       [{ lineId: "line-9", quantity: "1.000" }],
       "new",
-      { submissionId: expect.any(String), expectedVisitRevision: 3 },
+      { submissionId: expect.any(String), expectedPartyRevision: 3 },
     );
     expect(api.readCurrentOrders).toHaveBeenCalledTimes(reads + 1);
     expect(banner(el)).toBeNull();

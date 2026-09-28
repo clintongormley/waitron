@@ -4,7 +4,7 @@ import { setLocale, t } from "../i18n/t.js";
 import "./till-floor-screen.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import type { TillSeatDialog } from "../widgets/seat-dialog.js";
-import type { TableState, TableVisit } from "../api/client.js";
+import type { TableState, TableParty } from "../api/client.js";
 
 function table(over: Partial<TableState> = {}): TableState {
   return {
@@ -25,12 +25,12 @@ function table(over: Partial<TableState> = {}): TableState {
     posY: null,
     shape: null,
     rotation: null,
-    visit: null,
+    party: null,
     ...over,
   };
 }
 
-function visit(over: Partial<TableVisit> = {}): TableVisit {
+function party(over: Partial<TableParty> = {}): TableParty {
   return {
     id: "v1",
     revision: 3,
@@ -45,14 +45,14 @@ function visit(over: Partial<TableVisit> = {}): TableVisit {
   };
 }
 
-function seated(over: Partial<TableState> = {}, party: Partial<TableVisit> = {}): TableState {
+function seated(over: Partial<TableState> = {}, partyOver: Partial<TableParty> = {}): TableState {
   return table({
     state: "open-tab",
     hasOpenTab: true,
     tabId: "wo-4",
     tabLineCount: 2,
     tabTotal: "14.00",
-    visit: visit(party),
+    party: party(partyOver),
     ...over,
   });
 }
@@ -263,7 +263,7 @@ describe("till-floor-screen: a table needing clearing", () => {
 
     card(el, "t5").querySelector<HTMLElement>("[data-mark-cleared]")!.click();
 
-    expect(cleared).toEqual([{ visitId: "v1", expectedVisitRevision: 6 }]);
+    expect(cleared).toEqual([{ partyId: "v1", expectedPartyRevision: 6 }]);
   });
 
   it("neither opens nor seats the table when its card is tapped", async () => {
@@ -296,7 +296,7 @@ describe("till-floor-screen: a table needing clearing", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-clear-dialog] [data-mark-cleared]")!.click();
     await el.updateComplete;
 
-    expect(cleared).toEqual([{ visitId: "v1", expectedVisitRevision: 6 }]);
+    expect(cleared).toEqual([{ partyId: "v1", expectedPartyRevision: 6 }]);
     expect(el.shadowRoot!.querySelector("[data-clear-dialog]")).toBeNull();
   });
 

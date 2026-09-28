@@ -62,7 +62,7 @@ import {
   readTenderBlock,
 } from "./till-sale.js";
 import type { TillSaleResult } from "./till-sale.js";
-import { fingerprint } from "./visits.js";
+import { fingerprint } from "./parties.js";
 import {
   priceStoredOrder,
   priceStoredOrderForIssuance,

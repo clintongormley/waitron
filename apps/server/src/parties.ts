@@ -5,8 +5,8 @@ import {
   nowIso,
   sales,
   serviceCommands,
-  visitTables,
-  visits,
+  partyTables,
+  parties,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -23,14 +23,14 @@ import { VENUE_SERVICE } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { openTab } from "./working-order.js";
 import { readReceivedByBill, refuseBillHoldingMoney } from "./bill-payments.js";
-import { discardVisitDrafts } from "./order-drafts.js";
+import { discardPartyDrafts } from "./order-drafts.js";
 import "./errors.js";
 
-/** One bill of a visit's party, as the table screen lists it. */
-export interface VisitBill {
+/** One bill of a party, as the table screen lists it. */
+export interface PartyBill {
   workingOrderId: string;
-  /** The visit the bill is recorded on; for a bill a merged party kept, not the one asked about. */
-  visitId: string;
+  /** The party the bill is recorded on; for a bill a merged party kept, not the one asked about. */
+  partyId: string;
   label: string | null;
   status: "open" | "placed" | "settled" | "abandoned";
   total: string;
@@ -44,22 +44,22 @@ export interface VisitBill {
 }
 
 export type CommandScope =
-  { kind: "visit"; visitId: string } | { kind: "bill"; workingOrderId: string };
+  { kind: "visit"; partyId: string } | { kind: "bill"; workingOrderId: string };
 
 /**
- * What a tab path that moves lines or tables is sent (D19): the revision of each visit it changes, as
- * the caller last read it, and who acts. `expectedSourceVisitRevision` is the other visit's, on a
+ * What a tab path that moves lines or tables is sent (D19): the revision of each party it changes, as
+ * the caller last read it, and who acts. `expectedSourcePartyRevision` is the other party's, on a
  * merge or transfer between two parties.
  */
-export interface VisitCommand {
-  expectedVisitRevision?: number;
-  expectedSourceVisitRevision?: number;
+export interface PartyCommand {
+  expectedPartyRevision?: number;
+  expectedSourcePartyRevision?: number;
   operatorId: string;
 }
 
 /**
- * Seat a party at a free table: one visit, its first table and its tab, in the caller's
- * transaction. A table that already belongs to a visit is refused inside `openTab`.
+ * Seat a party at a free table: one party, its first table and its tab, in the caller's
+ * transaction. A table that already belongs to a party is refused inside `openTab`.
  */
 export async function seatTable(
   tx: Transaction,
@@ -69,186 +69,186 @@ export async function seatTable(
     guestCount: number | null;
     operatorId: string;
   },
-): Promise<{ visitId: string; tabId: string; revision: number; orderNumber: number }> {
-  // The visit row comes first because the tab is inserted naming it, and the table joins it only
+): Promise<{ partyId: string; tabId: string; revision: number; orderNumber: number }> {
+  // The party row comes first because the tab is inserted naming it, and the table joins it only
   // after `openTab` has checked that no party holds the table. A refusal from `openTab` therefore
-  // leaves the visit row for the caller's transaction to roll back.
-  const { visitId, revision } = await insertVisit(tx, args);
+  // leaves the party row for the caller's transaction to roll back.
+  const { partyId, revision } = await insertParty(tx, args);
   const { tabId, orderNumber } = await openTab(tx, cfg, {
     tableId: args.tableId,
-    visitId,
+    partyId,
   });
-  await tx.insert(visitTables).values({ visitId, tableId: args.tableId });
-  return { visitId, tabId, revision, orderNumber };
+  await tx.insert(partyTables).values({ partyId, tableId: args.tableId });
+  return { partyId, tabId, revision, orderNumber };
 }
 
-async function insertVisit(
+async function insertParty(
   tx: Transaction,
   args: { guestCount: number | null; operatorId: string },
-): Promise<{ visitId: string; revision: number }> {
-  const [visit] = await tx
-    .insert(visits)
+): Promise<{ partyId: string; revision: number }> {
+  const [party] = await tx
+    .insert(parties)
     .values({ guestCount: args.guestCount, openedBy: args.operatorId })
-    .returning({ visitId: visits.id, revision: visits.revision });
-  return visit!;
+    .returning({ partyId: parties.id, revision: parties.revision });
+  return party!;
 }
 
-/** A new open visit holding one table. */
-export async function openVisit(
+/** A new open party holding one table. */
+export async function openParty(
   tx: Transaction,
   args: { guestCount: number | null; operatorId: string; tableId: string },
-): Promise<{ visitId: string; revision: number }> {
-  const visit = await insertVisit(tx, args);
-  await tx.insert(visitTables).values({ visitId: visit.visitId, tableId: args.tableId });
-  return visit;
+): Promise<{ partyId: string; revision: number }> {
+  const party = await insertParty(tx, args);
+  await tx.insert(partyTables).values({ partyId: party.partyId, tableId: args.tableId });
+  return party;
 }
 
-/** The visit a bill belongs to; null for a counter order, or an order that does not exist. */
-export async function visitOfOrder(tx: Transaction, orderId: string): Promise<string | null> {
+/** The party a bill belongs to; null for a counter order, or an order that does not exist. */
+export async function partyOfOrder(tx: Transaction, orderId: string): Promise<string | null> {
   const [order] = await tx
-    .select({ visitId: workingOrders.visitId })
+    .select({ partyId: workingOrders.partyId })
     .from(workingOrders)
     .where(eq(workingOrders.id, orderId));
-  return order?.visitId ?? null;
+  return order?.partyId ?? null;
 }
 
-/** The visit a bill belongs to, at its revision now; null for a bill with no party, or an order that
+/** The party a bill belongs to, at its revision now; null for a bill with no party, or an order that
  * does not exist. */
-export async function visitRevisionOfOrder(
+export async function partyRevisionOfOrder(
   tx: Transaction,
   orderId: string,
 ): Promise<{ id: string; revision: number } | null> {
-  const [visit] = await tx
-    .select({ id: visits.id, revision: visits.revision })
+  const [party] = await tx
+    .select({ id: parties.id, revision: parties.revision })
     .from(workingOrders)
-    .innerJoin(visits, eq(visits.id, workingOrders.visitId))
+    .innerJoin(parties, eq(parties.id, workingOrders.partyId))
     .where(eq(workingOrders.id, orderId));
-  return visit ?? null;
+  return party ?? null;
 }
 
-/** The tables the visit holds now, in the order they joined it. */
-export async function memberTables(tx: Transaction, visitId: string): Promise<string[]> {
+/** The tables the party holds now, in the order they joined it. */
+export async function memberTables(tx: Transaction, partyId: string): Promise<string[]> {
   const rows = await tx
-    .select({ tableId: visitTables.tableId })
-    .from(visitTables)
-    .where(and(eq(visitTables.visitId, visitId), isNull(visitTables.leftAt)))
-    .orderBy(visitTables.joinedAt, visitTables.id);
+    .select({ tableId: partyTables.tableId })
+    .from(partyTables)
+    .where(and(eq(partyTables.partyId, partyId), isNull(partyTables.leftAt)))
+    .orderBy(partyTables.joinedAt, partyTables.id);
   return rows.map((row) => row.tableId);
 }
 
-/** The table stops belonging to whichever visit holds it. */
+/** The table stops belonging to whichever party holds it. */
 export async function leaveTables(
   tx: Transaction,
   tableIds: readonly string[],
   at: string = nowIso(),
 ): Promise<void> {
   await tx
-    .update(visitTables)
+    .update(partyTables)
     .set({ leftAt: at })
-    .where(and(inArray(visitTables.tableId, [...tableIds]), isNull(visitTables.leftAt)));
+    .where(and(inArray(partyTables.tableId, [...tableIds]), isNull(partyTables.leftAt)));
 }
 
-/** Whether a party holds the table, as a member of an open visit or one still needing clearing. */
+/** Whether a party holds the table, as a member of an open party or one still needing clearing. */
 export async function tableHeld(tx: Transaction, tableId: string): Promise<boolean> {
   const [member] = await tx
-    .select({ id: visitTables.id })
-    .from(visitTables)
-    .where(and(eq(visitTables.tableId, tableId), isNull(visitTables.leftAt)));
+    .select({ id: partyTables.id })
+    .from(partyTables)
+    .where(and(eq(partyTables.tableId, tableId), isNull(partyTables.leftAt)));
   return member !== undefined;
 }
 
-async function bumpOpenVisit(
+async function bumpOpenParty(
   tx: Transaction,
-  visitId: string,
+  partyId: string,
   expected: number | undefined,
-  field: "expectedVisitRevision" | "expectedSourceVisitRevision",
+  field: "expectedPartyRevision" | "expectedSourcePartyRevision",
 ): Promise<void> {
   if (expected === undefined) {
     throw new AppError("management.request_invalid", { field });
   }
-  await checkAndBumpVisit(tx, visitId, expected, "open");
+  await checkAndBumpParty(tx, partyId, expected, "open");
 }
 
 /**
- * Check and move on the revision of each visit a tab path changes: the destination's against
- * `expectedVisitRevision`, and a different source's against `expectedSourceVisitRevision`. A visit
- * that is not open is refused before its revision moves. A bill on no visit needs no revision.
+ * Check and move on the revision of each party a tab path changes: the destination's against
+ * `expectedPartyRevision`, and a different source's against `expectedSourcePartyRevision`. A party
+ * that is not open is refused before its revision moves. A bill on no party needs no revision.
  */
-export async function guardVisits(
+export async function guardParties(
   tx: Transaction,
   destination: string | null,
   source: string | null,
-  command: Omit<VisitCommand, "operatorId"> | undefined,
+  command: Omit<PartyCommand, "operatorId"> | undefined,
 ): Promise<void> {
   if (destination !== null) {
-    await bumpOpenVisit(tx, destination, command?.expectedVisitRevision, "expectedVisitRevision");
+    await bumpOpenParty(tx, destination, command?.expectedPartyRevision, "expectedPartyRevision");
   }
   if (source !== null && source !== destination) {
-    await bumpOpenVisit(
+    await bumpOpenParty(
       tx,
       source,
-      command?.expectedSourceVisitRevision,
-      "expectedSourceVisitRevision",
+      command?.expectedSourcePartyRevision,
+      "expectedSourcePartyRevision",
     );
   }
 }
 
 /**
- * Compare a command's visit revision with the visit's and move it on, in the caller's transaction,
- * so a command prepared from a stale copy of the visit writes nothing. A visit not in
- * `requiredState` is `visit.not_open` whatever revision was sent. Returns the new revision.
+ * Compare a command's party revision with the party's and move it on, in the caller's transaction,
+ * so a command prepared from a stale copy of the party writes nothing. A party not in
+ * `requiredState` is `party.not_open` whatever revision was sent. Returns the new revision.
  */
-export async function checkAndBumpVisit(
+export async function checkAndBumpParty(
   tx: Transaction,
-  visitId: string,
-  expectedVisitRevision: number,
+  partyId: string,
+  expectedPartyRevision: number,
   requiredState: "open" | "needs_clearing",
 ): Promise<number> {
-  const [visit] = await tx
-    .select({ state: visits.state, revision: visits.revision })
-    .from(visits)
-    .where(eq(visits.id, visitId));
-  if (visit?.state !== requiredState) {
-    throw new AppError("visit.not_open", { visitId });
+  const [party] = await tx
+    .select({ state: parties.state, revision: parties.revision })
+    .from(parties)
+    .where(eq(parties.id, partyId));
+  if (party?.state !== requiredState) {
+    throw new AppError("party.not_open", { partyId });
   }
-  if (visit.revision !== expectedVisitRevision) {
-    throw new AppError("visit.out_of_date", { visitId, revision: visit.revision });
+  if (party.revision !== expectedPartyRevision) {
+    throw new AppError("party.out_of_date", { partyId, revision: party.revision });
   }
-  const revision = visit.revision + 1;
-  await tx.update(visits).set({ revision }).where(eq(visits.id, visitId));
+  const revision = party.revision + 1;
+  await tx.update(parties).set({ revision }).where(eq(parties.id, partyId));
   return revision;
 }
 
 /**
- * Move the visit's revision on without comparing it: for a write that is not a visit command of its
+ * Move the party's revision on without comparing it: for a write that is not a party command of its
  * own and carries no revision (D19), such as a line edit or a void, whose bill's revision guards it.
  */
-export async function bumpVisitRevision(tx: Transaction, visitId: string): Promise<void> {
+export async function bumpPartyRevision(tx: Transaction, partyId: string): Promise<void> {
   await tx
-    .update(visits)
-    .set({ revision: sql`${visits.revision} + 1` })
-    .where(eq(visits.id, visitId));
+    .update(parties)
+    .set({ revision: sql`${parties.revision} + 1` })
+    .where(eq(parties.id, partyId));
 }
 
 /**
- * The visit and every visit merged into it, directly or through a chain of merges. Only an open
- * visit can absorb another and the absorbed one closes, so a chain cannot loop.
+ * The party and every party merged into it, directly or through a chain of merges. Only an open
+ * party can absorb another and the absorbed one closes, so a chain cannot loop.
  */
-export async function visitFamily(tx: Transaction, visitId: string): Promise<string[]> {
-  return (await visitFamilies(tx, [visitId])).get(visitId)!;
+export async function partyFamily(tx: Transaction, partyId: string): Promise<string[]> {
+  return (await partyFamilies(tx, [partyId])).get(partyId)!;
 }
 
-/** {@link visitFamily} for several visits in one query, keyed by each visit asked about. */
-export async function visitFamilies(
+/** {@link partyFamily} for several parties in one query, keyed by each party asked about. */
+export async function partyFamilies(
   tx: Transaction,
-  visitIds: readonly string[],
+  partyIds: readonly string[],
 ): Promise<Map<string, string[]>> {
-  const families = new Map(visitIds.map((id) => [id, [] as string[]]));
+  const families = new Map(partyIds.map((id) => [id, [] as string[]]));
   const { rows } = await tx.execute<{ root: string; id: string }>(sql`
     with recursive family(root, id) as (
-      select value, value from json_each(${JSON.stringify(visitIds)})
+      select value, value from json_each(${JSON.stringify(partyIds)})
       union
-      select f.root, v.id from visits v join family f on v.merged_into_visit_id = f.id
+      select f.root, v.id from parties v join family f on v.merged_into_party_id = f.id
     )
     select root, id from family
   `);
@@ -256,29 +256,29 @@ export async function visitFamilies(
   return families;
 }
 
-async function readVisit(
+async function readParty(
   tx: Transaction,
-  visitId: string,
+  partyId: string,
 ): Promise<{ state: "open" | "needs_clearing" | "closed" } | undefined> {
-  const [visit] = await tx
-    .select({ state: visits.state })
-    .from(visits)
-    .where(eq(visits.id, visitId));
-  return visit;
+  const [party] = await tx
+    .select({ state: parties.state })
+    .from(parties)
+    .where(eq(parties.id, partyId));
+  return party;
 }
 
-export async function requireOpenVisit(tx: Transaction, visitId: string): Promise<void> {
-  if ((await readVisit(tx, visitId))?.state !== "open") {
-    throw new AppError("visit.not_open", { visitId });
+export async function requireOpenParty(tx: Transaction, partyId: string): Promise<void> {
+  if ((await readParty(tx, partyId))?.state !== "open") {
+    throw new AppError("party.not_open", { partyId });
   }
 }
 
-/** Every bill of the visit's family, in the order they were opened. */
-export async function readVisitBills(tx: Transaction, visitId: string): Promise<VisitBill[]> {
-  if ((await readVisit(tx, visitId)) === undefined) {
-    throw new AppError("visit.not_open", { visitId });
+/** Every bill of the party's family, in the order they were opened. */
+export async function readPartyBills(tx: Transaction, partyId: string): Promise<PartyBill[]> {
+  if ((await readParty(tx, partyId)) === undefined) {
+    throw new AppError("party.not_open", { partyId });
   }
-  const bills = (await readBillsOfVisits(tx, [visitId])).get(visitId)!;
+  const bills = (await readBillsOfParties(tx, [partyId])).get(partyId)!;
   const filed = new Set(
     (
       await tx
@@ -296,40 +296,40 @@ export async function readVisitBills(tx: Transaction, visitId: string): Promise<
 }
 
 /**
- * {@link readVisitBills} for several visits at once, keyed by each visit asked about, without
+ * {@link readPartyBills} for several parties at once, keyed by each party asked about, without
  * reading whether each bill's receipt can be printed again.
  */
-export async function readBillsOfVisits(
+export async function readBillsOfParties(
   tx: Transaction,
-  visitIds: readonly string[],
-): Promise<Map<string, Omit<VisitBill, "receiptAvailable">[]>> {
-  if (visitIds.length === 0) return new Map();
-  const families = await visitFamilies(tx, visitIds);
+  partyIds: readonly string[],
+): Promise<Map<string, Omit<PartyBill, "receiptAvailable">[]>> {
+  if (partyIds.length === 0) return new Map();
+  const families = await partyFamilies(tx, partyIds);
   const members = [...new Set([...families.values()].flat())];
   const rows = await tx
     .select({
       workingOrderId: workingOrders.id,
-      visitId: workingOrders.visitId,
+      partyId: workingOrders.partyId,
       label: workingOrders.label,
       status: workingOrders.status,
       total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) as text)`,
     })
     .from(workingOrders)
     .leftJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
-    .where(inArray(workingOrders.visitId, members))
+    .where(inArray(workingOrders.partyId, members))
     .groupBy(workingOrders.id)
     .orderBy(workingOrders.openedAt, workingOrders.orderNumber, workingOrders.id);
   const received = await readReceivedByBill(
     tx,
     rows.filter((row) => row.status === "open").map((row) => row.workingOrderId),
   );
-  const bills = rows.map((row): Omit<VisitBill, "receiptAvailable"> => {
+  const bills = rows.map((row): Omit<PartyBill, "receiptAvailable"> => {
     const total = rawCentsToDecimal(row.total);
     const owing = row.status === "open" || row.status === "placed";
     const paid = received.get(row.workingOrderId);
     return {
       workingOrderId: row.workingOrderId,
-      visitId: row.visitId!,
+      partyId: row.partyId!,
       label: row.label,
       status: row.status,
       total,
@@ -343,21 +343,21 @@ export async function readBillsOfVisits(
   return new Map(
     [...families].map(([root, family]) => {
       const inFamily = new Set(family);
-      return [root, bills.filter((bill) => inFamily.has(bill.visitId))];
+      return [root, bills.filter((bill) => inFamily.has(bill.partyId))];
     }),
   );
 }
 
 /**
- * Take the tab pointer off every table the visit holds, and with `leave` end its memberships too,
+ * Take the tab pointer off every table the party holds, and with `leave` end its memberships too,
  * which frees the tables for the next party.
  */
 async function releaseTables(
   tx: Transaction,
-  visitId: string,
+  partyId: string,
   leave: { at: string } | null,
 ): Promise<void> {
-  const members = await memberTables(tx, visitId);
+  const members = await memberTables(tx, partyId);
   await tx.update(diningTables).set({ tabId: null }).where(inArray(diningTables.id, members));
   if (leave !== null) {
     await leaveTables(tx, members, leave.at);
@@ -365,19 +365,19 @@ async function releaseTables(
 }
 
 /**
- * Finish the party's table: refused while any bill of the visit's family is placed or open with
- * items on it; an empty open bill is abandoned. The visit then closes and frees its tables, or,
+ * Finish the party's table: refused while any bill of the party's family is placed or open with
+ * items on it; an empty open bill is abandoned. The party then closes and frees its tables, or,
  * where the venue uses the clearing workflow, keeps them as needing clearing until
  * {@link markCleared}.
  */
 export async function finishTable(
   tx: Transaction,
-  args: { visitId: string; expectedVisitRevision: number; operatorId: string },
+  args: { partyId: string; expectedPartyRevision: number; operatorId: string },
 ): Promise<{ state: "closed" | "needs_clearing" }> {
-  const { visitId } = args;
-  await checkAndBumpVisit(tx, visitId, args.expectedVisitRevision, "open");
+  const { partyId } = args;
+  await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
 
-  const family = await visitFamily(tx, visitId);
+  const family = await partyFamily(tx, partyId);
   const bills = await tx
     .select({
       id: workingOrders.id,
@@ -386,12 +386,12 @@ export async function finishTable(
     })
     .from(workingOrders)
     .leftJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
-    .where(inArray(workingOrders.visitId, family))
+    .where(inArray(workingOrders.partyId, family))
     .groupBy(workingOrders.id);
   if (
     bills.some((bill) => bill.status === "placed" || (bill.status === "open" && bill.lines > 0))
   ) {
-    throw new AppError("visit.bill_outstanding", { visitId });
+    throw new AppError("party.bill_outstanding", { partyId });
   }
   const empty = bills.filter((bill) => bill.status === "open").map((bill) => bill.id);
   // An emptied bill can still hold a tip its refunded payment kept (design §2.3, §4.5).
@@ -403,33 +403,33 @@ export async function finishTable(
       .where(inArray(workingOrders.id, empty));
   }
 
-  await discardVisitDrafts(tx, visitId, args.operatorId);
+  await discardPartyDrafts(tx, partyId, args.operatorId);
 
   const state = (await VENUE_SERVICE.readClearingWorkflow(tx)) ? "needs_clearing" : "closed";
   const at = nowIso();
   await tx
-    .update(visits)
+    .update(parties)
     .set({ state, closedAt: at, closedBy: args.operatorId })
-    .where(eq(visits.id, visitId));
-  await releaseTables(tx, visitId, state === "closed" ? { at } : null);
+    .where(eq(parties.id, partyId));
+  await releaseTables(tx, partyId, state === "closed" ? { at } : null);
   return { state };
 }
 
-/** A table that needed clearing is ready for the next party: the visit closes and frees its tables. */
+/** A table that needed clearing is ready for the next party: the party closes and frees its tables. */
 export async function markCleared(
   tx: Transaction,
-  args: { visitId: string; expectedVisitRevision: number },
+  args: { partyId: string; expectedPartyRevision: number },
 ): Promise<void> {
-  const { visitId } = args;
-  await checkAndBumpVisit(tx, visitId, args.expectedVisitRevision, "needs_clearing");
-  await tx.update(visits).set({ state: "closed" }).where(eq(visits.id, visitId));
-  await releaseTables(tx, visitId, { at: nowIso() });
+  const { partyId } = args;
+  await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "needs_clearing");
+  await tx.update(parties).set({ state: "closed" }).where(eq(parties.id, partyId));
+  await releaseTables(tx, partyId, { at: nowIso() });
 }
 
 /** Keys a retry may change without being another command: the id itself and re-read revisions. */
 const NOT_FINGERPRINTED = new Set([
   "submissionId",
-  "expectedVisitRevision",
+  "expectedPartyRevision",
   "draftRevision",
   "expectedRevision",
 ]);
@@ -465,7 +465,7 @@ export function fingerprint(args: Record<string, unknown>): string {
  * `args` is the command's path ids and body. A repeat of the same kind and arguments returns the
  * recorded result and runs nothing; the same id with another kind or other arguments is
  * `submission.id_reused`. The replay check comes before anything else the command checks, so a
- * retry is answered even once the visit has closed. The result is recorded as JSON, so a replay
+ * retry is answered even once the party has closed. The result is recorded as JSON, so a replay
  * returns what JSON can carry of it.
  */
 export async function runServiceCommand<R>(
@@ -476,7 +476,7 @@ export async function runServiceCommand<R>(
   args: Record<string, unknown>,
   run: () => Promise<R>,
 ): Promise<R> {
-  const scopeId = scope.kind === "visit" ? scope.visitId : scope.workingOrderId;
+  const scopeId = scope.kind === "visit" ? scope.partyId : scope.workingOrderId;
   const print = fingerprint(args);
   const [recorded] = await tx
     .select({
@@ -498,7 +498,7 @@ export async function runServiceCommand<R>(
     }
     return recorded.result.value as R;
   }
-  if (scope.kind === "visit") await requireOpenVisit(tx, scope.visitId);
+  if (scope.kind === "visit") await requireOpenParty(tx, scope.partyId);
   const result = await run();
   await tx.insert(serviceCommands).values({
     scopeKind: scope.kind,

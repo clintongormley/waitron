@@ -35,7 +35,7 @@ import type { Attestation, BillBalance, BillRefundView } from "./bill-payments.j
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { enqueueBillRefundDrawer } from "./receipt-print.js";
 import type { TillConfig } from "./till-config.js";
-import { fingerprint } from "./visits.js";
+import { fingerprint } from "./parties.js";
 import { refusePaymentInFlight } from "./working-order.js";
 import type { TillSaleDeps } from "./working-order.js";
 import "./errors.js";

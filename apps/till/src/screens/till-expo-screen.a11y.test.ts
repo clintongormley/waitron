@@ -162,7 +162,7 @@ const partyOrder: ExpoOrder = {
   tableLabel: "Mesa 7",
   openedMinutes: 20,
   worstBand: "fresh",
-  visit: { id: "v-7", revision: 3 },
+  party: { id: "v-7", revision: 3 },
   courses: [],
   groups: [
     section(null, null, null, [passItem("it-moved", "Pan", { state: "ready" })]),
@@ -203,7 +203,7 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
   it("has no violations on a party's groups with the table-changed notice", async () => {
     const api = {
       getExpoQueue: vi.fn().mockResolvedValue([partyOrder]),
-      markGroupAway: vi.fn().mockRejectedValue({ code: "visit.out_of_date" }),
+      markGroupAway: vi.fn().mockRejectedValue({ code: "party.out_of_date" }),
       reprintOrder: vi.fn().mockResolvedValue(undefined),
     } as unknown as TillApi;
     const { el, host } = await mountWidget<TillExpoScreen>(

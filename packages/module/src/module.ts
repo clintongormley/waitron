@@ -18,11 +18,11 @@ import "./errors.js";
  * Boot implements it with the venue's config bound in, so a verb never takes the config.
  */
 export interface CoreServices {
-  /** Seats a party at a free table: its visit, its first table and its tab. */
+  /** Seats a party at a free table: its party, its first table and its tab. */
   seatTable(
     tx: Transaction,
     req: { tableId: string; guestCount: number | null; operatorId: string },
-  ): Promise<{ tabId: string; visitId: string }>;
+  ): Promise<{ tabId: string; partyId: string }>;
 }
 
 /**

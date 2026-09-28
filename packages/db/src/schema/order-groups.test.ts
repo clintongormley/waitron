@@ -13,7 +13,7 @@ import { isRefusal } from "../unique-violation.js";
 import { orderGroupEvents, orderGroups } from "./order-groups.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
 import { locations, tenants, tills } from "./tenants.js";
-import { visits } from "./visits.js";
+import { parties } from "./parties.js";
 
 const LOCATION = "bbbbbbbb-0000-4000-8000-000000000002";
 const TILL = "bbbbbbbb-1111-4000-8000-000000000002";
@@ -41,18 +41,18 @@ describe("order_groups, order_group_events and working_order_lines.group_id", ()
     nodeId = await seedNode(db, brandLocationId(LOCATION));
   });
 
-  async function visit(): Promise<string> {
+  async function party(): Promise<string> {
     return inTx(async (tx) => {
       const [row] = await tx
-        .insert(visits)
+        .insert(parties)
         .values({ openedBy: OPERATOR })
-        .returning({ id: visits.id });
+        .returning({ id: parties.id });
       return row!.id;
     });
   }
 
   async function group(
-    values: Partial<typeof orderGroups.$inferInsert> & { visitId: string },
+    values: Partial<typeof orderGroups.$inferInsert> & { partyId: string },
   ): Promise<string> {
     return inTx(async (tx) => {
       const [row] = await tx
@@ -63,12 +63,12 @@ describe("order_groups, order_group_events and working_order_lines.group_id", ()
     });
   }
 
-  async function bill(visitId: string): Promise<string> {
+  async function bill(partyId: string): Promise<string> {
     orderSeq += 1;
     return inTx(async (tx) => {
       const [row] = await tx
         .insert(workingOrders)
-        .values({ tillId: TILL, nodeId, orderNumber: orderSeq, visitId })
+        .values({ tillId: TILL, nodeId, orderNumber: orderSeq, partyId })
         .returning({ id: workingOrders.id });
       return row!.id;
     });
@@ -91,17 +91,17 @@ describe("order_groups, order_group_events and working_order_lines.group_id", ()
   }
 
   it("refuses a fired group with no fired time, and accepts one that has it", async () => {
-    const visitId = await visit();
-    const error = await captureError(() => group({ visitId, state: "fired" }));
+    const partyId = await party();
+    const error = await captureError(() => group({ partyId, state: "fired" }));
     expect(checkFailed(error, "order_groups_fired_at_ck")).toBe(true);
-    const id = await group({ visitId, state: "fired", firedAt: new Date().toISOString() });
+    const id = await group({ partyId, state: "fired", firedAt: new Date().toISOString() });
     const [row] = await inTx((tx) => tx.select().from(orderGroups).where(eq(orderGroups.id, id)));
     expect(row).toMatchObject({ state: "fired", firedBy: null, remindAt: null });
   });
 
   it("records no HOLD-ticket time on a new group, and keeps one written to a held or fired group", async () => {
-    const visitId = await visit();
-    const held = await group({ visitId });
+    const partyId = await party();
+    const held = await group({ partyId });
     const printedAt = new Date().toISOString();
     const [fresh] = await inTx((tx) =>
       tx.select().from(orderGroups).where(eq(orderGroups.id, held)),
@@ -114,14 +114,14 @@ describe("order_groups, order_group_events and working_order_lines.group_id", ()
         .where(eq(orderGroups.id, held));
     });
     const fired = await group({
-      visitId,
+      partyId,
       state: "fired",
       firedAt: new Date().toISOString(),
       holdPrintedAt: printedAt,
     });
     // Raw SQL, so the stored column is read by its own name rather than through the declaration.
     const { rows } = suite.db.execute(
-      sql`select id, hold_printed_at from order_groups where visit_id = ${visitId}`,
+      sql`select id, hold_printed_at from order_groups where party_id = ${partyId}`,
     );
     expect(new Map(rows.map((row) => [row.id, row.hold_printed_at]))).toEqual(
       new Map([
@@ -132,17 +132,17 @@ describe("order_groups, order_group_events and working_order_lines.group_id", ()
   });
 
   it("refuses a held group with a fired time, and accepts one without", async () => {
-    const visitId = await visit();
+    const partyId = await party();
     const error = await captureError(() =>
-      group({ visitId, state: "held", firedAt: new Date().toISOString() }),
+      group({ partyId, state: "held", firedAt: new Date().toISOString() }),
     );
     expect(checkFailed(error, "order_groups_fired_at_ck")).toBe(true);
-    await group({ visitId, state: "held" });
+    await group({ partyId, state: "held" });
   });
 
   it("refuses a state outside the vocabulary, and accepts removed", async () => {
-    const visitId = await visit();
-    const id = await group({ visitId });
+    const partyId = await party();
+    const id = await group({ partyId });
     const error = await captureError(() =>
       inTx(async (tx) => {
         await tx.execute(sql`update order_groups set state = 'paused' where id = ${id}`);
@@ -155,14 +155,14 @@ describe("order_groups, order_group_events and working_order_lines.group_id", ()
   });
 
   it("refuses an event kind outside the vocabulary, and accepts a known one", async () => {
-    const visitId = await visit();
-    const groupId = await group({ visitId });
-    const event = { visitId, groupId, actorId: OPERATOR, detail: {} };
+    const partyId = await party();
+    const groupId = await group({ partyId });
+    const event = { partyId, groupId, actorId: OPERATOR, detail: {} };
     const error = await captureError(() =>
       inTx(async (tx) => {
         await tx.execute(sql`
-          insert into order_group_events (id, visit_id, group_id, kind, actor_id, detail, created_at)
-          values (${MISSING}, ${visitId}, ${groupId}, 'cancelled', ${OPERATOR}, '{}',
+          insert into order_group_events (id, party_id, group_id, kind, actor_id, detail, created_at)
+          values (${MISSING}, ${partyId}, ${groupId}, 'cancelled', ${OPERATOR}, '{}',
             ${new Date().toISOString()})
         `);
       }),
@@ -171,41 +171,41 @@ describe("order_groups, order_group_events and working_order_lines.group_id", ()
     await inTx((tx) => tx.insert(orderGroupEvents).values({ ...event, kind: "submitted" }));
   });
 
-  it("refuses a group naming no visit, and accepts one naming a visit", async () => {
-    const error = await captureError(() => group({ visitId: MISSING }));
+  it("refuses a group naming no party, and accepts one naming a party", async () => {
+    const error = await captureError(() => group({ partyId: MISSING }));
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
-    await group({ visitId: await visit() });
+    await group({ partyId: await party() });
   });
 
-  it("refuses an event naming no visit, and accepts one naming a visit", async () => {
-    const visitId = await visit();
-    const groupId = await group({ visitId });
+  it("refuses an event naming no party, and accepts one naming a party", async () => {
+    const partyId = await party();
+    const groupId = await group({ partyId });
     const event = { groupId, kind: "submitted" as const, actorId: OPERATOR, detail: {} };
     const error = await captureError(() =>
-      inTx((tx) => tx.insert(orderGroupEvents).values({ ...event, visitId: MISSING })),
+      inTx((tx) => tx.insert(orderGroupEvents).values({ ...event, partyId: MISSING })),
     );
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
-    await inTx((tx) => tx.insert(orderGroupEvents).values({ ...event, visitId }));
+    await inTx((tx) => tx.insert(orderGroupEvents).values({ ...event, partyId }));
   });
 
   it("refuses an event naming no group, and accepts one naming a group or none", async () => {
-    const visitId = await visit();
-    const event = { visitId, kind: "reordered" as const, actorId: OPERATOR, detail: {} };
+    const partyId = await party();
+    const event = { partyId, kind: "reordered" as const, actorId: OPERATOR, detail: {} };
     const error = await captureError(() =>
       inTx((tx) => tx.insert(orderGroupEvents).values({ ...event, groupId: MISSING })),
     );
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
-    const groupId = await group({ visitId });
+    const groupId = await group({ partyId });
     await inTx((tx) => tx.insert(orderGroupEvents).values({ ...event, groupId }));
     await inTx((tx) => tx.insert(orderGroupEvents).values({ ...event, groupId: null }));
   });
 
   it("refuses a line naming no group, and accepts one naming a group", async () => {
-    const visitId = await visit();
-    const workingOrderId = await bill(visitId);
+    const partyId = await party();
+    const workingOrderId = await bill(partyId);
     const error = await captureError(() => lineIn(workingOrderId, 1, MISSING));
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
-    const groupId = await group({ visitId });
+    const groupId = await group({ partyId });
     await lineIn(workingOrderId, 1, groupId);
     const rows = await inTx((tx) =>
       tx

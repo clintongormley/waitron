@@ -282,8 +282,8 @@ declare module "@waitron/shared" {
     "table.inactive": { tableId: string };
     /**
      * A move/join TARGET table already has an OPEN tab, or a party still holds it (an active
-     * `visit_tables` row) whatever its `tab_id` points at; `mergeTabs` combines two bills instead.
-     * The partial unique index `visit_tables_active_table_uq` allows one active membership per
+     * `party_tables` row) whatever its `tab_id` points at; `mergeTabs` combines two bills instead.
+     * The partial unique index `party_tables_active_table_uq` allows one active membership per
      * table; the check runs first so the index never refuses with an engine error.
      */
     "table.occupied": { tableId: string };
@@ -301,28 +301,28 @@ declare module "@waitron/shared" {
     "table.not_shared": { tableId: string; tabId: string };
     /**
      * A table's `tab_id` already points at an OPEN working order, or a party still holds the table
-     * (an active `visit_tables` row) whatever its `tab_id` points at, so a second tab may not be
+     * (an active `party_tables` row) whatever its `tab_id` points at, so a second tab may not be
      * opened (`openTab` in `working-order.ts`).
      */
     "tab.already_open": { tableId: string };
     /**
-     * A visit verb found the visit is not in the state it needs — Finish needs `open`, Mark cleared
+     * A party verb found the party is not in the state it needs — Finish needs `open`, Mark cleared
      * needs `needs_clearing`, a new service command needs `open`, a tab path acting on a party's bill
-     * needs that party's visit `open` (`guardVisits`) — or the id names no visit, or a visit id in
+     * needs that party `open` (`guardParties`) — or the id names no party, or a party id in
      * a route is not a UUID. One code for all, as `tab.not_open` is.
      */
-    "visit.not_open": { visitId: string };
+    "party.not_open": { partyId: string };
     /**
-     * A command carried a visit revision another write has since moved past, so it was prepared
-     * from a stale copy of the visit. `revision` is the visit's current one; the caller reloads and
+     * A command carried a party revision another write has since moved past, so it was prepared
+     * from a stale copy of the party. `revision` is the party's current one; the caller reloads and
      * acts again. The sibling of `working_order.out_of_date`.
      */
-    "visit.out_of_date": { visitId: string; revision: number };
+    "party.out_of_date": { partyId: string; revision: number };
     /**
      * Finish table found a bill of the party — its own, or one kept by a party merged into it — that
      * is placed, or open with items on it: the table cannot be finished while a bill is unpaid.
      */
-    "visit.bill_outstanding": { visitId: string };
+    "party.bill_outstanding": { partyId: string };
     /**
      * A submission id already recorded in this scope arrived with another command kind or other
      * arguments. The id is the device's own, made fresh for each person's action.
@@ -334,12 +334,12 @@ declare module "@waitron/shared" {
     "draft.already_submitted": { draftId: string };
     /**
      * A draft command carried a draft revision another write has since moved past, or asked for a
-     * new draft where the person already has one open on the visit. `draftId` and `revision` are
+     * new draft where the person already has one open on the party. `draftId` and `revision` are
      * that draft's current ones; the caller reloads and acts again.
      */
     "draft.out_of_date": { draftId: string; revision: number };
     /**
-     * The id names no draft that is open or submitted, or names one of another visit than the one
+     * The id names no draft that is open or submitted, or names one of another party than the one
      * the request is on. A discarded draft is not found.
      */
     "draft.not_found": { draftId: string };
@@ -349,16 +349,16 @@ declare module "@waitron/shared" {
      */
     "group.not_held": { groupId: string };
     /**
-     * No group of this visit has the id (a removed group included), a moved line is not a dish
-     * line in one of the visit's groups, or a served line is not a dish line on a bill of the visit.
+     * No group of this party has the id (a removed group included), a moved line is not a dish
+     * line in one of the party's groups, or a served line is not a dish line on a bill of the party.
      * One of the two ids is named.
      */
     "group.not_found": { groupId: string } | { lineId: string };
     /**
-     * A line of a held group was asked to move to another visit's bill. A group belongs to its
-     * visit, so held work may not leave it; fire the group first.
+     * A line of a held group was asked to move to another party's bill. A group belongs to its
+     * party, so held work may not leave it; fire the group first.
      */
-    "group.held_leaves_visit": { tabId: string; lineNo: number };
+    "group.held_leaves_party": { tabId: string; lineNo: number };
     /**
      * A line was sent on its own, or marked served, while its group is held or its kitchen item
      * unreleased; it is released by firing the group.
@@ -515,12 +515,12 @@ declare module "@waitron/shared" {
      * `mergeTabs` named one bill that belongs to a seated party and one table's bill that belongs
      * to none; `tabId` is the one with no party.
      */
-    "tab.visit_mismatch": { tabId: string };
+    "tab.party_mismatch": { tabId: string };
     /**
      * `mergeTabs` named, as its source, a bill of another party that no table points at while that
      * party still has another open bill.
      */
-    "tab.visit_has_other_open_bill": { tabId: string };
+    "tab.party_has_other_open_bill": { tabId: string };
     /**
      * `mergeTabs`, asked to free the source bill's tables within one party, would free every table
      * the party holds; `tabId` is the source bill.

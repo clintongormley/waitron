@@ -12,7 +12,7 @@ import type {
   KitchenNotice,
   KitchenNoticeKind,
   QueueGroup,
-  QueueVisit,
+  QueueParty,
   StationQueueCourse,
   StationQueueGroup,
   StationQueueItem,
@@ -69,9 +69,9 @@ interface GroupSection {
 
 /** What `fire-kitchen-group` carries: the held group, and the party at the revision the card was read. */
 export interface FireKitchenGroupDetail {
-  visitId: string;
+  partyId: string;
   groupId: string;
-  expectedVisitRevision: number;
+  expectedPartyRevision: number;
 }
 
 /** Courseless lines sort first: the server fires them at once unless the send asks to hold them. */
@@ -607,10 +607,10 @@ export class TillStationQueue extends LitElement {
     );
   }
 
-  #fireGroup(visit: QueueVisit, group: QueueGroup): void {
+  #fireGroup(party: QueueParty, group: QueueGroup): void {
     this.dispatchEvent(
       new CustomEvent<FireKitchenGroupDetail>("fire-kitchen-group", {
-        detail: { visitId: visit.id, groupId: group.id, expectedVisitRevision: visit.revision },
+        detail: { partyId: party.id, groupId: group.id, expectedPartyRevision: party.revision },
         bubbles: true,
         composed: true,
       }),
@@ -787,10 +787,10 @@ export class TillStationQueue extends LitElement {
               : nothing
           }
           ${
-            group.visit === undefined
+            group.party === undefined
               ? this.#courseSections(group).map((section) => this.#courseSection(group, section))
               : this.#groupSections(group).map((section) =>
-                  this.#groupSection(group, group.visit!, section),
+                  this.#groupSection(group, group.party!, section),
                 )
           }
           ${this.#collectAction(group)} ${this.#reprintAction(group)}
@@ -811,7 +811,7 @@ export class TillStationQueue extends LitElement {
 
   #groupSection(
     group: StationQueueGroup,
-    visit: QueueVisit,
+    party: QueueParty,
     section: GroupSection,
   ): TemplateResult {
     const sent = section.group;
@@ -839,7 +839,7 @@ export class TillStationQueue extends LitElement {
               class="fire"
               data-fire-group=${sent.id}
               aria-label=${`${t("station.fire_group")} ${name}`}
-              @click=${() => this.#fireGroup(visit, sent)}
+              @click=${() => this.#fireGroup(party, sent)}
             >
               ${t("station.fire_group")}
             </button>`

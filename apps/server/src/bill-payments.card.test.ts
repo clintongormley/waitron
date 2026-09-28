@@ -888,7 +888,7 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
       "DELETE",
       `/api/working-orders/${billId}/lines/2`,
     );
-    // The bill has no visit, so the round is the function a group submission calls.
+    // The bill has no party, so the round is the function a group submission calls.
     const round = await inTx(venue, (tx) =>
       addTabRound(tx, venue.cfg, billId, [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }]),
     ).catch((error: unknown) => error);

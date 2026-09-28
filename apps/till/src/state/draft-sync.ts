@@ -50,7 +50,7 @@ export type TakeOverOutcome = "taken" | "failed" | "unsaved" | DraftRefused;
 
 export interface DraftSyncOptions {
   api: Pick<TillApi, "listDrafts" | "saveDraft" | "takeOverDraft">;
-  visitId: string;
+  partyId: string;
   personId: string;
   /** The saved lines as the till shows them, from the table's offers. */
   rebuild: (lines: readonly DraftLine[]) => OrderLine[];
@@ -135,7 +135,7 @@ function sameLines(till: readonly DraftLineInput[], saved: readonly DraftLine[])
  */
 export class DraftSync {
   readonly store = new DraftStore();
-  readonly visitId: string;
+  readonly partyId: string;
   readonly personId: string;
   /** Other people's open drafts on the party, as last read. */
   others: Draft[] = [];
@@ -160,7 +160,7 @@ export class DraftSync {
 
   constructor(options: DraftSyncOptions) {
     this.#options = options;
-    this.visitId = options.visitId;
+    this.partyId = options.partyId;
     this.personId = options.personId;
     this.#unsubscribe = this.store.subscribe(() => this.#onChange());
   }
@@ -191,7 +191,7 @@ export class DraftSync {
     const limit = limited(this.#options.requestLimitMs);
     let drafts: Draft[];
     try {
-      drafts = await this.#options.api.listDrafts(this.visitId, { signal: limit.signal });
+      drafts = await this.#options.api.listDrafts(this.partyId, { signal: limit.signal });
     } catch {
       return false;
     } finally {
@@ -257,7 +257,7 @@ export class DraftSync {
     const limit = limited(this.#options.requestLimitMs);
     let taken: Draft;
     try {
-      taken = await this.#options.api.takeOverDraft(this.visitId, draftId, revision, {
+      taken = await this.#options.api.takeOverDraft(this.partyId, draftId, revision, {
         signal: limit.signal,
       });
     } catch (error) {
@@ -326,7 +326,7 @@ export class DraftSync {
     this.#saving = true;
     try {
       saved = await this.#options.api.saveDraft(
-        this.visitId,
+        this.partyId,
         { draftId: this.#draftId, revision: this.#revision, lines },
         { signal: limit.signal },
       );
