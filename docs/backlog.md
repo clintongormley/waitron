@@ -1997,7 +1997,7 @@ first is still open:
   does not ship, the account gets the venue's language saved as though chosen — so the stored value
   cannot tell "chose Spanish" from "said nothing", and it does not follow a later change to the venue
   default. Keep this, or store a language only when the browser asked for one?
-- *The modal is always full height* — gone with the modal (C39, owner decision 2026-09-28). Every
+- *The modal is always full height* — gone with the modal (C39, #828, owner decision 2026-09-28). Every
   setup screen now sits in a column centred on the page, at most 704px wide, with the Waitron logo
   at the top. The logo is the brand lockup drawn inline, so its word follows the theme; the
   dashboard banner still loads it as an image and stays unreadable in the dark theme (the entry
