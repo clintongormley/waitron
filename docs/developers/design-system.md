@@ -1031,9 +1031,11 @@ rather than assuming this composition applies unchanged.
 
 ## Event discipline
 
-Custom events crossing a shadow boundary are `composed: true`, so a native event re-emitted
-without care fires twice. **Always `stopPropagation()` the native event before dispatching your
-own.** `wt-input` and `wt-switch` are the reference implementations.
+Custom events crossing a shadow boundary are `composed: true`. A native event that is itself
+composed, such as `input`, also crosses that boundary, so re-emitting it without care makes the
+consumer see the change twice. Native `change` is not composed (the measurement is under "Event
+discipline" in [conventions-ui.md](conventions-ui.md)). **Always `stopPropagation()` the native
+event before dispatching your own.** `wt-input` and `wt-switch` are the reference implementations.
 
 Custom events are named `wt-*` and carry data in `detail`.
 

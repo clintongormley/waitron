@@ -537,6 +537,17 @@ A pending bill payment is resolved from the provider's row, never from its age:
   attest routes for bill payments and bill refunds refuse `pin.throttled` (HTTP 429) after too many
   wrong PINs. A `received` a manager attests is dated at the provider row's settled time when the
   row has one, and at the moment of the attestation otherwise.)_
+  _(2026-09-28, retroactive Codex review of #728: two qualifications. M7b2's resolve does not clear the
+  working order's in-flight mark while a payment of the order could still be captured or waits to
+  be filed, or a newer attempt has replaced the mark: it answers `orderUnlocked: false` and the mark
+  stays, as item 5 of §1.2 states (`clearPaymentAttemptMark`, `apps/server/src/till-sale.ts`). And
+  a bill payment whose `payments` row is still `attempting`, at a connected provider that cannot
+  resolve an abandoned attempt, is refused `payment.resolve_unsupported` (HTTP 422) rather than
+  `bill.payment_not_stuck` or `bill.payment_outcome_unconfirmed`, and stays `pending`. Pinned in
+  `apps/server/src/payments-api.stuck.test.ts`, the first only for another payment still
+  `attempting`: "reports the order still locked, and keeps its
+  mark, while another card payment on it is unresolved" and "refuses resolve_unsupported for a
+  provider that cannot resolve an abandoned attempt".)_
 - **A charged card the loop cannot finish** (2026-09-27): when the loop cannot record a pending
   bill payment whose card was charged for it (for example, its invoice fails to issue), it raises
   the alert `payment.bill_settle_failed` and the bill stays locked (`raiseSettleFailed`,

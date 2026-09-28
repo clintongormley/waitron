@@ -224,10 +224,14 @@ A new `wt-*` primitive under `packages/ui/src/components/` is incomplete review-
 This rule is the contract for shared `wt-*` components. Their custom events are named `wt-*`, carry
 their payload in `detail`, and are dispatched with `bubbles: true, composed: true` so they can cross
 the component's own shadow boundary. Before re-emitting, the native or internal event that triggered
-them must be stopped with `event.stopPropagation()` — otherwise the native event (itself
-`composed: true` for things like `input`/`change`) independently crosses the same boundary and the
-consumer observes the change twice. App screens and app-owned components may name their local action
-events plainly, as the till screens do with events such as `fire-course` and `mark-collected`.
+them must be stopped with `event.stopPropagation()` — otherwise a composed native event such as
+`input` independently crosses the same boundary and the consumer observes the change twice. Not every
+native event is composed: measured 2026-09-28 with a standalone Playwright 1.63 script in Chromium
+153, an input inside a shadow root, filled with Playwright's `fill` and then blurred by a click
+outside, delivered `input` with `composed: true`, which a listener on the document saw, and `change`
+with `composed: false`, which a listener inside the shadow root saw and the one on the document did
+not. App screens and app-owned components may name their local action events plainly, as the till
+screens do with events such as `fire-course` and `mark-collected`.
 
 ## A `<select>` over rendered options marks the chosen option, not only the select's `.value`
 
