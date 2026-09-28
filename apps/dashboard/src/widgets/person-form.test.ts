@@ -266,6 +266,68 @@ describe("person-form server refusals", () => {
     expect(fieldError(el, "display-name")).toBe("");
     expect(summaryErrors(el)).toEqual([codeMessage("person.email_taken")]);
   });
+
+  it("keeps a taken display name beside its field and once in the summary when another field fails its check", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    await fillRequired(el);
+    el.error = "person.display_name_taken";
+    await el.updateComplete;
+    let created = false;
+    el.addEventListener("create-person", () => {
+      created = true;
+    });
+    change(el, "email", "");
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+    await el.updateComplete;
+    const message = codeMessage("person.display_name_taken");
+    expect(created).toBe(false);
+    expect(fieldError(el, "display-name")).toBe(message);
+    expect(fieldError(el, "email")).toBe(t("form.email_required"));
+    expect([...summaryErrors(el)].sort()).toEqual([message, t("form.email_required")].sort());
+  });
+
+  it("still sends an Add whose own checks pass, for the server to judge the name again", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    await fillRequired(el);
+    el.error = "person.display_name_taken";
+    await el.updateComplete;
+    const created = new Promise<CustomEvent>((resolve) =>
+      el.addEventListener("create-person", (event) => resolve(event as CustomEvent), {
+        once: true,
+      }),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+    expect((await created).detail.displayName).toBe("Ada");
+  });
+
+  it("clears a taken display name when a name change regenerates it", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    change(el, "first-names", "Ada");
+    change(el, "last-names", "Lovelace");
+    change(el, "email", "ada@example.com");
+    await el.updateComplete;
+    el.error = "person.display_name_taken";
+    await el.updateComplete;
+    change(el, "last-names", "Byron");
+    await el.updateComplete;
+    expect(displayName(el)).toBe("Ada Byron");
+    expect(fieldError(el, "display-name")).toBe("");
+    expect(summaryErrors(el)).toEqual([]);
+  });
+
+  it("keeps a taken display name when a name change leaves a customised one alone", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    await fillRequired(el);
+    el.error = "person.display_name_taken";
+    await el.updateComplete;
+    change(el, "last-names", "Byron");
+    await el.updateComplete;
+    const message = codeMessage("person.display_name_taken");
+    expect(displayName(el)).toBe("Ada");
+    expect(fieldError(el, "display-name")).toBe(message);
+    expect(summaryErrors(el)).toEqual([message]);
+  });
 });
 
 describe("person-form validation and keyboard submit", () => {

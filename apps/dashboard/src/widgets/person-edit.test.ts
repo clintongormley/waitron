@@ -245,6 +245,71 @@ describe("person-edit server refusals", () => {
     expect(fieldError(el, "edit-display-name")).toBe("");
     expect(summaryErrors(el)).toEqual([codeMessage("person.email_taken")]);
   });
+
+  const displayName = (el: PersonEdit): string =>
+    (
+      el.shadowRoot!.querySelector("[data-test=edit-display-name]") as HTMLElement & {
+        value: string;
+      }
+    ).value;
+
+  it("keeps a taken display name beside its field and once in the summary when another field fails its check", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    el.error = "person.display_name_taken";
+    await el.updateComplete;
+    let saved = false;
+    el.addEventListener("save-person", () => {
+      saved = true;
+    });
+    change(el, "edit-telephone", "+44 20 7946 0958");
+    change(el, "edit-last-names", "");
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    await el.updateComplete;
+    const message = codeMessage("person.display_name_taken");
+    expect(saved).toBe(false);
+    expect(fieldError(el, "edit-display-name")).toBe(message);
+    expect(fieldError(el, "edit-last-names")).toBe(t("form.last_names_required"));
+    expect([...summaryErrors(el)].sort()).toEqual([message, t("form.last_names_required")].sort());
+  });
+
+  it("still sends a Save whose own checks pass, for the server to judge the name again", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    change(el, "edit-telephone", "+44 20 7946 0958");
+    el.error = "person.display_name_taken";
+    await el.updateComplete;
+    const saved = new Promise<CustomEvent>((resolve) =>
+      el.addEventListener("save-person", (event) => resolve(event as CustomEvent), { once: true }),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    expect((await saved).detail.displayName).toBe("Ada");
+  });
+
+  it("clears a taken display name when a name change regenerates it", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
+      person: { ...person, displayName: "Ada Lovelace" },
+      open: true,
+    });
+    el.error = "person.display_name_taken";
+    await el.updateComplete;
+    change(el, "edit-last-names", "Byron");
+    await el.updateComplete;
+    expect(displayName(el)).toBe("Ada Byron");
+    expect(fieldError(el, "edit-display-name")).toBe("");
+    expect(summaryErrors(el)).toEqual([]);
+  });
+
+  it("keeps a taken display name when a name change leaves a customised one alone", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    el.error = "person.display_name_taken";
+    await el.updateComplete;
+    change(el, "edit-last-names", "Byron");
+    await el.updateComplete;
+    const message = codeMessage("person.display_name_taken");
+    expect(displayName(el)).toBe("Ada");
+    expect(fieldError(el, "edit-display-name")).toBe(message);
+    expect(summaryErrors(el)).toEqual([message]);
+  });
 });
 
 describe("person-edit validation and keyboard submit", () => {

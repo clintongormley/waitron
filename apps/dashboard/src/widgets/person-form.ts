@@ -16,7 +16,7 @@ import { t } from "../i18n/t.js";
 
 type Field = "firstNames" | "lastNames" | "displayName" | "email";
 
-/** Moved beside the display-name field, so the summary does not list it a second time. */
+/** Shown beside the display-name field, so the summary does not list it a second time. */
 const DISPLAY_NAME_TAKEN = "person.display_name_taken";
 
 @customElement("dashboard-person-form")
@@ -69,6 +69,7 @@ export class PersonForm extends LitElement {
   #change(field: Field | "telephone", event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     const value = event.detail.value;
+    const prevDisplayName = this.displayName;
     if (field === "firstNames" || field === "lastNames") {
       const prevFirst = this.firstNames;
       const prevLast = this.lastNames;
@@ -86,7 +87,11 @@ export class PersonForm extends LitElement {
     } else if (field === "displayName") this.displayName = value;
     else if (field === "email") this.email = value;
     else this.telephone = value;
-    this.fieldErrors = { ...this.fieldErrors, [field]: undefined };
+    this.fieldErrors = {
+      ...this.fieldErrors,
+      [field]: undefined,
+      ...(this.displayName !== prevDisplayName && { displayName: undefined }),
+    };
   }
 
   #validate(): boolean {
@@ -100,8 +105,13 @@ export class PersonForm extends LitElement {
     }
     const tel = this.telephone.trim();
     if (tel && !isValidTelephone(tel)) errors.telephone = codeMessage("person.telephone_invalid");
+    const valid = Object.keys(errors).length === 0;
+    // Kept only when a local check fails; a form that passes goes on for the server to judge again.
+    if (!valid && this.fieldErrors.displayName === codeMessage(DISPLAY_NAME_TAKEN)) {
+      errors.displayName ??= this.fieldErrors.displayName;
+    }
     this.fieldErrors = errors;
-    return Object.keys(errors).length === 0;
+    return valid;
   }
 
   #confirm(event: Event): void {
