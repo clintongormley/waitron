@@ -3,7 +3,7 @@ import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { TabLine, PartyBill } from "../api/client.js";
-import { mount } from "./till-table-order-screen.test-helpers.js";
+import { mount, resized } from "./till-table-order-screen.test-helpers.js";
 import {
   croquetas,
   current,
@@ -495,6 +495,8 @@ describe("the release reminder in Current orders", () => {
         now: undefined,
         currentOrders: current({ reminder: { groupId: "g3", dueAt } }),
       });
+      // The width watch reports on its first frame, setting `wide` even when unchanged.
+      await resized(el);
       const redraws = vi.spyOn(el, "requestUpdate");
       await vi.advanceTimersByTimeAsync(1_000);
       expect(redraws).not.toHaveBeenCalled();
