@@ -489,7 +489,7 @@ unchanged, `refreshBasket` lists the dish or variant and each extra whose price 
 own row of the dialog. Campaign item C32 (#817), branch `fix/basket-refresh-unit-price-label`, 2026-09-28:
 those rows now read as unit prices, "€9.00 each → €8.00 each" / "9,00 € c/u → 8,00 € c/u", or, for a
 dish not counted in whole units, per the dish's unit as the menu grid shows it, "€20.00/kg"; a
-line-total row is unmarked. Campaign item C49, branch `fix/price-change-dialog-unit-only`,
+line-total row is unmarked. Campaign item C49 (#831),
 2026-09-29: a dish or variant now sold by another unit gets a row even when no price changed, and
 when the unit and a price change together, the dish or variant's row, plus a row for each extra
 whose price changed, is shown instead of the line's total.)_
