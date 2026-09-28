@@ -408,8 +408,11 @@ the unit's identity too: a ticket entry is merged or split only when its unit do
 in Each, or no unit recorded on the line), so a venue's own unit spelled like Each prints its
 entries as sold, never merged or split, and a renamed stored Each unit's are merged or split. The
 known gap above applies to merging and splitting as well, and so does a line with no recorded
-context but a unit recorded on it: it prints that unit, so its entries print as sold. **Kept as
-they are, by the owner's choice (2026-09-28):** the printed receipt
+context but a unit recorded on it: it prints that unit, so its entries print as sold. **Done
+since (2026-09-28, lane C's C33, branch `fix/kitchen-ticket-printed-as-sold`, on the owner's "tidy
+it"):** the ticket entry's flag for this is named `printedAsSold` (it was `measured`), and no input
+in the formatter's own tests (`apps/server/src/kitchen-ticket.test.ts`) shows a unit without that
+flag. **Kept as they are, by the owner's choice (2026-09-28):** the printed receipt
 (`apps/server/src/receipt-ticket.ts`) and the till's ticket view
 (`apps/till/src/screens/till-ticket-view.ts`), which still show the Each unit: the receipt's case
 "prints the unit abbreviation of the invoice language…" in `apps/server/src/receipt-ticket.test.ts`

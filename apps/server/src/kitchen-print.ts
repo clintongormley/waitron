@@ -218,7 +218,7 @@ async function buildTicketItems(
         unit,
         name: kitchenPresentationName(row),
         note: row.note ?? undefined,
-        ...(unit === undefined ? {} : { measured: true }),
+        ...(unit === undefined ? {} : { printedAsSold: true }),
         modifiers: [
           ...optionSnapshotLabels(row.optionSnapshots),
           ...(modifiersByParent.get(row.id) ?? []),
