@@ -359,6 +359,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "draft.out_of_date": 409,
   "draft.not_found": 404,
   "group.not_held": 409,
+  "group.not_waiting": 409,
   "group.not_found": 404,
   "group.held_leaves_party": 409,
   "group.line_held": 409,

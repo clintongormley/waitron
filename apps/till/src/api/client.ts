@@ -2016,8 +2016,10 @@ export class TillApi {
     return this.#request(`/api/parties/${partyId}/groups/${groupId}/served`, "POST", command);
   }
 
-  /** Put off a held group's release reminder → `POST /api/parties/:partyId/groups/:groupId/snooze`: it
-   * becomes due `minutes` from now. A fired group rejects `group.not_held`. */
+  /** Put off the release reminder of the group waiting (the party's first held group) →
+   * `POST /api/parties/:partyId/groups/:groupId/snooze`: it becomes due `minutes` from now. A
+   * fired group rejects `group.not_held`, and a held group other than the one waiting
+   * `group.not_waiting`. */
   snoozeGroup(
     partyId: string,
     groupId: string,

@@ -513,7 +513,10 @@ export async function reorderHeldGroups(
 /** The longest snooze, in whole minutes. */
 export const MAX_SNOOZE_MINUTES = 120;
 
-/** Snooze a held group's release reminder: its `remind_at` becomes now plus `minutes` (D11). */
+/**
+ * Snooze the release reminder of the group waiting, the party's first held group: its `remind_at`
+ * becomes now plus `minutes` (D11).
+ */
 export async function snoozeReminder(
   tx: Transaction,
   cfg: TillConfig,
@@ -535,6 +538,13 @@ export async function snoozeReminder(
         throw new AppError("management.request_invalid", { field: "minutes" });
       }
       await requireHeldGroup(tx, partyId, groupId);
+      const [waiting] = await tx
+        .select({ id: orderGroups.id })
+        .from(orderGroups)
+        .where(and(eq(orderGroups.partyId, partyId), eq(orderGroups.state, "held")))
+        .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id))
+        .limit(1);
+      if (waiting!.id !== groupId) throw new AppError("group.not_waiting", { groupId });
       await tx
         .update(orderGroups)
         .set({ remindAt: new Date(Date.now() + minutes * 60_000).toISOString() })

@@ -2831,12 +2831,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         orders shows it on the waiting group once it has a time: the time it falls due, then Snooze
         and, where waiters fire held groups, Fire. **Next action:** a mark on the table's token when
         a party's reminder is due.
-      - A snooze may be put on any held group, not only the one waiting. It stays until that group
-        becomes the one waiting and then replaces the worked-out time, so snoozing group 4 by 120
-        minutes while group 3 waits makes group 4 due two hours later even after group 3 is served.
-        Reproduced 2026-09-28 by the finish-branch run-it review: a later group's snooze made it
-        due at 22:15 instead of its worked-out 20:30. The till offers Snooze only on the waiting group. **Next
-        action:** the owner decides whether the server should refuse it on any other group.
+      - DONE (campaign item A116, on the owner's ruling of 2026-09-28 "refuse with a code"): a
+        snooze on a held group other than the one waiting (the party's first held group) is refused
+        `group.not_waiting` (409) and moves no reminder; the till says so in English and Spanish.
+        Before this, a later group's snooze made it due at 22:15 instead of its worked-out 20:30.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card

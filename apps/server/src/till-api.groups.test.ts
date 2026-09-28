@@ -1626,7 +1626,7 @@ async function remindAts(partyId: string) {
 }
 
 describe("POST /api/parties/:id/groups/:gid/snooze and GET /api/parties/:id/current-orders", () => {
-  it("snoozes a held group by whole minutes, answering the party's revision, and Current orders shows the reminder once the work ahead is served", async () => {
+  it("snoozes the group waiting by whole minutes, answering the party's revision, and Current orders shows the reminder once the work ahead is served", async () => {
     const party = await withGroups();
     const revision = await revisionOf(party.partyId);
     const from = Date.now();
@@ -1708,6 +1708,12 @@ describe("POST /api/parties/:id/groups/:gid/snooze and GET /api/parties/:id/curr
         at({ minutes: 5 }),
         409,
         refusal("group.not_held", { groupId: party.fired.id }),
+      ],
+      [
+        `${base}/${party.croquetas.id}/snooze`,
+        at({ minutes: 5 }),
+        409,
+        refusal("group.not_waiting", { groupId: party.croquetas.id }),
       ],
       [tarta, at({ minutes: 0 }), 400, minutesInvalid],
       [tarta, at({ minutes: 121 }), 400, minutesInvalid],

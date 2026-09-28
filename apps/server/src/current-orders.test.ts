@@ -538,17 +538,15 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
     expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g4.id, dueAt: T(40) });
   });
 
-  it("moves the reminder to group 4 when it is reordered ahead of group 3, clearing both snoozes", async () => {
+  it("moves the reminder to group 4 when it is reordered ahead of group 3, clearing group 3's snooze", async () => {
     const v = await setupVenue();
     const s = await servedUpToGroupTwo(v);
     await at(T(15), () => snooze(v, s.partyId, s.g3.id, 5));
-    await at(T(15), () => snooze(v, s.partyId, s.g4.id, 30));
 
     await reorder(s.partyId, [s.g4.id, s.g3.id]);
 
     expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g4.id, dueAt: T(15) });
     expect(await remindAtOf(s.g3.id)).toBeNull();
-    expect(await remindAtOf(s.g4.id)).toBeNull();
   });
 
   it("keeps a snooze through a reorder that leaves its group where it was", async () => {
@@ -683,6 +681,48 @@ describe("snoozeReminder (D8, D11, D19)", () => {
     });
   });
 
+  it("refuses a held group that is not the one waiting (group.not_waiting), writing nothing", async () => {
+    const v = await setupVenue();
+    const s = await servedUpToGroupTwo(v);
+    await at(T(15), () => snooze(v, s.partyId, s.g3.id, 5));
+
+    await at(T(16), () =>
+      expectRefusedWithNothingWritten(s.partyId, () => snooze(v, s.partyId, s.g4.id, 120), {
+        code: "group.not_waiting",
+        params: { groupId: s.g4.id },
+      }),
+    );
+
+    expect(await remindAtOf(s.g3.id)).toBe(T(20));
+    expect(await remindAtOf(s.g4.id)).toBeNull();
+    await fire(v, s.partyId, s.g3.id);
+    await at(T(30), () => serveGroup(v, s.partyId, s.g3.id));
+    expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g4.id, dueAt: T(40) });
+  });
+
+  it("takes the waiting group from the sequence: after group 4 is reordered ahead, it is snoozed and group 3 refused", async () => {
+    const v = await setupVenue();
+    const s = await servedUpToGroupTwo(v);
+    await reorder(s.partyId, [s.g4.id, s.g3.id]);
+
+    await at(T(15), () => snooze(v, s.partyId, s.g4.id, 5));
+
+    expect(await remindAtOf(s.g4.id)).toBe(T(20));
+    await expectRefusedWithNothingWritten(s.partyId, () => snooze(v, s.partyId, s.g3.id, 5), {
+      code: "group.not_waiting",
+      params: { groupId: s.g3.id },
+    });
+  });
+
+  it("takes a snooze on the first held group while the work ahead of it is still unserved", async () => {
+    const v = await setupVenue();
+    const s = await fourGroups(v);
+
+    await at(T(0), () => snooze(v, s.partyId, s.g3.id, 5));
+
+    expect(await remindAtOf(s.g3.id)).toBe(T(5));
+  });
+
   it("refuses a group of another party, an unknown one and a removed one (group.not_found), writing nothing", async () => {
     const v = await setupVenue();
     const s = await fourGroups(v);
@@ -721,15 +761,15 @@ describe("snoozeReminder (D8, D11, D19)", () => {
     },
   );
 
-  it("takes 1 and 120 minutes, and may snooze a held group that is not yet the one waiting", async () => {
+  it("takes 1 and 120 minutes", async () => {
     const v = await setupVenue();
     const s = await fourGroups(v);
 
     await at(T(0), () => snooze(v, s.partyId, s.g3.id, 1));
-    await at(T(0), () => snooze(v, s.partyId, s.g4.id, 120));
-
     expect(await remindAtOf(s.g3.id)).toBe(T(1));
-    expect(await remindAtOf(s.g4.id)).toBe(T(0, 22));
+
+    await at(T(0), () => snooze(v, s.partyId, s.g3.id, 120));
+    expect(await remindAtOf(s.g3.id)).toBe(T(0, 22));
   });
 });
 

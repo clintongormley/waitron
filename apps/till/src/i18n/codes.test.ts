@@ -227,3 +227,10 @@ it("words the three refusals of an order sent to a bill it cannot go on, in both
   expect(codeMessage("bill.other_party", "en")).toBe("That bill belongs to other guests");
   expect(codeMessage("bill.other_party", "es")).toBe("Esa cuenta es de otros clientes");
 });
+
+it("explains a snooze refused because another group is the one waiting, in both languages", () => {
+  expect([codeMessage("group.not_waiting", "en"), codeMessage("group.not_waiting", "es")]).toEqual([
+    "Only the group waiting to go to the kitchen can be snoozed. Check the table before trying again",
+    "Solo se puede posponer el grupo que espera para ir a cocina. Revisa la mesa antes de volver a intentarlo",
+  ]);
+});

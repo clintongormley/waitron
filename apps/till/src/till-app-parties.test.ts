@@ -3849,4 +3849,21 @@ describe("till-app: Current orders", () => {
     expect(banner(el)!.textContent).toContain(codeMessage("group.line_held"));
     expect(api.readCurrentOrders).toHaveBeenCalledTimes(reads + 1);
   });
+
+  it("says a snooze refused for a group that is not the one waiting in its own words, and reads Current orders again", async () => {
+    const { el } = await mountApp({
+      ...noCurrentOrders(),
+      snoozeGroup: vi.fn().mockRejectedValue({ code: "group.not_waiting" }),
+    });
+    const order = await openMesa(el);
+    const reads = vi.mocked(api.readCurrentOrders).mock.calls.length;
+
+    emit(order, "snooze-group", { groupId: "g2", minutes: 5 });
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(
+      "Only the group waiting to go to the kitchen can be snoozed. Check the table before trying again",
+    );
+    expect(api.readCurrentOrders).toHaveBeenCalledTimes(reads + 1);
+  });
 });
