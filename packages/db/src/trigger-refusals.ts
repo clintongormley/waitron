@@ -20,7 +20,10 @@ export const POST_SETTLEMENT_REFUSAL = "tender rejected: the sale is already set
 /** `working_orders_enforce_transition`: the order's status may not move that way. */
 export const TRANSITION_REFUSAL = "working order cannot make that transition";
 
-/** `working_order_lines_require_open_parent_*`: the order is not open, or does not exist. */
+/**
+ * `working_order_lines_require_open_parent_*`: the order is not open, or does not exist. On an order
+ * that exists but is not open, an update changing what was served and nothing else is let through.
+ */
 export const OPEN_PARENT_REFUSAL = "lines may only be written while the order is open";
 
 /** `working_order_lines_check_locales_*`: `descriptions` is not exactly the venue's invoice locales. */

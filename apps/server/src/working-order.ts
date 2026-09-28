@@ -1255,8 +1255,8 @@ export async function fireLines(
  * Stamp `sent_at` on dish lines not stamped yet, and on their extras children, which follow their
  * dish. A line already stamped keeps its first stamp, so a recalled line sent again keeps it.
  *
- * Only while the order is open: `working_order_lines_require_open_parent_update` refuses a line
- * update on any other order. `placeOrder` stamps its lines itself before the order leaves `open`,
+ * Only while the order is open: `working_order_lines_require_open_parent_update` refuses a
+ * `sent_at` stamp on any other order. `placeOrder` stamps its lines itself before the order leaves `open`,
  * and a settled order sent to preparation is stamped by nothing.
  */
 async function stampSent(

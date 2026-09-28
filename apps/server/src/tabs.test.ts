@@ -593,13 +593,13 @@ describe("markLineServed / unmarkLineServed", () => {
     });
   });
 
-  it("refuses a settled tab (tab.not_open — the require_open_parent trigger is the DB backstop)", async () => {
+  it("refuses a settled tab (tab.not_open)", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
-    // The `require_open_parent` trigger would also refuse this, so this case does not isolate the
-    // status check; the next case isolates the back-pointer check.
+    // The line trigger lets a served mark through on an order that is not open (core `0033`), so
+    // the status check alone refuses this; the next case isolates the back-pointer check.
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
     );

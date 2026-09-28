@@ -26,7 +26,8 @@ import { visits } from "./visits.js";
 
 export const workingOrderStatus = enumType([
   "open",
-  // placed: finalized — composition FROZEN (lines may only be written while the order is open)
+  // placed: finalized — composition FROZEN (a line may change only what was served once the order
+  // leaves open)
   // and the fiscal issuance basis fixed. Not terminal: it still ends settled or abandoned.
   "placed",
   "settled",
@@ -160,7 +161,9 @@ export const workingOrderLines = table(
     lineTotal: money("line_total").notNull(),
     // Snapshotted analytics label, NOT a category_id or a catalogue FK.
     category: label("category"),
+    // Set only once the whole line is served; `served_quantity` counts a part served before that.
     servedAt: tsString("served_at"),
+    servedQuantity: quantity("served_quantity").notNull().default(0),
     // The kitchen course this line was rung under. No course means the line fires earliest.
     courseId: id("course_id"),
     // The dish line an extras pick belongs to; a top-level line leaves it NULL.
