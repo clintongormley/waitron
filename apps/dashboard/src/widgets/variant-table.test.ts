@@ -5,7 +5,7 @@ import type { VariantTable } from "./variant-table.js";
 import "./variant-table.js";
 import { reorder } from "./reorder.js";
 import type { ProductEditorVariant } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
 
@@ -45,6 +45,10 @@ const threeVariants = (): ProductEditorVariant[] => [
     active: true,
   },
 ];
+
+/** A Spanish price, which the suite's default language writes with a no-break space before the
+ * sign. The stacked-price assertions fold every space to a plain one, so they spell it plainly. */
+const euros = (amount: string) => `${amount}\u00a0€`;
 
 async function mountTable(props: Partial<VariantTable> = {}) {
   return (
@@ -98,7 +102,7 @@ it("lists one row per variant with its staff name and price, and changes the uni
   const el = await mountTable();
   expect(rows(el)).toHaveLength(3);
   expect(cells(el, 1)).toEqual(["Media", "Entera", "Doble"]);
-  expect(cells(el, 2)).toEqual(["6.50", "12.00", "20.00"]);
+  expect(cells(el, 2)).toEqual([euros("6,50"), euros("12,00"), euros("20,00")]);
   el.unitId = "kg";
   el.unitOptions = [
     { value: null, label: "Each" },
@@ -173,16 +177,20 @@ it("moves each price under its name on a narrow table, and back to its own colum
   const stacked = (index: number) =>
     el.shadowRoot!.querySelector(`[data-test="stacked-price-${index}"]`)!.textContent!;
   expect(stacked(0).replace(/\s+/g, " ").trim()).toBe(
-    `${t("product.price")} ${t("editor.same_as").replace("{value}", "9.00")}`,
+    `${t("product.price")} ${t("editor.same_as").replace("{value}", "9,00 €")}`,
   );
-  expect(stacked(2).replace(/\s+/g, " ").trim()).toBe(`${t("product.price")} 20.00`);
+  expect(stacked(2).replace(/\s+/g, " ").trim()).toBe(`${t("product.price")} 20,00 €`);
   el.style.width = "40rem";
   await new Promise((resolve) => requestAnimationFrame(resolve));
   for (const row of rows(el)) {
     expect(shown(row.children[2]!)).toBe(true);
     expect(shown(row.querySelector(".stacked-price"))).toBe(false);
   }
-  expect(cells(el, 2)).toEqual([t("editor.same_as").replace("{value}", "9.00"), "12.00", "20.00"]);
+  expect(cells(el, 2)).toEqual([
+    t("editor.same_as").replace("{value}", euros("9,00")),
+    euros("12,00"),
+    euros("20,00"),
+  ]);
 });
 
 it("caps the name cell with the shared sizing token, not a literal width", async () => {
@@ -361,7 +369,11 @@ it("shows a variant with no price of its own as the base price it sells at", asy
       index === 0 ? { ...variant, unitPrice: null } : variant,
     ),
   });
-  expect(cells(el, 2)).toEqual([t("editor.same_as").replace("{value}", "9.00"), "12.00", "20.00"]);
+  expect(cells(el, 2)).toEqual([
+    t("editor.same_as").replace("{value}", euros("9,00")),
+    euros("12,00"),
+    euros("20,00"),
+  ]);
 });
 
 it("hides Inactive variants until the status filter asks for them", async () => {
@@ -473,7 +485,7 @@ it("shows no price hint at all while the product has no base price yet", async (
       index === 0 ? { ...variant, unitPrice: null } : variant,
     ),
   });
-  expect(cells(el, 2)).toEqual(["", "12.00", "20.00"]);
+  expect(cells(el, 2)).toEqual(["", euros("12,00"), euros("20,00")]);
 });
 
 it("disables Open and says why while the product has changes not yet saved", async () => {
@@ -559,4 +571,48 @@ it("moves focus to the next row on screen when Remove hides the row, and to the 
   await expect.poll(() => focused(el)).toBe("actions-1");
   await chooseFromMenu(el, "remove", 1);
   await expect.poll(() => focused(el)).toBe("variant-status");
+});
+
+// Spanish writes a no-break space (U+00A0) before the sign, spelled out here rather than taken from
+// the formatter the table calls.
+it.each([
+  { locale: "en-GB", base: "€9.00", own: "€12.00" },
+  { locale: "es-ES", base: "9,00\u00a0€", own: "12,00\u00a0€" },
+])(
+  "writes each price, and the base price a variant sells at, with the euro sign where $locale writes it",
+  async ({ locale, base, own }) => {
+    setLocale(locale);
+    try {
+      const el = await mountTable({
+        basePrice: "9.00",
+        variants: threeVariants().map((variant, index) =>
+          index === 0 ? { ...variant, unitPrice: null } : variant,
+        ),
+      });
+      const sameAs = t("editor.same_as").replace("{value}", base);
+      const amounts = (at: Element) =>
+        [...at.querySelectorAll(".amount")].map((a) => a.textContent);
+      expect(cells(el, 2).slice(0, 2)).toEqual([sameAs, own]);
+      expect(amounts(rows(el)[1]!.children[2]!)).toEqual([own]);
+      // The copy under the name, which a narrow table shows, is written the same way.
+      expect(amounts(el.shadowRoot!.querySelector('[data-test="stacked-price-0"]')!)).toEqual([
+        base,
+      ]);
+      expect(amounts(el.shadowRoot!.querySelector('[data-test="stacked-price-1"]')!)).toEqual([
+        own,
+      ]);
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);
+
+it("shows a base price still being typed as it stands, not as a sign beside NaN", async () => {
+  const el = await mountTable({
+    basePrice: "9,5x",
+    variants: threeVariants().map((variant, index) =>
+      index === 0 ? { ...variant, unitPrice: null } : variant,
+    ),
+  });
+  expect(cells(el, 2)[0]).toBe(t("editor.same_as").replace("{value}", "9,5x"));
 });

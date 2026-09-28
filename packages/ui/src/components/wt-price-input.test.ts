@@ -593,3 +593,39 @@ test("a field moved elsewhere in the page re-measures its sign", async () => {
   await settled();
   expectSignClearOfText(currency!, input);
 });
+
+test("shows a hint under the field and describes the amount by it first, then by any error, the currency and a fixed unit", async () => {
+  const el = await mount(
+    '<wt-price-input label="Price" name="price" unit="kg" fixed-unit locale="en-GB" hint="Leave it empty to use the product price."></wt-price-input>',
+  );
+  const input = el.shadowRoot!.querySelector("input")!;
+  const hint = el.shadowRoot!.querySelector<HTMLElement>("[data-hint]")!;
+  const currency = el.shadowRoot!.querySelector<HTMLElement>('[part~="currency"]')!;
+  const unit = el.shadowRoot!.querySelector<HTMLElement>(".unit")!;
+  expect(hint.textContent).toBe("Leave it empty to use the product price.");
+  expect(hint.id).toMatch(/^wt-price-input-hint-\d+$/);
+  expect(input.getAttribute("aria-describedby")).toBe(`${hint.id} ${currency.id} ${unit.id}`);
+  expect(hint.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  el.setAttribute("error", "Enter a price");
+  await (el as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+  const error = el.shadowRoot!.querySelector<HTMLElement>("[data-error]")!;
+  expect(input.getAttribute("aria-describedby")).toBe(
+    `${hint.id} ${error.id} ${currency.id} ${unit.id}`,
+  );
+  expect(error.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+});
+
+test("a price field with no hint renders no hint line", async () => {
+  const el = await mount('<wt-price-input label="Price"></wt-price-input>');
+  expect(el.shadowRoot!.querySelector("[data-hint]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("input")!.hasAttribute("aria-describedby")).toBe(false);
+});
+
+test("the hint paints from the muted-text and small-font tokens", async () => {
+  const el = await mount('<wt-price-input label="Price" hint="Optional"></wt-price-input>');
+  host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+  host.style.setProperty("--wt-font-size-sm", "11px");
+  const hint = el.shadowRoot!.querySelector<HTMLElement>("[data-hint]")!;
+  expect(getComputedStyle(hint).color).toBe("rgb(7, 8, 9)");
+  expect(getComputedStyle(hint).fontSize).toBe("11px");
+});

@@ -6,7 +6,8 @@ import type {
   MenuVariant,
   Product,
 } from "../api/client.js";
-import { setLocale, t } from "../i18n/t.js";
+import { formatMoney } from "@waitron/shared";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { MenuPricesTable, type OfferSave } from "./menu-prices-table.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 
@@ -132,6 +133,12 @@ function row(el: MenuPricesTable, menuItemId: string): HTMLElement | null {
   return table(el).shadowRoot.querySelector<HTMLElement>(`tr[data-row-key="${menuItemId}"]`);
 }
 
+/** A price as the table writes it in the current language, with its spaces folded the way
+ * `text` and `visibleText` read them. */
+function eur(amount: string): string {
+  return formatMoney(amount, currentLocale()).replace(/\s+/g, " ");
+}
+
 /** Each shown column's key, in order. */
 function headers(el: MenuPricesTable): string[] {
   return [...table(el).shadowRoot.querySelectorAll("thead th")].map(
@@ -232,6 +239,57 @@ function saves(el: MenuPricesTable) {
   return heard;
 }
 
+// Spanish writes a no-break space (U+00A0) before the sign, spelled out here rather than taken from
+// the formatter the table calls. Read with textContent, which keeps it.
+it.each([
+  {
+    locale: "en-GB",
+    burger: "€12.00",
+    lemonade: "€3.00 – €3.40",
+    override: "€2.50",
+  },
+  {
+    locale: "es-ES",
+    burger: "12,00\u00a0€",
+    lemonade: "3,00\u00a0€ – 3,40\u00a0€",
+    override: "2,50\u00a0€",
+  },
+])("writes every price in the table with the euro sign where $locale writes it", async (want) => {
+  setLocale(want.locale);
+  try {
+    const el = await mount();
+    const raw = (key: string, rowKey: string) => cell(el, key, rowKey).textContent!.trim();
+    expect(raw("product-price", "mi-burger")).toBe(want.burger);
+    expect(raw("product-price", "mi-lemonade")).toBe(want.lemonade);
+    expect(raw("menu-price", "mi-lemonade")).toBe(want.override);
+    expect(raw("effective-price", "mi-burger")).toBe(want.burger);
+  } finally {
+    setLocale("es-ES");
+  }
+});
+
+it.each([
+  { locale: "en-GB", price: "€3.00" },
+  { locale: "es-ES", price: "3,00\u00a0€" },
+])(
+  "edits the menu price and each variant's in price fields showing the euro sign where $locale writes it, and names the product price in the hint the same way",
+  async ({ locale, price }) => {
+    setLocale(locale);
+    try {
+      const el = await mount({ editing: "mi-lemonade" });
+      for (const name of ["grossPrice", "variants.0.price", "variants.1.price"]) {
+        const input = field<HTMLElement & { locale: string }>(el, name);
+        expect(input.tagName, name).toBe("WT-PRICE-INPUT");
+        expect(input.locale, name).toBe(locale);
+      }
+      const hint = field(el, "grossPrice").shadowRoot!.querySelector<HTMLElement>("[data-hint]")!;
+      expect(hint.textContent).toBe(t("menu_prices.override_help").replace("{price}", price));
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);
+
 it("lists each product once with its prices, and where it appears by the sections' internal names", async () => {
   const el = await mount();
   expect(shown(el)).toEqual(["mi-burger", "mi-lemonade", "mi-lager"]);
@@ -251,16 +309,16 @@ it("lists each product once with its prices, and where it appears by the section
   // Lemonade is sold only as its variants, so its product price is theirs: 3.00 for the small,
   // which has none of its own, and the large's 3.40.
   expect(column(el, "product-price")).toEqual([
-    "12.00",
-    t("menu_prices.range").replace("{low}", "3.00").replace("{high}", "3.40"),
-    "2.00",
+    eur("12.00"),
+    t("menu_prices.range").replace("{low}", eur("3.00")).replace("{high}", eur("3.40")),
+    eur("2.00"),
   ]);
   expect(column(el, "menu-price")).toEqual([
     t("menu_prices.no_override"),
-    "2.50",
+    eur("2.50"),
     t("menu_prices.no_override"),
   ]);
-  expect(column(el, "effective-price")).toEqual(["12.00", "2.50", "2.00"]);
+  expect(column(el, "effective-price")).toEqual([eur("12.00"), eur("2.50"), eur("2.00")]);
   expect(column(el, "active")).toEqual([
     t("menu_prices.sold_here"),
     t("menu_prices.sold_here"),
@@ -377,7 +435,7 @@ it("sorts the prices as amounts, not as text", async () => {
   });
   table(el).shadowRoot.querySelector<HTMLElement>('button[data-sort="product-price"]')!.click();
   await table(el).updateComplete;
-  expect(column(el, "product-price")).toEqual(["9.50", "10.00"]);
+  expect(column(el, "product-price")).toEqual([eur("9.50"), eur("10.00")]);
 });
 
 it("sorts by this menu's price and by the price charged here, not by the product's own price", async () => {
@@ -505,10 +563,14 @@ it("shows the product price as an empty menu price's placeholder and in its hint
   expect(field(el, "grossPrice").placeholder).toBe("12.00");
   // The help line is the price field's own hint, which is what its input is described by.
   const help = field(el, "grossPrice").shadowRoot!.querySelector<HTMLElement>("[data-hint]")!;
-  expect(text(help)).toBe(t("menu_prices.override_help").replace("{price}", "12.00"));
+  expect(text(help)).toBe(t("menu_prices.override_help").replace("{price}", eur("12.00")));
+  // Read first, then the euro sign the field draws.
+  const sign = field(el, "grossPrice").shadowRoot!.querySelector<HTMLElement>(
+    '[part~="currency"]',
+  )!;
   expect(
     field(el, "grossPrice").shadowRoot!.querySelector("input")!.getAttribute("aria-describedby"),
-  ).toBe(help.id);
+  ).toBe(`${help.id} ${sign.id}`);
   expect(modal(el).querySelector("fieldset")).toBeNull();
   expect(modal(el).querySelector('[data-test="use-product-price"]')).toBeNull();
   await flip(el, "active", false);
@@ -661,7 +723,9 @@ it.each(["_form", "active", "variants", "variants.1", "price", "variantId"])(
     el.refusal = { field: refused, message: "Refused" };
     await el.updateComplete;
     expect(await summary(el)).toEqual(["Refused"]);
-    const errors = [...modal(el).querySelectorAll<HTMLElementTagNameMap["wt-input"]>("wt-input")]
+    const errors = [
+      ...modal(el).querySelectorAll<HTMLElementTagNameMap["wt-price-input"]>("wt-price-input"),
+    ]
       .map((input) => input.error)
       .filter(Boolean);
     expect(errors).toEqual([]);
@@ -905,7 +969,7 @@ describe("variants", () => {
   }
 
   const range = (low: string, high: string) =>
-    t("menu_prices.range").replace("{low}", low).replace("{high}", high);
+    t("menu_prices.range").replace("{low}", eur(low)).replace("{high}", eur(high));
 
   function mutedColour(el: MenuPricesTable): string {
     const probe = document.createElement("span");
@@ -966,10 +1030,10 @@ describe("variants", () => {
     const cells = (key: string) => variants.map((rowKey) => visibleText(cell(el, key, rowKey)));
     expect(cells("name")).toEqual(["Glass", "Bottle", "Carafe"]);
     // A variant with no price of its own shows the product's.
-    expect(cells("product-price")).toEqual(["6.00", "10.00", "14.00"]);
-    expect(cells("menu-price")).toEqual(["7.00", t("menu_prices.no_override"), "15.00"]);
+    expect(cells("product-price")).toEqual([eur("6.00"), eur("10.00"), eur("14.00")]);
+    expect(cells("menu-price")).toEqual([eur("7.00"), t("menu_prices.no_override"), eur("15.00")]);
     // The bottle has neither a menu price nor its own, so it is charged the product's menu price.
-    expect(cells("effective-price")).toEqual(["7.00", "13.00", "15.00"]);
+    expect(cells("effective-price")).toEqual([eur("7.00"), eur("13.00"), eur("15.00")]);
     expect(cells("active")).toEqual([
       t("menu_prices.offered"),
       t("menu_prices.offered"),
@@ -1016,9 +1080,9 @@ describe("variants", () => {
     const el = await mountVariants({ rows: [glassWithoutMenuPrice], products: [] });
     await expand(el, "mi-wine");
     expect(visibleText(cell(el, "name", "mi-wine:v-glass"))).toBe(t("members.missing"));
-    expect(visibleText(cell(el, "product-price", "mi-wine:v-glass"))).toBe("10.00");
-    expect(visibleText(cell(el, "effective-price", "mi-wine:v-glass"))).toBe("13.00");
-    expect(visibleText(cell(el, "effective-price", "mi-wine:v-carafe"))).toBe("15.00");
+    expect(visibleText(cell(el, "product-price", "mi-wine:v-glass"))).toBe(eur("10.00"));
+    expect(visibleText(cell(el, "effective-price", "mi-wine:v-glass"))).toBe(eur("13.00"));
+    expect(visibleText(cell(el, "effective-price", "mi-wine:v-carafe"))).toBe(eur("15.00"));
   });
 
   it("shows a product sold as its variants at the range of its variants' prices", async () => {
@@ -1027,14 +1091,14 @@ describe("variants", () => {
     expect(column(el, "product-price")).toEqual([
       range("6.00", "14.00"),
       range("3.00", "5.00"),
-      "2.20",
-      "12.00",
+      eur("2.20"),
+      eur("12.00"),
     ]);
     expect(column(el, "effective-price")).toEqual([
       range("7.00", "13.00"),
       range("3.50", "5.00"),
       t("menu_prices.no_variant_offered"),
-      "12.00",
+      eur("12.00"),
     ]);
     expect(
       getComputedStyle(cell(el, "effective-price", "mi-tea").querySelector("[part~=muted]")!).color,
@@ -1053,7 +1117,7 @@ describe("variants", () => {
         },
       ],
     });
-    expect(column(el, "effective-price")).toEqual(["5.0"]);
+    expect(column(el, "effective-price")).toEqual([eur("5.0")]);
   });
 
   it("sorts a range column by the low end of each range, as an amount", async () => {
@@ -1096,7 +1160,7 @@ describe("variants", () => {
   it("says a product's menu prices are on its variants when only they have one", async () => {
     const el = await mountVariants();
     expect(column(el, "menu-price")).toEqual([
-      "13.00",
+      eur("13.00"),
       t("menu_prices.variant_overrides"),
       t("menu_prices.variant_overrides"),
       t("menu_prices.no_override"),
@@ -1227,10 +1291,10 @@ describe("variants", () => {
       const el = await mountCombined();
       await expand(el, "mi-cider");
       for (const [key, price] of [
-        ["mi-burger", "12.00"],
+        ["mi-burger", eur("12.00")],
         ["mi-cider", range("4.00", "4.50")],
-        ["mi-cider:v-pint", "4.50"],
-        ["mi-cider:v-half", "4.00"],
+        ["mi-cider:v-pint", eur("4.50")],
+        ["mi-cider:v-half", eur("4.00")],
       ] as const) {
         const muted = combined(el, key).querySelector("[part~=muted]")!;
         expect(visibleText(muted), key).toBe(price);
@@ -1255,10 +1319,10 @@ describe("variants", () => {
       });
       await showCombined(el);
       await expand(el, "mi-juice");
-      expect(visibleText(cell(el, "menu-price", "mi-juice"))).toBe("4.50");
+      expect(visibleText(cell(el, "menu-price", "mi-juice"))).toBe(eur("4.50"));
       for (const [key, price] of [
         ["mi-juice", range("3.00", "5.00")],
-        ["mi-juice:v-juice-small", "3.00"],
+        ["mi-juice:v-juice-small", eur("3.00")],
       ] as const) {
         const muted = combined(el, key).querySelector("[part~=muted]")!;
         expect(visibleText(muted), key).toBe(price);
@@ -1286,13 +1350,13 @@ describe("variants", () => {
     it("strikes out the product's price beside a different menu price, telling a screen reader it was the price", async () => {
       const el = await mountCombined();
       for (const [key, was, now] of [
-        ["mi-steak", "20.00", "18.00"],
+        ["mi-steak", eur("20.00"), eur("18.00")],
         // The juice's only menu price is its small size's.
         ["mi-juice", range("3.00", "5.00"), range("3.50", "5.00")],
         ["mi-wine", range("6.00", "14.00"), range("7.00", "13.00")],
       ] as const) {
         const struck = combined(el, key).querySelector("s")!;
-        expect(struck.textContent!.trim(), key).toBe(was);
+        expect(text(struck), key).toBe(was);
         expect(getComputedStyle(struck).textDecorationLine).toBe("line-through");
         expect(visibleText(combined(el, key))).toBe(`${was} ${now}`);
         const hidden = combined(el, key).querySelector('[part~="visually-hidden"]')!;
@@ -1304,7 +1368,7 @@ describe("variants", () => {
 
     it("shows a menu price equal to the product's price plainly", async () => {
       const el = await mountCombined();
-      expect(visibleText(combined(el, "mi-soup"))).toBe("5.00");
+      expect(visibleText(combined(el, "mi-soup"))).toBe(eur("5.00"));
       expect(
         combined(el, "mi-soup").querySelector("s, [part~=muted], [part~=visually-hidden]"),
       ).toBeNull();
@@ -1332,8 +1396,8 @@ describe("variants", () => {
         rows: [{ ...wine, variants: [{ variantId: "v-bottle", price: null, offered: true }] }],
       });
       await showCombined(el);
-      expect(combined(el, "mi-wine").querySelector("s")!.textContent!.trim()).toBe("10.00");
-      expect(visibleText(combined(el, "mi-wine"))).toBe("10.00 13.00");
+      expect(text(combined(el, "mi-wine").querySelector("s"))).toBe(eur("10.00"));
+      expect(visibleText(combined(el, "mi-wine"))).toBe(`${eur("10.00")} ${eur("13.00")}`);
     });
 
     it("ignores a menu price on a variant that is not offered", async () => {
@@ -1350,7 +1414,7 @@ describe("variants", () => {
       });
       await showCombined(el);
       const muted = combined(el, "mi-juice").querySelector("[part~=muted]")!;
-      expect(visibleText(muted)).toBe("5.00");
+      expect(visibleText(muted)).toBe(eur("5.00"));
       expect(combined(el, "mi-juice").querySelector("s")).toBeNull();
     });
 
@@ -1366,16 +1430,16 @@ describe("variants", () => {
       await expand(el, "mi-wine", "mi-juice");
       // The bottle has no price of its own, so the product's menu price applies to it.
       for (const [key, was, now] of [
-        ["mi-wine:v-glass", "6.00", "7.00"],
-        ["mi-wine:v-bottle", "10.00", "13.00"],
-        ["mi-wine:v-carafe", "14.00", "15.00"],
-        ["mi-juice:v-juice-small", "3.00", "3.50"],
+        ["mi-wine:v-glass", eur("6.00"), eur("7.00")],
+        ["mi-wine:v-bottle", eur("10.00"), eur("13.00")],
+        ["mi-wine:v-carafe", eur("14.00"), eur("15.00")],
+        ["mi-juice:v-juice-small", eur("3.00"), eur("3.50")],
       ] as const) {
-        expect(combined(el, key).querySelector("s")!.textContent!.trim(), key).toBe(was);
+        expect(text(combined(el, key).querySelector("s")), key).toBe(was);
         expect(visibleText(combined(el, key)), key).toBe(`${was} ${now}`);
       }
       const large = combined(el, "mi-juice:v-juice-large");
-      expect(visibleText(large.querySelector("[part~=muted]")!)).toBe("5.00");
+      expect(visibleText(large.querySelector("[part~=muted]")!)).toBe(eur("5.00"));
       expect(large.querySelector("s")).toBeNull();
     });
 

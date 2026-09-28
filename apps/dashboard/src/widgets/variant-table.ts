@@ -9,6 +9,7 @@ import { reorder } from "./reorder.js";
 import { ReorderController, type ReorderModel } from "./reorder-table.js";
 import type { ProductEditorVariant } from "../api/client.js";
 import { t } from "../i18n/t.js";
+import { priceText } from "./form-fields.js";
 
 interface VariantRow {
   key: string;
@@ -113,8 +114,11 @@ export class VariantTable extends LitElement {
         td:nth-child(3) {
           display: none;
         }
+        /* A secondary line, in the small size, so a four-digit price with its sign still fits a
+           320px phone with the text sizes raised. */
         .stacked-price {
           display: block;
+          font-size: var(--wt-font-size-sm);
         }
         th:nth-child(4) {
           max-width: calc(var(--wt-tap-min) + var(--wt-space-6));
@@ -270,7 +274,7 @@ export class VariantTable extends LitElement {
   /** "Same as" the product's price, with the amount kept whole while the words around it wrap. */
   #sameAs() {
     const [before = "", after = ""] = t("editor.same_as").split("{value}");
-    return html`${before}<span class="amount">${this.basePrice}</span>${after}`;
+    return html`${before}<span class="amount">${priceText(this.basePrice)}</span>${after}`;
   }
 
   #emit(name: string, detail: Record<string, unknown>): void {
@@ -318,7 +322,7 @@ export class VariantTable extends LitElement {
     const error = this.errors[index] ?? "";
     const price =
       variant.unitPrice !== null
-        ? html`<span class="amount">${variant.unitPrice}</span>`
+        ? html`<span class="amount">${priceText(variant.unitPrice)}</span>`
         : this.basePrice
           ? html`<span class="muted">${this.#sameAs()}</span>`
           : nothing;

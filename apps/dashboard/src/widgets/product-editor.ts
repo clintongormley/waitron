@@ -976,6 +976,7 @@ export class ProductEditor extends LitElement {
           base ? t("editor.base_price_unit").replace("{unit}", unitLabel) : priceLabel(unitLabel)
         }
         unit=${t("editor.per_unit").replace("{unit}", unitLabel)}
+        locale=${currentLocale()}
         placeholder=${parent?.unitPrice ?? ""}
         ?required=${parent === null}
         ?disabled=${this.suspended}

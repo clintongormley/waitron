@@ -171,9 +171,14 @@ export class WtPriceInput extends LitElement {
         margin-inline-start: var(--wt-space-1);
       }
 
-      .error {
+      .error,
+      .hint {
         margin: var(--wt-space-1) 0 0;
         font-size: var(--wt-font-size-sm);
+      }
+
+      .hint {
+        color: var(--wt-color-text-muted);
       }
     `,
   ];
@@ -184,6 +189,8 @@ export class WtPriceInput extends LitElement {
   @property() unit = "";
   @property() placeholder = "";
   @property() error = "";
+  /** A line of help under the field, which the amount is described by. */
+  @property() hint = "";
   @property({ type: Boolean, reflect: true }) required = false;
   @property({ type: Boolean, reflect: true }) disabled = false;
   /** Names the field for assistive technology without drawing the label above it. */
@@ -194,6 +201,7 @@ export class WtPriceInput extends LitElement {
 
   private readonly generatedInputId = uniqueId("wt-price-input");
   private readonly errorId = uniqueId("wt-price-input-error");
+  private readonly hintId = uniqueId("wt-price-input-hint");
   private readonly unitId = uniqueId("wt-price-input-unit");
   private readonly currencyId = uniqueId("wt-price-input-currency");
 
@@ -264,7 +272,9 @@ export class WtPriceInput extends LitElement {
     const hasError = this.error !== "";
     const inputId = this.name || this.generatedInputId;
     const currency = this.locale ? currencySymbol(this.locale) : null;
+    const hasHint = this.hint !== "";
     const describedBy = [
+      ...(hasHint ? [this.hintId] : []),
       ...(hasError ? [this.errorId] : []),
       ...(currency ? [this.currencyId] : []),
       ...(this.fixedUnit && this.unit ? [this.unitId] : []),
@@ -308,6 +318,7 @@ export class WtPriceInput extends LitElement {
             : input
         }${this.renderUnit()}
       </div>
+      ${hasHint ? html`<p id=${this.hintId} class="hint" data-hint>${this.hint}</p>` : nothing}
       ${hasError ? html`<p id=${this.errorId} class="error" data-error>${this.error}</p>` : nothing}
     `;
   }

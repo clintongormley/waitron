@@ -19,7 +19,7 @@ import { optionalTextFields, translations, wholeWithin, type FieldContext } from
 import { reorder } from "./reorder.js";
 import { ReorderController, type ReorderModel } from "./reorder-table.js";
 import type { ExtraList, ExtraListInput, Product } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 
 const decreaseLabel = (label: string) => t("action.decrease").replace("{label}", label);
 const increaseLabel = (label: string) => t("action.increase").replace("{label}", label);
@@ -66,6 +66,11 @@ export class ExtraListForm extends LitElement {
       }
       .picks-row wt-number-stepper {
         --wt-stepper-field-width: var(--wt-stepper-field-width-wide);
+      }
+      /* The price field sizes its amount box for "9999.99" alone, and its euro sign sits inside
+         that box, so the box is widened by room for the sign. */
+      td wt-price-input::part(amount) {
+        width: calc(var(--wt-price-field-width) + var(--wt-space-4));
       }
       /* The same narrow case, and the same width, as the variants table's (design-system.md): a
          container query cannot read a token. There the column heading alone names the switches. */
@@ -506,6 +511,7 @@ export class ExtraListForm extends LitElement {
           hide-label
           fixed-unit
           unit=${this.#unitLabel(item.productId)}
+          locale=${currentLocale()}
           placeholder=${this.#inheritedPrice(item.productId)}
           .disabled=${this.busy}
           .value=${item.price}

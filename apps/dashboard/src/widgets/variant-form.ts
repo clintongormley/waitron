@@ -13,6 +13,7 @@ import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import {
   nonBlankNames,
   optionalTextFields,
+  priceField,
   priceLabel,
   switchField,
   textField,
@@ -179,7 +180,7 @@ export class VariantForm extends LitElement {
           },
           true,
         )}
-        ${textField(
+        ${priceField(
           fields,
           "unitPrice",
           priceLabel(this.unitLabel),

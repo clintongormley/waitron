@@ -12,6 +12,7 @@ import type { EditorVariant, ProductEditorDraft } from "./product-editor-model.j
 import type { CategorySummary, ExtraList, Label, OptionList } from "../api/client.js";
 import type { InheritedValues } from "@waitron/catalogue/src/product-types.js";
 import { localToday, vatRateOn } from "@waitron/catalogue/src/vat-rates.js";
+import { formatMoney } from "@waitron/shared";
 import { setLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/domain.js";
 
@@ -159,6 +160,36 @@ it('renders a short unit as "per unit" on the price control', async () => {
   expect(el.shadowRoot!.querySelector("[name=unit-price]")!.getAttribute("unit")).toBe(
     t("editor.per_unit").replace("{unit}", "l"),
   );
+});
+
+it.each([
+  { locale: "en-GB", side: "before" },
+  { locale: "es-ES", side: "after" },
+])("draws the euro sign in the price field where $locale writes it", async ({ locale, side }) => {
+  setLocale(locale);
+  try {
+    const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+      open: true,
+      value: product,
+      locales: ["en"],
+      units: [unit],
+      taxChoices: reduced,
+    });
+    const price = el.shadowRoot!.querySelector<HTMLElement & { locale: string }>(
+      "[name=unit-price]",
+    )!;
+    expect(price.locale).toBe(locale);
+    const shadow = price.shadowRoot!;
+    const sign = shadow.querySelector<HTMLElement>('[part~="currency"]')!;
+    expect(sign.textContent).toBe("€");
+    const signBox = sign.getBoundingClientRect();
+    const amountBox = shadow.querySelector("input")!.getBoundingClientRect();
+    const middle = (amountBox.left + amountBox.right) / 2;
+    if (side === "before") expect(signBox.right).toBeLessThan(middle);
+    else expect(signBox.left).toBeGreaterThan(middle);
+  } finally {
+    setLocale("es-ES");
+  }
 });
 
 it("uses the shared compact nutritional picker without a reviewed switch", async () => {
@@ -2094,9 +2125,12 @@ it.each(
       const rows = [...table.shadowRoot!.querySelectorAll("tbody tr")];
       for (const row of rows) expect(row.children[2]!.getClientRects()).toHaveLength(0);
       const cells = rows.map((row) => row.children[1]!);
-      expect(linesOf(cells[0]!, "9.00"), "the base price the first row falls back to").toBe(1);
-      expect(linesOf(cells[1]!, "3.00")).toBe(1);
-      expect(linesOf(cells[2]!, "1250.00")).toBe(1);
+      expect(
+        linesOf(cells[0]!, formatMoney("9.00", locale)),
+        "the base price the first row falls back to",
+      ).toBe(1);
+      expect(linesOf(cells[1]!, formatMoney("3.00", locale))).toBe(1);
+      expect(linesOf(cells[2]!, formatMoney("1250.00", locale))).toBe(1);
       // Kept on one line, an amount wider than the name column would run over the switch beside it.
       for (const cell of cells) {
         const amount = cell.querySelector(".amount")!.getBoundingClientRect();

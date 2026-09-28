@@ -5,7 +5,7 @@ import type { VariantForm } from "./variant-form.js";
 import "./variant-form.js";
 import type { ImageUploader } from "./image-upload.js";
 import type { ProductEditorVariant } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
 
@@ -98,11 +98,38 @@ it("shows the product's unit with the price and offers no way to change it", asy
   const el = await mountForm({ unitLabel: "kg" });
   expect(field(el, "unitPrice").label).toBe(t("editor.price_unit").replace("{unit}", "kg"));
   // The unit belongs to the product, so the variant window names it but carries no control for it —
-  // no unit dropdown, and not `wt-price-input`, whose unit is a button that opens a picker.
-  expect(el.shadowRoot!.querySelector("wt-price-input")).toBeNull();
+  // no unit dropdown, and a price field with no unit button, which in the product editor opens a
+  // picker.
+  const price = el.shadowRoot!.querySelector('wt-price-input[name="unitPrice"]')!;
+  expect(price.shadowRoot!.querySelector("button")).toBeNull();
   expect(el.shadowRoot!.querySelector("select")).toBeNull();
   const buttons = [...el.shadowRoot!.querySelectorAll("button")].map((b) => b.textContent?.trim());
   expect(buttons).not.toContain("kg");
+});
+
+it.each([
+  { locale: "en-GB", side: "before" },
+  { locale: "es-ES", side: "after" },
+])("draws the euro sign in the price field where $locale writes it", async ({ locale, side }) => {
+  setLocale(locale);
+  try {
+    const el = await mountForm({ value: halfPortion });
+    const price = el.shadowRoot!.querySelector<HTMLElement & { locale: string }>(
+      'wt-price-input[name="unitPrice"]',
+    )!;
+    expect(price.locale).toBe(locale);
+    const sign = price.shadowRoot!.querySelector<HTMLElement>('[part~="currency"]')!;
+    expect(sign.textContent).toBe("€");
+    const signBox = sign.getBoundingClientRect();
+    const amount = price.shadowRoot!.querySelector("input")!;
+    expect(amount.value).toBe("6.50");
+    const box = amount.getBoundingClientRect();
+    const middle = (box.left + box.right) / 2;
+    if (side === "before") expect(signBox.right).toBeLessThan(middle);
+    else expect(signBox.left).toBeGreaterThan(middle);
+  } finally {
+    setLocale("es-ES");
+  }
 });
 
 it("falls back to the plain price label when the product has no unit yet", async () => {

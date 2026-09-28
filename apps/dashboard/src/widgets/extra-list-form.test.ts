@@ -1087,6 +1087,50 @@ it("keeps a long unit from widening the table on a phone, in English and Spanish
   }
 });
 
+it("draws the euro sign in each item's price where the language writes it, on a wide screen and a phone", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  try {
+    for (const [locale, side] of [
+      ["en-GB", "before"],
+      ["es-ES", "after"],
+    ] as const)
+      for (const frame of [1280, 390]) {
+        setLocale(locale);
+        await page.viewport(frame, 844);
+        const { el } = await mount({
+          value: {
+            ...addons,
+            items: addons.items.map((item) => ({ ...item, price: "9999.99" })),
+          },
+        });
+        // The field measures its sign after layout, and pads the amount clear of it then.
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const at = `${locale} at ${frame}px`;
+        const price = field<HTMLElement & { locale: string }>(el, "item-0-price");
+        expect(price.locale, at).toBe(locale);
+        const sign = price.shadowRoot!.querySelector<HTMLElement>('[part~="currency"]')!;
+        expect(sign.textContent, at).toBe("€");
+        const input = price.shadowRoot!.querySelector("input")!;
+        const box = input.getBoundingClientRect();
+        const signBox = sign.getBoundingClientRect();
+        // Inside the amount box, on its side, and never over the typed amount.
+        expect(signBox.left, at).toBeGreaterThanOrEqual(box.left);
+        expect(signBox.right, at).toBeLessThanOrEqual(box.right);
+        const middle = (box.left + box.right) / 2;
+        if (side === "before") expect(signBox.right, at).toBeLessThan(middle);
+        else expect(signBox.left, at).toBeGreaterThan(middle);
+        expect(input.scrollWidth, `${at}: the amount is cut off`).toBeLessThanOrEqual(
+          input.clientWidth,
+        );
+        cleanupWidgets();
+      }
+  } finally {
+    setLocale("en");
+    await page.viewport(width, height);
+  }
+});
+
 it("puts the unit under the amount on a phone and beside it on a wide screen", async () => {
   const width = window.innerWidth,
     height = window.innerHeight;

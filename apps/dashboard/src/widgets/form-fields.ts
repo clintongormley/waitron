@@ -1,8 +1,10 @@
 import { html } from "lit";
 import { currentContentLanguages } from "@waitron/ui";
-import { MAX_MODIFIER_INTEGER } from "@waitron/catalogue/src/modifier-limits.js";
-import { t } from "../i18n/t.js";
+import { formatMoney } from "@waitron/shared";
+import { MAX_MODIFIER_INTEGER, isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
+import { currentLocale, t } from "../i18n/t.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-price-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 
 export interface FieldContext {
@@ -23,6 +25,11 @@ export const isModifierQuantity = (text: string) => wholeWithin(text, 1) !== nul
 
 export const priceLabel = (unitLabel: string) =>
   unitLabel.trim() ? t("editor.price_unit").replace("{unit}", unitLabel) : t("editor.price");
+
+/** A price in euros as the dashboard's language writes it. Text that is not a price — a draft still
+ * being typed — is shown as it stands. */
+export const priceText = (value: string) =>
+  isProductPrice(value) ? formatMoney(value, currentLocale()) : value;
 
 export const nonBlankNames = (value: Record<string, string>) =>
   Object.fromEntries(Object.entries(value).filter(([, text]) => text.trim()));
@@ -59,6 +66,36 @@ export function textField(
       change(event.detail.value);
     }}
   ></wt-input>`;
+}
+
+/** {@link textField} for an amount in euros: the field draws the sign where the dashboard's language
+ * writes it, and has no unit. */
+export function priceField(
+  context: FieldContext,
+  key: string,
+  label: string,
+  value: string,
+  change: (value: string) => void,
+  required = false,
+  placeholder = "",
+  hint = "",
+) {
+  return html`<wt-price-input
+    name=${key}
+    label=${label}
+    fixed-unit
+    locale=${currentLocale()}
+    placeholder=${placeholder}
+    hint=${hint}
+    .value=${value}
+    .required=${required}
+    .disabled=${context.busy}
+    .error=${context.error(key)}
+    @wt-change=${(event: CustomEvent<{ value: string }>) => {
+      event.stopPropagation();
+      change(event.detail.value);
+    }}
+  ></wt-price-input>`;
 }
 
 /** One input per content language, named `<key>-<locale>`. Only the default language is required,
