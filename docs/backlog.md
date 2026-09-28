@@ -2383,7 +2383,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       the move clears nothing on the destination when it prints. Also, not tested as a rule: move
       a dish from bill A to bill B, reprint B so it prints, move the dish back, and A shows its
       old failure again.)_
-    - _Fixed by lane C item C31 (2026-09-28):_ a move copied every unprinted ticket at a moved
+    - _Fixed by lane C item C31 (2026-09-28, #815):_ a move copied every unprinted ticket at a moved
       dish's station, so a ticket that carried only dishes that stayed behind showed on the new
       bill too (Mesa 4's burger printed on Cocina, a later fish ticket there failed, the burger
       moved to Mesa 5, and Mesa 5 showed a Cocina problem). Each kitchen ticket now records the
