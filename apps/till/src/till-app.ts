@@ -747,8 +747,10 @@ export class TillApp extends LitElement {
   #signIns = 0;
   /** The draft of an order with no party, which is never saved. */
   #partylessDraft = new WorkingOrderStore();
-  /** {@link #draftSync} has been read, and the party's groups with it, so the screen may show it. */
+  /** {@link #draftSync} has been read, so the screen may show it. */
   #draftReady = false;
+  /** The party whose groups {@link tabGroups} holds, once a read of them has finished. */
+  #groupsReadFor: string | null = null;
   readonly #menuPoll = new MenuStatePoll({
     read: (zoneId, signal) => this.api.menuState(zoneId, { signal }),
     // A table's zone only while its order is on screen: each read takes a turn of the write lock.
@@ -764,6 +766,8 @@ export class TillApp extends LitElement {
   @state() private tableSelectedCatalogueId = "";
   /** Identifies the latest table-selection offer request so a slower prior selection cannot win. */
   #tableOfferRequest = 0;
+  /** The {@link #tableOfferRequest} of the latest table open that has put its order on screen. */
+  #openShown = 0;
   /** Bumped when the waiter goes back to the floor, starts opening a table, selects a tab that hides
    * the order, or logs out, so an answer to a request sent before can tell the order has been left
    * while {@link activeTabId} still names it. Paying the tab does not bump it. */
@@ -2244,7 +2248,7 @@ export class TillApp extends LitElement {
       try {
         const catalogue = await this.api.listZoneOffers(table.zoneId);
         const { menus, defaultMenuId } = catalogue;
-        if (offerRequest !== this.#tableOfferRequest) return;
+        if (offerRequest !== this.#tableOfferRequest || session !== this.#operatorSession) return;
         this.#loadTableOffers(table.zoneId, catalogue);
         this.tableSelectedCatalogueId = defaultMenuId ?? this.#defaultCatalogueId(menus);
       } catch {
@@ -2277,6 +2281,9 @@ export class TillApp extends LitElement {
     } else {
       try {
         const { tabId, visitId, revision } = await this.api.seatTable(tableId, guestCount);
+        // A table opened after this one and already on screen stays there. One still opening
+        // replaces this table when it finishes.
+        if (session !== this.#operatorSession || this.#openShown > offerRequest) return;
         this.activeTabId = tabId;
         this.orderParty = {
           id: visitId,
@@ -2296,6 +2303,7 @@ export class TillApp extends LitElement {
       }
       await this.#reloadOrder();
     }
+    this.#openShown = Math.max(this.#openShown, offerRequest);
     // A canvas that authors a `table-order` card (handheld, tablet) switches to that tab; a till drills
     // in over the floor tab. Off the shell, only the lock screen is reached here, by a logout that lands
     // while the tab is opening.
@@ -2314,11 +2322,13 @@ export class TillApp extends LitElement {
   /** A failed read, or no tab id, leaves an empty tab rather than blocking the operator. */
   async #loadTabLines(): Promise<void> {
     const read = ++this.#tabLinesRead;
+    const partyId = this.orderParty?.id ?? null;
     if (this.activeTabId === undefined) {
       this.tabLines = [];
       this.tabGroups = [];
       this.printProblems = [];
       this.#groupsUnread = false;
+      this.#groupsReadFor = partyId;
       return;
     }
     const groups = this.#readGroups();
@@ -2338,6 +2348,7 @@ export class TillApp extends LitElement {
     if (read !== this.#tabLinesRead) return;
     this.tabGroups = partyGroups ?? [];
     this.#groupsUnread = partyGroups === null;
+    this.#groupsReadFor = partyId;
     this.printProblems = partyProblems;
   }
 
@@ -2435,13 +2446,18 @@ export class TillApp extends LitElement {
   }
 
   /** The draft the open order shows: the person's on its party, and none on a check. A floor that
-   * does not yet name the table's own tab cannot tell a check, so the draft shows. */
+   * does not yet name the table's own tab cannot tell a check, so the draft shows. It waits for the
+   * party's own groups, since the screen decides from them whether its first line is a later
+   * addition. */
   #tableDraft(): WorkingOrderStore | null {
     const row = this.tables.find((table) => table.id === this.activeTableId);
     if (row?.tabId !== undefined && this.#showsCheck()) return null;
     if (this.orderParty === null) return this.#partylessDraft;
     const sync = this.#draftSync;
-    return this.#draftReady && sync?.visitId === this.orderParty.id ? sync.store : null;
+    const party = this.orderParty.id;
+    return this.#draftReady && sync?.visitId === party && this.#groupsReadFor === party
+      ? sync.store
+      : null;
   }
 
   /** Starts the person's draft on the order's party, read from the server unless `read` is false.

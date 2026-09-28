@@ -1428,3 +1428,152 @@ describe("till-app: a table open that another overtakes", () => {
     expect(browser(el)?.store.lines ?? []).toEqual([]);
   });
 });
+
+describe("till-app: an order that moves to a party whose groups answer late", () => {
+  it("decides a later addition from the new party's groups, not the old party's", async () => {
+    const held: OrderGroup = {
+      id: "g-9",
+      position: 1,
+      state: "held",
+      firedAt: null,
+      remindAt: null,
+      lineIds: ["l-9"],
+      summary: "1 × Steak",
+    };
+    let answerGroups!: () => void;
+    const { el } = await mountApp({
+      moveTab: vi.fn().mockRejectedValue({ code: "visit.out_of_date", visitId: "v1" }),
+      listGroups: vi.fn(async (visitId: string) => {
+        if (visitId !== "v9") return { revision: 3, groups: [] };
+        await new Promise<void>((resolve) => (answerGroups = resolve));
+        return { revision: 1, groups: [held] };
+      }),
+    });
+    await openMesa(el);
+    server.save("v9", {
+      draftId: null,
+      revision: 0,
+      lines: [
+        {
+          menuItemId: "offer-flan",
+          variantId: null,
+          menuVersionId: "v1",
+          options: [],
+          extras: [],
+          note: null,
+          quantity: "1",
+          courseId: null,
+          noMerge: false,
+        },
+      ],
+    });
+    api.getTablesState.mockResolvedValue([
+      table("t4", "4", party({ id: "v9", revision: 1, tableIds: ["t4", "t7"] }), "wo-4"),
+      mesa7,
+    ]);
+
+    emit(tableOrder(el)!, "move-tab", { toTableId: "t7" });
+    await flush(el, 6);
+    answerGroups();
+    await flush(el, 6);
+
+    expect(rows(el)).toEqual(["Flan ×1"]);
+    const actions = [...tableOrder(el)!.shadowRoot!.querySelectorAll("[data-draft-action]")].map(
+      (action) => action.getAttribute("data-draft-action"),
+    );
+    expect(actions).toEqual(["submit"]);
+  });
+});
+
+describe("till-app: a table open that the session outlives", () => {
+  it("leaves the next person on no table when the open answers after a sign-out", async () => {
+    let answerOffers!: () => void;
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(till(orderTabCanvas)),
+      listZoneOffers: vi.fn(async () => {
+        await new Promise<void>((resolve) => (answerOffers = resolve));
+        return catalogue("v1");
+      }),
+    });
+    await flush(el);
+    await signIn(el);
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "logout");
+    await flush(el);
+    answerOffers();
+    await flush(el);
+    await signIn(el, "p2", "Sam");
+    emit(shell(el), "tab-select", { key: "order" });
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBeUndefined();
+    expect(api.getTabLines).not.toHaveBeenCalledWith("wo-4");
+  });
+});
+
+describe("till-app: seating a free table while something else happens", () => {
+  const mesa9 = table("t9", "9", null);
+
+  function seatingLater() {
+    let answer!: () => void;
+    const seatTable = vi.fn(async () => {
+      await new Promise<void>((resolve) => (answer = resolve));
+      return { visitId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 };
+    });
+    return { seatTable, answer: () => answer() };
+  }
+
+  it("stays on the table opened after it when the seat answers late", async () => {
+    const seat = seatingLater();
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(till(orderTabCanvas)),
+      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
+      seatTable: seat.seatTable,
+    });
+    await flush(el);
+    await signIn(el);
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+
+    seat.answer();
+    await flush(el, 6);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+    expect(api.listDrafts).toHaveBeenLastCalledWith("v7", expect.anything());
+  });
+
+  it("leaves the next person on no table when the seat answers after a sign-out", async () => {
+    const seat = seatingLater();
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(till(orderTabCanvas)),
+      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
+      seatTable: seat.seatTable,
+    });
+    await flush(el);
+    await signIn(el);
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
+    await flush(el);
+
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "logout");
+    await flush(el);
+    seat.answer();
+    await flush(el, 6);
+    await signIn(el, "p2", "Sam");
+    emit(shell(el), "tab-select", { key: "order" });
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBeUndefined();
+    expect(api.getTabLines).not.toHaveBeenCalledWith("wo-new");
+  });
+});
