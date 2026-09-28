@@ -62,15 +62,15 @@ describe("till-basket-refresh-dialog", () => {
   it("lists each re-priced part of one line on a row of its own", async () => {
     const { el } = await mount({
       changed: [
-        { lineNo: 1, name: "Burger", from: "9.00", to: "8.00" },
-        { lineNo: 1, name: "Cheese", from: "1.00", to: "2.00" },
+        { lineNo: 1, name: "Burger", from: "9.00", to: "8.00", units: { from: each, to: each } },
+        { lineNo: 1, name: "Cheese", from: "1.00", to: "2.00", units: { from: each, to: each } },
       ],
       blocked: [],
     });
     const rows = [...el.shadowRoot!.querySelectorAll("[data-changed] li[data-line='1']")];
     expect(rows.map((row) => row.textContent!.replace(/\s+/g, " ").trim())).toEqual([
-      "Burger €9.00 → €8.00",
-      "Cheese €1.00 → €2.00",
+      "Burger €9.00 each → €8.00 each",
+      "Cheese €1.00 each → €2.00 each",
     ]);
   });
 

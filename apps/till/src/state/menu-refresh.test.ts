@@ -522,6 +522,43 @@ describe("refreshBasket", () => {
     ]);
   });
 
+  it("names a dish whose unit changed while every price stayed the same", () => {
+    const line = lineOf(burger, "v1", { quantity: "2" });
+    const outcome = refreshBasket([line], [{ ...burger, unit: kg }], live);
+    expect(outcome.changed).toEqual([
+      { lineNo: 1, name: "burger", from: "9.00", to: "9.00", units: { from: unit, to: kg } },
+    ]);
+  });
+
+  it("names only the dish, not an extra whose price stayed the same, when only the dish's unit changed", () => {
+    const line = lineOf(burger, "v1", {
+      quantity: "2",
+      extras: [
+        { listId: "list-extras", productId: "cheese", name: "cheese", price: "1.00", quantity: 1 },
+      ],
+    });
+    const outcome = refreshBasket([line], [{ ...burger, unit: kg }], live);
+    expect(outcome.changed).toEqual([
+      { lineNo: 1, name: "burger", from: "9.00", to: "9.00", units: { from: unit, to: kg } },
+    ]);
+  });
+
+  it("shows a unit change and a price change on one row at the unit price, even when the line's total changed", () => {
+    const line = lineOf(burger, "v1", { quantity: "2" });
+    const outcome = refreshBasket([line], [{ ...burger, unit: kg, unitPrice: "8.00" }], live);
+    expect(outcome.changed).toEqual([
+      { lineNo: 1, name: "burger", from: "9.00", to: "8.00", units: { from: unit, to: kg } },
+    ]);
+    expect(outcome.adopted.get(0)!.product.unitPrice).toBe("8.00");
+  });
+
+  it("adopts a line silently when the live version sends the same unit afresh", () => {
+    const line = lineOf(burger, "v1", { quantity: "2" });
+    const outcome = refreshBasket([line], [{ ...burger, unit: { ...unit } }], live);
+    expect(outcome.changed).toEqual([]);
+    expect(outcome.adopted.get(0)!.product.menuVersionId).toBe("v2");
+  });
+
   it("keeps a variant line on its variant, at the variant's new price", () => {
     const glass = menuOfferToTillProduct(wine, "v1");
     const line: OrderLine = {

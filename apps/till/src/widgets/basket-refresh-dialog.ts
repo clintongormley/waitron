@@ -25,9 +25,10 @@ const REASON_WORDS: Record<BlockReason, StringKey> = {
 
 /**
  * What a newly published menu changes in the basket (D9): each line's new total, or, when the total
- * is unchanged, each dish, variant or extra whose unit price moved; and each line that must be
- * removed or replaced. It re-prices nothing itself; the app does that on
- * `wt-basket-refresh-confirmed`, and keeps the basket as it was on `wt-basket-refresh-cancelled`.
+ * is unchanged or the dish's unit changed, each dish, variant or extra whose unit price moved and
+ * the dish or variant whose unit did; and each line that must be removed or replaced. It re-prices
+ * nothing itself; the app does that on `wt-basket-refresh-confirmed`, and keeps the basket as it was
+ * on `wt-basket-refresh-cancelled`.
  */
 @customElement("till-basket-refresh-dialog")
 export class TillBasketRefreshDialog extends LitElement {

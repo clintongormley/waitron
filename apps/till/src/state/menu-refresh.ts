@@ -202,9 +202,10 @@ export function isStale(line: OrderLine, liveVersions: ReadonlyMap<string, strin
  * offers (D9): what the line would cost now, and whether it can still be sold as it stands. Saved
  * lines are never re-priced (D10), and a line with no version is priced by the server from the live
  * version already. A line whose earlier price is unknown is always named, at its new price alone. A
- * line whose total is unchanged while its parts' prices moved names each part that moved — the dish
- * or variant, then each extra — at its unit price. A line whose quantity the live unit cannot hold is
- * not adopted: the live unit would refuse it.
+ * line whose total is unchanged while its parts' prices moved, or whose dish or variant is now sold
+ * by another unit, names at its unit price the dish or variant if its price or unit changed, then
+ * each extra whose price changed; a line total cannot show a change of unit. A line whose quantity
+ * the live unit cannot hold is not adopted: the live unit would refuse it.
  */
 export function refreshBasket(
   lines: readonly OrderLine[],
@@ -237,14 +238,21 @@ export function refreshBasket(
       return;
     }
     const from = lineGross(line);
-    if (compareDecimal(from, to) !== 0)
+    if (compareDecimal(from, to) !== 0 && !unitChanged(line, adopted))
       outcome.changed.push({ lineNo, name: lineProductName(product), from, to });
     else outcome.changed.push(...partsRepriced(line, adopted, lineNo));
   });
   return outcome;
 }
 
-/** Each part of `line` whose unit price `adopted` changes: the dish or variant, then each extra. */
+function unitChanged(line: OrderLine, adopted: OrderLine): boolean {
+  return productUnit(line.product).id !== productUnit(adopted.product).id;
+}
+
+/**
+ * Each part of `line` whose unit price `adopted` changes: the dish or variant, then each extra. The
+ * dish or variant is named too when its unit changed.
+ */
 function partsRepriced(line: OrderLine, adopted: OrderLine, lineNo: number): ChangedLine[] {
   const units = { from: productUnit(line.product), to: productUnit(adopted.product) };
   const parts = [
@@ -258,7 +266,12 @@ function partsRepriced(line: OrderLine, adopted: OrderLine, lineNo: number): Cha
   (line.extras ?? []).forEach((pick, index) =>
     parts.push({ name: pick.name, from: pick.price, to: adopted.extras![index]!.price }),
   );
+  const dishUnitChanged = unitChanged(line, adopted);
   return parts
-    .filter((part) => compareDecimal(decimal(part.from), decimal(part.to)) !== 0)
+    .filter(
+      (part, index) =>
+        (index === 0 && dishUnitChanged) ||
+        compareDecimal(decimal(part.from), decimal(part.to)) !== 0,
+    )
     .map((part) => ({ lineNo, ...part, units }));
 }
