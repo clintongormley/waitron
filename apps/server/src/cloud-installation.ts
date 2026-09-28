@@ -232,6 +232,14 @@ export function machinePayload(
     ]),
   );
 }
+export function pendingRequest(action: Action, lease?: Envelope, body = "{}"): Pending {
+  return {
+    action,
+    operationId: randomUUID(),
+    lease: action === "renew" || action === "revoke" ? "" : JSON.stringify(lease),
+    body,
+  };
+}
 export function installationClient(
   state: SavedCloudState,
   save: (state: SavedCloudState) => Promise<void>,
@@ -312,12 +320,7 @@ export function installationClient(
     }
   }
   async function prepare(action: Action, body = "{}") {
-    c.pending = {
-      action,
-      operationId: randomUUID(),
-      lease: action === "renew" || action === "revoke" ? "" : JSON.stringify(c.lease),
-      body,
-    };
+    c.pending = pendingRequest(action, c.lease, body);
     await save(state);
   }
   return {

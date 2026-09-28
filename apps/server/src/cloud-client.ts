@@ -5,6 +5,7 @@ import {
 } from "./cloud-backup.js";
 import {
   installationClient,
+  pendingRequest,
   projectCloudInstallation,
   readCloudInstallation,
   type CloudInstallationState,
@@ -365,6 +366,11 @@ export function createCloudConnection(options: CloudConnectionOptions) {
             JSON.stringify(existing.view?.registration) !== JSON.stringify(input.registration)
           )
             throw new AppError("cloud.binding_conflict", {});
+          const c = (existing.lifecycle ??= { unavailable: false, revoked: false });
+          if (input.stopped && !c.revoked && c.pending?.action !== "revoke") {
+            c.pending = pendingRequest("revoke");
+            await save(existing);
+          }
           return project(existing);
         }
         const state: SavedCloudState = {
@@ -393,7 +399,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
                 lifecycle: {
                   unavailable: false,
                   revoked: false,
-                  pending: { action: "revoke", operationId: randomUUID(), lease: "", body: "{}" },
+                  pending: pendingRequest("revoke"),
                 },
               }
             : {}),
