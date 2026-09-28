@@ -2023,6 +2023,70 @@ describe("dashboard-app", () => {
     },
   );
 
+  it("offers Content languages in Settings, after Location invoices, to a session holding person.manage, and opens its page", async () => {
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["person.manage"] }),
+      listStaff: vi.fn().mockResolvedValue([]),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    const item = navItem(el, "content-languages");
+    expect(item!.textContent!.trim()).toBe(t("nav.content_languages"));
+    const panel = el.shadowRoot!.querySelector("#nav-group-panel-configuration")!;
+    const order = [...panel.querySelectorAll<HTMLElement>(".nav-item")].map((b) => b.dataset.test);
+    expect(order.indexOf("nav-content-languages")).toBe(order.indexOf("nav-location-settings") + 1);
+
+    item!.click();
+    await flush(el);
+    const face = el.shadowRoot!.querySelector<HTMLElement & { api?: DashboardApi }>(
+      "dashboard-content-languages-screen",
+    );
+    expect(face!.api).toBe(api);
+    expect(location.pathname).toBe("/manage/content-languages");
+  });
+
+  it.each([
+    ["supervisor", []],
+    ["manager", ["booking.manage"]],
+  ])(
+    "does not offer Content languages to a %s session without person.manage",
+    async (role, permissions) => {
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({
+          getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions }),
+          listStaff: vi.fn().mockResolvedValue([]),
+        }),
+      });
+      await flush(el);
+      expect(navItem(el, "overview")).toBeTruthy();
+      expect(navItem(el, "content-languages")).toBeNull();
+    },
+  );
+
+  it.each([
+    [
+      "manager",
+      ["person.manage"],
+      "dashboard-content-languages-screen",
+      "/manage/content-languages",
+    ],
+    ["supervisor", [], "dashboard-overview-screen", "/manage/overview"],
+  ])(
+    "opens /manage/content-languages for a %s session only when it holds person.manage",
+    async (role, permissions, tag, path) => {
+      history.replaceState(null, "", "/manage/content-languages");
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({
+          getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions }),
+          listStaff: vi.fn().mockResolvedValue([]),
+        }),
+      });
+      await flush(el);
+      expect(el.shadowRoot!.querySelector(tag)).not.toBeNull();
+      expect(location.pathname).toBe(path);
+    },
+  );
+
   it("clicking a nav item switches the screen and marks it aria-current=page", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),

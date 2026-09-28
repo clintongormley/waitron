@@ -241,6 +241,19 @@ describe("catalogue-screen", () => {
     expect(el.shadowRoot!.querySelector('select[name="product-catalogue"]')).toBeNull();
   });
 
+  it("leaves the content languages to their own Settings page while still handing them to the editor", async () => {
+    const api = stubApi({
+      getContentLanguages: vi
+        .fn()
+        .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=edit-languages]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("dashboard-content-languages")).toBeNull();
+    expect(editor(el).locales).toEqual(["es", "en"]);
+  });
+
   // Delete makes the product Inactive and leaves its availability as it was.
   it("confirms Delete and makes the product Inactive without deleting its history", async () => {
     const api = stubApi();
