@@ -244,7 +244,11 @@ Every table action below runs in one transaction and checks the revision of ever
   deli, and a deli order's delivery table changing. Only the dishes whose destination changed get a
   notice (today's `enqueueMovedSlips`).
 - Kitchen print failures follow the dishes that moved: lane C's C31 (record which dishes each ticket
-  carried) applies to split, merge, transfer and move of a bill.
+  carried) applies to split, merge, transfer and move of a bill. _(2026-09-28, C31 as built: of the
+  two ways a ticket link reaches another bill, it changed only the per-dish copy,
+  `copyKitchenPrintLinks`, which transfer, split, unjoin and line moves use; a merge still moves every
+  source-bill ticket link no printed reprint covered, whichever dishes it carried, through
+  `moveKitchenPrintLinks`, whose only caller is `mergeTabs`.)_
 - Receipts show the party's display name and tables.
 
 ## 9. Money and fiscal points
