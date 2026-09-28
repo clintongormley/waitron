@@ -3376,6 +3376,15 @@ approved.
 
 ### B9. CI and test infra
 
+- **`scripts/migration-upgrade.test.ts` stalled past its 120-second bound once in CI (2026-09-28).**
+  In run 36401947339 (the `lint` job, on #803's docs-only head `b3768ddb3`) it failed
+  `Test timed out in 120000ms` while every other root suite ran at its usual speed; the same test
+  took 16 to 31 seconds in the `lint` jobs of the four `main` runs before it. Not reproduced
+  locally: 25 runs of the file alone took 6 to 7 seconds each, and three
+  `pnpm vitest run --coverage` runs of the root project passed. The CI log shows nothing about
+  which step stalled. Next: have the test report how long each migration step takes, and which
+  step it was on, so the next stall says where it waited; then locate it before naming a cause.
+  First seen in the last 60 CI runs.
 - **Dependabot, switched on by #760 (2026-09-27) — DONE: the 15 security alerts fixed by lane A's
   A107 (**PR #796**, 2026-09-28).** Config:
   `.github/dependabot.yml`; how to land one of its PRs: `docs/developers/workflow-guide.md` →
