@@ -87,6 +87,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Money has already been taken on this bill. Take the rest from the bill's payments. To discard or merge the bill, give that money back first",
     es: "Ya se ha cobrado dinero en esta cuenta. Cobra el resto desde los pagos de la cuenta. Para descartar o combinar la cuenta, devuelve primero ese dinero",
   },
+  "bill.presented": {
+    en: "This bill has been presented, so it cannot be changed",
+    es: "Esta cuenta ya se ha presentado, así que no se puede cambiar",
+  },
+  "bill.paid": {
+    en: "This bill is paid",
+    es: "Esta cuenta ya está pagada",
+  },
+  "bill.other_party": {
+    en: "That bill belongs to other guests",
+    es: "Esa cuenta es de otros clientes",
+  },
   "bill.line_paid": {
     en: "This item has already been paid for, so it cannot be changed, moved or charged again. Refund its payment first",
     es: "Este artículo ya está pagado, así que no se puede cambiar, mover ni cobrar otra vez. Devuelve antes su pago",

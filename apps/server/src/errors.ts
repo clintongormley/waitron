@@ -394,6 +394,12 @@ declare module "@waitron/shared" {
      * finishing its table are refused while it still holds money.
      */
     "bill.payments_received": { workingOrderId: string };
+    /** The bill has been presented (placed), so it takes no new order. */
+    "bill.presented": { workingOrderId: string };
+    /** The bill is paid, so it takes no new order. */
+    "bill.paid": { workingOrderId: string };
+    /** An order named a bill that is not the party's: another party's, or a counter order. */
+    "bill.other_party": { workingOrderId: string };
     /** No bill payment with this id; `paymentId` is the id the caller sent. */
     "bill.payment_not_found": { paymentId: string };
     /** A manager's action was refused: the bill payment is no longer pending, its card is at a
@@ -500,10 +506,9 @@ declare module "@waitron/shared" {
     };
     // The four `booking.*` codes are declared in @waitron/bookings/src/errors.ts.
     /**
-     * A tab verb found the order it was asked to modify is not an OPEN tab — not `open`, not pointed
-     * at by any `dining_tables.tab_id`, or absent. `moveTab` and `joinTable`, and `priceTabRound`
-     * (through which `submitGroups` prices a submission) for a round with lines, also accept the
-     * settled or abandoned tab a seated party's tables still point at.
+     * A tab verb found the order it was asked to modify is not open, or is absent; or, for a verb
+     * on a party's bills, is a counter order no table points at. `moveTab` and `joinTable` also
+     * accept the settled or abandoned tab a seated party's tables still point at.
      */
     "tab.not_open": { tabId: string };
     /**

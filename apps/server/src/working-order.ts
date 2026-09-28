@@ -27,6 +27,8 @@ import {
   tableHeld,
   partyFamily,
   partyOfOrder,
+  partyTableLabels,
+  setMainBill,
 } from "./parties.js";
 import type { PartyCommand } from "./parties.js";
 import { randomUUID } from "node:crypto";
@@ -43,6 +45,7 @@ import {
   decimalToThousandths,
   FALLBACK_LOCALE,
   locationId as brandLocationId,
+  partyDisplayName,
   MONEY_SCALE,
   multiplyDecimal,
   perDishOptionQuantity,
@@ -1049,20 +1052,19 @@ export async function openTab(
 }
 
 /**
- * This working order is an open tab a dining table points at, else `tab.not_open`. The back-pointer
- * is what makes it a TAB rather than a detached CHECK (a table-less open order a split minted).
+ * This working order is open and belongs to a party, or is open with a table pointing at it (a
+ * table's bill of no party), else `tab.not_open`. A counter order is neither.
  */
-async function assertAnchoredTabOpen(
-  tx: Transaction,
-  cfg: TillConfig,
-  tabId: string,
-): Promise<void> {
-  await assertTabOpen(tx, cfg, tabId);
-  const [pointer] = await tx
-    .select({ id: diningTables.id })
-    .from(diningTables)
-    .where(eq(diningTables.tabId, tabId));
-  if (pointer === undefined) {
+async function assertPartyBillOpen(tx: Transaction, cfg: TillConfig, tabId: string): Promise<void> {
+  void cfg;
+  const [order] = await tx
+    .select({ status: workingOrders.status, partyId: workingOrders.partyId })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, tabId));
+  if (order?.status !== "open") {
+    throw new AppError("tab.not_open", { tabId });
+  }
+  if (order.partyId === null && !(await tablePointsAt(tx, tabId))) {
     throw new AppError("tab.not_open", { tabId });
   }
 }
@@ -1496,7 +1498,7 @@ export async function sendLines(
   tabId: string,
   lineNos: number[],
 ): Promise<void> {
-  await assertAnchoredTabOpen(tx, cfg, tabId);
+  await assertPartyBillOpen(tx, cfg, tabId);
   // A held group's lines are released only by firing the group.
   const heldGroupLines = await tx
     .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
@@ -1601,7 +1603,7 @@ export async function recallLines(
   tabId: string,
   lineNos: number[],
 ): Promise<void> {
-  await assertAnchoredTabOpen(tx, cfg, tabId);
+  await assertPartyBillOpen(tx, cfg, tabId);
   if (lineNos.length === 0) {
     return;
   }
@@ -1731,13 +1733,12 @@ export type TabRoundLine = {
 export async function addTabRound(
   tx: Transaction,
   cfg: TillConfig,
-  sentTabId: string,
+  tabId: string,
   lines: TabRoundLine[],
   // Written on every row the round inserts, extras children included.
   stamp: { groupId?: string; creditedTo?: string } = {},
 ): Promise<{ tabId: string }> {
-  const round = await priceTabRound(tx, cfg, sentTabId, lines);
-  const { tabId } = round;
+  const round = await priceTabRound(tx, cfg, tabId, lines);
   const appendedLines = await insertTabRound(
     tx,
     cfg,
@@ -1767,7 +1768,7 @@ export async function addTabRound(
 
 /** A round priced for an open tab and numbered after its last line, not yet written. */
 export interface PricedTabRound {
-  /** The tab the round goes on: the party's next tab when the one sent had been paid. */
+  /** The bill the round goes on. */
   tabId: string;
   /** One row per line and per extras child, in the order the lines were sent. */
   rows: WorkingOrderLineInsert[];
@@ -1776,8 +1777,7 @@ export interface PricedTabRound {
 }
 
 /**
- * Price a round for the tab and number its rows after the tab's last line, writing no line. A round
- * sent to a paid party tab opens the party's next tab ({@link openNextPartyTab}) first.
+ * Price a round for the bill and number its rows after the bill's last line, writing no line.
  *
  * The `max(line_no)+1` read-then-insert cannot interleave with another append, because
  * `withTransaction` IS the venue file's write lock.
@@ -1785,12 +1785,10 @@ export interface PricedTabRound {
 export async function priceTabRound(
   tx: Transaction,
   cfg: TillConfig,
-  sentTabId: string,
+  tabId: string,
   lines: TabRoundLine[],
 ): Promise<PricedTabRound> {
-  const tabId =
-    lines.length > 0 ? ((await openNextPartyTab(tx, cfg, sentTabId)) ?? sentTabId) : sentTabId;
-  await assertAnchoredTabOpen(tx, cfg, tabId);
+  await assertPartyBillOpen(tx, cfg, tabId);
   if (lines.length === 0) {
     throw new AppError("sale.empty_basket", {});
   }
@@ -1834,34 +1832,8 @@ export async function insertTabRound(
 }
 
 /**
- * A round sent to a seated party's tab after it has settled or been abandoned opens the party's next
- * tab on the same party and points every table of the party at it. Only the tab the party's tables
- * still point at qualifies, so a round from a screen that has not seen the new tab is refused rather
- * than opening a second one. Returns the new tab, or null when `tabId` is not such a tab.
- */
-async function openNextPartyTab(
-  tx: Transaction,
-  cfg: TillConfig,
-  tabId: string,
-): Promise<string | null> {
-  const party = await closedPartyTab(tx, tabId);
-  if (party === null) {
-    return null;
-  }
-  const nextTabId = randomUUID();
-  await createOpenOrder(tx, cfg, nextTabId, [], null, { partyId: party.partyId });
-  await VENUE_SERVICE.copyOrderContext(tx, cfg, tabId, nextTabId);
-  await tx
-    .update(diningTables)
-    .set({ tabId: nextTabId })
-    .where(inArray(diningTables.id, party.tables));
-  await bumpPartyRevision(tx, party.partyId);
-  return nextTabId;
-}
-
-/**
  * A settled or abandoned tab that tables of its party still point at: its party, and those tables.
- * Null for any other order, so a screen that has not seen the party's next tab cannot act on this one.
+ * Null for any other order, so a screen that has not seen the party's next bill cannot act on it.
  */
 async function closedPartyTab(
   tx: Transaction,
@@ -1923,7 +1895,7 @@ export async function voidTabLine(
   quantity?: string,
   operatorId?: string,
 ): Promise<void> {
-  await assertAnchoredTabOpen(tx, cfg, tabId);
+  await assertPartyBillOpen(tx, cfg, tabId);
   // Read first, because the delete's cascade removes the ticket item too.
   const [target] = await tx
     .select({
@@ -2138,7 +2110,7 @@ export async function setLineCourse(
   lineNo: number,
   courseId: string | null,
 ): Promise<void> {
-  await assertAnchoredTabOpen(tx, cfg, tabId);
+  await assertPartyBillOpen(tx, cfg, tabId);
   if (courseId !== null) {
     await requireLiveCourse(tx, cfg, courseId);
   }
@@ -2588,9 +2560,9 @@ async function moveOrderLines(
 }
 
 /**
- * Assert a working order is OPEN, else `tab.not_open`. Deliberately NOT {@link assertAnchoredTabOpen}:
- * `moveTab`, `joinTable` and `unjoinTable` work on orders whose table back-pointer is what they are
- * about to change.
+ * Assert a working order is OPEN, else `tab.not_open`. Deliberately NOT
+ * {@link assertPartyBillOpen}: `moveTab`, `joinTable` and `unjoinTable` work on orders whose table
+ * back-pointer is what they are about to change.
  */
 async function assertTabOpen(tx: Transaction, cfg: TillConfig, tabId: string): Promise<void> {
   void cfg;
@@ -2997,6 +2969,14 @@ export async function mergeTabs(
   }
   await refuseInconsistentMerge(tx, into, from);
   await guardParties(tx, into.partyId, from.partyId, options);
+  const [fromParty] =
+    from.partyId !== null && from.partyId === into.partyId
+      ? await tx
+          .select({ mainBillId: parties.mainBillId })
+          .from(parties)
+          .where(eq(parties.id, from.partyId))
+      : [];
+  const mergesAwayMain = fromParty?.mainBillId === fromTabId;
   const leavingParty =
     options.freeSourceTable && from.partyId !== null && from.partyId === into.partyId
       ? await refuseMergeLeavingNoTable(tx, from.partyId, fromTabId)
@@ -3062,6 +3042,7 @@ export async function mergeTabs(
       })
       .where(eq(parties.id, absorbed.from));
   }
+  if (mergesAwayMain) await setMainBill(tx, into.partyId!, intoTabId);
   await enqueueMovedSlips(tx, cfg, before, intoTabId);
 }
 
@@ -3133,7 +3114,7 @@ async function carveBetweenTabs(
 
   // Sorted only so that, when both ends fail, the refusal names the lower id.
   for (const tabId of [fromTabId, toTabId].sort()) {
-    await assertAnchoredTabOpen(tx, cfg, tabId);
+    await assertPartyBillOpen(tx, cfg, tabId);
   }
   // The only mode check on this path: `carveOffLines` makes none, whole lines or split.
   await assertServiceModesMatch(tx, cfg, fromTabId, toTabId);
@@ -3467,9 +3448,9 @@ async function splitTicketItem(
 }
 
 /**
- * Spin selected items off an OPEN tab into a NEW, separately-filing CHECK: an ordinary `open` working
- * order that NO table points at, because it is a payment unit, not a seat. Being table-less, it is
- * filled by {@link carveOffLines} directly, not `transferLines`, which requires both ends to be tabs.
+ * Spin selected items off an open bill of a party, or a table's bill, into a NEW, separately-filing
+ * CHECK on the origin's party (or none): an ordinary `open` working order that NO table points at,
+ * filled by {@link carveOffLines} directly.
  */
 export async function splitOffCheck(
   tx: Transaction,
@@ -3485,8 +3466,7 @@ export async function splitOffCheck(
 
   assertDistinctTransferLines(fromTabId, transfers);
 
-  // The origin must be a TAB: a detached check minted by an earlier split is not a split origin.
-  await assertAnchoredTabOpen(tx, cfg, fromTabId);
+  await assertPartyBillOpen(tx, cfg, fromTabId);
   const partyId = await partyOfOrder(tx, fromTabId);
   await guardParties(tx, partyId, null, command);
 
@@ -3546,8 +3526,6 @@ export async function unjoinTable(
     return {};
   }
 
-  // If this is the SOLE table anchoring `tabId`, the repoint below would leave `tabId` anchorless and
-  // `carveBetweenTabs` would refuse it with a misleading `tab.not_open`.
   const [otherAnchor] = await tx
     .select({ id: diningTables.id })
     .from(diningTables)
@@ -3576,6 +3554,7 @@ export async function unjoinTable(
     await VENUE_SERVICE.retargetOrderContext(tx, cfg, newTabId, table.zoneId);
   }
   await tx.update(diningTables).set({ tabId: newTabId }).where(eq(diningTables.id, tableId));
+  if (newPartyId !== null) await setMainBill(tx, newPartyId, newTabId);
   // Read after the repoint, so the kitchen is told of every sent item the unjoin takes: a joined
   // tab's slips name its lowest-id table (`readOrderHeader`), which need not be the one its tickets
   // printed before the join.
@@ -5823,6 +5802,12 @@ export interface TableParty {
   revision: number;
   guestCount: number | null;
   state: "open" | "needs_clearing" | "closed";
+  /** The name staff gave the party, or null. */
+  name: string | null;
+  /** `name`, or else the party's tables' labels ({@link partyDisplayName}). */
+  displayName: string;
+  /** The bill an order that names none goes on; null until the party's next order makes one. */
+  mainBillId: string | null;
   /** What the party's bills, and those of every party merged into it, still owe. */
   outstanding: string;
   /** The party's bills that are not abandoned, merged parties' included. */
@@ -5847,7 +5832,7 @@ export interface TableState {
   /** `open-tab` while a party holds the table, whether or not its tab is still open. */
   state: "free" | "open-tab" | "delivery-pending";
   hasOpenTab: boolean;
-  /** The open tab, or a seated party's settled tab, a round to which opens the party's next one. */
+  /** The open tab, or the settled or abandoned tab a seated party's table still points at. */
   tabId?: string;
   tabLineCount?: number;
   /** The open tab's GROSS draft total. */
@@ -6077,6 +6062,8 @@ async function readSeatedParties(
       revision: parties.revision,
       guestCount: parties.guestCount,
       state: parties.state,
+      name: parties.name,
+      mainBillId: parties.mainBillId,
     })
     .from(partyTables)
     .innerJoin(parties, eq(parties.id, partyTables.partyId))
@@ -6084,6 +6071,7 @@ async function readSeatedParties(
     .where(and(isNull(partyTables.leftAt), eq(diningTables.locationId, locationId)))
     .orderBy(partyTables.joinedAt, partyTables.id);
   const partyIds = [...new Set(members.map((member) => member.partyId))];
+  const labels = await partyTableLabels(tx, partyIds);
   const bills = await readBillsOfParties(tx, partyIds);
   const unsentDrafts = await readUnsentDrafts(tx, partyIds);
   const reminders = await readReleaseReminders(tx, partyIds);
@@ -6100,6 +6088,9 @@ async function readSeatedParties(
       revision: member.revision,
       guestCount: member.guestCount,
       state: member.state,
+      name: member.name,
+      displayName: partyDisplayName(member.name, labels.get(member.partyId)!),
+      mainBillId: member.mainBillId,
       outstanding: toScale(sumDecimals(own.map((bill) => decimal(bill.outstanding))), MONEY_SCALE),
       billCount: own.filter((bill) => bill.status !== "abandoned").length,
       tableIds: [member.tableId],

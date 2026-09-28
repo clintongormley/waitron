@@ -15,7 +15,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createCourse, deactivateCourse, setProductCourse } from "./kitchen.js";
 import { createTable } from "./tables.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
-import { addTabRound } from "./working-order.js";
+import { addTabRound, splitOffCheck } from "./working-order.js";
 import "./errors.js";
 
 // The HTTP layer of the order-group routes: body parsing, the operator taken from the session, the
@@ -231,6 +231,57 @@ describe("POST /api/parties/:id/groups", () => {
     expect(reused.json).toEqual(refusal("submission.id_reused", { submissionId }));
     expect(await snapshot(party)).toEqual(before);
   });
+
+  it("puts the lines on the bill of the party billId names, and refuses the same id naming another bill 409 submission.id_reused", async () => {
+    const party = await seated();
+    await submit(party.partyId, [{ lines: [dish("Caña"), dish("Pulpo")], release: "fire" }]);
+    const command = {
+      expectedPartyRevision: await revisionOf(party.partyId),
+      operatorId: venue.operatorId,
+    };
+    const { checkId } = await inTx(venue, (tx) =>
+      splitOffCheck(tx, venue.cfg, party.tabId, [{ lineNo: 2 }], command),
+    );
+    const submissionId = randomUUID();
+    const body = {
+      submissionId,
+      expectedPartyRevision: await revisionOf(party.partyId),
+      billId: checkId.toUpperCase(),
+      groups: [{ lines: [dish("Tarta")], release: "hold" }],
+    };
+
+    const named = await call("POST", `/api/parties/${party.partyId}/groups`, body);
+    expect(named.status).toBe(200);
+    expect((named.json as unknown as SubmitAnswer).tabId).toBe(checkId);
+    expect((await dishLines(checkId)).map((line) => line.name)).toEqual(["Pulpo", "Tarta"]);
+    const before = await snapshot(party);
+
+    const reused = await call("POST", `/api/parties/${party.partyId}/groups`, {
+      ...body,
+      billId: party.tabId,
+    });
+
+    expect(reused.status).toBe(409);
+    expect(reused.json).toEqual(refusal("submission.id_reused", { submissionId }));
+    expect(await snapshot(party)).toEqual(before);
+    expect((await dishLines(checkId)).map((line) => line.name)).toEqual(["Pulpo", "Tarta"]);
+  });
+
+  it.each([null, "bill-1", 7])(
+    "refuses the billId %j 400 management.request_invalid, writing nothing",
+    async (billId) => {
+      const party = await seated();
+      const before = await snapshot(party);
+
+      const refused = await submit(party.partyId, [{ lines: [dish("Caña")], release: "fire" }], {
+        billId,
+      });
+
+      expect(refused.status).toBe(400);
+      expect(refused.json).toEqual(refusal("management.request_invalid", { field: "billId" }));
+      expect(await snapshot(party)).toEqual(before);
+    },
+  );
 
   it("refuses 409 party.out_of_date for a revision another command has moved past, writing nothing", async () => {
     const party = await seated();

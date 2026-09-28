@@ -214,3 +214,16 @@ it("explains each refusal about a table's party, in both languages", () => {
     ],
   ]);
 });
+
+it("words the three refusals of an order sent to a bill it cannot go on, in both languages", () => {
+  expect(codeMessage("bill.presented", "en")).toBe(
+    "This bill has been presented, so it cannot be changed",
+  );
+  expect(codeMessage("bill.presented", "es")).toBe(
+    "Esta cuenta ya se ha presentado, así que no se puede cambiar",
+  );
+  expect(codeMessage("bill.paid", "en")).toBe("This bill is paid");
+  expect(codeMessage("bill.paid", "es")).toBe("Esta cuenta ya está pagada");
+  expect(codeMessage("bill.other_party", "en")).toBe("That bill belongs to other guests");
+  expect(codeMessage("bill.other_party", "es")).toBe("Esa cuenta es de otros clientes");
+});

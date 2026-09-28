@@ -287,6 +287,34 @@ describe("POST /api/parties/:id/drafts/:did/submit", () => {
   });
 });
 
+describe("POST /api/parties/:id/drafts/:did/submit naming a bill", () => {
+  it("puts the lines on the bill billId names, and refuses the same id without it 409 submission.id_reused", async () => {
+    const party = await seated();
+    const anas = await newDraft(ana, party.partyId, [dish("Caña"), dish("Pulpo")]);
+    const body = {
+      ...(await submitBody(party.partyId, anas, [anas.lines[0]!])),
+      billId: party.tabId.toUpperCase(),
+    };
+
+    const named = await ana("POST", `/api/parties/${party.partyId}/drafts/${anas.id}/submit`, body);
+    expect(named.status).toBe(200);
+    expect(named.json).toMatchObject({ tabId: party.tabId });
+    const before = await snapshot();
+
+    // `undefined` leaves the key out of the JSON body.
+    const reused = await ana("POST", `/api/parties/${party.partyId}/drafts/${anas.id}/submit`, {
+      ...body,
+      billId: undefined,
+    });
+
+    expect(reused.status).toBe(409);
+    expect(reused.json).toEqual(
+      refusal("submission.id_reused", { submissionId: body.submissionId }),
+    );
+    expect(await snapshot()).toEqual(before);
+  });
+});
+
 describe("a draft named on another party", () => {
   it("is refused 404 draft.not_found by the save, the take-over and the submit, as is an id that is not one", async () => {
     const mesa4 = await seated();
@@ -405,6 +433,8 @@ describe("a malformed body", () => {
     ["release", { ...valid, groups: [{ lineIds: [] }] }],
     ["release", { ...valid, groups: [{ lineIds: [], release: "later" }] }],
     ["joinGroupId", { ...valid, groups: [{ lineIds: [], release: "hold" }], joinGroupId: 4 }],
+    ["billId", { ...valid, groups: [], billId: null }],
+    ["billId", { ...valid, groups: [], billId: "bill-1" }],
   ] as const)(
     "refuses a submit 400 management.request_invalid naming %s for %j",
     async (field, body) => {
