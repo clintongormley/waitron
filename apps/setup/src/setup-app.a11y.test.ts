@@ -19,24 +19,23 @@ function stubApi(): SetupApi {
   } as unknown as SetupApi;
 }
 
-// The shell's own contribution is the modal every screen renders inside. Its name comes from the
-// `aria-label` forwarded to the inner <dialog>, which axe's aria-dialog-name rule checks; the screens'
-// own suites mount them without the shell, so only this suite can see that wiring.
+// The shell's own contribution is the page every screen renders inside — the <main> column and the
+// logo. The screens' own suites mount them without the shell, so only this suite sees it.
 describe.each(["light", "dark"] as const)("setup-app a11y (%s theme)", (theme) => {
-  it("has no violations on the wizard's first screen inside its modal", async () => {
+  it("has no violations on the wizard's first screen inside its page", async () => {
     const { el, host } = await mountWidget<SetupApp>("setup-app", { api: stubApi() }, theme);
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull();
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations on the restore-from-bucket screen inside its modal", async () => {
+  it("has no violations on the restore-from-bucket screen inside its page", async () => {
     const { el, host } = await mountWidget<SetupApp>("setup-app", { api: stubApi() }, theme);
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
-    // The shell listens for `setup-goto` on its <wt-modal> (setup-app.ts, the `@setup-goto` binding).
-    el.shadowRoot!.querySelector("wt-modal")!.dispatchEvent(
+    // The shell listens for `setup-goto` on its <main> (setup-app.ts, the `@setup-goto` binding).
+    el.shadowRoot!.querySelector("main")!.dispatchEvent(
       new CustomEvent("setup-goto", {
         detail: { screen: "restore-bucket" },
         bubbles: true,

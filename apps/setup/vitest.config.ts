@@ -21,10 +21,9 @@ const emulateColorScheme: BrowserCommand<[colorScheme: ColorScheme]> = async (
 };
 
 export default defineConfig({
-  // axe-core is imported only by the a11y suites, so Vite discovers it mid-run and re-optimises —
-  // which reloads the in-flight test file and prints a "Vite unexpectedly reloaded a test" warning
-  // that can flake CI. Pre-bundling it up front removes the mid-run discovery.
-  optimizeDeps: { include: ["axe-core"] },
+  // Vite discovering a dependency mid-run re-optimises and reloads the in-flight test file ("Vite
+  // unexpectedly reloaded a test"), which can flake CI; pre-bundling these up front prevents it.
+  optimizeDeps: { include: ["axe-core", "lit/directives/unsafe-html.js"] },
   test: {
     globals: true,
     clearMocks: false,

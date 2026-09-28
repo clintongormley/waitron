@@ -35,10 +35,17 @@ change these with it.
 **They are inlined in three places.** The two source SVGs here carry `#1f6feb` and `#16181d`;
 `build-icons.mjs` carries `#4c8dff` for the favicon's dark rule; and `apps/server/src/trust-page-logo.ts`
 holds a copy of the whole lockup for the certificate page, which must stay one self-contained string
-with nothing to fetch. That copy is the only place `#eceef2` appears, because it is the only one that
-reverses the WORDMARK for a dark page. `scripts/trust-page-logo.test.ts` compares the two DRAWINGS and
+with nothing to fetch. Of the three, that copy is the only place `#eceef2` appears.
+`scripts/trust-page-logo.test.ts` compares the two DRAWINGS and
 deliberately ignores paint, so it will not catch a colour that drifts — this paragraph is the only
 thing that will.
+
+The setup wizard (`apps/setup/src/setup-app.ts`) also draws the lockup inline, but copies nothing:
+it imports `waitron-lockup.svg` as-is through a `?raw` import and repaints its two top-level groups
+by position — the first `<g>` (the waiter) with `--wt-color-primary`, the last (the word) with
+`--wt-color-text`. That is the order `build-icons.mjs` writes them in, so the wizard depends on it
+staying that way; the paint cases in `apps/setup/src/setup-app.test.ts` find each group by the ink
+this file gives it, so a reordered file fails them.
 
 ## Why an .ico and a PNG as well as the SVG
 

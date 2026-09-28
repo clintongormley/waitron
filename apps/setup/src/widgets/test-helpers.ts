@@ -13,8 +13,8 @@ export interface Mounted<T extends HTMLElement> {
 
 /**
  * Assigns `props` before connecting, because the wizard screens take object properties that cannot
- * travel through markup. The host is painted `--wt-color-surface-raised`, the background of the
- * `<wt-modal>` the screens render inside (`setup-app.ts`), so a contrast check sees the app's colours.
+ * travel through markup. The host is painted `--wt-color-surface-raised`, the background of the page
+ * column the screens render inside (`setup-app.ts`), so a contrast check sees the app's colours.
  */
 export async function mountWidget<T extends HTMLElement>(
   tag: string,

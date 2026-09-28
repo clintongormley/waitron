@@ -1990,16 +1990,18 @@ replacement shows the pairing code and approved capture time, then requires an e
 restore. Live production recovery and continuous complete-server recovery remain open.
 
 The setup wizard landed in #334 (2026-09-12); corrections from walking it on a real machine, plus a
-first-sign-in passkey offer, landed in #347 (2026-09-13). Two calls the PR left with the owner, still
-open:
+first-sign-in passkey offer, landed in #347 (2026-09-13). Two calls the PR left with the owner; the
+first is still open:
 
 - *Setup always stores a language on the account.* If the browser sends no language, or one Waitron
   does not ship, the account gets the venue's language saved as though chosen — so the stored value
   cannot tell "chose Spanish" from "said nothing", and it does not follow a later change to the venue
   default. Keep this, or store a language only when the browser asked for one?
-- *The modal is always full height.* A short screen, such as the join-or-recover choice, sits in a
-  tall box with space below. That follows from choosing a real modal; the PR did not check how it
-  looks on a phone. Worth a look in the running wizard before deciding.
+- *The modal is always full height* — gone with the modal (C39, owner decision 2026-09-28). Every
+  setup screen now sits in a column centred on the page, at most 704px wide, with the Waitron logo
+  at the top. The logo is the brand lockup drawn inline, so its word follows the theme; the
+  dashboard banner still loads it as an image and stays unreadable in the dark theme (the entry
+  under "The Waitron wordmark is invisible on the dashboard banner").
 
 **Still open after #334**, each one something the branch consciously did not take:
 
@@ -6160,7 +6162,9 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   themes, as an `<img>`, so it cannot follow the theme: the wordmark's letters are painted
   `#16181d`, and the dark theme's page background is `#101216` — a contrast ratio of 1.06 to 1,
   where 4.5 is the readable minimum. **Next action:** give the lockup a light and a dark variant, or
-  paint the wordmark with a token by inlining the SVG instead of loading it as an image.
+  paint the wordmark with a token by inlining the SVG instead of loading it as an image. The setup
+  wizard now inlines the lockup and paints the wordmark with `--wt-color-text`
+  (`apps/setup/src/setup-app.ts`, C39), which is the second option already working in one app.
 - **Sales and takings business-day range — DONE (C15).** The screen starts its reports with the
   UTC date, then adopts the venue's business day from the Overview endpoint when it answers. If
   Overview refuses or has not answered, the initial reports remain available. An operator's edited

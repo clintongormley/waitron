@@ -69,7 +69,7 @@ async function flush(el: SetupApp): Promise<void> {
   await el.updateComplete;
 }
 
-const wizard = (el: SetupApp) => el.shadowRoot!.querySelector<HTMLElement>("wt-modal")!;
+const wizard = (el: SetupApp) => el.shadowRoot!.querySelector<HTMLElement>("main")!;
 
 /** Awaits the screen's own render, which the shell awaiting its render does not. */
 async function screenHost(el: SetupApp, screen: Screen): Promise<HTMLElement> {
@@ -1937,27 +1937,77 @@ describe("A2 mode boundaries", () => {
   });
 });
 
-describe("modal shell", () => {
-  it("renders the wizard inside an open, non-dismissible modal", async () => {
+describe("page shell", () => {
+  it("renders the wizard in a page rather than a modal", async () => {
     const el = await mountSetupApp();
-    const modal = el.shadowRoot!.querySelector("wt-modal") as HTMLElement & {
-      open: boolean;
-      dismissible: boolean;
-    };
-    expect(modal).not.toBeNull();
-    expect(modal.open).toBe(true);
-    expect(modal.dismissible).toBe(false);
-    // The screens keep their own h1, so the modal is named by a label rather than its heading —
-    // setting `heading` would paint a second title above the first.
-    expect(modal.getAttribute("aria-label")).toBe("Set up your server");
-    expect(modal.getAttribute("heading")).toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull();
+    expect(wizard(el).querySelector("[data-test^=screen-]")).not.toBeNull();
   });
 
-  it("mounts the current screen inside the modal, not beside it", async () => {
+  it("centres the page in a 704px column in a wide window", async () => {
     const el = await mountSetupApp();
-    const modal = el.shadowRoot!.querySelector("wt-modal")!;
-    expect(modal.querySelector("[data-test^=screen-]")).not.toBeNull();
+    const host = el.parentElement!;
+    host.style.width = "2000px";
+    await el.updateComplete;
+    const hostBox = host.getBoundingClientRect();
+    const pageBox = wizard(el).getBoundingClientRect();
+    expect(pageBox.width).toBeLessThan(hostBox.width);
+    expect(pageBox.width).toBe(704);
+    expect(Math.abs(pageBox.left - hostBox.left - (hostBox.right - pageBox.right))).toBeLessThan(1);
   });
+
+  const screens: Screen[] = [
+    "connection",
+    "role",
+    "connect",
+    "restore",
+    "restore-bucket",
+    "cloud-restore",
+    "live-source",
+    "configuration-preview",
+    "fiscal-test",
+    "mode",
+    "admin",
+    "venue",
+    "cert",
+    "review",
+    "provisioning",
+    "reset",
+    "done",
+  ];
+
+  it.each(screens)("shows the Waitron logo above the %s screen", async (screen) => {
+    const el = await mountSetupApp();
+    goto(el, screen);
+    await el.updateComplete;
+    const logo = wizard(el).querySelector<HTMLElement>("[data-test=setup-logo]")!;
+    const shown = wizard(el).querySelector(`[data-test=screen-${screen}]`)!;
+    expect(logo.getAttribute("role")).toBe("img");
+    expect(logo.getAttribute("aria-label")).toBe("Waitron");
+    expect(logo.querySelector("svg")).not.toBeNull();
+    expect(logo.compareDocumentPosition(shown) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it.each(["light", "dark"] as const)(
+    "paints the logo's word in the text colour and its waiter in the primary colour (%s theme)",
+    async (theme) => {
+      const el = await mountSetupApp();
+      const host = el.parentElement!;
+      host.setAttribute("data-theme", theme);
+      const probe = document.createElement("span");
+      host.appendChild(probe);
+      const colourOf = (token: string) => {
+        probe.style.color = `var(${token})`;
+        return getComputedStyle(probe).color;
+      };
+      const svg = wizard(el).querySelector("[data-test=setup-logo] svg")!;
+      // Found by the brand file's own ink, not by position, so a reordered file fails here.
+      const waiter = svg.querySelector(':scope > g[fill="#1f6feb"]');
+      const word = svg.querySelector(':scope > g[fill="#16181d"]');
+      expect(getComputedStyle(word!).fill).toBe(colourOf("--wt-color-text"));
+      expect(getComputedStyle(waiter!).fill).toBe(colourOf("--wt-color-primary"));
+    },
+  );
 });
 
 describe("connection checks", () => {
