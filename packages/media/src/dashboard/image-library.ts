@@ -57,19 +57,31 @@ export class ImageLibrary extends LitElement {
         margin-block: var(--wt-space-4);
         align-items: end;
       }
+      .filters wt-input {
+        flex: 1 1 calc(var(--wt-tap-min) * 8);
+        min-width: 0;
+      }
       label {
         display: grid;
         gap: var(--wt-space-2);
       }
+      /* Wide enough for a card's Spanish Edit and Delete buttons to share a line;
+         image-library.narrow.test.ts measures it. */
       .grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+        grid-template-columns: repeat(
+          auto-fill,
+          minmax(min(100%, calc(var(--wt-tap-min) * 6)), 1fr)
+        );
         gap: var(--wt-space-4);
       }
       article {
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
         padding: var(--wt-space-3);
+      }
+      .actions .use {
+        flex-basis: 100%;
       }
       article img {
         width: 100%;
@@ -531,35 +543,37 @@ export class ImageLibrary extends LitElement {
       ${this.loadError ? html`<p role="alert" class="error">${t("image.load_error")} <wt-button variant="secondary" @click=${() => void this.#load()}>${t("image.retry")}</wt-button></p>` : nothing}
       ${this.deleteError && this.deletion === null ? html`<p role="alert" class="error">${t("image.delete_error")}</p>` : nothing}
       <div class="grid">
-        ${this.images.map(
-          (image) =>
-            html`<article data-image=${image.id}>
-              <img
-                src=${`/media/${encodeURIComponent(image.filename)}`}
-                alt=${this.#text(image.altText)}
-                loading="lazy"
-              />
-              <h2>${this.#text(image.names)}</h2>
-              <p class="labels">${image.labels.join(" · ")}</p>
-              <time datetime=${image.createdAt}
-                >${new Date(image.createdAt).toLocaleDateString(currentLocale())}</time
+        ${this.images.map((image) => {
+          const name = this.#text(image.names);
+          return html`<article data-image=${image.id}>
+            <img
+              src=${`/media/${encodeURIComponent(image.filename)}`}
+              alt=${this.#text(image.altText)}
+              loading="lazy"
+            />
+            <h2>${name}</h2>
+            <p class="labels">${image.labels.join(" · ")}</p>
+            <time datetime=${image.createdAt}
+              >${new Date(image.createdAt).toLocaleDateString(currentLocale())}</time
+            >
+            <div class="actions">
+              ${this.picker ? html`<wt-button class="use" data-test=${`select-${image.id}`} aria-label=${`${t("image.select")}: ${name}`} @click=${() => this.dispatchEvent(new CustomEvent("select-image", { detail: image, bubbles: true, composed: true }))}>${t("image.select")}</wt-button>` : nothing}
+              <wt-button
+                data-test=${`edit-${image.id}`}
+                variant="secondary"
+                aria-label=${`${t("action.edit")}: ${name}`}
+                @click=${() => this.#edit(image)}
+                >${t("action.edit")}</wt-button
+              ><wt-button
+                data-test=${`delete-${image.id}`}
+                variant="secondary"
+                aria-label=${`${t("image.delete")}: ${name}`}
+                @click=${() => void this.#inspectDeletion(image)}
+                >${t("image.delete")}</wt-button
               >
-              <div class="actions">
-                ${this.picker ? html`<wt-button data-test=${`select-${image.id}`} @click=${() => this.dispatchEvent(new CustomEvent("select-image", { detail: image, bubbles: true, composed: true }))}>${t("image.select")}</wt-button>` : nothing}
-                <wt-button
-                  data-test=${`edit-${image.id}`}
-                  variant="secondary"
-                  @click=${() => this.#edit(image)}
-                  >${t("image.edit")}</wt-button
-                ><wt-button
-                  data-test=${`delete-${image.id}`}
-                  variant="secondary"
-                  @click=${() => void this.#inspectDeletion(image)}
-                  >${t("image.delete")}</wt-button
-                >
-              </div>
-            </article>`,
-        )}
+            </div>
+          </article>`;
+        })}
       </div>
       ${this.images.length === 0 && !this.loadError ? html`<p>${t("image.empty")}</p>` : nothing}
       <nav aria-label=${t("image.page")}>

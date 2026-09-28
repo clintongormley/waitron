@@ -86,8 +86,8 @@ names, alt text and labels, as long as Waitron's image library has not been upgr
 newer version may make a slightly different copy, which is then stored as a new image. A notice
 identifies the reused image and lets you open it for editing.
 
-Choose **Edit image** in the library to add translations or change its labels. Editing this shared
-record changes the metadata wherever that photograph is reused.
+Choose **Edit** on the photograph's card in the library to add translations or change its labels.
+Editing this shared record changes the metadata wherever that photograph is reused.
 
 ## Remove a use before deleting the photograph
 
